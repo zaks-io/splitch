@@ -16,6 +16,7 @@ export interface HoldoverWriteMiniflareOptions {
   missingSuppressionReadsRemaining?: number;
   pauseCancelAlarmAfterSnapshot?: boolean;
   pausePreparedAlarmAfterSnapshot?: boolean;
+  pauseAssignmentWriterPut?: boolean;
 }
 
 export interface DeadlockBarrierStatus {
@@ -24,6 +25,7 @@ export interface DeadlockBarrierStatus {
   readonly finalizeInventoryListReached: boolean;
   readonly cancelAlarmSnapshotReached: boolean;
   readonly preparedAlarmSnapshotReached: boolean;
+  readonly assignmentWriterPutReached: boolean;
 }
 
 export function miniflareWithInventoryAndOutbox(options: HoldoverWriteMiniflareOptions): Miniflare {
@@ -34,7 +36,7 @@ export function miniflareWithInventoryAndOutbox(options: HoldoverWriteMiniflareO
     compatibilityFlags: ["nodejs_compat"],
     kvNamespaces: { ASSIGNMENTS_KV: "assignments" },
     durableObjects: {
-      ASSIGNMENT_STORE_WRITER: { className: "AssignmentStoreDurableObject" },
+      ASSIGNMENT_STORE_WRITER: { className: "AssignmentStoreDurableObjectV2" },
       HOLDOVER_WRITE_OUTBOX: { className: "HoldoverWriteOutboxDurableObject" },
       HOLDOVER_WRITE_APP_INVENTORY: { className: "HoldoverWriteAppInventoryDurableObject" },
     },

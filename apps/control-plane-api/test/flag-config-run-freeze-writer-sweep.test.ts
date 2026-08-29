@@ -134,6 +134,16 @@ const DURABLE_OBJECT_ONLY: Record<string, string> = {
   webSocketError: "no-op",
   alarm: "revalidates live sockets",
   setLiveUpdatesAvailable: "flips a DO storage flag and closes sockets",
+  readAppIdentity: "reads the authoritative App identity atom; no D1 write",
+  putAppIdentityIfAbsent:
+    "serialized App identity provision in DO storage; writes no Flag Configuration row",
+  resetCompromisedAppIdentity:
+    "serialized App identity reset in DO storage; writes no Flag Configuration row",
+  assertAppIdentityTrafficAllowed: "reads the App identity lifecycle; no D1 write",
+  beginEntityPrivacy: "serializes Entity privacy against App identity reset",
+  recordEntityDeletionSuppression: "serializes Entity suppression ledger writes against reset",
+  recordEntityPrivacyCompletion: "serializes Entity privacy evidence writes against reset",
+  identityStore: "constructs the App identity DO store; writes no Flag Configuration row",
   store: "constructs the guarded store; the guard it returns is the boundary",
   broadcast: "sends a delta nudge over open sockets",
   revalidate: "closes a socket whose authorization expired",

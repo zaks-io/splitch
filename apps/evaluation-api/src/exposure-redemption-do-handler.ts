@@ -57,6 +57,12 @@ export async function handleExposureRedemptionClaimFetch(
   if (request.method !== "POST") {
     return Response.json({ error: "not found" }, { status: 404 });
   }
+  if (new URL(request.url).pathname === "/delete-all") {
+    const keys = await ctx.storage.list();
+    await ctx.storage.delete([...keys.keys()]);
+    await ctx.storage.deleteAlarm();
+    return Response.json({ deleted: keys.size });
+  }
   const body = await parseClaimBody(request);
   if (body === null) {
     return Response.json({ error: "invalid claim payload" }, { status: 400 });

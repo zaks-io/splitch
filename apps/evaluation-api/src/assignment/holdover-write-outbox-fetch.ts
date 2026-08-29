@@ -1,3 +1,4 @@
+import { requireDestroyedIdentityVersions } from "./app-identity-reset-fence";
 import type { HashedAssignmentPutInput } from "./assignment-store";
 import type { HoldoverWriteAppInventoryNamespace } from "./holdover-write-app-inventory";
 import {
@@ -13,6 +14,8 @@ import {
   type HoldoverWritePutPort,
   type HoldoverWriteSuppressionPort,
   purgeEntityOutboxState,
+  readEntitySuppression,
+  resetAppOutboxState,
   suppressEntityOutbox,
 } from "./holdover-write-outbox-core";
 import {
@@ -55,6 +58,15 @@ const outboxPostRoutes: Record<string, OutboxHandler> = {
     );
     return Response.json({ ok: true, ...result });
   },
+  "/reset-app": async (storage, _put, request) => {
+    const body = await request.json().catch(() => ({}));
+    return Response.json(
+      await resetAppOutboxState(
+        storage,
+        requireDestroyedIdentityVersions(isRecord(body) ? body.destroyedVersions : undefined),
+      ),
+    );
+  },
   "/ensure": async (storage, putPort, request, ctx) =>
     ensureResponse(storage, putPort, await request.json(), ctx),
 };
@@ -73,11 +85,22 @@ export async function handleHoldoverWriteOutboxFetch(
   if (request.method === "GET" && url.pathname === "/status") {
     return statusResponse(storage);
   }
+  if (request.method === "GET" && url.pathname === "/export") {
+    return exportResponse(storage);
+  }
   if (request.method === "POST") {
     const route = outboxPostRoutes[url.pathname];
     if (route) return route(storage, putPort, request, ctx);
   }
   return new Response("not found", { status: 404 });
+}
+
+async function exportResponse(storage: HoldoverWriteOutboxStorage): Promise<Response> {
+  const listed = await storage.list<HoldoverWriteJob>({ prefix: HOLDOVER_WRITE_JOB_PREFIX });
+  return Response.json({
+    jobs: [...listed.values()],
+    suppression: (await readEntitySuppression(storage)) ?? null,
+  });
 }
 
 async function deleteResponse(
@@ -179,6 +202,7 @@ function parseEnsureRequest(value: unknown): {
     experimentId: requireString(value, "experimentId"),
     idType: requireString(value, "idType"),
     targetingKeyHash: requireString(value, "targetingKeyHash"),
+    identityVersion: requireString(value, "identityVersion"),
     runId: requireString(value, "runId"),
     variant: requireString(value, "variant"),
   };

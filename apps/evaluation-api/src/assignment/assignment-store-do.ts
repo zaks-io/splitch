@@ -1,57 +1,72 @@
 import { DurableObject } from "cloudflare:workers";
-import type { AssignmentKv, HashedAssignmentPutInput } from "./assignment-store";
+import { requireDestroyedIdentityVersions } from "./app-identity-reset-fence";
+import type { AssignmentKv } from "./assignment-store";
+import { parseHashedAssignmentPut } from "./assignment-store-input";
 import { AssignmentStoreWriter } from "./assignment-store-writer";
 
 export interface AssignmentStoreEnv {
   ASSIGNMENTS_KV: AssignmentKv;
 }
 
-export class AssignmentStoreDurableObject extends DurableObject<AssignmentStoreEnv> {
+export class AssignmentStoreDurableObjectV2 extends DurableObject<AssignmentStoreEnv> {
   override async fetch(request: Request): Promise<Response> {
     const url = new URL(request.url);
-    if (request.method !== "POST" || url.pathname !== "/put") {
+    if (request.method === "GET" && url.pathname === "/export") {
+      return Response.json(
+        await this.ctx.blockConcurrencyWhile(() => this.writer().exportEntity()),
+      );
+    }
+    if (request.method === "POST") return this.post(url.pathname, request);
+    return Response.json({ error: "not found" }, { status: 404 });
+  }
+
+  private async post(path: string, request: Request): Promise<Response> {
+    if (path === "/put") {
+      const input = parseHashedAssignmentPut(await request.json());
+      const result = await this.ctx.blockConcurrencyWhile(() => this.writer().put(input));
+      return Response.json(result);
+    }
+    if (path !== "/delete" && path !== "/reset-app") {
       return Response.json({ error: "not found" }, { status: 404 });
     }
+    return this.delete(path, (await request.json()) as Record<string, unknown>);
+  }
 
-    const input = parsePutRequest(await request.json());
-    const result = await this.ctx.blockConcurrencyWhile(() =>
-      new AssignmentStoreWriter(this.ctx.storage, this.env.ASSIGNMENTS_KV, (promise) =>
-        this.ctx.waitUntil(promise),
-      ).put(input),
+  private async delete(path: string, body: Record<string, unknown>): Promise<Response> {
+    const identity = assignmentIdentity(body);
+    if (identity === null) {
+      return Response.json({ error: "Assignment identity is required" }, { status: 400 });
+    }
+    if (path === "/reset-app") {
+      const proof = await this.ctx.blockConcurrencyWhile(() =>
+        this.writer().resetApp(identity, requireDestroyedIdentityVersions(body.destroyedVersions)),
+      );
+      return Response.json({ deleted: true, ...proof });
+    }
+    if (typeof body.deleteBeforeTsMs !== "number" || !Number.isFinite(body.deleteBeforeTsMs)) {
+      return Response.json({ error: "deleteBeforeTsMs is required" }, { status: 400 });
+    }
+    const proof = await this.ctx.blockConcurrencyWhile(() =>
+      this.writer().deleteEntity(identity, body.deleteBeforeTsMs as number),
     );
-    return Response.json(result);
+    return Response.json({ deleted: true, proof });
+  }
+
+  private writer(): AssignmentStoreWriter {
+    return new AssignmentStoreWriter(this.ctx.storage, this.env.ASSIGNMENTS_KV, (promise) =>
+      this.ctx.waitUntil(promise),
+    );
   }
 }
 
-function parsePutRequest(value: unknown): HashedAssignmentPutInput {
-  if (!isRecord(value)) {
-    throw new TypeError("assignment-store: expected object payload");
-  }
-
-  const input = {
-    appId: requireString(value, "appId"),
-    experimentId: requireString(value, "experimentId"),
-    idType: requireString(value, "idType"),
-    targetingKeyHash: requireString(value, "targetingKeyHash"),
-    runId: requireString(value, "runId"),
-    variant: requireString(value, "variant"),
-  };
-
-  const extra = Object.keys(value).filter((key) => !(key in input));
-  if (extra.length > 0) {
-    throw new TypeError(`assignment-store: unexpected payload keys ${extra.join(",")}`);
-  }
-  return input;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function requireString(value: Record<string, unknown>, key: string): string {
-  const field = value[key];
-  if (typeof field !== "string" || field.length === 0) {
-    throw new TypeError(`assignment-store: ${key} must be a non-empty string`);
-  }
-  return field;
+function assignmentIdentity(body: Record<string, unknown>): {
+  appId: string;
+  idType: string;
+  targetingKeyHash: string;
+} | null {
+  return typeof body.appId === "string" &&
+    typeof body.idType === "string" &&
+    typeof body.targetingKeyHash === "string"
+    ? { appId: body.appId, idType: body.idType, targetingKeyHash: body.targetingKeyHash }
+    : null;
 }

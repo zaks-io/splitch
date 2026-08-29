@@ -1,4 +1,5 @@
 import { eventDefinitionConfigKey } from "@splitch/contracts";
+import { computeTargetingKeyHash, rewrapKvAppIdentityRecord } from "@splitch/privacy";
 import { describe, expect, it, vi } from "vitest";
 import worker from "./index";
 import { ingestAdmissionScopeName } from "./ingest-admission-config";
@@ -12,7 +13,12 @@ import {
   metricEventBody,
   sendMetricEvent,
 } from "./metric-event.test-fixture";
-import { handleAuthorizedMetricEvent } from "./metric-event-ingest";
+import {
+  handleAuthorizedMetricEvent,
+  metricEventDedupKey,
+  metricEventPayloadFingerprint,
+} from "./metric-event-ingest";
+import { makeMetricEventSaltStore } from "./metric-event-salt-store";
 import { TestExecutionContext } from "./test-fixtures";
 
 describe("Metric Event ingest", () => {
@@ -183,6 +189,109 @@ describe("Metric Event ingest request bounds", () => {
 
     expect(response.status).toBe(400);
     expect(getReader).not.toHaveBeenCalled();
+  });
+});
+
+describe("Metric Event retained-epoch retry", () => {
+  it("replays an exact pre-transition Metric Event instead of conflicting", async () => {
+    const fixture = await makeMetricEventFixture({}, "api_key");
+    const body = metricEventBody();
+    const store = makeMetricEventSaltStore(fixture.env);
+    const historicalHash = await computeTargetingKeyHash(store, {
+      appId: METRIC_APP_ID,
+      idType: "user",
+      targetingKey: "entity-7",
+      keyVersion: "v1",
+    });
+    const fingerprint = await metricEventPayloadFingerprint({
+      eventName: METRIC_EVENT_NAME,
+      idType: "user",
+      targetingKeyHash: historicalHash,
+      fields: body.fields,
+      dimensions: body.dimensions,
+    });
+    const dedupKey = await metricEventDedupKey(
+      METRIC_APP_ID,
+      METRIC_ENVIRONMENT_ID,
+      String(body.eventId),
+    );
+    fixture.claims.set(dedupKey, {
+      fingerprint,
+      eventDefinitionId: "ed_signed_up",
+      eventDefinitionVersionId: "edv_1",
+    });
+
+    const retry = await sendMetricEvent(fixture, body);
+
+    expect(retry.status).toBe(202);
+    expect(await retry.json()).toMatchObject({
+      duplicate: true,
+      eventDefinitionVersionId: "edv_1",
+    });
+    expect(fixture.claims.size).toBe(1);
+    expect(fixture.admissionCharges).toHaveLength(0);
+  });
+
+  it("replays an exact pre-transition Metric Event after KEK rewrap", async () => {
+    const root = "test-root-secret-do-not-use";
+    const nextRoot = "rotated-root-secret-do-not-use";
+    const fixture = await makeMetricEventFixture(
+      {
+        EVALUATION_PRIVACY_SALT: root,
+        SPLITCH_PLATFORM_TARGET: "production",
+      },
+      "api_key",
+    );
+    const body = metricEventBody();
+    const store = makeMetricEventSaltStore(fixture.env);
+    const historicalHash = await computeTargetingKeyHash(store, {
+      appId: METRIC_APP_ID,
+      idType: "user",
+      targetingKey: "entity-7",
+      keyVersion: "v1",
+    });
+    const fingerprint = await metricEventPayloadFingerprint({
+      eventName: METRIC_EVENT_NAME,
+      idType: "user",
+      targetingKeyHash: historicalHash,
+      fields: body.fields,
+      dimensions: body.dimensions,
+    });
+    const dedupKey = await metricEventDedupKey(
+      METRIC_APP_ID,
+      METRIC_ENVIRONMENT_ID,
+      String(body.eventId),
+    );
+    fixture.claims.set(dedupKey, {
+      fingerprint,
+      eventDefinitionId: "ed_signed_up",
+      eventDefinitionVersionId: "edv_1",
+    });
+
+    await rewrapKvAppIdentityRecord({
+      kv: {
+        get: async (key) => fixture.config.get(key) ?? null,
+        put: async (key, value) => {
+          fixture.config.set(key, value);
+        },
+      },
+      appId: METRIC_APP_ID,
+      oldRootSecret: root,
+      newRootSecret: nextRoot,
+    });
+    const rotated = {
+      ...fixture,
+      env: { ...fixture.env, EVALUATION_PRIVACY_SALT: nextRoot },
+    };
+    const retry = await sendMetricEvent(rotated, body);
+
+    expect(retry.status).toBe(202);
+    expect(await retry.json()).toMatchObject({
+      duplicate: true,
+      eventDefinitionVersionId: "edv_1",
+    });
+    expect(rotated.claims.size).toBe(1);
+    expect(rotated.admissionCharges).toHaveLength(0);
   });
 });
 

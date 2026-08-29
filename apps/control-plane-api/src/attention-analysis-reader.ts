@@ -25,6 +25,10 @@ interface FetcherLike {
   fetch(request: Request): Promise<Response>;
 }
 
+interface AppIdentityTrafficGate {
+  assertAppIdentityTrafficAllowed(appId: string): Promise<void>;
+}
+
 /**
  * Per-read bound on the Analysis service-binding fetch. Up to
  * ANALYSIS_READ_LIMIT (200) of these run at ANALYSIS_READ_CONCURRENCY (8) for
@@ -39,11 +43,13 @@ const ANALYSIS_READ_TIMEOUT_MS = 10_000;
 export function createAnalysisResultsReader(
   fetcher: FetcherLike,
   timeoutMs: number = ANALYSIS_READ_TIMEOUT_MS,
+  trafficGate?: AppIdentityTrafficGate,
 ): AnalysisResultsReader {
   return {
     async read(scope, actorId) {
       let response: Response;
       try {
+        await trafficGate?.assertAppIdentityTrafficAllowed(scope.appId);
         response = await fetcher.fetch(
           new Request(analysisResultsRequest(scope, actorId), {
             signal: AbortSignal.timeout(timeoutMs),

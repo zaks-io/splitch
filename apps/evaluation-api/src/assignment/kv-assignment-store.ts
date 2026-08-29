@@ -1,18 +1,22 @@
-import type { SaltStore } from "@splitch/privacy";
+import { keyVersionOf, type SaltStore } from "@splitch/privacy";
 import {
   type AssignmentIdentity,
-  type AssignmentStoreEntry,
-  assignmentValueToMap,
-  assignmentWriterName,
   type AssignmentKv,
   type AssignmentPutInput,
   type AssignmentStore,
+  type AssignmentStoreEntry,
   AssignmentStoreError,
   type AssignmentStoreLogger,
   type AssignmentStorePutResult,
+  assignmentValueToMap,
+  assignmentWriterName,
   hashedAssignmentIdentity,
+  mergeRetainedAssignmentValues,
   readAssignmentValue,
+  retainedAssignmentIdentities,
 } from "./assignment-store";
+import type { HoldoverWriteAppInventoryNamespace } from "./holdover-write-app-inventory";
+import { DurableHoldoverWriteAppInventoryClient } from "./holdover-write-app-inventory-client";
 
 export interface AssignmentWriterNamespace {
   idFromName(name: string): DurableObjectId;
@@ -29,33 +33,51 @@ export class KvAssignmentStore implements AssignmentStore {
     private readonly writerNamespace: AssignmentWriterNamespace,
     private readonly saltStore: SaltStore,
     private readonly logger?: AssignmentStoreLogger,
+    private readonly appInventory?: HoldoverWriteAppInventoryNamespace,
   ) {}
 
   async getAll(input: AssignmentIdentity): Promise<Map<string, AssignmentStoreEntry>> {
-    const { entityKey } = await hashedAssignmentIdentity(this.saltStore, input);
-    return assignmentValueToMap(await readAssignmentValue(this.kv, entityKey, this.logger));
+    const identities = await retainedAssignmentIdentities(this.saltStore, input);
+    const values = [];
+    for (const { entityKey } of identities) {
+      values.push(await readAssignmentValue(this.kv, entityKey, this.logger));
+    }
+    return assignmentValueToMap(mergeRetainedAssignmentValues(values));
   }
 
   async put(input: AssignmentPutInput): Promise<AssignmentStorePutResult> {
+    const existing = (await this.getAll(input)).get(input.experimentId);
+    if (existing !== undefined) {
+      return { status: "existing", assignment: existing };
+    }
     const { targetingKeyHash } = await hashedAssignmentIdentity(this.saltStore, input);
     return this.putHashed({
       appId: input.appId,
       experimentId: input.experimentId,
       idType: input.idType,
       targetingKeyHash,
+      identityVersion: input.identityVersion,
       runId: input.runId,
+      sourceCreatedAtMs: input.sourceCreatedAtMs,
       variant: input.variant,
     });
   }
 
-  async putHashed(input: {
-    appId: string;
-    experimentId: string;
-    idType: string;
-    targetingKeyHash: string;
-    runId: string;
-    variant: string;
-  }): Promise<AssignmentStorePutResult> {
+  async putHashed(
+    input: Parameters<AssignmentStore["putHashed"]>[0],
+  ): Promise<AssignmentStorePutResult> {
+    if (input.sourceCreatedAtMs === undefined || !Number.isFinite(input.sourceCreatedAtMs)) {
+      throw new AssignmentStoreError("Assignment sourceCreatedAtMs is required");
+    }
+    if (this.appInventory) {
+      if (input.identityVersion === undefined) {
+        throw new AssignmentStoreError("Assignment identityVersion is required");
+      }
+      return new DurableHoldoverWriteAppInventoryClient(this.appInventory).putAssignment({
+        ...input,
+        identityVersion: input.identityVersion,
+      });
+    }
     const name = assignmentWriterName(input);
     const id = this.writerNamespace.idFromName(name);
     const stub = this.writerNamespace.get(id);
@@ -68,7 +90,9 @@ export class KvAssignmentStore implements AssignmentStore {
         experimentId: input.experimentId,
         idType: input.idType,
         targetingKeyHash: input.targetingKeyHash,
+        identityVersion: input.identityVersion ?? keyVersionOf(input.targetingKeyHash),
         runId: input.runId,
+        sourceCreatedAtMs: input.sourceCreatedAtMs,
         variant: input.variant,
       }),
     });

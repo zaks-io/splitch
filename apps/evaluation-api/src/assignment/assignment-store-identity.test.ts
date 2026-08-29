@@ -1,0 +1,183 @@
+import { assignmentKey } from "@splitch/contracts";
+import {
+  computeTargetingKeyHash,
+  makeIdentitySaltStore,
+  makeMemoryAppIdentityStore,
+  mintInitialAppIdentityRecord,
+} from "@splitch/privacy";
+import { describe, expect, it } from "vitest";
+import { makeEnvSaltStore } from "../local-salt-store";
+import { hashedAssignmentIdentity, serializeAssignmentValue } from "./assignment-store";
+import {
+  basePut,
+  RAW_TARGETING_KEY,
+  RecordingKv,
+  RecordingWriterNamespace,
+} from "./assignment-store-test-fixtures";
+import { KvAssignmentStore } from "./kv-assignment-store";
+
+const ROOT = "test-root-secret-do-not-use";
+
+function hostedIdentitySaltStore() {
+  return makeEnvSaltStore({
+    EVALUATION_PRIVACY_SALT: ROOT,
+    SPLITCH_PLATFORM_TARGET: "production",
+    identityStore: makeMemoryAppIdentityStore(),
+  });
+}
+
+describe("KvAssignmentStore first-mint identity", () => {
+  it("does not activate a later mint over an already-provisioned record", async () => {
+    const identityStore = makeMemoryAppIdentityStore();
+    const first = mintInitialAppIdentityRecord(ROOT);
+    await identityStore.save(basePut.appId, first);
+    const saltStore = makeIdentitySaltStore({
+      rootSecret: ROOT,
+      identityStore,
+    });
+    const firstHash = await computeTargetingKeyHash(saltStore, {
+      appId: basePut.appId,
+      idType: basePut.idType,
+      targetingKey: basePut.targetingKey,
+    });
+    const firstKey = assignmentKey(basePut.appId, basePut.idType, firstHash);
+    const kv = new RecordingKv();
+    kv.putRaw(
+      firstKey,
+      serializeAssignmentValue({ "exp-checkout": { runId: "run-first", variant: "control" } }),
+    );
+    const winner = await identityStore.putIfAbsent(
+      basePut.appId,
+      mintInitialAppIdentityRecord(ROOT),
+    );
+    const winnerActive = winner.epochs.find((epoch) => epoch.role === "active")?.key;
+    const firstActive = first.epochs.find((epoch) => epoch.role === "active")?.key;
+    expect(winnerActive).toBeDefined();
+    expect(firstActive).toBeDefined();
+    if (winnerActive === undefined || firstActive === undefined) {
+      throw new Error("provisioned App identity record is missing its active epoch");
+    }
+    expect([...winnerActive]).toEqual([...firstActive]);
+
+    const store = new KvAssignmentStore(kv, new RecordingWriterNamespace(), saltStore);
+    const holdovers = await store.getAll(basePut);
+
+    expect(firstHash.startsWith("app-v1:")).toBe(true);
+    expect(holdovers).toEqual(
+      new Map([["exp-checkout", { runId: "run-first", variant: "control" }]]),
+    );
+    expect(kv.getCalls).toContain(firstKey);
+  });
+
+  it("isolates two Apps that share one Evaluation privacy root secret", async () => {
+    const saltStore = hostedIdentitySaltStore();
+    const kv = new RecordingKv();
+    const appA = await hashedAssignmentIdentity(saltStore, basePut);
+    kv.putRaw(
+      appA.entityKey,
+      serializeAssignmentValue({ "exp-checkout": { runId: "run-1", variant: "control" } }),
+    );
+
+    const store = new KvAssignmentStore(kv, new RecordingWriterNamespace(), saltStore);
+    const appBHoldovers = await store.getAll({ ...basePut, appId: "app-B" });
+    const appB = await hashedAssignmentIdentity(saltStore, { ...basePut, appId: "app-B" });
+
+    expect(appBHoldovers.size).toBe(0);
+    expect(kv.getCalls.every((key) => key.startsWith("assignment:app-B:"))).toBe(true);
+    expect(kv.getCalls).not.toContain(appA.entityKey);
+    expect(appB.entityKey).not.toBe(appA.entityKey);
+    expect(appA.targetingKeyHash).not.toBe(appB.targetingKeyHash);
+    expect(appA.targetingKeyHash).not.toContain(RAW_TARGETING_KEY);
+  });
+
+  it("keeps a retained local-v1 holdover visible after the App identity epoch starts", async () => {
+    const saltStore = hostedIdentitySaltStore();
+    const historicalHash = await computeTargetingKeyHash(saltStore, {
+      appId: basePut.appId,
+      idType: basePut.idType,
+      targetingKey: basePut.targetingKey,
+      keyVersion: "local-v1",
+    });
+    const historicalKey = assignmentKey(basePut.appId, basePut.idType, historicalHash);
+    const kv = new RecordingKv();
+    kv.putRaw(
+      historicalKey,
+      serializeAssignmentValue({ "exp-checkout": { runId: "run-old", variant: "control" } }),
+    );
+
+    const store = new KvAssignmentStore(kv, new RecordingWriterNamespace(), saltStore);
+    const current = await hashedAssignmentIdentity(saltStore, basePut);
+    const holdovers = await store.getAll(basePut);
+
+    expect(historicalHash.startsWith("local-v1:")).toBe(true);
+    expect(current.targetingKeyHash.startsWith("app-v1:")).toBe(true);
+    expect(current.targetingKeyHash).not.toBe(historicalHash);
+    expect(current.entityKey).not.toBe(historicalKey);
+    expect(holdovers).toEqual(
+      new Map([["exp-checkout", { runId: "run-old", variant: "control" }]]),
+    );
+    expect(kv.getCalls).toContain(historicalKey);
+    expect(kv.getCalls).toContain(current.entityKey);
+  });
+});
+
+describe("KvAssignmentStore retained epoch merge", () => {
+  it("merges compatible epoch maps and fails loud on a conflict", async () => {
+    const saltStore = hostedIdentitySaltStore();
+    const historicalHash = await computeTargetingKeyHash(saltStore, {
+      appId: basePut.appId,
+      idType: basePut.idType,
+      targetingKey: basePut.targetingKey,
+      keyVersion: "local-v1",
+    });
+    const current = await hashedAssignmentIdentity(saltStore, basePut);
+    const kv = new RecordingKv();
+    kv.putRaw(
+      assignmentKey(basePut.appId, basePut.idType, historicalHash),
+      serializeAssignmentValue({ "exp-old": { runId: "run-old", variant: "control" } }),
+    );
+    kv.putRaw(
+      current.entityKey,
+      serializeAssignmentValue({ "exp-new": { runId: "run-new", variant: "treatment" } }),
+    );
+
+    const store = new KvAssignmentStore(kv, new RecordingWriterNamespace(), saltStore);
+    const merged = await store.getAll(basePut);
+    expect(merged).toEqual(
+      new Map([
+        ["exp-old", { runId: "run-old", variant: "control" }],
+        ["exp-new", { runId: "run-new", variant: "treatment" }],
+      ]),
+    );
+
+    kv.putRaw(
+      assignmentKey(basePut.appId, basePut.idType, historicalHash),
+      serializeAssignmentValue({ "exp-new": { runId: "run-other", variant: "control" } }),
+    );
+    await expect(store.getAll(basePut)).rejects.toThrow(
+      /Conflicting Assignment for Experiment "exp-new"/,
+    );
+  });
+
+  it("writes a new Experiment under the active epoch only", async () => {
+    const saltStore = hostedIdentitySaltStore();
+    const historicalHash = await computeTargetingKeyHash(saltStore, {
+      appId: basePut.appId,
+      idType: basePut.idType,
+      targetingKey: basePut.targetingKey,
+      keyVersion: "v1",
+    });
+    const writer = new RecordingWriterNamespace();
+    const store = new KvAssignmentStore(new RecordingKv(), writer, saltStore);
+    await store.put({ ...basePut, experimentId: "exp-new" });
+    const current = await hashedAssignmentIdentity(saltStore, basePut);
+    expect(writer.names[0]).toContain(current.targetingKeyHash);
+    expect(writer.names[0]).not.toContain(historicalHash);
+    expect(writer.bodies).toEqual([
+      expect.objectContaining({
+        experimentId: "exp-new",
+        targetingKeyHash: current.targetingKeyHash,
+      }),
+    ]);
+  });
+});

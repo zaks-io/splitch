@@ -61,10 +61,28 @@ export async function makeMetricEventFixture(
     ...base,
     ...(options.omitCredentialStore ? {} : { CREDENTIAL_STORE: kv(credential) }),
     CONFIG_STORE: mergedConfigStore(base.CONFIG_STORE, config),
+    CONFIG_STORE_WRITER: base.CONFIG_STORE_WRITER ?? appIdentityWriter(config),
     METRIC_EVENT_OUTBOX: outboxStub(claims),
     ...admissionBinding(options.admission, admissionCharges),
   } as unknown as Env;
   return { env, config, claims, admissionCharges, hash, credentialKind };
+}
+
+function appIdentityWriter(values: Map<string, string>): NonNullable<Env["CONFIG_STORE_WRITER"]> {
+  return {
+    getByName: () => ({
+      async readAppIdentity(appId: string) {
+        return values.get(`app:${appId}:entity-identity`) ?? null;
+      },
+      async putAppIdentityIfAbsent(appId: string, value: string) {
+        const key = `app:${appId}:entity-identity`;
+        const winner = values.get(key);
+        if (winner !== undefined) return winner;
+        values.set(key, value);
+        return value;
+      },
+    }),
+  };
 }
 
 /** The live path: what the Evaluation Worker hands over the EVENT_INGEST binding. */
@@ -174,6 +192,9 @@ function mergedConfigStore(base: KVNamespace | undefined, values: Map<string, st
   return {
     async get(key: string) {
       return values.get(key) ?? (base ? ((await base.get(key)) as string | null) : null);
+    },
+    async put(key: string, value: string) {
+      values.set(key, value);
     },
   } as KVNamespace;
 }

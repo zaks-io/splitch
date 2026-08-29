@@ -31,6 +31,18 @@ describe("Event Ingest Worker Wrangler runtime config", () => {
    * while Cloudflare is still retrying it.
    */
   it.each([
+    ["local", config, "splitch-control-plane-api"],
+    ["shared-preview", config.env?.["shared-preview"], "splitch-control-plane-api-shared-preview"],
+    ["production", config.env?.production, "splitch-control-plane-api"],
+  ])("subscribes to the Config Store identity coordinator for %s", (_target, target, scriptName) => {
+    expect(target?.durable_objects?.bindings).toContainEqual({
+      name: "CONFIG_STORE_WRITER",
+      class_name: "ConfigStoreDurableObject",
+      script_name: scriptName,
+    });
+  });
+
+  it.each([
     ["local", config],
     ["shared-preview", config.env?.["shared-preview"]],
     ["production", config.env?.production],
@@ -85,7 +97,7 @@ interface WranglerTarget {
 }
 
 interface DurableObjectsConfig {
-  bindings?: Array<{ name?: string; class_name?: string }>;
+  bindings?: Array<{ name?: string; class_name?: string; script_name?: string }>;
 }
 
 interface Migration {

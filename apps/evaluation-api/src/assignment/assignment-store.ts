@@ -1,25 +1,31 @@
 import {
-  assignmentKey,
   type AssignmentStoreEntry,
   type AssignmentStoreValue,
   AssignmentStoreValueSchema,
+  assignmentKey,
   CURRENT_KV_SCHEMA_VERSION,
   kvEnvelope,
 } from "@splitch/contracts";
-import { computeTargetingKeyHash, type SaltStore } from "@splitch/privacy";
 import { AssignmentStoreError } from "@splitch/evaluation-core";
+import {
+  computeRetainedTargetingKeyHashes,
+  computeTargetingKeyHash,
+  type SaltStore,
+} from "@splitch/privacy";
 
-export type { AssignmentStoreEntry } from "@splitch/contracts";
+export type { AssignmentStoreEntry, AssignmentStoreValue } from "@splitch/contracts";
 
 export interface AssignmentIdentity {
   appId: string;
   idType: string;
   targetingKey: string;
+  identityVersion?: string;
 }
 
 export interface AssignmentPutInput extends AssignmentIdentity {
   experimentId: string;
   runId: string;
+  sourceCreatedAtMs?: number;
   variant: string;
 }
 
@@ -28,7 +34,9 @@ export interface HashedAssignmentPutInput {
   experimentId: string;
   idType: string;
   targetingKeyHash: string;
+  identityVersion?: string;
   runId: string;
+  sourceCreatedAtMs?: number;
   variant: string;
 }
 
@@ -74,11 +82,56 @@ export async function hashedAssignmentIdentity(
   saltStore: SaltStore,
   input: AssignmentIdentity,
 ): Promise<{ entityKey: string; targetingKeyHash: string }> {
-  const targetingKeyHash = await computeTargetingKeyHash(saltStore, input);
+  const targetingKeyHash = await computeTargetingKeyHash(saltStore, {
+    ...input,
+    keyVersion: input.identityVersion,
+  });
   return {
     entityKey: assignmentKey(input.appId, input.idType, targetingKeyHash),
     targetingKeyHash,
   };
+}
+
+/**
+ * Current and every retained-epoch Assignment Store key for this Entity.
+ * Callers merge every compatible map and fail loud on conflicting values.
+ */
+export async function retainedAssignmentIdentities(
+  saltStore: SaltStore,
+  input: AssignmentIdentity,
+): Promise<readonly { entityKey: string; targetingKeyHash: string }[]> {
+  if (
+    input.identityVersion !== undefined &&
+    (await saltStore.currentKeyVersion(input.appId)) !== input.identityVersion
+  ) {
+    throw new AssignmentStoreError("App identity generation changed during Assignment read");
+  }
+  const hashes = await computeRetainedTargetingKeyHashes(saltStore, input);
+  return hashes.map((targetingKeyHash) => ({
+    targetingKeyHash,
+    entityKey: assignmentKey(input.appId, input.idType, targetingKeyHash),
+  }));
+}
+
+export function mergeRetainedAssignmentValues(
+  values: readonly AssignmentStoreValue[],
+): AssignmentStoreValue {
+  const merged: AssignmentStoreValue = {};
+  for (const value of values) {
+    for (const [experimentId, entry] of Object.entries(value)) {
+      const existing = merged[experimentId];
+      if (existing === undefined) {
+        merged[experimentId] = entry;
+        continue;
+      }
+      if (existing.runId !== entry.runId || existing.variant !== entry.variant) {
+        throw new AssignmentStoreError(
+          `Conflicting Assignment for Experiment "${experimentId}" across retained identity epochs`,
+        );
+      }
+    }
+  }
+  return merged;
 }
 
 export function assignmentWriterName(

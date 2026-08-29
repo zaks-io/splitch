@@ -1,19 +1,15 @@
 import { describe, expect, it } from "vitest";
-import type { HashedAssignmentPutInput } from "./assignment-store";
 import { RecordingKv } from "./assignment-store-test-fixtures";
 import {
   suppressAndPurgeEntityHoldoverWriteOutbox,
   suppressAppHoldoverWriteOutbox,
 } from "./holdover-write-deletion";
 import { DirectHoldoverWriteCoordinator } from "./holdover-write-outbox";
-import { MemoryHoldoverWriteCoordinator } from "./holdover-write-outbox-memory";
 import {
   deleteEntityOutbox,
   HOLDOVER_WRITE_ENTITY_SUPPRESSED_KEY,
   HOLDOVER_WRITE_JOB_PREFIX,
   HOLDOVER_WRITE_MAX_ATTEMPTS,
-  type HoldoverWriteJob,
-  type HoldoverWriteOutboxStorage,
   holdoverWriteJobDueAtMs,
   holdoverWriteJobKey,
   holdoverWriteOutboxName,
@@ -23,65 +19,12 @@ import {
   suppressEntityOutbox,
 } from "./holdover-write-outbox-core";
 import { ensureHoldoverWriteJob, runHoldoverWriteAlarm } from "./holdover-write-outbox-ensure";
-
-const basePut: HashedAssignmentPutInput = {
-  appId: "app-A",
-  experimentId: "exp-1",
-  idType: "user",
-  targetingKeyHash: "hash-abc",
-  runId: "run-42",
-  variant: "treatment",
-};
-
-class FailNTimesPut {
-  readonly calls: HashedAssignmentPutInput[] = [];
-  constructor(private readonly failures: number) {}
-  async putHashed(input: HashedAssignmentPutInput): Promise<{ status: "stored" }> {
-    this.calls.push(input);
-    if (this.calls.length <= this.failures) {
-      throw new Error(`forced put failure #${this.calls.length}`);
-    }
-    return { status: "stored" };
-  }
-}
-
-class MemoryStorage implements HoldoverWriteOutboxStorage {
-  readonly values = new Map<string, unknown>();
-  alarms: number[] = [];
-  async get<T>(key: string): Promise<T | undefined> {
-    return this.values.get(key) as T | undefined;
-  }
-  async put<T>(key: string, value: T): Promise<void> {
-    this.values.set(key, value);
-  }
-  async delete(key: string): Promise<boolean | undefined> {
-    const had = this.values.has(key);
-    this.values.delete(key);
-    return had;
-  }
-  async list<T>(options?: { prefix?: string }): Promise<Map<string, T>> {
-    const out = new Map<string, T>();
-    for (const [key, value] of this.values) {
-      if (options?.prefix === undefined || key.startsWith(options.prefix)) {
-        out.set(key, value as T);
-      }
-    }
-    return out;
-  }
-  async setAlarm(scheduledTime: number): Promise<void> {
-    this.alarms.push(scheduledTime);
-  }
-  async deleteAlarm(): Promise<void> {}
-  get job(): HoldoverWriteJob | undefined {
-    return this.values.get(holdoverWriteJobKey(basePut.experimentId)) as
-      | HoldoverWriteJob
-      | undefined;
-  }
-}
+import { MemoryHoldoverWriteCoordinator } from "./holdover-write-outbox-memory";
+import { basePut, FailNTimesPut, MemoryStorage } from "./holdover-write-outbox-test-fixtures";
 
 describe("holdover write outbox core", () => {
   it("names the outbox with the Entity writer slot (no experiment suffix)", () => {
-    expect(holdoverWriteOutboxName(basePut)).toBe("app-A:user:hash-abc");
+    expect(holdoverWriteOutboxName(basePut)).toBe("app-A:user:v1:hash-abc");
     expect(holdoverWriteOutboxName(basePut)).not.toMatch(/ticket|credential|targetingKey[^H]/i);
     expect(holdoverWriteJobKey(basePut.experimentId)).toBe(
       `${HOLDOVER_WRITE_JOB_PREFIX}${basePut.experimentId}`,
@@ -98,7 +41,7 @@ describe("holdover write outbox core", () => {
       appId: "app-A",
       experimentId: "exp-1",
       idType: "user",
-      targetingKeyHash: "hash-abc",
+      targetingKeyHash: "v1:hash-abc",
       runId: "run-42",
       variant: "treatment",
       attempt: 3,
@@ -175,7 +118,7 @@ describe("holdover write outbox core", () => {
     expect(exhaustion?.detail).toMatchObject({
       appId: "app-A",
       experimentId: "exp-1",
-      targetingKeyHash: "hash-abc",
+      targetingKeyHash: "v1:hash-abc",
       runId: "run-42",
       variant: "treatment",
       status: "poisoned",

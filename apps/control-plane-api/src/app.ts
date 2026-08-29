@@ -18,15 +18,18 @@ import { unavailableAnalysisResults } from "./attention-analysis-reader";
 import { makeAttentionRollupHandler } from "./attention-rollup";
 import type { CloudflareHandlerDeps } from "./cloudflare-handlers";
 import { mountCloudflareRoutes } from "./cloudflare-route-mounting";
-import type { ConfigStoreAccess } from "./config-store-do";
+import type { ConfigStoreAccess } from "./config-store-access";
 import type { ConvexHandlerDeps } from "./convex-handlers";
 import { mountConvexRoutes } from "./convex-route-mounting";
 import type { CredentialCacheWriterAccess } from "./credential-cache";
 import { makeCredentialHandlers } from "./credential-handlers";
 import { type DelegationBindings, mountDelegatedRoutes } from "./delegated-routes";
+import type { EntityPrivacyConsumer } from "./entity-privacy-consumer";
+import { mountEntityPrivacyRoutes } from "./entity-privacy-handlers";
 import type { EnvironmentExposureStatusCleanup } from "./environment-exposure-status-cleanup";
 import { registerEventDefinitionRoutes } from "./event-definition-handlers";
 import { makeExperimentHandlers } from "./experiment-handlers";
+import { mountExperimentRoutes, mountMetricRoutes } from "./experiment-metric-route-mounting";
 import { diagnosableHandlers } from "./flag-config-policy";
 import { makeFlagDefinitionHandlers } from "./flag-definition-handlers";
 import { mountFlagDefinitionRoutes } from "./flag-definition-route-mounting";
@@ -82,6 +85,7 @@ export interface AppDeps {
   approvalArchiveStore?: import("./approval-archive").ApprovalArchiveStore;
   exposureStatusCleanup?: EnvironmentExposureStatusCleanup;
   holdoverWriteOutboxCleanup?: HoldoverWriteOutboxCleanup;
+  entityPrivacy?: EntityPrivacyConsumer;
   convex?: Omit<ConvexHandlerDeps, "repo">;
   cloudflare?: Omit<CloudflareHandlerDeps, "repo">;
   sentry?: Omit<SentryHandlerDeps, "repo">;
@@ -259,12 +263,14 @@ export function createApp(deps: AppDeps): Hono {
   registrar.mount(app, controlPlaneRoute("api_keys_list"), credentialHandlers.listApiKeys);
   registrar.mount(app, controlPlaneRoute("api_keys_create"), credentialHandlers.createApiKey);
   registrar.mount(app, controlPlaneRoute("api_keys_revoke"), credentialHandlers.revokeApiKey);
-  // Entity privacy physical purge (Assignment Store KV/DO + Tinybird) is not
-  // implemented in this slice — keep the route fail-loud unavailable rather than
-  // claiming a queued deletion job. Holdover-write Entity/App cleanup remains on
-  // the Evaluation App-deletion path.
+  mountEntityPrivacyRoutes(app, registrar, {
+    repo: deps.repo,
+    entityPrivacy: deps.entityPrivacy,
+    configStore: deps.configStore,
+    nowIso: deps.nowIso,
+  });
   mountUnavailableControlPlaneRoutes(app, registrar, deps.repo);
-  mountDelegatedRoutes(app, registrar, deps.delegationBindings ?? {}, deps.repo);
+  mountDelegatedRoutes(app, registrar, deps.delegationBindings ?? {}, deps.repo, deps.configStore);
 
   return app;
 }
@@ -290,32 +296,4 @@ function mountAttentionRollupRoute(app: Hono, registrar: Registrar, deps: AppDep
       analysisResults: deps.analysisResults ?? unavailableAnalysisResults,
     }),
   );
-}
-
-function mountExperimentRoutes(
-  app: Hono,
-  registrar: Registrar,
-  handlers: ReturnType<typeof makeExperimentHandlers>,
-): void {
-  registrar.mount(app, controlPlaneRoute("experiments_list"), handlers.listExperiments);
-  registrar.mount(app, controlPlaneRoute("experiments_create"), handlers.createExperiment);
-  registrar.mount(app, controlPlaneRoute("experiments_get"), handlers.getExperiment);
-  registrar.mount(app, controlPlaneRoute("experiments_update"), handlers.updateExperiment);
-  registrar.mount(app, controlPlaneRoute("experiments_delete"), handlers.deleteExperiment);
-  registrar.mount(app, controlPlaneRoute("experiments_start"), handlers.startExperiment);
-  registrar.mount(app, controlPlaneRoute("runs_list"), handlers.listRuns);
-  registrar.mount(app, controlPlaneRoute("runs_get"), handlers.getRun);
-  registrar.mount(app, controlPlaneRoute("runs_end"), handlers.endRun);
-}
-
-function mountMetricRoutes(
-  app: Hono,
-  registrar: Registrar,
-  handlers: ReturnType<typeof makeMetricSegmentHandlers>,
-): void {
-  registrar.mount(app, controlPlaneRoute("metrics_list"), handlers.listMetrics);
-  registrar.mount(app, controlPlaneRoute("metrics_create"), handlers.createMetric);
-  registrar.mount(app, controlPlaneRoute("metrics_get"), handlers.getMetric);
-  registrar.mount(app, controlPlaneRoute("metrics_update"), handlers.updateMetric);
-  registrar.mount(app, controlPlaneRoute("metrics_delete"), handlers.deleteMetric);
 }

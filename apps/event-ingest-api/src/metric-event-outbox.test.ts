@@ -82,6 +82,41 @@ describe("Metric Event outbox Durable Object", () => {
     expect(outbox.send).not.toHaveBeenCalled();
     expect(outbox.stored()).toEqual(first);
   });
+
+  it("redacts the payload and keeps a payload-free claim that suppresses stale retries", async () => {
+    const outbox = makeOutbox();
+    outbox.seed({ ...row("entity-7"), queued: true });
+
+    const deleted = await outbox.suppress(row("entity-7"));
+    const replay = await outbox.claim(row("entity-7"));
+    const exported = await outbox.exported();
+
+    expect(deleted).toEqual({ deleted: true, proof: "metric-event-outbox-redacted-v1" });
+    expect(replay.outcome).toBe("duplicate");
+    expect(exported).toEqual({ deleted: true, row: null });
+    expect(outbox.stored()).not.toHaveProperty("row");
+    expect(outbox.send).not.toHaveBeenCalled();
+  });
+
+  it("does not let a queue send overwrite a concurrent suppression tombstone", async () => {
+    let releaseSend!: () => void;
+    const sendPaused = new Promise<void>((resolve) => {
+      releaseSend = resolve;
+    });
+    const outbox = makeOutbox(async () => sendPaused);
+
+    const claim = outbox.claim(row("entity-7"));
+    await vi.waitFor(() => expect(outbox.send).toHaveBeenCalledTimes(1));
+    const suppression = outbox.suppress(row("entity-7"));
+
+    await expect(
+      Promise.race([suppression.then(() => "done"), Promise.resolve("blocked")]),
+    ).resolves.toBe("blocked");
+    releaseSend();
+    await expect(claim).resolves.toMatchObject({ outcome: "accepted" });
+    await expect(suppression).resolves.toMatchObject({ deleted: true });
+    await expect(outbox.exported()).resolves.toEqual({ deleted: true, row: null });
+  });
 });
 
 interface ClaimInput {
@@ -101,9 +136,9 @@ function row(targetingKey: string): ClaimInput {
 }
 
 /** Durable Object storage round-trips through structured clone, so this does too. */
-function makeOutbox() {
+function makeOutbox(sendImpl: () => Promise<void> = async () => {}) {
   const storage = new Map<string, unknown>();
-  const send = vi.fn(async (_row: Record<string, unknown>) => {});
+  const send = vi.fn(async (_row: Record<string, unknown>) => sendImpl());
   const ctx = {
     storage: {
       async get<T>(key: string) {
@@ -140,6 +175,22 @@ function makeOutbox() {
       return object.fetch(
         new Request("https://metric-event-outbox.local/lookup", { method: "GET" }),
       );
+    },
+    async suppress(input: ClaimInput) {
+      const response = await object.fetch(
+        new Request("https://metric-event-outbox.local/suppress", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(input),
+        }),
+      );
+      expect(response.status).toBe(200);
+      return response.json();
+    },
+    async exported() {
+      const response = await object.fetch(new Request("https://metric-event-outbox.local/export"));
+      expect(response.status).toBe(200);
+      return response.json();
     },
   };
 }

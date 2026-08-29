@@ -108,6 +108,26 @@ describe("GET/POST experiment results", () => {
       experiment_id: EXPERIMENT_ID,
     });
   });
+
+  it("joins historical shared-root Exposure and Metric Event hashes before stats", async () => {
+    const digest = "485bdba84f840c9627db32bcc99a6f00722b5253754e513ff473c90a8febc588";
+    const fixture = rowsByPipe();
+    const exposures = fixture.analysis_deduped_exposures as { targeting_key_hash: string }[];
+    const metrics = fixture.analysis_metric_values as { targeting_key_hash: string }[];
+    if (exposures[0]) exposures[0].targeting_key_hash = `local-v1:${digest}`;
+    if (metrics[0]) metrics[0].targeting_key_hash = `v1:${digest}`;
+    const tinybird = new FakeTinybird(fixture);
+
+    const input = await readStatsInputFromTinybird(tinybird, {
+      appId: APP_ID,
+      environmentId: ENVIRONMENT_ID,
+      experimentId: EXPERIMENT_ID,
+      runId: RUN_ID,
+    });
+
+    expect(input.exposures.map((row) => row.targeting_key_hash)).toContain(`v1:${digest}`);
+    expect(input.metric_values.map((row) => row.targeting_key_hash)).toContain(`v1:${digest}`);
+  });
 });
 
 describe("GET/POST experiment results isolation", () => {

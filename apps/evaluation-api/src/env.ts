@@ -20,6 +20,7 @@ export interface ConvexControlPlaneBinding extends ExposureIngestFetcher {
   loadCloudflareExposureVerificationConfig(
     input: ConvexExposureVerificationRequest,
   ): Promise<ConvexExposureVerificationResult>;
+  resetCompromisedAppIdentity(appId: string, resetId: string): Promise<string>;
 }
 
 export interface EvaluationApiEnv {

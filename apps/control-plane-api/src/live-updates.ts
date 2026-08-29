@@ -10,7 +10,7 @@ import {
   renderError,
 } from "@splitch/worker-runtime";
 import type { Context, Hono } from "hono";
-import type { ConfigStoreAccess } from "./config-store-do";
+import type { ConfigStoreAccess } from "./config-store-access";
 import { resolveControlPlanePathSelectors } from "./path-selector-resolution";
 
 const LIVE_UPDATE_PATH = "/apps/:appId/envs/:environmentId/live";

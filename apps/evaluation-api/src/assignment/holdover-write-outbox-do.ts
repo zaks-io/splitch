@@ -25,7 +25,7 @@ export class HoldoverWriteOutboxDurableObject extends DurableObject<HoldoverWrit
   }
 
   private async handleFetch(request: Request): Promise<Response> {
-    const putPort = assignmentWriterPutPort(this.env.ASSIGNMENT_STORE_WRITER);
+    const putPort = assignmentWriterPutPort(this.requiredAppInventory());
     return handleHoldoverWriteOutboxFetch(
       this.ctx.storage,
       putPort,
@@ -38,7 +38,7 @@ export class HoldoverWriteOutboxDurableObject extends DurableObject<HoldoverWrit
   }
 
   private async handleAlarm(): Promise<void> {
-    const putPort = assignmentWriterPutPort(this.env.ASSIGNMENT_STORE_WRITER);
+    const putPort = assignmentWriterPutPort(this.requiredAppInventory());
     await runHoldoverWriteAlarm(
       this.ctx.storage,
       putPort,
@@ -46,5 +46,11 @@ export class HoldoverWriteOutboxDurableObject extends DurableObject<HoldoverWrit
       console,
       appSuppressionFromKv(this.env.ASSIGNMENTS_KV),
     );
+  }
+
+  private requiredAppInventory() {
+    const inventory = this.env.HOLDOVER_WRITE_APP_INVENTORY;
+    if (!inventory) throw new Error("HOLDOVER_WRITE_APP_INVENTORY is required");
+    return inventory;
   }
 }

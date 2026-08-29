@@ -52,6 +52,11 @@ export type HoldoverWriteAppInventoryRegisterResult =
   | { readonly status: "registered" }
   | { readonly status: "suppressed" };
 
+export type HoldoverWriteAppAssignmentAdmissionResult =
+  | { readonly status: "registered" }
+  | { readonly status: "suppressed" }
+  | { readonly status: "stale" };
+
 export interface HoldoverWriteAppInventoryNamespace {
   idFromName(name: string): DurableObjectId;
   get(id: DurableObjectId): {
@@ -63,6 +68,7 @@ const ENTITY_PREFIX = "entity:";
 const SUPPRESSED_KEY = "suppressed";
 const DELETION_COMPLETE_KEY = "deletionComplete";
 const DELETE_BEFORE_TS_KEY = "deleteBeforeTsMs";
+const ACTIVE_IDENTITY_VERSION_KEY = "activeIdentityVersion";
 
 export function holdoverWriteAppInventoryName(appId: string): string {
   if (appId.length === 0) {
@@ -91,6 +97,47 @@ export async function registerAppInventoryEntity(
   }
   await storage.put(entityInventoryKey(ref), ref);
   return { status: "registered" };
+}
+
+/**
+ * Atomically fence an Assignment mutation against the App reset generation and
+ * durably inventory its writer before the writer is allowed to mutate.
+ */
+export async function admitAppInventoryAssignment(
+  storage: HoldoverWriteAppInventoryStorage,
+  ref: HoldoverWriteAppEntityRef,
+  identityVersion: string,
+): Promise<HoldoverWriteAppAssignmentAdmissionResult> {
+  requireEntityRef(ref);
+  if (identityVersion.length === 0) {
+    throw new Error("admitAppInventoryAssignment: identityVersion is required");
+  }
+  if (
+    (await storage.get<boolean>(SUPPRESSED_KEY)) === true ||
+    (await storage.get<boolean>(DELETION_COMPLETE_KEY)) === true
+  ) {
+    return { status: "suppressed" };
+  }
+  const active = await storage.get<string>(ACTIVE_IDENTITY_VERSION_KEY);
+  if (active !== undefined && active !== identityVersion) return { status: "stale" };
+  if (active === undefined) await storage.put(ACTIVE_IDENTITY_VERSION_KEY, identityVersion);
+  await storage.put(entityInventoryKey(ref), ref);
+  return { status: "registered" };
+}
+
+/** Store the replacement generation while suppression is still held. */
+export async function activateAppInventoryIdentityVersion(
+  storage: HoldoverWriteAppInventoryStorage,
+  identityVersion: string,
+): Promise<void> {
+  if (identityVersion.length === 0) {
+    throw new Error("activateAppInventoryIdentityVersion: identityVersion is required");
+  }
+  const active = await storage.get<string>(ACTIVE_IDENTITY_VERSION_KEY);
+  if ((await storage.get<boolean>(SUPPRESSED_KEY)) !== true && active !== identityVersion) {
+    throw new Error("activateAppInventoryIdentityVersion: App is not suppressed");
+  }
+  await storage.put(ACTIVE_IDENTITY_VERSION_KEY, identityVersion);
 }
 
 /**

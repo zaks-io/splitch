@@ -1,8 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { RecordingKv } from "./assignment-store-test-fixtures";
 import {
+  activateAppInventoryIdentityVersion,
+  admitAppInventoryAssignment,
   appInventoryStatus,
   beginAppInventoryDeletion,
+  cancelAppInventoryDeletion,
   completeAppInventoryDeletion,
   type HoldoverWriteAppInventoryStorage,
   markAppInventoryEntityPurged,
@@ -39,6 +42,23 @@ class MemoryInventoryStorage implements HoldoverWriteAppInventoryStorage {
 }
 
 describe("holdover write App inventory ordering / resumability", () => {
+  it("durably fences old Assignment generations and inventories the admitted writer", async () => {
+    const storage = new MemoryInventoryStorage();
+    const ref = { idType: "user", targetingKeyHash: "app-v1:hash-1" };
+
+    await expect(admitAppInventoryAssignment(storage, ref, "app-v1")).resolves.toEqual({
+      status: "registered",
+    });
+    await beginAppInventoryDeletion(storage, 1_000);
+    await activateAppInventoryIdentityVersion(storage, "app-v2");
+    await cancelAppInventoryDeletion(storage);
+
+    expect((await appInventoryStatus(storage)).entities).toEqual([ref]);
+    await expect(admitAppInventoryAssignment(storage, ref, "app-v1")).resolves.toEqual({
+      status: "stale",
+    });
+  });
+
   it("begin-deletion requires appId in the body for KV suppress (not only DO id.name)", async () => {
     const storage = new MemoryInventoryStorage();
     const kv = new RecordingKv();

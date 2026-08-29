@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   apiKeyCacheKey,
+  appEntityIdentityKey,
   assignmentKey,
   clientKeyCacheKey,
   controlPlaneFlagConfigKey,
@@ -78,5 +79,11 @@ describe("assignment key-pattern constructor (per-Entity, ADR-0008/0009)", () =>
   it("does not embed a raw Targeting Key — only the supplied hash appears", () => {
     const key = assignmentKey("app_1", "user", "hash_of_user_42");
     expect(key.endsWith(":hash_of_user_42")).toBe(true);
+  });
+});
+
+describe("App entity identity key", () => {
+  it("produces app:{appId}:entity-identity", () => {
+    expect(appEntityIdentityKey("app_1")).toBe("app:app_1:entity-identity");
   });
 });

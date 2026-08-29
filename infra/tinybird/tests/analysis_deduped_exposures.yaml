@@ -42,3 +42,15 @@
   parameters: "app_id=app_1&environment_id=env_prod&experiment_id=exp_1"
   expected_http_status: 400
   expected_result: "Template Syntax Error: Required parameter is not defined. Check the parameters app_id, environment_id, experiment_id and run_id. Please provide a value or set a default value in the pipe code."
+- name: entity_deletion_cutoff_excludes_old_exposure
+  description: The durable Entity tombstone gates retained reads before physical purge while later collection remains visible.
+  parameters: "app_id=app_privacy&environment_id=env_prod&experiment_id=exp_privacy&run_id=run_privacy"
+  expected_http_status: 200
+  expected_result: |
+    {"app_id":"app_privacy","environment_id":"env_prod","id_type":"user","run_id":"run_privacy","targeting_key_hash":"app-v1:bbbb-new","variant":"control","first_exposure_ts":"2026-07-03 00:00:00.000","window_anchor":"2026-07-03 00:00:00.000"}
+- name: late_old_generation_copy_stays_hidden_after_reset
+  description: A Copy snapshot that finishes after reset cannot make local-v1, v1, or app-v1 rows visible, while replacement app-v2 remains visible.
+  parameters: "app_id=app_reset_generation&environment_id=env_prod&experiment_id=exp_reset&run_id=run_reset"
+  expected_http_status: 200
+  expected_result: |
+    {"app_id":"app_reset_generation","environment_id":"env_prod","id_type":"user","run_id":"run_reset","targeting_key_hash":"app-v2:replacement","variant":"treatment","first_exposure_ts":"2026-07-12 00:00:00.000","window_anchor":"2026-07-12 00:00:00.000"}

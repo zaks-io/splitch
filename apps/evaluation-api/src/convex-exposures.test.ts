@@ -298,5 +298,8 @@ function saltStore() {
     async saltFor() {
       return new TextEncoder().encode("test-salt") as Uint8Array<ArrayBuffer>;
     },
+    async retainedKeyVersions() {
+      return ["v1"];
+    },
   };
 }

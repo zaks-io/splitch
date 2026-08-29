@@ -3,7 +3,7 @@ import { appScope, envScope, type Repository } from "@splitch/db";
 import { renderError } from "@splitch/worker-runtime";
 import { requireAppWrite as requireAppWriteAuthz } from "./app-authz";
 import { appNotFound } from "./app-environment-model";
-import type { ConfigStoreAccess } from "./config-store-do";
+import type { ConfigStoreAccess } from "./config-store-access";
 import type { RunningBlocker } from "./flag-definition-guards";
 import { pathParam } from "./handler-input";
 

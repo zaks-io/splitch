@@ -17,6 +17,9 @@ const store: SaltStore = {
     // Obvious fake test salt — NOT a real secret.
     return new TextEncoder().encode("test-salt-durable-shape-v1");
   },
+  async retainedKeyVersions() {
+    return ["v1"];
+  },
 };
 
 // Mirrors the entity_deletions durable row (storage-schemas-d1-privacy.md).

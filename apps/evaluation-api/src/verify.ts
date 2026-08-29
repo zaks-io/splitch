@@ -5,9 +5,15 @@ import {
   type Variant,
 } from "@splitch/contracts";
 import { type HandlerArgs, type Principal, renderError } from "@splitch/worker-runtime";
+import {
+  admittedEvaluatePathDeps,
+  appIdentityAdmissionValidationError,
+  tryAdmitAppIdentity,
+} from "./app-identity-traffic";
 import { verify } from "./evaluate/accessor-paths";
 import type { EvaluateResult } from "./evaluate/evaluate-path";
 import type { EvaluatePathDeps, EvaluatePathInput } from "./evaluate/evaluate-path-types";
+import type { ExposureAssemblyDeps } from "./evaluate/exposure-assembly";
 import { errorDisclosureForKind, errorResponse } from "./evaluation-error-response";
 import type { FlagConfig, Provider } from "./provider/provider";
 import { reasonForResolution } from "./resolution-reason";
@@ -27,13 +33,23 @@ interface CredentialScope {
   readonly environmentId: string;
 }
 
-export function makeVerifyHandler(deps: EvaluatePathDeps) {
+export function makeVerifyHandler(
+  deps: EvaluatePathDeps & { exposureAssembly: ExposureAssemblyDeps },
+) {
   return async ({ input, principal, requestId }: HandlerArgs<unknown>): Promise<Response> => {
     const parsed = verifyInput(input);
     const scope = credentialScope(principal, parsed.body.appId);
     if (!scope.ok) return renderError(scope.error, { requestId });
+    const admitted = await tryAdmitAppIdentity(deps.exposureAssembly.saltStore, scope.value.appId);
+    if (!admitted.ok) return renderError(admitted.error, { requestId });
 
-    const evaluated = await verifyWithCapture(parsed.body, scope.value, deps);
+    const evaluated = await verifyWithCapture(
+      parsed.body,
+      scope.value,
+      admittedEvaluatePathDeps(deps, admitted.admission),
+    );
+    const stale = await appIdentityAdmissionValidationError(admitted.admission);
+    if (stale !== null) return renderError(stale, { requestId });
     return verifyResponse(
       evaluated,
       principal.kind === "api-key",

@@ -2,7 +2,7 @@ import type { ApprovalRequest } from "@splitch/contracts";
 import { type ApprovalCommit, appScope, type Repository } from "@splitch/db";
 import { applyExperimentStart } from "./approval-application-experiment-start";
 import type { ApplicationOutcome } from "./approval-service-types";
-import type { ConfigStoreAccess } from "./config-store-do";
+import type { ConfigStoreAccess } from "./config-store-access";
 import { captureFlagConfigPurgeTargets, purgeFlagConfigsKvForKey } from "./flag-config-lifecycle";
 import {
   type VariantDeleteRefusal,

@@ -15,6 +15,7 @@ export function holdoverWriteFaultHooks(
   missingSuppressionReadsRemaining: number,
   pauseCancelAlarmAfterSnapshot: boolean,
   pausePreparedAlarmAfterSnapshot: boolean,
+  pauseAssignmentWriterPut: boolean,
 ): string {
   if (
     registerFailsRemaining <= 0 &&
@@ -30,7 +31,8 @@ export function holdoverWriteFaultHooks(
     !pauseFinalizeAfterInventoryList &&
     missingSuppressionReadsRemaining <= 0 &&
     !pauseCancelAlarmAfterSnapshot &&
-    !pausePreparedAlarmAfterSnapshot
+    !pausePreparedAlarmAfterSnapshot &&
+    !pauseAssignmentWriterPut
   ) {
     return "";
   }
@@ -74,6 +76,10 @@ HoldoverWriteAppInventoryDurableObject.prototype.fetch = async function (request
   }
   if (url.pathname === "/__test/transaction-status" && request.method === "GET") {
     return Response.json({ sagaPutObserved: globalThis.__markTransactionSagaPutObserved });
+  }
+  if (url.pathname === "/__test/release-assignment-writer-put" && request.method === "POST") {
+    globalThis.__assignmentWriterPutReleased = true;
+    return Response.json({ released: true });
   }
   if (url.pathname === "/__test/alarm" && request.method === "POST") {
     await this.ctx.storage.deleteAlarm();
@@ -203,7 +209,12 @@ HoldoverWriteOutboxDurableObject.prototype.fetch = async function (request) {
       Date.now = originalDateNow;
     }
   }
-  if (url.pathname === "/purge" && globalThis.__purgeFailsRemaining > 0) {
+  if (
+    (url.pathname === "/purge" ||
+      url.pathname === "/delete" ||
+      url.pathname === "/reset-app") &&
+    globalThis.__purgeFailsRemaining > 0
+  ) {
     globalThis.__purgeFailsRemaining -= 1;
     return Response.json({ error: "forced Entity purge failure" }, { status: 503 });
   }
@@ -228,6 +239,16 @@ HoldoverWriteOutboxDurableObject.prototype.alarm = async function () {
   }
 };
 const __prodAssignmentWriteThrough = AssignmentStoreWriter.prototype.writeThrough;
+const __prodAssignmentPut = AssignmentStoreWriter.prototype.put;
+AssignmentStoreWriter.prototype.put = async function (input) {
+  if (globalThis.__pauseAssignmentWriterPut && !globalThis.__assignmentWriterPutReached) {
+    globalThis.__assignmentWriterPutReached = true;
+    while (!globalThis.__assignmentWriterPutReleased) {
+      await new Promise((resolve) => setTimeout(resolve, 1));
+    }
+  }
+  return __prodAssignmentPut.call(this, input);
+};
 AssignmentStoreWriter.prototype.writeThrough = async function (input) {
   globalThis.__writerPutAttempts += 1;
   const originalKv = this.kv;

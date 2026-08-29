@@ -2,53 +2,28 @@
  * Shared TypeScript concatenation harness for Miniflare tests that load the
  * real App inventory + Entity outbox + assignment-store DO classes.
  */
-import { readFileSync } from "node:fs";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
 import ts from "typescript";
 import { holdoverWriteFaultHooks } from "./holdover-write-miniflare-faults";
 import { holdoverWriteInventoryClientStubs } from "./holdover-write-miniflare-harness";
-
-const root = dirname(fileURLToPath(import.meta.url));
-
-interface HoldoverWriteMiniflareOptions {
-  registerFailsRemaining?: number;
-  suppressPutFailsRemaining?: number;
-  cancelStatePutFailsRemaining?: number;
-  cancelKvDeleteFailsRemaining?: number;
-  staleSuppressionReadsRemaining?: number;
-  writerPutFailsRemaining?: number;
-  purgeFailsRemaining?: number;
-  markTransactionFailsBeforeCommitRemaining?: number;
-  markTransactionThrowsAfterCommitRemaining?: number;
-  pauseCancelAfterKvDelete?: boolean;
-  pauseFinalizeAfterInventoryList?: boolean;
-  missingSuppressionReadsRemaining?: number;
-  pauseCancelAlarmAfterSnapshot?: boolean;
-  pausePreparedAlarmAfterSnapshot?: boolean;
-}
-
-const DEFAULT_OPTIONS = {
-  registerFailsRemaining: 0,
-  suppressPutFailsRemaining: 0,
-  cancelStatePutFailsRemaining: 0,
-  cancelKvDeleteFailsRemaining: 0,
-  staleSuppressionReadsRemaining: 0,
-  writerPutFailsRemaining: 0,
-  purgeFailsRemaining: 0,
-  markTransactionFailsBeforeCommitRemaining: 0,
-  markTransactionThrowsAfterCommitRemaining: 0,
-  pauseCancelAfterKvDelete: false,
-  pauseFinalizeAfterInventoryList: false,
-  missingSuppressionReadsRemaining: 0,
-  pauseCancelAlarmAfterSnapshot: false,
-  pausePreparedAlarmAfterSnapshot: false,
-} satisfies Required<HoldoverWriteMiniflareOptions>;
+import {
+  type HoldoverWriteMiniflareOptions,
+  resolveHoldoverWriteMiniflareOptions,
+} from "./holdover-write-miniflare-options";
+import {
+  readSource,
+  stripExport,
+  stripImport,
+  stripImports,
+  stripIsRecordHelpers,
+} from "./holdover-write-miniflare-source";
 
 export function bundleHoldoverWriteInventoryAndOutboxWorker(
   options?: HoldoverWriteMiniflareOptions,
 ): string {
-  const source = renderWorkerSource(readWorkerSources(), { ...DEFAULT_OPTIONS, ...options });
+  const source = renderWorkerSource(
+    readWorkerSources(),
+    resolveHoldoverWriteMiniflareOptions(options),
+  );
   return ts.transpileModule(source, {
     compilerOptions: {
       module: ts.ModuleKind.ESNext,
@@ -61,6 +36,7 @@ export function bundleHoldoverWriteInventoryAndOutboxWorker(
 
 function readWorkerSources() {
   return {
+    identityResetFence: readSource("app-identity-reset-fence.ts"),
     inventory: readSource("holdover-write-app-inventory.ts"),
     deletionInput: readSource("holdover-write-app-deletion-input.ts"),
     sagaStorage: stripImport(
@@ -70,6 +46,7 @@ function readWorkerSources() {
     sagaCancel: stripImports(readSource("holdover-write-app-deletion-saga-cancel.ts"), [
       "./assignment-store",
       "./holdover-write-app-inventory",
+      "./holdover-write-app-inventory-client",
       "./holdover-write-outbox-core",
       "./holdover-write-app-deletion-saga-storage",
     ]),
@@ -97,10 +74,27 @@ function readWorkerSources() {
       "./holdover-write-app-deletion-saga-finalize",
       "./holdover-write-outbox-core",
     ]),
+    identityReset: stripImports(readSource("holdover-write-app-identity-reset.ts"), [
+      "./holdover-write-app-deletion-input",
+      "./holdover-write-app-deletion-saga",
+      "./holdover-write-app-inventory",
+    ]),
+    assignmentInput: stripIsRecordHelpers(
+      stripImport(readSource("assignment-store-input.ts"), "./assignment-store"),
+    ),
+    appAssignment: stripImports(readSource("holdover-write-app-assignment.ts"), [
+      "@splitch/privacy",
+      "./assignment-store",
+      "./assignment-store-input",
+      "./holdover-write-app-inventory",
+      "./kv-assignment-store",
+    ]),
     inventoryDo: stripImports(readSource("holdover-write-app-inventory-do.ts"), [
       "cloudflare:workers",
       "./assignment-store",
+      "./holdover-write-app-assignment",
       "./holdover-write-app-inventory",
+      "./holdover-write-app-identity-reset",
       "./holdover-write-app-inventory-fetch",
       "./holdover-write-app-deletion-input",
       "./holdover-write-app-deletion-saga",
@@ -108,15 +102,17 @@ function readWorkerSources() {
       "./holdover-write-outbox",
       "./holdover-write-outbox-core",
     ]),
-    core: readSource("holdover-write-outbox-core.ts"),
+    core: stripImport(readSource("holdover-write-outbox-core.ts"), "./app-identity-reset-fence"),
     ensure: stripImports(readSource("holdover-write-outbox-ensure.ts"), [
       "./assignment-store",
+      "./app-identity-reset-fence",
       "./holdover-write-app-inventory",
       "./holdover-write-outbox-core",
     ]),
     fetchHandler: stripIsRecordHelpers(
       stripImports(readSource("holdover-write-outbox-fetch.ts"), [
         "./assignment-store",
+        "./app-identity-reset-fence",
         "./holdover-write-app-inventory",
         "./holdover-write-app-inventory-client",
         "./holdover-write-outbox-core",
@@ -140,12 +136,18 @@ function readWorkerSources() {
       "./holdover-write-outbox-core",
       "./holdover-write-outbox-ensure",
       "./holdover-write-outbox-fetch",
+      "./holdover-write-outbox-binding",
     ]),
-    writer: stripImport(readSource("assignment-store-writer.ts"), "./assignment-store"),
+    writer: stripImports(readSource("assignment-store-writer.ts"), [
+      "./assignment-store",
+      "./app-identity-reset-fence",
+    ]),
     assignmentDo: stripIsRecordHelpers(
       stripImports(readSource("assignment-store-do.ts"), [
         "cloudflare:workers",
         "./assignment-store",
+        "./app-identity-reset-fence",
+        "./assignment-store-input",
         "./assignment-store-writer",
       ]),
     ),
@@ -157,6 +159,7 @@ function renderWorkerSource(
   options: Required<HoldoverWriteMiniflareOptions>,
 ): string {
   const {
+    identityResetFence,
     inventory,
     deletionInput,
     sagaStorage,
@@ -165,6 +168,9 @@ function renderWorkerSource(
     saga,
     inventoryFetch,
     inventoryEntityPort,
+    identityReset,
+    assignmentInput,
+    appAssignment,
     inventoryDo,
     core,
     ensure,
@@ -189,6 +195,7 @@ function renderWorkerSource(
     missingSuppressionReadsRemaining,
     pauseCancelAlarmAfterSnapshot,
     pausePreparedAlarmAfterSnapshot,
+    pauseAssignmentWriterPut,
   } = options;
   return `
 import { DurableObject } from "cloudflare:workers";
@@ -207,7 +214,9 @@ ${holdoverWriteInventoryClientStubs(
   missingSuppressionReadsRemaining,
   pauseCancelAlarmAfterSnapshot,
   pausePreparedAlarmAfterSnapshot,
+  pauseAssignmentWriterPut,
 )}
+${stripExport(identityResetFence)}
 ${stripExport(inventory)}
 ${stripExport(deletionInput)}
 ${stripExport(sagaStorage)}
@@ -216,6 +225,9 @@ ${stripExport(sagaFinalize)}
 ${stripExport(saga)}
 ${stripExport(inventoryFetch)}
 ${stripExport(inventoryEntityPort)}
+${stripExport(identityReset)}
+${stripExport(assignmentInput)}
+${stripExport(appAssignment)}
 ${inventoryDo}
 ${stripExport(core)}
 ${stripExport(ensure)}
@@ -239,6 +251,7 @@ ${holdoverWriteFaultHooks(
   missingSuppressionReadsRemaining,
   pauseCancelAlarmAfterSnapshot,
   pausePreparedAlarmAfterSnapshot,
+  pauseAssignmentWriterPut,
 )}
 export default {
   async fetch(request) {
@@ -250,6 +263,7 @@ export default {
         finalizeInventoryListReached: globalThis.__finalizeInventoryListReached,
         cancelAlarmSnapshotReached: globalThis.__cancelAlarmSnapshotReached,
         preparedAlarmSnapshotReached: globalThis.__preparedAlarmSnapshotReached,
+        assignmentWriterPutReached: globalThis.__assignmentWriterPutReached,
       });
     }
     if (url.pathname === "/__test/release-cancel-kv-delete" && request.method === "POST") {
@@ -268,48 +282,12 @@ export default {
       globalThis.__preparedAlarmSnapshotReleased = true;
       return Response.json({ released: true });
     }
+    if (url.pathname === "/__test/release-assignment-writer-put" && request.method === "POST") {
+      globalThis.__assignmentWriterPutReleased = true;
+      return Response.json({ released: true });
+    }
     return new Response("harness", { status: 200 });
   },
 };
 `;
-}
-
-function readSource(name: string): string {
-  return readFileSync(join(root, name), "utf8");
-}
-
-function stripImport(source: string, from: string): string {
-  return source.replace(
-    new RegExp(`^import[\\s\\S]*?from ["']${escapeRegExp(from)}["'];?\\s*`, "m"),
-    "",
-  );
-}
-
-function stripImports(source: string, froms: string[]): string {
-  let next = source;
-  for (const from of froms) next = stripImport(next, from);
-  return next;
-}
-
-function stripIsRecordHelpers(source: string): string {
-  return source.replace(
-    /\nfunction isRecord\(value: unknown\): value is Record<string, unknown> \{[\s\S]*?\n\}\n\nfunction requireString\(value: Record<string, unknown>, key: string\): string \{[\s\S]*?\n\}\n/,
-    "\n",
-  );
-}
-
-function stripExport(source: string): string {
-  // Drop barrel re-exports entirely (`export … { … } from "…"`), including
-  // type-only forms. Leaving a dangling `from "…"` after stripping `export type`
-  // becomes a runtime `from is not defined` in the Miniflare worker.
-  return source
-    .replace(/^export\s+type\s+\{[\s\S]*?\}\s+from\s+["'][^"']+["'];?\s*/gm, "")
-    .replace(/^export\s+\{[\s\S]*?\}\s+from\s+["'][^"']+["'];?\s*/gm, "")
-    .replace(/^export\s+type\s+\{[\s\S]*?\};?\s*/gm, "")
-    .replace(/^export\s+\{[\s\S]*?\};?\s*/gm, "")
-    .replace(/^export /gm, "");
-}
-
-function escapeRegExp(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }

@@ -1,5 +1,29 @@
 import type { McpDelegationReplayDurableObjectNamespace } from "@splitch/worker-runtime";
-import type { ConfigStoreDurableObjectNamespace } from "./config-store-do";
+import type { ConfigStoreDurableObjectNamespace } from "./config-store-access";
+
+interface AnalysisControlPlaneBinding extends Fetcher {
+  purgeAppIdentityAnalytics(
+    appId: string,
+    destroyedVersions: readonly string[],
+    resetId: string,
+  ): Promise<string>;
+}
+
+interface EvaluationControlPlaneBinding extends Fetcher {
+  purgeAppIdentityAssignments(
+    appId: string,
+    resetId: string,
+    destroyedVersions: readonly string[],
+  ): Promise<string>;
+  purgeAppIdentityRetryClaims(appId: string, environmentIds: readonly string[]): Promise<string>;
+  completeAppIdentityReset(appId: string, resetId: string, identityVersion: string): Promise<void>;
+}
+
+interface EventIngestControlPlaneBinding extends Fetcher {
+  purgeAppIdentityDelivery(appId: string, resetId: string, currentVersion: string): Promise<string>;
+  completeAppIdentityReset(appId: string, resetId: string, nextVersion: string): Promise<void>;
+}
+
 import type { CredentialCacheBackfillDurableObjectNamespace } from "./credential-cache-backfill-do";
 import type { CredentialCacheWriterDurableObjectNamespace } from "./credential-cache-writer-do";
 import type { PanelDelegationReplayDurableObjectNamespace } from "./panel-identity-replay";
@@ -33,9 +57,11 @@ export interface ControlPlaneApiEnv {
   /** Cloudflare-native counter keyed by the authenticated Control Plane actor. */
   CONTROL_PLANE_ACTOR_RATE_LIMITER?: RateLimit;
   /** Binding-only ControlPlaneEntrypoint on the Analysis Worker (ADR-0046). */
-  ANALYSIS_API: Fetcher;
+  ANALYSIS_API: AnalysisControlPlaneBinding;
   /** Binding-only ControlPlaneEntrypoint on the Evaluation Worker (ADR-0046). */
-  EVALUATION_API: Fetcher;
+  EVALUATION_API: EvaluationControlPlaneBinding;
+  /** Binding-only ControlPlaneEntrypoint on Event Ingest for Entity suppression and outbox purge. */
+  EVENT_INGEST_API: EventIngestControlPlaneBinding;
   /** CI-only bearer token for the hosted credential-cache rollout gate. */
   SPLITCH_DEPLOY_GATE_TOKEN?: string;
   /** This control-plane protected-resource origin; the token `aud` must equal it. */
@@ -65,4 +91,5 @@ export interface ControlPlaneApiEnv {
   SPLITCH_DEPLOYED_COMMIT_SHA?: string;
   SPLITCH_PLATFORM_TARGET?: string;
   SENTRY_DSN?: string;
+  EVALUATION_PRIVACY_SALT?: string;
 }

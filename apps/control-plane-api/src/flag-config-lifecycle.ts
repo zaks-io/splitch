@@ -1,7 +1,7 @@
 import { appScope, envScope, type Repository } from "@splitch/db";
 import { deleteEnvironmentCredentials } from "./app-environment-credentials";
 import type { AppEnvironmentDeps } from "./app-environment-model";
-import type { ConfigStoreAccess } from "./config-store-do";
+import type { ConfigStoreAccess } from "./config-store-access";
 import { randomHex } from "./credential-cache";
 
 export interface FlagConfigLifecycleDeps {

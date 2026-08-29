@@ -1,16 +1,19 @@
 import type { ErrorResponse } from "@splitch/contracts";
 import { emptyError, renderError, serviceUnavailable, validationError } from "./errors";
-import { evaluationCommitOutbox } from "./evaluation-commit-outbox";
+import { deliverSealedEvaluationCommit } from "./evaluation-commit-delivery";
+import { evaluationCommitOutbox } from "./evaluation-commit-outbox-client";
+import {
+  confirmEvaluationCommitInventory,
+  inventoryEvaluationCommit,
+} from "./evaluation-commit-privacy";
 import { evaluationUsageScope, requiredIdentity } from "./ingest";
 import { ingestAdmissionDenial } from "./ingest-admission";
 import { loadRunScope } from "./kv-config";
 import { readJsonObject } from "./payload";
 import {
-  appendRawEvent,
   type EvaluationUsageEventInput,
   evaluationUsagePayload,
   exposureEvent,
-  tinybirdDelivery,
   toEvaluationUsageTinybirdRow,
   toTinybirdRow,
 } from "./tinybird";
@@ -33,7 +36,6 @@ const EVALUATION_COMMIT_USAGE_BYTE_COST_EVENT_ID = `sha256:${"0".repeat(64)}`;
 export async function handleEvaluationCommit(request: Request, env: Env): Promise<Response> {
   const prepared = await prepareEvaluationCommit(request, env);
   if (!prepared.ok) return renderError(prepared.error);
-
   const { commit } = prepared.value;
   if (commit.delivered)
     return Response.json({ ok: true, eventId: commit.eventId }, { status: 202 });
@@ -64,7 +66,11 @@ async function prepareEvaluationCommit(
     return { ok: false, error: serviceUnavailable("Evaluation commit outbox is unavailable") };
   }
   const { scope, payload } = input.value;
-  const identity = await evaluationCommitIdentity(scope, payload.usage.idempotencyKey);
+  const identity = await evaluationCommitIdentity(
+    scope,
+    payload.usage.identityVersion,
+    payload.usage.idempotencyKey,
+  );
 
   try {
     const existing = await outbox.lookup(identity);
@@ -75,7 +81,12 @@ async function prepareEvaluationCommit(
     const denied = await chargeNewEvaluationCommit(env, scope, payload);
     if (denied) return { ok: false, error: denied };
 
+    const inventory = { identity, outbox, payload };
+    if (await inventoryEvaluationCommit(inventory, env)) {
+      throw new Error("Evaluation commit is suppressed by App identity reset");
+    }
     const sealed = await outbox.commit(identity, payload);
+    await confirmEvaluationCommitInventory(inventory, env);
     return preparedCommit(scope, identity, outbox, sealed);
   } catch {
     return { ok: false, error: serviceUnavailable("Evaluation commit outbox is unavailable") };
@@ -174,22 +185,13 @@ async function deliverEvaluationCommit(
   env: Env,
 ): Promise<Response> {
   const { commit, identity, outbox, scope } = prepared;
-  const usageDelivery = tinybirdDelivery(env, "raw_evaluations");
-  const exposureDelivery = commit.payload.exposureRows.length > 0 ? tinybirdDelivery(env) : null;
-  if (!usageDelivery.ok) return renderError(usageDelivery.error);
-  if (exposureDelivery !== null && !exposureDelivery.ok) return renderError(exposureDelivery.error);
 
   try {
-    await appendRawEvent(
-      toEvaluationUsageTinybirdRow({ eventId: commit.eventId, ...commit.payload.usage }),
-      usageDelivery.value,
-    );
-    if (exposureDelivery?.ok) {
-      for (const row of commit.payload.exposureRows) {
-        await appendRawEvent(row, exposureDelivery.value);
-      }
+    const delivered = await outbox.deliver(identity);
+    if (!delivered.delivered) {
+      await deliverSealedEvaluationCommit(env, commit.eventId, commit.payload);
+      await outbox.acknowledge(identity);
     }
-    await outbox.acknowledge(identity);
   } catch (error) {
     console.error("event-ingest-api Evaluation commit delivery failed", {
       organizationId: scope.organizationId,
@@ -278,12 +280,14 @@ function isEvaluationCommitPayload(value: unknown): value is EvaluationCommitPay
 
 async function evaluationCommitIdentity(
   scope: EvaluationUsageScope,
+  identityVersion: string,
   idempotencyKey: string,
 ): Promise<string> {
   const material = [
     scope.organizationId,
     scope.appId,
     scope.environmentId,
+    identityVersion,
     "remote",
     idempotencyKey,
   ].join("\u001f");

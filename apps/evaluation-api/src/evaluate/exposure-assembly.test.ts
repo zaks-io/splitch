@@ -119,6 +119,8 @@ describe("evaluate Exposure assembly", () => {
         variant: "treatment",
         id_type: "user",
         targeting_key_hash: "hmac:ticket-entity",
+        entity_family_hash: "v1:ticket-entity",
+        identity_version: "hmac",
         issued_at: "2026-07-02T02:00:00.000Z",
       },
       appId: APP_ID,

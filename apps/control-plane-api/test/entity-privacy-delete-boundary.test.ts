@@ -1,15 +1,16 @@
 import { createRepository } from "@splitch/db";
 import type { RateLimiter } from "@splitch/worker-runtime";
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { makePoolBindings as makeLocalBindings } from "./pool-bindings";
 import { createApp } from "../src/app";
 import { makeControlPlaneAuthResolver } from "../src/auth-resolver";
+import type { EntityPrivacyLedgerInput } from "../src/config-store-app-identity-ledger";
 import { type FixtureSigner, makeFixtureSigner } from "../src/fixture-signer";
 import { makeJwksVerifier } from "../src/jwks-verify";
 import { appAdminScope } from "../src/scope-binding";
 import { makeSessionStore } from "../src/session-store";
 import type { LocalBindings } from "../src/test-fixtures";
 import { seedOrgApp } from "../src/test-seeds";
+import { makePoolBindings as makeLocalBindings } from "./pool-bindings";
 
 const AUDIENCE = "https://cp.splitch.test";
 const NOW_MS = Date.UTC(2026, 6, 18, 12, 0, 0);
@@ -44,7 +45,9 @@ describe("entity privacy delete route availability", () => {
 
   afterEach(async () => bindings.dispose());
 
-  it("stays fail-loud unavailable even when holdover cleanup is wired", async () => {
+  it("exports and deletes every retained-epoch hash without echoing the Targeting Key", async () => {
+    const hashes = ["local-v1:abc", "app-v1:def"] as const;
+    const repo = createRepository(bindings.d1);
     const app = createApp({
       authResolver: makeControlPlaneAuthResolver({
         verifier: makeJwksVerifier({
@@ -62,22 +65,65 @@ describe("entity privacy delete route availability", () => {
         now: () => NOW_MS,
       }),
       rateLimiter: allowLimiter,
-      repo: createRepository(bindings.d1),
-      holdoverWriteOutboxCleanup: {
-        async prepare() {
-          throw new Error("entity privacy must not claim queued deletion");
+      repo,
+      configStore: identityCoordinator(repo),
+      nowIso: () => NOW_ISO,
+      entityPrivacy: {
+        async exportEntity() {
+          const assignmentRecords = [
+            {
+              targetingKeyHash: hashes[0],
+              assignments: { "exp-old": { runId: "run-old", variant: "control" } },
+              assignmentWriterAssignments: {
+                "exp-old": { runId: "run-old", variant: "control" },
+              },
+              holdoverWrites: [{ environmentId: "env-prod", experimentId: "exp-old" }],
+            },
+          ];
+          return {
+            appId: PRIMARY.appId,
+            idType: "user",
+            targetingKeyHashes: hashes,
+            entityFamilyHash: hashes[0],
+            records: assignmentRecords,
+            exportArtifact: {
+              schemaVersion: "entity-privacy-export-v1",
+              appId: PRIMARY.appId,
+              idType: "user",
+              targetingKeyHashes: hashes,
+              entityFamilyHash: hashes[0],
+              stores: [
+                {
+                  name: "assignments",
+                  records: assignmentRecords,
+                  proofs: hashes.map((hash) => `assignment-kv:${hash}`),
+                },
+                {
+                  name: "analysis",
+                  records: [{ source: "metric_events", event_name: "purchase" }],
+                  proofs: hashes.map((hash) => `tinybird:metric_events:${hash}`),
+                },
+                {
+                  name: "event-ingest",
+                  records: [{ store: "metric-event-outbox", deliveryId: "delivery-1" }],
+                  proofs: hashes.map((hash) => `metric-event-outbox-inventory:${hash}`),
+                },
+              ],
+            },
+          };
         },
-        async markD1Deleted() {
-          throw new Error("entity privacy must not claim queued deletion");
-        },
-        async finalize() {
-          throw new Error("entity privacy must not claim queued deletion");
-        },
-        async cancel() {
-          throw new Error("entity privacy must not claim queued deletion");
-        },
-        async delete() {
-          throw new Error("entity privacy must not claim queued deletion");
+        async suppressEntity() {},
+        async deleteEntity() {
+          return {
+            appId: PRIMARY.appId,
+            idType: "user",
+            targetingKeyHashes: hashes,
+            entityFamilyHash: hashes[0],
+            deletedKeyCount: hashes.length,
+            deletedWriterCount: hashes.length,
+            deletedOutboxCount: hashes.length,
+            proofs: hashes.map((hash) => `${hash}:assignment-do-tombstone-v1`),
+          };
         },
       },
     });
@@ -90,7 +136,15 @@ describe("entity privacy delete route availability", () => {
       exp: Math.floor(NOW_MS / 1000) + 3600,
       scopes: [appAdminScope(PRIMARY.appId)],
     });
-    const response = await app.request(`/apps/${PRIMARY.appId}/privacy/entities/delete`, {
+    const exported = await app.request(`/apps/${PRIMARY.appId}/privacy/entities/export`, {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${jwt}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ idType: "user", targetingKey: "subject_entity_privacy" }),
+    });
+    const deleted = await app.request(`/apps/${PRIMARY.appId}/privacy/entities/delete`, {
       method: "POST",
       headers: {
         authorization: `Bearer ${jwt}`,
@@ -99,10 +153,68 @@ describe("entity privacy delete route availability", () => {
       body: JSON.stringify({ idType: "user", targetingKey: "subject_entity_privacy" }),
     });
 
-    expect(response.status).toBe(503);
-    expect(await response.json()).toMatchObject({
-      code: "SERVICE_UNAVAILABLE",
-      message: "operation is not available yet",
+    expect(exported.status).toBe(200);
+    expect(deleted.status).toBe(200);
+    const exportBody = await exported.json();
+    const deleteBody = await deleted.json();
+    expect(exportBody).toMatchObject({
+      request: { requestType: "export", subjectType: "entity", status: "completed" },
+      job: { kind: "export", status: "completed" },
+      artifact: {
+        schemaVersion: "entity-privacy-export-v1",
+        stores: [
+          { name: "assignments", records: [{ holdoverWrites: [{ experimentId: "exp-old" }] }] },
+          { name: "analysis", records: [{ event_name: "purchase" }] },
+          { name: "event-ingest", records: [{ deliveryId: "delivery-1" }] },
+        ],
+      },
     });
+    expect(deleteBody).toMatchObject({
+      request: { requestType: "delete", subjectType: "entity", status: "completed" },
+      job: { kind: "delete", status: "completed" },
+    });
+    expect(JSON.stringify({ exportBody, deleteBody })).not.toContain("subject_entity_privacy");
+
+    const status = await app.request(`/privacy/requests/${exportBody.request.requestId}`, {
+      headers: { authorization: `Bearer ${jwt}` },
+    });
+    expect(status.status).toBe(200);
+    expect(await status.json()).toMatchObject({ artifact: exportBody.artifact });
+
+    const outsiderJwt = await signer.sign({
+      sub: "user_other_tenant",
+      iss: "https://auth.splitch.test",
+      aud: AUDIENCE,
+      iat: Math.floor(NOW_MS / 1000),
+      exp: Math.floor(NOW_MS / 1000) + 3600,
+      scopes: [appAdminScope(PRIMARY.appId)],
+    });
+    const forbidden = await app.request(`/privacy/requests/${exportBody.request.requestId}`, {
+      headers: { authorization: `Bearer ${outsiderJwt}` },
+    });
+    expect(forbidden.status).toBe(403);
   });
 });
+
+function identityCoordinator(repo: ReturnType<typeof createRepository>) {
+  return {
+    writerFor: () => {
+      throw new Error("not used");
+    },
+    liveUpdatesFor: () => {
+      throw new Error("not used");
+    },
+    beginEntityPrivacy: async () => "app-v1",
+    recordEntityDeletionSuppression: async () => undefined,
+    recordEntityPrivacyCompletion: async (
+      _appId: string,
+      _version: string,
+      input: EntityPrivacyLedgerInput,
+    ) =>
+      repo.privacy.createPrivacyRequest({
+        ...input,
+        subjectType: "entity",
+        status: "completed",
+      }),
+  };
+}

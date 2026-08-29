@@ -1,8 +1,15 @@
 import type { ErrorResponse } from "@splitch/contracts";
 import { describe, expect, it } from "vitest";
-import { EvaluationCommitSinkError, makeHttpEvaluationCommitSink } from "./evaluation-commit-sink";
+import { StaticSaltStore } from "./assignment/assignment-store-test-fixtures";
 import { baseInput } from "./evaluate/evaluate-path-test-fixtures";
-import { APP_ID, CLIENT_KEY, makeSdkRouteHarness, sdkRouteInit } from "./sdk-route-test-fixtures";
+import { EvaluationCommitSinkError, makeHttpEvaluationCommitSink } from "./evaluation-commit-sink";
+import {
+  APP_ID,
+  CLIENT_KEY,
+  evaluateAllRouteInit,
+  makeSdkRouteHarness,
+  sdkRouteInit,
+} from "./sdk-route-test-fixtures";
 
 const PATH = "/api/sdk/evaluate";
 
@@ -48,6 +55,7 @@ describe("POST /api/sdk/evaluate: Evaluation usage telemetry", () => {
         idempotencyKey: expect.any(String),
         organizationId: "org_verify",
         appId: APP_ID,
+        identityVersion: "v1",
         environmentId: "env-1",
         flagKey: "checkout-banner",
         sdkRuntime: "unknown",
@@ -207,6 +215,37 @@ describe("POST /api/sdk/evaluation-telemetry: cached Evaluation telemetry", () =
     expect(evaluationUsageSink.writes).toEqual([]);
   });
 });
+
+describe("App identity reset traffic gate", () => {
+  it("fails evaluate, evaluate-all, and cached usage before any usage write", async () => {
+    const saltStore = new BlockingSaltStore();
+    const { app, evaluationUsageSink } = await makeSdkRouteHarness({ saltStore });
+    const cached = {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${CLIENT_KEY}`,
+        "content-type": "application/json",
+        "idempotency-key": "cache-reset",
+      },
+      body: JSON.stringify({ flagKey: "checkout-banner", idempotencyKey: "cache-reset" }),
+    };
+
+    const responses = await Promise.all([
+      app.request(PATH, sdkRouteInit(CLIENT_KEY)),
+      app.request("/api/sdk/evaluate-all", evaluateAllRouteInit(CLIENT_KEY)),
+      app.request("/api/sdk/evaluation-telemetry", cached),
+    ]);
+
+    expect(responses.map((response) => response.status)).toEqual([503, 503, 503]);
+    expect(evaluationUsageSink.writes).toEqual([]);
+  });
+});
+
+class BlockingSaltStore extends StaticSaltStore {
+  override async currentKeyVersion(): Promise<string> {
+    throw new Error("App identity reset is in progress");
+  }
+}
 
 class FailingEvaluationCommitSink {
   async write(): Promise<void> {

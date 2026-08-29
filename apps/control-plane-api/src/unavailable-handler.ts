@@ -61,7 +61,7 @@ async function authorizeUnavailableOperation(
   }
 }
 
-async function authorizePrivacyRequestStatus(
+export async function authorizePrivacyRequestStatus(
   deps: UnavailableHandlerDeps,
   args: HandlerArgs<unknown>,
 ): Promise<Response | null> {
@@ -145,6 +145,13 @@ export function mountUnavailableControlPlaneRoutes(
   repo: Repository,
 ): void {
   for (const operationId of unavailableControlPlaneOperationIds) {
+    if (
+      operationId === "entity_privacy_export" ||
+      operationId === "entity_privacy_delete" ||
+      operationId === "privacy_requests_get"
+    ) {
+      continue;
+    }
     registrar.mount(
       app,
       controlPlaneRoute(operationId),

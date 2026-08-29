@@ -1,3 +1,5 @@
+import type { AssignmentStorePutResult, HashedAssignmentPutInput } from "./assignment-store";
+import type { HoldoverWriteAppDeletionSagaPhase } from "./holdover-write-app-deletion-saga";
 import {
   type HoldoverWriteAppDeletionBeginResult,
   type HoldoverWriteAppEntityRef,
@@ -6,7 +8,6 @@ import {
   type HoldoverWriteAppInventoryStatus,
   holdoverWriteAppInventoryName,
 } from "./holdover-write-app-inventory";
-import type { HoldoverWriteAppDeletionSagaPhase } from "./holdover-write-app-deletion-saga";
 import type { HoldoverWriteInventoryRegisterPort } from "./holdover-write-outbox-ensure";
 
 class HoldoverWriteAppInventoryError extends Error {
@@ -58,6 +59,13 @@ export class DurableHoldoverWriteAppInventoryClient implements HoldoverWriteAppI
     return { status: body.status };
   }
 
+  async putAssignment(
+    input: HashedAssignmentPutInput & { readonly identityVersion: string },
+  ): Promise<AssignmentStorePutResult> {
+    const body = await this.postJson(input.appId, "/put-assignment", input);
+    return parseAssignmentPutResult(body);
+  }
+
   async beginDeletion(
     appId: string,
     generationId: string,
@@ -94,6 +102,29 @@ export class DurableHoldoverWriteAppInventoryClient implements HoldoverWriteAppI
     const body = await this.postJson(appId, "/cancel-deletion", { appId, generationId });
     if (!isRecord(body) || typeof body.cancelled !== "boolean" || !Array.isArray(body.entities)) {
       throw new HoldoverWriteAppInventoryError("cancel-deletion returned an invalid payload");
+    }
+    return {
+      cancelled: body.cancelled,
+      done: body.done === true,
+      entities: body.entities.map(parseEntityRef),
+      sagaPhase: parseSagaPhase(body.sagaPhase),
+    };
+  }
+
+  async completeIdentityReset(
+    appId: string,
+    generationId: string,
+    identityVersion: string,
+  ): Promise<HoldoverWriteAppInventoryCancelResult> {
+    const body = await this.postJson(appId, "/complete-identity-reset", {
+      appId,
+      generationId,
+      identityVersion,
+    });
+    if (!isRecord(body) || typeof body.cancelled !== "boolean" || !Array.isArray(body.entities)) {
+      throw new HoldoverWriteAppInventoryError(
+        "complete-identity-reset returned an invalid payload",
+      );
     }
     return {
       cancelled: body.cancelled,
@@ -205,6 +236,24 @@ export class DurableHoldoverWriteAppInventoryClient implements HoldoverWriteAppI
     }
     return response.json();
   }
+}
+
+function parseAssignmentPutResult(value: unknown): AssignmentStorePutResult {
+  if (!isRecord(value) || (value.status !== "stored" && value.status !== "existing")) {
+    throw new HoldoverWriteAppInventoryError("put-assignment returned an invalid payload");
+  }
+  const assignment = value.assignment;
+  if (
+    !isRecord(assignment) ||
+    typeof assignment.runId !== "string" ||
+    typeof assignment.variant !== "string"
+  ) {
+    throw new HoldoverWriteAppInventoryError("put-assignment returned an invalid Assignment");
+  }
+  return {
+    status: value.status,
+    assignment: { runId: assignment.runId, variant: assignment.variant },
+  };
 }
 
 function parseEntityRef(value: unknown): HoldoverWriteAppEntityRef {

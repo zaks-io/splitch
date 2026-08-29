@@ -15,7 +15,7 @@ import {
 import { approvalRequestProjection } from "./approval-model";
 import { reviewApproval } from "./approval-service";
 import type { ApplicationOutcome } from "./approval-service-types";
-import type { ConfigStoreAccess } from "./config-store-do";
+import type { ConfigStoreAccess } from "./config-store-access";
 import { objectBody, pathParam } from "./handler-input";
 
 interface ApprovalHandlerDeps {

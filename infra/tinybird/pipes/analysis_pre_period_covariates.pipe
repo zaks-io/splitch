@@ -8,7 +8,7 @@ SQL >
     {% if not defined(environment_id) %} {{ error('environment_id is required') }}{% end %}
     {% if not defined(experiment_id) %} {{ error('experiment_id is required') }}{% end %}
     {% if not defined(run_id) %} {{ error('run_id is required') }}{% end %}
-    SELECT app_id, environment_id, id_type, targeting_key_hash, first_exposure_ts
+    SELECT app_id, environment_id, id_type, targeting_key_hash, entity_family_hash, first_exposure_ts
     FROM serve_deduped_exposures
     WHERE
         app_id = {{ String(app_id) }}
@@ -36,6 +36,7 @@ SQL >
         environment_id,
         id_type,
         targeting_key_hash,
+        entity_family_hash,
         accepted_at,
         {% if metric_type == 'binomial' %} toFloat64(1) AS event_value
         {% else %} toFloat64(JSONExtractRaw(fields, {{ String(event_field_name) }})) AS event_value
@@ -75,7 +76,7 @@ SQL >
         AND events.app_id = {{ String(app_id) }}
         AND events.environment_id = {{ String(environment_id) }}
         AND events.id_type = exposures.id_type
-        AND events.targeting_key_hash = exposures.targeting_key_hash
+        AND events.entity_family_hash = exposures.entity_family_hash
         AND events.accepted_at
         >= subtractMilliseconds(exposures.first_exposure_ts, {{ UInt64(lookback_ms) }})
         AND events.accepted_at < exposures.first_exposure_ts

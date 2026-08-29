@@ -98,3 +98,12 @@ export function memberProfileCacheKey(userId: string): string {
 export function assignmentKey(appId: string, idType: string, targetingKeyHash: string): string {
   return `assignment:${appId}:${idType}:${targetingKeyHash}`;
 }
+
+/**
+ * `app:{appId}:entity-identity` — wrapped App `app_entity_identity_key` epochs
+ * (ADR-0044). Lives in the App-scoped Config Store Durable Object. The raw
+ * Targeting Key is never stored.
+ */
+export function appEntityIdentityKey(appId: string): string {
+  return `app:${appId}:entity-identity`;
+}

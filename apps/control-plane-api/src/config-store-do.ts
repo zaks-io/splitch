@@ -3,24 +3,33 @@ import {
   authorizesLiveUpdateConnection,
   type DeltaNudge,
   type LiveUpdateAuthorizationContext,
-  type LiveUpdateConnectionContext,
   parseLiveUpdateConnectionContext,
 } from "@splitch/contracts";
 import { appScope, createRepository, envScope } from "@splitch/db";
 import { type ConfigStoreWriter, makeConfigStore } from "./config-store";
 import type { EvaluationFlagConfigRead, EvaluationFlagConfigSnapshot } from "./config-store-access";
+import {
+  assertConfigStoreAppIdentityTrafficAllowed,
+  putConfigStoreAppIdentityIfAbsent,
+  readConfigStoreAppIdentity,
+  resetConfigStoreAppIdentity,
+} from "./config-store-app-identity";
+import {
+  beginConfigStoreEntityPrivacy,
+  type EntityPrivacyLedgerInput,
+  type EntityPrivacyLedgerRecord,
+  recordConfigStoreEntityDeletionSuppression,
+  recordConfigStoreEntityPrivacyCompletion,
+} from "./config-store-app-identity-ledger";
+import {
+  isPanelSessionContext,
+  LIVE_UPDATE_CONTEXT_HEADER,
+  parseConfigStoreConnectionContext,
+  parsePanelSessionContext,
+} from "./config-store-live-update-context";
 import { buildSnapshotFromD1 } from "./config-store-shared";
 import { makeDurableSnapshotRevisionAllocator } from "./config-store-snapshot-revision";
 import type { ControlPlaneApiEnv } from "./env";
-
-// biome-ignore lint/performance/noBarrelFile: preserve the existing DO import surface while keeping the access seam in a small file
-export {
-  type ConfigStoreAccess,
-  type ConfigStoreDurableObjectNamespace,
-  durableConfigStoreAccess,
-  type EvaluationFlagConfigRead,
-  type EvaluationFlagConfigSnapshot,
-} from "./config-store-access";
 
 export class ConfigStoreDurableObject
   extends DurableObject<ControlPlaneApiEnv>
@@ -133,7 +142,7 @@ export class ConfigStoreDurableObject
     }
 
     const context = parseLiveUpdateConnectionContext(
-      parseConnectionContextHeader(request.headers.get(LIVE_UPDATE_CONTEXT_HEADER)),
+      parseConfigStoreConnectionContext(request.headers.get(LIVE_UPDATE_CONTEXT_HEADER)),
     );
     if (!context || !(await this.isAuthorized(context))) {
       return new Response("live update authorization required", { status: 403 });
@@ -172,6 +181,58 @@ export class ConfigStoreDurableObject
     for (const socket of this.ctx.getWebSockets()) {
       socket.close(SERVICE_RESTART_CLOSE_CODE, "live update server unavailable");
     }
+  }
+
+  /**
+   * Serialized first provision of one App identity record. Evaluation and Event
+   * Ingest call this on `app-identity:${appId}` so both planes share one winner.
+   */
+  readAppIdentity(appId: string): Promise<string | null> {
+    return readConfigStoreAppIdentity(this.ctx, appId);
+  }
+
+  async putAppIdentityIfAbsent(appId: string, value: string): Promise<string> {
+    return putConfigStoreAppIdentityIfAbsent(this.ctx, this.env, appId, value);
+  }
+
+  async resetCompromisedAppIdentity(appId: string, resetId: string): Promise<string> {
+    return resetConfigStoreAppIdentity(this.ctx, this.env, appId, resetId);
+  }
+
+  async assertAppIdentityTrafficAllowed(appId: string): Promise<void> {
+    return assertConfigStoreAppIdentityTrafficAllowed(this.ctx, this.env, appId);
+  }
+
+  async beginEntityPrivacy(appId: string): Promise<string> {
+    return beginConfigStoreEntityPrivacy(this.ctx, this.env, appId);
+  }
+
+  async recordEntityDeletionSuppression(
+    appId: string,
+    expectedVersion: string,
+    input: { idType: string; targetingKeyHashes: readonly string[]; deleteBeforeTs: string },
+  ): Promise<void> {
+    return recordConfigStoreEntityDeletionSuppression(
+      this.ctx,
+      this.env,
+      appId,
+      expectedVersion,
+      input,
+    );
+  }
+
+  async recordEntityPrivacyCompletion(
+    appId: string,
+    expectedVersion: string,
+    input: EntityPrivacyLedgerInput,
+  ): Promise<EntityPrivacyLedgerRecord> {
+    return recordConfigStoreEntityPrivacyCompletion(
+      this.ctx,
+      this.env,
+      appId,
+      expectedVersion,
+      input,
+    );
   }
 
   private store(): ConfigStoreWriter {
@@ -232,7 +293,6 @@ export class ConfigStoreDurableObject
   }
 }
 
-export const LIVE_UPDATE_CONTEXT_HEADER = "x-splitch-live-update-context";
 const AUTHORIZATION_POLICY_CLOSE_CODE = 1008;
 
 const PANEL_SESSION_KEY_PREFIX = "session:";
@@ -240,23 +300,3 @@ const PANEL_SESSION_KEY_PREFIX = "session:";
 const SESSION_REVALIDATION_INTERVAL_MS = 60_000;
 const LIVE_UPDATES_AVAILABLE_KEY = "liveUpdatesAvailable";
 const SERVICE_RESTART_CLOSE_CODE = 1012;
-
-function parseConnectionContextHeader(value: string | null): unknown {
-  if (!value) return null;
-  try {
-    return JSON.parse(value);
-  } catch {
-    return null;
-  }
-}
-
-function parsePanelSessionContext(raw: unknown): LiveUpdateConnectionContext | null {
-  const context = parseLiveUpdateConnectionContext(raw);
-  return isPanelSessionContext(context) ? context : null;
-}
-
-function isPanelSessionContext(
-  context: LiveUpdateAuthorizationContext | null,
-): context is LiveUpdateConnectionContext {
-  return context !== null && "sessionTokenHash" in context;
-}

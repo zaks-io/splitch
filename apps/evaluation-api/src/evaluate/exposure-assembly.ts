@@ -1,5 +1,5 @@
 import type { ExposureEvent } from "@splitch/contracts";
-import { computeTargetingKeyHash, type SaltStore } from "@splitch/privacy";
+import { computeEntityFamilyHash, computeTargetingKeyHash, type SaltStore } from "@splitch/privacy";
 import type { EvaluatePathInput, EvaluateResult } from "./evaluate-path-types";
 import type { ExposureTicketPayload } from "./exposure-ticket";
 
@@ -29,11 +29,15 @@ export async function assembleEvaluateExposures(
 
   const timestamp = (deps.now ?? (() => new Date()))().toISOString();
   const eventId = (deps.newEventId ?? (() => crypto.randomUUID()))();
-  const targetingKeyHash = await computeTargetingKeyHash(deps.saltStore, {
+  const identity = {
     appId: input.appId,
     idType: result.exposure.idType,
     targetingKey: input.evaluationContext.targetingKey,
-  });
+  };
+  const [targetingKeyHash, entityFamilyHash] = await Promise.all([
+    computeTargetingKeyHash(deps.saltStore, identity),
+    computeEntityFamilyHash(deps.saltStore, identity),
+  ]);
   const runId = result.liveRunId;
   const dedupKey = await exposureDedupKey({
     appId: input.appId,
@@ -54,6 +58,7 @@ export async function assembleEvaluateExposures(
       runId,
       idType: result.exposure.idType,
       targetingKeyHash,
+      entityFamilyHash,
       variantName: result.exposure.variant,
       type: EXPOSURE_TYPE,
       eventId,
@@ -103,6 +108,7 @@ export async function assembleExposureFromTicket(input: {
     runId: input.ticket.run_id,
     idType: input.ticket.id_type,
     targetingKeyHash: input.ticket.targeting_key_hash,
+    entityFamilyHash: input.ticket.entity_family_hash,
     variantName: input.ticket.variant,
     type: EXPOSURE_TYPE,
     eventId: input.exposureId,

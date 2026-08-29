@@ -4,6 +4,12 @@ import {
   type ErrorResponse,
 } from "@splitch/contracts";
 import { type HandlerArgs, type Principal, renderError } from "@splitch/worker-runtime";
+import {
+  type AppIdentityAdmission,
+  admittedAssignmentStore,
+  appIdentityAdmissionValidationError,
+  tryAdmitAppIdentity,
+} from "./app-identity-traffic";
 import { evaluate } from "./evaluate/accessor-paths";
 import type { EvaluateResult } from "./evaluate/evaluate-path";
 import type { EvaluatePathDeps, EvaluatePathInput } from "./evaluate/evaluate-path-types";
@@ -23,11 +29,6 @@ type EvaluateInput = {
 interface EvaluateRouteDeps extends EvaluatePathDeps {
   readonly exposureAssembly: ExposureAssemblyDeps;
   readonly evaluationCommitSink: EvaluationCommitSink;
-  /**
-   * `ctx.waitUntil` seam for the fire-and-forget Assignment Store write
-   * (holdover-write-contract.md). When absent (unit harnesses), the write still
-   * fires but nothing keeps the runtime alive for it.
-   */
   readonly waitUntil?: (promise: Promise<unknown>) => void;
 }
 
@@ -46,9 +47,14 @@ export function makeEvaluateHandler(deps: EvaluateRouteDeps) {
 
     const assertionError = appAssertionError(parsed.body.appId, scope.value.appId);
     if (assertionError !== null) return renderError(assertionError, { requestId });
+    const admitted = await tryAdmitAppIdentity(deps.exposureAssembly.saltStore, scope.value.appId);
+    if (!admitted.ok) return renderError(admitted.error, { requestId });
 
-    const evaluated = await evaluateWithCapture(parsed.body, scope.value, deps);
-    return evaluateResponse(evaluated, deps, requestId, request);
+    const requestDeps = admittedEvaluateDeps(deps, admitted.admission);
+    const evaluated = await evaluateWithCapture(parsed.body, scope.value, requestDeps);
+    const stale = await appIdentityAdmissionValidationError(admitted.admission);
+    if (stale !== null) return renderError(stale, { requestId });
+    return evaluateResponse(evaluated, requestDeps, admitted.admission, requestId, request);
   };
 }
 
@@ -100,6 +106,7 @@ async function evaluateWithCapture(
 async function evaluateResponse(
   evaluated: Awaited<ReturnType<typeof evaluateWithCapture>>,
   deps: EvaluateRouteDeps,
+  admission: AppIdentityAdmission,
   requestId: string,
   request: Request,
 ): Promise<Response> {
@@ -132,14 +139,28 @@ async function evaluateResponse(
     evaluated.scope,
     { flagKey: provider.flag.flagKey, sdkRuntime: sdkRuntime(request) },
     deps,
+    admission,
   );
   if (!commit.ok) return renderError(commit.error, { requestId });
+
+  const stale = await appIdentityAdmissionValidationError(admission);
+  if (stale !== null) return renderError(stale, { requestId });
 
   // Only record the holdover AFTER the Exposure is accepted by ingest. Writing it
   // first and then returning 503 would make the SDK retry hit holdover replay
   // without another Exposure, dropping the event. Writing it last lets retries
   // re-attempt the Exposure.
-  scheduleHoldoverWrite(output.result, deps);
+  try {
+    await writeHoldoverAssignment(output.result, output.exposures, deps);
+  } catch (cause) {
+    deps.logger?.error("assignment_store_put_failed", { cause });
+    return renderError(
+      errorResponse("SERVICE_UNAVAILABLE", "Assignment commit is temporarily unavailable"),
+      { requestId },
+    );
+  }
+  const assignmentStale = await appIdentityAdmissionValidationError(admission);
+  if (assignmentStale !== null) return renderError(assignmentStale, { requestId });
 
   const response = Response.json(DataPlaneEvaluateResponseSchema.parse(body.value));
   if (output.result.liveRunId !== null) {
@@ -161,33 +182,30 @@ async function evaluateResponse(
  * The holdover write (holdover-write-contract.md): every result that fires an
  * Exposure records its first-touch `(run_id, variant)` in the Assignment Store
  * so a Run boundary replays the sticky Variant instead of re-assigning
- * (ADR-0006). Fire-and-forget in `ctx.waitUntil` — the SDK caller never waits;
- * a failed write self-heals on the next evaluate (the writer re-asserts KV).
+ * (ADR-0006). The route waits for the durable winner because success cannot be
+ * returned while an App identity reset could still reject the Assignment.
  * Holdover replays carry `exposure: null`, so they never re-write.
  */
-function scheduleHoldoverWrite(result: EvaluateResult, deps: EvaluateRouteDeps): void {
+async function writeHoldoverAssignment(
+  result: EvaluateResult,
+  exposures: readonly AssembledExposure[],
+  deps: EvaluateRouteDeps,
+): Promise<void> {
   const exposure = result.kind === "error" ? null : result.exposure;
   if (exposure === null) return;
-
-  const write = deps.assignmentStore
-    .put({
-      appId: exposure.appId,
-      idType: exposure.idType,
-      targetingKey: exposure.targetingKey,
-      experimentId: exposure.experimentId,
-      runId: exposure.liveRunId,
-      variant: exposure.variant,
-    })
-    .then(
-      () => undefined,
-      (cause) => {
-        // Non-blocking per the failure contract: a missed holdover write is a
-        // cosmetic cross-POP miss (assign() is deterministic), retried on the
-        // next evaluate. Loud in logs so operators see repeated failures.
-        deps.logger?.error("assignment_store_put_failed", { cause });
-      },
-    );
-  deps.waitUntil?.(write);
+  const sourceCreatedAtMs = Date.parse(exposures[0]?.exposureAt ?? "");
+  if (!Number.isFinite(sourceCreatedAtMs)) {
+    throw new Error("Assignment source timestamp is unavailable");
+  }
+  await deps.assignmentStore.put({
+    appId: exposure.appId,
+    idType: exposure.idType,
+    targetingKey: exposure.targetingKey,
+    experimentId: exposure.experimentId,
+    runId: exposure.liveRunId,
+    sourceCreatedAtMs,
+    variant: exposure.variant,
+  });
 }
 
 async function writeEvaluationCommit(
@@ -196,13 +214,17 @@ async function writeEvaluationCommit(
   scope: EvaluationUsageScope,
   dimensions: { readonly flagKey: string; readonly sdkRuntime: string },
   deps: EvaluateRouteDeps,
+  admission: AppIdentityAdmission,
 ): Promise<{ ok: true } | { ok: false; error: ErrorResponse }> {
+  const stale = await appIdentityAdmissionValidationError(admission);
+  if (stale !== null) return { ok: false, error: stale };
   try {
     await deps.evaluationCommitSink.write({
       usage: {
         idempotencyKey,
         organizationId: scope.organizationId,
         appId: scope.appId,
+        identityVersion: admission.identityVersion,
         environmentId: scope.environmentId,
         flagKey: dimensions.flagKey,
         sdkRuntime: dimensions.sdkRuntime,
@@ -237,6 +259,17 @@ async function writeEvaluationCommit(
       error: errorResponse("SERVICE_UNAVAILABLE", "Evaluation commit ingest is unavailable"),
     };
   }
+}
+
+function admittedEvaluateDeps(
+  deps: EvaluateRouteDeps,
+  admission: AppIdentityAdmission,
+): EvaluateRouteDeps {
+  return {
+    ...deps,
+    assignmentStore: admittedAssignmentStore(deps.assignmentStore, admission),
+    exposureAssembly: { ...deps.exposureAssembly, saltStore: admission.saltStore },
+  };
 }
 
 function evaluateInput(input: unknown): EvaluateInput {

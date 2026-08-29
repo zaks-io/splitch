@@ -1,5 +1,5 @@
 /**
- * Salt-store seam for the App-scoped, versioned `app_privacy_salt`.
+ * Salt-store seam for App-scoped identity-key material.
  *
  * WHY an injected interface and not a concrete store: the secret salt material
  * lives outside this package (a Worker secret binding / KV / DO), and it MUST
@@ -38,4 +38,19 @@ export interface SaltStore {
    * every derived hash and breaks export/delete matching.
    */
   saltFor(appId: string, keyVersion: KeyVersion): Promise<SaltBytes>;
+
+  /**
+   * Every identity epoch that still has retained durable rows for this App,
+   * oldest first. Export, deletion, Assignment holdover reads, and Metric Event
+   * retries must resolve all of these — not only the current write epoch.
+   */
+  retainedKeyVersions(appId: string): Promise<readonly KeyVersion[]>;
+
+  /**
+   * Every HMAC key that can still produce a `targeting_key_hash` for this
+   * version prefix. A raced first mint may retain more than one key under
+   * `app-v1`. Implementations that omit this method are treated as a single
+   * `saltFor` result.
+   */
+  saltsFor?(appId: string, keyVersion: KeyVersion): Promise<readonly SaltBytes[]>;
 }

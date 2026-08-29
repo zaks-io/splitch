@@ -7,6 +7,11 @@ import {
 import { envScope, type Repository } from "@splitch/db";
 import type { ConfigStoreWriter } from "./config-store";
 import {
+  type ConfigStoreAppIdentityAccess,
+  type ConfigStoreAppIdentityDurableObjectStub,
+  durableConfigStoreAppIdentityAccess,
+} from "./config-store-app-identity-access";
+import {
   assertControlPlaneFlagConfigSnapshotScope,
   type ControlPlaneFlagConfigSnapshot,
   ControlPlaneFlagConfigSnapshotScopeError,
@@ -22,14 +27,6 @@ import {
 
 export interface ConfigStoreDurableObjectNamespace {
   getByName(name: string): ConfigStoreDurableObjectStub;
-}
-
-interface ConfigStoreDurableObjectStub extends ConfigStoreWriter {
-  fetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response>;
-  readFlagConfigForEvaluation(
-    input: EvaluationFlagConfigRead,
-  ): Promise<EvaluationFlagConfigSnapshot | null>;
-  setLiveUpdatesAvailable(available: boolean): Promise<void>;
 }
 
 export interface EvaluationFlagConfigRead {
@@ -49,9 +46,23 @@ interface ConfigStoreLiveUpdates {
   connect(request: Request): Promise<Response>;
 }
 
+interface ConfigStoreDurableObjectStub
+  extends ConfigStoreWriter,
+    ConfigStoreAppIdentityDurableObjectStub {
+  fetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response>;
+  readFlagConfigForEvaluation(
+    input: EvaluationFlagConfigRead,
+  ): Promise<EvaluationFlagConfigSnapshot | null>;
+  setLiveUpdatesAvailable(available: boolean): Promise<void>;
+}
+
+export interface ConfigStoreDurableObjectNamespace {
+  getByName(name: string): ConfigStoreDurableObjectStub;
+}
+
 type FlagConfigRead = Pick<ConfigStoreWriter, "readFlagConfig">;
 
-export interface ConfigStoreAccess extends FlagConfigRead {
+export interface ConfigStoreAccess extends FlagConfigRead, ConfigStoreAppIdentityAccess {
   writerFor(appId: string, environmentId: string): ConfigStoreWriter;
   liveUpdatesFor(appId: string, environmentId: string): ConfigStoreLiveUpdates;
 }
@@ -76,7 +87,7 @@ export function durableConfigStoreAccess(
   namespace: ConfigStoreDurableObjectNamespace,
   kv: KVNamespace,
   options: ConfigStoreAccessOptions = {},
-): ConfigStoreAccess {
+): ConfigStoreAccess & Required<Pick<ConfigStoreAccess, "assertAppIdentityTrafficAllowed">> {
   const logger = options.logger ?? console;
   const writeThrough = options.writeThrough ?? isolateWriteThrough;
   const localSnapshots = configStoreWriteThrough(writeThrough, {
@@ -86,6 +97,7 @@ export function durableConfigStoreAccess(
   });
 
   return {
+    ...durableConfigStoreAppIdentityAccess(namespace),
     async readFlagConfig(input) {
       return readFlagConfigFromKv(
         namespace,

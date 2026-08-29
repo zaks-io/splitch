@@ -4,9 +4,15 @@ import {
   TestEvaluationResponseSchema,
   type Variant,
 } from "@splitch/contracts";
-import { renderError, type HandlerArgs } from "@splitch/worker-runtime";
+import { type HandlerArgs, renderError } from "@splitch/worker-runtime";
+import {
+  admittedEvaluatePathDeps,
+  appIdentityAdmissionValidationError,
+  tryAdmitAppIdentity,
+} from "./app-identity-traffic";
 import { evaluatePath } from "./evaluate/evaluate-path";
 import type { EvaluatePathDeps, EvaluatePathInput } from "./evaluate/evaluate-path-types";
+import type { ExposureAssemblyDeps } from "./evaluate/exposure-assembly";
 import type { FlagConfig, Provider } from "./provider/provider";
 
 type TestEvaluationInput = {
@@ -14,9 +20,16 @@ type TestEvaluationInput = {
   body: { evaluationContext: EvaluatePathInput["evaluationContext"] };
 };
 
-export function makeTestEvaluationHandler(deps: EvaluatePathDeps) {
+export function makeTestEvaluationHandler(
+  deps: EvaluatePathDeps & { exposureAssembly: ExposureAssemblyDeps },
+) {
   return async ({ input, requestId }: HandlerArgs<unknown>): Promise<Response> => {
     const parsed = testEvaluationInput(input);
+    const admitted = await tryAdmitAppIdentity(
+      deps.exposureAssembly.saltStore,
+      parsed.params.appId,
+    );
+    if (!admitted.ok) return renderError(admitted.error, { requestId });
     const provider = new CapturingProvider(deps.provider);
     const result = await evaluatePath(
       {
@@ -25,8 +38,11 @@ export function makeTestEvaluationHandler(deps: EvaluatePathDeps) {
         flagKey: parsed.params.flagKey,
         evaluationContext: parsed.body.evaluationContext,
       },
-      { ...deps, provider },
+      admittedEvaluatePathDeps({ ...deps, provider }, admitted.admission),
     );
+
+    const stale = await appIdentityAdmissionValidationError(admitted.admission);
+    if (stale !== null) return renderError(stale, { requestId });
 
     if (result.kind === "error") {
       return renderError(

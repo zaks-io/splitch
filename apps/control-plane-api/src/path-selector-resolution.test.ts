@@ -3,7 +3,7 @@ import { createRepository } from "@splitch/db";
 import type { Principal } from "@splitch/worker-runtime";
 import { beforeEach, describe, expect, it } from "vitest";
 import { createApp } from "./app";
-import type { ConfigStoreAccess } from "./config-store-do";
+import type { ConfigStoreAccess } from "./config-store-access";
 import {
   resetOrganizationGraph,
   seedAppMember,

@@ -11,12 +11,17 @@ SQL >
         id_type,
         server_received_at,
         targeting_key_hash,
+        entity_family_hash,
         dedup_key,
         argMinState(
             tuple(event_id, event_definition_version_id, event_name, fields, dimensions, server_received_at, ingest_ts),
             ingest_ts
         ) AS canonical_state
     FROM metric_events
+    LEFT JOIN app_identity_generation_tombstones AS generation_tombstones
+        ON generation_tombstones.app_id = metric_events.app_id
+        AND generation_tombstones.targeting_key_version = splitByChar(':', metric_events.targeting_key_hash)[1]
+    WHERE generation_tombstones.app_id = ''
     GROUP BY
         app_id,
         environment_id,
@@ -25,6 +30,7 @@ SQL >
         id_type,
         server_received_at,
         targeting_key_hash,
+        entity_family_hash,
         dedup_key
 
 TYPE MATERIALIZED

@@ -2,7 +2,7 @@ import type { MetricRef, TargetingRule, TargetingRuleInput } from "@splitch/cont
 import { appScope, type EnvScope, envScope, type Repository } from "@splitch/db";
 import { requireAppWrite } from "./app-authz";
 import { appNotFound } from "./app-environment-model";
-import type { ConfigStoreAccess } from "./config-store-do";
+import type { ConfigStoreAccess } from "./config-store-access";
 import { type ExperimentRow, json, type RunRow } from "./experiment-model";
 import { normalizeTargetingRuleRollouts } from "./flag-config-rollout";
 import { flagNotFound, validationError } from "./flag-definition-errors";

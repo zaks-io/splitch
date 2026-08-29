@@ -5,6 +5,7 @@ import {
   type AdmissionOption,
   admissionBinding,
 } from "./admission-test-fixture";
+import { entityMetricPrivacyFixtureFetch } from "./entity-metric-privacy.test-fixture";
 import type { EvaluationCommitOutbox } from "./evaluation-commit-outbox";
 import type { EvaluationUsageReplayWindow } from "./evaluation-usage-replay-window";
 import type { ExposurePayload } from "./event-ingest-test-types";
@@ -102,6 +103,7 @@ export async function postEvaluationAt(
         flagKey: "checkout",
         sdkRuntime: "javascript",
         idempotencyKey: "eval-request-1",
+        identityVersion: "app-v1",
         ...payload,
       }),
     }),
@@ -113,6 +115,8 @@ export async function postEvaluationCommit(
   options: {
     payload?: Partial<ExposurePayload>;
     exposures?: unknown[];
+    identityVersion?: string;
+    idempotencyKey?: string;
     statuses?: readonly number[];
     env?: ReturnType<typeof makeEnv>;
   } = {},
@@ -137,7 +141,8 @@ export async function postEvaluationCommit(
         hasExposure: true,
         flagKey: "checkout",
         sdkRuntime: "javascript",
-        idempotencyKey: "eval-request-1",
+        idempotencyKey: options.idempotencyKey ?? "eval-request-1",
+        identityVersion: options.identityVersion ?? "app-v1",
         exposures: options.exposures ?? [{ ...baseExposure(), ...options.payload }],
       }),
     }),
@@ -153,14 +158,33 @@ export function makeEnv(
     admissionCharges?: AdmissionCharge[];
   } = {},
 ) {
+  const configStore = seededConfigStore() as unknown as KVNamespace;
   return {
-    CONFIG_STORE: seededConfigStore() as unknown as KVNamespace,
+    CONFIG_STORE: configStore,
+    CONFIG_STORE_WRITER: {
+      getByName: () => ({
+        async readAppIdentity(appId: string) {
+          return (await configStore.get(`app:${appId}:entity-identity`)) as string | null;
+        },
+        async putAppIdentityIfAbsent(appId: string, value: string) {
+          const key = `app:${appId}:entity-identity`;
+          const winner = (await configStore.get(key)) as string | null;
+          if (winner !== null) return winner;
+          await configStore.put(key, value);
+          return value;
+        },
+      }),
+    },
     SPLITCH_EVENT_INGEST_TOKEN: "internal_ingest_secret",
     SPLITCH_PLATFORM_TARGET: "local",
     TINYBIRD_API_URL: "https://tinybird.test",
     TINYBIRD_INGEST_TOKEN: "tb_ingest_secret",
     EVALUATION_USAGE_REPLAY_WINDOW: replayWindow,
     EVALUATION_COMMIT_OUTBOX: evaluationCommitOutbox,
+    ENTITY_METRIC_PRIVACY: {
+      idFromName: () => ({}) as DurableObjectId,
+      get: () => ({ fetch: entityMetricPrivacyFixtureFetch }),
+    },
     ...admissionBinding(options.admission, options.admissionCharges ?? []),
   };
 }
@@ -226,6 +250,7 @@ export function baseExposure(): ExposurePayload {
     runId: liveRunId,
     idType: "user",
     targetingKeyHash: "hmac:targeting-key",
+    entityFamilyHash: "v1:targeting-key",
     variantName: "treatment",
     type: "exposure",
     sourceId: "pop-sjc",

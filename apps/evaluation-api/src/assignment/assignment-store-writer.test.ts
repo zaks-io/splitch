@@ -1,7 +1,7 @@
 import { assignmentKey } from "@splitch/contracts";
+import { computeTargetingKeyHash, makeDerivedSaltStore } from "@splitch/privacy";
 import { describe, expect, it } from "vitest";
 import { serializeAssignmentValue } from "./assignment-store";
-import { AssignmentStoreWriter } from "./assignment-store-writer";
 import {
   basePut,
   MapStorage,
@@ -9,6 +9,7 @@ import {
   RecordingKv,
   StaticSaltStore,
 } from "./assignment-store-test-fixtures";
+import { AssignmentStoreWriter } from "./assignment-store-writer";
 import { InMemoryAssignmentStore } from "./in-memory-assignment-store";
 
 describe("InMemoryAssignmentStore", () => {
@@ -56,9 +57,160 @@ describe("InMemoryAssignmentStore", () => {
     });
     expect(store.policyCalls).toEqual([]);
   });
+
+  it("keeps a retained local-v1 holdover visible after the App identity epoch starts", async () => {
+    const saltStore = makeDerivedSaltStore({ rootSecret: "test-root-secret-do-not-use" });
+    const store = new InMemoryAssignmentStore(saltStore);
+    const historicalHash = await computeTargetingKeyHash(saltStore, {
+      appId: basePut.appId,
+      idType: basePut.idType,
+      targetingKey: basePut.targetingKey,
+      keyVersion: "local-v1",
+    });
+
+    await store.putHashed({
+      appId: basePut.appId,
+      experimentId: "exp-checkout",
+      idType: basePut.idType,
+      targetingKeyHash: historicalHash,
+      runId: "run-old",
+      variant: "control",
+    });
+    const holdovers = await store.getAll(basePut);
+
+    expect(holdovers).toEqual(
+      new Map([["exp-checkout", { runId: "run-old", variant: "control" }]]),
+    );
+    expect(store.entityKeyNames.join("|")).not.toContain(RAW_TARGETING_KEY);
+  });
+});
+
+describe("InMemoryAssignmentStore retained epochs", () => {
+  it("returns current A plus retained B and writes new C only to the active epoch", async () => {
+    const saltStore = makeDerivedSaltStore({ rootSecret: "test-root-secret-do-not-use" });
+    const store = new InMemoryAssignmentStore(saltStore);
+    const historicalHash = await computeTargetingKeyHash(saltStore, {
+      appId: basePut.appId,
+      idType: basePut.idType,
+      targetingKey: basePut.targetingKey,
+      keyVersion: "local-v1",
+    });
+    const currentHash = await computeTargetingKeyHash(saltStore, {
+      appId: basePut.appId,
+      idType: basePut.idType,
+      targetingKey: basePut.targetingKey,
+    });
+
+    await store.putHashed({
+      appId: basePut.appId,
+      experimentId: "exp-retained",
+      idType: basePut.idType,
+      targetingKeyHash: historicalHash,
+      runId: "run-old",
+      variant: "control",
+    });
+    await store.putHashed({
+      appId: basePut.appId,
+      experimentId: "exp-current",
+      idType: basePut.idType,
+      targetingKeyHash: currentHash,
+      runId: "run-now",
+      variant: "treatment",
+    });
+
+    const holdovers = await store.getAll(basePut);
+    expect(holdovers).toEqual(
+      new Map([
+        ["exp-retained", { runId: "run-old", variant: "control" }],
+        ["exp-current", { runId: "run-now", variant: "treatment" }],
+      ]),
+    );
+
+    const replayed = await store.put({
+      ...basePut,
+      experimentId: "exp-retained",
+      runId: "run-should-not-win",
+      variant: "treatment",
+    });
+    expect(replayed).toEqual({
+      status: "existing",
+      assignment: { runId: "run-old", variant: "control" },
+    });
+
+    const created = await store.put({
+      ...basePut,
+      experimentId: "exp-new",
+      runId: "run-new",
+      variant: "on",
+    });
+    expect(created).toEqual({
+      status: "stored",
+      assignment: { runId: "run-new", variant: "on" },
+    });
+    expect(store.entityKeyNames.at(-1)).toBe(
+      assignmentKey(basePut.appId, basePut.idType, currentHash),
+    );
+    expect(store.writerObjectNames.at(-1)).toContain(currentHash);
+  });
+
+  it("fails loud when retained epoch maps conflict for one Experiment", async () => {
+    const saltStore = makeDerivedSaltStore({ rootSecret: "test-root-secret-do-not-use" });
+    const store = new InMemoryAssignmentStore(saltStore);
+    const historicalHash = await computeTargetingKeyHash(saltStore, {
+      appId: basePut.appId,
+      idType: basePut.idType,
+      targetingKey: basePut.targetingKey,
+      keyVersion: "local-v1",
+    });
+    const currentHash = await computeTargetingKeyHash(saltStore, {
+      appId: basePut.appId,
+      idType: basePut.idType,
+      targetingKey: basePut.targetingKey,
+    });
+    await store.putHashed({
+      appId: basePut.appId,
+      experimentId: "exp-checkout",
+      idType: basePut.idType,
+      targetingKeyHash: historicalHash,
+      runId: "run-old",
+      variant: "control",
+    });
+    await store.putHashed({
+      appId: basePut.appId,
+      experimentId: "exp-checkout",
+      idType: basePut.idType,
+      targetingKeyHash: currentHash,
+      runId: "run-new",
+      variant: "treatment",
+    });
+    await expect(store.getAll(basePut)).rejects.toThrow(
+      /Conflicting Assignment for Experiment "exp-checkout"/,
+    );
+  });
 });
 
 describe("AssignmentStoreWriter", () => {
+  it("rejects stale retries after deletion and accepts post-cutoff assignments", async () => {
+    const kv = new RecordingKv();
+    const writer = new AssignmentStoreWriter(new MapStorage(), kv, () => undefined);
+    const input = { ...basePut, targetingKeyHash: "v1:hash-deleted" };
+    await writer.put(input);
+
+    await expect(
+      writer.deleteEntity(
+        { appId: input.appId, idType: input.idType, targetingKeyHash: input.targetingKeyHash },
+        1_000,
+      ),
+    ).resolves.toBe("assignment-do-cutoff-tombstone-v2");
+    await expect(writer.put(input)).rejects.toThrow(/predates Entity deletion cutoff/);
+    await expect(
+      writer.put({ ...input, experimentId: "exp-after", sourceCreatedAtMs: 1_001 }),
+    ).resolves.toMatchObject({ status: "stored" });
+    expect(
+      JSON.parse(kv.raw(assignmentKey("app-A", "user", "v1:hash-deleted")) as string).data,
+    ).toEqual({ "exp-after": { runId: "run-1", variant: "control" } });
+  });
+
   it("write-through merges the stored winner into the Entity KV value before put returns", async () => {
     const kv = new RecordingKv();
     const writer = new AssignmentStoreWriter(new MapStorage(), kv, () => undefined);
@@ -96,7 +248,7 @@ describe("AssignmentStoreWriter", () => {
     });
   });
 
-  it("fails the put when write-through fails, then re-asserts KV on the next put", async () => {
+  it("leaves a rejected DO-only winner after KV failure for namespace retirement", async () => {
     const key = assignmentKey("app-A", "user", "v1:hash-a");
     const kv = new RecordingKv({ failPuts: true });
     const storage = new MapStorage();
@@ -111,9 +263,14 @@ describe("AssignmentStoreWriter", () => {
     expect(await storage.get("assignment:exp-checkout")).toMatchObject({
       targetingKeyHash: "v1:hash-a",
     });
+    await expect(writer.exportEntity()).resolves.toEqual({
+      assignments: { "exp-checkout": { runId: "run-1", variant: "control" } },
+      tombstoned: false,
+      proof: "assignment-do-winners-exported-v1",
+    });
 
-    // Second put for the same assignment: still "existing", but the KV entry is
-    // re-asserted so the holdover becomes visible to getAll.
+    // V2 self-heals this ordinary retry. The deploy-time V1 class retirement
+    // covers the pre-inventory legacy instance when no retry arrives.
     kv.failPuts = false;
     await expect(writer.put({ ...basePut, targetingKeyHash: "v1:hash-a" })).resolves.toMatchObject({
       status: "existing",

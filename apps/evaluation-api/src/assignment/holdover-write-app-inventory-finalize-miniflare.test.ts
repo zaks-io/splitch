@@ -13,7 +13,8 @@ const PUT = {
   appId: "app-A",
   experimentId: "exp-checkout",
   idType: "user",
-  targetingKeyHash: "hash-entity-1",
+  targetingKeyHash: "v1:hash-entity-1",
+  identityVersion: "v1",
   runId: "run-42",
   variant: "treatment",
 } as const;
@@ -171,7 +172,7 @@ async function startFinalizeTest(options: {
     compatibilityFlags: ["nodejs_compat"],
     kvNamespaces: { ASSIGNMENTS_KV: "assignments" },
     durableObjects: {
-      ASSIGNMENT_STORE_WRITER: { className: "AssignmentStoreDurableObject" },
+      ASSIGNMENT_STORE_WRITER: { className: "AssignmentStoreDurableObjectV2" },
       HOLDOVER_WRITE_OUTBOX: { className: "HoldoverWriteOutboxDurableObject" },
       HOLDOVER_WRITE_APP_INVENTORY: { className: "HoldoverWriteAppInventoryDurableObject" },
     },

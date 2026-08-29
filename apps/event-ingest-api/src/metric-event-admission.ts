@@ -1,5 +1,6 @@
 import type { EventDefinition, MetricEventTrackRequest } from "@splitch/contracts";
 import type { MetricEventCredentialScope } from "./client-key-auth";
+import { registerEntityMetricEvent } from "./entity-metric-privacy";
 import { renderError, serviceUnavailable } from "./errors";
 import {
   type EventDefinitionMismatchSink,
@@ -16,14 +17,17 @@ export async function replayExistingMetricEvent(
   eventId: string,
   dedupKey: string,
   fingerprint: string,
+  retainedFingerprints: readonly string[] = [],
   disclosure: "public" | "trusted" = "public",
 ): Promise<Response | null> {
   try {
     const existing = await lookupMetricEvent(env.METRIC_EVENT_OUTBOX, dedupKey);
     if (existing === null) return null;
-    if (existing.fingerprint !== fingerprint) return eventIdConflict(eventId);
+    const matched =
+      existing.fingerprint === fingerprint || retainedFingerprints.includes(existing.fingerprint);
+    if (!matched) return eventIdConflict(eventId);
     const replay = await claimMetricEvent(env.METRIC_EVENT_OUTBOX, dedupKey, {
-      fingerprint,
+      fingerprint: existing.fingerprint,
       eventDefinitionId: existing.eventDefinitionId,
       eventDefinitionVersionId: existing.eventDefinitionVersionId,
       row: {},
@@ -40,12 +44,14 @@ export async function admitAndClaimMetricEvent(
   parsed: MetricEventTrackRequest,
   identity: {
     targetingKeyHash: string;
+    entityFamilyHash: string;
     fingerprint: string;
     dedupKey: string;
     eventDefinitionId: string;
     eventDefinitionVersionId: string;
   },
 ): Promise<Response> {
+  const serverReceivedAt = new Date().toISOString();
   const row = {
     dedup_key: identity.dedupKey,
     event_id: parsed.eventId,
@@ -56,13 +62,42 @@ export async function admitAndClaimMetricEvent(
     event_name: parsed.eventName,
     id_type: parsed.idType,
     targeting_key_hash: identity.targetingKeyHash,
+    entity_family_hash: identity.entityFamilyHash,
     fields: canonicalJson(parsed.fields),
     dimensions: canonicalJson(parsed.dimensions),
-    server_received_at: new Date().toISOString(),
+    server_received_at: serverReceivedAt,
   };
   const denied = await chargeNewMetricEvent(env, credential, row);
   if (denied) return denied;
   try {
+    const suppressed = await registerEntityMetricEvent(
+      env.ENTITY_METRIC_PRIVACY,
+      {
+        appId: credential.appId,
+        idType: parsed.idType,
+        entityFamilyHash: identity.entityFamilyHash,
+      },
+      {
+        dedupKey: identity.dedupKey,
+        fingerprint: identity.fingerprint,
+        eventDefinitionId: identity.eventDefinitionId,
+        eventDefinitionVersionId: identity.eventDefinitionVersionId,
+        targetingKeyHash: identity.targetingKeyHash,
+        serverReceivedAt,
+      },
+      env.SPLITCH_PLATFORM_TARGET,
+    );
+    if (suppressed) {
+      return acceptedMetricEvent(
+        parsed.eventId,
+        {
+          eventDefinitionId: identity.eventDefinitionId,
+          eventDefinitionVersionId: identity.eventDefinitionVersionId,
+          outcome: "duplicate",
+        },
+        credential.credentialKind === "api_key" ? "trusted" : "public",
+      );
+    }
     const claim = await claimMetricEvent(env.METRIC_EVENT_OUTBOX, identity.dedupKey, {
       fingerprint: identity.fingerprint,
       eventDefinitionId: identity.eventDefinitionId,

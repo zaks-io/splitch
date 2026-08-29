@@ -24,6 +24,7 @@ import { createApp } from "./app";
 import type { AnalysisApiEnv } from "./env";
 import { runScheduledSnapshot } from "./scheduled";
 import { createTinybirdCopyTransport, createTinybirdReadTransport } from "./tinybird";
+import { deleteAppIdentityData } from "./tinybird-app-identity-reset";
 import { createTinybirdDeleteTransport } from "./tinybird-delete";
 
 const allowLimiter: RateLimiter = () => ({ limited: false });
@@ -31,7 +32,16 @@ const allowLimiter: RateLimiter = () => ({ limited: false });
 const delegatedRoutes = routesDelegatedTo("analysis-api");
 const cleanupRoute = getRoute("environment_exposure_status_delete");
 if (!cleanupRoute) throw new Error("analysis-api: Exposure status cleanup route is not registered");
-const bindingRoutes = [...delegatedRoutes, cleanupRoute];
+const entityPrivacyRoutes = [
+  "entity_analysis_privacy_export",
+  "entity_analysis_privacy_suppress",
+  "entity_analysis_privacy_delete",
+].map((operationId) => {
+  const route = getRoute(operationId);
+  if (!route) throw new Error(`analysis-api: ${operationId} route is not registered`);
+  return route;
+});
+const bindingRoutes = [...delegatedRoutes, cleanupRoute, ...entityPrivacyRoutes];
 const service = "splitch-analysis-api";
 
 const handler = {
@@ -62,6 +72,14 @@ export class ControlPlaneEntrypoint extends WorkerEntrypoint<AnalysisApiEnv> {
       this.env,
       this.ctx,
     );
+  }
+
+  async purgeAppIdentityAnalytics(
+    appId: string,
+    destroyedVersions: readonly string[],
+    resetId: string,
+  ): Promise<string> {
+    return deleteAppIdentityData(this.env, appId, destroyedVersions, resetId);
   }
 }
 

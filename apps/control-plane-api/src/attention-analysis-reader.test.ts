@@ -23,6 +23,30 @@ function analysisEnvelope(stats = statsOutput()) {
 }
 
 describe("createAnalysisResultsReader timeout", () => {
+  it("blocks retained analytics reads while the App identity is unavailable", async () => {
+    let fetchCount = 0;
+    const reader = createAnalysisResultsReader(
+      {
+        fetch: async () => {
+          fetchCount += 1;
+          return Response.json(analysisEnvelope());
+        },
+      },
+      10_000,
+      {
+        assertAppIdentityTrafficAllowed: async (appId) => {
+          expect(appId).toBe(SCOPE.appId);
+          throw new Error("App identity reset is in progress");
+        },
+      },
+    );
+
+    await expect(reader.read(SCOPE, "actor_1")).rejects.toBeInstanceOf(
+      AnalysisResultsUnavailableError,
+    );
+    expect(fetchCount).toBe(0);
+  });
+
   // A hung service binding must not stall the read forever: with
   // ANALYSIS_READ_CONCURRENCY capped at 8 and up to 200 planned reads, one
   // non-responding fetch would otherwise occupy a concurrency slot for the

@@ -6,7 +6,7 @@ import { expect } from "vitest";
 import { createApp } from "./app";
 import { ALLOW_POLICY } from "./app-environment-model";
 import { makeControlPlaneAuthResolver } from "./auth-resolver";
-import type { ConfigStoreAccess } from "./config-store-do";
+import type { ConfigStoreAccess } from "./config-store-access";
 import type { EnvironmentExposureStatusCleanup } from "./environment-exposure-status-cleanup";
 import { type FixtureSigner, makeFixtureSigner } from "./fixture-signer";
 import { makeJwksVerifier } from "./jwks-verify";

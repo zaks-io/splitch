@@ -22,12 +22,16 @@ SQL >
         counterfactual,
         assumeNotNull(activation_ts) AS activation_ts
     FROM raw_events
+    LEFT JOIN app_identity_generation_tombstones AS generation_tombstones
+        ON generation_tombstones.app_id = raw_events.app_id
+        AND generation_tombstones.targeting_key_version = splitByChar(':', raw_events.targeting_key_hash)[1]
     WHERE type = 'activation'
         AND activation_ts IS NOT NULL
         AND app_id = {{String(app_id)}}
         AND environment_id = {{String(environment_id)}}
         AND experiment_id = {{String(experiment_id)}}
         AND run_id = {{String(run_id)}}
+        AND generation_tombstones.app_id = ''
         -- Counterfactual Activations record what a Control Entity WOULD have done.
         -- The Stats Engine's activated-denominator filter reads only run_id and
         -- `activated` (packages/stats/src/exposure-denominator.ts), so a

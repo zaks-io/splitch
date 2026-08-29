@@ -4,6 +4,11 @@ import { Hono } from "hono";
 import type { HoldoverWriteCoordinator } from "./assignment/holdover-write-outbox";
 import { DirectHoldoverWriteCoordinator } from "./assignment/holdover-write-outbox";
 import {
+  type EntityAssignmentPrivacyHandlerDeps,
+  makeEntityAssignmentPrivacyDeleteHandler,
+  makeEntityAssignmentPrivacyExportHandler,
+} from "./assignment/entity-assignment-privacy-handler";
+import {
   type HoldoverWriteOutboxCleanupDeps,
   makeHoldoverWriteOutboxCleanupHandler,
 } from "./assignment/holdover-write-outbox-cleanup";
@@ -56,6 +61,8 @@ export interface AppDeps extends EvaluatePathDeps {
   holdoverWrite?: HoldoverWriteCoordinator;
   /** Binding-door App/Entity deletion consumer for the holdover-write outbox. */
   holdoverWriteOutboxCleanup?: HoldoverWriteOutboxCleanupDeps;
+  /** Binding-door multi-epoch Assignment export/delete for Entity privacy. */
+  entityAssignmentPrivacy?: EntityAssignmentPrivacyHandlerDeps;
   evaluationCommitSink: EvaluationCommitSink;
   evaluationUsageSink: EvaluationUsageSink;
   rateLimiter: RateLimiter;
@@ -149,6 +156,18 @@ export function createApp(deps: AppDeps): Hono {
         app,
         evaluationRoute("holdover_write_outbox_delete"),
         makeHoldoverWriteOutboxCleanupHandler(deps.holdoverWriteOutboxCleanup),
+      );
+    }
+    if (deps.entityAssignmentPrivacy) {
+      registrar.mount(
+        app,
+        evaluationRoute("entity_assignment_privacy_export"),
+        makeEntityAssignmentPrivacyExportHandler(deps.entityAssignmentPrivacy),
+      );
+      registrar.mount(
+        app,
+        evaluationRoute("entity_assignment_privacy_delete"),
+        makeEntityAssignmentPrivacyDeleteHandler(deps.entityAssignmentPrivacy),
       );
     }
   }

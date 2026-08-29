@@ -1,5 +1,10 @@
 import { WorkerEntrypoint } from "cloudflare:workers";
-import { createHealthResponse, requirePlatformTarget, routesDelegatedTo } from "@splitch/contracts";
+import {
+  createHealthResponse,
+  getRoute,
+  requirePlatformTarget,
+  routesDelegatedTo,
+} from "@splitch/contracts";
 import {
   createWorkerObservability,
   workerObservabilityWithWaitUntil,
@@ -10,6 +15,12 @@ import {
   notDelegatedResponse,
   type Observability,
 } from "@splitch/worker-runtime";
+import { appIdentityPrivacyInventoryStub } from "./entity-metric-privacy";
+import {
+  handleEntityMetricPrivacy,
+  requireEntityMetricPrivacyBinding,
+} from "./entity-metric-privacy-handler";
+import { EntityMetricPrivacyDurableObject } from "./entity-metric-privacy-store";
 import { authenticateDelegatedDataPlaneCredential } from "./client-key-auth";
 import { renderError } from "./errors";
 import { handleEvaluationCommit } from "./evaluation-commit";
@@ -21,6 +32,7 @@ import { handleAuthorizedMetricEvent } from "./metric-event-ingest";
 import { MetricEventOutboxDurableObject } from "./metric-event-outbox";
 import { handleMetricEventQueue } from "./metric-event-queue";
 import { MetricEventRateLimitDurableObject } from "./metric-event-rate-limit";
+import { makeMetricEventSaltStore } from "./metric-event-salt-store";
 import type { Env } from "./types";
 
 const service = "splitch-event-ingest-api";
@@ -31,6 +43,16 @@ const metricEventPath = "/api/sdk/events";
 const metricEventRoutes = routesDelegatedTo("event-ingest-api").filter(
   (route) => route.operationId === "sdk_track",
 );
+const entityPrivacyOperations = [
+  "entity_event_privacy_export",
+  "entity_event_privacy_suppress",
+  "entity_event_privacy_delete",
+] as const;
+const entityPrivacyRoutes = entityPrivacyOperations.map((operationId) => {
+  const route = getRoute(operationId);
+  if (!route) throw new Error(`event-ingest-api: ${operationId} route is not registered`);
+  return route;
+});
 
 /**
  * Binding-only writes the Evaluation Worker makes for its own App and
@@ -63,6 +85,7 @@ const internalRoutes: Readonly<
 const handler = {
   async fetch(request, env): Promise<Response> {
     const platformTarget = requirePlatformTarget(env.SPLITCH_PLATFORM_TARGET);
+    requireEntityMetricPrivacyBinding(env);
     const url = new URL(request.url);
     if (request.method === "GET" && (url.pathname === "/" || url.pathname === "/health")) {
       return healthResponse(env, platformTarget);
@@ -85,6 +108,7 @@ const handler = {
 const delegatedHandler = {
   async fetch(request, env, ctx): Promise<Response> {
     requirePlatformTarget(env.SPLITCH_PLATFORM_TARGET);
+    makeMetricEventSaltStore(env);
     const url = new URL(request.url);
     const observability = observabilityFor(env, ctx);
     const internal = await handleInternalRoute(request, env, observability, url);
@@ -112,12 +136,90 @@ export class EvaluationEntrypoint extends WorkerEntrypoint<Env> {
   }
 }
 
+const controlPlaneHandler = {
+  async fetch(request, env): Promise<Response> {
+    requirePlatformTarget(env.SPLITCH_PLATFORM_TARGET);
+    requireEntityMetricPrivacyBinding(env);
+    const identity = delegatedIdentityFor(request, entityPrivacyRoutes);
+    if (!identity) return notDelegatedResponse(request);
+    const operationId = identity.operation;
+    const operation = operationId.endsWith("_export")
+      ? "export"
+      : operationId.endsWith("_suppress")
+        ? "suppress"
+        : "delete";
+    return handleEntityMetricPrivacy(request, env, identity, operation);
+  },
+} satisfies ExportedHandler<Env>;
+
+export class ControlPlaneEntrypoint extends WorkerEntrypoint<Env> {
+  override async fetch(request: Request): Promise<Response> {
+    return wrapWorkerHandler(controlPlaneHandler, { surface: "event-ingest-api" }).fetch(
+      request as Parameters<typeof controlPlaneHandler.fetch>[0],
+      this.env,
+      this.ctx,
+    );
+  }
+
+  purgeAppIdentityDelivery(
+    appId: string,
+    resetId: string,
+    currentVersion: string,
+  ): Promise<string> {
+    return purgeAppIdentityDelivery(this.env, appId, resetId, currentVersion);
+  }
+
+  completeAppIdentityReset(appId: string, resetId: string, nextVersion: string): Promise<void> {
+    return completeAppIdentityReset(this.env, appId, resetId, nextVersion);
+  }
+}
+
+async function purgeAppIdentityDelivery(
+  env: Env,
+  appId: string,
+  resetId: string,
+  currentVersion: string,
+): Promise<string> {
+  const response = await appIdentityPrivacyInventoryStub(env.ENTITY_METRIC_PRIVACY, appId).fetch(
+    "https://entity-privacy.local/reset-app",
+    {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ appId, resetId, currentVersion }),
+    },
+  );
+  if (!response.ok) throw new Error(`Event delivery identity purge returned ${response.status}`);
+  const body = (await response.json()) as { proof?: unknown };
+  if (typeof body.proof !== "string")
+    throw new Error("Event delivery identity purge omitted proof");
+  return body.proof;
+}
+
+async function completeAppIdentityReset(
+  env: Env,
+  appId: string,
+  resetId: string,
+  nextVersion: string,
+): Promise<void> {
+  const response = await appIdentityPrivacyInventoryStub(env.ENTITY_METRIC_PRIVACY, appId).fetch(
+    "https://entity-privacy.local/complete-reset",
+    {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ resetId, nextVersion }),
+    },
+  );
+  if (!response.ok) throw new Error(`Event identity reset completion returned ${response.status}`);
+}
+
 export default wrapWorkerHandler(handler, { surface: "event-ingest-api" });
 
 function healthResponse(
   env: Env,
   platformTarget = requirePlatformTarget(env.SPLITCH_PLATFORM_TARGET),
 ): Response {
+  requireEntityMetricPrivacyBinding(env);
+  makeMetricEventSaltStore(env);
   return Response.json(
     createHealthResponse(service, platformTarget, env.SPLITCH_DEPLOYED_COMMIT_SHA),
   );
@@ -159,4 +261,5 @@ export {
   IngestAdmissionGateDurableObject,
   MetricEventOutboxDurableObject,
   MetricEventRateLimitDurableObject,
+  EntityMetricPrivacyDurableObject,
 };

@@ -1,8 +1,14 @@
 import { type ErrorResponse, PeekEvaluateResponseSchema, type Variant } from "@splitch/contracts";
-import { renderError, type HandlerArgs, type Principal } from "@splitch/worker-runtime";
+import { type HandlerArgs, type Principal, renderError } from "@splitch/worker-runtime";
+import {
+  admittedEvaluatePathDeps,
+  appIdentityAdmissionValidationError,
+  tryAdmitAppIdentity,
+} from "./app-identity-traffic";
 import { peekVariant } from "./evaluate/accessor-paths";
-import type { EvaluatePathDeps, EvaluatePathInput } from "./evaluate/evaluate-path-types";
 import type { EvaluateResult } from "./evaluate/evaluate-path";
+import type { EvaluatePathDeps, EvaluatePathInput } from "./evaluate/evaluate-path-types";
+import type { ExposureAssemblyDeps } from "./evaluate/exposure-assembly";
 import { errorResponse } from "./evaluation-error-response";
 import type { FlagConfig, Provider } from "./provider/provider";
 
@@ -27,13 +33,23 @@ interface CredentialScope {
   readonly environmentId: string;
 }
 
-export function makePeekHandler(deps: EvaluatePathDeps) {
+export function makePeekHandler(
+  deps: EvaluatePathDeps & { exposureAssembly: ExposureAssemblyDeps },
+) {
   return async ({ input, principal, requestId }: HandlerArgs<unknown>): Promise<Response> => {
     const parsed = peekInput(input);
     const scope = credentialScope(principal, parsed.body.appId);
     if (!scope.ok) return renderError(scope.error, { requestId });
+    const admitted = await tryAdmitAppIdentity(deps.exposureAssembly.saltStore, scope.value.appId);
+    if (!admitted.ok) return renderError(admitted.error, { requestId });
 
-    const evaluated = await peekWithCapture(parsed.body, scope.value, deps);
+    const evaluated = await peekWithCapture(
+      parsed.body,
+      scope.value,
+      admittedEvaluatePathDeps(deps, admitted.admission),
+    );
+    const stale = await appIdentityAdmissionValidationError(admitted.admission);
+    if (stale !== null) return renderError(stale, { requestId });
     return peekResponse(evaluated, requestId);
   };
 }

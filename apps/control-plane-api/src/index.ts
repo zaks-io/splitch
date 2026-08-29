@@ -2,8 +2,6 @@ import { WorkerEntrypoint } from "cloudflare:workers";
 import {
   type ConvexExposureVerificationRequest,
   type ConvexExposureVerificationResult,
-  createHealthResponse,
-  parsePlatformTarget,
   routesDelegatedTo,
 } from "@splitch/contracts";
 import { createRepository } from "@splitch/db";
@@ -21,6 +19,8 @@ import { createAnalysisResultsReader } from "./attention-analysis-reader";
 import { authJwksUri } from "./auth-jwks-config";
 import { makeControlPlaneAuthResolver } from "./auth-resolver";
 import { loadCloudflareExposureVerificationConfig } from "./cloudflare-exposure-verification";
+import { durableConfigStoreAccess } from "./config-store-access";
+import { durableAppIdentityResetAccess } from "./config-store-app-identity-access";
 import { ConfigStoreDurableObject } from "./config-store-do";
 import { parseControlPanelBindingOperation } from "./control-panel-operation";
 import { handleControlPlaneAppRequest } from "./control-plane-app-request";
@@ -37,6 +37,7 @@ import {
   durableCredentialCacheWriterAccess,
 } from "./credential-cache-writer-do";
 import type { ControlPlaneApiEnv } from "./env";
+import { controlPlaneHealthResponse } from "./health";
 import { handleCredentialCacheBackfillGate, handleLiveUpdateTestControl } from "./internal-routes";
 import { makeCachedJwksVerifier } from "./jwks-verify";
 import { makeSessionCacheMemberProfileResolver } from "./member-profile-cache";
@@ -50,7 +51,6 @@ import { makeSessionStore } from "./session-store";
 import { makeTokenMembershipAccess, withBearerMembershipCheck } from "./token-membership";
 import { unauthorized } from "./unauthorized";
 
-const service = "splitch-control-plane-api";
 const handler = {
   async fetch(request, env, ctx): Promise<Response> {
     return handleRequest(request, env, ctx);
@@ -133,6 +133,13 @@ export class EvaluationEntrypoint extends WorkerEntrypoint<ControlPlaneApiEnv> {
   ): Promise<ConvexExposureVerificationResult> {
     return loadCloudflareExposureVerificationConfig(createRepository(this.env.DB), input);
   }
+
+  resetCompromisedAppIdentity(appId: string, resetId: string): Promise<string> {
+    return durableAppIdentityResetAccess(this.env.CONFIG_STORE_WRITER).resetCompromisedAppIdentity(
+      appId,
+      resetId,
+    );
+  }
 }
 
 type PanelProtocol = "none" | "signed" | "bounded-session";
@@ -162,17 +169,7 @@ async function handleRequest(
 ): Promise<Response> {
   const url = new URL(request.url);
   if (url.pathname === "/health" || url.pathname === "/") {
-    const response = Response.json(
-      createHealthResponse(
-        service,
-        parsePlatformTarget(env.SPLITCH_PLATFORM_TARGET),
-        env.SPLITCH_DEPLOYED_COMMIT_SHA,
-      ),
-    );
-    if (env.SPLITCH_LOCAL_E2E_RUN_ID) {
-      response.headers.set("x-splitch-local-e2e-run-id", env.SPLITCH_LOCAL_E2E_RUN_ID);
-    }
-    return response;
+    return controlPlaneHealthResponse(env);
   }
   if (url.pathname.startsWith("/internal/credential-cache-backfill")) {
     return handleCredentialCacheBackfillGate(request, env, url);
@@ -280,8 +277,12 @@ async function handleSignedPanelOverview(
   if (operation?.id !== "overview_get") return null;
   const auth = await authResolver(request);
   if (!auth.ok) return unauthorized();
+  const configStore = durableConfigStoreAccess(env.CONFIG_STORE_WRITER, env.CONFIG_STORE);
   return panelOverviewRead(
-    { repo, analysisResults: createAnalysisResultsReader(env.ANALYSIS_API) },
+    {
+      repo,
+      analysisResults: createAnalysisResultsReader(env.ANALYSIS_API, undefined, configStore),
+    },
     {
       actorId: auth.principal.id,
       appId: operation.appId,

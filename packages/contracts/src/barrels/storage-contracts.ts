@@ -1,6 +1,7 @@
 // biome-ignore lint/performance/noBarrelFile: keeps the public entry point below the repository size limit
 export {
   apiKeyCacheKey,
+  appEntityIdentityKey,
   assignmentKey,
   clientKeyCacheKey,
   controlPlaneFlagConfigKey,

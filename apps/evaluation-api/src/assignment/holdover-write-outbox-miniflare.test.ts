@@ -1,15 +1,12 @@
-import { readFileSync } from "node:fs";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
 import { assignmentKey } from "@splitch/contracts";
 import { Miniflare } from "miniflare";
-import ts from "typescript";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   DurableHoldoverWriteCoordinator,
   type HoldoverWriteOutboxNamespace,
 } from "./holdover-write-outbox";
 import { holdoverWriteOutboxName } from "./holdover-write-outbox-core";
+import { bundleOutboxAssignmentWorker } from "./holdover-write-outbox-miniflare-bundle";
 
 /**
  * Miniflare boundary: real HoldoverWriteOutbox DO + production
@@ -22,7 +19,8 @@ const PUT = {
   appId: "app-A",
   experimentId: "exp-checkout",
   idType: "user",
-  targetingKeyHash: "hash-entity-1",
+  targetingKeyHash: "v1:hash-entity-1",
+  identityVersion: "v1",
   runId: "run-42",
   variant: "treatment",
 } as const;
@@ -131,180 +129,14 @@ async function miniflareWithOutboxAndAssignmentStore(options: {
 }): Promise<Miniflare> {
   return new Miniflare({
     modules: true,
-    script: bundleWorker(options.failFirstKvPut),
+    script: bundleOutboxAssignmentWorker(options.failFirstKvPut),
     compatibilityDate: "2026-06-21",
     compatibilityFlags: ["nodejs_compat"],
     kvNamespaces: { ASSIGNMENTS_KV: "assignments" },
     durableObjects: {
-      ASSIGNMENT_STORE_WRITER: { className: "AssignmentStoreDurableObject" },
+      ASSIGNMENT_STORE_WRITER: { className: "AssignmentStoreDurableObjectV2" },
       HOLDOVER_WRITE_OUTBOX: { className: "HoldoverWriteOutboxDurableObject" },
+      HOLDOVER_WRITE_APP_INVENTORY: { className: "TestAppInventoryDurableObject" },
     },
   });
-}
-
-function bundleWorker(failFirstKvPut: boolean): string {
-  const root = dirname(fileURLToPath(import.meta.url));
-  const core = readSource(join(root, "holdover-write-outbox-core.ts"));
-  const ensure = readSource(join(root, "holdover-write-outbox-ensure.ts"))
-    .replace(/^import[\s\S]*?from ["']\.\/assignment-store["'];?\s*/m, "")
-    .replace(/^import[\s\S]*?from ["']\.\/holdover-write-outbox-core["'];?\s*/m, "");
-  const fetchHandler = readSource(join(root, "holdover-write-outbox-fetch.ts"))
-    .replace(/^import[\s\S]*?from ["']\.\/assignment-store["'];?\s*/m, "")
-    .replace(/^import[\s\S]*?from ["']\.\/holdover-write-app-inventory["'];?\s*/m, "")
-    .replace(/^import[\s\S]*?from ["']\.\/holdover-write-app-inventory-client["'];?\s*/m, "")
-    .replace(/^import[\s\S]*?from ["']\.\/holdover-write-outbox-core["'];?\s*/m, "")
-    .replace(/^import[\s\S]*?from ["']\.\/holdover-write-outbox-ensure["'];?\s*/m, "")
-    .replace(
-      /\nfunction isRecord\(value: unknown\): value is Record<string, unknown> \{[\s\S]*?\n\}\n\nfunction requireString\(value: Record<string, unknown>, key: string\): string \{[\s\S]*?\n\}\n/,
-      "\n",
-    );
-  const outbox = readSource(join(root, "holdover-write-outbox.ts"))
-    .replace(/^import[\s\S]*?from ["']\.\/assignment-store["'];?\s*/gm, "")
-    .replace(/^import[\s\S]*?from ["']\.\/holdover-write-outbox-core["'];?\s*/gm, "")
-    .replace(/^import[\s\S]*?from ["']\.\/holdover-write-outbox-fetch["'];?\s*/gm, "")
-    .replace(/^import[\s\S]*?from ["']\.\/holdover-write-outbox-memory["'];?\s*/gm, "")
-    .replace(/^import[\s\S]*?from ["']\.\/kv-assignment-store["'];?\s*/gm, "")
-    .replace(/^export \{[^}]*MemoryHoldoverWriteCoordinator[^}]*\} from [^;]+;?\s*/gm, "")
-    .replace(/^export \{ handleHoldoverWriteOutboxFetch \} from [^;]+;?\s*/gm, "")
-    .replace(/^export type \{[\s\S]*?\} from ["']\.\/holdover-write-outbox-core["'];?\s*/gm, "");
-  const outboxDo = readSource(join(root, "holdover-write-outbox-do.ts"))
-    .replace(/^import \{ DurableObject \} from "cloudflare:workers";\s*/m, "")
-    .replace(/^import[\s\S]*?from ["']\.\/holdover-write-outbox["'];?\s*/m, "")
-    .replace(/^import[\s\S]*?from ["']\.\/holdover-write-outbox-core["'];?\s*/m, "")
-    .replace(/^import[\s\S]*?from ["']\.\/holdover-write-outbox-ensure["'];?\s*/m, "")
-    .replace(/^import[\s\S]*?from ["']\.\/holdover-write-outbox-fetch["'];?\s*/m, "");
-
-  // Production writer + DO (not an inlined twin). Contracts/Zod are stubbed;
-  // write-through helpers match the production assignment-store module.
-  const writer = readSource(join(root, "assignment-store-writer.ts")).replace(
-    /^import[\s\S]*?from ["']\.\/assignment-store["'];?\s*/m,
-    "",
-  );
-  const assignmentDo = readSource(join(root, "assignment-store-do.ts"))
-    .replace(/^import \{ DurableObject \} from "cloudflare:workers";\s*/m, "")
-    .replace(/^import[\s\S]*?from ["']\.\/assignment-store["'];?\s*/m, "")
-    .replace(/^import[\s\S]*?from ["']\.\/assignment-store-writer["'];?\s*/m, "")
-    .replace(
-      /\nfunction isRecord\(value: unknown\): value is Record<string, unknown> \{[\s\S]*?\n\}\n\nfunction requireString\(value: Record<string, unknown>, key: string\): string \{[\s\S]*?\n\}\n/,
-      "\n",
-    );
-
-  const stubs = `
-globalThis.__holdoverKvFailsRemaining = ${failFirstKvPut ? "1" : "0"};
-const CURRENT_KV_SCHEMA_VERSION = 1;
-function assignmentWriterName(input) {
-  return input.appId + ":" + input.idType + ":" + input.targetingKeyHash;
-}
-function assignmentKey(appId, idType, targetingKeyHash) {
-  return "assignment:" + appId + ":" + idType + ":" + targetingKeyHash;
-}
-function mergeAssignmentValue(value, input) {
-  if (value[input.experimentId] !== undefined) return value;
-  return { ...value, [input.experimentId]: { runId: input.runId, variant: input.variant } };
-}
-function serializeAssignmentValue(value) {
-  return JSON.stringify({ schemaVersion: CURRENT_KV_SCHEMA_VERSION, data: value });
-}
-async function readAssignmentValue(kv, key) {
-  const raw = await kv.get(key);
-  if (raw === null) return {};
-  return JSON.parse(raw).data;
-}
-function isRecord(value) {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-function requireString(value, key) {
-  const field = value[key];
-  if (typeof field !== "string" || field.length === 0) {
-    throw new TypeError("assignment-store: " + key + " must be a non-empty string");
-  }
-  return field;
-}
-function failOnceKv(kv) {
-  return {
-    get: (key) => kv.get(key),
-    put: async (key, value) => {
-      if (${failFirstKvPut ? "true" : "false"} && globalThis.__holdoverKvFailsRemaining > 0) {
-        globalThis.__holdoverKvFailsRemaining -= 1;
-        throw new Error("forced KV put failure");
-      }
-      return kv.put(key, value);
-    },
-  };
-}
-class DurableHoldoverWriteAppInventoryClient {
-  constructor() {}
-  registerEntity() {
-    return Promise.resolve({ status: "registered" });
-  }
-}
-function inventoryRegisterPortForApp(client, appId) {
-  return {
-    registerEntity: (ref) => client.registerEntity(appId, ref),
-  };
-}
-`;
-
-  const stripExport = (source: string) =>
-    source.replace(/^export \{[\s\S]*?\};?\s*/gm, "").replace(/^export /gm, "");
-
-  return ts.transpileModule(
-    `
-import { DurableObject } from "cloudflare:workers";
-${stubs}
-${stripExport(core)}
-${stripExport(ensure)}
-${stripExport(fetchHandler)}
-${stripExport(outbox)}
-${outboxDo}
-${stripExport(writer)}
-${assignmentDo}
-const __prodOutboxFetch = HoldoverWriteOutboxDurableObject.prototype.fetch;
-HoldoverWriteOutboxDurableObject.prototype.fetch = async function (request) {
-  const url = new URL(request.url);
-  if (url.pathname === "/__test/alarm-state") {
-    return Response.json({ alarm: await this.ctx.storage.getAlarm() });
-  }
-  if (url.pathname === "/__test/alarm" && request.method === "POST") {
-    const scheduledAt = await this.ctx.storage.getAlarm();
-    const originalDateNow = Date.now;
-    if (scheduledAt !== null) Date.now = () => scheduledAt;
-    try {
-      await this.alarm();
-      return Response.json({ ok: true });
-    } finally {
-      Date.now = originalDateNow;
-    }
-  }
-  return __prodOutboxFetch.call(this, request);
-};
-const __prodAssignmentFetch = AssignmentStoreDurableObject.prototype.fetch;
-AssignmentStoreDurableObject.prototype.fetch = async function (request) {
-  const originalKv = this.env.ASSIGNMENTS_KV;
-  this.env.ASSIGNMENTS_KV = failOnceKv(originalKv);
-  try {
-    return await __prodAssignmentFetch.call(this, request);
-  } finally {
-    this.env.ASSIGNMENTS_KV = originalKv;
-  }
-};
-export default {
-  async fetch() {
-    return new Response("harness", { status: 200 });
-  },
-};
-`,
-    {
-      compilerOptions: {
-        module: ts.ModuleKind.ESNext,
-        target: ts.ScriptTarget.ES2022,
-        strict: true,
-      },
-      fileName: "holdover-write-outbox.mf.ts",
-    },
-  ).outputText;
-}
-
-function readSource(path: string): string {
-  return readFileSync(path, "utf8");
 }

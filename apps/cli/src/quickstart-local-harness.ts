@@ -6,8 +6,8 @@ import {
   type ConfigStoreWriter,
   makeConfigStore,
 } from "../../control-plane-api/src/config-store.js";
+import type { ConfigStoreAccess } from "../../control-plane-api/src/config-store-access.js";
 import { makeSnapshotRevisionCounter } from "../../control-plane-api/src/config-store-fixture-data.js";
-import type { ConfigStoreAccess } from "../../control-plane-api/src/config-store-do.js";
 import type { FixtureSigner } from "../../control-plane-api/src/fixture-signer.js";
 import {
   appToken,
@@ -137,6 +137,7 @@ export async function makeQuickstartHarness(): Promise<QuickstartHarness> {
     exposureAssembly: {
       saltStore: {
         currentKeyVersion: () => Promise.resolve("quickstart-v1"),
+        retainedKeyVersions: () => Promise.resolve(["quickstart-v1"]),
         saltFor: (requestedAppId: string) => {
           if (requestedAppId !== appId) {
             throw new Error(`quickstart harness: missing salt for ${requestedAppId}`);

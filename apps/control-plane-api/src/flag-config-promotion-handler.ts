@@ -5,7 +5,7 @@ import { canonicalHash } from "./approval-canonical";
 import { createApproval, replayApprovalIfExists } from "./approval-service";
 import { environmentPolicyContexts, requiresReview } from "./approval-target";
 import type { ConfigStoreWriter } from "./config-store";
-import type { ConfigStoreAccess } from "./config-store-do";
+import type { ConfigStoreAccess } from "./config-store-access";
 import { configStoreUnavailable } from "./experiment-errors";
 import { flagConfigNotFound } from "./flag-config-errors";
 import {

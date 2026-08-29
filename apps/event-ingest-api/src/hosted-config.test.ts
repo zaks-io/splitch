@@ -99,6 +99,137 @@ describe("Event Ingest hosted configuration", () => {
   });
 });
 
+describe("Event Ingest hosted privacy salt", () => {
+  it("fails health, delegated, and queue delivery when a hosted target has no privacy root salt", async () => {
+    const env = hostedBindings("production");
+    delete (env as { EVALUATION_PRIVACY_SALT?: string }).EVALUATION_PRIVACY_SALT;
+    const ctx = new TestExecutionContext();
+
+    await expect(
+      worker.fetch(workerRequest("https://event-ingest.test/health"), env, ctx),
+    ).rejects.toThrow(/EVALUATION_PRIVACY_SALT/);
+
+    await expect(
+      new EvaluationEntrypoint(ctx, env).fetch(
+        workerRequest("https://splitch-event-ingest.internal/api/internal/exposures", {
+          method: "POST",
+          headers: {
+            authorization: "Bearer internal_ingest_secret",
+            "content-type": "application/json",
+            "x-splitch-app-id": appId,
+            "x-splitch-environment-id": environmentId,
+          },
+          body: JSON.stringify(baseExposure()),
+        }),
+      ),
+    ).rejects.toThrow(/EVALUATION_PRIVACY_SALT/);
+
+    const queued = {
+      id: "message-hosted-salt",
+      timestamp: new Date("2026-08-07T00:00:00.000Z"),
+      body: { event_id: "event-hosted-salt" },
+      attempts: 1,
+      ack: vi.fn(),
+      retry: vi.fn(),
+    };
+    if (!worker.queue) {
+      throw new Error("Event ingest queue handler is not configured");
+    }
+    await expect(
+      worker.queue(
+        {
+          messages: [queued],
+          queue: "metric-events",
+          metadata: { metrics: { backlogCount: 1, backlogBytes: 64 } },
+          ackAll: vi.fn(),
+          retryAll: vi.fn(),
+        },
+        env,
+        ctx,
+      ),
+    ).rejects.toThrow(/EVALUATION_PRIVACY_SALT/);
+    expect(queued.ack).not.toHaveBeenCalled();
+    expect(queued.retry).not.toHaveBeenCalled();
+  });
+
+  it("fails health, delegated, and queue delivery when a hosted target has no CONFIG_STORE", async () => {
+    const env = hostedBindings("production");
+    delete (env as { CONFIG_STORE?: Env["CONFIG_STORE"] }).CONFIG_STORE;
+    const ctx = new TestExecutionContext();
+
+    await expect(
+      worker.fetch(workerRequest("https://event-ingest.test/health"), env, ctx),
+    ).rejects.toThrow(/CONFIG_STORE is required/);
+
+    await expect(
+      new EvaluationEntrypoint(ctx, env).fetch(
+        workerRequest("https://splitch-event-ingest.internal/api/internal/exposures", {
+          method: "POST",
+          headers: {
+            authorization: "Bearer internal_ingest_secret",
+            "content-type": "application/json",
+            "x-splitch-app-id": appId,
+            "x-splitch-environment-id": environmentId,
+          },
+          body: JSON.stringify(baseExposure()),
+        }),
+      ),
+    ).rejects.toThrow(/CONFIG_STORE is required/);
+
+    const queued = {
+      id: "message-hosted-config-store",
+      timestamp: new Date("2026-08-07T00:00:00.000Z"),
+      body: { event_id: "event-hosted-config-store" },
+      attempts: 1,
+      ack: vi.fn(),
+      retry: vi.fn(),
+    };
+    if (!worker.queue) {
+      throw new Error("Event ingest queue handler is not configured");
+    }
+    await expect(
+      worker.queue(
+        {
+          messages: [queued],
+          queue: "metric-events",
+          metadata: { metrics: { backlogCount: 1, backlogBytes: 64 } },
+          ackAll: vi.fn(),
+          retryAll: vi.fn(),
+        },
+        env,
+        ctx,
+      ),
+    ).rejects.toThrow(/CONFIG_STORE is required/);
+    expect(queued.ack).not.toHaveBeenCalled();
+    expect(queued.retry).not.toHaveBeenCalled();
+  });
+
+  it("serves hosted health when the root salt and deployed SHA are present", async () => {
+    const response = await worker.fetch(
+      workerRequest("https://event-ingest.test/health"),
+      hostedBindings("production"),
+      new TestExecutionContext(),
+    );
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ ok: true, platformTarget: "production" });
+  });
+
+  it("serves health on an explicit local target without a hosted salt", async () => {
+    const env = makeEnv();
+    delete (env as { EVALUATION_PRIVACY_SALT?: string }).EVALUATION_PRIVACY_SALT;
+
+    const response = await worker.fetch(
+      workerRequest("https://event-ingest.test/health"),
+      env,
+      new TestExecutionContext(),
+    );
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ ok: true, platformTarget: "local" });
+  });
+});
+
 function hostedBindings(platformTarget: string | undefined): Env {
   const { SPLITCH_PLATFORM_TARGET: _explicitLocal, ...bindings } = makeEnv();
   return {

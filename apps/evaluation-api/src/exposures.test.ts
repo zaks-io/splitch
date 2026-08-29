@@ -3,13 +3,13 @@ import { describe, expect, it } from "vitest";
 import type { AssembledExposure } from "./evaluate/exposure-assembly";
 import { type ExposureIngestSink, ExposureIngestSinkError } from "./exposure-redemption";
 import { MemoryExposureRedemptionClaimStore } from "./exposure-redemption-claim";
-import { ExposureRedemptionClaimTransportError } from "./exposure-redemption-claim-errors";
 import type {
   ExposureRedemptionAcknowledgeOutcome,
   ExposureRedemptionClaimInput,
   ExposureRedemptionClaimOutcome,
   ExposureRedemptionClaimStore,
 } from "./exposure-redemption-claim-core";
+import { ExposureRedemptionClaimTransportError } from "./exposure-redemption-claim-errors";
 import {
   EXPOSURE_ID_A,
   EXPOSURE_ID_B,
@@ -123,6 +123,7 @@ describe("POST /api/sdk/exposures: happy path and pipeline seam", () => {
         appId: APP_ID,
         experimentId: EXPERIMENT_ID,
         idType: "user",
+        identityVersion: "v1",
         targetingKeyHash: exposureSink.writes[0]?.targetingKeyHash,
         runId: "run-42",
         variant: "treatment",

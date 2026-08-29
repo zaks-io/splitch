@@ -12,6 +12,7 @@ export async function writeEvaluationUsage(
   hasExposure: boolean,
   idempotencyKey: string,
   scope: EvaluationUsageScope,
+  identityVersion: string,
   dimensions: { readonly flagKey: string; readonly sdkRuntime: string },
   deps: {
     readonly evaluationUsageSink: EvaluationUsageSink;
@@ -25,6 +26,7 @@ export async function writeEvaluationUsage(
       idempotencyKey,
       organizationId: scope.organizationId,
       appId: scope.appId,
+      identityVersion,
       environmentId: scope.environmentId,
       flagKey: dimensions.flagKey,
       sdkRuntime: dimensions.sdkRuntime,

@@ -49,20 +49,19 @@ KV propagation window: up to ~60s. During this window, a cross-POP evaluate may 
 
 Two callers drive Assignment Store writes. Timing differs:
 
-**`evaluate` (live path):** response is not blocked on the DO/KV write.
+**`evaluate` (live path):** response waits for the required DO/KV Assignment commit and final
+validation of the captured App identity generation.
 
 ```
 evaluate() call
   ├── Read KV for holdover (cache hit → replay, cache miss → assign())
   ├── On fresh Exposure: synchronously seal retry-stable row in Event Ingest raw_events outbox
   │     └── Fail Evaluation before Assignment Store write if durable seal fails
-  ├── Return Variant to SDK caller  ← response is here; not blocked by Queue, Tinybird, or DO write
-  └── ctx.waitUntil: after durable seal, if KV miss → call Assignment Store put (writer DO → KV)
-                        ├── Writer responds within the waitUntil promise
-                        ├── On success: KV write-through is awaited inside the writer
-                        └── On timeout/failure: log loud; no durable evaluate-path outbox —
-                              the next evaluate that still misses KV recomputes assign()
-                              (deterministic) and retries the same put
+  ├── After durable seal, if KV miss → call App Assignment authority → writer DO → KV
+  │     ├── App authority fences the captured identity generation and inventories the writer
+  │     ├── Writer rejects stale work at the Entity deletion cutoff
+  │     └── KV write-through and final identity-generation validation are awaited
+  └── Return Variant to SDK caller only after the required Assignment commit succeeds
 ```
 
 **`POST /api/sdk/exposures` (ticket redemption):** the Worker **awaits** durable holdover-write
@@ -72,17 +71,17 @@ never “ack then maybe write.” Deletion cutoff returns `suppressed` instead o
 
 The SDK caller of `evaluate` waits for durable Exposure ownership, not Queue publication or
 Tinybird. The outbox retries Queue publication until it succeeds. On the evaluate path the
-Assignment Store write remains non-blocking in `ctx.waitUntil` and starts only after the durable
-Exposure seal succeeds. Evaluate does **not** enqueue a separate durable holdover-write retry;
-recovery is the next Evaluation that still misses KV. Exposures-ticket redemption is the path that
-seals holdover-write outbox ownership and schedules DO alarm retries. This ordering prevents a
-successful holdover write from suppressing the only retry of an unaccepted Exposure.
+Assignment Store write starts only after the durable Exposure seal succeeds and is fail-closed for
+the Evaluation response. Evaluate does **not** enqueue a separate durable holdover-write retry;
+the SDK retries the Evaluation when the required commit fails. Exposures-ticket redemption is the
+path that seals holdover-write outbox ownership and schedules DO alarm retries. This ordering
+prevents a successful holdover write from suppressing the only retry of an unaccepted Exposure.
 
 ## Failure contract
 
 | Failure                                          | Effect on experience                      | Effect on analysis                         | Recovery                                                                      |
 | ------------------------------------------------ | ----------------------------------------- | ------------------------------------------ | ----------------------------------------------------------------------------- |
-| DO/KV write fails on evaluate `waitUntil`        | Holdover miss on next cross-POP request   | None — raw log append unaffected           | Next evaluate recomputes assign() (deterministic) and retries put; loud logs  |
+| DO/KV write fails on evaluate                    | Evaluation fails before success           | Durable Exposure remains retry-stable      | SDK retries the same Evaluation idempotency key                               |
 | DO/KV write fails after exposures ownership seal | SDK may still see `accepted` once owned   | None                                       | Holdover-write outbox Durable Object alarms retry until KV-complete or poison |
 | Exposures ownership seal fails                   | Item `rejected` (`SERVICE_UNAVAILABLE`)   | Exposure row may already be sealed         | SDK retries same `exposureId`                                                 |
 | Exposures retries exhausted (poisoned)           | Item `rejected` (`INTERNAL_SERVER_ERROR`) | None                                       | Fail loud; no silent ack                                                      |
@@ -95,19 +94,20 @@ successful holdover write from suppressing the only retry of an unaccepted Expos
 | Permanent Tinybird failure or quarantine         | Experience unaffected                     | Analysis unavailable until operator repair | Durable DLQ transfer, alert, and manual replay only                           |
 
 There is no distributed transaction across Tinybird and Assignment Store. Evaluate-path DO/KV
-propagation failures self-heal on a later Evaluation within the ~60s window (deterministic
-`assign()`). Durable holdover-write alarm retry applies to exposures-ticket redemption, not to
-evaluate `waitUntil`. Exposures-ticket acks require ownership first. Tinybird retry,
+propagation failures fail the Evaluation and are retried by the SDK with the same idempotency key.
+Durable holdover-write alarm retry applies to exposures-ticket redemption, not to `evaluate`.
+Exposures-ticket acks require ownership first. Tinybird retry,
 reconciliation, and DLQ states are visible operational failures and are not described as
 self-healing.
 
 ## Connection between ingest and DO write
 
 **`evaluate`:** the Evaluation Worker seals the Exposure in the Event Ingest raw_events outbox,
-returns the Variant, then drives Assignment Store via `ctx.waitUntil` → Assignment Store Writer DO
-(`env.ASSIGNMENT_STORE_WRITER`) → `putIfAbsent` + awaited KV write-through. Event Ingest owns
-Tinybird delivery after the handoff. The writer DO is one network hop away (Cloudflare placement),
-not necessarily the same POP.
+then drives Assignment Store through the App-scoped serialized inventory authority → Assignment
+Store Writer DO (`env.ASSIGNMENT_STORE_WRITER`) → `putIfAbsent` + awaited KV write-through. It
+returns the Variant only after that commit and final identity-generation validation. Event Ingest
+owns Tinybird delivery after the handoff. The writer DO is one network hop away (Cloudflare
+placement), not necessarily the same POP.
 
 **`POST /api/sdk/exposures`:** after the Exposure seal and claim acknowledge path, the Evaluation
 Worker **awaits** the holdover-write outbox Durable Object (`env.HOLDOVER_WRITE_OUTBOX`, one DO per
@@ -140,9 +140,8 @@ There is no multi-Run holdover history in the DO. The pipeline's `raw_events` lo
   decides when to call `AssignmentStore.put()` (on KV miss) and supplies `(key, run_id, variant)`.
 - DO: serializes concurrent writes; guarantees one true first-touch winner; write-throughs to KV.
 
-**Failure contract:** On `evaluate`, DO/KV failure in `waitUntil` is non-blocking (loud log; next
-evaluate that still misses KV retries the put; cosmetic miss within the KV window). On exposures
-redemption, ownership seal failure rejects the item (SDK retains the queue); after ownership is
+**Failure contract:** On `evaluate`, DO/KV failure fails the request before a Variant response. On
+exposures redemption, ownership seal failure rejects the item (SDK retains the queue); after ownership is
 sealed, an inline writer failure may still return `owned` so the item can be acknowledged while DO
 alarm retry continues without re-evaluation until KV-complete or poison. Not a distributed
 transaction.

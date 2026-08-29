@@ -5,6 +5,12 @@ import {
   EvaluateAllResponseSchema,
 } from "@splitch/contracts";
 import { type HandlerArgs, type Principal, renderError } from "@splitch/worker-runtime";
+import {
+  type AppIdentityAdmission,
+  admittedAssignmentStore,
+  appIdentityAdmissionValidationError,
+  tryAdmitAppIdentity,
+} from "./app-identity-traffic";
 import { memoizeGetAll } from "./assignment/memoize-get-all";
 import { evaluateAllFlag } from "./evaluate/accessor-paths";
 import type { EvaluatePathDeps, EvaluatePathInput } from "./evaluate/evaluate-path-types";
@@ -43,49 +49,91 @@ export function makeEvaluateAllHandler(deps: EvaluateAllRouteDeps) {
     request,
   }: HandlerArgs<unknown>): Promise<Response> => {
     const parsed = evaluateAllInput(input);
-    const scope = credentialScope(principal);
-    if (!scope.ok) return renderError(scope.error, { requestId });
-
-    const assertionError = appAssertionError(parsed.body.appId, scope.value.appId);
-    if (assertionError !== null) return renderError(assertionError, { requestId });
-
-    const payload = await resolveAll(parsed.body, scope.value, deps);
-    if (!payload.ok) return renderError(payload.error, { requestId });
-
-    const body = EvaluateAllResponseSchema.parse({ evaluations: payload.evaluations });
-    const etag = await strongEtag(
-      etagMaterial(
-        body,
-        {
-          appId: scope.value.appId,
-          environmentId: scope.value.environmentId,
-          targetingKey: parsed.body.targetingKey,
-          idType: parsed.body.idType,
-          attributes: parsed.body.attributes,
-        },
-        payload.ticketRefreshWindow,
-      ),
+    const checked = await checkedEvaluationScope(
+      principal,
+      parsed.body.appId,
+      deps.exposureTicket.saltStore,
+      requestId,
     );
-    if (ifNoneMatchMatches(request.headers.get("if-none-match"), etag)) {
-      return new Response(null, {
-        status: 304,
-        headers: {
-          etag,
-          "access-control-expose-headers": "etag, x-request-id",
-        },
-      });
-    }
+    if (!checked.ok) return checked.response;
+    const { scope, admission } = checked;
+    const requestDeps = admittedEvaluateAllDeps(deps, admission);
+    return completeEvaluateAll(parsed.body, scope, request, requestId, requestDeps, admission);
+  };
+}
 
-    const billed = await writeBatchUsage(body, scope.value, request, deps);
-    if (!billed.ok) return renderError(billed.error, { requestId });
+async function completeEvaluateAll(
+  requestBody: EvaluateAllRequest,
+  scope: CredentialScope,
+  request: Request,
+  requestId: string,
+  deps: EvaluateAllRouteDeps,
+  admission: AppIdentityAdmission,
+): Promise<Response> {
+  const payload = await resolveAll(requestBody, scope, deps);
+  if (!payload.ok) return renderError(payload.error, { requestId });
+  const stale = await appIdentityAdmissionValidationError(admission);
+  if (stale !== null) return renderError(stale, { requestId });
 
-    return Response.json(body, {
+  const body = EvaluateAllResponseSchema.parse({ evaluations: payload.evaluations });
+  const etag = await strongEtag(
+    etagMaterial(
+      body,
+      {
+        appId: scope.appId,
+        environmentId: scope.environmentId,
+        targetingKey: requestBody.targetingKey,
+        idType: requestBody.idType,
+        attributes: requestBody.attributes,
+      },
+      payload.ticketRefreshWindow,
+    ),
+  );
+  if (ifNoneMatchMatches(request.headers.get("if-none-match"), etag)) {
+    const staleBeforeSuccess = await appIdentityAdmissionValidationError(admission);
+    if (staleBeforeSuccess !== null) return renderError(staleBeforeSuccess, { requestId });
+    return new Response(null, {
+      status: 304,
       headers: {
         etag,
         "access-control-expose-headers": "etag, x-request-id",
       },
     });
-  };
+  }
+
+  const billed = await writeBatchUsage(body, scope, request, deps, admission);
+  if (!billed.ok) return renderError(billed.error, { requestId });
+
+  const staleBeforeSuccess = await appIdentityAdmissionValidationError(admission);
+  if (staleBeforeSuccess !== null) return renderError(staleBeforeSuccess, { requestId });
+
+  return Response.json(body, {
+    headers: {
+      etag,
+      "access-control-expose-headers": "etag, x-request-id",
+    },
+  });
+}
+
+async function checkedEvaluationScope(
+  principal: Principal,
+  assertedAppId: string | undefined,
+  saltStore: MintExposureTicketDeps["saltStore"],
+  requestId: string,
+): Promise<
+  | { ok: true; scope: CredentialScope; admission: AppIdentityAdmission }
+  | { ok: false; response: Response }
+> {
+  const scope = credentialScope(principal);
+  if (!scope.ok) return { ok: false, response: renderError(scope.error, { requestId }) };
+  const assertionError = appAssertionError(assertedAppId, scope.value.appId);
+  if (assertionError !== null) {
+    return { ok: false, response: renderError(assertionError, { requestId }) };
+  }
+  const admitted = await tryAdmitAppIdentity(saltStore, scope.value.appId);
+  return admitted.ok
+    ? { ok: true, scope: scope.value, admission: admitted.admission }
+    : { ok: false, response: renderError(admitted.error, { requestId }) };
 }
 
 async function resolveAll(
@@ -197,6 +245,7 @@ async function writeBatchUsage(
   scope: CredentialScope,
   request: Request,
   deps: EvaluateAllRouteDeps,
+  admission: AppIdentityAdmission,
 ): Promise<{ ok: true } | { ok: false; error: ErrorResponse }> {
   const flagCount = Object.keys(body.evaluations).length;
   if (flagCount === 0) return { ok: true };
@@ -209,11 +258,15 @@ async function writeBatchUsage(
     };
   }
 
+  const stale = await appIdentityAdmissionValidationError(admission);
+  if (stale !== null) return { ok: false, error: stale };
+
   try {
     await deps.evaluationUsageSink.write({
       idempotencyKey,
       organizationId: scope.organizationId,
       appId: scope.appId,
+      identityVersion: admission.identityVersion,
       environmentId: scope.environmentId,
       flagKey: BATCH_USAGE_FLAG_KEY,
       sdkRuntime: sdkRuntime(request),
@@ -234,6 +287,17 @@ async function writeBatchUsage(
       ),
     };
   }
+}
+
+function admittedEvaluateAllDeps(
+  deps: EvaluateAllRouteDeps,
+  admission: AppIdentityAdmission,
+): EvaluateAllRouteDeps {
+  return {
+    ...deps,
+    assignmentStore: admittedAssignmentStore(deps.assignmentStore, admission),
+    exposureTicket: { ...deps.exposureTicket, saltStore: admission.saltStore },
+  };
 }
 
 function record(value: unknown): Record<string, unknown> {

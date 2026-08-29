@@ -1,14 +1,16 @@
-import { experimentConfigKey, flagConfigKey, type ErrorResponse } from "@splitch/contracts";
+import { type ErrorResponse, experimentConfigKey, flagConfigKey } from "@splitch/contracts";
 import type { AuthResolver, Principal, RateLimiter } from "@splitch/worker-runtime";
 import { describe, expect, it } from "vitest";
-import { StaticSaltStore } from "./assignment/assignment-store-test-fixtures";
 import { createApp } from "./app";
+import { StaticSaltStore } from "./assignment/assignment-store-test-fixtures";
 import {
+  baseInput,
   EXPERIMENT_ID,
   RecordingAssignmentStore,
-  baseInput,
   targetingRule,
 } from "./evaluate/evaluate-path-test-fixtures";
+import { RecordingExposureIngestSink } from "./exposure-redemption";
+import { MemoryExposureRedemptionClaimStore } from "./exposure-redemption-claim";
 import { FakeKv } from "./provider/fake-kv";
 import { experimentConfigKV, flagConfigKV } from "./provider/fixtures";
 import { KvProvider } from "./provider/kv-provider";
@@ -17,8 +19,6 @@ import {
   RecordingEvaluationUsageSink,
   RecordingExposureSink,
 } from "./sdk-route-test-fixtures";
-import { RecordingExposureIngestSink } from "./exposure-redemption";
-import { MemoryExposureRedemptionClaimStore } from "./exposure-redemption-claim";
 
 const APP_ID = "app-A";
 const ENVIRONMENT_ID = "env-1";
@@ -67,7 +67,7 @@ function seededKv(): FakeKv {
     );
 }
 
-function makeHarness() {
+function makeHarness(saltStore = new StaticSaltStore()) {
   const configKv = seededKv();
   const assignmentStore = new RecordingAssignmentStore();
   const app = createApp({
@@ -79,11 +79,11 @@ function makeHarness() {
     provider: new KvProvider(configKv),
     assignmentStore,
     exposureAssembly: {
-      saltStore: new StaticSaltStore(),
+      saltStore,
       sourceId: "pop-test",
     },
     exposureTicket: {
-      saltStore: new StaticSaltStore(),
+      saltStore,
       ticketKey: "splitch-test-exposure-ticket-key-32chars",
     },
     exposureIngestSink: new RecordingExposureIngestSink(),
@@ -111,6 +111,18 @@ function testEvalInit(token?: string): RequestInit {
 }
 
 describe("POST /apps/:appId/envs/:environmentId/flags/:flagKey/test-eval", () => {
+  it("rejects a dry-run paused across an App identity replacement", async () => {
+    const saltStore = new TestEvalPausingSaltStore();
+    const { app, assignmentStore } = makeHarness(saltStore);
+
+    const response = app.request(PATH, testEvalInit("cp-app-A"));
+    await saltStore.paused;
+    saltStore.replaceIdentity();
+
+    expect((await response).status).toBe(503);
+    expect(assignmentStore.putCalls).toEqual([]);
+  });
+
   it("returns the full rule_matched reason from KV config with liveRunId null", async () => {
     const { app, assignmentStore, configKv } = makeHarness();
 
@@ -201,3 +213,30 @@ describe("POST /apps/:appId/envs/:environmentId/flags/:flagKey/test-eval", () =>
     expect(assignmentStore.putCalls).toEqual([]);
   });
 });
+
+class TestEvalPausingSaltStore extends StaticSaltStore {
+  private calls = 0;
+  private version = "app-v1";
+  private resume!: () => void;
+  private readonly gate = new Promise<void>((resolve) => {
+    this.resume = resolve;
+  });
+  private entered!: () => void;
+  readonly paused = new Promise<void>((resolve) => {
+    this.entered = resolve;
+  });
+
+  override async currentKeyVersion(): Promise<string> {
+    this.calls += 1;
+    if (this.calls === 3) {
+      this.entered();
+      await this.gate;
+    }
+    return this.version;
+  }
+
+  replaceIdentity(): void {
+    this.version = "app-v2";
+    this.resume();
+  }
+}

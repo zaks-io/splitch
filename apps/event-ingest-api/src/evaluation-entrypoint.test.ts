@@ -224,6 +224,7 @@ function usagePayload() {
     flagKey: "checkout",
     sdkRuntime: "javascript",
     idempotencyKey: "eval-request-1",
+    identityVersion: "app-v1",
     experimentId,
     runId: liveRunId,
   };

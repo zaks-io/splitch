@@ -2,40 +2,30 @@
  * Targeting-key hashing: the derived `targeting_key_hash` that durable Entity
  * stores use in place of the raw Targeting Key.
  *
- * Construction (docs/spec/platform/privacy-data-lifecycle.md):
+ * Construction (docs/spec/platform/privacy-data-lifecycle.md, ADR-0044):
  *
  *   targeting_key_hash =
- *     key_version + ":" + HMAC_SHA256(app_privacy_salt[key_version],
- *                                     id_type + ":" + targetingKey)
+ *     key_version + ":" + HMAC_SHA256(identity_key, id_type + ":" + targetingKey)
+ *
+ * Current writes use that App's stored `app_entity_identity_key` and an
+ * explicit per-App epoch (`app-v1`, `app-v2`, …). Routine root/wrapper rotation
+ * rewraps the same key and keeps the same prefix and digest. Historical `v1:`
+ * and `local-v1:` prefixes stay pinned to the shared-root algorithm so retained
+ * rows remain comparable. A new epoch never reuses those prefixes. The version
+ * prefix is a non-secret routing label for export, deletion, and retry.
  *
  * WHY Web Crypto (crypto.subtle), not node:crypto: this runs on the Cloudflare
  * Worker edge runtime, which exposes the WebCrypto API and not Node's crypto.
  * subtle.sign is async, so the public API is async — callers await it.
  *
  * The output is `key_version:<hex digest>`. The raw Targeting Key is the HMAC
- * MESSAGE, never echoed: a digest is one-way, and the salt is the secret key, so
- * the function cannot reproduce the input. The version is a non-secret routing
- * prefix that lets export/delete recompute the right hash per active salt.
+ * MESSAGE, never echoed: a digest is one-way, and the identity key is the secret,
+ * so the function cannot reproduce the input. Export/delete/retry recompute
+ * every retained epoch rather than remapping old rows onto the current hash.
  */
 
+import { hmacSha256Hex } from "./hmac";
 import type { KeyVersion, SaltBytes, SaltStore } from "./salt-store";
-
-const HMAC_PARAMS = { name: "HMAC", hash: "SHA-256" } as const;
-
-function toHex(buffer: ArrayBuffer): string {
-  const bytes = new Uint8Array(buffer);
-  let hex = "";
-  for (const byte of bytes) {
-    hex += byte.toString(16).padStart(2, "0");
-  }
-  return hex;
-}
-
-async function hmacSha256Hex(salt: SaltBytes, message: string): Promise<string> {
-  const key = await crypto.subtle.importKey("raw", salt, HMAC_PARAMS, false, ["sign"]);
-  const signature = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(message));
-  return toHex(signature);
-}
 
 function validateIdType(idType: string): void {
   if (idType.length === 0) {
@@ -61,6 +51,11 @@ export interface TargetingKeyHashInput {
    * current version.
    */
   keyVersion?: KeyVersion;
+  /**
+   * Override `saltFor` when a version has more than one retained key (a raced
+   * first mint). The version prefix on the hash still comes from `keyVersion`.
+   */
+  salt?: SaltBytes;
 }
 
 /**
@@ -73,7 +68,7 @@ export async function computeTargetingKeyHash(
   input: TargetingKeyHashInput,
 ): Promise<string> {
   const keyVersion = input.keyVersion ?? (await store.currentKeyVersion(input.appId));
-  const salt = await store.saltFor(input.appId, keyVersion);
+  const salt = input.salt ?? (await store.saltFor(input.appId, keyVersion));
   if (salt.length === 0) {
     throw new Error(`privacy: empty salt for app=${input.appId} version=${keyVersion}`);
   }

@@ -5,8 +5,8 @@
  */
 import { Miniflare } from "miniflare";
 import { afterEach, describe, expect, it } from "vitest";
-import { DurableHoldoverWriteAppInventoryClient } from "./holdover-write-app-inventory-client";
 import type { HoldoverWriteAppInventoryNamespace } from "./holdover-write-app-inventory";
+import { DurableHoldoverWriteAppInventoryClient } from "./holdover-write-app-inventory-client";
 import { bundleHoldoverWriteInventoryAndOutboxWorker } from "./holdover-write-miniflare-bundle";
 import type { HoldoverWriteOutboxNamespace } from "./holdover-write-outbox";
 
@@ -14,7 +14,8 @@ const PUT = {
   appId: "app-A",
   experimentId: "exp-checkout",
   idType: "user",
-  targetingKeyHash: "hash-entity-1",
+  targetingKeyHash: "v1:hash-entity-1",
+  identityVersion: "v1",
   runId: "run-42",
   variant: "treatment",
 } as const;
@@ -95,7 +96,7 @@ async function miniflareWithInventoryAndOutbox(): Promise<Miniflare> {
     compatibilityFlags: ["nodejs_compat"],
     kvNamespaces: { ASSIGNMENTS_KV: "assignments" },
     durableObjects: {
-      ASSIGNMENT_STORE_WRITER: { className: "AssignmentStoreDurableObject" },
+      ASSIGNMENT_STORE_WRITER: { className: "AssignmentStoreDurableObjectV2" },
       HOLDOVER_WRITE_OUTBOX: { className: "HoldoverWriteOutboxDurableObject" },
       HOLDOVER_WRITE_APP_INVENTORY: { className: "HoldoverWriteAppInventoryDurableObject" },
     },

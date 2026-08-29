@@ -1,0 +1,13 @@
+DESCRIPTION Entity deletion cutoffs committed before physical purge and consulted by every Entity analysis read.
+
+SCHEMA >
+    `app_id` String `json:$.app_id`,
+    `id_type` LowCardinality(String) `json:$.id_type`,
+    `targeting_key_hash` String `json:$.targeting_key_hash`,
+    `entity_family_hash` String `json:$.entity_family_hash`,
+    `delete_before_ts` DateTime64(3) `json:$.delete_before_ts`,
+    `requested_at` DateTime64(3) `json:$.requested_at`
+
+ENGINE "MergeTree"
+ENGINE_PARTITION_KEY "toYYYYMM(requested_at)"
+ENGINE_SORTING_KEY "app_id, id_type, entity_family_hash, targeting_key_hash, delete_before_ts"

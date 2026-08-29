@@ -18,6 +18,7 @@ export const privacyRequests = sqliteTable("privacy_requests", {
   subjectType: text("subject_type").notNull(),
   // WorkOS user ID, Org/App ID, or JSON array of targeting_key_hash values.
   subjectRef: text("subject_ref").notNull(),
+  subjectRefRedactedAt: text("subject_ref_redacted_at"),
   requestedBy: text("requested_by").notNull(),
   status: text("status").notNull(),
   receivedAt: text("received_at").notNull(),
@@ -25,6 +26,8 @@ export const privacyRequests = sqliteTable("privacy_requests", {
   responseDueAt: text("response_due_at").notNull(),
   completedAt: text("completed_at"),
   denialReason: text("denial_reason"),
+  /** Durable, authenticated retrieval payload for completed export requests. */
+  resultJson: text("result_json"),
 });
 
 /**

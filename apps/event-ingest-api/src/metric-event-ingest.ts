@@ -5,6 +5,11 @@ import {
   type MetricEventTrackRequest,
   MetricEventTrackRequestSchema,
 } from "@splitch/contracts";
+import {
+  computeEntityFamilyHash,
+  computeRetainedTargetingKeyHashes,
+  computeTargetingKeyHash,
+} from "@splitch/privacy";
 import type { MetricEventCredentialScope } from "./client-key-auth";
 import { renderError, serviceUnavailable } from "./errors";
 import {
@@ -18,6 +23,7 @@ import {
   schemaMismatch,
 } from "./metric-event-admission";
 import { checkMetricEventRateLimit } from "./metric-event-rate-limit";
+import { makeMetricEventSaltStore } from "./metric-event-salt-store";
 import type { Env } from "./types";
 
 const MAX_BODY_BYTES = 32_768;
@@ -33,18 +39,40 @@ export async function handleAuthorizedMetricEvent(
   const limited = await enforceCredentialRateLimit(env, credential);
   if (limited) return limited;
 
-  const targetingKeyHash = await computeTargetingKeyHash(env, parsed.idType, parsed.targetingKey);
-  const fingerprint = await sha256(
-    canonicalJson({
-      eventName: parsed.eventName,
-      idType: parsed.idType,
-      targetingKeyHash,
-      fields: parsed.fields,
-      dimensions: parsed.dimensions,
-    }),
-  );
-  const dedupKey = await sha256(
-    `metric:${credential.appId}:${credential.environmentId}:${parsed.eventId}`,
+  const saltStore = makeMetricEventSaltStore(env);
+  const targetingKeyHash = await computeTargetingKeyHash(saltStore, {
+    appId: credential.appId,
+    idType: parsed.idType,
+    targetingKey: parsed.targetingKey,
+  });
+  const retainedHashes = await computeRetainedTargetingKeyHashes(saltStore, {
+    appId: credential.appId,
+    idType: parsed.idType,
+    targetingKey: parsed.targetingKey,
+  });
+  const entityFamily = await computeEntityFamilyHash(saltStore, {
+    appId: credential.appId,
+    idType: parsed.idType,
+    targetingKey: parsed.targetingKey,
+  });
+  const fingerprint = await metricEventPayloadFingerprint({
+    eventName: parsed.eventName,
+    idType: parsed.idType,
+    targetingKeyHash,
+    fields: parsed.fields,
+    dimensions: parsed.dimensions,
+  });
+  const retainedFingerprints = await retainedMetricEventFingerprints(retainedHashes, {
+    eventName: parsed.eventName,
+    idType: parsed.idType,
+    targetingKeyHash,
+    fields: parsed.fields,
+    dimensions: parsed.dimensions,
+  });
+  const dedupKey = await metricEventDedupKey(
+    credential.appId,
+    credential.environmentId,
+    parsed.eventId,
   );
   const disclosure = credential.credentialKind === "api_key" ? "trusted" : "public";
   const replay = await replayExistingMetricEvent(
@@ -52,6 +80,7 @@ export async function handleAuthorizedMetricEvent(
     parsed.eventId,
     dedupKey,
     fingerprint,
+    retainedFingerprints,
     disclosure,
   );
   if (replay) return replay;
@@ -63,6 +92,7 @@ export async function handleAuthorizedMetricEvent(
 
   return admitAndClaimMetricEvent(env, credential, parsed, {
     targetingKeyHash,
+    entityFamilyHash: entityFamily,
     fingerprint,
     dedupKey,
     eventDefinitionId: hot.eventDefinition.id,
@@ -219,31 +249,56 @@ async function loadDefinition(
   }
 }
 
-function localSalt(target: string | undefined): string {
-  if (target === undefined || target === "local" || target === "pr-ci")
-    return "splitch-local-evaluation-salt";
-  throw new Error("EVALUATION_PRIVACY_SALT is required outside local targets");
+export async function metricEventDedupKey(
+  appId: string,
+  environmentId: string,
+  eventId: string,
+): Promise<string> {
+  return sha256(`metric:${appId}:${environmentId}:${eventId}`);
 }
 
-async function computeTargetingKeyHash(
-  env: Env,
-  idType: string,
-  targetingKey: string,
-): Promise<string> {
-  const secret = env.EVALUATION_PRIVACY_SALT ?? localSalt(env.SPLITCH_PLATFORM_TARGET);
-  const key = await crypto.subtle.importKey(
-    "raw",
-    new TextEncoder().encode(secret),
-    { name: "HMAC", hash: "SHA-256" },
-    false,
-    ["sign"],
+export async function metricEventPayloadFingerprint(input: {
+  eventName: string;
+  idType: string;
+  targetingKeyHash: string;
+  fields: unknown;
+  dimensions: unknown;
+}): Promise<string> {
+  return sha256(
+    canonicalJson({
+      eventName: input.eventName,
+      idType: input.idType,
+      targetingKeyHash: input.targetingKeyHash,
+      fields: input.fields,
+      dimensions: input.dimensions,
+    }),
   );
-  const digest = await crypto.subtle.sign(
-    "HMAC",
-    key,
-    new TextEncoder().encode(`${idType}:${targetingKey}`),
-  );
-  return `v1:${[...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("")}`;
+}
+
+async function retainedMetricEventFingerprints(
+  hashes: readonly string[],
+  input: {
+    eventName: string;
+    idType: string;
+    targetingKeyHash: string;
+    fields: unknown;
+    dimensions: unknown;
+  },
+): Promise<readonly string[]> {
+  const fingerprints = [];
+  for (const hash of hashes) {
+    if (hash === input.targetingKeyHash) continue;
+    fingerprints.push(
+      await metricEventPayloadFingerprint({
+        eventName: input.eventName,
+        idType: input.idType,
+        targetingKeyHash: hash,
+        fields: input.fields,
+        dimensions: input.dimensions,
+      }),
+    );
+  }
+  return fingerprints;
 }
 
 function validation(message: string, path: string[]) {

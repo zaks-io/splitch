@@ -10,14 +10,22 @@ import type {
 import type { IngestAdmissionGateNamespace } from "./ingest-admission-gate";
 import type { MetricEventOutboxNamespace } from "./metric-event-outbox";
 import type { MetricEventRateLimitNamespace } from "./metric-event-rate-limit";
+import type { EntityMetricPrivacyNamespace } from "./entity-metric-privacy";
 
 export type Env = {
   CONFIG_STORE?: KVNamespace;
+  CONFIG_STORE_WRITER?: {
+    getByName(name: string): {
+      readAppIdentity?(appId: string): Promise<string | null>;
+      putAppIdentityIfAbsent?(appId: string, value: string): Promise<string>;
+    };
+  };
   CREDENTIAL_STORE?: KVNamespace;
   EVALUATION_PRIVACY_SALT?: string;
   INGEST_ADMISSION_GATE?: IngestAdmissionGateNamespace;
   METRIC_EVENT_OUTBOX?: MetricEventOutboxNamespace;
   METRIC_EVENT_RATE_LIMIT?: MetricEventRateLimitNamespace;
+  ENTITY_METRIC_PRIVACY?: EntityMetricPrivacyNamespace;
   METRIC_EVENTS_QUEUE?: Queue<Record<string, unknown>>;
   SPLITCH_DEPLOYED_COMMIT_SHA?: string;
   SPLITCH_EVENT_INGEST_TOKEN?: string;

@@ -4,8 +4,8 @@ import { DurableConfigUpdates } from "../../evaluation-api/src/provider/config-u
 import { FakeKv } from "../../evaluation-api/src/provider/fake-kv.js";
 import { flagConfigKV } from "../../evaluation-api/src/provider/fixtures.js";
 import { KvProvider } from "../../evaluation-api/src/provider/kv-provider.js";
-import { LIVE_UPDATE_CONTEXT_HEADER } from "../src/config-store-do.js";
 import { ids, seedConfigGraph } from "../src/config-store-fixture-data.js";
+import { LIVE_UPDATE_CONTEXT_HEADER } from "../src/config-store-live-update-context.js";
 
 const USER_ID = "user_live_updates";
 const DEFAULT_SESSION_VALIDITY_MS = 3_600_000;

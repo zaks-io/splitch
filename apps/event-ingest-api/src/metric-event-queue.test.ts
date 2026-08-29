@@ -130,6 +130,26 @@ describe("Metric Event queue delivery", () => {
       expect.objectContaining({ queueMessageId: "message-2", eventId: "event-2" }),
     );
   });
+
+  it("acknowledges a suppressed queued retry without re-appending it", async () => {
+    const fetch = vi.fn();
+    vi.stubGlobal("fetch", fetch);
+    const message = queueMessage("message-deleted", {
+      ...metricEvent("event-deleted"),
+      entity_family_hash: "v1:deleted-family",
+    });
+    const env = deliveryEnv();
+    env.ENTITY_METRIC_PRIVACY = {
+      idFromName: () => ({}) as DurableObjectId,
+      get: () => ({ fetch: async () => Response.json({ suppressed: true }) }),
+    };
+
+    await deliver(messageBatch([message]), env);
+
+    expect(message.ack).toHaveBeenCalledOnce();
+    expect(message.retry).not.toHaveBeenCalled();
+    expect(fetch).not.toHaveBeenCalled();
+  });
 });
 
 function metricEvent(eventId: string): Record<string, unknown> {

@@ -51,6 +51,11 @@
   "durable_objects": {
     "bindings": [
       {
+        "name": "CONFIG_STORE_WRITER",
+        "class_name": "ConfigStoreDurableObject",
+        "script_name": "splitch-control-plane-api"
+      },
+      {
         "name": "EVALUATION_USAGE_REPLAY_WINDOW",
         "class_name": "EvaluationUsageReplayWindowDurableObject"
       },
@@ -69,6 +74,10 @@
       {
         "name": "INGEST_ADMISSION_GATE",
         "class_name": "IngestAdmissionGateDurableObject"
+      },
+      {
+        "name": "ENTITY_METRIC_PRIVACY",
+        "class_name": "EntityMetricPrivacyDurableObject"
       }
     ]
   },
@@ -88,6 +97,10 @@
     {
       "tag": "v4_ingest_admission_gate",
       "new_sqlite_classes": ["IngestAdmissionGateDurableObject"]
+    },
+    {
+      "tag": "v5_entity_metric_privacy",
+      "new_sqlite_classes": ["EntityMetricPrivacyDurableObject"]
     }
   ],
   "env": {
@@ -141,6 +154,11 @@
       "durable_objects": {
         "bindings": [
           {
+            "name": "CONFIG_STORE_WRITER",
+            "class_name": "ConfigStoreDurableObject",
+            "script_name": "splitch-control-plane-api-shared-preview"
+          },
+          {
             "name": "EVALUATION_USAGE_REPLAY_WINDOW",
             "class_name": "EvaluationUsageReplayWindowDurableObject"
           },
@@ -159,6 +177,10 @@
           {
             "name": "INGEST_ADMISSION_GATE",
             "class_name": "IngestAdmissionGateDurableObject"
+          },
+          {
+            "name": "ENTITY_METRIC_PRIVACY",
+            "class_name": "EntityMetricPrivacyDurableObject"
           }
         ]
       },
@@ -181,6 +203,10 @@
         {
           "tag": "v4_ingest_admission_gate",
           "new_sqlite_classes": ["IngestAdmissionGateDurableObject"]
+        },
+        {
+          "tag": "v5_entity_metric_privacy",
+          "new_sqlite_classes": ["EntityMetricPrivacyDurableObject"]
         }
       ]
     },
@@ -232,6 +258,11 @@
       "durable_objects": {
         "bindings": [
           {
+            "name": "CONFIG_STORE_WRITER",
+            "class_name": "ConfigStoreDurableObject",
+            "script_name": "splitch-control-plane-api"
+          },
+          {
             "name": "EVALUATION_USAGE_REPLAY_WINDOW",
             "class_name": "EvaluationUsageReplayWindowDurableObject"
           },
@@ -250,6 +281,10 @@
           {
             "name": "INGEST_ADMISSION_GATE",
             "class_name": "IngestAdmissionGateDurableObject"
+          },
+          {
+            "name": "ENTITY_METRIC_PRIVACY",
+            "class_name": "EntityMetricPrivacyDurableObject"
           }
         ]
       },
@@ -272,6 +307,10 @@
         {
           "tag": "v4_ingest_admission_gate",
           "new_sqlite_classes": ["IngestAdmissionGateDurableObject"]
+        },
+        {
+          "tag": "v5_entity_metric_privacy",
+          "new_sqlite_classes": ["EntityMetricPrivacyDurableObject"]
         }
       ]
     }

@@ -78,6 +78,14 @@ describe("Control Plane API Wrangler runtime config", () => {
       "splitch-evaluation-api-shared-preview",
     ],
     ["production", config.env?.production, "EVALUATION_API", "splitch-evaluation-api"],
+    ["local", config, "EVENT_INGEST_API", "splitch-event-ingest-api"],
+    [
+      "shared-preview",
+      config.env?.["shared-preview"],
+      "EVENT_INGEST_API",
+      "splitch-event-ingest-api-shared-preview",
+    ],
+    ["production", config.env?.production, "EVENT_INGEST_API", "splitch-event-ingest-api"],
   ])("binds %s %s to the delegated Worker's named entrypoint", (_t, target, binding, service) => {
     expect(target?.services).toContainEqual({
       binding,

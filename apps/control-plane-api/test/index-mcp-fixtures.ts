@@ -1,5 +1,6 @@
 import { env } from "cloudflare:workers";
 import { appScope, createRepository, envScope } from "@splitch/db";
+import { mintInitialAppIdentityRecord, wrapAppIdentityRecord } from "@splitch/privacy";
 import { expect } from "vitest";
 import type { ControlPlaneApiEnv } from "../src/env.js";
 import { McpEntrypoint } from "../src/index.js";
@@ -75,6 +76,19 @@ async function seedTenant(d1: D1Database, tenant: TenantFixture, owner: string):
     environmentId: tenant.environmentId,
     key: tenant.environmentKey,
   });
+  const rootSecret = env.EVALUATION_PRIVACY_SALT;
+  if (typeof rootSecret !== "string" || rootSecret.length === 0) {
+    throw new Error("MCP fixture requires EVALUATION_PRIVACY_SALT");
+  }
+  const identity = await wrapAppIdentityRecord(
+    mintInitialAppIdentityRecord(rootSecret),
+    rootSecret,
+    tenant.appId,
+  );
+  await env.CONFIG_STORE_WRITER.getByName(`app-identity:${tenant.appId}`).putAppIdentityIfAbsent(
+    tenant.appId,
+    JSON.stringify(identity),
+  );
 
   const repo = createRepository(d1);
   const controlVariantId = `${tenant.flagId}_control`;

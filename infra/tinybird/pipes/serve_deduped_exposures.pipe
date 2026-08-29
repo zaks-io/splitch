@@ -1,5 +1,17 @@
 DESCRIPTION The canonical first-touch Exposure population for one Run: the deduped snapshot plus the raw tail ingested since that snapshot's watermark, re-deduped across the boundary.
 
+NODE entity_deletion_cutoffs
+SQL >
+    %
+    SELECT
+        app_id,
+        id_type,
+        entity_family_hash,
+        max(delete_before_ts) AS delete_before_ts
+    FROM entity_deletions
+    WHERE app_id = {{String(app_id)}}
+    GROUP BY app_id, id_type, entity_family_hash
+
 NODE snapshot_layer
 SQL >
     %
@@ -16,47 +28,67 @@ SQL >
     {{error('run_id is required')}}
     {% end %}
     SELECT
-        app_id,
-        environment_id,
-        experiment_id,
-        run_id,
-        id_type,
-        targeting_key_hash,
-        variant,
-        first_exposure_ts
-    FROM deduped_exposures
-    WHERE app_id = {{String(app_id)}}
-        AND environment_id = {{String(environment_id)}}
-        AND experiment_id = {{String(experiment_id)}}
-        AND run_id = {{String(run_id)}}
+        exposures.app_id AS app_id,
+        exposures.environment_id AS environment_id,
+        exposures.experiment_id AS experiment_id,
+        exposures.run_id AS run_id,
+        exposures.id_type AS id_type,
+        exposures.targeting_key_hash AS targeting_key_hash,
+        exposures.entity_family_hash AS entity_family_hash,
+        exposures.variant AS variant,
+        exposures.first_exposure_ts AS encounter_ts
+    FROM deduped_exposures AS exposures
+    LEFT JOIN entity_deletion_cutoffs AS deletions
+        ON deletions.app_id = exposures.app_id
+        AND deletions.id_type = exposures.id_type
+        AND deletions.entity_family_hash = exposures.entity_family_hash
+    LEFT JOIN app_identity_generation_tombstones AS generation_tombstones
+        ON generation_tombstones.app_id = exposures.app_id
+        AND generation_tombstones.targeting_key_version = splitByChar(':', exposures.targeting_key_hash)[1]
+    WHERE exposures.app_id = {{String(app_id)}}
+        AND exposures.environment_id = {{String(environment_id)}}
+        AND exposures.experiment_id = {{String(experiment_id)}}
+        AND exposures.run_id = {{String(run_id)}}
+        AND generation_tombstones.app_id = ''
+        AND (deletions.delete_before_ts IS NULL OR exposures.first_exposure_ts > deletions.delete_before_ts)
 
 NODE tail_layer
 SQL >
     %
     SELECT
-        app_id,
-        environment_id,
-        experiment_id,
-        run_id,
-        id_type,
-        targeting_key_hash,
+        events.app_id AS app_id,
+        events.environment_id AS environment_id,
+        events.experiment_id AS experiment_id,
+        events.run_id AS run_id,
+        events.id_type AS id_type,
+        argMin(targeting_key_hash, exposure_at) AS targeting_key_hash,
+        events.entity_family_hash AS entity_family_hash,
         if(
             countIf(isNull(variant)) > 0 OR countDistinct(variant) > 1,
             '__multiple__',
             max(assumeNotNull(variant))
         ) AS variant,
-        min(exposure_at) AS first_exposure_ts
-    FROM raw_events
-    WHERE type = 'exposure'
-        AND app_id = {{String(app_id)}}
-        AND environment_id = {{String(environment_id)}}
-        AND experiment_id = {{String(experiment_id)}}
-        AND run_id = {{String(run_id)}}
+        min(exposure_at) AS encounter_ts
+    FROM raw_events AS events
+    LEFT JOIN entity_deletion_cutoffs AS deletions
+        ON deletions.app_id = events.app_id
+        AND deletions.id_type = events.id_type
+        AND deletions.entity_family_hash = events.entity_family_hash
+    LEFT JOIN app_identity_generation_tombstones AS generation_tombstones
+        ON generation_tombstones.app_id = events.app_id
+        AND generation_tombstones.targeting_key_version = splitByChar(':', events.targeting_key_hash)[1]
+    WHERE events.type = 'exposure'
+        AND events.app_id = {{String(app_id)}}
+        AND events.environment_id = {{String(environment_id)}}
+        AND events.experiment_id = {{String(experiment_id)}}
+        AND events.run_id = {{String(run_id)}}
+        AND generation_tombstones.app_id = ''
+        AND (deletions.delete_before_ts IS NULL OR events.server_received_at > deletions.delete_before_ts)
         -- Inclusive on both sides of the watermark: the Copy Pipe takes
         -- `ingest_ts <= copy_watermark`, so a row landing exactly on the boundary
         -- after that snapshot ran would be lost by a strict `>`. Overlap is safe
         -- because the union re-reduces with the same first-touch rule.
-        AND ingest_ts >= (
+        AND events.ingest_ts >= (
             SELECT coalesce(
                 max(watermark_ts),
                 toDateTime64('1970-01-01 00:00:00', 3, 'UTC')
@@ -66,12 +98,12 @@ SQL >
                 AND environment_id = {{String(environment_id)}}
         )
     GROUP BY
-        app_id,
-        environment_id,
-        experiment_id,
-        run_id,
-        id_type,
-        targeting_key_hash
+        events.app_id,
+        events.environment_id,
+        events.experiment_id,
+        events.run_id,
+        events.id_type,
+        events.entity_family_hash
 
 NODE union_and_final_dedup
 SQL >
@@ -81,9 +113,10 @@ SQL >
         experiment_id,
         run_id,
         id_type,
-        targeting_key_hash,
+        entity_family_hash,
+        argMin(targeting_key_hash, encounter_ts) AS targeting_key_hash,
         if(countDistinct(variant) > 1, '__multiple__', max(variant)) AS variant,
-        min(first_exposure_ts) AS first_exposure_ts
+        min(encounter_ts) AS first_exposure_ts
     FROM (
         SELECT * FROM snapshot_layer
         UNION ALL
@@ -95,4 +128,4 @@ SQL >
         experiment_id,
         run_id,
         id_type,
-        targeting_key_hash
+        entity_family_hash

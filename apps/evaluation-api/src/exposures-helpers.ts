@@ -1,5 +1,6 @@
 import type { ErrorCode, ExposureBatchResult } from "@splitch/contracts";
 import { RETRYABLE_EXPOSURE_REJECTION_CODE } from "@splitch/contracts";
+import type { AppIdentityAdmission } from "./app-identity-traffic";
 import type { HoldoverWriteCoordinator } from "./assignment/holdover-write-outbox";
 import { errorCauseChain } from "./error-cause-chain";
 import {
@@ -47,6 +48,7 @@ export function ingestFailureCode(status: number | null): ErrorCode {
 export async function verifyTicketForScope(
   ticket: string,
   scope: CredentialScope,
+  admission: AppIdentityAdmission,
   deps: {
     readonly exposureTicket: MintExposureTicketDeps & { readonly previousTicketKey?: string };
     readonly now?: () => Date;
@@ -67,6 +69,9 @@ export async function verifyTicketForScope(
     verified.payload.app_id !== scope.appId ||
     verified.payload.environment_id !== scope.environmentId
   ) {
+    return { ok: false, code: "EXPOSURE_TICKET_INVALID" };
+  }
+  if (admission.identityVersion !== verified.payload.identity_version) {
     return { ok: false, code: "EXPOSURE_TICKET_INVALID" };
   }
   return { ok: true, payload: verified.payload };
@@ -108,6 +113,7 @@ export async function ensureHoldoverWrite(
     readonly experiment_id: string;
     readonly id_type: string;
     readonly targeting_key_hash: string;
+    readonly identity_version: string;
     readonly run_id: string;
     readonly variant: string;
     readonly issued_at: string;
@@ -127,6 +133,7 @@ export async function ensureHoldoverWrite(
         experimentId: ticket.experiment_id,
         idType: ticket.id_type,
         targetingKeyHash: ticket.targeting_key_hash,
+        identityVersion: ticket.identity_version,
         runId: ticket.run_id,
         variant: ticket.variant,
       },

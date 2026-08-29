@@ -1,0 +1,11 @@
+DESCRIPTION Permanent old-generation tombstones that keep reset App identity rows invisible after late append or Copy completion.
+
+SCHEMA >
+    `app_id` String `json:$.app_id`,
+    `targeting_key_version` String `json:$.targeting_key_version`,
+    `reset_id` String `json:$.reset_id`,
+    `created_at` DateTime64(3) `json:$.created_at`
+
+ENGINE "ReplacingMergeTree"
+ENGINE_SORTING_KEY "app_id, targeting_key_version"
+TOKEN app_identity_generation_tombstones_ingest APPEND

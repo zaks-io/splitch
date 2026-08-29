@@ -1,8 +1,11 @@
 import type { Miniflare } from "miniflare";
 import { afterEach, describe, expect, it } from "vitest";
-import { DurableHoldoverWriteAppInventoryClient } from "./holdover-write-app-inventory-client";
 import type { HoldoverWriteAppInventoryNamespace } from "./holdover-write-app-inventory";
-import { miniflareWithInventoryAndOutbox } from "./holdover-write-app-inventory-miniflare-fixture";
+import { DurableHoldoverWriteAppInventoryClient } from "./holdover-write-app-inventory-client";
+import {
+  miniflareWithInventoryAndOutbox,
+  waitForDeadlockBarrier,
+} from "./holdover-write-app-inventory-miniflare-fixture";
 import {
   DurableHoldoverWriteCoordinator,
   type HoldoverWriteOutboxNamespace,
@@ -13,8 +16,10 @@ const PUT = {
   appId: "app-A",
   experimentId: "exp-checkout",
   idType: "user",
-  targetingKeyHash: "hash-entity-1",
+  targetingKeyHash: "v1:hash-entity-1",
+  identityVersion: "v1",
   runId: "run-42",
+  sourceCreatedAtMs: 1_000,
   variant: "treatment",
 } as const;
 const GENERATION_ID = "generation-A";
@@ -24,6 +29,37 @@ let mf: Miniflare | undefined;
 afterEach(async () => {
   await mf?.dispose();
   mf = undefined;
+});
+
+describe("HoldoverWriteAppInventoryDurableObject Assignment reset serialization", () => {
+  it("serializes reset after durable writer admission and before the writer mutation", async () => {
+    mf = miniflareWithInventoryAndOutbox({
+      registerFailsRemaining: 0,
+      pauseAssignmentWriterPut: true,
+    });
+    const inventoryNs = (await mf.getDurableObjectNamespace(
+      "HOLDOVER_WRITE_APP_INVENTORY",
+    )) as unknown as HoldoverWriteAppInventoryNamespace;
+    const inventory = new DurableHoldoverWriteAppInventoryClient(inventoryNs);
+
+    const put = inventory.putAssignment(PUT);
+    await waitForDeadlockBarrier(mf, (status) => status.assignmentWriterPutReached);
+    let deletionSettled = false;
+    const deletion = inventory.beginDeletion(PUT.appId, GENERATION_ID, 9_000).finally(() => {
+      deletionSettled = true;
+    });
+    await new Promise((resolve) => setTimeout(resolve, 25));
+    expect(deletionSettled).toBe(false);
+
+    await mf.dispatchFetch("https://harness.local/__test/release-assignment-writer-put", {
+      method: "POST",
+    });
+    await expect(put).resolves.toMatchObject({ status: "stored" });
+    await expect(deletion).resolves.toMatchObject({ suppressed: true });
+    await expect(inventory.status(PUT.appId)).resolves.toMatchObject({
+      entities: [{ idType: PUT.idType, targetingKeyHash: PUT.targetingKeyHash }],
+    });
+  });
 });
 
 describe("HoldoverWriteAppInventoryDurableObject via Miniflare", () => {
@@ -135,6 +171,28 @@ describe("HoldoverWriteAppInventoryDurableObject via Miniflare", () => {
       sagaPhase: null,
     });
     expect(await kv.get(appHoldoverWriteSuppressKey(PUT.appId))).toBeNull();
+  });
+
+  it("retries identity reset completion idempotently", async () => {
+    mf = await miniflareWithInventoryAndOutbox({ registerFailsRemaining: 0 });
+    const inventoryNs = (await mf.getDurableObjectNamespace(
+      "HOLDOVER_WRITE_APP_INVENTORY",
+    )) as unknown as HoldoverWriteAppInventoryNamespace;
+    const inventory = new DurableHoldoverWriteAppInventoryClient(inventoryNs);
+
+    await inventory.beginDeletion(PUT.appId, GENERATION_ID, 9_000);
+    const restartedClient = new DurableHoldoverWriteAppInventoryClient(inventoryNs);
+    await expect(
+      restartedClient.completeIdentityReset(PUT.appId, GENERATION_ID, "app-v2"),
+    ).resolves.toMatchObject({ cancelled: true, done: true, sagaPhase: null });
+    await expect(
+      restartedClient.completeIdentityReset(PUT.appId, GENERATION_ID, "app-v2"),
+    ).resolves.toMatchObject({ cancelled: true, done: true, sagaPhase: null });
+    expect(await restartedClient.status(PUT.appId)).toMatchObject({
+      suppressed: false,
+      sagaPhase: null,
+      entities: [],
+    });
   });
 });
 

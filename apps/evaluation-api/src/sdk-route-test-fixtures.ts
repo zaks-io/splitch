@@ -11,13 +11,13 @@ import {
   type RunConfigKV,
   runConfigKey,
 } from "@splitch/contracts";
+import type { SaltStore } from "@splitch/privacy";
 import type { AuthResolver, RateLimiter } from "@splitch/worker-runtime";
 import { createApp, type EvaluationDoor } from "./app";
 import { StaticSaltStore } from "./assignment/assignment-store-test-fixtures";
 import { makeDataPlaneAuthResolver, sha256Hex } from "./data-plane-auth";
 import {
   APP_ID,
-  baseInput,
   ENVIRONMENT_ID,
   EXPERIMENT_ID,
   FLAG_KEY,
@@ -35,6 +35,7 @@ import { FakeKv } from "./provider/fake-kv";
 import { experimentConfigKV, flagConfigKV, runConfigKV } from "./provider/fixtures";
 import { KvProvider } from "./provider/kv-provider";
 import { stubHoldoverWriteOutboxCleanup } from "./sdk-route-binding-cleanup-fixture";
+import { stubEntityAssignmentPrivacy } from "./sdk-route-entity-privacy-fixture";
 
 export { APP_ID, ENVIRONMENT_ID, EXPERIMENT_ID, FLAG_KEY, sha256Hex };
 
@@ -69,6 +70,8 @@ interface SdkRouteHarnessOptions {
   readonly delegationBindings?: Parameters<typeof createApp>[0]["delegationBindings"];
   readonly rateLimiter?: RateLimiter;
   readonly clientKeyRateLimitRps?: number | null;
+  readonly saltStore?: SaltStore;
+  readonly assignmentStore?: RecordingAssignmentStore;
 }
 
 function seededConfigKv(options: SdkRouteHarnessOptions = {}): FakeKv {
@@ -192,7 +195,7 @@ async function seededCredentialKv(options: SdkRouteHarnessOptions = {}): Promise
 export async function makeSdkRouteHarness(options: SdkRouteHarnessOptions = {}) {
   const configKv = seededConfigKv(options);
   const credentialKv = await seededCredentialKv(options);
-  const assignmentStore = new RecordingAssignmentStore({ holdovers: options.holdovers });
+  const assignmentStore = routeAssignmentStore(options);
   const exposureSink = new RecordingExposureSink();
   const evaluationUsageSink = options.evaluationUsageSink ?? new RecordingEvaluationUsageSink();
   const evaluationCommitSink =
@@ -203,6 +206,7 @@ export async function makeSdkRouteHarness(options: SdkRouteHarnessOptions = {}) 
   const exposureRedemptionClaims =
     options.exposureRedemptionClaims ?? new MemoryExposureRedemptionClaimStore();
   const logger = new RecordingLogger();
+  const saltStore = routeSaltStore(options);
   const app = createApp({
     logger,
     door: options.door ?? "public",
@@ -215,14 +219,15 @@ export async function makeSdkRouteHarness(options: SdkRouteHarnessOptions = {}) 
     holdoverWrite: options.holdoverWrite,
     holdoverWriteOutboxCleanup:
       options.door === "binding" ? stubHoldoverWriteOutboxCleanup() : undefined,
+    entityAssignmentPrivacy: options.door === "binding" ? stubEntityAssignmentPrivacy() : undefined,
     exposureAssembly: {
-      saltStore: new StaticSaltStore(),
+      saltStore,
       sourceId: "pop-route-test",
       newEventId: () => "evt-route-1",
       now: () => new Date("2026-07-03T00:00:00.000Z"),
     },
     exposureTicket: {
-      saltStore: new StaticSaltStore(),
+      saltStore,
       ticketKey: "splitch-test-exposure-ticket-key-32chars",
       previousTicketKey: options.previousTicketKey,
       now: options.ticketNow ?? (() => new Date("2026-07-03T00:00:00.000Z")),
@@ -245,49 +250,16 @@ export async function makeSdkRouteHarness(options: SdkRouteHarnessOptions = {}) 
   };
 }
 
-export function sdkRouteInit(
-  credential?: string,
-  extraHeaders: Record<string, string> = {},
-  bodyOverrides: Record<string, unknown> = {},
-): RequestInit {
-  return {
-    method: "POST",
-    headers: {
-      ...(credential === undefined ? {} : { authorization: `Bearer ${credential}` }),
-      "content-type": "application/json",
-      "idempotency-key": "test-logical-evaluation",
-      ...extraHeaders,
-    },
-    body: JSON.stringify({
-      flagKey: FLAG_KEY,
-      targetingKey: baseInput().evaluationContext.targetingKey,
-      idType: baseInput().evaluationContext.idType,
-      attributes: baseInput().evaluationContext.attributes,
-      ...bodyOverrides,
-    }),
-  };
+function routeAssignmentStore(options: SdkRouteHarnessOptions): RecordingAssignmentStore {
+  return options.assignmentStore ?? new RecordingAssignmentStore({ holdovers: options.holdovers });
 }
 
-/** evaluate-all request body: DataPlaneEvaluateRequest minus flagKey. */
-export function evaluateAllRouteInit(
-  credential?: string,
-  extraHeaders: Record<string, string> = {},
-  bodyOverrides: Record<string, unknown> = {},
-): RequestInit {
-  const { flagKey: _flagKey, ...body } = JSON.parse(
-    String(sdkRouteInit(credential, extraHeaders, bodyOverrides).body),
-  ) as Record<string, unknown>;
-  return {
-    method: "POST",
-    headers: {
-      ...(credential === undefined ? {} : { authorization: `Bearer ${credential}` }),
-      "content-type": "application/json",
-      "idempotency-key": "test-logical-evaluate-all",
-      ...extraHeaders,
-    },
-    body: JSON.stringify(body),
-  };
+function routeSaltStore(options: SdkRouteHarnessOptions): SaltStore {
+  return options.saltStore ?? new StaticSaltStore();
 }
+
+// biome-ignore lint/performance/noBarrelFile: compatibility export preserves existing test imports
+export { evaluateAllRouteInit, sdkRouteInit } from "./sdk-route-request-init";
 
 export class RecordingExposureSink {
   readonly writes: AssembledExposure[] = [];

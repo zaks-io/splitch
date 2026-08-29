@@ -3,7 +3,7 @@ import {
   type ConvexServerExposureItem,
   createHealthResponse,
   getRoute,
-  parsePlatformTarget,
+  requirePlatformTarget,
   routesDelegatedTo,
 } from "@splitch/contracts";
 import {
@@ -22,7 +22,12 @@ import {
   type Principal,
 } from "@splitch/worker-runtime";
 import { createApp } from "./app";
-import { AssignmentStoreDurableObject } from "./assignment/assignment-store-do";
+import {
+  completeAppIdentityReset,
+  purgeAppIdentityAssignments,
+  purgeAppIdentityRetryClaims,
+} from "./app-identity-reset";
+import { AssignmentStoreDurableObjectV2 } from "./assignment/assignment-store-do";
 import { DurableHoldoverWriteAppInventoryClient } from "./assignment/holdover-write-app-inventory-client";
 import { HoldoverWriteAppInventoryDurableObject } from "./assignment/holdover-write-app-inventory-do";
 import { DurableHoldoverWriteCoordinator } from "./assignment/holdover-write-outbox";
@@ -33,8 +38,8 @@ import {
 import { HoldoverWriteOutboxDurableObject } from "./assignment/holdover-write-outbox-do";
 import { KvAssignmentStore } from "./assignment/kv-assignment-store";
 import {
-  makeEvaluationControlPlaneJwksVerifier,
   makeControlPlaneAuthResolver,
+  makeEvaluationControlPlaneJwksVerifier,
   makeSessionStore,
 } from "./control-plane-auth";
 import { makeDataPlaneAuthResolver } from "./data-plane-auth";
@@ -58,7 +63,17 @@ const holdoverWriteOutboxCleanupRoute = getRoute("holdover_write_outbox_delete")
 if (!holdoverWriteOutboxCleanupRoute) {
   throw new Error("evaluation-api: holdover write outbox cleanup route is not registered");
 }
-const bindingRoutes = [...delegatedRoutes, holdoverWriteOutboxCleanupRoute];
+const entityAssignmentPrivacyExportRoute = getRoute("entity_assignment_privacy_export");
+const entityAssignmentPrivacyDeleteRoute = getRoute("entity_assignment_privacy_delete");
+if (!entityAssignmentPrivacyExportRoute || !entityAssignmentPrivacyDeleteRoute) {
+  throw new Error("evaluation-api: entity assignment privacy routes are not registered");
+}
+const bindingRoutes = [
+  ...delegatedRoutes,
+  holdoverWriteOutboxCleanupRoute,
+  entityAssignmentPrivacyExportRoute,
+  entityAssignmentPrivacyDeleteRoute,
+];
 
 const handler = {
   async fetch(request, env, ctx): Promise<Response> {
@@ -93,6 +108,22 @@ export class ControlPlaneEntrypoint extends WorkerEntrypoint<EvaluationApiEnv> {
       this.ctx,
     );
   }
+
+  purgeAppIdentityAssignments(
+    appId: string,
+    resetId: string,
+    destroyedVersions: readonly string[],
+  ): Promise<string> {
+    return purgeAppIdentityAssignments(this.env, appId, resetId, destroyedVersions);
+  }
+
+  purgeAppIdentityRetryClaims(appId: string, environmentIds: readonly string[]): Promise<string> {
+    return purgeAppIdentityRetryClaims(this.env, appId, environmentIds);
+  }
+
+  completeAppIdentityReset(appId: string, resetId: string, identityVersion: string): Promise<void> {
+    return completeAppIdentityReset(this.env, appId, resetId, identityVersion);
+  }
 }
 
 type EvaluationRequestAuthority = { kind: "control-plane"; identity: DelegatedIdentity };
@@ -104,13 +135,11 @@ async function handleRequest(
   authority?: EvaluationRequestAuthority,
 ): Promise<Response> {
   const url = new URL(request.url);
+  const platformTarget = requirePlatformTarget(env.SPLITCH_PLATFORM_TARGET);
+  const saltStore = makeEnvSaltStore(env);
   if (url.pathname === "/health" || url.pathname === "/") {
     return Response.json(
-      createHealthResponse(
-        service,
-        parsePlatformTarget(env.SPLITCH_PLATFORM_TARGET),
-        env.SPLITCH_DEPLOYED_COMMIT_SHA,
-      ),
+      createHealthResponse(service, platformTarget, env.SPLITCH_DEPLOYED_COMMIT_SHA),
     );
   }
   const exposureRedemptionClaims = requiredExposureRedemptionClaimsBinding(
@@ -124,7 +153,6 @@ async function handleRequest(
     env,
     workerObservabilityWithWaitUntil("evaluation-api", ctx),
   );
-  const saltStore = makeEnvSaltStore(env);
   const app = createApp({
     door: authority ? "binding" : "public",
     authResolver: requestAuthResolver(env, url, authority),
@@ -143,12 +171,20 @@ async function handleRequest(
       env.ASSIGNMENTS_KV,
       env.ASSIGNMENT_STORE_WRITER,
       saltStore,
+      undefined,
+      requiredHoldoverWriteAppInventoryBinding(env.HOLDOVER_WRITE_APP_INVENTORY),
     ),
     holdoverWrite: new DurableHoldoverWriteCoordinator(holdoverWriteOutbox),
     holdoverWriteOutboxCleanup: {
       assignmentsKv: env.ASSIGNMENTS_KV,
       holdoverWriteOutbox,
       holdoverWriteAppInventory,
+    },
+    entityAssignmentPrivacy: {
+      assignmentsKv: env.ASSIGNMENTS_KV,
+      assignmentWriters: env.ASSIGNMENT_STORE_WRITER,
+      holdoverWriteOutboxes: holdoverWriteOutbox,
+      saltStore,
     },
     exposureAssembly: {
       saltStore,
@@ -253,7 +289,7 @@ function requestAuthResolver(
  * `deleted_classes` migration.
  */
 export {
-  AssignmentStoreDurableObject,
+  AssignmentStoreDurableObjectV2,
   ExposureRedemptionClaimDurableObject,
   HoldoverWriteAppInventoryDurableObject,
   HoldoverWriteOutboxDurableObject,

@@ -3,7 +3,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { getTableColumns } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { claimVerifications, runs, targetingRules } from "./schema";
+import { claimVerifications, privacyRequests, runs, targetingRules } from "./schema";
 
 /**
  * Asserts the GENERATED migration SQL — the exact DDL `wrangler d1 migrations
@@ -79,6 +79,17 @@ describe("D1 co-scoping columns", () => {
 
   it("environments carries inline Environment Policy storage", () => {
     expect(migrationSql).toContain("ALTER TABLE `environments` ADD `policy` text");
+  });
+});
+
+describe("privacy request reset redaction", () => {
+  it("applies and declares the subject_ref_redacted_at audit timestamp", () => {
+    expect(migrationSql).toContain(
+      "ALTER TABLE `privacy_requests` ADD `subject_ref_redacted_at` text",
+    );
+    expect(getTableColumns(privacyRequests).subjectRefRedactedAt?.name).toBe(
+      "subject_ref_redacted_at",
+    );
   });
 });
 

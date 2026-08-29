@@ -64,6 +64,62 @@ export const CLI_MCP_CONTRACT_EXCEPTIONS = [
       "binding-only internal Worker route (auth internal-worker); excluded from every public surface",
   },
   {
+    operationId: "entity_assignment_privacy_export",
+    cli: false,
+    mcp: false,
+    reason:
+      "binding-only internal Worker route (auth internal-worker); excluded from every public surface",
+  },
+  {
+    operationId: "entity_assignment_privacy_delete",
+    cli: false,
+    mcp: false,
+    reason:
+      "binding-only internal Worker route (auth internal-worker); excluded from every public surface",
+  },
+  {
+    operationId: "entity_analysis_privacy_export",
+    cli: false,
+    mcp: false,
+    reason:
+      "binding-only internal Worker route (auth internal-worker); excluded from every public surface",
+  },
+  {
+    operationId: "entity_analysis_privacy_suppress",
+    cli: false,
+    mcp: false,
+    reason:
+      "binding-only internal Worker route (auth internal-worker); excluded from every public surface",
+  },
+  {
+    operationId: "entity_analysis_privacy_delete",
+    cli: false,
+    mcp: false,
+    reason:
+      "binding-only internal Worker route (auth internal-worker); excluded from every public surface",
+  },
+  {
+    operationId: "entity_event_privacy_export",
+    cli: false,
+    mcp: false,
+    reason:
+      "binding-only internal Worker route (auth internal-worker); excluded from every public surface",
+  },
+  {
+    operationId: "entity_event_privacy_suppress",
+    cli: false,
+    mcp: false,
+    reason:
+      "binding-only internal Worker route (auth internal-worker); excluded from every public surface",
+  },
+  {
+    operationId: "entity_event_privacy_delete",
+    cli: false,
+    mcp: false,
+    reason:
+      "binding-only internal Worker route (auth internal-worker); excluded from every public surface",
+  },
+  {
     operationId: "openapi_document_get",
     cli: false,
     mcp: false,

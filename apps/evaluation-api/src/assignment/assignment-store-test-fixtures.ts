@@ -11,6 +11,7 @@ export const basePut: AssignmentPutInput = {
   idType: "user",
   targetingKey: RAW_TARGETING_KEY,
   runId: "run-1",
+  sourceCreatedAtMs: 1_000,
   variant: "control",
 };
 
@@ -30,6 +31,10 @@ export class StaticSaltStore implements SaltStore {
       throw new Error(`missing salt for ${appId}`);
     }
     return Promise.resolve(salt);
+  }
+
+  retainedKeyVersions(): Promise<readonly string[]> {
+    return Promise.resolve(["v1"]);
   }
 }
 
@@ -136,6 +141,25 @@ export class MapStorage implements AssignmentWriterStorage {
 
   put<T>(key: string, value: T): Promise<void> {
     this.values.set(key, value);
+    return Promise.resolve();
+  }
+
+  list<T>({ prefix }: { prefix: string }): Promise<Map<string, T>> {
+    return Promise.resolve(
+      new Map(
+        [...this.values.entries()]
+          .filter(([key]) => key.startsWith(prefix))
+          .map(([key, value]) => [key, value as T]),
+      ),
+    );
+  }
+
+  delete(key: string): Promise<boolean> {
+    return Promise.resolve(this.values.delete(key));
+  }
+
+  deleteAll(): Promise<void> {
+    this.values.clear();
     return Promise.resolve();
   }
 }

@@ -1,6 +1,6 @@
-import type { AssignmentKv } from "./assignment-store";
-import { assignmentWriterName, type HashedAssignmentPutInput } from "./assignment-store";
+import type { AssignmentKv, HashedAssignmentPutInput } from "./assignment-store";
 import type { HoldoverWriteAppInventoryNamespace } from "./holdover-write-app-inventory";
+import { DurableHoldoverWriteAppInventoryClient } from "./holdover-write-app-inventory-client";
 import {
   appHoldoverWriteSuppressKey,
   type HoldoverWriteEnsureResult,
@@ -169,28 +169,15 @@ export interface HoldoverWriteOutboxEnv {
 }
 
 export function assignmentWriterPutPort(
-  namespace: AssignmentWriterNamespace,
+  namespace: HoldoverWriteAppInventoryNamespace,
 ): HoldoverWritePutPort {
+  const inventory = new DurableHoldoverWriteAppInventoryClient(namespace);
   return {
     async putHashed(input) {
-      const id = namespace.idFromName(assignmentWriterName(input));
-      const stub = namespace.get(id);
-      const response = await stub.fetch("https://assignment-store.local/put", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          appId: input.appId,
-          experimentId: input.experimentId,
-          idType: input.idType,
-          targetingKeyHash: input.targetingKeyHash,
-          runId: input.runId,
-          variant: input.variant,
-        }),
-      });
-      if (!response.ok) {
-        throw new HoldoverWriteOutboxError(`Assignment writer DO returned ${response.status}`);
+      if (input.identityVersion === undefined) {
+        throw new HoldoverWriteOutboxError("holdover write identityVersion is required");
       }
-      await response.json();
+      await inventory.putAssignment({ ...input, identityVersion: input.identityVersion });
     },
   };
 }

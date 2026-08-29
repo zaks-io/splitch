@@ -1,4 +1,7 @@
 import { requirePlatformTarget } from "@splitch/contracts";
+import { deliverEntityIdentityRow } from "./entity-identity-row-delivery";
+import { identityVersionForRow } from "./entity-metric-privacy";
+import { makeMetricEventSaltStore } from "./metric-event-salt-store";
 import { appendRawEvent, tinybirdDelivery } from "./tinybird";
 import type { Env } from "./types";
 
@@ -12,30 +15,52 @@ export async function handleMetricEventQueue(
   env: Env,
 ): Promise<void> {
   requirePlatformTarget(env.SPLITCH_PLATFORM_TARGET);
+  makeMetricEventSaltStore(env);
   const delivery = tinybirdDelivery(env, "metric_events");
-  await Promise.all(
-    batch.messages.map(async (message) => {
-      try {
-        if (!delivery.ok) throw new Error(delivery.error.message);
-        await appendRawEvent(message.body, delivery.value);
-        message.ack();
-      } catch (error) {
-        const finalAttempt = message.attempts > METRIC_EVENT_MAX_RETRIES;
-        console.error(
-          finalAttempt
-            ? "event-ingest-api Metric Event discarded after final delivery attempt"
-            : "event-ingest-api Metric Event delivery failed",
-          {
-            queueMessageId: message.id,
-            attempts: message.attempts,
-            maxRetries: METRIC_EVENT_MAX_RETRIES,
-            ...metricEventIdentity(message.body),
-            errorMessage: error instanceof Error ? error.message : "non-error rejection",
-          },
-        );
-        message.retry();
-      }
-    }),
+  await Promise.all(batch.messages.map((message) => deliverMetricEvent(message, env, delivery)));
+}
+
+async function deliverMetricEvent(
+  message: Message<MetricEventRow>,
+  env: Env,
+  delivery: ReturnType<typeof tinybirdDelivery>,
+): Promise<void> {
+  try {
+    if (!delivery.ok) throw new Error(delivery.error.message);
+    if (
+      !env.ENTITY_METRIC_PRIVACY &&
+      (env.SPLITCH_PLATFORM_TARGET === "local" || env.SPLITCH_PLATFORM_TARGET === "pr-ci")
+    ) {
+      await appendRawEvent(message.body, delivery.value);
+    } else {
+      await deliverEntityIdentityRow(
+        env.ENTITY_METRIC_PRIVACY,
+        identityVersionForRow(message.body),
+        "metric_events",
+        message.body,
+        env.SPLITCH_PLATFORM_TARGET,
+      );
+    }
+    message.ack();
+  } catch (error) {
+    logMetricEventFailure(message, error);
+    message.retry();
+  }
+}
+
+function logMetricEventFailure(message: Message<MetricEventRow>, error: unknown): void {
+  const finalAttempt = message.attempts > METRIC_EVENT_MAX_RETRIES;
+  console.error(
+    finalAttempt
+      ? "event-ingest-api Metric Event discarded after final delivery attempt"
+      : "event-ingest-api Metric Event delivery failed",
+    {
+      queueMessageId: message.id,
+      attempts: message.attempts,
+      maxRetries: METRIC_EVENT_MAX_RETRIES,
+      ...metricEventIdentity(message.body),
+      errorMessage: error instanceof Error ? error.message : "non-error rejection",
+    },
   );
 }
 

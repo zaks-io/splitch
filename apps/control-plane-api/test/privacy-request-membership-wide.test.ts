@@ -6,7 +6,7 @@ import { createApp } from "../src/app";
 import { seedOrgApp, seedOrgMember } from "../src/test-seeds";
 
 /**
- * `privacy_requests_get` is the one unavailable-slice route a membership-wide
+ * `privacy_requests_get` is the privacy route a membership-wide
  * read token can reach (the rest are writes, refused earlier by the read-only
  * gate), and its addressability check is the second consumer of the registrar's
  * `organizationAccessCovers` / `appAccessCovers` predicates. Nothing exercised
@@ -96,13 +96,21 @@ describe("membership-wide privacy-request scope", () => {
 
   // Both cases above are refusals, so a gate that rejected every wide token would
   // satisfy them. This one pins the other direction: an Organization the token
-  // does hold as owner clears the scope check and the D1 role re-read, and stops
-  // only on the slice's own unavailable response.
-  it("lets a wide owner through to the unavailable response", async () => {
+  // does hold as owner clears the scope check and the D1 role re-read, then reads
+  // the durable request through the implemented status route.
+  it("lets a wide owner read the durable privacy request", async () => {
     const response = await request("/privacy/requests/prq_owned");
 
-    expect(response.status).toBe(503);
-    expect(await response.json()).toMatchObject({ code: "SERVICE_UNAVAILABLE" });
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      request: {
+        requestId: "prq_owned",
+        organizationId: OWNED.orgId,
+        status: "received",
+      },
+      job: { requestId: "prq_owned", kind: "export", status: "running" },
+      artifact: null,
+    });
   });
 });
 

@@ -9,13 +9,14 @@ export function assertEnvironmentExposureStatusContract(root, fail) {
     [
       "`app_id`",
       "`environment_id`",
+      "`targeting_key_version`",
       "`first_exposure_state` AggregateFunction(min, DateTime64(3))",
     ],
     fail,
   );
   requireInstruction(
     datasource,
-    /^ENGINE_SORTING_KEY "app_id, environment_id"$/m,
+    /^ENGINE_SORTING_KEY "app_id, environment_id, targeting_key_version"$/m,
     "Environment Exposure status sorting key must be App/Environment scoped",
     fail,
   );
@@ -61,7 +62,7 @@ export function assertEnvironmentExposureStatusContract(root, fail) {
   );
   requireInstruction(
     materialization,
-    /GROUP BY app_id, environment_id/,
+    /GROUP BY app_id, environment_id, targeting_key_version/,
     "Environment Exposure status must group by both tenant axes",
     fail,
   );
@@ -97,7 +98,7 @@ function requireInstruction(contents, pattern, message, fail) {
 }
 
 function requireIdentityFree(contents, label, fail) {
-  if (/targeting_key|id_type|ENGINE_TTL/u.test(contents)) {
+  if (/targeting_key_hash|id_type|ENGINE_TTL/u.test(contents)) {
     fail(`${label} must not retain Entity identity or expire`);
   }
 }

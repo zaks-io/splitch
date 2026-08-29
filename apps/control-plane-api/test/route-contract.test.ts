@@ -243,15 +243,13 @@ describe("control-plane route contract", () => {
     }
   });
 
-  it("limits unavailable privacy request status to its requester, owner, or App admin", async () => {
+  it("limits privacy request status and artifacts to its requester, owner, or App admin", async () => {
     const requesterJwt = await token([], REQUESTER);
     const ownerJwt = await token([`org:${PRIMARY.orgId}:owner`], ORG_OWNER);
     const adminJwt = await token([appAdminScope(PRIMARY.appId)], APP_ADMIN);
 
     for (const jwt of [requesterJwt, ownerJwt, adminJwt]) {
-      const response = await request("GET", `/privacy/requests/${PRIVACY_REQUEST_ID}`, jwt);
-      expect(response.status).toBe(503);
-      expect(((await response.json()) as ErrorResponse).code).toBe("SERVICE_UNAVAILABLE");
+      await expectPrivacyStatus(jwt);
     }
 
     for (const jwt of [await token([]), await token([], OUTSIDER)]) {
@@ -272,6 +270,16 @@ describe("control-plane route contract", () => {
     }
   });
 });
+
+async function expectPrivacyStatus(jwt: string): Promise<void> {
+  const response = await request("GET", `/privacy/requests/${PRIVACY_REQUEST_ID}`, jwt);
+  expect(response.status).toBe(200);
+  expect(await response.json()).toMatchObject({
+    request: { requestId: PRIVACY_REQUEST_ID, status: "received" },
+    job: { requestId: PRIVACY_REQUEST_ID, status: "running" },
+    artifact: null,
+  });
+}
 
 function token(scopes: string[], userId = USER, authDoor?: string): Promise<string> {
   const now = Math.floor(NOW_MS / 1000);

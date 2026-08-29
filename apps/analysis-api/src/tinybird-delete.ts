@@ -1,4 +1,5 @@
 import type { AnalysisApiEnv } from "./env";
+import { createTinybirdEntityDeleteOperations } from "./tinybird-entity-delete";
 
 const STATUS_DATASOURCE = "environment_exposure_status_state";
 const DELETION_DATASOURCE = "environment_exposure_status_deletions";
@@ -12,6 +13,16 @@ export interface ExposureStatusDeleteScope {
 
 export interface TinybirdDeleteTransport {
   deleteExposureStatus(scope: ExposureStatusDeleteScope): Promise<void>;
+  suppressEntity?(scope: EntityTinybirdPrivacyScope): Promise<readonly string[]>;
+  deleteEntity?(scope: EntityTinybirdPrivacyScope): Promise<readonly string[]>;
+}
+
+export interface EntityTinybirdPrivacyScope {
+  appId: string;
+  idType: string;
+  targetingKeyHashes: readonly string[];
+  entityFamilyHash: string;
+  deleteBeforeTs: string;
 }
 
 export class TinybirdDeleteError extends Error {
@@ -37,6 +48,15 @@ export function createTinybirdDeleteTransport(
     options.delay ??
     ((milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds)));
 
+  const entityOperations = () =>
+    createTinybirdEntityDeleteOperations({
+      fetchFn,
+      apiUrl: requiredConfig(env.TINYBIRD_API_URL, "TINYBIRD_API_URL"),
+      token: requiredConfig(env.TINYBIRD_DELETE_TOKEN, "TINYBIRD_DELETE_TOKEN"),
+      delay,
+      pollIntervalMs,
+      timeoutMs,
+    });
   return {
     async deleteExposureStatus(scope) {
       const apiUrl = requiredConfig(env.TINYBIRD_API_URL, "TINYBIRD_API_URL");
@@ -48,10 +68,12 @@ export function createTinybirdDeleteTransport(
       const job = await requestJob(fetchFn, endpoint, token, { method: "POST", body }, timeoutMs);
       await waitForJob(fetchFn, apiUrl, token, job, { delay, pollIntervalMs, timeoutMs });
     },
+    suppressEntity: (scope) => entityOperations().suppressEntity(scope),
+    deleteEntity: (scope) => entityOperations().deleteEntity(scope),
   };
 }
 
-async function appendDeletionSuppression(
+export async function appendDeletionSuppression(
   fetchFn: typeof fetch,
   apiUrl: string,
   token: string,
@@ -112,7 +134,7 @@ function deleteCondition(scope: ExposureStatusDeleteScope): string {
   return `${appCondition} AND environment_id = '${safeTenantId(scope.environmentId, "environmentId")}'`;
 }
 
-async function waitForJob(
+export async function waitForJob(
   fetchFn: typeof fetch,
   apiUrl: string,
   token: string,
@@ -139,13 +161,13 @@ async function waitForJob(
   }
 }
 
-interface DeleteJob {
+export interface DeleteJob {
   status?: unknown;
   job_url?: unknown;
   job?: { status?: unknown };
 }
 
-async function requestJob(
+export async function requestJob(
   fetchFn: typeof fetch,
   url: URL,
   token: string,
@@ -180,7 +202,7 @@ async function requestJob(
   }
 }
 
-function jobStatus(job: DeleteJob): string | null {
+export function jobStatus(job: DeleteJob): string | null {
   const status = job.status ?? job.job?.status;
   return typeof status === "string" ? status.toLowerCase() : null;
 }
@@ -197,14 +219,14 @@ function validatedJobUrl(job: DeleteJob, apiUrl: string): URL {
   return url;
 }
 
-function safeTenantId(value: string, name: string): string {
+export function safeTenantId(value: string, name: string): string {
   if (!SAFE_TENANT_ID.test(value)) {
     throw new TinybirdDeleteError(`Tinybird Exposure status deletion requires a safe ${name}`);
   }
   return value;
 }
 
-function requiredConfig(value: string | undefined, name: string): string {
+export function requiredConfig(value: string | undefined, name: string): string {
   if (!value?.trim()) throw new TinybirdDeleteError(`Tinybird config ${name} is required`);
   return value;
 }

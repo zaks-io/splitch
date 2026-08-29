@@ -11,6 +11,7 @@ import {
   makeExposureStatusCleanupHandler,
   type ExposureStatusCleanupDeps,
 } from "./exposure-status-cleanup";
+import { makeEntityPrivacyHandler, type EntityPrivacyDeps } from "./entity-privacy";
 import { makeExposureStatusHandler, type ExposureStatusDeps } from "./exposure-status";
 import { makeResultsHandler, type ResultsDeps } from "./results";
 import { analysisRoute } from "./routes";
@@ -33,7 +34,8 @@ export interface AnalysisAppDeps
   extends ResultsDeps,
     UsageDeps,
     ExposureStatusDeps,
-    ExposureStatusCleanupDeps {
+    ExposureStatusCleanupDeps,
+    EntityPrivacyDeps {
   door: AnalysisDoor;
   authResolver: AuthResolver;
   rateLimiter: RateLimiter;
@@ -64,6 +66,9 @@ export function createApp(deps: AnalysisAppDeps): Hono {
   const usageHandler = makeUsageHandler(deps);
   const exposureStatusHandler = makeExposureStatusHandler(deps);
   const exposureStatusCleanupHandler = makeExposureStatusCleanupHandler(deps);
+  const entityPrivacyExportHandler = makeEntityPrivacyHandler(deps, "export");
+  const entityPrivacySuppressHandler = makeEntityPrivacyHandler(deps, "suppress");
+  const entityPrivacyDeleteHandler = makeEntityPrivacyHandler(deps, "delete");
   registrar.mount(app, analysisRoute("experiment_results_get"), resultsHandler);
   registrar.mount(app, analysisRoute("experiment_results_post"), resultsHandler);
   registrar.mount(app, analysisRoute("organization_usage_get"), usageHandler);
@@ -73,6 +78,13 @@ export function createApp(deps: AnalysisAppDeps): Hono {
     analysisRoute("environment_exposure_status_delete"),
     exposureStatusCleanupHandler,
   );
+  registrar.mount(app, analysisRoute("entity_analysis_privacy_export"), entityPrivacyExportHandler);
+  registrar.mount(
+    app,
+    analysisRoute("entity_analysis_privacy_suppress"),
+    entityPrivacySuppressHandler,
+  );
+  registrar.mount(app, analysisRoute("entity_analysis_privacy_delete"), entityPrivacyDeleteHandler);
 
   return app;
 }
