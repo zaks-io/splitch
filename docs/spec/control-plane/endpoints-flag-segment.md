@@ -28,19 +28,20 @@ on any affected route.
 Returns every Flag the authenticated principal can read across all of their Organizations and Apps.
 This is the deliberate cross-App read surface. Its App set is reconstructed from live Organization
 and App memberships in D1 on every request, then passed into the repository as one minted multi-App
-scope. Request input cannot add an App. Every tenant-table statement binds that set with an explicit
-`app_id IN (...)` predicate; an empty membership set returns an empty bounded envelope without issuing
-tenant SQL.
+scope. Request input cannot add an App. Every App-scoped table statement binds that set with an
+explicit `app_id IN (...)` predicate; an empty membership set returns an empty bounded envelope
+without issuing App-scoped SQL.
 
 Rows are deterministically ordered by App, then Flag key. The repository uses the canonical App ID
 for the first ordering axis and the Flag ID as the final tie-breaker. Each row adds its owning scope
 inline while preserving field parity with the corresponding `flags_list` row:
 
-```
-FlagResponse & {
-  org: { id: string, slug: string },
-  app: { id: string, key: string }
-}
+```typescript
+FlagResponse &
+  {
+    org: { id: string, slug: string },
+    app: { id: string, key: string },
+  };
 ```
 
 `?include=config` and the optional `envs={environment_id},{environment_id}` subset have the same
