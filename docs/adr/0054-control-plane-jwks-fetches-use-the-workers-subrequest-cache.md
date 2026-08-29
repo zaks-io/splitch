@@ -26,18 +26,28 @@ handler work.
    authenticated requests. One request in a colo pays the JWKS fetch during that window and the
    rest reuse it across isolates.
 
-4. **Key rotation accepts up to 300 seconds of propagation lag per colo.** jose refreshes after an
-   unknown `kid`, but that refresh can receive the cached key set for the rest of the TTL. Emergency
-   rotation therefore requires a Cloudflare cache purge of the JWKS URL. This is an operational
-   lever, not new product tooling.
+4. **Key rotation costs up to 300 seconds of extra propagation lag per colo, on top of jose's own
+   600-second in-process cache.** jose's `createRemoteJWKSet` defaults `cacheMaxAge` to 600000 ms
+   and refreshes only when an unknown `kid` arrives _and_ that window has expired; we do not
+   override it. This shared cache adds up to another 300 seconds when the refresh lands on a cached
+   entry, so the worst-case window for a new key to become usable in a colo is roughly 900 seconds.
+   Emergency rotation therefore purges the JWKS URL from Cloudflare's cache **and** waits out
+   jose's 600-second window (or redeploys the reading Worker, which discards every isolate's
+   in-process key set). The purge alone reaches only isolates that are about to refetch.
 
 5. **An unknown `kid` never bypasses the shared cache.** A bypass would let an attacker turn
    garbage `kid` values into an uncached-fetch amplifier against the Auth API. The bounded rotation
    window is the accepted trade.
 
-6. **Caching changes only public-key retrieval.** A JWKS is public by definition. RS256 signature
-   verification and the existing `aud` and `exp` assertions remain unchanged. A stale, missing, or
-   failed cache entry never degrades verification into a pass.
+6. **Caching changes only public-key retrieval, and only for how long a _withdrawn_ key stays
+   trusted.** A JWKS is public by definition. RS256 signature verification and the existing `aud`
+   and `exp` assertions remain unchanged. A missing or failed cache entry never degrades
+   verification into a pass: a non-2xx is uncached and reaches jose, which throws. A _stale_ entry
+   does have one real consequence, and it is the reason decision 4 states the window in seconds.
+   `ACCESS_TOKEN_SECRET` carries a single key, so rotation is a replace and the old `kid`
+   disappears; until every cache layer turns over, a token signed by the withdrawn key still
+   verifies. That is a bounded revocation delay, not a bypass, and it is what the emergency
+   procedure in decision 4 exists to cut short.
 
 7. **The Auth API advertises the same cache window.** Successful JWKS responses carry
    `Cache-Control: public, max-age=300`, which lets every compliant consumer cache the public key
@@ -47,8 +57,11 @@ handler work.
 
 - Bursty control-plane authentication normally performs one Auth API JWKS fetch per colo per five
   minutes instead of one fetch per fresh isolate.
-- A routine signing-key rotation can take up to five minutes to become usable in a colo.
-- Emergency rotation includes purging the Auth API JWKS URL from Cloudflare's cache.
+- A routine signing-key rotation can take up to fifteen minutes to become usable in a colo: jose's
+  600-second in-process window plus this cache's 300-second TTL.
+- Emergency revocation of a compromised key is a two-step runbook: purge the Auth API JWKS URL from
+  Cloudflare's cache, then redeploy the reading Workers to drop jose's in-process key sets. Purging
+  alone leaves warm isolates trusting the withdrawn key for up to 600 seconds.
 - Tenant-JWKS callers retain their current uncached custom transport and resolver isolation.
 
 ## Sources
