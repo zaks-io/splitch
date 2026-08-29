@@ -1,7 +1,7 @@
 import { writeFile } from "node:fs/promises";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { runCli } from "./cli.js";
-import { EXIT_OK } from "./exit-codes.js";
+import { EXIT_API, EXIT_OK } from "./exit-codes.js";
 import { FakeCliTransport, storedCredential } from "./test-fixtures.js";
 import { cleanupTempHomes, makeTempHome } from "./test-helpers.js";
 
@@ -15,6 +15,10 @@ const principalPage = {
     principalFlag("org_alpha", "alpha", "app_search", "search", "flag_rank", "ranking"),
     principalFlag("org_beta", "beta", "app_billing", "billing", "flag_invoice", "invoice"),
   ],
+};
+const summaryPage = {
+  ...principalPage,
+  items: principalPage.items.map(({ configurations: _configurations, ...flag }) => flag),
 };
 
 afterEach(async () => {
@@ -102,7 +106,7 @@ describe("scope-free flags list", () => {
 
   it("uses the compact response contract with --summary", async () => {
     const scope = await unscopedSession();
-    const transport = transportFor(principalPage);
+    const transport = transportFor(summaryPage);
 
     expect(
       await runCli(["flags", "list", "--summary"], {
@@ -117,6 +121,21 @@ describe("scope-free flags list", () => {
     );
     expect(new URL(request?.url ?? "https://invalid").searchParams.has("include")).toBe(false);
     expect(new URL(request?.url ?? "https://invalid").searchParams.has("envs")).toBe(false);
+  });
+
+  it("refuses an unhydrated envelope on the hydrated read instead of printing Flags with no Configuration", async () => {
+    const scope = await unscopedSession();
+    const transport = transportFor(summaryPage);
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    expect(
+      await runCli(["flags", "list", "--json"], {
+        ...scope,
+        cwd: scope.dir,
+        fetch: transport.fetch,
+      }),
+    ).toBe(EXIT_API);
+    expect(error.mock.calls.join("\n")).toContain("server returned an unhydrated response");
   });
 
   it("tells a human how to narrow an incomplete cross-App result", async () => {
@@ -189,5 +208,15 @@ function principalFlag(
     updatedAt: timestamp,
     org: { id: orgId, slug: orgSlug },
     app: { id: appId, key: appKey },
+    configurations: [
+      {
+        environmentId: `env_${appId}_prod`,
+        enabled: true,
+        availableVariantNames: ["control"],
+        targetingRules: [],
+        rollout: null,
+        experiment: null,
+      },
+    ],
   };
 }

@@ -54,7 +54,12 @@ export const FlagListQuerySchema = z
     }
   });
 export const PrincipalFlagListQuerySchema = z
-  .object(FlagHydrationQueryShape)
+  .object({
+    ...FlagHydrationQueryShape,
+    envs: EnvironmentSelectorsQuerySchema.optional().describe(
+      "Comma-separated Environment IDs or keys to hydrate; a key hydrates the Environment it names in every readable App, and omission hydrates every Environment.",
+    ),
+  })
   .strict()
   .superRefine((query, ctx) => {
     if (query.envs && query.include !== "config") {

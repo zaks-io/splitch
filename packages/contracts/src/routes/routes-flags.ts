@@ -268,6 +268,6 @@ export const flagRoutes = [
     auth: AUTH,
     rateLimit: RATE,
     idempotency: "none",
-    errors: ["FORBIDDEN"],
+    errors: ["ENVIRONMENT_NOT_FOUND", "FORBIDDEN", "INTERNAL_SERVER_ERROR"],
   }),
 ] as const satisfies readonly ApiRouteContract[];

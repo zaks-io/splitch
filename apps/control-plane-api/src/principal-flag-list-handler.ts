@@ -9,9 +9,13 @@ import {
 import { multiAppScope } from "@splitch/db";
 import { type HandlerArgs, renderError, requireWideMemberships } from "@splitch/worker-runtime";
 import type { FlagDefinitionDeps } from "./flag-definition-handler-utils";
-import { composeHydratedFlags } from "./flag-definition-hydration";
+import { composeHydratedFlags, FlagConfigurationMissingError } from "./flag-definition-hydration";
 import { flagFrom } from "./flag-definition-model";
 import { optionalQueryParam } from "./handler-input";
+import {
+  EnvironmentSelectorMissError,
+  resolveEnvironmentSelectors,
+} from "./principal-environment-selectors";
 import { FLAG_LIST_READ_LIMIT } from "./overview-thresholds";
 
 /** Every readable Flag across the live membership set, bounded globally. */
@@ -46,18 +50,24 @@ export async function listPrincipalFlags(
   const flagIds = page.items.map((row) => row.id);
   const catalogsResult = deps.repo.flags.listVariantsForFlagsAcrossApps(scope, flagIds);
   const include = optionalQueryParam(input, "include");
-  const requestedEnvironmentIds = optionalQueryParam(input, "envs")?.split(",");
+  const environmentSelectors = optionalQueryParam(input, "envs")?.split(",");
 
   let composed: Array<PrincipalFlagResponse | HydratedPrincipalFlagResponse>;
   if (include === "config") {
-    composed = await hydratedItems(
-      deps,
-      scope,
-      page.items,
-      catalogsResult,
-      descriptorByAppId,
-      requestedEnvironmentIds,
-    );
+    try {
+      composed = await hydratedItems(
+        deps,
+        scope,
+        page.items,
+        catalogsResult,
+        descriptorByAppId,
+        environmentSelectors,
+      );
+    } catch (cause) {
+      const fault = renderHydrationFault(cause, requestId);
+      if (!fault) throw cause;
+      return fault;
+    }
   } else {
     const catalogs = await catalogsResult;
     composed = page.items.map((row) => {
@@ -82,7 +92,7 @@ async function hydratedItems(
     string,
     { orgId: string; orgSlug: string; appId: string; appKey: string }
   >,
-  requestedEnvironmentIds?: readonly string[],
+  environmentSelectors?: readonly string[],
 ) {
   const flagIds = rows.map((row) => row.id);
   const [catalogs, environments, configs, targetingRules, experiments] = await Promise.all([
@@ -92,6 +102,9 @@ async function hydratedItems(
     deps.repo.flags.listTargetingRulesAcrossApps(scope, flagIds),
     deps.repo.flags.listRunningExperimentsAcrossApps(scope, flagIds),
   ]);
+  const requestedEnvironmentIds = environmentSelectors
+    ? resolveEnvironmentSelectors(environments, environmentSelectors)
+    : undefined;
   return composeHydratedFlags(
     rows,
     catalogs,
@@ -122,4 +135,30 @@ function requireDescriptor(
   const descriptor = descriptors.get(appId);
   if (!descriptor) throw new Error(`principal Flag list: App ${appId} has no descriptor`);
   return descriptor;
+}
+
+/**
+ * The App-scoped Flag reads render these two faults through
+ * `diagnosableHydration`; the principal read has no App axis to route through
+ * it, so it renders them here rather than letting them escape as an undeclared
+ * 500.
+ */
+function renderHydrationFault(cause: unknown, requestId: string): Response | null {
+  if (cause instanceof EnvironmentSelectorMissError) {
+    return renderError(
+      { code: "ENVIRONMENT_NOT_FOUND", message: cause.message, details: {} },
+      { requestId },
+    );
+  }
+  if (cause instanceof FlagConfigurationMissingError) {
+    return renderError(
+      {
+        code: "INTERNAL_SERVER_ERROR",
+        message: cause.message,
+        details: { fault: "FLAG_CONFIGURATION_MISSING" },
+      },
+      { requestId },
+    );
+  }
+  return null;
 }

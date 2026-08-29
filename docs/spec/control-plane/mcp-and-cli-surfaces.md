@@ -169,8 +169,12 @@ Flag visible through the principal's live Organization and App memberships. Huma
 by the `org.slug/app.key` selector and includes the canonical App ID. The route hydrates complete
 per-Environment Configurations across those Apps by default; `--summary` selects compact human
 output and does not request hydration. The MCP `principal_flags_list` tool accepts an `envs`
-Environment selector list, subject to `FLAG_READ_ENVIRONMENT_SELECTOR_LIMIT`. If the bounded result
-is incomplete, the CLI says to narrow it with `--app`.
+Environment selector list, subject to `FLAG_READ_ENVIRONMENT_SELECTOR_LIMIT`. Environment keys are
+unique within an App, so a key selector hydrates the Environment it names in every readable App; a
+canonical ID selector hydrates only its owning App, and Flags in the other Apps carry no
+Configuration for it. A selector that names no readable Environment anywhere returns
+`ENVIRONMENT_NOT_FOUND` rather than an empty hydration. If the bounded result is incomplete, the CLI
+says to narrow it with `--app`.
 
 With `--app`, `SPLITCH_APP`, active App config, or an explicit `--env`, the command uses the scoped
 `flags_list` route; `--env` therefore requires an App.

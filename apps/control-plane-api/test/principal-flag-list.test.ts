@@ -1,10 +1,12 @@
 import type { FlagListReadResponse, PrincipalFlagListReadResponse } from "@splitch/contracts";
 import { LIST_READ_LIMIT } from "@splitch/contracts";
+import { appScope } from "@splitch/db";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   FOREIGN_APP,
   makePrincipalFlagHarness,
   MEMBER_ORG_NONMEMBER_APP,
+  NOW,
   PRINCIPAL_APPS,
   type PrincipalFlagHarness,
 } from "./principal-flag-list-fixture";
@@ -112,6 +114,78 @@ describe("principal-scoped GET /flags", () => {
     });
     expect(response.status).toBe(403);
     expect(list).not.toHaveBeenCalled();
+  });
+});
+
+describe("principal-scoped GET /flags Environment selectors", () => {
+  it("fans one Environment key out to the matching Environment in every readable App", async () => {
+    const response = await get("/flags?include=config&envs=prod");
+    expect(response.status, await response.clone().text()).toBe(200);
+    const body = (await response.json()) as PrincipalFlagListReadResponse;
+
+    expect(body.items).toHaveLength(PRINCIPAL_APPS.length);
+    for (const row of body.items) {
+      const app = PRINCIPAL_APPS.find((seed) => seed.appId === row.app.id);
+      expect(app, `unexpected App ${row.app.id}`).toBeDefined();
+      expect(
+        (row as { configurations: { environmentId: string }[] }).configurations.map(
+          (config) => config.environmentId,
+        ),
+      ).toEqual([app?.environmentId]);
+    }
+    expect(JSON.stringify(body)).not.toContain(FOREIGN_APP.environmentId);
+    expect(JSON.stringify(body)).not.toContain(MEMBER_ORG_NONMEMBER_APP.environmentId);
+  });
+
+  it("hydrates only the owning App when the selector is one canonical Environment ID", async () => {
+    const target = PRINCIPAL_APPS[0];
+    const response = await get(`/flags?include=config&envs=${target.environmentId}`);
+    expect(response.status, await response.clone().text()).toBe(200);
+    const body = (await response.json()) as PrincipalFlagListReadResponse;
+
+    const configurationsByApp = new Map(
+      body.items.map((row) => [
+        row.app.id,
+        (row as { configurations: { environmentId: string }[] }).configurations,
+      ]),
+    );
+    expect(configurationsByApp.get(target.appId)?.map((config) => config.environmentId)).toEqual([
+      target.environmentId,
+    ]);
+    for (const other of PRINCIPAL_APPS.filter((row) => row.appId !== target.appId)) {
+      expect(configurationsByApp.get(other.appId)).toEqual([]);
+    }
+  });
+
+  it("refuses a selector that names no readable Environment instead of hydrating nothing", async () => {
+    const response = await get("/flags?include=config&envs=prod,staging");
+    expect(response.status).toBe(404);
+    expect(await response.json()).toMatchObject({ code: "ENVIRONMENT_NOT_FOUND" });
+  });
+
+  it("refuses an Environment that exists only outside the membership set", async () => {
+    const response = await get(`/flags?include=config&envs=${FOREIGN_APP.environmentId}`);
+    expect(response.status).toBe(404);
+    expect(await response.json()).toMatchObject({ code: "ENVIRONMENT_NOT_FOUND" });
+  });
+
+  it("names a missing Flag Configuration as a fault instead of an undeclared 500", async () => {
+    const target = PRINCIPAL_APPS[0];
+    await h.repo.identity.environments.insert(appScope(target.appId), {
+      id: "env_principal_alpha_checkout_staging",
+      appId: target.appId,
+      key: "staging",
+      name: "Staging",
+      createdAt: NOW,
+      updatedAt: NOW,
+    });
+
+    const response = await get("/flags?include=config&envs=staging");
+    expect(response.status).toBe(500);
+    expect(await response.json()).toMatchObject({
+      code: "INTERNAL_SERVER_ERROR",
+      details: { fault: "FLAG_CONFIGURATION_MISSING" },
+    });
   });
 });
 

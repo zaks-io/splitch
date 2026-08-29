@@ -12,7 +12,7 @@ import { makePoolBindings } from "./pool-bindings";
 
 const AUDIENCE = "https://cp.splitch.test";
 const NOW_MS = Date.UTC(2026, 7, 28, 12, 0, 0);
-const NOW = new Date(NOW_MS).toISOString();
+export const NOW = new Date(NOW_MS).toISOString();
 const USER_ID = "user_principal_flags_member";
 const OTHER_USER_ID = "user_zzaudit_other";
 const allowLimiter: RateLimiter = () => ({ limited: false });

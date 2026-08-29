@@ -4,6 +4,7 @@ import {
   HydratedFlagListResponseSchema,
   type HydratedFlagResponse,
   HydratedFlagResponseSchema,
+  HydratedPrincipalFlagListResponseSchema,
 } from "@splitch/sdk/control-plane";
 import { SplitchCliError } from "./errors.js";
 
@@ -58,6 +59,12 @@ export function assertHydratedFlagRead(operationId: string, payload: unknown): v
       ? HydratedFlagListResponseSchema.safeParse(payload)
       : HydratedFlagResponseSchema.safeParse(payload);
   if (!parsed.success) throw flagReadContractError(operationId, "hydrated");
+}
+
+/** The principal-wide read carries the same SPL-529 hydration contract as `flags_list`. */
+export function assertHydratedPrincipalFlagRead(payload: unknown): void {
+  const parsed = HydratedPrincipalFlagListResponseSchema.safeParse(payload);
+  if (!parsed.success) throw flagReadContractError("principal_flags_list", "hydrated");
 }
 
 function flagReadContractError(operationId: string, mode: "summary" | "hydrated"): SplitchCliError {
