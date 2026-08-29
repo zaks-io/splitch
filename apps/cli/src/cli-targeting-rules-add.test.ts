@@ -1,9 +1,9 @@
 import { writeFile } from "node:fs/promises";
 import { afterEach, describe, expect, it } from "vitest";
 import { runCli } from "./cli.js";
+import { findCommand } from "./command-registry.js";
 import { EXIT_OK, EXIT_USAGE } from "./exit-codes.js";
 import { renderCommandHelp, renderHelp } from "./help.js";
-import { findCommand } from "./command-registry.js";
 import { flagsListStub, scopeResolutionStubs } from "./scope-resolution-fixtures.js";
 import { FakeCliTransport, flagConfigResponse, storedCredential } from "./test-fixtures.js";
 import { cleanupTempHomes, makeTempHome } from "./test-helpers.js";
@@ -88,9 +88,20 @@ describe("flag-targeting-rules add (SPL-405)", () => {
       replaceOkStub(),
     ]);
 
-    expect(await runAdd(["flag_1", "--when", "plan=enterprise", "--serve", "on"], transport)).toBe(
-      EXIT_OK,
+    expect(
+      await runAdd(
+        ["flag_1", "--by", "id", "--when", "plan=enterprise", "--serve", "on"],
+        transport,
+      ),
+    ).toBe(EXIT_OK);
+
+    const configRead = transport.requests.find(
+      (request) => request.method === "GET" && request.url.includes("/config"),
     );
+    expect(new URL(configRead?.url ?? "https://invalid.test").searchParams.get("by")).toBe("id");
+    expect(
+      new URL(replaceRequest(transport)?.url ?? "https://invalid.test").searchParams.get("by"),
+    ).toBe("id");
 
     expect(replaceRequest(transport)?.body).toEqual({
       targetingRules: [

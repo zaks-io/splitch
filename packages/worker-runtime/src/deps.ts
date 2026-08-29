@@ -1,9 +1,38 @@
-import type { AuthKind } from "@splitch/contracts";
+import type { AuthKind, ErrorResponse, RouteContract } from "@splitch/contracts";
 import type { AuthResolver } from "./principal";
+import type { Principal } from "./principal";
 import type { RateLimiter } from "./rate-limit";
 
 /** Auth kinds that need a resolver. `public` is resolved without one. */
 export type ResolvableAuthKind = Exclude<AuthKind, "public">;
+
+export interface AuthenticatedInputResolverArgs {
+  contract: RouteContract;
+  input: unknown;
+  params: Record<string, string>;
+  principal: Principal;
+  request: Request;
+  requestId: string;
+}
+
+export type AuthenticatedInputResolution =
+  | {
+      ok: true;
+      input: unknown;
+      params: Record<string, string>;
+      principal: Principal;
+    }
+  | { ok: false; error: ErrorResponse };
+
+/**
+ * Authenticated, rate-limited request normalization that must run before the
+ * registrar compares path scope to the Principal. The default registrar path
+ * is identity; Workers opt in only when a public path value needs canonical
+ * resolution before co-scope can be enforced.
+ */
+export type AuthenticatedInputResolver = (
+  args: AuthenticatedInputResolverArgs,
+) => Promise<AuthenticatedInputResolution> | AuthenticatedInputResolution;
 
 /**
  * Observability hook surface. The guard calls these around the request; a Worker
@@ -24,6 +53,7 @@ export interface Observability {
 export interface RegistrarDeps {
   authResolvers: Partial<Record<ResolvableAuthKind, AuthResolver>>;
   rateLimiter: RateLimiter;
+  authenticatedInputResolver?: AuthenticatedInputResolver;
   observability?: Observability;
   /**
    * Extra headers merged onto every response the guard renders. The baseline

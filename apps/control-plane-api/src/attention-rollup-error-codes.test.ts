@@ -27,8 +27,8 @@ async function emittedCode(response: Response): Promise<string> {
 }
 
 describe("attention rollup handler emitted error codes", () => {
-  it("matches the route's declared error set exactly", async () => {
-    const emitted = new Set(
+  it("keeps handler and resolver emitted errors inside the declared set", async () => {
+    const emittedByHandler = new Set<string>(
       await Promise.all([
         emittedCode(appNotFound("req_1")),
         emittedCode(forbidden("req_1")),
@@ -40,7 +40,10 @@ describe("attention rollup handler emitted error codes", () => {
       ]),
     );
 
-    const declared = new Set(getRoute("app_attention_rollup_get")?.errors);
-    expect(emitted).toEqual(declared);
+    const emittedByResolver = new Set<string>(["APP_NOT_FOUND", "SELECTOR_AMBIGUOUS"]);
+    const declared = new Set<string>(getRoute("app_attention_rollup_get")?.errors ?? []);
+    expect([...emittedByHandler].every((code) => declared.has(code))).toBe(true);
+    expect([...emittedByResolver].every((code) => declared.has(code))).toBe(true);
+    expect(declared).toEqual(new Set([...emittedByHandler, ...emittedByResolver]));
   });
 });

@@ -37,6 +37,9 @@ export async function readFlagsPage(
       readTruncated: listed.data.readTruncated,
       readLimit: listed.data.readLimit,
       items: listed.data.items.map((definition) => {
+        if ("configurations" in definition) {
+          throw new Error("Flags page received hydrated data without requesting include=config");
+        }
         return {
           definition: {
             id: definition.id,

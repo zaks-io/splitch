@@ -9,4 +9,6 @@ export const D1_TEST_FILES = defineTestFileManifest(import.meta.url, [
   "src/panel-overview-experiment-bounds.test.ts",
   "src/panel-overview-flag-bounds.test.ts",
   "src/panel-overview.test.ts",
+  "src/path-selector-authorization.test.ts",
+  "src/path-selector-resolution.test.ts",
 ]);

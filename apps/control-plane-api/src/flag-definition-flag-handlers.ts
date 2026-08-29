@@ -17,6 +17,7 @@ import {
   type Result,
   serializeSchema,
 } from "./flag-definition-handler-utils";
+import { hydrateFlags } from "./flag-definition-hydration";
 import {
   flagFrom,
   flagResponse,
@@ -40,6 +41,8 @@ export async function listFlags(
 ): Promise<Response> {
   const appId = pathParam(input, "appId");
   const environmentId = optionalQueryParam(input, "environmentId");
+  const include = optionalQueryParam(input, "include");
+  const requestedEnvironmentIds = environmentIdsFromQuery(input);
   const scope = appScope(appId);
   // The existence checks and the catalog read depend on nothing but the path, so
   // they issue CONCURRENTLY: run in sequence they are three D1 round trips deep
@@ -74,11 +77,13 @@ export async function listFlags(
     rows.map((row) => row.id),
   );
   const items =
-    environmentId === undefined
-      ? catalogsResult.then((catalogs) =>
-          rows.map((row) => flagFrom(row, catalogs.get(row.id) ?? [])),
-        )
-      : withEnvironmentConfigurations(deps, appId, environmentId, rows, catalogsResult);
+    include === "config"
+      ? hydrateFlags(deps, appId, rows, catalogsResult, requestedEnvironmentIds)
+      : environmentId === undefined
+        ? catalogsResult.then((catalogs) =>
+            rows.map((row) => flagFrom(row, catalogs.get(row.id) ?? [])),
+          )
+        : withEnvironmentConfigurations(deps, appId, environmentId, rows, catalogsResult);
   return Response.json({
     items: await items,
     readTruncated,
@@ -133,28 +138,33 @@ async function withEnvironmentConfigurations(
 
 export async function getFlag(
   deps: FlagDefinitionDeps,
-  { input, requestId, request }: HandlerArgs<unknown>,
+  { input, requestId }: HandlerArgs<unknown>,
 ): Promise<Response> {
   const appId = pathParam(input, "appId");
-  const selector = pathParam(input, "flagId");
-  // Path is id-only by default. Key lookup is an explicit ?by=key so a Flag key
-  // that equals another Flag's canonical id can never collide on one segment
-  // (SPL-236). Write routes stay id-only via loadWritableFlag.
-  //
-  // Read `by` from URLSearchParams (first value), not from the parsed query
-  // record: queryToRecord last-wins on duplicates, while the Panel claim parser
-  // first-wins — `?by=id&by=key` would otherwise mint by:"id" and resolve as key.
-  const flag =
-    flagLookupBy(request) === "key"
-      ? await deps.repo.flags.getFlagByKey(appScope(appId), selector)
-      : await deps.repo.flags.getFlag(appScope(appId), selector);
+  const flagId = pathParam(input, "flagId");
+  const include = optionalQueryParam(input, "include");
+  // The authenticated resolver owns every key-to-ID lookup, including explicit
+  // `by=key`, so the handler has one canonical repository read.
+  const flag = await deps.repo.flags.getFlag(appScope(appId), flagId);
   if (!flag) return flagNotFound(requestId);
+  if (include === "config") {
+    const hydrated = await hydrateFlags(
+      deps,
+      appId,
+      [flag],
+      deps.repo.flags.listVariantsForFlags(appScope(appId), [flag.id]),
+      environmentIdsFromQuery(input),
+    );
+    const response = hydrated[0];
+    if (!response) throw new Error("hydrated flag get: expected one Flag response");
+    return Response.json(response);
+  }
   return Response.json(await flagResponse(deps.repo, appId, flag));
 }
 
-/** Same source as `parseControlPanelOperation`: URLSearchParams first value. */
-function flagLookupBy(request: Request): "id" | "key" {
-  return new URL(request.url).searchParams.get("by") === "key" ? "key" : "id";
+function environmentIdsFromQuery(input: unknown): string[] | undefined {
+  const envs = optionalQueryParam(input, "envs");
+  return envs?.split(",");
 }
 
 export async function updateFlag(

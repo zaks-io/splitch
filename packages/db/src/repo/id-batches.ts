@@ -14,12 +14,33 @@
  * headroom at each call site would put the D1 limit in several places at once.
  */
 const D1_ID_BATCH_SIZE = 90;
+const D1_TWO_AXIS_BATCH_SIZE = D1_ID_BATCH_SIZE / 2;
 
 /** Splits an id set into batches D1 will accept as `IN (...)` parameters. */
 export function idBatches<T>(ids: readonly T[]): T[][] {
+  return batchesOf(ids, D1_ID_BATCH_SIZE);
+}
+
+/**
+ * Cartesian batches for a statement with two independent `IN (...)` axes.
+ *
+ * Each side contributes at most 45 bindings, leaving the same deliberate D1
+ * headroom as `idBatches` for app_id and fixed predicates such as status.
+ */
+export function twoAxisIdBatches<A, B>(
+  firstIds: readonly A[],
+  secondIds: readonly B[],
+): Array<{ first: A[]; second: B[] }> {
+  if (firstIds.length === 0 || secondIds.length === 0) return [];
+  return batchesOf(firstIds, D1_TWO_AXIS_BATCH_SIZE).flatMap((first) =>
+    batchesOf(secondIds, D1_TWO_AXIS_BATCH_SIZE).map((second) => ({ first, second })),
+  );
+}
+
+function batchesOf<T>(ids: readonly T[], size: number): T[][] {
   const batches: T[][] = [];
-  for (let start = 0; start < ids.length; start += D1_ID_BATCH_SIZE) {
-    batches.push(ids.slice(start, start + D1_ID_BATCH_SIZE));
+  for (let start = 0; start < ids.length; start += size) {
+    batches.push(ids.slice(start, start + size));
   }
   return batches;
 }

@@ -1,10 +1,10 @@
-import { ErrorCodeSchema, type ErrorResponse, getRoute } from "@splitch/sdk/control-plane";
 import { createSplitchClient } from "@splitch/sdk";
-import { remediationForServerError, warnStaleApprovalDiscard } from "./approval-stale-warn.js";
+import { getRoute } from "@splitch/sdk/control-plane";
+import { warnStaleApprovalDiscard } from "./approval-stale-warn.js";
 import { withAuthorizationRetry } from "./auth.js";
 import type { TokenBinding } from "./auth-binding.js";
 import { missingPositionalError } from "./command-positionals.js";
-import { commandSupportsConfirm, type CliCommandDefinition } from "./command-registry.js";
+import type { CliCommandDefinition } from "./command-registry.js";
 import type { ResolvedContext } from "./context.js";
 import { requireAppScope, requireEnvironmentScope } from "./context.js";
 import {
@@ -16,10 +16,11 @@ import {
 import { emit } from "./execute-io.js";
 import type { CliDeps, CliIo, CliResult } from "./execute-types.js";
 import { EXIT_API, EXIT_AUTH, EXIT_OK, EXIT_SCOPE, EXIT_USAGE } from "./exit-codes.js";
-import { parseEvaluationContext } from "./operation-input.js";
+import { environmentSelectorOverride, parseEvaluationContext } from "./operation-input.js";
 import { emitOperationNotices } from "./operation-notices.js";
 import type { ParsedInvocation } from "./parse-args.js";
 import { createOperationSdks, resolveDataPlaneBaseUrl, sdkForRoute } from "./sdks.js";
+import { exitCodeForServerError, writeServerError } from "./server-errors.js";
 
 export function validateCommandScope(
   command: CliCommandDefinition,
@@ -75,7 +76,11 @@ export async function executeFlagsVerify(
         const sdks = createOperationSdks(deps);
         const result = await sdks["control-plane-api"].callOperationById(
           "client_key_get",
-          { appId: context.appId, environmentId: context.environmentId },
+          {
+            appId: context.appId,
+            environmentId: context.environmentId,
+            ...environmentSelectorOverride(invocation.flags.by),
+          },
           { authorization },
         );
         return { status: result.ok ? 200 : result.status, value: result };
@@ -84,8 +89,11 @@ export async function executeFlagsVerify(
     );
     if (!clientKeyResult.ok) {
       emit(io, invocation.flags.json, clientKeyResult.error);
-      writeServerError(io, clientKeyResult.error, "client_key_get");
-      return { exitCode: EXIT_API, payload: clientKeyResult.error };
+      writeServerError(io, clientKeyResult.error, "client_key_get", invocation);
+      return {
+        exitCode: exitCodeForServerError(clientKeyResult.error),
+        payload: clientKeyResult.error,
+      };
     }
     const clientKey = clientKeyResult.data as { keyMaterial: string };
     const evaluationContext = parseEvaluationContext(
@@ -140,47 +148,6 @@ export function validateFlagsVerifyUsage(
   return null;
 }
 
-export async function executeEnvPolicyGet(
-  invocation: ParsedInvocation,
-  deps: CliDeps,
-  io: CliIo,
-  context: ResolvedContext,
-): Promise<CliResult> {
-  return executeApiOperation(
-    "environments_get",
-    { appId: context.appId, environmentId: context.environmentId },
-    invocation,
-    deps,
-    io,
-    (data) => ({ policy: (data as { policy: unknown }).policy }),
-  );
-}
-
-export async function executeEnvPolicySet(
-  invocation: ParsedInvocation,
-  deps: CliDeps,
-  io: CliIo,
-  context: ResolvedContext,
-): Promise<CliResult> {
-  if (!invocation.flags.bodyJson) {
-    writeCliError(io, {
-      code: "CLI_USAGE_INVALID",
-      causeSummary: "env-policy set requires --body-json",
-      remediation: "Pass the Environment Policy JSON object with --body-json",
-    });
-    return { exitCode: EXIT_USAGE };
-  }
-  const policy = JSON.parse(invocation.flags.bodyJson) as unknown;
-  return executeApiOperation(
-    "environments_update",
-    { appId: context.appId, environmentId: context.environmentId, policy },
-    invocation,
-    deps,
-    io,
-    (data) => ({ policy: (data as { policy: unknown }).policy }),
-  );
-}
-
 /**
  * The token binding an operation needs, derived from the same identifiers its
  * route path carries: an App-scoped path needs an app-bound token, an
@@ -228,8 +195,8 @@ export async function executeApiOperation(
       // `writeServerError` owns both channels: the enriched JSON on stdout and
       // the prose on stderr. Emitting `payload.error` here too would put the
       // raw wire shape and the enriched one on the same stream.
-      writeServerError(io, payload.error, operationId);
-      return { exitCode: EXIT_API, payload: payload.error };
+      writeServerError(io, payload.error, operationId, invocation);
+      return { exitCode: exitCodeForServerError(payload.error), payload: payload.error };
     }
     const projected = project ? await project(payload.data) : payload.data;
     emit(io, invocation.flags.json, projected);
@@ -300,25 +267,4 @@ export function handleExecutionError(error: unknown, io: CliIo): CliResult {
     return { exitCode: EXIT_SCOPE };
   }
   return { exitCode: EXIT_USAGE };
-}
-
-export function writeServerError(io: CliIo, error: ErrorResponse, operationId: string): void {
-  const parsedCode = ErrorCodeSchema.safeParse(error.code);
-  if (!parsedCode.success) {
-    writeCliError(io, {
-      code: "CLI_SERVER_CODE_UNRECOGNIZED",
-      causeSummary: `The server returned unrecognized error code "${String(error.code)}": ${error.message}`,
-      remediation: "Update the CLI or report the server code before retrying the command",
-    });
-    return;
-  }
-  writeCliError(io, {
-    code: parsedCode.data,
-    causeSummary: error.message,
-    remediation: remediationForServerError(error, commandSupportsConfirm(operationId)),
-    // `details` carries the fields a caller has to act on (approvalRequestId,
-    // frozenFields, policyContexts). Prose can only name some of them, so the
-    // whole object travels and `--json` surfaces it verbatim.
-    details: error.details,
-  });
 }

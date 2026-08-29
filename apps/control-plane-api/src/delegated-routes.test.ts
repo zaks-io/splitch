@@ -356,6 +356,10 @@ function stubRepo(experiments?: {
     identity: {
       getEnvironment: async ({ appId }: { appId: string }, environmentId: string) =>
         ENVIRONMENTS.has(`${appId}/${environmentId}`) ? { id: environmentId } : null,
+      findEnvironmentSelectorCandidates: async ({ appId }: { appId: string }, selector: string) =>
+        ENVIRONMENTS.has(`${appId}/${selector}`)
+          ? [{ environmentId: selector, environmentKey: "development" }]
+          : [],
     },
     experiments: experiments ?? {
       getExperiment: vi.fn(async () => ({ id: "exp_1", status: "running" })),

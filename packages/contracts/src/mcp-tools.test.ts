@@ -151,6 +151,24 @@ describe("mcp tools: 1:1 parity with control-plane routes", () => {
     );
   });
 
+  it("accepts human App, Environment, and Flag selectors in derived tool input", () => {
+    const config = tools.find((tool) => tool.name === "flag_config_get");
+    const shape = objectShape(config?.inputSchema);
+
+    expect(
+      config?.inputSchema.safeParse({
+        appId: "neuron",
+        environmentId: "production",
+        flagId: "checkout",
+      }).success,
+    ).toBe(true);
+    expect((shape.appId as z.ZodTypeAny | undefined)?.description).toContain("App ID");
+    expect((shape.environmentId as z.ZodTypeAny | undefined)?.description).toContain(
+      "Environment ID",
+    );
+    expect((shape.flagId as z.ZodTypeAny | undefined)?.description).toContain("Flag ID");
+  });
+
   it("derives the Organization create tool with a body-only input (SPL-171)", () => {
     const create = tools.find((tool) => tool.name === "organizations_create");
     const shape = objectShape(create?.inputSchema);
@@ -210,7 +228,9 @@ describe("mcp tools: 1:1 parity with control-plane routes", () => {
       expect(getRoute(tool.name)).toBeDefined();
     }
   });
+});
 
+describe("mcp tools: derived input and output schemas", () => {
   it("tool input combines route path, query, and body fields in SDK call shape", () => {
     const create = tools.find((tool) => tool.name === "flags_create");
     const createShape = objectShape(create?.inputSchema);
@@ -220,7 +240,21 @@ describe("mcp tools: 1:1 parity with control-plane routes", () => {
 
     const list = tools.find((tool) => tool.name === "flags_list");
     const listShape = objectShape(list?.inputSchema);
-    expect(Object.keys(listShape)).toContain("appId");
+    expect(Object.keys(listShape)).toEqual(expect.arrayContaining(["appId", "include", "envs"]));
+    expect(
+      list?.inputSchema.safeParse({ appId: "app_1", include: "config", envs: "env_dev,env_prod" })
+        .success,
+    ).toBe(true);
+
+    const get = tools.find((tool) => tool.name === "flags_get");
+    expect(
+      get?.inputSchema.safeParse({
+        appId: "app_1",
+        flagId: "checkout",
+        include: "config",
+        envs: "env_prod",
+      }).success,
+    ).toBe(true);
 
     const update = tools.find((tool) => tool.name === "flags_update");
     const updateShape = objectShape(update?.inputSchema);

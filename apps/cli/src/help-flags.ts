@@ -1,5 +1,5 @@
 import { API_KEY_CREATE_OPERATION_ID } from "./api-key-output.js";
-import { type CliCommandDefinition, META_COMMANDS } from "./command-registry.js";
+import type { CliCommandDefinition, META_COMMANDS } from "./command-registry.js";
 import { commandHasBodyJson } from "./help-body-json.js";
 import { toolByOperation } from "./help-command-description.js";
 import { deleteModeHelpFlags } from "./help-delete-flags.js";
@@ -54,7 +54,7 @@ function scopeFlags(command: CliCommandDefinition, fields: ReadonlySet<string>):
     flags.push(flag("--app <app>", "string", "SPLITCH_APP or config", "App ID or slug."));
   if (command.needsEnvironment) {
     flags.push(
-      flag("--env <environment>", "string", "SPLITCH_ENV or config", "Environment ID or slug."),
+      flag("--env <environment>", "string", "SPLITCH_ENV or config", "Environment ID or key."),
     );
   } else if (command.operationId === "flags_list") {
     flags.push(
@@ -62,7 +62,7 @@ function scopeFlags(command: CliCommandDefinition, fields: ReadonlySet<string>):
         "--env <environment>",
         "string",
         "SPLITCH_ENV or config",
-        "Environment ID or slug used with --with-config.",
+        "Environment ID or key used with --with-config.",
       ),
     );
   } else if (fields.has("environmentId")) {
@@ -71,7 +71,7 @@ function scopeFlags(command: CliCommandDefinition, fields: ReadonlySet<string>):
         "--env <environment>",
         "string",
         "none",
-        "Optional Environment ID or slug filter (Policy context).",
+        "Optional Environment ID or key filter (Policy context).",
       ),
     );
   }
@@ -82,7 +82,24 @@ function scopeFlags(command: CliCommandDefinition, fields: ReadonlySet<string>):
     const description = command.operationId === "flags_create" ? "Flag KEY." : "Resource key.";
     flags.push(flag("--key <key>", "string", "none", description));
   }
+  flags.push(...selectorFlags(command, fields));
   return flags;
+}
+
+function selectorFlags(
+  command: CliCommandDefinition,
+  fields: ReadonlySet<string>,
+): readonly HelpFlag[] {
+  if (!fields.has("by") && command.kind !== "flags_verify") return [];
+  const allowedValues = command.operationId === "flags_get" ? "id or key" : "id";
+  return [
+    flag(
+      "--by <mode>",
+      "string",
+      "automatic",
+      `Allowed: ${allowedValues}. Resolve a canonical-looking selector explicitly.`,
+    ),
+  ];
 }
 
 function operationFlags(command: CliCommandDefinition): HelpFlag[] {
@@ -154,7 +171,7 @@ export function metaFlags(command: (typeof META_COMMANDS)[number]): HelpFlag[] {
         "--env <environment>",
         "string",
         metaScopeDefault(command, "env"),
-        "Environment ID or slug.",
+        "Environment ID or key.",
       ),
     );
   if (command === "health")

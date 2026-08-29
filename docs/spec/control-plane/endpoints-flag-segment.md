@@ -13,14 +13,47 @@ All endpoints live on the **Control Plane API Worker** and require a control-pla
 requests/responses are `Content-Type: application/json`. Error shape, pagination, and the shared
 conventions are described in [control-plane-endpoint-inventory.md](control-plane-endpoint-inventory.md).
 
+Every route in this document that exposes `{app_id}`, `{environment_id}` /
+`{target_environment_id}`, or `{flag_id}` accepts either that resource's canonical ID or its
+human-readable selector (App slug, Environment key, or Flag key). This applies to reads and writes.
+Routes without those path parameters accept no selector. A canonical-looking Flag key can be forced
+only on `flags_get` with `?by=key`; other routes treat the canonical `flag_` shape as an ID. When a
+legacy Environment key collides with a canonical Environment ID, `?by=id` selects the canonical ID
+on any affected route.
+
 ## Flag definition endpoints (App-level — the catalog, defined once)
 
 ### `GET /apps/{app_id}/flags`
 
-The optional query `?environmentId={environment_id}` requests one Environment's Configuration
-summary inline. When present, `environmentId` must be a non-empty Environment ID in the App; an
-empty value is `VALIDATION_ERROR`. When omitted, the endpoint remains an App-level catalog read and
-does not return per-Environment data.
+The optional query `?include=config` returns each Flag definition with its full per-Environment
+Configurations inline. By default it includes every Environment in the App. The optional
+`envs={environment_id},{environment_id}` narrows hydration to the named canonical Environment IDs;
+`envs` without `include=config` is `VALIDATION_ERROR`. IDs outside the App and IDs that do not exist
+both contribute no Configuration, so the response cannot reveal whether a foreign Environment exists.
+
+Hydration returns a distinct required envelope:
+
+```
+FlagResponse & {
+  configurations: Array<{
+    environmentId: string,
+    enabled: boolean,
+    availableVariantNames: string[],
+    targetingRules: TargetingRule[],
+    rollout: { percentage: number, salt: string } | null,
+    experiment: { id: string, key: string } | null
+  }>
+}
+```
+
+The Experiment `key` is its human and agent-readable selector; the display `name` is not the
+reference. Each Configuration is composed explicitly, so D1-only ids, attribution, and timestamps do
+not reach the wire. The Flag's App-level Variant catalog remains on `variants` once, rather than being
+duplicated into every Configuration.
+
+The earlier optional `?environmentId={environment_id}` summary remains supported and is distinct from
+hydration. When present, `environmentId` must be a non-empty Environment ID in the App; an empty value
+is `VALIDATION_ERROR`. It cannot be combined with `include=config`; use `envs` for a hydrated subset.
 
 Returns exactly:
 
@@ -41,8 +74,10 @@ Returns exactly:
 
 `flagConfiguration` is absent from every item when `environmentId` is omitted and present on every
 item when it is supplied. `rollout` is the baseline percentage only, or `null`; full availability
-and Targeting Rules remain on `flag_config_get`. `readTruncated` reports whether the bounded read
-omitted additional Flags, and `readLimit` reports that bound.
+and Targeting Rules remain absent from this legacy summary. When `include=config` is present, every
+item instead uses the required hydrated envelope above. `readTruncated` reports whether the bounded
+read omitted additional Flags, and `readLimit` reports that bound. Hydration never changes which Flag
+rows are in the bounded page or any field of the list envelope.
 
 ### `POST /apps/{app_id}/flags`
 
@@ -72,14 +107,18 @@ Invariant: exactly one Variant is the Default Variant; every Variant `value` sat
 
 ### `GET /apps/{app_id}/flags/{flag_id}`
 
-Returns: full Flag definition (catalog Variants + schema). No per-Environment config.
+Without `include`, returns the full Flag definition (catalog Variants + schema) with exactly the
+existing bytes. With `?include=config`, returns the distinct hydrated Flag envelope defined above.
+The optional comma-separated `envs` subset has the same rules and non-revealing foreign-id behavior as
+`flags_list`. One logical Flag is one request; a client never assembles its Configurations from
+per-Environment follow-up calls.
 
-`{flag_id}` is the Flag's **canonical id**. Key lookup is an explicit query on the
-same route: `GET /apps/{app_id}/flags/{selector}?by=key`. `by` accepts `id`
-(default) and `key`. The catalog list is bounded; `?by=key` is the exact path
-that keeps a Flag reachable in the Panel when it is past that ceiling. A key
-that only exists in another App is `FLAG_NOT_FOUND` under this App (the App
-scope is the isolation boundary). Write routes stay id-only.
+`{flag_id}` accepts a canonical ID or Flag key. A canonical-looking value is an
+ID unless `?by=key` explicitly selects a colliding key. Omitting `by` and
+`?by=id` use the same automatic selector behavior. The catalog list is bounded;
+`?by=key` is the exact path that keeps a canonical-looking key reachable in the
+Panel when it is past that ceiling. A key that only exists in another App is
+`FLAG_NOT_FOUND` under this App (the App scope is the isolation boundary).
 
 ### `PATCH /apps/{app_id}/flags/{flag_id}`
 

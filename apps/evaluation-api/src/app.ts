@@ -75,6 +75,7 @@ export function createApp(deps: AppDeps): Hono {
       return new Response(null, { status: 204, headers: evaluationCorsHeaders() });
     }
     await next();
+    context.res = new Response(context.res.body, context.res);
     for (const [name, value] of evaluationCorsHeaders()) {
       context.res.headers.set(name, value);
     }

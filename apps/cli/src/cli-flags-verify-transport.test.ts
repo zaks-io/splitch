@@ -74,6 +74,7 @@ describe("flags verify transport", () => {
       request.url.includes("/api/sdk/verify"),
     );
     expect(clientKeyCall?.authorization).toBe(authHeader());
+    expect(new URL(clientKeyCall?.url ?? "https://invalid.test").searchParams.get("by")).toBe("id");
     expect(verifyCall?.authorization).toBe(`Bearer ${clientKeyMaterial}`);
     expect(verifyCall?.authorization).not.toBe(authHeader());
     expect(verifyCall?.body).toMatchObject({ flagKey: "checkout" });
@@ -124,6 +125,8 @@ function verifyArgs(flagKey: string): string[] {
     "app_1",
     "--env",
     "env_1",
+    "--by",
+    "id",
     flagKey,
     "--targeting-key",
     "user-1",

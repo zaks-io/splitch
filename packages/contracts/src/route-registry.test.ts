@@ -20,6 +20,13 @@ import {
   routesSurfacedBy,
 } from "./route-registry";
 
+const SELECTOR_ERROR_BY_SEGMENT = [
+  [":appId", ["APP_NOT_FOUND", "SELECTOR_AMBIGUOUS"]],
+  [":environmentId", ["APP_NOT_FOUND", "SELECTOR_AMBIGUOUS"]],
+  [":targetEnvironmentId", ["APP_NOT_FOUND", "SELECTOR_AMBIGUOUS"]],
+  [":flagId", ["FLAG_NOT_FOUND"]],
+] as const;
+
 /**
  * The registry is cross-cutting: every Worker mounts it, the SDK infers from it,
  * MCP derives tools from it. These assertions are the contract that keeps all
@@ -183,6 +190,23 @@ describe("route registry: canonical coverage", () => {
 });
 
 describe("route registry: per-route invariants", () => {
+  it("declares canonical Environment disambiguation on Environment selector routes", () => {
+    const route = getRoute("environments_get");
+    if (!route) throw new Error("missing environments_get route");
+    expect(
+      route.input.safeParse({
+        params: { appId: "app_test", environmentId: "env_test" },
+        query: { by: "id" },
+      }).success,
+    ).toBe(true);
+    expect(
+      route.input.safeParse({
+        params: { appId: "app_test", environmentId: "env_test" },
+        query: { by: "key" },
+      }).success,
+    ).toBe(false);
+  });
+
   it("every operationId is unique", () => {
     expect(new Set(operationIds).size).toBe(operationIds.length);
   });
@@ -213,6 +237,18 @@ describe("route registry: per-route invariants", () => {
       if (route.scopes.length > 0) {
         expect(route.errors).toContain("INSUFFICIENT_SCOPES");
       }
+    }
+  });
+
+  it.each(
+    SELECTOR_ERROR_BY_SEGMENT,
+  )("authenticated Control Plane paths with %s document %s", (segment, errors) => {
+    const matchingRoutes = routeRegistry.filter(
+      (route) => route.auth === "control-plane-token" && route.path.includes(segment),
+    );
+    expect(matchingRoutes.length).toBeGreaterThan(0);
+    for (const route of matchingRoutes) {
+      for (const error of errors) expect(route.errors).toContain(error);
     }
   });
 

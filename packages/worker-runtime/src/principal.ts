@@ -6,8 +6,9 @@ import type { AuthDoor, AuthKind, ErrorResponse } from "@splitch/contracts";
  *
  * `orgId`/`appId`/`environmentId` are the scope the credential is bound to. The
  * guard enforces that they match the route's path params where the contract
- * requires co-scoping (ADR-0027). A `null` means the credential is not bound to
- * that axis; a route that requires co-scope on a null axis is a FORBIDDEN.
+ * requires co-scoping (ADR-0027). A `null` means the credential is not yet bound
+ * to that axis. A selector resolver may bind it to one App already named by a
+ * matching signed scope; otherwise a required null co-scope is FORBIDDEN.
  *
  * `orgId` follows the same single-value-or-null shape as `appId`: it is the one
  * Org the credential is bound to, meaningful only when the token names exactly

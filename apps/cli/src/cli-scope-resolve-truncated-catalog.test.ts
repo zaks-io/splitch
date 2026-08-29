@@ -1,7 +1,7 @@
 import { writeFile } from "node:fs/promises";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { runCli } from "./cli.js";
-import { EXIT_OK, EXIT_SCOPE } from "./exit-codes.js";
+import { EXIT_API, EXIT_OK, EXIT_SELECTOR_AMBIGUOUS } from "./exit-codes.js";
 import { flagsListStub, scopeResolutionStubs } from "./scope-resolution-fixtures.js";
 import { FakeCliTransport, jsonError, storedCredential } from "./test-fixtures.js";
 import { cleanupTempHomes, makeTempHome } from "./test-helpers.js";
@@ -11,11 +11,63 @@ afterEach(async () => {
   await cleanupTempHomes();
 });
 
-describe("truncated org/app/env catalogs", () => {
-  it("fails with CLI_SCOPE_UNRESOLVED when the App catalog is complete and the key is missing", async () => {
+describe("Environment selector collisions", () => {
+  it("renders the server's ambiguity refusal", async () => {
     const { credentialPath } = await makeTempHome();
     await writeFile(credentialPath, `${JSON.stringify(storedCredential())}\n`);
-    const transport = new FakeCliTransport([...scopeResolutionStubs()]);
+    const transport = new FakeCliTransport([
+      ...scopeResolutionStubs({
+        environments: [
+          { id: "env_collision", key: "production", name: "Production" },
+          { id: "env_other", key: "env_collision", name: "Collision" },
+        ],
+      }),
+      {
+        match: (request) => new URL(request.url).pathname === "/apps/app_1/envs/env_collision",
+        status: 409,
+        body: {
+          code: "SELECTOR_AMBIGUOUS",
+          message: 'Environment selector "env_collision" matches more than one Environment',
+          details: {
+            recommendedAction: "USE_CANONICAL_ID",
+            candidates: [
+              { environmentId: "env_collision", environmentKey: "production" },
+              { environmentId: "env_other", environmentKey: "env_collision" },
+            ],
+          },
+        },
+      },
+    ]);
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const code = await runCli(
+      ["env-policy", "get", "--json", "--app", "app_1", "--env", "env_collision"],
+      { credentialPath, fetch: transport.fetch },
+    );
+
+    expect(code).toBe(EXIT_SELECTOR_AMBIGUOUS);
+    expect(error.mock.calls.join(" ")).toContain("Environment production");
+    expect(error.mock.calls.join(" ")).toContain("--env env_other");
+    expect(
+      transport.requests.some(
+        (request) => new URL(request.url).pathname === "/apps/app_1/envs/env_collision",
+      ),
+    ).toBe(true);
+  });
+});
+
+describe("truncated org/app/env catalogs", () => {
+  it("lets the server refuse a missing App selector", async () => {
+    const { credentialPath } = await makeTempHome();
+    await writeFile(credentialPath, `${JSON.stringify(storedCredential())}\n`);
+    const transport = new FakeCliTransport([
+      ...scopeResolutionStubs(),
+      {
+        match: (request) => new URL(request.url).pathname === "/apps/missing-app/flags",
+        status: 404,
+        body: jsonError("APP_NOT_FOUND", "app not found"),
+      },
+    ]);
     const error = vi.spyOn(console, "error").mockImplementation(() => {});
 
     const code = await runCli(["flags", "list", "--json", "--app", "missing-app"], {
@@ -23,11 +75,11 @@ describe("truncated org/app/env catalogs", () => {
       fetch: transport.fetch,
     });
 
-    expect(code).toBe(EXIT_SCOPE);
-    expect(error.mock.calls.join(" ")).toContain("CLI_SCOPE_UNRESOLVED");
+    expect(code).toBe(EXIT_API);
+    expect(error.mock.calls.join(" ")).toContain("APP_NOT_FOUND");
     expect(
       transport.requests.some((request) => new URL(request.url).pathname.includes("/missing-app/")),
-    ).toBe(false);
+    ).toBe(true);
   });
 
   it("does not resolve a visible App key when the catalog is truncated", async () => {

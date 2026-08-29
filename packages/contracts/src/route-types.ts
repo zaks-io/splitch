@@ -11,12 +11,7 @@ import type {
   PatchEventDefinitionRequestSchema,
   PublishEventDefinitionVersionRequestSchema,
 } from "./event-definition-write";
-import {
-  AppMemberSchema,
-  AppSchema,
-  type ClientKeySchema,
-  EnvironmentSchema,
-} from "./leaf-schemas-runtime";
+import { AppMemberSchema, AppSchema } from "./leaf-schemas-runtime";
 import type {
   ResourceDeleteModeQuerySchema,
   ResourceDeleteResponseSchema,
@@ -25,59 +20,36 @@ import type {
   AppAttentionRollupResponseSchema,
   CreateAppRequestSchema,
   CreateAppResponseSchema,
-  CreateCredentialResponseSchema,
-  CreateEnvironmentResponseSchema,
   CreateOrganizationRequestSchema,
-  ListCredentialsResponseSchema,
   OrganizationResponseSchema,
   PatchAppRequestSchema,
 } from "./resource-envelopes-account";
-import {
-  type CreateExperimentRequestSchema,
-  ExperimentResponseSchema,
-  type ExperimentUpdateResponseSchema,
-  type PatchExperimentRequestSchema,
-  type StartRunRequestSchema,
-  type StartRunResponseSchema,
-} from "./resource-envelopes-experiment";
 import type {
   CreateFlagRequestSchema,
   CreateVariantRequestSchema,
-  FlagListResponseSchema,
+  FlagListReadResponseSchema,
   FlagMutationResponseSchema,
+  FlagReadResponseSchema,
   FlagResponseSchema,
   PatchFlagRequestSchema,
   PatchVariantRequestSchema,
 } from "./resource-envelopes-flag";
+import type * as EnvironmentRoutes from "./route-types-environment";
 import type {
   AddAppMemberRequestSchema,
-  ApiKeyParams,
-  ApiKeyRevokeResponseSchema,
   AppMemberParams,
   AppParams,
   ApprovalRequestParams,
-  ClientKeyRotateResponseSchema,
-  CreateApiKeyRequestSchema,
-  CreateEnvironmentRequestSchema,
-  EnvFlagParams,
-  EnvParams,
-  ExperimentParams,
-  FlagConfigMutationResponseSchema,
-  FlagConfigResponseSchema,
   FlagGetQuerySchema,
   FlagListQuerySchema,
   FlagParams,
   FlagVariantParams,
   OrgAppsParams,
-  PatchClientKeyRequestSchema,
-  PatchEnvironmentRequestSchema,
-  PatchFlagConfigRequestSchema,
-  PromoteParams,
-  PromoteRequestSchema,
-  PromoteResponseSchema,
-  ReplaceTargetingRulesRequestSchema,
   UpdateAppMemberRequestSchema,
 } from "./routes/route-shapes";
+
+export type * from "./route-types-environment";
+
 import {
   type ApprovalRequestListQuerySchema,
   ApprovalRequestSchema,
@@ -91,7 +63,6 @@ import { listResponse } from "./wire-envelopes-core";
  * shapes in the SDK.
  */
 
-const ExperimentListResponseSchema = listResponse(ExperimentResponseSchema);
 const ApprovalRequestListResponseSchema = listResponse(ApprovalRequestSchema);
 const DeletedResponseSchema = z.object({ deleted: z.literal(true) });
 
@@ -118,21 +89,15 @@ export type EventDefinitionVersionsGetInput = EventDefinitionVersionPath;
 export type EventDefinitionVersionsGetOutput = z.infer<typeof EventDefinitionVersionSchema>;
 
 export type FlagsListInput = z.infer<typeof AppParams> & z.infer<typeof FlagListQuerySchema>;
-export type FlagsListOutput = z.infer<typeof FlagListResponseSchema>;
+export type FlagsListOutput = z.infer<typeof FlagListReadResponseSchema>;
 export type FlagsCreateInput = z.infer<typeof AppParams> & z.infer<typeof CreateFlagRequestSchema>;
 export type FlagsCreateOutput = z.infer<typeof FlagResponseSchema>;
 export type FlagsGetInput = z.infer<typeof FlagParams> & z.infer<typeof FlagGetQuerySchema>;
-export type FlagsGetOutput = z.infer<typeof FlagResponseSchema>;
+export type FlagsGetOutput = z.infer<typeof FlagReadResponseSchema>;
 export type FlagsUpdateInput = z.infer<typeof FlagParams> & z.infer<typeof PatchFlagRequestSchema>;
 export type FlagsUpdateOutput = z.infer<typeof FlagResponseSchema>;
 export type FlagsDeleteInput = z.infer<typeof FlagParams>;
 export type FlagsDeleteOutput = z.infer<typeof DeletedResponseSchema>;
-export type FlagConfigGetInput = z.infer<typeof EnvFlagParams>;
-export type FlagConfigGetOutput = z.infer<typeof FlagConfigResponseSchema>;
-export type FlagConfigUpdateInput = z.infer<typeof EnvFlagParams> &
-  z.infer<typeof PatchFlagConfigRequestSchema>;
-export type FlagConfigUpdateOutput = z.infer<typeof FlagConfigMutationResponseSchema>;
-
 export type ApprovalRequestsListInput = z.infer<typeof AppParams> &
   z.infer<typeof ApprovalRequestListQuerySchema>;
 export type ApprovalRequestsListOutput = z.infer<typeof ApprovalRequestListResponseSchema>;
@@ -141,22 +106,6 @@ export type ApprovalRequestsGetOutput = z.infer<typeof ApprovalRequestSchema>;
 export type ApprovalRequestReviewsCreateInput = z.infer<typeof ApprovalRequestParams> &
   z.infer<typeof ReviewApprovalRequestSchema>;
 export type ApprovalRequestReviewsCreateOutput = z.infer<typeof ApprovalRequestSchema>;
-
-export type ExperimentsListInput = z.infer<typeof EnvParams>;
-export type ExperimentsListOutput = z.infer<typeof ExperimentListResponseSchema>;
-export type ExperimentsCreateInput = z.infer<typeof EnvParams> &
-  z.infer<typeof CreateExperimentRequestSchema>;
-export type ExperimentsCreateOutput = z.infer<typeof ExperimentResponseSchema>;
-export type ExperimentsGetInput = z.infer<typeof ExperimentParams>;
-export type ExperimentsGetOutput = z.infer<typeof ExperimentResponseSchema>;
-export type ExperimentsUpdateInput = z.infer<typeof ExperimentParams> &
-  z.infer<typeof PatchExperimentRequestSchema>;
-export type ExperimentsUpdateOutput = z.infer<typeof ExperimentUpdateResponseSchema>;
-export type ExperimentsStartInput = z.infer<typeof ExperimentParams> &
-  z.infer<typeof StartRunRequestSchema>;
-export type ExperimentsStartOutput = z.infer<typeof StartRunResponseSchema>;
-export type ExperimentsDeleteInput = z.infer<typeof ExperimentParams>;
-export type ExperimentsDeleteOutput = z.infer<typeof DeletedResponseSchema>;
 
 export type FlagVariantsCreateInput = z.infer<typeof FlagParams> &
   z.infer<typeof CreateVariantRequestSchema>;
@@ -167,16 +116,7 @@ export type FlagVariantsUpdateOutput = z.infer<typeof FlagMutationResponseSchema
 export type FlagVariantsDeleteInput = z.infer<typeof FlagVariantParams>;
 export type FlagVariantsDeleteOutput = z.infer<typeof FlagResponseSchema>;
 
-export type FlagTargetingRulesReplaceInput = z.infer<typeof EnvFlagParams> &
-  z.infer<typeof ReplaceTargetingRulesRequestSchema>;
-export type FlagTargetingRulesReplaceOutput = z.infer<typeof FlagConfigMutationResponseSchema>;
-
-export type FlagsPromoteInput = z.infer<typeof PromoteParams> &
-  z.infer<typeof PromoteRequestSchema>;
-export type FlagsPromoteOutput = z.infer<typeof PromoteResponseSchema>;
-
 const AppListResponseSchema = listResponse(AppSchema);
-const EnvironmentListResponseSchema = listResponse(EnvironmentSchema);
 const AppMemberListResponseSchema = listResponse(AppMemberSchema);
 
 // No path params: the Org does not exist yet, so the body is the whole input.
@@ -208,41 +148,6 @@ export type AppMembersRemoveOutput = { deleted: true };
 
 export type AppAttentionRollupGetInput = z.infer<typeof AppParams>;
 export type AppAttentionRollupGetOutput = z.infer<typeof AppAttentionRollupResponseSchema>;
-
-export type EnvironmentsListInput = z.infer<typeof AppParams>;
-export type EnvironmentsListOutput = z.infer<typeof EnvironmentListResponseSchema>;
-export type EnvironmentsCreateInput = z.infer<typeof AppParams> &
-  z.infer<typeof CreateEnvironmentRequestSchema>;
-export type EnvironmentsCreateOutput = z.infer<typeof CreateEnvironmentResponseSchema>;
-export type EnvironmentsGetInput = z.infer<typeof EnvParams>;
-export type EnvironmentsGetOutput = z.infer<typeof EnvironmentSchema>;
-export type EnvironmentsUpdateInput = z.infer<typeof EnvParams> &
-  z.infer<typeof PatchEnvironmentRequestSchema>;
-export type EnvironmentsUpdateOutput = z.infer<typeof EnvironmentSchema>;
-export type EnvironmentsDeleteInput = z.infer<typeof EnvParams>;
-export type EnvironmentsDeleteOutput = z.infer<typeof DeletedResponseSchema>;
-
-export type ClientKeyGetInput = z.infer<typeof EnvParams>;
-export type ClientKeyGetOutput = z.infer<typeof ClientKeySchema>;
-export type ClientKeyUpdateInput = z.infer<typeof EnvParams> &
-  z.infer<typeof PatchClientKeyRequestSchema>;
-export type ClientKeyUpdateOutput = z.infer<typeof ClientKeySchema>;
-export type ClientKeyRotateInput = z.infer<typeof EnvParams>;
-export type ClientKeyRotateOutput = z.infer<typeof ClientKeyRotateResponseSchema>;
-
-export type ApiKeysListInput = z.infer<typeof EnvParams>;
-export type ApiKeysListOutput = z.infer<typeof ListCredentialsResponseSchema>;
-/**
- * The minted API Key's raw secret rides `value` on THIS response only — it is
- * surfaced once and is never re-readable. `ApiKeysListOutput` composes the
- * APIKey leaf, which carries no key-material field at all (ADR-0018/ADR-0022),
- * so there is no type-level path from a list read back to a secret.
- */
-export type ApiKeysCreateInput = z.infer<typeof EnvParams> &
-  z.infer<typeof CreateApiKeyRequestSchema>;
-export type ApiKeysCreateOutput = z.infer<typeof CreateCredentialResponseSchema>;
-export type ApiKeysRevokeInput = z.infer<typeof ApiKeyParams>;
-export type ApiKeysRevokeOutput = z.infer<typeof ApiKeyRevokeResponseSchema>;
 
 /**
  * operationId -> flat input/output map. Single source of truth: `OperationId`,
@@ -288,11 +193,26 @@ export interface RouteTypeMap {
     output: AppAttentionRollupGetOutput;
   };
 
-  environments_list: { input: EnvironmentsListInput; output: EnvironmentsListOutput };
-  environments_create: { input: EnvironmentsCreateInput; output: EnvironmentsCreateOutput };
-  environments_get: { input: EnvironmentsGetInput; output: EnvironmentsGetOutput };
-  environments_update: { input: EnvironmentsUpdateInput; output: EnvironmentsUpdateOutput };
-  environments_delete: { input: EnvironmentsDeleteInput; output: EnvironmentsDeleteOutput };
+  environments_list: {
+    input: EnvironmentRoutes.EnvironmentsListInput;
+    output: EnvironmentRoutes.EnvironmentsListOutput;
+  };
+  environments_create: {
+    input: EnvironmentRoutes.EnvironmentsCreateInput;
+    output: EnvironmentRoutes.EnvironmentsCreateOutput;
+  };
+  environments_get: {
+    input: EnvironmentRoutes.EnvironmentsGetInput;
+    output: EnvironmentRoutes.EnvironmentsGetOutput;
+  };
+  environments_update: {
+    input: EnvironmentRoutes.EnvironmentsUpdateInput;
+    output: EnvironmentRoutes.EnvironmentsUpdateOutput;
+  };
+  environments_delete: {
+    input: EnvironmentRoutes.EnvironmentsDeleteInput;
+    output: EnvironmentRoutes.EnvironmentsDeleteOutput;
+  };
 
   approval_requests_list: {
     input: ApprovalRequestsListInput;
@@ -304,12 +224,30 @@ export interface RouteTypeMap {
     output: ApprovalRequestReviewsCreateOutput;
   };
 
-  client_key_get: { input: ClientKeyGetInput; output: ClientKeyGetOutput };
-  client_key_update: { input: ClientKeyUpdateInput; output: ClientKeyUpdateOutput };
-  client_key_rotate: { input: ClientKeyRotateInput; output: ClientKeyRotateOutput };
-  api_keys_list: { input: ApiKeysListInput; output: ApiKeysListOutput };
-  api_keys_create: { input: ApiKeysCreateInput; output: ApiKeysCreateOutput };
-  api_keys_revoke: { input: ApiKeysRevokeInput; output: ApiKeysRevokeOutput };
+  client_key_get: {
+    input: EnvironmentRoutes.ClientKeyGetInput;
+    output: EnvironmentRoutes.ClientKeyGetOutput;
+  };
+  client_key_update: {
+    input: EnvironmentRoutes.ClientKeyUpdateInput;
+    output: EnvironmentRoutes.ClientKeyUpdateOutput;
+  };
+  client_key_rotate: {
+    input: EnvironmentRoutes.ClientKeyRotateInput;
+    output: EnvironmentRoutes.ClientKeyRotateOutput;
+  };
+  api_keys_list: {
+    input: EnvironmentRoutes.ApiKeysListInput;
+    output: EnvironmentRoutes.ApiKeysListOutput;
+  };
+  api_keys_create: {
+    input: EnvironmentRoutes.ApiKeysCreateInput;
+    output: EnvironmentRoutes.ApiKeysCreateOutput;
+  };
+  api_keys_revoke: {
+    input: EnvironmentRoutes.ApiKeysRevokeInput;
+    output: EnvironmentRoutes.ApiKeysRevokeOutput;
+  };
 
   flags_list: { input: FlagsListInput; output: FlagsListOutput };
   flags_create: { input: FlagsCreateInput; output: FlagsCreateOutput };
@@ -319,20 +257,47 @@ export interface RouteTypeMap {
   flag_variants_create: { input: FlagVariantsCreateInput; output: FlagVariantsCreateOutput };
   flag_variants_update: { input: FlagVariantsUpdateInput; output: FlagVariantsUpdateOutput };
   flag_variants_delete: { input: FlagVariantsDeleteInput; output: FlagVariantsDeleteOutput };
-  flag_config_get: { input: FlagConfigGetInput; output: FlagConfigGetOutput };
-  flag_config_update: { input: FlagConfigUpdateInput; output: FlagConfigUpdateOutput };
-  flag_targeting_rules_replace: {
-    input: FlagTargetingRulesReplaceInput;
-    output: FlagTargetingRulesReplaceOutput;
+  flag_config_get: {
+    input: EnvironmentRoutes.FlagConfigGetInput;
+    output: EnvironmentRoutes.FlagConfigGetOutput;
   };
-  flags_promote: { input: FlagsPromoteInput; output: FlagsPromoteOutput };
+  flag_config_update: {
+    input: EnvironmentRoutes.FlagConfigUpdateInput;
+    output: EnvironmentRoutes.FlagConfigUpdateOutput;
+  };
+  flag_targeting_rules_replace: {
+    input: EnvironmentRoutes.FlagTargetingRulesReplaceInput;
+    output: EnvironmentRoutes.FlagTargetingRulesReplaceOutput;
+  };
+  flags_promote: {
+    input: EnvironmentRoutes.FlagsPromoteInput;
+    output: EnvironmentRoutes.FlagsPromoteOutput;
+  };
 
-  experiments_list: { input: ExperimentsListInput; output: ExperimentsListOutput };
-  experiments_create: { input: ExperimentsCreateInput; output: ExperimentsCreateOutput };
-  experiments_get: { input: ExperimentsGetInput; output: ExperimentsGetOutput };
-  experiments_update: { input: ExperimentsUpdateInput; output: ExperimentsUpdateOutput };
-  experiments_start: { input: ExperimentsStartInput; output: ExperimentsStartOutput };
-  experiments_delete: { input: ExperimentsDeleteInput; output: ExperimentsDeleteOutput };
+  experiments_list: {
+    input: EnvironmentRoutes.ExperimentsListInput;
+    output: EnvironmentRoutes.ExperimentsListOutput;
+  };
+  experiments_create: {
+    input: EnvironmentRoutes.ExperimentsCreateInput;
+    output: EnvironmentRoutes.ExperimentsCreateOutput;
+  };
+  experiments_get: {
+    input: EnvironmentRoutes.ExperimentsGetInput;
+    output: EnvironmentRoutes.ExperimentsGetOutput;
+  };
+  experiments_update: {
+    input: EnvironmentRoutes.ExperimentsUpdateInput;
+    output: EnvironmentRoutes.ExperimentsUpdateOutput;
+  };
+  experiments_start: {
+    input: EnvironmentRoutes.ExperimentsStartInput;
+    output: EnvironmentRoutes.ExperimentsStartOutput;
+  };
+  experiments_delete: {
+    input: EnvironmentRoutes.ExperimentsDeleteInput;
+    output: EnvironmentRoutes.ExperimentsDeleteOutput;
+  };
 }
 
 export type OperationId = keyof RouteTypeMap;

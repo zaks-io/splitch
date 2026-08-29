@@ -12,6 +12,7 @@ import type {
   ClientKeyUpdateInput,
   ClientKeyUpdateOutput,
 } from "@splitch/contracts/route-types";
+import { environmentSelectorQuery } from "./environment-selector-query";
 import {
   type ControlPlaneHcOptions,
   type CredentialsHcClient,
@@ -77,15 +78,22 @@ export function createCredentialsClient(
       get: (input, callOptions) =>
         invokeHcRoute<ClientKeyGetOutput>("client_key_get", () =>
           hcClient.apps[":appId"].envs[":environmentId"]["client-key"].$get(
-            { param: { appId: input.appId, environmentId: input.environmentId } },
+            {
+              param: { appId: input.appId, environmentId: input.environmentId },
+              ...environmentSelectorQuery(input),
+            } as never,
             hcRequestOptions(withAuthorization(hcOptions, callOptions)),
           ),
         ),
       update: (input, callOptions) => {
-        const { appId, environmentId, ...body } = input;
+        const { appId, environmentId, by, ...body } = input;
         return invokeHcRoute<ClientKeyUpdateOutput>("client_key_update", () =>
           hcClient.apps[":appId"].envs[":environmentId"]["client-key"].$patch(
-            { param: { appId, environmentId }, json: body } as never,
+            {
+              param: { appId, environmentId },
+              ...environmentSelectorQuery({ by }),
+              json: body,
+            } as never,
             hcRequestOptions(withAuthorization(hcOptions, callOptions)),
           ),
         );
@@ -93,7 +101,10 @@ export function createCredentialsClient(
       rotate: (input, callOptions) =>
         invokeHcRoute<ClientKeyRotateOutput>("client_key_rotate", () =>
           hcClient.apps[":appId"].envs[":environmentId"]["client-key"].revoke.$post(
-            { param: { appId: input.appId, environmentId: input.environmentId } } as never,
+            {
+              param: { appId: input.appId, environmentId: input.environmentId },
+              ...environmentSelectorQuery(input),
+            } as never,
             hcRequestOptions(withAuthorization(hcOptions, callOptions)),
           ),
         ),
@@ -102,15 +113,22 @@ export function createCredentialsClient(
       list: (input, callOptions) =>
         invokeHcRoute<ApiKeysListOutput>("api_keys_list", () =>
           hcClient.apps[":appId"].envs[":environmentId"]["api-keys"].$get(
-            { param: { appId: input.appId, environmentId: input.environmentId } },
+            {
+              param: { appId: input.appId, environmentId: input.environmentId },
+              ...environmentSelectorQuery(input),
+            } as never,
             hcRequestOptions(withAuthorization(hcOptions, callOptions)),
           ),
         ),
       create: (input, callOptions) => {
-        const { appId, environmentId, ...body } = input;
+        const { appId, environmentId, by, ...body } = input;
         return invokeHcRoute<ApiKeysCreateOutput>("api_keys_create", () =>
           hcClient.apps[":appId"].envs[":environmentId"]["api-keys"].$post(
-            { param: { appId, environmentId }, json: body } as never,
+            {
+              param: { appId, environmentId },
+              ...environmentSelectorQuery({ by }),
+              json: body,
+            } as never,
             hcRequestOptions(withAuthorization(hcOptions, callOptions)),
           ),
         );
@@ -124,6 +142,7 @@ export function createCredentialsClient(
                 environmentId: input.environmentId,
                 keyId: input.keyId,
               },
+              ...environmentSelectorQuery(input),
               json: {},
             } as never,
             hcRequestOptions(withAuthorization(hcOptions, callOptions)),

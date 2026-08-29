@@ -14,6 +14,7 @@ import { makeAppMembershipRepo } from "./identity-app-memberships";
 import { makeDemoReaper } from "./identity-demo-reaper";
 import { makeOrgMutations } from "./identity-org-mutations";
 import { makeOrgReads } from "./identity-org-reads";
+import { makeIdentitySelectorReads } from "./identity-selector-reads";
 import { makeSessionReads } from "./identity-session-reads";
 import { makeCreateOrganization } from "./organization-create";
 import type { TenantScope } from "./scope";
@@ -51,6 +52,7 @@ export function makeIdentityRepo(db: Db, d1: D1Database) {
   const appDeletionSagaRepo = makeAppDeletionSagaRepo(d1);
   const appCreateIdempotencyRepo = makeAppCreateIdempotencyRepo(db);
   const orgReads = makeOrgReads(db);
+  const selectorReads = makeIdentitySelectorReads(db);
 
   return {
     environments: environmentsTable,
@@ -78,6 +80,10 @@ export function makeIdentityRepo(db: Db, d1: D1Database) {
       return environmentsTable.findOne(scope, eq(environments.id, environmentId));
     },
 
+    getEnvironmentByKey(scope: TenantScope, key: string) {
+      return environmentsTable.findOne(scope, eq(environments.key, key));
+    },
+
     updateEnvironment(
       scope: TenantScope,
       environmentId: string,
@@ -97,6 +103,7 @@ export function makeIdentityRepo(db: Db, d1: D1Database) {
     // --- Org-or-identity scoped (NOT app-scoped) -------------------------------
 
     ...orgReads,
+    ...selectorReads,
     ...appCreateIdempotencyRepo,
 
     ...orgMutations,
