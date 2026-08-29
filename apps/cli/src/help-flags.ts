@@ -52,29 +52,7 @@ function scopeFlags(command: CliCommandDefinition, fields: ReadonlySet<string>):
   const flags: HelpFlag[] = [];
   if (command.needsApp)
     flags.push(flag("--app <app>", "string", "SPLITCH_APP or config", "App ID or slug."));
-  if (command.needsEnvironment) {
-    flags.push(
-      flag("--env <environment>", "string", "SPLITCH_ENV or config", "Environment ID or key."),
-    );
-  } else if (command.operationId === "flags_list") {
-    flags.push(
-      flag(
-        "--env <environment>",
-        "string",
-        "SPLITCH_ENV or config",
-        "Environment ID or key used with --with-config.",
-      ),
-    );
-  } else if (fields.has("environmentId")) {
-    flags.push(
-      flag(
-        "--env <environment>",
-        "string",
-        "none",
-        "Optional Environment ID or key filter (Policy context).",
-      ),
-    );
-  }
+  flags.push(...environmentScopeFlags(command, fields));
   if (fields.has("orgId"))
     flags.push(flag("--org <organization>", "string", "none", "Organization ID."));
   if (fields.has("name")) flags.push(flag("--name <name>", "string", "none", "Resource name."));
@@ -84,6 +62,35 @@ function scopeFlags(command: CliCommandDefinition, fields: ReadonlySet<string>):
   }
   flags.push(...selectorFlags(command, fields));
   return flags;
+}
+
+function environmentScopeFlags(
+  command: CliCommandDefinition,
+  fields: ReadonlySet<string>,
+): readonly HelpFlag[] {
+  if (command.needsEnvironment) {
+    return [
+      flag("--env <environment>", "string", "SPLITCH_ENV or config", "Environment ID or key."),
+    ];
+  }
+  if (command.operationId === "flags_list" || command.operationId === "flags_get") {
+    const description =
+      command.operationId === "flags_get"
+        ? "Limit hydrated Configurations to one Environment; cannot be combined with --summary."
+        : "Limit hydrated Configurations to one Environment; --summary selects its compact Configuration.";
+    return [flag("--env <environment>", "string", "none", description)];
+  }
+  if (fields.has("environmentId")) {
+    return [
+      flag(
+        "--env <environment>",
+        "string",
+        "none",
+        "Optional Environment ID or key filter (Policy context).",
+      ),
+    ];
+  }
+  return [];
 }
 
 function selectorFlags(
@@ -121,12 +128,13 @@ function operationFlags(command: CliCommandDefinition): HelpFlag[] {
   }
   switch (command.operationId) {
     case "flags_list":
+    case "flags_get":
       return [
         flag(
-          "--with-config",
+          "--summary",
           "boolean",
           "false",
-          "Include enabled, rollout, and Default Variant for one Environment.",
+          "Print compact human columns instead of complete per-Environment Configurations; cannot be combined with --json.",
         ),
       ];
     case "flags_create":

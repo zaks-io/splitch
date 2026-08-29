@@ -54,6 +54,30 @@ describe("identity selector reads", () => {
     });
     await expect(repo.identity.getEnvironmentByKey(alpha, "victim-only")).resolves.toBeNull();
   });
+
+  it("finds candidates for every Environment selector in one query", async () => {
+    await seedSelectorGraph(local.d1);
+    let prepared = 0;
+    const counting = new Proxy(local.d1, {
+      get(target, property, receiver) {
+        if (property === "prepare") prepared += 1;
+        return Reflect.get(target, property, receiver);
+      },
+    });
+
+    const candidates = await createRepository(
+      counting,
+    ).identity.findEnvironmentSelectorCandidatesForSelectors(appScope("app_alpha"), [
+      "production",
+      "env_alpha_production",
+      "victim-only",
+    ]);
+
+    expect(candidates).toEqual([
+      { environmentId: "env_alpha_production", environmentKey: "production" },
+    ]);
+    expect(prepared).toBe(1);
+  });
 });
 
 async function seedHalfMembershipCandidate(

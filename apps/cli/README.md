@@ -141,9 +141,10 @@ Typed flags cover the common fields (`--key`, `--name`, `--variants`, `--enabled
 
 Two more worth knowing:
 
-- `splitch flags list --with-config --env prod` includes each Flag's `enabled`, rollout, and
-  Default Variant for that one Environment, so "which Flags are on here" is one call rather than one
-  call per Flag.
+- `splitch flags list` and `splitch flags get <key>` return complete Flag Configurations and the
+  running Experiment reference for every Environment in one request. Pass `--env prod` to limit the
+  hydrated response to that Environment. Pass `--summary` for compact human columns; `--json`
+  always writes the complete hydrated envelope.
 - `splitch apps delete --app <app> --dry-run` lists every delete blocker with its ID and the command that
   removes it, and deletes nothing. `--force` cascades the non-gated children in dependency order and
   stops with pending Approval Request IDs where Policy requires review.

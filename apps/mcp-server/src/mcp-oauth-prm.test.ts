@@ -148,7 +148,7 @@ describe("MCP OAuth protected-resource boundary", () => {
         authorization: null,
         delegation: actor,
         method: "GET",
-        path: "/apps/app_local/flags",
+        path: "/apps/app_local/flags?include=config",
       },
     ]);
 

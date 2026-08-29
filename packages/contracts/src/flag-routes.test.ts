@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { FlagGetQuerySchema, FlagListQuerySchema } from "./routes/route-shapes";
+import {
+  FLAG_READ_ENVIRONMENT_SELECTOR_LIMIT,
+  FlagGetQuerySchema,
+  FlagListQuerySchema,
+} from "./routes/route-shapes";
 
 describe("Flag list route", () => {
   it("accepts an omitted or non-empty Environment ID", () => {
@@ -11,7 +15,7 @@ describe("Flag list route", () => {
     expect(FlagListQuerySchema.safeParse({ environmentId: "" }).success).toBe(false);
   });
 
-  it("accepts hydrated reads for all Environments or an explicit subset", () => {
+  it("accepts hydrated reads for all Environments or an explicit selector subset", () => {
     expect(FlagListQuerySchema.safeParse({ include: "config" }).success).toBe(true);
     expect(
       FlagListQuerySchema.safeParse({ include: "config", envs: "env_dev,env_prod" }).success,
@@ -19,11 +23,33 @@ describe("Flag list route", () => {
     expect(
       FlagGetQuerySchema.safeParse({ by: "key", include: "config", envs: "env_prod" }).success,
     ).toBe(true);
+    expect(FlagListQuerySchema.safeParse({ include: "config", envs: "dev,prod" }).success).toBe(
+      true,
+    );
   });
 
   it("rejects an Environment subset without hydration", () => {
     expect(FlagListQuerySchema.safeParse({ envs: "env_prod" }).success).toBe(false);
     expect(FlagGetQuerySchema.safeParse({ envs: "env_prod" }).success).toBe(false);
+  });
+
+  it("refuses an over-large Environment selector list on envs", () => {
+    const envs = Array.from(
+      { length: FLAG_READ_ENVIRONMENT_SELECTOR_LIMIT + 1 },
+      (_, index) => `environment-${index}`,
+    ).join(",");
+
+    for (const schema of [FlagListQuerySchema, FlagGetQuerySchema]) {
+      const parsed = schema.safeParse({ include: "config", envs });
+      expect(parsed.success).toBe(false);
+      if (parsed.success) throw new Error("over-large envs selector list unexpectedly parsed");
+      expect(parsed.error.issues).toContainEqual(
+        expect.objectContaining({
+          path: ["envs"],
+          message: `envs accepts at most ${FLAG_READ_ENVIRONMENT_SELECTOR_LIMIT} Environment selectors`,
+        }),
+      );
+    }
   });
 
   it("keeps the legacy one-Environment summary distinct from hydration", () => {

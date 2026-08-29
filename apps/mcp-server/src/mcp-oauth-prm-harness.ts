@@ -187,7 +187,7 @@ export async function bootControlPlaneApi(seen: SeenDownstream[]): Promise<strin
     });
     if (
       request.method !== "GET" ||
-      request.url !== "/apps/app_local/flags" ||
+      request.url !== "/apps/app_local/flags?include=config" ||
       authorization !== null ||
       delegation?.subject !== actor.subject ||
       delegation.scopes.join(" ") !== actor.scopes.join(" ") ||

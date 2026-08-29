@@ -1087,33 +1087,35 @@ Behavior:
 
 Example:
   splitch flags delete <flag-id-or-key> --json",
-    "flags get": "Get a Flag definition by canonical ID or key.
+    "flags get": "Get a Flag definition by canonical ID or key. Returns complete per-Environment Flag Configurations and running Experiment references for every Environment in the App by default.
 
 Usage:
   splitch flags get <flag-id-or-key> [flags]
 
 Flags:
-  --app <app>  [type: string; default: SPLITCH_APP or config] App ID or slug.
-  --by <mode>  [type: string; default: automatic] Allowed: id or key. Resolve a canonical-looking selector explicitly.
-  --json       [type: boolean; default: false] Write machine-readable JSON to stdout.
-  -h, --help   [type: boolean; default: false] Show help and exit.
+  --app <app>          [type: string; default: SPLITCH_APP or config] App ID or slug.
+  --env <environment>  [type: string; default: none] Limit hydrated Configurations to one Environment; cannot be combined with --summary.
+  --by <mode>          [type: string; default: automatic] Allowed: id or key. Resolve a canonical-looking selector explicitly.
+  --summary            [type: boolean; default: false] Print compact human columns instead of complete per-Environment Configurations; cannot be combined with --json.
+  --json               [type: boolean; default: false] Write machine-readable JSON to stdout.
+  -h, --help           [type: boolean; default: false] Show help and exit.
 
 Example:
   splitch flags get <flag-id-or-key> --json",
-    "flags list": "List Flag definitions in an App (bounded; reports its own truncation).
+    "flags list": "List Flag definitions in an App (bounded; reports its own truncation). Returns complete per-Environment Flag Configurations and running Experiment references for every Environment in the App by default.
 
 Usage:
   splitch flags list [flags]
 
 Flags:
   --app <app>          [type: string; default: SPLITCH_APP or config] App ID or slug.
-  --env <environment>  [type: string; default: SPLITCH_ENV or config] Environment ID or key used with --with-config.
-  --with-config        [type: boolean; default: false] Include enabled, rollout, and Default Variant for one Environment.
+  --env <environment>  [type: string; default: none] Limit hydrated Configurations to one Environment; --summary selects its compact Configuration.
+  --summary            [type: boolean; default: false] Print compact human columns instead of complete per-Environment Configurations; cannot be combined with --json.
   --json               [type: boolean; default: false] Write machine-readable JSON to stdout.
   -h, --help           [type: boolean; default: false] Show help and exit.
 
 Example:
-  splitch flags list --with-config --env prod --json",
+  splitch flags list --json",
     "flags promote": "Promote selected Flag Configuration field-groups between Environments.
 
 Usage:
@@ -1951,9 +1953,9 @@ Usage:
   splitch flags <action> [arguments] [flags]
 
 Commands:
-  list            List Flag definitions in an App (bounded; reports its own truncation).
+  list            List Flag definitions in an App (bounded; reports its own truncation). Returns complete per-Environment Flag Configurations and running Experiment references for every Environment in the App by default.
   create          Create a Flag definition (key, schema, Variant catalog).
-  get             Get a Flag definition by canonical ID or key.
+  get             Get a Flag definition by canonical ID or key. Returns complete per-Environment Flag Configurations and running Experiment references for every Environment in the App by default.
   update          Update a Flag definition's name/description/schema.
   delete          Delete a Flag (blocked if referenced by a running Experiment).
   promote         Promote selected Flag Configuration field-groups between Environments.
