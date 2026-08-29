@@ -1,3 +1,4 @@
+import { controlPlaneFlagConfigKey } from "@splitch/contracts";
 import { envScope } from "@splitch/db";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { type ConfigStoreDeps, type ConfigStoreWriter, makeConfigStore } from "../src/config-store";
@@ -15,10 +16,7 @@ import {
   startSeededExperiment,
   token,
 } from "../src/config-store-harness-core";
-import {
-  type ControlPlaneFlagConfigSnapshot,
-  controlPlaneFlagConfigKey,
-} from "../src/config-store-kv";
+import type { ControlPlaneFlagConfigSnapshot } from "../src/config-store-kv";
 import { makeDurableSnapshotRevisionAllocator } from "../src/config-store-snapshot-revision";
 import { makePoolHarness } from "./config-store-pool-harness";
 
@@ -37,7 +35,7 @@ describe("flag_config_get read-your-writes", () => {
     const revisions = makeSnapshotRevisionCounter();
     const store = makeStore(revisions);
     expect(await store.resyncFlagConfig(configIdentity())).toMatchObject({ ok: true });
-    const key = controlPlaneFlagConfigKey(scope(), ids.flagId);
+    const key = controlPlaneFlagConfigKey(ids.appId, ids.environmentId, ids.flagId);
     const previous = await requiredSnapshot(key);
     const staleKv = staleSnapshotKv(h.kv, key, previous);
     const writeThrough = new Map();
@@ -65,7 +63,7 @@ describe("flag_config_get read-your-writes", () => {
     const revisions = makeSnapshotRevisionCounter();
     const store = makeStore(revisions);
     expect(await store.resyncFlagConfig(configIdentity())).toMatchObject({ ok: true });
-    const key = controlPlaneFlagConfigKey(scope(), ids.flagId);
+    const key = controlPlaneFlagConfigKey(ids.appId, ids.environmentId, ids.flagId);
     const draft = await requiredSnapshot(key);
     const writeThrough = new Map();
 
@@ -115,14 +113,16 @@ describe("flag_config_get read-your-writes", () => {
     const revisions = makeSnapshotRevisionCounter();
     const store = makeStore(revisions);
     expect(await store.resyncFlagConfig(configIdentity())).toMatchObject({ ok: true });
-    const key = controlPlaneFlagConfigKey(scope(), ids.flagId);
+    const key = controlPlaneFlagConfigKey(ids.appId, ids.environmentId, ids.flagId);
     const present = await requiredSnapshot(key);
     const writeThrough = new Map();
     const staleAccess = accessFor(store, staleSnapshotKv(h.kv, key, present), writeThrough);
     await h.repo.flags.removeFlagConfig(envScope(ids.appId, ids.environmentId), ids.flagId);
 
     expect(
-      await staleAccess.writerFor(ids.appId, ids.environmentId).deleteFlagConfig(configIdentity()),
+      await staleAccess
+        .writerFor(ids.appId, ids.environmentId)
+        .deleteFlagConfig({ ...configIdentity(), experimentId: null }),
     ).toMatchObject({ ok: true, snapshotRevision: 2 });
     expect((await getFlagConfig(staleAccess)).status).toBe(404);
 
@@ -134,13 +134,15 @@ describe("flag_config_get read-your-writes", () => {
   it("refuses stale-null repair after another isolate records a delete", async () => {
     const store = makeStore(durableRevisionAllocator());
     expect(await store.resyncFlagConfig(configIdentity())).toMatchObject({ ok: true });
-    const key = controlPlaneFlagConfigKey(scope(), ids.flagId);
+    const key = controlPlaneFlagConfigKey(ids.appId, ids.environmentId, ids.flagId);
     await h.repo.flags.removeFlagConfig(envScope(ids.appId, ids.environmentId), ids.flagId);
 
-    expect(await store.deleteFlagConfig(configIdentity())).toMatchObject({
-      ok: true,
-      snapshotRevision: 2,
-    });
+    expect(await store.deleteFlagConfig({ ...configIdentity(), experimentId: null })).toMatchObject(
+      {
+        ok: true,
+        snapshotRevision: 2,
+      },
+    );
     const otherIsolate = accessFor(store, missingSnapshotKv(h.kv, key), new Map());
     expect((await getFlagConfig(otherIsolate)).status).toBe(404);
     expect(JSON.parse(await requiredSnapshot(key))).toMatchObject({
@@ -173,7 +175,11 @@ function accessFor(
       return writer;
     },
   } as unknown as ConfigStoreDurableObjectNamespace;
-  return durableConfigStoreAccess(namespace, kv, { writeThrough });
+  return durableConfigStoreAccess(namespace, kv, {
+    repo: h.repo,
+    waitUntil: (promise) => void promise,
+    writeThrough,
+  });
 }
 
 async function getFlagConfig(access: ConfigStoreAccess): Promise<Response> {
@@ -217,10 +223,6 @@ async function requiredSnapshot(key: string): Promise<string> {
 
 function configIdentity() {
   return { appId: ids.appId, environmentId: ids.environmentId, flagId: ids.flagId };
-}
-
-function scope() {
-  return { appId: ids.appId, environmentId: ids.environmentId } as const;
 }
 
 function staleSnapshotKv(base: KVNamespace, key: string, stale: string): KVNamespace {

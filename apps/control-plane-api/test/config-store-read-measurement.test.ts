@@ -1,4 +1,8 @@
-import { CURRENT_KV_SCHEMA_VERSION, flagConfigKey } from "@splitch/contracts";
+import {
+  CURRENT_KV_SCHEMA_VERSION,
+  controlPlaneFlagConfigKey,
+  flagConfigKey,
+} from "@splitch/contracts";
 import { createRepository } from "@splitch/db";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { type ConfigStoreWriter, makeConfigStore } from "../src/config-store";
@@ -9,7 +13,6 @@ import {
 } from "../src/config-store-access";
 import { makeSnapshotRevisionCounter } from "../src/config-store-fixture-data";
 import { type Harness, ids, makeAuthedApp, token } from "../src/config-store-harness-core";
-import { controlPlaneFlagConfigKey } from "../src/config-store-kv";
 import { makePoolHarness } from "./config-store-pool-harness";
 
 let h: Harness;
@@ -43,6 +46,8 @@ describe("flag_config_get direct KV reads", () => {
       }),
     );
     const access = durableConfigStoreAccess(target.namespace, h.kv, {
+      repo,
+      waitUntil: (promise) => void promise,
       writeThrough: new Map(),
     });
     const app = appFor(repo, access);
@@ -65,8 +70,10 @@ describe("flag_config_get direct KV reads", () => {
       durationMs,
     });
   });
+});
 
-  it("falls back through the writer DO on a KV miss, repairs the snapshot, and logs it", async () => {
+describe("flag_config_get KV miss reads", () => {
+  it("reads D1 directly on a KV miss and repairs the snapshot in waitUntil", async () => {
     const revisions = makeSnapshotRevisionCounter();
     const seeded = makeConfigStore({
       repo: h.repo,
@@ -75,7 +82,7 @@ describe("flag_config_get direct KV reads", () => {
       nextSnapshotRevision: revisions,
     });
     expect(await seeded.resyncFlagConfig(configIdentity())).toMatchObject({ ok: true });
-    const key = controlPlaneFlagConfigKey(scope(), ids.flagId);
+    const key = controlPlaneFlagConfigKey(ids.appId, ids.environmentId, ids.flagId);
     await h.kv.delete(key);
     expect(
       await h.kv.get(flagConfigKey(ids.appId, ids.environmentId, ids.flagKey), "text"),
@@ -91,8 +98,13 @@ describe("flag_config_get direct KV reads", () => {
     });
     const target = namespaceFor(writer);
     const warn = vi.fn();
+    const backgroundTasks: Promise<unknown>[] = [];
     const access = durableConfigStoreAccess(target.namespace, missingSnapshotKv(h.kv, key), {
       logger: { error: vi.fn(), warn },
+      repo,
+      waitUntil: (promise) => {
+        backgroundTasks.push(promise);
+      },
       writeThrough: new Map(),
     });
     const app = appFor(repo, access);
@@ -106,6 +118,7 @@ describe("flag_config_get direct KV reads", () => {
     expect(await response.json()).toMatchObject({ flagId: ids.flagId, enabled: false });
     expect(counted.queries()).toBeGreaterThan(0);
     expect(target.subrequests()).toBe(1);
+    expect(backgroundTasks).toHaveLength(1);
     expect(warn).toHaveBeenCalledWith(
       "config_store_kv_snapshot_miss",
       expect.objectContaining({
@@ -114,6 +127,7 @@ describe("flag_config_get direct KV reads", () => {
         flagId: ids.flagId,
       }),
     );
+    await Promise.all(backgroundTasks);
     expect(await h.kv.get(key, "text")).toEqual(expect.any(String));
 
     counted.reset();
@@ -123,6 +137,42 @@ describe("flag_config_get direct KV reads", () => {
     expect(target.subrequests()).toBe(0);
   });
 
+  it("returns FLAG_NOT_FOUND from D1 on a KV miss without touching the writer DO", async () => {
+    const counted = countingD1(h.d1);
+    const repo = createRepository(counted.db);
+    const target = namespaceFor(
+      makeConfigStore({
+        repo,
+        kv: h.kv,
+        broadcaster: { broadcast: () => undefined },
+        nextSnapshotRevision: makeSnapshotRevisionCounter(),
+      }),
+    );
+    const backgroundTasks: Promise<unknown>[] = [];
+    const access = durableConfigStoreAccess(target.namespace, h.kv, {
+      repo,
+      waitUntil: (promise) => {
+        backgroundTasks.push(promise);
+      },
+      writeThrough: new Map(),
+    });
+    const app = appFor(repo, access);
+    counted.reset();
+    target.reset();
+
+    const response = await app.request(
+      `/apps/${ids.appId}/envs/${ids.environmentId}/flags/flag_missing/config`,
+      { headers: { authorization: `Bearer ${await token(h.signer)}` } },
+    );
+
+    expect(response.status).toBe(404);
+    expect(counted.queries()).toBeGreaterThan(0);
+    expect(target.subrequests()).toBe(0);
+    expect(backgroundTasks).toHaveLength(0);
+  });
+});
+
+describe("flag_config_get snapshot failures", () => {
   it("fails loud on a malformed control-plane snapshot without a DO or D1 fallback", async () => {
     const counted = countingD1(h.d1);
     const repo = createRepository(counted.db);
@@ -137,10 +187,12 @@ describe("flag_config_get direct KV reads", () => {
     const error = vi.fn();
     const access = durableConfigStoreAccess(target.namespace, h.kv, {
       logger: { error, warn: vi.fn() },
+      repo,
+      waitUntil: (promise) => void promise,
       writeThrough: new Map(),
     });
     const app = appFor(repo, access);
-    const key = controlPlaneFlagConfigKey(scope(), ids.flagId);
+    const key = controlPlaneFlagConfigKey(ids.appId, ids.environmentId, ids.flagId);
     await h.kv.put(
       key,
       JSON.stringify({
@@ -190,10 +242,6 @@ function flagConfigPath(): string {
 
 function configIdentity() {
   return { appId: ids.appId, environmentId: ids.environmentId, flagId: ids.flagId };
-}
-
-function scope() {
-  return { appId: ids.appId, environmentId: ids.environmentId } as const;
 }
 
 function namespaceFor(writer: ConfigStoreWriter) {

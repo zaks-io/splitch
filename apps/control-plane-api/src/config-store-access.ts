@@ -1,15 +1,24 @@
-import type { ExperimentConfigKV, FlagConfigKV, RunConfigKV } from "@splitch/contracts";
-import { envScope } from "@splitch/db";
+import {
+  controlPlaneFlagConfigKey,
+  type ExperimentConfigKV,
+  type FlagConfigKV,
+  type RunConfigKV,
+} from "@splitch/contracts";
+import { envScope, type Repository } from "@splitch/db";
 import type { ConfigStoreWriter } from "./config-store";
 import {
   assertControlPlaneFlagConfigSnapshotScope,
   type ControlPlaneFlagConfigSnapshot,
   ControlPlaneFlagConfigSnapshotScopeError,
-  controlPlaneFlagConfigKey,
   InvalidControlPlaneFlagConfigSnapshotError,
   readControlPlaneFlagConfigSnapshot,
 } from "./config-store-kv";
+import { readFlagConfigOnMiss } from "./config-store-read-miss";
 import type { FlagConfigResult } from "./config-store-types";
+import {
+  type ConfigStoreWriteThrough,
+  configStoreWriteThrough,
+} from "./config-store-write-through";
 
 export interface ConfigStoreDurableObjectNamespace {
   getByName(name: string): ConfigStoreDurableObjectStub;
@@ -49,7 +58,12 @@ export interface ConfigStoreAccess extends FlagConfigRead {
 
 export interface ConfigStoreAccessOptions {
   logger?: Pick<Console, "error" | "warn">;
+  now?: () => number;
+  repo?: Repository;
+  waitUntil?: (promise: Promise<unknown>) => void;
   writeThrough?: Map<string, ControlPlaneFlagConfigSnapshot>;
+  writeThroughMaxEntries?: number;
+  writeThroughTtlMs?: number;
 }
 
 const isolateWriteThrough = new Map<string, ControlPlaneFlagConfigSnapshot>();
@@ -65,19 +79,33 @@ export function durableConfigStoreAccess(
 ): ConfigStoreAccess {
   const logger = options.logger ?? console;
   const writeThrough = options.writeThrough ?? isolateWriteThrough;
+  const localSnapshots = configStoreWriteThrough(writeThrough, {
+    maxEntries: options.writeThroughMaxEntries,
+    now: options.now ?? Date.now,
+    ttlMs: options.writeThroughTtlMs,
+  });
 
   return {
     async readFlagConfig(input) {
-      return readFlagConfigFromKv(namespace, kv, logger, writeThrough, input);
+      return readFlagConfigFromKv(
+        namespace,
+        kv,
+        options.repo,
+        options.waitUntil,
+        logger,
+        localSnapshots,
+        input,
+      );
     },
 
     writerFor(appId, environmentId) {
       const writer = namespace.getByName(configWriterName(appId, environmentId));
       const remember = <T>(result: T, flagId?: string): T =>
-        rememberSnapshot(writeThrough, appId, environmentId, result, flagId);
+        rememberSnapshot(localSnapshots, appId, environmentId, result, flagId);
 
       return {
         readFlagConfig: (input) => writer.readFlagConfig(input),
+        readFlagConfigPurgeTarget: (input) => writer.readFlagConfigPurgeTarget(input),
         repairFlagConfigSnapshot: (input) =>
           writer.repairFlagConfigSnapshot(input).then((result) => remember(result, input.flagId)),
         writeFlagConfig: (input) =>
@@ -97,16 +125,13 @@ export function durableConfigStoreAccess(
         async deleteFlagConfig(input) {
           const result = await writer.deleteFlagConfig(input);
           if (isSuccessful(result)) {
-            writeThrough.set(
-              controlPlaneFlagConfigKey(envScope(appId, environmentId), input.flagId),
-              {
-                appId,
-                environmentId,
-                flagId: input.flagId,
-                revision: result.snapshotRevision,
-                state: "deleted",
-              },
-            );
+            localSnapshots.set(controlPlaneFlagConfigKey(appId, environmentId, input.flagId), {
+              appId,
+              environmentId,
+              flagId: input.flagId,
+              revision: result.snapshotRevision,
+              state: "deleted",
+            });
           }
           return result;
         },
@@ -126,13 +151,15 @@ export function durableConfigStoreAccess(
 async function readFlagConfigFromKv(
   namespace: ConfigStoreDurableObjectNamespace,
   kv: KVNamespace,
+  repo: Repository | undefined,
+  waitUntil: ((promise: Promise<unknown>) => void) | undefined,
   logger: Pick<Console, "error" | "warn">,
-  writeThrough: Map<string, ControlPlaneFlagConfigSnapshot>,
+  localSnapshots: ConfigStoreWriteThrough,
   input: Parameters<ConfigStoreWriter["readFlagConfig"]>[0],
 ): ReturnType<ConfigStoreWriter["readFlagConfig"]> {
   const scope = envScope(input.appId, input.environmentId);
-  const key = controlPlaneFlagConfigKey(scope, input.flagId);
-  const local = writeThrough.get(key);
+  const key = controlPlaneFlagConfigKey(input.appId, input.environmentId, input.flagId);
+  const local = localSnapshots.get(key);
   let remote: ControlPlaneFlagConfigSnapshot | null;
   try {
     remote = await readControlPlaneFlagConfigSnapshot(kv, scope, input.flagId);
@@ -142,7 +169,7 @@ async function readFlagConfigFromKv(
   }
   if (remote) {
     if (!local || remote.revision >= local.revision) {
-      writeThrough.delete(key);
+      localSnapshots.delete(key);
       return flagConfigReadResult(remote);
     }
     assertControlPlaneFlagConfigSnapshotScope(local, scope, input.flagId);
@@ -152,12 +179,17 @@ async function readFlagConfigFromKv(
     assertControlPlaneFlagConfigSnapshotScope(local, scope, input.flagId);
     return flagConfigReadResult(local);
   }
-  logger.warn("config_store_kv_snapshot_miss", { key, ...input });
-  const result = await namespace
-    .getByName(configWriterName(input.appId, input.environmentId))
-    .repairFlagConfigSnapshot(input);
-  rememberSnapshot(writeThrough, input.appId, input.environmentId, result, input.flagId);
-  return result;
+  return readFlagConfigOnMiss({
+    input,
+    key,
+    logger,
+    namespace,
+    repo,
+    remember: (result) =>
+      rememberSnapshot(localSnapshots, input.appId, input.environmentId, result, input.flagId),
+    scope,
+    waitUntil,
+  });
 }
 
 function reportSnapshotReadFailure(
@@ -183,7 +215,7 @@ function reportSnapshotReadFailure(
 }
 
 function rememberSnapshot<T>(
-  writeThrough: Map<string, ControlPlaneFlagConfigSnapshot>,
+  localSnapshots: ConfigStoreWriteThrough,
   appId: string,
   environmentId: string,
   result: T,
@@ -208,7 +240,10 @@ function rememberSnapshot<T>(
     config: result.config,
   };
   assertControlPlaneFlagConfigSnapshotScope(snapshot, scope, result.config.flagId);
-  writeThrough.set(controlPlaneFlagConfigKey(scope, result.config.flagId), snapshot);
+  localSnapshots.set(
+    controlPlaneFlagConfigKey(appId, environmentId, result.config.flagId),
+    snapshot,
+  );
   return result;
 }
 

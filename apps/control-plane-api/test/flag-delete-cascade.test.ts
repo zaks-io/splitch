@@ -1,7 +1,6 @@
-import { flagConfigKey } from "@splitch/contracts";
+import { controlPlaneFlagConfigKey, flagConfigKey } from "@splitch/contracts";
 import { appScope, createRepository, envScope } from "@splitch/db";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { controlPlaneFlagConfigKey } from "../src/config-store-kv";
 import {
   allowAllPolicies,
   createFlag,
@@ -112,7 +111,7 @@ describe("flag delete cascade cleanup", () => {
     }
     expect(
       await h.bindings.configKv.get(
-        controlPlaneFlagConfigKey(envScope(createdApp.app.id, dev.id), flag.id),
+        controlPlaneFlagConfigKey(createdApp.app.id, dev.id, flag.id),
         "text",
       ),
     ).toContain('"state":"present"');

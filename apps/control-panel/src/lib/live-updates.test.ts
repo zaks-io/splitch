@@ -14,14 +14,18 @@ type FakeSocket = {
 
 const scope = { appId: "app_1", environmentId: "env_dev" };
 
-describe("live updates", () => {
-  afterEach(() => {
-    vi.restoreAllMocks();
-    vi.useRealTimers();
-  });
+afterEach(() => {
+  vi.restoreAllMocks();
+  vi.useRealTimers();
+});
 
+describe("live updates", () => {
   it("invalidates only the nudged flag prefix", async () => {
     const queryClient = queryClientStub({ version: 2 });
+    queryClient.invalidateQueries.mockImplementation(() => {
+      queryClient.getQueryData.mockReturnValue({ version: 3 });
+      return Promise.resolve();
+    });
 
     await handleNudge(
       JSON.stringify({ type: "config.changed", entity: "flag", id: "flag_1", version: 3 }),
@@ -37,6 +41,15 @@ describe("live updates", () => {
       { queryKey: queryKeys.flag.prefix(scope.appId, scope.environmentId), refetchType: "all" },
       { throwOnError: true },
     );
+  });
+
+  it("refetches the active route for a nudge", async () => {
+    const queryClient = queryClientStub();
+    const refetchRoute = vi.fn(() => Promise.resolve());
+
+    await handleNudge(message("flag_1", 3).data, scope, queryClient.client, { refetchRoute });
+
+    expect(refetchRoute).toHaveBeenCalledOnce();
   });
 
   it("invalidates the Experiment prefix for a canonical Run nudge", async () => {
@@ -145,27 +158,6 @@ describe("live updates", () => {
     await vi.advanceTimersByTimeAsync(0);
     expect(stale).toHaveBeenLastCalledWith(false);
   });
-
-  it("retries failed nudge refetches after 2s, 4s, and 8s before giving up", async () => {
-    vi.useFakeTimers();
-    vi.spyOn(Math, "random").mockReturnValue(0.5);
-    const attempts: number[] = [];
-    const queryClient = queryClientStub();
-    const startedAt = Date.now();
-    queryClient.invalidateQueries.mockImplementation(() => {
-      attempts.push(Date.now());
-      return Promise.reject(new Error("read API unavailable"));
-    });
-
-    const pending = handleNudge(message("flag_1", 1).data, scope, queryClient.client);
-    await vi.advanceTimersByTimeAsync(0);
-    await vi.advanceTimersByTimeAsync(2_000);
-    await vi.advanceTimersByTimeAsync(4_000);
-    await vi.advanceTimersByTimeAsync(8_000);
-    await pending;
-
-    expect(attempts.map((at) => at - startedAt)).toEqual([0, 2_000, 6_000, 14_000]);
-  });
 });
 
 describe("scope startup", () => {
@@ -210,14 +202,18 @@ function socketAt(sockets: FakeSocket[], index: number): FakeSocket {
 }
 
 function message(id: string, version: number): MessageEvent {
+  return entityMessage("flag", id, version);
+}
+
+function entityMessage(entity: "flag" | "segment", id: string, version: number): MessageEvent {
   return {
-    data: JSON.stringify({ type: "config.changed", entity: "flag", id, version }),
+    data: JSON.stringify({ type: "config.changed", entity, id, version }),
   } as MessageEvent;
 }
 
 function queryClientStub(cachedValue?: unknown) {
   const client = {
-    getQueryData: vi.fn(() => cachedValue),
+    getQueryData: vi.fn((_key?: readonly unknown[]) => cachedValue),
     invalidateQueries: vi.fn(() => Promise.resolve()),
   };
   return { ...client, client: client as unknown as QueryClient };

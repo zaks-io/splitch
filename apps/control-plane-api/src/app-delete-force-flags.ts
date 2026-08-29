@@ -9,7 +9,11 @@ import {
   environmentPolicyContexts,
   requiresReview,
 } from "./approval-target";
-import { deleteFlagD1Cascade, purgeFlagConfigsKvForKey } from "./flag-config-lifecycle";
+import {
+  captureFlagConfigPurgeTargets,
+  deleteFlagD1Cascade,
+  purgeFlagConfigsKvForKey,
+} from "./flag-config-lifecycle";
 
 /** Force-path Flag deletes: Policy-gated proposals stop the cascade (SPL-326). */
 
@@ -28,8 +32,9 @@ export async function forceDeleteFlags(
       pendingApprovals.push(gated);
       continue;
     }
+    const purgeTargets = await captureFlagConfigPurgeTargets(deps, app.id, flag.id);
     await deleteFlagD1Cascade(deps, app.id, flag.id);
-    await purgeFlagConfigsKvForKey(deps, app.id, flag.id, flag.key);
+    await purgeFlagConfigsKvForKey(deps, app.id, flag.id, flag.key, purgeTargets);
     removed.push({ childType: "flags", id: flag.id });
   }
 }

@@ -5,6 +5,7 @@ import { createNudgeRefetchFailureHandler } from "./panel-observability";
 import { type AppEnvironmentScope, nudgeInvalidationPrefix, queryKeys } from "./query-keys";
 
 const reconnectDelaysMs = [2_000, 4_000, 8_000] as const;
+const nudgeConvergenceDelaysMs = [2_000, 4_000, 8_000, 16_000, 32_000] as const;
 
 type LiveUpdateSocket = {
   close(): void;
@@ -28,8 +29,11 @@ export type LiveUpdateConnectionOptions = {
 
 export class LiveUpdateConnection {
   private attempts = 0;
+  private nextNudgeGeneration = 0;
+  private readonly nudgeGenerations = new Map<string, number>();
   private reconnectTimer: Timer | undefined;
   private socket: LiveUpdateSocket | undefined;
+  private readonly staleNudgeTargets = new Set<string>();
   private stopped = false;
 
   constructor(private readonly options: LiveUpdateConnectionOptions) {}
@@ -42,6 +46,8 @@ export class LiveUpdateConnection {
 
   stop(): void {
     this.stopped = true;
+    this.nudgeGenerations.clear();
+    this.staleNudgeTargets.clear();
     if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
     this.reconnectTimer = undefined;
     this.socket?.close();
@@ -63,13 +69,32 @@ export class LiveUpdateConnection {
     };
     socket.onmessage = (event) => {
       if (socket !== this.socket || this.stopped) return;
-      void handleNudge(event.data, this.options.scope, this.options.queryClient, {
-        onStaleData: () => this.options.onStaleDataChange?.(true),
+      const nudge = parseNudge(event.data);
+      if (!nudge) return;
+      const target = `${nudge.entity}:${nudge.id}`;
+      const generation = ++this.nextNudgeGeneration;
+      this.nudgeGenerations.set(target, generation);
+      const isCurrent = () =>
+        generation === this.nudgeGenerations.get(target) && socket === this.socket && !this.stopped;
+      void handleParsedNudge(nudge, this.options.scope, this.options.queryClient, {
+        onStaleData: () => {
+          if (!isCurrent()) return;
+          this.staleNudgeTargets.add(target);
+          this.options.onStaleDataChange?.(true);
+        },
+        onFreshData: () => {
+          if (!isCurrent()) return;
+          this.staleNudgeTargets.delete(target);
+          this.options.onStaleDataChange?.(this.staleNudgeTargets.size > 0);
+        },
+        refetchRoute: this.options.refetchRoute,
       });
     };
     socket.onerror = () => socket.close();
     socket.onclose = () => {
       if (socket !== this.socket || this.stopped) return;
+      this.nudgeGenerations.clear();
+      this.staleNudgeTargets.clear();
       this.scheduleReconnect();
     };
   }
@@ -91,7 +116,7 @@ export class LiveUpdateConnection {
     return invalidateWithRetry(
       this.options.queryClient,
       queryKeys.app.root(this.options.scope.appId, this.options.scope.environmentId),
-      undefined,
+      {},
       this.options.refetchRoute,
     );
   }
@@ -101,16 +126,42 @@ export async function handleNudge(
   rawPayload: unknown,
   scope: AppEnvironmentScope,
   queryClient: QueryClient,
-  options: { onStaleData?: () => void } = {},
+  options: {
+    onFreshData?: () => void;
+    onStaleData?: () => void;
+    refetchRoute?: () => Promise<void>;
+  } = {},
 ): Promise<void> {
   const parsed = parseNudge(rawPayload);
   if (!parsed) return;
 
+  return handleParsedNudge(parsed, scope, queryClient, options);
+}
+
+async function handleParsedNudge(
+  parsed: DeltaNudge,
+  scope: AppEnvironmentScope,
+  queryClient: QueryClient,
+  options: {
+    onFreshData?: () => void;
+    onStaleData?: () => void;
+    refetchRoute?: () => Promise<void>;
+  },
+): Promise<void> {
   const detailKey = nudgeDetailKey(parsed, scope);
   const detail = detailKey ? queryClient.getQueryData<{ version?: number }>(detailKey) : undefined;
-  if (detail?.version !== undefined && detail.version >= parsed.version) return;
+  if (detail?.version !== undefined && detail.version >= parsed.version) {
+    options.onFreshData?.();
+    return;
+  }
 
-  await invalidateNudgeWithRetry(parsed, scope, queryClient, options.onStaleData);
+  await invalidateNudgeWithRetry(
+    parsed,
+    scope,
+    queryClient,
+    detail?.version === undefined ? null : detailKey,
+    options,
+  );
 }
 
 export function liveUpdateUrl(scope: { orgSlug: string; appSlug: string; env: string }): string {
@@ -131,36 +182,62 @@ async function invalidateNudgeWithRetry(
   nudge: DeltaNudge,
   scope: AppEnvironmentScope,
   queryClient: QueryClient,
-  onStaleData: (() => void) | undefined,
+  detailKey: readonly string[] | null,
+  options: {
+    onFreshData?: () => void;
+    onStaleData?: () => void;
+    refetchRoute?: () => Promise<void>;
+  },
 ): Promise<void> {
   const prefix = nudgeInvalidationPrefix[nudge.entity](scope.appId, scope.environmentId);
   const reportFailure = createNudgeRefetchFailureHandler({
     entity: nudge.entity,
     id: nudge.id,
-    onStaleData: () => onStaleData?.(),
+    onStaleData: () => options.onStaleData?.(),
   });
 
-  await invalidateWithRetry(queryClient, prefix, reportFailure);
+  const converged = await invalidateWithRetry(
+    queryClient,
+    prefix,
+    {
+      delaysMs: nudgeConvergenceDelaysMs,
+      isFresh: detailKey
+        ? () => {
+            const refreshed = queryClient.getQueryData<{ version?: number }>(detailKey);
+            return refreshed?.version !== undefined && refreshed.version >= nudge.version;
+          }
+        : undefined,
+      onRetry: reportFailure,
+    },
+    options.refetchRoute,
+  );
+  if (converged) options.onFreshData?.();
 }
 
-/** Initial refetch plus three retries after 2s, 4s, and 8s. */
 async function invalidateWithRetry(
   queryClient: QueryClient,
   queryKey: ReturnType<(typeof nudgeInvalidationPrefix)[DeltaNudge["entity"]]>,
-  onRetry?: (failure: { attempt: number; nextRetryMs: number }) => void,
+  options: {
+    delaysMs?: readonly number[];
+    isFresh?: () => boolean;
+    onRetry?: (failure: { attempt: number; nextRetryMs: number }) => void;
+  } = {},
   refetchRoute?: () => Promise<void>,
 ): Promise<boolean> {
-  for (let retry = 0; retry <= reconnectDelaysMs.length; retry += 1) {
+  const delaysMs = options.delaysMs ?? reconnectDelaysMs;
+  for (let retry = 0; retry <= delaysMs.length; retry += 1) {
     try {
       await queryClient.invalidateQueries({ queryKey, refetchType: "all" }, { throwOnError: true });
       await refetchRoute?.();
-      return true;
+      if (options.isFresh?.() !== false) return true;
     } catch {
-      if (retry === reconnectDelaysMs.length) return false;
-      const nextRetryMs = reconnectDelaysMs[retry] ?? 8_000;
-      onRetry?.({ attempt: retry + 1, nextRetryMs });
-      await wait(jitteredReconnectDelay(retry));
+      // A failed refetch and a successful stale refetch both leave the cache unconfirmed.
     }
+    if (retry === delaysMs.length) return false;
+    const nextRetryMs = delaysMs[retry];
+    if (nextRetryMs === undefined) return false;
+    options.onRetry?.({ attempt: retry + 1, nextRetryMs });
+    await wait(nextRetryMs);
   }
   return false;
 }

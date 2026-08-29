@@ -56,6 +56,7 @@ const APPROVAL: ApprovalCommit = {
  */
 const EXEMPT_WRITERS: Record<string, string> = {
   readFlagConfig: "read-only",
+  readFlagConfigPurgeTarget: "reads the stored evaluation owner before deletion",
   repairFlagConfigSnapshot: "repairs derived KV state without changing D1",
   syncExperimentConfig: "republishes D1 to KV; writes no Flag Configuration row",
   deleteFlagConfig: "removes the KV snapshot after the Flag rows are already gone",

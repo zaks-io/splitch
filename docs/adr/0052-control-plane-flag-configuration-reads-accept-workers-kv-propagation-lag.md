@@ -17,15 +17,19 @@ not carrying the writer's in-memory value, including another isolate in the same
 
 2. **Read-your-writes is isolate-local.** A successful write stores its revisioned result in an
    in-memory map. A later read in that isolate prefers it until KV returns an
-   equal or newer revision. A fresh isolate has no such protection.
+   equal or newer revision. Entries expire after 60 seconds and the map evicts the least recently
+   used entry above 128 entries, so a long-lived isolate cannot retain an unbounded Flag catalog.
+   A fresh isolate has no such protection.
 
 3. **The product exposure is explicit per surface.** During the KV window:
 
    - `flags update` returns the committed Flag Configuration and is safe.
    - `flags update` followed by `flags get` can return the previous Flag Configuration from a
      non-writing isolate.
-   - the Control Panel's `config.changed` refetch can return the previous version and remain there
-     because the version short-circuit does not issue a second nudge.
+   - the Control Panel's `config.changed` refetch compares the returned version with the nudge's
+     target version. It keeps the existing stale-data indicator asserted while retrying with
+     bounded backoff through 62 seconds. If the version still has not converged, the indicator
+     remains asserted instead of presenting the cached version as fresh.
    - the verification read after a Promotion can return the previous Flag Configuration.
    - `flags list` after delete is safe because it reads D1.
    - `flags get` after delete can return the pre-delete Flag Configuration until the tombstone
@@ -37,16 +41,22 @@ not carrying the writer's in-memory value, including another isolate in the same
    Environment, and Flag identity. A malformed or mis-scoped snapshot is rejected and emits a
    distinct operator event. It is never repaired through D1 as a silent fallback (ADR-0036).
 
-5. **Miss repair is serialized with publication.** D1 capture, revision allocation, all KV writes,
-   and broadcast execute in one Config Store mutation queue operation. The repair result is retained
-   in the calling isolate while its KV write propagates.
+5. **A miss reads D1 directly and repairs in the background.** The API Worker serves a KV miss from
+   D1 without entering the Config Store mutation queue. A missing Flag returns `FLAG_NOT_FOUND`
+   without touching the Durable Object. For an existing Flag, the API schedules repair with
+   `waitUntil`; the Durable Object then repeats D1 capture inside its mutation queue before revision
+   allocation, KV publication, and broadcast. Publication therefore remains serialized against
+   writes, while the response path has the same D1 authority and cost as the pre-KV read path. A
+   background publication failure is logged and does not replace the successful D1 read.
 
 ## Consequences
 
 - The latency and infrastructure-cost win is deliberate, but the consistency contract is weaker
   than D1-backed reads.
 - Operator and automation flows that require immediate cross-isolate confirmation must use the
-  mutation response as their committed result. A later `flags get` is not stronger proof.
+  mutation response as their committed result. A later `flags get` is not stronger proof. The
+  Control Panel additionally treats a below-target refetch as stale until convergence or its
+  bounded retry limit.
 - A stronger read contract requires a different storage or coordination design. It must not be
   simulated by an occasional D1 fallback that makes stale reads appear authoritative.
 

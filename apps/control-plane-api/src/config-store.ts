@@ -49,6 +49,13 @@ export interface ConfigStoreWriter {
     | { ok: false; reason: "FLAG_NOT_FOUND" }
     | { ok: false; reason: "SEGMENT_NOT_FOUND"; missingSegmentIds: string[] }
   >;
+  readFlagConfigPurgeTarget(
+    input: Omit<PatchFlagConfigInput, "actor" | "enabled" | "availableVariantNames">,
+  ): Promise<
+    | { ok: true; experimentId: string | null }
+    | { ok: false; reason: "FLAG_NOT_FOUND" }
+    | { ok: false; reason: "SEGMENT_NOT_FOUND"; missingSegmentIds: string[] }
+  >;
   repairFlagConfigSnapshot(
     input: Omit<PatchFlagConfigInput, "actor" | "enabled" | "availableVariantNames">,
   ): Promise<
@@ -92,6 +99,15 @@ export function makeConfigStore(deps: ConfigStoreDeps): ConfigStoreWriter {
         const snapshot = await readFlagSnapshot(runtimeDeps, scope, input.flagId);
         if (!snapshot) return { ok: false as const, reason: "FLAG_NOT_FOUND" as const };
         return { ok: true as const, config: responseFromSnapshot(snapshot) };
+      });
+    },
+
+    async readFlagConfigPurgeTarget(input) {
+      return catchConfigStoreFailure(runtimeDeps, async () => {
+        const scope = envScope(input.appId, input.environmentId);
+        const snapshot = await readFlagSnapshot(runtimeDeps, scope, input.flagId);
+        if (!snapshot) return { ok: false as const, reason: "FLAG_NOT_FOUND" as const };
+        return { ok: true as const, experimentId: snapshot.flag.experimentId };
       });
     },
 

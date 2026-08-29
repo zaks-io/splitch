@@ -23,6 +23,11 @@ interface FlagConfigPurgeFailure {
   causes: readonly unknown[];
 }
 
+export interface FlagConfigPurgeTarget {
+  environmentId: string;
+  experimentId: string | null;
+}
+
 export class FlagConfigPurgeIncompleteError extends Error {
   readonly appId: string;
   readonly flagId: string;
@@ -101,21 +106,28 @@ export async function purgeFlagConfigsKvForKey(
   appId: string,
   flagId: string,
   flagKey: string,
+  targets: readonly FlagConfigPurgeTarget[],
 ): Promise<void> {
-  const environments = await deps.repo.identity.listEnvironments(appScope(appId));
   const failures: FlagConfigPurgeFailure[] = [];
-  for (const environment of environments) {
+  for (const target of targets) {
     const causes: unknown[] = [];
     for (let attempt = 0; attempt < FLAG_CONFIG_PURGE_ATTEMPTS; attempt += 1) {
       try {
-        await purgeFlagConfigKv(deps, appId, environment.id, flagId, flagKey);
+        await purgeFlagConfigKv(
+          deps,
+          appId,
+          target.environmentId,
+          flagId,
+          flagKey,
+          target.experimentId,
+        );
         break;
       } catch (cause) {
         causes.push(cause);
       }
     }
     if (causes.length === FLAG_CONFIG_PURGE_ATTEMPTS) {
-      failures.push({ environmentId: environment.id, causes });
+      failures.push({ environmentId: target.environmentId, causes });
     }
   }
   if (failures.length > 0) {
@@ -123,6 +135,38 @@ export async function purgeFlagConfigsKvForKey(
     // SPL-540 owns durable, resumable cleanup across requests.
     throw new FlagConfigPurgeIncompleteError(appId, flagId, flagKey, failures);
   }
+}
+
+export async function captureFlagConfigPurgeTargets(
+  deps: FlagConfigLifecycleDeps,
+  appId: string,
+  flagId: string,
+): Promise<FlagConfigPurgeTarget[]> {
+  const environments = await deps.repo.identity.listEnvironments(appScope(appId));
+  const configStore = deps.configStore;
+  if (!configStore) {
+    // An omitted Config Store means this runtime has no KV snapshots to purge.
+    return environments.map((environment) => ({
+      environmentId: environment.id,
+      experimentId: null,
+    }));
+  }
+  return Promise.all(
+    environments.map(async (environment) => {
+      const result = await configStore
+        .writerFor(appId, environment.id)
+        .readFlagConfigPurgeTarget({ appId, environmentId: environment.id, flagId });
+      if (!result.ok) {
+        throw new Error(
+          `flag-config lifecycle: cannot capture purge target for flag ${flagId} in ${environment.id}`,
+        );
+      }
+      return {
+        environmentId: environment.id,
+        experimentId: result.experimentId,
+      };
+    }),
+  );
 }
 
 export async function deleteFlagD1Cascade(
@@ -175,7 +219,7 @@ async function removeFlagConfigAt(
   const scope = envScope(appId, environmentId);
   await deps.repo.flags.removeTargetingRules(scope, flagId);
   await deps.repo.flags.removeFlagConfig(scope, flagId);
-  await purgeFlagConfigKv(deps, appId, environmentId, flagId, flagKey);
+  await purgeFlagConfigKv(deps, appId, environmentId, flagId, flagKey, null);
 }
 
 async function ensureInitialFlagConfig(
@@ -226,6 +270,7 @@ async function purgeFlagConfigKv(
   environmentId: string,
   flagId: string,
   flagKey: string,
+  experimentId: string | null,
 ): Promise<void> {
   if (!deps.configStore) return;
   const result = await deps.configStore.writerFor(appId, environmentId).deleteFlagConfig({
@@ -233,6 +278,7 @@ async function purgeFlagConfigKv(
     environmentId,
     flagId,
     flagKey,
+    experimentId,
   });
   if (!result.ok) {
     throw new Error(

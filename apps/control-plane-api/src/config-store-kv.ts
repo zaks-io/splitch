@@ -1,5 +1,6 @@
 import {
   CURRENT_KV_SCHEMA_VERSION,
+  controlPlaneFlagConfigKey,
   ExperimentConfigKVSchema,
   experimentConfigKey,
   type FlagConfigKV,
@@ -23,10 +24,6 @@ const LiveRunEnvelope = kvEnvelope(LiveRunKVSchema);
 
 export function parseFlagConfigEnvelope(raw: string): FlagConfigKV {
   return FlagConfigEnvelope.parse(JSON.parse(raw)).data;
-}
-
-export function controlPlaneFlagConfigKey(scope: EnvScope, flagId: string): string {
-  return `app:${scope.appId}:${scope.environmentId}:control-plane-flag-config:${flagId}`;
 }
 
 export type ControlPlaneFlagConfigSnapshot =
@@ -65,7 +62,10 @@ export async function readControlPlaneFlagConfigSnapshot(
   scope: EnvScope,
   flagId: string,
 ): Promise<ControlPlaneFlagConfigSnapshot | null> {
-  const raw = await kv.get(controlPlaneFlagConfigKey(scope, flagId), "text");
+  const raw = await kv.get(
+    controlPlaneFlagConfigKey(scope.appId, scope.environmentId, flagId),
+    "text",
+  );
   if (raw === null) return null;
   const snapshot = parseControlPlaneFlagConfigSnapshot(raw);
   assertControlPlaneFlagConfigSnapshotScope(snapshot, scope, flagId);
@@ -98,10 +98,10 @@ export async function deleteFlagConfigSnapshot(
   flagId: string,
   revision: number,
   flagKey: string,
-  experimentId?: string | null,
+  experimentId: string | null,
 ): Promise<void> {
   await kv.put(
-    controlPlaneFlagConfigKey(scope, flagId),
+    controlPlaneFlagConfigKey(scope.appId, scope.environmentId, flagId),
     serializeControlPlaneFlagConfigSnapshot({
       appId: scope.appId,
       environmentId: scope.environmentId,
@@ -110,7 +110,11 @@ export async function deleteFlagConfigSnapshot(
       state: "deleted",
     }),
   );
-  await kv.delete(flagConfigKey(scope.appId, scope.environmentId, flagKey));
+  const evaluationKey = flagConfigKey(scope.appId, scope.environmentId, flagKey);
+  const storedFlag = await kv.get(evaluationKey, "text");
+  if (storedFlag !== null && parseFlagConfigEnvelope(storedFlag).id === flagId) {
+    await kv.delete(evaluationKey);
+  }
   if (experimentId) {
     await kv.delete(experimentConfigKey(scope.appId, scope.environmentId, experimentId));
     await kv.delete(liveRunKey(scope.appId, scope.environmentId, experimentId));
@@ -125,7 +129,7 @@ export async function writeSnapshot(
   revision: number,
 ): Promise<void> {
   await kv.put(
-    controlPlaneFlagConfigKey(scope, snapshot.flag.id),
+    controlPlaneFlagConfigKey(scope.appId, scope.environmentId, snapshot.flag.id),
     serializeControlPlaneFlagConfigSnapshot({
       appId: scope.appId,
       environmentId: scope.environmentId,

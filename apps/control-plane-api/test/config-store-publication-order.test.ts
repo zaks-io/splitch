@@ -1,8 +1,8 @@
+import { controlPlaneFlagConfigKey } from "@splitch/contracts";
 import { envScope } from "@splitch/db";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { type ConfigStoreDeps, type ConfigStoreWriter, makeConfigStore } from "../src/config-store";
 import { type Harness, ids } from "../src/config-store-harness-core";
-import { controlPlaneFlagConfigKey } from "../src/config-store-kv";
 import { makeDurableSnapshotRevisionAllocator } from "../src/config-store-snapshot-revision";
 import { makePoolHarness } from "./config-store-pool-harness";
 
@@ -122,10 +122,7 @@ function writeInput(enabled: boolean) {
 }
 
 async function requiredSnapshot(): Promise<string> {
-  const key = controlPlaneFlagConfigKey(
-    { appId: ids.appId, environmentId: ids.environmentId },
-    ids.flagId,
-  );
+  const key = controlPlaneFlagConfigKey(ids.appId, ids.environmentId, ids.flagId);
   const snapshot = await h.kv.get(key, "text");
   if (snapshot === null) throw new Error(`test snapshot is missing: ${key}`);
   return snapshot;

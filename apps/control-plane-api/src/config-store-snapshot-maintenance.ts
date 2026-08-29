@@ -15,6 +15,7 @@ export interface FlagConfigResyncInput {
 }
 
 export interface FlagConfigDeleteInput extends FlagConfigResyncInput {
+  experimentId: string | null;
   flagKey?: string;
 }
 
@@ -65,7 +66,14 @@ export async function deleteFlagConfigFromStore(
       flagId: input.flagId,
       operation: "delete",
     });
-    await deleteFlagConfigSnapshot(deps.kv, scope, input.flagId, snapshotRevision, flag.key, null);
+    await deleteFlagConfigSnapshot(
+      deps.kv,
+      scope,
+      input.flagId,
+      snapshotRevision,
+      flag.key,
+      input.experimentId,
+    );
 
     const nudge = DeltaNudgeSchema.parse({
       type: "config.changed",

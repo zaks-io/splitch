@@ -1,6 +1,5 @@
-import { envScope } from "@splitch/db";
+import { controlPlaneFlagConfigKey } from "@splitch/contracts";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { controlPlaneFlagConfigKey } from "../src/config-store-kv";
 import {
   get,
   makeWorld,
@@ -36,7 +35,7 @@ describe("SPL-526 warm KV read tenant isolation", () => {
     const world = makeWorld();
     await publish(world, ALPHA);
     await publish(world, BRAVO);
-    const crossKey = controlPlaneFlagConfigKey(envScope(ALPHA.appId, BRAVO.envId), BRAVO.flagId);
+    const crossKey = controlPlaneFlagConfigKey(ALPHA.appId, BRAVO.envId, BRAVO.flagId);
 
     const response = await get(world.app, ALPHA, ALPHA.appId, BRAVO.envId, BRAVO.flagId);
     const body = await response.text();
@@ -45,10 +44,7 @@ describe("SPL-526 warm KV read tenant isolation", () => {
     expect(body).not.toContain(BRAVO.ruleValue);
     expect(await kv.get(crossKey, "text")).toBeNull();
     expect(
-      await kv.get(
-        controlPlaneFlagConfigKey(envScope(BRAVO.appId, BRAVO.envId), BRAVO.flagId),
-        "text",
-      ),
+      await kv.get(controlPlaneFlagConfigKey(BRAVO.appId, BRAVO.envId, BRAVO.flagId), "text"),
     ).toContain(BRAVO.ruleValue);
   });
 
@@ -89,7 +85,7 @@ describe("SPL-526 warm KV read tenant isolation", () => {
     const publisher = makeWorld();
     await publish(publisher, ALPHA);
     await publish(publisher, BRAVO);
-    await kv.delete(controlPlaneFlagConfigKey(envScope(ALPHA.appId, ALPHA.envId), ALPHA.flagId));
+    await kv.delete(controlPlaneFlagConfigKey(ALPHA.appId, ALPHA.envId, ALPHA.flagId));
     const world = makeWorld();
 
     const response = await get(world.app, ALPHA, ALPHA.appId, ALPHA.envId, ALPHA.flagId);
@@ -127,12 +123,13 @@ describe("SPL-526 warm KV read tenant isolation failure paths", () => {
     const world = makeWorld();
     await publish(world, ALPHA);
     await publish(world, BRAVO);
-    const bravoKey = controlPlaneFlagConfigKey(envScope(BRAVO.appId, BRAVO.envId), BRAVO.flagId);
+    const bravoKey = controlPlaneFlagConfigKey(BRAVO.appId, BRAVO.envId, BRAVO.flagId);
     const before = await kv.get(bravoKey, "text");
 
     const result = await world.access.writerFor(ALPHA.appId, ALPHA.envId).deleteFlagConfig({
       appId: ALPHA.appId,
       environmentId: ALPHA.envId,
+      experimentId: null,
       flagId: BRAVO.flagId,
     });
 
@@ -147,8 +144,8 @@ describe("SPL-526 warm KV read tenant isolation failure paths", () => {
     const world = makeWorld({ error });
     await publish(world, ALPHA);
     await publish(world, BRAVO);
-    const alphaKey = controlPlaneFlagConfigKey(envScope(ALPHA.appId, ALPHA.envId), ALPHA.flagId);
-    const bravoKey = controlPlaneFlagConfigKey(envScope(BRAVO.appId, BRAVO.envId), BRAVO.flagId);
+    const alphaKey = controlPlaneFlagConfigKey(ALPHA.appId, ALPHA.envId, ALPHA.flagId);
+    const bravoKey = controlPlaneFlagConfigKey(BRAVO.appId, BRAVO.envId, BRAVO.flagId);
     const bravoSnapshot = await kv.get(bravoKey, "text");
     if (!bravoSnapshot) throw new Error("security fixture Bravo snapshot is missing");
     await kv.put(alphaKey, bravoSnapshot);
@@ -179,7 +176,7 @@ describe("SPL-526 warm KV read tenant isolation failure paths", () => {
     const world = makeWorld({ warn });
     await publish(world, ALPHA);
     await publish(world, BRAVO);
-    await kv.delete(controlPlaneFlagConfigKey(envScope(ALPHA.appId, ALPHA.envId), ALPHA.flagId));
+    await kv.delete(controlPlaneFlagConfigKey(ALPHA.appId, ALPHA.envId, ALPHA.flagId));
 
     await get(world.app, ALPHA, ALPHA.appId, ALPHA.envId, ALPHA.flagId);
 

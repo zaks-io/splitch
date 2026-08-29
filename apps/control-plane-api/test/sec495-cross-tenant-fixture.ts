@@ -81,6 +81,8 @@ export function makeWorld(
   } as unknown as ConfigStoreDurableObjectNamespace;
   const hasLogger = options.error !== undefined || options.warn !== undefined;
   const access = durableConfigStoreAccess(namespace, kv, {
+    repo,
+    waitUntil: (promise) => void promise,
     ...(options.sharedWriteThrough ? {} : { writeThrough: new Map() }),
     ...(hasLogger
       ? {

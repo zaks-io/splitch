@@ -55,6 +55,12 @@ export class ConfigStoreDurableObject
     return this.store().readFlagConfig(input);
   }
 
+  readFlagConfigPurgeTarget(
+    input: Parameters<ConfigStoreWriter["readFlagConfigPurgeTarget"]>[0],
+  ): ReturnType<ConfigStoreWriter["readFlagConfigPurgeTarget"]> {
+    return this.store().readFlagConfigPurgeTarget(input);
+  }
+
   repairFlagConfigSnapshot(
     input: Parameters<ConfigStoreWriter["repairFlagConfigSnapshot"]>[0],
   ): ReturnType<ConfigStoreWriter["repairFlagConfigSnapshot"]> {
