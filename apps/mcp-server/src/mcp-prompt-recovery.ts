@@ -101,7 +101,7 @@ function recoverySteps(
       return [
         message(
           "assistant",
-          "Choose the intended candidate from details.candidates, then retry the original operation with that candidate's canonical ID.",
+          "Choose the intended candidate from details.candidates, then retry the original operation with that candidate's canonical ID. If that Environment ID is itself the ambiguous selector, pass by=id to force the canonical ID.",
         ),
       ];
     case "CREATE_NEW_RUN":

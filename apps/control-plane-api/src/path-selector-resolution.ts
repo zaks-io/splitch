@@ -34,11 +34,22 @@ export async function resolveControlPlanePathSelectors(
   const resolvedAppError = appScopeError(resolvedPrincipal, resolvedParams.appId);
   if (resolvedAppError) return { ok: false, error: resolvedAppError };
 
-  const environment = await resolveEnvironment(repo, resolvedParams.appId, params.environmentId);
+  const forceEnvironmentId = canonicalEnvironmentLookup(request);
+  const environment = await resolveEnvironment(
+    repo,
+    resolvedParams.appId,
+    params.environmentId,
+    forceEnvironmentId,
+  );
   if (!environment.ok) return environment;
   assignResolved(resolvedParams, "environmentId", environment.environmentId);
 
-  const target = await resolveEnvironment(repo, resolvedParams.appId, params.targetEnvironmentId);
+  const target = await resolveEnvironment(
+    repo,
+    resolvedParams.appId,
+    params.targetEnvironmentId,
+    forceEnvironmentId,
+  );
   if (!target.ok) return target;
   assignResolved(resolvedParams, "targetEnvironmentId", target.environmentId);
 
@@ -91,9 +102,11 @@ async function resolveEnvironment(
   repo: Repository,
   appId: string | undefined,
   selector: string | undefined,
+  forceCanonicalId: boolean,
 ): Promise<{ ok: true; environmentId?: string } | { ok: false; error: ErrorResponse }> {
   if (selector === undefined) return { ok: true };
   if (!appId?.startsWith(APP_ID_PREFIX)) return failure("APP_NOT_FOUND", "app not found");
+  if (forceCanonicalId && selector.startsWith(ENVIRONMENT_ID_PREFIX)) return { ok: true };
   // Legacy keys can have the same `env_` shape as canonical IDs. One scoped OR
   // query is required to detect that collision without silently choosing a
   // plausible wrong Environment; it also avoids the old two-read ID-miss path.
@@ -177,6 +190,10 @@ function flagLookupBy(contractId: string, request: Request): "auto" | "key" {
   return contractId === "flags_get" && new URL(request.url).searchParams.get("by") === "key"
     ? "key"
     : "auto";
+}
+
+function canonicalEnvironmentLookup(request: Request): boolean {
+  return new URL(request.url).searchParams.get("by") === "id";
 }
 
 function withResolvedParams(

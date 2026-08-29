@@ -59,10 +59,10 @@ export const lookupErrorDocs = {
   },
   SELECTOR_AMBIGUOUS: {
     remediation:
-      "Choose the intended resource from details.candidates and resend with its canonical ID",
+      "Choose the intended resource from details.candidates and resend with its canonical ID; pass by=id when an Environment ID is itself ambiguous",
     cause:
       "The App slug or Environment key matches more than one resource within the caller's reachable scope.",
-    fix: "Choose the intended candidate, then resend with its canonical `appId` or `environmentId`.",
+    fix: "Choose the intended candidate, then resend with its canonical `appId` or `environmentId`. If the selected Environment ID equals the rejected selector, pass `by=id` to force the canonical ID.",
     details:
       '{ candidates: Array<{ orgSlug: string, appId: string, appSlug: string } | { environmentId: string, environmentKey: string }>, recommendedAction: "USE_CANONICAL_ID" }',
     recommendedAction: "USE_CANONICAL_ID",

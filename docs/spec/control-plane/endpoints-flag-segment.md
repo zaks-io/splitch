@@ -17,7 +17,9 @@ Every route in this document that exposes `{app_id}`, `{environment_id}` /
 `{target_environment_id}`, or `{flag_id}` accepts either that resource's canonical ID or its
 human-readable selector (App slug, Environment key, or Flag key). This applies to reads and writes.
 Routes without those path parameters accept no selector. A canonical-looking Flag key can be forced
-only on `flags_get` with `?by=key`; other routes treat the canonical `flag_` shape as an ID.
+only on `flags_get` with `?by=key`; other routes treat the canonical `flag_` shape as an ID. When a
+legacy Environment key collides with a canonical Environment ID, `?by=id` selects the canonical ID
+on any affected route.
 
 ## Flag definition endpoints (App-level — the catalog, defined once)
 

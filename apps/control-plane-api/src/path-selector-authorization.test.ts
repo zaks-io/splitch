@@ -144,6 +144,19 @@ describe("path selector compatibility", () => {
         ],
       },
     });
+
+    const byId = await app.request(`/apps/${VICTIM_APP}/envs/env_prod9?by=id`);
+    expect(byId.status).toBe(200);
+    await expect(byId.json()).resolves.toMatchObject({ id: "env_prod9", key: "prod" });
+
+    const byLegacyKeyCandidateId = await app.request(
+      `/apps/${VICTIM_APP}/envs/env_selector_collision`,
+    );
+    expect(byLegacyKeyCandidateId.status).toBe(200);
+    await expect(byLegacyKeyCandidateId.json()).resolves.toMatchObject({
+      id: "env_selector_collision",
+      key: "env_prod9",
+    });
   });
 
   it("merges canonical replacements into parsed params without discarding transforms", async () => {

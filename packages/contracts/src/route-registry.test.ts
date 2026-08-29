@@ -190,6 +190,23 @@ describe("route registry: canonical coverage", () => {
 });
 
 describe("route registry: per-route invariants", () => {
+  it("declares canonical Environment disambiguation on Environment selector routes", () => {
+    const route = getRoute("environments_get");
+    if (!route) throw new Error("missing environments_get route");
+    expect(
+      route.input.safeParse({
+        params: { appId: "app_test", environmentId: "env_test" },
+        query: { by: "id" },
+      }).success,
+    ).toBe(true);
+    expect(
+      route.input.safeParse({
+        params: { appId: "app_test", environmentId: "env_test" },
+        query: { by: "key" },
+      }).success,
+    ).toBe(false);
+  });
+
   it("every operationId is unique", () => {
     expect(new Set(operationIds).size).toBe(operationIds.length);
   });

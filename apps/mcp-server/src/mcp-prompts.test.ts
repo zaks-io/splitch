@@ -161,6 +161,12 @@ describe("MCP prompts workflows", () => {
     ]);
     expect(RECOVERY_OPERATION_IDS.REFRESH_AND_REPROPOSE).toEqual(["approval_requests_get"]);
     expect(RECOVERY_OPERATION_IDS.RETRY_REVIEW).toEqual(["approval_request_reviews_create"]);
+
+    const selectorPlan = getPromptPlan("recover_from_error", {
+      errorCode: "SELECTOR_AMBIGUOUS",
+      details: { recommendedAction: "USE_CANONICAL_ID", candidates: [] },
+    });
+    expect(selectorPlan.messages.at(-1)?.content.text).toContain("by=id");
   });
 
   it("reports a bad prompt argument as invalid params, not an internal fault", async () => {

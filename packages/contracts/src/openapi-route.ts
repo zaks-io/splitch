@@ -185,12 +185,13 @@ function buildOpenApiErrorResponses(codes: readonly ErrorCode[]) {
 
 export function defineApiRoute<const Input extends DefineApiRouteInput>(input: Input) {
   const errors = selectorAwareErrors(input);
+  const request = selectorAwareRequest(input);
   const contract = defineRoute({
     id: input.operationId,
     owner: input.owner,
     method: input.method,
     path: input.path,
-    input: runtimeInput(input.request),
+    input: runtimeInput(request),
     output: input.response,
     auth: input.auth,
     scopes: input.scopes ?? [],
@@ -210,7 +211,7 @@ export function defineApiRoute<const Input extends DefineApiRouteInput>(input: I
       operationId: input.operationId,
       summary: input.summary,
       request: {
-        ...(buildOpenApiRequestConfig(input.request) ?? {}),
+        ...(buildOpenApiRequestConfig(request) ?? {}),
         ...(idempotencyHeader(input.idempotency)
           ? { headers: idempotencyHeader(input.idempotency) }
           : {}),
@@ -230,6 +231,30 @@ export function defineApiRoute<const Input extends DefineApiRouteInput>(input: I
           : {}),
       },
     } as const),
+  };
+}
+
+const CanonicalEnvironmentSelectorQuery = z
+  .literal("id")
+  .optional()
+  .describe("Force a canonical Environment ID when a legacy key has the same value.");
+
+/** Environment ambiguity must expose a declared escape hatch on every affected route. */
+function selectorAwareRequest(input: DefineApiRouteInput): ApiRouteRequest | undefined {
+  if (
+    input.auth !== "control-plane-token" ||
+    (!input.path.includes(":environmentId") && !input.path.includes(":targetEnvironmentId"))
+  ) {
+    return input.request;
+  }
+  const request = input.request ?? {};
+  const query = request.query;
+  if (query?.shape.by) return request;
+  return {
+    ...request,
+    query: query
+      ? query.extend({ by: CanonicalEnvironmentSelectorQuery })
+      : z.object({ by: CanonicalEnvironmentSelectorQuery }).strict(),
   };
 }
 
