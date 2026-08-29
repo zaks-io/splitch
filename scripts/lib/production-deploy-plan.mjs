@@ -155,11 +155,13 @@ function isEmbeddedMcpResource(path) {
 
 function isNonDeployableChange(path) {
   return (
+    path.startsWith("e2e/") ||
     path.startsWith("docs/") ||
     path.startsWith(".agents/") ||
     path.startsWith(".codex/") ||
     path.startsWith(".github/") ||
     path.startsWith("scripts/release/") ||
+    path === "scripts/lib/cli-mcp-contract-exceptions.ts" ||
     path === "scripts/lib/production-deploy-plan.mjs" ||
     path === "scripts/plan-ci-verification.mjs" ||
     path.endsWith(".test.mjs") ||
