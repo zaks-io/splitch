@@ -90,7 +90,7 @@ function selectorFlags(
   command: CliCommandDefinition,
   fields: ReadonlySet<string>,
 ): readonly HelpFlag[] {
-  if (!fields.has("by")) return [];
+  if (!fields.has("by") && command.kind !== "flags_verify") return [];
   const type = command.operationId === "flags_get" ? "id | key" : "id";
   return [
     flag("--by <mode>", type, "automatic", "Resolve a canonical-looking selector explicitly."),

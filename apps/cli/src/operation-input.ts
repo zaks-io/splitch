@@ -20,6 +20,10 @@ export function operationInputHasEnvironmentId(operationId: string): boolean {
   return "environmentId" in (schema.shape as Record<string, unknown>);
 }
 
+export function environmentSelectorOverride(by: string | undefined): { by?: string } {
+  return by === undefined ? {} : { by };
+}
+
 export function buildOperationInput(
   command: CliCommandDefinition,
   invocation: ParsedInvocation,

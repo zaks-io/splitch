@@ -2,8 +2,8 @@ import { randomUUID } from "node:crypto";
 import {
   type ErrorResponse,
   type Flag,
-  TargetingRuleSchema,
   type TargetingRule,
+  TargetingRuleSchema,
 } from "@splitch/sdk/control-plane";
 import { withAuthorizationRetry } from "./auth.js";
 import type { CliCommandDefinition } from "./command-registry.js";
@@ -19,10 +19,11 @@ import { EXIT_API, EXIT_USAGE } from "./exit-codes.js";
 import { CliInputError } from "./flag-create-input.js";
 import {
   buildAppendedTargetingRule,
+  type FlagTargetingRulesAddInput,
   parseFlagTargetingRulesAddInput,
   resolveVariantByName,
-  type FlagTargetingRulesAddInput,
 } from "./flag-targeting-rules-add-input.js";
+import { environmentSelectorOverride } from "./operation-input.js";
 import type { ParsedInvocation } from "./parse-args.js";
 import { type FlagSelectorResolution, resolveFlagSelector } from "./scope-resolve.js";
 import { createOperationSdks } from "./sdks.js";
@@ -69,7 +70,7 @@ function requireAddScope(
   invocation: ParsedInvocation,
   context: ResolvedContext,
   io: CliIo,
-): { flagSelector: string; appId: string; environmentId: string } | CliResult {
+): { flagSelector: string; appId: string; environmentId: string; by?: string } | CliResult {
   const flagSelector = invocation.positionals[0];
   if (!flagSelector || !context.appId || !context.environmentId) {
     writeCliError(io, {
@@ -80,7 +81,12 @@ function requireAddScope(
     });
     return { exitCode: EXIT_USAGE };
   }
-  return { flagSelector, appId: context.appId, environmentId: context.environmentId };
+  return {
+    flagSelector,
+    appId: context.appId,
+    environmentId: context.environmentId,
+    ...environmentSelectorOverride(invocation.flags.by),
+  };
 }
 
 async function assembleReplaceInput(options: {
@@ -89,7 +95,7 @@ async function assembleReplaceInput(options: {
   readonly invocation: ParsedInvocation;
   readonly deps: CliDeps;
   readonly io: CliIo;
-  readonly scope: { flagSelector: string; appId: string; environmentId: string };
+  readonly scope: { flagSelector: string; appId: string; environmentId: string; by?: string };
 }): Promise<{ body: Record<string, unknown> } | CliResult> {
   const { addInput, command, invocation, deps, io, scope } = options;
   const listed = await resolveFlagSelector(deps, scope.appId, scope.flagSelector);
@@ -108,6 +114,7 @@ async function assembleReplaceInput(options: {
   const body: Record<string, unknown> = {
     appId: scope.appId,
     environmentId: scope.environmentId,
+    ...environmentSelectorOverride(scope.by),
     flagId,
     targetingRules: [...existing.rules, appended],
     idempotency_key: invocation.flags.idempotencyKey ?? `cli_${randomUUID()}`,
@@ -198,13 +205,14 @@ function preferFlagLookupError(
 async function readRulesForAdd(
   deps: CliDeps,
   io: CliIo,
-  scope: { appId: string; environmentId: string },
+  scope: { appId: string; environmentId: string; by?: string },
   flagId: string,
 ): Promise<{ rules: TargetingRule[] } | CliResult> {
   const configResult = await readControlPlane(deps, "flag_config_get", {
     appId: scope.appId,
     environmentId: scope.environmentId,
     flagId,
+    ...environmentSelectorOverride(scope.by),
   });
   if (!configResult.ok) {
     writeServerError(io, configResult.error, "flag_config_get");

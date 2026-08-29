@@ -1191,6 +1191,7 @@ Usage:
 Flags:
   --app <app>            [type: string; default: SPLITCH_APP or config] App ID or slug.
   --env <environment>    [type: string; default: SPLITCH_ENV or config] Environment ID or key.
+  --by <mode>            [type: id; default: automatic] Resolve a canonical-looking selector explicitly.
   --targeting-key <key>  [type: string; default: none] Entity Targeting Key.
   --context-json <json>  [type: JSON object; default: {"attributes":{}}] Evaluation Context fields.
   --json                 [type: boolean; default: false] Write machine-readable JSON to stdout.
