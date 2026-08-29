@@ -29,6 +29,9 @@ export class CliInputError extends SplitchCliError {
       code: payload.code,
       causeSummary: payload.message,
       remediation: remediation ?? "Correct the named input field and run the command again",
+      // The offending field travels on the one `--json` error object; it used to
+      // need a second stdout document of its own to reach the caller.
+      details: payload.details,
     });
     this.name = "CliInputError";
     this.payload = payload;

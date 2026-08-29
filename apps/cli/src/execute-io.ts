@@ -1,8 +1,9 @@
 import type { EnvironmentPolicy } from "@splitch/sdk/control-plane";
 import type { CliIo } from "./execute-types.js";
 import { formatEnvironmentPolicy, isEnvironmentPolicy } from "./format-environment-policy.js";
+import { formatPayload } from "./format-payload.js";
 
-export function emit(io: CliIo, asJson: boolean, payload: unknown): void {
+export function emit(io: CliIo, asJson: boolean, payload: unknown, noun?: string): void {
   if (asJson) {
     io.log(JSON.stringify(payload));
     return;
@@ -11,7 +12,7 @@ export function emit(io: CliIo, asJson: boolean, payload: unknown): void {
     io.log(formatEnvironmentPolicy(payload.policy));
     return;
   }
-  io.log(typeof payload === "string" ? payload : JSON.stringify(payload, null, 2));
+  io.log(formatPayload(payload, noun));
 }
 
 function isPolicyProjection(payload: unknown): payload is { policy: EnvironmentPolicy } {
