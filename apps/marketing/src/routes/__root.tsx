@@ -11,10 +11,11 @@ export const Route = createRootRoute({
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "splitch · feature flags and experiments, agents first" },
+      { title: "splitch · feature flags and A/B experiments in one tool" },
       {
         name: "description",
-        content: "Feature flags and A/B experimentation for agent-operated apps.",
+        content:
+          "Ship features behind a flag, then measure what they did to conversion and revenue. Open source, and your coding agent can run the whole thing over MCP.",
       },
     ],
     links: [{ rel: "stylesheet", href: appCss }],

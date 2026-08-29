@@ -2,10 +2,10 @@ import { CheckIcon } from "lucide-react";
 import { SectionEyebrow } from "./section-eyebrow";
 
 const contracts = [
-  "Sequential, always-valid inference by default",
-  "Exposure is the analysis denominator",
-  "SRM, CUPED, winsorization, and FDR are product contracts",
-  "Bad config fails loud instead of falling back silently",
+  "Peek at results whenever. Sequential math means early looks can't manufacture a win.",
+  "Counts the users who actually saw the Variant, not the ones who might have.",
+  "Traffic imbalance, outliers, and many-Metric testing are corrected before you see a number.",
+  "Broken config fails loudly with a named error instead of serving a default.",
 ] as const;
 
 export function RigorSection() {
@@ -17,13 +17,12 @@ export function RigorSection() {
       <div className="mx-auto grid w-full max-w-6xl gap-10 lg:grid-cols-2 lg:items-center">
         <div className="grid gap-5">
           <SectionEyebrow>Statistical rigor</SectionEyebrow>
-          <h2 className="font-bold font-display text-3xl text-foreground tracking-tight sm:text-4xl">
-            Results have to trace back to facts<span className="text-arm-control">.</span>
+          <h2 className="text-balance font-bold font-display text-3xl text-foreground tracking-tight sm:text-4xl">
+            A result you can act on<span className="text-arm-control">.</span>
           </h2>
-          <p className="max-w-xl text-muted-foreground leading-relaxed">
-            splitch treats analysis as an enforced product contract. A result should be auditable
-            back to raw Exposure events, the Experiment Run, and the Metric definition that produced
-            it.
+          <p className="max-w-xl text-pretty text-muted-foreground leading-relaxed">
+            The failure mode of A/B testing is a number that looks like a win and isn’t. The common
+            ways to fool yourself are handled for you.
           </p>
           <ul className="grid gap-3">
             {contracts.map((contract) => (
@@ -41,21 +40,46 @@ export function RigorSection() {
             <span>95% CI</span>
           </p>
 
-          <div className="grid gap-2">
-            {/* Axis 0%..+8%; CI [1.1, 7.3] and the +4.2% point estimate sit to scale. */}
-            <div className="relative h-8 rounded-md bg-muted">
+          {/* Axis runs 0%..+8%, so every mark sits at value/8: the interval
+              [1.1, 7.3] spans 13.75%..91.25% and the +4.2% point estimate lands
+              at 52.5%. The heavier rule at 0% is the null: an interval clear of
+              it is the whole claim, so the plot has to show that gap. */}
+          <div className="grid gap-1.5">
+            <div className="relative h-4">
+              <span className="-translate-x-1/2 absolute left-[52.5%] font-mono text-foreground text-xs">
+                +4.2%
+              </span>
+            </div>
+
+            <div className="relative h-6">
               <span
                 aria-hidden="true"
-                className="absolute inset-y-2 right-[9%] left-[14%] rounded-full bg-arm-treatment"
+                className="-translate-y-1/2 absolute inset-x-0 top-1/2 h-px bg-border"
               />
               <span
                 aria-hidden="true"
-                className="absolute inset-y-0 left-[52%] w-1 rounded-full bg-foreground"
+                className="absolute inset-y-0 left-0 w-0.5 bg-muted-foreground"
+              />
+              <span
+                aria-hidden="true"
+                className="-translate-y-1/2 absolute top-1/2 right-[8.75%] left-[13.75%] h-1.5 rounded-full bg-arm-treatment"
+              />
+              <span
+                aria-hidden="true"
+                className="absolute inset-y-1 left-[13.75%] w-0.5 rounded-full bg-arm-treatment"
+              />
+              <span
+                aria-hidden="true"
+                className="absolute inset-y-1 right-[8.75%] w-0.5 rounded-full bg-arm-treatment"
+              />
+              <span
+                aria-hidden="true"
+                className="-translate-x-1/2 absolute inset-y-0 left-[52.5%] w-0.5 rounded-full bg-foreground"
               />
             </div>
+
             <p className="flex justify-between font-mono text-muted-foreground text-xs">
               <span>0%</span>
-              <span className="text-foreground">+4.2%</span>
               <span>+8%</span>
             </p>
           </div>
