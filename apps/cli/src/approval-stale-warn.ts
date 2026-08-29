@@ -1,4 +1,6 @@
 import type { ErrorResponse } from "@splitch/sdk/control-plane";
+import type { ParsedInvocation } from "./parse-args.js";
+import { selectorAmbiguityRemediation } from "./selector-ambiguity.js";
 
 /**
  * An approved change that became unapplicable must not look like a quiet status
@@ -85,7 +87,10 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 export function remediationForServerError(
   error: ErrorResponse,
   commandSupportsConfirm: boolean,
+  invocation?: ParsedInvocation,
 ): string {
+  const ambiguous = selectorAmbiguityRemediation(error, invocation);
+  if (ambiguous) return ambiguous;
   const frozen = runFrozenRemediation(error);
   if (frozen) return frozen;
   if (error.code === "APPROVAL_REQUEST_STALE") {

@@ -14,7 +14,7 @@ import type { ParsedGlobalFlags, ParsedInvocation } from "./parse-args.js";
 const TOOL_BY_OPERATION = new Map(deriveMcpTools().map((tool) => [tool.name, tool]));
 
 /** True when the operation's flat input schema accepts an `environmentId` field. */
-export function operationInputHasEnvironmentId(operationId: string): boolean {
+function operationInputHasEnvironmentId(operationId: string): boolean {
   const schema = TOOL_BY_OPERATION.get(operationId)?.inputSchema;
   if (!schema || !("shape" in schema)) return false;
   return "environmentId" in (schema.shape as Record<string, unknown>);
