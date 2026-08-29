@@ -110,6 +110,9 @@ async function resolveEnvironment(
   // Legacy keys can have the same `env_` shape as canonical IDs. One scoped OR
   // query is required to detect that collision without silently choosing a
   // plausible wrong Environment; it also avoids the old two-read ID-miss path.
+  // The default canonical-ID path still costs this resolver read plus the
+  // handler's read of the same row. SPL-541 accepts that cost so collision
+  // detection remains unconditional.
   const candidates = await repo.identity.findEnvironmentSelectorCandidates(
     appScope(appId),
     selector,

@@ -11,6 +11,37 @@ afterEach(async () => {
   await cleanupTempHomes();
 });
 
+describe("Environment selector collisions", () => {
+  it("refuses an Environment selector shared by an ID and another Environment key", async () => {
+    const { credentialPath } = await makeTempHome();
+    await writeFile(credentialPath, `${JSON.stringify(storedCredential())}\n`);
+    const transport = new FakeCliTransport([
+      ...scopeResolutionStubs({
+        environments: [
+          { id: "env_collision", key: "production", name: "Production" },
+          { id: "env_other", key: "env_collision", name: "Collision" },
+        ],
+      }),
+    ]);
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const code = await runCli(
+      ["env-policy", "get", "--json", "--app", "app_1", "--env", "env_collision"],
+      { credentialPath, fetch: transport.fetch },
+    );
+
+    expect(code).toBe(EXIT_SCOPE);
+    expect(error.mock.calls.join(" ")).toContain(
+      'Environment selector "env_collision" matches more than one Environment on App app_1: it is the ID of env_collision and the key of env_other',
+    );
+    expect(
+      transport.requests.some(
+        (request) => new URL(request.url).pathname === "/apps/app_1/envs/env_collision",
+      ),
+    ).toBe(false);
+  });
+});
+
 describe("truncated org/app/env catalogs", () => {
   it("fails with CLI_SCOPE_UNRESOLVED when the App catalog is complete and the key is missing", async () => {
     const { credentialPath } = await makeTempHome();

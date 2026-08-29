@@ -36,9 +36,9 @@ export interface FlagSelectorResolution extends NamedResource {
  *
  * App selectors that already look like canonical IDs (`app_…`) pass through
  * without a list round-trip: App keys use the shared slug alphabet (no `_`),
- * so an `app_` prefix cannot be a key. Environment selectors always resolve —
- * Environment keys are unconstrained and could otherwise collide with `env_…`
- * ID shapes.
+ * so an `app_` prefix cannot be a key. Environment selectors always read the
+ * Environment catalog because keys are unconstrained and may collide with
+ * `env_…` ID shapes; distinct ID/key matches are refused as ambiguous.
  *
  * Flag positionals (`:flagId`) follow the same seam via `resolveFlagSelector`:
  * ID and key matches within the selected App (Flag keys are unconstrained and
@@ -157,9 +157,16 @@ export async function resolveEnvironmentSelector(
     { appId },
     { kind: "app", selector: appId },
   );
-  const match =
-    environments.items.find((environment) => environment.id === selector) ??
-    environments.items.find((environment) => environment.key === selector);
+  const byId = environments.items.find((environment) => environment.id === selector);
+  const byKey = environments.items.find((environment) => environment.key === selector);
+  if (byId && byKey && byId.id !== byKey.id) {
+    throw new SplitchCliError({
+      code: "CLI_SCOPE_UNRESOLVED",
+      causeSummary: `Environment selector "${selector}" matches more than one Environment on App ${appId}: it is the ID of ${byId.id} and the key of ${byKey.id}`,
+      remediation: "Pass the canonical Environment ID of the Environment you intend to address",
+    });
+  }
+  const match = byId ?? byKey;
   if (match) return match;
   if (environments.readTruncated) return { id: selector };
   throw new SplitchCliError({

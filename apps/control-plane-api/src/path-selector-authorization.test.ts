@@ -118,6 +118,14 @@ describe("path selector compatibility", () => {
 
   it("rejects an Environment selector shared by an ID and a legacy key", async () => {
     await seedReachableApp(VICTIM_APP, "sensitive");
+    await seedOrgApp(env.DB, {
+      orgId: "org_selector_foreign",
+      orgName: "Foreign",
+      orgSlug: "foreign",
+      appId: "app_selector_foreign",
+      appName: "Foreign",
+      appKey: "foreign",
+    });
     await seedEnvironment(env.DB, {
       appId: VICTIM_APP,
       environmentId: "env_prod9",
@@ -128,12 +136,20 @@ describe("path selector compatibility", () => {
       environmentId: "env_selector_collision",
       key: "env_prod9",
     });
+    await seedEnvironment(env.DB, {
+      appId: "app_selector_foreign",
+      environmentId: "env_selector_foreign_collision",
+      key: "env_prod9",
+    });
     const app = testApp(principal(VICTIM_APP, [VICTIM_APP]));
 
     const response = await app.request(`/apps/${VICTIM_APP}/envs/env_prod9`);
 
     expect(response.status).toBe(409);
-    await expect(response.json()).resolves.toEqual({
+    const body = (await response.json()) as {
+      details: { candidates: Array<{ environmentId: string; environmentKey: string }> };
+    };
+    expect(body).toEqual({
       code: "SELECTOR_AMBIGUOUS",
       message: 'Environment selector "env_prod9" matches more than one Environment',
       details: {
@@ -143,6 +159,10 @@ describe("path selector compatibility", () => {
           { environmentId: "env_selector_collision", environmentKey: "env_prod9" },
         ],
       },
+    });
+    expect(body.details.candidates).not.toContainEqual({
+      environmentId: "env_selector_foreign_collision",
+      environmentKey: "env_prod9",
     });
 
     const byId = await app.request(`/apps/${VICTIM_APP}/envs/env_prod9?by=id`);

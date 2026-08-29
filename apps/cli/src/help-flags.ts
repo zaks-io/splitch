@@ -91,9 +91,14 @@ function selectorFlags(
   fields: ReadonlySet<string>,
 ): readonly HelpFlag[] {
   if (!fields.has("by") && command.kind !== "flags_verify") return [];
-  const type = command.operationId === "flags_get" ? "id | key" : "id";
+  const allowedValues = command.operationId === "flags_get" ? "id or key" : "id";
   return [
-    flag("--by <mode>", type, "automatic", "Resolve a canonical-looking selector explicitly."),
+    flag(
+      "--by <mode>",
+      "string",
+      "automatic",
+      `Allowed: ${allowedValues}. Resolve a canonical-looking selector explicitly.`,
+    ),
   ];
 }
 

@@ -137,9 +137,7 @@ function applyNamedFlags(
   if (flags.key) {
     input.key = flags.key;
   }
-  if (flags.by) {
-    input.by = flags.by;
-  }
+  applyByFlag(command, flags.by, input);
   if (command.supportsConfirm && flags.confirm) {
     input.review = { action: "approve_and_apply" };
   }
@@ -147,6 +145,24 @@ function applyNamedFlags(
     if (flags.dryRun) input.dryRun = true;
     if (flags.force) input.force = true;
   }
+}
+
+function applyByFlag(
+  command: CliCommandDefinition,
+  by: string | undefined,
+  input: Record<string, unknown>,
+): void {
+  if (!by) return;
+  const querySchema = getRoute(command.operationId)?.openapi.request?.query;
+  const queryShape = (querySchema as { shape?: unknown } | undefined)?.shape;
+  if (!queryShape || typeof queryShape !== "object" || !Object.hasOwn(queryShape, "by")) {
+    throw new SplitchCliError({
+      code: "CLI_USAGE_INVALID",
+      causeSummary: `--by is not accepted by splitch ${command.path.join(" ")}`,
+      remediation: `Drop --by, or run splitch ${command.path.join(" ")} --help to list the accepted flags`,
+    });
+  }
+  input.by = by;
 }
 
 function supportsDeleteMode(operationId: string): boolean {

@@ -28,6 +28,22 @@ describe("identity selector reads", () => {
     ]);
   });
 
+  it("excludes an Org member who is not an App member", async () => {
+    await seedHalfMembershipCandidate(local.d1, "org");
+
+    await expect(repo.identity.findAppSelectorCandidatesForUser(USER, "neuron")).resolves.toEqual(
+      [],
+    );
+  });
+
+  it("excludes an App member who is not an Org member", async () => {
+    await seedHalfMembershipCandidate(local.d1, "app");
+
+    await expect(repo.identity.findAppSelectorCandidatesForUser(USER, "neuron")).resolves.toEqual(
+      [],
+    );
+  });
+
   it("keeps Environment key reads inside the App scope", async () => {
     await seedSelectorGraph(local.d1);
     const alpha = appScope("app_alpha");
@@ -39,6 +55,36 @@ describe("identity selector reads", () => {
     await expect(repo.identity.getEnvironmentByKey(alpha, "victim-only")).resolves.toBeNull();
   });
 });
+
+async function seedHalfMembershipCandidate(
+  d1: D1Database,
+  membership: "org" | "app",
+): Promise<void> {
+  await d1
+    .prepare(
+      `INSERT INTO organizations (id, name, slug, plan, is_provisional, created_at, updated_at)
+       VALUES ('org_half', 'Half', 'half', 'free', 0, '${NOW}', '${NOW}')`,
+    )
+    .run();
+  await d1
+    .prepare(
+      `INSERT INTO apps (id, organization_id, name, key, created_at, updated_at, created_by)
+       VALUES ('app_half', 'org_half', 'Half App', 'neuron', '${NOW}', '${NOW}', '${OTHER_USER}')`,
+    )
+    .run();
+  await d1
+    .prepare(
+      `INSERT INTO org_memberships (org_id, user_id, role, created_at)
+       VALUES ('org_half', '${membership === "org" ? USER : OTHER_USER}', 'owner', '${NOW}')`,
+    )
+    .run();
+  await d1
+    .prepare(
+      `INSERT INTO app_memberships (app_id, user_id, role, created_at)
+       VALUES ('app_half', '${membership === "app" ? USER : OTHER_USER}', 'owner', '${NOW}')`,
+    )
+    .run();
+}
 
 async function seedSelectorGraph(d1: D1Database): Promise<void> {
   const statements = [

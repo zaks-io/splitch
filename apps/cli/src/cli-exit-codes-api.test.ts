@@ -1,7 +1,7 @@
 import { writeFile } from "node:fs/promises";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { runCli } from "./cli.js";
-import { EXIT_OK } from "./exit-codes.js";
+import { EXIT_OK, EXIT_USAGE } from "./exit-codes.js";
 import { flagsListStub, scopeResolutionStubs } from "./scope-resolution-fixtures.js";
 import {
   authHeader,
@@ -18,6 +18,7 @@ import {
 import { cleanupTempHomes, makeTempHome } from "./test-helpers.js";
 
 afterEach(async () => {
+  vi.restoreAllMocks();
   await cleanupTempHomes();
 });
 
@@ -42,6 +43,21 @@ describe("api command exit codes", () => {
     // apps_create rebinds to the target Org, so the API call carries the
     // freshly minted org-bound token, not the stored default.
     expect(transport.requests.at(-1)?.authorization).toBe("Bearer refreshed-access-token");
+  });
+
+  it("rejects --by before apps create can put it in the request body", async () => {
+    const { credentialPath } = await makeTempHome();
+    const transport = new FakeCliTransport([]);
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const code = await runCli(["apps", "create", "org_123", "--name", "Acme", "--by", "id"], {
+      credentialPath,
+      fetch: transport.fetch,
+    });
+
+    expect(code).toBe(EXIT_USAGE);
+    expect(transport.requests).toEqual([]);
+    expect(error.mock.calls.join(" ")).toContain("--by is not accepted by splitch apps create");
   });
 
   it("flags create returns 0 on success", async () => {

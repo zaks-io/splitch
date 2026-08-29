@@ -235,7 +235,13 @@ export function defineApiRoute<const Input extends DefineApiRouteInput>(input: I
   };
 }
 
-/** Environment ambiguity must expose a declared escape hatch on every affected route. */
+/**
+ * Environment ambiguity must expose a declared escape hatch on every affected route.
+ * This deliberately gives all 26 control-plane-token routes with `:environmentId` or
+ * `:targetEnvironmentId` a strict query contract: unknown query params now return
+ * 400 VALIDATION_ERROR where routes without a query schema previously ignored them.
+ * That fail-loud contract change is intentional under ADR-0036.
+ */
 function selectorAwareRequest(input: DefineApiRouteInput): ApiRouteRequest | undefined {
   if (
     input.auth !== "control-plane-token" ||
