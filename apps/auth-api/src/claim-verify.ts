@@ -13,8 +13,8 @@ import {
   reconcileProviderConfirmation,
   tokenize,
 } from "./claim-verify-support";
+import { mutateMembershipWithCacheInvalidation } from "./membership-cache";
 import { OAuthError } from "./oauth-errors";
-import { invalidateMembershipCache } from "./membership-cache";
 
 const IN_FLIGHT_LEASE_MS = 5 * 60 * 1000;
 const COMPLETED_REPLAY_TTL_MS = 24 * 60 * 60 * 1000;
@@ -215,8 +215,11 @@ export async function verifyClaim(deps: ClaimDeps, input: VerifyInput): Promise<
         }
       }
     }
-    await invalidateMembershipCache(deps.sessionStore, [claimant.userId, verifiedUserId]);
-    const transferred = await deps.repo.claim.completeClaim(transfer);
+    const transferred = await mutateMembershipWithCacheInvalidation(
+      deps.sessionStore,
+      [claimant.userId, verifiedUserId],
+      () => deps.repo.claim.completeClaim(transfer),
+    );
     const completed =
       transferred ||
       (await deps.repo.claim.completedClaim({ ...identityHashes, keyHash, now: nowIso }));

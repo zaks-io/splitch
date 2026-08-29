@@ -9,10 +9,12 @@ must not expose. Every Zod-parsed surface is listed here. (ADR-0025 "reuse at th
 
 ## KV namespaces (Zod-parsed on every read)
 
-Every KV value is a JSON blob Zod-parsed on read inside a `schemaVersion` envelope whose version is
-**pinned to the current version** (`z.literal`, see `CURRENT_KV_SCHEMA_VERSION`). A malformed blob
-or an unknown/future schema version fails loud. Evaluation recovers Flag Configuration through the
-authoritative Config Store DO; control-plane readers rebuild KV from D1 (see
+Config and credential KV values are JSON blobs Zod-parsed on read inside a `schemaVersion` envelope
+whose version is **pinned to the current version** (`z.literal`, see `CURRENT_KV_SCHEMA_VERSION`).
+The single-purpose SESSION_STORE `MemberProfileCache` and `MembershipSet` values have no version
+envelope and are parsed directly by their strict schemas. An unknown or future version on a
+versioned value fails loud. Evaluation recovers Flag Configuration through the authoritative Config
+Store DO; a malformed `MembershipSet` is logged and rebuilt from D1 (see
 [../platform/contracts-and-validation.md](../platform/contracts-and-validation.md)).
 (ADR-0025 "every KV read is Zod-parsed, including hot-path reads".)
 
@@ -25,6 +27,12 @@ authoritative Config Store DO; control-plane readers rebuild KV from D1 (see
 | `ck:{keyMaterialHash}` / `ak:{keyHash}`                 | `CredentialCacheKV`  | active: none; revoked: 5m    | Mutable credential entry; prefixes distinguish Client Keys from API Keys                     |
 | `revoked:{credentialCacheKey}`                          | presence marker      | none                         | Terminal revocation marker; checked before the mutable credential entry                      |
 | `member-profile:{userId}`                               | `{ email }`          | none                         | SESSION_STORE identity cache for Org member email; written at login, never in D1             |
+| `memberships:{userId}`                                  | `MembershipSet`      | 60 seconds                   | SESSION_STORE scope-resolution cache; invalidated before and after membership mutations      |
+
+`MembershipSet` contains the User's complete Organization memberships and App memberships. Each
+App entry carries its owning Organization id, and parsing rejects an App entry whose Organization
+is absent from the same value. Control Plane App- and Organization-scoped handlers still perform
+their documented uncached D1 membership check before returning tenant data.
 
 ### FlagConfigKV
 

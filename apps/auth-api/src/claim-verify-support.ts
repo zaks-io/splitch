@@ -1,8 +1,8 @@
 import { rememberMemberProfile } from "@splitch/contracts";
 import type { ClaimDeps, ClaimResult } from "./claim";
 import { type claimHashes, iso, type Provisional } from "./claim-identity";
+import { mutateMembershipWithCacheInvalidation } from "./membership-cache";
 import { OAuthError } from "./oauth-errors";
-import { invalidateMembershipCache } from "./membership-cache";
 
 const COMPLETED_REPLAY_TTL_MS = 24 * 60 * 60 * 1000;
 
@@ -58,8 +58,11 @@ export async function reconcileProviderConfirmation(
     replayExpiresAt: iso(Date.parse(nowIso) + COMPLETED_REPLAY_TTL_MS),
     now: nowIso,
   };
-  await invalidateMembershipCache(deps.sessionStore, [claimant.userId, verifiedUserId]);
-  const transferred = await deps.repo.claim.completeClaim(transfer);
+  const transferred = await mutateMembershipWithCacheInvalidation(
+    deps.sessionStore,
+    [claimant.userId, verifiedUserId],
+    () => deps.repo.claim.completeClaim(transfer),
+  );
   if (
     !transferred &&
     !(await deps.repo.claim.completedClaim({ ...identityHashes, keyHash, now: nowIso }))

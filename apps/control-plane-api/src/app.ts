@@ -5,6 +5,7 @@ import type { AppDeps } from "./app-deps";
 import { appEnvironmentCleanupDeps } from "./app-environment-cleanup-deps";
 import { makeAppEnvironmentHandlers } from "./app-environment-handlers";
 import { makeAppMemberHandlers } from "./app-member-handlers";
+import { withLiveAppReadMembership } from "./app-read-authz";
 import { makeOtherApprovalApplication } from "./approval-application";
 import { makeApprovalHandlers } from "./approval-handlers";
 import { unavailableAnalysisResults } from "./attention-analysis-reader";
@@ -36,10 +37,10 @@ import { mountUnavailableControlPlaneRoutes } from "./unavailable-handler";
  * control-plane-token resolver under its AuthKind and mounts the routes; the
  * guard does the rest.
  *
- * Authorization for App reads is the token's App co-scope binding plus the
- * resolver's live membership recheck: a removed or role-incompatible membership
- * is refused before the guard, so a stale App-scoped token cannot reach the
- * handler. Canonical App selectors are co-scoped before selector repository
+ * Authorization for App reads is the token's App co-scope binding plus a live
+ * handler-boundary membership read: a removed member cannot reach tenant data
+ * even while another location still holds a cached membership set. Canonical
+ * App selectors are co-scoped before selector repository
  * reads; human App selectors require one membership-bounded lookup before the
  * resolved App is co-scoped. Org
  * routes also layer live D1 membership checks in their owning handler module
@@ -60,7 +61,7 @@ export function controlPlaneRegistrar(deps: AppDeps): Registrar {
     defaultHeaders: deps.defaultHeaders,
     observability: deps.observability,
   };
-  return createRegistrar(registrarDeps);
+  return withLiveAppReadMembership(createRegistrar(registrarDeps), deps.repo);
 }
 
 // biome-ignore lint/complexity/noExcessiveLinesPerFunction: route mounting stays explicit so no operation can be silently omitted

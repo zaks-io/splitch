@@ -64,6 +64,7 @@ describe("Approval Request scheduled archival", () => {
 function scheduledEnv(): ControlPlaneApiEnv {
   return {
     DB: h.d1,
+    SESSION_STORE: h.kv,
     CREDENTIAL_CACHE_BACKFILL: {
       getByName: () => ({ fetch: () => Promise.resolve(new Response(null, { status: 204 })) }),
     },

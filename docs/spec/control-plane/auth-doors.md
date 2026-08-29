@@ -189,11 +189,13 @@ an unresolvable selector must fail the one request rather than burn the session.
 
 A Control Plane token request may instead set `authorization=membership-wide-read`. This option is
 mutually exclusive with `app`, `org`, and a device grant's selected App. It mints no selector scopes;
-the Control Plane reconstructs the principal's complete live membership set from D1 on every
-request. The route registrar accepts that structural grant only for `GET` and rejects every mutation
-before its handler runs. Internal delegation carries the grant and request-live membership set,
-binds only axes the surface registrar already authorized, and reruns Organization/App co-scope in
-the owner Worker. The CLI reuses any unexpired device-flow token for principal-keyed Organization
+the Control Plane resolves the principal's complete membership set through the bounded
+`memberships:{user_id}` cache defined by
+[ADR-0053](../../adr/0053-membership-cache-is-bounded-and-not-an-authorization-decision.md). The
+route registrar accepts that structural grant only for `GET` and rejects every mutation before its
+handler runs. Internal delegation carries the grant and request-resolved membership set, binds only
+axes the surface registrar already authorized, and reruns Organization/App co-scope in the owner
+Worker. App-scoped reads retain an uncached D1 App membership backstop. The CLI reuses any unexpired device-flow token for principal-keyed Organization
 discovery. When it must refresh, it refreshes the session default without requesting wide authority;
 `organizations_list` already returns the principal's complete live Organization membership set for
 device-flow principals. The CLI-side request and cache path for wide authority lands in SPL-530, where

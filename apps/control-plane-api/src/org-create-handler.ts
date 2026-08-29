@@ -8,8 +8,11 @@ import type { HandlerArgs, Principal } from "@splitch/worker-runtime";
 import { renderError } from "@splitch/worker-runtime";
 import { randomHex } from "./credential-cache";
 import { objectBody } from "./handler-input";
+import {
+  type MembershipCacheInvalidator,
+  mutateMembershipWithCacheInvalidation,
+} from "./membership-cache";
 import { organizationResponse } from "./org-response";
-import { type MembershipCacheInvalidator, invalidateMembershipCache } from "./membership-cache";
 
 /**
  * `organizations_create` (SPL-171).
@@ -49,23 +52,27 @@ export function makeCreateOrganizationHandler(deps: OrgCreateDeps) {
     if (!slug) return unusableSlug(name, requestId);
 
     const now = deps.nowIso?.() ?? new Date().toISOString();
-    await invalidateMembershipCache(deps.membershipCache, [principal.id]);
-    const created = await deps.repo.identity.createOrganization({
-      organization: {
-        id: `org_${randomHex(12)}`,
-        name,
-        slug,
-        plan: "free",
-        // An Org created by an identified principal is real, never a demo, so it
-        // is not eligible for the provisional reaper.
-        isProvisional: false,
-        demoExpiresAt: null,
-        createdAt: now,
-        updatedAt: now,
-      },
-      ownerUserId: principal.id,
-      createdAt: now,
-    });
+    const created = await mutateMembershipWithCacheInvalidation(
+      deps.membershipCache,
+      [principal.id],
+      () =>
+        deps.repo.identity.createOrganization({
+          organization: {
+            id: `org_${randomHex(12)}`,
+            name,
+            slug,
+            plan: "free",
+            // An Org created by an identified principal is real, never a demo, so it
+            // is not eligible for the provisional reaper.
+            isProvisional: false,
+            demoExpiresAt: null,
+            createdAt: now,
+            updatedAt: now,
+          },
+          ownerUserId: principal.id,
+          createdAt: now,
+        }),
+    );
 
     if (!created.ok) return slugConflict(slug, requestId);
     return Response.json(organizationResponse(created.organization), { status: 201 });

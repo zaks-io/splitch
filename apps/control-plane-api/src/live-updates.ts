@@ -10,6 +10,7 @@ import {
   renderError,
 } from "@splitch/worker-runtime";
 import type { Context, Hono } from "hono";
+import { requireLiveAppReadMembership } from "./app-read-authz";
 import type { ConfigStoreAccess } from "./config-store-do";
 import { resolveControlPlanePathSelectors } from "./path-selector-resolution";
 
@@ -69,6 +70,14 @@ async function handleLiveUpdate(c: Context, deps: LiveUpdateDeps): Promise<Respo
     if (scopeError) {
       return renderError(scopeError, { requestId, defaultHeaders: deps.defaultHeaders });
     }
+
+    const membershipError = await requireLiveAppReadMembership(
+      deps.repo,
+      appId,
+      resolved.principal,
+      requestId,
+    );
+    if (membershipError) return membershipError;
 
     const environment = await deps.repo.identity.getEnvironment(appScope(appId), environmentId);
     if (!environment) {

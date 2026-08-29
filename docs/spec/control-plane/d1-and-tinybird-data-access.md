@@ -78,16 +78,20 @@ and attaches it to request context). Repository methods are never called without
 
 ## KV hot-validation reads
 
-Two read types are hot enough for KV:
+Three read types are hot enough for KV:
 
 1. **Session validation** — control-plane token validation (JWKS fetch is once; signature verify is CPU)
 2. **SDK key validation** — per-request API Key or Client Key validation
+3. **Bearer membership-set resolution** — the complete Organization and App membership set, cached
+   for 60 seconds under `memberships:{user_id}` with D1 as the miss source
 
-KV schema and write-through contract: see [credentials-and-keys.md](credentials-and-keys.md).
+KV schema and write-through contracts: see [credentials-and-keys.md](credentials-and-keys.md) and
+[ADR-0053](../../adr/0053-membership-cache-is-bounded-and-not-an-authorization-decision.md).
 
-**Everything else is NOT in KV.** Flag config and live Run ID are in KV for the data-plane evaluate
-path — that is the platform seam's concern, not this one. From the control-plane perspective, D1 is
-the config store and KV is the credential cache only.
+**Everything else is NOT in control-plane KV.** Flag config and live Run ID are in KV for the
+data-plane evaluate path. D1 remains authoritative for membership and configuration. App-scoped
+Control Plane reads perform an uncached D1 App membership check after cached scope resolution, so the
+membership cache is not the tenant-data authorization decision.
 
 Exception: `live_run:{app_id}:{environment_id}:{experiment_id}` → `run_id` is written by the
 control-plane at Start time (see [run-state-machine.md](run-state-machine.md)) for the edge to read.

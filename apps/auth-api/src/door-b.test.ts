@@ -136,6 +136,27 @@ async function registerOk(app: ReturnType<typeof createApp>): Promise<RegisterBo
 }
 
 describe("Door B register: Turnstile-before-write, provisional Org+App+Environments", () => {
+  it("does not invalidate membership cache for a freshly minted User", async () => {
+    const deleted: string[] = [];
+    const sessionStore = new Proxy(local.sessionKv, {
+      get(target, property) {
+        if (property === "delete") {
+          return async (key: string) => {
+            deleted.push(key);
+            return target.delete(key);
+          };
+        }
+        const value = Reflect.get(target, property);
+        return typeof value === "function" ? value.bind(target) : value;
+      },
+    });
+
+    const { app } = build({ sessionStore });
+    const body = await registerOk(app);
+
+    expect(deleted).not.toContain(`memberships:${body.user_id}`);
+  });
+
   it("a valid fixture Turnstile token creates a provisional Org + App + default Environments", async () => {
     const { app } = build();
     const body = await registerOk(app);

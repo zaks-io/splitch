@@ -354,6 +354,8 @@ function stubRepo(experiments?: {
 }): Repository {
   return {
     identity: {
+      getApp: async (appId: string) => ({ id: appId }),
+      getAppMembership: async () => ({ role: "member" }),
       getEnvironment: async ({ appId }: { appId: string }, environmentId: string) =>
         ENVIRONMENTS.has(`${appId}/${environmentId}`) ? { id: environmentId } : null,
       findEnvironmentSelectorCandidates: async ({ appId }: { appId: string }, selector: string) =>

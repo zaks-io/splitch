@@ -9,12 +9,15 @@ import type { Repository } from "@splitch/db";
 import type { HandlerArgs } from "@splitch/worker-runtime";
 import { renderError } from "@splitch/worker-runtime";
 import { objectBody, pathParam } from "./handler-input";
+import {
+  type MembershipCacheInvalidator,
+  mutateMembershipWithCacheInvalidation,
+} from "./membership-cache";
+import { membershipConflict } from "./membership-conflict";
 import { ORG_ADMIN_ROLES, ORG_MEMBER_ROLES, ORG_OWNER_ROLES, requireOrgRole } from "./org-authz";
 import { makeCreateOrganizationHandler } from "./org-create-handler";
 import { makeListOrganizationsHandler } from "./org-list-handler";
 import { organizationResponse } from "./org-response";
-import { membershipConflict } from "./membership-conflict";
-import { type MembershipCacheInvalidator, invalidateMembershipCache } from "./membership-cache";
 
 export interface MemberProfile {
   email: string;
@@ -111,13 +114,14 @@ export function makeOrgHandlers(deps: OrgHandlerDeps) {
       const profile = await resolveNewMemberProfile(deps, orgId, userId, request, requestId);
       if (profile instanceof Response) return profile;
 
-      await invalidateMembershipCache(deps.membershipCache, [userId]);
-      const row = await deps.repo.identity.createOrgMembership({
-        orgId,
-        userId,
-        role,
-        createdAt: now(),
-      });
+      const row = await mutateMembershipWithCacheInvalidation(deps.membershipCache, [userId], () =>
+        deps.repo.identity.createOrgMembership({
+          orgId,
+          userId,
+          role,
+          createdAt: now(),
+        }),
+      );
       return Response.json(memberFromMembership(row, profile));
     },
 
@@ -137,8 +141,11 @@ export function makeOrgHandlers(deps: OrgHandlerDeps) {
       const profile = await resolveProfile(deps, orgId, userId, request, requestId);
       if (profile instanceof Response) return profile;
 
-      await invalidateMembershipCache(deps.membershipCache, [userId]);
-      const updated = await deps.repo.identity.updateOrgMembershipRole(orgId, userId, role);
+      const updated = await mutateMembershipWithCacheInvalidation(
+        deps.membershipCache,
+        [userId],
+        () => deps.repo.identity.updateOrgMembershipRole(orgId, userId, role),
+      );
       if (!updated) return failedMemberUpdate(current, role, orgId, requestId);
       return Response.json(memberFromMembership(updated, profile));
     },
@@ -155,8 +162,11 @@ export function makeOrgHandlers(deps: OrgHandlerDeps) {
       const lastOwner = await rejectLastOwnerRemoval(deps, orgId, current, null, requestId);
       if (lastOwner) return lastOwner;
 
-      await invalidateMembershipCache(deps.membershipCache, [userId]);
-      const deleted = await deps.repo.identity.deleteOrgMembership(orgId, userId);
+      const deleted = await mutateMembershipWithCacheInvalidation(
+        deps.membershipCache,
+        [userId],
+        () => deps.repo.identity.deleteOrgMembership(orgId, userId),
+      );
       if (deleted === 0) return failedMemberDelete(current, orgId, requestId);
       return Response.json({ deleted: true });
     },

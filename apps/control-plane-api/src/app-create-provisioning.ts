@@ -4,12 +4,12 @@ import {
   type AppEnvironmentDeps,
   type AppRow,
   CONFIRM_POLICY,
-  type EnvironmentRow,
   createEnvironmentRecord,
+  type EnvironmentRow,
   nowIso,
   provisionEnvironmentClientKeys,
 } from "./app-environment-model";
-import { invalidateMembershipCache } from "./membership-cache";
+import { mutateMembershipWithCacheInvalidation } from "./membership-cache";
 
 export async function provisionAppCreateState(
   deps: AppEnvironmentDeps,
@@ -32,20 +32,18 @@ async function ensureOwnerMembership(
   scope: TenantScope,
   actorId: string,
 ): Promise<void> {
-  if (await deps.repo.identity.getAppMembership(scope, actorId)) {
-    await invalidateMembershipCache(deps.membershipCache, [actorId]);
-    return;
-  }
-  await invalidateMembershipCache(deps.membershipCache, [actorId]);
-  await deps.repo.identity
-    .createAppMembership(scope, {
-      userId: actorId,
-      role: "owner",
-      createdAt: nowIso(deps),
-    })
-    .catch(async (cause) => {
-      if (!(await deps.repo.identity.getAppMembership(scope, actorId))) throw cause;
-    });
+  if (await deps.repo.identity.getAppMembership(scope, actorId)) return;
+  await mutateMembershipWithCacheInvalidation(deps.membershipCache, [actorId], () =>
+    deps.repo.identity
+      .createAppMembership(scope, {
+        userId: actorId,
+        role: "owner",
+        createdAt: nowIso(deps),
+      })
+      .catch(async (cause) => {
+        if (!(await deps.repo.identity.getAppMembership(scope, actorId))) throw cause;
+      }),
+  );
 }
 
 async function ensureEnvironment(

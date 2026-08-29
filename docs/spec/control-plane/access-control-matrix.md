@@ -40,12 +40,12 @@ user or agent onboarding path.
 
 `authorization: "membership-wide-read"` is a Control Plane-only, read-only grant. Its token must
 carry an explicitly empty `scopes` array and cannot be combined with an App or Organization
-selector. The claim carries no membership rows. On every request, the Control Plane resolves the
-principal's complete current Organization and App membership set from D1 and exposes that live set
-to the handler context. The registrar accepts the grant only for `GET`, applies path co-scope against
-the live set, and rejects every other method before the handler runs. Session revocation uses the
-same principal-keyed check as selector-bound tokens. The Auth API refuses this authorization for the
-MCP audience.
+selector. The claim carries no membership rows. On `GET`, the Control Plane resolves the principal's
+complete Organization and App membership set through the `memberships:{user_id}` SESSION_STORE
+cache. A miss loads the complete set from D1 and writes it with a 60-second TTL. The registrar
+accepts the grant only for `GET`, applies path co-scope against that set, and rejects every other
+method before the handler runs. Session revocation uses the same principal-keyed check as
+selector-bound tokens. The Auth API refuses this authorization for the MCP audience.
 
 **Scope format:** `app:{app_id}:{role}` where role is `owner`, `admin`, or `member`.
 A token may carry multiple App scopes (e.g. user is admin on two Apps). Org-level operations require
@@ -57,10 +57,10 @@ membership, because the token a cold-start device login mints carries no scopes 
 would return an empty list and deadlock the first step of every agent journey.
 
 The scope filter is dropped for the `device_flow` door and for membership-wide authority. Device
-flow can rebind to any live Organization; the structural grant explicitly names the same complete
-live membership reach regardless of its auth door. Other refresh-less access tokens remain narrowed
-by scopes. Live membership is the floor for every door: a scope naming an Organization the principal
-does not belong to never widens the result. Every other Organization route co-scopes on `:orgId`.
+flow can rebind to any current Organization; the structural grant names the complete cached
+membership reach regardless of its auth door. Other refresh-less access tokens remain narrowed by
+scopes. Every Organization route with an `:orgId` path performs an uncached D1 Organization
+membership check in its handler. `GET /orgs` and Organization-scoped App listing read D1 directly.
 
 **Token validation at the selected protected resource:**
 
@@ -69,21 +69,30 @@ does not belong to never widens the result. Every other Organization route co-sc
 3. Assert `aud` exactly matches the protected resource handling the request
 4. Assert `exp` not passed
 5. Session-validation hot read: a revoked session is `CREDENTIAL_REVOKED`
-6. Hot-validate every Organization and App membership axis the token carries.
-   This runs on the public bearer path and again on the MCP Control Plane
-   door after the delegation is verified (delegation copies minted scopes, or
-   the wide grant plus its request-live membership set). A removed or role-incompatible
-   membership is refused before route scope checks. Tokens whose authority
-   does not derive from membership (API Key, Client Key, and ordinary tokens
-   with no `org:`/`app:` axes) keep their existing path.
+6. Resolve every Organization and App membership axis the token carries through
+   `memberships:{user_id}`. Cache misses read the complete set from D1. Only `GET` and `HEAD`
+   requests fill the cache; mutating requests read D1 on a miss without filling. Membership
+   mutations delete the affected key before the D1 write and again after commit. A cache entry
+   expires after 60 seconds even if either delete is not yet visible at another Cloudflare location.
+   This runs on the public bearer path and again on the MCP Control Plane door after delegation is
+   verified. Tokens whose authority does not derive from membership keep their existing path.
 7. For `authorization: "membership-wide-read"`, require an empty `scopes` array,
-   resolve the complete membership set from live D1, refuse non-`GET` methods,
-   and co-scope any Organization or App path against that set. Internal delegation carries the
-   grant and live set, binds only the already-authorized path axes, and reruns Organization/App
+   resolve the complete membership set through the same cache, refuse non-`GET` methods, and
+   co-scope any Organization or App path against that set. Internal delegation carries the grant
+   and resolved set, binds only the already-authorized path axes, and reruns Organization/App
    co-scope in the owner Worker.
 8. Otherwise, extract `scopes` and match against the required scope for the
    requested operation.
 9. Extract `sub` as `user_id` for audit logging
+
+The membership cache is a scope-resolution optimization, not the final authorization decision.
+Every Control Plane `GET` route whose canonical path contains `:appId` performs an uncached
+`getAppMembership` read before its handler can return App data. The hand-mounted live-update route
+performs the same check before reading the Environment or opening the stream. App and Organization
+mutation handlers perform their role-specific uncached D1 checks. Organization-scoped reads perform
+an uncached `getOrgMembership` check, while `GET /orgs` reads the principal's memberships directly
+from D1. These live handler checks make removal effective on the next request; the 60-second TTL
+only bounds stale scope resolution and does not authorize an App-scoped response.
 
 ## Trusted IdP allow-list
 

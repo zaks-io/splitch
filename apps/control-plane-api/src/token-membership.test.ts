@@ -265,5 +265,6 @@ function emptyCache(): KVNamespace {
   return {
     get: async () => null,
     put: async () => undefined,
+    delete: async () => undefined,
   } as unknown as KVNamespace;
 }

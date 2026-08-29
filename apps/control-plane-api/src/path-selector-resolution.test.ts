@@ -174,7 +174,7 @@ describe("selector resolution failures and descendant selectors", () => {
     expect(byId.status).toBe(200);
     expect(byName.status).toBe(200);
     expect(await byName.json()).toEqual(await byId.json());
-    expect([idQueries, nameQueries]).toEqual([1, 3]);
+    expect([idQueries, nameQueries]).toEqual([2, 4]);
     expect(seen.at(-1)).toEqual({
       appId: APP_A,
       environmentId: "env_selector_prod",

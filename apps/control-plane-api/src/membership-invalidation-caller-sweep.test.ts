@@ -9,8 +9,9 @@ import { describe, expect, it } from "vitest";
  * Membership writes live behind `@splitch/db`, but invalidation needs the shared
  * SESSION_STORE binding owned by each Worker. This test therefore classifies
  * every production caller in both Workers and requires the enclosing block to
- * reach `invalidateMembershipCache` before the mutation. Invalidating first
- * prevents a KV limit fault from following an irreversible D1 write.
+ * reach `mutateMembershipWithCacheInvalidation` around the mutation. Its
+ * contract deletes before the D1 write and again after commit, closing the
+ * refill race without putting an irreversible write before a KV limit fault.
  *
  * The match is on each METHOD, not its receiver: destructuring can change a
  * receiver without changing the mutation. The enclosing scope is found by
@@ -26,7 +27,8 @@ import { describe, expect, it } from "vitest";
 
 const CONTROL_PLANE_SRC = fileURLToPath(new URL("./", import.meta.url));
 const AUTH_SRC = fileURLToPath(new URL("../../auth-api/src/", import.meta.url));
-const INVALIDATION = "invalidateMembershipCache";
+const CACHE_BOUNDARY = "mutateMembershipWithCacheInvalidation";
+const DIRECT_INVALIDATION = "invalidateMembershipCache";
 
 const MUTATIONS = [
   ".createOrganization(",
@@ -45,23 +47,26 @@ const MUTATIONS = [
 /** Every production module calling a membership writer, with how it invalidates. */
 const CALLERS: Record<string, string> = {
   "auth-api/src/claim-verify-support.ts":
-    "invalidates provisional and verified users before a recovered claim transfer",
+    "invalidates provisional and verified users around a recovered claim transfer",
   "auth-api/src/claim-verify.ts":
-    "invalidates provisional and verified users before a claim transfer",
-  "auth-api/src/register.ts":
-    "invalidates the new user before Organization and App membership creation",
+    "invalidates provisional and verified users around a claim transfer",
   "control-plane-api/src/app-create-provisioning.ts":
-    "invalidates the actor before provisioning the App owner membership",
+    "invalidates the actor around provisioning the App owner membership",
   "control-plane-api/src/app-delete-holdover.ts":
-    "reads App members before the cascade and invalidates every affected user",
+    "reads App members before the cascade and invalidates every affected user around it",
   "control-plane-api/src/app-member-handlers.ts":
-    "invalidates the affected user before create, role change, and removal",
+    "invalidates the affected user around create, role change, and removal",
   "control-plane-api/src/org-create-handler.ts":
-    "invalidates the owner before atomic Organization and membership creation",
+    "invalidates the owner around atomic Organization and membership creation",
   "control-plane-api/src/org-handlers.ts":
-    "invalidates the affected user before create, role change, and removal",
+    "invalidates the affected user around create, role change, and removal",
   "control-plane-api/src/scheduled.ts":
-    "reads expired demo members before reaping and invalidates every affected user",
+    "reads expired demo members before reaping and invalidates every affected user around it",
+};
+
+const FRESH_USER_CALLERS: Record<string, string> = {
+  "auth-api/src/register.ts":
+    "creates a new User id that cannot have a pre-existing membership cache entry",
 };
 
 const TEST_SUPPORT = new Set([
@@ -133,10 +138,12 @@ describe("every membership mutation caller invalidates the affected cache", () =
     ].filter((rel) => !TEST_SUPPORT.has(rel));
     const calling = files.filter((rel) => callSites(read(rel)).length > 0);
 
-    expect(calling.sort()).toEqual(Object.keys(CALLERS).sort());
+    expect(calling.sort()).toEqual(
+      [...Object.keys(CALLERS), ...Object.keys(FRESH_USER_CALLERS)].sort(),
+    );
   });
 
-  it("reaches invalidation before every mutation call", () => {
+  it("routes every cacheable mutation through the pre-and-post boundary", () => {
     for (const rel of Object.keys(CALLERS)) {
       const source = read(rel);
       const sites = callSites(source);
@@ -144,12 +151,30 @@ describe("every membership mutation caller invalidates the affected cache", () =
       for (const at of sites) {
         const line = source.slice(0, at).split("\n").length;
         const start = blockStart(source, at);
-        expect(enclosingBlock(source, at)).toContain(INVALIDATION);
+        expect(enclosingBlock(source, at)).toContain(CACHE_BOUNDARY);
         expect(
           source.slice(start, at),
-          `${rel}:${line} does not invalidate membership cache before the mutation`,
-        ).toContain(INVALIDATION);
+          `${rel}:${line} does not enter the membership cache boundary before the mutation`,
+        ).toContain(CACHE_BOUNDARY);
       }
     }
+  });
+
+  it("limits no-invalidation callers to freshly minted User ids", () => {
+    expect(Object.keys(FRESH_USER_CALLERS)).toEqual(["auth-api/src/register.ts"]);
+    for (const rel of Object.keys(FRESH_USER_CALLERS)) {
+      expect(read(rel)).not.toContain(CACHE_BOUNDARY);
+      expect(read(rel)).not.toContain(DIRECT_INVALIDATION);
+    }
+  });
+
+  it("does not invalidate when App owner provisioning finds the membership unchanged", () => {
+    const source = read("control-plane-api/src/app-create-provisioning.ts");
+    const existingBranch = source.slice(
+      source.indexOf("if (await deps.repo.identity.getAppMembership"),
+      source.indexOf(CACHE_BOUNDARY),
+    );
+    expect(existingBranch).not.toContain(DIRECT_INVALIDATION);
+    expect(existingBranch).not.toContain(CACHE_BOUNDARY);
   });
 });

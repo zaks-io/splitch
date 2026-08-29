@@ -6,9 +6,9 @@ import { createApp } from "../src/app";
 import { makeControlPlaneAuthResolver } from "../src/auth-resolver";
 import { type FixtureSigner, makeFixtureSigner } from "../src/fixture-signer";
 import { makeJwksVerifier } from "../src/jwks-verify";
+import { makeMembershipCacheInvalidator } from "../src/membership-cache";
 import { appAdminScope } from "../src/scope-binding";
 import { makeSessionStore } from "../src/session-store";
-import { makeMembershipCacheInvalidator } from "../src/membership-cache";
 import type { LocalBindings } from "../src/test-fixtures";
 import {
   resetOrganizationGraph,
@@ -226,15 +226,46 @@ describe("bearer token live membership recheck", () => {
     expect(refused.status).toBe(403);
     expect(((await refused.json()) as ErrorResponse).message).toBe("live membership is required");
   });
+});
 
-  it("documents the bounded stale window by allowing a value whose invalidation is not visible", async () => {
+describe("membership cache security backstops", () => {
+  it("fails loud with 500 when a membership mutation has no invalidator", async () => {
+    const ownerJwt = await token(OWNER, [`app:${PAYMENTS.appId}:owner`]);
+    const app = createApp({
+      authResolver: makeControlPlaneAuthResolver({
+        verifier: makeJwksVerifier({
+          issuer: "https://auth.splitch.test",
+          fetchJwks: async () => h.signer.jwks,
+          controlPlaneAudience: AUDIENCE,
+        }),
+        sessions: makeSessionStore(h.bindings.kv),
+        membershipAccess: makeTokenMembershipAccess(h.repo, h.bindings.kv, false),
+        now: () => NOW_MS,
+      }),
+      rateLimiter: allowLimiter,
+      repo: h.repo,
+    });
+
+    const refused = await app.request(`/apps/${PAYMENTS.appId}/members/${ALICE}`, {
+      method: "DELETE",
+      headers: { authorization: `Bearer ${ownerJwt}` },
+    });
+    expect(refused.status).toBe(500);
+    expect(await h.repo.identity.getAppMembership(appScope(PAYMENTS.appId), ALICE)).not.toBeNull();
+  });
+
+  it("refuses App metadata, Environment, and Flag reads after live membership removal despite a warm cache", async () => {
     const jwt = await token(ALICE, [appAdminScope(PAYMENTS.appId)]);
     expect((await get(`/apps/${PAYMENTS.appId}`, jwt)).status).toBe(200);
+    expect((await get(`/apps/${PAYMENTS.appId}/envs`, jwt)).status).toBe(200);
+    expect((await get(`/apps/${PAYMENTS.appId}/flags`, jwt)).status).toBe(200);
 
     await h.repo.identity.deleteAppMembership(appScope(PAYMENTS.appId), ALICE);
+    await h.repo.identity.deleteOrgMembership(PAYMENTS.orgId, ALICE);
 
-    const insideWindow = await get(`/apps/${PAYMENTS.appId}`, jwt);
-    expect(insideWindow.status).toBe(200);
+    expect((await get(`/apps/${PAYMENTS.appId}`, jwt)).status).toBe(403);
+    expect((await get(`/apps/${PAYMENTS.appId}/envs`, jwt)).status).toBe(403);
+    expect((await get(`/apps/${PAYMENTS.appId}/flags`, jwt)).status).toBe(403);
   });
 
   it("fails loud with 500 when membershipAccess is unwired and never returns a principal", async () => {

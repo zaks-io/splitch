@@ -1,6 +1,10 @@
-import type { MembershipSet } from "@splitch/contracts";
+import { MEMBERSHIP_CACHE_TTL_SECONDS, type MembershipSet } from "@splitch/contracts";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { invalidateMembershipCache, makeMembershipCacheInvalidator } from "./membership-cache";
+import {
+  invalidateMembershipCache,
+  makeMembershipCacheInvalidator,
+  mutateMembershipWithCacheInvalidation,
+} from "./membership-cache";
 import { makeTokenMembershipAccess } from "./token-membership";
 
 const USER = "user_membership_cache";
@@ -96,9 +100,48 @@ describe("membership cache reads", () => {
     expect(d1.queryCount()).toBe(2);
     expect(wrote).toBe(false);
   });
+
+  it("applies the security TTL to the KV entry written on a cache miss", async () => {
+    const puts: Array<{ key: string; options?: KVNamespacePutOptions }> = [];
+    const kv = {
+      get: async () => null,
+      put: async (key: string, _value: string, options?: KVNamespacePutOptions) => {
+        puts.push({ key, options });
+      },
+      delete: async () => undefined,
+    } as unknown as KVNamespace;
+    const access = makeTokenMembershipAccess(countingIdentity().repo, kv);
+
+    await access.resolve(USER);
+
+    expect(puts).toEqual([
+      {
+        key: `memberships:${USER}`,
+        options: { expirationTtl: MEMBERSHIP_CACHE_TTL_SECONDS },
+      },
+    ]);
+  });
+
+  it("fails at construction when SESSION_STORE is unwired", () => {
+    expect(() => makeTokenMembershipAccess(countingIdentity().repo, undefined)).toThrow(
+      "control-plane: SESSION_STORE KV binding is required",
+    );
+    expect(() => makeMembershipCacheInvalidator(undefined)).toThrow(
+      "control-plane: SESSION_STORE KV binding is required",
+    );
+    expect(() => makeTokenMembershipAccess(countingIdentity().repo, {} as KVNamespace)).toThrow(
+      "control-plane: SESSION_STORE KV binding is required",
+    );
+  });
 });
 
 describe("membership cache invalidation", () => {
+  it("fails loud when the invalidator is unwired", async () => {
+    await expect(invalidateMembershipCache(undefined, [USER])).rejects.toThrow(
+      "control-plane: membership cache invalidator is required",
+    );
+  });
+
   it("propagates a KV delete failure", async () => {
     await expect(
       invalidateMembershipCache(
@@ -110,6 +153,30 @@ describe("membership cache invalidation", () => {
         [USER],
       ),
     ).rejects.toThrow("KV delete failed");
+  });
+
+  it("deletes a stale refill again after the D1 mutation commits", async () => {
+    let cached: string | null = JSON.stringify(memberships);
+    let live: MembershipSet = memberships;
+    const kv = {
+      get: async () => cached,
+      put: async (_key: string, value: string) => {
+        cached = value;
+      },
+      delete: async () => {
+        cached = null;
+      },
+    } as unknown as KVNamespace;
+    const invalidator = makeMembershipCacheInvalidator(kv);
+    const repo = membershipIdentity(() => live);
+
+    await mutateMembershipWithCacheInvalidation(invalidator, [USER], async () => {
+      await makeTokenMembershipAccess(repo, kv).resolve(USER);
+      live = { organizations: [], apps: [] };
+    });
+
+    const access = makeTokenMembershipAccess(repo, kv);
+    await expect(access.resolve(USER)).resolves.toEqual({ organizations: [], apps: [] });
   });
 });
 
@@ -132,10 +199,25 @@ function countingIdentity() {
   };
 }
 
+function membershipIdentity(read: () => MembershipSet) {
+  return {
+    identity: {
+      listOrgMembershipsForUser: async () =>
+        read().organizations.map((row) => ({ orgId: row.id, role: row.role })),
+      listAppMembershipsWithAppForUser: async () =>
+        read().apps.map((row) => ({
+          role: row.role,
+          app: { id: row.id, organizationId: row.organizationId },
+        })),
+    },
+  } as unknown as Parameters<typeof makeTokenMembershipAccess>[0];
+}
+
 function cache(raw: string): KVNamespace {
   return {
     get: async () => raw,
     put: async () => undefined,
+    delete: async () => undefined,
   } as unknown as KVNamespace;
 }
 
@@ -145,5 +227,6 @@ function faultingCache(): KVNamespace {
       throw new Error("KV unavailable");
     },
     put: async () => undefined,
+    delete: async () => undefined,
   } as unknown as KVNamespace;
 }

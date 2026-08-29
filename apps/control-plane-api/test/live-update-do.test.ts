@@ -12,6 +12,7 @@ import { type FixtureSigner, makeFixtureSigner } from "../src/fixture-signer.js"
 import { makeJwksVerifier } from "../src/jwks-verify.js";
 import { appAdminScope } from "../src/scope-binding.js";
 import { makeSessionStore } from "../src/session-store.js";
+import { seedAppMember } from "../src/test-seeds.js";
 
 const AUDIENCE = "https://cp.splitch.test";
 const USER_ID = "user_live_updates";
@@ -29,6 +30,7 @@ let signer: FixtureSigner;
 
 beforeAll(async () => {
   await seedConfigGraph(env.DB);
+  await seedAppMember(env.DB, { appId: ids.appId, userId: USER_ID, role: "admin" });
   signer = await makeFixtureSigner();
 });
 

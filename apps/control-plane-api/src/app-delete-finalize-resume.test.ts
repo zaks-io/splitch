@@ -1,12 +1,11 @@
-import { describe, expect, it } from "vitest";
-import { createApp } from "./app";
-import type { AuthResolver, RateLimiter } from "@splitch/worker-runtime";
 import { createRepository } from "@splitch/db";
-import { afterEach, beforeEach } from "vitest";
-import { type LocalBindings, makeLocalBindings } from "./test-fixtures";
+import type { AuthResolver, RateLimiter } from "@splitch/worker-runtime";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { createApp } from "./app";
+import { makeControlPlaneAuthResolver } from "./auth-resolver";
 import type { EnvironmentExposureStatusCleanupInput } from "./environment-exposure-status-cleanup";
 import type { HoldoverWriteOutboxCleanup } from "./holdover-write-outbox-cleanup";
-import { makeControlPlaneAuthResolver } from "./auth-resolver";
+import { type LocalBindings, makeLocalBindings } from "./test-fixtures";
 
 const APP_ID = "app_finalize_resume";
 const ORG_ID = "org_finalize_resume";
@@ -137,6 +136,7 @@ describe("App delete public D1 boundary recovery", () => {
     const realDelete = realRepo.identity.deleteAppCascade;
     const boundaryCrossed = deferred<void>();
     let prepareCalls = 0;
+    let deleteCalls = 0;
     let evaluationCancels = 0;
     const holdover: HoldoverWriteOutboxCleanup = {
       async prepare() {
@@ -161,6 +161,7 @@ describe("App delete public D1 boundary recovery", () => {
           return realCancel(...args);
         },
         async deleteAppCascade(...args: Parameters<typeof realDelete>) {
+          deleteCalls += 1;
           await realDelete(...args);
           boundaryCrossed.resolve();
         },
@@ -175,6 +176,7 @@ describe("App delete public D1 boundary recovery", () => {
 
     expect(responses.map((response) => response.status)).toEqual([200, 200]);
     expect(evaluationCancels).toBe(0);
+    expect(deleteCalls).toBe(1);
     expect(await realRepo.identity.getApp(APP_ID)).toBeNull();
     expect(await realRepo.identity.getAppDeletionSaga(APP_ID)).toMatchObject({ phase: "complete" });
   });

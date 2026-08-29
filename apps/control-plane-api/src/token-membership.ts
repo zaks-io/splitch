@@ -1,7 +1,7 @@
 import { type MembershipSet, type UserRole, UserRoleSchema } from "@splitch/contracts";
 import type { Repository } from "@splitch/db";
 import type { AuthResolver, AuthResult, PrincipalMemberships } from "@splitch/worker-runtime";
-import { resolveCachedMemberships } from "./membership-cache";
+import { requireMembershipCacheBinding, resolveCachedMemberships } from "./membership-cache";
 import {
   type MembershipClaim,
   type MembershipRole,
@@ -43,9 +43,10 @@ const MEMBERSHIP_REFUSED: AuthResult = {
 
 export function makeTokenMembershipAccess(
   repo: Pick<Repository, "identity">,
-  kv: KVNamespace,
+  kv: KVNamespace | undefined,
   writeOnMiss = true,
 ): TokenMembershipAccess {
+  requireMembershipCacheBinding(kv);
   const resolve = (userId: string) =>
     resolveCachedMemberships(
       kv,

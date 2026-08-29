@@ -11,7 +11,23 @@ export interface MembershipCacheInvalidator {
   invalidate(userId: string): Promise<void>;
 }
 
-export function makeMembershipCacheInvalidator(kv: KVNamespace): MembershipCacheInvalidator {
+export function requireMembershipCacheBinding(
+  kv: KVNamespace | undefined,
+): asserts kv is KVNamespace {
+  if (
+    !kv ||
+    typeof kv.get !== "function" ||
+    typeof kv.put !== "function" ||
+    typeof kv.delete !== "function"
+  ) {
+    throw new Error("control-plane: SESSION_STORE KV binding is required");
+  }
+}
+
+export function makeMembershipCacheInvalidator(
+  kv: KVNamespace | undefined,
+): MembershipCacheInvalidator {
+  requireMembershipCacheBinding(kv);
   return {
     invalidate(userId) {
       return kv.delete(membershipCacheKey(userId));
@@ -29,6 +45,17 @@ export async function invalidateMembershipCache(
   await Promise.all([...new Set(userIds)].map((userId) => invalidator.invalidate(userId)));
 }
 
+export async function mutateMembershipWithCacheInvalidation<T>(
+  invalidator: MembershipCacheInvalidator | undefined,
+  userIds: readonly string[],
+  mutate: () => Promise<T>,
+): Promise<T> {
+  await invalidateMembershipCache(invalidator, userIds);
+  const result = await mutate();
+  await invalidateMembershipCache(invalidator, userIds);
+  return result;
+}
+
 export async function resolveCachedMemberships(
   kv: KVNamespace,
   userId: string,
@@ -36,6 +63,7 @@ export async function resolveCachedMemberships(
   logger: MembershipCacheLogger = console,
   writeOnMiss = true,
 ): Promise<MembershipSet> {
+  requireMembershipCacheBinding(kv);
   const cached = await readMembershipCache(kv, userId, logger);
   if (cached) return cached;
 

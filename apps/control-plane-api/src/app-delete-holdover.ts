@@ -9,8 +9,8 @@ import { type HandlerArgs, renderError } from "@splitch/worker-runtime";
 import { revokeEnvironmentCredentialsForAppDelete } from "./app-environment-credentials";
 import {
   type AppEnvironmentDeps,
-  type EnvironmentRow,
   appNotFound,
+  type EnvironmentRow,
   nowIso,
 } from "./app-environment-model";
 import { EnvironmentExposureStatusCleanupError } from "./environment-exposure-status-cleanup";
@@ -18,7 +18,10 @@ import {
   type HoldoverWriteOutboxCleanup,
   HoldoverWriteOutboxCleanupError,
 } from "./holdover-write-outbox-cleanup";
-import { invalidateMembershipCache } from "./membership-cache";
+import {
+  invalidateMembershipCache,
+  mutateMembershipWithCacheInvalidation,
+} from "./membership-cache";
 
 export function renderAppDeleteCleanupError(cause: unknown, requestId: string): Response | null {
   if (cause instanceof EnvironmentExposureStatusCleanupError) {
@@ -105,23 +108,26 @@ async function prepareAndCrossAppDeletionBoundary(
   cleanup: HoldoverWriteOutboxCleanup,
   input: Parameters<HoldoverWriteOutboxCleanup["prepare"]>[0],
 ): Promise<void> {
-  const recover = (cause: unknown) =>
-    recoverFailedAppDeletionBoundary(deps, appId, saga, cleanup, input, cause);
-  await cleanup.prepare(input).catch(recover);
-  for (const environment of environments) {
-    await revokeEnvironmentCredentialsForAppDelete(deps, appId, environment.id).catch(recover);
+  let affectedUserIds: string[] | null = null;
+  try {
+    await cleanup.prepare(input);
+    for (const environment of environments) {
+      await revokeEnvironmentCredentialsForAppDelete(deps, appId, environment.id);
+    }
+    const affectedMemberships = await deps.repo.identity.listAppMembers(appScope(appId));
+    affectedUserIds = affectedMemberships.map(({ userId }) => userId);
+    await mutateMembershipWithCacheInvalidation(deps.membershipCache, affectedUserIds, () =>
+      deps.repo.identity.deleteAppCascade(appScope(appId), {
+        ...saga,
+        updatedAt: nowIso(deps),
+      }),
+    );
+  } catch (cause) {
+    await recoverFailedAppDeletionBoundary(deps, appId, saga, cleanup, input, cause);
+    if (affectedUserIds) {
+      await invalidateMembershipCache(deps.membershipCache, affectedUserIds);
+    }
   }
-  const affectedMemberships = await deps.repo.identity.listAppMembers(appScope(appId));
-  await invalidateMembershipCache(
-    deps.membershipCache,
-    affectedMemberships.map(({ userId }) => userId),
-  ).catch(recover);
-  await deps.repo.identity
-    .deleteAppCascade(appScope(appId), {
-      ...saga,
-      updatedAt: nowIso(deps),
-    })
-    .catch(recover);
 }
 
 async function recoverFailedAppDeletionBoundary(
