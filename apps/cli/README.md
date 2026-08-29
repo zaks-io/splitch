@@ -242,7 +242,7 @@ Scripts branch on the exit code; the printed code says which failure within that
 
 Every code the CLI, the SDK, and the API can emit has a page at
 `https://splitch.dev/docs/error/{code}`, indexed at
-<https://splitch.dev/docs#errors>. Append `.md` to any page for plain markdown.
+<https://splitch.dev/docs/errors>. Append `.md` to any page for plain markdown.
 
 ## Full quickstart
 
@@ -250,6 +250,6 @@ Read the [public quickstart](https://splitch.dev/quickstart) for the complete pa
 through the first real Exposure.
 
 - CLI reference: <https://splitch.dev/docs/cli>
-- Error catalog: <https://splitch.dev/docs#errors>
+- Error catalog: <https://splitch.dev/docs/errors>
 - SDK guide: <https://splitch.dev/docs/sdk/install>
 - Machine-readable index: <https://splitch.dev/llms.txt>
