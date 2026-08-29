@@ -119,10 +119,6 @@
     {
       "tag": "v6_assignment_store_writer_v2",
       "new_sqlite_classes": ["AssignmentStoreDurableObjectV2"]
-    },
-    {
-      "tag": "v7_retire_assignment_store_writer_v1",
-      "deleted_classes": ["AssignmentStoreDurableObject"]
     }
   ],
   "env": {
@@ -223,10 +219,6 @@
         {
           "tag": "v6_assignment_store_writer_v2",
           "new_sqlite_classes": ["AssignmentStoreDurableObjectV2"]
-        },
-        {
-          "tag": "v7_retire_assignment_store_writer_v1",
-          "deleted_classes": ["AssignmentStoreDurableObject"]
         }
       ],
       "services": [
@@ -339,10 +331,6 @@
         {
           "tag": "v6_assignment_store_writer_v2",
           "new_sqlite_classes": ["AssignmentStoreDurableObjectV2"]
-        },
-        {
-          "tag": "v7_retire_assignment_store_writer_v1",
-          "deleted_classes": ["AssignmentStoreDurableObject"]
         }
       ],
       "services": [
