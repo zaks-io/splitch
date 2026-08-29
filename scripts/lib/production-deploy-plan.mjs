@@ -160,6 +160,9 @@ function isNonDeployableChange(path) {
     path.startsWith(".codex/") ||
     path.startsWith(".github/") ||
     path.startsWith("scripts/release/") ||
+    path === "scripts/lib/production-deploy-plan.mjs" ||
+    path === "scripts/plan-ci-verification.mjs" ||
+    path.endsWith(".test.mjs") ||
     path === "LICENSE" ||
     (!path.includes("/") && path.endsWith(".md")) ||
     path.endsWith("/CONTEXT.md")
@@ -170,7 +173,9 @@ function isTinybirdChange(path) {
   return (
     path.startsWith("infra/tinybird/") ||
     path === "tinybird.config.json" ||
-    path === "scripts/deploy-tinybird-production.mjs"
+    path === "scripts/deploy-tinybird-production.mjs" ||
+    path === "scripts/check-tinybird-local.mjs" ||
+    path.startsWith("scripts/lib/tinybird-")
   );
 }
 

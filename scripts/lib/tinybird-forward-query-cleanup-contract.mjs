@@ -11,7 +11,7 @@ const PROMOTED_DATASOURCES = [
 export function assertPromotedForwardQueriesRemoved(root, fail) {
   for (const name of PROMOTED_DATASOURCES) {
     const contents = readFileSync(join(root, "datasources", `${name}.datasource`), "utf8");
-    if (/^FORWARD_QUERY >/m.test(contents)) {
+    if (/^[\t ]*FORWARD_QUERY[\t ]*>/imu.test(contents)) {
       fail(`${name} must not retain its completed one-release migration query`);
     }
   }

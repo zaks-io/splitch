@@ -20,17 +20,20 @@ test("promoted datasource migrations are absent", () => {
 });
 
 test("a stale promoted migration fails the contract", (t) => {
+  const directives = ["FORWARD_QUERY >", "  FORWARD_QUERY   >", "\tforward_query >"];
   for (const name of DATASOURCES) {
-    const root = copyDatasources(t);
-    const path = join(root, "datasources", `${name}.datasource`);
-    writeFileSync(
-      path,
-      `${readFileSync(path, "utf8").trimEnd()}\n\nFORWARD_QUERY >\n    SELECT 1\n`,
-    );
-    assert.throws(
-      () => assertPromotedForwardQueriesRemoved(root, fail),
-      new RegExp(`${name} must not retain its completed one-release migration query`, "u"),
-    );
+    for (const directive of directives) {
+      const root = copyDatasources(t);
+      const path = join(root, "datasources", `${name}.datasource`);
+      writeFileSync(
+        path,
+        `${readFileSync(path, "utf8").trimEnd()}\n\n${directive}\n    SELECT 1\n`,
+      );
+      assert.throws(
+        () => assertPromotedForwardQueriesRemoved(root, fail),
+        new RegExp(`${name} must not retain its completed one-release migration query`, "u"),
+      );
+    }
   }
 });
 
