@@ -13,3 +13,8 @@ SCHEMA >
 
 ENGINE "MergeTree"
 ENGINE_SORTING_KEY "app_id, environment_id, experiment_id, run_id, variant, entity_family_hash"
+
+# Derive the family used by deletion joins for retained rows.
+# Remove this one-release migration after production promotion.
+FORWARD_QUERY >
+    SELECT app_id, environment_id, experiment_id, run_id, id_type, targeting_key_hash, if(startsWith(targeting_key_hash, 'local-v1:'), concat('v1:', substring(targeting_key_hash, 10)), targeting_key_hash) AS entity_family_hash, variant, first_exposure_ts, snapshot_ts, watermark_ts

@@ -22,8 +22,8 @@ export function assertEnvironmentExposureStatusContract(root, fail) {
   );
   requireInstruction(
     datasource,
-    /^FORWARD_QUERY >\s+SELECT \*$/m,
-    "Environment Exposure status must preserve live history when its retained source is rebuilt",
+    /^FORWARD_QUERY >\s+SELECT app_id, environment_id, defaultValueOfTypeName\('String'\) AS targeting_key_version, first_exposure_state$/m,
+    "Environment Exposure status must carry its one-release legacy-state migration until production promotion",
     fail,
   );
   requireIdentityFree(datasource, "Environment Exposure status", fail);
