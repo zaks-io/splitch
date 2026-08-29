@@ -3,6 +3,8 @@ pre-commit:
   commands:
     file-size:
       run: node scripts/check-file-size.mjs
+    binary-assets:
+      run: node scripts/check-binary-assets.mjs
     verify-commit:
       run: CI=true pnpm verify:commit
 
