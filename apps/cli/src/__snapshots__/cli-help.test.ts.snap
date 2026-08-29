@@ -10,7 +10,7 @@ Usage:
 
 Flags:
   --app <app>              [type: string; default: SPLITCH_APP or config] App ID or slug.
-  --env <environment>      [type: string; default: SPLITCH_ENV or config] Environment ID or slug.
+  --env <environment>      [type: string; default: SPLITCH_ENV or config] Environment ID or key.
   --body-json <json>       [type: JSON object; default: none] Request body fields; see Request body below.
   --idempotency-key <key>  [type: string; default: generated] Stable retry key for this mutation.
   --output-file <path>     [type: string; default: none] Write the once-only secret to a new 0600 file instead of stdout; the payload reports valueWrittenTo.
@@ -35,7 +35,7 @@ Usage:
 
 Flags:
   --app <app>          [type: string; default: SPLITCH_APP or config] App ID or slug.
-  --env <environment>  [type: string; default: SPLITCH_ENV or config] Environment ID or slug.
+  --env <environment>  [type: string; default: SPLITCH_ENV or config] Environment ID or key.
   --json               [type: boolean; default: false] Write machine-readable JSON to stdout.
   -h, --help           [type: boolean; default: false] Show help and exit.
 
@@ -51,7 +51,7 @@ Usage:
 
 Flags:
   --app <app>          [type: string; default: SPLITCH_APP or config] App ID or slug.
-  --env <environment>  [type: string; default: SPLITCH_ENV or config] Environment ID or slug.
+  --env <environment>  [type: string; default: SPLITCH_ENV or config] Environment ID or key.
   --body-json <json>   [type: JSON object; default: none] Request body fields; see Request body below.
   --json               [type: boolean; default: false] Write machine-readable JSON to stdout.
   -h, --help           [type: boolean; default: false] Show help and exit.
@@ -179,7 +179,7 @@ Usage:
 
 Flags:
   --app <app>          [type: string; default: SPLITCH_APP or config] App ID or slug.
-  --env <environment>  [type: string; default: none] Optional Environment ID or slug filter (Policy context).
+  --env <environment>  [type: string; default: none] Optional Environment ID or key filter (Policy context).
   --json               [type: boolean; default: false] Write machine-readable JSON to stdout.
   -h, --help           [type: boolean; default: false] Show help and exit.
 
@@ -276,7 +276,7 @@ Usage:
 
 Flags:
   --app <app>          [type: string; default: SPLITCH_APP or config] App ID or slug.
-  --env <environment>  [type: string; default: SPLITCH_ENV or config] Environment ID or slug.
+  --env <environment>  [type: string; default: SPLITCH_ENV or config] Environment ID or key.
   --json               [type: boolean; default: false] Write machine-readable JSON to stdout.
   -h, --help           [type: boolean; default: false] Show help and exit.
 
@@ -292,7 +292,7 @@ Usage:
 
 Flags:
   --app <app>          [type: string; default: SPLITCH_APP or config] App ID or slug.
-  --env <environment>  [type: string; default: SPLITCH_ENV or config] Environment ID or slug.
+  --env <environment>  [type: string; default: SPLITCH_ENV or config] Environment ID or key.
   --json               [type: boolean; default: false] Write machine-readable JSON to stdout.
   -h, --help           [type: boolean; default: false] Show help and exit.
 
@@ -308,7 +308,7 @@ Usage:
 
 Flags:
   --app <app>          [type: string; default: SPLITCH_APP or config] App ID or slug.
-  --env <environment>  [type: string; default: SPLITCH_ENV or config] Environment ID or slug.
+  --env <environment>  [type: string; default: SPLITCH_ENV or config] Environment ID or key.
   --body-json <json>   [type: JSON object; default: none] Request body fields; see Request body below.
   --json               [type: boolean; default: false] Write machine-readable JSON to stdout.
   -h, --help           [type: boolean; default: false] Show help and exit.
@@ -330,7 +330,7 @@ Usage:
   splitch cloudflare remove [flags]
 
 Flags:
-  --env <environment>  [type: string; default: SPLITCH_ENV or config] Environment ID or slug.
+  --env <environment>  [type: string; default: SPLITCH_ENV or config] Environment ID or key.
   --json               [type: boolean; default: false] Write machine-readable JSON to stdout.
   -h, --help           [type: boolean; default: false] Show help and exit.
 
@@ -342,7 +342,7 @@ Usage:
   splitch cloudflare setup [flags]
 
 Flags:
-  --env <environment>  [type: string; default: SPLITCH_ENV or config] Environment ID or slug.
+  --env <environment>  [type: string; default: SPLITCH_ENV or config] Environment ID or key.
   --json               [type: boolean; default: false] Write machine-readable JSON to stdout.
   -h, --help           [type: boolean; default: false] Show help and exit.
 
@@ -354,7 +354,7 @@ Usage:
   splitch cloudflare status [flags]
 
 Flags:
-  --env <environment>  [type: string; default: SPLITCH_ENV or config] Environment ID or slug.
+  --env <environment>  [type: string; default: SPLITCH_ENV or config] Environment ID or key.
   --json               [type: boolean; default: false] Write machine-readable JSON to stdout.
   -h, --help           [type: boolean; default: false] Show help and exit.
 
@@ -367,7 +367,7 @@ Usage:
 
 Flags:
   --app <app>          [type: string; default: SPLITCH_APP or config] App ID or slug.
-  --env <environment>  [type: string; default: SPLITCH_ENV or config] Environment ID or slug.
+  --env <environment>  [type: string; default: SPLITCH_ENV or config] Environment ID or key.
   --json               [type: boolean; default: false] Write machine-readable JSON to stdout.
   -h, --help           [type: boolean; default: false] Show help and exit.
 
@@ -380,7 +380,7 @@ Usage:
 
 Flags:
   --app <app>          [type: string; default: SPLITCH_APP or config] App ID or slug.
-  --env <environment>  [type: string; default: SPLITCH_ENV or config] Environment ID or slug.
+  --env <environment>  [type: string; default: SPLITCH_ENV or config] Environment ID or key.
   --json               [type: boolean; default: false] Write machine-readable JSON to stdout.
   -h, --help           [type: boolean; default: false] Show help and exit.
 
@@ -393,7 +393,7 @@ Usage:
 
 Flags:
   --app <app>          [type: string; default: SPLITCH_APP or config] App ID or slug.
-  --env <environment>  [type: string; default: SPLITCH_ENV or config] Environment ID or slug.
+  --env <environment>  [type: string; default: SPLITCH_ENV or config] Environment ID or key.
   --json               [type: boolean; default: false] Write machine-readable JSON to stdout.
   -h, --help           [type: boolean; default: false] Show help and exit.
 
@@ -406,7 +406,7 @@ Usage:
 
 Flags:
   --app <app>          [type: string; default: SPLITCH_APP or config] App ID or slug.
-  --env <environment>  [type: string; default: SPLITCH_ENV or config] Environment ID or slug.
+  --env <environment>  [type: string; default: SPLITCH_ENV or config] Environment ID or key.
   --json               [type: boolean; default: false] Write machine-readable JSON to stdout.
   -h, --help           [type: boolean; default: false] Show help and exit.
 
@@ -419,7 +419,7 @@ Usage:
 
 Flags:
   --app <app>          [type: string; default: SPLITCH_APP or config] App ID or slug.
-  --env <environment>  [type: string; default: SPLITCH_ENV or config] Environment ID or slug.
+  --env <environment>  [type: string; default: SPLITCH_ENV or config] Environment ID or key.
   --json               [type: boolean; default: false] Write machine-readable JSON to stdout.
   -h, --help           [type: boolean; default: false] Show help and exit.
 
@@ -435,7 +435,7 @@ Usage:
 
 Flags:
   --app <app>          [type: string; default: SPLITCH_APP or config] App ID or slug.
-  --env <environment>  [type: string; default: SPLITCH_ENV or config] Environment ID or slug.
+  --env <environment>  [type: string; default: SPLITCH_ENV or config] Environment ID or key.
   --name <name>        [type: string; default: none] Resource name.
   --body-json <json>   [type: JSON object; default: none] Request body fields; see Request body below.
   --json               [type: boolean; default: false] Write machine-readable JSON to stdout.
@@ -461,7 +461,7 @@ Usage:
 
 Flags:
   --app <app>          [type: string; default: SPLITCH_APP or config] App ID or slug.
-  --env <environment>  [type: string; default: SPLITCH_ENV or config] Environment ID or slug.
+  --env <environment>  [type: string; default: SPLITCH_ENV or config] Environment ID or key.
   --json               [type: boolean; default: false] Write machine-readable JSON to stdout.
   -h, --help           [type: boolean; default: false] Show help and exit.
 
@@ -496,7 +496,7 @@ Usage:
 
 Flags:
   --app <app>          [type: string; default: SPLITCH_APP or config] App ID or slug.
-  --env <environment>  [type: string; default: SPLITCH_ENV or config] Environment ID or slug.
+  --env <environment>  [type: string; default: SPLITCH_ENV or config] Environment ID or key.
   --json               [type: boolean; default: false] Write machine-readable JSON to stdout.
   -h, --help           [type: boolean; default: false] Show help and exit.
 
@@ -509,7 +509,7 @@ Usage:
 
 Flags:
   --app <app>          [type: string; default: SPLITCH_APP or config] App ID or slug.
-  --env <environment>  [type: string; default: SPLITCH_ENV or config] Environment ID or slug.
+  --env <environment>  [type: string; default: SPLITCH_ENV or config] Environment ID or key.
   --json               [type: boolean; default: false] Write machine-readable JSON to stdout.
   -h, --help           [type: boolean; default: false] Show help and exit.
 
@@ -534,7 +534,7 @@ Usage:
 
 Flags:
   --app <app>          [type: string; default: SPLITCH_APP or config] App ID or slug.
-  --env <environment>  [type: string; default: SPLITCH_ENV or config] Environment ID or slug.
+  --env <environment>  [type: string; default: SPLITCH_ENV or config] Environment ID or key.
   --name <name>        [type: string; default: none] Resource name.
   --body-json <json>   [type: JSON object; default: none] Request body fields; see Request body below.
   --json               [type: boolean; default: false] Write machine-readable JSON to stdout.
@@ -668,7 +668,7 @@ Usage:
 
 Flags:
   --app <app>          [type: string; default: SPLITCH_APP or config] App ID or slug.
-  --env <environment>  [type: string; default: SPLITCH_ENV or config] Environment ID or slug.
+  --env <environment>  [type: string; default: SPLITCH_ENV or config] Environment ID or key.
   --json               [type: boolean; default: false] Write machine-readable JSON to stdout.
   -h, --help           [type: boolean; default: false] Show help and exit.
 
@@ -681,7 +681,7 @@ Usage:
 
 Flags:
   --app <app>          [type: string; default: SPLITCH_APP or config] App ID or slug.
-  --env <environment>  [type: string; default: SPLITCH_ENV or config] Environment ID or slug.
+  --env <environment>  [type: string; default: SPLITCH_ENV or config] Environment ID or key.
   --body-json <json>   [type: JSON object; default: none] Request body fields; see Request body below.
   --json               [type: boolean; default: false] Write machine-readable JSON to stdout.
   -h, --help           [type: boolean; default: false] Show help and exit.
@@ -700,7 +700,7 @@ Usage:
 
 Flags:
   --app <app>              [type: string; default: SPLITCH_APP or config] App ID or slug.
-  --env <environment>      [type: string; default: SPLITCH_ENV or config] Environment ID or slug.
+  --env <environment>      [type: string; default: SPLITCH_ENV or config] Environment ID or key.
   --name <name>            [type: string; default: none] Resource name.
   --key <key>              [type: string; default: none] Resource key.
   --body-json <json>       [type: JSON object; default: none] Request body fields; see Request body below.
@@ -741,7 +741,7 @@ Usage:
 
 Flags:
   --app <app>          [type: string; default: SPLITCH_APP or config] App ID or slug.
-  --env <environment>  [type: string; default: SPLITCH_ENV or config] Environment ID or slug.
+  --env <environment>  [type: string; default: SPLITCH_ENV or config] Environment ID or key.
   --json               [type: boolean; default: false] Write machine-readable JSON to stdout.
   -h, --help           [type: boolean; default: false] Show help and exit.
 
@@ -754,7 +754,7 @@ Usage:
 
 Flags:
   --app <app>          [type: string; default: SPLITCH_APP or config] App ID or slug.
-  --env <environment>  [type: string; default: SPLITCH_ENV or config] Environment ID or slug.
+  --env <environment>  [type: string; default: SPLITCH_ENV or config] Environment ID or key.
   --json               [type: boolean; default: false] Write machine-readable JSON to stdout.
   -h, --help           [type: boolean; default: false] Show help and exit.
 
@@ -767,7 +767,7 @@ Usage:
 
 Flags:
   --app <app>          [type: string; default: SPLITCH_APP or config] App ID or slug.
-  --env <environment>  [type: string; default: SPLITCH_ENV or config] Environment ID or slug.
+  --env <environment>  [type: string; default: SPLITCH_ENV or config] Environment ID or key.
   --json               [type: boolean; default: false] Write machine-readable JSON to stdout.
   -h, --help           [type: boolean; default: false] Show help and exit.
 
@@ -780,7 +780,7 @@ Usage:
 
 Flags:
   --app <app>              [type: string; default: SPLITCH_APP or config] App ID or slug.
-  --env <environment>      [type: string; default: SPLITCH_ENV or config] Environment ID or slug.
+  --env <environment>      [type: string; default: SPLITCH_ENV or config] Environment ID or key.
   --body-json <json>       [type: JSON object; default: none] Request body fields; see Request body below.
   --idempotency-key <key>  [type: string; default: generated] Stable retry key for this mutation.
   --confirm                [type: boolean; default: false] Approve and apply a Policy-gated change.
@@ -810,7 +810,7 @@ Usage:
 
 Flags:
   --app <app>          [type: string; default: SPLITCH_APP or config] App ID or slug.
-  --env <environment>  [type: string; default: SPLITCH_ENV or config] Environment ID or slug.
+  --env <environment>  [type: string; default: SPLITCH_ENV or config] Environment ID or key.
   --name <name>        [type: string; default: none] Resource name.
   --body-json <json>   [type: JSON object; default: none] Request body fields; see Request body below.
   --json               [type: boolean; default: false] Write machine-readable JSON to stdout.
@@ -854,7 +854,7 @@ Usage:
 
 Flags:
   --app <app>          [type: string; default: SPLITCH_APP or config] App ID or slug.
-  --env <environment>  [type: string; default: SPLITCH_ENV or config] Environment ID or slug.
+  --env <environment>  [type: string; default: SPLITCH_ENV or config] Environment ID or key.
   --json               [type: boolean; default: false] Write machine-readable JSON to stdout.
   -h, --help           [type: boolean; default: false] Show help and exit.
 
@@ -867,7 +867,7 @@ Usage:
 
 Flags:
   --app <app>               [type: string; default: SPLITCH_APP or config] App ID or slug.
-  --env <environment>       [type: string; default: SPLITCH_ENV or config] Environment ID or slug.
+  --env <environment>       [type: string; default: SPLITCH_ENV or config] Environment ID or key.
   --enabled <boolean>       [type: boolean; default: current value] Set the Flag enabled state.
   --rollout <percent|none>  [type: number | none; default: current value] Set or clear the baseline rollout.
   --body-json <json>        [type: JSON object; default: none] Request body fields; see Request body below.
@@ -894,7 +894,7 @@ Usage:
 
 Flags:
   --app <app>              [type: string; default: SPLITCH_APP or config] App ID or slug.
-  --env <environment>      [type: string; default: SPLITCH_ENV or config] Environment ID or slug.
+  --env <environment>      [type: string; default: SPLITCH_ENV or config] Environment ID or key.
   --when <attr=value>      [type: string (repeatable); default: none] String equality Condition. Repeat to AND more. Number or boolean values require replace --body-json.
   --serve <variant>        [type: string; default: none] Catalog Variant name to serve when the Conditions match.
   --idempotency-key <key>  [type: string; default: generated] Stable retry key for this mutation.
@@ -918,7 +918,7 @@ Usage:
 
 Flags:
   --app <app>              [type: string; default: SPLITCH_APP or config] App ID or slug.
-  --env <environment>      [type: string; default: SPLITCH_ENV or config] Environment ID or slug.
+  --env <environment>      [type: string; default: SPLITCH_ENV or config] Environment ID or key.
   --body-json <json>       [type: JSON object; default: none] Request body fields; see Request body below.
   --idempotency-key <key>  [type: string; default: generated] Stable retry key for this mutation.
   --confirm                [type: boolean; default: false] Approve and apply a Policy-gated change.
@@ -1059,7 +1059,7 @@ Behavior:
 
 Example:
   splitch flags delete <flag-id-or-key> --json",
-    "flags get": "Get a Flag definition by canonical id.
+    "flags get": "Get a Flag definition by canonical ID or key.
 
 Usage:
   splitch flags get <flag-id-or-key> [flags]
@@ -1078,7 +1078,7 @@ Usage:
 
 Flags:
   --app <app>          [type: string; default: SPLITCH_APP or config] App ID or slug.
-  --env <environment>  [type: string; default: SPLITCH_ENV or config] Environment ID or slug used with --with-config.
+  --env <environment>  [type: string; default: SPLITCH_ENV or config] Environment ID or key used with --with-config.
   --with-config        [type: boolean; default: false] Include enabled, rollout, and Default Variant for one Environment.
   --json               [type: boolean; default: false] Write machine-readable JSON to stdout.
   -h, --help           [type: boolean; default: false] Show help and exit.
@@ -1092,7 +1092,7 @@ Usage:
 
 Flags:
   --app <app>                 [type: string; default: SPLITCH_APP or config] App ID or slug.
-  --env <environment>         [type: string; default: SPLITCH_ENV or config] Environment ID or slug.
+  --env <environment>         [type: string; default: SPLITCH_ENV or config] Environment ID or key.
   --from-environment-id <id>  [type: string; default: none] Source Environment ID.
   --body-json <json>          [type: JSON object; default: none] Request body fields; see Request body below.
   --idempotency-key <key>     [type: string; default: generated] Stable retry key for this mutation.
@@ -1117,7 +1117,7 @@ Usage:
 
 Flags:
   --app <app>            [type: string; default: SPLITCH_APP or config] App ID or slug.
-  --env <environment>    [type: string; default: SPLITCH_ENV or config] Environment ID or slug.
+  --env <environment>    [type: string; default: SPLITCH_ENV or config] Environment ID or key.
   --targeting-key <key>  [type: string; default: none] Entity Targeting Key.
   --context-json <json>  [type: JSON object; default: {"attributes":{}}] Evaluation Context fields.
   --body-json <json>     [type: JSON object; default: none] Request body fields; see Request body below.
@@ -1159,7 +1159,7 @@ Usage:
 
 Flags:
   --app <app>            [type: string; default: SPLITCH_APP or config] App ID or slug.
-  --env <environment>    [type: string; default: SPLITCH_ENV or config] Environment ID or slug.
+  --env <environment>    [type: string; default: SPLITCH_ENV or config] Environment ID or key.
   --targeting-key <key>  [type: string; default: none] Entity Targeting Key.
   --context-json <json>  [type: JSON object; default: {"attributes":{}}] Evaluation Context fields.
   --json                 [type: boolean; default: false] Write machine-readable JSON to stdout.
@@ -1415,7 +1415,7 @@ Usage:
 
 Flags:
   --app <app>          [type: string; default: SPLITCH_APP or config] App ID or slug.
-  --env <environment>  [type: string; default: SPLITCH_ENV or config] Environment ID or slug.
+  --env <environment>  [type: string; default: SPLITCH_ENV or config] Environment ID or key.
   --body-json <json>   [type: JSON object; default: none] Request body fields; see Request body below.
   --json               [type: boolean; default: false] Write machine-readable JSON to stdout.
   -h, --help           [type: boolean; default: false] Show help and exit.
@@ -1434,7 +1434,7 @@ Usage:
 
 Flags:
   --app <app>          [type: string; default: SPLITCH_APP or config] App ID or slug.
-  --env <environment>  [type: string; default: SPLITCH_ENV or config] Environment ID or slug.
+  --env <environment>  [type: string; default: SPLITCH_ENV or config] Environment ID or key.
   --json               [type: boolean; default: false] Write machine-readable JSON to stdout.
   -h, --help           [type: boolean; default: false] Show help and exit.
 
@@ -1447,7 +1447,7 @@ Usage:
 
 Flags:
   --app <app>          [type: string; default: SPLITCH_APP or config] App ID or slug.
-  --env <environment>  [type: string; default: SPLITCH_ENV or config] Environment ID or slug.
+  --env <environment>  [type: string; default: SPLITCH_ENV or config] Environment ID or key.
   --json               [type: boolean; default: false] Write machine-readable JSON to stdout.
   -h, --help           [type: boolean; default: false] Show help and exit.
 
@@ -1918,7 +1918,7 @@ Usage:
 Commands:
   list            List Flag definitions in an App (bounded; reports its own truncation).
   create          Create a Flag definition (key, schema, Variant catalog).
-  get             Get a Flag definition by canonical id.
+  get             Get a Flag definition by canonical ID or key.
   update          Update a Flag definition's name/description/schema.
   delete          Delete a Flag (blocked if referenced by a running Experiment).
   promote         Promote selected Flag Configuration field-groups between Environments.
@@ -2062,7 +2062,7 @@ Usage:
 
 Flags:
   --app <app>          [type: string; default: SPLITCH_APP or config] App ID or slug.
-  --env <environment>  [type: string; default: SPLITCH_ENV or config] Environment ID or slug.
+  --env <environment>  [type: string; default: SPLITCH_ENV or config] Environment ID or key.
   --json               [type: boolean; default: false] Write machine-readable JSON to stdout.
   -h, --help           [type: boolean; default: false] Show help and exit.
 
@@ -2110,7 +2110,7 @@ Usage:
 
 Flags:
   --app <app>          [type: string; default: unchanged] App ID or slug.
-  --env <environment>  [type: string; default: unchanged] Environment ID or slug.
+  --env <environment>  [type: string; default: unchanged] Environment ID or key.
   --json               [type: boolean; default: false] Write machine-readable JSON to stdout.
   -h, --help           [type: boolean; default: false] Show help and exit.
 

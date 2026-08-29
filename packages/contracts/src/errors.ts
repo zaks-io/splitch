@@ -22,6 +22,7 @@ import { LastOwnerRequiredDetailsSchema } from "./last-owner-error-details";
 import { ApprovalPolicyLevelSchema } from "./leaf-schemas-runtime";
 import { ResourceDeleteBlockerSchema } from "./resource-delete-tree";
 import { SegmentDependenciesSchema, SegmentNotFoundDetailsSchema } from "./segment-error-details";
+import { SelectorAmbiguousDetailsSchema } from "./selector-error-details";
 
 /**
  * Canonical error contract. One base shape, discriminated on `code`, parsed by
@@ -30,10 +31,15 @@ import { SegmentDependenciesSchema, SegmentNotFoundDetailsSchema } from "./segme
  * this file is its executable form.
  */
 
-export type { ErrorCode };
-export { ErrorCodeSchema, errorCodes };
-export type { PolicyChangeType, RecommendedAction };
-export { PolicyChangeTypeSchema, policyChangeTypes, RecommendedActionSchema, recommendedActions };
+export type { ErrorCode, PolicyChangeType, RecommendedAction };
+export {
+  ErrorCodeSchema,
+  errorCodes,
+  PolicyChangeTypeSchema,
+  policyChangeTypes,
+  RecommendedActionSchema,
+  recommendedActions,
+};
 
 const JsonScalarSchema = z.union([z.string(), z.number(), z.boolean(), z.null()]);
 const JsonScalarArraySchema = z.array(JsonScalarSchema);
@@ -212,24 +218,7 @@ const errorMembers = [
     }),
   ),
 
-  member(
-    "SELECTOR_AMBIGUOUS",
-    z
-      .object({
-        candidates: z
-          .array(
-            z
-              .object({
-                orgSlug: z.string().min(1),
-                appId: z.string().min(1),
-                appSlug: z.string().min(1),
-              })
-              .strict(),
-          )
-          .min(2),
-      })
-      .strict(),
-  ),
+  member("SELECTOR_AMBIGUOUS", SelectorAmbiguousDetailsSchema),
 
   ...conflictErrorMembers,
 

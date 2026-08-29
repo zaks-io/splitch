@@ -54,7 +54,7 @@ function scopeFlags(command: CliCommandDefinition, fields: ReadonlySet<string>):
     flags.push(flag("--app <app>", "string", "SPLITCH_APP or config", "App ID or slug."));
   if (command.needsEnvironment) {
     flags.push(
-      flag("--env <environment>", "string", "SPLITCH_ENV or config", "Environment ID or slug."),
+      flag("--env <environment>", "string", "SPLITCH_ENV or config", "Environment ID or key."),
     );
   } else if (command.operationId === "flags_list") {
     flags.push(
@@ -62,7 +62,7 @@ function scopeFlags(command: CliCommandDefinition, fields: ReadonlySet<string>):
         "--env <environment>",
         "string",
         "SPLITCH_ENV or config",
-        "Environment ID or slug used with --with-config.",
+        "Environment ID or key used with --with-config.",
       ),
     );
   } else if (fields.has("environmentId")) {
@@ -71,7 +71,7 @@ function scopeFlags(command: CliCommandDefinition, fields: ReadonlySet<string>):
         "--env <environment>",
         "string",
         "none",
-        "Optional Environment ID or slug filter (Policy context).",
+        "Optional Environment ID or key filter (Policy context).",
       ),
     );
   }
@@ -154,7 +154,7 @@ export function metaFlags(command: (typeof META_COMMANDS)[number]): HelpFlag[] {
         "--env <environment>",
         "string",
         metaScopeDefault(command, "env"),
-        "Environment ID or slug.",
+        "Environment ID or key.",
       ),
     );
   if (command === "health")

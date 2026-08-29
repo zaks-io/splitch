@@ -1,11 +1,12 @@
 import type { ErrorResponse } from "@splitch/contracts";
 import { appScope, type Repository } from "@splitch/db";
 import type {
-  AuthenticatedInputResolverArgs,
   AuthenticatedInputResolution,
   AuthenticatedInputResolver,
+  AuthenticatedInputResolverArgs,
   Principal,
 } from "@splitch/worker-runtime";
+import { membershipClaimsInScopes } from "./scope-binding";
 
 const APP_ID_PREFIX = "app_";
 const ENVIRONMENT_ID_PREFIX = "env_";
@@ -79,7 +80,7 @@ async function resolveApp(
       error: {
         code: "SELECTOR_AMBIGUOUS",
         message: `App selector "${selector}" matches more than one App`,
-        details: { candidates },
+        details: { candidates, recommendedAction: "USE_CANONICAL_ID" },
       },
     };
   }
@@ -93,18 +94,36 @@ async function resolveEnvironment(
 ): Promise<{ ok: true; environmentId?: string } | { ok: false; error: ErrorResponse }> {
   if (selector === undefined) return { ok: true };
   if (!appId?.startsWith(APP_ID_PREFIX)) return failure("APP_NOT_FOUND", "app not found");
-  const scope = appScope(appId);
-  if (
-    selector.startsWith(ENVIRONMENT_ID_PREFIX) &&
-    (await repo.identity.getEnvironment(scope, selector))
-  ) {
+  // Legacy keys can have the same `env_` shape as canonical IDs. One scoped OR
+  // query is required to detect that collision without silently choosing a
+  // plausible wrong Environment; it also avoids the old two-read ID-miss path.
+  const candidates = await repo.identity.findEnvironmentSelectorCandidates(
+    appScope(appId),
+    selector,
+  );
+  if (candidates.length === 0 && selector.startsWith(ENVIRONMENT_ID_PREFIX)) {
     return { ok: true };
+  }
+  if (candidates.length > 1) {
+    return {
+      ok: false,
+      error: {
+        code: "SELECTOR_AMBIGUOUS",
+        message: `Environment selector "${selector}" matches more than one Environment`,
+        details: { candidates, recommendedAction: "USE_CANONICAL_ID" },
+      },
+    };
   }
   // Environment not-found uses APP_NOT_FOUND throughout the Control Plane because
   // the Environment is part of the App resource boundary, unlike an App-level Flag.
-  const environment = await repo.identity.getEnvironmentByKey(scope, selector);
+  const environment = candidates[0];
   return environment
-    ? { ok: true, environmentId: environment.id }
+    ? {
+        ok: true,
+        ...(environment.environmentId === selector
+          ? {}
+          : { environmentId: environment.environmentId }),
+      }
     : failure("APP_NOT_FOUND", "app not found");
 }
 
@@ -129,7 +148,9 @@ function bindResolvedApp(principal: Principal, appId: string | undefined): Princ
 }
 
 function hasAppScope(scopes: readonly string[], appId: string): boolean {
-  return ["owner", "admin", "member"].some((role) => scopes.includes(`app:${appId}:${role}`));
+  return membershipClaimsInScopes(scopes).some(
+    (claim) => claim.axis === "app" && claim.id === appId,
+  );
 }
 
 function assignResolved(
@@ -150,6 +171,9 @@ function canonicalAppId(selector: string | undefined): string | undefined {
 }
 
 function flagLookupBy(contractId: string, request: Request): "auto" | "key" {
+  // The raw selector is intentionally first-wins, matching the Panel claim
+  // parser. Parsed query records are last-wins, so reading them here would make
+  // `?by=id&by=key` resolve the collision as a key instead.
   return contractId === "flags_get" && new URL(request.url).searchParams.get("by") === "key"
     ? "key"
     : "auto";

@@ -6,10 +6,10 @@ const AppSelectorSchema = z
   .describe("Canonical App ID (app_...) or human-readable App slug.");
 const EnvironmentSelectorSchema = z
   .string()
-  .describe("Canonical Environment ID (env_...) or human-readable Environment slug.");
+  .describe("Canonical Environment ID (env_...) or human-readable Environment key.");
 const FlagSelectorSchema = z
   .string()
-  .describe("Canonical Flag ID (flag_...) or human-readable Flag slug.");
+  .describe("Canonical Flag ID (flag_...) or human-readable Flag key.");
 
 export const OrgParams = z.object({ orgId: z.string() });
 export const OrgMemberParams = z.object({ orgId: z.string(), userId: z.string() });
@@ -26,7 +26,7 @@ export const EnvParams = z.object({
 export const FlagParams = z.object({ appId: AppSelectorSchema, flagId: FlagSelectorSchema });
 
 /**
- * Flag path segments accept canonical IDs or slugs. The resolver treats a
+ * Flag path segments accept canonical IDs or keys. The resolver treats a
  * canonical-looking value as an ID unless `by=key` explicitly selects the key
  * collision, then hands one canonical ID to the handler (SPL-236/SPL-524).
  */

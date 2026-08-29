@@ -1,6 +1,6 @@
+import { env } from "cloudflare:workers";
 import { createRepository } from "@splitch/db";
 import type { Principal } from "@splitch/worker-runtime";
-import { env } from "cloudflare:workers";
 import { beforeEach, describe, expect, it } from "vitest";
 import { createApp } from "./app";
 import type { ConfigStoreAccess } from "./config-store-do";
@@ -83,6 +83,7 @@ describe("authenticated control-plane path selectors", () => {
       code: "SELECTOR_AMBIGUOUS",
       message: 'App selector "neuron" matches more than one App',
       details: {
+        recommendedAction: "USE_CANONICAL_ID",
         candidates: [
           { orgSlug: "alpha", appId: APP_A, appSlug: "neuron" },
           { orgSlug: "beta", appId: APP_B, appSlug: "neuron" },
@@ -140,7 +141,7 @@ describe("selector resolution failures and descendant selectors", () => {
     expect(await flagByName.json()).toEqual(await flagById.json());
   });
 
-  it("resolves App, Environment, and Flag names with one query per parameter", async () => {
+  it("holds canonical selectors to one query and key selectors to three", async () => {
     await seedReachableApp(env.DB, {
       orgId: "org_selector_a",
       orgSlug: "alpha",
@@ -170,11 +171,10 @@ describe("selector resolution failures and descendant selectors", () => {
     counting.reset();
     const byName = await app.request("/apps/neuron/envs/prod/flags/checkout/config");
     const nameQueries = counting.count();
-
     expect(byId.status).toBe(200);
     expect(byName.status).toBe(200);
     expect(await byName.json()).toEqual(await byId.json());
-    expect(nameQueries - idQueries).toBe(2);
+    expect([idQueries, nameQueries]).toEqual([1, 3]);
     expect(seen.at(-1)).toEqual({
       appId: APP_A,
       environmentId: "env_selector_prod",

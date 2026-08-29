@@ -79,6 +79,10 @@ function repo(missing?: "org" | "app"): Repository {
       getOrgMembership: async () => (missing === "org" ? null : { role: "member" }),
       getEnvironment: async ({ appId }: { appId: string }, environmentId: string) =>
         appId === "app_1" && environmentId === "env_1" ? { id: environmentId } : null,
+      findEnvironmentSelectorCandidates: async ({ appId }: { appId: string }, selector: string) =>
+        appId === "app_1" && selector === "env_1"
+          ? [{ environmentId: selector, environmentKey: "development" }]
+          : [],
     },
   } as unknown as Repository;
 }

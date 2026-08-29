@@ -58,11 +58,14 @@ export const lookupErrorDocs = {
     related: ["SENTRY_INSTALLATION_NOT_FOUND", "IDEMPOTENCY_KEY_CONFLICT"],
   },
   SELECTOR_AMBIGUOUS: {
-    remediation: "Choose the intended App from details.candidates and resend with its appId",
+    remediation:
+      "Choose the intended resource from details.candidates and resend with its canonical ID",
     cause:
-      "The App slug matches more than one App across Organizations where the caller has membership.",
-    fix: "Use `details.candidates[].orgSlug` to choose the intended App, then resend the request with that candidate's canonical `appId`.",
-    details: "{ candidates: Array<{ orgSlug: string, appId: string, appSlug: string }> }",
+      "The App slug or Environment key matches more than one resource within the caller's reachable scope.",
+    fix: "Choose the intended candidate, then resend with its canonical `appId` or `environmentId`.",
+    details:
+      '{ candidates: Array<{ orgSlug: string, appId: string, appSlug: string } | { environmentId: string, environmentKey: string }>, recommendedAction: "USE_CANONICAL_ID" }',
+    recommendedAction: "USE_CANONICAL_ID",
     related: ["APP_NOT_FOUND"],
   },
 

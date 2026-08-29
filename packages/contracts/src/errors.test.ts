@@ -62,14 +62,17 @@ describe("Selector ambiguity ErrorResponse", () => {
       ErrorResponseSchema.safeParse({
         code: "SELECTOR_AMBIGUOUS",
         message: "App selector is ambiguous",
-        details: { candidates: [candidate, { ...candidate, orgSlug: "beta", appId: "app_b" }] },
+        details: {
+          recommendedAction: "USE_CANONICAL_ID",
+          candidates: [candidate, { ...candidate, orgSlug: "beta", appId: "app_b" }],
+        },
       }).success,
     ).toBe(true);
     expect(
       ErrorResponseSchema.safeParse({
         code: "SELECTOR_AMBIGUOUS",
         message: "App selector is ambiguous",
-        details: { candidates: [candidate] },
+        details: { recommendedAction: "USE_CANONICAL_ID", candidates: [candidate] },
       }).success,
     ).toBe(false);
   });

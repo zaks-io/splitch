@@ -1,6 +1,6 @@
+import { env } from "cloudflare:workers";
 import { createRepository } from "@splitch/db";
 import type { Principal, RateLimiter } from "@splitch/worker-runtime";
-import { env } from "cloudflare:workers";
 import { beforeEach, describe, expect, it } from "vitest";
 import { createApp } from "./app";
 import { resolveControlPlanePathSelectors } from "./path-selector-resolution";
@@ -13,6 +13,7 @@ import {
 } from "./test-seeds";
 
 const ATTACKER = "user_selector_attacker";
+const OTHER_USER = "user_selector_other";
 const ATTACKER_APP = "app_selector_attacker";
 const VICTIM_APP = "app_selector_victim";
 const allowLimiter: RateLimiter = () => ({ limited: false });
@@ -77,6 +78,29 @@ describe("path selector compatibility", () => {
     expect(await bySlug.json()).toEqual(await byId.json());
   });
 
+  it("ignores a colliding App key outside the caller's live memberships", async () => {
+    await seedReachableApp(ATTACKER_APP, "neuron");
+    await seedOrgApp(env.DB, {
+      orgId: "org_selector_other",
+      orgName: "Other",
+      orgSlug: "other",
+      appId: VICTIM_APP,
+      appName: "Neuron",
+      appKey: "neuron",
+    });
+    await seedOrgMember(env.DB, {
+      orgId: "org_selector_other",
+      userId: OTHER_USER,
+      role: "owner",
+    });
+    await seedAppMember(env.DB, { appId: VICTIM_APP, userId: OTHER_USER, role: "owner" });
+    const app = testApp(principal(ATTACKER_APP, [ATTACKER_APP, VICTIM_APP]));
+
+    const response = await app.request("/apps/neuron/flags");
+
+    expect(response.status).toBe(200);
+  });
+
   it("falls through a missing canonical-looking Environment ID to a legacy key", async () => {
     await seedReachableApp(VICTIM_APP, "sensitive");
     await seedEnvironment(env.DB, {
@@ -90,6 +114,36 @@ describe("path selector compatibility", () => {
 
     expect(response.status).toBe(200);
     expect(await response.json()).toMatchObject({ id: "env_legacy_row_id", key: "env_legacy_key" });
+  });
+
+  it("rejects an Environment selector shared by an ID and a legacy key", async () => {
+    await seedReachableApp(VICTIM_APP, "sensitive");
+    await seedEnvironment(env.DB, {
+      appId: VICTIM_APP,
+      environmentId: "env_prod9",
+      key: "prod",
+    });
+    await seedEnvironment(env.DB, {
+      appId: VICTIM_APP,
+      environmentId: "env_selector_collision",
+      key: "env_prod9",
+    });
+    const app = testApp(principal(VICTIM_APP, [VICTIM_APP]));
+
+    const response = await app.request(`/apps/${VICTIM_APP}/envs/env_prod9`);
+
+    expect(response.status).toBe(409);
+    await expect(response.json()).resolves.toEqual({
+      code: "SELECTOR_AMBIGUOUS",
+      message: 'Environment selector "env_prod9" matches more than one Environment',
+      details: {
+        recommendedAction: "USE_CANONICAL_ID",
+        candidates: [
+          { environmentId: "env_prod9", environmentKey: "prod" },
+          { environmentId: "env_selector_collision", environmentKey: "env_prod9" },
+        ],
+      },
+    });
   });
 
   it("merges canonical replacements into parsed params without discarding transforms", async () => {
@@ -112,7 +166,7 @@ describe("path selector compatibility", () => {
   it("does not inject empty params into a route with no path params", async () => {
     const input = { query: { format: "json" } };
     const resolved = await resolveControlPlanePathSelectors(createRepository(env.DB), {
-      contract: { id: "openapi_document" },
+      contract: { id: "openapi_document_get" },
       input,
       params: {},
       principal: principal(null, []),

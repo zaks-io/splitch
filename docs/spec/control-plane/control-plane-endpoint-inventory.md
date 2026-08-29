@@ -30,8 +30,8 @@ Two path prefixes, by the App/Environment split:
   Experiments, Experiment Runs, **Promotion**, test-eval, Experiment analytics reads, and Web
   Analytics reads.
 
-`environment_id` is the canonical ID in the path (slugs are URL-presentation only — API paths carry
-IDs). Environment-level writes are subject to the Environment Policy (ADR-0029).
+`environment_id` accepts the canonical ID or Environment key in the path. Environment-level writes
+are subject to the Environment Policy (ADR-0029).
 
 `POST /orgs` sits above both prefixes: the Organization does not exist yet, so there is no `org_id` to scope
 against and the co-scope guard never fires. Authorization there is the handler's alone — see

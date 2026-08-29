@@ -1,11 +1,17 @@
-import { and, asc, eq } from "drizzle-orm";
-import { appMemberships, apps, organizations, orgMemberships } from "../schema/index";
+import { and, asc, eq, or } from "drizzle-orm";
+import { appMemberships, apps, environments, organizations, orgMemberships } from "../schema/index";
 import type { Db } from "./client";
+import type { TenantScope } from "./scope";
 
 export interface AppSelectorCandidate {
   orgSlug: string;
   appId: string;
   appSlug: string;
+}
+
+export interface EnvironmentSelectorCandidate {
+  environmentId: string;
+  environmentKey: string;
 }
 
 /** Resolve an App key only through both of the caller's live membership axes. */
@@ -30,6 +36,25 @@ export function makeIdentitySelectorReads(db: Db) {
         .innerJoin(organizations, eq(organizations.id, apps.organizationId))
         .where(eq(orgMemberships.userId, userId))
         .orderBy(asc(organizations.slug), asc(apps.id));
+    },
+
+    findEnvironmentSelectorCandidates(
+      scope: TenantScope,
+      selector: string,
+    ): Promise<EnvironmentSelectorCandidate[]> {
+      return db
+        .select({
+          environmentId: environments.id,
+          environmentKey: environments.key,
+        })
+        .from(environments)
+        .where(
+          and(
+            eq(environments.appId, scope.appId),
+            or(eq(environments.id, selector), eq(environments.key, selector)),
+          ),
+        )
+        .orderBy(asc(environments.id));
     },
   };
 }

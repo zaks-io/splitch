@@ -13,6 +13,12 @@ All endpoints live on the **Control Plane API Worker** and require a control-pla
 requests/responses are `Content-Type: application/json`. Error shape, pagination, and the shared
 conventions are described in [control-plane-endpoint-inventory.md](control-plane-endpoint-inventory.md).
 
+Every route in this document that exposes `{app_id}`, `{environment_id}` /
+`{target_environment_id}`, or `{flag_id}` accepts either that resource's canonical ID or its
+human-readable selector (App slug, Environment key, or Flag key). This applies to reads and writes.
+Routes without those path parameters accept no selector. A canonical-looking Flag key can be forced
+only on `flags_get` with `?by=key`; other routes treat the canonical `flag_` shape as an ID.
+
 ## Flag definition endpoints (App-level — the catalog, defined once)
 
 ### `GET /apps/{app_id}/flags`
@@ -74,7 +80,7 @@ Invariant: exactly one Variant is the Default Variant; every Variant `value` sat
 
 Returns: full Flag definition (catalog Variants + schema). No per-Environment config.
 
-`{flag_id}` accepts a canonical ID or Flag slug. A canonical-looking value is an
+`{flag_id}` accepts a canonical ID or Flag key. A canonical-looking value is an
 ID unless `?by=key` explicitly selects a colliding key. Omitting `by` and
 `?by=id` use the same automatic selector behavior. The catalog list is bounded;
 `?by=key` is the exact path that keeps a canonical-looking key reachable in the

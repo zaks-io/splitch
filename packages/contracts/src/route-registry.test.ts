@@ -22,8 +22,8 @@ import {
 
 const SELECTOR_ERROR_BY_SEGMENT = [
   [":appId", ["APP_NOT_FOUND", "SELECTOR_AMBIGUOUS"]],
-  [":environmentId", ["APP_NOT_FOUND"]],
-  [":targetEnvironmentId", ["APP_NOT_FOUND"]],
+  [":environmentId", ["APP_NOT_FOUND", "SELECTOR_AMBIGUOUS"]],
+  [":targetEnvironmentId", ["APP_NOT_FOUND", "SELECTOR_AMBIGUOUS"]],
   [":flagId", ["FLAG_NOT_FOUND"]],
 ] as const;
 

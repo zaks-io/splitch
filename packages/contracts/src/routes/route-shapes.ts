@@ -44,13 +44,10 @@ export {
 } from "./route-shapes-params";
 
 /**
- * Path-param and route-local request/response shapes that have NO dedicated
- * resource envelope (members, environments, flag-config, promotion, privacy,
- * audit), composed from existing leaves — never redefining a domain leaf. Each
- * is kept tiny and single-purpose so the per-domain route files stay declarative.
- *
- * Param schemas carry `.openapi()` examples so the generated document and MCP
- * tool inputs read well; the runtime guard only cares that the value is a string.
+ * Route-local request/response shapes that have NO dedicated resource envelope
+ * (members, environments, flag-config, promotion, privacy, audit), composed
+ * from existing leaves — never redefining a domain leaf. Each is kept tiny and
+ * single-purpose so the per-domain route files stay declarative.
  */
 
 // ---------------------------------------------------------------------------
