@@ -115,6 +115,26 @@ describe("config store snapshot deletion", () => {
 });
 
 describe("config store purge target isolation", () => {
+  it("captures a purge target when the Environment has no Flag Configuration row", async () => {
+    const scope = envScope(ids.appId, ids.environmentId);
+    await h.repo.flags.removeFlagConfig(scope, ids.flagId);
+    const store = makeConfigStore({
+      repo: h.repo,
+      kv: h.kv,
+      broadcaster: { broadcast: (nudge) => void h.nudges.push(nudge) },
+      nextSnapshotRevision: makeSnapshotRevisionCounter(),
+      now: () => new Date(NOW_MS),
+    });
+
+    await expect(
+      store.readFlagConfigPurgeTarget({
+        appId: ids.appId,
+        environmentId: ids.environmentId,
+        flagId: ids.flagId,
+      }),
+    ).resolves.toMatchObject({ ok: true, experimentIds: [ids.experimentId] });
+  });
+
   it.each([
     "draft",
     "ended",

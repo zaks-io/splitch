@@ -19,6 +19,27 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
+describe("nudge retry cancellation", () => {
+  it("does not report a retry after cancellation wins the failed attempt", async () => {
+    const queryClient = queryClientStub();
+    queryClient.invalidateQueries.mockRejectedValue(new Error("read API unavailable"));
+    const isCancelled = vi
+      .fn()
+      .mockReturnValueOnce(false)
+      .mockReturnValueOnce(false)
+      .mockReturnValueOnce(false)
+      .mockReturnValue(true);
+    const onStaleData = vi.fn();
+
+    await handleNudge(deletedMessage("flag_1").data, scope, queryClient.client, {
+      isCancelled,
+      onStaleData,
+    });
+
+    expect(onStaleData).not.toHaveBeenCalled();
+  });
+});
+
 describe("live updates", () => {
   it("invalidates only the nudged flag prefix", async () => {
     const queryClient = queryClientStub({ version: 2 });
@@ -227,6 +248,12 @@ function socketAt(sockets: FakeSocket[], index: number): FakeSocket {
 
 function message(id: string, version: number): MessageEvent {
   return entityMessage("flag", id, version);
+}
+
+function deletedMessage(id: string): MessageEvent {
+  return {
+    data: JSON.stringify({ type: "config.changed", entity: "flag", id, version: 0, deleted: true }),
+  } as MessageEvent;
 }
 
 function entityMessage(entity: "flag" | "segment", id: string, version: number): MessageEvent {

@@ -1,11 +1,14 @@
 import type { DeltaNudge } from "@splitch/contracts";
 import { DeltaNudgeSchema } from "@splitch/contracts";
 import type { QueryClient } from "@tanstack/react-query";
+import {
+  invalidateWithRetry,
+  jitteredReconnectDelay,
+  nudgeConvergenceDelaysMs,
+  reconnectDelaysMs,
+} from "./live-updates-retry";
 import { createNudgeRefetchFailureHandler } from "./panel-observability";
 import { type AppEnvironmentScope, nudgeInvalidationPrefix, queryKeys } from "./query-keys";
-
-const reconnectDelaysMs = [2_000, 4_000, 8_000] as const;
-const nudgeConvergenceDelaysMs = [2_000, 4_000, 8_000, 16_000, 32_000] as const;
 
 type LiveUpdateSocket = {
   close(): void;
@@ -17,18 +20,13 @@ type LiveUpdateSocket = {
 type SocketFactory = (url: string) => LiveUpdateSocket;
 type Timer = ReturnType<typeof setTimeout>;
 type NudgeOptions = {
+  cancellationSignal?: AbortSignal;
   isCancelled?: () => boolean;
+  onConverged?: () => void;
   onFreshData?: () => void;
   onStaleData?: () => void;
   random?: () => number;
   refetchRoute?: () => Promise<void>;
-};
-type RetryOptions = {
-  delaysMs?: readonly number[];
-  isCancelled?: () => boolean;
-  isFresh?: () => boolean;
-  onRetry?: (failure: { attempt: number; nextRetryMs: number }) => void;
-  random?: () => number;
 };
 
 export type LiveUpdateConnectionOptions = {
@@ -45,6 +43,7 @@ export class LiveUpdateConnection {
   private attempts = 0;
   private nextNudgeGeneration = 0;
   private readonly nudgeGenerations = new Map<string, number>();
+  private readonly nudgeRetryControllers = new Map<string, AbortController>();
   private reconnectTimer: Timer | undefined;
   private socket: LiveUpdateSocket | undefined;
   private readonly staleNudgeTargets = new Set<string>();
@@ -61,6 +60,7 @@ export class LiveUpdateConnection {
   stop(): void {
     this.stopped = true;
     this.nudgeGenerations.clear();
+    this.cancelNudgeRetries();
     this.staleNudgeTargets.clear();
     if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
     this.reconnectTimer = undefined;
@@ -87,17 +87,24 @@ export class LiveUpdateConnection {
       if (!nudge) return;
       const target = `${nudge.entity}:${nudge.id}`;
       const generation = ++this.nextNudgeGeneration;
+      this.nudgeRetryControllers.get(target)?.abort();
+      const retryController = new AbortController();
+      this.nudgeRetryControllers.set(target, retryController);
       this.nudgeGenerations.set(target, generation);
       const isCurrent = () =>
-        generation === this.nudgeGenerations.get(target) && socket === this.socket && !this.stopped;
-      void handleParsedNudge(nudge, this.options.scope, this.options.queryClient, {
+        !retryController.signal.aborted &&
+        generation === this.nudgeGenerations.get(target) &&
+        socket === this.socket &&
+        !this.stopped;
+      const handling = handleParsedNudge(nudge, this.options.scope, this.options.queryClient, {
+        cancellationSignal: retryController.signal,
         isCancelled: () => !isCurrent(),
         onStaleData: () => {
           if (!isCurrent()) return;
           this.staleNudgeTargets.add(target);
           this.options.onStaleDataChange?.(true);
         },
-        onFreshData: () => {
+        onConverged: () => {
           if (!isCurrent()) return;
           this.staleNudgeTargets.delete(target);
           this.options.onStaleDataChange?.(this.staleNudgeTargets.size > 0);
@@ -105,11 +112,17 @@ export class LiveUpdateConnection {
         random: this.options.random,
         refetchRoute: this.options.refetchRoute,
       });
+      void handling.finally(() => {
+        if (this.nudgeRetryControllers.get(target) === retryController) {
+          this.nudgeRetryControllers.delete(target);
+        }
+      });
     };
     socket.onerror = () => socket.close();
     socket.onclose = () => {
       if (socket !== this.socket || this.stopped) return;
       this.nudgeGenerations.clear();
+      this.cancelNudgeRetries();
       this.staleNudgeTargets.clear();
       this.scheduleReconnect();
     };
@@ -135,6 +148,11 @@ export class LiveUpdateConnection {
       { isCancelled: () => !isCurrent(), random: this.options.random },
       this.options.refetchRoute,
     );
+  }
+
+  private cancelNudgeRetries(): void {
+    for (const controller of this.nudgeRetryControllers.values()) controller.abort();
+    this.nudgeRetryControllers.clear();
   }
 }
 
@@ -164,6 +182,7 @@ async function handleParsedNudge(
     detail?.version !== undefined &&
     detail.version >= parsed.version
   ) {
+    options.onConverged?.();
     options.onFreshData?.();
     return;
   }
@@ -186,15 +205,6 @@ export function liveUpdateUrl(scope: { orgSlug: string; appSlug: string; env: st
   return url.toString();
 }
 
-function jitteredReconnectDelay(
-  attempt: number,
-  random = Math.random,
-  delaysMs: readonly number[] = reconnectDelaysMs,
-): number {
-  const baseDelay = delaysMs[Math.min(attempt, delaysMs.length - 1)] ?? 8_000;
-  return Math.round(baseDelay * (0.8 + random() * 0.4));
-}
-
 async function invalidateNudgeWithRetry(
   nudge: DeltaNudge,
   scope: AppEnvironmentScope,
@@ -214,6 +224,7 @@ async function invalidateNudgeWithRetry(
     prefix,
     {
       delaysMs: nudgeConvergenceDelaysMs,
+      cancellationSignal: options.cancellationSignal,
       isFresh: detailKey
         ? () => {
             const refreshed = queryClient.getQueryData<{ version?: number }>(detailKey);
@@ -221,59 +232,14 @@ async function invalidateNudgeWithRetry(
           }
         : undefined,
       onRetry: reportFailure,
-      isCancelled: options.isCancelled,
+      isCancelled: () =>
+        options.cancellationSignal?.aborted === true || options.isCancelled?.() === true,
       random: options.random,
     },
     options.refetchRoute,
   );
+  if (converged) options.onConverged?.();
   if (converged && nudge.deleted !== true) options.onFreshData?.();
-}
-
-async function invalidateWithRetry(
-  queryClient: QueryClient,
-  queryKey: ReturnType<(typeof nudgeInvalidationPrefix)[DeltaNudge["entity"]]>,
-  options: RetryOptions = {},
-  refetchRoute?: () => Promise<void>,
-): Promise<boolean> {
-  const delaysMs = options.delaysMs ?? reconnectDelaysMs;
-  for (let retry = 0; retry <= delaysMs.length; retry += 1) {
-    const result = await invalidateOnce(queryClient, queryKey, options, refetchRoute);
-    if (result === "fresh") return true;
-    if (result === "cancelled") return false;
-    if (!(await waitForRetry(retry, delaysMs, options))) return false;
-  }
-  return false;
-}
-
-async function waitForRetry(
-  retry: number,
-  delaysMs: readonly number[],
-  options: Pick<RetryOptions, "isCancelled" | "onRetry" | "random">,
-): Promise<boolean> {
-  const nextRetryMs = delaysMs[retry];
-  if (nextRetryMs === undefined) return false;
-  options.onRetry?.({ attempt: retry + 1, nextRetryMs });
-  if (options.isCancelled?.()) return false;
-  await wait(jitteredReconnectDelay(retry, options.random, delaysMs));
-  return options.isCancelled?.() !== true;
-}
-
-async function invalidateOnce(
-  queryClient: QueryClient,
-  queryKey: ReturnType<(typeof nudgeInvalidationPrefix)[DeltaNudge["entity"]]>,
-  options: Pick<RetryOptions, "isCancelled" | "isFresh">,
-  refetchRoute?: () => Promise<void>,
-): Promise<"cancelled" | "fresh" | "stale"> {
-  if (options.isCancelled?.()) return "cancelled";
-  try {
-    await queryClient.invalidateQueries({ queryKey, refetchType: "all" }, { throwOnError: true });
-    if (options.isCancelled?.()) return "cancelled";
-    await refetchRoute?.();
-    if (options.isCancelled?.()) return "cancelled";
-    return options.isFresh?.() === false ? "stale" : "fresh";
-  } catch {
-    return options.isCancelled?.() ? "cancelled" : "stale";
-  }
 }
 
 function nudgeDetailKey(nudge: DeltaNudge, scope: AppEnvironmentScope): readonly string[] | null {
@@ -306,8 +272,4 @@ function parseNudge(rawPayload: unknown): DeltaNudge | null {
 
 function browserSocket(url: string): LiveUpdateSocket {
   return new WebSocket(url);
-}
-
-function wait(delay: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, delay));
 }

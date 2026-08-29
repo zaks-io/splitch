@@ -17,14 +17,16 @@ afterEach(async () => {
 });
 
 describe("Flag Configuration delete ownership guard", () => {
-  it("reports and deletes a malformed evaluation blob using D1 authority", async () => {
+  it("deletes a malformed evaluation snapshot without reading it for ownership", async () => {
     const key = flagConfigKey(ids.appId, ids.environmentId, ids.flagKey);
     await h.kv.put(key, "corrupt evaluation snapshot");
+    const reads: string[] = [];
+    const kv = trackingEvaluationReadKv(h.kv, key, reads);
     const store = makeConfigStore({
       repo: h.repo,
-      kv: h.kv,
+      kv,
       broadcaster: { broadcast: async () => {} },
-      logger: { warn: (...args) => h.warnings.push(args) },
+      logger: { error: () => {}, warn: (...args) => h.warnings.push(args) },
       nextSnapshotRevision: makeSnapshotRevisionCounter(),
       now: () => new Date(NOW_MS),
     });
@@ -46,54 +48,24 @@ describe("Flag Configuration delete ownership guard", () => {
       }),
     ).resolves.toMatchObject({ ok: true });
 
-    expect(h.warnings).toContainEqual([
-      "config_store_kv_schema_mismatch",
-      expect.objectContaining({ key, cause: expect.anything() }),
-    ]);
-    expect(await h.kv.get(key, "text")).toBeNull();
-  });
-
-  it("deletes the evaluation blob when its KV ownership read is a cached miss", async () => {
-    const key = flagConfigKey(ids.appId, ids.environmentId, ids.flagKey);
-    const kv = negativeEvaluationReadKv(h.kv, key);
-    const store = makeConfigStore({
-      repo: h.repo,
-      kv,
-      broadcaster: { broadcast: async () => {} },
-      nextSnapshotRevision: makeSnapshotRevisionCounter(),
-      now: () => new Date(NOW_MS),
-    });
-    await store.resyncFlagConfig({
-      appId: ids.appId,
-      environmentId: ids.environmentId,
-      flagId: ids.flagId,
-    });
-    expect(await h.kv.get(key, "text")).not.toBeNull();
-    const captured = await store.readFlagConfigPurgeTarget({
-      appId: ids.appId,
-      environmentId: ids.environmentId,
-      flagId: ids.flagId,
-    });
-    if (!captured.ok) throw new Error("expected a purge target");
-    await h.repo.flags.removeFlagConfig(envScope(ids.appId, ids.environmentId), ids.flagId);
-
-    await store.deleteFlagConfig({
-      appId: ids.appId,
-      environmentId: ids.environmentId,
-      flagId: ids.flagId,
-      experimentIds: captured.experimentIds,
-    });
-
+    expect(reads).toEqual([]);
+    expect(h.warnings).toEqual([]);
     expect(await h.kv.get(key, "text")).toBeNull();
   });
 });
 
-function negativeEvaluationReadKv(base: KVNamespace, evaluationKey: string): KVNamespace {
+function trackingEvaluationReadKv(
+  base: KVNamespace,
+  evaluationKey: string,
+  reads: string[],
+): KVNamespace {
   return new Proxy(base, {
     get(target, property, receiver) {
       if (property === "get") {
-        return (...args: Parameters<KVNamespace["get"]>) =>
-          args[0] === evaluationKey ? Promise.resolve(null) : target.get(...args);
+        return (...args: Parameters<KVNamespace["get"]>) => {
+          if (args[0] === evaluationKey) reads.push(args[0]);
+          return target.get(...args);
+        };
       }
       const value = Reflect.get(target, property, receiver);
       return typeof value === "function" ? value.bind(target) : value;

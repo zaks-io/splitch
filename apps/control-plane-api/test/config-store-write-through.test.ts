@@ -26,7 +26,7 @@ describe("Config Store isolate write-through bounds", () => {
     expect(cache.get("flag-a")).toMatchObject({ flagId: "flag_a" });
     now = 60_000;
     expect(cache.get("flag-a")).toBeUndefined();
-    expect(entries).toHaveLength(0);
+    expect(entries.size).toBe(0);
   });
 });
 

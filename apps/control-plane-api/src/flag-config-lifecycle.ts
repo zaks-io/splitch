@@ -157,7 +157,9 @@ export async function captureFlagConfigPurgeTargets(
         .writerFor(appId, environment.id)
         .readFlagConfigPurgeTarget({ appId, environmentId: environment.id, flagId });
       if (!result.ok) {
-        if (result.reason === "FLAG_NOT_FOUND") return null;
+        if (result.reason === "FLAG_NOT_FOUND") {
+          return { environmentId: environment.id, experimentIds: [] };
+        }
         throw new Error(
           `flag-config lifecycle: cannot capture purge target for flag ${flagId} in ${environment.id}`,
         );
@@ -168,7 +170,7 @@ export async function captureFlagConfigPurgeTargets(
       };
     }),
   );
-  return targets.filter((target) => target !== null);
+  return targets;
 }
 
 export async function deleteFlagD1Cascade(

@@ -77,22 +77,11 @@ export async function readFlagConfigPurgeTarget(
   scope: EnvScope,
   flagId: string,
 ): Promise<{ experimentIds: string[] } | null> {
-  const [flag, config, experiments] = await Promise.all([
+  const [flag, experiments] = await Promise.all([
     deps.repo.flags.getFlag(appScope(scope.appId), flagId),
-    deps.repo.flags.getFlagConfig(scope, flagId),
     deps.repo.experiments.listExperimentsForFlag(scope, flagId),
   ]);
-  if (!flag || !config) return null;
-
-  const key = flagConfigKey(scope.appId, scope.environmentId, flag.key);
-  const raw = await deps.kv.get(key, "text");
-  if (raw !== null) {
-    try {
-      parseFlagConfigEnvelope(raw);
-    } catch (cause) {
-      deps.logger?.warn("config_store_kv_schema_mismatch", { key, cause });
-    }
-  }
+  if (!flag) return null;
 
   return { experimentIds: experiments.map((experiment) => experiment.id) };
 }

@@ -57,7 +57,9 @@ describe("flag delete cascade cleanup", () => {
       ).toBeNull();
     }
   });
+});
 
+describe("flag delete orphan snapshot cleanup", () => {
   it("deletes a Flag when one Environment has no Flag Configuration", async () => {
     const createdApp = await lifecycleCreateDefaultApp(h);
     const jwt = await lifecycleAppToken(h, createdApp.app.id);
@@ -68,9 +70,18 @@ describe("flag delete cascade cleanup", () => {
     if (!missingEnvironment) throw new Error("expected an Environment");
     const missingScope = envScope(createdApp.app.id, missingEnvironment.id);
     await repo.flags.removeFlagConfig(missingScope, flag.id);
-    await h.bindings.configKv.delete(
-      flagConfigKey(createdApp.app.id, missingEnvironment.id, flag.key),
-    );
+    expect(
+      await h.bindings.configKv.get(
+        flagConfigKey(createdApp.app.id, missingEnvironment.id, flag.key),
+        "text",
+      ),
+    ).not.toBeNull();
+    expect(
+      await h.bindings.configKv.get(
+        controlPlaneFlagConfigKey(createdApp.app.id, missingEnvironment.id, flag.id),
+        "text",
+      ),
+    ).toContain('"state":"present"');
 
     const del = await request(
       h,
@@ -91,9 +102,17 @@ describe("flag delete cascade cleanup", () => {
           "text",
         ),
       ).toBeNull();
+      expect(
+        await h.bindings.configKv.get(
+          controlPlaneFlagConfigKey(createdApp.app.id, environment.id, flag.id),
+          "text",
+        ),
+      ).toContain('"state":"deleted"');
     }
   });
+});
 
+describe("flag delete cascade transaction", () => {
   it("rolls back every D1 delete when an Experiment races into the delete transaction", async () => {
     const createdApp = await lifecycleCreateDefaultApp(h);
     const jwt = await lifecycleAppToken(h, createdApp.app.id);

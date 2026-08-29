@@ -26,6 +26,32 @@ beforeEach(async () => {
 
 afterEach(async () => h.bindings.dispose());
 
+describe("Flag Configuration KV purge target capture", () => {
+  it("keeps an Environment when its Config Store reports no Flag Configuration", async () => {
+    const createdApp = await lifecycleCreateDefaultApp(h);
+    const jwt = await lifecycleAppToken(h, createdApp.app.id);
+    const flag = await createFlag(h, createdApp.app.id, jwt);
+    const repo = createRepository(h.bindings.d1);
+    const missingEnvironment = createdApp.environments[0];
+    if (!missingEnvironment) throw new Error("expected an Environment");
+
+    const targets = await captureFlagConfigPurgeTargets(
+      {
+        repo,
+        configStore: missingPurgeTargetAccess(configStoreAccess(h.bindings), missingEnvironment.id),
+      },
+      createdApp.app.id,
+      flag.id,
+    );
+
+    expect(targets).toHaveLength(createdApp.environments.length);
+    expect(targets).toContainEqual({
+      environmentId: missingEnvironment.id,
+      experimentIds: [],
+    });
+  });
+});
+
 describe("Flag Configuration KV purge retries", () => {
   it("continues purging later Environments after a middle Environment fails", async () => {
     const fixture = await seedDeletedFlagWithSnapshots();
@@ -262,6 +288,28 @@ function faultingDeleteAccess(
           },
         });
       },
+    },
+  };
+}
+
+function missingPurgeTargetAccess(
+  base: ConfigStoreAccess,
+  missingEnvironmentId: string,
+): ConfigStoreAccess {
+  return {
+    readFlagConfig: (input) => base.readFlagConfig(input),
+    liveUpdatesFor: (appId, environmentId) => base.liveUpdatesFor(appId, environmentId),
+    writerFor(appId, environmentId) {
+      const writer = base.writerFor(appId, environmentId);
+      if (environmentId !== missingEnvironmentId) return writer;
+      return new Proxy(writer, {
+        get(target, property, receiver) {
+          if (property !== "readFlagConfigPurgeTarget") {
+            return Reflect.get(target, property, receiver);
+          }
+          return async () => ({ ok: false as const, reason: "FLAG_NOT_FOUND" as const });
+        },
+      });
     },
   };
 }

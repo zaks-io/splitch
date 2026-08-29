@@ -87,6 +87,38 @@ describe("nudge convergence", () => {
 });
 
 describe("nudge convergence coordination", () => {
+  it("clears a stale target after a later delete nudge converges", async () => {
+    vi.useFakeTimers();
+    const { connection, queryClient, sockets, stale } = connectionHarness();
+    connection.start();
+    await vi.advanceTimersByTimeAsync(0);
+    queryClient.invalidateQueries.mockRejectedValue(new Error("read API unavailable"));
+
+    socketAt(sockets, 0).onmessage?.(deletedMessage("flag_1"));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(stale).toHaveBeenLastCalledWith(true);
+
+    queryClient.invalidateQueries.mockResolvedValue();
+    socketAt(sockets, 0).onmessage?.(deletedMessage("flag_1"));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(stale).toHaveBeenLastCalledWith(false);
+  });
+
+  it("cancels a pending nudge backoff when the connection stops", async () => {
+    vi.useFakeTimers();
+    const { connection, queryClient, sockets } = connectionHarness();
+    connection.start();
+    await vi.advanceTimersByTimeAsync(0);
+    queryClient.invalidateQueries.mockRejectedValue(new Error("read API unavailable"));
+
+    socketAt(sockets, 0).onmessage?.(deletedMessage("flag_1"));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(vi.getTimerCount()).toBe(1);
+
+    connection.stop();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
   it("does not let an older nudge clear a newer nudge's stale state", async () => {
     vi.useFakeTimers();
     const { connection, queryClient, sockets, stale } = connectionHarness();
@@ -232,6 +264,12 @@ function socketAt(sockets: FakeSocket[], index: number): FakeSocket {
 
 function message(id: string, version: number): MessageEvent {
   return entityMessage("flag", id, version);
+}
+
+function deletedMessage(id: string): MessageEvent {
+  return {
+    data: JSON.stringify({ type: "config.changed", entity: "flag", id, version: 0, deleted: true }),
+  } as MessageEvent;
 }
 
 function entityMessage(entity: "flag" | "segment", id: string, version: number): MessageEvent {

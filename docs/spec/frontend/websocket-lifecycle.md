@@ -108,11 +108,16 @@ control-plane socket into a per-event invalidation channel.
 ```
 function handleNudge(nudge: NudgePayload, appId: string, environmentId: string, qc: QueryClient) {
   const detail = qc.getQueryData(keys[nudge.entity].detail(appId, environmentId, nudge.id))
-  if (detail?.version >= nudge.version) return           // version gate: no-op for editor
+  if (!nudge.deleted && detail?.version >= nudge.version) return // version gate: no-op for editor
   invalidateQueryAndActiveRoute(keys[nudge.entity].prefix(appId, environmentId))
   retryUntilReturnedVersionReaches(nudge.version)
 }
 ```
+
+Deletion nudges bypass the version gate. They carry `version: 0`, so applying the gate to a cached
+detail with a higher version would discard the deletion. Their invalidation converges when the
+refetch succeeds; only non-deletion nudges additionally require the returned detail version to reach
+the nudge version.
 
 See [query-key-factory.md](./query-key-factory.md) for the full key mapping.
 

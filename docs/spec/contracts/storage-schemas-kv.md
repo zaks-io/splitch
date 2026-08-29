@@ -67,8 +67,42 @@ of `FlagConfigKV`, so the flag and its controlling-Experiment pointer can never 
 null `experimentId` flows straight to the evaluate path's "no live Run" branch — no separate lookup, no
 new entity, just a nullable field on config the path already reads.
 
-`ResolvedTargetingRule` contains concrete Conditions and cannot contain `segmentId`. Publication
-resolves authoring Segment references before this blob is written; edge evaluation performs no
+### Control-plane Flag Configuration snapshot
+
+The control-plane read snapshot is a flat revisioned object, not a `kvEnvelope` value. Every read
+validates `schemaVersion` and the embedded App, Environment, and Flag identity. Its state is one of:
+
+```
+{
+  schemaVersion: number
+  appId:          string
+  environmentId:  string
+  flagId:         string
+  revision:       number
+  state:          'present'
+  data:           FlagConfiguration
+}
+
+{
+  schemaVersion: number
+  appId:          string
+  environmentId:  string
+  flagId:         string
+  revision:       number
+  state:          'deleted'
+}
+```
+
+A Flag Configuration write replaces the snapshot with a higher-revision `present` value. Deletion
+writes a higher-revision tombstone before removing the evaluation snapshot, so stale Workers KV
+reads cannot make the deleted Flag Configuration authoritative again. The isolate-local
+write-through cache retains the tombstone for at most 60 seconds and removes it once KV returns an
+equal or newer revision. The KV tombstone itself currently has no TTL or compaction job and is
+retained indefinitely. A bounded KV tombstone retention policy needs a new cleanup consumer before
+the stored value can expire safely.
+
+`ResolvedTargetingRule` contains concrete Conditions and cannot contain `segmentId`. Snapshot writes
+resolve authoring Segment references before this blob is stored; edge evaluation performs no
 Segment read or recursive evaluation.
 
 ### RunConfigKV
