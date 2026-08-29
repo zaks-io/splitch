@@ -9,7 +9,11 @@ export function validateFlagReadUsage(
   io: CliIo,
 ): CliResult | null {
   if (!invocation.flags.summary) return null;
-  if (command.operationId !== "flags_list" && command.operationId !== "flags_get") {
+  if (
+    command.operationId !== "principal_flags_list" &&
+    command.operationId !== "flags_list" &&
+    command.operationId !== "flags_get"
+  ) {
     return usageError(
       io,
       `--summary is not accepted by splitch ${command.path.join(" ")}`,

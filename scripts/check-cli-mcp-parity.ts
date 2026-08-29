@@ -1,4 +1,8 @@
-import { CLI_COMMANDS, META_COMMANDS } from "../apps/cli/src/command-registry.js";
+import {
+  allCliParityOperationIds,
+  CLI_COMMANDS,
+  META_COMMANDS,
+} from "../apps/cli/src/command-registry.js";
 import {
   renderCommandHelp,
   renderHelp,
@@ -24,7 +28,7 @@ import {
 } from "./lib/cli-mcp-parity.mjs";
 import { assertSharedOperationParity } from "./lib/cli-mcp-shared-operation.js";
 
-const cliOperationIds = [...new Set(CLI_COMMANDS.map((command) => command.operationId))];
+const cliOperationIds = allCliParityOperationIds();
 const mcpOperationIds = MCP_TOOL_DEFINITIONS.filter((tool) => tool.name !== "context_use").map(
   (tool) => tool.name,
 );
@@ -138,15 +142,20 @@ const publishedSchemas = new Map(
   ]),
 );
 const sharedSchemas = assertDerivedMcpSchemaParity({ derivedSchemas, publishedSchemas });
+const flagReadOperationIds = ["principal_flags_list", "flags_list", "flags_get"] as const;
+const cliFlagReadHelp = new Map<string, string>();
+for (const command of CLI_COMMANDS) {
+  for (const operationId of [command.operationId, ...(command.alternateOperationIds ?? [])]) {
+    if (flagReadOperationIds.includes(operationId as (typeof flagReadOperationIds)[number])) {
+      cliFlagReadHelp.set(operationId, renderCommandHelp(command));
+    }
+  }
+}
 const sharedFlagReadFields = assertFlagReadSummaryParity({
-  cliHelp: new Map(
-    CLI_COMMANDS.filter(
-      (command) => command.operationId === "flags_list" || command.operationId === "flags_get",
-    ).map((command) => [command.operationId, renderCommandHelp(command)]),
-  ),
+  cliHelp: cliFlagReadHelp,
   mcpInputSchemas: new Map(
-    MCP_TOOL_DEFINITIONS.filter(
-      (tool) => tool.name === "flags_list" || tool.name === "flags_get",
+    MCP_TOOL_DEFINITIONS.filter((tool) =>
+      flagReadOperationIds.includes(tool.name as (typeof flagReadOperationIds)[number]),
     ).map((tool) => [tool.name, tool.inputSchema]),
   ),
 });

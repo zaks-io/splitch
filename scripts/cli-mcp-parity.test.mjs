@@ -45,10 +45,12 @@ test("fails loud when a Flag-read summary field is missing from MCP", () => {
     () =>
       assertFlagReadSummaryParity({
         cliHelp: new Map([
+          ["principal_flags_list", "--summary"],
           ["flags_list", "--summary"],
           ["flags_get", "--summary"],
         ]),
         mcpInputSchemas: new Map([
+          ["principal_flags_list", { properties: { summary: { type: "boolean" } } }],
           ["flags_list", { properties: { summary: { type: "boolean" } } }],
           ["flags_get", { properties: {} }],
         ]),

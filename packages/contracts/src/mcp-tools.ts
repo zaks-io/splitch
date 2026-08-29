@@ -123,7 +123,13 @@ function deriveInputSchema(route: ApiRouteContract): z.ZodTypeAny {
 }
 
 function withFlagReadFields(route: ApiRouteContract, shape: z.ZodRawShape): z.ZodRawShape {
-  if (route.operationId !== "flags_list" && route.operationId !== "flags_get") return shape;
+  if (
+    route.operationId !== "principal_flags_list" &&
+    route.operationId !== "flags_list" &&
+    route.operationId !== "flags_get"
+  ) {
+    return shape;
+  }
   return {
     ...shape,
     summary: z
@@ -188,6 +194,9 @@ function deriveTool(route: ApiRouteContract): McpToolDefinition {
  * before sending `--enabled false` under a confirm Policy.
  */
 function toolDescription(route: ApiRouteContract): string {
+  if (route.operationId === "principal_flags_list") {
+    return `${route.summary} Returns complete per-Environment Flag Configurations and running Experiment references for every Environment across those Apps by default.`;
+  }
   if (route.operationId === "flags_list" || route.operationId === "flags_get") {
     return `${route.summary} Returns complete per-Environment Flag Configurations and running Experiment references for every Environment in the App by default.`;
   }

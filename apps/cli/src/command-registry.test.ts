@@ -1,6 +1,7 @@
 import { routeRegistry } from "@splitch/sdk/control-plane";
 import { describe, expect, it } from "vitest";
 import {
+  allCliParityOperationIds,
   allMcpParityOperationIds,
   CLI_COMMANDS,
   commandSupportsConfirm,
@@ -54,15 +55,17 @@ describe("cli command parity", () => {
     expect(findCommand(matched)?.operationId).toBe("flags_create");
   });
 
-  it("maps every MCP tool operationId to exactly one CLI command path", () => {
+  it("maps every MCP tool operationId to a CLI command path", () => {
     const mcpIds = allMcpParityOperationIds();
-    for (const operationId of mcpIds) {
-      const command = CLI_COMMANDS.find(
-        (entry) => entry.operationId === operationId && entry.kind === "api",
-      );
-      expect(command, `missing CLI command for ${operationId}`).toBeDefined();
-      expect(findCommand(command?.path ?? [])).toEqual(command);
-    }
+    expect(
+      allCliParityOperationIds()
+        .filter((operationId) => mcpIds.includes(operationId))
+        .sort(),
+    ).toEqual([...mcpIds].sort());
+    expect(findCommand(["flags", "list"])).toMatchObject({
+      operationId: "principal_flags_list",
+      alternateOperationIds: ["flags_list"],
+    });
   });
 
   it("derives the Organization usage read command from the shared route", () => {

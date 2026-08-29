@@ -32,6 +32,7 @@ import { makeExperimentHandlers } from "./experiment-handlers";
 import { mountExperimentRoutes, mountMetricRoutes } from "./experiment-metric-route-mounting";
 import { diagnosableHandlers } from "./flag-config-policy";
 import { makeFlagDefinitionHandlers } from "./flag-definition-handlers";
+import { mountFlagDefinitionRoutes } from "./flag-definition-route-mounting";
 import { makeHandlers } from "./handlers";
 import type { HoldoverWriteOutboxCleanup } from "./holdover-write-outbox-cleanup";
 import { mountLiveUpdateRoute } from "./live-updates";
@@ -228,26 +229,7 @@ export function createApp(deps: AppDeps): Hono {
   registrar.mount(app, controlPlaneRoute("organization_members_add"), handlers.addMember);
   registrar.mount(app, controlPlaneRoute("organization_members_update"), handlers.updateMember);
   registrar.mount(app, controlPlaneRoute("organization_members_remove"), handlers.removeMember);
-  registrar.mount(app, controlPlaneRoute("flags_list"), flagDefinitionHandlers.listFlags);
-  registrar.mount(app, controlPlaneRoute("flags_create"), flagDefinitionHandlers.createFlag);
-  registrar.mount(app, controlPlaneRoute("flags_get"), flagDefinitionHandlers.getFlag);
-  registrar.mount(app, controlPlaneRoute("flags_update"), flagDefinitionHandlers.updateFlag);
-  registrar.mount(app, controlPlaneRoute("flags_delete"), flagDefinitionHandlers.deleteFlag);
-  registrar.mount(
-    app,
-    controlPlaneRoute("flag_variants_create"),
-    flagDefinitionHandlers.createVariant,
-  );
-  registrar.mount(
-    app,
-    controlPlaneRoute("flag_variants_update"),
-    flagDefinitionHandlers.updateVariant,
-  );
-  registrar.mount(
-    app,
-    controlPlaneRoute("flag_variants_delete"),
-    flagDefinitionHandlers.deleteVariant,
-  );
+  mountFlagDefinitionRoutes(app, registrar, flagDefinitionHandlers);
   registrar.mount(app, controlPlaneRoute("flag_config_get"), handlers.getFlagConfig);
   registrar.mount(app, controlPlaneRoute("flag_config_update"), handlers.updateFlagConfig);
   registrar.mount(

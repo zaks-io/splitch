@@ -41,6 +41,7 @@ const EXPECTED_GATES: Record<string, string> = {
   approval_requests_get: "app:member",
   approval_request_reviews_create: "app:member",
   flags_list: "app:member",
+  principal_flags_list: "membership-wide-read",
   flags_create: "app:admin",
   flags_get: "app:member",
   flags_update: "app:admin",
@@ -157,6 +158,13 @@ describe("mcp tool membership gates", () => {
     expect(gate).toEqual(["app:member"]);
     expect(scopeSatisfiesMembershipGate("org:org_local:owner", gate[0] as string)).toBe(false);
     expect(scopeSatisfiesMembershipGate("app:app_local:member", gate[0] as string)).toBe(true);
+  });
+
+  it("does not treat an MCP selector scope as membership-wide authority", () => {
+    const gate = membershipGatePatterns(getRouteMembershipGate("principal_flags_list"));
+    expect(gate).toEqual(["membership-wide-read"]);
+    expect(scopeSatisfiesMembershipGate("app:app_local:owner", gate[0] as string)).toBe(false);
+    expect(scopeSatisfiesMembershipGate("org:org_local:owner", gate[0] as string)).toBe(false);
   });
 
   it.each([

@@ -50,7 +50,7 @@ export function commandFlags(command: CliCommandDefinition): HelpFlag[] {
 
 function scopeFlags(command: CliCommandDefinition, fields: ReadonlySet<string>): HelpFlag[] {
   const flags: HelpFlag[] = [];
-  if (command.needsApp)
+  if (showsAppFlag(command))
     flags.push(flag("--app <app>", "string", "SPLITCH_APP or config", "App ID or slug."));
   flags.push(...environmentScopeFlags(command, fields));
   if (fields.has("orgId"))
@@ -64,6 +64,10 @@ function scopeFlags(command: CliCommandDefinition, fields: ReadonlySet<string>):
   return flags;
 }
 
+function showsAppFlag(command: CliCommandDefinition): boolean {
+  return command.needsApp || command.operationId === "principal_flags_list";
+}
+
 function environmentScopeFlags(
   command: CliCommandDefinition,
   fields: ReadonlySet<string>,
@@ -73,7 +77,11 @@ function environmentScopeFlags(
       flag("--env <environment>", "string", "SPLITCH_ENV or config", "Environment ID or key."),
     ];
   }
-  if (command.operationId === "flags_list" || command.operationId === "flags_get") {
+  if (
+    command.operationId === "flags_list" ||
+    command.operationId === "flags_get" ||
+    command.operationId === "principal_flags_list"
+  ) {
     const description =
       command.operationId === "flags_get"
         ? "Limit hydrated Configurations to one Environment; cannot be combined with --summary."
@@ -135,6 +143,17 @@ function operationFlags(command: CliCommandDefinition): HelpFlag[] {
           "boolean",
           "false",
           "Print compact human columns instead of complete per-Environment Configurations; cannot be combined with --json.",
+        ),
+      ];
+    // The cross-App read groups by App rather than printing columns; SPL-547
+    // tracks giving it the column renderer the App-scoped reads use.
+    case "principal_flags_list":
+      return [
+        flag(
+          "--summary",
+          "boolean",
+          "false",
+          "Print each Flag's compact Configuration instead of complete per-Environment Configurations; cannot be combined with --json.",
         ),
       ];
     case "flags_create":

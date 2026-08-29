@@ -32,6 +32,7 @@ export {
   FLAG_READ_ENVIRONMENT_SELECTOR_LIMIT,
   FlagGetQuerySchema,
   FlagListQuerySchema,
+  PrincipalFlagListQuerySchema,
   FlagParams,
   FlagVariantParams,
   MetricParams,

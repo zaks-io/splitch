@@ -67,6 +67,7 @@ describe("control plane SDK route selection", () => {
       "flag_config_update",
       "flag_targeting_rules_replace",
       "flags_promote",
+      "principal_flags_list",
     ]);
   });
 
@@ -130,7 +131,7 @@ describe("control plane SDK route selection", () => {
   it("reads the indices the SDK app actually selects", () => {
     // Proves the coupling: these come from the source, so dropping a route from
     // the SDK app changes them here and fails the by-name assertions above.
-    expect(FLAGS_SDK_INDICES).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]);
+    expect(FLAGS_SDK_INDICES).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
     expect(EXPERIMENTS_SDK_INDICES).toEqual([0, 1, 2, 3, 4, 5]);
     expect(APPS_SDK_INDICES).toEqual([9, 10, 11, 12, 13, 19, 20, 21, 22]);
     expect(ATTENTION_SDK_INDICES).toEqual([0]);

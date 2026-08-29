@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { ExperimentSchema } from "./leaf-schemas-experiment";
 import { FlagSchema, PercentageRolloutSchema, TargetingRuleSchema } from "./leaf-schemas-flag";
+import { AppSchema, OrganizationSchema } from "./leaf-schemas-runtime";
 import {
   IdempotencyKeySchema,
   PersistedDescriptionSchema,
@@ -161,6 +162,29 @@ export const FlagListReadResponseSchema = z.union([
   HydratedFlagListResponseSchema,
 ]);
 export type FlagListReadResponse = z.infer<typeof FlagListReadResponseSchema>;
+
+const PrincipalFlagScopeSchema = {
+  org: OrganizationSchema.pick({ id: true, slug: true }).strict(),
+  app: AppSchema.pick({ id: true, key: true }).strict(),
+};
+
+export const PrincipalFlagResponseSchema =
+  FlagResponseSchema.extend(PrincipalFlagScopeSchema).strict();
+export type PrincipalFlagResponse = z.infer<typeof PrincipalFlagResponseSchema>;
+
+export const HydratedPrincipalFlagResponseSchema =
+  HydratedFlagResponseSchema.extend(PrincipalFlagScopeSchema).strict();
+export type HydratedPrincipalFlagResponse = z.infer<typeof HydratedPrincipalFlagResponseSchema>;
+
+export const PrincipalFlagListResponseSchema = listResponse(PrincipalFlagResponseSchema);
+export const HydratedPrincipalFlagListResponseSchema = listResponse(
+  HydratedPrincipalFlagResponseSchema,
+);
+export const PrincipalFlagListReadResponseSchema = z.union([
+  PrincipalFlagListResponseSchema,
+  HydratedPrincipalFlagListResponseSchema,
+]);
+export type PrincipalFlagListReadResponse = z.infer<typeof PrincipalFlagListReadResponseSchema>;
 
 // ---------------------------------------------------------------------------
 // CreateVariantRequest (Variant sub-resource)

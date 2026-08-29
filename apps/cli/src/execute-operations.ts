@@ -1,5 +1,5 @@
 import { createSplitchClient } from "@splitch/sdk";
-import { cliCommandPath, getRoute } from "@splitch/sdk/control-plane";
+import { getRoute } from "@splitch/sdk/control-plane";
 import { warnStaleApprovalDiscard } from "./approval-stale-warn.js";
 import { withAuthorizationRetry } from "./auth.js";
 import {
@@ -18,10 +18,9 @@ import {
   writeCliError,
 } from "./errors.js";
 import { emit } from "./execute-io.js";
+import { emitApiOutput } from "./emit-flag-read-output.js";
 import type { CliDeps, CliIo, CliResult } from "./execute-types.js";
 import { EXIT_API, EXIT_AUTH, EXIT_OK, EXIT_SCOPE, EXIT_USAGE } from "./exit-codes.js";
-import { assertHydratedFlagRead, formatFlagRead } from "./format-flag-read.js";
-import { humanizeLabel } from "./format-payload.js";
 import { environmentSelectorOverride, parseEvaluationContext } from "./operation-input.js";
 import { emitOperationNotices } from "./operation-notices.js";
 import type { ParsedInvocation } from "./parse-args.js";
@@ -222,34 +221,6 @@ export async function executeApiOperation(
   }
 }
 
-/**
- * The plural the empty and truncated notices name, taken from the command's own
- * resource group so `splitch api-keys list` reports "No API Keys found." rather
- * than a generic noun the operator has to map back to what they asked for.
- */
-function resourceNoun(operationId: string): string {
-  const group = cliCommandPath(operationId)[0];
-  return group ? humanizeLabel(group) : "Results";
-}
-
-function emitApiOutput(
-  io: CliIo,
-  operationId: string,
-  payload: unknown,
-  invocation: ParsedInvocation,
-): void {
-  if (operationId !== "flags_list" && operationId !== "flags_get") {
-    emit(io, invocation.flags.json, payload, resourceNoun(operationId));
-    return;
-  }
-  if (invocation.flags.json) {
-    assertHydratedFlagRead(operationId, payload);
-    emit(io, true, payload);
-    return;
-  }
-  io.log(formatFlagRead(operationId, payload, invocation.flags.summary));
-}
-
 function requireOperationRoute(operationId: string): NonNullable<ReturnType<typeof getRoute>> {
   const route = getRoute(operationId);
   if (route) return route;
@@ -260,18 +231,14 @@ function requireOperationRoute(operationId: string): NonNullable<ReturnType<type
   });
 }
 
-/**
- * Path selectors bind to their App or Organization. Selector-free Control
- * Plane reads use the wide marker only for cached-token reuse; refresh mints
- * the session default. SPL-530 adds the wide request; mutations keep existing authority.
- */
+/** Bind selectors normally; the cross-App Flag route alone requires wide authority. */
 export function operationAuthorization(
   route: NonNullable<ReturnType<typeof getRoute>>,
   input: Record<string, unknown>,
 ): TokenAuthorization | undefined {
   const selectorBinding = operationBinding(input);
   if (selectorBinding) return selectorBinding;
-  return route.method === "GET" && route.auth === "control-plane-token"
+  return route.operationId === "principal_flags_list"
     ? { kind: MEMBERSHIP_WIDE_READ_AUTHORIZATION }
     : undefined;
 }

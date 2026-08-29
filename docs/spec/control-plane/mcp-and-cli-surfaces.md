@@ -132,7 +132,7 @@ splitch apps list --org <org_id>
 splitch apps create --org <org_id> --name <name>   # provisions dev + prod Environments (DX default)
 splitch envs list [--app <app_id>]                  # [ctx]
 splitch envs create [--app <app_id>] --key <key> [--name <name>]  # [ctx]
-splitch flags list [--app <app_id>] [--env <environment_id>] [--summary]  # [ctx]
+splitch flags list [--app <app_id>] [--env <environment_id>] [--summary]  # scope-free reads all member Apps; [ctx] scopes
 splitch flags get [--app <app_id>] [--env <environment_id>] <flag_id_or_key> [--summary]  # [ctx]
 splitch flags create [--app <app_id>] --key <key> ...                       # [ctx] App-level definition
 splitch flags promote [--app <app_id>] [--env <environment_id>] <flag_id>   # [ctx] move Flag Configuration into an Env (ADR-0028)
@@ -163,6 +163,21 @@ need an Environment (from `[ctx]` or `--env`); Flag definition, Environment CRUD
 are App/Env scoped accordingly. Environment-level writes that the Environment Policy gates may
 require a `--confirm` affordance (ADR-0029); it submits the canonical
 `review.action = "approve_and_apply"` and never creates a separate confirmation pipeline.
+
+With no resolved App, `splitch flags list` makes one `principal_flags_list` request and returns every
+Flag visible through the principal's live Organization and App memberships. Human output groups rows
+by the `org.slug/app.key` selector and includes the canonical App ID. The route hydrates complete
+per-Environment Configurations across those Apps by default; `--summary` selects compact human
+output and does not request hydration. The MCP `principal_flags_list` tool accepts an `envs`
+Environment selector list, subject to `FLAG_READ_ENVIRONMENT_SELECTOR_LIMIT`. Environment keys are
+unique within an App, so a key selector hydrates the Environment it names in every readable App; a
+canonical ID selector hydrates only its owning App, and Flags in the other Apps carry no
+Configuration for it. A selector that names no readable Environment anywhere returns
+`ENVIRONMENT_NOT_FOUND` rather than an empty hydration. If the bounded result is incomplete, the CLI
+says to narrow it with `--app`.
+
+With `--app`, `SPLITCH_APP`, active App config, or an explicit `--env`, the command uses the scoped
+`flags_list` route; `--env` therefore requires an App.
 
 `splitch flags list` and `splitch flags get` send `include=config` by default, returning each Flag's
 complete per-Environment Configurations and running Experiment reference in the same request. An

@@ -267,6 +267,21 @@ describe("mcp tools: derived input and output schemas", () => {
     expect(list?.description).toContain("complete per-Environment Flag Configurations");
     expect(list?.description).toContain("by default");
 
+    const principalList = tools.find((tool) => tool.name === "principal_flags_list");
+    const principalListShape = objectShape(principalList?.inputSchema);
+    expect(Object.keys(principalListShape)).toEqual(
+      expect.arrayContaining(["include", "envs", "summary"]),
+    );
+    expect(principalListShape).not.toHaveProperty("appId");
+    expect(principalList?.inputSchema.safeParse({ summary: true }).success).toBe(true);
+    expect(
+      principalList?.inputSchema.safeParse({ include: "config", envs: "env_dev,env_prod" }).success,
+    ).toBe(true);
+    expect(principalList?.description).toContain(
+      "running Experiment references for every Environment across those Apps by default",
+    );
+    expect(principalList?.outputSchema).toBe(getRoute("principal_flags_list")?.output);
+
     const get = tools.find((tool) => tool.name === "flags_get");
     expect(Object.keys(objectShape(get?.inputSchema))).toContain("summary");
     expect(

@@ -170,6 +170,10 @@ describe("MCP resource reads", () => {
       gate: ["app:member"],
       grantedBy: ["app:app_local:admin"],
     });
+    expect(payload.tools.find((tool) => tool.name === "principal_flags_list")).toMatchObject({
+      gate: ["membership-wide-read"],
+      grantedBy: [],
+    });
     expect(payload.tools.find((tool) => tool.name === "organizations_list")).toMatchObject({
       gate: ["token"],
       grantedBy: ["app:app_local:admin", "org:org_local:member"],

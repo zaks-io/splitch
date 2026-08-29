@@ -144,8 +144,9 @@ async function executeCommand(
     env: deps.env,
     cwd: deps.cwd,
   });
+  const scopedCommand = commandForContext(command, context);
 
-  const scopeError = validateCommandScope(command, context, io);
+  const scopeError = validateCommandScope(scopedCommand, context, io);
   if (scopeError) {
     return scopeError;
   }
@@ -164,14 +165,14 @@ async function executeCommand(
 
   let input: Record<string, unknown>;
   try {
-    input = buildOperationInput(command, invocation, context);
-    assertPathParamsPresent(command, input);
+    input = buildOperationInput(scopedCommand, invocation, context);
+    assertPathParamsPresent(scopedCommand, input);
   } catch (error) {
     return handleInputError(error, io);
   }
   const outputFile = invocation.flags.outputFile;
   return executeApiOperation(
-    command.operationId,
+    scopedCommand.operationId,
     input,
     invocation,
     deps,
@@ -237,6 +238,21 @@ function isCloudflareCommand(command: CliCommandDefinition): command is CliComma
   kind: "cloudflare_setup" | "cloudflare_status" | "cloudflare_remove";
 } {
   return command.kind.startsWith("cloudflare_");
+}
+
+function commandForContext(
+  command: CliCommandDefinition,
+  context: ResolvedContext,
+): CliCommandDefinition {
+  if (command.operationId === "principal_flags_list") {
+    if (!context.appId && !context.environmentId) return command;
+    return {
+      ...command,
+      operationId: "flags_list",
+      needsApp: true,
+    };
+  }
+  return command;
 }
 
 function validateRequiredPositionals(

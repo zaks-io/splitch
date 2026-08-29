@@ -19,6 +19,15 @@ export function emitOperationNotices(
   asJson: boolean,
   io: CliIo,
 ): void {
+  if (
+    operationId === "principal_flags_list" &&
+    isObject(payload) &&
+    payload.readTruncated === true &&
+    !asJson
+  ) {
+    io.error("Flag list is incomplete. Narrow it with --app <app>.");
+    return;
+  }
   if (asJson) return;
   if (operationId === "experiments_start") {
     emitStartNotices(payload, io);

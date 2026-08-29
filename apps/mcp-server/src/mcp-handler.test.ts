@@ -11,7 +11,6 @@ import {
   type ProtocolTool,
   type SeenRequest,
   service,
-  token,
   toolsListRequest,
   type ToolResult,
   updatedFlag,

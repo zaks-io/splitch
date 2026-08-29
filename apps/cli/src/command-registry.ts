@@ -9,6 +9,8 @@ import {
 export interface CliCommandDefinition {
   /** Stable operation identity (MCP tool name for API commands). */
   readonly operationId: string;
+  /** Other operations selected dynamically by this same user-facing command. */
+  readonly alternateOperationIds?: readonly string[];
   /** Human CLI path segments, e.g. ["flags", "list"]. */
   readonly path: readonly string[];
   readonly needsApp: boolean;
@@ -55,14 +57,16 @@ export function commandSupportsConfirm(operationId: string): boolean {
 }
 
 function buildApiCommands(): CliCommandDefinition[] {
-  return deriveMcpTools().map((tool: McpToolDefinition) => ({
-    operationId: tool.name,
-    path: cliCommandPath(tool.name),
-    needsApp: needsAppFromPath(getRoutePath(tool.name)),
-    needsEnvironment: needsEnvironmentFromPath(getRoutePath(tool.name)),
-    supportsConfirm: supportsConfirm(tool.name),
-    kind: "api",
-  }));
+  return deriveMcpTools()
+    .filter((tool) => tool.name !== "principal_flags_list" && tool.name !== "flags_list")
+    .map((tool: McpToolDefinition) => ({
+      operationId: tool.name,
+      path: cliCommandPath(tool.name),
+      needsApp: needsAppFromPath(getRoutePath(tool.name)),
+      needsEnvironment: needsEnvironmentFromPath(getRoutePath(tool.name)),
+      supportsConfirm: supportsConfirm(tool.name),
+      kind: "api",
+    }));
 }
 
 function getRoutePath(operationId: string): string {
@@ -72,6 +76,15 @@ function getRoutePath(operationId: string): string {
 const API_COMMANDS = buildApiCommands();
 
 const PRESENTATION_ALIASES: readonly CliCommandDefinition[] = [
+  {
+    operationId: "principal_flags_list",
+    alternateOperationIds: ["flags_list"],
+    path: CLI_PRESENTATION_ALIAS_PATHS.principal_flags_list,
+    needsApp: false,
+    needsEnvironment: false,
+    supportsConfirm: false,
+    kind: "api",
+  },
   {
     operationId: "flag_targeting_rules_replace",
     path: ["flag-targeting-rules", "add"],
@@ -152,4 +165,15 @@ const COMMAND_LOOKUP = new Map<string, CliCommandDefinition>(
 
 export function allMcpParityOperationIds(): readonly string[] {
   return deriveMcpTools().map((tool: McpToolDefinition) => tool.name);
+}
+
+export function allCliParityOperationIds(): readonly string[] {
+  return [
+    ...new Set(
+      CLI_COMMANDS.flatMap((command) => [
+        command.operationId,
+        ...(command.alternateOperationIds ?? []),
+      ]),
+    ),
+  ];
 }

@@ -9,6 +9,7 @@ import {
   type ApiRouteContract,
   getRoute,
   HydratedFlagListResponseSchema,
+  HydratedPrincipalFlagListResponseSchema,
   HydratedFlagResponseSchema,
   publicSurfaceFor,
 } from "@splitch/contracts";
@@ -123,7 +124,13 @@ function withFlagReadDefaults(
   operationId: string,
   input: Record<string, unknown>,
 ): Record<string, unknown> {
-  if (operationId !== "flags_list" && operationId !== "flags_get") return input;
+  if (
+    operationId !== "principal_flags_list" &&
+    operationId !== "flags_list" &&
+    operationId !== "flags_get"
+  ) {
+    return input;
+  }
   const { summary, ...requestInput } = input;
   if (summary === true) {
     // `envs` is only accepted alongside `include=config`, so dropping `include`
@@ -151,15 +158,21 @@ function assertHydratedFlagResult(
   result: { ok: true; data: unknown } | { ok: false },
 ): void {
   if (!result.ok || input.include !== "config") return;
-  const payload = result.data;
-  if (operationId === "flags_list") {
-    if (HydratedFlagListResponseSchema.safeParse(payload).success) return;
-  } else if (operationId === "flags_get") {
-    if (HydratedFlagResponseSchema.safeParse(payload).success) return;
-  } else {
-    return;
-  }
+  if (isHydratedFlagResult(operationId, result.data)) return;
   throw new McpFlagReadContractError(operationId);
+}
+
+function isHydratedFlagResult(operationId: string, payload: unknown): boolean {
+  if (operationId === "principal_flags_list") {
+    return HydratedPrincipalFlagListResponseSchema.safeParse(payload).success;
+  }
+  if (operationId === "flags_list") {
+    return HydratedFlagListResponseSchema.safeParse(payload).success;
+  }
+  if (operationId === "flags_get") {
+    return HydratedFlagResponseSchema.safeParse(payload).success;
+  }
+  return true;
 }
 
 /**

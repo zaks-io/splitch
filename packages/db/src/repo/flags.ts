@@ -17,6 +17,7 @@ import type { ApprovalCommit } from "./approval-types";
 import type { Db } from "./client";
 import { makeFlagConfigOps, scopedFlagConfig, scopedTargetingRule } from "./flag-config-ops";
 import { type FlagInScope, makeVariantOps } from "./flag-variant-ops";
+import { makeFlagMultiAppReads } from "./flag-multi-app-reads";
 import { idBatches } from "./id-batches";
 import { assertMintedScope, envScope, type TenantScope } from "./scope";
 import { type ReadOptions, scopedTable } from "./scoped-table";
@@ -39,6 +40,7 @@ export function makeFlagRepo(db: Db) {
   }
 
   return {
+    ...makeFlagMultiAppReads(db),
     flags: flagsTable,
     // Read/insert only: UPDATEs of flag_configs go through makeFlagConfigOps so
     // every writer bumps `version` (SPL-350). Exposing ScopedTable.update here
