@@ -78,7 +78,8 @@ describe("remote JWKS shared transport", () => {
       cf: {
         cacheEverything: true,
         cacheTtlByStatus: {
-          "200-299": JWKS_SHARED_CACHE_TTL_SECONDS,
+          "200": JWKS_SHARED_CACHE_TTL_SECONDS,
+          "201-299": 0,
           "300-399": 0,
           "400-599": 0,
         },
@@ -104,6 +105,25 @@ describe("remote JWKS shared transport", () => {
     vi.stubGlobal(
       "fetch",
       vi.fn(async () => new Response(null, { status: 503 })),
+    );
+    const verifier = remoteJwksSignatureVerifier(uniqueJwksUri());
+
+    await expect(verifier.verify(await sign(trusted, { sub: "valid" }))).rejects.toThrow(
+      "Expected 200 OK",
+    );
+  });
+
+  /**
+   * jose accepts status 200 only, so the rest of 2xx is a fault. Paired with the
+   * exact `cacheTtlByStatus` map asserted above, this pins why that map singles
+   * out "200" instead of caching the whole 2xx range: a cached 204 would make
+   * every isolate in the colo fail auth for the full TTL with no way to refetch.
+   */
+  it.each([204, 206])("treats the 2xx statuses jose rejects as faults (%i)", async (status) => {
+    const trusted = await keypair(`jose-rejects-${status}`);
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response(null, { status })),
     );
     const verifier = remoteJwksSignatureVerifier(uniqueJwksUri());
 

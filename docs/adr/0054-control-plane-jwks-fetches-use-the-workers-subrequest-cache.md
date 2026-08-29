@@ -14,8 +14,11 @@ handler work.
    `cacheEverything` with `cacheTtlByStatus` rather than a flat `cacheTtl`. The Cloudflare docs
    describe `cacheTtlByStatus` as "a version of the `cacheTtl` feature" that selects the TTL from
    the response status, so setting both would state the window twice; the by-status form is the one
-   that can refuse to cache a fault. Only 2xx responses receive the 300-second TTL; 3xx, 4xx, and
-   5xx receive zero. A transport fault therefore still reaches jose and fails authentication loud.
+   that can refuse to cache a fault. Only status 200 receives the 300-second TTL; every other status,
+   including the rest of 2xx, receives zero. jose accepts 200 alone, so a cached 204 or 206 would
+   pin a response jose already treats as a fault for the full TTL and fail every request in the colo
+   with no way to refetch. A transport fault therefore still reaches jose and fails authentication
+   loud on the next request rather than for five minutes.
 
 2. **The resolver partition remains a property of the caller's fetch argument.** No caller-supplied
    fetch means the `default` partition and the shared cached transport. A caller-supplied fetch,

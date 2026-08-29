@@ -42,8 +42,12 @@ export const fetchSharedJwks: FetchImplementation = (url, options) => {
     ...options,
     cf: {
       cacheEverything: true,
+      // Only 200 is cacheable: jose rejects every other status, including the
+      // rest of 2xx, so caching a 204 would wedge the whole colo on a response
+      // that is already a fault instead of letting the next request refetch.
       cacheTtlByStatus: {
-        "200-299": JWKS_SHARED_CACHE_TTL_SECONDS,
+        "200": JWKS_SHARED_CACHE_TTL_SECONDS,
+        "201-299": 0,
         "300-399": 0,
         "400-599": 0,
       },
