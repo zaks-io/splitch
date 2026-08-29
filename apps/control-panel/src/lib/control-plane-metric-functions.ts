@@ -9,6 +9,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { getRequest } from "@tanstack/react-start/server";
 import { z } from "zod";
 import { controlPanelMutationBindings } from "./bindings";
+import { createControlPanelEventDefinitionsClient } from "./control-plane-apps";
 import { createControlPanelMetricsClient } from "./control-plane-metrics";
 import {
   MetricDraftSchema,
@@ -33,11 +34,41 @@ const MetricDeleteSchema = MetricScopeSchema.extend({
 export const loadControlPanelMetrics = createServerFn({ method: "GET" })
   .validator((data: unknown) => MetricScopeSchema.safeParse(data))
   .handler(
-    async ({ data: parsed }): Promise<ControlPlaneOperationResult<PanelMetricsListOutput>> => {
+    async ({
+      data: parsed,
+    }): Promise<
+      ControlPlaneOperationResult<
+        PanelMetricsListOutput & { eventDefinitions: Array<{ id: string; name: string }> }
+      >
+    > => {
       if (!parsed.success) return malformed("The Metric scope is malformed");
       const authorized = await authorizedMetricsClient(parsed.data.environmentId);
       if (!authorized.ok) return authorized.result;
-      return authorized.metrics.list({ appId: parsed.data.appId });
+      const result = await authorized.metrics.list({ appId: parsed.data.appId });
+      if (!result.ok) return result;
+      const eventDefinitionIds = [
+        ...new Set(result.data.items.flatMap(({ eventDefinitionId }) => eventDefinitionId ?? [])),
+      ];
+      const definitions = await Promise.all(
+        eventDefinitionIds.map((eventDefinitionId) =>
+          authorized.eventDefinitions.get({
+            appId: parsed.data.appId,
+            eventDefinitionId,
+          }),
+        ),
+      );
+      const failed = definitions.find((definition) => !definition.ok);
+      if (failed && !failed.ok) return failed;
+      return {
+        ...result,
+        data: {
+          ...result.data,
+          eventDefinitions: definitions.map((definition) => {
+            if (!definition.ok) throw new Error("unreachable Event Definition result");
+            return { id: definition.data.id, name: definition.data.name };
+          }),
+        },
+      };
     },
   );
 
@@ -99,6 +130,12 @@ async function authorizedMetricsClient(environmentId: string) {
   }
   return {
     ok: true as const,
+    eventDefinitions: createControlPanelEventDefinitionsClient(
+      bindings.CONTROL_PLANE_API,
+      { actorId: loaded.session.userId, sessionExpiresAt: loaded.session.expiresAt },
+      environmentId,
+      bindings.CONTROL_PANEL_DELEGATION_SECRET,
+    ),
     metrics: createControlPanelMetricsClient(
       bindings.CONTROL_PLANE_API,
       { actorId: loaded.session.userId, sessionExpiresAt: loaded.session.expiresAt },

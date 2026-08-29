@@ -1,4 +1,4 @@
-import { VariantSchema } from "@splitch/contracts";
+import { type Metric, MetricSchema, VariantSchema } from "@splitch/contracts";
 
 export interface PanelExperimentDetailInput {
   appId: string;
@@ -64,8 +64,9 @@ export interface PanelExperimentDetail {
 
 export interface PanelExperimentDetailOutput {
   experiment: PanelExperimentDetail;
-  flag: { id: string; name: string };
-  metrics: Array<{ id: string; name: string }>;
+  flag: { id: string; key: string; name: string };
+  metrics: Metric[];
+  eventDefinitions: Array<{ id: string; name: string }>;
   variants: Array<{ id: string; name: string }>;
   runs: PanelExperimentRun[];
 }
@@ -75,20 +76,27 @@ export function parsePanelExperimentDetailOutput(input: unknown) {
     !isObject(input) ||
     !isObject(input.flag) ||
     !Array.isArray(input.metrics) ||
+    !Array.isArray(input.eventDefinitions) ||
     !Array.isArray(input.variants) ||
     !Array.isArray(input.runs)
   ) {
     return { success: false as const };
   }
   const experiment = parsePanelExperimentDetail(input.experiment);
-  const metrics = input.metrics.map(parseMetric);
+  const metrics = input.metrics.map((metric) => {
+    const parsed = MetricSchema.safeParse(metric);
+    return parsed.success ? parsed.data : null;
+  });
+  const eventDefinitions = input.eventDefinitions.map(parseMetric);
   const variants = input.variants.map(parseMetric);
   const runs = input.runs.map(parsePanelExperimentRun);
   if (
     experiment === null ||
     !isNonEmptyString(input.flag.id) ||
+    !isNonEmptyString(input.flag.key) ||
     !isNonEmptyString(input.flag.name) ||
     metrics.some((metric) => metric === null) ||
+    eventDefinitions.some((definition) => definition === null) ||
     variants.some((variant) => variant === null) ||
     runs.some((run) => run === null)
   ) {
@@ -98,8 +106,9 @@ export function parsePanelExperimentDetailOutput(input: unknown) {
     success: true as const,
     data: {
       experiment,
-      flag: { id: input.flag.id, name: input.flag.name },
+      flag: { id: input.flag.id, key: input.flag.key, name: input.flag.name },
       metrics,
+      eventDefinitions,
       variants,
       runs,
     } as PanelExperimentDetailOutput,

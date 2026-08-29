@@ -174,7 +174,13 @@ describe("Flag detail page", () => {
 
 function render(next: FlagDetailView): string {
   return renderToStaticMarkup(
-    <FlagDetailPage appId="app_1" environmentId="env_dev" scopeHref={scopeHref} view={next} />,
+    <FlagDetailPage
+      appId="app_1"
+      clientKey="pk_test_dev"
+      environmentId="env_dev"
+      scopeHref={scopeHref}
+      view={next}
+    />,
   );
 }
 

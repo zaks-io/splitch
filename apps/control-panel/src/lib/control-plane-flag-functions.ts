@@ -22,7 +22,12 @@ import {
 
 type FlagsPageScope = { appId: string; environmentId: string };
 type FlagsMatrixScope = { appId: string; environmentIds: string[] };
-type CreateFlagResult = ControlPlaneOperationResult<{ key: string }>;
+export type CreatedFlagHandoff = {
+  key: string;
+  defaultVariantId: string;
+  variants: Array<{ id: string; name: string; valueJson: string }>;
+};
+type CreateFlagResult = ControlPlaneOperationResult<CreatedFlagHandoff>;
 
 const CreateFlagInputSchema = z.object({
   appId: z.string(),
@@ -130,7 +135,21 @@ export const createControlPanelFlag = createServerFn({ method: "POST" })
     const result = await authorized.client.create(
       flagCreateInput(data.appId, data.draft, data.idempotencyKey),
     );
-    return result.ok ? { ok: true, status: result.status, data: { key: result.data.key } } : result;
+    return result.ok
+      ? {
+          ok: true,
+          status: result.status,
+          data: {
+            key: result.data.key,
+            defaultVariantId: result.data.defaultVariantId,
+            variants: result.data.variants.map(({ id, name, value }) => ({
+              id,
+              name,
+              valueJson: JSON.stringify(value),
+            })),
+          },
+        }
+      : result;
   });
 
 function validationError(

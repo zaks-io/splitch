@@ -15,6 +15,7 @@ describe("Metric editor dialog", () => {
       <MetricsPage
         appId="app_billing"
         environmentId="env_prod"
+        eventDefinitions={[]}
         metrics={[]}
         readLimit={200}
         readTruncated={false}

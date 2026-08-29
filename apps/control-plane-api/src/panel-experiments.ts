@@ -21,6 +21,7 @@ import { appScope, envScope, type Repository } from "@splitch/db";
 import { analysisResultsRequest } from "./analysis-results-request";
 import { experimentNotFound, runNotFound } from "./experiment-errors";
 import { experimentResponse, jsonArray, jsonObject } from "./experiment-model";
+import { metricResponse } from "./metric-segment-shared";
 import { panelScopeAccessError } from "./panel-scope-access";
 
 interface PanelExperimentsDeps {
@@ -103,8 +104,9 @@ export async function panelExperimentDetail(
     deps.repo.flags.getFlagConfig(scope, row.flagId),
     deps.repo.experiments.listRunsForExperiment(scope, input.experimentId),
   ]);
-  const flagName = flagRows.find((flag) => flag.id === row.flagId)?.name;
-  if (!flagName) throw new Error(`Experiment ${row.id} references a missing Flag`);
+  const flag = flagRows.find((candidate) => candidate.id === row.flagId);
+  if (!flag) throw new Error(`Experiment ${row.id} references a missing Flag`);
+  const eventDefinitions = await referencedEventDefinitions(deps.repo, input.appId, metricRows);
 
   return Response.json({
     experiment: {
@@ -135,8 +137,9 @@ export async function panelExperimentDetail(
       draftSegmentIds: jsonArray<string>(row.draftSegmentIds),
       liveRunId: row.liveRunId,
     },
-    flag: { id: row.flagId, name: flagName },
-    metrics: metricRows.map((metric) => ({ id: metric.id, name: metric.name })),
+    flag: { id: row.flagId, key: flag.key, name: flag.name },
+    metrics: metricRows.map(metricResponse),
+    eventDefinitions,
     variants: availableVariants(variantRows, flagConfig?.availableVariantNames ?? "[]"),
     runs: runRows
       .sort((left, right) => right.runNumber - left.runNumber)
@@ -167,6 +170,21 @@ export async function panelExperimentDetail(
         createdAt: run.createdAt,
       })),
   });
+}
+
+async function referencedEventDefinitions(
+  repo: Repository,
+  appId: string,
+  metrics: Array<{ eventDefinitionId: string | null }>,
+): Promise<Array<{ id: string; name: string }>> {
+  const ids = [...new Set(metrics.flatMap(({ eventDefinitionId }) => eventDefinitionId ?? []))];
+  return Promise.all(
+    ids.map(async (id) => {
+      const definition = await repo.eventDefinitions.get(appScope(appId), id);
+      if (!definition) throw new Error(`Metric references a missing Event Definition: ${id}`);
+      return { id: definition.id, name: definition.name };
+    }),
+  );
 }
 
 /**

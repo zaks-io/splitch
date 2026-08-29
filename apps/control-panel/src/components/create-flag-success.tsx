@@ -10,6 +10,7 @@ import { parityHint } from "#lib/parity-hints";
 import { exposureStatusDisplayState } from "#lib/exposure-status-polling";
 import { environmentExposureStatusQuery } from "#lib/exposure-status-query";
 import { environmentSettingsQuery } from "#lib/settings-query";
+import type { CreatedFlagHandoff } from "#lib/control-plane-flag-functions";
 import { ConnectYourCodeCard } from "./connect-your-code-card";
 import { EnvironmentExposureStatus } from "./environment-exposure-status";
 import { FlagVerifyPanel } from "./flag-verify-panel";
@@ -25,12 +26,12 @@ const CLIENT_KEY_PARITY = parityHint("client_key_get");
 export function CreateFlagSuccess({
   appId,
   environmentId,
-  flagKey,
+  flag,
   settingsHref,
 }: {
   appId: string;
   environmentId: string;
-  flagKey: string;
+  flag: CreatedFlagHandoff;
   settingsHref: string;
 }) {
   const settings = useQuery(environmentSettingsQuery({ appId, environmentId }));
@@ -42,7 +43,7 @@ export function CreateFlagSuccess({
       <DialogHeader>
         <DialogTitle>Connect your code</DialogTitle>
         <DialogDescription>
-          <code>{flagKey}</code> was created with the boolean Variant catalog.
+          <code>{flag.key}</code> was created with its Variant catalog.
         </DialogDescription>
       </DialogHeader>
 
@@ -67,10 +68,19 @@ export function CreateFlagSuccess({
         <>
           <ConnectYourCodeCard
             clientKey={settings.data.clientKey}
-            flagKey={flagKey}
+            flagKey={flag.key}
+            flag={{
+              key: flag.key,
+              defaultVariant: flag.variants.find(({ id }) => id === flag.defaultVariantId)?.name,
+              variants: flag.variants.map((variant) => ({
+                name: variant.name,
+                value: JSON.parse(variant.valueJson) as unknown,
+                isDefault: variant.id === flag.defaultVariantId,
+              })),
+            }}
             settingsHref={settingsHref}
           />
-          <FlagVerifyPanel appId={appId} environmentId={environmentId} flagKey={flagKey} />
+          <FlagVerifyPanel appId={appId} environmentId={environmentId} flagKey={flag.key} />
         </>
       ) : null}
 

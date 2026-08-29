@@ -226,6 +226,12 @@ screens, both scoped to the selected Run:
   edit taxonomy below) plus the Experiment's current measurement config; Variants/allocation,
   Targeting, Targeting Key, Metrics (goal/secondary/guardrail/activation). What you _author_.
 
+When a live Run exists, Setup also renders a generated **code-agent prompt** containing the exact
+Flag key, public Client Key, frozen assignment configuration, and Metric bindings. Copying it hands
+the desired state to a coding agent, which follows the public code-agent implementation guide and
+changes the consumer repository. It does not mutate the splitch control plane. Starting a new Run or
+saving measurement changes regenerates this prompt from the reread Worker state.
+
 ### The Run-history timeline — a screen-level strip above the tabs
 
 The timeline is **not** a Setup-tab widget; it sits at the **detail-screen level, above the tabs**,
@@ -438,6 +444,10 @@ cross-env honesty as Segments. A Metric's _role_ (goal / Guardrail / Activation)
 — it is chosen **per-Experiment** when the Experiment is configured. Here you only define the Metric;
 the Experiment binds its role.
 
+After a Metric create or edit is read back successfully, the panel generates a code-agent prompt
+for its exact Event Definition and aggregation contract. Ratio prompts name the operand Metrics and
+never teach a made-up ratio event.
+
 ## Settings — App settings vs per-Environment settings
 
 Split exactly as the IA pins it:
@@ -524,6 +534,11 @@ Each step names the CLI/MCP parity it mirrors. No step is panel-only.
 
    (`idType` defaults to `'user'`, so the snippet stays short, ADR-0036.) The card links to the
    API-Key flow for server runtimes (provisioned-and-shown-once, ADR-0022). (Parity: `client_key_get`.)
+
+   The same handoff includes a generated **code-agent prompt** with the real Client Key, Flag key,
+   Variant catalog, and Default Variant. The prompt treats those values as data and sends the coding
+   agent to the public runtime-specific implementation contract before it edits. Flag detail keeps
+   the regenerated prompt available after later catalog or Configuration changes.
 
 5. **Verify it resolves** — the first green check. An inline **"Test this Flag"** panel on the card
    takes a Targeting Key and calls **`verify`** (ADR-0037): it shows the resolved Variant and a

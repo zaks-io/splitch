@@ -46,8 +46,19 @@ function detail(): PanelExperimentDetailOutput {
       draftSegmentIds: [],
       liveRunId: "run_3",
     },
-    flag: { id: "flag_1", name: "Checkout" },
-    metrics: [{ id: "metric_activation", name: "Checkout opened" }],
+    flag: { id: "flag_1", key: "checkout", name: "Checkout" },
+    metrics: [
+      {
+        id: "metric_activation",
+        appId: "app_1",
+        key: "checkout-opened",
+        name: "Checkout opened",
+        kind: "binomial",
+        eventDefinitionId: "checkout_opened",
+        createdAt: "2026-08-01T00:00:00.000Z",
+      },
+    ],
+    eventDefinitions: [{ id: "checkout_opened", name: "checkout_opened" }],
     variants: [
       { id: "variant_control", name: "control" },
       { id: "variant_treatment", name: "treatment" },

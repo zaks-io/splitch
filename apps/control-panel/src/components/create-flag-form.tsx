@@ -8,7 +8,7 @@ import {
 } from "@splitch/ui/components/dialog";
 import { type FormEvent, useRef, useState } from "react";
 import { type MutationErrorSurface, mutationErrorSurface } from "#lib/api";
-import { createControlPanelFlag } from "#lib/control-plane-flag-functions";
+import { type CreatedFlagHandoff, createControlPanelFlag } from "#lib/control-plane-flag-functions";
 import {
   booleanPresetDraft,
   draftIssues,
@@ -39,7 +39,7 @@ export function CreateFlagForm({
 }: {
   appId: string;
   environmentId: string;
-  onCreated: (key: string) => void;
+  onCreated: (flag: CreatedFlagHandoff) => void;
 }) {
   const [draft, setDraft] = useState(booleanPresetDraft);
   const [keyEdited, setKeyEdited] = useState(false);
@@ -82,7 +82,7 @@ export function CreateFlagForm({
       });
       if (result.ok) {
         idempotencyKey.current = null;
-        onCreated(result.data.key);
+        onCreated(result.data);
       } else setMutationError(mutationErrorSurface(result));
     } catch {
       setMutationError({

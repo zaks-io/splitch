@@ -1,5 +1,8 @@
 import type { FlagDetailView } from "#lib/flag-detail-view";
+import { Alert, AlertDescription, AlertTitle } from "@splitch/ui/components/alert";
+import { renderFlagImplementationPrompt } from "#lib/implementation-prompt";
 import { useFlagEditing } from "#lib/use-flag-editing";
+import { CodeAgentPrompt } from "./code-agent-prompt";
 import { FlagDetailDefinition } from "./flag-detail-definition";
 import { FlagDetailEnvConfig } from "./flag-detail-env-config";
 import { FlagDetailExperimentBanner } from "./flag-detail-experiment-banner";
@@ -18,12 +21,14 @@ import { GatedWriteOutcome } from "./gated-write-outcome";
  */
 export function FlagDetailPage({
   appId,
+  clientKey,
   environmentId,
   scopeHref,
   view,
   promotionSourceEnv,
 }: {
   appId: string;
+  clientKey?: string;
   environmentId: string;
   scopeHref: string;
   view: FlagDetailView;
@@ -83,6 +88,33 @@ export function FlagDetailPage({
       />
       <FlagDetailEnvConfig editing={editing} view={view} />
       <FlagDetailDefinition editing={editing} view={view} />
+      {clientKey ? (
+        <CodeAgentPrompt
+          prompt={renderFlagImplementationPrompt({
+            clientKey,
+            environment: view.env,
+            flag: {
+              key: view.key,
+              enabled: view.enabled,
+              defaultVariant: view.defaultVariantName,
+              variants: view.catalog.map((variant) => ({
+                name: variant.name,
+                value: JSON.parse(variant.value) as unknown,
+                isDefault: variant.isDefault,
+              })),
+            },
+          })}
+          testId="flag-detail-code-agent-prompt"
+        />
+      ) : (
+        <Alert variant="destructive">
+          <AlertTitle>Code-agent prompt unavailable</AlertTitle>
+          <AlertDescription>
+            The public Client Key could not be loaded. Reload this page or copy it from Environment
+            settings before implementing this Flag.
+          </AlertDescription>
+        </Alert>
+      )}
     </section>
   );
 }

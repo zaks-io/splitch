@@ -11,6 +11,7 @@ import { appScope, createRepository, envScope, type Repository } from "@splitch/
 import { type ConfigStoreWriter, makeConfigStore } from "./config-store";
 import type { ConfigStoreAccess } from "./config-store-do";
 import { makeSnapshotRevisionCounter } from "./config-store-fixture-data";
+import { insertExperimentRunEventDefinition } from "./experiment-run-event-definition-fixture";
 import {
   appToken,
   createDefaultApp,
@@ -112,6 +113,7 @@ export async function experimentFixture(ctx: ExperimentRunHarness, environmentKe
     availableVariantNames: JSON.stringify(["control", "treatment"]),
     updatedAt: NOW_ISO,
   });
+  await insertExperimentRunEventDefinition(ctx.repo, appId);
   const metric = await ctx.repo.experiments.metrics.insert(appScope(appId), {
     id: `metric_${environmentKey}`,
     appId,

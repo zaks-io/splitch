@@ -85,6 +85,13 @@ test.describe("onboarding: connect your code", () => {
     // The shipped client takes no appId; scope comes from the credential.
     expect(snippet).not.toContain("appId");
 
+    const agentPrompt = await card.getByTestId("flag-code-agent-prompt-text").innerText();
+    expect(agentPrompt).toContain("https://splitch.dev/docs/code-agents.md");
+    expect(agentPrompt).toContain(`"clientKey": "${clientKey}"`);
+    expect(agentPrompt).toContain(`"key": "${flagKey}"`);
+    expect(agentPrompt).toContain('"defaultVariant": "disabled"');
+    expect(agentPrompt).not.toMatch(/\bsk_[A-Za-z0-9]/);
+
     // The secret API Key is never redisplayed: the server path points at
     // Settings and reads the key from the environment.
     await card.getByText("Running on a trusted server instead?").click();

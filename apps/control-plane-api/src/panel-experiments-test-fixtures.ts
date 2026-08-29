@@ -81,6 +81,27 @@ export function runRow(ids: PanelExperimentIds, runNumber: 1 | 2) {
   };
 }
 
+export function metricRow(appId: string) {
+  return {
+    id: "metric_signup",
+    appId,
+    key: "signup",
+    name: "Signup",
+    description: null,
+    kind: "binomial",
+    eventDefinitionId: "signed_up",
+    eventFieldName: null,
+    numeratorMetricId: null,
+    denominatorMetricId: null,
+    downsideThresholdPct: null,
+    winsorize: null,
+    winsorizePct: null,
+    cuped: null,
+    cupedCoverageThresholdPct: null,
+    createdAt: "2026-08-01T00:00:00.000Z",
+  };
+}
+
 /**
  * What the Analysis Worker actually answers with: the Run it analysed, the
  * baseline that Run froze, and the numbers. Tests wrap through here so a caller

@@ -10,6 +10,17 @@ test.describe("Experiment Setup edit taxonomy", () => {
     await context.addCookies([{ name: "__session", value: LOCAL_E2E_SESSION_TOKEN, url: origin }]);
   });
 
+  test("generates a code-agent prompt from the live Run", async ({ page }) => {
+    await page.goto(setupPath);
+
+    const prompt = page.getByTestId("experiment-code-agent-prompt-text");
+    await expect(prompt).toContainText('"key": "new-checkout"');
+    await expect(prompt).toContainText('"number": 1');
+    await expect(prompt).toContainText('"eventName": "checkout_completed"');
+    await expect(prompt).toContainText('"conversionWindowMs": 86400000');
+    await expect(prompt).toContainText("This call is the Exposure denominator");
+  });
+
   test("keeps safe edits inline and makes the next Run a named destructive flow", async ({
     page,
   }, testInfo) => {

@@ -11,6 +11,8 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { revokeConvexInstallation } from "#lib/convex-mutations";
 import { convexInstallationsQuery, refreshConvexInstallations } from "#lib/convex-query";
+import { renderConvexIntegrationPrompt } from "#lib/implementation-prompt";
+import { CodeAgentPrompt } from "./code-agent-prompt";
 import { CopyableCode } from "./copyable-code";
 import { PushInstallationsTable, type PushInstallationRow } from "./push-installations-table";
 
@@ -144,6 +146,11 @@ function ConvexSetupSteps() {
         Set this Environment's <code>SPLITCH_API_KEY</code> in the Convex deployment, deploy, then
         call <code>flags.install(ctx)</code> once from an Action.
       </p>
+      <CodeAgentPrompt
+        prompt={renderConvexIntegrationPrompt()}
+        testId="convex-code-agent-prompt"
+        title="Implement Convex with your code agent"
+      />
     </div>
   );
 }

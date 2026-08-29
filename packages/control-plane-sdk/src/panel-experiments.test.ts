@@ -60,8 +60,9 @@ describe("panel experiments binding transport", () => {
           draftSegmentIds: ["segment_paid"],
           liveRunId: "run_2",
         },
-        flag: { id: "flag_1", name: "Checkout Flag" },
+        flag: { id: "flag_1", key: "checkout-flag", name: "Checkout Flag" },
         metrics: [],
+        eventDefinitions: [],
         variants: [
           { id: "variant_control", name: "control" },
           { id: "variant_treatment", name: "treatment" },
