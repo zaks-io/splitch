@@ -3,6 +3,14 @@ import { appScope, createRepository, envScope, type Repository } from "@splitch/
 export const NOW = "2026-07-01T20:00:00.000Z";
 export const NOW_MS = Date.parse(NOW);
 
+export function makeSnapshotRevisionCounter(): () => number {
+  let revision = 0;
+  return () => {
+    revision += 1;
+    return revision;
+  };
+}
+
 export const ids = {
   orgId: "org_config",
   appId: "app_config",

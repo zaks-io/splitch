@@ -108,10 +108,16 @@ control-plane socket into a per-event invalidation channel.
 ```
 function handleNudge(nudge: NudgePayload, appId: string, environmentId: string, qc: QueryClient) {
   const detail = qc.getQueryData(keys[nudge.entity].detail(appId, environmentId, nudge.id))
-  if (detail?.version >= nudge.version) return           // version gate: no-op for editor
-  qc.invalidateQueries({ queryKey: keys[nudge.entity].prefix(appId, environmentId) })
+  if (!nudge.deleted && detail?.version >= nudge.version) return // version gate: no-op for editor
+  invalidateQueryAndActiveRoute(keys[nudge.entity].prefix(appId, environmentId))
+  retryUntilReturnedVersionReaches(nudge.version)
 }
 ```
+
+Deletion nudges bypass the version gate. They carry `version: 0`, so applying the gate to a cached
+detail with a higher version would discard the deletion. Their invalidation converges when the
+refetch succeeds; only non-deletion nudges additionally require the returned detail version to reach
+the nudge version.
 
 See [query-key-factory.md](./query-key-factory.md) for the full key mapping.
 
@@ -121,8 +127,11 @@ A failed nudge-triggered refetch is **non-fatal**:
 
 - The failed refetch never unmounts existing data
 - The UI degrades to stale + dismissable toast ("couldn't refresh, retrying")
-- Retry policy: the initial refetch plus three retry attempts after 2 s / 4 s / 8 s with ±20% jitter
-- After the third retry fails: stop retrying for that nudge; wait for the next nudge or manual refresh
+- Retry policy: the initial refetch plus five retry attempts after 2 s / 4 s / 8 s / 16 s / 32 s
+- A successful response below the nudge version is stale, not a successful refetch
+- The stale indicator remains asserted through the complete 62-second retry window
+- After the fifth retry fails or remains below target: stop retrying and keep the stale indicator
+  asserted until a later nudge, reconnect, or manual refresh succeeds
 - Sentry: low-severity breadcrumb, not an error event
 
 Socket disconnection triggers the reconnect path (full invalidate-and-refetch), not the nudge retry
@@ -130,8 +139,8 @@ path. Disconnection is handled separately from per-nudge refetch failure.
 
 ## Source of truth
 
-The socket is **never** the source of truth. It is a "something changed, go look" signal. The Query
-cache refetch from the read API is the only mechanism that changes panel state.
+The socket is **never** the source of truth. It is a "something changed, go look" signal. Query and
+active-route refetches from the read API are the only mechanisms that change panel state.
 
 ## Marketing live-data routes
 

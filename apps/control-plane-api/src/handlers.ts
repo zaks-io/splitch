@@ -60,9 +60,7 @@ export function makeHandlers(deps: HandlerDeps) {
       const appId = pathParam(input, "appId");
       const environmentId = pathParam(input, "environmentId");
       const flagId = pathParam(input, "flagId");
-      const result = await deps.configStore
-        .writerFor(appId, environmentId)
-        .readFlagConfig({ appId, environmentId, flagId });
+      const result = await deps.configStore.readFlagConfig({ appId, environmentId, flagId });
 
       if (!result.ok) {
         return renderFlagConfigReadFailure(result, requestId);

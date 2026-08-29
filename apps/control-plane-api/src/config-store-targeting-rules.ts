@@ -1,16 +1,15 @@
 import type { TargetingRule } from "@splitch/contracts";
 import { type EnvScope, envScope, type ReplaceTargetingRulesResult } from "@splitch/db";
 import { targetingFreeze } from "./config-store-freeze";
+import { writeFlagConfigSnapshot } from "./config-store-snapshot-write";
 import {
-  buildSnapshotFromD1,
-  type ConfigStoreDeps,
+  type ConfigStoreRuntimeDeps,
   type FlagConfigWriteResult,
   loadFlagConfigWriteContext,
   missingRuleVariantNames,
   type ReplaceTargetingRulesInput,
   targetingRuleRows,
   toTargetingRule,
-  writeSnapshotAndBroadcast,
 } from "./config-store-shared";
 import { normalizeTargetingRuleRollouts } from "./flag-config-rollout";
 import { resolveTargetingRules } from "./targeting-rule-resolution";
@@ -44,7 +43,7 @@ export function targetingRulePersistFailure(
 }
 
 export async function replaceTargetingRules(
-  deps: ConfigStoreDeps,
+  deps: ConfigStoreRuntimeDeps,
   input: ReplaceTargetingRulesInput,
 ): Promise<FlagConfigWriteResult> {
   const frozen = await targetingFreeze(deps, input);
@@ -91,7 +90,7 @@ export async function replaceTargetingRules(
 }
 
 async function commitTargetingRules(
-  deps: ConfigStoreDeps,
+  deps: ConfigStoreRuntimeDeps,
   scope: EnvScope,
   input: ReplaceTargetingRulesInput & { targetingRules: TargetingRule[] },
 ): Promise<FlagConfigWriteResult> {
@@ -110,7 +109,5 @@ async function commitTargetingRules(
     return targetingRulePersistFailure(replaced, input.targetingRules, "FLAG_NOT_FOUND");
   }
 
-  const committed = await buildSnapshotFromD1(deps.repo, scope, flagId);
-  if (!committed) return { ok: false, reason: "FLAG_NOT_FOUND" };
-  return writeSnapshotAndBroadcast(deps, scope, flagId, committed);
+  return writeFlagConfigSnapshot(deps, scope, flagId);
 }

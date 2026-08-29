@@ -6,6 +6,7 @@ import {
   type ConfigStoreWriter,
   makeConfigStore,
 } from "../../control-plane-api/src/config-store.js";
+import { makeSnapshotRevisionCounter } from "../../control-plane-api/src/config-store-fixture-data.js";
 import type { ConfigStoreAccess } from "../../control-plane-api/src/config-store-do.js";
 import type { FixtureSigner } from "../../control-plane-api/src/fixture-signer.js";
 import {
@@ -90,6 +91,7 @@ export async function makeQuickstartHarness(): Promise<QuickstartHarness> {
     repo,
     kv: configKv,
     broadcaster: { broadcast() {} },
+    nextSnapshotRevision: makeSnapshotRevisionCounter(),
     now: () => new Date(Date.parse(NOW_ISO)),
   });
   const configStoreAccess: ConfigStoreAccess = {

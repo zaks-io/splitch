@@ -297,26 +297,27 @@ function configStore(
   seen: Array<{ appId: string; environmentId: string; flagId: string }>,
   liveSeen: Array<{ appId: string; environmentId: string }> = [],
 ) {
+  async function readFlagConfig(input: { appId: string; environmentId: string; flagId: string }) {
+    seen.push(input);
+    return {
+      ok: true as const,
+      config: {
+        flagId: input.flagId,
+        environmentId: input.environmentId,
+        version: 1,
+        enabled: false,
+        availableVariantNames: [],
+        targetingRules: [],
+        rollout: null,
+        experiment: null,
+      },
+    };
+  }
+
   return {
+    readFlagConfig,
     writerFor() {
-      return {
-        async readFlagConfig(input: { appId: string; environmentId: string; flagId: string }) {
-          seen.push(input);
-          return {
-            ok: true as const,
-            config: {
-              flagId: input.flagId,
-              environmentId: input.environmentId,
-              version: 1,
-              enabled: false,
-              availableVariantNames: [],
-              targetingRules: [],
-              rollout: null,
-              experiment: null,
-            },
-          };
-        },
-      } as never;
+      return {} as never;
     },
     liveUpdatesFor(appId: string, environmentId: string) {
       liveSeen.push({ appId, environmentId });
