@@ -1,5 +1,5 @@
 import type { AccessTokenAuthorization } from "@splitch/contracts";
-import { timingSafeEqualString } from "@splitch/worker-runtime";
+import { JWKS_SHARED_CACHE_TTL_SECONDS, timingSafeEqualString } from "@splitch/worker-runtime";
 import type { Hono } from "hono";
 import { verifyAccessToken } from "./access-token";
 import { accessTokenJwks } from "./access-token-key";
@@ -91,7 +91,9 @@ export function mountOAuthRoutes(app: Hono, deps: OAuthRouteDeps): void {
     if (!jwks) {
       return Response.json({ error: "access-token JWKS is not configured" }, { status: 500 });
     }
-    return Response.json(jwks);
+    return Response.json(jwks, {
+      headers: { "cache-control": `public, max-age=${JWKS_SHARED_CACHE_TTL_SECONDS}` },
+    });
   });
 
   app.get("/auth.md", () => {

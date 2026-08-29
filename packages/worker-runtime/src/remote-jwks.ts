@@ -8,6 +8,7 @@ import {
 } from "jose";
 
 const MAX_REMOTE_JWKS_RESOLVERS = 32;
+export const JWKS_SHARED_CACHE_TTL_SECONDS = 300;
 const rejectedCredentialCodes = new Set([
   "ERR_JOSE_ALG_NOT_ALLOWED",
   "ERR_JWKS_NO_MATCHING_KEY",
@@ -32,6 +33,23 @@ export interface RemoteJwksSignatureVerifierOptions {
 const remoteResolvers = new Map<string, RemoteJWKSet>();
 const fetchPartitions = new WeakMap<FetchImplementation, string>();
 let nextFetchPartition = 1;
+
+// Five minutes collapses bursty CLI and Control Panel auth into one fetch per colo. It accepts the
+// same key-rotation propagation window; emergency rotation requires purging the JWKS URL. Unknown
+// kid requests deliberately do not bypass this cache because that would amplify attacker traffic.
+export const fetchSharedJwks: FetchImplementation = (url, options) => {
+  return fetch(url, {
+    ...options,
+    cf: {
+      cacheEverything: true,
+      cacheTtlByStatus: {
+        "200-299": JWKS_SHARED_CACHE_TTL_SECONDS,
+        "300-399": 0,
+        "400-599": 0,
+      },
+    },
+  });
+};
 
 /**
  * Reuse jose's Cloudflare-aware remote resolver. It caches parsed keys, bounds
@@ -67,10 +85,8 @@ function remoteResolver(jwksUri: string, fetchImpl?: FetchImplementation): Remot
     return existing;
   }
 
-  const resolver = createRemoteJWKSet(
-    new URL(href),
-    fetchImpl === undefined ? undefined : { [customFetch]: fetchImpl },
-  );
+  const transport = fetchImpl ?? fetchSharedJwks;
+  const resolver = createRemoteJWKSet(new URL(href), { [customFetch]: transport });
   remoteResolvers.set(key, resolver);
   if (remoteResolvers.size > MAX_REMOTE_JWKS_RESOLVERS) {
     const oldest = remoteResolvers.keys().next().value;

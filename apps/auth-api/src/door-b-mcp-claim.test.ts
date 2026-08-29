@@ -119,6 +119,7 @@ async function mcpVerifier() {
         env,
         testCtx,
       );
+      expect(response.headers.get("cache-control")).toBe("public, max-age=300");
       return (await response.json()) as { keys: JsonWebKey[] };
     },
   });

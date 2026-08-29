@@ -1,5 +1,10 @@
+import type { FetchImplementation } from "jose";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { remoteJwksSignatureVerifier } from "./remote-jwks";
+import {
+  fetchSharedJwks,
+  JWKS_SHARED_CACHE_TTL_SECONDS,
+  remoteJwksSignatureVerifier,
+} from "./remote-jwks";
 
 afterEach(() => {
   vi.useRealTimers();
@@ -49,7 +54,79 @@ describe("remote JWKS signature verification", () => {
     await expect(verifier.verify(await sign(trusted, { sub: "streamed" }))).resolves.toBe(true);
     expect(fetchJwks).toHaveBeenCalledOnce();
   });
+});
 
+describe("remote JWKS shared transport", () => {
+  it("uses the Workers subrequest cache for the default transport", async () => {
+    const platformFetch = vi.fn(async () => Response.json({ keys: [] }));
+    vi.stubGlobal("fetch", platformFetch);
+    const headers = new Headers({ accept: "application/json" });
+    const signal = new AbortController().signal;
+
+    await fetchSharedJwks("https://jwks.test/.well-known/jwks.json", {
+      method: "GET",
+      redirect: "manual",
+      headers,
+      signal,
+    });
+
+    expect(platformFetch).toHaveBeenCalledWith("https://jwks.test/.well-known/jwks.json", {
+      method: "GET",
+      redirect: "manual",
+      headers,
+      signal,
+      cf: {
+        cacheEverything: true,
+        cacheTtlByStatus: {
+          "200-299": JWKS_SHARED_CACHE_TTL_SECONDS,
+          "300-399": 0,
+          "400-599": 0,
+        },
+      },
+    });
+  });
+
+  it("uses a caller-supplied fetch without adding shared cache options", async () => {
+    const trusted = await keypair("custom-transport");
+    const fetchJwks = vi.fn<FetchImplementation>(async () => Response.json(trusted.jwks));
+    const verifier = remoteJwksSignatureVerifier(uniqueJwksUri(), { fetch: fetchJwks });
+
+    await expect(verifier.verify(await sign(trusted, { sub: "custom-transport" }))).resolves.toBe(
+      true,
+    );
+
+    expect(fetchJwks).toHaveBeenCalledOnce();
+    expect(fetchJwks.mock.calls[0]?.[1]).not.toHaveProperty("cf");
+  });
+
+  it("leaves a non-2xx JWKS response loud", async () => {
+    const trusted = await keypair("unavailable");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response(null, { status: 503 })),
+    );
+    const verifier = remoteJwksSignatureVerifier(uniqueJwksUri());
+
+    await expect(verifier.verify(await sign(trusted, { sub: "valid" }))).rejects.toThrow(
+      "Expected 200 OK",
+    );
+  });
+
+  it("keeps default callers in one resolver partition", async () => {
+    const trusted = await keypair("shared-default");
+    const uri = uniqueJwksUri();
+    const defaultFetch = vi.fn(async () => Response.json(trusted.jwks));
+    vi.stubGlobal("fetch", defaultFetch);
+    const token = await sign(trusted, { sub: "shared-default" });
+
+    await expect(remoteJwksSignatureVerifier(uri).verify(token)).resolves.toBe(true);
+    await expect(remoteJwksSignatureVerifier(uri).verify(token)).resolves.toBe(true);
+
+    expect(defaultFetch).toHaveBeenCalledOnce();
+  });
+});
+
+describe("remote JWKS resolver isolation and failures", () => {
   it("contains attacker-controlled signature failures but leaves JWKS faults loud", async () => {
     const trusted = await keypair("trusted");
     const attacker = await keypair("attacker");
