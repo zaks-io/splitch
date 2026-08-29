@@ -44,8 +44,12 @@ FlagResponse &
   };
 ```
 
-`?include=config` and the optional `envs={environment_id},{environment_id}` subset have the same
-hydration contract and validation as `GET /apps/{app_id}/flags`. Hydration remains batched across the
+`?include=config` and the optional `envs={environment_selector},{environment_selector}` subset
+have the same hydration contract and validation as `GET /apps/{app_id}/flags`. A selector is an
+Environment ID or key; because Environment keys are unique within an App, a key hydrates the
+Environment it names in every readable App, while an ID hydrates only its owning App. A selector
+that names no readable Environment anywhere returns `ENVIRONMENT_NOT_FOUND` rather than hydrating
+nothing. Hydration remains batched across the
 membership App set, and every hydrated row remains field-identical to the same principal's per-App
 read after removing the inline `org` and `app` fields.
 

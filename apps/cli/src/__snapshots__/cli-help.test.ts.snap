@@ -1110,7 +1110,7 @@ Usage:
 Flags:
   --app <app>          [type: string; default: SPLITCH_APP or config] App ID or slug.
   --env <environment>  [type: string; default: none] Limit hydrated Configurations to one Environment; --summary selects its compact Configuration.
-  --summary            [type: boolean; default: false] Print compact human columns instead of complete per-Environment Configurations; cannot be combined with --json.
+  --summary            [type: boolean; default: false] Print each Flag's compact Configuration instead of complete per-Environment Configurations; cannot be combined with --json.
   --json               [type: boolean; default: false] Write machine-readable JSON to stdout.
   -h, --help           [type: boolean; default: false] Show help and exit.
 

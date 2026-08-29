@@ -137,13 +137,23 @@ function operationFlags(command: CliCommandDefinition): HelpFlag[] {
   switch (command.operationId) {
     case "flags_list":
     case "flags_get":
-    case "principal_flags_list":
       return [
         flag(
           "--summary",
           "boolean",
           "false",
           "Print compact human columns instead of complete per-Environment Configurations; cannot be combined with --json.",
+        ),
+      ];
+    // The cross-App read groups by App rather than printing columns; SPL-547
+    // tracks giving it the column renderer the App-scoped reads use.
+    case "principal_flags_list":
+      return [
+        flag(
+          "--summary",
+          "boolean",
+          "false",
+          "Print each Flag's compact Configuration instead of complete per-Environment Configurations; cannot be combined with --json.",
         ),
       ];
     case "flags_create":
