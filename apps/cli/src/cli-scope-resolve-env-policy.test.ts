@@ -212,7 +212,7 @@ describe("env-policy canonical selector recovery", () => {
 
     expect(code).toBe(EXIT_OK);
     const output = log.mock.calls.map((call) => call.join(" ")).join("\n");
-    expect(output).toContain("enabledState: confirm");
+    expect(output).toContain("Enabled State: confirm");
     expect(output).toContain(KILL_SWITCH_OFF_EXEMPTION);
   });
 });
