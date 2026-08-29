@@ -9,6 +9,7 @@ import {
 } from "@splitch/worker-runtime";
 import type { Context, Hono } from "hono";
 import type { ConfigStoreAccess } from "./config-store-do";
+import { resolveControlPlanePathSelectors } from "./path-selector-resolution";
 
 const LIVE_UPDATE_PATH = "/apps/:appId/envs/:environmentId/live";
 const REQUEST_ID_HEADER = "x-request-id";
@@ -29,8 +30,8 @@ export function mountLiveUpdateRoute(app: Hono, deps: LiveUpdateDeps): void {
 async function handleLiveUpdate(c: Context, deps: LiveUpdateDeps): Promise<Response> {
   const request = c.req.raw;
   const requestId = requestIdFor(request);
-  const appId = pathParam(c, "appId");
-  const environmentId = pathParam(c, "environmentId");
+  const requestedAppId = pathParam(c, "appId");
+  const requestedEnvironmentId = pathParam(c, "environmentId");
 
   try {
     const auth = await deps.authResolver(request);
@@ -48,7 +49,20 @@ async function handleLiveUpdate(c: Context, deps: LiveUpdateDeps): Promise<Respo
       return renderError(rateLimited, { requestId, defaultHeaders: deps.defaultHeaders });
     }
 
-    const scopeError = liveScopeError(auth.principal, appId, environmentId);
+    const resolved = await resolveControlPlanePathSelectors(deps.repo, {
+      contract: { id: "live_updates" },
+      input: { params: { appId: requestedAppId, environmentId: requestedEnvironmentId } },
+      params: { appId: requestedAppId, environmentId: requestedEnvironmentId },
+      principal: auth.principal,
+      request,
+    });
+    if (!resolved.ok) {
+      return renderError(resolved.error, { requestId, defaultHeaders: deps.defaultHeaders });
+    }
+    const appId = requiredResolvedParam(resolved.params, "appId");
+    const environmentId = requiredResolvedParam(resolved.params, "environmentId");
+
+    const scopeError = liveScopeError(resolved.principal, appId, environmentId);
     if (scopeError) {
       return renderError(scopeError, { requestId, defaultHeaders: deps.defaultHeaders });
     }
@@ -74,7 +88,7 @@ async function handleLiveUpdate(c: Context, deps: LiveUpdateDeps): Promise<Respo
 
     return deps.configStore
       .liveUpdatesFor(appId, environmentId)
-      .connect(serverAuthenticatedLiveUpdateRequest(auth.principal, appId, environmentId));
+      .connect(serverAuthenticatedLiveUpdateRequest(resolved.principal, appId, environmentId));
   } catch {
     return renderError(emptyError("INTERNAL_SERVER_ERROR", "unhandled runtime fault"), {
       requestId,
@@ -142,6 +156,14 @@ function pathParam(c: Context, key: string): string {
   const value = c.req.param(key);
   if (!value) {
     throw new Error(`control-plane-api: live update route missing path param "${key}"`);
+  }
+  return value;
+}
+
+function requiredResolvedParam(params: Record<string, string>, key: string): string {
+  const value = params[key];
+  if (!value) {
+    throw new Error(`control-plane-api: selector resolver omitted path param "${key}"`);
   }
   return value;
 }

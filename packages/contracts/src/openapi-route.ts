@@ -11,11 +11,12 @@ import {
   defineRoute,
   type HttpMethod,
   type IdempotencyMode,
-  type RawBodyByteLimit,
   type RateLimitClass,
+  type RawBodyByteLimit,
   type RouteContract,
   type RouteOwner,
 } from "./route-contract";
+import { CanonicalEnvironmentSelectorQuerySchema } from "./routes/route-shapes-params";
 
 /**
  * One authored shape per HTTP endpoint that serves BOTH consumers from a single
@@ -184,19 +185,21 @@ function buildOpenApiErrorResponses(codes: readonly ErrorCode[]) {
 }
 
 export function defineApiRoute<const Input extends DefineApiRouteInput>(input: Input) {
+  const errors = selectorAwareErrors(input);
+  const request = selectorAwareRequest(input);
   const contract = defineRoute({
     id: input.operationId,
     owner: input.owner,
     method: input.method,
     path: input.path,
-    input: runtimeInput(input.request),
+    input: runtimeInput(request),
     output: input.response,
     auth: input.auth,
     scopes: input.scopes ?? [],
     rateLimit: input.rateLimit,
     idempotency: input.idempotency,
     rawBodyByteLimit: input.rawBodyByteLimit,
-    errors: input.errors,
+    errors,
   });
 
   return {
@@ -209,13 +212,13 @@ export function defineApiRoute<const Input extends DefineApiRouteInput>(input: I
       operationId: input.operationId,
       summary: input.summary,
       request: {
-        ...(buildOpenApiRequestConfig(input.request) ?? {}),
+        ...(buildOpenApiRequestConfig(request) ?? {}),
         ...(idempotencyHeader(input.idempotency)
           ? { headers: idempotencyHeader(input.idempotency) }
           : {}),
       },
       responses: {
-        ...buildOpenApiErrorResponses(input.errors),
+        ...buildOpenApiErrorResponses(errors),
         200: {
           description: input.summary,
           content: { [JSON_CONTENT]: { schema: input.response } },
@@ -230,6 +233,41 @@ export function defineApiRoute<const Input extends DefineApiRouteInput>(input: I
       },
     } as const),
   };
+}
+
+/**
+ * Environment ambiguity must expose a declared escape hatch on every affected route.
+ * This deliberately gives all 26 control-plane-token routes with `:environmentId` or
+ * `:targetEnvironmentId` a strict query contract: unknown query params now return
+ * 400 VALIDATION_ERROR where routes without a query schema previously ignored them.
+ * That fail-loud contract change is intentional under ADR-0036.
+ */
+function selectorAwareRequest(input: DefineApiRouteInput): ApiRouteRequest | undefined {
+  if (
+    input.auth !== "control-plane-token" ||
+    (!input.path.includes(":environmentId") && !input.path.includes(":targetEnvironmentId"))
+  ) {
+    return input.request;
+  }
+  const request = input.request ?? {};
+  const query = request.query;
+  if (query?.shape.by) return request;
+  return {
+    ...request,
+    query: query
+      ? query.extend(CanonicalEnvironmentSelectorQuerySchema.shape)
+      : CanonicalEnvironmentSelectorQuerySchema,
+  };
+}
+
+/** Resolver errors are derived from App and nested selector axes exposed by the route. */
+function selectorAwareErrors(input: DefineApiRouteInput): readonly ErrorCode[] {
+  if (input.auth !== "control-plane-token" || !input.path.includes(":appId")) return input.errors;
+  const errors = new Set(input.errors);
+  errors.add("APP_NOT_FOUND");
+  errors.add("SELECTOR_AMBIGUOUS");
+  if (input.path.includes(":flagId")) errors.add("FLAG_NOT_FOUND");
+  return [...errors];
 }
 
 export { z };

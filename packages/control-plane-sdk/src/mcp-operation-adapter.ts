@@ -109,10 +109,15 @@ function scopedDelegationActor(
 }
 
 function scopeTarget(kind: "org" | "app", id: unknown): string | null {
-  return typeof id === "string" ? `${kind}:${id}:` : null;
+  if (typeof id !== "string") return null;
+  // An App slug may match any App authority the actor holds, but never Org
+  // authority. The Control Plane narrows that union after membership resolution.
+  if (kind === "app" && !id.startsWith("app_")) return "app:";
+  return `${kind}:${id}:`;
 }
 
 function scopeMatchesTarget(scope: string, target: string): boolean {
+  if (target === "app:") return /^app:app_[^:]+:(owner|admin|member)$/.test(scope);
   const role = scope.slice(target.length);
   return scope.startsWith(target) && USER_ROLES.has(role);
 }

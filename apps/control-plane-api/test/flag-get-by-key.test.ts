@@ -14,9 +14,9 @@ import { FLAG_LIST_READ_LIMIT } from "../src/overview-thresholds";
 import { makePoolBindings as makeLocalBindings } from "./pool-bindings";
 
 /**
- * `flags_get` is id-only on the path. Key lookup is explicit via `?by=key` so a
- * Flag key that equals another Flag's canonical id can never collide on one
- * segment (SPL-236). The App scope remains the isolation boundary.
+ * `flags_get` accepts a canonical ID or slug. `?by=key` selects the key side of
+ * an ID/key collision; otherwise a canonical-looking value keeps ID precedence
+ * (SPL-236/SPL-524). The App scope remains the isolation boundary.
  */
 let h: FlagDefinitionHarness;
 
@@ -135,6 +135,21 @@ describe("flags_get by key past the catalog list ceiling", () => {
     expect(await byId.json()).toMatchObject({ id: OLDEST_SEEDED_ID, key: OLDEST_SEEDED_KEY });
   });
 
+  it("unifies an ordinary Flag slug across omitted, by=key, and by=id forms", async () => {
+    const createdApp = await createDefaultApp(h);
+    const appId = createdApp.app.id;
+    await seedFlags(appId, 1);
+    const jwt = await appToken(h, appId);
+
+    const omitted = await request(h, "GET", `/apps/${appId}/flags/${OLDEST_SEEDED_KEY}`, jwt);
+    const byKey = await request(h, "GET", `/apps/${appId}/flags/${OLDEST_SEEDED_KEY}?by=key`, jwt);
+    const byId = await request(h, "GET", `/apps/${appId}/flags/${OLDEST_SEEDED_KEY}?by=id`, jwt);
+    const bodies = await Promise.all([omitted.json(), byKey.json(), byId.json()]);
+
+    expect([omitted.status, byKey.status, byId.status]).toEqual([200, 200, 200]);
+    expect(new Set(bodies.map((body) => JSON.stringify(body))).size).toBe(1);
+  });
+
   it("refuses a Flag key that only another App holds when asked ?by=key", async () => {
     const appA = await createDefaultApp(h);
     const appB = await createSecondApp();
@@ -209,48 +224,45 @@ describe("flags_get by key past the catalog list ceiling", () => {
     });
   });
 
-  it("does not let a trailing by=key override an earlier by=id on the same request", async () => {
-    // id and key are distinct strings so a coincidental match cannot pass.
-    // queryToRecord last-wins; the claim parser first-wins. Resolution must
-    // follow URLSearchParams (first) so ?by=id&by=key cannot become a key read.
+  it("ignores flags_get's by=key query on mutation routes", async () => {
     const createdApp = await createDefaultApp(h);
     const appId = createdApp.app.id;
-    const decoyId = "flag_decoy_duplicate_by";
-    const decoyKey = "decoy-key-duplicate-by";
-    const scope = appScope(appId);
-    const repo = createRepository(h.bindings.d1);
-    await repo.flags.flags.insert(scope, {
-      id: decoyId,
-      appId,
-      key: decoyKey,
-      name: "Decoy",
-      schema: JSON.stringify({ type: "boolean" }),
-      defaultVariantId: "var_decoy",
-      createdAt: NOW_ISO,
-      updatedAt: NOW_ISO,
-    });
-    await repo.flags.addVariant(scope, decoyId, {
-      id: "var_decoy",
-      name: "control",
-      value: JSON.stringify(false),
-      createdAt: NOW_ISO,
-    });
+    await seedIdKeyCollision(appId);
     const jwt = await appToken(h, appId);
 
-    const asId = await request(h, "GET", `/apps/${appId}/flags/${decoyKey}?by=id`, jwt);
-    expect(asId.status).toBe(404);
+    const updated = await request(h, "PATCH", `/apps/${appId}/flags/${COLLIDING_ID}?by=key`, jwt, {
+      name: "Updated canonical Flag",
+    });
+    const keyed = await request(h, "GET", `/apps/${appId}/flags/${COLLIDING_ID}?by=key`, jwt);
 
+    expect(updated.status).toBe(200);
+    expect(await updated.json()).toMatchObject({
+      id: COLLIDING_ID,
+      name: "Updated canonical Flag",
+    });
+    expect(await keyed.json()).toMatchObject({
+      id: "flag_keyed_elsewhere_0001",
+      name: "Keyed as the other's id",
+    });
+  });
+
+  it("does not let a trailing by=key override an earlier by=id on the same request", async () => {
+    const createdApp = await createDefaultApp(h);
+    const appId = createdApp.app.id;
+    await seedIdKeyCollision(appId);
+    const jwt = await appToken(h, appId);
+
+    const asId = await request(h, "GET", `/apps/${appId}/flags/${COLLIDING_ID}?by=id`, jwt);
     const duplicated = await request(
       h,
       "GET",
-      `/apps/${appId}/flags/${decoyKey}?by=id&by=key`,
+      `/apps/${appId}/flags/${COLLIDING_ID}?by=id&by=key`,
       jwt,
     );
-    expect(duplicated.status).toBe(404);
-    expect((await errorBody(duplicated)).code).toBe("FLAG_NOT_FOUND");
+    const asKey = await request(h, "GET", `/apps/${appId}/flags/${COLLIDING_ID}?by=key`, jwt);
 
-    const asKey = await request(h, "GET", `/apps/${appId}/flags/${decoyKey}?by=key`, jwt);
-    expect(asKey.status).toBe(200);
-    expect(await asKey.json()).toMatchObject({ id: decoyId, key: decoyKey });
+    expect(await asId.json()).toMatchObject({ id: COLLIDING_ID, key: "shadow-key" });
+    expect(await duplicated.json()).toMatchObject({ id: COLLIDING_ID, key: "shadow-key" });
+    expect(await asKey.json()).toMatchObject({ id: "flag_keyed_elsewhere_0001" });
   });
 });

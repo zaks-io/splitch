@@ -200,17 +200,19 @@ Account-closure privacy deletion is the only exception; see
 
 ## Environment endpoints (App-level resource; ADR-0027)
 
-Environments are children of an App. Each has a slug (URL segment), its own credentials, Flag
+Environments are children of an App. Each has a key (URL segment), its own credentials, Flag
 Configurations, experiment data, and **Environment Policy**.
 
 ### `GET /apps/{app_id}/envs`
 
-Returns: list of Environments `{ environment_id, app_id, slug, name, created_at }`.
+Returns: list of Environments `{ environment_id, app_id, key, name, created_at }`.
 Auth: App member.
 
 ### `POST /apps/{app_id}/envs`
 
-Body: `{ slug: string, name?: string, policy?: EnvironmentPolicy }` (slug unique within App)
+Body: `{ key: string, name?: string, policy?: EnvironmentPolicy }` (key unique within App). New keys
+are 2–63 lowercase alphanumerics separated by single hyphens; `_` is not accepted. Existing rows may
+retain older key shapes so selector resolution remains backward-compatible.
 Returns: the new Environment, with its default Policy if none supplied (dev-style all-`allow`), plus
 the public Client Key auto-provisioned for it under `clientKey` (same shape as
 `GET /apps/{app_id}/envs/{environment_id}/client-key`), so a caller can point an SDK at the
@@ -220,7 +222,7 @@ Auth: App `owner` or `admin`.
 
 ### `GET /apps/{app_id}/envs/{environment_id}`
 
-Returns: `{ environment_id, app_id, slug, name, policy, created_at }`.
+Returns: `{ environment_id, app_id, key, name, policy, created_at }`.
 
 ### `PATCH /apps/{app_id}/envs/{environment_id}`
 

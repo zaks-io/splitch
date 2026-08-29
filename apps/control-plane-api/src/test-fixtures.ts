@@ -16,6 +16,7 @@ const SCHEMA = [
   // fixture without it would report success on a duplicate the real DB rejects.
   `CREATE UNIQUE INDEX organizations_slug_unique ON organizations (slug)`,
   `CREATE TABLE org_memberships (org_id TEXT NOT NULL, user_id TEXT NOT NULL, role TEXT NOT NULL, created_at TEXT NOT NULL, PRIMARY KEY (org_id, user_id))`,
+  `CREATE INDEX org_memberships_user_id_idx ON org_memberships (user_id)`,
   `CREATE TABLE apps (id TEXT PRIMARY KEY NOT NULL, organization_id TEXT NOT NULL, name TEXT NOT NULL, key TEXT NOT NULL, description TEXT, create_idempotency_key TEXT, create_request_hash TEXT, create_response TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, created_by TEXT)`,
   `CREATE UNIQUE INDEX apps_org_key_unique ON apps (organization_id, key)`,
   `CREATE UNIQUE INDEX apps_create_idempotency_unique ON apps (organization_id, created_by, create_idempotency_key)`,

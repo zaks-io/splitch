@@ -133,28 +133,15 @@ async function withEnvironmentConfigurations(
 
 export async function getFlag(
   deps: FlagDefinitionDeps,
-  { input, requestId, request }: HandlerArgs<unknown>,
+  { input, requestId }: HandlerArgs<unknown>,
 ): Promise<Response> {
   const appId = pathParam(input, "appId");
-  const selector = pathParam(input, "flagId");
-  // Path is id-only by default. Key lookup is an explicit ?by=key so a Flag key
-  // that equals another Flag's canonical id can never collide on one segment
-  // (SPL-236). Write routes stay id-only via loadWritableFlag.
-  //
-  // Read `by` from URLSearchParams (first value), not from the parsed query
-  // record: queryToRecord last-wins on duplicates, while the Panel claim parser
-  // first-wins — `?by=id&by=key` would otherwise mint by:"id" and resolve as key.
-  const flag =
-    flagLookupBy(request) === "key"
-      ? await deps.repo.flags.getFlagByKey(appScope(appId), selector)
-      : await deps.repo.flags.getFlag(appScope(appId), selector);
+  const flagId = pathParam(input, "flagId");
+  // The authenticated resolver owns every key-to-ID lookup, including explicit
+  // `by=key`, so the handler has one canonical repository read.
+  const flag = await deps.repo.flags.getFlag(appScope(appId), flagId);
   if (!flag) return flagNotFound(requestId);
   return Response.json(await flagResponse(deps.repo, appId, flag));
-}
-
-/** Same source as `parseControlPanelOperation`: URLSearchParams first value. */
-function flagLookupBy(request: Request): "id" | "key" {
-  return new URL(request.url).searchParams.get("by") === "key" ? "key" : "id";
 }
 
 export async function updateFlag(

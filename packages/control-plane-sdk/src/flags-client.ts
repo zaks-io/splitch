@@ -26,6 +26,12 @@ import type {
 } from "@splitch/contracts/route-types";
 import { FlagSelectorUnaddressableError } from "./flag-selector-unaddressable-error";
 import {
+  getFlagConfig,
+  promoteFlag,
+  replaceFlagTargetingRules,
+  updateFlagConfig,
+} from "./flags-environment-operations";
+import {
   type ControlPlaneHcOptions,
   createFlagsHcClient,
   type FlagsHcClient,
@@ -184,58 +190,11 @@ export function createFlagsClient(
           ),
         ),
       ),
-    getConfig: (input, callOptions) =>
-      invokeHcRoute<FlagConfigGetOutput>("flag_config_get", () =>
-        hcClient.apps[":appId"].envs[":environmentId"].flags[":flagId"].config.$get(
-          {
-            param: {
-              appId: input.appId,
-              environmentId: input.environmentId,
-              flagId: input.flagId,
-            },
-          },
-          hcRequestOptions(withAuthorization(hcOptions, callOptions)),
-        ),
-      ),
-    updateConfig: (input, callOptions) => {
-      const { appId, environmentId, flagId, ...body } = input;
-      return invokeHcRoute<FlagConfigUpdateOutput>("flag_config_update", () =>
-        hcClient.apps[":appId"].envs[":environmentId"].flags[":flagId"].config.$patch(
-          { param: { appId, environmentId, flagId }, json: body } as never,
-          withIdempotencyHeader(
-            "flag_config_update",
-            hcRequestOptions(withAuthorization(hcOptions, callOptions)),
-            body.idempotency_key,
-          ),
-        ),
-      );
-    },
-    replaceTargetingRules: (input, callOptions) => {
-      const { appId, environmentId, flagId, ...body } = input;
-      return invokeHcRoute<FlagTargetingRulesReplaceOutput>("flag_targeting_rules_replace", () =>
-        hcClient.apps[":appId"].envs[":environmentId"].flags[":flagId"]["targeting-rules"].$put(
-          { param: { appId, environmentId, flagId }, json: body } as never,
-          withIdempotencyHeader(
-            "flag_targeting_rules_replace",
-            hcRequestOptions(withAuthorization(hcOptions, callOptions)),
-            body.idempotency_key,
-          ),
-        ),
-      );
-    },
-    promote: (input, callOptions) => {
-      const { appId, targetEnvironmentId, flagId, ...body } = input;
-      return invokeHcRoute<FlagsPromoteOutput>("flags_promote", () =>
-        hcClient.apps[":appId"].envs[":targetEnvironmentId"].flags[":flagId"].promote.$post(
-          { param: { appId, targetEnvironmentId, flagId }, json: body } as never,
-          withIdempotencyHeader(
-            "flags_promote",
-            hcRequestOptions(withAuthorization(hcOptions, callOptions)),
-            body.idempotency_key,
-          ),
-        ),
-      );
-    },
+    getConfig: (input, callOptions) => getFlagConfig(hcClient, hcOptions, input, callOptions),
+    updateConfig: (input, callOptions) => updateFlagConfig(hcClient, hcOptions, input, callOptions),
+    replaceTargetingRules: (input, callOptions) =>
+      replaceFlagTargetingRules(hcClient, hcOptions, input, callOptions),
+    promote: (input, callOptions) => promoteFlag(hcClient, hcOptions, input, callOptions),
   };
 }
 

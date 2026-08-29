@@ -33,8 +33,9 @@ export function enforceScopes(
   // the principal to be bound to that Org. A null `orgId` means the credential is
   // bound to NO single Org (it named zero or many Org scopes), which on an
   // Org-scoped route is FORBIDDEN, not a silent pass: an org-unbound token must
-  // not read or manage an Org by path. This rejects before any repository call,
-  // so an org_id-less context never reaches the seam.
+  // not read or manage an Org by path. Authenticated selector normalization may
+  // already have run, but an org_id-less context never reaches the handler or an
+  // Org resource repository call.
   const pathOrgId = params.orgId;
   if (pathOrgId !== undefined && principal.orgId !== pathOrgId) {
     return forbidden("credential is not scoped to this organization");
@@ -44,8 +45,9 @@ export function enforceScopes(
   // org-level control-plane token, or a data-plane key not yet app-bound). The
   // App IS the tenant boundary, so a route that co-scopes on `:appId` requires
   // that binding: a null App axis is FORBIDDEN, not a silent pass (principal.ts:
-  // "a route that requires co-scope on a null axis is a FORBIDDEN"). This rejects
-  // before any repository call, so an app_id-less context never reaches the seam.
+  // "a route that requires co-scope on a null axis is a FORBIDDEN"). An opted-in
+  // selector resolver may bind a null axis from one matching signed App scope;
+  // otherwise it never reaches the handler or an App resource repository call.
   const pathAppId = params.appId;
   if (pathAppId !== undefined && principal.appId !== pathAppId) {
     return forbidden("credential is not scoped to this app");

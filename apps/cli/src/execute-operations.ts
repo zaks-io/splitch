@@ -1,10 +1,10 @@
-import { ErrorCodeSchema, type ErrorResponse, getRoute } from "@splitch/sdk/control-plane";
 import { createSplitchClient } from "@splitch/sdk";
+import { ErrorCodeSchema, type ErrorResponse, getRoute } from "@splitch/sdk/control-plane";
 import { remediationForServerError, warnStaleApprovalDiscard } from "./approval-stale-warn.js";
 import { withAuthorizationRetry } from "./auth.js";
 import type { TokenBinding } from "./auth-binding.js";
 import { missingPositionalError } from "./command-positionals.js";
-import { commandSupportsConfirm, type CliCommandDefinition } from "./command-registry.js";
+import { type CliCommandDefinition, commandSupportsConfirm } from "./command-registry.js";
 import type { ResolvedContext } from "./context.js";
 import { requireAppScope, requireEnvironmentScope } from "./context.js";
 import {
@@ -16,7 +16,7 @@ import {
 import { emit } from "./execute-io.js";
 import type { CliDeps, CliIo, CliResult } from "./execute-types.js";
 import { EXIT_API, EXIT_AUTH, EXIT_OK, EXIT_SCOPE, EXIT_USAGE } from "./exit-codes.js";
-import { parseEvaluationContext } from "./operation-input.js";
+import { environmentSelectorOverride, parseEvaluationContext } from "./operation-input.js";
 import { emitOperationNotices } from "./operation-notices.js";
 import type { ParsedInvocation } from "./parse-args.js";
 import { createOperationSdks, resolveDataPlaneBaseUrl, sdkForRoute } from "./sdks.js";
@@ -75,7 +75,11 @@ export async function executeFlagsVerify(
         const sdks = createOperationSdks(deps);
         const result = await sdks["control-plane-api"].callOperationById(
           "client_key_get",
-          { appId: context.appId, environmentId: context.environmentId },
+          {
+            appId: context.appId,
+            environmentId: context.environmentId,
+            ...environmentSelectorOverride(invocation.flags.by),
+          },
           { authorization },
         );
         return { status: result.ok ? 200 : result.status, value: result };
@@ -138,47 +142,6 @@ export function validateFlagsVerifyUsage(
     return { exitCode: EXIT_USAGE };
   }
   return null;
-}
-
-export async function executeEnvPolicyGet(
-  invocation: ParsedInvocation,
-  deps: CliDeps,
-  io: CliIo,
-  context: ResolvedContext,
-): Promise<CliResult> {
-  return executeApiOperation(
-    "environments_get",
-    { appId: context.appId, environmentId: context.environmentId },
-    invocation,
-    deps,
-    io,
-    (data) => ({ policy: (data as { policy: unknown }).policy }),
-  );
-}
-
-export async function executeEnvPolicySet(
-  invocation: ParsedInvocation,
-  deps: CliDeps,
-  io: CliIo,
-  context: ResolvedContext,
-): Promise<CliResult> {
-  if (!invocation.flags.bodyJson) {
-    writeCliError(io, {
-      code: "CLI_USAGE_INVALID",
-      causeSummary: "env-policy set requires --body-json",
-      remediation: "Pass the Environment Policy JSON object with --body-json",
-    });
-    return { exitCode: EXIT_USAGE };
-  }
-  const policy = JSON.parse(invocation.flags.bodyJson) as unknown;
-  return executeApiOperation(
-    "environments_update",
-    { appId: context.appId, environmentId: context.environmentId, policy },
-    invocation,
-    deps,
-    io,
-    (data) => ({ policy: (data as { policy: unknown }).policy }),
-  );
 }
 
 /**

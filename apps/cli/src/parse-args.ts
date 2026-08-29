@@ -15,6 +15,7 @@ export interface ParsedGlobalFlags {
   readonly targetingKey?: string;
   readonly contextJson?: string;
   readonly bodyJson?: string;
+  readonly by?: string;
   readonly variants?: string;
   readonly fromEnvironmentId?: string;
   readonly enabled?: boolean;
@@ -55,6 +56,7 @@ const KNOWN_FLAGS = new Set([
   "targetingKey",
   "contextJson",
   "bodyJson",
+  "by",
   "variants",
   "fromEnvironmentId",
   "enabled",
@@ -181,6 +183,7 @@ function toParsedFlags(flags: Record<string, ParsedFlagValue>): ParsedGlobalFlag
     targetingKey: stringFlag(flags.targetingKey),
     contextJson: stringFlag(flags.contextJson),
     bodyJson: stringFlag(flags.bodyJson),
+    by: stringFlag(flags.by),
     variants: stringFlag(flags.variants),
     fromEnvironmentId: stringFlag(flags.fromEnvironmentId),
     enabled: parseEnabledFlag(flags.enabled),

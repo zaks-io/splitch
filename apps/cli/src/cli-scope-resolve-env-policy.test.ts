@@ -93,7 +93,9 @@ describe("env-policy get --app/--env slug resolution", () => {
       ),
     ).toBe(true);
   });
+});
 
+describe("env-policy canonical selector recovery", () => {
   it("accepts a canonical Environment ID", async () => {
     const { credentialPath } = await makeTempHome();
     await writeFile(credentialPath, `${JSON.stringify(storedCredential())}\n`);
@@ -108,11 +110,52 @@ describe("env-policy get --app/--env slug resolution", () => {
     ]);
 
     const code = await runCli(
-      ["env-policy", "get", "--json", "--app", "app_1", "--env", "env_prod"],
+      ["env-policy", "get", "--json", "--app", "app_1", "--env", "env_prod", "--by", "id"],
       { credentialPath, fetch: transport.fetch },
     );
 
     expect(code).toBe(EXIT_OK);
+    const request = transport.requests.find(
+      (item) => new URL(item.url).pathname === "/apps/app_1/envs/env_prod",
+    );
+    expect(new URL(request?.url ?? "https://invalid.test").searchParams.get("by")).toBe("id");
+  });
+
+  it("forwards by=id on env-policy set without leaking it into the Policy body", async () => {
+    const { credentialPath } = await makeTempHome();
+    await writeFile(credentialPath, `${JSON.stringify(storedCredential())}\n`);
+    const transport = new FakeCliTransport([
+      ...scopeResolutionStubs(),
+      {
+        match: (request) =>
+          request.method === "PATCH" &&
+          new URL(request.url).pathname === "/apps/app_1/envs/env_prod",
+        status: 200,
+        body: environmentGetBody,
+      },
+    ]);
+
+    const code = await runCli(
+      [
+        "env-policy",
+        "set",
+        "--json",
+        "--app",
+        "app_1",
+        "--env",
+        "env_prod",
+        "--by",
+        "id",
+        "--body-json",
+        JSON.stringify(envPolicy),
+      ],
+      { credentialPath, fetch: transport.fetch },
+    );
+
+    expect(code).toBe(EXIT_OK);
+    const request = transport.requests.find((item) => item.method === "PATCH");
+    expect(new URL(request?.url ?? "https://invalid.test").searchParams.get("by")).toBe("id");
+    expect(request?.body).toEqual({ policy: envPolicy });
   });
 
   it("fails with CLI_SCOPE_UNRESOLVED naming the unknown Environment slug", async () => {
