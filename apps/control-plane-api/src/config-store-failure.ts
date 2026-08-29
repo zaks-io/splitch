@@ -10,7 +10,7 @@ export async function catchConfigStoreFailure<T>(
     return await operation();
   } catch (cause) {
     if (cause instanceof DeletedFlagConfigSnapshotError) {
-      (deps.logger ?? console).error("config_store_deleted_snapshot_publication_refused", {
+      (deps.logger ?? console).error("config_store_deleted_snapshot_write_refused", {
         flagId: cause.flagId,
         cause,
       });

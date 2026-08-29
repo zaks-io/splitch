@@ -21,6 +21,7 @@ const ControlPlaneFlagConfigEnvelope = kvEnvelope(controlPlaneRoute("flag_config
 const ExperimentConfigEnvelope = kvEnvelope(ExperimentConfigKVSchema);
 const RunConfigEnvelope = kvEnvelope(RunConfigKVSchema);
 const LiveRunEnvelope = kvEnvelope(LiveRunKVSchema);
+const DELETED_SNAPSHOT_EXPIRATION_TTL_SECONDS = 62;
 
 export function parseFlagConfigEnvelope(raw: string): FlagConfigKV {
   return FlagConfigEnvelope.parse(JSON.parse(raw)).data;
@@ -110,6 +111,10 @@ export async function deleteFlagConfigSnapshot(
       revision,
       state: "deleted",
     }),
+    {
+      // After expiry, a KV miss reads authoritative D1; a deleted Flag returns FLAG_NOT_FOUND.
+      expirationTtl: DELETED_SNAPSHOT_EXPIRATION_TTL_SECONDS,
+    },
   );
   const evaluationKey = flagConfigKey(scope.appId, scope.environmentId, flagKey);
   if (deleteEvaluationSnapshot) await kv.delete(evaluationKey);

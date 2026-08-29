@@ -1,7 +1,7 @@
 import type { PercentageRollout, TargetingRule, Variant } from "@splitch/contracts";
 import { type EnvScope, envScope } from "@splitch/db";
 import { promotionFreeze } from "./config-store-freeze";
-import { publishFlagConfigSnapshot } from "./config-store-publication";
+import { writeFlagConfigSnapshot } from "./config-store-snapshot-write";
 import {
   buildSnapshotFromD1,
   type ConfigStoreRuntimeDeps,
@@ -301,7 +301,7 @@ async function commitPromotion(
     return { ok: false, reason: "FLAG_NOT_FOUND" };
   }
 
-  return publishFlagConfigSnapshot(deps, targetScope, input.flagId);
+  return writeFlagConfigSnapshot(deps, targetScope, input.flagId);
 }
 
 function copySelectedAvailability(

@@ -1,7 +1,7 @@
 import type { TargetingRule } from "@splitch/contracts";
 import { type EnvScope, envScope, type ReplaceTargetingRulesResult } from "@splitch/db";
 import { targetingFreeze } from "./config-store-freeze";
-import { publishFlagConfigSnapshot } from "./config-store-publication";
+import { writeFlagConfigSnapshot } from "./config-store-snapshot-write";
 import {
   type ConfigStoreRuntimeDeps,
   type FlagConfigWriteResult,
@@ -109,5 +109,5 @@ async function commitTargetingRules(
     return targetingRulePersistFailure(replaced, input.targetingRules, "FLAG_NOT_FOUND");
   }
 
-  return publishFlagConfigSnapshot(deps, scope, flagId);
+  return writeFlagConfigSnapshot(deps, scope, flagId);
 }

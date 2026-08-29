@@ -45,9 +45,14 @@ not carrying the writer's in-memory value, including another isolate in the same
    D1 without entering the Config Store mutation queue. A missing Flag returns `FLAG_NOT_FOUND`
    without touching the Durable Object. For an existing Flag, the API schedules repair with
    `waitUntil`; the Durable Object then repeats D1 capture inside its mutation queue before revision
-   allocation, KV write, and broadcast. The KV write therefore remains serialized against
+   allocation, KV write, and broadcast. The KV write therefore remains serialized against other
    writes, while the response path has the same D1 authority and cost as the pre-KV read path. A
    background KV write failure is logged and does not replace the successful D1 read.
+
+6. **Deletion tombstones expire after 62 seconds.** This is the same propagation-lag budget as the
+   Control Panel's initial refetch plus five retries. After expiry, KV returns a miss; the
+   control-plane read path then consults authoritative D1, where a deleted Flag returns
+   `FLAG_NOT_FOUND` without scheduling snapshot repair.
 
 ## Consequences
 

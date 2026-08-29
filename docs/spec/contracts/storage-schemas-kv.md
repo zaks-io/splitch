@@ -19,7 +19,7 @@ authoritative Config Store DO; control-plane readers rebuild KV from D1 (see
 | Namespace key pattern                                            | Value schema                              | TTL                          | Notes                                                                                        |
 | ---------------------------------------------------------------- | ----------------------------------------- | ---------------------------- | -------------------------------------------------------------------------------------------- |
 | `app:{appId}:{environmentId}:flag:{flagKey}`                     | `FlagConfigKV`                            | none (invalidated on change) | Hot-path flag config read; Flag CONFIGURATION is per-Environment (ADR-0027)                  |
-| `app:{appId}:{environmentId}:control-plane-flag-config:{flagId}` | control-plane Flag Configuration snapshot | none (tombstoned on delete)  | Revisioned control-plane read snapshot; carries explicit present/deleted state               |
+| `app:{appId}:{environmentId}:control-plane-flag-config:{flagId}` | control-plane Flag Configuration snapshot | present: none; deleted: 62s  | Revisioned control-plane read snapshot; carries explicit present/deleted state               |
 | `app:{appId}:{environmentId}:run:{runId}`                        | `RunConfigKV`                             | none                         | Hot-path live Experiment Run config, read only from `ExperimentConfigKV.liveRunId`           |
 | `app:{appId}:{environmentId}:experiment:{experimentId}`          | `ExperimentConfigKV`                      | none (invalidated on change) | Edge Experiment config read; carries nullable `liveRunId` for evaluation and ingest          |
 | `live_run:{appId}:{environmentId}:{experimentId}`                | `LiveRunKV`                               | none                         | Explicit live Run pointer written on Start and cleared on End; never inferred from latest D1 |
@@ -97,9 +97,10 @@ A Flag Configuration write replaces the snapshot with a higher-revision `present
 writes a higher-revision tombstone before removing the evaluation snapshot, so stale Workers KV
 reads cannot make the deleted Flag Configuration authoritative again. The isolate-local
 write-through cache retains the tombstone for at most 60 seconds and removes it once KV returns an
-equal or newer revision. The KV tombstone itself currently has no TTL or compaction job and is
-retained indefinitely. A bounded KV tombstone retention policy needs a new cleanup consumer before
-the stored value can expire safely.
+equal or newer revision. The KV tombstone expires after 62 seconds, matching ADR-0052's accepted
+initial-refetch-plus-five-retries propagation window. After expiry, the missing snapshot falls back
+to authoritative D1; because the Flag row is gone, the read returns `FLAG_NOT_FOUND` and does not
+repair the snapshot.
 
 `ResolvedTargetingRule` contains concrete Conditions and cannot contain `segmentId`. Snapshot writes
 resolve authoring Segment references before this blob is stored; edge evaluation performs no

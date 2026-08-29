@@ -86,6 +86,27 @@ describe("nudge convergence", () => {
   });
 });
 
+describe("deletion nudge convergence coordination", () => {
+  it("clears a deletion target after its retry converges", async () => {
+    vi.useFakeTimers();
+    const { connection, queryClient, sockets, stale } = connectionHarness();
+    connection.start();
+    await vi.advanceTimersByTimeAsync(0);
+    queryClient.invalidateQueries.mockClear();
+    queryClient.invalidateQueries
+      .mockRejectedValueOnce(new Error("read API unavailable"))
+      .mockResolvedValue();
+
+    socketAt(sockets, 0).onmessage?.(deletedMessage("flag_1"));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(stale).toHaveBeenLastCalledWith(true);
+
+    await vi.advanceTimersByTimeAsync(2_000);
+    expect(queryClient.invalidateQueries).toHaveBeenCalledTimes(2);
+    expect(stale).toHaveBeenLastCalledWith(false);
+  });
+});
+
 describe("nudge convergence coordination", () => {
   it("clears a stale target after a later delete nudge converges", async () => {
     vi.useFakeTimers();

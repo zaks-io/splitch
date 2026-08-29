@@ -112,11 +112,11 @@ export function makeWorld(
   return { access, app, names };
 }
 
-export async function publish(world: World, tenant: Tenant): Promise<void> {
-  await publishIn(world, tenant, tenant.envId);
+export async function writeSnapshots(world: World, tenant: Tenant): Promise<void> {
+  await writeSnapshotsIn(world, tenant, tenant.envId);
 }
 
-export async function publishIn(
+export async function writeSnapshotsIn(
   world: World,
   tenant: Tenant,
   environmentId: string,
@@ -126,7 +126,8 @@ export async function publishIn(
     environmentId,
     flagId: tenant.flagId,
   });
-  if (!result.ok) throw new Error(`security fixture publish failed: ${JSON.stringify(result)}`);
+  if (!result.ok)
+    throw new Error(`security fixture snapshot write failed: ${JSON.stringify(result)}`);
 }
 
 export async function seedSecondEnvironment(tenant: Tenant): Promise<void> {

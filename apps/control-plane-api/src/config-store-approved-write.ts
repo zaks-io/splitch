@@ -1,6 +1,6 @@
 import { envScope } from "@splitch/db";
 import { approvedProposalFreeze } from "./config-store-freeze";
-import { publishFlagConfigSnapshot } from "./config-store-publication";
+import { writeFlagConfigSnapshot } from "./config-store-snapshot-write";
 import {
   type ApplyApprovedFlagConfigInput,
   buildSnapshotFromD1,
@@ -74,7 +74,7 @@ export async function applyApprovedFlagConfig(
   ) {
     return { ok: false, reason: "APPROVAL_NOT_APPLIED" };
   }
-  return publishFlagConfigSnapshot(deps, scope, input.flagId);
+  return writeFlagConfigSnapshot(deps, scope, input.flagId);
 }
 
 /** Patch keys whose JSON Pointer appears in `diff.entries` (plus `updatedAt`). */

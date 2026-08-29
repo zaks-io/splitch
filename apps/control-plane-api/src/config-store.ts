@@ -7,10 +7,10 @@ import { promoteFlagConfig } from "./config-store-mutations";
 import { previewSnapshotResult, previewTargetingRules } from "./config-store-preview";
 import {
   type ExperimentConfigSyncInput,
-  publishFlagConfigSnapshot,
   resyncFlagConfig,
   syncExperimentConfig,
-} from "./config-store-publication";
+  writeFlagConfigSnapshot,
+} from "./config-store-snapshot-write";
 import {
   type ApplyApprovedFlagConfigInput,
   buildSnapshotFromD1,
@@ -215,7 +215,7 @@ async function writeFlagConfig(
 
   const committed = await commitFlagConfigPatch(deps, scope, input, snapshot);
   if (!committed) return { ok: false, reason: "FLAG_NOT_FOUND" };
-  return publishFlagConfigSnapshot(deps, scope, input.flagId);
+  return writeFlagConfigSnapshot(deps, scope, input.flagId);
 }
 
 async function previewFlagConfig(

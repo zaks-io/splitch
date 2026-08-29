@@ -16,7 +16,7 @@ afterEach(async () => {
   await h.dispose();
 });
 
-describe("Flag Configuration snapshot publication order", () => {
+describe("Flag Configuration snapshot write order", () => {
   it("keeps the later write after an earlier write paused with stale content", async () => {
     const store = makeStore(durableRevisionAllocator());
     expect(await store.resyncFlagConfig(configIdentity())).toMatchObject({ ok: true });
@@ -69,7 +69,7 @@ describe("Flag Configuration snapshot publication order", () => {
     });
   });
 
-  it("emits a distinct operator error when a deletion fence refuses publication", async () => {
+  it("emits a distinct operator error when a deletion fence refuses a snapshot write", async () => {
     const nextSnapshotRevision = durableRevisionAllocator();
     const baseline = makeStore(nextSnapshotRevision);
     expect(await baseline.resyncFlagConfig(configIdentity())).toMatchObject({ ok: true });
@@ -82,7 +82,7 @@ describe("Flag Configuration snapshot publication order", () => {
       reason: "FLAG_NOT_FOUND",
     });
     expect(error).toHaveBeenCalledWith(
-      "config_store_deleted_snapshot_publication_refused",
+      "config_store_deleted_snapshot_write_refused",
       expect.objectContaining({ flagId: ids.flagId, cause: expect.anything() }),
     );
     expect(

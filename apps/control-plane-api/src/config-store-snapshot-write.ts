@@ -20,7 +20,7 @@ export function resyncFlagConfig(
   input: FlagConfigResyncInput,
 ): Promise<FlagConfigWriteResult> {
   return catchConfigStoreFailure(deps, () =>
-    publishFlagConfigSnapshot(deps, envScope(input.appId, input.environmentId), input.flagId),
+    writeFlagConfigSnapshot(deps, envScope(input.appId, input.environmentId), input.flagId),
   );
 }
 
@@ -29,7 +29,7 @@ export function syncExperimentConfig(
   input: ExperimentConfigSyncInput,
 ): Promise<FlagConfigWriteResult> {
   return catchConfigStoreFailure(deps, () =>
-    publishExperimentConfigSnapshot(
+    writeExperimentConfigSnapshot(
       deps,
       envScope(input.appId, input.environmentId),
       input.experimentId,
@@ -37,25 +37,25 @@ export function syncExperimentConfig(
   );
 }
 
-export function publishFlagConfigSnapshot(
+export function writeFlagConfigSnapshot(
   deps: ConfigStoreRuntimeDeps,
   scope: EnvScope,
   flagId: string,
 ): Promise<FlagConfigWriteResult> {
-  return publishSnapshot(deps, scope, () => buildSnapshotFromD1(deps.repo, scope, flagId));
+  return writeLoadedSnapshot(deps, scope, () => buildSnapshotFromD1(deps.repo, scope, flagId));
 }
 
-function publishExperimentConfigSnapshot(
+function writeExperimentConfigSnapshot(
   deps: ConfigStoreRuntimeDeps,
   scope: EnvScope,
   experimentId: string,
 ): Promise<FlagConfigWriteResult> {
-  return publishSnapshot(deps, scope, () =>
+  return writeLoadedSnapshot(deps, scope, () =>
     buildExperimentSnapshotFromD1(deps.repo, scope, experimentId),
   );
 }
 
-async function publishSnapshot(
+async function writeLoadedSnapshot(
   deps: ConfigStoreRuntimeDeps,
   scope: EnvScope,
   loadSnapshot: () => Promise<Snapshot | null>,
