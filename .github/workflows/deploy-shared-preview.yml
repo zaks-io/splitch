@@ -126,7 +126,7 @@ jobs:
 
       - name: Deploy shared preview
         id: deploy
-        run: pnpm deploy:shared-preview
+        run: pnpm deploy:cloudflare:evaluation:shared-preview
 
       - name: Seed shared preview smoke data
         id: seed
