@@ -58,9 +58,10 @@ and tells the operator to narrow the read with `--app`.
 
 The optional query `?include=config` returns each Flag definition with its full per-Environment
 Configurations inline. By default it includes every Environment in the App. The optional
-`envs={environment_id},{environment_id}` narrows hydration to the named canonical Environment IDs;
-`envs` without `include=config` is `VALIDATION_ERROR`. IDs outside the App and IDs that do not exist
-both contribute no Configuration, so the response cannot reveal whether a foreign Environment exists.
+`envs={environment_selector},{environment_selector}` narrows hydration to at most 45 Environment IDs
+or keys. The server resolves the list in one scoped candidate query. `envs` without
+`include=config`, an over-large list, or malformed separators is `VALIDATION_ERROR`. An unresolved
+selector returns `ENVIRONMENT_NOT_FOUND`; a key/ID collision returns `SELECTOR_AMBIGUOUS`.
 
 Hydration returns a distinct required envelope:
 
@@ -83,8 +84,10 @@ not reach the wire. The Flag's App-level Variant catalog remains on `variants` o
 duplicated into every Configuration.
 
 The earlier optional `?environmentId={environment_id}` summary remains supported and is distinct from
-hydration. When present, `environmentId` must be a non-empty Environment ID in the App; an empty value
-is `VALIDATION_ERROR`. It cannot be combined with `include=config`; use `envs` for a hydrated subset.
+hydration. When present, `environmentId` must be a non-empty Environment ID or key in the App; the
+server resolves it through the same Environment selector path as `envs`. An empty value is
+`VALIDATION_ERROR`, and an unresolved selector is `ENVIRONMENT_NOT_FOUND`. It cannot be combined with
+`include=config`; use `envs` for a hydrated subset.
 
 Returns exactly:
 
@@ -141,8 +144,8 @@ Invariant: exactly one Variant is the Default Variant; every Variant `value` sat
 Without `include`, returns the full Flag definition (catalog Variants + schema) with exactly the
 existing bytes. With `?include=config`, returns the distinct hydrated Flag envelope defined above.
 The optional comma-separated `envs` subset has the same rules and non-revealing foreign-id behavior as
-`flags_list`. One logical Flag is one request; a client never assembles its Configurations from
-per-Environment follow-up calls.
+`flags_list`, including the 45-selector cap and `ENVIRONMENT_NOT_FOUND` on a miss. One logical Flag is
+one request; a client never assembles its Configurations from per-Environment follow-up calls.
 
 `{flag_id}` accepts a canonical ID or Flag key. A canonical-looking value is an
 ID unless `?by=key` explicitly selects a colliding key. Omitting `by` and

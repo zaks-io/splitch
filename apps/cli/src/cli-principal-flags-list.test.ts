@@ -86,7 +86,7 @@ describe("scope-free flags list", () => {
     const transport = transportFor(principalPage);
 
     expect(
-      await runCli(["flags", "list", "--with-config", "--json"], {
+      await runCli(["flags", "list", "--json"], {
         ...scope,
         cwd: scope.dir,
         fetch: transport.fetch,
@@ -97,6 +97,25 @@ describe("scope-free flags list", () => {
       (candidate) => candidate.method === "GET" && new URL(candidate.url).pathname === "/flags",
     );
     expect(new URL(request?.url ?? "https://invalid").searchParams.get("include")).toBe("config");
+    expect(new URL(request?.url ?? "https://invalid").searchParams.has("envs")).toBe(false);
+  });
+
+  it("uses the compact response contract with --summary", async () => {
+    const scope = await unscopedSession();
+    const transport = transportFor(principalPage);
+
+    expect(
+      await runCli(["flags", "list", "--summary"], {
+        ...scope,
+        cwd: scope.dir,
+        fetch: transport.fetch,
+      }),
+    ).toBe(EXIT_OK);
+
+    const request = transport.requests.find(
+      (candidate) => candidate.method === "GET" && new URL(candidate.url).pathname === "/flags",
+    );
+    expect(new URL(request?.url ?? "https://invalid").searchParams.has("include")).toBe(false);
     expect(new URL(request?.url ?? "https://invalid").searchParams.has("envs")).toBe(false);
   });
 

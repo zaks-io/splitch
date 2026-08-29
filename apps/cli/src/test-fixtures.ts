@@ -295,7 +295,10 @@ export class RefreshRetryTransport {
       if (this.flagCalls === 1) {
         return Response.json(jsonError("UNAUTHORIZED", "expired"), { status: 401 });
       }
-      return Response.json(flagListPage);
+      return Response.json({
+        ...flagListPage,
+        items: flagListPage.items.map((flag) => ({ ...flag, configurations: [] })),
+      });
     }
     throw new Error(`RefreshRetryTransport: unexpected ${recorded.method} ${recorded.url}`);
   };

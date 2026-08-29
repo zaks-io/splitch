@@ -99,6 +99,13 @@ export const lookupErrorDocs = {
     "Confirm the App id or slug and your membership in the owning Organization",
     "Confirm the App id or slug and that your credential holds membership in the owning Organization.",
   ),
+  ENVIRONMENT_NOT_FOUND: {
+    remediation: "Confirm the Environment id or key in the App-level filter",
+    cause:
+      "No Environment in the already-authorized App matched an Environment selector supplied as an App-level read filter.",
+    fix: "Confirm every Environment id or key in the filter. Path Environment misses remain APP_NOT_FOUND because those routes preserve resource-boundary non-disclosure.",
+    related: ["APP_NOT_FOUND", "SELECTOR_AMBIGUOUS"],
+  },
   ORGANIZATION_NOT_FOUND: notFound(
     "Organization",
     "Confirm the Organization id or slug",

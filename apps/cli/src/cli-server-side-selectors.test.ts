@@ -35,14 +35,20 @@ function controlPlaneRequests(transport: FakeCliTransport) {
   return transport.requests.filter((request) => new URL(request.url).pathname.startsWith("/apps/"));
 }
 
+const hydratedFlagRecord = { ...flagRecord, configurations: [] };
+const hydratedFlagListPage = { ...flagListPage, items: [hydratedFlagRecord] };
+
 describe("server-side selector resolution", () => {
   it("sends an App selector verbatim and lists Flags in exactly one control-plane request", async () => {
     const { credentialPath } = await selectorBoundCredential();
     const transport = new FakeCliTransport([
       {
-        match: (request) => new URL(request.url).pathname === "/apps/checkout/flags",
+        match: (request) => {
+          const url = new URL(request.url);
+          return url.pathname === "/apps/checkout/flags" && url.search === "?include=config";
+        },
         status: 200,
-        body: flagListPage,
+        body: hydratedFlagListPage,
       },
     ]);
 
@@ -62,10 +68,15 @@ describe("server-side selector resolution", () => {
     const { credentialPath } = await selectorBoundCredential();
     const transport = new FakeCliTransport([
       {
-        match: (request) =>
-          new URL(request.url).pathname === "/apps/checkout/flags/checkout-banner",
+        match: (request) => {
+          const url = new URL(request.url);
+          return (
+            url.pathname === "/apps/checkout/flags/checkout-banner" &&
+            url.search === "?include=config"
+          );
+        },
         status: 200,
-        body: { ...flagRecord, key: "checkout-banner" },
+        body: { ...hydratedFlagRecord, key: "checkout-banner" },
       },
     ]);
 

@@ -11,16 +11,29 @@ const FlagSelectorSchema = z
   .string()
   .describe("Canonical Flag ID (flag_...) or human-readable Flag key.");
 
+export const FLAG_READ_ENVIRONMENT_SELECTOR_LIMIT = 45;
+
 export const OrgParams = z.object({ orgId: z.string() });
 export const OrgMemberParams = z.object({ orgId: z.string(), userId: z.string() });
 export const AppParams = z.object({ appId: AppSelectorSchema });
-const EnvironmentIdsQuerySchema = z
+const EnvironmentSelectorsQuerySchema = z
   .string()
   .min(1)
-  .regex(/^[^,]+(?:,[^,]+)*$/, "envs must be a comma-separated list of Environment IDs");
+  .regex(/^[^,]+(?:,[^,]+)*$/, "envs must be a comma-separated list of Environment selectors")
+  .refine(
+    (selectors) => selectors.split(",").length <= FLAG_READ_ENVIRONMENT_SELECTOR_LIMIT,
+    `envs accepts at most ${FLAG_READ_ENVIRONMENT_SELECTOR_LIMIT} Environment selectors`,
+  );
 const FlagHydrationQueryShape = {
-  include: z.literal("config").optional(),
-  envs: EnvironmentIdsQuerySchema.optional(),
+  include: z
+    .literal("config")
+    .optional()
+    .describe(
+      "Include complete per-Environment Flag Configurations; CLI and MCP reads use this by default.",
+    ),
+  envs: EnvironmentSelectorsQuerySchema.optional().describe(
+    "Comma-separated Environment IDs or keys to hydrate; omission hydrates every Environment in the App.",
+  ),
 };
 export const FlagListQuerySchema = z
   .object({
@@ -64,8 +77,15 @@ export const FlagParams = z.object({ appId: AppSelectorSchema, flagId: FlagSelec
 export const FlagGetQuerySchema = z
   .object({
     by: z.enum(["id", "key"]).optional(),
-    include: z.literal("config").optional(),
-    envs: EnvironmentIdsQuerySchema.optional(),
+    include: z
+      .literal("config")
+      .optional()
+      .describe(
+        "Include complete per-Environment Flag Configurations; CLI and MCP reads use this by default.",
+      ),
+    envs: EnvironmentSelectorsQuerySchema.optional().describe(
+      "Comma-separated Environment IDs or keys to hydrate; omission hydrates every Environment in the App.",
+    ),
   })
   .strict()
   .superRefine((query, ctx) => {

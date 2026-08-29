@@ -3,7 +3,7 @@ import { findCommand } from "./command-registry.js";
 import { buildOperationInput } from "./operation-input.js";
 import { parseInvocation } from "./parse-args.js";
 
-it("keeps a scoped flags list App-bound without forwarding its Environment", () => {
+it("hydrates a scoped flags list for its explicit Environment selector", () => {
   const presentation = findCommand(["flags", "list"]);
   if (!presentation) throw new Error("flags list command is not registered");
   const command = { ...presentation, operationId: "flags_list", needsApp: true };
@@ -12,5 +12,5 @@ it("keeps a scoped flags list App-bound without forwarding its Environment", () 
     parseInvocation(["flags", "list", "--json", "--app", "app_cli", "--env", "env_prod"]),
     { appId: "app_cli", environmentId: "env_prod", environmentSource: "flag" },
   );
-  expect(input).toEqual({ appId: "app_cli" });
+  expect(input).toEqual({ appId: "app_cli", include: "config", envs: "env_prod" });
 });

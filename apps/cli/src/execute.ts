@@ -28,6 +28,7 @@ import {
 import type { CliDeps, CliIo, CliResult } from "./execute-types.js";
 import { EXIT_OK, EXIT_USAGE } from "./exit-codes.js";
 import { CliInputError } from "./flag-create-input.js";
+import { validateFlagReadUsage } from "./flag-read-usage.js";
 import { executeFlagTargetingRulesAdd } from "./flag-targeting-rules-add.js";
 import { validateFlagTargetingRulesAddUsage } from "./flag-targeting-rules-add-input.js";
 import { buildOperationInput } from "./operation-input.js";
@@ -41,6 +42,12 @@ export async function executeInvocation(
 ): Promise<CliResult> {
   const io = withJsonMode(deps.io ?? consoleIo(), invocation.flags.json);
   if (invocation.metaCommand) {
+    const usageError = validateFlagReadUsage(
+      { operationId: null, path: [invocation.metaCommand] },
+      invocation,
+      io,
+    );
+    if (usageError) return usageError;
     return executeMeta(invocation, deps, io);
   }
   const command = findCommand(invocation.commandPath);
@@ -52,6 +59,8 @@ export async function executeInvocation(
     });
     return { exitCode: EXIT_USAGE };
   }
+  const usageError = validateFlagReadUsage(command, invocation, io);
+  if (usageError) return usageError;
   return executeCommand(command, invocation, deps, io);
 }
 
@@ -135,7 +144,7 @@ async function executeCommand(
     env: deps.env,
     cwd: deps.cwd,
   });
-  const scopedCommand = commandForContext(command, invocation, context);
+  const scopedCommand = commandForContext(command, context);
 
   const scopeError = validateCommandScope(scopedCommand, context, io);
   if (scopeError) {
@@ -233,7 +242,6 @@ function isCloudflareCommand(command: CliCommandDefinition): command is CliComma
 
 function commandForContext(
   command: CliCommandDefinition,
-  invocation: ParsedInvocation,
   context: ResolvedContext,
 ): CliCommandDefinition {
   if (command.operationId === "principal_flags_list") {
@@ -242,13 +250,9 @@ function commandForContext(
       ...command,
       operationId: "flags_list",
       needsApp: true,
-      needsEnvironment: invocation.flags.withConfig,
     };
   }
-  if (command.operationId !== "flags_list" || !invocation.flags.withConfig) {
-    return command;
-  }
-  return { ...command, needsEnvironment: true };
+  return command;
 }
 
 function validateRequiredPositionals(

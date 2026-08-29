@@ -4,6 +4,7 @@ import { CanonicalJsonSha256Schema } from "./canonical-hash";
 import { type ErrorCode, ErrorCodeSchema, errorCodes } from "./error-code";
 import { conflictErrorMembers } from "./error-members-conflict";
 import { integrationErrorMembers } from "./error-members-integration";
+import { notFoundErrorMembers } from "./error-members-not-found";
 import {
   type PolicyChangeType,
   PolicyChangeTypeSchema,
@@ -21,7 +22,7 @@ import {
 import { LastOwnerRequiredDetailsSchema } from "./last-owner-error-details";
 import { ApprovalPolicyLevelSchema } from "./leaf-schemas-runtime";
 import { ResourceDeleteBlockerSchema } from "./resource-delete-tree";
-import { SegmentDependenciesSchema, SegmentNotFoundDetailsSchema } from "./segment-error-details";
+import { SegmentDependenciesSchema } from "./segment-error-details";
 import { SelectorAmbiguousDetailsSchema } from "./selector-error-details";
 
 /**
@@ -222,18 +223,7 @@ const errorMembers = [
 
   ...conflictErrorMembers,
 
-  member("EXPERIMENT_NOT_FOUND", EmptyDetails),
-  member("RUN_NOT_FOUND", EmptyDetails),
-  member("FLAG_NOT_FOUND", EmptyDetails),
-  member("VARIANT_NOT_FOUND", EmptyDetails),
-  member("METRIC_NOT_FOUND", EmptyDetails),
-  member("APP_NOT_FOUND", EmptyDetails),
-  member("ORGANIZATION_NOT_FOUND", EmptyDetails),
-  member("USER_NOT_FOUND", EmptyDetails),
-  member("CREDENTIAL_NOT_FOUND", EmptyDetails),
-  member("SEGMENT_NOT_FOUND", SegmentNotFoundDetailsSchema),
-  member("PRIVACY_JOB_NOT_FOUND", EmptyDetails),
-  member("APPROVAL_REQUEST_NOT_FOUND", EmptyDetails),
+  ...notFoundErrorMembers,
   ...integrationErrorMembers,
 
   member("UNAUTHORIZED", EmptyDetails),

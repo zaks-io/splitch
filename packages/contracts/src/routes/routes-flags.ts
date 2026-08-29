@@ -60,7 +60,7 @@ export const flagRoutes = [
     auth: AUTH,
     rateLimit: RATE,
     idempotency: "none",
-    errors: ["APP_NOT_FOUND", "FORBIDDEN"],
+    errors: ["APP_NOT_FOUND", "ENVIRONMENT_NOT_FOUND", "FORBIDDEN", "INTERNAL_SERVER_ERROR"],
   }),
   defineApiRoute({
     operationId: "flags_create",
@@ -86,7 +86,7 @@ export const flagRoutes = [
     auth: AUTH,
     rateLimit: RATE,
     idempotency: "none",
-    errors: ["FLAG_NOT_FOUND", "FORBIDDEN"],
+    errors: ["FLAG_NOT_FOUND", "ENVIRONMENT_NOT_FOUND", "FORBIDDEN", "INTERNAL_SERVER_ERROR"],
   }),
   defineApiRoute({
     operationId: "flags_update",

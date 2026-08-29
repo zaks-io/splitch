@@ -60,6 +60,7 @@ describe("unknown flags", () => {
       "on",
       "--json",
       "--confirm",
+      "--summary",
     ]);
 
     expect(parsed.flags).toMatchObject({
@@ -82,6 +83,13 @@ describe("unknown flags", () => {
       serve: "on",
       json: true,
       confirm: true,
+      summary: true,
     });
+  });
+
+  it("rejects the removed --with-config spelling instead of keeping a duplicate behavior", () => {
+    expect(() => parseInvocation(["flags", "list", "--with-config"])).toThrowError(
+      expect.objectContaining({ code: "CLI_USAGE_INVALID" }),
+    );
   });
 });

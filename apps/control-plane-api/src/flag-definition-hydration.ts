@@ -21,6 +21,18 @@ type ExperimentRow = Awaited<
   ReturnType<Repository["flags"]["listRunningExperimentsAcrossApps"]>
 >[number];
 
+export class FlagConfigurationMissingError extends Error {
+  readonly flagId: string;
+  readonly environmentId: string;
+
+  constructor(flagId: string, environmentId: string) {
+    super(`Flag ${flagId} has no Configuration in Environment ${environmentId}`);
+    this.name = "FlagConfigurationMissingError";
+    this.flagId = flagId;
+    this.environmentId = environmentId;
+  }
+}
+
 export async function hydrateFlags(
   deps: FlagDefinitionDeps,
   appId: string,
@@ -95,9 +107,7 @@ export function composeHydratedFlags(
         const key = scopeKey({ environmentId, flagId: row.id });
         const config = configByScope.get(key);
         if (!config) {
-          throw new Error(
-            `hydrated flag read: Flag ${row.id} has no Configuration in Environment ${environmentId}`,
-          );
+          throw new FlagConfigurationMissingError(row.id, environmentId);
         }
         return {
           environmentId,

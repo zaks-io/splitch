@@ -21,6 +21,7 @@ import { emit } from "./execute-io.js";
 import type { CliDeps, CliIo, CliResult } from "./execute-types.js";
 import { formatPrincipalFlags } from "./format-principal-flags.js";
 import { EXIT_API, EXIT_AUTH, EXIT_OK, EXIT_SCOPE, EXIT_USAGE } from "./exit-codes.js";
+import { assertHydratedFlagRead, formatFlagRead } from "./format-flag-read.js";
 import { environmentSelectorOverride, parseEvaluationContext } from "./operation-input.js";
 import { emitOperationNotices } from "./operation-notices.js";
 import type { ParsedInvocation } from "./parse-args.js";
@@ -198,7 +199,7 @@ export async function executeApiOperation(
       return { exitCode: exitCodeForServerError(payload.error), payload: payload.error };
     }
     const projected = project ? await project(payload.data) : payload.data;
-    emitOperationOutput(operationId, projected, invocation.flags.json, io);
+    emitApiOutput(io, operationId, projected, invocation);
     // Keyed off payload shape, not operationId: any command that returns an
     // Approval Request (or list) must surface a recorded stale discard.
     warnStaleApprovalDiscard(io, projected);
@@ -220,16 +221,32 @@ export async function executeApiOperation(
   }
 }
 
-function emitOperationOutput(
-  operationId: string,
-  projected: unknown,
-  asJson: boolean,
+function emitApiOutput(
   io: CliIo,
+  operationId: string,
+  payload: unknown,
+  invocation: ParsedInvocation,
 ): void {
-  const groupedFlags =
-    operationId === "principal_flags_list" && !asJson ? formatPrincipalFlags(projected) : null;
-  if (groupedFlags) io.log(groupedFlags);
-  else emit(io, asJson, projected);
+  if (operationId === "principal_flags_list") {
+    if (invocation.flags.json) {
+      emit(io, true, payload);
+      return;
+    }
+    const groupedFlags = formatPrincipalFlags(payload);
+    if (groupedFlags) io.log(groupedFlags);
+    else emit(io, false, payload);
+    return;
+  }
+  if (operationId !== "flags_list" && operationId !== "flags_get") {
+    emit(io, invocation.flags.json, payload);
+    return;
+  }
+  if (invocation.flags.json) {
+    assertHydratedFlagRead(operationId, payload);
+    emit(io, true, payload);
+    return;
+  }
+  io.log(formatFlagRead(operationId, payload, invocation.flags.summary));
 }
 
 function requireOperationRoute(operationId: string): NonNullable<ReturnType<typeof getRoute>> {
@@ -298,6 +315,9 @@ export function handleExecutionError(error: unknown, io: CliIo): CliResult {
   }
   if (cliError.code === "CLI_SCOPE_UNRESOLVED" || cliError.code === "CLI_TOKEN_BINDING_REFUSED") {
     return { exitCode: EXIT_SCOPE };
+  }
+  if (cliError.code === "INTERNAL_SERVER_ERROR") {
+    return { exitCode: EXIT_API };
   }
   return { exitCode: EXIT_USAGE };
 }

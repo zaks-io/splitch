@@ -40,6 +40,7 @@ export function buildOperationInput(
   applyExplicitIdempotencyKey(invocation.flags, input);
   applyDefaultIdempotencyKey(command, input);
   applyCommandSpecificFields(command, invocation, input);
+  applyFlagReadFields(command, invocation, context, input);
   return input;
 }
 
@@ -63,7 +64,7 @@ function applyContextFields(
   context: ResolvedContext,
   input: Record<string, unknown>,
 ): void {
-  if (command.needsApp && context.appId) {
+  if (context.appId && usesAppContext(command)) {
     input.appId = context.appId;
   }
   if (!context.environmentId) {
@@ -86,6 +87,10 @@ function applyContextFields(
   if (context.environmentSource === "flag" && operationInputHasEnvironmentId(command.operationId)) {
     input.environmentId = context.environmentId;
   }
+}
+
+function usesAppContext(command: CliCommandDefinition): boolean {
+  return command.needsApp || command.alternateOperationIds?.includes("flags_list") === true;
 }
 
 function applyOrgFlag(flags: ParsedGlobalFlags, input: Record<string, unknown>): void {
@@ -186,9 +191,6 @@ function applyCommandSpecificFields(
   invocation: ParsedInvocation,
   input: Record<string, unknown>,
 ): void {
-  if (command.operationId === "principal_flags_list" && invocation.flags.withConfig) {
-    input.include = "config";
-  }
   if (command.operationId === "flags_promote" && invocation.flags.fromEnvironmentId) {
     input.fromEnvironmentId = invocation.flags.fromEnvironmentId;
     input.select = input.select ?? { enabled: true };
@@ -209,6 +211,31 @@ function applyCommandSpecificFields(
       variants: invocation.flags.variants,
     });
     assertContractValidFlagsCreateInput(input);
+  }
+}
+
+function applyFlagReadFields(
+  command: CliCommandDefinition,
+  invocation: ParsedInvocation,
+  context: ResolvedContext,
+  input: Record<string, unknown>,
+): void {
+  if (
+    command.operationId !== "principal_flags_list" &&
+    command.operationId !== "flags_list" &&
+    command.operationId !== "flags_get"
+  ) {
+    return;
+  }
+  if (invocation.flags.summary) {
+    if (command.operationId === "flags_list" && invocation.flags.env) {
+      input.environmentId = context.environmentId;
+    }
+    return;
+  }
+  input.include = "config";
+  if (invocation.flags.env) {
+    input.envs = context.environmentId;
   }
 }
 

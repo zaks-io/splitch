@@ -5,7 +5,14 @@
  * here; the handler owns routing, auth, sessions, and transport.
  */
 
-import { type ApiRouteContract, getRoute, publicSurfaceFor } from "@splitch/contracts";
+import {
+  type ApiRouteContract,
+  getRoute,
+  HydratedFlagListResponseSchema,
+  HydratedPrincipalFlagListResponseSchema,
+  HydratedFlagResponseSchema,
+  publicSurfaceFor,
+} from "@splitch/contracts";
 import { IdempotencyKeyRequiredError } from "@splitch/control-plane-sdk/idempotency-header";
 import { McpOperationInvalidParamsError } from "@splitch/control-plane-sdk/mcp-operation-adapter";
 import type { McpSpanHandle } from "@splitch/observability/mcp-spans";
@@ -96,9 +103,11 @@ export async function callTool(
         jsonRpcResult(id, toolResult({ message: input.message }, { isError: true })),
       );
     }
-    const result = await sdk.callOperationById(call.name, input.value, {
+    const operationInput = withFlagReadDefaults(call.name, input.value);
+    const result = await sdk.callOperationById(call.name, operationInput, {
       delegation: { subject: actor.subject, scopes: actor.scopes, authDoor: actor.authDoor },
     });
+    assertHydratedFlagResult(call.name, operationInput, result);
     return recordToolResult(
       fault.span,
       jsonRpcResult(
@@ -108,6 +117,101 @@ export async function callTool(
     );
   } catch (error) {
     return toolCallFailure(id, error, fault);
+  }
+}
+
+function withFlagReadDefaults(
+  operationId: string,
+  input: Record<string, unknown>,
+): Record<string, unknown> {
+  if (
+    operationId !== "principal_flags_list" &&
+    operationId !== "flags_list" &&
+    operationId !== "flags_get"
+  ) {
+    return input;
+  }
+  const { summary, ...requestInput } = input;
+  if (summary === true) {
+    // `envs` is only accepted alongside `include=config`, so dropping `include`
+    // while keeping `envs` would hand the Worker a request it must reject. Both
+    // fields contradict `summary`; say so instead of silently picking a winner.
+    const conflict = ["include", "envs"].find((field) => requestInput[field] !== undefined);
+    if (conflict) throw new McpFlagReadUsageError(operationId, conflict);
+    return requestInput;
+  }
+  if (requestInput.include !== undefined) return requestInput;
+  if (
+    operationId === "flags_list" &&
+    typeof requestInput.environmentId === "string" &&
+    requestInput.envs === undefined
+  ) {
+    const { environmentId, ...hydratedInput } = requestInput;
+    return { ...hydratedInput, include: "config", envs: environmentId };
+  }
+  return { ...requestInput, include: "config" };
+}
+
+function assertHydratedFlagResult(
+  operationId: string,
+  input: Record<string, unknown>,
+  result: { ok: true; data: unknown } | { ok: false },
+): void {
+  if (!result.ok || input.include !== "config") return;
+  if (isHydratedFlagResult(operationId, result.data)) return;
+  throw new McpFlagReadContractError(operationId);
+}
+
+function isHydratedFlagResult(operationId: string, payload: unknown): boolean {
+  if (operationId === "principal_flags_list") {
+    return HydratedPrincipalFlagListResponseSchema.safeParse(payload).success;
+  }
+  if (operationId === "flags_list") {
+    return HydratedFlagListResponseSchema.safeParse(payload).success;
+  }
+  if (operationId === "flags_get") {
+    return HydratedFlagResponseSchema.safeParse(payload).success;
+  }
+  return true;
+}
+
+/**
+ * `summary` is the compact-response opt-out, so pairing it with a hydration
+ * field is a contradiction the caller controls. It reaches the agent as the
+ * same typed `VALIDATION_ERROR` tool result the idempotency rule uses, naming
+ * the field to drop (SPL-266, ADR-0036).
+ */
+class McpFlagReadUsageError extends Error {
+  readonly errorResponse: Record<string, unknown>;
+
+  constructor(operationId: string, conflictingField: string) {
+    const detail = `${operationId} cannot combine summary with ${conflictingField}: drop ${conflictingField} for the compact response, or drop summary for complete Flag Configurations`;
+    super(detail);
+    this.name = "McpFlagReadUsageError";
+    this.errorResponse = {
+      code: "VALIDATION_ERROR",
+      message: detail,
+      details: { issues: [{ path: [conflictingField], message: "conflicts with summary" }] },
+    };
+  }
+}
+
+class McpFlagReadContractError extends Error {
+  readonly errorResponse: Record<string, unknown>;
+
+  constructor(operationId: string) {
+    const message = `${operationId} requested complete Flag Configurations but received an unhydrated response`;
+    super(message);
+    this.name = "McpFlagReadContractError";
+    this.errorResponse = {
+      code: "INTERNAL_SERVER_ERROR",
+      message,
+      remediation:
+        "Update the server to the SPL-529 Flag-read contract or report the response mismatch",
+      recommendedAction: "UPDATE_SERVER",
+      docsUrl: "https://splitch.dev/docs/error/INTERNAL_SERVER_ERROR",
+      details: { fault: "FLAG_READ_CONTRACT_MISMATCH" },
+    };
   }
 }
 
@@ -157,6 +261,18 @@ function toolCallFailure(id: JsonRpcId, error: unknown, fault: McpToolCallFault)
         argument: error.argument,
         message: error.message,
       }),
+    );
+  }
+  if (error instanceof McpFlagReadUsageError) {
+    return recordToolResult(
+      fault.span,
+      jsonRpcResult(id, toolResult(error.errorResponse, { isError: true })),
+    );
+  }
+  if (error instanceof McpFlagReadContractError) {
+    return recordToolResult(
+      fault.span,
+      jsonRpcResult(id, toolResult(error.errorResponse, { isError: true })),
     );
   }
   return recordToolResult(fault.span, jsonRpcInternalError(id, error, fault.reportFault));
