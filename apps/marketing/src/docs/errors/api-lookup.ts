@@ -57,6 +57,17 @@ export const lookupErrorDocs = {
     recommendedAction: "REVOKE_ACTIVE_INSTALLATION",
     related: ["SENTRY_INSTALLATION_NOT_FOUND", "IDEMPOTENCY_KEY_CONFLICT"],
   },
+  SELECTOR_AMBIGUOUS: {
+    remediation:
+      "Choose a candidate canonical ID and retry; pass by=id when the selected Environment ID matches the ambiguous key",
+    cause:
+      "The App slug or Environment key matches more than one resource within the caller's reachable scope.",
+    fix: "Choose the intended candidate, then resend with its canonical `appId` or `environmentId`. If the selected Environment ID equals the rejected selector, pass `by=id` to force the canonical ID.",
+    details:
+      '{ candidates: Array<{ orgSlug: string, appId: string, appSlug: string } | { environmentId: string, environmentKey: string }>, recommendedAction: "USE_CANONICAL_ID" }',
+    recommendedAction: "USE_CANONICAL_ID",
+    related: ["APP_NOT_FOUND"],
+  },
 
   EXPERIMENT_NOT_FOUND: notFound(
     "Experiment",

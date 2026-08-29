@@ -1,4 +1,22 @@
-import type { AuthDoor, AuthKind, ErrorResponse } from "@splitch/contracts";
+import type {
+  AccessTokenAuthorization,
+  AuthDoor,
+  AuthKind,
+  ErrorResponse,
+  UserRole,
+} from "@splitch/contracts";
+
+export interface PrincipalMemberships {
+  organizations: readonly {
+    id: string;
+    role: UserRole;
+  }[];
+  apps: readonly {
+    id: string;
+    organizationId: string;
+    role: UserRole;
+  }[];
+}
 
 /**
  * The resolved caller. Produced by a Worker-provided AuthResolver, consumed by
@@ -7,7 +25,10 @@ import type { AuthDoor, AuthKind, ErrorResponse } from "@splitch/contracts";
  * `orgId`/`appId`/`environmentId` are the scope the credential is bound to. The
  * guard enforces that they match the route's path params where the contract
  * requires co-scoping (ADR-0027). A `null` means the credential is not bound to
- * that axis; a route that requires co-scope on a null axis is a FORBIDDEN.
+ * one value on that axis. A selector resolver may bind it to one App already
+ * named by a matching signed scope; otherwise a selector-bound credential is
+ * FORBIDDEN on a null co-scope axis. Membership-wide read tokens instead
+ * co-scope against their complete live `memberships` set.
  *
  * `orgId` follows the same single-value-or-null shape as `appId`: it is the one
  * Org the credential is bound to, meaningful only when the token names exactly
@@ -23,6 +44,10 @@ export interface Principal {
   orgId: string | null;
   appId: string | null;
   environmentId: string | null;
+  /** Present only on a token whose claim structurally grants membership-wide reads. */
+  authorization?: AccessTokenAuthorization;
+  /** Live D1 result for a membership-wide token. Never populated from JWT claims. */
+  memberships?: PrincipalMemberships;
   /**
    * Which door minted this credential, when the auth kind carries one. `null`
    * for kinds with no door concept (public, Client Key, API Key) — those are

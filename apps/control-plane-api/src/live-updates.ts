@@ -2,13 +2,16 @@ import type { ErrorResponse, ServerAuthenticatedLiveUpdateContext } from "@split
 import { appScope, type Repository } from "@splitch/db";
 import {
   type AuthResolver,
+  appAccessCovers,
   emptyError,
+  type Observability,
   type Principal,
   type RateLimiter,
   renderError,
 } from "@splitch/worker-runtime";
 import type { Context, Hono } from "hono";
 import type { ConfigStoreAccess } from "./config-store-access";
+import { resolveControlPlanePathSelectors } from "./path-selector-resolution";
 
 const LIVE_UPDATE_PATH = "/apps/:appId/envs/:environmentId/live";
 const REQUEST_ID_HEADER = "x-request-id";
@@ -20,6 +23,7 @@ export interface LiveUpdateDeps {
   configStore?: ConfigStoreAccess;
   repo: Repository;
   defaultHeaders?: Record<string, string>;
+  observability?: Observability;
 }
 
 export function mountLiveUpdateRoute(app: Hono, deps: LiveUpdateDeps): void {
@@ -29,8 +33,8 @@ export function mountLiveUpdateRoute(app: Hono, deps: LiveUpdateDeps): void {
 async function handleLiveUpdate(c: Context, deps: LiveUpdateDeps): Promise<Response> {
   const request = c.req.raw;
   const requestId = requestIdFor(request);
-  const appId = pathParam(c, "appId");
-  const environmentId = pathParam(c, "environmentId");
+  const requestedAppId = pathParam(c, "appId");
+  const requestedEnvironmentId = pathParam(c, "environmentId");
 
   try {
     const auth = await deps.authResolver(request);
@@ -48,7 +52,20 @@ async function handleLiveUpdate(c: Context, deps: LiveUpdateDeps): Promise<Respo
       return renderError(rateLimited, { requestId, defaultHeaders: deps.defaultHeaders });
     }
 
-    const scopeError = liveScopeError(auth.principal, appId, environmentId);
+    const resolved = await resolveControlPlanePathSelectors(deps.repo, {
+      contract: { id: "live_updates" },
+      input: { params: { appId: requestedAppId, environmentId: requestedEnvironmentId } },
+      params: { appId: requestedAppId, environmentId: requestedEnvironmentId },
+      principal: auth.principal,
+      request,
+    });
+    if (!resolved.ok) {
+      return renderError(resolved.error, { requestId, defaultHeaders: deps.defaultHeaders });
+    }
+    const appId = requiredResolvedParam(resolved.params, "appId");
+    const environmentId = requiredResolvedParam(resolved.params, "environmentId");
+
+    const scopeError = liveScopeError(resolved.principal, appId, environmentId);
     if (scopeError) {
       return renderError(scopeError, { requestId, defaultHeaders: deps.defaultHeaders });
     }
@@ -74,8 +91,14 @@ async function handleLiveUpdate(c: Context, deps: LiveUpdateDeps): Promise<Respo
 
     return deps.configStore
       .liveUpdatesFor(appId, environmentId)
-      .connect(serverAuthenticatedLiveUpdateRequest(auth.principal, appId, environmentId));
-  } catch {
+      .connect(serverAuthenticatedLiveUpdateRequest(resolved.principal, appId, environmentId));
+  } catch (cause) {
+    deps.observability?.onError?.({
+      requestId,
+      code: "INTERNAL_SERVER_ERROR",
+      status: 500,
+      cause,
+    });
     return renderError(emptyError("INTERNAL_SERVER_ERROR", "unhandled runtime fault"), {
       requestId,
       defaultHeaders: deps.defaultHeaders,
@@ -115,7 +138,10 @@ function liveScopeError(
   appId: string,
   environmentId: string,
 ): ErrorResponse | null {
-  if (principal.appId !== appId) {
+  // This route is mounted by hand, so the registrar's scope step never runs and
+  // this is the only App check on it. It asks `appAccessCovers` so the rule has
+  // one definition rather than a second copy that can drift from the registrar's.
+  if (!appAccessCovers(principal, appId)) {
     return emptyError("FORBIDDEN", "credential is not scoped to this app");
   }
   if (principal.environmentId !== null && principal.environmentId !== environmentId) {
@@ -142,6 +168,14 @@ function pathParam(c: Context, key: string): string {
   const value = c.req.param(key);
   if (!value) {
     throw new Error(`control-plane-api: live update route missing path param "${key}"`);
+  }
+  return value;
+}
+
+function requiredResolvedParam(params: Record<string, string>, key: string): string {
+  const value = params[key];
+  if (!value) {
+    throw new Error(`control-plane-api: selector resolver omitted path param "${key}"`);
   }
   return value;
 }

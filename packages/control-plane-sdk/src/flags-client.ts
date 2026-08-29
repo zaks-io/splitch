@@ -26,6 +26,12 @@ import type {
 } from "@splitch/contracts/route-types";
 import { FlagSelectorUnaddressableError } from "./flag-selector-unaddressable-error";
 import {
+  getFlagConfig,
+  promoteFlag,
+  replaceFlagTargetingRules,
+  updateFlagConfig,
+} from "./flags-environment-operations";
+import {
   type ControlPlaneHcOptions,
   createFlagsHcClient,
   type FlagsHcClient,
@@ -184,58 +190,11 @@ export function createFlagsClient(
           ),
         ),
       ),
-    getConfig: (input, callOptions) =>
-      invokeHcRoute<FlagConfigGetOutput>("flag_config_get", () =>
-        hcClient.apps[":appId"].envs[":environmentId"].flags[":flagId"].config.$get(
-          {
-            param: {
-              appId: input.appId,
-              environmentId: input.environmentId,
-              flagId: input.flagId,
-            },
-          },
-          hcRequestOptions(withAuthorization(hcOptions, callOptions)),
-        ),
-      ),
-    updateConfig: (input, callOptions) => {
-      const { appId, environmentId, flagId, ...body } = input;
-      return invokeHcRoute<FlagConfigUpdateOutput>("flag_config_update", () =>
-        hcClient.apps[":appId"].envs[":environmentId"].flags[":flagId"].config.$patch(
-          { param: { appId, environmentId, flagId }, json: body } as never,
-          withIdempotencyHeader(
-            "flag_config_update",
-            hcRequestOptions(withAuthorization(hcOptions, callOptions)),
-            body.idempotency_key,
-          ),
-        ),
-      );
-    },
-    replaceTargetingRules: (input, callOptions) => {
-      const { appId, environmentId, flagId, ...body } = input;
-      return invokeHcRoute<FlagTargetingRulesReplaceOutput>("flag_targeting_rules_replace", () =>
-        hcClient.apps[":appId"].envs[":environmentId"].flags[":flagId"]["targeting-rules"].$put(
-          { param: { appId, environmentId, flagId }, json: body } as never,
-          withIdempotencyHeader(
-            "flag_targeting_rules_replace",
-            hcRequestOptions(withAuthorization(hcOptions, callOptions)),
-            body.idempotency_key,
-          ),
-        ),
-      );
-    },
-    promote: (input, callOptions) => {
-      const { appId, targetEnvironmentId, flagId, ...body } = input;
-      return invokeHcRoute<FlagsPromoteOutput>("flags_promote", () =>
-        hcClient.apps[":appId"].envs[":targetEnvironmentId"].flags[":flagId"].promote.$post(
-          { param: { appId, targetEnvironmentId, flagId }, json: body } as never,
-          withIdempotencyHeader(
-            "flags_promote",
-            hcRequestOptions(withAuthorization(hcOptions, callOptions)),
-            body.idempotency_key,
-          ),
-        ),
-      );
-    },
+    getConfig: (input, callOptions) => getFlagConfig(hcClient, hcOptions, input, callOptions),
+    updateConfig: (input, callOptions) => updateFlagConfig(hcClient, hcOptions, input, callOptions),
+    replaceTargetingRules: (input, callOptions) =>
+      replaceFlagTargetingRules(hcClient, hcOptions, input, callOptions),
+    promote: (input, callOptions) => promoteFlag(hcClient, hcOptions, input, callOptions),
   };
 }
 
@@ -245,13 +204,15 @@ function flagsList(
   input: FlagsListInput,
   callOptions?: ControlPlaneOperationOptions,
 ) {
+  const query = {
+    ...(input.environmentId !== undefined ? { environmentId: input.environmentId } : {}),
+    ...(input.include !== undefined ? { include: input.include } : {}),
+    ...(input.envs !== undefined ? { envs: input.envs } : {}),
+  };
   const request =
-    input.environmentId === undefined
+    Object.keys(query).length === 0
       ? { param: { appId: input.appId } }
-      : {
-          param: { appId: input.appId },
-          query: { environmentId: input.environmentId },
-        };
+      : { param: { appId: input.appId }, query };
   return invokeHcRoute<FlagsListOutput>("flags_list", () =>
     hcClient.apps[":appId"].flags.$get(
       request as never,
@@ -277,11 +238,16 @@ function flagsGet(
     return Promise.reject(new FlagSelectorUnaddressableError(input.flagId));
   }
   const param = { appId: input.appId, flagId: encodeURIComponent(input.flagId) };
+  const query = {
+    ...(input.by !== undefined ? { by: input.by } : {}),
+    ...(input.include !== undefined ? { include: input.include } : {}),
+    ...(input.envs !== undefined ? { envs: input.envs } : {}),
+  };
   return invokeHcRoute<FlagsGetOutput>("flags_get", () =>
     hcClient.apps[":appId"].flags[":flagId"].$get(
-      // Omit `query` when `by` is absent so the id path stays byte-identical to
+      // Omit `query` when every option is absent so the id path stays byte-identical to
       // main (no trailing bare `?`). `as never` is the house hc pattern.
-      (input.by === undefined ? { param } : { param, query: { by: input.by } }) as never,
+      (Object.keys(query).length === 0 ? { param } : { param, query }) as never,
       hcRequestOptions(withAuthorization(hcOptions, callOptions)),
     ),
   );

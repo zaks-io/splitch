@@ -4,11 +4,9 @@ import {
   wrapAppIdentityRecord,
 } from "@splitch/privacy";
 import { describe, expect, it, vi } from "vitest";
-import {
-  type ConfigStoreDurableObjectNamespace,
-  durableAppIdentityResetAccess,
-} from "../src/config-store-access.js";
+import type { ConfigStoreDurableObjectNamespace } from "../src/config-store-access.js";
 import { putConfigStoreAppIdentityIfAbsent } from "../src/config-store-app-identity.js";
+import { durableAppIdentityResetAccess } from "../src/config-store-app-identity-access.js";
 import {
   beginConfigStoreEntityPrivacy,
   recordConfigStoreEntityPrivacyCompletion,

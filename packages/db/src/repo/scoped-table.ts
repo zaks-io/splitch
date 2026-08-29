@@ -4,6 +4,7 @@ import type { SQLiteColumn, SQLiteTable } from "drizzle-orm/sqlite-core";
 import type { Db } from "./client";
 import type { EnvScope, ScopeColumns, TenantScope } from "./scope";
 import { assertMintedScope, withScope } from "./scope";
+import { crossEnvironmentPredicate, validatedReadLimit } from "./scoped-table-read";
 
 /**
  * The structural tenant-scope guarantee (ADR-0018).
@@ -54,7 +55,24 @@ export interface ReadOptions {
 type Row<T extends SQLiteTable> = T["$inferSelect"];
 type Insert<T extends SQLiteTable> = T["$inferInsert"];
 
-export type ScopedTable<T extends AppScopedTable> = {
+type CrossEnvironmentRead<T extends AppScopedTable> = T extends HasEnvColumn
+  ? {
+      /**
+       * Read an explicit Environment set under one App tenant boundary.
+       *
+       * This is the sanctioned ADR-0027 cross-Environment read. A foreign
+       * Environment id cannot match because app_id remains mandatory.
+       */
+      findManyAcrossEnvironments(
+        scope: TenantScope,
+        environmentIds: readonly string[],
+        extra?: SQL,
+        options?: ReadOptions,
+      ): Promise<Row<T>[]>;
+    }
+  : Record<never, never>;
+
+type ScopedTableCore<T extends AppScopedTable> = {
   /**
    * Rows in this scope matching the optional extra predicate. `limit` bounds the
    * rows materialized, for callers that only need to know whether a ceiling is
@@ -95,6 +113,8 @@ export type ScopedTable<T extends AppScopedTable> = {
   /** Delete rows in this scope; the scope predicate bounds every DELETE. */
   remove(scope: RequiredScope<T>, extra?: SQL): Promise<number>;
 };
+
+export type ScopedTable<T extends AppScopedTable> = ScopedTableCore<T> & CrossEnvironmentRead<T>;
 
 function scopeColumns(table: AppScopedTable): ScopeColumns {
   // getTableColumns keys by the Drizzle PROPERTY name (appId / environmentId),
@@ -143,7 +163,14 @@ function scopeValues(columns: ScopeColumns, scope: TenantScope): Record<string, 
 export function scopedTable<T extends AppScopedTable>(db: Db, table: T): ScopedTable<T> {
   const columns = scopeColumns(table);
 
-  return {
+  const facade: ScopedTableCore<T> & {
+    findManyAcrossEnvironments(
+      scope: TenantScope,
+      environmentIds: readonly string[],
+      extra?: SQL,
+      options?: ReadOptions,
+    ): Promise<Row<T>[]>;
+  } = {
     async findMany(scope, extra, options) {
       const filtered = db
         .select()
@@ -153,11 +180,32 @@ export function scopedTable<T extends AppScopedTable>(db: Db, table: T): ScopedT
         options?.orderBy && options.orderBy.length > 0
           ? filtered.orderBy(...options.orderBy)
           : filtered;
-      if (options?.limit === undefined) return query as Promise<Row<T>[]>;
-      if (!Number.isInteger(options.limit) || options.limit < 1) {
-        throw new Error(`findMany: limit must be a positive integer, got ${options.limit}`);
-      }
-      return query.limit(options.limit) as Promise<Row<T>[]>;
+      const limit = validatedReadLimit(options, "findMany");
+      return limit === undefined
+        ? (query as Promise<Row<T>[]>)
+        : (query.limit(limit) as Promise<Row<T>[]>);
+    },
+
+    async findManyAcrossEnvironments(
+      scope: TenantScope,
+      environmentIds: readonly string[],
+      extra?: SQL,
+      options?: ReadOptions,
+    ) {
+      const predicate = crossEnvironmentPredicate(columns, scope, environmentIds, extra);
+      if (!predicate) return [];
+      const filtered = db
+        .select()
+        .from(table as SQLiteTable)
+        .where(predicate);
+      const query =
+        options?.orderBy && options.orderBy.length > 0
+          ? filtered.orderBy(...options.orderBy)
+          : filtered;
+      const limit = validatedReadLimit(options, "findManyAcrossEnvironments");
+      return limit === undefined
+        ? (query as Promise<Row<T>[]>)
+        : (query.limit(limit) as Promise<Row<T>[]>);
     },
 
     async countRows(scope, extra) {
@@ -240,4 +288,5 @@ export function scopedTable<T extends AppScopedTable>(db: Db, table: T): ScopedT
       return rows.length;
     },
   };
+  return facade as unknown as ScopedTable<T>;
 }

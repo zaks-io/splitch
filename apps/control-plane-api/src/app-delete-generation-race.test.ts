@@ -217,7 +217,12 @@ function createTestApp(
         return false;
       },
     },
-    membershipAccess: { authorize: async () => true },
+    membershipAccess: {
+      authorize: async () => true,
+      resolve: async () => {
+        throw new Error("test fixture has no wide membership resolver");
+      },
+    },
   });
   const rateLimiter: RateLimiter = () => ({ limited: false });
   return createApp({

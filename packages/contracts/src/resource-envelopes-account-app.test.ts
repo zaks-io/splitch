@@ -3,6 +3,7 @@ import {
   CreateAppResponseSchema,
   CreateEnvironmentResponseSchema,
 } from "./resource-envelopes-account";
+import { CreateEnvironmentRequestSchema } from "./routes/route-shapes";
 
 const timestamp = "2026-06-28T00:00:00.000Z";
 
@@ -90,6 +91,13 @@ describe("CreateEnvironmentResponseSchema", () => {
         },
       }).success,
     ).toBe(false);
+  });
+});
+
+describe("CreateEnvironmentRequestSchema", () => {
+  it("keeps Environment slugs distinct from canonical IDs", () => {
+    expect(CreateEnvironmentRequestSchema.safeParse({ key: "production" }).success).toBe(true);
+    expect(CreateEnvironmentRequestSchema.safeParse({ key: "env_production" }).success).toBe(false);
   });
 });
 

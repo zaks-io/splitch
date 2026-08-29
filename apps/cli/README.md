@@ -237,6 +237,7 @@ Scripts branch on the exit code; the printed code says which failure within that
 | `2`  | Not authenticated, session expired, or email unverified                |
 | `3`  | Scope could not be resolved, or the token could not be bound to it     |
 | `4`  | The API refused the request; the code is the control-plane `ErrorCode` |
+| `5`  | An App or Environment matched multiple candidates; retry as listed     |
 
 Every code the CLI, the SDK, and the API can emit has a page at
 `https://splitch.dev/docs/error/{code}`, indexed at

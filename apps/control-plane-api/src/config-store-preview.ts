@@ -76,6 +76,7 @@ export function previewSnapshotResult(
   return {
     ok: true,
     config: responseFromSnapshot(proposed),
+    snapshotRevision: null,
     nudge: DeltaNudgeSchema.parse({
       type: "config.changed",
       entity: "flag",

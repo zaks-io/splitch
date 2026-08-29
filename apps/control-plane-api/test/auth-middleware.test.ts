@@ -58,6 +58,7 @@ async function bodyOf(res: Response): Promise<ErrorResponse> {
 interface Harness {
   app: Hono;
   scopeGatedApp: Hono;
+  membershipContextApp: Hono;
   signer: FixtureSigner;
   bindings: LocalBindings;
 }
@@ -85,6 +86,7 @@ beforeEach(async () => {
   const bindings = await makeLocalBindings();
   const signer = await makeFixtureSigner();
   const verifier = makeJwksVerifier({
+    issuer: "https://auth.splitch.test",
     fetchJwks: async () => signer.jwks,
     controlPlaneAudience: AUDIENCE,
   });
@@ -111,14 +113,26 @@ beforeEach(async () => {
     () => Response.json({ id: PAYMENTS.appId, ok: true }),
   );
 
-  h = { app, scopeGatedApp, signer, bindings };
+  const membershipContextApp = new Hono();
+  controlPlaneRegistrar(deps).mount(
+    membershipContextApp,
+    controlPlaneRoute("organizations_list"),
+    ({ principal }) => Response.json(principal.memberships),
+  );
+
+  h = { app, scopeGatedApp, membershipContextApp, signer, bindings };
 });
 
 afterEach(async () => {
   await h.bindings.dispose();
 });
 
-function token(signer: FixtureSigner, sub: string, scopes: string[]): Promise<string> {
+function token(
+  signer: FixtureSigner,
+  sub: string,
+  scopes: string[],
+  authorization?: "membership-wide-read",
+): Promise<string> {
   return signer.sign({
     sub,
     iss: "https://auth.splitch.test",
@@ -126,6 +140,7 @@ function token(signer: FixtureSigner, sub: string, scopes: string[]): Promise<st
     iat: nowSeconds(),
     exp: nowSeconds() + 3600,
     scopes,
+    ...(authorization ? { authorization } : {}),
   });
 }
 
@@ -134,6 +149,17 @@ async function get(app: Hono, path: string, jwt?: string): Promise<Response> {
 }
 
 describe("control-plane auth middleware: authorized path", () => {
+  it("exposes the live D1 membership set to a wide-token handler", async () => {
+    const jwt = await token(h.signer, ALICE, [], "membership-wide-read");
+    const res = await get(h.membershipContextApp, "/orgs", jwt);
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({
+      organizations: [{ id: PAYMENTS.orgId, role: "admin" }],
+      apps: [{ id: PAYMENTS.appId, organizationId: PAYMENTS.orgId, role: "admin" }],
+    });
+  });
+
   it("200s an App read with a valid token bound to that App", async () => {
     const jwt = await token(h.signer, ALICE, [appAdminScope(PAYMENTS.appId)]);
     const res = await get(h.app, `/apps/${PAYMENTS.appId}`, jwt);
@@ -177,6 +203,18 @@ describe("control-plane auth middleware: rejections", () => {
     const attacker = await makeFixtureSigner();
     const forged = await token(attacker, ALICE, [appAdminScope(PAYMENTS.appId)]);
     const res = await get(h.app, `/apps/${PAYMENTS.appId}`, forged);
+    expect(res.status).toBe(401);
+    expect((await bodyOf(res)).code).toBe("UNAUTHORIZED");
+  });
+
+  it("rejects a wide-read discriminator combined with selector scopes", async () => {
+    const hybrid = await token(
+      h.signer,
+      ALICE,
+      [appAdminScope(PAYMENTS.appId)],
+      "membership-wide-read",
+    );
+    const res = await get(h.app, `/apps/${PAYMENTS.appId}`, hybrid);
     expect(res.status).toBe(401);
     expect((await bodyOf(res)).code).toBe("UNAUTHORIZED");
   });
@@ -240,6 +278,54 @@ describe("control-plane auth middleware: rejections", () => {
     expect(res.status).toBe(403);
     expect((await bodyOf(res)).code).toBe("CREDENTIAL_REVOKED");
   });
+
+  it("revokes a membership-wide read token through the same session key", async () => {
+    await h.bindings.kv.put(revocationKey(ALICE), "1");
+    const jwt = await token(h.signer, ALICE, [], "membership-wide-read");
+    const res = await get(h.app, `/apps/${PAYMENTS.appId}`, jwt);
+    expect(res.status).toBe(403);
+    expect((await bodyOf(res)).code).toBe("CREDENTIAL_REVOKED");
+  });
+
+  it("refuses a wide token on a write while the matching selector-bound token still passes", async () => {
+    const wide = await token(h.signer, ALICE, [], "membership-wide-read");
+    const refused = await h.scopeGatedApp.request(`/apps/${PAYMENTS.appId}`, {
+      method: "PATCH",
+      headers: { authorization: `Bearer ${wide}`, "content-type": "application/json" },
+      body: JSON.stringify({ name: "Renamed" }),
+    });
+    expect(refused.status).toBe(403);
+    expect(await bodyOf(refused)).toMatchObject({
+      code: "FORBIDDEN",
+      message: "credential grants read access only",
+    });
+
+    const selector = await token(h.signer, ALICE, [appAdminScope(PAYMENTS.appId)]);
+    const allowed = await h.scopeGatedApp.request(`/apps/${PAYMENTS.appId}`, {
+      method: "PATCH",
+      headers: { authorization: `Bearer ${selector}`, "content-type": "application/json" },
+      body: JSON.stringify({ name: "Renamed" }),
+    });
+    expect(allowed.status).toBe(200);
+  });
+
+  // The case above addresses the App by its canonical id, where selector resolution
+  // has nothing to do. A wide token holding the App now clears the App check on the
+  // slug path too, so the read-only gate is the only thing standing between it and
+  // this write -- assert that gate, not resolution, is what refuses it.
+  it("refuses a wide token on a write addressed by App slug", async () => {
+    const wide = await token(h.signer, ALICE, [], "membership-wide-read");
+    const res = await h.scopeGatedApp.request(`/apps/${PAYMENTS.appKey}`, {
+      method: "PATCH",
+      headers: { authorization: `Bearer ${wide}`, "content-type": "application/json" },
+      body: JSON.stringify({ name: "Renamed" }),
+    });
+    expect(res.status).toBe(403);
+    expect(await bodyOf(res)).toMatchObject({
+      code: "FORBIDDEN",
+      message: "credential grants read access only",
+    });
+  });
 });
 
 describe("control-plane auth middleware: fail-loud KV fault", () => {
@@ -250,6 +336,7 @@ describe("control-plane auth middleware: fail-loud KV fault", () => {
       },
     } as unknown as KVNamespace;
     const verifier = makeJwksVerifier({
+      issuer: "https://auth.splitch.test",
       fetchJwks: async () => h.signer.jwks,
       controlPlaneAudience: AUDIENCE,
     });

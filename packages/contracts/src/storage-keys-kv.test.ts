@@ -4,6 +4,7 @@ import {
   appEntityIdentityKey,
   assignmentKey,
   clientKeyCacheKey,
+  controlPlaneFlagConfigKey,
   credentialRevocationCacheKey,
   experimentConfigKey,
   flagConfigKey,
@@ -17,6 +18,12 @@ describe("config key-pattern constructors (per-Environment, ADR-0027)", () => {
   it("flagConfigKey produces app:{appId}:{environmentId}:flag:{flagKey}", () => {
     expect(flagConfigKey("app_1", "env_prod", "checkout-redesign")).toBe(
       "app:app_1:env_prod:flag:checkout-redesign",
+    );
+  });
+
+  it("controlPlaneFlagConfigKey produces an App and Environment scoped Flag id key", () => {
+    expect(controlPlaneFlagConfigKey("app_1", "env_prod", "flag_1")).toBe(
+      "app:app_1:env_prod:control-plane-flag-config:flag_1",
     );
   });
 

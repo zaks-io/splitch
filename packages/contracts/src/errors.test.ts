@@ -55,6 +55,29 @@ const conclusionErrorResponses = [
   },
 ] as const;
 
+describe("Selector ambiguity ErrorResponse", () => {
+  it("requires two fully identified membership-bounded candidates", () => {
+    const candidate = { orgSlug: "alpha", appId: "app_a", appSlug: "neuron" };
+    expect(
+      ErrorResponseSchema.safeParse({
+        code: "SELECTOR_AMBIGUOUS",
+        message: "App selector is ambiguous",
+        details: {
+          recommendedAction: "USE_CANONICAL_ID",
+          candidates: [candidate, { ...candidate, orgSlug: "beta", appId: "app_b" }],
+        },
+      }).success,
+    ).toBe(true);
+    expect(
+      ErrorResponseSchema.safeParse({
+        code: "SELECTOR_AMBIGUOUS",
+        message: "App selector is ambiguous",
+        details: { recommendedAction: "USE_CANONICAL_ID", candidates: [candidate] },
+      }).success,
+    ).toBe(false);
+  });
+});
+
 describe("ErrorResponse contract", () => {
   it("parses a structured-detail error and narrows details by code", () => {
     const parsed = ErrorResponseSchema.parse({

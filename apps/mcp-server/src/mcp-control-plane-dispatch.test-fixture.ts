@@ -93,6 +93,12 @@ function controlPlaneFetchMissingAnalysisBinding(): NonNullable<
     repo: {
       identity: {
         getEnvironment: async () => ({ id: MISSING_BINDING_ENV_ID }),
+        findEnvironmentSelectorCandidates: async () => [
+          {
+            environmentId: MISSING_BINDING_ENV_ID,
+            environmentKey: "development",
+          },
+        ],
       },
       experiments: {
         getExperiment: async () => ({ id: MISSING_BINDING_EXPERIMENT_ID, status: "running" }),

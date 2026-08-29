@@ -10,6 +10,7 @@ import {
 import { appScope, createRepository, envScope, type Repository } from "@splitch/db";
 import { type ConfigStoreWriter, makeConfigStore } from "./config-store";
 import type { ConfigStoreAccess } from "./config-store-access";
+import { makeSnapshotRevisionCounter } from "./config-store-fixture-data";
 import {
   appToken,
   createDefaultApp,
@@ -286,26 +287,34 @@ export function configStoreAccess(
   kv: KVNamespace,
   syncFailures?: SyncFailureControl,
 ): ConfigStoreAccess {
-  const writer = makeConfigStore({
-    repo,
-    kv,
-    broadcaster: { broadcast() {} },
-    now: () => new Date(Date.parse(NOW_ISO)),
-  });
-  const controlledWriter: ConfigStoreWriter = {
-    ...writer,
-    async syncExperimentConfig(input) {
-      if (syncFailures && syncFailures.remaining > 0) {
-        syncFailures.remaining -= 1;
-        throw new Error("injected syncExperimentConfig failure");
-      }
-      return writer.syncExperimentConfig(input);
-    },
+  const writers = new Map<string, ConfigStoreWriter>();
+  const writerFor = (appId: string, environmentId: string): ConfigStoreWriter => {
+    const name = `${appId}:${environmentId}`;
+    const existing = writers.get(name);
+    if (existing) return existing;
+    const writer = makeConfigStore({
+      repo,
+      kv,
+      broadcaster: { broadcast() {} },
+      nextSnapshotRevision: makeSnapshotRevisionCounter(),
+      now: () => new Date(Date.parse(NOW_ISO)),
+    });
+    const controlled: ConfigStoreWriter = {
+      ...writer,
+      async syncExperimentConfig(input) {
+        if (syncFailures && syncFailures.remaining > 0) {
+          syncFailures.remaining -= 1;
+          throw new Error("injected syncExperimentConfig failure");
+        }
+        return writer.syncExperimentConfig(input);
+      },
+    };
+    writers.set(name, controlled);
+    return controlled;
   };
   return {
-    writerFor(): ConfigStoreWriter {
-      return controlledWriter;
-    },
+    readFlagConfig: (input) => writerFor(input.appId, input.environmentId).readFlagConfig(input),
+    writerFor,
     liveUpdatesFor: () => ({
       connect: async () => new Response("test live updates unavailable", { status: 503 }),
     }),

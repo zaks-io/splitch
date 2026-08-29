@@ -151,6 +151,7 @@ describe("MCP prompts workflows", () => {
     expect(RECOVERY_OPERATION_IDS.RETRY_AFTER).toEqual([]);
     expect(RECOVERY_OPERATION_IDS.CHOOSE_DIFFERENT_SLUG).toEqual([]);
     expect(RECOVERY_OPERATION_IDS.CHOOSE_DIFFERENT_KEY).toEqual([]);
+    expect(RECOVERY_OPERATION_IDS.USE_CANONICAL_ID).toEqual([]);
     expect(RECOVERY_OPERATION_IDS.READ_PER_ENVIRONMENT).toEqual([
       "experiments_list",
       "experiment_results_get",
@@ -160,6 +161,12 @@ describe("MCP prompts workflows", () => {
     ]);
     expect(RECOVERY_OPERATION_IDS.REFRESH_AND_REPROPOSE).toEqual(["approval_requests_get"]);
     expect(RECOVERY_OPERATION_IDS.RETRY_REVIEW).toEqual(["approval_request_reviews_create"]);
+
+    const selectorPlan = getPromptPlan("recover_from_error", {
+      errorCode: "SELECTOR_AMBIGUOUS",
+      details: { recommendedAction: "USE_CANONICAL_ID", candidates: [] },
+    });
+    expect(selectorPlan.messages.at(-1)?.content.text).toContain("by=id");
   });
 
   it("reports a bad prompt argument as invalid params, not an internal fault", async () => {

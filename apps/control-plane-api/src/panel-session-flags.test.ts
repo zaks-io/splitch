@@ -128,7 +128,12 @@ function deps(verify = async () => null) {
     sessions: {
       isRevoked: async () => false,
     } as SessionStore,
-    membershipAccess: { authorize: async () => true },
+    membershipAccess: {
+      authorize: async () => true,
+      resolve: async () => {
+        throw new Error("test fixture has no wide membership resolver");
+      },
+    },
     now: () => NOW * 1000,
   };
 }

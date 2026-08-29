@@ -72,7 +72,10 @@ export const orgMemberships = sqliteTable(
     role: text("role").notNull(),
     createdAt: createdAt(),
   },
-  (t) => [primaryKey({ columns: [t.orgId, t.userId] })],
+  (t) => [
+    primaryKey({ columns: [t.orgId, t.userId] }),
+    index("org_memberships_user_id_idx").on(t.userId),
+  ],
 );
 
 export const apps = sqliteTable(

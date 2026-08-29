@@ -28,12 +28,15 @@ import {
   parsePanelSessionContext,
 } from "./config-store-live-update-context";
 import { buildSnapshotFromD1 } from "./config-store-shared";
+import { makeDurableSnapshotRevisionAllocator } from "./config-store-snapshot-revision";
 import type { ControlPlaneApiEnv } from "./env";
 
 export class ConfigStoreDurableObject
   extends DurableObject<ControlPlaneApiEnv>
   implements ConfigStoreWriter
 {
+  #configStore: ConfigStoreWriter | undefined;
+
   async readFlagConfigForEvaluation(
     input: EvaluationFlagConfigRead,
   ): Promise<EvaluationFlagConfigSnapshot | null> {
@@ -59,6 +62,18 @@ export class ConfigStoreDurableObject
     input: Parameters<ConfigStoreWriter["readFlagConfig"]>[0],
   ): ReturnType<ConfigStoreWriter["readFlagConfig"]> {
     return this.store().readFlagConfig(input);
+  }
+
+  readFlagConfigPurgeTarget(
+    input: Parameters<ConfigStoreWriter["readFlagConfigPurgeTarget"]>[0],
+  ): ReturnType<ConfigStoreWriter["readFlagConfigPurgeTarget"]> {
+    return this.store().readFlagConfigPurgeTarget(input);
+  }
+
+  repairFlagConfigSnapshot(
+    input: Parameters<ConfigStoreWriter["repairFlagConfigSnapshot"]>[0],
+  ): ReturnType<ConfigStoreWriter["repairFlagConfigSnapshot"]> {
+    return this.store().repairFlagConfigSnapshot(input);
   }
 
   writeFlagConfig(
@@ -221,12 +236,14 @@ export class ConfigStoreDurableObject
   }
 
   private store(): ConfigStoreWriter {
-    return makeConfigStore({
+    this.#configStore ??= makeConfigStore({
       repo: createRepository(this.env.DB),
       kv: this.env.CONFIG_STORE,
       broadcaster: { broadcast: (nudge) => this.broadcast(nudge) },
+      nextSnapshotRevision: makeDurableSnapshotRevisionAllocator(this.ctx.storage),
       logger: console,
     });
+    return this.#configStore;
   }
 
   private broadcast(nudge: DeltaNudge): void {
@@ -279,6 +296,7 @@ export class ConfigStoreDurableObject
 const AUTHORIZATION_POLICY_CLOSE_CODE = 1008;
 
 const PANEL_SESSION_KEY_PREFIX = "session:";
+
 const SESSION_REVALIDATION_INTERVAL_MS = 60_000;
 const LIVE_UPDATES_AVAILABLE_KEY = "liveUpdatesAvailable";
 const SERVICE_RESTART_CLOSE_CODE = 1012;

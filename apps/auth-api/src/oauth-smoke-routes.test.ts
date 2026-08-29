@@ -135,6 +135,55 @@ describe("OAuth access-token JWKS", () => {
   });
 });
 
+describe("OAuth membership-wide read authorization", () => {
+  it("passes the structural read authorization through identity assertion exchange", async () => {
+    const exchanges: Array<{ audience: string | undefined; authorization: string | undefined }> =
+      [];
+    const app = routeApp({
+      tokenSigner: {
+        ...tokenSigner,
+        exchangeForAccessToken: async (_assertion, _now, audience, authorization) => {
+          exchanges.push({ audience, authorization });
+          return "wide-access-token";
+        },
+      },
+    });
+
+    const res = await app.request("/oauth2/token", {
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+      body: form({
+        grant_type: "urn:ietf:params:oauth:grant-type:token-exchange",
+        identity_assertion: "identity-assertion",
+        resource: "https://cp.splitch.test",
+        authorization: "membership-wide-read",
+      }),
+    });
+
+    expect(res.status).toBe(200);
+    expect(exchanges).toEqual([
+      { audience: "https://cp.splitch.test", authorization: "membership-wide-read" },
+    ]);
+  });
+
+  it("refuses membership-wide authorization for the MCP resource", async () => {
+    const app = routeApp({});
+    const res = await app.request("/oauth2/token", {
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+      body: form({
+        grant_type: "urn:ietf:params:oauth:grant-type:token-exchange",
+        identity_assertion: "identity-assertion",
+        resource: "https://mcp.splitch.test/mcp",
+        authorization: "membership-wide-read",
+      }),
+    });
+
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({ error: "invalid_request" });
+  });
+});
+
 describe("OAuth smoke client_credentials route", () => {
   it("mints only the exact configured MCP protected resource", async () => {
     const audiences: Array<string | undefined> = [];

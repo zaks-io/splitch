@@ -117,8 +117,24 @@ async function runGuard<Input extends z.ZodTypeAny, Output extends z.ZodTypeAny>
       return fail(rateLimited);
     }
 
-    // Step 5: scopes + app/environment co-scope.
-    const scopeError = enforceScopes(contract, principal, c.req.param());
+    // Step 5: resolve authenticated path selectors, then enforce scopes against
+    // the canonical params. A resolver must reject a canonical App co-scope
+    // mismatch before its first repository read; a human App selector may perform
+    // one membership-bounded lookup before enforcing the resolved co-scope.
+    const resolved = deps.authenticatedInputResolver
+      ? await deps.authenticatedInputResolver({
+          contract,
+          input: parsed.value,
+          params: c.req.param(),
+          principal,
+          request,
+          requestId,
+        })
+      : { ok: true as const, input: parsed.value, params: c.req.param(), principal };
+    if (!resolved.ok) {
+      return fail(resolved.error);
+    }
+    const scopeError = enforceScopes(contract, resolved.principal, resolved.params);
     if (scopeError) {
       return fail(scopeError);
     }
@@ -131,8 +147,8 @@ async function runGuard<Input extends z.ZodTypeAny, Output extends z.ZodTypeAny>
 
     // Step 7: hand parsed input + principal to the route handler.
     const response = await handler({
-      input: parsed.value,
-      principal,
+      input: resolved.input as z.infer<Input>,
+      principal: resolved.principal,
       requestId,
       request,
     });

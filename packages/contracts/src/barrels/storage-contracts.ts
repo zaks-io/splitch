@@ -4,6 +4,7 @@ export {
   appEntityIdentityKey,
   assignmentKey,
   clientKeyCacheKey,
+  controlPlaneFlagConfigKey,
   credentialRevocationCacheKey,
   eventDefinitionConfigKey,
   experimentConfigKey,

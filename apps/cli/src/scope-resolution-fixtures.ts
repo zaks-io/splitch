@@ -3,15 +3,9 @@ import { type FakeResponse, oauthTokenMint } from "./test-fixtures.js";
 const scopeStamp = "2026-07-03T00:00:00.000Z";
 
 /**
- * Stubs for the live App/Environment selector resolution that every command
- * runs when `--app` / `--env` (or SPLITCH_*) carry a flag/env selector. Put
- * these ahead of the operation stub so FakeCliTransport matches the list
- * calls first.
- *
- * Does NOT stub `flags_list` — that operation shares a URL with Flag key
- * resolution. Compose `flagsListStub` explicitly when a `:flagId` command needs
- * catalog resolution, so a future `flags list` test cannot pass against a
- * buried scope stub by accident.
+ * Shared Org/App/Environment catalog responses for older command tests. New
+ * selector pass-through tests intentionally omit these and pin the absolute
+ * request count so an accidental client-side lookup cannot hide here.
  */
 export function scopeResolutionStubs(options?: {
   readonly appId?: string;
@@ -113,11 +107,7 @@ export function scopeResolutionStubs(options?: {
   ];
 }
 
-/**
- * Stub for Flag ID-then-key resolution via `flags_list`. Compose after
- * `scopeResolutionStubs` and before the operation under test — never embed this
- * inside App/Env scope stubs, so `flags list` tests stay explicit.
- */
+/** Shared flags_list response for tests whose command actually lists Flags. */
 export function flagsListStub(options?: {
   readonly appId?: string;
   readonly flags?: ReadonlyArray<{

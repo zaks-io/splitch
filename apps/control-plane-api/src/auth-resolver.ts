@@ -1,4 +1,4 @@
-import type { AuthDoor } from "@splitch/contracts";
+import { type AuthDoor, MEMBERSHIP_WIDE_READ_AUTHORIZATION } from "@splitch/contracts";
 import {
   CONTROL_PANEL_DELEGATION_HEADER,
   verifyControlPanelDelegation,
@@ -13,6 +13,7 @@ import type { PanelSessionStore, SessionStore } from "./session-store";
 import {
   authorizeBearerMembership,
   requireTokenMembershipAccess,
+  resolveBearerMemberships,
   type TokenMembershipAccess,
 } from "./token-membership";
 
@@ -31,7 +32,7 @@ import {
  *
  * Order (access-control-matrix.md "Token validation"):
  *   1. Extract `Authorization: Bearer <jwt>`; absent/malformed → UNAUTHORIZED.
- *   2. Verify signature (JWKS) + `aud` + `exp` via the JwksVerifier; fail →
+ *   2. Verify signature (JWKS) + `iss` + `typ` + `aud` + `exp`; fail →
  *      UNAUTHORIZED. (The verifier returns null for every bad-token case and only
  *      throws on a genuine fault, e.g. JWKS unreachable, which the guard maps to
  *      500 — never a silent allow.)
@@ -43,8 +44,10 @@ import {
  *      authority does not derive from membership) skip this read. A missing
  *      membership port or a thrown D1 membership read fails loud (guard → 500)
  *      and never produces a principal.
- *   5. Success → Principal: scopes pass through from the token, `id` = `sub`
- *      (audit/user_id), Org/App/Env binding derived from the scopes.
+ *   5. For membership-wide read authority, require empty scopes and resolve the
+ *      complete live Organization and App membership set from D1.
+ *   6. Success → Principal: `id` = `sub`; selector-bound Org/App/Environment
+ *      axes derive from scopes, while wide principals carry live memberships.
  *
  * The resolver returns typed failures (it does NOT throw for the ordinary
  * unauthenticated/revoked cases); the registrar renders them through the shared
@@ -152,6 +155,27 @@ async function resolveBearerPrincipal(
     verified.scopes,
   );
   if (membership) return membership;
+
+  if (verified.authorization === MEMBERSHIP_WIDE_READ_AUTHORIZATION) {
+    const memberships = await resolveBearerMemberships(
+      requireTokenMembershipAccess(deps.membershipAccess),
+      verified.sub,
+    );
+    return {
+      ok: true as const,
+      principal: {
+        kind: "control-plane-token" as const,
+        id: verified.sub,
+        scopes: [],
+        orgId: null,
+        appId: null,
+        environmentId: null,
+        authDoor: verified.authDoor,
+        authorization: verified.authorization,
+        memberships,
+      },
+    };
+  }
 
   const binding = deriveBinding(verified.scopes);
   return {

@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { appScope, createRepository } from "../index";
 import { createLocalD1, type LocalD1 } from "./test-d1-pool";
+import { twoAxisIdBatches } from "./id-batches";
 import { seedTwoTenants } from "./test-seed";
 
 /**
@@ -68,5 +69,23 @@ describe("id-set reads past D1's bound-parameter cap", () => {
     // The scope proof runs per batch, so it has to survive batching too.
     expect(catalogs.has(seed.b.flagId)).toBe(false);
     expect(catalogs.get(bulkIds[BULK - 1] as string)).toHaveLength(1);
+  });
+});
+
+describe("two-axis id batches", () => {
+  it("covers both axes while keeping each statement at 90 IN bindings", () => {
+    const first = Array.from({ length: 115 }, (_, index) => `flag_${index}`);
+    const second = Array.from({ length: 52 }, (_, index) => `env_${index}`);
+    const batches = twoAxisIdBatches(first, second);
+
+    expect(batches.every((batch) => batch.first.length + batch.second.length <= 90)).toBe(true);
+    const pairs = new Set(
+      batches.flatMap((batch) =>
+        batch.first.flatMap((flagId) =>
+          batch.second.map((environmentId) => `${flagId}:${environmentId}`),
+        ),
+      ),
+    );
+    expect(pairs.size).toBe(first.length * second.length);
   });
 });

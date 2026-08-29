@@ -1,4 +1,4 @@
-import { boundListRead } from "@splitch/contracts";
+import { boundListRead, MEMBERSHIP_WIDE_READ_AUTHORIZATION } from "@splitch/contracts";
 import type { Repository } from "@splitch/db";
 import type { HandlerArgs, Principal } from "@splitch/worker-runtime";
 import { organizationResponse } from "./org-response";
@@ -10,11 +10,9 @@ import { organizationIdsInScopes } from "./scope-binding";
  * Filtering by the token's org scopes would make it return `{items: []}` for
  * the app-less token a fresh login mints, deadlocking the very first step.
  *
- * The exemption is limited to `device_flow` because that is the only door whose
- * holder can already reach every one of these Orgs: its refresh token rebinds
- * to any of them on demand, so listing them grants no reach it lacks. Doors
- * that mint a refresh-less access token (the claim ceremony, client_credentials)
- * genuinely ARE narrowed by their scopes, so they keep the scope intersection.
+ * Device-flow tokens can already rebind to every live Organization. A
+ * membership-wide token carries that same reach structurally, independent of
+ * which door minted it. Other refresh-less tokens remain narrowed by scopes.
  */
 export function makeListOrganizationsHandler(repo: Repository) {
   return async ({ principal }: HandlerArgs<unknown>): Promise<Response> => {
@@ -46,7 +44,10 @@ function reachableOrgIds(
   memberships: readonly { orgId: string }[],
 ): Set<string> {
   const member = new Set(memberships.map((membership) => membership.orgId));
-  if (principal.authDoor === "device_flow") {
+  if (
+    principal.authDoor === "device_flow" ||
+    principal.authorization === MEMBERSHIP_WIDE_READ_AUTHORIZATION
+  ) {
     return member;
   }
   const scoped = organizationIdsInScopes(principal.scopes);

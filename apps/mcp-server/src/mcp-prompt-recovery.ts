@@ -96,8 +96,14 @@ function recoverySteps(
   if (action === "CHOOSE_DIFFERENT_KEY") {
     return chooseDifferentSteps(action, details);
   }
-
   switch (action) {
+    case "USE_CANONICAL_ID":
+      return [
+        message(
+          "assistant",
+          "Choose the intended candidate from details.candidates, then retry the original operation with that candidate's canonical ID. If that Environment ID is itself the ambiguous selector, pass by=id to force the canonical ID.",
+        ),
+      ];
     case "CREATE_NEW_RUN":
       return [
         toolMessage(

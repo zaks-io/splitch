@@ -19,7 +19,8 @@ import { createAnalysisResultsReader } from "./attention-analysis-reader";
 import { authJwksUri } from "./auth-jwks-config";
 import { makeControlPlaneAuthResolver } from "./auth-resolver";
 import { loadCloudflareExposureVerificationConfig } from "./cloudflare-exposure-verification";
-import { durableAppIdentityResetAccess, durableConfigStoreAccess } from "./config-store-access";
+import { durableConfigStoreAccess } from "./config-store-access";
+import { durableAppIdentityResetAccess } from "./config-store-app-identity-access";
 import { ConfigStoreDurableObject } from "./config-store-do";
 import { parseControlPanelBindingOperation } from "./control-panel-operation";
 import { handleControlPlaneAppRequest } from "./control-plane-app-request";
@@ -276,7 +277,7 @@ async function handleSignedPanelOverview(
   if (operation?.id !== "overview_get") return null;
   const auth = await authResolver(request);
   if (!auth.ok) return unauthorized();
-  const configStore = durableConfigStoreAccess(env.CONFIG_STORE_WRITER);
+  const configStore = durableConfigStoreAccess(env.CONFIG_STORE_WRITER, env.CONFIG_STORE);
   return panelOverviewRead(
     {
       repo,

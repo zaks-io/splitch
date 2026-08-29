@@ -88,6 +88,7 @@ export function makeAppForRepo(
   eventDefinitionStore?: KVNamespace,
 ): Hono {
   const verifier = makeJwksVerifier({
+    issuer: "https://auth.splitch.test",
     fetchJwks: async () => h.signer.jwks,
     controlPlaneAudience: AUDIENCE,
   });
@@ -95,7 +96,12 @@ export function makeAppForRepo(
     authResolver: makeControlPlaneAuthResolver({
       verifier,
       sessions: makeSessionStore(h.bindings.kv),
-      membershipAccess: { authorize: async () => true },
+      membershipAccess: {
+        authorize: async () => true,
+        resolve: async () => {
+          throw new Error("Flag definition harness has no wide membership fixture");
+        },
+      },
       now: () => NOW_MS,
     }),
     rateLimiter: allowLimiter,

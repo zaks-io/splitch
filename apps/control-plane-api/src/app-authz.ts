@@ -1,4 +1,6 @@
+import { MEMBERSHIP_WIDE_READ_AUTHORIZATION } from "@splitch/contracts";
 import { appScope } from "@splitch/db";
+import type { Principal } from "@splitch/worker-runtime";
 import { renderError } from "@splitch/worker-runtime";
 import { appAdminScope } from "./scope-binding";
 
@@ -17,10 +19,7 @@ interface AppAuthzDeps {
     };
   };
 }
-export interface ScopedActor {
-  id: string;
-  scopes: readonly string[];
-}
+export type ScopedActor = Pick<Principal, "id" | "scopes" | "authorization" | "memberships">;
 
 export async function requireAppAdmin(
   deps: AppAuthzDeps,
@@ -65,8 +64,20 @@ async function requireAppRole(
   allowedRoles: readonly AppRole[],
   requestId: string,
 ): Promise<Response | null> {
-  const scopeError = requireAppRoleFromScopes(appId, actor.scopes, allowedRoles, requestId);
-  if (scopeError) return scopeError;
+  const hasWideRole =
+    actor.authorization === MEMBERSHIP_WIDE_READ_AUTHORIZATION &&
+    actor.memberships?.apps.some(
+      (membership) =>
+        membership.id === appId &&
+        allowedRoles.includes(membership.role) &&
+        actor.memberships?.organizations.some(
+          (organization) => organization.id === membership.organizationId,
+        ),
+    );
+  if (!hasWideRole) {
+    const scopeError = requireAppRoleFromScopes(appId, actor.scopes, allowedRoles, requestId);
+    if (scopeError) return scopeError;
+  }
 
   const membership = await deps.repo.identity.getAppMembership(appScope(appId), actor.id);
   if (membership && allowedRoles.includes(membership.role as AppRole)) return null;

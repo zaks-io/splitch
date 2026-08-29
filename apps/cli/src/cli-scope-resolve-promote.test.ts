@@ -1,9 +1,9 @@
 import { writeFile } from "node:fs/promises";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { runCli } from "./cli.js";
-import { EXIT_OK, EXIT_SCOPE } from "./exit-codes.js";
-import { flagsListStub, scopeResolutionStubs } from "./scope-resolution-fixtures.js";
-import { FakeCliTransport, promoteResponse, storedCredential } from "./test-fixtures.js";
+import { EXIT_API, EXIT_OK } from "./exit-codes.js";
+import { scopeResolutionStubs } from "./scope-resolution-fixtures.js";
+import { FakeCliTransport, jsonError, promoteResponse, storedCredential } from "./test-fixtures.js";
 import { cleanupTempHomes, makeTempHome } from "./test-helpers.js";
 
 afterEach(async () => {
@@ -11,19 +11,16 @@ afterEach(async () => {
   await cleanupTempHomes();
 });
 
-const FLAG_1 = [{ id: "flag_1", key: "flag-1", name: "Flag 1" }] as const;
-
-describe("flags promote --env slug resolution", () => {
-  it("accepts a target Environment slug and promotes to the canonical ID", async () => {
+describe("flags promote server-side selector resolution", () => {
+  it("forwards a target Environment selector unchanged", async () => {
     const { credentialPath } = await makeTempHome();
     await writeFile(credentialPath, `${JSON.stringify(storedCredential())}\n`);
     const transport = new FakeCliTransport([
       ...scopeResolutionStubs(),
-      flagsListStub({ flags: FLAG_1 }),
       {
         match: (request) =>
           request.method === "POST" &&
-          request.url.includes("/apps/app_1/envs/env_prod/flags/flag_1/promote"),
+          request.url.includes("/apps/app_1/envs/prod/flags/flag_1/promote"),
         status: 200,
         body: promoteResponse,
       },
@@ -49,7 +46,7 @@ describe("flags promote --env slug resolution", () => {
     expect(code).toBe(EXIT_OK);
     expect(
       transport.requests.some((request) =>
-        request.url.includes("/apps/app_1/envs/env_prod/flags/flag_1/promote"),
+        request.url.includes("/apps/app_1/envs/prod/flags/flag_1/promote"),
       ),
     ).toBe(true);
   });
@@ -59,7 +56,6 @@ describe("flags promote --env slug resolution", () => {
     await writeFile(credentialPath, `${JSON.stringify(storedCredential())}\n`);
     const transport = new FakeCliTransport([
       ...scopeResolutionStubs(),
-      flagsListStub({ flags: FLAG_1 }),
       {
         match: (request) =>
           request.method === "POST" &&
@@ -89,10 +85,17 @@ describe("flags promote --env slug resolution", () => {
     expect(code).toBe(EXIT_OK);
   });
 
-  it("fails with CLI_SCOPE_UNRESOLVED naming the unknown target Environment slug", async () => {
+  it("lets the server refuse an unknown target Environment", async () => {
     const { credentialPath } = await makeTempHome();
     await writeFile(credentialPath, `${JSON.stringify(storedCredential())}\n`);
-    const transport = new FakeCliTransport([...scopeResolutionStubs()]);
+    const transport = new FakeCliTransport([
+      ...scopeResolutionStubs(),
+      {
+        match: (request) => request.url.includes("/apps/app_1/envs/nosuch/flags/flag_1/promote"),
+        status: 404,
+        body: jsonError("APP_NOT_FOUND", "app not found"),
+      },
+    ]);
     const error = vi.spyOn(console, "error").mockImplementation(() => {});
 
     const code = await runCli(
@@ -112,19 +115,26 @@ describe("flags promote --env slug resolution", () => {
       { credentialPath, fetch: transport.fetch },
     );
 
-    expect(code).toBe(EXIT_SCOPE);
+    expect(code).toBe(EXIT_API);
     const message = error.mock.calls.join(" ");
-    expect(message).toContain("CLI_SCOPE_UNRESOLVED");
-    expect(message).toContain("nosuch");
-    expect(transport.requests.some((request) => request.url.includes("/promote"))).toBe(false);
+    expect(message).toContain("APP_NOT_FOUND");
+    expect(message).not.toContain("CLI_SCOPE_UNRESOLVED");
+    expect(transport.requests.some((request) => request.url.includes("/promote"))).toBe(true);
   });
 });
 
 describe("flags list --app slug resolution", () => {
-  it("fails with CLI_SCOPE_UNRESOLVED naming an unknown App slug", async () => {
+  it("lets the server refuse an unknown App selector", async () => {
     const { credentialPath } = await makeTempHome();
     await writeFile(credentialPath, `${JSON.stringify(storedCredential())}\n`);
-    const transport = new FakeCliTransport([...scopeResolutionStubs()]);
+    const transport = new FakeCliTransport([
+      ...scopeResolutionStubs(),
+      {
+        match: (request) => new URL(request.url).pathname === "/apps/missing-app/flags",
+        status: 404,
+        body: jsonError("APP_NOT_FOUND", "app not found"),
+      },
+    ]);
     const error = vi.spyOn(console, "error").mockImplementation(() => {});
 
     const code = await runCli(["flags", "list", "--json", "--app", "missing-app"], {
@@ -132,10 +142,9 @@ describe("flags list --app slug resolution", () => {
       fetch: transport.fetch,
     });
 
-    expect(code).toBe(EXIT_SCOPE);
+    expect(code).toBe(EXIT_API);
     const message = error.mock.calls.join(" ");
-    expect(message).toContain("CLI_SCOPE_UNRESOLVED");
-    expect(message).toContain("missing-app");
-    expect(message).not.toContain("FORBIDDEN");
+    expect(message).toContain("APP_NOT_FOUND");
+    expect(message).not.toContain("CLI_SCOPE_UNRESOLVED");
   });
 });

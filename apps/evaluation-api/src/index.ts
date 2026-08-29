@@ -38,7 +38,7 @@ import {
 import { HoldoverWriteOutboxDurableObject } from "./assignment/holdover-write-outbox-do";
 import { KvAssignmentStore } from "./assignment/kv-assignment-store";
 import {
-  makeCachedJwksVerifier,
+  makeEvaluationControlPlaneJwksVerifier,
   makeControlPlaneAuthResolver,
   makeSessionStore,
 } from "./control-plane-auth";
@@ -268,7 +268,7 @@ function requestAuthResolver(
   const controlPlaneAudience = env.CONTROL_PLANE_ORIGIN ?? url.origin;
   const jwksUri = env.AUTH_JWKS_URI ?? `${controlPlaneAudience}/.well-known/jwks.json`;
   return makeControlPlaneAuthResolver({
-    verifier: makeCachedJwksVerifier({
+    verifier: makeEvaluationControlPlaneJwksVerifier({
       jwksUri,
       controlPlaneAudience,
     }),

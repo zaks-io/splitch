@@ -7,7 +7,11 @@ import {
 import { appScope } from "@splitch/db";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { makeConfigStore } from "../src/config-store";
-import { narrowSeededAvailability, startSeededExperiment } from "../src/config-store-fixture-data";
+import {
+  makeSnapshotRevisionCounter,
+  narrowSeededAvailability,
+  startSeededExperiment,
+} from "../src/config-store-fixture-data";
 import {
   authedPatch,
   faultingCommitRepo,
@@ -96,6 +100,7 @@ describe("config store write path", () => {
       repo: faultingCommitRepo(h.repo),
       kv: { get: h.kv.get.bind(h.kv), put: kvPut } as unknown as KVNamespace,
       broadcaster: { broadcast: (nudge) => void h.nudges.push(nudge) },
+      nextSnapshotRevision: makeSnapshotRevisionCounter(),
       now: () => new Date(NOW_MS),
     });
     const app = makeAuthedApp(h, store);
@@ -158,7 +163,7 @@ describe("config store write path", () => {
     expect(h.nudges).toEqual([]);
   });
 
-  it("falls back to D1 on an unknown KV schemaVersion and logs the mismatch", async () => {
+  it("fails loud on an unknown KV schemaVersion without repairing it", async () => {
     const key = flagConfigKey(ids.appId, ids.environmentId, ids.flagKey);
     await h.kv.put(
       key,
@@ -185,19 +190,11 @@ describe("config store write path", () => {
       { headers: { authorization: `Bearer ${jwt}` } },
     );
 
-    expect(res.status).toBe(200);
-    expect(await res.json()).toMatchObject({
-      version: 1,
-      enabled: false,
-      availableVariantNames: ["control", "treatment"],
-    });
+    expect(res.status).toBe(500);
     expect(h.warnings).toHaveLength(1);
 
-    const rewritten = await kvJson(h.kv, key);
-    expect(rewritten).toMatchObject({
-      schemaVersion: CURRENT_KV_SCHEMA_VERSION,
-      data: { enabled: false, availableVariantNames: ["control", "treatment"] },
-    });
+    const preserved = await kvJson(h.kv, key);
+    expect(preserved).toMatchObject({ schemaVersion: 999, data: { enabled: true } });
   });
 });
 
@@ -207,6 +204,7 @@ describe("config store variant catalog resync", () => {
       repo: h.repo,
       kv: h.kv,
       broadcaster: { broadcast: (nudge) => void h.nudges.push(nudge) },
+      nextSnapshotRevision: makeSnapshotRevisionCounter(),
       now: () => new Date(NOW_MS),
     });
     const key = flagConfigKey(ids.appId, ids.environmentId, ids.flagKey);
@@ -239,52 +237,15 @@ describe("config store variant catalog resync", () => {
     };
     expect(after.data.variants.find((v) => v.name === "treatment")?.value).toBe("changed");
   });
+});
 
-  it("deleteFlagConfig removes the KV snapshot and broadcasts invalidation", async () => {
-    const store = makeConfigStore({
-      repo: h.repo,
-      kv: h.kv,
-      broadcaster: { broadcast: (nudge) => void h.nudges.push(nudge) },
-      now: () => new Date(NOW_MS),
-    });
-    await store.resyncFlagConfig({
-      appId: ids.appId,
-      environmentId: ids.environmentId,
-      flagId: ids.flagId,
-    });
-    const key = flagConfigKey(ids.appId, ids.environmentId, ids.flagKey);
-    expect(await h.kv.get(key, "text")).toEqual(expect.any(String));
-
-    const result = await store.deleteFlagConfig({
-      appId: ids.appId,
-      environmentId: ids.environmentId,
-      flagId: ids.flagId,
-    });
-    expect(result.ok).toBe(true);
-    expect(await h.kv.get(key, "text")).toBeNull();
-    expect(h.nudges).toContainEqual(
-      expect.objectContaining({
-        type: "config.changed",
-        entity: "flag",
-        id: ids.flagId,
-        version: 0,
-      }),
-    );
-
-    const retry = await store.deleteFlagConfig({
-      appId: ids.appId,
-      environmentId: ids.environmentId,
-      flagId: ids.flagId,
-      flagKey: ids.flagKey,
-    });
-    expect(retry.ok).toBe(true);
-  });
-
+describe("config store missing resync", () => {
   it("resyncFlagConfig reports FLAG_NOT_FOUND when the Environment has no config for the Flag", async () => {
     const store = makeConfigStore({
       repo: h.repo,
       kv: h.kv,
       broadcaster: { broadcast: (nudge) => void h.nudges.push(nudge) },
+      nextSnapshotRevision: makeSnapshotRevisionCounter(),
       now: () => new Date(NOW_MS),
     });
 

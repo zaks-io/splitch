@@ -87,6 +87,23 @@ describe("batched session membership reads", () => {
     expect(rows.map((row) => row.app.id)).toEqual(["app_1"]);
   }, 15_000);
 
+  it("requires the App to belong to an Organization the User belongs to", async () => {
+    await seed(local.d1);
+
+    const rows = await repo.identity.listAppMembershipsWithAppForUser("user_cross_axis", ["org_1"]);
+
+    expect(rows).toEqual([]);
+  }, 15_000);
+
+  it("requires each App membership to belong to the requested User", async () => {
+    await seed(local.d1);
+
+    const rows = await repo.identity.listAppMembershipsWithAppForUser("user_1", ["org_1"]);
+
+    expect(rows.map((row) => row.app.id)).toEqual(["app_1"]);
+    expect(rows.some((row) => row.app.id === "app_2")).toBe(false);
+  }, 15_000);
+
   // D1 refuses a statement carrying more than 100 bound parameters. Unbatched,
   // `eq(userId)` plus `inArray(orgIds)` over 150 Organizations binds 151
   // parameters in one statement and D1 itself throws `too many SQL variables`.
@@ -177,7 +194,8 @@ async function seed(d1: D1Database): Promise<void> {
     `INSERT INTO org_memberships (org_id, user_id, role, created_at) VALUES
        ('org_1', 'user_1', 'owner', '2026-07-29T08:00:00.000Z'),
        ('org_2', 'user_1', 'member', '2026-07-29T08:30:00.000Z'),
-       ('org_1', 'user_2', 'member', '${NOW}')`,
+       ('org_1', 'user_2', 'member', '${NOW}'),
+       ('org_1', 'user_cross_axis', 'member', '${NOW}')`,
     `INSERT INTO apps (id, organization_id, name, key, created_at, updated_at, created_by) VALUES
        ('app_1', 'org_1', 'App One', 'app-one', '${NOW}', '${NOW}', 'user_1'),
        ('app_2', 'org_1', 'App Two', 'app-two', '${NOW}', '${NOW}', 'user_2'),
@@ -185,7 +203,8 @@ async function seed(d1: D1Database): Promise<void> {
     `INSERT INTO app_memberships (app_id, user_id, role, created_at) VALUES
        ('app_1', 'user_1', 'owner', '${NOW}'),
        ('app_2', 'user_2', 'owner', '${NOW}'),
-       ('app_3', 'user_1', 'viewer', '${NOW}')`,
+       ('app_3', 'user_1', 'viewer', '${NOW}'),
+       ('app_3', 'user_cross_axis', 'member', '${NOW}')`,
   ];
   for (const statement of statements) {
     await d1.prepare(statement).run();

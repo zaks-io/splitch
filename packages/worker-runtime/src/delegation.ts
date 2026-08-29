@@ -1,4 +1,9 @@
-import type { AuthKind, RouteContract } from "@splitch/contracts";
+import { MEMBERSHIP_WIDE_READ_AUTHORIZATION, type RouteContract } from "@splitch/contracts";
+import {
+  delegatedAxisCovers,
+  type DelegatedIdentity,
+  parseDelegatedIdentity,
+} from "./delegated-identity";
 import type { AuthResolver, Principal } from "./principal";
 import { resolveRequestId } from "./request-id";
 import { emptyError, renderError } from "./respond";
@@ -27,32 +32,16 @@ export const DELEGATED_IDENTITY_HEADER = "x-splitch-delegated-identity";
 /** Service-binding requests need an absolute URL; this host is never resolved. */
 const DELEGATION_ORIGIN = "https://delegated.splitch.internal";
 
-export interface DelegatedIdentity {
-  /** The registry operationId the surface Worker authorized. */
-  operation: string;
-  actorId: string;
-  authKind?: AuthKind;
-  scopes?: readonly string[];
-  /**
-   * The tenant scope the surface Worker AUTHORIZED, never what the request asked
-   * for. Minting these from the path instead of from the resolved principal would
-   * make the receiving end's cross-check a tautology.
-   */
-  orgId: string | null;
-  appId: string | null;
-  environmentId: string | null;
-}
+export type { DelegatedIdentity } from "./delegated-identity";
 
 /**
  * The scope the surface Worker authorized, read off the resolved principal once
  * the guard's co-scope step has passed (ADR-0027).
  *
- * App and Org come from the CREDENTIAL: they are tenant boundaries, and the guard
- * already refused a principal not bound to the path's App or Org. The Environment
- * is the path's whenever the credential is env-unbound, because a control-plane
- * token binds an App and SELECTS the Environment by path within it; an env-bound
- * credential was held to the same value by the guard, so the two agree wherever
- * both exist.
+ * Selector-bound App and Org axes come from the credential. A membership-wide
+ * principal binds the path axes only after the surface guard proves they occur
+ * in its live set, then carries that set so the owner guard can prove them again.
+ * The Environment is the path's whenever the credential is env-unbound.
  */
 export function delegatedIdentityFrom(
   route: Pick<RouteContract, "id">,
@@ -64,8 +53,25 @@ export function delegatedIdentityFrom(
     actorId: principal.id,
     authKind: principal.kind,
     scopes: [...principal.scopes],
-    orgId: principal.orgId,
-    appId: principal.appId,
+    ...(principal.authorization ? { authorization: principal.authorization } : {}),
+    ...(principal.memberships
+      ? {
+          memberships: {
+            organizations: principal.memberships.organizations.map((membership) => ({
+              ...membership,
+            })),
+            apps: principal.memberships.apps.map((membership) => ({ ...membership })),
+          },
+        }
+      : {}),
+    orgId:
+      principal.orgId ??
+      (principal.authorization === MEMBERSHIP_WIDE_READ_AUTHORIZATION ? params.orgId : null) ??
+      null,
+    appId:
+      principal.appId ??
+      (principal.authorization === MEMBERSHIP_WIDE_READ_AUTHORIZATION ? params.appId : null) ??
+      null,
     environmentId: principal.environmentId ?? params.environmentId ?? null,
   };
 }
@@ -129,7 +135,8 @@ export function delegatedIdentityFor(
   // selects it by path), so it catches a request built inconsistently with the
   // identity minted alongside it, not an authorization failure.
   for (const axis of ["orgId", "appId", "environmentId"] as const) {
-    if (params[axis] !== undefined && params[axis] !== identity[axis]) return null;
+    const value = params[axis];
+    if (value !== undefined && !delegatedAxisCovers(identity, axis, value)) return null;
   }
   return identity;
 }
@@ -169,33 +176,13 @@ export function delegatedAuthResolver(identity: DelegatedIdentity): AuthResolver
       orgId: identity.orgId,
       appId: identity.appId,
       environmentId: identity.environmentId,
+      ...(identity.authorization ? { authorization: identity.authorization } : {}),
+      ...(identity.memberships ? { memberships: identity.memberships } : {}),
       // Minted by the surface Worker from an already-authorized principal, not by
       // an auth door.
       authDoor: null,
     },
   });
-}
-
-function parseDelegatedIdentity(value: string | null): DelegatedIdentity | null {
-  if (!value) return null;
-  try {
-    const candidate = JSON.parse(value) as Record<string, unknown>;
-    return isDelegatedIdentity(candidate) ? (candidate as unknown as DelegatedIdentity) : null;
-  } catch {
-    return null;
-  }
-}
-
-function isDelegatedIdentity(candidate: Record<string, unknown>): boolean {
-  return (
-    isNonEmptyString(candidate.operation) &&
-    isNonEmptyString(candidate.actorId) &&
-    isScopeAxis(candidate.orgId) &&
-    isScopeAxis(candidate.appId) &&
-    isScopeAxis(candidate.environmentId) &&
-    (candidate.authKind === undefined || isAuthKind(candidate.authKind)) &&
-    (candidate.scopes === undefined || isStringArray(candidate.scopes))
-  );
 }
 
 function substitutePath(template: string, params: Readonly<Record<string, string>>): string {
@@ -250,27 +237,4 @@ function decodeParam(value: string): string | null {
   } catch {
     return null;
   }
-}
-
-function isNonEmptyString(value: unknown): value is string {
-  return typeof value === "string" && value.length > 0;
-}
-
-function isScopeAxis(value: unknown): value is string | null {
-  return value === null || isNonEmptyString(value);
-}
-
-function isStringArray(value: unknown): value is string[] {
-  return Array.isArray(value) && value.every((item) => typeof item === "string");
-}
-
-function isAuthKind(value: unknown): value is AuthKind {
-  return [
-    "public",
-    "control-plane-token",
-    "client-key",
-    "api-key",
-    "internal-worker",
-    "data-plane-key",
-  ].includes(String(value));
 }

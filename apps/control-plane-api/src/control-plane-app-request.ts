@@ -28,7 +28,10 @@ export async function handleControlPlaneAppRequest(input: {
   delegated: boolean;
 }): Promise<Response> {
   const { request, env, ctx, authResolver, repo, delegated } = input;
-  const configStore = durableConfigStoreAccess(env.CONFIG_STORE_WRITER);
+  const configStore = durableConfigStoreAccess(env.CONFIG_STORE_WRITER, env.CONFIG_STORE, {
+    repo,
+    waitUntil: (promise) => ctx.waitUntil(promise),
+  });
   const app = createApp({
     door: delegated ? "binding" : "public",
     authResolver,

@@ -12,6 +12,7 @@ import type {
   ExperimentsUpdateInput,
   ExperimentsUpdateOutput,
 } from "@splitch/contracts/route-types";
+import { environmentSelectorQuery } from "./environment-selector-query";
 import {
   type ControlPlaneHcOptions,
   createExperimentsHcClient,
@@ -60,16 +61,21 @@ export function createExperimentsClient(
     list: (input, callOptions) =>
       invokeHcRoute<ExperimentsListOutput>("experiments_list", () =>
         hcClient.apps[":appId"].envs[":environmentId"].experiments.$get(
-          { param: { appId: input.appId, environmentId: input.environmentId } },
+          {
+            param: { appId: input.appId, environmentId: input.environmentId },
+            ...environmentSelectorQuery(input),
+          } as never,
           hcRequestOptions(withAuthorization(hcOptions, callOptions)),
         ),
       ),
-    create: (input, callOptions) =>
-      invokeHcRoute<ExperimentsCreateOutput>("experiments_create", () =>
+    create: (input, callOptions) => {
+      const { by, ...body } = input;
+      return invokeHcRoute<ExperimentsCreateOutput>("experiments_create", () =>
         hcClient.apps[":appId"].envs[":environmentId"].experiments.$post(
           {
             param: { appId: input.appId, environmentId: input.environmentId },
-            json: input,
+            ...environmentSelectorQuery({ by }),
+            json: body,
           } as never,
           withIdempotencyHeader(
             "experiments_create",
@@ -77,7 +83,8 @@ export function createExperimentsClient(
             input.idempotency_key,
           ),
         ),
-      ),
+      );
+    },
     get: (input, callOptions) =>
       invokeHcRoute<ExperimentsGetOutput>("experiments_get", () =>
         hcClient.apps[":appId"].envs[":environmentId"].experiments[":experimentId"].$get(
@@ -87,24 +94,33 @@ export function createExperimentsClient(
               environmentId: input.environmentId,
               experimentId: input.experimentId,
             },
-          },
+            ...environmentSelectorQuery(input),
+          } as never,
           hcRequestOptions(withAuthorization(hcOptions, callOptions)),
         ),
       ),
     update: (input, callOptions) => {
-      const { appId, environmentId, experimentId, ...body } = input;
+      const { appId, environmentId, experimentId, by, ...body } = input;
       return invokeHcRoute<ExperimentsUpdateOutput>("experiments_update", () =>
         hcClient.apps[":appId"].envs[":environmentId"].experiments[":experimentId"].$patch(
-          { param: { appId, environmentId, experimentId }, json: body } as never,
+          {
+            param: { appId, environmentId, experimentId },
+            ...environmentSelectorQuery({ by }),
+            json: body,
+          } as never,
           hcRequestOptions(withAuthorization(hcOptions, callOptions)),
         ),
       );
     },
     start: (input, callOptions) => {
-      const { appId, environmentId, experimentId, ...body } = input;
+      const { appId, environmentId, experimentId, by, ...body } = input;
       return invokeHcRoute<ExperimentsStartOutput>("experiments_start", () =>
         hcClient.apps[":appId"].envs[":environmentId"].experiments[":experimentId"].start.$post(
-          { param: { appId, environmentId, experimentId }, json: body } as never,
+          {
+            param: { appId, environmentId, experimentId },
+            ...environmentSelectorQuery({ by }),
+            json: body,
+          } as never,
           withIdempotencyHeader(
             "experiments_start",
             hcRequestOptions(withAuthorization(hcOptions, callOptions)),
@@ -122,7 +138,8 @@ export function createExperimentsClient(
               environmentId: input.environmentId,
               experimentId: input.experimentId,
             },
-          },
+            ...environmentSelectorQuery(input),
+          } as never,
           hcRequestOptions(withAuthorization(hcOptions, callOptions)),
         ),
       ),

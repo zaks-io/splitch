@@ -2,6 +2,16 @@
 
 **Status:** accepted; amended 2026-07-19
 
+## 2026-08-28 amendment: path-selected App binding
+
+An MCP delegation may carry signed scopes for several Apps, so its initial
+Principal has no single App binding. On an App-scoped route, the authenticated
+selector resolver may bind that null axis to exactly one App already named by a
+matching signed `app:<id>:<role>` scope. The request may name that App by canonical
+ID or by a membership-bounded slug; both forms authorize identically. This
+binding grants no new authority, and the resolved App is co-scoped before any
+Environment or Flag lookup and again by the shared guard before the handler.
+
 ## 2026-07-19 amendment: resource-bound access tokens
 
 The original phrase "the same control-plane access token" meant one principal, claim shape, signing

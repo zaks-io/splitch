@@ -10,6 +10,7 @@ import type {
   EnvironmentsUpdateInput,
   EnvironmentsUpdateOutput,
 } from "@splitch/contracts/route-types";
+import { environmentSelectorQuery } from "./environment-selector-query";
 import {
   type ControlPlaneHcOptions,
   createEnvironmentsHcClient,
@@ -73,15 +74,22 @@ export function createEnvironmentsClient(
     get: (input, callOptions) =>
       invokeHcRoute<EnvironmentsGetOutput>("environments_get", () =>
         hcClient.apps[":appId"].envs[":environmentId"].$get(
-          { param: { appId: input.appId, environmentId: input.environmentId } },
+          {
+            param: { appId: input.appId, environmentId: input.environmentId },
+            ...environmentSelectorQuery(input),
+          } as never,
           hcRequestOptions(withAuthorization(hcOptions, callOptions)),
         ),
       ),
     update: (input, callOptions) => {
-      const { appId, environmentId, ...body } = input;
+      const { appId, environmentId, by, ...body } = input;
       return invokeHcRoute<EnvironmentsUpdateOutput>("environments_update", () =>
         hcClient.apps[":appId"].envs[":environmentId"].$patch(
-          { param: { appId, environmentId }, json: body } as never,
+          {
+            param: { appId, environmentId },
+            ...environmentSelectorQuery({ by }),
+            json: body,
+          } as never,
           hcRequestOptions(withAuthorization(hcOptions, callOptions)),
         ),
       );
@@ -89,7 +97,10 @@ export function createEnvironmentsClient(
     delete: (input, callOptions) =>
       invokeHcRoute<EnvironmentsDeleteOutput>("environments_delete", () =>
         hcClient.apps[":appId"].envs[":environmentId"].$delete(
-          { param: { appId: input.appId, environmentId: input.environmentId } },
+          {
+            param: { appId: input.appId, environmentId: input.environmentId },
+            ...environmentSelectorQuery(input),
+          } as never,
           hcRequestOptions(withAuthorization(hcOptions, callOptions)),
         ),
       ),

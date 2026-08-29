@@ -27,7 +27,8 @@ access tokens exist only in isolated unit-test fixtures; they are not the local 
   exp: number,             // unix timestamp
   iat: number,
   scopes: string[],        // e.g. ["app:app_abc123:admin"]
-  auth_door: string        // "id_jag" | "anonymous" | "device_flow" | "client_credentials"
+  auth_door: string,       // "id_jag" | "anonymous" | "device_flow" | "client_credentials"
+  authorization?: "membership-wide-read"
 }
 ```
 
@@ -36,6 +37,15 @@ the challenged endpoint (the MCP origin or its `/mcp` URL). A token for one is r
 other resource. `client_credentials` is reserved for the shared-preview smoke client. It mints a
 short-lived resource-bound token for the configured seeded smoke user and scopes; it is not a general
 user or agent onboarding path.
+
+`authorization: "membership-wide-read"` is a Control Plane-only, read-only grant. Its token must
+carry an explicitly empty `scopes` array and cannot be combined with an App or Organization
+selector. The claim carries no membership rows. On every request, the Control Plane resolves the
+principal's complete current Organization and App membership set from D1 and exposes that live set
+to the handler context. The registrar accepts the grant only for `GET`, applies path co-scope against
+the live set, and rejects every other method before the handler runs. Session revocation uses the
+same principal-keyed check as selector-bound tokens. The Auth API refuses this authorization for the
+MCP audience.
 
 **Scope format:** `app:{app_id}:{role}` where role is `owner`, `admin`, or `member`.
 A token may carry multiple App scopes (e.g. user is admin on two Apps). Org-level operations require
@@ -46,29 +56,34 @@ itself rather than a path id. It answers "which Organizations am I a member of?"
 membership, because the token a cold-start device login mints carries no scopes — filtering by them
 would return an empty list and deadlock the first step of every agent journey.
 
-The scope filter is dropped **only for the `device_flow` door**, and only because that door's premise
-holds there: its refresh token rebinds to any of the principal's Organizations on demand, so listing
-them exposes no reach the holder does not already have. Doors that mint a refresh-less access token
-(the claim ceremony, `client_credentials`) cannot rebind, so their scopes are a real narrowing and
-`GET /orgs` keeps intersecting against them. Live membership is the floor for every door: a scope
-naming an Organization the principal does not belong to never widens the result. Every other
-Organization route co-scopes on `:orgId` as usual.
+The scope filter is dropped for the `device_flow` door and for membership-wide authority. Device
+flow can rebind to any live Organization; the structural grant explicitly names the same complete
+live membership reach regardless of its auth door. Other refresh-less access tokens remain narrowed
+by scopes. Live membership is the floor for every door: a scope naming an Organization the principal
+does not belong to never widens the result. Every other Organization route co-scopes on `:orgId`.
 
 **Token validation at the selected protected resource:**
 
 1. Verify JWT signature as RS256 against the configured Auth API `AUTH_JWKS_URI`
-2. Assert `aud` exactly matches the protected resource handling the request
-3. Assert `exp` not passed
-4. Session-validation hot read: a revoked session is `CREDENTIAL_REVOKED`
-5. Hot-validate every Organization and App membership axis the token carries.
+2. Assert `iss` matches the Auth API origin and `typ` is `access_token`
+3. Assert `aud` exactly matches the protected resource handling the request
+4. Assert `exp` not passed
+5. Session-validation hot read: a revoked session is `CREDENTIAL_REVOKED`
+6. Hot-validate every Organization and App membership axis the token carries.
    This runs on the public bearer path and again on the MCP Control Plane
-   door after the delegation is verified (delegation copies minted scopes;
-   live membership is still required). A removed or role-incompatible
+   door after the delegation is verified (delegation copies minted scopes, or
+   the wide grant plus its request-live membership set). A removed or role-incompatible
    membership is refused before route scope checks. Tokens whose authority
-   does not derive from membership (API Key, Client Key, and tokens with no
-   `org:`/`app:` axes) keep their existing path.
-6. Extract `scopes`; match against required scope for the requested operation
-7. Extract `sub` as `user_id` for audit logging
+   does not derive from membership (API Key, Client Key, and ordinary tokens
+   with no `org:`/`app:` axes) keep their existing path.
+7. For `authorization: "membership-wide-read"`, require an empty `scopes` array,
+   resolve the complete membership set from live D1, refuse non-`GET` methods,
+   and co-scope any Organization or App path against that set. Internal delegation carries the
+   grant and live set, binds only the already-authorized path axes, and reruns Organization/App
+   co-scope in the owner Worker.
+8. Otherwise, extract `scopes` and match against the required scope for the
+   requested operation.
+9. Extract `sub` as `user_id` for audit logging
 
 ## Trusted IdP allow-list
 

@@ -37,6 +37,7 @@ import type { HoldoverWriteOutboxCleanup } from "./holdover-write-outbox-cleanup
 import { mountLiveUpdateRoute } from "./live-updates";
 import { makeMetricSegmentHandlers } from "./metric-segment-handlers";
 import type { MemberProfileResolver } from "./org-handlers";
+import { makePathSelectorResolver } from "./path-selector-resolution";
 import { controlPlaneRoute } from "./routes";
 import type { SentryHandlerDeps } from "./sentry-handlers";
 import { mountSentryRoutes } from "./sentry-route-mounting";
@@ -46,8 +47,9 @@ import { mountUnavailableControlPlaneRoutes } from "./unavailable-handler";
  * Control Plane API Worker HTTP surface.
  *
  * Every management route mounts through the @splitch/worker-runtime registrar so
- * the fixed guard chain (parse → resolve principal → rate-limit → scopes +
- * App/Env co-scope → idempotency → handler) is identical across routes and never
+ * the fixed guard chain (parse → resolve principal → rate-limit → authenticated
+ * selector resolution → scopes + App/Env co-scope → idempotency → handler) is
+ * identical across routes and never
  * hand-rolled per endpoint (worker-runtime.md). This module wires the
  * control-plane-token resolver under its AuthKind and mounts the routes; the
  * guard does the rest.
@@ -55,8 +57,9 @@ import { mountUnavailableControlPlaneRoutes } from "./unavailable-handler";
  * Authorization for App reads is the token's App co-scope binding plus the
  * resolver's live membership recheck: a removed or role-incompatible membership
  * is refused before the guard, so a stale App-scoped token cannot reach the
- * handler. The guard still rejects a principal not bound to the path's App with
- * FORBIDDEN BEFORE the handler (and thus before any repository call). Org
+ * handler. Canonical App selectors are co-scoped before selector repository
+ * reads; human App selectors require one membership-bounded lookup before the
+ * resolved App is co-scoped. Org
  * routes also layer live D1 membership checks in their owning handler module
  * (ADR-0022).
  */
@@ -97,6 +100,7 @@ export function controlPlaneRegistrar(deps: AppDeps): Registrar {
         : {}),
     },
     rateLimiter: deps.rateLimiter,
+    authenticatedInputResolver: makePathSelectorResolver(deps.repo),
     defaultHeaders: deps.defaultHeaders,
     observability: deps.observability,
   };
@@ -181,6 +185,7 @@ export function createApp(deps: AppDeps): Hono {
     repo: deps.repo,
     configStore: deps.configStore,
     defaultHeaders: deps.defaultHeaders,
+    observability: deps.observability,
   });
 
   registrar.mount(app, controlPlaneRoute("apps_list"), appEnvironmentHandlers.listApps);

@@ -1,5 +1,9 @@
-import type { ErrorResponse, RouteContract } from "@splitch/contracts";
-import type { Principal } from "../principal";
+import {
+  type ErrorResponse,
+  MEMBERSHIP_WIDE_READ_AUTHORIZATION,
+  type RouteContract,
+} from "@splitch/contracts";
+import type { Principal, PrincipalMemberships } from "../principal";
 
 /**
  * Step 5. Enforce required scopes, then Org/App/Environment co-scope (ADR-0027).
@@ -15,6 +19,9 @@ export function enforceScopes(
   principal: Principal,
   params: Record<string, string>,
 ): ErrorResponse | null {
+  const authorizationError = membershipWideReadError(contract, principal);
+  if (authorizationError) return authorizationError;
+
   const held = new Set(principal.scopes);
   const missing = contract.scopes.filter((scope) => !held.has(scope));
   if (missing.length > 0) {
@@ -33,10 +40,11 @@ export function enforceScopes(
   // the principal to be bound to that Org. A null `orgId` means the credential is
   // bound to NO single Org (it named zero or many Org scopes), which on an
   // Org-scoped route is FORBIDDEN, not a silent pass: an org-unbound token must
-  // not read or manage an Org by path. This rejects before any repository call,
-  // so an org_id-less context never reaches the seam.
+  // not read or manage an Org by path. Authenticated selector normalization may
+  // already have run, but an org_id-less context never reaches the handler or an
+  // Org resource repository call.
   const pathOrgId = params.orgId;
-  if (pathOrgId !== undefined && principal.orgId !== pathOrgId) {
+  if (pathOrgId !== undefined && !organizationAccessCovers(principal, pathOrgId)) {
     return forbidden("credential is not scoped to this organization");
   }
 
@@ -44,10 +52,11 @@ export function enforceScopes(
   // org-level control-plane token, or a data-plane key not yet app-bound). The
   // App IS the tenant boundary, so a route that co-scopes on `:appId` requires
   // that binding: a null App axis is FORBIDDEN, not a silent pass (principal.ts:
-  // "a route that requires co-scope on a null axis is a FORBIDDEN"). This rejects
-  // before any repository call, so an app_id-less context never reaches the seam.
+  // "a route that requires co-scope on a null axis is a FORBIDDEN"). An opted-in
+  // selector resolver may bind a null axis from one matching signed App scope;
+  // otherwise it never reaches the handler or an App resource repository call.
   const pathAppId = params.appId;
-  if (pathAppId !== undefined && principal.appId !== pathAppId) {
+  if (pathAppId !== undefined && !appAccessCovers(principal, pathAppId)) {
     return forbidden("credential is not scoped to this app");
   }
 
@@ -66,6 +75,39 @@ export function enforceScopes(
   }
 
   return null;
+}
+
+function membershipWideReadError(
+  contract: RouteContract,
+  principal: Principal,
+): ErrorResponse | null {
+  if (principal.authorization !== MEMBERSHIP_WIDE_READ_AUTHORIZATION) return null;
+  if (contract.method !== "GET") return forbidden("credential grants read access only");
+  requireWideMemberships(principal);
+  return null;
+}
+
+export function requireWideMemberships(principal: Principal): PrincipalMemberships {
+  if (!principal.memberships) {
+    throw new Error("worker-runtime: membership-wide principal has no live memberships");
+  }
+  return principal.memberships;
+}
+
+export function organizationAccessCovers(principal: Principal, organizationId: string): boolean {
+  if (principal.authorization === MEMBERSHIP_WIDE_READ_AUTHORIZATION) {
+    return requireWideMemberships(principal).organizations.some(
+      (membership) => membership.id === organizationId,
+    );
+  }
+  return principal.orgId === organizationId;
+}
+
+export function appAccessCovers(principal: Principal, appId: string): boolean {
+  if (principal.authorization === MEMBERSHIP_WIDE_READ_AUTHORIZATION) {
+    return requireWideMemberships(principal).apps.some((membership) => membership.id === appId);
+  }
+  return principal.appId === appId;
 }
 
 function forbidden(message: string): ErrorResponse {
