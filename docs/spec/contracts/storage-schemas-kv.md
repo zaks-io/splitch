@@ -27,12 +27,14 @@ Store DO; a malformed `MembershipSet` is logged and rebuilt from D1 (see
 | `ck:{keyMaterialHash}` / `ak:{keyHash}`                 | `CredentialCacheKV`  | active: none; revoked: 5m    | Mutable credential entry; prefixes distinguish Client Keys from API Keys                     |
 | `revoked:{credentialCacheKey}`                          | presence marker      | none                         | Terminal revocation marker; checked before the mutable credential entry                      |
 | `member-profile:{userId}`                               | `{ email }`          | none                         | SESSION_STORE identity cache for Org member email; written at login, never in D1             |
-| `memberships:{userId}`                                  | `MembershipSet`      | 60 seconds                   | SESSION_STORE scope-resolution cache; invalidated before and after membership mutations      |
+| `memberships:{userId}`                                  | `MembershipSet`      | 60 seconds                   | SESSION_STORE scope-resolution cache; invalidated once after membership mutations commit     |
 
 `MembershipSet` contains the User's complete Organization memberships and App memberships. Each
 App entry carries its owning Organization id, and parsing rejects an App entry whose Organization
 is absent from the same value. Control Plane App- and Organization-scoped handlers still perform
-their documented uncached D1 membership check before returning tenant data.
+their documented uncached D1 membership checks before accessing tenant data, for every HTTP method.
+A concurrent reader can refill a pre-commit cache value, but live route checks make that a
+bounded-latency concern rather than an authorization decision.
 
 ### FlagConfigKV
 

@@ -37,7 +37,6 @@ export interface RegisterDeps {
   rateLimiter: RateLimiter;
   workos: WorkOsPort;
   tokenSigner: TokenSigner;
-  sessionStore: KVNamespace;
   now: () => number;
 }
 

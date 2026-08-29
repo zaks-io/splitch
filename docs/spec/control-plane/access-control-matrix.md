@@ -73,8 +73,10 @@ membership check in its handler. `GET /orgs` and Organization-scoped App listing
 6. Resolve every Organization and App membership axis the token carries through
    `memberships:{user_id}`. Cache misses read the complete set from D1. Only `GET` and `HEAD`
    requests fill the cache; mutating requests read D1 on a miss without filling. Membership
-   mutations delete the affected key before the D1 write and again after commit. A cache entry
-   expires after 60 seconds even if either delete is not yet visible at another Cloudflare location.
+   mutations delete the affected key once after the D1 commit. A concurrent reader can refill a
+   pre-commit value, but that is a bounded-latency concern because tenant routes recheck live D1
+   membership before reading data. A cache entry expires after 60 seconds even if the delete is not
+   yet visible at another Cloudflare location.
    This runs on the public bearer path and again on the MCP Control Plane door after delegation is
    verified. A removed or role-incompatible membership is refused before route scope checks.
    Tokens whose authority does not derive from membership (API Key, Client Key, and ordinary
@@ -89,13 +91,14 @@ membership check in its handler. `GET /orgs` and Organization-scoped App listing
 9. Extract `sub` as `user_id` for audit logging
 
 The membership cache is a scope-resolution optimization, not the final authorization decision.
-Every Control Plane `GET` route whose canonical path contains `:appId` performs an uncached
-`getAppMembership` read before its handler can return App data. The hand-mounted live-update route
-performs the same check before reading the Environment or opening the stream. App and Organization
-mutation handlers perform their role-specific uncached D1 checks. Organization-scoped reads perform
-an uncached `getOrgMembership` check, while `GET /orgs` reads the principal's memberships directly
-from D1. These live handler checks make removal effective on the next request; the 60-second TTL
-only bounds stale scope resolution and does not authorize an App-scoped response.
+Every Control Plane route whose canonical path contains `:appId` performs an uncached App membership
+read before its handler can access tenant data, regardless of HTTP method. The hand-mounted
+live-update route performs the same check before reading the Environment or opening the stream.
+Every Control Plane route whose canonical path contains `:orgId` performs an uncached Organization
+membership read, regardless of HTTP method. Mutation handlers may repeat the indexed read before
+enforcing their role-specific requirement. `GET /orgs` reads the principal's memberships directly
+from D1. These live checks make removal effective on the next request; the 60-second TTL only bounds
+stale scope resolution and does not authorize a tenant-scoped response.
 
 ## Trusted IdP allow-list
 

@@ -146,7 +146,6 @@ const handler = {
         workos,
         tokenSigner,
         now,
-        sessionStore: env.SESSION_STORE,
       },
       claim: {
         repo,

@@ -39,10 +39,14 @@ export async function invalidateMembershipCache(
   invalidator: MembershipCacheInvalidator | undefined,
   userIds: readonly string[],
 ): Promise<void> {
-  if (!invalidator) {
-    throw new Error("control-plane: membership cache invalidator is required");
-  }
+  requireMembershipCacheInvalidator(invalidator);
   await Promise.all([...new Set(userIds)].map((userId) => invalidator.invalidate(userId)));
+}
+
+function requireMembershipCacheInvalidator(
+  invalidator: MembershipCacheInvalidator | undefined,
+): asserts invalidator is MembershipCacheInvalidator {
+  if (!invalidator) throw new Error("control-plane: membership cache invalidator is required");
 }
 
 export async function mutateMembershipWithCacheInvalidation<T>(
@@ -50,8 +54,12 @@ export async function mutateMembershipWithCacheInvalidation<T>(
   userIds: readonly string[],
   mutate: () => Promise<T>,
 ): Promise<T> {
-  await invalidateMembershipCache(invalidator, userIds);
+  requireMembershipCacheInvalidator(invalidator);
   const result = await mutate();
+  // Invalidate once after D1 commits: Workers KV permits only one write per key
+  // per second. A concurrent reader can still refill a pre-commit value, but
+  // every tenant-scoped route now rechecks membership in live D1, so that race
+  // is a bounded-latency concern rather than an authorization decision.
   await invalidateMembershipCache(invalidator, userIds);
   return result;
 }

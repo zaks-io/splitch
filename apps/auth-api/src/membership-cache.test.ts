@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { mutateMembershipWithCacheInvalidation } from "./membership-cache";
 
 describe("membership cache mutation boundary", () => {
-  it("invalidates before the mutation and again after it commits", async () => {
+  it("invalidates once after the mutation commits", async () => {
     const events: string[] = [];
     const kv = {
       delete: async (key: string) => {
@@ -14,10 +14,22 @@ describe("membership cache mutation boundary", () => {
       events.push("mutation");
     });
 
-    expect(events).toEqual([
-      "delete:memberships:user_cache",
-      "mutation",
-      "delete:memberships:user_cache",
-    ]);
+    expect(events).toEqual(["mutation", "delete:memberships:user_cache"]);
+  });
+
+  it("does not invalidate when the mutation does not commit", async () => {
+    let deletes = 0;
+    const kv = {
+      delete: async () => {
+        deletes += 1;
+      },
+    } as unknown as KVNamespace;
+
+    await expect(
+      mutateMembershipWithCacheInvalidation(kv, ["user_cache"], async () => {
+        throw new Error("D1 mutation failed");
+      }),
+    ).rejects.toThrow("D1 mutation failed");
+    expect(deletes).toBe(0);
   });
 });

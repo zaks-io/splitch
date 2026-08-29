@@ -2,6 +2,7 @@ import { MEMBERSHIP_CACHE_TTL_SECONDS, type MembershipSet } from "@splitch/contr
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   invalidateMembershipCache,
+  type MembershipCacheInvalidator,
   makeMembershipCacheInvalidator,
   mutateMembershipWithCacheInvalidation,
 } from "./membership-cache";
@@ -155,28 +156,37 @@ describe("membership cache invalidation", () => {
     ).rejects.toThrow("KV delete failed");
   });
 
-  it("deletes a stale refill again after the D1 mutation commits", async () => {
-    let cached: string | null = JSON.stringify(memberships);
-    let live: MembershipSet = memberships;
-    const kv = {
-      get: async () => cached,
-      put: async (_key: string, value: string) => {
-        cached = value;
+  it("invalidates once after the D1 mutation commits", async () => {
+    const events: string[] = [];
+    const invalidator: MembershipCacheInvalidator = {
+      invalidate: async (userId) => {
+        events.push(`delete:${userId}`);
       },
-      delete: async () => {
-        cached = null;
-      },
-    } as unknown as KVNamespace;
-    const invalidator = makeMembershipCacheInvalidator(kv);
-    const repo = membershipIdentity(() => live);
+    };
 
     await mutateMembershipWithCacheInvalidation(invalidator, [USER], async () => {
-      await makeTokenMembershipAccess(repo, kv).resolve(USER);
-      live = { organizations: [], apps: [] };
+      events.push("mutation");
     });
 
-    const access = makeTokenMembershipAccess(repo, kv);
-    await expect(access.resolve(USER)).resolves.toEqual({ organizations: [], apps: [] });
+    expect(events).toEqual(["mutation", `delete:${USER}`]);
+  });
+
+  it("propagates a post-commit invalidation failure", async () => {
+    let committed = false;
+    await expect(
+      mutateMembershipWithCacheInvalidation(
+        {
+          invalidate: async () => {
+            throw new Error("KV delete failed");
+          },
+        },
+        [USER],
+        async () => {
+          committed = true;
+        },
+      ),
+    ).rejects.toThrow("KV delete failed");
+    expect(committed).toBe(true);
   });
 });
 
@@ -197,20 +207,6 @@ function countingIdentity() {
       },
     } as unknown as Parameters<typeof makeTokenMembershipAccess>[0],
   };
-}
-
-function membershipIdentity(read: () => MembershipSet) {
-  return {
-    identity: {
-      listOrgMembershipsForUser: async () =>
-        read().organizations.map((row) => ({ orgId: row.id, role: row.role })),
-      listAppMembershipsWithAppForUser: async () =>
-        read().apps.map((row) => ({
-          role: row.role,
-          app: { id: row.id, organizationId: row.organizationId },
-        })),
-    },
-  } as unknown as Parameters<typeof makeTokenMembershipAccess>[0];
 }
 
 function cache(raw: string): KVNamespace {

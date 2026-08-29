@@ -12,8 +12,11 @@ export async function mutateMembershipWithCacheInvalidation<T>(
   userIds: readonly string[],
   mutate: () => Promise<T>,
 ): Promise<T> {
-  await invalidateMembershipCache(kv, userIds);
   const result = await mutate();
+  // Invalidate once after D1 commits: Workers KV permits only one write per key
+  // per second. A concurrent reader can still refill a pre-commit value, but
+  // every tenant-scoped route now rechecks membership in live D1, so that race
+  // is a bounded-latency concern rather than an authorization decision.
   await invalidateMembershipCache(kv, userIds);
   return result;
 }

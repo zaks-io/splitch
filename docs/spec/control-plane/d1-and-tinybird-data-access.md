@@ -90,8 +90,9 @@ KV schema and write-through contracts: see [credentials-and-keys.md](credentials
 
 **Everything else is NOT in control-plane KV.** Flag config and live Run ID are in KV for the
 data-plane evaluate path. D1 remains authoritative for membership and configuration. App-scoped
-Control Plane reads perform an uncached D1 App membership check after cached scope resolution, so the
-membership cache is not the tenant-data authorization decision.
+Control Plane routes perform an uncached D1 App membership check after cached scope resolution,
+regardless of HTTP method. Organization-scoped routes perform an uncached D1 Organization membership
+check. The membership cache is therefore not the tenant-data authorization decision.
 
 Exception: `live_run:{app_id}:{environment_id}:{experiment_id}` → `run_id` is written by the
 control-plane at Start time (see [run-state-machine.md](run-state-machine.md)) for the edge to read.

@@ -1,127 +1,29 @@
 import type { ErrorResponse } from "@splitch/contracts";
-import { appScope, createRepository } from "@splitch/db";
-import type { RateLimiter } from "@splitch/worker-runtime";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { appScope } from "@splitch/db";
+import { describe, expect, it } from "vitest";
 import { createApp } from "../src/app";
 import { makeControlPlaneAuthResolver } from "../src/auth-resolver";
-import { type FixtureSigner, makeFixtureSigner } from "../src/fixture-signer";
 import { makeJwksVerifier } from "../src/jwks-verify";
 import { makeMembershipCacheInvalidator } from "../src/membership-cache";
 import { appAdminScope } from "../src/scope-binding";
 import { makeSessionStore } from "../src/session-store";
-import type { LocalBindings } from "../src/test-fixtures";
-import {
-  resetOrganizationGraph,
-  seedAppMember,
-  seedEnvironment,
-  seedOrgApp,
-  seedOrgMember,
-} from "../src/test-seeds";
 import { makeTokenMembershipAccess } from "../src/token-membership";
-import { makePoolBindings as makeLocalBindings } from "./pool-bindings";
+import {
+  ALICE,
+  ANALYTICS,
+  AUDIENCE,
+  allowLimiter,
+  BOB,
+  get,
+  harness,
+  NOW_MS,
+  OWNER,
+  PAYMENTS,
+  token,
+  useRevocationHarness,
+} from "./auth-membership-revocation-harness";
 
-/**
- * SPL-482/SPL-532: a signed App-scoped token is checked against the current
- * membership set. Writers invalidate the shared KV entry; Workers KV's roughly
- * one-minute propagation window is pinned explicitly below.
- */
-
-const AUDIENCE = "https://cp.splitch.test";
-const NOW_MS = Date.UTC(2026, 7, 27, 12, 0, 0);
-const nowSeconds = () => Math.floor(NOW_MS / 1000);
-
-const PAYMENTS = {
-  orgId: "org_membership_revocation_pay",
-  orgName: "Payments Revocation",
-  appId: "app_membership_revocation_pay",
-  appName: "Payments",
-  appKey: "payments-revocation",
-};
-const ANALYTICS = {
-  orgId: "org_membership_revocation_an",
-  orgName: "Analytics Revocation",
-  appId: "app_membership_revocation_an",
-  appName: "Analytics",
-  appKey: "analytics-revocation",
-};
-
-const ALICE = "user_membership_revocation_alice";
-const BOB = "user_membership_revocation_bob";
-const OWNER = "user_membership_revocation_owner";
-const ENV = "env_membership_revocation_pay";
-
-const allowLimiter: RateLimiter = () => ({ limited: false });
-
-interface Harness {
-  app: ReturnType<typeof createApp>;
-  signer: FixtureSigner;
-  bindings: LocalBindings;
-  repo: ReturnType<typeof createRepository>;
-}
-
-let h: Harness;
-
-beforeEach(async () => {
-  const bindings = await makeLocalBindings();
-  await resetOrganizationGraph(bindings.d1);
-  await seedOrgApp(bindings.d1, PAYMENTS);
-  await seedOrgApp(bindings.d1, ANALYTICS);
-  await seedEnvironment(bindings.d1, {
-    appId: PAYMENTS.appId,
-    environmentId: ENV,
-    key: "prod",
-  });
-  await seedOrgMember(bindings.d1, { orgId: PAYMENTS.orgId, userId: ALICE, role: "admin" });
-  await seedOrgMember(bindings.d1, { orgId: PAYMENTS.orgId, userId: OWNER, role: "owner" });
-  await seedOrgMember(bindings.d1, { orgId: ANALYTICS.orgId, userId: BOB, role: "member" });
-  await seedAppMember(bindings.d1, { appId: PAYMENTS.appId, userId: ALICE, role: "admin" });
-  await seedAppMember(bindings.d1, { appId: PAYMENTS.appId, userId: OWNER, role: "owner" });
-  await seedAppMember(bindings.d1, { appId: ANALYTICS.appId, userId: BOB, role: "member" });
-
-  const signer = await makeFixtureSigner();
-  const repo = createRepository(bindings.d1);
-  const app = createApp({
-    authResolver: makeControlPlaneAuthResolver({
-      verifier: makeJwksVerifier({
-        issuer: "https://auth.splitch.test",
-        fetchJwks: async () => signer.jwks,
-        controlPlaneAudience: AUDIENCE,
-      }),
-      sessions: makeSessionStore(bindings.kv),
-      membershipAccess: makeTokenMembershipAccess(repo, bindings.kv),
-      now: () => NOW_MS,
-    }),
-    rateLimiter: allowLimiter,
-    repo,
-    membershipCache: makeMembershipCacheInvalidator(bindings.kv),
-  });
-  h = { app, signer, bindings, repo };
-});
-
-afterEach(async () => {
-  await h.bindings.dispose();
-});
-
-function token(
-  sub: string,
-  scopes: string[],
-  authorization?: "membership-wide-read",
-): Promise<string> {
-  return h.signer.sign({
-    sub,
-    iss: "https://auth.splitch.test",
-    aud: AUDIENCE,
-    iat: nowSeconds(),
-    exp: nowSeconds() + 3600,
-    scopes,
-    auth_door: "id_jag",
-    ...(authorization ? { authorization } : {}),
-  });
-}
-
-function get(path: string, jwt: string): Promise<Response> {
-  return h.app.request(path, { headers: { authorization: `Bearer ${jwt}` } });
-}
+useRevocationHarness();
 
 describe("bearer token live membership recheck", () => {
   it("rebuilds wide read authority from D1 and refuses the same JWT after membership removal", async () => {
@@ -130,8 +32,8 @@ describe("bearer token live membership recheck", () => {
     expect((await get(`/apps/${PAYMENTS.appId}`, jwt)).status).toBe(200);
     expect((await get(`/apps/${ANALYTICS.appId}`, jwt)).status).toBe(403);
 
-    await h.repo.identity.deleteAppMembership(appScope(PAYMENTS.appId), ALICE);
-    await makeMembershipCacheInvalidator(h.bindings.kv).invalidate(ALICE);
+    await harness().repo.identity.deleteAppMembership(appScope(PAYMENTS.appId), ALICE);
+    await makeMembershipCacheInvalidator(harness().bindings.kv).invalidate(ALICE);
 
     const refused = await get(`/apps/${PAYMENTS.appId}`, jwt);
     expect(refused.status).toBe(403);
@@ -148,8 +50,8 @@ describe("bearer token live membership recheck", () => {
     expect(allowed.status).toBe(200);
     expect(await allowed.json()).toMatchObject({ id: PAYMENTS.appId });
 
-    await h.repo.identity.deleteAppMembership(appScope(PAYMENTS.appId), ALICE);
-    await makeMembershipCacheInvalidator(h.bindings.kv).invalidate(ALICE);
+    await harness().repo.identity.deleteAppMembership(appScope(PAYMENTS.appId), ALICE);
+    await makeMembershipCacheInvalidator(harness().bindings.kv).invalidate(ALICE);
 
     const refused = await get(`/apps/${PAYMENTS.appId}`, jwt);
     expect(refused.status).toBe(403);
@@ -164,10 +66,12 @@ describe("bearer token live membership recheck", () => {
     const jwt = await token(ALICE, [appAdminScope(PAYMENTS.appId)]);
     expect((await get(`/apps/${PAYMENTS.appId}`, jwt)).status).toBe(200);
 
-    const removed = await h.repo.identity.deleteOrgMembership(PAYMENTS.orgId, ALICE);
+    const removed = await harness().repo.identity.deleteOrgMembership(PAYMENTS.orgId, ALICE);
     expect(removed).toBe(1);
-    expect(await h.repo.identity.getAppMembership(appScope(PAYMENTS.appId), ALICE)).not.toBeNull();
-    await makeMembershipCacheInvalidator(h.bindings.kv).invalidate(ALICE);
+    expect(
+      await harness().repo.identity.getAppMembership(appScope(PAYMENTS.appId), ALICE),
+    ).not.toBeNull();
+    await makeMembershipCacheInvalidator(harness().bindings.kv).invalidate(ALICE);
 
     const refused = await get(`/apps/${PAYMENTS.appId}`, jwt);
     expect(refused.status).toBe(403);
@@ -178,8 +82,10 @@ describe("bearer token live membership recheck", () => {
     const jwt = await token(ALICE, [appAdminScope(PAYMENTS.appId)]);
     expect((await get(`/apps/${PAYMENTS.appId}`, jwt)).status).toBe(200);
 
-    await h.repo.identity.updateAppMembership(appScope(PAYMENTS.appId), ALICE, { role: "member" });
-    await makeMembershipCacheInvalidator(h.bindings.kv).invalidate(ALICE);
+    await harness().repo.identity.updateAppMembership(appScope(PAYMENTS.appId), ALICE, {
+      role: "member",
+    });
+    await makeMembershipCacheInvalidator(harness().bindings.kv).invalidate(ALICE);
 
     const refused = await get(`/apps/${PAYMENTS.appId}`, jwt);
     expect(refused.status).toBe(403);
@@ -194,8 +100,8 @@ describe("bearer token live membership recheck", () => {
     expect((await get(`/apps/${PAYMENTS.appId}`, aliceJwt)).status).toBe(200);
     expect((await get(`/apps/${ANALYTICS.appId}`, bobJwt)).status).toBe(200);
 
-    await h.repo.identity.deleteAppMembership(appScope(PAYMENTS.appId), ALICE);
-    await makeMembershipCacheInvalidator(h.bindings.kv).invalidate(ALICE);
+    await harness().repo.identity.deleteAppMembership(appScope(PAYMENTS.appId), ALICE);
+    await makeMembershipCacheInvalidator(harness().bindings.kv).invalidate(ALICE);
 
     expect((await get(`/apps/${PAYMENTS.appId}`, aliceJwt)).status).toBe(403);
     const stillAllowed = await get(`/apps/${ANALYTICS.appId}`, bobJwt);
@@ -216,7 +122,7 @@ describe("bearer token live membership recheck", () => {
     const ownerJwt = await token(OWNER, [`app:${PAYMENTS.appId}:owner`]);
     expect((await get(`/apps/${PAYMENTS.appId}`, memberJwt)).status).toBe(200);
 
-    const removed = await h.app.request(`/apps/${PAYMENTS.appId}/members/${ALICE}`, {
+    const removed = await harness().app.request(`/apps/${PAYMENTS.appId}/members/${ALICE}`, {
       method: "DELETE",
       headers: { authorization: `Bearer ${ownerJwt}` },
     });
@@ -228,22 +134,22 @@ describe("bearer token live membership recheck", () => {
   });
 });
 
-describe("membership cache security backstops", () => {
+describe("membership cache wiring and not-found contracts", () => {
   it("fails loud with 500 when a membership mutation has no invalidator", async () => {
     const ownerJwt = await token(OWNER, [`app:${PAYMENTS.appId}:owner`]);
     const app = createApp({
       authResolver: makeControlPlaneAuthResolver({
         verifier: makeJwksVerifier({
           issuer: "https://auth.splitch.test",
-          fetchJwks: async () => h.signer.jwks,
+          fetchJwks: async () => harness().signer.jwks,
           controlPlaneAudience: AUDIENCE,
         }),
-        sessions: makeSessionStore(h.bindings.kv),
-        membershipAccess: makeTokenMembershipAccess(h.repo, h.bindings.kv, false),
+        sessions: makeSessionStore(harness().bindings.kv),
+        membershipAccess: makeTokenMembershipAccess(harness().repo, harness().bindings.kv, false),
         now: () => NOW_MS,
       }),
       rateLimiter: allowLimiter,
-      repo: h.repo,
+      repo: harness().repo,
     });
 
     const refused = await app.request(`/apps/${PAYMENTS.appId}/members/${ALICE}`, {
@@ -251,7 +157,9 @@ describe("membership cache security backstops", () => {
       headers: { authorization: `Bearer ${ownerJwt}` },
     });
     expect(refused.status).toBe(500);
-    expect(await h.repo.identity.getAppMembership(appScope(PAYMENTS.appId), ALICE)).not.toBeNull();
+    expect(
+      await harness().repo.identity.getAppMembership(appScope(PAYMENTS.appId), ALICE),
+    ).not.toBeNull();
   });
 
   it("refuses App metadata, Environment, and Flag reads after live membership removal despite a warm cache", async () => {
@@ -260,8 +168,8 @@ describe("membership cache security backstops", () => {
     expect((await get(`/apps/${PAYMENTS.appId}/envs`, jwt)).status).toBe(200);
     expect((await get(`/apps/${PAYMENTS.appId}/flags`, jwt)).status).toBe(200);
 
-    await h.repo.identity.deleteAppMembership(appScope(PAYMENTS.appId), ALICE);
-    await h.repo.identity.deleteOrgMembership(PAYMENTS.orgId, ALICE);
+    await harness().repo.identity.deleteAppMembership(appScope(PAYMENTS.appId), ALICE);
+    await harness().repo.identity.deleteOrgMembership(PAYMENTS.orgId, ALICE);
 
     expect((await get(`/apps/${PAYMENTS.appId}`, jwt)).status).toBe(403);
     expect((await get(`/apps/${PAYMENTS.appId}/envs`, jwt)).status).toBe(403);
@@ -274,15 +182,15 @@ describe("membership cache security backstops", () => {
       authResolver: makeControlPlaneAuthResolver({
         verifier: makeJwksVerifier({
           issuer: "https://auth.splitch.test",
-          fetchJwks: async () => h.signer.jwks,
+          fetchJwks: async () => harness().signer.jwks,
           controlPlaneAudience: AUDIENCE,
         }),
-        sessions: makeSessionStore(h.bindings.kv),
+        sessions: makeSessionStore(harness().bindings.kv),
         now: () => NOW_MS,
         membershipAccess: undefined as unknown as ReturnType<typeof makeTokenMembershipAccess>,
       }),
       rateLimiter: allowLimiter,
-      repo: h.repo,
+      repo: harness().repo,
     });
 
     const refused = await app.request(`/apps/${PAYMENTS.appId}`, {
@@ -301,10 +209,10 @@ describe("membership cache security backstops", () => {
       authResolver: makeControlPlaneAuthResolver({
         verifier: makeJwksVerifier({
           issuer: "https://auth.splitch.test",
-          fetchJwks: async () => h.signer.jwks,
+          fetchJwks: async () => harness().signer.jwks,
           controlPlaneAudience: AUDIENCE,
         }),
-        sessions: makeSessionStore(h.bindings.kv),
+        sessions: makeSessionStore(harness().bindings.kv),
         now: () => NOW_MS,
         membershipAccess: {
           authorize: async () => {
@@ -316,7 +224,7 @@ describe("membership cache security backstops", () => {
         },
       }),
       rateLimiter: allowLimiter,
-      repo: h.repo,
+      repo: harness().repo,
     });
 
     const refused = await app.request(`/apps/${PAYMENTS.appId}`, {
@@ -333,8 +241,8 @@ describe("membership cache security backstops", () => {
     const jwt = await token(ALICE, [appAdminScope(PAYMENTS.appId)]);
     expect((await get(`/apps/${PAYMENTS.appId}/envs`, jwt)).status).toBe(200);
 
-    await h.repo.identity.deleteAppMembership(appScope(PAYMENTS.appId), ALICE);
-    await makeMembershipCacheInvalidator(h.bindings.kv).invalidate(ALICE);
+    await harness().repo.identity.deleteAppMembership(appScope(PAYMENTS.appId), ALICE);
+    await makeMembershipCacheInvalidator(harness().bindings.kv).invalidate(ALICE);
 
     const missingApp = await get("/apps/app_does_not_exist", jwt);
     const removedMember = await get(`/apps/${PAYMENTS.appId}/envs`, jwt);

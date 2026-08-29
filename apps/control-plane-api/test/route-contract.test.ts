@@ -219,7 +219,9 @@ describe("control-plane route contract", () => {
       request("POST", `/apps/${PRIMARY.appId}/privacy/entities/delete`, memberAppJwt, entityBody()),
     ])) {
       expect(response.status).toBe(403);
-      expect(((await response.json()) as ErrorResponse).code).toBe("INSUFFICIENT_SCOPES");
+      // The structural App boundary runs before the handler's role gate. This
+      // principal has a member scope but no live App membership row.
+      expect(((await response.json()) as ErrorResponse).code).toBe("FORBIDDEN");
     }
     // Scope-valid outsider JWT with no live App membership is FORBIDDEN, not
     // self-contradicting INSUFFICIENT_SCOPES (SPL-298).

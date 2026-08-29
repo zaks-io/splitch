@@ -130,7 +130,6 @@ export function makeDoorBDeps(
       workos,
       tokenSigner,
       now,
-      sessionStore,
     },
     claim: {
       repo,

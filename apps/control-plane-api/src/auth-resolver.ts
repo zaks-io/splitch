@@ -1,4 +1,4 @@
-import { type AuthDoor, MEMBERSHIP_WIDE_READ_AUTHORIZATION } from "@splitch/contracts";
+import type { AuthDoor } from "@splitch/contracts";
 import {
   CONTROL_PANEL_DELEGATION_HEADER,
   verifyControlPanelDelegation,

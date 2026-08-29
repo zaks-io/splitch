@@ -5,7 +5,7 @@ import type { AppDeps } from "./app-deps";
 import { appEnvironmentCleanupDeps } from "./app-environment-cleanup-deps";
 import { makeAppEnvironmentHandlers } from "./app-environment-handlers";
 import { makeAppMemberHandlers } from "./app-member-handlers";
-import { withLiveAppReadMembership } from "./app-read-authz";
+import { withLiveTenantMembership } from "./app-read-authz";
 import { makeOtherApprovalApplication } from "./approval-application";
 import { makeApprovalHandlers } from "./approval-handlers";
 import { unavailableAnalysisResults } from "./attention-analysis-reader";
@@ -37,14 +37,14 @@ import { mountUnavailableControlPlaneRoutes } from "./unavailable-handler";
  * control-plane-token resolver under its AuthKind and mounts the routes; the
  * guard does the rest.
  *
- * Authorization for App reads is the token's App co-scope binding plus a live
- * handler-boundary membership read: a removed member cannot reach tenant data
- * even while another location still holds a cached membership set. Canonical
- * App selectors are co-scoped before selector repository
+ * Authorization for every App- or Organization-scoped control-plane-token route
+ * includes a live handler-boundary membership read: a removed member cannot
+ * reach tenant data even while another location still holds a cached membership
+ * set. Canonical App selectors are co-scoped before selector repository
  * reads; human App selectors require one membership-bounded lookup before the
  * resolved App is co-scoped. Org
- * routes also layer live D1 membership checks in their owning handler module
- * (ADR-0022).
+ * routes may also layer role-specific live D1 checks in their owning handler
+ * module (ADR-0022).
  */
 
 /** Build the registrar bound to this Worker's control-plane-token resolver. */
@@ -61,7 +61,7 @@ export function controlPlaneRegistrar(deps: AppDeps): Registrar {
     defaultHeaders: deps.defaultHeaders,
     observability: deps.observability,
   };
-  return withLiveAppReadMembership(createRegistrar(registrarDeps), deps.repo);
+  return withLiveTenantMembership(createRegistrar(registrarDeps), deps.repo);
 }
 
 // biome-ignore lint/complexity/noExcessiveLinesPerFunction: route mounting stays explicit so no operation can be silently omitted
