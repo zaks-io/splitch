@@ -84,11 +84,7 @@ describe("Evaluation Worker service bindings", () => {
     ).toBe(true);
   });
 
-  it.each(
-    targets,
-  )("stages the cutoff-aware Assignment writer before retiring the legacy namespace for %s", (_target, target) => {
-    // Cloudflare rejects deletion while a live deployment still binds V1, so
-    // this release switches to V2 and a later release can delete V1.
+  it.each(targets)("retires the unbound legacy Assignment namespace for %s", (_target, target) => {
     expect(
       target?.durable_objects?.bindings?.find(
         (candidate) => candidate.name === "ASSIGNMENT_STORE_WRITER",
@@ -101,14 +97,13 @@ describe("Evaluation Worker service bindings", () => {
       tag: "v6_assignment_store_writer_v2",
       new_sqlite_classes: ["AssignmentStoreDurableObjectV2"],
     });
-    expect(
-      target?.migrations?.some((migration) =>
-        migration.deleted_classes?.includes("AssignmentStoreDurableObject"),
-      ),
-    ).toBe(false);
+    expect(target?.migrations).toContainEqual({
+      tag: "v7_delete_assignment_store_v1",
+      deleted_classes: ["AssignmentStoreDurableObject"],
+    });
     const worker = readFileSync(fileURLToPath(new URL("./index.ts", import.meta.url)), "utf8");
     expect(worker).toMatch(/^\s*AssignmentStoreDurableObjectV2,$/mu);
-    expect(worker).toMatch(/^\s*AssignmentStoreDurableObject,$/mu);
+    expect(worker).not.toMatch(/^\s*AssignmentStoreDurableObject,$/mu);
   });
 
   /**

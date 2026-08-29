@@ -59,10 +59,6 @@ export class AssignmentStoreDurableObjectV2 extends DurableObject<AssignmentStor
   }
 }
 
-// Cloudflare requires the prior class export to remain for the deployment that
-// moves its binding. The following delete-class release removes this holdover.
-export class AssignmentStoreDurableObject extends AssignmentStoreDurableObjectV2 {}
-
 function assignmentIdentity(body: Record<string, unknown>): {
   appId: string;
   idType: string;
