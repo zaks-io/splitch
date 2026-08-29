@@ -186,6 +186,9 @@ function applyCommandSpecificFields(
   invocation: ParsedInvocation,
   input: Record<string, unknown>,
 ): void {
+  if (command.operationId === "principal_flags_list" && invocation.flags.withConfig) {
+    input.include = "config";
+  }
   if (command.operationId === "flags_promote" && invocation.flags.fromEnvironmentId) {
     input.fromEnvironmentId = invocation.flags.fromEnvironmentId;
     input.select = input.select ?? { enabled: true };

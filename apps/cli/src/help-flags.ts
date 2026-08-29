@@ -50,13 +50,13 @@ export function commandFlags(command: CliCommandDefinition): HelpFlag[] {
 
 function scopeFlags(command: CliCommandDefinition, fields: ReadonlySet<string>): HelpFlag[] {
   const flags: HelpFlag[] = [];
-  if (command.needsApp)
+  if (showsAppFlag(command))
     flags.push(flag("--app <app>", "string", "SPLITCH_APP or config", "App ID or slug."));
   if (command.needsEnvironment) {
     flags.push(
       flag("--env <environment>", "string", "SPLITCH_ENV or config", "Environment ID or key."),
     );
-  } else if (command.operationId === "flags_list") {
+  } else if (isFlagListOperation(command.operationId)) {
     flags.push(
       flag(
         "--env <environment>",
@@ -84,6 +84,14 @@ function scopeFlags(command: CliCommandDefinition, fields: ReadonlySet<string>):
   }
   flags.push(...selectorFlags(command, fields));
   return flags;
+}
+
+function showsAppFlag(command: CliCommandDefinition): boolean {
+  return command.needsApp || command.operationId === "principal_flags_list";
+}
+
+function isFlagListOperation(operationId: string): boolean {
+  return operationId === "flags_list" || operationId === "principal_flags_list";
 }
 
 function selectorFlags(
@@ -121,12 +129,13 @@ function operationFlags(command: CliCommandDefinition): HelpFlag[] {
   }
   switch (command.operationId) {
     case "flags_list":
+    case "principal_flags_list":
       return [
         flag(
           "--with-config",
           "boolean",
           "false",
-          "Include enabled, rollout, and Default Variant for one Environment.",
+          "Include enabled, rollout, and Default Variant for one Environment with --app, or full Flag Configurations across Apps.",
         ),
       ];
     case "flags_create":

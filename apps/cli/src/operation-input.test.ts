@@ -321,14 +321,4 @@ describe("canonical approval input", () => {
     );
     expect(fromSplitchEnv.environmentId).toBeUndefined();
   });
-
-  it("flags list stays app-scoped and does not forward environmentId", () => {
-    const command = requireCommand(["flags", "list"]);
-    const input = buildOperationInput(
-      command,
-      parseInvocation(["flags", "list", "--json", "--app", "app_cli", "--env", "env_prod"]),
-      { appId: "app_cli", environmentId: "env_prod", environmentSource: "flag" },
-    );
-    expect(input).toEqual({ appId: "app_cli" });
-  });
 });

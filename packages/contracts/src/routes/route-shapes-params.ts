@@ -18,11 +18,14 @@ const EnvironmentIdsQuerySchema = z
   .string()
   .min(1)
   .regex(/^[^,]+(?:,[^,]+)*$/, "envs must be a comma-separated list of Environment IDs");
+const FlagHydrationQueryShape = {
+  include: z.literal("config").optional(),
+  envs: EnvironmentIdsQuerySchema.optional(),
+};
 export const FlagListQuerySchema = z
   .object({
     environmentId: z.string().min(1).optional(),
-    include: z.literal("config").optional(),
-    envs: EnvironmentIdsQuerySchema.optional(),
+    ...FlagHydrationQueryShape,
   })
   .strict()
   .superRefine((query, ctx) => {
@@ -35,6 +38,14 @@ export const FlagListQuerySchema = z
         path: ["environmentId"],
         message: "environmentId cannot be combined with include=config; use envs",
       });
+    }
+  });
+export const PrincipalFlagListQuerySchema = z
+  .object(FlagHydrationQueryShape)
+  .strict()
+  .superRefine((query, ctx) => {
+    if (query.envs && query.include !== "config") {
+      ctx.addIssue({ code: "custom", path: ["envs"], message: "envs requires include=config" });
     }
   });
 export const AppMemberParams = z.object({ appId: AppSelectorSchema, userId: z.string() });

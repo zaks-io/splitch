@@ -132,7 +132,7 @@ splitch apps list --org <org_id>
 splitch apps create --org <org_id> --name <name>   # provisions dev + prod Environments (DX default)
 splitch envs list [--app <app_id>]                  # [ctx]
 splitch envs create [--app <app_id>] --key <key> [--name <name>]  # [ctx]
-splitch flags list [--app <app_id>] [--with-config --env <environment_id>]  # [ctx]
+splitch flags list [--app <app_id>] [--with-config] [--env <environment_id>] # scope-free reads all member Apps
 splitch flags create [--app <app_id>] --key <key> ...                       # [ctx] App-level definition
 splitch flags promote [--app <app_id>] [--env <environment_id>] <flag_id>   # [ctx] move Flag Configuration into an Env (ADR-0028)
 splitch event-definitions list [--app <app_id>]                              # [ctx] App-level
@@ -163,12 +163,17 @@ are App/Env scoped accordingly. Environment-level writes that the Environment Po
 require a `--confirm` affordance (ADR-0029); it submits the canonical
 `review.action = "approve_and_apply"` and never creates a separate confirmation pipeline.
 
-`splitch flags list` is an App-level catalog read by default. `--with-config` adds each Flag's exact
-Configuration summary (`enabled`, baseline `rollout`, and `defaultVariant`) for one Environment and
-therefore requires a non-empty Environment resolved from `--env`, `SPLITCH_ENV`, or active config.
-The CLI passes that Environment as `flags_list.environmentId`; it fails before the request when
-`--with-config` has no resolved Environment. `--env` without `--with-config` does not change the
-App-level response.
+With no resolved App, `splitch flags list` makes one `principal_flags_list` request and returns every
+Flag visible through the principal's live Organization and App memberships. Human output groups rows
+by the `org.slug/app.key` selector and includes the canonical App ID. `--with-config` uses the
+principal route's `include=config` hydration across those Apps. If the bounded result is incomplete,
+the CLI says to narrow it with `--app`.
+
+With `--app`, `SPLITCH_APP`, or active App config, the command keeps using the scoped `flags_list`
+route. `--with-config` there adds each Flag's exact Configuration summary (`enabled`, baseline
+`rollout`, and `defaultVariant`) for one Environment and requires a non-empty Environment resolved
+from `--env`, `SPLITCH_ENV`, or active config. An explicit `--env` also selects this scoped route and
+therefore requires an App. `--env` without `--with-config` does not change the App-level response.
 
 `--json` envelopes are verb-class consistent: a get returns the resource bare, and the matching
 write returns those same fields at the same paths with `approvalRequest` alongside (never wrapped
@@ -178,9 +183,9 @@ complete page from a truncated one.
 
 **Output and scripting:** every command accepts `--json` for machine-readable output (the same
 shape the MCP tool returns), so the CLI is pipe-able and an agent shelling out to the CLI parses one
-contract. Default output is indented, human-readable JSON plus exit codes. When a required scope is
-unresolved, the CLI fails loud with the exact `splitch use` / `--app` remedy — never a silent
-default.
+contract. Default output is indented, human-readable JSON plus exit codes. When a write or
+single-target read requires scope and it is unresolved, the CLI fails loud with the exact
+`splitch use` / `--app` remedy. List reads do not silently choose an App.
 
 ## MCP server
 

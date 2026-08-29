@@ -125,7 +125,6 @@ async function executeCommand(
   deps: CliDeps,
   io: CliIo,
 ): Promise<CliResult> {
-  const scopedCommand = commandForInvocation(command, invocation);
   // Positionals before scope / SDK so misuse never reaches control-plane-sdk
   // path building (and never needs credentials to learn the argument is required).
   const positionalError = validateRequiredPositionals(command, invocation, io);
@@ -138,6 +137,7 @@ async function executeCommand(
     env: deps.env,
     cwd: deps.cwd,
   });
+  const scopedCommand = commandForContext(command, invocation, context);
 
   const scopeError = validateCommandScope(scopedCommand, context, io);
   if (scopeError) {
@@ -165,14 +165,14 @@ async function executeCommand(
   let input: Record<string, unknown>;
   try {
     input = buildOperationInput(scopedCommand, invocation, context);
-    assertPathParamsPresent(command, input);
-    input = await resolveFlagIdInInput(deps, command, context, input);
+    assertPathParamsPresent(scopedCommand, input);
+    input = await resolveFlagIdInInput(deps, scopedCommand, context, input);
   } catch (error) {
     return handleInputError(error, invocation, io);
   }
   const outputFile = invocation.flags.outputFile;
   return executeApiOperation(
-    command.operationId,
+    scopedCommand.operationId,
     input,
     invocation,
     deps,
@@ -240,10 +240,20 @@ function isCloudflareCommand(command: CliCommandDefinition): command is CliComma
   return command.kind.startsWith("cloudflare_");
 }
 
-function commandForInvocation(
+function commandForContext(
   command: CliCommandDefinition,
   invocation: ParsedInvocation,
+  context: ResolvedContext,
 ): CliCommandDefinition {
+  if (command.operationId === "principal_flags_list") {
+    if (!context.appId && !context.environmentId) return command;
+    return {
+      ...command,
+      operationId: "flags_list",
+      needsApp: true,
+      needsEnvironment: invocation.flags.withConfig,
+    };
+  }
   if (command.operationId !== "flags_list" || !invocation.flags.withConfig) {
     return command;
   }

@@ -239,7 +239,9 @@ function cachedAuthorizationUsable(
   binding: TokenAuthorization | undefined,
   cachedBinding: string,
 ): boolean {
-  if (binding?.kind === MEMBERSHIP_WIDE_READ_AUTHORIZATION) return true;
+  if (binding?.kind === MEMBERSHIP_WIDE_READ_AUTHORIZATION) {
+    return cachedBinding === MEMBERSHIP_WIDE_READ_AUTHORIZATION;
+  }
   if (binding === undefined) return cachedBinding !== MEMBERSHIP_WIDE_READ_AUTHORIZATION;
   return cachedBinding === bindingKey(binding);
 }
@@ -247,7 +249,7 @@ function cachedAuthorizationUsable(
 function refreshBindingFor(
   binding: TokenAuthorization | undefined,
 ): TokenAuthorization | undefined {
-  return binding?.kind === MEMBERSHIP_WIDE_READ_AUTHORIZATION ? undefined : binding;
+  return binding;
 }
 
 /**

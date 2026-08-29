@@ -19,21 +19,12 @@ afterEach(async () => {
 });
 
 describe("context resolution", () => {
-  it("fails loud with the splitch use / --app remedy when App scope is unresolved", async () => {
+  it("fails loud with the splitch use / --app remedy for an unresolved single-Flag read", async () => {
     const { dir, credentialPath } = await makeTempHome();
     await writeFile(credentialPath, `${JSON.stringify(storedCredential())}\n`);
-    const transport = new FakeCliTransport([
-      {
-        match: (request) => request.url.includes("/apps/app_local/flags"),
-        status: 200,
-        body: flagListPage,
-      },
-    ]);
-
-    const code = await runCli(["flags", "list", "--json"], {
+    const code = await runCli(["flags", "get", "flag_checkout", "--json"], {
       credentialPath,
       cwd: dir,
-      fetch: transport.fetch,
     });
 
     expect(code).toBe(EXIT_SCOPE);

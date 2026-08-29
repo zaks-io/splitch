@@ -48,8 +48,8 @@ export type {
 // biome-ignore lint/performance/noBarrelFile: package public-API entry (exports "." → index.js); the seam + schema surface is intentionally aggregated here
 export { createRepository } from "./repo/index";
 export { appDeletionRetryActorHash } from "./repo/app-deletion-sagas";
-export type { EnvScope, TenantScope } from "./repo/scope";
-export { appScope, envScope } from "./repo/scope";
+export type { EnvScope, MultiAppScope, TenantScope } from "./repo/scope";
+export { appScope, envScope, multiAppScope } from "./repo/scope";
 export type { ScopedTable } from "./repo/scoped-table";
 export type {
   SentryInstallationRow,

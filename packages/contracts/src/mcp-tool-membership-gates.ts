@@ -1,4 +1,5 @@
 import { type UserRole, userRoles } from "./leaf-schemas-runtime";
+import { MEMBERSHIP_WIDE_READ_AUTHORIZATION } from "./access-token-authorization";
 import { isMcpToolRoute } from "./mcp-tools";
 import type { ApiRouteContract } from "./openapi-route";
 import { routeRegistry } from "./route-registry";
@@ -9,7 +10,7 @@ import { routeRegistry } from "./route-registry";
  * not HTTP verb heuristics. Validated at module load against the route registry.
  */
 
-export const membershipAxes = ["token", "org", "app"] as const;
+export const membershipAxes = ["token", "org", "app", MEMBERSHIP_WIDE_READ_AUTHORIZATION] as const;
 export type MembershipAxis = (typeof membershipAxes)[number];
 
 export const membershipRoles = userRoles;
@@ -21,6 +22,7 @@ export interface RouteMembershipGate {
 }
 
 const TOKEN: RouteMembershipGate = { axis: "token" };
+const WIDE_READ: RouteMembershipGate = { axis: MEMBERSHIP_WIDE_READ_AUTHORIZATION };
 const ORG_MEMBER: RouteMembershipGate = { axis: "org", minimumRole: "member" };
 const ORG_ADMIN: RouteMembershipGate = { axis: "org", minimumRole: "admin" };
 const ORG_OWNER: RouteMembershipGate = { axis: "org", minimumRole: "owner" };
@@ -60,6 +62,7 @@ const MCP_TOOL_MEMBERSHIP_GATES = {
   approval_requests_get: APP_MEMBER,
   approval_request_reviews_create: APP_MEMBER,
   flags_list: APP_MEMBER,
+  principal_flags_list: WIDE_READ,
   flags_create: APP_ADMIN,
   flags_get: APP_MEMBER,
   flags_update: APP_ADMIN,
@@ -134,7 +137,9 @@ export function getRouteMembershipGate(operationId: string): RouteMembershipGate
 }
 
 export function membershipGatePatterns(gate: RouteMembershipGate): readonly string[] {
-  if (gate.axis === "token") return ["token"];
+  if (gate.axis === "token" || gate.axis === MEMBERSHIP_WIDE_READ_AUTHORIZATION) {
+    return [gate.axis];
+  }
   return [`${gate.axis}:${gate.minimumRole}`];
 }
 
@@ -156,6 +161,10 @@ const ROLE_RANK: Record<MembershipRole, number> = {
 
 export function scopeSatisfiesMembershipGate(heldScope: string, gate: string): boolean {
   if (gate === "token") return heldScope.length > 0;
+  // MCP access tokens cannot carry the Control Plane's membership-wide
+  // authorization marker, so this derived tool stays visible without claiming
+  // that any selector scope grants it.
+  if (gate === MEMBERSHIP_WIDE_READ_AUTHORIZATION) return false;
   const [axis, minimumRole] = gate.split(":") as [MembershipAxis, MembershipRole];
   const match = (axis === "app" ? APP_SCOPE : ORG_SCOPE).exec(heldScope);
   if (!match) return false;

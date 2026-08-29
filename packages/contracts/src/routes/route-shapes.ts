@@ -31,6 +31,7 @@ export {
   ExperimentParams,
   FlagGetQuerySchema,
   FlagListQuerySchema,
+  PrincipalFlagListQuerySchema,
   FlagParams,
   FlagVariantParams,
   MetricParams,

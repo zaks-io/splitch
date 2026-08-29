@@ -1,4 +1,8 @@
-import { CLI_COMMANDS, META_COMMANDS } from "../apps/cli/src/command-registry.js";
+import {
+  allCliParityOperationIds,
+  CLI_COMMANDS,
+  META_COMMANDS,
+} from "../apps/cli/src/command-registry.js";
 import {
   renderCommandHelp,
   renderHelp,
@@ -23,7 +27,7 @@ import {
 } from "./lib/cli-mcp-parity.mjs";
 import { assertSharedOperationParity } from "./lib/cli-mcp-shared-operation.js";
 
-const cliOperationIds = [...new Set(CLI_COMMANDS.map((command) => command.operationId))];
+const cliOperationIds = allCliParityOperationIds();
 const mcpOperationIds = MCP_TOOL_DEFINITIONS.filter((tool) => tool.name !== "context_use").map(
   (tool) => tool.name,
 );

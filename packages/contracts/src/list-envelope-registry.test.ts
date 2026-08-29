@@ -35,6 +35,7 @@ describe("list envelope: every *_list route uses listResponse", () => {
       "metrics_list",
       "organization_members_list",
       "organizations_list",
+      "principal_flags_list",
       "runs_list",
       "segments_list",
       "sentry_installations_list",

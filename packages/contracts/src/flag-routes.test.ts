@@ -1,10 +1,26 @@
 import { describe, expect, it } from "vitest";
-import { FlagGetQuerySchema, FlagListQuerySchema } from "./routes/route-shapes";
+import {
+  FlagGetQuerySchema,
+  FlagListQuerySchema,
+  PrincipalFlagListQuerySchema,
+} from "./routes/route-shapes";
 
 describe("Flag list route", () => {
   it("accepts an omitted or non-empty Environment ID", () => {
     expect(FlagListQuerySchema.safeParse({}).success).toBe(true);
     expect(FlagListQuerySchema.safeParse({ environmentId: "env_prod" }).success).toBe(true);
+  });
+
+  it("reuses hydrated query semantics without accepting an App or legacy Environment summary", () => {
+    expect(PrincipalFlagListQuerySchema.safeParse({}).success).toBe(true);
+    expect(
+      PrincipalFlagListQuerySchema.safeParse({ include: "config", envs: "env_dev,env_prod" })
+        .success,
+    ).toBe(true);
+    expect(PrincipalFlagListQuerySchema.safeParse({ envs: "env_prod" }).success).toBe(false);
+    expect(PrincipalFlagListQuerySchema.safeParse({ environmentId: "env_prod" }).success).toBe(
+      false,
+    );
   });
 
   it("rejects an empty Environment ID", () => {

@@ -33,6 +33,7 @@ import type {
   FlagResponseSchema,
   PatchFlagRequestSchema,
   PatchVariantRequestSchema,
+  PrincipalFlagListReadResponseSchema,
 } from "./resource-envelopes-flag";
 import type * as EnvironmentRoutes from "./route-types-environment";
 import type {
@@ -45,6 +46,7 @@ import type {
   FlagParams,
   FlagVariantParams,
   OrgAppsParams,
+  PrincipalFlagListQuerySchema,
   UpdateAppMemberRequestSchema,
 } from "./routes/route-shapes";
 
@@ -90,6 +92,8 @@ export type EventDefinitionVersionsGetOutput = z.infer<typeof EventDefinitionVer
 
 export type FlagsListInput = z.infer<typeof AppParams> & z.infer<typeof FlagListQuerySchema>;
 export type FlagsListOutput = z.infer<typeof FlagListReadResponseSchema>;
+export type PrincipalFlagsListInput = z.infer<typeof PrincipalFlagListQuerySchema>;
+export type PrincipalFlagsListOutput = z.infer<typeof PrincipalFlagListReadResponseSchema>;
 export type FlagsCreateInput = z.infer<typeof AppParams> & z.infer<typeof CreateFlagRequestSchema>;
 export type FlagsCreateOutput = z.infer<typeof FlagResponseSchema>;
 export type FlagsGetInput = z.infer<typeof FlagParams> & z.infer<typeof FlagGetQuerySchema>;
@@ -250,6 +254,7 @@ export interface RouteTypeMap {
   };
 
   flags_list: { input: FlagsListInput; output: FlagsListOutput };
+  principal_flags_list: { input: PrincipalFlagsListInput; output: PrincipalFlagsListOutput };
   flags_create: { input: FlagsCreateInput; output: FlagsCreateOutput };
   flags_get: { input: FlagsGetInput; output: FlagsGetOutput };
   flags_update: { input: FlagsUpdateInput; output: FlagsUpdateOutput };

@@ -19,6 +19,7 @@ import {
 } from "./errors.js";
 import { emit } from "./execute-io.js";
 import type { CliDeps, CliIo, CliResult } from "./execute-types.js";
+import { formatPrincipalFlags } from "./format-principal-flags.js";
 import { EXIT_API, EXIT_AUTH, EXIT_OK, EXIT_SCOPE, EXIT_USAGE } from "./exit-codes.js";
 import { environmentSelectorOverride, parseEvaluationContext } from "./operation-input.js";
 import { emitOperationNotices } from "./operation-notices.js";
@@ -193,7 +194,7 @@ export async function executeApiOperation(
       return { exitCode: EXIT_API, payload: payload.error };
     }
     const projected = project ? await project(payload.data) : payload.data;
-    emit(io, invocation.flags.json, projected);
+    emitOperationOutput(operationId, projected, invocation.flags.json, io);
     // Keyed off payload shape, not operationId: any command that returns an
     // Approval Request (or list) must surface a recorded stale discard.
     warnStaleApprovalDiscard(io, projected);
@@ -215,6 +216,18 @@ export async function executeApiOperation(
   }
 }
 
+function emitOperationOutput(
+  operationId: string,
+  projected: unknown,
+  asJson: boolean,
+  io: CliIo,
+): void {
+  const groupedFlags =
+    operationId === "principal_flags_list" && !asJson ? formatPrincipalFlags(projected) : null;
+  if (groupedFlags) io.log(groupedFlags);
+  else emit(io, asJson, projected);
+}
+
 function requireOperationRoute(operationId: string): NonNullable<ReturnType<typeof getRoute>> {
   const route = getRoute(operationId);
   if (route) return route;
@@ -225,18 +238,14 @@ function requireOperationRoute(operationId: string): NonNullable<ReturnType<type
   });
 }
 
-/**
- * Path selectors bind to their App or Organization. Selector-free Control
- * Plane reads use the wide marker only for cached-token reuse; refresh mints
- * the session default. SPL-530 adds the wide request; mutations keep existing authority.
- */
+/** Bind selectors normally; the cross-App Flag route alone requires wide authority. */
 export function operationAuthorization(
   route: NonNullable<ReturnType<typeof getRoute>>,
   input: Record<string, unknown>,
 ): TokenAuthorization | undefined {
   const selectorBinding = operationBinding(input);
   if (selectorBinding) return selectorBinding;
-  return route.method === "GET" && route.auth === "control-plane-token"
+  return route.operationId === "principal_flags_list"
     ? { kind: MEMBERSHIP_WIDE_READ_AUTHORIZATION }
     : undefined;
 }
