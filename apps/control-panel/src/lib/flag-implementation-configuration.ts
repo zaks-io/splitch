@@ -61,6 +61,7 @@ export function flagImplementationConfigurationFromView(
       `Default Variant is unavailable from the Flag catalog: ${view.defaultVariantName}`,
     );
   }
+  assertAvailableVariants(view.catalog, view.availableVariantNames);
   for (const rule of view.targetingRules) {
     if (!catalogNames.has(rule.variantName)) {
       throw new Error(
@@ -74,11 +75,7 @@ export function flagImplementationConfigurationFromView(
     configured: view.configured,
     enabled: view.enabled,
     defaultVariant: view.defaultVariantName,
-    availableVariantNames: view.availabilityNarrowed
-      ? view.catalog
-          .filter((variant) => variant.availability === "available")
-          .map((variant) => variant.name)
-      : [],
+    availableVariantNames: view.availableVariantNames,
     variants: view.catalog.map((variant) => ({
       name: variant.name,
       valueJson: variant.value,
@@ -123,7 +120,10 @@ function requiredVariantName(catalog: Variant[], variantId: string, source: stri
   return variant.name;
 }
 
-function assertAvailableVariants(catalog: Variant[], available: string[]): void {
+function assertAvailableVariants(
+  catalog: readonly { name: string }[],
+  available: readonly string[],
+): void {
   const catalogNames = new Set(catalog.map((variant) => variant.name));
   const missing = available.find((name) => !catalogNames.has(name));
   if (missing) {

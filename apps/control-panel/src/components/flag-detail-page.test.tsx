@@ -216,6 +216,7 @@ function view(overrides: Partial<FlagDetailView> = {}): FlagDetailView {
       },
     ],
     availableVariantCount: 1,
+    availableVariantNames: ["control"],
     availabilityNarrowed: true,
     defaultVariantName: "control",
     targetingRules: [

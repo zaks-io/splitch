@@ -75,6 +75,7 @@ export type FlagDetailView = {
   enabled: boolean;
   catalog: CatalogVariantView[];
   availableVariantCount: number;
+  availableVariantNames: string[];
   availabilityNarrowed: boolean;
   defaultVariantName: string;
   targetingRules: TargetingRuleView[];
@@ -111,6 +112,7 @@ export function flagDetailView(
       availability: availabilityOf(variant, config === null, narrowed, available),
     })),
     availableVariantCount: available.length,
+    availableVariantNames: available,
     availabilityNarrowed: narrowed,
     defaultVariantName: variantName(catalog, data.definition.defaultVariantId),
     targetingRules: (config?.targetingRules ?? [])

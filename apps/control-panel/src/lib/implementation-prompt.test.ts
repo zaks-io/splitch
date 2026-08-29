@@ -89,6 +89,12 @@ describe("code-agent implementation prompts", () => {
     expect(result).toContain('"decisionFamily"');
     expect(result).toContain('"guardrailDecisions"');
     expect(result).toContain('"metricVarianceConfig"');
+    expect(result).toContain('"experimentId": "experiment_checkout"');
+    expect(result).toContain('"environmentId": "environment_prod"');
+    expect(result).toContain('"startedAt": "2026-08-01T00:00:00.000Z"');
+    expect(result).toContain('"endReason": null');
+    expect(result).toContain('"activationMetricId": "metric_activation"');
+    expect(result).toContain('"eventName": "checkout_viewed"');
     expect(result).toContain('"eventDefinitionId": "event_purchase"');
     expect(result).toContain('"eventName": "purchase_completed"');
     expect(result).toContain('"eventValueField": "amount"');
@@ -127,7 +133,7 @@ function experimentDetail(): PanelExperimentDetailOutput {
       flagId: "flag_checkout",
       targetingKey: "accountId",
       targetingKeyType: "account",
-      activationMetricId: null,
+      activationMetricId: "metric_activation",
       conversionWindowMs: 86_400_000,
       confidenceLevel: 0.95,
       dimensions: [],
@@ -198,6 +204,14 @@ function metricFixtures(): Metric[] {
   return [
     {
       ...base,
+      id: "metric_activation",
+      key: "checkout-viewed",
+      name: "Checkout viewed",
+      kind: "binomial",
+      eventDefinitionId: "event_checkout_viewed",
+    },
+    {
+      ...base,
       id: "metric_revenue",
       key: "revenue",
       name: "Revenue",
@@ -227,6 +241,7 @@ function metricFixtures(): Metric[] {
 
 function eventDefinitions() {
   return [
+    { id: "event_checkout_viewed", name: "checkout_viewed" },
     { id: "event_purchase", name: "purchase_completed" },
     { id: "event_checkout_started", name: "checkout_started" },
   ];

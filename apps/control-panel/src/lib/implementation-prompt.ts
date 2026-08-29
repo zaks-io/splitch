@@ -84,6 +84,7 @@ export function renderExperimentImplementationPrompt({
     ...data.experiment.metricIds,
     ...data.experiment.guardrailMetricIds,
     ...(run.activationMetricId ? [run.activationMetricId] : []),
+    ...(data.experiment.activationMetricId ? [data.experiment.activationMetricId] : []),
   ]);
   const metrics = metricClosure(data.metrics, metricIds);
   const configuration = {
@@ -93,6 +94,8 @@ export function renderExperimentImplementationPrompt({
     flag: { id: data.flag.id, key: data.flag.key, name: data.flag.name },
     run: {
       id: run.id,
+      experimentId: run.experimentId,
+      environmentId: run.environmentId,
       number: run.runNumber,
       status: run.status,
       targetingKeyField: run.targetingKey,
@@ -119,9 +122,15 @@ export function renderExperimentImplementationPrompt({
       horizon: run.horizon,
       sampleSizeLocked: run.sampleSizeLocked,
       configHash: run.configHash,
+      startedAt: run.startedAt,
+      endedAt: run.endedAt,
+      startReason: run.startReason,
+      endReason: run.endReason,
+      createdAt: run.createdAt,
     },
     measurement: {
       conversionWindowMs: data.experiment.conversionWindowMs,
+      activationMetricId: data.experiment.activationMetricId,
       metricIds: data.experiment.metricIds,
       guardrailMetricIds: data.experiment.guardrailMetricIds,
       metrics: metrics.map((metric) => metricConfiguration(metric, data.eventDefinitions)),

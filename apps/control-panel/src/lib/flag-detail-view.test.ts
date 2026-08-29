@@ -201,6 +201,15 @@ describe("Flag implementation configuration", () => {
       ),
     ).toThrow("Targeting Rule rule_missing references an unavailable Variant: var_missing");
   });
+
+  it("refuses unavailable Variant names preserved by the detail view", () => {
+    const view = flagDetailView(detail(devConfig()), "dev");
+    view.availableVariantNames = ["removed"];
+
+    expect(() => flagImplementationConfigurationFromView(view)).toThrow(
+      "marks an unavailable Variant as available: removed",
+    );
+  });
 });
 
 function detail(configuration: FlagConfigGetOutput | null): FlagDetailData {
