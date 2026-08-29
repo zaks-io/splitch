@@ -31,4 +31,15 @@ describe("Flag list route", () => {
       FlagListQuerySchema.safeParse({ environmentId: "env_prod", include: "config" }).success,
     ).toBe(false);
   });
+
+  // `include` is the whole fail-loud contract for hydration: an unrecognized
+  // value must be refused, not read as "no hydration requested". A caller who
+  // typos it should get a 400, never a silently unhydrated body they then join
+  // by hand -- which is the exact failure mode this endpoint exists to remove.
+  it("refuses an include value it does not recognize", () => {
+    for (const include of ["configs", "CONFIG", "", "config,variants", "true"]) {
+      expect(FlagListQuerySchema.safeParse({ include }).success).toBe(false);
+      expect(FlagGetQuerySchema.safeParse({ include }).success).toBe(false);
+    }
+  });
 });
