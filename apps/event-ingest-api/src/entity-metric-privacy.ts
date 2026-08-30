@@ -148,7 +148,7 @@ export async function admitAppIdentityRow(
   if (!response.ok) throw new Error(`App identity admission returned HTTP ${response.status}`);
   const body = (await response.json()) as { suppressed?: unknown };
   if (typeof body.suppressed !== "boolean") {
-    throw new Error("App Evaluation admission returned an invalid result");
+    throw new Error("App identity admission returned an invalid result");
   }
   return body.suppressed;
 }

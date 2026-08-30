@@ -83,7 +83,7 @@ describe("Event Ingest hosted configuration", () => {
       worker.queue(
         {
           messages: [queued],
-          queue: "metric-events",
+          queue: "splitch-metric-events-local",
           metadata: { metrics: { backlogCount: 1, backlogBytes: 64 } },
           ackAll: vi.fn(),
           retryAll: vi.fn(),
@@ -139,7 +139,7 @@ describe("Event Ingest hosted privacy salt", () => {
       worker.queue(
         {
           messages: [queued],
-          queue: "metric-events",
+          queue: "splitch-metric-events-local",
           metadata: { metrics: { backlogCount: 1, backlogBytes: 64 } },
           ackAll: vi.fn(),
           retryAll: vi.fn(),
@@ -191,7 +191,7 @@ describe("Event Ingest hosted privacy salt", () => {
       worker.queue(
         {
           messages: [queued],
-          queue: "metric-events",
+          queue: "splitch-metric-events-local",
           metadata: { metrics: { backlogCount: 1, backlogBytes: 64 } },
           ackAll: vi.fn(),
           retryAll: vi.fn(),

@@ -4,10 +4,9 @@ import {
   completeAppIdentityRow,
   identityVersionForRow,
 } from "./entity-metric-privacy";
+import type { RawEventDatasource } from "./raw-event-queue-envelope";
 import { beginRawEventAttempt, type RawEventTerminalState } from "./raw-event-terminal-state";
 import type { Env } from "./types";
-
-type RawEventDatasource = "raw_events" | "raw_evaluations";
 
 export type RawEventPrivacyAdmission =
   | { readonly kind: "admitted" }
@@ -31,7 +30,7 @@ export async function admitRawEventPrivacy(
       env.SPLITCH_PLATFORM_TARGET,
       deliveryId,
     );
-  } else {
+  } else if (datasource === "raw_evaluations") {
     suppressed = await admitAppIdentityRow(
       env.ENTITY_METRIC_PRIVACY,
       appId(row),
@@ -41,6 +40,8 @@ export async function admitRawEventPrivacy(
       env.SPLITCH_PLATFORM_TARGET,
       deliveryId,
     );
+  } else {
+    return unreachableDatasource(datasource);
   }
   if (suppressed) return { kind: "suppressed" };
   const attempt = await beginRawEventAttempt(env, row, deliveryId);
@@ -64,12 +65,20 @@ export async function completeRawEventPrivacy(
     );
     return;
   }
-  await completeAppIdentityRow(
-    env.ENTITY_METRIC_PRIVACY,
-    appId(row),
-    deliveryId,
-    env.SPLITCH_PLATFORM_TARGET,
-  );
+  if (datasource === "raw_evaluations") {
+    await completeAppIdentityRow(
+      env.ENTITY_METRIC_PRIVACY,
+      appId(row),
+      deliveryId,
+      env.SPLITCH_PLATFORM_TARGET,
+    );
+    return;
+  }
+  return unreachableDatasource(datasource);
+}
+
+function unreachableDatasource(datasource: never): never {
+  throw new Error(`Unsupported raw event datasource: ${String(datasource)}`);
 }
 
 function appId(row: Record<string, unknown>): string {

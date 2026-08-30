@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { makeEntityDeliveryFixture } from "./app-identity-delivery-test-fixture";
+import { commitResponse, makeEntityDeliveryFixture } from "./app-identity-delivery-test-fixture";
 import { EntityMetricPrivacyDurableObject } from "./entity-metric-privacy-store";
 import type { Env } from "./types";
 
@@ -131,9 +131,42 @@ describe("App identity delivery generation", () => {
   });
 });
 
-function commitResponse(): Response {
-  return Response.json({ successful_rows: 1, quarantined_rows: 0 });
-}
+describe("App identity direct delivery permits", () => {
+  it("does not leave a queue permit behind on the direct delivery route", async () => {
+    const fixture = makeEntityDeliveryFixture();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => commitResponse()),
+    );
+    const row = {
+      app_id: "app_1",
+      id_type: "user",
+      identity_version: "app-v1",
+      targeting_key_hash: "app-v1:entity",
+      entity_family_hash: "app-v1:family",
+      server_received_at: "2026-08-07T00:00:00.000Z",
+    };
+
+    await expect(
+      fixture.post("/deliver-entity-row", {
+        appId: "app_1",
+        idType: "user",
+        identityVersion: "app-v1",
+        entityFamilyHash: "app-v1:family",
+        datasource: "raw_events",
+        deliveryId: "queue:raw_events:unexpected",
+        row,
+      }),
+    ).resolves.toEqual({ suppressed: false });
+    await expect(
+      fixture.post("/reset-app", {
+        appId: "app_1",
+        resetId: "reset_direct_delivery",
+        currentVersion: "app-v1",
+      }),
+    ).resolves.toEqual({ proof: "event-delivery:entities=1;evaluation_commits=0" });
+  });
+});
 
 function deliver(
   fixture: ReturnType<typeof makeFixture>,

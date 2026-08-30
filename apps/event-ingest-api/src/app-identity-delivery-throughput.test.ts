@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { makeEntityDeliveryFixture } from "./app-identity-delivery-test-fixture";
+import { commitResponse, makeEntityDeliveryFixture } from "./app-identity-delivery-test-fixture";
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -104,7 +104,3 @@ describe("App identity delivery throughput", () => {
     });
   });
 });
-
-function commitResponse(): Response {
-  return Response.json({ successful_rows: 1, quarantined_rows: 0 });
-}

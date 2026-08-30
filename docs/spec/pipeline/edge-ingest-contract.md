@@ -16,7 +16,7 @@ In the current checkout:
   dead-letter queues;
 - queue consumers produce bounded gzip NDJSON microbatches with `wait=true` and a fixed
   `max_concurrency = 1` governor;
-- Evaluation commits publish their sealed usage and Exposure rows to the corresponding queues;
+- Evaluation commits enqueue their sealed usage and Exposure rows to the corresponding queues;
 - remote Evaluation commit idempotency is scoped to Organization, App, Environment, the admitted
   App identity version, and the caller's key, so a replacement identity cannot replay a destroyed
   generation's redacted commit;
@@ -113,7 +113,7 @@ sequencing:
 2. Synchronously hand the raw Exposure row to the Event Ingest Worker and wait only until its scoped
    Evaluation idempotency claim, resolved-result fingerprint, retry-stable row, and delivery payload
    are sealed atomically in the durable `raw_events` outbox. The request handler never waits for Queue
-   publication or Tinybird. This step is skipped on a holdover replay because a holdover fires no
+   Queue handoff or Tinybird. This step is skipped on a holdover replay because a holdover fires no
    Exposure (see
    [evaluation/exposure-firing-and-accessor.md](../evaluation/exposure-firing-and-accessor.md)
    §Holdover path).
@@ -130,16 +130,16 @@ deterministic on retry.
 
 ## Ingest failure contract
 
-| Failure                                                  | Effect                                                         | Recovery                                                                       |
-| -------------------------------------------------------- | -------------------------------------------------------------- | ------------------------------------------------------------------------------ |
-| Durable Exposure outbox seal fails before response       | Evaluation fails loud; no Assignment Store write begins        | Retry the same Evaluation idempotency key                                      |
-| Queue publication fails after durable outbox seal        | Accepted rows remain unavailable to analysis until publication | Durable outbox retries Queue publication                                       |
-| Retryable Tinybird `429`/`500`/`503` after queue handoff | Accepted rows remain unavailable to analysis until redelivery  | Bounded queue retry with stable per-row dedup keys                             |
-| Tinybird timeout or other no-response outcome            | Commit status is indeterminate                                 | Durable reconciliation or datasource DLQ transfer; no ordinary retry           |
-| Tinybird `422` materialized-view interruption            | Raw and derived commit status is indeterminate                 | Durable reconciliation record; no ordinary retry                               |
-| Permanent Tinybird failure or quarantined rows           | Affected delivery leaves the primary queue                     | Durable datasource DLQ copy plus critical alert; manual replay only            |
-| DO write fails after durable outbox seal                 | Holdover miss for up to ~60s + retry window                    | `assign()` is deterministic — same Variant computed on miss; DO retry picks up |
-| KV write-through from DO fails                           | KV miss for ~60s                                               | Next KV read recomputes and re-propagates via DO (self-healing)                |
+| Failure                                                  | Effect                                                        | Recovery                                                                       |
+| -------------------------------------------------------- | ------------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| Durable Exposure outbox seal fails before response       | Evaluation fails loud; no Assignment Store write begins       | Retry the same Evaluation idempotency key                                      |
+| Queue handoff fails after durable outbox seal            | Accepted rows remain unavailable to analysis until handoff    | Durable outbox retries Queue handoff                                           |
+| Retryable Tinybird `429`/`500`/`503` after queue handoff | Accepted rows remain unavailable to analysis until redelivery | Bounded queue retry with stable per-row dedup keys                             |
+| Tinybird timeout or other no-response outcome            | Commit status is indeterminate                                | Durable reconciliation or datasource DLQ transfer; no ordinary retry           |
+| Tinybird `422` materialized-view interruption            | Raw and derived commit status is indeterminate                | Durable reconciliation record; no ordinary retry                               |
+| Permanent Tinybird failure or quarantined rows           | Affected delivery leaves the primary queue                    | Durable datasource DLQ copy plus critical alert; manual replay only            |
+| DO write fails after durable outbox seal                 | Holdover miss for up to ~60s + retry window                   | `assign()` is deterministic — same Variant computed on miss; DO retry picks up |
+| KV write-through from DO fails                           | KV miss for ~60s                                              | Next KV read recomputes and re-propagates via DO (self-healing)                |
 
 There is no distributed transaction across Tinybird + DO + KV. DO and KV propagation failures are
 cosmetic and self-healing within the ~60s propagation window. Ingest failures are different:
@@ -178,7 +178,7 @@ not fall back to a row-by-row loop.
 A Queue message is a bounded datasource-specific delivery unit and may carry one or more canonical
 rows. Producer message granularity is not the Tinybird import granularity: the consumer flattens
 rows from all delivered messages into the fewest bounded NDJSON requests. This permits an
-independently sealed Metric or Web Event to publish safely without turning that event into one
+independently sealed Metric or Web Event to enqueue safely without turning that event into one
 Tinybird HTTP request.
 
 Every serialized Queue message, including its Splitch delivery envelope, is at most 120,000 bytes.
@@ -187,7 +187,7 @@ Before acceptance, Event Ingest proves every canonical row fits in a one-row mes
 oversized event fails its family request bound, and an oversized internal row fails loud before
 durable acceptance. Producers greedily pack multiple rows only while the message remains within
 120,000 bytes. `sendBatch` calls contain at most 100 messages and at most 240,000 total serialized
-bytes; larger publication sets are split across calls. Splitting Queue publication does not split a
+bytes; larger enqueue sets are split across calls. Splitting a Queue handoff does not split a
 claim or change the consumer's cross-message Tinybird microbatching.
 
 ### Write-ahead delivery attempts
@@ -265,7 +265,7 @@ committed valid siblings, so probing would create duplicate physical rows and un
 load. If the poison transition fails after the Tinybird response, the write-ahead record remains
 `attempting`; redelivery reconciles it without resubmission. Dead-letter replay is an explicit
 operator action, preserves each original row and `dedup_key`, and rechecks current privacy deletion
-suppression before publication.
+suppression before Queue handoff.
 
 Tinybird `429`, `500`, and `503` are retryable. A delivery receives at most eight total attempts,
 including the initial attempt. Exhaustion follows the same
@@ -302,7 +302,7 @@ reconciliation or replay. Reconciliation completion is auditable and only then r
 The queue absorbs valid traffic spikes and Tinybird outages; it does not absorb arbitrary
 unvalidated client data. Authentication, authorization, origin policy, strict outer-envelope and
 per-item schema validation, Event Definition resolution, body and item bounds, idempotency, and
-per-credential rate limits run before queue publication. Invalid or undeclared input never consumes
+per-credential rate limits run before Queue handoff. Invalid or undeclared input never consumes
 queue storage or Tinybird ingest capacity.
 
 After validation and idempotency lookup identify the canonical new rows, an Event Ingest-owned
@@ -324,7 +324,7 @@ reuse the event-id deduplication and durable outbox shards for aggregate admissi
 
 The gate charges both the number of new canonical rows and their serialized queue-payload bytes.
 HTTP request count is not the unit, so SDK batching cannot bypass the limit. Exact idempotent retries
-and duplicate Web Event items that require no new queue publication consume zero aggregate capacity.
+and duplicate Web Event items that require no new Queue handoff consume zero aggregate capacity.
 The standard per-credential limiter still runs independently; a request must pass both controls.
 
 That zero-cost rule applies after an existing claim is observed. Concurrent attempts can both
@@ -348,7 +348,7 @@ tokens.
 
 If either aggregate budget is unavailable, the Event Ingest Worker rejects the complete request with
 `429 RATE_LIMITED` and canonical `Retry-After` before any new claim, outbox write, or queue
-publication. A Web Event batch does not partially admit otherwise valid siblings when this
+Queue handoff. A Web Event batch does not partially admit otherwise valid siblings when this
 batch-level gate fails. A missing or failed Admission Gate fails closed.
 
 Accepted valid rows are never sampled, thinned, or silently dropped to protect Tinybird. When input
@@ -358,7 +358,7 @@ queue to increase Tinybird pressure or consume another datasource's delivery cap
 
 The Evaluation Worker returns a Variant only after Event Ingest seals the raw Exposure row in its
 durable outbox. Admission rejection or outbox failure therefore fails the Evaluation before an
-Assignment Store write begins. Queue publication and Tinybird delivery remain asynchronous after
+Assignment Store write begins. Queue handoff and Tinybird delivery remain asynchronous after
 that boundary; a successful response cannot depend on the SDK re-firing an Exposure.
 
 Admission count and byte budgets are operational fairness controls. They consume no V1 billing unit,
@@ -404,7 +404,7 @@ append scope. The public SDK never receives that token and never writes directly
 `202 accepted` acknowledges durable ownership by Event Ingest, not a Tinybird commit. For
 claim-backed Metric Events and Web Events, the family-scoped idempotency claim and canonical
 delivery payload are sealed atomically in the durable ingest outbox before the response is returned.
-The outbox retries Cloudflare Queue publication until it succeeds, so a committed claim cannot lose
+The outbox retries Cloudflare Queue handoff until it succeeds, so a committed claim cannot lose
 its row between claim and queue handoff.
 
 The Evaluation Worker likewise waits for the scoped claim, result fingerprint, retry-stable Exposure

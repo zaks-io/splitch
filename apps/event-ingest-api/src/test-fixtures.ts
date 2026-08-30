@@ -32,13 +32,12 @@ export const organizationId = "org_credential";
 export async function postExposure(
   options: {
     payload?: Partial<ExposurePayload>;
-    tinybirdStatus?: number;
     awaitWaits?: boolean;
     env?: ReturnType<typeof makeEnv>;
   } = {},
 ) {
   vi.spyOn(Date, "now").mockReturnValue(new Date(fixedNow).getTime());
-  const fetch = mockTinybirdFetch(options.tinybirdStatus);
+  const fetch = mockTinybirdFetch();
   const ctx = new TestExecutionContext();
   const env = options.env ?? makeEnv();
   const queuedStart = env.__queuedRows.length;

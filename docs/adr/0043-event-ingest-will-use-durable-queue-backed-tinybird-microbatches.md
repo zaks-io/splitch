@@ -4,11 +4,14 @@
 
 **Implementation status:** partial. `metric_events`, `raw_events`, and `raw_evaluations` now use
 datasource-isolated queues under the fixed drain governor below and send bounded gzip NDJSON
-microbatches with `wait=true`. Evaluation commits publish their sealed usage and Exposure rows to
+microbatches with `wait=true`. Evaluation commits enqueue their sealed usage and Exposure rows to
 those queues instead of looping over Tinybird requests. Metric Event delivery has per-row write-ahead
 attempts plus a dedicated reconciliation queue; an ambiguous attempt never resubmits, and repeated
 raw-datasource absence moves to the reconciliation DLQ for operator review. Raw-only Metric Event
 evidence runs a bounded append Copy Pipe from raw truth and verifies the resulting aggregate state.
+The reconciliation consumer accepts at most 10 messages per invocation, leaving headroom below
+Cloudflare's 15-minute consumer limit even when one message performs three sequential 15-second
+Tinybird reads.
 Raw Exposure and Evaluation consumers transfer ambiguous or permanent outcomes to their isolated
 DLQs instead of resubmitting them. Before Tinybird, they persist `attempting` in a delivery-scoped
 Durable Object; only a durable `retryable` outcome can authorize another request. `delivered` and
@@ -45,9 +48,11 @@ with exponential backoff and jitter. A timeout, connection loss, or other no-res
 prove the request was absent, so it is indeterminate and never enters the ordinary retry path.
 Growing oldest-message age alerts operators instead of relaxing the governor.
 
-Queue delivery envelopes are independently bounded to 120,000 serialized bytes, below Cloudflare's
-128 KB message limit. Producers split Queue `sendBatch` calls at 100 messages or 240,000 aggregate
-serialized bytes and prove each canonical row fits in one Queue message before durable acceptance.
+Primary raw-event Queue envelopes are independently bounded to 64,000 serialized bytes, below
+Cloudflare's 128 KB message limit and with enough headroom to preserve the original row plus complete
+failure metadata in a 120,000-byte dead-letter envelope. Producers split Queue `sendBatch` calls at
+100 messages or 240,000 aggregate serialized bytes and prove each canonical row fits in one Queue
+message before durable acceptance.
 The consumer may still combine rows from many messages into a Tinybird request or split that
 combined set at the separate 5 MiB NDJSON ceiling.
 
@@ -64,8 +69,8 @@ unrecognized shape rather than inferring one.
 
 A response reporting quarantined rows or a short commit poisons its whole batch, including rows the
 same response committed. Every column of `metric_events` is a `String` except the two `DateTime64`
-timestamps this service generates, so tenant content cannot quarantine a row on its own and a
-quarantine means the canonical row shape is wrong for every row like it, not for one tenant's. Rows
+timestamps this service generates, so App content cannot quarantine a row on its own and a
+quarantine means the canonical row shape is wrong for every row like it, not for one App's. Rows
 replayed from the dead-letter queue that had in fact committed collapse against their originals,
 because `materialize_deduped_metric_events` groups by the retry-stable `dedup_key`. Identifying the
 individual bad rows would take a second read against Tinybird's quarantine datasource on every
@@ -115,16 +120,16 @@ queue acknowledgement. `429`, `500`, and `503` transition it to `retryable` befo
 
 The queue is a backpressure boundary, not a substitute for data-quality admission. Authentication,
 authorization, strict schema and Event Definition validation, body and item bounds, idempotency, and
-per-credential rate limits run before queue publication. Invalid or undeclared input never consumes
+per-credential rate limits run before Queue handoff. Invalid or undeclared input never consumes
 queue or Tinybird capacity. Valid accepted rows are buffered without sampling or silent thinning;
 protecting Tinybird may increase freshness lag but does not bias the retained event stream.
 
 An aggregate Ingest Admission Gate also runs before any new idempotency claim, outbox write, or queue
-publication. It is keyed by `(app_id, environment_id, ingest_stream)`, where `ingest_stream` is the
+Queue handoff. It is keyed by `(app_id, environment_id, ingest_stream)`, where `ingest_stream` is the
 destination datasource. The gate charges both canonical row count and serialized queue-payload
 bytes, so batching cannot bypass it. It composes with per-credential rate limits and rejects the
 complete request with `429 RATE_LIMITED` when either budget is unavailable. Exact idempotent retries
-that require no new queue publication consume no aggregate capacity. This is an operational fairness
+that require no new Queue handoff consume no aggregate capacity. This is an operational fairness
 and Tinybird-protection control, not billing, quota, sampling, or a customer-configurable spend guard.
 Concurrent attempts that both precede the winning family-scoped claim may conservatively consume
 capacity more than once while still producing one logical row; the separate Durable Objects do not
@@ -151,7 +156,7 @@ The checked-in launch profile uses a 10-second burst window:
 These platform-owned values are explicit configuration, not customer overrides, runtime
 auto-tuning, or hidden defaults. A change requires reviewed load evidence showing stable queue age,
 no sustained Tinybird `429` responses, and recovery after a 2x burst. Because the budgets are
-independent per `(app_id, environment_id, ingest_stream)`, they provide tenant fairness and spike
+independent per `(app_id, environment_id, ingest_stream)`, they provide App fairness and spike
 isolation but do not impose a global cap on Tinybird traffic. The fixed per-datasource queue
 consumer governor remains the hard Tinybird protection boundary.
 
@@ -160,7 +165,7 @@ delivery payload are sealed atomically in the durable ingest outbox before `202 
 returned. An Exposure payload is likewise sealed before the Evaluation Worker returns its Variant;
 the same transaction includes the scoped Evaluation claim, result fingerprint, and retry-stable
 Exposure row. The Assignment Store write begins only after that seal succeeds. The outbox retries
-publication to Cloudflare Queue until it succeeds. For other intake, an accepted response requires either an
+handoff to Cloudflare Queue until it succeeds. For other intake, an accepted response requires either an
 equivalent durable outbox seal or successful durable queue handoff. Acceptance does not wait for
 Tinybird. At-least-once queue and Tinybird retries preserve the stable per-row dedup key and may create
 duplicate physical rows; downstream dedup remains authoritative. Metric and Web reads use the

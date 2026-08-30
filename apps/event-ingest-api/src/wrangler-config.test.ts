@@ -146,7 +146,7 @@ describe("Event Ingest Worker Wrangler runtime config", () => {
     expect(consumers.length, `${target} declares no Metric Event consumer`).toBeGreaterThan(0);
     for (const consumer of consumers) {
       expect(consumer.max_batch_size, `${target} batches too few rows per request`).toBe(
-        consumer.queue?.includes("reconciliation") ? 25 : 100,
+        consumer.queue?.includes("reconciliation") ? 10 : 100,
       );
       expect(consumer.max_batch_timeout, `${target} holds a batch too long`).toBe(1);
       expect(consumer.max_concurrency, `${target} fans out past the Tinybird ceiling`).toBe(1);

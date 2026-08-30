@@ -30,6 +30,7 @@ describe("Event Ingest Worker", () => {
 
     expect(calls.response.status).toBe(202);
     expect(calls.fetch).not.toHaveBeenCalled();
+    expect(calls.envelopes).toEqual([{ datasource: "raw_events", row }]);
     expect(row).toMatchObject({
       app_id: appId,
       environment_id: environmentId,
@@ -56,6 +57,7 @@ describe("Evaluation usage ingest", () => {
 
     expect(calls.response.status).toBe(202);
     expect(calls.fetch).not.toHaveBeenCalled();
+    expect(calls.envelopes).toEqual([{ datasource: "raw_evaluations", row }]);
     expect(row).toMatchObject({
       organization_id: organizationId,
       app_id: appId,
@@ -143,8 +145,8 @@ describe("Evaluation usage ingest", () => {
 });
 
 describe("Exposure ingest", () => {
-  it("does not make client success depend on a failing Tinybird sink", async () => {
-    const calls = await postExposure({ tinybirdStatus: 500 });
+  it("returns 202 from the Queue handoff without a Tinybird request", async () => {
+    const calls = await postExposure();
 
     expect(calls.response.status).toBe(202);
     expect(calls.rows).toHaveLength(1);

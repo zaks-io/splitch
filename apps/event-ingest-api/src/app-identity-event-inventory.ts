@@ -1,4 +1,9 @@
-import { parseEntityIdentityDelivery } from "./app-identity-row-input";
+import {
+  type AppEntityRef,
+  parseAppEntityRef,
+  parseAppEvaluationRef,
+  parseEntityIdentityDelivery,
+} from "./app-identity-row-input";
 import { completeEntityDeliveryPermit } from "./entity-delivery-permit-client";
 import {
   type AppEvaluationCommitRef,
@@ -18,13 +23,6 @@ const APP_ENTITY_PREFIX = "privacy:app-entity:";
 const APP_EVALUATION_PREFIX = "privacy:app-evaluation:";
 const APP_RESET_SUPPRESSION_KEY = "privacy:app-reset-suppression";
 const APP_ACTIVE_VERSION_KEY = "privacy:app-active-version";
-
-interface AppEntityRef {
-  appId: string;
-  idType: string;
-  entityFamilyHash: string;
-  identityVersion: string;
-}
 
 interface AppResetSuppression {
   resetId: string;
@@ -95,7 +93,7 @@ async function forwardEntityIdentityRow(
   storage: DurableObjectStorage,
   env: Env,
   request: Request,
-  entityRoute: string,
+  entityRoute: "deliver-row" | "admit-row",
 ): Promise<Response> {
   const body = (await request.json()) as Record<string, unknown>;
   const { row, datasource, deliveryId, ref } = parseEntityIdentityDelivery(body);
@@ -105,7 +103,7 @@ async function forwardEntityIdentityRow(
     }
     return suppressed();
   }
-  await recordDeliveryPermit(storage, deliveryId);
+  await recordForwardedPermit(storage, deliveryId, entityRoute);
   await storage.put(`${APP_ENTITY_PREFIX}${ref.idType}:${ref.entityFamilyHash}`, ref);
   try {
     const response = await entityStub(env.ENTITY_METRIC_PRIVACY, ref).fetch(
@@ -129,6 +127,14 @@ async function forwardEntityIdentityRow(
     if (deliveryId !== undefined) await releaseForwardedPermit(storage, env, ref, deliveryId);
     throw error;
   }
+}
+
+async function recordForwardedPermit(
+  storage: DurableObjectStorage,
+  deliveryId: string | undefined,
+  entityRoute: "deliver-row" | "admit-row",
+): Promise<void> {
+  if (entityRoute === "admit-row") await recordDeliveryPermit(storage, deliveryId);
 }
 
 async function releaseForwardedPermit(
@@ -268,42 +274,6 @@ async function purgeEntities(
     }
     await storage.delete(key);
   }
-}
-
-function parseAppEntityRef(value: unknown): AppEntityRef {
-  if (!isRecord(value)) throw new Error("App Entity privacy inventory input is invalid");
-  if (
-    typeof value.appId !== "string" ||
-    typeof value.idType !== "string" ||
-    typeof value.entityFamilyHash !== "string" ||
-    typeof value.identityVersion !== "string"
-  ) {
-    throw new Error("App Entity privacy inventory input is invalid");
-  }
-  return {
-    appId: value.appId,
-    idType: value.idType,
-    entityFamilyHash: value.entityFamilyHash,
-    identityVersion: value.identityVersion,
-  };
-}
-
-function parseAppEvaluationRef(value: unknown): AppEvaluationCommitRef {
-  if (
-    !isRecord(value) ||
-    typeof value.appId !== "string" ||
-    value.appId.length === 0 ||
-    typeof value.commitIdentity !== "string" ||
-    typeof value.identityVersion !== "string" ||
-    !/^[a-f0-9]{64}$/u.test(value.commitIdentity)
-  ) {
-    throw new Error("App Evaluation privacy inventory input is invalid");
-  }
-  return {
-    appId: value.appId,
-    commitIdentity: value.commitIdentity,
-    identityVersion: value.identityVersion,
-  };
 }
 
 function suppressed(): Response {

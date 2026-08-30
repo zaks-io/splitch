@@ -38,6 +38,10 @@ export function makeEntityDeliveryFixture() {
   return { post: postTo(app) };
 }
 
+export function commitResponse(): Response {
+  return Response.json({ successful_rows: 1, quarantined_rows: 0 });
+}
+
 function memoryStorage(): DurableObjectStorage {
   const values = new Map<string, unknown>();
   return {

@@ -279,7 +279,7 @@ function queueMessage(id: string, body: Record<string, unknown>, attempts = 2) {
 function messageBatch(messages: readonly ReturnType<typeof queueMessage>[]) {
   return {
     messages,
-    queue: "metric-events",
+    queue: "splitch-metric-events-local",
     metadata: { metrics: { backlogCount: 3, backlogBytes: 1024 } },
     ackAll: vi.fn(),
     retryAll: vi.fn(),

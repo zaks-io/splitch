@@ -42,6 +42,24 @@ const ingestPath = "/api/internal/exposures";
 const evaluationIngestPath = "/api/internal/evaluations";
 const evaluationCommitPath = "/api/internal/evaluation-commits";
 const metricEventPath = "/api/sdk/events";
+const rawEventQueueNames = new Set([
+  "splitch-raw-events-local",
+  "splitch-raw-evaluations-local",
+  "splitch-raw-events-shared-preview",
+  "splitch-raw-evaluations-shared-preview",
+  "splitch-raw-events",
+  "splitch-raw-evaluations",
+]);
+const metricEventQueueNames = new Set([
+  "splitch-metric-events-local",
+  "splitch-metric-events-shared-preview",
+  "splitch-metric-events",
+]);
+const metricEventReconciliationQueueNames = new Set([
+  "splitch-metric-events-reconciliation-local",
+  "splitch-metric-events-reconciliation-shared-preview",
+  "splitch-metric-events-reconciliation",
+]);
 const metricEventRoutes = routesDelegatedTo("event-ingest-api").filter(
   (route) => route.operationId === "sdk_track",
 );
@@ -98,13 +116,14 @@ const handler = {
 } satisfies ExportedHandler<Env, Record<string, unknown>>;
 
 async function handleQueue(batch: MessageBatch<Record<string, unknown>>, env: Env): Promise<void> {
-  if (batch.queue.includes("raw-events") || batch.queue.includes("raw-evaluations")) {
+  if (rawEventQueueNames.has(batch.queue)) {
     return handleRawEventQueue(batch, env);
   }
-  if (batch.queue.includes("metric-events-reconciliation")) {
+  if (metricEventReconciliationQueueNames.has(batch.queue)) {
     return handleMetricEventReconciliationQueue(batch, env);
   }
-  return handleMetricEventQueue(batch, env);
+  if (metricEventQueueNames.has(batch.queue)) return handleMetricEventQueue(batch, env);
+  throw new Error(`event-ingest-api received an unknown queue: ${batch.queue}`);
 }
 
 /**

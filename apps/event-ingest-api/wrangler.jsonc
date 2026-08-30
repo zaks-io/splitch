@@ -87,7 +87,7 @@
       },
       {
         "queue": "splitch-metric-events-reconciliation-local",
-        "max_batch_size": 25,
+        "max_batch_size": 10,
         "max_batch_timeout": 1,
         "max_concurrency": 1,
         "max_retries": 7,
@@ -237,7 +237,7 @@
           },
           {
             "queue": "splitch-metric-events-reconciliation-shared-preview",
-            "max_batch_size": 25,
+            "max_batch_size": 10,
             "max_batch_timeout": 1,
             "max_concurrency": 1,
             "max_retries": 7,
@@ -384,7 +384,7 @@
           },
           {
             "queue": "splitch-metric-events-reconciliation",
-            "max_batch_size": 25,
+            "max_batch_size": 10,
             "max_batch_timeout": 1,
             "max_concurrency": 1,
             "max_retries": 7,

@@ -8,6 +8,9 @@ export interface RawEventQueueEnvelope extends Record<string, unknown> {
   readonly row: Record<string, unknown>;
 }
 
+/** Leaves enough Queue-message headroom for the original row plus failure metadata in the DLQ. */
+export const RAW_EVENT_QUEUE_MAX_MESSAGE_BYTES = 64_000;
+
 export async function enqueueRawEvent(
   env: Env,
   datasource: RawEventDatasource,
@@ -35,6 +38,7 @@ export function parseRawEventEnvelope(value: Record<string, unknown>): RawEventQ
   ) {
     throw new Error("raw event queue envelope is invalid");
   }
+  assertEnvelopeSize(value);
   return value as RawEventQueueEnvelope;
 }
 
@@ -42,7 +46,18 @@ function envelope(
   datasource: RawEventDatasource,
   row: Record<string, unknown>,
 ): RawEventQueueEnvelope {
-  return { kind: "raw-event-delivery-v1", datasource, row };
+  const value = { kind: "raw-event-delivery-v1", datasource, row } as const;
+  assertEnvelopeSize(value);
+  return value;
+}
+
+function assertEnvelopeSize(value: Record<string, unknown>): void {
+  const bytes = new TextEncoder().encode(JSON.stringify(value)).byteLength;
+  if (bytes > RAW_EVENT_QUEUE_MAX_MESSAGE_BYTES) {
+    throw new Error(
+      `raw event queue envelope exceeds ${String(RAW_EVENT_QUEUE_MAX_MESSAGE_BYTES)} bytes`,
+    );
+  }
 }
 
 function requiredQueue(env: Env, datasource: RawEventDatasource): Queue<Record<string, unknown>> {

@@ -5,6 +5,10 @@ import type { Env } from "./types";
 
 export interface RawEventQueueTestEnv {
   readonly __queuedRows: Record<string, unknown>[];
+  readonly __queuedEnvelopes: Array<{
+    readonly datasource: string;
+    readonly row: Record<string, unknown>;
+  }>;
 }
 
 type TestMock = ReturnType<typeof vi.fn>;
@@ -23,13 +27,20 @@ interface RawEventTestQueue {
 
 export function rawEventQueueBindings() {
   const queuedRows: Record<string, unknown>[] = [];
+  const queuedEnvelopes: RawEventQueueTestEnv["__queuedEnvelopes"] = [];
+  const capture = (body: Record<string, unknown>) => {
+    const row = queueRow(body);
+    if (typeof body.datasource !== "string") throw new Error("expected raw queue datasource");
+    queuedRows.push(row);
+    queuedEnvelopes.push({ datasource: body.datasource, row });
+  };
   const queue = {
     send: vi.fn(async (body: Record<string, unknown>) => {
-      queuedRows.push(queueRow(body));
+      capture(body);
       return queueResult();
     }),
     sendBatch: vi.fn(async (messages: Iterable<{ body: Record<string, unknown> }>) => {
-      for (const message of messages) queuedRows.push(queueRow(message.body));
+      for (const message of messages) capture(message.body);
       return queueResult();
     }),
     metrics: vi.fn(async () => queueResult().metadata.metrics),
@@ -38,6 +49,7 @@ export function rawEventQueueBindings() {
     RAW_EVENTS_QUEUE: queue,
     RAW_EVALUATIONS_QUEUE: queue,
     __queuedRows: queuedRows,
+    __queuedEnvelopes: queuedEnvelopes,
   };
 }
 
@@ -48,7 +60,13 @@ export function captureQueuedResponse<Context, Fetch>(
   env: RawEventQueueTestEnv,
   queuedStart: number,
 ) {
-  return { ctx, fetch, response, rows: env.__queuedRows.slice(queuedStart) };
+  return {
+    ctx,
+    fetch,
+    response,
+    rows: env.__queuedRows.slice(queuedStart),
+    envelopes: env.__queuedEnvelopes.slice(queuedStart),
+  };
 }
 
 export function rawEventMessage(id: string, datasource = "raw_events"): RawEventTestMessage {
