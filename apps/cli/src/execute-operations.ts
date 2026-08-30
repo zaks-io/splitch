@@ -11,6 +11,7 @@ import { missingPositionalError } from "./command-positionals.js";
 import type { CliCommandDefinition } from "./command-registry.js";
 import type { ResolvedContext } from "./context.js";
 import { requireAppScope, requireEnvironmentScope } from "./context.js";
+import { emitApiOutput } from "./emit-flag-read-output.js";
 import {
   cliErrorCodeForVerifyDetails,
   normalizeCliError,
@@ -18,7 +19,6 @@ import {
   writeCliError,
 } from "./errors.js";
 import { emit } from "./execute-io.js";
-import { emitApiOutput } from "./emit-flag-read-output.js";
 import type { CliDeps, CliIo, CliResult } from "./execute-types.js";
 import { EXIT_API, EXIT_AUTH, EXIT_OK, EXIT_SCOPE, EXIT_USAGE } from "./exit-codes.js";
 import { environmentSelectorOverride, parseEvaluationContext } from "./operation-input.js";
@@ -118,7 +118,6 @@ export async function executeFlagsVerify(
       },
     });
     const verifyDetails = await client.verify(flagKey, evaluationContext);
-    emit(io, invocation.flags.json, verifyDetails);
     if (verifyDetails.reason === "ERROR") {
       // The CLI renders this SDK failure once with command-specific remediation.
       writeCliError(io, {
@@ -129,6 +128,7 @@ export async function executeFlagsVerify(
       });
       return { exitCode: EXIT_API, payload: verifyDetails };
     }
+    emit(io, invocation.flags.json, verifyDetails);
     if (sdkVerifyError) {
       io.error(sdkVerifyError);
     }
