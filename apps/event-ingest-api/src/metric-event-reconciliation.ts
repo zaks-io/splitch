@@ -24,7 +24,14 @@ interface ReconciliationEnvelope extends Record<string, unknown> {
   readonly environmentId: string;
   readonly eventDefinitionId: string;
   readonly serverReceivedAt: string;
+  readonly copyJobId?: string;
 }
+
+type ReconciliationOutcome =
+  | "committed"
+  | "absent"
+  | "copy-pending"
+  | { readonly copyJobId: string };
 
 /** Acknowledge the primary message only after its recovery work is durable. */
 export async function transferToReconciliation(
@@ -43,42 +50,68 @@ export async function handleMetricEventReconciliationQueue(
   env: Env,
 ): Promise<void> {
   requirePlatformTarget(env.SPLITCH_PLATFORM_TARGET);
+  const reconciliationQueue = env.METRIC_EVENTS_RECONCILIATION_QUEUE;
+  if (!reconciliationQueue) {
+    throw new Error("METRIC_EVENTS_RECONCILIATION_QUEUE binding is unavailable");
+  }
   for (const message of batch.messages) {
-    try {
-      const envelope = parseReconciliationEnvelope(message.body);
-      if (await metricEventCommitted(envelope, env)) {
-        await settleMetricEventDelivery(env.METRIC_EVENT_OUTBOX, envelope.dedupKey, {
-          ...envelope.attempt,
-          state: "delivered",
-          reason: undefined,
-        });
-        message.ack();
-        continue;
-      }
-      message.retry({
-        delaySeconds: queueRetryDelaySeconds(message.attempts, message.id),
-      });
-    } catch (error) {
-      console.error("event-ingest-api Metric Event reconciliation failed", {
-        queueMessageId: message.id,
-        attempts: message.attempts,
-        errorMessage: error instanceof Error ? error.message : "non-error rejection",
-      });
-      message.retry({
-        delaySeconds: queueRetryDelaySeconds(message.attempts, message.id),
-      });
-    }
+    await handleReconciliationMessage(message, env, reconciliationQueue);
   }
 }
 
-async function metricEventCommitted(envelope: ReconciliationEnvelope, env: Env): Promise<boolean> {
+async function handleReconciliationMessage(
+  message: Message<Record<string, unknown>>,
+  env: Env,
+  reconciliationQueue: Queue<Record<string, unknown>>,
+): Promise<void> {
+  try {
+    const envelope = parseReconciliationEnvelope(message.body);
+    const outcome = await reconcileMetricEvent(envelope, env);
+    if (outcome === "committed") {
+      await settleMetricEventDelivery(env.METRIC_EVENT_OUTBOX, envelope.dedupKey, {
+        ...envelope.attempt,
+        state: "delivered",
+        reason: undefined,
+      });
+      message.ack();
+      return;
+    }
+    if (typeof outcome === "object") {
+      await reconciliationQueue.send({ ...envelope, copyJobId: outcome.copyJobId });
+      message.ack();
+      return;
+    }
+    message.retry({
+      delaySeconds: queueRetryDelaySeconds(message.attempts, message.id),
+    });
+  } catch (error) {
+    console.error("event-ingest-api Metric Event reconciliation failed", {
+      queueMessageId: message.id,
+      attempts: message.attempts,
+      errorMessage: error instanceof Error ? error.message : "non-error rejection",
+    });
+    message.retry({
+      delaySeconds: queueRetryDelaySeconds(message.attempts, message.id),
+    });
+  }
+}
+
+async function reconcileMetricEvent(
+  envelope: ReconciliationEnvelope,
+  env: Env,
+): Promise<ReconciliationOutcome> {
   let evidence = await readEvidence(envelope, env);
   if (evidence.rawRows > 0 && evidence.stateRows === 0) {
-    await populateState(envelope, env);
+    if (envelope.copyJobId === undefined) {
+      return { copyJobId: await startStatePopulate(envelope, env) };
+    }
+    if ((await readCopyJobStatus(envelope.copyJobId, env)) !== "done") {
+      return "copy-pending";
+    }
     evidence = await readEvidence(envelope, env);
   }
-  if (evidence.rawRows > 0 && evidence.stateRows > 0) return true;
-  if (evidence.rawRows === 0 && evidence.stateRows === 0) return false;
+  if (evidence.rawRows > 0 && evidence.stateRows > 0) return "committed";
+  if (evidence.rawRows === 0 && evidence.stateRows === 0) return "absent";
   throw new Error(
     `Tinybird reconciliation returned mixed evidence raw=${String(evidence.rawRows)} state=${String(evidence.stateRows)}`,
   );
@@ -119,7 +152,7 @@ async function readEvidence(
   return { rawRows, stateRows };
 }
 
-async function populateState(envelope: ReconciliationEnvelope, env: Env): Promise<void> {
+async function startStatePopulate(envelope: ReconciliationEnvelope, env: Env): Promise<string> {
   if (!env.TINYBIRD_COPY_TOKEN) throw new Error("TINYBIRD_COPY_TOKEN is unavailable");
   const response = await fetch(pipeUrl(env, POPULATE_PIPE_NAME, envelope, "/copy"), {
     method: "POST",
@@ -127,6 +160,29 @@ async function populateState(envelope: ReconciliationEnvelope, env: Env): Promis
     signal: AbortSignal.timeout(READ_TIMEOUT_MS),
   });
   if (!response.ok) throw new Error(`Tinybird state populate returned HTTP ${response.status}`);
+  const body = (await response.json()) as { job?: unknown };
+  if (!isRecord(body.job) || typeof body.job.job_id !== "string" || body.job.job_id.length === 0) {
+    throw new Error("Tinybird state populate returned no job id");
+  }
+  return body.job.job_id;
+}
+
+async function readCopyJobStatus(jobId: string, env: Env): Promise<"done" | "pending"> {
+  if (!env.TINYBIRD_COPY_TOKEN) throw new Error("TINYBIRD_COPY_TOKEN is unavailable");
+  if (!env.TINYBIRD_API_URL) throw new Error("TINYBIRD_API_URL is unavailable");
+  const response = await fetch(
+    new URL(`/v0/jobs/${encodeURIComponent(jobId)}`, env.TINYBIRD_API_URL),
+    {
+      headers: { authorization: `Bearer ${env.TINYBIRD_COPY_TOKEN}` },
+      signal: AbortSignal.timeout(READ_TIMEOUT_MS),
+    },
+  );
+  if (!response.ok) throw new Error(`Tinybird Copy job returned HTTP ${response.status}`);
+  const body = (await response.json()) as { status?: unknown };
+  if (body.status === "done") return "done";
+  if (body.status === "waiting" || body.status === "working") return "pending";
+  if (body.status === "error") throw new Error(`Tinybird Copy job ${jobId} failed`);
+  throw new Error("Tinybird Copy job returned an invalid status");
 }
 
 function pipeUrl(
@@ -174,6 +230,7 @@ function parseReconciliationEnvelope(value: Record<string, unknown>): Reconcilia
   ) {
     throw new Error("Metric Event reconciliation envelope is invalid");
   }
+  if (value.copyJobId !== undefined) requiredString(value, "copyJobId");
   for (const field of [
     "dedupKey",
     "appId",
