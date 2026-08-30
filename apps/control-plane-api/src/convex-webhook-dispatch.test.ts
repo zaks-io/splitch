@@ -45,24 +45,124 @@ describe("Convex config webhook dispatch", () => {
       expect(finishes[0]).toMatchObject({ state });
     }
   });
+
+  it("isolates an undecryptable delivery without disconnecting healthy siblings", async () => {
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const healthyBody = '{"deliveryId":"00000000-0000-4000-8000-000000000001"}';
+    const poisonedBody = '{"deliveryId":"00000000-0000-4000-8000-000000000002"}';
+    const encrypted = await encryptConvexSecret("webhook-secret", KEY, "v1");
+    const finishes: Array<{ deliveryId: string; input: Record<string, unknown> }> = [];
+    const fetcher = vi.fn(async () => new Response(null, { status: 202 }));
+    const repo = {
+      convex: {
+        claimDueDeliveries: async () => [
+          delivery(healthyBody, encrypted.ciphertext),
+          delivery(poisonedBody, "not-valid-ciphertext", {
+            deliveryId: "00000000-0000-4000-8000-000000000002",
+          }),
+        ],
+        finishDelivery: async (
+          deliveryId: string,
+          _leaseOwner: string,
+          input: Record<string, unknown>,
+        ) => finishes.push({ deliveryId, input }),
+      },
+    } as unknown as Repository;
+
+    await expect(
+      dispatchConvexWebhooks({ repo, webhookKek: KEY, fetcher, now: () => NOW }),
+    ).resolves.toBe(2);
+
+    expect(fetcher).toHaveBeenCalledOnce();
+    expect(consoleError).toHaveBeenCalledWith("convex_webhook_delivery_preparation_failed", {
+      deliveryId: "00000000-0000-4000-8000-000000000002",
+      code: "DELIVERY_PREPARATION_FAILED",
+    });
+    consoleError.mockRestore();
+    expect(finishes).toEqual(
+      expect.arrayContaining([
+        {
+          deliveryId: "00000000-0000-4000-8000-000000000001",
+          input: expect.objectContaining({ state: "delivered" }),
+        },
+        {
+          deliveryId: "00000000-0000-4000-8000-000000000002",
+          input: expect.objectContaining({
+            state: "pending",
+            errorJson: expect.stringContaining('"code":"DELIVERY_PREPARATION_FAILED"'),
+          }),
+        },
+      ]),
+    );
+  });
+
+  it("reports a lease update failure after healthy siblings finish", async () => {
+    const firstBody = '{"deliveryId":"00000000-0000-4000-8000-000000000001"}';
+    const secondBody = '{"deliveryId":"00000000-0000-4000-8000-000000000002"}';
+    const encrypted = await encryptConvexSecret("webhook-secret", KEY, "v1");
+    const finishAttempts: string[] = [];
+    const repo = {
+      convex: {
+        claimDueDeliveries: async () => [
+          delivery(firstBody, encrypted.ciphertext),
+          delivery(secondBody, encrypted.ciphertext, {
+            deliveryId: "00000000-0000-4000-8000-000000000002",
+          }),
+        ],
+        finishDelivery: async (deliveryId: string) => {
+          finishAttempts.push(deliveryId);
+          if (deliveryId === "00000000-0000-4000-8000-000000000001")
+            throw new Error("D1 completion failed");
+        },
+      },
+    } as unknown as Repository;
+
+    await expect(
+      dispatchConvexWebhooks({
+        repo,
+        webhookKek: KEY,
+        fetcher: async () => new Response(null, { status: 202 }),
+        now: () => NOW,
+      }),
+    ).rejects.toThrow("1 Convex delivery lease updates failed");
+
+    expect(finishAttempts).toHaveLength(2);
+    expect(finishAttempts).toEqual(
+      expect.arrayContaining([
+        "00000000-0000-4000-8000-000000000001",
+        "00000000-0000-4000-8000-000000000002",
+      ]),
+    );
+  });
 });
+
+function delivery(
+  bodyJson: string,
+  secretCiphertext: string,
+  overrides: Partial<{
+    deliveryId: string;
+    installationId: string;
+    callbackUrl: string;
+  }> = {},
+) {
+  return {
+    deliveryId: "00000000-0000-4000-8000-000000000001",
+    installationId: "00000000-0000-4000-8000-000000000002",
+    callbackUrl: "https://example.convex.site/integrations/splitch/configuration",
+    secretCiphertext,
+    secretKeyVersion: "v1",
+    environmentVersion: 2,
+    bodyJson,
+    attemptCount: 0,
+    ...overrides,
+  };
+}
 
 async function fixture(bodyJson: string) {
   const encrypted = await encryptConvexSecret("webhook-secret", KEY, "v1");
   const finishes: Array<Record<string, unknown>> = [];
   const convex = {
-    claimDueDeliveries: async () => [
-      {
-        deliveryId: "00000000-0000-4000-8000-000000000001",
-        installationId: "00000000-0000-4000-8000-000000000002",
-        callbackUrl: "https://example.convex.site/integrations/splitch/configuration",
-        secretCiphertext: encrypted.ciphertext,
-        secretKeyVersion: encrypted.keyVersion,
-        environmentVersion: 2,
-        bodyJson,
-        attemptCount: 0,
-      },
-    ],
+    claimDueDeliveries: async () => [delivery(bodyJson, encrypted.ciphertext)],
     finishDelivery: async (
       _deliveryId: string,
       _leaseOwner: string,

@@ -42,8 +42,14 @@ export const ConvexInstallationStatusSchema = ConvexInstallationSchema.extend({
   terminalCount: z.number().int().nonnegative(),
   latestDeliveryError: z
     .object({
-      kind: z.enum(["transport", "http"]),
-      code: z.enum(["DNS_ERROR", "CONNECT_TIMEOUT", "TLS_ERROR", "HTTP_STATUS"]),
+      kind: z.enum(["transport", "http", "internal"]),
+      code: z.enum([
+        "DNS_ERROR",
+        "CONNECT_TIMEOUT",
+        "TLS_ERROR",
+        "HTTP_STATUS",
+        "DELIVERY_PREPARATION_FAILED",
+      ]),
       httpStatus: z.number().int().min(100).max(599).optional(),
       retryAfterMs: z.number().int().nonnegative().optional(),
       occurredAt: z.iso.datetime(),

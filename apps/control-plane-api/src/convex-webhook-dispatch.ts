@@ -1,6 +1,6 @@
 import type { Repository } from "@splitch/db";
 import { decryptConvexSecret, signConvexWebhook } from "./convex-secret";
-import { describeCause, postWebhook, retryDelayMs } from "./webhook-transport";
+import { describeCause, postWebhook, retryDelayMs, type WebhookPost } from "./webhook-transport";
 
 const LEASE_MS = 30_000;
 const BATCH_SIZE = 25;
@@ -24,18 +24,49 @@ export async function dispatchConvexWebhooks(deps: ConvexWebhookDispatchDeps): P
     BATCH_SIZE,
   );
 
-  await Promise.all(deliveries.map((delivery) => deliverOne(deps, delivery, leaseOwner, now)));
+  const settled = await Promise.allSettled(
+    deliveries.map((delivery) => deliverSafely(deps, delivery, leaseOwner, now)),
+  );
+  const rejected = settled.filter((result) => result.status === "rejected");
+  if (rejected.length > 0)
+    throw new AggregateError(
+      rejected.map((result) => result.reason),
+      `${rejected.length} Convex delivery lease updates failed`,
+    );
   return deliveries.length;
 }
 
 type Delivery = Awaited<ReturnType<Repository["convex"]["claimDueDeliveries"]>>[number];
 
-async function deliverOne(
+async function deliverSafely(
   deps: ConvexWebhookDispatchDeps,
   delivery: Delivery,
   leaseOwner: string,
   now: Date,
 ): Promise<void> {
+  let webhook: WebhookPost;
+  try {
+    webhook = await prepareWebhook(deps, delivery, now);
+  } catch {
+    console.error("convex_webhook_delivery_preparation_failed", {
+      deliveryId: delivery.deliveryId,
+      code: "DELIVERY_PREPARATION_FAILED",
+    });
+    await finishFailure(deps, delivery, leaseOwner, now, true, {
+      kind: "internal",
+      code: "DELIVERY_PREPARATION_FAILED",
+      occurredAt: now.toISOString(),
+    });
+    return;
+  }
+  await deliverOne(deps, delivery, leaseOwner, now, webhook);
+}
+
+async function prepareWebhook(
+  deps: ConvexWebhookDispatchDeps,
+  delivery: Delivery,
+  now: Date,
+): Promise<WebhookPost> {
   const secret = await decryptConvexSecret(
     delivery.secretCiphertext,
     deps.webhookKek,
@@ -44,7 +75,7 @@ async function deliverOne(
   );
   const timestamp = Math.floor(now.getTime() / 1_000).toString();
   const signature = await signConvexWebhook(secret, timestamp, delivery.bodyJson);
-  const result = await postWebhook({
+  return {
     url: delivery.callbackUrl,
     body: delivery.bodyJson,
     headers: {
@@ -54,7 +85,17 @@ async function deliverOne(
       "splitch-timestamp": timestamp,
     },
     fetcher: deps.fetcher,
-  });
+  };
+}
+
+async function deliverOne(
+  deps: ConvexWebhookDispatchDeps,
+  delivery: Delivery,
+  leaseOwner: string,
+  now: Date,
+  webhook: WebhookPost,
+): Promise<void> {
+  const result = await postWebhook(webhook);
 
   if (result.outcome === "transport-failed") {
     console.error("convex_webhook_delivery_transport_failed", {
