@@ -39,6 +39,27 @@ function loginTransport(authorization: unknown): FakeCliTransport {
 }
 
 describe("login browser approval", () => {
+  it("opens the WorkOS AuthKit verification URI returned by hosted Auth", async () => {
+    const { credentialPath } = await makeTempHome();
+    const transport = loginTransport({
+      ...deviceAuthorizationResponse(),
+      verification_uri: "https://soulful-path-50.authkit.app/device",
+      verification_uri_complete: "https://soulful-path-50.authkit.app/device?user_code=ABCD-1234",
+    });
+
+    expect(
+      await runCli(["login", "--json"], {
+        credentialPath,
+        fetch: transport.fetch,
+        platformTarget: "production",
+      }),
+    ).toBe(EXIT_OK);
+
+    expect(open).toHaveBeenCalledWith(
+      "https://soulful-path-50.authkit.app/device?user_code=ABCD-1234",
+    );
+  });
+
   it("opens the base verification URI before polling when no complete URI is returned", async () => {
     const { credentialPath } = await makeTempHome();
     const { verification_uri_complete: _complete, ...authorization } =
@@ -90,18 +111,11 @@ describe("login device URL origin binding", () => {
       { verification_uri: "file:///tmp/approval", verification_uri_complete: undefined },
     ],
     ["unsupported complete URI", { verification_uri_complete: "javascript:alert(1)" }],
-    ["foreign-origin URI", { verification_uri: "https://evil.test/device" }],
+    ["mismatched complete URI", { verification_uri_complete: "https://evil.test/device" }],
     [
       "credential-bearing URI",
       {
         verification_uri: "https://user:pass@auth.splitch.dev/device",
-        verification_uri_complete: undefined,
-      },
-    ],
-    [
-      "port-changing URI",
-      {
-        verification_uri: "https://auth.splitch.dev:8443/device",
         verification_uri_complete: undefined,
       },
     ],

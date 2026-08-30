@@ -13,8 +13,8 @@ export async function openDeviceApproval(approval: DeviceApproval): Promise<void
   const verificationUri = requireVerificationUrl(
     approval.verificationUri,
     "verification_uri",
-    approval.authBaseUrl,
     approval.requireHttps,
+    approval.requireHttps ? undefined : new URL(approval.authBaseUrl).origin,
   );
   const verificationUrl =
     approval.verificationUriComplete === undefined
@@ -22,8 +22,8 @@ export async function openDeviceApproval(approval: DeviceApproval): Promise<void
       : requireVerificationUrl(
           approval.verificationUriComplete,
           "verification_uri_complete",
-          approval.authBaseUrl,
           approval.requireHttps,
+          new URL(verificationUri).origin,
         );
 
   console.error(`Opening ${verificationUrl} in your browser.`);
@@ -41,19 +41,18 @@ export async function openDeviceApproval(approval: DeviceApproval): Promise<void
 }
 
 /**
- * Device-approval URLs must stay on the configured Auth origin. Foreign hosts,
- * userinfo credentials, port changes, and HTTP on hosted targets are rejected
- * before anything is printed or opened.
+ * WorkOS hosts device approval on the configured AuthKit domain, not the
+ * splitch Auth API origin. The base URL comes from the trusted authorization
+ * response; the complete URL must remain on that same origin.
  */
 export function requireVerificationUrl(
   value: string,
   field: string,
-  authBaseUrl: string,
   requireHttps: boolean,
+  expectedOrigin?: string,
 ): string {
   try {
     const url = new URL(value);
-    const authOrigin = new URL(authBaseUrl);
     if (url.protocol !== "http:" && url.protocol !== "https:") {
       throw new Error("unsupported protocol");
     }
@@ -63,8 +62,8 @@ export function requireVerificationUrl(
     if (requireHttps && url.protocol !== "https:") {
       throw new Error("hosted target requires https");
     }
-    if (url.origin !== authOrigin.origin) {
-      throw new Error("foreign origin");
+    if (expectedOrigin !== undefined && url.origin !== expectedOrigin) {
+      throw new Error("unexpected origin");
     }
     return url.href;
   } catch {
