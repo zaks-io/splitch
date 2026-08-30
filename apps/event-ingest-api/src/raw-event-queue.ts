@@ -1,54 +1,27 @@
 import { requirePlatformTarget } from "@splitch/contracts";
 import { queueRetryDelaySeconds } from "./queue-retry";
+import { type RawEventFailureSource, rawFailureChunks } from "./raw-event-dead-letter";
 import { admitRawEventPrivacy, completeRawEventPrivacy } from "./raw-event-privacy-delivery";
+import {
+  parseRawEventEnvelope,
+  type RawEventDatasource,
+  type RawEventQueueEnvelope,
+} from "./raw-event-queue-envelope";
+import {
+  markRawEventDelivered,
+  markRawEventRetryable,
+  markRawEventTerminal,
+  markRawEventTransferred,
+  type RawEventTerminalState,
+} from "./raw-event-terminal-state";
 import { tinybirdDelivery } from "./tinybird";
 import { ndjsonBatches, sendNdjsonBatch } from "./tinybird-microbatch";
 import type { Env } from "./types";
 
-export type RawEventDatasource = "raw_events" | "raw_evaluations";
-
-interface RawEventQueueEnvelope extends Record<string, unknown> {
-  readonly kind: "raw-event-delivery-v1";
-  readonly datasource: RawEventDatasource;
-  readonly row: Record<string, unknown>;
-}
-
-interface AdmittedRawEvent {
+interface AdmittedRawEvent extends RawEventFailureSource {
   readonly message: Message<Record<string, unknown>>;
   readonly envelope: RawEventQueueEnvelope;
   readonly deliveryId: string;
-}
-
-interface RawEventFailureEnvelope extends Record<string, unknown> {
-  readonly kind: "raw-event-delivery-failure-v1";
-  readonly classification: "indeterminate" | "poison";
-  readonly reason: string;
-  readonly sourceMessageId: string;
-  readonly sourceAttempts: number;
-  readonly original: RawEventQueueEnvelope;
-}
-
-const DLQ_MAX_MESSAGES = 100;
-const DLQ_MAX_BATCH_BYTES = 240_000;
-const DLQ_MAX_MESSAGE_BYTES = 120_000;
-
-export async function enqueueRawEvent(
-  env: Env,
-  datasource: RawEventDatasource,
-  row: Record<string, unknown>,
-): Promise<void> {
-  await requiredQueue(env, datasource).send(envelope(datasource, row));
-}
-
-export async function enqueueRawEvents(
-  env: Env,
-  datasource: RawEventDatasource,
-  rows: readonly Record<string, unknown>[],
-): Promise<void> {
-  if (rows.length === 0) return;
-  await requiredQueue(env, datasource).sendBatch(
-    rows.map((row) => ({ body: envelope(datasource, row) })),
-  );
 }
 
 /**
@@ -72,27 +45,59 @@ async function admitBatch(
   env: Env,
 ): Promise<Map<RawEventDatasource, AdmittedRawEvent[]>> {
   const groups = new Map<RawEventDatasource, AdmittedRawEvent[]>();
-  await Promise.all(
-    messages.map(async (message) => {
-      try {
-        const queued = parseEnvelope(message.body);
-        if (queued.datasource !== queueDatasource) {
-          throw new Error(`${queued.datasource} envelope arrived on ${queueDatasource} queue`);
-        }
-        const deliveryId = `queue:${queued.datasource}:${message.id}`;
-        if (await admitRawEventPrivacy(queued.datasource, queued.row, deliveryId, env)) {
-          message.ack();
-          return;
-        }
-        const group = groups.get(queued.datasource) ?? [];
-        group.push({ message, envelope: queued, deliveryId });
-        groups.set(queued.datasource, group);
-      } catch (error) {
-        retry(message, error);
-      }
-    }),
-  );
+  await Promise.all(messages.map((message) => admitMessage(message, queueDatasource, env, groups)));
   return groups;
+}
+
+async function admitMessage(
+  message: Message<Record<string, unknown>>,
+  queueDatasource: RawEventDatasource,
+  env: Env,
+  groups: Map<RawEventDatasource, AdmittedRawEvent[]>,
+): Promise<void> {
+  let queued: RawEventQueueEnvelope;
+  try {
+    queued = parseRawEventEnvelope(message.body);
+    if (queued.datasource !== queueDatasource) {
+      throw new Error(`${queued.datasource} envelope arrived on ${queueDatasource} queue`);
+    }
+  } catch (error) {
+    retry(message, error);
+    return;
+  }
+  const deliveryId = `queue:${queued.datasource}:${message.id}`;
+  const item = { message, envelope: queued, deliveryId };
+  try {
+    const privacy = await admitRawEventPrivacy(queued.datasource, queued.row, deliveryId, env);
+    if (privacy.kind === "suppressed") return message.ack();
+    if (privacy.kind === "delivered") {
+      await settleCompletedAdmissions([item], env, (completed) => completed.message.ack());
+      return;
+    }
+    if (privacy.kind === "terminal") return resumeTerminalFailure(item, privacy.state, env);
+  } catch (error) {
+    await cleanupFailedAdmission(item, env, error);
+    return;
+  }
+  const group = groups.get(queued.datasource) ?? [];
+  group.push(item);
+  groups.set(queued.datasource, group);
+}
+
+async function cleanupFailedAdmission(
+  item: AdmittedRawEvent,
+  env: Env,
+  error: unknown,
+): Promise<void> {
+  try {
+    await completeAdmission(item, env);
+    retry(item.message, error);
+  } catch (cleanupError) {
+    retry(
+      item.message,
+      new AggregateError([error, cleanupError], "privacy admission cleanup failed"),
+    );
+  }
 }
 
 async function deliverGroup(
@@ -102,7 +107,7 @@ async function deliverGroup(
 ): Promise<void> {
   const delivery = tinybirdDelivery(env, datasource);
   if (!delivery.ok) {
-    await settleCompletedAdmissions(admitted, env, (item) =>
+    await recordThenComplete(admitted, env, markRawEventRetryable, (item) =>
       retry(item.message, new Error(delivery.error.message)),
     );
     return;
@@ -120,11 +125,13 @@ async function settleMicrobatch(
   env: Env,
 ): Promise<void> {
   if (outcome.kind === "delivered") {
-    await settleCompletedAdmissions(items, env, (item) => item.message.ack());
+    await recordThenComplete(items, env, markRawEventDelivered, (item) => item.message.ack());
     return;
   }
   if (outcome.kind === "retryable") {
-    await settleCompletedAdmissions(items, env, (item) => retryDelivery(item, outcome));
+    await recordThenComplete(items, env, markRawEventRetryable, (item) =>
+      retryDelivery(item, outcome),
+    );
     return;
   }
   await transferTerminalFailure(datasource, items, outcome, env);
@@ -155,6 +162,34 @@ async function settleCompletedAdmissions(
   }
 }
 
+async function recordThenComplete(
+  items: readonly AdmittedRawEvent[],
+  env: Env,
+  record: (env: Env, row: Record<string, unknown>, deliveryId: string) => Promise<void>,
+  settle: (item: AdmittedRawEvent) => void,
+): Promise<void> {
+  const recorded = await recordItems(items, (item) =>
+    record(env, item.envelope.row, item.deliveryId),
+  );
+  await settleCompletedAdmissions(recorded, env, settle);
+}
+
+async function recordItems(
+  items: readonly AdmittedRawEvent[],
+  record: (item: AdmittedRawEvent) => Promise<void>,
+): Promise<AdmittedRawEvent[]> {
+  const outcomes = await Promise.allSettled(items.map(record));
+  const recorded: AdmittedRawEvent[] = [];
+  for (let index = 0; index < items.length; index += 1) {
+    const item = items[index];
+    const outcome = outcomes[index];
+    if (!item || !outcome) continue;
+    if (outcome.status === "fulfilled") recorded.push(item);
+    else retry(item.message, outcome.reason);
+  }
+  return recorded;
+}
+
 function retryDelivery(
   item: AdmittedRawEvent,
   outcome: Extract<Awaited<ReturnType<typeof sendNdjsonBatch>>, { kind: "retryable" }>,
@@ -183,17 +218,21 @@ async function transferTerminalFailure(
   >,
   env: Env,
 ): Promise<void> {
-  const chunks = failureChunks(items, outcome);
+  const terminal = { classification: outcome.kind, reason: outcome.reason } as const;
+  const marked = await recordItems(items, (item) =>
+    markRawEventTerminal(env, item.envelope.row, item.deliveryId, terminal),
+  );
+  const chunks = rawFailureChunks(marked, terminal);
   const queue = requiredDeadLetterQueue(env, datasource);
   for (let index = 0; index < chunks.length; index += 1) {
     const chunk = chunks[index] ?? [];
     try {
       await queue.sendBatch(chunk.map((entry) => ({ body: entry.envelope })));
-      await settleCompletedAdmissions(
+      const transferred = await recordItems(
         chunk.map((entry) => entry.item),
-        env,
-        (item) => item.message.ack(),
+        (item) => markRawEventTransferred(env, item.envelope.row, item.deliveryId),
       );
+      await settleCompletedAdmissions(transferred, env, (item) => item.message.ack());
     } catch (error) {
       for (const pending of chunks.slice(index).flat()) retry(pending.item.message, error);
       return;
@@ -203,54 +242,28 @@ async function transferTerminalFailure(
     datasource,
     classification: outcome.kind,
     reason: outcome.reason,
-    rowCount: items.length,
+    rowCount: marked.length,
     chunkCount: chunks.length,
   });
 }
 
-interface RawFailureEntry {
-  readonly item: AdmittedRawEvent;
-  readonly envelope: RawEventFailureEnvelope;
-  readonly bytes: number;
-}
-
-function failureChunks(
-  items: readonly AdmittedRawEvent[],
-  outcome: { readonly kind: "indeterminate" | "poison"; readonly reason: string },
-): RawFailureEntry[][] {
-  const chunks: RawFailureEntry[][] = [];
-  let current: RawFailureEntry[] = [];
-  let bytes = 0;
-  for (const item of items) {
-    const envelope: RawEventFailureEnvelope = {
-      kind: "raw-event-delivery-failure-v1",
-      classification: outcome.kind,
-      reason: outcome.reason,
-      sourceMessageId: item.message.id,
-      sourceAttempts: item.message.attempts,
-      original: item.envelope,
-    };
-    const entry = { item, envelope, bytes: byteLength(JSON.stringify(envelope)) };
-    if (entry.bytes > DLQ_MAX_MESSAGE_BYTES) {
-      throw new Error(`Raw event failure envelope exceeds ${String(DLQ_MAX_MESSAGE_BYTES)} bytes`);
+async function resumeTerminalFailure(
+  item: AdmittedRawEvent,
+  terminal: RawEventTerminalState,
+  env: Env,
+): Promise<void> {
+  if (!terminal.transferred) {
+    const entry = rawFailureChunks([item], terminal)[0]?.[0];
+    if (!entry) throw new Error("Raw event terminal failure envelope is unavailable");
+    try {
+      await requiredDeadLetterQueue(env, item.envelope.datasource).send(entry.envelope);
+      await markRawEventTransferred(env, item.envelope.row, item.deliveryId);
+    } catch (error) {
+      retry(item.message, error);
+      return;
     }
-    if (
-      current.length > 0 &&
-      (current.length >= DLQ_MAX_MESSAGES || bytes + entry.bytes > DLQ_MAX_BATCH_BYTES)
-    ) {
-      chunks.push(current);
-      current = [];
-      bytes = 0;
-    }
-    current.push(entry);
-    bytes += entry.bytes;
   }
-  if (current.length > 0) chunks.push(current);
-  return chunks;
-}
-
-function byteLength(value: string): number {
-  return new TextEncoder().encode(value).byteLength;
+  await settleCompletedAdmissions([item], env, (completed) => completed.message.ack());
 }
 
 function retry(message: Message<Record<string, unknown>>, error: unknown): void {
@@ -262,30 +275,6 @@ function retry(message: Message<Record<string, unknown>>, error: unknown): void 
   message.retry({ delaySeconds: queueRetryDelaySeconds(message.attempts, message.id) });
 }
 
-function envelope(
-  datasource: RawEventDatasource,
-  row: Record<string, unknown>,
-): RawEventQueueEnvelope {
-  return { kind: "raw-event-delivery-v1", datasource, row };
-}
-
-function parseEnvelope(value: Record<string, unknown>): RawEventQueueEnvelope {
-  if (
-    value.kind !== "raw-event-delivery-v1" ||
-    (value.datasource !== "raw_events" && value.datasource !== "raw_evaluations") ||
-    !isRecord(value.row)
-  ) {
-    throw new Error("raw event queue envelope is invalid");
-  }
-  return value as RawEventQueueEnvelope;
-}
-
-function requiredQueue(env: Env, datasource: RawEventDatasource): Queue<Record<string, unknown>> {
-  const queue = datasource === "raw_events" ? env.RAW_EVENTS_QUEUE : env.RAW_EVALUATIONS_QUEUE;
-  if (!queue) throw new Error(`${datasource} queue binding is unavailable`);
-  return queue;
-}
-
 function requiredDeadLetterQueue(
   env: Env,
   datasource: RawEventDatasource,
@@ -293,8 +282,4 @@ function requiredDeadLetterQueue(
   const queue = datasource === "raw_events" ? env.RAW_EVENTS_DLQ : env.RAW_EVALUATIONS_DLQ;
   if (!queue) throw new Error(`${datasource} dead-letter queue binding is unavailable`);
   return queue;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }

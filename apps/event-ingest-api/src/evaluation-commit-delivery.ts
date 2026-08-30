@@ -1,4 +1,4 @@
-import { enqueueRawEvent, enqueueRawEvents } from "./raw-event-queue";
+import { enqueueRawEvent, enqueueRawEvents } from "./raw-event-queue-envelope";
 import { type EvaluationUsageEventInput, toEvaluationUsageTinybirdRow } from "./tinybird";
 import type { Env } from "./types";
 

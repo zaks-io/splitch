@@ -1,7 +1,9 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { EntityMetricPrivacyDurableObject } from "./entity-metric-privacy-store";
-import worker from "./index";
-import type { Env } from "./types";
+import {
+  deliverRawEventMessages as deliver,
+  rawEventMessage as message,
+  rawEventPrivacyNamespace as privacyNamespace,
+} from "./raw-event-queue-test-fixture";
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -141,35 +143,28 @@ describe("raw event queue privacy permits", () => {
   it.each([
     ["Exposure", "splitch-raw-events", "raw_events", "/admit-entity-row"],
     ["Evaluation", "splitch-raw-evaluations", "raw_evaluations", "/admit-app-row"],
-  ])("clears stale %s permits when suppression follows a lost admission response", async (_, queue, source, lostPath) => {
+  ])("clears stale %s permits after every lost admission response", async (_, queue, source, lostPath) => {
     const append = vi.fn();
     vi.stubGlobal("fetch", append);
-    const privacy = privacyNamespace(lostPath);
+    const privacy = privacyNamespace(lostPath, 8);
     const queued = message("lost-admission", source);
     const overrides = {
       SPLITCH_PLATFORM_TARGET: "production" as const,
       ENTITY_METRIC_PRIVACY: privacy.namespace,
     };
 
-    await deliver(queue, [queued], overrides);
-    expect(queued.retry).toHaveBeenCalledOnce();
+    for (let attempt = 1; attempt <= 8; attempt += 1) {
+      queued.attempts = attempt;
+      await deliver(queue, [queued], overrides);
+    }
+    expect(queued.retry).toHaveBeenCalledTimes(8);
     expect(append).not.toHaveBeenCalled();
-    const blockedReset = await privacy.fetch("app_1:app-identity-inventory", "/reset-app", {
+    const reset = await privacy.fetch("app_1:app-identity-inventory", "/reset-app", {
       appId: "app_1",
       resetId: "reset_lost_admission",
       currentVersion: "app-v1",
     });
-    expect(blockedReset.status).toBe(409);
-
-    await deliver(queue, [queued], overrides);
-    expect(queued.ack).toHaveBeenCalledOnce();
-    expect(append).not.toHaveBeenCalled();
-    const completedReset = await privacy.fetch("app_1:app-identity-inventory", "/reset-app", {
-      appId: "app_1",
-      resetId: "reset_lost_admission",
-      currentVersion: "app-v1",
-    });
-    expect(completedReset.status).toBe(200);
+    expect(reset.status).toBe(200);
   });
 
   it("rolls back the App and Entity permits when nested admission fails", async () => {
@@ -191,118 +186,3 @@ describe("raw event queue privacy permits", () => {
     expect(reset.status).toBe(200);
   });
 });
-
-function message(id: string, datasource = "raw_events") {
-  return {
-    id,
-    timestamp: new Date("2026-08-30T00:00:00.000Z"),
-    attempts: 1,
-    body: {
-      kind: "raw-event-delivery-v1",
-      datasource,
-      row: {
-        app_id: "app_1",
-        environment_id: "env_1",
-        id_type: "user",
-        targeting_key_hash: "app-v1:target",
-        entity_family_hash: "app-v1:family",
-        server_received_at: "2026-08-30T00:00:00.000Z",
-        dedup_key: `sha256:${id}`,
-      },
-    },
-    ack: vi.fn(),
-    retry: vi.fn(),
-  } satisfies Message<Record<string, unknown>>;
-}
-
-async function deliver(
-  queue: string,
-  messages: readonly ReturnType<typeof message>[],
-  overrides: Partial<Env> = {},
-) {
-  if (!worker.queue) throw new Error("queue handler is unavailable");
-  const rawEventsDlq = { send: vi.fn(), sendBatch: vi.fn(), metrics: vi.fn() };
-  const rawEvaluationsDlq = { send: vi.fn(), sendBatch: vi.fn(), metrics: vi.fn() };
-  await worker.queue(
-    {
-      queue,
-      messages,
-      metadata: { metrics: { backlogCount: messages.length, backlogBytes: 1_024 } },
-      ackAll: vi.fn(),
-      retryAll: vi.fn(),
-    },
-    {
-      SPLITCH_PLATFORM_TARGET: "local",
-      TINYBIRD_API_URL: "https://tinybird.test",
-      TINYBIRD_INGEST_TOKEN: "test-token",
-      RAW_EVENTS_DLQ: rawEventsDlq,
-      RAW_EVALUATIONS_DLQ: rawEvaluationsDlq,
-      ...overrides,
-    } as Env,
-    {} as ExecutionContext,
-  );
-  return { rawEventsDlq, rawEvaluationsDlq };
-}
-
-function privacyNamespace(lostAdmissionPath?: string) {
-  const objects = new Map<string, EntityMetricPrivacyDurableObject>();
-  let loseAdmission = lostAdmissionPath !== undefined;
-  let namespace!: Env["ENTITY_METRIC_PRIVACY"];
-  const env = () =>
-    ({
-      SPLITCH_PLATFORM_TARGET: "production",
-      TINYBIRD_API_URL: "https://tinybird.test",
-      TINYBIRD_INGEST_TOKEN: "test-token",
-      ENTITY_METRIC_PRIVACY: namespace,
-      EVALUATION_COMMIT_OUTBOX: {},
-      METRIC_EVENT_OUTBOX: {},
-    }) as Env;
-  namespace = {
-    idFromName: (name: string) => name as unknown as DurableObjectId,
-    get: (id: DurableObjectId) => ({
-      fetch: async (input: RequestInfo | URL, init?: RequestInit) => {
-        const name = String(id);
-        let object = objects.get(name);
-        if (!object) {
-          object = new EntityMetricPrivacyDurableObject(
-            { storage: memoryStorage() } as DurableObjectState,
-            env(),
-          );
-          objects.set(name, object);
-        }
-        const response = await object.fetch(new Request(String(input), init));
-        if (loseAdmission && new URL(String(input)).pathname === lostAdmissionPath) {
-          loseAdmission = false;
-          throw new Error("admission response lost");
-        }
-        return response;
-      },
-    }),
-  };
-  return {
-    namespace,
-    fetch(name: string, path: string, body: unknown) {
-      return namespace.get(namespace.idFromName(name)).fetch(`https://privacy.test${path}`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify(body),
-      });
-    },
-  };
-}
-
-function memoryStorage(): DurableObjectStorage {
-  const values = new Map<string, unknown>();
-  return {
-    get: async <T>(key: string) => values.get(key) as T | undefined,
-    put: async (key: string, value: unknown) => void values.set(key, structuredClone(value)),
-    delete: async (key: string | string[]) =>
-      Array.isArray(key)
-        ? key.reduce((count, item) => count + Number(values.delete(item)), 0)
-        : values.delete(key),
-    list: async <T>({ prefix }: { prefix: string }) =>
-      new Map(
-        [...values.entries()].filter(([key]) => key.startsWith(prefix)) as Array<[string, T]>,
-      ),
-  } as unknown as DurableObjectStorage;
-}

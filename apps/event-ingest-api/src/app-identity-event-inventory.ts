@@ -1,17 +1,17 @@
+import { parseEntityIdentityDelivery } from "./app-identity-row-input";
+import { completeEntityDeliveryPermit } from "./entity-delivery-permit-client";
 import {
   type AppEvaluationCommitRef,
   entityStub,
   identityVersionForRow,
 } from "./entity-metric-privacy";
-import { completeEntityDeliveryPermit } from "./entity-delivery-permit-client";
-import { parseEntityIdentityDelivery } from "./app-identity-row-input";
 import { evaluationCommitOutbox } from "./evaluation-commit-outbox-client";
-import { appendRawEvent, tinybirdDelivery } from "./tinybird";
 import {
   hasDeliveryPermits,
   recordDeliveryPermit,
   releaseDeliveryPermit,
 } from "./raw-event-delivery-permit";
+import { appendRawEvent, tinybirdDelivery } from "./tinybird";
 import type { Env } from "./types";
 
 const APP_ENTITY_PREFIX = "privacy:app-entity:";
@@ -137,8 +137,11 @@ async function releaseForwardedPermit(
   ref: AppEntityRef,
   deliveryId: string,
 ): Promise<void> {
-  await completeEntityDeliveryPermit(env.ENTITY_METRIC_PRIVACY, ref, deliveryId);
-  await releaseDeliveryPermit(storage, deliveryId);
+  try {
+    await completeEntityDeliveryPermit(env.ENTITY_METRIC_PRIVACY, ref, deliveryId);
+  } finally {
+    await releaseDeliveryPermit(storage, deliveryId);
+  }
 }
 
 export async function resetAppIdentityDelivery(

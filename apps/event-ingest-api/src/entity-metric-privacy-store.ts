@@ -1,4 +1,9 @@
 import {
+  admitAppIdentityRow,
+  completeAppIdentityRow,
+  completeEntityIdentityRow,
+} from "./app-identity-delivery-permit";
+import {
   admitEntityIdentityRow,
   completeAppIdentityDeliveryReset,
   deliverAppIdentityRow,
@@ -7,11 +12,6 @@ import {
   registerAppEvaluation,
   resetAppIdentityDelivery,
 } from "./app-identity-event-inventory";
-import {
-  admitAppIdentityRow,
-  completeAppIdentityRow,
-  completeEntityIdentityRow,
-} from "./app-identity-delivery-permit";
 import { DeliveryResetLock } from "./delivery-reset-lock";
 import {
   admitEntityRowResponse,
@@ -33,8 +33,13 @@ import {
   exportEvaluationRecords,
   exportMetricRecords,
 } from "./entity-metric-privacy-records";
-import type { Env } from "./types";
 import { hasDeliveryPermits } from "./raw-event-delivery-permit";
+import {
+  beginRawEventAttemptAtAuthority,
+  recordRawEventOutcome,
+  recordRawEventTransferred,
+} from "./raw-event-terminal-state";
+import type { Env } from "./types";
 
 const SUPPRESSION_KEY = "privacy:suppression";
 const EVENT_PREFIX = "event:";
@@ -86,6 +91,13 @@ export class EntityMetricPrivacyDurableObject {
       "/deliver-row": concurrent(() => this.deliverRow(request)),
       "/admit-row": concurrent(() => this.admitRow(request)),
       "/complete-row": concurrent(() => this.completeRow(request)),
+      "/begin-raw-attempt": concurrent(() =>
+        beginRawEventAttemptAtAuthority(this.ctx.storage, request),
+      ),
+      "/mark-raw-outcome": concurrent(() => recordRawEventOutcome(this.ctx.storage, request)),
+      "/mark-raw-transferred": concurrent(() =>
+        recordRawEventTransferred(this.ctx.storage, request),
+      ),
       "/reset-app": alone(() => this.resetApp(request)),
       "/complete-reset": alone(() => this.completeReset(request)),
     };

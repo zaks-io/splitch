@@ -4,7 +4,7 @@ import { evaluationUsageReplayWindow } from "./evaluation-usage-replay-window";
 import { rejectIngestAdmission } from "./ingest-admission";
 import { loadRunScope } from "./kv-config";
 import { readJsonObject, stringField } from "./payload";
-import { enqueueRawEvent } from "./raw-event-queue";
+import { enqueueRawEvent } from "./raw-event-queue-envelope";
 import {
   evaluationUsageEvent,
   exposureEvent,
