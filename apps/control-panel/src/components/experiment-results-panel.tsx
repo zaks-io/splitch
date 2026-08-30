@@ -34,7 +34,7 @@ export function ExperimentResultsPanel({
       appId={appId}
       environmentId={environmentId}
       experimentId={experimentId}
-      runId={run.id}
+      run={run}
     />
   );
 }
@@ -43,15 +43,15 @@ function ExperimentResultsForRun({
   appId,
   environmentId,
   experimentId,
-  runId,
+  run,
 }: {
   appId: string;
   environmentId: string;
   experimentId: string;
-  runId: string;
+  run: PanelExperimentRun;
 }) {
   const { data } = useSuspenseQuery(
-    experimentResultsQuery({ appId, environmentId, experimentId, runId }),
+    experimentResultsQuery({ appId, environmentId, experimentId, runId: run.id }),
   );
   if (data.state === "no_run") {
     return <ExperimentResultsEmpty />;
@@ -66,5 +66,5 @@ function ExperimentResultsForRun({
       />
     );
   }
-  return <ExperimentResults results={data} />;
+  return <ExperimentResults results={data} run={run} />;
 }
