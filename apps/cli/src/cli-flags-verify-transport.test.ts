@@ -123,6 +123,7 @@ describe("flags verify transport", () => {
   it("returns EXIT_API when the SDK reason is ERROR", async () => {
     const { credentialPath } = await makeTempHome();
     await writeFile(credentialPath, `${JSON.stringify(storedCredential())}\n`);
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
     const transport = new FakeCliTransport([
       ...scopeResolutionStubs(),
       clientKeyStub(),
@@ -139,6 +140,11 @@ describe("flags verify transport", () => {
     });
 
     expect(code).toBe(EXIT_API);
+    expect(log).toHaveBeenCalledTimes(1);
+    expect(JSON.parse(String(log.mock.calls[0]?.[0]))).toMatchObject({
+      code: "FLAG_NOT_FOUND",
+      message: "flag not found",
+    });
   });
 });
 function clientKeyStub() {
