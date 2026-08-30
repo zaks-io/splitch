@@ -12,7 +12,7 @@ For a fresh live-Run Assignment, the component mutation performs one atomic unit
 2. Claim the caller's `idempotencyKey` against the canonical Evaluation fingerprint.
 3. Insert the local holdover with put-if-absent semantics.
 4. Insert one retry-stable Exposure outbox row.
-5. Schedule an immediate delivery Action.
+5. Ensure one installation-scoped batch drain successor is scheduled immediately.
 
 All five operations join the caller's top-level mutation transaction. An uncaught error or caller
 rollback commits none of them. Reusing an idempotency key with the same fingerprint returns the
@@ -125,16 +125,14 @@ historical first-touch order changes.
 
 ## Retry, health, and privacy
 
-The scheduled Action claims one pending row, posts with the API Key, and acknowledges it in a
-follow-up mutation. Transient transport, `429`, and `5xx` failures reschedule with the same
-`exposureId` after `1s`, `5s`, `30s`, `2m`, `10m`, then `30m` with up to 20% jitter on every capped
-retry. Convex does not automatically retry failed Actions, so the outbox state is the authority.
-The outbox insert also schedules a recovery Mutation one lease interval later. That Mutation
-rearms itself only while the row remains pending or delivering, and reschedules the Action after a
-missed execution or expired lease. There is no reconciliation cron; the durable scheduled recovery
-chain is authoritative. After a component upgrade, an idempotent `install()` retry runs one bounded,
-versioned adoption chain that attaches watches to pending or delivering rows created by the previous
-version.
+The scheduled Action claims up to 25 due rows while keeping the serialized request within 32 KiB,
+posts one batch with the API Key, and settles every item in one follow-up Mutation. It leaves one
+scheduled successor at the earliest pending retry or active lease deadline. Transient transport,
+`429`, and `5xx` failures reschedule each affected `exposureId` after `1s`, `5s`, `30s`, `2m`, `10m`,
+then `30m` with up to 20% jitter on every capped retry. Convex does not automatically retry failed
+Actions, so the outbox state is the authority. There is no reconciliation cron. After a component
+upgrade, an idempotent `install()` retry runs one bounded, versioned adoption chain that moves legacy
+per-row recovery work under the batch successor.
 Deterministic rejection becomes terminal immediately. Transport errors, `429`, `5xx`, and a
 successful batch item carrying retryable `SERVICE_UNAVAILABLE` reschedule unchanged. Transient
 retries stop at the 24-hour privacy deadline and become terminal after raw identity/context is

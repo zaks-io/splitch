@@ -9,7 +9,6 @@ import type {
   LocalResolutionDetails as ResolutionDetails,
   VariantValue,
 } from "@splitch/sdk/local-evaluation";
-import type { TrackRequest } from "@splitch/sdk";
 import type { ComponentApi } from "./component/_generated/component";
 
 export type {
@@ -25,19 +24,6 @@ export interface ConvexEvaluationContext {
 
 export interface ConvexExposureContext extends ConvexEvaluationContext {
   readonly idempotencyKey: string;
-}
-
-export type ConvexMetricEvent = Omit<TrackRequest, "eventName">;
-
-export interface ConvexTrackReceipt {
-  readonly eventId: string;
-  readonly queued: true;
-}
-
-export interface ConvexTrackStatus {
-  readonly eventId: string;
-  readonly state: "missing" | "queued" | "accepted" | "terminal" | "suppressed";
-  readonly error?: string;
 }
 
 export class Splitch {
@@ -67,21 +53,6 @@ export class Splitch {
       targetingKey: context.targetingKey,
       idType: context.idType ?? "user",
     });
-  }
-
-  track<DataModel extends GenericDataModel>(
-    ctx: GenericMutationCtx<DataModel>,
-    eventName: string,
-    event: ConvexMetricEvent,
-  ): Promise<ConvexTrackReceipt> {
-    return ctx.runMutation(this.component.metric_event.track, { ...event, eventName });
-  }
-
-  trackStatus<DataModel extends GenericDataModel>(
-    ctx: GenericQueryCtx<DataModel> | GenericMutationCtx<DataModel>,
-    eventId: string,
-  ): Promise<ConvexTrackStatus> {
-    return ctx.runQuery(this.component.metric_event.status, { eventId });
   }
 
   async peekDetails<DataModel extends GenericDataModel>(

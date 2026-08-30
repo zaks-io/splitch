@@ -92,3 +92,24 @@ export const deliveryClaimValidator = v.union(
     leaseExpiresAt: v.number(),
   }),
 );
+
+const exposureDeliveryItemValidator = v.object({
+  exposureId: v.string(),
+  installationId: v.string(),
+  flagKey: v.string(),
+  experimentId: v.string(),
+  runId: v.string(),
+  runConfigHash: v.string(),
+  evaluationContext: evaluationContextValidator,
+  variantName: v.string(),
+  exposureAt: v.string(),
+});
+
+export const deliveryBatchClaimValidator = v.union(
+  v.null(),
+  v.object({
+    endpoint: v.string(),
+    rows: v.array(exposureDeliveryItemValidator),
+    leaseExpiresAt: v.number(),
+  }),
+);

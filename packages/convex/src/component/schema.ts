@@ -29,6 +29,8 @@ export default defineSchema({
     recoveryGeneration: v.optional(v.number()),
     retentionJobId: v.optional(v.id("_scheduled_functions")),
     retentionDueAt: v.optional(v.number()),
+    exposureDrainJobId: v.optional(v.id("_scheduled_functions")),
+    exposureDrainDueAt: v.optional(v.number()),
     state: v.union(v.literal("pending"), v.literal("active"), v.literal("revoked")),
   }).index("by_key", ["key"]),
   snapshots: defineTable({

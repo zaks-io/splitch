@@ -10,6 +10,11 @@ import { v } from "convex/values";
 import { internalAction, internalMutation, mutation, query } from "./_generated/server";
 import { canonicalJson, sha256Hex } from "./crypto";
 import {
+  claimExposureBatchHandler,
+  drainExposuresHandler,
+  finishExposureBatchHandler,
+} from "./exposure_batch";
+import {
   claimDeliveryHandler,
   deliverHandler,
   finishDeliveryHandler,
@@ -24,6 +29,7 @@ import {
 import { ensureRetentionScheduled } from "./retention";
 import { snapshotProvider } from "./snapshot";
 import {
+  deliveryBatchClaimValidator,
   deliveryClaimValidator,
   evaluationContextValidator,
   resolutionDetailsValidator,
@@ -40,7 +46,7 @@ export const peek = query({
   args: evaluateArgs,
   returns: resolutionDetailsValidator,
   handler: async (ctx, args): Promise<ResolutionDetails> => {
-    const runtime = await runtimeState(ctx, args.context);
+    const runtime = await runtimeState(ctx, args.flagKey, args.context);
     const result = await evaluatePath(
       {
         appId: runtime.snapshot.appId,
@@ -63,7 +69,7 @@ export const evaluate = mutation({
   handler: async (ctx, args): Promise<ResolutionDetails> => {
     if (!args.idempotencyKey)
       throw new Error("idempotencyKey is required for Exposure-bearing Convex evaluation");
-    const runtime = await runtimeState(ctx, args.context);
+    const runtime = await runtimeState(ctx, args.flagKey, args.context);
     const fingerprint = await sha256Hex(
       canonicalJson({
         flagKey: args.flagKey,
@@ -126,6 +132,27 @@ export const finishDelivery = internalMutation({
   handler: finishDeliveryHandler,
 });
 
+export const claimExposureBatch = internalMutation({
+  args: {},
+  returns: deliveryBatchClaimValidator,
+  handler: claimExposureBatchHandler,
+});
+
+export const finishExposureBatch = internalMutation({
+  args: {
+    leaseExpiresAt: v.number(),
+    results: v.array(
+      v.object({
+        exposureId: v.string(),
+        outcome: v.union(v.literal("accepted"), v.literal("retry"), v.literal("terminal")),
+        error: v.optional(v.string()),
+      }),
+    ),
+  },
+  returns: v.null(),
+  handler: finishExposureBatchHandler,
+});
+
 export const deleteEntity = mutation({
   args: { targetingKey: v.string(), idType: v.string() },
   returns: v.null(),
@@ -170,6 +197,12 @@ export const deliver = internalAction({
   args: { exposureId: v.string() },
   returns: v.null(),
   handler: deliverHandler,
+});
+
+export const drain = internalAction({
+  args: {},
+  returns: v.null(),
+  handler: drainExposuresHandler,
 });
 
 function readOnlyAssignmentStore(assignments: Map<string, { runId: string; variant: string }>) {

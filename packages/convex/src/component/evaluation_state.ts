@@ -6,8 +6,7 @@ import type {
 import { internal } from "./_generated/api";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 import { hmacHex, stableUuid } from "./crypto";
-import { DELIVERY_LEASE_MS } from "./delivery_policy";
-import { scheduleDeliveryWatch } from "./exposure_delivery";
+import { ensureExposureDrainScheduled } from "./exposure_batch";
 import { ensureRetentionScheduled } from "./retention";
 import { parseSnapshot } from "./snapshot";
 
@@ -100,7 +99,11 @@ async function suppressMetricEvents(
   return rows.length;
 }
 
-export async function runtimeState(ctx: QueryCtx | MutationCtx, context: EvaluationContext) {
+export async function runtimeState(
+  ctx: QueryCtx | MutationCtx,
+  flagKey: string,
+  context: EvaluationContext,
+) {
   const integration = await ctx.db
     .query("integrations")
     .withIndex("by_key", (q) => q.eq("key", "current"))
@@ -118,17 +121,24 @@ export async function runtimeState(ctx: QueryCtx | MutationCtx, context: Evaluat
     );
   const snapshot = parseSnapshot(stored.payload);
   const targetingKeyHash = await localTargetingKeyHash(integration.componentIdentityKey, context);
-  const rows = await ctx.db
-    .query("assignments")
-    .withIndex("by_entity_experiment", (q) =>
-      q.eq("idType", context.idType).eq("targetingKeyHash", targetingKeyHash),
-    )
-    .take(1_001);
-  if (rows.length > 1_000)
-    throw new Error("ASSIGNMENT_LIMIT_EXCEEDED: Entity has more than 1000 local Assignments");
-  const assignments = new Map<string, { runId: string; variant: string }>(
-    rows.map((row) => [row.experimentId, { runId: row.runId, variant: row.variant }]),
-  );
+  const experimentId = snapshot.flags.find((flag) => flag.key === flagKey)?.experimentId;
+  const assignment = experimentId
+    ? await ctx.db
+        .query("assignments")
+        .withIndex("by_entity_experiment", (q) =>
+          q
+            .eq("idType", context.idType)
+            .eq("targetingKeyHash", targetingKeyHash)
+            .eq("experimentId", experimentId),
+        )
+        .unique()
+    : null;
+  const assignments = new Map<string, { runId: string; variant: string }>();
+  if (assignment)
+    assignments.set(assignment.experimentId, {
+      runId: assignment.runId,
+      variant: assignment.variant,
+    });
   return { integration, snapshot, assignments };
 }
 
@@ -195,10 +205,8 @@ export async function persistExposure(
     state: "pending",
     attemptCount: 0,
     nextAttemptAt: Date.now(),
-    recoveryWatchGeneration: 1,
   });
-  await ctx.scheduler.runAfter(0, internal.evaluation.deliver, { exposureId });
-  await scheduleDeliveryWatch(ctx, exposureId, DELIVERY_LEASE_MS);
+  await ensureExposureDrainScheduled(ctx, Date.now());
 }
 
 export async function localTargetingKeyHash(
