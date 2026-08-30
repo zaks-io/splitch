@@ -8,23 +8,23 @@ Store write on apparent first-touch.
 ## Implementation status
 
 The queue-backed contract in this document is the accepted target from
-[ADR-0043](../../adr/0043-event-ingest-will-use-durable-queue-backed-tinybird-microbatches.md), not
-the current implementation.
+[ADR-0043](../../adr/0043-event-ingest-will-use-durable-queue-backed-tinybird-microbatches.md).
 
 In the current checkout:
 
-- `raw_events` and `raw_evaluations` are implemented;
-- each implemented row is sent in its own JSON request by
-  `apps/event-ingest-api/src/tinybird.ts`;
-- an Evaluation commit loops over Exposure rows and appends them sequentially;
+- `raw_events`, `raw_evaluations`, and `metric_events` use separate durable queues and matching
+  dead-letter queues;
+- queue consumers produce bounded gzip NDJSON microbatches with `wait=true` and a fixed
+  `max_concurrency = 1` governor;
+- Evaluation commits publish their sealed usage and Exposure rows to the corresponding queues;
 - remote Evaluation commit idempotency is scoped to Organization, App, Environment, the admitted
   App identity version, and the caller's key, so a replacement identity cannot replay a destroyed
   generation's redacted commit;
-- `apps/event-ingest-api/wrangler.jsonc` declares no Cloudflare Queue producer or consumer binding;
-- Metric Event and Web Event intake are specified but not implemented.
+- Metric Event intake uses write-ahead attempts and scoped reconciliation for ambiguous delivery;
+- Web Event intake remains specified but not implemented.
 
-That direct transport is known architecture debt. It must be replaced, not extended to the new event
-families.
+The remaining shared recovery-store work must extend these queue boundaries, not add another direct
+transport.
 
 The Event Ingest Worker also accepts SDK Metric Events through `POST /api/sdk/events` and appends
 them to the separate `metric_events` datasource. Its strict request, identity, Event Definition

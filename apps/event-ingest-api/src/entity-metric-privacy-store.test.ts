@@ -59,7 +59,7 @@ describe("Entity Metric privacy Durable Object", () => {
     const append = vi.fn(async () => {
       markAppendStarted();
       await appendGate;
-      return new Response(null, { status: 202 });
+      return Response.json({ successful_rows: 1, quarantined_rows: 0 });
     });
     vi.stubGlobal("fetch", append);
     const row = {

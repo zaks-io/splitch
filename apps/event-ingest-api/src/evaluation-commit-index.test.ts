@@ -8,18 +8,21 @@ import { makeEnv, postEvaluationCommit } from "./test-fixtures";
 afterEach(() => vi.restoreAllMocks());
 
 describe("Evaluation commit ingest", () => {
-  it("replays one durable usage and Exposure commit after the Exposure append fails", async () => {
+  it("replays one durable usage and Exposure commit after the Exposure queue handoff fails", async () => {
     const env = makeEnv();
-    const first = await postEvaluationCommit({ statuses: [202, 500], env });
+    vi.mocked(env.RAW_EVENTS_QUEUE.sendBatch).mockRejectedValueOnce(
+      new Error("raw_events queue unavailable"),
+    );
+    const first = await postEvaluationCommit({ env });
     const retry = await postEvaluationCommit({ env });
 
     expect(first.response.status).toBe(503);
-    expect(first.rows).toHaveLength(2);
+    expect(first.rows).toHaveLength(1);
     expect(first.rows[0]).toMatchObject({ evaluation_count: 1, has_exposure: 1 });
     expect(retry.response.status).toBe(202);
     expect(retry.rows).toHaveLength(2);
     expect(retry.rows[0]?.dedup_key).toBe(first.rows[0]?.dedup_key);
-    expect(retry.rows[1]?.dedup_key).toBe(first.rows[1]?.dedup_key);
+    expect(retry.rows[1]?.dedup_key).toMatch(/^sha256:[a-f0-9]{64}$/);
   });
 
   it("acks a delivered commit without appending a second usage or Exposure row", async () => {

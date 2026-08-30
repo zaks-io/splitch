@@ -127,7 +127,7 @@ export async function registerAppEvaluationCommit(
   return body.suppressed;
 }
 
-export async function deliverAppIdentityRow(
+export async function admitAppIdentityRow(
   namespace: EntityMetricPrivacyNamespace | undefined,
   appId: string,
   identityVersion: string,
@@ -137,17 +137,17 @@ export async function deliverAppIdentityRow(
 ): Promise<boolean> {
   if (!namespace && (platformTarget === "local" || platformTarget === "pr-ci")) return false;
   const response = await appIdentityPrivacyInventoryStub(namespace, appId).fetch(
-    "https://entity-privacy.local/deliver-app-row",
+    "https://entity-privacy.local/admit-app-row",
     {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ appId, identityVersion, datasource, row }),
     },
   );
-  if (!response.ok) throw new Error(`App identity delivery returned HTTP ${response.status}`);
+  if (!response.ok) throw new Error(`App identity admission returned HTTP ${response.status}`);
   const body = (await response.json()) as { suppressed?: unknown };
   if (typeof body.suppressed !== "boolean") {
-    throw new Error("App Evaluation delivery returned an invalid result");
+    throw new Error("App Evaluation admission returned an invalid result");
   }
   return body.suppressed;
 }

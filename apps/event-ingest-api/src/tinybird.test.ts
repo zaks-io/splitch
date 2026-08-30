@@ -49,7 +49,7 @@ describe("tinybirdDelivery", () => {
     });
   });
 
-  it("does not send a request to Tinybird's generic default when TINYBIRD_API_URL is absent", async () => {
+  it("does not touch Tinybird during intake when TINYBIRD_API_URL is absent", async () => {
     const fetch = mockTinybirdFetch();
     const env = { ...makeEnv(), TINYBIRD_API_URL: undefined };
     const ctx = new TestExecutionContext();
@@ -66,11 +66,8 @@ describe("tinybirdDelivery", () => {
       }),
     );
 
-    expect(response.status).toBe(503);
-    expect(await response.json()).toMatchObject({
-      code: "SERVICE_UNAVAILABLE",
-      message: "Tinybird API URL is unavailable",
-    });
+    expect(response.status).toBe(202);
+    expect(env.__queuedRows).toHaveLength(1);
     expect(fetch).not.toHaveBeenCalled();
     expect(fetch.mock.calls.map(([url]) => String(url)).join()).not.toContain("api.tinybird.co");
   });

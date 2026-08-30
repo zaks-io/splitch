@@ -73,7 +73,7 @@ export async function admitMetricEvent(
     case "unresolved":
       return {
         kind: "recover",
-        attempt: { ...begun.attempt, state: "indeterminate" },
+        attempt: begun.attempt,
         dedupKey,
         reason: `unresolved ${begun.attempt.state} attempt`,
       };

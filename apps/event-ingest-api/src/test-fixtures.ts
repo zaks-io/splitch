@@ -15,6 +15,7 @@ import {
   MemoryEvaluationCommitOutbox,
   MemoryReplayWindow,
 } from "./memory-replay-windows.test-fixture";
+import { captureQueuedResponse, rawEventQueueBindings } from "./raw-event-queue-test-fixture";
 import type { Env } from "./types";
 
 export type { AdmissionCharge, AdmissionOption };
@@ -39,7 +40,9 @@ export async function postExposure(
   vi.spyOn(Date, "now").mockReturnValue(new Date(fixedNow).getTime());
   const fetch = mockTinybirdFetch(options.tinybirdStatus);
   const ctx = new TestExecutionContext();
-  const response = await new EvaluationEntrypoint(ctx, (options.env ?? makeEnv()) as Env).fetch(
+  const env = options.env ?? makeEnv();
+  const queuedStart = env.__queuedRows.length;
+  const response = await new EvaluationEntrypoint(ctx, env as Env).fetch(
     workerRequest("https://splitch-event-ingest.internal/api/internal/exposures", {
       method: "POST",
       headers: {
@@ -53,7 +56,7 @@ export async function postExposure(
   );
 
   if (options.awaitWaits !== false) await Promise.all(ctx.waits);
-  return captureResponse(ctx, fetch, response);
+  return captureQueuedResponse(ctx, fetch, response, env, queuedStart);
 }
 
 export async function postEvaluation(
@@ -85,6 +88,7 @@ export async function postEvaluationAt(
   vi.spyOn(Date, "now").mockReturnValue(new Date(now).getTime());
   const fetch = mockTinybirdFetch();
   const ctx = new TestExecutionContext();
+  const queuedStart = env.__queuedRows.length;
   const response = await new EvaluationEntrypoint(ctx, env as Env).fetch(
     workerRequest("https://splitch-event-ingest.internal/api/internal/evaluations", {
       method: "POST",
@@ -108,7 +112,7 @@ export async function postEvaluationAt(
       }),
     }),
   );
-  return captureResponse(ctx, fetch, response);
+  return captureQueuedResponse(ctx, fetch, response, env, queuedStart);
 }
 
 export async function postEvaluationCommit(
@@ -124,7 +128,9 @@ export async function postEvaluationCommit(
   vi.spyOn(Date, "now").mockReturnValue(new Date(fixedNow).getTime());
   const fetch = mockTinybirdFetch(options.statuses);
   const ctx = new TestExecutionContext();
-  const response = await new EvaluationEntrypoint(ctx, (options.env ?? makeEnv()) as Env).fetch(
+  const env = options.env ?? makeEnv();
+  const queuedStart = env.__queuedRows.length;
+  const response = await new EvaluationEntrypoint(ctx, env as Env).fetch(
     workerRequest("https://splitch-event-ingest.internal/api/internal/evaluation-commits", {
       method: "POST",
       headers: {
@@ -147,7 +153,7 @@ export async function postEvaluationCommit(
       }),
     }),
   );
-  return captureResponse(ctx, fetch, response);
+  return captureQueuedResponse(ctx, fetch, response, env, queuedStart);
 }
 
 export function makeEnv(
@@ -185,6 +191,7 @@ export function makeEnv(
       idFromName: () => ({}) as DurableObjectId,
       get: () => ({ fetch: entityMetricPrivacyFixtureFetch }),
     },
+    ...rawEventQueueBindings(),
     ...admissionBinding(options.admission, options.admissionCharges ?? []),
   };
 }
@@ -223,21 +230,6 @@ export class TestExecutionContext implements ExecutionContext {
   }
 
   passThroughOnException(): void {}
-}
-
-function captureResponse(
-  ctx: TestExecutionContext,
-  fetch: ReturnType<typeof mockTinybirdFetch>,
-  response: Response,
-) {
-  return {
-    ctx,
-    fetch,
-    response,
-    rows: fetch.mock.calls.map(
-      (call) => JSON.parse(String(call[1]?.body)) as Record<string, unknown>,
-    ),
-  };
 }
 
 export function baseExposure(): ExposurePayload {

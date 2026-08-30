@@ -5,11 +5,7 @@ import {
   type MetricEventTrackRequest,
   MetricEventTrackRequestSchema,
 } from "@splitch/contracts";
-import {
-  computeEntityFamilyHash,
-  computeRetainedTargetingKeyHashes,
-  computeTargetingKeyHash,
-} from "@splitch/privacy";
+import { canonicalizeAnalysisEntityHash, resolveEntityPrivacyIdentity } from "@splitch/privacy";
 import type { MetricEventCredentialScope } from "./client-key-auth";
 import { renderError, serviceUnavailable } from "./errors";
 import {
@@ -40,21 +36,12 @@ export async function handleAuthorizedMetricEvent(
   if (limited) return limited;
 
   const saltStore = makeMetricEventSaltStore(env);
-  const targetingKeyHash = await computeTargetingKeyHash(saltStore, {
+  const identity = await resolveEntityPrivacyIdentity(saltStore, {
     appId: credential.appId,
     idType: parsed.idType,
     targetingKey: parsed.targetingKey,
   });
-  const retainedHashes = await computeRetainedTargetingKeyHashes(saltStore, {
-    appId: credential.appId,
-    idType: parsed.idType,
-    targetingKey: parsed.targetingKey,
-  });
-  const entityFamily = await computeEntityFamilyHash(saltStore, {
-    appId: credential.appId,
-    idType: parsed.idType,
-    targetingKey: parsed.targetingKey,
-  });
+  const targetingKeyHash = canonicalizeAnalysisEntityHash(identity.targetingKeyHashes);
   const fingerprint = await metricEventPayloadFingerprint({
     eventName: parsed.eventName,
     idType: parsed.idType,
@@ -62,7 +49,7 @@ export async function handleAuthorizedMetricEvent(
     fields: parsed.fields,
     dimensions: parsed.dimensions,
   });
-  const retainedFingerprints = await retainedMetricEventFingerprints(retainedHashes, {
+  const retainedFingerprints = await retainedMetricEventFingerprints(identity.targetingKeyHashes, {
     eventName: parsed.eventName,
     idType: parsed.idType,
     targetingKeyHash,
@@ -92,7 +79,7 @@ export async function handleAuthorizedMetricEvent(
 
   return admitAndClaimMetricEvent(env, credential, parsed, {
     targetingKeyHash,
-    entityFamilyHash: entityFamily,
+    entityFamilyHash: identity.entityFamilyHash,
     fingerprint,
     dedupKey,
     eventDefinitionId: hot.eventDefinition.id,

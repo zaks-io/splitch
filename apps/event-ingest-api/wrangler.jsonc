@@ -20,7 +20,12 @@
     }
   },
   "secrets": {
-    "required": ["SENTRY_DSN", "SPLITCH_EVENT_INGEST_TOKEN", "TINYBIRD_INGEST_TOKEN"]
+    "required": [
+      "SENTRY_DSN",
+      "SPLITCH_EVENT_INGEST_TOKEN",
+      "TINYBIRD_INGEST_TOKEN",
+      "TINYBIRD_READ_TOKEN"
+    ]
   },
   "vars": {
     "SPLITCH_PLATFORM_TARGET": "local",
@@ -39,17 +44,53 @@
   ],
   "queues": {
     "producers": [
+      { "binding": "RAW_EVENTS_QUEUE", "queue": "splitch-raw-events-local" },
+      { "binding": "RAW_EVENTS_DLQ", "queue": "splitch-raw-events-local-dlq" },
+      { "binding": "RAW_EVALUATIONS_QUEUE", "queue": "splitch-raw-evaluations-local" },
+      { "binding": "RAW_EVALUATIONS_DLQ", "queue": "splitch-raw-evaluations-local-dlq" },
       { "binding": "METRIC_EVENTS_QUEUE", "queue": "splitch-metric-events-local" },
-      { "binding": "METRIC_EVENTS_DLQ", "queue": "splitch-metric-events-local-dlq" }
+      { "binding": "METRIC_EVENTS_DLQ", "queue": "splitch-metric-events-local-dlq" },
+      {
+        "binding": "METRIC_EVENTS_RECONCILIATION_QUEUE",
+        "queue": "splitch-metric-events-reconciliation-local"
+      },
+      {
+        "binding": "METRIC_EVENTS_RECONCILIATION_DLQ",
+        "queue": "splitch-metric-events-reconciliation-local-dlq"
+      }
     ],
     "consumers": [
+      {
+        "queue": "splitch-raw-events-local",
+        "max_batch_size": 100,
+        "max_batch_timeout": 1,
+        "max_concurrency": 1,
+        "max_retries": 7,
+        "dead_letter_queue": "splitch-raw-events-local-dlq"
+      },
+      {
+        "queue": "splitch-raw-evaluations-local",
+        "max_batch_size": 100,
+        "max_batch_timeout": 1,
+        "max_concurrency": 1,
+        "max_retries": 7,
+        "dead_letter_queue": "splitch-raw-evaluations-local-dlq"
+      },
       {
         "queue": "splitch-metric-events-local",
         "max_batch_size": 100,
         "max_batch_timeout": 1,
-        "max_concurrency": 5,
+        "max_concurrency": 1,
         "max_retries": 7,
         "dead_letter_queue": "splitch-metric-events-local-dlq"
+      },
+      {
+        "queue": "splitch-metric-events-reconciliation-local",
+        "max_batch_size": 25,
+        "max_batch_timeout": 1,
+        "max_concurrency": 1,
+        "max_retries": 7,
+        "dead_letter_queue": "splitch-metric-events-reconciliation-local-dlq"
       }
     ]
   },
@@ -132,6 +173,7 @@
           "SENTRY_DSN",
           "SPLITCH_EVENT_INGEST_TOKEN",
           "TINYBIRD_INGEST_TOKEN",
+          "TINYBIRD_READ_TOKEN",
           "EVALUATION_PRIVACY_SALT"
         ]
       },
@@ -145,17 +187,59 @@
       ],
       "queues": {
         "producers": [
+          { "binding": "RAW_EVENTS_QUEUE", "queue": "splitch-raw-events-shared-preview" },
+          { "binding": "RAW_EVENTS_DLQ", "queue": "splitch-raw-events-shared-preview-dlq" },
+          {
+            "binding": "RAW_EVALUATIONS_QUEUE",
+            "queue": "splitch-raw-evaluations-shared-preview"
+          },
+          {
+            "binding": "RAW_EVALUATIONS_DLQ",
+            "queue": "splitch-raw-evaluations-shared-preview-dlq"
+          },
           { "binding": "METRIC_EVENTS_QUEUE", "queue": "splitch-metric-events-shared-preview" },
-          { "binding": "METRIC_EVENTS_DLQ", "queue": "splitch-metric-events-shared-preview-dlq" }
+          { "binding": "METRIC_EVENTS_DLQ", "queue": "splitch-metric-events-shared-preview-dlq" },
+          {
+            "binding": "METRIC_EVENTS_RECONCILIATION_QUEUE",
+            "queue": "splitch-metric-events-reconciliation-shared-preview"
+          },
+          {
+            "binding": "METRIC_EVENTS_RECONCILIATION_DLQ",
+            "queue": "splitch-metric-events-reconciliation-shared-preview-dlq"
+          }
         ],
         "consumers": [
+          {
+            "queue": "splitch-raw-events-shared-preview",
+            "max_batch_size": 100,
+            "max_batch_timeout": 1,
+            "max_concurrency": 1,
+            "max_retries": 7,
+            "dead_letter_queue": "splitch-raw-events-shared-preview-dlq"
+          },
+          {
+            "queue": "splitch-raw-evaluations-shared-preview",
+            "max_batch_size": 100,
+            "max_batch_timeout": 1,
+            "max_concurrency": 1,
+            "max_retries": 7,
+            "dead_letter_queue": "splitch-raw-evaluations-shared-preview-dlq"
+          },
           {
             "queue": "splitch-metric-events-shared-preview",
             "max_batch_size": 100,
             "max_batch_timeout": 1,
-            "max_concurrency": 5,
+            "max_concurrency": 1,
             "max_retries": 7,
             "dead_letter_queue": "splitch-metric-events-shared-preview-dlq"
+          },
+          {
+            "queue": "splitch-metric-events-reconciliation-shared-preview",
+            "max_batch_size": 25,
+            "max_batch_timeout": 1,
+            "max_concurrency": 1,
+            "max_retries": 7,
+            "dead_letter_queue": "splitch-metric-events-reconciliation-shared-preview-dlq"
           }
         ]
       },
@@ -241,6 +325,7 @@
           "SENTRY_DSN",
           "SPLITCH_EVENT_INGEST_TOKEN",
           "TINYBIRD_INGEST_TOKEN",
+          "TINYBIRD_READ_TOKEN",
           "EVALUATION_PRIVACY_SALT"
         ]
       },
@@ -254,17 +339,53 @@
       ],
       "queues": {
         "producers": [
+          { "binding": "RAW_EVENTS_QUEUE", "queue": "splitch-raw-events" },
+          { "binding": "RAW_EVENTS_DLQ", "queue": "splitch-raw-events-dlq" },
+          { "binding": "RAW_EVALUATIONS_QUEUE", "queue": "splitch-raw-evaluations" },
+          { "binding": "RAW_EVALUATIONS_DLQ", "queue": "splitch-raw-evaluations-dlq" },
           { "binding": "METRIC_EVENTS_QUEUE", "queue": "splitch-metric-events" },
-          { "binding": "METRIC_EVENTS_DLQ", "queue": "splitch-metric-events-dlq" }
+          { "binding": "METRIC_EVENTS_DLQ", "queue": "splitch-metric-events-dlq" },
+          {
+            "binding": "METRIC_EVENTS_RECONCILIATION_QUEUE",
+            "queue": "splitch-metric-events-reconciliation"
+          },
+          {
+            "binding": "METRIC_EVENTS_RECONCILIATION_DLQ",
+            "queue": "splitch-metric-events-reconciliation-dlq"
+          }
         ],
         "consumers": [
+          {
+            "queue": "splitch-raw-events",
+            "max_batch_size": 100,
+            "max_batch_timeout": 1,
+            "max_concurrency": 1,
+            "max_retries": 7,
+            "dead_letter_queue": "splitch-raw-events-dlq"
+          },
+          {
+            "queue": "splitch-raw-evaluations",
+            "max_batch_size": 100,
+            "max_batch_timeout": 1,
+            "max_concurrency": 1,
+            "max_retries": 7,
+            "dead_letter_queue": "splitch-raw-evaluations-dlq"
+          },
           {
             "queue": "splitch-metric-events",
             "max_batch_size": 100,
             "max_batch_timeout": 1,
-            "max_concurrency": 5,
+            "max_concurrency": 1,
             "max_retries": 7,
             "dead_letter_queue": "splitch-metric-events-dlq"
+          },
+          {
+            "queue": "splitch-metric-events-reconciliation",
+            "max_batch_size": 25,
+            "max_batch_timeout": 1,
+            "max_concurrency": 1,
+            "max_retries": 7,
+            "dead_letter_queue": "splitch-metric-events-reconciliation-dlq"
           }
         ]
       },

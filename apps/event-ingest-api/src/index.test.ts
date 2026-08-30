@@ -24,13 +24,12 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 describe("Event Ingest Worker", () => {
-  it("appends a validated raw_events row through waitUntil", async () => {
+  it("hands a validated raw_events row to its durable queue", async () => {
     const calls = await postExposure();
     const row = expectRow(calls.rows);
 
     expect(calls.response.status).toBe(202);
-    expect(calls.fetch).toHaveBeenCalledTimes(1);
-    expect(calls.fetch.mock.calls[0]?.[0]).toBe("https://tinybird.test/v0/events?name=raw_events");
+    expect(calls.fetch).not.toHaveBeenCalled();
     expect(row).toMatchObject({
       app_id: appId,
       environment_id: environmentId,
@@ -56,12 +55,7 @@ describe("Evaluation usage ingest", () => {
     const row = expectRow(calls.rows);
 
     expect(calls.response.status).toBe(202);
-    expect(calls.fetch.mock.calls[0]?.[0]).toBe(
-      "https://tinybird.test/v0/events?name=raw_evaluations",
-    );
-    expect(calls.fetch.mock.calls[0]?.[1]?.headers).toMatchObject({
-      authorization: "Bearer tb_ingest_secret",
-    });
+    expect(calls.fetch).not.toHaveBeenCalled();
     expect(row).toMatchObject({
       organization_id: organizationId,
       app_id: appId,
@@ -149,23 +143,27 @@ describe("Evaluation usage ingest", () => {
 });
 
 describe("Exposure ingest", () => {
-  it("returns 503 (no ACK) and logs when the Tinybird append fails", async () => {
-    // The ACK is the at-least-once delivery receipt for the Evaluation Worker;
-    // a failed append must surface as SERVICE_UNAVAILABLE so the evaluate call
-    // fails loud and the SDK re-fires, never as a silent 202 drop.
-    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+  it("does not make client success depend on a failing Tinybird sink", async () => {
     const calls = await postExposure({ tinybirdStatus: 500 });
 
+    expect(calls.response.status).toBe(202);
+    expect(calls.rows).toHaveLength(1);
+    expect(calls.fetch).not.toHaveBeenCalled();
+  });
+
+  it("fails loud when the durable queue handoff itself fails", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const env = makeEnv();
+    vi.mocked(env.RAW_EVENTS_QUEUE.send).mockRejectedValueOnce(new Error("queue unavailable"));
+
+    const calls = await postExposure({ env });
+
     expect(calls.response.status).toBe(503);
-    await expect(calls.response.json()).resolves.toMatchObject({ code: "SERVICE_UNAVAILABLE" });
-    expect(error).toHaveBeenCalledWith(
-      "event-ingest-api Tinybird append failed",
-      expect.objectContaining({
-        appId,
-        eventId: "evt_retry_1",
-        errorMessage: "Tinybird append failed with HTTP 500",
-      }),
-    );
+    await expect(calls.response.json()).resolves.toMatchObject({
+      code: "SERVICE_UNAVAILABLE",
+      message: "raw event queue handoff failed",
+    });
+    expect(calls.fetch).not.toHaveBeenCalled();
   });
 
   it("stamps the payload's fire-time runId even when a newer Run is live", async () => {

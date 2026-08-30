@@ -11,32 +11,10 @@ interface SuppressionState {
   readonly deleteBeforeTs: string;
 }
 
-/** App authority then Entity authority is the sole lock order for delivery and reset. */
-export async function deliverEntityIdentityRow(
-  namespace: EntityMetricPrivacyNamespace | undefined,
-  identityVersion: string,
-  datasource: string,
-  row: Record<string, unknown>,
-  platformTarget: string | undefined,
-): Promise<boolean> {
-  return postEntityIdentityRow(
-    "deliver-entity-row",
-    namespace,
-    identityVersion,
-    datasource,
-    row,
-    platformTarget,
-  );
-}
-
 /**
- * The same privacy decision without the append.
- *
  * A queue consumer combines many admitted rows into one Tinybird request
- * (ADR-0043), so it asks the authorities whether each row may be sent and does
- * the sending itself. Datasources that are not yet queue-backed still call
- * `deliverEntityIdentityRow`, which appends inline; both go through one
- * admission path so the privacy answer cannot drift between them.
+ * (ADR-0043), so it asks the authorities whether each row may be sent before
+ * doing the batched append itself.
  */
 export async function admitEntityIdentityRow(
   namespace: EntityMetricPrivacyNamespace | undefined,

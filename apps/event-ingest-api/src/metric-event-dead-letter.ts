@@ -22,6 +22,7 @@ export interface PoisonedDelivery {
  */
 const DLQ_MAX_MESSAGES = 100;
 const DLQ_MAX_BATCH_BYTES = 240_000;
+const DLQ_MAX_MESSAGE_BYTES = 120_000;
 
 /**
  * Copies poisoned deliveries to the dead-letter queue, then records the
@@ -45,13 +46,15 @@ export async function transferToDeadLetter(
   if (!env.METRIC_EVENTS_DLQ) throw new Error("METRIC_EVENTS_DLQ binding is unavailable");
   for (const chunk of deadLetterChunks(poisoned)) {
     await env.METRIC_EVENTS_DLQ.sendBatch(chunk.map((entry) => ({ body: entry.envelope })));
-    for (const entry of chunk) {
-      await settleMetricEventDelivery(env.METRIC_EVENT_OUTBOX, entry.dedupKey, {
-        ...entry.attempt,
-        state: "poison_transferred",
-        reason: entry.reason,
-      });
-    }
+    await Promise.all(
+      chunk.map((entry) =>
+        settleMetricEventDelivery(env.METRIC_EVENT_OUTBOX, entry.dedupKey, {
+          ...entry.attempt,
+          state: "poison_transferred",
+          reason: entry.reason,
+        }),
+      ),
+    );
   }
   console.error("event-ingest-api Metric Event deliveries dead-lettered", {
     count: poisoned.length,
@@ -77,6 +80,11 @@ function deadLetterChunks(poisoned: readonly PoisonedDelivery[]): DeadLetterEntr
   for (const entry of poisoned) {
     const envelope = deadLetterEnvelope(entry);
     const size = byteLength(JSON.stringify(envelope));
+    if (size > DLQ_MAX_MESSAGE_BYTES) {
+      throw new Error(
+        `Metric Event dead-letter envelope exceeds ${String(DLQ_MAX_MESSAGE_BYTES)} bytes`,
+      );
+    }
     const full = current.length >= DLQ_MAX_MESSAGES || bytes + size > DLQ_MAX_BATCH_BYTES;
     if (current.length > 0 && full) {
       chunks.push(current);

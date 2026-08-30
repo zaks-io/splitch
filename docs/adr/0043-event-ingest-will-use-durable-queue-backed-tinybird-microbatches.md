@@ -2,14 +2,13 @@
 
 **Status:** accepted
 
-**Implementation status:** partial. `metric_events` ships this decision: the Event Ingest Worker
-consumes the `splitch-metric-events` queue under the fixed drain governor below, claims a write-ahead
-delivery-attempt record on each row's Metric Event outbox object before any Tinybird call, sends one
-bounded gzip NDJSON request per size split with `wait=true`, and transfers a poisoned row to the
-dead-letter queue strictly before acknowledging it (SPL-447). `raw_events` and `raw_evaluations` still
-send each row to Tinybird in its own JSON request, and Evaluation commits still loop over Exposure
-rows sequentially; those datasources have no queue yet. Web Event intake is specified but not
-implemented.
+**Implementation status:** partial. `metric_events`, `raw_events`, and `raw_evaluations` now use
+datasource-isolated queues under the fixed drain governor below and send bounded gzip NDJSON
+microbatches with `wait=true`. Evaluation commits publish their sealed usage and Exposure rows to
+those queues instead of looping over Tinybird requests. Metric Event delivery has per-row write-ahead
+attempts plus a dedicated reconciliation queue; an ambiguous attempt never resubmits, and repeated
+raw-datasource absence moves to the reconciliation DLQ for operator review. Web Event intake and the
+shared recovery-store design for the remaining raw streams are specified but not implemented.
 
 All Tinybird-backed ingest will be refactored onto four durable Cloudflare Queues owned and consumed
 by the existing Event Ingest Worker: one queue each for `raw_events`, `raw_evaluations`,
@@ -41,12 +40,9 @@ serialized bytes and prove each canonical row fits in one Queue message before d
 The consumer may still combine rows from many messages into a Tinybird request or split that
 combined set at the separate 5 MiB NDJSON ceiling.
 
-The consumer runs at `max_concurrency: 5`. An invocation issues about one request per batch, so
-five concurrent consumers sit near a third of the 100-requests-per-second-per-datasource ceiling even
-when batches turn around quickly, and the remaining budget absorbs a backlog draining at full batch
-size. Per-row settles inside an invocation run concurrently: each targets a different per-dedup-key
-object and nothing orders them against each other, so awaiting them serially would reimpose the
-per-row round trip the microbatch exists to remove.
+Per-row settles inside an invocation run concurrently: each targets a different per-dedup-key object
+and nothing orders them against each other, so awaiting them serially would reimpose the per-row round
+trip the microbatch exists to remove.
 
 A dead-letter queue receives two shapes and they are told apart by a `kind` field. This consumer
 writes `metric-event-delivery-failure-v1`, carrying the original row beside its failure metadata.
@@ -71,7 +67,7 @@ datasource's dead-letter queue. After the copy succeeds it records terminal `poi
 acknowledges the primary messages, and pages operators. Redelivery in either poison state skips
 Tinybird; `poison_pending` resumes the DLQ transfer and `poison_transferred` resumes acknowledgement.
 If the post-response state transition fails, the attempt remains `attempting`, and redelivery
-re-sends it (see Stranded attempts below). The consumer does not recursively
+transfers it to reconciliation without resubmitting. The consumer does not recursively
 split or replay the batch to discover a poison row because that would reinsert successful rows and add
 Tinybird load. `429`,
 `500`, `503`, and pre-response network failures receive at most eight total delivery attempts.
@@ -79,20 +75,10 @@ Exhaustion enters `poison_pending` and follows the same successful-DLQ-copy then
 `poison_transferred` acknowledgement sequence as a permanent response. Replay is manual, preserves
 every original per-row dedup key, and rechecks current privacy deletion suppression.
 
-Stranded attempts re-send. A redelivery that finds `attempting` is by construction a later
-invocation reading a claim whose owner never came back, so nothing ever recorded what Tinybird
-answered. Treating that as indeterminate would park an event no reconciliation pass has any evidence
-to resolve, and acknowledging it would drop the event with no record that it existed. Re-sending
-risks a duplicate physical row instead, which costs nothing: `materialize_deduped_metric_events`
-groups by the retry-stable `dedup_key` with `argMinState(..., ingest_ts)`, so
-`serve_deduped_metric_events` already collapses retries of one logical event. Silent loss has no such
-recovery. Distinguishing a claim stranded before dispatch from one stranded after the response would
-take a second durable write per row between the Tinybird call and the settle, which is the per-row
-round trip this ADR's microbatching exists to remove.
-
-`attempting` therefore answers two different questions differently. A concurrent privacy deletion is
-refused while a claim is open, because a live invocation may have that row in flight and redacting
-would return a proof for a row that still lands. A redelivery reading the same state re-sends.
+An `attempting` record is ambiguous after ownership changes: the prior invocation may have reached
+Tinybird before it died. A concurrent privacy deletion is refused while that claim is unresolved, and
+a redelivery durably transfers reconciliation work before acknowledging the primary message. Only an
+explicit `retryable` response may generate another Tinybird request.
 
 Tinybird `422` is a separate indeterminate outcome: a materialized view interrupted ingestion, so
 blind retry can duplicate committed raw rows while acknowledging can lose uncommitted rows. The
@@ -100,7 +86,7 @@ write-ahead record already contains the datasource, attempt ID, sorted queue mes
 App/Environment/date scopes, every retry-stable `dedup_key`, and durable references to the canonical
 outbox payloads. The consumer transitions it from `attempting` to `indeterminate` before acknowledging
 the primary messages. If that transition fails, the record remains `attempting` and redelivery
-re-sends it, because only a recorded `indeterminate` proves Tinybird answered at all. The recovery
+reconciles it without resubmission. The recovery
 store cannot clear referenced payloads while the record is unresolved. Reconciliation is the only path that can clear it:
 
 1. raw rows and expected materialized states present means delivered;

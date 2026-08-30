@@ -26,14 +26,21 @@ export type Env = {
   METRIC_EVENT_OUTBOX?: MetricEventOutboxNamespace;
   METRIC_EVENT_RATE_LIMIT?: MetricEventRateLimitNamespace;
   ENTITY_METRIC_PRIVACY?: EntityMetricPrivacyNamespace;
+  RAW_EVENTS_QUEUE?: Queue<Record<string, unknown>>;
+  RAW_EVENTS_DLQ?: Queue<Record<string, unknown>>;
+  RAW_EVALUATIONS_QUEUE?: Queue<Record<string, unknown>>;
+  RAW_EVALUATIONS_DLQ?: Queue<Record<string, unknown>>;
   METRIC_EVENTS_QUEUE?: Queue<Record<string, unknown>>;
   METRIC_EVENTS_DLQ?: Queue<Record<string, unknown>>;
+  METRIC_EVENTS_RECONCILIATION_QUEUE?: Queue<Record<string, unknown>>;
+  METRIC_EVENTS_RECONCILIATION_DLQ?: Queue<Record<string, unknown>>;
   SPLITCH_DEPLOYED_COMMIT_SHA?: string;
   SPLITCH_EVENT_INGEST_TOKEN?: string;
   SPLITCH_PLATFORM_TARGET?: string;
   SPLITCH_SOURCE_ID?: string;
   TINYBIRD_API_URL?: string;
   TINYBIRD_INGEST_TOKEN?: string;
+  TINYBIRD_READ_TOKEN?: string;
   EVALUATION_USAGE_REPLAY_WINDOW?:
     | EvaluationUsageReplayWindow
     | EvaluationUsageReplayWindowNamespace;

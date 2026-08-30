@@ -31,7 +31,9 @@ import { IngestAdmissionGateDurableObject } from "./ingest-admission-gate";
 import { handleAuthorizedMetricEvent } from "./metric-event-ingest";
 import { MetricEventOutboxDurableObject } from "./metric-event-outbox";
 import { handleMetricEventQueue } from "./metric-event-queue";
+import { handleMetricEventReconciliationQueue } from "./metric-event-reconciliation";
 import { MetricEventRateLimitDurableObject } from "./metric-event-rate-limit";
+import { handleRawEventQueue } from "./raw-event-queue";
 import { makeMetricEventSaltStore } from "./metric-event-salt-store";
 import type { Env } from "./types";
 
@@ -92,8 +94,19 @@ const handler = {
     }
     return new Response("not found", { status: 404 });
   },
-  queue: handleMetricEventQueue,
+  queue: handleQueue,
 } satisfies ExportedHandler<Env, Record<string, unknown>>;
+
+async function handleQueue(batch: MessageBatch<Record<string, unknown>>, env: Env): Promise<void> {
+  const first = batch.messages[0]?.body;
+  if (first?.kind === "raw-event-delivery-v1") {
+    return handleRawEventQueue(batch, env);
+  }
+  if (first?.kind === "metric-event-reconciliation-v1") {
+    return handleMetricEventReconciliationQueue(batch, env);
+  }
+  return handleMetricEventQueue(batch, env);
+}
 
 /**
  * Everything `splitch-evaluation-api` may send over the single `EVENT_INGEST`

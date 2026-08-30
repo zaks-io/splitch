@@ -67,6 +67,26 @@ export async function deliverAppIdentityRow(
   return Response.json({ suppressed: false });
 }
 
+export async function admitAppIdentityRow(
+  storage: DurableObjectStorage,
+  request: Request,
+): Promise<Response> {
+  const body = (await request.json()) as Record<string, unknown>;
+  if (
+    !isRecord(body.row) ||
+    typeof body.appId !== "string" ||
+    body.row.app_id !== body.appId ||
+    typeof body.identityVersion !== "string" ||
+    identityVersionForRow(body.row) !== body.identityVersion ||
+    typeof body.datasource !== "string"
+  ) {
+    throw new Error("App identity admission input is invalid");
+  }
+  return (await admitVersion(storage, body.identityVersion))
+    ? Response.json({ suppressed: false })
+    : suppressed();
+}
+
 export async function deliverEntityIdentityRow(
   storage: DurableObjectStorage,
   env: Env,

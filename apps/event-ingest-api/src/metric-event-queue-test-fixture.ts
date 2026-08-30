@@ -21,6 +21,7 @@ export interface QueueFixture {
 export function makeQueueFixture(): QueueFixture {
   const dlq = { send: vi.fn(), sendBatch: vi.fn() };
   const queue = { send: vi.fn(), sendBatch: vi.fn() };
+  const reconciliation = { send: vi.fn(), sendBatch: vi.fn() };
   const env = {
     SPLITCH_PLATFORM_TARGET: "local",
     TINYBIRD_API_URL: "https://tinybird.test",
@@ -28,6 +29,7 @@ export function makeQueueFixture(): QueueFixture {
     EVALUATION_PRIVACY_SALT: "test-privacy-salt",
     METRIC_EVENTS_QUEUE: queue,
     METRIC_EVENTS_DLQ: dlq,
+    METRIC_EVENTS_RECONCILIATION_QUEUE: reconciliation,
     EVALUATION_COMMIT_OUTBOX: emptyEvaluationOutbox(),
   } as unknown as Env;
   const outboxState = new Map<string, Map<string, unknown>>();

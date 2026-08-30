@@ -7,14 +7,19 @@ import {
 } from "./metric-event-batch-delivery";
 import { type PoisonedDelivery, transferToDeadLetter } from "./metric-event-dead-letter";
 import { makeMetricEventSaltStore } from "./metric-event-salt-store";
+import {
+  transferToReconciliation,
+  type UnresolvedMetricEvent,
+} from "./metric-event-reconciliation";
 import { tinybirdDelivery } from "./tinybird";
 import type { DeliveryOutcome } from "./tinybird-microbatch";
+import { QUEUE_MAX_RETRIES, queueRetryDelaySeconds } from "./queue-retry";
 import type { Env } from "./types";
 
 type MetricEventRow = Record<string, unknown>;
 
 /** Must equal `queues.consumers[].max_retries` in wrangler.jsonc; a test holds the two together. */
-export const METRIC_EVENT_MAX_RETRIES = 7;
+export const METRIC_EVENT_MAX_RETRIES = QUEUE_MAX_RETRIES;
 
 /**
  * Backoff floor and ceiling, in seconds. Doubling from 5 across the seven
@@ -25,7 +30,6 @@ export const METRIC_EVENT_MAX_RETRIES = 7;
  * can exceed the 86,400 Cloudflare accepts for a delayed message
  * (https://developers.cloudflare.com/queues/configuration/javascript-apis/).
  */
-const RETRY_BASE_SECONDS = 5;
 const RETRY_MAX_SECONDS = 43_200;
 
 /**
@@ -66,25 +70,44 @@ export async function handleMetricEventQueue(
 
   const admitted: AdmittedRow[] = [];
   const poisoned: PoisonedDelivery[] = [];
+  const unresolved: UnresolvedMetricEvent[] = [];
   for (const entry of admissions) {
     if (!entry) continue;
-    collectAdmission(entry.message, entry.admission, admitted, poisoned);
+    collectAdmission(entry.message, entry.admission, admitted, poisoned, unresolved);
   }
 
   try {
     const outcomes = await deliverAdmittedRows(admitted, env, delivery.value);
     for (const entry of admitted) {
-      settleAdmitted(entry, outcomes.get(entry.message), poisoned);
+      settleAdmitted(entry, outcomes.get(entry.message), poisoned, unresolved);
     }
   } catch (error) {
-    // The write-ahead records stay `attempting`, which a later invocation reads
-    // as a claim left by a dead one and re-sends, so a throw that never reached
-    // Tinybird strands nothing. The messages still need their retry.
+    // A write-ahead record left `attempting` is never blindly re-sent. The next
+    // invocation hands it to reconciliation, which proves commit or absence.
     for (const entry of admitted) retryMessage(entry.message, error);
     logBatchFailure(admitted.length, error);
   }
 
+  await transferUnresolved(unresolved, env);
   await transferPoisoned(poisoned, env);
+  console.info("event-ingest-api Metric Event batch settled", {
+    queue: batch.queue,
+    attemptId,
+    rowCount: batch.messages.length,
+    attemptedDeliveryCount: admitted.length,
+    unresolvedCount: unresolved.length,
+    poisonCount: poisoned.length,
+    backlogCount: batch.metadata.metrics.backlogCount,
+    backlogBytes: batch.metadata.metrics.backlogBytes,
+    oldestMessageTimestamp: oldestMessageTimestamp(batch.messages),
+  });
+}
+
+function oldestMessageTimestamp(messages: readonly Message<MetricEventRow>[]): string | null {
+  if (messages.length === 0) return null;
+  return new Date(
+    Math.min(...messages.map((message) => message.timestamp.getTime())),
+  ).toISOString();
 }
 
 function collectAdmission(
@@ -92,6 +115,7 @@ function collectAdmission(
   admission: Admission,
   admitted: AdmittedRow[],
   poisoned: PoisonedDelivery[],
+  unresolved: UnresolvedMetricEvent[],
 ): void {
   if (admission.kind === "send") {
     admitted.push(admission.admitted);
@@ -101,16 +125,19 @@ function collectAdmission(
     message.ack();
     return;
   }
-  if (admission.attempt.state === "indeterminate") {
-    // Neither retrying nor discarding is safe. The durable record is the
-    // handoff to reconciliation; the queue message has nothing left to do.
+  if (admission.attempt.state !== "poison_pending") {
     console.error("event-ingest-api Metric Event delivery is unresolved", {
       queueMessageId: message.id,
       dedupKey: admission.dedupKey,
       attemptId: admission.attempt.attemptId,
       reason: admission.reason,
     });
-    message.ack();
+    unresolved.push({
+      message,
+      dedupKey: admission.dedupKey,
+      attempt: admission.attempt,
+      reason: admission.reason,
+    });
     return;
   }
   poisoned.push({
@@ -125,6 +152,7 @@ function settleAdmitted(
   entry: AdmittedRow,
   outcome: DeliveryOutcome | undefined,
   poisoned: PoisonedDelivery[],
+  unresolved: UnresolvedMetricEvent[],
 ): void {
   if (!outcome) {
     throw new Error("Metric Event delivery produced no outcome for an admitted row");
@@ -153,7 +181,12 @@ function settleAdmitted(
       attemptId: entry.attempt.attemptId,
       reason: outcome.reason,
     });
-    entry.message.ack();
+    unresolved.push({
+      message: entry.message,
+      dedupKey: entry.dedupKey,
+      attempt: { ...entry.attempt, state: "indeterminate", reason: outcome.reason },
+      reason: outcome.reason,
+    });
     return;
   }
   // Logged here rather than only in the transfer, because this is the line that
@@ -165,6 +198,15 @@ function settleAdmitted(
     attempt: entry.attempt,
     reason: outcome.reason,
   });
+}
+
+async function transferUnresolved(unresolved: UnresolvedMetricEvent[], env: Env): Promise<void> {
+  if (unresolved.length === 0) return;
+  try {
+    await transferToReconciliation(unresolved, env);
+  } catch (error) {
+    for (const entry of unresolved) retryMessage(entry.message, error);
+  }
 }
 
 function clampDelaySeconds(seconds: number | undefined): number | undefined {
@@ -213,21 +255,7 @@ function logBatchFailure(rowCount: number, error: unknown): void {
  * cost the message its retry.
  */
 export function metricEventRetryDelaySeconds(attempts: number, messageId: string): number {
-  const attempt = Number.isFinite(attempts)
-    ? Math.min(Math.max(Math.trunc(attempts), 1), METRIC_EVENT_MAX_RETRIES)
-    : 1;
-  const base = Math.min(RETRY_BASE_SECONDS * 2 ** (attempt - 1), RETRY_MAX_SECONDS);
-  return Math.min(base + Math.floor(base * jitterFraction(messageId)), RETRY_MAX_SECONDS);
-}
-
-/** FNV-1a over the message id, mapped to [0, 1). Deterministic per message. */
-function jitterFraction(messageId: string): number {
-  let hash = 2_166_136_261;
-  for (let index = 0; index < messageId.length; index += 1) {
-    hash ^= messageId.charCodeAt(index);
-    hash = Math.imul(hash, 16_777_619);
-  }
-  return ((hash >>> 0) % 1_000) / 1_000;
+  return queueRetryDelaySeconds(attempts, messageId);
 }
 
 function logMetricEventFailure(message: Message<MetricEventRow>, error: unknown): void {

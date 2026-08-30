@@ -4,7 +4,12 @@ import { describe, expect, it } from "vitest";
 import { METRIC_EVENT_MAX_RETRIES } from "./metric-event-queue";
 
 const config = readWranglerConfig();
-const requiredSecrets = ["SENTRY_DSN", "SPLITCH_EVENT_INGEST_TOKEN", "TINYBIRD_INGEST_TOKEN"];
+const requiredSecrets = [
+  "SENTRY_DSN",
+  "SPLITCH_EVENT_INGEST_TOKEN",
+  "TINYBIRD_INGEST_TOKEN",
+  "TINYBIRD_READ_TOKEN",
+];
 
 describe("Event Ingest Worker Wrangler runtime config", () => {
   it.each([
@@ -115,12 +120,9 @@ describe("Event Ingest Worker Wrangler runtime config", () => {
     expect(consumers.length, `${target} declares no Metric Event consumer`).toBeGreaterThan(0);
     for (const consumer of consumers) {
       expect(
-        producers,
+        producers.some((producer) => producer.queue === consumer.dead_letter_queue),
         `${target} cannot write to ${String(consumer.dead_letter_queue)}`,
-      ).toContainEqual({
-        binding: "METRIC_EVENTS_DLQ",
-        queue: consumer.dead_letter_queue,
-      });
+      ).toBe(true);
     }
   });
 
@@ -128,9 +130,9 @@ describe("Event Ingest Worker Wrangler runtime config", () => {
    * The whole point of the queue is that Tinybird sees one request per batch,
    * not one per row, against a documented ceiling of 100 requests per second per
    * data source. A short batch timeout keeps ingest latency low, and the
-   * concurrency bounds how far a backlog may fan out into that ceiling: an
-   * invocation issues about one request per batch, so five concurrent consumers
-   * stay near a third of the budget even when each batch turns around fast
+   * concurrency is deliberately one because Cloudflare's setting bounds active
+   * consumers rather than requests per second. One consumer per datasource is
+   * the fail-loud governor until hosted load evidence justifies a larger value
    * (docs/adr/0043-event-ingest-will-use-durable-queue-backed-tinybird-microbatches.md).
    */
   it.each([
@@ -142,9 +144,11 @@ describe("Event Ingest Worker Wrangler runtime config", () => {
 
     expect(consumers.length, `${target} declares no Metric Event consumer`).toBeGreaterThan(0);
     for (const consumer of consumers) {
-      expect(consumer.max_batch_size, `${target} batches too few rows per request`).toBe(100);
+      expect(consumer.max_batch_size, `${target} batches too few rows per request`).toBe(
+        consumer.queue?.includes("reconciliation") ? 25 : 100,
+      );
       expect(consumer.max_batch_timeout, `${target} holds a batch too long`).toBe(1);
-      expect(consumer.max_concurrency, `${target} fans out past the Tinybird ceiling`).toBe(5);
+      expect(consumer.max_concurrency, `${target} fans out past the Tinybird ceiling`).toBe(1);
     }
   });
 });

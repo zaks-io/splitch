@@ -56,6 +56,21 @@ describe("NDJSON batching", () => {
 });
 
 describe("Tinybird response classification", () => {
+  it("bounds every upstream request with an abort signal", async () => {
+    let signal: AbortSignal | null | undefined;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+        signal = init?.signal;
+        return Response.json({ successful_rows: 1, quarantined_rows: 0 });
+      }),
+    );
+
+    await send();
+
+    expect(signal).toBeInstanceOf(AbortSignal);
+  });
+
   it("reads Retry-After given as an HTTP date", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-08-30T00:00:00.000Z"));

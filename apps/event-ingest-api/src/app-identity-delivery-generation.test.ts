@@ -8,7 +8,7 @@ afterEach(() => vi.unstubAllGlobals());
 describe("App identity delivery generation", () => {
   it("blocks Evaluation usage delivery while reset suppression is durable", async () => {
     const fixture = makeFixture();
-    const append = vi.fn(async () => new Response(null, { status: 202 }));
+    const append = vi.fn(async () => commitResponse());
     vi.stubGlobal("fetch", append);
     const row = { app_id: "app_1", identity_version: "app-v1", dedup_key: "usage" };
 
@@ -24,7 +24,7 @@ describe("App identity delivery generation", () => {
 
   it("releases only the durably activated replacement generation", async () => {
     const fixture = makeFixture();
-    const append = vi.fn(async () => new Response(null, { status: 202 }));
+    const append = vi.fn(async () => commitResponse());
     vi.stubGlobal("fetch", append);
     const oldRow = { app_id: "app_1", identity_version: "app-v1", dedup_key: "old" };
     await deliver(fixture, "app-v1", oldRow);
@@ -60,7 +60,7 @@ describe("App identity delivery generation", () => {
       vi.fn(async () => {
         markStarted();
         await gate;
-        return new Response(null, { status: 202 });
+        return commitResponse();
       }),
     );
     const row = {
@@ -130,6 +130,10 @@ describe("App identity delivery generation", () => {
     ).rejects.toThrow("Entity identity delivery input is invalid");
   });
 });
+
+function commitResponse(): Response {
+  return Response.json({ successful_rows: 1, quarantined_rows: 0 });
+}
 
 function deliver(
   fixture: ReturnType<typeof makeFixture>,

@@ -1,4 +1,5 @@
 import {
+  admitAppIdentityRow,
   admitEntityIdentityRow,
   completeAppIdentityDeliveryReset,
   deliverAppIdentityRow,
@@ -71,6 +72,7 @@ export class EntityMetricPrivacyDurableObject {
       "/register-app-entity": concurrent(() => this.registerAppEntity(request)),
       "/register-app-evaluation": concurrent(() => this.registerAppEvaluation(request)),
       "/deliver-app-row": concurrent(() => this.deliverAppRow(request)),
+      "/admit-app-row": concurrent(() => this.admitAppRow(request)),
       "/deliver-entity-row": concurrent(() => this.deliverEntityRow(request)),
       "/admit-entity-row": concurrent(() => this.admitEntityRow(request)),
       "/deliver-row": concurrent(() => this.deliverRow(request)),
@@ -91,6 +93,10 @@ export class EntityMetricPrivacyDurableObject {
 
   private async deliverAppRow(request: Request): Promise<Response> {
     return deliverAppIdentityRow(this.ctx.storage, this.env, request);
+  }
+
+  private async admitAppRow(request: Request): Promise<Response> {
+    return admitAppIdentityRow(this.ctx.storage, request);
   }
 
   private async deliverEntityRow(request: Request): Promise<Response> {
