@@ -10,8 +10,11 @@ attempts plus a dedicated reconciliation queue; an ambiguous attempt never resub
 raw-datasource absence moves to the reconciliation DLQ for operator review. Raw-only Metric Event
 evidence runs a bounded append Copy Pipe from raw truth and verifies the resulting aggregate state.
 Raw Exposure and Evaluation consumers transfer ambiguous or permanent outcomes to their isolated
-DLQs instead of resubmitting them. Web Event intake and the shared recovery-store design for those raw
-streams are specified but not implemented.
+DLQs instead of resubmitting them. Their privacy authorities persist a delivery permit before an
+admitted row leaves the authority boundary and clear it before primary acknowledgement. Suppression
+or App reset becomes durable but refuses deletion proof while any permit remains, so a queued batch
+cannot append after proof even across a Durable Object restart. Web Event intake and the shared
+recovery-store design for those raw streams are specified but not implemented.
 
 All Tinybird-backed ingest will be refactored onto four durable Cloudflare Queues owned and consumed
 by the existing Event Ingest Worker: one queue each for `raw_events`, `raw_evaluations`,

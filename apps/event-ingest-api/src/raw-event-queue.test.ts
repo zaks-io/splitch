@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { EntityMetricPrivacyDurableObject } from "./entity-metric-privacy-store";
 import worker from "./index";
 import type { Env } from "./types";
 
@@ -94,6 +95,46 @@ describe("raw event queue delivery", () => {
     expect(fetch).not.toHaveBeenCalled();
     expect(queued.retry).toHaveBeenCalledOnce();
   });
+
+  it.each([
+    ["Exposure", "splitch-raw-events", "raw_events"],
+    ["Evaluation", "splitch-raw-evaluations", "raw_evaluations"],
+  ])("blocks an App reset until an admitted %s queue append completes", async (_, queue, source) => {
+    let releaseAppend!: () => void;
+    const appendGate = new Promise<void>((resolve) => {
+      releaseAppend = resolve;
+    });
+    const append = vi.fn(async () => {
+      await appendGate;
+      return Response.json({ successful_rows: 1, quarantined_rows: 0 });
+    });
+    vi.stubGlobal("fetch", append);
+    const privacy = privacyNamespace();
+    const queued = message("permit-race", source);
+    const delivery = deliver(queue, [queued], {
+      SPLITCH_PLATFORM_TARGET: "production",
+      ENTITY_METRIC_PRIVACY: privacy.namespace,
+    });
+    await vi.waitFor(() => expect(append).toHaveBeenCalledOnce());
+
+    const resetWhilePending = await privacy.fetch("app_1:app-identity-inventory", "/reset-app", {
+      appId: "app_1",
+      resetId: "reset_queue_race",
+      currentVersion: "app-v1",
+    });
+    expect(resetWhilePending.status).toBe(409);
+    expect(queued.ack).not.toHaveBeenCalled();
+
+    releaseAppend();
+    await delivery;
+    expect(queued.ack).toHaveBeenCalledOnce();
+    const resetAfterDelivery = await privacy.fetch("app_1:app-identity-inventory", "/reset-app", {
+      appId: "app_1",
+      resetId: "reset_queue_race",
+      currentVersion: "app-v1",
+    });
+    expect(resetAfterDelivery.status).toBe(200);
+  });
 });
 
 function message(id: string, datasource = "raw_events") {
@@ -119,7 +160,11 @@ function message(id: string, datasource = "raw_events") {
   } satisfies Message<Record<string, unknown>>;
 }
 
-async function deliver(queue: string, messages: readonly ReturnType<typeof message>[]) {
+async function deliver(
+  queue: string,
+  messages: readonly ReturnType<typeof message>[],
+  overrides: Partial<Env> = {},
+) {
   if (!worker.queue) throw new Error("queue handler is unavailable");
   const rawEventsDlq = { send: vi.fn(), sendBatch: vi.fn(), metrics: vi.fn() };
   const rawEvaluationsDlq = { send: vi.fn(), sendBatch: vi.fn(), metrics: vi.fn() };
@@ -137,8 +182,66 @@ async function deliver(queue: string, messages: readonly ReturnType<typeof messa
       TINYBIRD_INGEST_TOKEN: "test-token",
       RAW_EVENTS_DLQ: rawEventsDlq,
       RAW_EVALUATIONS_DLQ: rawEvaluationsDlq,
+      ...overrides,
     } as Env,
     {} as ExecutionContext,
   );
   return { rawEventsDlq, rawEvaluationsDlq };
+}
+
+function privacyNamespace() {
+  const objects = new Map<string, EntityMetricPrivacyDurableObject>();
+  let namespace!: Env["ENTITY_METRIC_PRIVACY"];
+  const env = () =>
+    ({
+      SPLITCH_PLATFORM_TARGET: "production",
+      TINYBIRD_API_URL: "https://tinybird.test",
+      TINYBIRD_INGEST_TOKEN: "test-token",
+      ENTITY_METRIC_PRIVACY: namespace,
+      EVALUATION_COMMIT_OUTBOX: {},
+      METRIC_EVENT_OUTBOX: {},
+    }) as Env;
+  namespace = {
+    idFromName: (name: string) => name as unknown as DurableObjectId,
+    get: (id: DurableObjectId) => ({
+      fetch: (input: RequestInfo | URL, init?: RequestInit) => {
+        const name = String(id);
+        let object = objects.get(name);
+        if (!object) {
+          object = new EntityMetricPrivacyDurableObject(
+            { storage: memoryStorage() } as DurableObjectState,
+            env(),
+          );
+          objects.set(name, object);
+        }
+        return object.fetch(new Request(String(input), init));
+      },
+    }),
+  };
+  return {
+    namespace,
+    fetch(name: string, path: string, body: unknown) {
+      return namespace.get(namespace.idFromName(name)).fetch(`https://privacy.test${path}`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body),
+      });
+    },
+  };
+}
+
+function memoryStorage(): DurableObjectStorage {
+  const values = new Map<string, unknown>();
+  return {
+    get: async <T>(key: string) => values.get(key) as T | undefined,
+    put: async (key: string, value: unknown) => void values.set(key, structuredClone(value)),
+    delete: async (key: string | string[]) =>
+      Array.isArray(key)
+        ? key.reduce((count, item) => count + Number(values.delete(item)), 0)
+        : values.delete(key),
+    list: async <T>({ prefix }: { prefix: string }) =>
+      new Map(
+        [...values.entries()].filter(([key]) => key.startsWith(prefix)) as Array<[string, T]>,
+      ),
+  } as unknown as DurableObjectStorage;
 }

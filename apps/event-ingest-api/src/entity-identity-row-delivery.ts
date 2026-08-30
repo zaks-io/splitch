@@ -5,6 +5,11 @@ import {
   rowIdentity,
 } from "./entity-metric-privacy";
 import { appendRawEvent, tinybirdDelivery } from "./tinybird";
+import {
+  completeDeliveryPermit,
+  deliveryPermitId,
+  recordDeliveryPermit,
+} from "./raw-event-delivery-permit";
 import type { Env } from "./types";
 
 interface SuppressionState {
@@ -22,6 +27,7 @@ export async function admitEntityIdentityRow(
   datasource: string,
   row: Record<string, unknown>,
   platformTarget: string | undefined,
+  deliveryId?: string,
 ): Promise<boolean> {
   return postEntityIdentityRow(
     "admit-entity-row",
@@ -30,7 +36,29 @@ export async function admitEntityIdentityRow(
     datasource,
     row,
     platformTarget,
+    deliveryId,
   );
+}
+
+export async function completeEntityIdentityRow(
+  namespace: EntityMetricPrivacyNamespace | undefined,
+  identityVersion: string,
+  datasource: string,
+  row: Record<string, unknown>,
+  platformTarget: string | undefined,
+  deliveryId: string,
+): Promise<void> {
+  if (!namespace && (platformTarget === "local" || platformTarget === "pr-ci")) return;
+  const identity = rowIdentity(row);
+  const response = await appIdentityPrivacyInventoryStub(namespace, identity.appId).fetch(
+    "https://entity-privacy.local/complete-entity-row",
+    {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ ...identity, identityVersion, datasource, deliveryId }),
+    },
+  );
+  if (!response.ok) throw new Error(`Entity identity completion returned HTTP ${response.status}`);
 }
 
 async function postEntityIdentityRow(
@@ -40,6 +68,7 @@ async function postEntityIdentityRow(
   datasource: string,
   row: Record<string, unknown>,
   platformTarget: string | undefined,
+  deliveryId?: string,
 ): Promise<boolean> {
   if (!namespace && (platformTarget === "local" || platformTarget === "pr-ci")) return false;
   const identity = rowIdentity(row);
@@ -48,7 +77,7 @@ async function postEntityIdentityRow(
     {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ ...identity, identityVersion, datasource, row }),
+      body: JSON.stringify({ ...identity, identityVersion, datasource, row, deliveryId }),
     },
   );
   if (!response.ok) throw new Error(`Entity identity delivery returned HTTP ${response.status}`);
@@ -77,12 +106,25 @@ export async function admitEntityRowResponse(
   request: Request,
 ): Promise<Response> {
   const admitted = await admitEntityRowAtAuthority(storage, request);
+  if (!admitted.suppressed) await recordDeliveryPermit(storage, admitted.deliveryId);
   return Response.json({ suppressed: admitted.suppressed });
+}
+
+export async function completeEntityRowDelivery(
+  storage: DurableObjectStorage,
+  request: Request,
+): Promise<Response> {
+  return completeDeliveryPermit(storage, request);
 }
 
 type AdmittedRow =
   | { suppressed: true }
-  | { suppressed: false; datasource: string; row: Record<string, unknown> };
+  | {
+      suppressed: false;
+      datasource: string;
+      row: Record<string, unknown>;
+      deliveryId?: string;
+    };
 
 async function admitEntityRowAtAuthority(
   storage: DurableObjectStorage,
@@ -100,7 +142,12 @@ async function admitEntityRowAtAuthority(
   if (suppression && atOrBefore(serverReceivedAt, suppression.deleteBeforeTs)) {
     return { suppressed: true };
   }
-  return { suppressed: false, datasource: body.datasource, row: body.row };
+  return {
+    suppressed: false,
+    datasource: body.datasource,
+    row: body.row,
+    deliveryId: deliveryPermitId(body),
+  };
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

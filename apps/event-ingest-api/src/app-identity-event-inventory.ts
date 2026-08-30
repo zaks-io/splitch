@@ -5,6 +5,12 @@ import {
 } from "./entity-metric-privacy";
 import { evaluationCommitOutbox } from "./evaluation-commit-outbox-client";
 import { appendRawEvent, tinybirdDelivery } from "./tinybird";
+import {
+  deliveryPermitId,
+  hasDeliveryPermits,
+  recordDeliveryPermit,
+  releaseDeliveryPermit,
+} from "./raw-event-delivery-permit";
 import type { Env } from "./types";
 
 const APP_ENTITY_PREFIX = "privacy:app-entity:";
@@ -67,26 +73,6 @@ export async function deliverAppIdentityRow(
   return Response.json({ suppressed: false });
 }
 
-export async function admitAppIdentityRow(
-  storage: DurableObjectStorage,
-  request: Request,
-): Promise<Response> {
-  const body = (await request.json()) as Record<string, unknown>;
-  if (
-    !isRecord(body.row) ||
-    typeof body.appId !== "string" ||
-    body.row.app_id !== body.appId ||
-    typeof body.identityVersion !== "string" ||
-    identityVersionForRow(body.row) !== body.identityVersion ||
-    typeof body.datasource !== "string"
-  ) {
-    throw new Error("App identity admission input is invalid");
-  }
-  return (await admitVersion(storage, body.identityVersion))
-    ? Response.json({ suppressed: false })
-    : suppressed();
-}
-
 export async function deliverEntityIdentityRow(
   storage: DurableObjectStorage,
   env: Env,
@@ -126,6 +112,8 @@ async function forwardEntityIdentityRow(
     throw new Error("Entity identity delivery input is invalid");
   }
   if (!(await admitVersion(storage, body.identityVersion))) return suppressed();
+  const deliveryId = deliveryPermitId(body);
+  await recordDeliveryPermit(storage, deliveryId);
   const ref: AppEntityRef = {
     appId: body.appId,
     idType: body.idType,
@@ -138,11 +126,18 @@ async function forwardEntityIdentityRow(
     {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ datasource: body.datasource, row: body.row }),
+      body: JSON.stringify({ datasource: body.datasource, row: body.row, deliveryId }),
     },
   );
   if (!response.ok) throw new Error(`Entity identity delivery returned ${response.status}`);
-  return Response.json(await response.json());
+  const result = (await response.json()) as { suppressed?: unknown };
+  if (typeof result.suppressed !== "boolean") {
+    throw new Error("Entity identity delivery returned an invalid result");
+  }
+  if (result.suppressed && deliveryId !== undefined) {
+    await releaseDeliveryPermit(storage, deliveryId);
+  }
+  return Response.json(result);
 }
 
 export async function resetAppIdentityDelivery(
@@ -170,6 +165,9 @@ export async function resetAppIdentityDelivery(
     resetId: body.resetId,
     blockedVersion: body.currentVersion,
   });
+  if (await hasDeliveryPermits(storage)) {
+    return new Response("raw event deliveries are pending", { status: 409 });
+  }
   const refs = await storage.list<AppEntityRef>({ prefix: APP_ENTITY_PREFIX });
   const commits = await storage.list<AppEvaluationCommitRef>({ prefix: APP_EVALUATION_PREFIX });
   await purgeEvaluationCommits(storage, env, commits);
@@ -213,7 +211,7 @@ export async function completeAppIdentityDeliveryReset(
   return Response.json({ completed: true });
 }
 
-async function admitVersion(
+export async function admitVersion(
   storage: DurableObjectStorage,
   identityVersion: string,
 ): Promise<boolean> {

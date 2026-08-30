@@ -1,5 +1,4 @@
 import {
-  admitAppIdentityRow,
   admitEntityIdentityRow,
   completeAppIdentityDeliveryReset,
   deliverAppIdentityRow,
@@ -8,9 +7,15 @@ import {
   registerAppEvaluation,
   resetAppIdentityDelivery,
 } from "./app-identity-event-inventory";
+import {
+  admitAppIdentityRow,
+  completeAppIdentityRow,
+  completeEntityIdentityRow,
+} from "./app-identity-delivery-permit";
 import { DeliveryResetLock } from "./delivery-reset-lock";
 import {
   admitEntityRowResponse,
+  completeEntityRowDelivery,
   deliverEntityRowAtAuthority,
 } from "./entity-identity-row-delivery";
 import {
@@ -29,6 +34,7 @@ import {
   exportMetricRecords,
 } from "./entity-metric-privacy-records";
 import type { Env } from "./types";
+import { hasDeliveryPermits } from "./raw-event-delivery-permit";
 
 const SUPPRESSION_KEY = "privacy:suppression";
 const EVENT_PREFIX = "event:";
@@ -73,10 +79,13 @@ export class EntityMetricPrivacyDurableObject {
       "/register-app-evaluation": concurrent(() => this.registerAppEvaluation(request)),
       "/deliver-app-row": concurrent(() => this.deliverAppRow(request)),
       "/admit-app-row": concurrent(() => this.admitAppRow(request)),
+      "/complete-app-row": concurrent(() => this.completeAppRow(request)),
       "/deliver-entity-row": concurrent(() => this.deliverEntityRow(request)),
       "/admit-entity-row": concurrent(() => this.admitEntityRow(request)),
+      "/complete-entity-row": concurrent(() => this.completeEntityRow(request)),
       "/deliver-row": concurrent(() => this.deliverRow(request)),
       "/admit-row": concurrent(() => this.admitRow(request)),
+      "/complete-row": concurrent(() => this.completeRow(request)),
       "/reset-app": alone(() => this.resetApp(request)),
       "/complete-reset": alone(() => this.completeReset(request)),
     };
@@ -99,6 +108,10 @@ export class EntityMetricPrivacyDurableObject {
     return admitAppIdentityRow(this.ctx.storage, request);
   }
 
+  private async completeAppRow(request: Request): Promise<Response> {
+    return completeAppIdentityRow(this.ctx.storage, request);
+  }
+
   private async deliverEntityRow(request: Request): Promise<Response> {
     return deliverEntityIdentityRow(this.ctx.storage, this.env, request);
   }
@@ -107,12 +120,20 @@ export class EntityMetricPrivacyDurableObject {
     return admitEntityIdentityRow(this.ctx.storage, this.env, request);
   }
 
+  private async completeEntityRow(request: Request): Promise<Response> {
+    return completeEntityIdentityRow(this.ctx.storage, this.env, request);
+  }
+
   private async deliverRow(request: Request): Promise<Response> {
     return deliverEntityRowAtAuthority(this.ctx.storage, this.env, request);
   }
 
   private async admitRow(request: Request): Promise<Response> {
     return admitEntityRowResponse(this.ctx.storage, request);
+  }
+
+  private async completeRow(request: Request): Promise<Response> {
+    return completeEntityRowDelivery(this.ctx.storage, request);
   }
 
   private async resetApp(request: Request): Promise<Response> {
@@ -166,6 +187,9 @@ export class EntityMetricPrivacyDurableObject {
         ? existing.deleteBeforeTs
         : deleteBeforeTs;
     await this.ctx.storage.put(SUPPRESSION_KEY, { deleteBeforeTs: effective });
+    if (await hasDeliveryPermits(this.ctx.storage)) {
+      return new Response("raw event deliveries are pending", { status: 409 });
+    }
     return Response.json({
       proofs: [`metric-event-queue-suppression:${effective}`],
     });
@@ -187,6 +211,9 @@ export class EntityMetricPrivacyDurableObject {
   }
 
   private async deleteRecords(): Promise<Response> {
+    if (await hasDeliveryPermits(this.ctx.storage)) {
+      return new Response("raw event deliveries are pending", { status: 409 });
+    }
     const metricEntries = await this.metricEntries();
     const evaluationEntries = await this.evaluationEntries();
     const metricCount = await deleteMetricRecords(this.env, metricEntries);

@@ -134,6 +134,7 @@ export async function admitAppIdentityRow(
   datasource: string,
   row: Record<string, unknown>,
   platformTarget: string | undefined,
+  deliveryId?: string,
 ): Promise<boolean> {
   if (!namespace && (platformTarget === "local" || platformTarget === "pr-ci")) return false;
   const response = await appIdentityPrivacyInventoryStub(namespace, appId).fetch(
@@ -141,7 +142,7 @@ export async function admitAppIdentityRow(
     {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ appId, identityVersion, datasource, row }),
+      body: JSON.stringify({ appId, identityVersion, datasource, row, deliveryId }),
     },
   );
   if (!response.ok) throw new Error(`App identity admission returned HTTP ${response.status}`);
@@ -150,6 +151,24 @@ export async function admitAppIdentityRow(
     throw new Error("App Evaluation admission returned an invalid result");
   }
   return body.suppressed;
+}
+
+export async function completeAppIdentityRow(
+  namespace: EntityMetricPrivacyNamespace | undefined,
+  appId: string,
+  deliveryId: string,
+  platformTarget: string | undefined,
+): Promise<void> {
+  if (!namespace && (platformTarget === "local" || platformTarget === "pr-ci")) return;
+  const response = await appIdentityPrivacyInventoryStub(namespace, appId).fetch(
+    "https://entity-privacy.local/complete-app-row",
+    {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ deliveryId }),
+    },
+  );
+  if (!response.ok) throw new Error(`App identity completion returned HTTP ${response.status}`);
 }
 
 export function identityVersionForRow(row: Record<string, unknown>): string {

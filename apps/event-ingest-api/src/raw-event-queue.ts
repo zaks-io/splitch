@@ -1,7 +1,6 @@
 import { requirePlatformTarget } from "@splitch/contracts";
-import { admitEntityIdentityRow } from "./entity-identity-row-delivery";
-import { admitAppIdentityRow, identityVersionForRow } from "./entity-metric-privacy";
 import { queueRetryDelaySeconds } from "./queue-retry";
+import { admitRawEventPrivacy, completeRawEventPrivacy } from "./raw-event-privacy-delivery";
 import { tinybirdDelivery } from "./tinybird";
 import { ndjsonBatches, sendNdjsonBatch } from "./tinybird-microbatch";
 import type { Env } from "./types";
@@ -17,6 +16,7 @@ interface RawEventQueueEnvelope extends Record<string, unknown> {
 interface AdmittedRawEvent {
   readonly message: Message<Record<string, unknown>>;
   readonly envelope: RawEventQueueEnvelope;
+  readonly deliveryId: string;
 }
 
 interface RawEventFailureEnvelope extends Record<string, unknown> {
@@ -79,12 +79,13 @@ async function admitBatch(
         if (queued.datasource !== queueDatasource) {
           throw new Error(`${queued.datasource} envelope arrived on ${queueDatasource} queue`);
         }
-        if (await isSuppressed(queued, env)) {
+        const deliveryId = `queue:${queued.datasource}:${message.id}`;
+        if (await admitRawEventPrivacy(queued.datasource, queued.row, deliveryId, env)) {
           message.ack();
           return;
         }
         const group = groups.get(queued.datasource) ?? [];
-        group.push({ message, envelope: queued });
+        group.push({ message, envelope: queued, deliveryId });
         groups.set(queued.datasource, group);
       } catch (error) {
         retry(message, error);
@@ -101,7 +102,9 @@ async function deliverGroup(
 ): Promise<void> {
   const delivery = tinybirdDelivery(env, datasource);
   if (!delivery.ok) {
-    for (const item of admitted) retry(item.message, new Error(delivery.error.message));
+    await settleCompletedAdmissions(admitted, env, (item) =>
+      retry(item.message, new Error(delivery.error.message)),
+    );
     return;
   }
   for (const microbatch of ndjsonBatches(admitted, (item) => item.envelope.row)) {
@@ -117,11 +120,11 @@ async function settleMicrobatch(
   env: Env,
 ): Promise<void> {
   if (outcome.kind === "delivered") {
-    for (const item of items) item.message.ack();
+    await settleCompletedAdmissions(items, env, (item) => item.message.ack());
     return;
   }
   if (outcome.kind === "retryable") {
-    for (const item of items) retryDelivery(item, outcome);
+    await settleCompletedAdmissions(items, env, (item) => retryDelivery(item, outcome));
     return;
   }
   await transferTerminalFailure(datasource, items, outcome, env);
@@ -133,28 +136,23 @@ function datasourceForQueue(queue: string): RawEventDatasource {
   throw new Error(`unknown raw event queue ${queue}`);
 }
 
-async function isSuppressed(queued: RawEventQueueEnvelope, env: Env): Promise<boolean> {
-  if (queued.datasource === "raw_events") {
-    return admitEntityIdentityRow(
-      env.ENTITY_METRIC_PRIVACY,
-      identityVersionForRow(queued.row),
-      queued.datasource,
-      queued.row,
-      env.SPLITCH_PLATFORM_TARGET,
-    );
+async function completeAdmission(item: AdmittedRawEvent, env: Env): Promise<void> {
+  await completeRawEventPrivacy(item.envelope.datasource, item.envelope.row, item.deliveryId, env);
+}
+
+async function settleCompletedAdmissions(
+  items: readonly AdmittedRawEvent[],
+  env: Env,
+  settle: (item: AdmittedRawEvent) => void,
+): Promise<void> {
+  const completions = await Promise.allSettled(items.map((item) => completeAdmission(item, env)));
+  for (let index = 0; index < items.length; index += 1) {
+    const item = items[index];
+    const completion = completions[index];
+    if (!item || !completion) continue;
+    if (completion.status === "fulfilled") settle(item);
+    else retry(item.message, completion.reason);
   }
-  const appId = queued.row.app_id;
-  if (typeof appId !== "string" || appId.length === 0) {
-    throw new Error("raw_evaluations row has no app_id");
-  }
-  return admitAppIdentityRow(
-    env.ENTITY_METRIC_PRIVACY,
-    appId,
-    identityVersionForRow(queued.row),
-    queued.datasource,
-    queued.row,
-    env.SPLITCH_PLATFORM_TARGET,
-  );
 }
 
 function retryDelivery(
@@ -191,7 +189,11 @@ async function transferTerminalFailure(
     const chunk = chunks[index] ?? [];
     try {
       await queue.sendBatch(chunk.map((entry) => ({ body: entry.envelope })));
-      for (const entry of chunk) entry.item.message.ack();
+      await settleCompletedAdmissions(
+        chunk.map((entry) => entry.item),
+        env,
+        (item) => item.message.ack(),
+      );
     } catch (error) {
       for (const pending of chunks.slice(index).flat()) retry(pending.item.message, error);
       return;
