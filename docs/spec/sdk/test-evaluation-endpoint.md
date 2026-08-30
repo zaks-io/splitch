@@ -61,6 +61,7 @@ The Flag is identified by `flagKey` in the path.
 TestEvaluationResponse {
   variantName: string       -- resolved Variant name
   value: VariantValue       -- resolved Variant value, same type as evaluate endpoint
+  resolutionReason: "SPLIT" | "TARGETING_MATCH" | "DEFAULT" | "DISABLED" | "CACHED"
   reason: EvaluationReason
   liveRunId: string | null  -- live Run observed from KV; null when no Run is live
 }
@@ -140,7 +141,7 @@ resolves as expected.
 
 ## Seam boundary
 
-- **Port:** `testEvaluate(appId, environmentId, controlPlaneToken, flagKey, evaluationContext) -> { variantName, value, reason, liveRunId }`
+- **Port:** `testEvaluate(appId, environmentId, controlPlaneToken, flagKey, evaluationContext) -> { variantName, value, resolutionReason, reason, liveRunId }`
 - **Left side:** CLI / MCP / agent calling the verify step; control-plane token required
 - **Right side:** Worker that reads live config from the same KV-backed Provider path the data-plane `evaluate` endpoint uses (not D1 directly), may read holdover, computes Assignment or reports holdover replay, returns reason; wired to NO write path
 - **Failure contract:** no writes on error; 404 → flag not found; 401/403 → auth failure

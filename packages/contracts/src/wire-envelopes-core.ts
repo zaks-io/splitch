@@ -30,6 +30,7 @@ import {
   type ExposureBatchResultStatus,
   ExposureBatchResultStatusSchema,
 } from "./leaves/exposures-wire";
+import { ResolutionReasonSchema } from "./leaves/resolution-reason";
 import { VariantValueSchema } from "./leaves/variant-value";
 
 export {
@@ -177,7 +178,8 @@ export const CachedEvaluationTelemetryResponseSchema = z.object({ ok: z.literal(
 // ---------------------------------------------------------------------------
 // Test-evaluation (dry-run, control-plane token)
 //
-// Returns both the Variant name and resolved value plus a structured reason.
+// Returns both the Variant name and resolved value, the same flat reason token
+// as the data plane, and the control-plane-only structured reason detail.
 // `liveRunId` is present-with-null (null when no Run is live). Writes nothing,
 // emits no Exposure (ADR-0026).
 // ---------------------------------------------------------------------------
@@ -230,6 +232,7 @@ export type TestEvaluationReason = z.infer<typeof TestEvaluationReasonSchema>;
 export const TestEvaluationResponseSchema = z.object({
   variantName: z.string(),
   value: VariantValueSchema,
+  resolutionReason: ResolutionReasonSchema.exclude(["STALE", "ERROR"]),
   reason: TestEvaluationReasonSchema,
   liveRunId: z.string().nullable(),
 });

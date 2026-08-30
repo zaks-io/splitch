@@ -180,6 +180,7 @@ export const startRunResponse = {
 export const testEvalResponse = {
   variantName: "on",
   value: true,
+  resolutionReason: "DISABLED" as const,
   reason: { type: "default_disabled" as const },
   liveRunId: null,
 };
@@ -234,6 +235,7 @@ function refreshTokenResponse() {
 export const testEvaluation = {
   variantName: "on",
   value: true,
+  resolutionReason: "DEFAULT" as const,
   reason: { type: "no_match_default" as const },
   liveRunId: null,
 };

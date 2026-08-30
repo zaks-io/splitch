@@ -54,7 +54,8 @@ export const analysisRoutes = [
     owner: "evaluation-api",
     method: "POST",
     path: "/apps/:appId/envs/:environmentId/flags/:flagKey/test-eval",
-    summary: "Dry-run resolve a Flag with the full resolution reason without firing an Exposure.",
+    summary:
+      "Dry-run resolve a Flag with the flat data-plane reason token and full resolution detail without firing an Exposure.",
     request: { params: EnvFlagKeyParams, body: TestEvaluationRequestSchema },
     response: TestEvaluationResponseSchema,
     auth: AUTH,

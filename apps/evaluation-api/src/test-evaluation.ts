@@ -4,6 +4,7 @@ import {
   TestEvaluationResponseSchema,
   type Variant,
 } from "@splitch/contracts";
+import { resolutionReasonFor } from "@splitch/evaluation-core";
 import { type HandlerArgs, renderError } from "@splitch/worker-runtime";
 import {
   admittedEvaluatePathDeps,
@@ -68,6 +69,7 @@ export function makeTestEvaluationHandler(
       TestEvaluationResponseSchema.parse({
         variantName: result.variant,
         value: value.value,
+        resolutionReason: resolutionReasonFor(result.kind),
         reason: result.reason,
         liveRunId: result.liveRunId,
       }),

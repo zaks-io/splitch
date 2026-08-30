@@ -214,6 +214,7 @@ async function assertHttpParity(
   expect(testEvalBody).toMatchObject({
     variantName: expected.variantName,
     value: expected.value,
+    resolutionReason: expected.reasonType === "rule_matched" ? "TARGETING_MATCH" : "SPLIT",
     reason: { type: expected.reasonType },
   });
   expect(evaluateBody).toEqual({ variant: expected.value });
