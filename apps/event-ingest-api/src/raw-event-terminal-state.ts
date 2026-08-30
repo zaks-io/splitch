@@ -75,7 +75,6 @@ export async function recordRawEventTransferred(
 
 export async function cleanupRawEventDeliveryState(storage: DurableObjectStorage): Promise<void> {
   if ((await storage.get(DELIVERY_OBJECT_MARKER)) !== true) return;
-  await storage.deleteAlarm();
   await storage.deleteAll();
 }
 
@@ -160,9 +159,11 @@ async function storeState(
   storage: DurableObjectStorage,
   state: StoredDeliveryState,
 ): Promise<void> {
-  await storage.put(DELIVERY_OBJECT_MARKER, true);
-  await storage.put(DELIVERY_STATE_KEY, state);
-  await storage.setAlarm(Date.now() + DELIVERY_RETENTION_MS);
+  await storage.transaction(async (transaction) => {
+    await transaction.put(DELIVERY_OBJECT_MARKER, true);
+    await transaction.put(DELIVERY_STATE_KEY, state);
+    await transaction.setAlarm(Date.now() + DELIVERY_RETENTION_MS);
+  });
 }
 
 function rawDeliveryStateStub(

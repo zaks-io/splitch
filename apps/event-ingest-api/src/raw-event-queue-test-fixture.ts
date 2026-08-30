@@ -170,7 +170,7 @@ function queueResult() {
 function memoryStorage(): DurableObjectStorage {
   const values = new Map<string, unknown>();
   let alarm: number | null = null;
-  return {
+  const storage = {
     get: async <T>(key: string) => values.get(key) as T | undefined,
     put: async (key: string, value: unknown) => void values.set(key, structuredClone(value)),
     delete: async (key: string | string[]) =>
@@ -190,6 +190,12 @@ function memoryStorage(): DurableObjectStorage {
     },
     deleteAll: async () => {
       values.clear();
+      alarm = null;
     },
+  };
+  return {
+    ...storage,
+    transaction: async <T>(closure: (transaction: DurableObjectTransaction) => Promise<T>) =>
+      closure(storage as unknown as DurableObjectTransaction),
   } as unknown as DurableObjectStorage;
 }
