@@ -90,7 +90,10 @@ async function requireExpectedVersion(
 }
 
 async function activeRecord(ctx: DurableObjectState, env: ControlPlaneApiEnv, appId: string) {
-  const record = await requireAppIdentityRecord(configStoreAppIdentityStore(ctx, env), appId);
+  const record = await requireAppIdentityRecord(
+    configStoreAppIdentityStore(ctx, env, appId),
+    appId,
+  );
   assertAppIdentityTrafficAllowed(record.lifecycle);
   return record;
 }

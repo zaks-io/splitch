@@ -1,16 +1,80 @@
 import {
+  type AppIdentityLifecycle,
   defaultAppEntityIdentityRecordKey,
   mintInitialAppIdentityRecord,
+  parseWrappedAppIdentityRecord,
+  unwrapAppIdentityRecord,
   wrapAppIdentityRecord,
 } from "@splitch/privacy";
 import { describe, expect, it, vi } from "vitest";
 import type { ConfigStoreDurableObjectNamespace } from "../src/config-store-access.js";
-import { putConfigStoreAppIdentityIfAbsent } from "../src/config-store-app-identity.js";
+import {
+  assertConfigStoreAppIdentityTrafficAllowed,
+  putConfigStoreAppIdentityIfAbsent,
+  readConfigStoreAppIdentity,
+} from "../src/config-store-app-identity.js";
 import { durableAppIdentityResetAccess } from "../src/config-store-app-identity-access.js";
 import {
   beginConfigStoreEntityPrivacy,
   recordConfigStoreEntityPrivacyCompletion,
 } from "../src/config-store-app-identity-ledger.js";
+
+describe("Config Store App identity traffic", () => {
+  it("provisions one identity for concurrent cold attention reads", async () => {
+    const rootSecret = "test-root-secret-do-not-use";
+    const appId = "app-checkout";
+    const ctx = memoryDurableObjectState();
+    const env = {
+      EVALUATION_PRIVACY_SALT: rootSecret,
+      SPLITCH_PLATFORM_TARGET: "production",
+    } as never;
+
+    await expect(
+      Promise.all([
+        assertConfigStoreAppIdentityTrafficAllowed(ctx, env, appId),
+        assertConfigStoreAppIdentityTrafficAllowed(ctx, env, appId),
+      ]),
+    ).resolves.toEqual([undefined, undefined]);
+
+    const raw = await readConfigStoreAppIdentity(ctx, appId);
+    if (raw === null) throw new Error("missing provisioned App identity");
+    const record = await unwrapAppIdentityRecord(
+      parseWrappedAppIdentityRecord(raw),
+      rootSecret,
+      appId,
+    );
+    expect(record.currentVersion).toBe("app-v1");
+    expect(record.epochs.map((epoch) => [epoch.version, epoch.role])).toEqual([
+      ["local-v1", "lookup"],
+      ["v1", "lookup"],
+      ["app-v1", "active"],
+    ]);
+  });
+
+  it("keeps an existing blocked identity blocked", async () => {
+    const rootSecret = "test-root-secret-do-not-use";
+    const appId = "app-checkout";
+    const ctx = memoryDurableObjectState();
+    const env = {
+      EVALUATION_PRIVACY_SALT: rootSecret,
+      SPLITCH_PLATFORM_TARGET: "production",
+    } as never;
+    const blocked = {
+      ...mintInitialAppIdentityRecord(rootSecret),
+      lifecycle: blockedAppIdentityLifecycleFixture("reset-compromised"),
+    };
+    await putConfigStoreAppIdentityIfAbsent(
+      ctx,
+      env,
+      appId,
+      JSON.stringify(await wrapAppIdentityRecord(blocked, rootSecret, appId)),
+    );
+
+    await expect(assertConfigStoreAppIdentityTrafficAllowed(ctx, env, appId)).rejects.toThrow(
+      "App identity traffic is blocked",
+    );
+  });
+});
 
 describe("durableAppIdentityResetAccess", () => {
   it("routes independent production callers through the same App-scoped Config Store DO", async () => {
@@ -118,6 +182,24 @@ describe("durableAppIdentityResetAccess", () => {
     expect(dbPrepare).not.toHaveBeenCalled();
   });
 });
+
+function blockedAppIdentityLifecycleFixture(resetId: string): AppIdentityLifecycle {
+  return {
+    state: "blocked",
+    trafficBlocked: true,
+    resetId,
+    proofs: {
+      runs_and_credentials: null,
+      delivery: null,
+      assignments: null,
+      analytics: null,
+      retry_claims: null,
+      entity_deletions: null,
+      privacy_subject_refs: null,
+    },
+    releaseProofs: { evaluation: null, event_ingest: null },
+  };
+}
 
 function memoryDurableObjectState(): DurableObjectState {
   const values = new Map<string, unknown>();

@@ -12,6 +12,18 @@ export {
   wrapAppIdentityKey,
 } from "./app-identity-key";
 export type {
+  AppIdentityLifecycle,
+  AppIdentityResetProofs,
+  AppIdentityResetRelease,
+  AppIdentityResetReleaseProofs,
+  AppIdentityResetStore,
+} from "./app-identity-lifecycle";
+export {
+  APP_IDENTITY_RESET_RELEASES,
+  APP_IDENTITY_RESET_STORES,
+  assertAppIdentityTrafficAllowed,
+} from "./app-identity-lifecycle";
+export type {
   AppIdentityEpoch,
   AppIdentityRecord,
   WrappedAppIdentityEpoch,
@@ -34,18 +46,6 @@ export {
   resetCompromisedAppIdentity,
 } from "./app-identity-reset";
 export type {
-  AppIdentityLifecycle,
-  AppIdentityResetProofs,
-  AppIdentityResetRelease,
-  AppIdentityResetReleaseProofs,
-  AppIdentityResetStore,
-} from "./app-identity-lifecycle";
-export {
-  APP_IDENTITY_RESET_RELEASES,
-  APP_IDENTITY_RESET_STORES,
-  assertAppIdentityTrafficAllowed,
-} from "./app-identity-lifecycle";
-export type {
   AppIdentityCoordinatorNamespace,
   AppIdentityStore,
 } from "./app-identity-store";
@@ -54,6 +54,7 @@ export {
   makeKvAppIdentityStore,
   makeMemoryAppIdentityStore,
   mintInitialAppIdentityRecord,
+  provisionAppIdentity,
   requireAppIdentityRecord,
   rewrapKvAppIdentityRecord,
 } from "./app-identity-store";

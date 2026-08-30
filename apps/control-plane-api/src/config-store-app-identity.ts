@@ -3,14 +3,14 @@ import {
   defaultAppEntityIdentityRecordKey,
   makeKvAppIdentityStore,
   parseWrappedAppIdentityRecord,
-  requireAppIdentityRecord,
+  provisionAppIdentity,
   resetCompromisedAppIdentity,
   resolvePrivacyRootSecret,
   unwrapAppIdentityRecord,
 } from "@splitch/privacy";
 import {
-  productionAppIdentityResetReleasers,
   productionAppIdentityResetPurgers,
+  productionAppIdentityResetReleasers,
 } from "./app-identity-reset-runtime";
 import type { ControlPlaneApiEnv } from "./env";
 
@@ -54,7 +54,7 @@ export function resetConfigStoreAppIdentity(
   assertAppIdentityScope(ctx, appId);
   return ctx.blockConcurrencyWhile(async () => {
     const record = await resetCompromisedAppIdentity(
-      configStoreAppIdentityStore(ctx, env),
+      configStoreAppIdentityStore(ctx, env, appId),
       appId,
       resetId,
       productionAppIdentityResetPurgers(env, resetId),
@@ -70,17 +70,30 @@ export async function assertConfigStoreAppIdentityTrafficAllowed(
   appId: string,
 ): Promise<void> {
   assertAppIdentityScope(ctx, appId);
-  const record = await requireAppIdentityRecord(configStoreAppIdentityStore(ctx, env), appId);
+  const rootSecret = privacyRootSecret(env);
+  // Apps created before per-App epochs have no record until their first
+  // Evaluation, ingest, or retained-data read. All three paths must elect the
+  // same durable first writer so a dormant App never needs an operator backfill.
+  const record = await provisionAppIdentity(
+    configStoreAppIdentityStore(ctx, env, appId),
+    appId,
+    rootSecret,
+  );
   assertAppIdentityTrafficAllowed(record.lifecycle);
 }
 
-export function configStoreAppIdentityStore(ctx: DurableObjectState, env: ControlPlaneApiEnv) {
+export function configStoreAppIdentityStore(
+  ctx: DurableObjectState,
+  env: ControlPlaneApiEnv,
+  appId: string,
+) {
   return makeKvAppIdentityStore({
     kv: {
       get: async (key) => (await ctx.storage.get<string>(key)) ?? null,
       put: (key, value) => ctx.storage.put(key, value),
     },
     rootSecret: privacyRootSecret(env),
+    putIfAbsent: (_key, value) => putConfigStoreAppIdentityIfAbsent(ctx, env, appId, value),
     durablySerializedReset: true,
     exclusive: { runExclusive: (_appId, run) => run() },
   });
