@@ -98,11 +98,10 @@ const handler = {
 } satisfies ExportedHandler<Env, Record<string, unknown>>;
 
 async function handleQueue(batch: MessageBatch<Record<string, unknown>>, env: Env): Promise<void> {
-  const first = batch.messages[0]?.body;
-  if (first?.kind === "raw-event-delivery-v1") {
+  if (batch.queue.includes("raw-events") || batch.queue.includes("raw-evaluations")) {
     return handleRawEventQueue(batch, env);
   }
-  if (first?.kind === "metric-event-reconciliation-v1") {
+  if (batch.queue.includes("metric-events-reconciliation")) {
     return handleMetricEventReconciliationQueue(batch, env);
   }
   return handleMetricEventQueue(batch, env);

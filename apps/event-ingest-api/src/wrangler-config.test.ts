@@ -9,6 +9,7 @@ const requiredSecrets = [
   "SPLITCH_EVENT_INGEST_TOKEN",
   "TINYBIRD_INGEST_TOKEN",
   "TINYBIRD_READ_TOKEN",
+  "TINYBIRD_COPY_TOKEN",
 ];
 
 describe("Event Ingest Worker Wrangler runtime config", () => {

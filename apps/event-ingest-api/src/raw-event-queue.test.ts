@@ -22,15 +22,52 @@ describe("raw event queue delivery", () => {
     for (const queued of messages) expect(queued.ack).toHaveBeenCalledOnce();
   });
 
-  it("retries an indeterminate commit without acknowledging it", async () => {
+  it("durably transfers an indeterminate commit without resubmitting it", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn(async () => new Response(null, { status: 422 })),
     );
     const queued = message("one");
 
-    await deliver("splitch-raw-events", [queued]);
+    const { rawEventsDlq } = await deliver("splitch-raw-events", [queued]);
 
+    expect(rawEventsDlq.sendBatch).toHaveBeenCalledOnce();
+    expect(queued.ack).toHaveBeenCalledOnce();
+    expect(queued.retry).not.toHaveBeenCalled();
+    const calls = rawEventsDlq.sendBatch.mock.calls as unknown as Array<
+      [Array<{ body: Record<string, unknown> }>]
+    >;
+    expect(calls[0]?.[0]?.[0]?.body).toEqual(
+      expect.objectContaining({
+        kind: "raw-event-delivery-failure-v1",
+        classification: "indeterminate",
+      }),
+    );
+  });
+
+  it("transfers a permanent failure to the datasource DLQ after one Tinybird request", async () => {
+    const fetch = vi.fn(async () => new Response(null, { status: 400 }));
+    vi.stubGlobal("fetch", fetch);
+    const queued = message("one");
+
+    const { rawEventsDlq } = await deliver("splitch-raw-events", [queued]);
+
+    expect(fetch).toHaveBeenCalledOnce();
+    expect(rawEventsDlq.sendBatch).toHaveBeenCalledOnce();
+    expect(queued.ack).toHaveBeenCalledOnce();
+    expect(queued.retry).not.toHaveBeenCalled();
+  });
+
+  it("keeps transient failures on the primary queue", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response(null, { status: 503 })),
+    );
+    const queued = message("one");
+
+    const { rawEventsDlq } = await deliver("splitch-raw-events", [queued]);
+
+    expect(rawEventsDlq.sendBatch).not.toHaveBeenCalled();
     expect(queued.ack).not.toHaveBeenCalled();
     expect(queued.retry).toHaveBeenCalledOnce();
   });
@@ -39,6 +76,18 @@ describe("raw event queue delivery", () => {
     const fetch = vi.fn();
     vi.stubGlobal("fetch", fetch);
     const queued = message("one", "raw_evaluations");
+
+    await deliver("splitch-raw-events", [queued]);
+
+    expect(fetch).not.toHaveBeenCalled();
+    expect(queued.retry).toHaveBeenCalledOnce();
+  });
+
+  it("uses queue identity even when an envelope kind is malformed", async () => {
+    const fetch = vi.fn();
+    vi.stubGlobal("fetch", fetch);
+    const queued = message("one");
+    queued.body.kind = "corrupt";
 
     await deliver("splitch-raw-events", [queued]);
 
@@ -72,6 +121,8 @@ function message(id: string, datasource = "raw_events") {
 
 async function deliver(queue: string, messages: readonly ReturnType<typeof message>[]) {
   if (!worker.queue) throw new Error("queue handler is unavailable");
+  const rawEventsDlq = { send: vi.fn(), sendBatch: vi.fn(), metrics: vi.fn() };
+  const rawEvaluationsDlq = { send: vi.fn(), sendBatch: vi.fn(), metrics: vi.fn() };
   await worker.queue(
     {
       queue,
@@ -84,7 +135,10 @@ async function deliver(queue: string, messages: readonly ReturnType<typeof messa
       SPLITCH_PLATFORM_TARGET: "local",
       TINYBIRD_API_URL: "https://tinybird.test",
       TINYBIRD_INGEST_TOKEN: "test-token",
+      RAW_EVENTS_DLQ: rawEventsDlq,
+      RAW_EVALUATIONS_DLQ: rawEvaluationsDlq,
     } as Env,
     {} as ExecutionContext,
   );
+  return { rawEventsDlq, rawEvaluationsDlq };
 }

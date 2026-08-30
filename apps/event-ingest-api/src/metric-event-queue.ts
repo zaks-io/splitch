@@ -77,10 +77,8 @@ export async function handleMetricEventQueue(
   }
 
   try {
-    const outcomes = await deliverAdmittedRows(admitted, env, delivery.value);
-    for (const entry of admitted) {
-      settleAdmitted(entry, outcomes.get(entry.message), poisoned, unresolved);
-    }
+    const deliveryResults = await deliverAdmittedRows(admitted, env, delivery.value);
+    settleDeliveryResults(admitted, deliveryResults, poisoned, unresolved);
   } catch (error) {
     // A write-ahead record left `attempting` is never blindly re-sent. The next
     // invocation hands it to reconciliation, which proves commit or absence.
@@ -101,6 +99,22 @@ export async function handleMetricEventQueue(
     backlogBytes: batch.metadata.metrics.backlogBytes,
     oldestMessageTimestamp: oldestMessageTimestamp(batch.messages),
   });
+}
+
+function settleDeliveryResults(
+  admitted: readonly AdmittedRow[],
+  results: Awaited<ReturnType<typeof deliverAdmittedRows>>,
+  poisoned: PoisonedDelivery[],
+  unresolved: UnresolvedMetricEvent[],
+): void {
+  for (const entry of admitted) {
+    const settlementFailure = results.settlementFailures.get(entry.message);
+    if (settlementFailure !== undefined) {
+      retryMessage(entry.message, settlementFailure);
+      continue;
+    }
+    settleAdmitted(entry, results.outcomes.get(entry.message), poisoned, unresolved);
+  }
 }
 
 function oldestMessageTimestamp(messages: readonly Message<MetricEventRow>[]): string | null {

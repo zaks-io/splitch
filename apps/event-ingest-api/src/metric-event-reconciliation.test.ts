@@ -9,10 +9,10 @@ afterEach(() => {
 
 describe("Metric Event reconciliation", () => {
   it("settles a raw commit as delivered", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async () => Response.json({ data: [{ raw_rows: 1, state_rows: 1 }] })),
+    const fetch = vi.fn<typeof globalThis.fetch>(async () =>
+      Response.json({ data: [{ raw_rows: 1, state_rows: 1 }] }),
     );
+    vi.stubGlobal("fetch", fetch);
     const outbox = outboxNamespace();
     const queued = message(2);
 
@@ -20,10 +20,33 @@ describe("Metric Event reconciliation", () => {
 
     expect(queued.ack).toHaveBeenCalledOnce();
     expect(queued.retry).not.toHaveBeenCalled();
+    const requested = new URL(String(fetch.mock.calls[0]?.[0]));
+    expect(requested.searchParams.get("server_received_at")).toBe("2026-08-30 00:00:00.000");
     expect(outbox.fetch).toHaveBeenCalledWith(
       expect.stringContaining("/settle-delivery"),
       expect.objectContaining({ body: expect.stringContaining('"state":"delivered"') }),
     );
+  });
+
+  it("populates raw-only aggregate state and verifies it before settlement", async () => {
+    const fetch = vi
+      .fn<typeof globalThis.fetch>()
+      .mockResolvedValueOnce(Response.json({ data: [{ raw_rows: 1, state_rows: 0 }] }))
+      .mockResolvedValueOnce(new Response(null, { status: 202 }))
+      .mockResolvedValueOnce(Response.json({ data: [{ raw_rows: 1, state_rows: 1 }] }));
+    vi.stubGlobal("fetch", fetch);
+    const outbox = outboxNamespace();
+    const queued = message(2);
+
+    await handleMetricEventReconciliationQueue(batch(queued), env(outbox));
+
+    expect(queued.ack).toHaveBeenCalledOnce();
+    expect(queued.retry).not.toHaveBeenCalled();
+    expect(fetch).toHaveBeenCalledTimes(3);
+    const populateUrl = new URL(String(fetch.mock.calls[1]?.[0]));
+    expect(populateUrl.pathname).toBe("/v0/pipes/populate_metric_event_delivery_state/copy");
+    expect(fetch.mock.calls[1]?.[1]).toEqual(expect.objectContaining({ method: "POST" }));
+    expect(fetch.mock.calls[2]?.[0]).toEqual(fetch.mock.calls[0]?.[0]);
   });
 
   it("keeps a scoped absence unresolved for DLQ and operator review", async () => {
@@ -84,8 +107,10 @@ function outboxNamespace() {
 
 function env(outbox: ReturnType<typeof outboxNamespace>): Env {
   return {
+    SPLITCH_PLATFORM_TARGET: "local",
     TINYBIRD_API_URL: "https://tinybird.test",
     TINYBIRD_READ_TOKEN: "read-token",
+    TINYBIRD_COPY_TOKEN: "copy-token",
     METRIC_EVENT_OUTBOX: outbox.namespace,
   };
 }

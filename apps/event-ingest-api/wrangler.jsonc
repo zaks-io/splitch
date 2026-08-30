@@ -24,7 +24,8 @@
       "SENTRY_DSN",
       "SPLITCH_EVENT_INGEST_TOKEN",
       "TINYBIRD_INGEST_TOKEN",
-      "TINYBIRD_READ_TOKEN"
+      "TINYBIRD_READ_TOKEN",
+      "TINYBIRD_COPY_TOKEN"
     ]
   },
   "vars": {
@@ -174,6 +175,7 @@
           "SPLITCH_EVENT_INGEST_TOKEN",
           "TINYBIRD_INGEST_TOKEN",
           "TINYBIRD_READ_TOKEN",
+          "TINYBIRD_COPY_TOKEN",
           "EVALUATION_PRIVACY_SALT"
         ]
       },
@@ -326,6 +328,7 @@
           "SPLITCH_EVENT_INGEST_TOKEN",
           "TINYBIRD_INGEST_TOKEN",
           "TINYBIRD_READ_TOKEN",
+          "TINYBIRD_COPY_TOKEN",
           "EVALUATION_PRIVACY_SALT"
         ]
       },

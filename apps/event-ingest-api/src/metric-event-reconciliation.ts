@@ -1,3 +1,4 @@
+import { requirePlatformTarget } from "@splitch/contracts";
 import type { MetricEventDeliveryAttempt } from "./metric-event-delivery-attempt";
 import { settleMetricEventDelivery } from "./metric-event-delivery-attempt";
 import { queueRetryDelaySeconds } from "./queue-retry";
@@ -5,6 +6,7 @@ import type { Env } from "./types";
 
 const RECONCILIATION_KIND = "metric-event-reconciliation-v1";
 const PIPE_NAME = "reconcile_metric_event_delivery";
+const POPULATE_PIPE_NAME = "populate_metric_event_delivery_state";
 const READ_TIMEOUT_MS = 15_000;
 
 export interface UnresolvedMetricEvent {
@@ -40,6 +42,7 @@ export async function handleMetricEventReconciliationQueue(
   batch: MessageBatch<Record<string, unknown>>,
   env: Env,
 ): Promise<void> {
+  requirePlatformTarget(env.SPLITCH_PLATFORM_TARGET);
   for (const message of batch.messages) {
     try {
       const envelope = parseReconciliationEnvelope(message.body);
@@ -69,14 +72,29 @@ export async function handleMetricEventReconciliationQueue(
 }
 
 async function metricEventCommitted(envelope: ReconciliationEnvelope, env: Env): Promise<boolean> {
+  let evidence = await readEvidence(envelope, env);
+  if (evidence.rawRows > 0 && evidence.stateRows === 0) {
+    await populateState(envelope, env);
+    evidence = await readEvidence(envelope, env);
+  }
+  if (evidence.rawRows > 0 && evidence.stateRows > 0) return true;
+  if (evidence.rawRows === 0 && evidence.stateRows === 0) return false;
+  throw new Error(
+    `Tinybird reconciliation returned mixed evidence raw=${String(evidence.rawRows)} state=${String(evidence.stateRows)}`,
+  );
+}
+
+interface ReconciliationEvidence {
+  readonly rawRows: number;
+  readonly stateRows: number;
+}
+
+async function readEvidence(
+  envelope: ReconciliationEnvelope,
+  env: Env,
+): Promise<ReconciliationEvidence> {
   if (!env.TINYBIRD_READ_TOKEN) throw new Error("TINYBIRD_READ_TOKEN is unavailable");
-  if (!env.TINYBIRD_API_URL) throw new Error("TINYBIRD_API_URL is unavailable");
-  const url = new URL(`/v0/pipes/${PIPE_NAME}.json`, env.TINYBIRD_API_URL);
-  url.searchParams.set("app_id", envelope.appId);
-  url.searchParams.set("environment_id", envelope.environmentId);
-  url.searchParams.set("event_definition_id", envelope.eventDefinitionId);
-  url.searchParams.set("dedup_key", envelope.dedupKey);
-  url.searchParams.set("server_received_at", envelope.serverReceivedAt);
+  const url = pipeUrl(env, PIPE_NAME, envelope);
   const response = await fetch(url, {
     headers: { authorization: `Bearer ${env.TINYBIRD_READ_TOKEN}` },
     signal: AbortSignal.timeout(READ_TIMEOUT_MS),
@@ -98,7 +116,39 @@ async function metricEventCommitted(envelope: ReconciliationEnvelope, env: Env):
   ) {
     throw new Error("Tinybird reconciliation returned invalid row counts");
   }
-  return rawRows > 0 && stateRows > 0;
+  return { rawRows, stateRows };
+}
+
+async function populateState(envelope: ReconciliationEnvelope, env: Env): Promise<void> {
+  if (!env.TINYBIRD_COPY_TOKEN) throw new Error("TINYBIRD_COPY_TOKEN is unavailable");
+  const response = await fetch(pipeUrl(env, POPULATE_PIPE_NAME, envelope, "/copy"), {
+    method: "POST",
+    headers: { authorization: `Bearer ${env.TINYBIRD_COPY_TOKEN}` },
+    signal: AbortSignal.timeout(READ_TIMEOUT_MS),
+  });
+  if (!response.ok) throw new Error(`Tinybird state populate returned HTTP ${response.status}`);
+}
+
+function pipeUrl(
+  env: Env,
+  pipeName: string,
+  envelope: ReconciliationEnvelope,
+  suffix = ".json",
+): URL {
+  if (!env.TINYBIRD_API_URL) throw new Error("TINYBIRD_API_URL is unavailable");
+  const url = new URL(`/v0/pipes/${pipeName}${suffix}`, env.TINYBIRD_API_URL);
+  url.searchParams.set("app_id", envelope.appId);
+  url.searchParams.set("environment_id", envelope.environmentId);
+  url.searchParams.set("event_definition_id", envelope.eventDefinitionId);
+  url.searchParams.set("dedup_key", envelope.dedupKey);
+  url.searchParams.set("server_received_at", tinybirdDateTime64(envelope.serverReceivedAt));
+  return url;
+}
+
+function tinybirdDateTime64(isoUtc: string): string {
+  const ms = Date.parse(isoUtc);
+  if (!Number.isFinite(ms)) throw new Error(`Metric Event reconciliation timestamp is invalid`);
+  return new Date(ms).toISOString().replace("T", " ").replace("Z", "");
 }
 
 function reconciliationEnvelope(entry: UnresolvedMetricEvent): ReconciliationEnvelope {

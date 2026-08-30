@@ -24,6 +24,11 @@ export interface AdmittedRow {
   readonly attempt: MetricEventDeliveryAttempt;
 }
 
+interface DeliveryResults {
+  readonly outcomes: Map<Message<MetricEventRow>, DeliveryOutcome>;
+  readonly settlementFailures: Map<Message<MetricEventRow>, unknown>;
+}
+
 /** What a message's admission decided, for the caller that owns ack and retry. */
 export type Admission =
   | { kind: "send"; admitted: AdmittedRow }
@@ -98,9 +103,10 @@ export async function deliverAdmittedRows(
   admitted: readonly AdmittedRow[],
   env: Env,
   delivery: TinybirdDelivery,
-): Promise<Map<Message<MetricEventRow>, DeliveryOutcome>> {
+): Promise<DeliveryResults> {
   const outcomes = new Map<Message<MetricEventRow>, DeliveryOutcome>();
-  if (admitted.length === 0) return outcomes;
+  const settlementFailures = new Map<Message<MetricEventRow>, unknown>();
+  if (admitted.length === 0) return { outcomes, settlementFailures };
   for (const batch of ndjsonBatches(admitted, (entry) => entry.row)) {
     const outcome = await sendNdjsonBatch(batch.body, batch.items.length, delivery);
     for (const entry of batch.items) {
@@ -109,24 +115,43 @@ export async function deliverAdmittedRows(
         exhausted(entry.message) ? poisonInsteadOfRetry(outcome) : outcome,
       );
     }
-    // Every settle targets a different per-dedup-key object, so nothing orders
-    // them against each other. Awaiting them one at a time made the batch cost a
-    // hundred serial round trips, which is the same per-row latency the
-    // microbatch exists to remove, just moved from Tinybird to the outbox.
-    await Promise.all(
-      batch.items.map((entry) => {
-        const settled = outcomes.get(entry.message);
-        if (!settled)
-          throw new Error("Metric Event delivery produced no outcome for an admitted row");
-        return settleMetricEventDelivery(env.METRIC_EVENT_OUTBOX, entry.dedupKey, {
-          ...entry.attempt,
-          state: settledState(settled),
-          reason: settled.kind === "delivered" ? undefined : settled.reason,
-        });
-      }),
-    );
+    await settleBatch(batch.items, outcomes, settlementFailures, env);
   }
-  return outcomes;
+  return { outcomes, settlementFailures };
+}
+
+async function settleBatch(
+  items: readonly AdmittedRow[],
+  outcomes: ReadonlyMap<Message<MetricEventRow>, DeliveryOutcome>,
+  failures: Map<Message<MetricEventRow>, unknown>,
+  env: Env,
+): Promise<void> {
+  // Every settle targets a different per-dedup-key object, so nothing orders
+  // them against each other. Awaiting them one at a time made the batch cost a
+  // hundred serial round trips, which is the same per-row latency the
+  // microbatch exists to remove, just moved from Tinybird to the outbox.
+  const settlements = await Promise.allSettled(
+    items.map((entry) => settleAdmittedAttempt(entry, outcomes, env)),
+  );
+  for (const [index, settlement] of settlements.entries()) {
+    if (settlement.status === "fulfilled") continue;
+    const entry = items[index];
+    if (entry) failures.set(entry.message, settlement.reason);
+  }
+}
+
+function settleAdmittedAttempt(
+  entry: AdmittedRow,
+  outcomes: ReadonlyMap<Message<MetricEventRow>, DeliveryOutcome>,
+  env: Env,
+): Promise<void> {
+  const outcome = outcomes.get(entry.message);
+  if (!outcome) throw new Error("Metric Event delivery produced no outcome for an admitted row");
+  return settleMetricEventDelivery(env.METRIC_EVENT_OUTBOX, entry.dedupKey, {
+    ...entry.attempt,
+    state: settledState(outcome),
+    reason: outcome.kind === "delivered" ? undefined : outcome.reason,
+  });
 }
 
 /**
