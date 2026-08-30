@@ -58,8 +58,9 @@ trip the microbatch exists to remove.
 A dead-letter queue receives two shapes and they are told apart by a `kind` field. This consumer
 writes `metric-event-delivery-failure-v1`, carrying the original row beside its failure metadata.
 Cloudflare writes the bare original message when a message exhausts `max_retries` outside the
-transfer path, which is reachable for failures that never resolved a dedup key at all. A replay
-consumer branches on `kind` and refuses an unrecognized shape rather than inferring one.
+transfer path, which is reachable for failures that never resolved a dedup key at all. Replay is an
+operator-owned manual procedure. Any future replay tool must branch on `kind` and refuse an
+unrecognized shape rather than inferring one.
 
 A response reporting quarantined rows or a short commit poisons its whole batch, including rows the
 same response committed. Every column of `metric_events` is a `String` except the two `DateTime64`
