@@ -7,35 +7,33 @@ const hostedAuth = "https://auth.splitch.dev";
 const localAuth = "http://127.0.0.1:8789";
 
 describe("device approval URL binding", () => {
-  it("accepts a path on the configured hosted Auth origin", () => {
+  it("accepts WorkOS's hosted AuthKit approval origin", () => {
     expect(
       requireVerificationUrl(
-        "https://auth.splitch.dev/device?user_code=ABCD-1234",
-        "verification_uri_complete",
-        hostedAuth,
+        "https://soulful-path-50.authkit.app/device",
+        "verification_uri",
         true,
       ),
-    ).toBe("https://auth.splitch.dev/device?user_code=ABCD-1234");
+    ).toBe("https://soulful-path-50.authkit.app/device");
   });
 
   it("accepts local HTTP only for an explicit local Auth origin", () => {
     expect(
-      requireVerificationUrl(`${localAuth}/device`, "verification_uri", localAuth, false),
+      requireVerificationUrl(`${localAuth}/device`, "verification_uri", false, localAuth),
     ).toBe("http://127.0.0.1:8789/device");
   });
 
   it.each([
-    ["foreign origin", "https://evil.test/device", hostedAuth, true],
-    ["credential-bearing userinfo", "https://user:pass@auth.splitch.dev/device", hostedAuth, true],
-    ["port change", "https://auth.splitch.dev:8443/device", hostedAuth, true],
-    ["https downgrade", "http://auth.splitch.dev/device", hostedAuth, true],
-    ["hosted http even when origin matches", `${localAuth}/device`, localAuth, true],
-    ["local foreign https", "https://auth.splitch.dev/device", localAuth, false],
-    ["javascript scheme", "javascript:alert(1)", hostedAuth, true],
-    ["file scheme", "file:///tmp/approval", hostedAuth, true],
-  ])("rejects a %s device URL without echoing it", (_case, value, authBaseUrl, requireHttps) => {
+    ["credential-bearing userinfo", "https://user:pass@auth.splitch.dev/device", true, undefined],
+    ["https downgrade", "http://auth.splitch.dev/device", true, undefined],
+    ["hosted http", `${localAuth}/device`, true, undefined],
+    ["unexpected complete origin", "https://evil.test/device", true, hostedAuth],
+    ["local foreign https", "https://auth.splitch.dev/device", false, localAuth],
+    ["javascript scheme", "javascript:alert(1)", true, undefined],
+    ["file scheme", "file:///tmp/approval", true, undefined],
+  ])("rejects a %s device URL without echoing it", (_case, value, requireHttps, expectedOrigin) => {
     try {
-      requireVerificationUrl(value, "verification_uri", authBaseUrl, requireHttps);
+      requireVerificationUrl(value, "verification_uri", requireHttps, expectedOrigin);
       expect.unreachable("expected the URL to be rejected");
     } catch (error) {
       expect(error).toBeInstanceOf(SplitchCliError);
