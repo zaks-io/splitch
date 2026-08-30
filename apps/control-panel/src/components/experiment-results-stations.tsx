@@ -8,6 +8,7 @@ import { formatLift } from "./experiment-results-format";
 import {
   ExperimentResultsGuardrails,
   ExperimentResultsHealth,
+  MULTIPLE_RATE_TOLERANCE,
 } from "./experiment-results-guardrails";
 import { ExperimentResultsMetricsTable } from "./experiment-results-metrics-table";
 import { ExperimentResultsSrm } from "./experiment-results-srm";
@@ -236,7 +237,7 @@ function healthFiringSignals(results: PanelExperimentResultsReady, tier: SrmTier
   if (results.control.state !== "frozen") signals.push("Control identity is not frozen.");
   if (tier === "confirmed") signals.push("Sample Ratio Mismatch is firing.");
   if (tier === "possible_imbalance") signals.push("Assignment balance needs attention.");
-  if (results.stats.health.multiple_rate > 0.01)
+  if (results.stats.health.multiple_rate > MULTIPLE_RATE_TOLERANCE)
     signals.push("Multiple assignment is outside tolerance.");
   if (results.stats.health.low_n_warning) signals.push("The engine raised a low-n warning.");
   return signals;

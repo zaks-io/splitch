@@ -89,7 +89,7 @@ export function ExperimentResultsHealth({ health }: { health: HealthMetrics }) {
 }
 
 /** docs/spec/stats/srm-and-health.md: above this share, quarantine is loud. */
-const MULTIPLE_RATE_TOLERANCE = 0.01;
+export const MULTIPLE_RATE_TOLERANCE = 0.01;
 
 type StatTone = "neutral" | "ok" | "warn";
 
