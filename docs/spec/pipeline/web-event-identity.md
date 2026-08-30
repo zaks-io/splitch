@@ -46,6 +46,54 @@ row, logs, and read APIs. Routine secret rotation preserves the underlying ident
 retained Web Session does not split during rotation. The raw identifier exists only while validating
 and canonicalizing the request.
 
+## Page context
+
+Every Web Event carries required page context in its envelope, outside Event Definition `fields` and
+`dimensions`. ADR-0042 bans free-form definition strings, so page context can exist only as
+envelope telemetry with its own bounded validation:
+
+- `pathname`: required. The document's URL path only. It must start with `/`, contain no `?`, `#`,
+  whitespace, or control characters, and be at most 512 characters. The SDK reads
+  `location.pathname` and never reads or transmits the query string, fragment, or full URL.
+- `referrerHostname`: optional. The lowercase hostname of `document.referrer`, at most 253
+  characters. The SDK omits it when the referrer is empty or same-origin; referrer paths and query
+  strings are never transmitted.
+
+The SDK stamps both values on every manual and automatic Web Event; application code cannot
+override them through the public accessors. A direct Client Key HTTP caller supplies its own
+values, so page context is validated advisory telemetry, not authenticated evidence. Both values
+are caller-supplied content and participate in the retry fingerprint.
+
+At accept time, the Event Ingest Worker derives two more envelope values from request metadata and
+seals them into the canonical payload:
+
+- `country`: the uppercase ISO 3166-1 alpha-2 code from Cloudflare request metadata, or null when
+  unavailable;
+- `deviceClass`: `desktop`, `mobile`, `tablet`, or `unknown`, derived from request User-Agent
+  headers.
+
+The raw User-Agent and client IP are never persisted, queued, or logged. Server-derived values are
+excluded from the retry fingerprint; an exact retry resolves through its existing claim to the
+originally sealed values rather than re-deriving them.
+
+## Visitor pseudonym
+
+Every accepted Web Event carries a required `visitor_hash`: a daily-rotating pseudonym that lets
+exploratory reads count unique visitors without any client-side identifier. The Event Ingest Worker
+computes it at accept time as an HMAC with the App's stable secret identity key, domain-separated by
+`web-visitor`, over the authenticated Environment, the UTC calendar date of `server_received_at`,
+the client IP, and the request User-Agent string. None of those inputs is persisted.
+
+Because the date participates in the derivation, the pseudonym rotates at UTC midnight and cannot
+link one visitor across days. Visitor uniques are therefore exact within one UTC day and an
+approximate upper bound across longer windows. A session that spans midnight contributes two
+pseudonyms; this is accepted and documented rather than corrected.
+
+The visitor pseudonym is not an Entity, Targeting Key, Web Session, or Entity Profile. It never
+participates in Experiment analysis, session-to-Entity association, or identity stitching, and no
+read surface returns it as a stable identifier beyond aggregate unique counts. An App identity
+reset replaces the identity key and therefore unlinks all prior visitor pseudonyms.
+
 ## Event retry identity
 
 Every Web Event wire request carries a required `eventId`. The browser SDK generates one
@@ -169,3 +217,4 @@ Web Session exists.
 - [leaf-schemas-runtime.md](../contracts/leaf-schemas-runtime.md)
 - [privacy-data-lifecycle.md](../platform/privacy-data-lifecycle.md)
 - [ADR-0041](../../adr/0041-splitch-does-not-store-entity-profiles.md)
+- [ADR-0055](../../adr/0055-web-page-context-and-visitor-pseudonym-are-envelope-telemetry.md)

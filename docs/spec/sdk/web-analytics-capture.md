@@ -55,6 +55,12 @@ Application code does not pass an `eventId` to `sdk.web.track()`. The SDK genera
 cryptographically random UUID for each logical manual or automatic Web Event before buffering or
 transport and retains that UUID across every retry.
 
+Every manual and automatic Web Event is stamped with the required page-context envelope defined in
+[web-event-identity.md](../pipeline/web-event-identity.md#page-context): the SDK reads
+`location.pathname` and reduces `document.referrer` to its hostname (omitted when empty or
+same-origin) at event creation time. It never reads the query string, fragment, full URL, or
+document title, and application code cannot override page context through the public accessors.
+
 The browser-only `web.sessionId` client option is the sole application-supplied Web Session entry
 point. It is validated as a canonical lowercase UUID during client construction, retained in memory,
 and used by both `sdk.web.track()` and `sdk.web.instrument()`. It has no setter, cannot be supplied
@@ -249,31 +255,40 @@ Each capture entry has exactly this strict shape:
 ```typescript
 {
   source: "page_view" | "web_vital" | "browser_error";
-  eventName: string;
+  eventName?: string;
 }
 ```
 
-The source selects one first-party Web Instrumentation Adapter and `eventName` selects the
-destination Event Definition. Capture entries do not accept attribute maps, JSON paths, field
-renames, transformation expressions, or caller-defined source names. An application that needs
-custom shaping calls `sdk.web.track()` with a separately published Event Definition.
+The source selects one first-party Web Instrumentation Adapter. `eventName` selects the destination
+Event Definition and defaults to that source's built-in definition (`$page_view`, `$web_vital`, or
+`$browser_error`) when omitted, so `sdk.web.instrument({ captures: [{ source: "page_view" }] })` is
+a complete zero-configuration setup. Capture entries do not accept attribute maps, JSON paths,
+field renames, transformation expressions, or caller-defined source names. An application that
+needs custom shaping calls `sdk.web.track()` with a separately published Event Definition.
 
-## Built-in Event Definition templates
+## Built-in Event Definitions
 
-`@splitch/contracts` exports one canonical Event Definition template for each built-in source. A
-template contains the source key and exact `fields` and `dimensions` definitions required by that
-adapter's current output contract. It does not choose an application-owned `eventName`, display
-name, description, or `entityType`.
+Every App owns three Splitch-provisioned `web` Event Definitions named `$page_view`, `$web_vital`,
+and `$browser_error`, one per built-in source, each with exactly the `fields` and `dimensions` its
+adapter's fixed output contract requires and a null `entityType`. The `$` name prefix is reserved:
+the control plane rejects user-supplied Event Definition names starting with `$` and rejects every
+edit, republish, or delete of a `$`-prefixed definition. Built-in definitions are therefore
+recognizable by name alone and need no separate ownership flag.
 
-The browser SDK consumes the manifest in contract tests that prove each adapter output matches its
-template. The control panel and CLI consume the same manifest to prefill the existing Event
-Definition create and immutable Version publish requests. The user reviews and explicitly supplies
-the Event Definition name, display metadata, and either anonymous-only or optional typed Entity
-identity before publication.
+`@splitch/contracts` exports the three built-in definitions as canonical data. The control plane
+provisions them atomically at App creation, and a one-time idempotent backfill provisions them for
+Apps created earlier. The browser SDK consumes the same exported definitions in contract tests that
+prove each adapter output matches the definition that will accept it.
 
-Template use is an authoring convenience, not a data-plane mutation. It creates no new endpoint or
-resource type. A Client Key cannot read, create, publish, or update Event Definitions, and
-`web.instrument()` never repairs a missing or mismatched definition automatically.
+A built-in definition version changes only when its adapter's output contract changes, which
+requires a new SDK major version; the platform then publishes the new immutable Version through the
+ordinary publication path. A Client Key still cannot read, create, publish, or update Event
+Definitions, and `web.instrument()` never repairs a missing or mismatched definition automatically:
+a missing built-in is a provisioning defect and fails loud at ingest like any unknown event name.
+
+Applications that want semantic event names, custom shaping, or Entity identity publish their own
+`web` definitions and pass explicit `eventName` values; the built-ins are the anonymous
+zero-configuration floor, not a ceiling.
 
 `instrument()` returns an idempotent scoped cleanup function. Calling it:
 
@@ -389,9 +404,10 @@ after each back-forward cache restoration. Registration before the initial `page
 event; registration afterward emits the current activation immediately. These paths deduplicate so
 one activation never emits twice.
 
-The configured destination `eventName` is the semantic page identity. For example, an application
-running instrumentation on its checkout document maps `page_view` to `checkout_page_view`. The
-adapter emits this fixed payload:
+Page identity comes from the envelope `pathname` stamped on every event, so the default `$page_view`
+destination already yields per-page traffic without configuration. An application may still map the
+source to its own definition (for example `checkout_page_view`) when it wants a semantic event name.
+The adapter emits this fixed payload:
 
 ```typescript
 type PageViewAdapterPayload = {
@@ -412,8 +428,9 @@ type PageViewAdapterPayload = {
 The accepting Event Definition Version therefore declares no fields and one required string
 Dimension named `navigationType`. Back-forward cache restoration emits `back_forward_cache`. An
 unsupported or unavailable browser navigation type emits `unknown`; arbitrary source strings never
-pass through. The adapter does not emit pathname, query, URL fragment, document title, referrer, DOM
-content, or a framework route.
+pass through. The adapter payload does not carry query strings, URL fragments, document title, DOM
+content, or a framework route; pathname and referrer hostname arrive only through the shared
+page-context envelope.
 
 Single-page application route transitions are not document activations. Application code records
 them explicitly through `sdk.web.track()` and a separately declared event contract. A later
@@ -521,13 +538,14 @@ Automatic capture never reads or emits:
 - form field values;
 - DOM text or HTML;
 - arbitrary element attributes;
-- raw URLs or query strings;
+- full URLs, query strings, or URL fragments;
 - cookies or application storage;
 - browser fingerprints;
 - generic click, key, pointer, or interaction streams.
 
-A later URL contract may allow declared, normalized, and redacted URL-derived fields. Until then,
-automatic capture does not include them.
+The sole URL-derived capture is the page-context envelope: `location.pathname` and the hostname of
+`document.referrer`, bounded and validated per
+[web-event-identity.md](../pipeline/web-event-identity.md#page-context).
 
 ## Web Session activation
 
@@ -545,6 +563,7 @@ application-supplied continuity are defined in
 - [metric-event-contract.md](../pipeline/metric-event-contract.md)
 - [privacy-data-lifecycle.md](../platform/privacy-data-lifecycle.md)
 - [ADR-0042](../../adr/0042-event-ingest-is-strictly-defined-ahead-of-time.md)
+- [ADR-0055](../../adr/0055-web-page-context-and-visitor-pseudonym-are-envelope-telemetry.md)
 - [GoogleChrome/web-vitals](https://github.com/GoogleChrome/web-vitals)
 - [OpenTelemetry JavaScript](https://opentelemetry.io/docs/languages/js/)
 - [OpenTelemetry JavaScript tracing API](https://github.com/open-telemetry/opentelemetry-js/blob/main/doc/tracing.md)

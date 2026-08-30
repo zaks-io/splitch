@@ -43,7 +43,16 @@ App/Environment-scoped `session_id_hash`, never the wire UUID.
 Creating a normal SDK client does not read or write `sessionStorage`, inspect the DOM, register
 browser instrumentation, or emit Web Events. Manual collection begins only when application code
 calls `sdk.web.track()`. Automatic collection begins only through `sdk.web.instrument()` with a
-bounded capture list. Automatic capture never reads form values, DOM text, or raw URLs.
+bounded capture list. Automatic capture never reads form values, DOM text, full URLs, query
+strings, or URL fragments; its sole URL-derived capture is the bounded page-context envelope
+(`location.pathname` plus the referrer hostname).
+
+Event Ingest derives each accepted Web Event's `country`, `device_class`, and daily-rotating
+`visitor_hash` from request metadata at accept time. The raw client IP and User-Agent are used in
+memory for that derivation and discarded; they are never persisted, queued, logged, or exported.
+`visitor_hash` is keyed by the App identity key, domain-separated by `web-visitor`, and includes
+the UTC date, so it cannot link a visitor across days and dies with the identity key on an App
+identity reset.
 
 The browser SDK buffers pending Web Events only in memory. It does not persist event payloads,
 generated event IDs, or retry state in IndexedDB, `localStorage`, `sessionStorage`, cookies, or

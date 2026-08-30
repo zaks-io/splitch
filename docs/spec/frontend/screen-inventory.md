@@ -421,8 +421,11 @@ Web Event ingest does not push a per-event WebSocket nudge. **Refresh** reruns t
 **Latest** advances `to` to the current UTC instant, preserves the selected duration by moving
 `from`, updates the URL, and then loads that new snapshot.
 
-- **Overview** shows logical Web Event count, Web Session count, anonymous/associated/ambiguous
-  session counts, associated Entity count, the UTC event/session trend, and per-event-name counts.
+- **Overview** shows logical Web Event count, Web Session count, unique visitor count,
+  anonymous/associated/ambiguous session counts, associated Entity count, the UTC
+  event/session/visitor trend, per-event-name counts, and the top pages, referrers, countries, and
+  device classes breakdowns. A multi-day visitor count is labeled as approximate because the
+  visitor pseudonym rotates daily.
 - **Sessions** shows the cursor-paginated session summaries. Selecting a row navigates to its stable
   detail URL, which pages forward through the complete windowed journey without truncation.
 - **Web Vitals** shows p50/p75/p95, exact sample/session counts, and rating counts grouped by Event

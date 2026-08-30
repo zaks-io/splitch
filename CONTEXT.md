@@ -118,6 +118,14 @@ analytics without creating Entity identity.
 **Ambiguous Web Session**: a Web Session containing Web Events from more than one distinct explicit
 Entity. Exploratory analysis attributes the session to no Entity.
 
+**Page Context**: the bounded URL-derived envelope on every Web Event: the document pathname and
+referrer hostname supplied by the SDK plus the country and device class derived at ingest. Never a
+full URL, query string, or fragment.
+
+**Visitor**: the unit behind Web Analytics unique counts, represented only by a daily-rotating
+server-derived pseudonym (`visitor_hash`). Exact within one UTC day, approximate across days; not
+an Entity and never joined to Experiment analysis.
+
 **Web Analytics**: exploratory analysis of Web Events by Web Session and optional Entity identity,
 separate from Experiment measurement.
 
