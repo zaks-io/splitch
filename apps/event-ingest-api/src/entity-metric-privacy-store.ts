@@ -16,6 +16,7 @@ import {
   parseEntry,
   parseEvaluationEntry,
 } from "./entity-metric-privacy";
+import { DeliveryResetLock } from "./delivery-reset-lock";
 import { evaluationCommitOutbox } from "./evaluation-commit-outbox-client";
 import { deliverEntityRowAtAuthority } from "./entity-identity-row-delivery";
 import type { Env } from "./types";
@@ -29,41 +30,45 @@ interface SuppressionState {
 }
 
 export class EntityMetricPrivacyDurableObject {
-  private section = Promise.resolve();
+  private readonly lock = new DeliveryResetLock();
   constructor(
     private readonly ctx: DurableObjectState,
     private readonly env: Env,
   ) {}
 
   async fetch(request: Request): Promise<Response> {
-    return this.serialized(() => this.handleFetch(request));
+    const route = this.route(request);
+    if (!route) return new Response("not found", { status: 404 });
+    return route.exclusive ? this.lock.exclusive(route.run) : this.lock.shared(route.run);
   }
 
-  private async handleFetch(request: Request): Promise<Response> {
+  /**
+   * Every route names whether it may overlap delivery. Reset, suppression,
+   * deletion, and export mutate or read the whole inventory, so they run alone;
+   * the rest are per-row and run concurrently. An unlisted path is a 404 rather
+   * than a default, so a new route cannot silently inherit the weaker side.
+   */
+  private route(request: Request): Route | undefined {
     const path = new URL(request.url).pathname;
     if (request.method === "GET") {
-      return path === "/export" ? this.exportRecords() : new Response("not found", { status: 404 });
+      return path === "/export" ? alone(() => this.exportRecords()) : undefined;
     }
-    if (request.method === "POST") return this.write(path, request);
-    return new Response("not found", { status: 404 });
-  }
-
-  private write(path: string, request: Request): Promise<Response> {
-    const handlers: Record<string, () => Promise<Response>> = {
-      "/register": () => this.register(request),
-      "/register-evaluation": () => this.registerEvaluation(request),
-      "/suppressed": () => this.suppressed(request),
-      "/suppress": () => this.suppress(request),
-      "/delete": () => this.deleteRecords(),
-      "/register-app-entity": () => this.registerAppEntity(request),
-      "/register-app-evaluation": () => this.registerAppEvaluation(request),
-      "/deliver-app-row": () => this.deliverAppRow(request),
-      "/deliver-entity-row": () => this.deliverEntityRow(request),
-      "/deliver-row": () => this.deliverRow(request),
-      "/reset-app": () => this.resetApp(request),
-      "/complete-reset": () => this.completeReset(request),
+    if (request.method !== "POST") return undefined;
+    const routes: Record<string, Route> = {
+      "/register": concurrent(() => this.register(request)),
+      "/register-evaluation": concurrent(() => this.registerEvaluation(request)),
+      "/suppressed": concurrent(() => this.suppressed(request)),
+      "/suppress": alone(() => this.suppress(request)),
+      "/delete": alone(() => this.deleteRecords()),
+      "/register-app-entity": concurrent(() => this.registerAppEntity(request)),
+      "/register-app-evaluation": concurrent(() => this.registerAppEvaluation(request)),
+      "/deliver-app-row": concurrent(() => this.deliverAppRow(request)),
+      "/deliver-entity-row": concurrent(() => this.deliverEntityRow(request)),
+      "/deliver-row": concurrent(() => this.deliverRow(request)),
+      "/reset-app": alone(() => this.resetApp(request)),
+      "/complete-reset": alone(() => this.completeReset(request)),
     };
-    return handlers[path]?.() ?? Promise.resolve(new Response("not found", { status: 404 }));
+    return routes[path];
   }
 
   private async registerAppEntity(request: Request): Promise<Response> {
@@ -272,15 +277,19 @@ export class EntityMetricPrivacyDurableObject {
     if (!outbox) throw new Error("EVALUATION_COMMIT_OUTBOX binding is unavailable");
     return outbox;
   }
+}
 
-  private serialized<T>(run: () => Promise<T>): Promise<T> {
-    const result = this.section.then(run, run);
-    this.section = result.then(
-      () => undefined,
-      () => undefined,
-    );
-    return result;
-  }
+interface Route {
+  exclusive: boolean;
+  run: () => Promise<Response>;
+}
+
+function concurrent(run: () => Promise<Response>): Route {
+  return { exclusive: false, run };
+}
+
+function alone(run: () => Promise<Response>): Route {
+  return { exclusive: true, run };
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
