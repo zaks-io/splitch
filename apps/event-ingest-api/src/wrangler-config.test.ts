@@ -75,13 +75,35 @@ describe("Event Ingest Worker Wrangler runtime config", () => {
       ).toBe(METRIC_EVENT_MAX_RETRIES);
     }
   });
+
+  /**
+   * Without a dead-letter queue Cloudflare deletes a message that exhausts its
+   * retries, so an ingest outage silently destroys accepted events. The spec
+   * calls a deployment incomplete when a primary queue lacks its matching DLQ
+   * (docs/spec/platform/deployment-pipeline.md).
+   */
+  it.each([
+    ["local", config],
+    ["shared-preview", config.env?.["shared-preview"]],
+    ["production", config.env?.production],
+  ])("dead-letters exhausted Metric Event deliveries for %s", (target, env) => {
+    const consumers = env?.queues?.consumers ?? [];
+
+    expect(consumers.length, `${target} declares no Metric Event consumer`).toBeGreaterThan(0);
+    for (const consumer of consumers) {
+      expect(
+        consumer.dead_letter_queue,
+        `${target} consumer for ${consumer.queue} declares no dead_letter_queue`,
+      ).toBe(`${consumer.queue}-dlq`);
+    }
+  });
 });
 
 interface WranglerConfig {
   durable_objects?: DurableObjectsConfig;
   env?: Record<string, WranglerTarget | undefined>;
   migrations?: Migration[];
-  queues?: { consumers?: Array<{ max_retries?: number }> };
+  queues?: { consumers?: Array<QueueConsumer> };
   secrets?: { required?: string[] };
   vars?: Record<string, unknown>;
 }
@@ -89,11 +111,17 @@ interface WranglerConfig {
 interface WranglerTarget {
   durable_objects?: DurableObjectsConfig;
   migrations?: Migration[];
-  queues?: { consumers?: Array<{ max_retries?: number }> };
+  queues?: { consumers?: Array<QueueConsumer> };
   routes?: Array<{ pattern?: string; custom_domain?: boolean }>;
   secrets?: { required?: string[] };
   vars?: Record<string, unknown>;
   workers_dev?: boolean;
+}
+
+interface QueueConsumer {
+  queue?: string;
+  max_retries?: number;
+  dead_letter_queue?: string;
 }
 
 interface DurableObjectsConfig {

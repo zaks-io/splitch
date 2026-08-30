@@ -165,6 +165,11 @@ copied to the DLQ and acknowledged without consuming the retry budget. A deploym
 if any primary queue lacks its matching DLQ binding or if shared preview and production reuse a queue
 resource.
 
+A retried delivery carries an explicit `delaySeconds` that doubles per attempt, offset per message so
+one failed batch does not re-arrive as a single herd. An immediate retry would spend the whole
+eight-attempt budget against the same unhealthy Tinybird in under a second, which converts a
+transient rate limit into permanent event loss.
+
 Hosted smoke must also prove each Tinybird request has durable write-ahead attempt state and that an
 unresolved `attempting`/`indeterminate` record prevents redelivery from calling Tinybird. Retryable
 `429`, `500`, and `503` outcomes remain bounded by the same eight-attempt ceiling.
