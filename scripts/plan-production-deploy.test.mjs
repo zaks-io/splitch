@@ -31,7 +31,7 @@ test("documentation and non-deployable application changes skip production mutat
 /**
  * `packages/sdk` and `apps/cli` were both in the case above until three edges
  * appeared. SPL-123 made `@splitch/sdk` a runtime dependency of the Control
- * Panel: `apps/control-panel/src/lib/panel-verify.ts` imports
+ * Panel: `apps/control-panel/src/lib/connect/panel-verify.ts` imports
  * `createSplitchClient` and the built Worker bundle inlines it. SPL-247 then
  * made the marketing site depend on both packages so `/docs/error/{code}`
  * covers every code the SDK and CLI can emit, and the compiler fails the build

@@ -4,23 +4,23 @@ import { NotFoundPage } from "@splitch/ui/state/not-found-page";
 import { PanelSkeleton } from "@splitch/ui/state/panel-skeleton";
 import { SectionErrorPage } from "@splitch/ui/state/section-error-page";
 import { createFileRoute, notFound, Outlet } from "@tanstack/react-router";
-import { LiveUpdatesClient } from "#components/live-updates-client";
-import { PanelPageBody } from "#components/panel-page-body";
-import { PanelShell } from "#components/panel-shell";
-import { deferredDestinationAt } from "#lib/app-shell-navigation";
+import { LiveUpdatesClient } from "#components/live-updates/live-updates-client";
+import { PanelPageBody } from "#components/shell/panel-page-body";
+import { PanelShell } from "#components/shell/panel-shell";
+import { deferredDestinationAt } from "#lib/shell/app-shell-navigation";
 import {
   AccessDeniedError,
   isAccessDeniedError,
   type ScopedLoaderContext,
-} from "#lib/loader-context";
-import { recordLastVisitedScope } from "#lib/last-visited-scope-functions";
-import { loginRedirect } from "#lib/login-redirect";
+} from "#lib/shared/loader-context";
+import { recordLastVisitedScope } from "#lib/sessions/last-visited-scope-functions";
+import { loginRedirect } from "#lib/auth/login-redirect";
 import {
   configureControlPanelSentryScope,
   reportExpectedDomainFailure,
   reportRouteError,
-} from "#lib/panel-observability";
-import { loadScopedSession } from "#lib/session-functions";
+} from "#lib/observability/panel-observability";
+import { loadScopedSession } from "#lib/sessions/session-functions";
 
 export const Route = createFileRoute("/$orgSlug/$appSlug/$env")({
   loader: async ({ location, params }): Promise<ScopedLoaderContext> => {

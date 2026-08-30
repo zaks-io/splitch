@@ -3,10 +3,12 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const loadCurrentSessionMock = vi.fn();
 
-vi.mock("#lib/session-functions", () => ({
+vi.mock("#lib/sessions/session-functions", () => ({
   loadCurrentSession: (...args: unknown[]) => loadCurrentSessionMock(...args),
 }));
-vi.mock("#components/organization-chooser", () => ({ OrganizationChooser: () => null }));
+vi.mock("#components/organizations/organization-chooser", () => ({
+  OrganizationChooser: () => null,
+}));
 
 const { Route } = await import("./index");
 

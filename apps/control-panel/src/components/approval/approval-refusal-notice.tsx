@@ -1,5 +1,5 @@
 import { Alert, AlertDescription, AlertTitle } from "@splitch/ui/components/alert";
-import type { MutationErrorSurface } from "#lib/api";
+import type { MutationErrorSurface } from "#lib/shared/api";
 
 /**
  * A Worker refusal, rendered as itself.

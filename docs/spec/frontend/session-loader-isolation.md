@@ -15,7 +15,7 @@ boundary: it withholds the cookie from a cross-_site_ POST, but
 (`/auth/logout`, `/claim/consent/$attemptId`) therefore also require
 same-origin `Origin` (`panel-csrf.ts`). `createServerFn` POSTs get TanStack's
 Origin / Sec-Fetch-Site middleware from `src/start.ts`. The attribute pin and
-write-surface enumeration live in `apps/control-panel/src/lib/session-cookie.ts`
+write-surface enumeration live in `apps/control-panel/src/lib/sessions/session-cookie.ts`
 and `session-cookie.test.ts` (SPL-263). The OAuth state cookie
 (`__session_state`) uses the same serializer and the same attributes.
 

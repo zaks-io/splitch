@@ -1,24 +1,24 @@
 import { isNotFound, isRedirect } from "@tanstack/react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { AccessDeniedError } from "#lib/loader-context";
+import { AccessDeniedError } from "#lib/shared/loader-context";
 
 const loadAppScopedSessionMock = vi.fn();
 const loadControlPanelFlagsMatrixMock = vi.fn();
 const recordLastVisitedScopeMock = vi.fn();
 
-vi.mock("#lib/session-functions", () => ({
+vi.mock("#lib/sessions/session-functions", () => ({
   loadAppScopedSession: (...args: unknown[]) => loadAppScopedSessionMock(...args),
 }));
-vi.mock("#lib/control-plane-flag-functions", () => ({
+vi.mock("#lib/flags/control-plane-flag-functions", () => ({
   loadControlPanelFlagsMatrix: (...args: unknown[]) => loadControlPanelFlagsMatrixMock(...args),
 }));
-vi.mock("#lib/last-visited-scope-functions", () => ({
+vi.mock("#lib/sessions/last-visited-scope-functions", () => ({
   recordLastVisitedScope: (...args: unknown[]) => recordLastVisitedScopeMock(...args),
 }));
-vi.mock("#components/flags-matrix-page", () => ({ FlagsMatrixPage: () => null }));
-vi.mock("#components/command-palette", () => ({ CommandPalette: () => null }));
+vi.mock("#components/flags/flags-matrix-page", () => ({ FlagsMatrixPage: () => null }));
+vi.mock("#components/shell/command-palette", () => ({ CommandPalette: () => null }));
 // The sidebar's Create Organization dialog reaches the create server function.
-vi.mock("#lib/control-plane-organization-functions", () => ({
+vi.mock("#lib/organizations/control-plane-organization-functions", () => ({
   createControlPanelOrganization: vi.fn(),
 }));
 

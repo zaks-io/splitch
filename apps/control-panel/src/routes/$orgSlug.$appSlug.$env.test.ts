@@ -15,20 +15,20 @@ const loadScopedSessionMock = vi.fn();
 const deferredDestinationAtMock = vi.fn();
 const recordLastVisitedScopeMock = vi.fn();
 
-vi.mock("#lib/session-functions", () => ({
+vi.mock("#lib/sessions/session-functions", () => ({
   loadScopedSession: (...args: unknown[]) => loadScopedSessionMock(...args),
 }));
-vi.mock("#lib/last-visited-scope-functions", () => ({
+vi.mock("#lib/sessions/last-visited-scope-functions", () => ({
   recordLastVisitedScope: (...args: unknown[]) => recordLastVisitedScopeMock(...args),
 }));
-vi.mock("#components/command-palette", () => ({ CommandPalette: () => null }));
+vi.mock("#components/shell/command-palette", () => ({ CommandPalette: () => null }));
 // The sidebar's Create Organization dialog reaches the create server function.
-vi.mock("#lib/control-plane-organization-functions", () => ({
+vi.mock("#lib/organizations/control-plane-organization-functions", () => ({
   createControlPanelOrganization: vi.fn(),
 }));
 
-vi.mock("#lib/app-shell-navigation", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("#lib/app-shell-navigation")>();
+vi.mock("#lib/shell/app-shell-navigation", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("#lib/shell/app-shell-navigation")>();
   return {
     ...actual,
     deferredDestinationAt: (...args: unknown[]) => deferredDestinationAtMock(...args),

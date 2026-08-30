@@ -1,5 +1,5 @@
 import { Badge } from "@splitch/ui/components/badge";
-import type { ApprovalGatePolicyContext } from "#lib/approval-gate-record";
+import type { ApprovalGatePolicyContext } from "#lib/approval/approval-gate-record";
 
 const CHANGE_TYPE_LABELS: Record<string, string> = {
   variant_availability: "Variant availability",

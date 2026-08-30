@@ -1,8 +1,8 @@
 import { createFileRoute, getRouteApi, Outlet, useRouterState } from "@tanstack/react-router";
-import { PanelPageBody } from "#components/panel-page-body";
-import { SectionUnavailable } from "#components/section-unavailable";
-import { type SettingsTab, SettingsTabs } from "#components/settings-tabs";
-import { reportRouteError } from "#lib/panel-observability";
+import { PanelPageBody } from "#components/shell/panel-page-body";
+import { SectionUnavailable } from "#components/shared/section-unavailable";
+import { type SettingsTab, SettingsTabs } from "#components/shell/settings-tabs";
+import { reportRouteError } from "#lib/observability/panel-observability";
 
 const appScopeRoute = getRouteApi("/$orgSlug/$appSlug/$env");
 

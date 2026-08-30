@@ -1,7 +1,7 @@
 import { createFileRoute, Outlet } from "@tanstack/react-router";
-import { ExperimentDetail } from "#components/experiment-detail";
-import { PanelPageBody } from "#components/panel-page-body";
-import { useExperimentDetailRouteData } from "#lib/experiment-detail-route";
+import { ExperimentDetail } from "#components/experiments/experiment-detail";
+import { PanelPageBody } from "#components/shell/panel-page-body";
+import { useExperimentDetailRouteData } from "#lib/experiments/experiment-detail-route";
 
 export const Route = createFileRoute("/$orgSlug/$appSlug/$env/experiments/$experimentId")({
   component: ExperimentDetailRoute,

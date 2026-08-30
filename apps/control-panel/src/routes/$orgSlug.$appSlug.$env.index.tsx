@@ -1,14 +1,14 @@
 import { PanelSkeleton } from "@splitch/ui/state/panel-skeleton";
 import { createFileRoute, notFound, useRouter } from "@tanstack/react-router";
-import { OverviewPage } from "#components/overview-page";
-import { PanelPageBody } from "#components/panel-page-body";
-import { SectionUnavailable } from "#components/section-unavailable";
-import { scopedHref } from "#lib/app-shell-navigation";
-import { loadControlPanelOverview } from "#lib/control-plane-overview-functions";
-import { AccessDeniedError } from "#lib/loader-context";
-import { loginRedirect } from "#lib/login-redirect";
-import { reportRouteError } from "#lib/panel-observability";
-import { loadScopedSession } from "#lib/session-functions";
+import { OverviewPage } from "#components/overview/overview-page";
+import { PanelPageBody } from "#components/shell/panel-page-body";
+import { SectionUnavailable } from "#components/shared/section-unavailable";
+import { scopedHref } from "#lib/shell/app-shell-navigation";
+import { loadControlPanelOverview } from "#lib/overview/control-plane-overview-functions";
+import { AccessDeniedError } from "#lib/shared/loader-context";
+import { loginRedirect } from "#lib/auth/login-redirect";
+import { reportRouteError } from "#lib/observability/panel-observability";
+import { loadScopedSession } from "#lib/sessions/session-functions";
 
 export const Route = createFileRoute("/$orgSlug/$appSlug/$env/")({
   loader: async ({ location, params }) => {

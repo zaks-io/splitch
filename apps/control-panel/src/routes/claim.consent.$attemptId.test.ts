@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { createSession } from "#lib/session";
-import { MemoryKv, sessionPrincipal } from "#lib/session-test-harness";
+import { createSession } from "#lib/sessions/session";
+import { MemoryKv, sessionPrincipal } from "#lib/sessions/session-test-harness";
 
 const kv = new MemoryKv();
 

@@ -1,14 +1,14 @@
 import { createFileRoute, notFound } from "@tanstack/react-router";
-import { MetricsPage } from "#components/metrics-page";
-import { PanelPageBody } from "#components/panel-page-body";
-import { SectionPending } from "#components/section-pending";
-import { SectionUnavailable } from "#components/section-unavailable";
-import { loadControlPanelMetrics } from "#lib/control-plane-metric-functions";
-import { loadControlPanelSettings } from "#lib/control-plane-settings-functions";
-import { AccessDeniedError } from "#lib/loader-context";
-import { loginRedirect } from "#lib/login-redirect";
-import { reportRouteError } from "#lib/panel-observability";
-import { loadScopedSession } from "#lib/session-functions";
+import { MetricsPage } from "#components/metrics/metrics-page";
+import { PanelPageBody } from "#components/shell/panel-page-body";
+import { SectionPending } from "#components/shared/section-pending";
+import { SectionUnavailable } from "#components/shared/section-unavailable";
+import { loadControlPanelMetrics } from "#lib/metrics/control-plane-metric-functions";
+import { loadControlPanelSettings } from "#lib/settings/control-plane-settings-functions";
+import { AccessDeniedError } from "#lib/shared/loader-context";
+import { loginRedirect } from "#lib/auth/login-redirect";
+import { reportRouteError } from "#lib/observability/panel-observability";
+import { loadScopedSession } from "#lib/sessions/session-functions";
 
 export const Route = createFileRoute("/$orgSlug/$appSlug/$env/metrics")({
   loader: async ({ location, params }) => {

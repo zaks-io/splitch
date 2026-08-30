@@ -7,8 +7,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@splitch/ui/components/dialog";
-import type { MutationErrorSurface } from "#lib/api";
-import type { ApprovalGateRecord } from "#lib/approval-gate-record";
+import type { MutationErrorSurface } from "#lib/shared/api";
+import type { ApprovalGateRecord } from "#lib/approval/approval-gate-record";
 import { ApprovalDiffTable } from "./approval-diff-table";
 import { ApprovalPolicyNote } from "./approval-policy-note";
 import { ApprovalRefusalNotice } from "./approval-refusal-notice";

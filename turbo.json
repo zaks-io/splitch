@@ -169,7 +169,7 @@
     },
     "@splitch/control-panel#test:connect-snippet": {
       "dependsOn": ["@splitch/sdk#build"],
-      "inputs": ["scripts/connect-snippet-compile.mjs", "src/lib/connect-snippet.ts"],
+      "inputs": ["scripts/connect-snippet-compile.mjs", "src/lib/connect/connect-snippet.ts"],
       "outputs": []
     },
     "@splitch/mcp-server#generate": {

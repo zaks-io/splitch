@@ -88,7 +88,7 @@ export function makeSessionReads(db: Db) {
       // punctuation-insensitive and orders case differently). The divergence
       // would only show up in the `id` tiebreak here, since `createdAt` is
       // fixed-width ISO-8601, but ordering is load-bearing downstream
-      // (apps/control-panel/src/lib/membership.ts buckets by Organization and
+      // (apps/control-panel/src/lib/sessions/membership.ts buckets by Organization and
       // keeps within-bucket order), so it has to match exactly, not just usually.
       return pages
         .flat()

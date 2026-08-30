@@ -1,13 +1,13 @@
 import { createFileRoute, notFound } from "@tanstack/react-router";
-import { PanelPageBody } from "#components/panel-page-body";
-import { SectionPending } from "#components/section-pending";
-import { SectionUnavailable } from "#components/section-unavailable";
-import { SegmentsPage } from "#components/segments-page";
-import { loadControlPanelSegments } from "#lib/control-plane-segment-functions";
-import { AccessDeniedError } from "#lib/loader-context";
-import { loginRedirect } from "#lib/login-redirect";
-import { reportRouteError } from "#lib/panel-observability";
-import { loadScopedSession } from "#lib/session-functions";
+import { PanelPageBody } from "#components/shell/panel-page-body";
+import { SectionPending } from "#components/shared/section-pending";
+import { SectionUnavailable } from "#components/shared/section-unavailable";
+import { SegmentsPage } from "#components/segments/segments-page";
+import { loadControlPanelSegments } from "#lib/segments/control-plane-segment-functions";
+import { AccessDeniedError } from "#lib/shared/loader-context";
+import { loginRedirect } from "#lib/auth/login-redirect";
+import { reportRouteError } from "#lib/observability/panel-observability";
+import { loadScopedSession } from "#lib/sessions/session-functions";
 
 export const Route = createFileRoute("/$orgSlug/$appSlug/$env/segments")({
   loader: async ({ location, params }) => {

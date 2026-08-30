@@ -1,10 +1,10 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { env as workerEnv } from "cloudflare:workers";
-import { callbackRedirectUri, createAuthKitClient } from "#lib/authkit";
-import { controlPanelBindings } from "#lib/bindings";
-import { createOAuthState } from "#lib/oauth-state";
-import { safeReturnPath } from "#lib/return-path";
-import { appendHttpOnlyCookie, type SerializedHttpOnlyCookie } from "#lib/session-cookie";
+import { callbackRedirectUri, createAuthKitClient } from "#lib/auth/authkit";
+import { controlPanelBindings } from "#lib/shared/bindings";
+import { createOAuthState } from "#lib/auth/oauth-state";
+import { safeReturnPath } from "#lib/auth/return-path";
+import { appendHttpOnlyCookie, type SerializedHttpOnlyCookie } from "#lib/sessions/session-cookie";
 
 export const Route = createFileRoute("/auth/login")({
   server: {

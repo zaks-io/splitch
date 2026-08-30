@@ -1,12 +1,12 @@
 import { Alert, AlertDescription, AlertTitle } from "@splitch/ui/components/alert";
 import { createFileRoute } from "@tanstack/react-router";
-import { OrgBillingPage } from "#components/org-billing-page";
-import { PanelPageBody } from "#components/panel-page-body";
-import { PanelPageHeader } from "#components/panel-page-header";
-import { PanelShell } from "#components/panel-shell";
-import { loginRedirect } from "#lib/login-redirect";
-import { loadOrgBilling } from "#lib/org-billing-functions";
-import { loadPanelNavigation } from "#lib/session-functions";
+import { OrgBillingPage } from "#components/billing/org-billing-page";
+import { PanelPageBody } from "#components/shell/panel-page-body";
+import { PanelPageHeader } from "#components/shell/panel-page-header";
+import { PanelShell } from "#components/shell/panel-shell";
+import { loginRedirect } from "#lib/auth/login-redirect";
+import { loadOrgBilling } from "#lib/billing/org-billing-functions";
+import { loadPanelNavigation } from "#lib/sessions/session-functions";
 
 export const Route = createFileRoute("/$orgSlug/billing")({
   loader: async ({ location, params }) => {

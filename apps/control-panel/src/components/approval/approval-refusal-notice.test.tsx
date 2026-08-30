@@ -1,6 +1,6 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import type { MutationErrorSurface } from "#lib/api";
+import type { MutationErrorSurface } from "#lib/shared/api";
 import { ApprovalRefusalNotice } from "./approval-refusal-notice";
 
 /**

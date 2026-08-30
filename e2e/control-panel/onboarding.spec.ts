@@ -23,7 +23,7 @@ function flagsPath(test: keyof typeof LOCAL_E2E_ONBOARDING_APP_SLUGS): string {
  * run evaluation-api (SPL-193, blocked on SPL-181/#205), so the reachable
  * assertion here is the fail-loud one: an unreachable data plane must render as
  * an unmistakable failure and never as a green check. The green resolution path
- * is proven in `apps/control-panel/src/lib/panel-verify.test.ts`, and the
+ * is proven in `apps/control-panel/src/lib/connect/panel-verify.test.ts`, and the
  * zero-Exposure invariant at the real boundary in
  * `apps/evaluation-api/src/verify.test.ts`.
  */
