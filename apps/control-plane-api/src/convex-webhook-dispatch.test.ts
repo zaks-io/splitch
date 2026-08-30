@@ -47,6 +47,7 @@ describe("Convex config webhook dispatch", () => {
   });
 
   it("isolates an undecryptable delivery without disconnecting healthy siblings", async () => {
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
     const healthyBody = '{"deliveryId":"00000000-0000-4000-8000-000000000001"}';
     const poisonedBody = '{"deliveryId":"00000000-0000-4000-8000-000000000002"}';
     const encrypted = await encryptConvexSecret("webhook-secret", KEY, "v1");
@@ -73,6 +74,11 @@ describe("Convex config webhook dispatch", () => {
     ).resolves.toBe(2);
 
     expect(fetcher).toHaveBeenCalledOnce();
+    expect(consoleError).toHaveBeenCalledWith("convex_webhook_delivery_preparation_failed", {
+      deliveryId: "00000000-0000-4000-8000-000000000002",
+      code: "DELIVERY_PREPARATION_FAILED",
+    });
+    consoleError.mockRestore();
     expect(finishes).toEqual(
       expect.arrayContaining([
         {
