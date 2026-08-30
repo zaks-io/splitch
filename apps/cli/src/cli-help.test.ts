@@ -68,9 +68,13 @@ describe("published CLI help", () => {
     expect(root).toContain("-v, --version");
     expect(root).toContain("Start here:\n  splitch login");
     expect(orgCreate).toContain('splitch orgs create --name "My Org" --json');
+    expect(appCreate).toContain("Usage:\n  splitch apps create --org <organization> [flags]");
     expect(appCreate).toContain('splitch apps create --org <organization> --name "My App" --json');
     expect(flagConfig).toContain(
       "splitch flag-config update <flag-id-or-key> --enabled true --rollout 100 --json",
+    );
+    expect(flagConfig).toContain(
+      "Send 0-100% of fall-through traffic to the one non-Default available Variant; the rest serves the Default Variant. Use none to clear the rollout.",
     );
     expect(health).toContain("splitch health --json");
   });

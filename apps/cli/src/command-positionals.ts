@@ -44,6 +44,9 @@ export function requiredPositionals(command: CliCommandDefinition): readonly str
 /** One usage line matching `renderCommandHelp`, without the `Usage:` header. */
 export function commandUsageLine(command: CliCommandDefinition): string {
   const path = command.path.join(" ");
+  if (command.operationId === "apps_create") {
+    return `splitch ${path} --org <organization> [flags]`;
+  }
   const args = requiredPositionals(command)
     .map((value) => ` <${value}>`)
     .join("");

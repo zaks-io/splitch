@@ -10,6 +10,7 @@ export {
 } from "./errors";
 export { evaluatePath } from "./evaluate";
 export { hashToUnitInterval } from "./hash";
+export { resolutionReasonFor } from "./resolution-reason";
 export type {
   AssignmentStoreEntry,
   AssignmentStoreReader,

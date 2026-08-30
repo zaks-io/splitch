@@ -61,6 +61,7 @@ describe("index.ts: widened MCP routes cross the service-binding boundary", () =
       expected: {
         variantName: "alpha-treatment",
         value: true,
+        resolutionReason: "DEFAULT",
         reason: { type: "no_match_default" },
         liveRunId: null,
       },
@@ -86,6 +87,7 @@ describe("index.ts: widened MCP routes cross the service-binding boundary", () =
       EVALUATION_API: recordingBinding(evaluationRequests, {
         variantName: "alpha-treatment",
         value: true,
+        resolutionReason: "DEFAULT",
         reason: { type: "no_match_default" },
         liveRunId: null,
       }),

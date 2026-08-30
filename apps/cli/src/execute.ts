@@ -139,6 +139,9 @@ async function executeCommand(
     return positionalError;
   }
 
+  const specializedUsageError = validateSpecializedUsage(command, invocation, io);
+  if (specializedUsageError) return specializedUsageError;
+
   const context = await resolveContext({
     flags: { app: invocation.flags.app, env: invocation.flags.env },
     env: deps.env,
@@ -150,9 +153,6 @@ async function executeCommand(
   if (scopeError) {
     return scopeError;
   }
-
-  const specializedUsageError = validateSpecializedUsage(command, invocation, io);
-  if (specializedUsageError) return specializedUsageError;
 
   if (isCloudflareCommand(command)) {
     return executeCloudflareCommand(command.kind, invocation, deps, io, context);
@@ -208,6 +208,14 @@ function validateSpecializedUsage(
   invocation: ParsedInvocation,
   io: CliIo,
 ): CliResult | null {
+  if (invocation.flags.confirm && !command.supportsConfirm) {
+    writeCliError(io, {
+      code: "CLI_USAGE_INVALID",
+      causeSummary: `--confirm is not accepted by splitch ${command.path.join(" ")}`,
+      remediation: `Drop --confirm, or run splitch ${command.path.join(" ")} --help to list the accepted flags`,
+    });
+    return { exitCode: EXIT_USAGE };
+  }
   // Accepting --output-file on a command that returns no secret would write
   // nothing and still exit 0, which reads as "the credential is in the file".
   if (invocation.flags.outputFile) {

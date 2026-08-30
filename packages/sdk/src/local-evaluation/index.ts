@@ -14,6 +14,7 @@ export {
   configSnapshotProvider,
   evaluatePath,
   parseConfigSnapshot,
+  resolutionReasonFor,
 } from "../../../evaluation-core/src/index";
 export type { EvaluateResult, Provider } from "../../../evaluation-core/src/index";
 

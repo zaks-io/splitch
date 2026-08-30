@@ -191,7 +191,7 @@ Example:
     "apps create": "Create an App (provisions dev + prod Environments and Client Keys).
 
 Usage:
-  splitch apps create <org-id> [flags]
+  splitch apps create --org <organization> [flags]
 
 Flags:
   --org <organization>     [type: string; default: none] Organization ID.
@@ -895,7 +895,7 @@ Flags:
   --env <environment>       [type: string; default: SPLITCH_ENV or config] Environment ID or key.
   --by <mode>               [type: string; default: automatic] Allowed: id. Resolve a canonical-looking selector explicitly.
   --enabled <boolean>       [type: boolean; default: current value] Set the Flag enabled state.
-  --rollout <percent|none>  [type: number | none; default: current value] Set or clear the baseline rollout.
+  --rollout <percent|none>  [type: number | none; default: current value] Send 0-100% of fall-through traffic to the one non-Default available Variant; the rest serves the Default Variant. Use none to clear the rollout.
   --body-json <json>        [type: JSON object; default: none] Request body fields; see Request body below.
   --idempotency-key <key>   [type: string; default: generated] Stable retry key for this mutation.
   --confirm                 [type: boolean; default: false] Approve and apply a Policy-gated change.
@@ -1142,7 +1142,7 @@ Request body (--body-json):
 
 Example:
   splitch flags promote <flag-id-or-key> --body-json '{"fromEnvironmentId":"fromEnvironment_1","select":{"availability":[],"targeting":true,"rollout":true,"enabled":true},"idempotency_key":"idem-1"}' --json",
-    "flags test-eval": "Dry-run resolve a Flag with the full resolution reason without firing an Exposure.
+    "flags test-eval": "Dry-run resolve a Flag with the flat data-plane reason token and full resolution detail without firing an Exposure.
 
 Usage:
   splitch flags test-eval <flag-key> [flags]
@@ -1958,7 +1958,7 @@ Commands:
   update          Update a Flag definition's name/description/schema.
   delete          Delete a Flag (blocked if referenced by a running Experiment).
   promote         Promote selected Flag Configuration field-groups between Environments.
-  test-eval       Dry-run resolve a Flag with the full resolution reason without firing an Exposure.
+  test-eval       Dry-run resolve a Flag with the flat data-plane reason token and full resolution detail without firing an Exposure.
   list            List every readable Flag across the principal's Apps, ordered by App then Flag key (bounded; reports its own truncation). Returns complete per-Environment Flag Configurations and running Experiment references for every Environment across those Apps by default.
   verify          Verify a Flag Key through the data plane without firing an Exposure.
 

@@ -169,7 +169,7 @@ function operationFlags(command: CliCommandDefinition): HelpFlag[] {
           "--rollout <percent|none>",
           "number | none",
           "current value",
-          "Set or clear the baseline rollout.",
+          "Send 0-100% of fall-through traffic to the one non-Default available Variant; the rest serves the Default Variant. Use none to clear the rollout.",
         ),
       ];
     case "flags_test_eval":

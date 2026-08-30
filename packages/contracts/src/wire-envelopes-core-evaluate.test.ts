@@ -219,6 +219,7 @@ describe("TestEvaluationResponseSchema", () => {
     const res = TestEvaluationResponseSchema.parse({
       variantName: "treatment",
       value: { color: "blue" },
+      resolutionReason: "DEFAULT",
       reason: { type: "no_match_default" },
       liveRunId: "run_1",
     });
@@ -230,6 +231,7 @@ describe("TestEvaluationResponseSchema", () => {
     const res = TestEvaluationResponseSchema.parse({
       variantName: "control",
       value: false,
+      resolutionReason: "DISABLED",
       reason: { type: "default_disabled" },
       liveRunId: null,
     });
@@ -241,6 +243,7 @@ describe("TestEvaluationResponseSchema", () => {
       TestEvaluationResponseSchema.safeParse({
         variantName: "control",
         value: false,
+        resolutionReason: "DISABLED",
         reason: { type: "default_disabled" },
       }).success,
     ).toBe(false);

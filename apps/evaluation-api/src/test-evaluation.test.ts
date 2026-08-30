@@ -133,6 +133,7 @@ describe("POST /apps/:appId/envs/:environmentId/flags/:flagKey/test-eval", () =>
       variantName: "treatment",
       value: true,
       liveRunId: null,
+      resolutionReason: "TARGETING_MATCH",
       reason: {
         type: "rule_matched",
         ruleId: "rule-enterprise",

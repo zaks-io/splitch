@@ -1,5 +1,5 @@
 import type { CloudflareConfigSnapshot, VariantValue } from "@splitch/contracts";
-import type { EvaluateResult } from "@splitch/evaluation-core";
+import { type EvaluateResult, resolutionReasonFor } from "@splitch/evaluation-core";
 import type { CloudflareResolutionDetails } from "./public-types";
 
 export function detailsFor(
@@ -24,7 +24,7 @@ export function detailsFor(
       defaultValue,
       `Resolved Variant "${result.variant}" is absent from Flag "${flagKey}"`,
     );
-  const reason = resolutionReason(result.kind);
+  const reason = resolutionReasonFor(result.kind);
   return {
     value: variant.value,
     variantName: variant.name,
@@ -51,13 +51,4 @@ function internalError(
   errorMessage: string,
 ): CloudflareResolutionDetails {
   return failureDetails(defaultValue, "ERROR", "INTERNAL_SERVER_ERROR", errorMessage);
-}
-
-function resolutionReason(kind: EvaluateResult["kind"]): CloudflareResolutionDetails["reason"] {
-  if (kind === "disabled") return "DISABLED";
-  if (kind === "rule_match_direct" || kind === "rule_match_percentage") return "TARGETING_MATCH";
-  if (kind === "holdover_replay") return "CACHED";
-  if (kind === "no_match_default" || kind === "no_live_run" || kind === "null_experiment")
-    return "DEFAULT";
-  return "SPLIT";
 }

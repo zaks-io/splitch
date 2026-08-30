@@ -3,6 +3,7 @@ import {
   type EvaluateResult,
   evaluatePath,
   type LocalResolutionDetails as ResolutionDetails,
+  resolutionReasonFor,
   type VariantValue,
 } from "@splitch/sdk/local-evaluation";
 import { v } from "convex/values";
@@ -216,7 +217,7 @@ function detailsFor(
       errorCode: "INTERNAL_SERVER_ERROR",
       errorMessage: `Resolved Variant "${result.variant}" is absent from Flag "${flagKey}"`,
     };
-  const reason = resolutionReason(result.kind);
+  const reason = resolutionReasonFor(result.kind);
   return {
     value: variant.value,
     variantName: variant.name,
@@ -227,13 +228,4 @@ function detailsFor(
       ? { ruleId: result.reason.ruleId }
       : {}),
   };
-}
-
-function resolutionReason(kind: EvaluateResult["kind"]): ResolutionDetails["reason"] {
-  if (kind === "disabled") return "DISABLED";
-  if (kind === "rule_match_direct" || kind === "rule_match_percentage") return "TARGETING_MATCH";
-  if (kind === "holdover_replay") return "CACHED";
-  if (kind === "no_match_default" || kind === "no_live_run" || kind === "null_experiment")
-    return "DEFAULT";
-  return "SPLIT";
 }

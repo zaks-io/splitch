@@ -42,6 +42,7 @@ endpoint must never reveal.
   variantName: string,
   value: VariantValue,
   liveRunId: string | null,
+  resolutionReason: "SPLIT" | "TARGETING_MATCH" | "DEFAULT" | "DISABLED" | "CACHED",
   reason:
     | {
         type: "holdover_replay",
@@ -63,7 +64,8 @@ endpoint must never reveal.
 
 The canonical request and response envelopes live in
 [../contracts/request-response-envelopes-conventions.md](../contracts/request-response-envelopes-conventions.md).
-Reason shape is a Zod discriminated union on `type`. `rule_matched` carries enough info for a human
+`resolutionReason` is the flat token used by API-Key `verify` and local trusted adapters for the
+same state. `reason` is a Zod discriminated union on `type`. `rule_matched` carries enough info for a human
 or agent to identify which Targeting Rule fired. Percentage Rollout outcome is implied by the
 `selection` field; the bucket and salt are not exposed in the response. `fresh_assignment` means the
 live Run assignment determined the Variant. `holdover_replay` names the prior Run that owns the
