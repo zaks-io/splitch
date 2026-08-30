@@ -124,8 +124,8 @@ per-credential rate limits run before Queue handoff. Invalid or undeclared input
 queue or Tinybird capacity. Valid accepted rows are buffered without sampling or silent thinning;
 protecting Tinybird may increase freshness lag but does not bias the retained event stream.
 
-An aggregate Ingest Admission Gate also runs before any new idempotency claim, outbox write, or queue
-Queue handoff. It is keyed by `(app_id, environment_id, ingest_stream)`, where `ingest_stream` is the
+An aggregate Ingest Admission Gate also runs before any new idempotency claim, outbox write, or Queue
+handoff. It is keyed by `(app_id, environment_id, ingest_stream)`, where `ingest_stream` is the
 destination datasource. The gate charges both canonical row count and serialized queue-payload
 bytes, so batching cannot bypass it. It composes with per-credential rate limits and rejects the
 complete request with `429 RATE_LIMITED` when either budget is unavailable. Exact idempotent retries
