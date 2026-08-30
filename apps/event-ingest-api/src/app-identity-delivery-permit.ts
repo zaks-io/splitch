@@ -1,9 +1,11 @@
 import { admitVersion } from "./app-identity-event-inventory";
-import { entityStub, identityVersionForRow } from "./entity-metric-privacy";
+import { completeEntityDeliveryPermit } from "./entity-delivery-permit-client";
+import { identityVersionForRow } from "./entity-metric-privacy";
 import {
   completeDeliveryPermit,
   deliveryPermitId,
   recordDeliveryPermit,
+  releaseDeliveryPermit,
 } from "./raw-event-delivery-permit";
 import type { Env } from "./types";
 
@@ -22,10 +24,12 @@ export async function admitAppIdentityRow(
   ) {
     throw new Error("App identity admission input is invalid");
   }
+  const deliveryId = deliveryPermitId(body);
   if (!(await admitVersion(storage, body.identityVersion))) {
+    if (deliveryId !== undefined) await releaseDeliveryPermit(storage, deliveryId);
     return Response.json({ suppressed: true });
   }
-  await recordDeliveryPermit(storage, deliveryPermitId(body));
+  await recordDeliveryPermit(storage, deliveryId);
   return Response.json({ suppressed: false });
 }
 
@@ -44,15 +48,7 @@ export async function completeEntityIdentityRow(
   const body = (await request.json()) as Record<string, unknown>;
   const deliveryId = deliveryPermitId(body);
   if (deliveryId === undefined) throw new Error("Raw event delivery permit id is unavailable");
-  const response = await entityStub(env.ENTITY_METRIC_PRIVACY, entityIdentity(body)).fetch(
-    "https://entity-privacy.local/complete-row",
-    {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ deliveryId }),
-    },
-  );
-  if (!response.ok) throw new Error(`Entity identity completion returned ${response.status}`);
+  await completeEntityDeliveryPermit(env.ENTITY_METRIC_PRIVACY, entityIdentity(body), deliveryId);
   return completeDeliveryPermit(storage, requestWithDeliveryId(deliveryId));
 }
 

@@ -3,10 +3,11 @@ import {
   entityStub,
   identityVersionForRow,
 } from "./entity-metric-privacy";
+import { completeEntityDeliveryPermit } from "./entity-delivery-permit-client";
+import { parseEntityIdentityDelivery } from "./app-identity-row-input";
 import { evaluationCommitOutbox } from "./evaluation-commit-outbox-client";
 import { appendRawEvent, tinybirdDelivery } from "./tinybird";
 import {
-  deliveryPermitId,
   hasDeliveryPermits,
   recordDeliveryPermit,
   releaseDeliveryPermit,
@@ -97,47 +98,47 @@ async function forwardEntityIdentityRow(
   entityRoute: string,
 ): Promise<Response> {
   const body = (await request.json()) as Record<string, unknown>;
-  if (
-    !isRecord(body.row) ||
-    typeof body.appId !== "string" ||
-    body.row.app_id !== body.appId ||
-    typeof body.idType !== "string" ||
-    body.row.id_type !== body.idType ||
-    typeof body.entityFamilyHash !== "string" ||
-    body.row.entity_family_hash !== body.entityFamilyHash ||
-    typeof body.identityVersion !== "string" ||
-    identityVersionForRow(body.row) !== body.identityVersion ||
-    typeof body.datasource !== "string"
-  ) {
-    throw new Error("Entity identity delivery input is invalid");
+  const { row, datasource, deliveryId, ref } = parseEntityIdentityDelivery(body);
+  if (!(await admitVersion(storage, ref.identityVersion))) {
+    if (deliveryId !== undefined) {
+      await releaseForwardedPermit(storage, env, ref, deliveryId);
+    }
+    return suppressed();
   }
-  if (!(await admitVersion(storage, body.identityVersion))) return suppressed();
-  const deliveryId = deliveryPermitId(body);
   await recordDeliveryPermit(storage, deliveryId);
-  const ref: AppEntityRef = {
-    appId: body.appId,
-    idType: body.idType,
-    entityFamilyHash: body.entityFamilyHash,
-    identityVersion: body.identityVersion,
-  };
   await storage.put(`${APP_ENTITY_PREFIX}${ref.idType}:${ref.entityFamilyHash}`, ref);
-  const response = await entityStub(env.ENTITY_METRIC_PRIVACY, ref).fetch(
-    `https://entity-privacy.local/${entityRoute}`,
-    {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ datasource: body.datasource, row: body.row, deliveryId }),
-    },
-  );
-  if (!response.ok) throw new Error(`Entity identity delivery returned ${response.status}`);
-  const result = (await response.json()) as { suppressed?: unknown };
-  if (typeof result.suppressed !== "boolean") {
-    throw new Error("Entity identity delivery returned an invalid result");
+  try {
+    const response = await entityStub(env.ENTITY_METRIC_PRIVACY, ref).fetch(
+      `https://entity-privacy.local/${entityRoute}`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ datasource, row, deliveryId }),
+      },
+    );
+    if (!response.ok) throw new Error(`Entity identity delivery returned ${response.status}`);
+    const result = (await response.json()) as { suppressed?: unknown };
+    if (typeof result.suppressed !== "boolean") {
+      throw new Error("Entity identity delivery returned an invalid result");
+    }
+    if (result.suppressed && deliveryId !== undefined) {
+      await releaseForwardedPermit(storage, env, ref, deliveryId);
+    }
+    return Response.json(result);
+  } catch (error) {
+    if (deliveryId !== undefined) await releaseForwardedPermit(storage, env, ref, deliveryId);
+    throw error;
   }
-  if (result.suppressed && deliveryId !== undefined) {
-    await releaseDeliveryPermit(storage, deliveryId);
-  }
-  return Response.json(result);
+}
+
+async function releaseForwardedPermit(
+  storage: DurableObjectStorage,
+  env: Env,
+  ref: AppEntityRef,
+  deliveryId: string,
+): Promise<void> {
+  await completeEntityDeliveryPermit(env.ENTITY_METRIC_PRIVACY, ref, deliveryId);
+  await releaseDeliveryPermit(storage, deliveryId);
 }
 
 export async function resetAppIdentityDelivery(

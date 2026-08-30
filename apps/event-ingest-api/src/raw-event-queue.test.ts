@@ -95,7 +95,9 @@ describe("raw event queue delivery", () => {
     expect(fetch).not.toHaveBeenCalled();
     expect(queued.retry).toHaveBeenCalledOnce();
   });
+});
 
+describe("raw event queue privacy permits", () => {
   it.each([
     ["Exposure", "splitch-raw-events", "raw_events"],
     ["Evaluation", "splitch-raw-evaluations", "raw_evaluations"],
@@ -134,6 +136,59 @@ describe("raw event queue delivery", () => {
       currentVersion: "app-v1",
     });
     expect(resetAfterDelivery.status).toBe(200);
+  });
+
+  it.each([
+    ["Exposure", "splitch-raw-events", "raw_events", "/admit-entity-row"],
+    ["Evaluation", "splitch-raw-evaluations", "raw_evaluations", "/admit-app-row"],
+  ])("clears stale %s permits when suppression follows a lost admission response", async (_, queue, source, lostPath) => {
+    const append = vi.fn();
+    vi.stubGlobal("fetch", append);
+    const privacy = privacyNamespace(lostPath);
+    const queued = message("lost-admission", source);
+    const overrides = {
+      SPLITCH_PLATFORM_TARGET: "production" as const,
+      ENTITY_METRIC_PRIVACY: privacy.namespace,
+    };
+
+    await deliver(queue, [queued], overrides);
+    expect(queued.retry).toHaveBeenCalledOnce();
+    expect(append).not.toHaveBeenCalled();
+    const blockedReset = await privacy.fetch("app_1:app-identity-inventory", "/reset-app", {
+      appId: "app_1",
+      resetId: "reset_lost_admission",
+      currentVersion: "app-v1",
+    });
+    expect(blockedReset.status).toBe(409);
+
+    await deliver(queue, [queued], overrides);
+    expect(queued.ack).toHaveBeenCalledOnce();
+    expect(append).not.toHaveBeenCalled();
+    const completedReset = await privacy.fetch("app_1:app-identity-inventory", "/reset-app", {
+      appId: "app_1",
+      resetId: "reset_lost_admission",
+      currentVersion: "app-v1",
+    });
+    expect(completedReset.status).toBe(200);
+  });
+
+  it("rolls back the App and Entity permits when nested admission fails", async () => {
+    vi.stubGlobal("fetch", vi.fn());
+    const privacy = privacyNamespace("/admit-row");
+    const queued = message("nested-admission-failure");
+
+    await deliver("splitch-raw-events", [queued], {
+      SPLITCH_PLATFORM_TARGET: "production",
+      ENTITY_METRIC_PRIVACY: privacy.namespace,
+    });
+
+    expect(queued.retry).toHaveBeenCalledOnce();
+    const reset = await privacy.fetch("app_1:app-identity-inventory", "/reset-app", {
+      appId: "app_1",
+      resetId: "reset_nested_failure",
+      currentVersion: "app-v1",
+    });
+    expect(reset.status).toBe(200);
   });
 });
 
@@ -189,8 +244,9 @@ async function deliver(
   return { rawEventsDlq, rawEvaluationsDlq };
 }
 
-function privacyNamespace() {
+function privacyNamespace(lostAdmissionPath?: string) {
   const objects = new Map<string, EntityMetricPrivacyDurableObject>();
+  let loseAdmission = lostAdmissionPath !== undefined;
   let namespace!: Env["ENTITY_METRIC_PRIVACY"];
   const env = () =>
     ({
@@ -204,7 +260,7 @@ function privacyNamespace() {
   namespace = {
     idFromName: (name: string) => name as unknown as DurableObjectId,
     get: (id: DurableObjectId) => ({
-      fetch: (input: RequestInfo | URL, init?: RequestInit) => {
+      fetch: async (input: RequestInfo | URL, init?: RequestInit) => {
         const name = String(id);
         let object = objects.get(name);
         if (!object) {
@@ -214,7 +270,12 @@ function privacyNamespace() {
           );
           objects.set(name, object);
         }
-        return object.fetch(new Request(String(input), init));
+        const response = await object.fetch(new Request(String(input), init));
+        if (loseAdmission && new URL(String(input)).pathname === lostAdmissionPath) {
+          loseAdmission = false;
+          throw new Error("admission response lost");
+        }
+        return response;
       },
     }),
   };

@@ -9,6 +9,7 @@ import {
   completeDeliveryPermit,
   deliveryPermitId,
   recordDeliveryPermit,
+  releaseDeliveryPermit,
 } from "./raw-event-delivery-permit";
 import type { Env } from "./types";
 
@@ -138,15 +139,17 @@ async function admitEntityRowAtAuthority(
   if (typeof serverReceivedAt !== "string" || !Number.isFinite(Date.parse(serverReceivedAt))) {
     throw new Error("Entity delivery server_received_at is invalid");
   }
+  const deliveryId = deliveryPermitId(body);
   const suppression = await storage.get<SuppressionState>("privacy:suppression");
   if (suppression && atOrBefore(serverReceivedAt, suppression.deleteBeforeTs)) {
+    if (deliveryId !== undefined) await releaseDeliveryPermit(storage, deliveryId);
     return { suppressed: true };
   }
   return {
     suppressed: false,
     datasource: body.datasource,
     row: body.row,
-    deliveryId: deliveryPermitId(body),
+    deliveryId,
   };
 }
 
