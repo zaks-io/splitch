@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import worker from "./index";
+import { METRIC_EVENT_MAX_RETRIES, metricEventRetryDelaySeconds } from "./metric-event-queue";
 import type { Env } from "./types";
 
 afterEach(() => {
@@ -68,7 +69,7 @@ describe("Metric Event queue delivery", () => {
     expect(failed.retry).toHaveBeenCalledOnce();
     expect(error).toHaveBeenCalledOnce();
     expect(error).toHaveBeenCalledWith(
-      "event-ingest-api Metric Event discarded after final delivery attempt",
+      "event-ingest-api Metric Event dead-lettered after final delivery attempt",
       {
         queueMessageId: "message-final-attempt",
         attempts: 8,
@@ -91,7 +92,7 @@ describe("Metric Event queue delivery", () => {
     await deliver(messageBatch([failed]), deliveryEnv());
 
     expect(error).toHaveBeenCalledWith(
-      "event-ingest-api Metric Event discarded after final delivery attempt",
+      "event-ingest-api Metric Event dead-lettered after final delivery attempt",
       {
         queueMessageId: "message-malformed",
         attempts: 8,
@@ -149,6 +150,73 @@ describe("Metric Event queue delivery", () => {
     expect(message.ack).toHaveBeenCalledOnce();
     expect(message.retry).not.toHaveBeenCalled();
     expect(fetch).not.toHaveBeenCalled();
+  });
+});
+
+describe("Metric Event retry backoff", () => {
+  it("holds a failed message longer on each successive attempt", () => {
+    const delays = Array.from({ length: METRIC_EVENT_MAX_RETRIES }, (_unused, index) =>
+      metricEventRetryDelaySeconds(index + 1, "message-1"),
+    );
+
+    for (const [index, delay] of delays.entries()) {
+      expect(Number.isInteger(delay)).toBe(true);
+      expect(delay).toBeGreaterThan(0);
+      expect(delay).toBeLessThanOrEqual(43_200);
+      if (index > 0) {
+        expect(delay, `attempt ${index + 1} does not exceed attempt ${index}`).toBeGreaterThan(
+          delays[index - 1] as number,
+        );
+      }
+    }
+  });
+
+  it("passes the backoff to the runtime when delivery fails", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("nope", { status: 500 })));
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const failed = queueMessage("message-1", metricEvent("event-1"), 3);
+
+    await deliver(messageBatch([failed]), deliveryEnv());
+
+    expect(failed.retry).toHaveBeenCalledWith({
+      delaySeconds: metricEventRetryDelaySeconds(3, "message-1"),
+    });
+  });
+
+  /**
+   * A batch fails together against one unhealthy Tinybird. Retrying it as a
+   * single herd reproduces the same overload, so the offset has to differ per
+   * message even at the same attempt.
+   */
+  it("spreads messages of one batch across the interval", () => {
+    const delays = new Set(
+      ["message-1", "message-2", "message-3", "message-4"].map((id) =>
+        metricEventRetryDelaySeconds(4, id),
+      ),
+    );
+
+    expect(delays.size).toBeGreaterThan(1);
+  });
+
+  /**
+   * `attempts` comes from the runtime. A NaN or unbounded delay would be
+   * rejected by Queues, which costs the message the retry this whole change
+   * exists to give it.
+   */
+  it.each([
+    ["above the retry budget", METRIC_EVENT_MAX_RETRIES + 50],
+    ["absurdly large", Number.MAX_SAFE_INTEGER],
+    ["infinite", Number.POSITIVE_INFINITY],
+    ["not a number", Number.NaN],
+    ["zero", 0],
+    ["negative", -4],
+    ["fractional", 2.7],
+  ])("returns a bounded positive integer when attempts is %s", (_label, attempts) => {
+    const delay = metricEventRetryDelaySeconds(attempts, "message-1");
+
+    expect(Number.isInteger(delay)).toBe(true);
+    expect(delay).toBeGreaterThan(0);
+    expect(delay).toBeLessThanOrEqual(43_200);
   });
 });
 

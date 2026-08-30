@@ -44,7 +44,8 @@
         "queue": "splitch-metric-events-local",
         "max_batch_size": 100,
         "max_batch_timeout": 5,
-        "max_retries": 7
+        "max_retries": 7,
+        "dead_letter_queue": "splitch-metric-events-local-dlq"
       }
     ]
   },
@@ -147,7 +148,8 @@
             "queue": "splitch-metric-events-shared-preview",
             "max_batch_size": 100,
             "max_batch_timeout": 5,
-            "max_retries": 7
+            "max_retries": 7,
+            "dead_letter_queue": "splitch-metric-events-shared-preview-dlq"
           }
         ]
       },
@@ -251,7 +253,8 @@
             "queue": "splitch-metric-events",
             "max_batch_size": 100,
             "max_batch_timeout": 5,
-            "max_retries": 7
+            "max_retries": 7,
+            "dead_letter_queue": "splitch-metric-events-dlq"
           }
         ]
       },
