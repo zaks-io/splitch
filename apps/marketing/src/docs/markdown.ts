@@ -1,6 +1,6 @@
 import { blocksToMarkdown } from "./blocks";
 import { cliDoc } from "./cli";
-import { codeAgentsDoc } from "./code-agents";
+import { codeAgentsDoc, SPLITCH_SKILL_SOURCE } from "./code-agents";
 import {
   type DocumentedErrorCode,
   documentedCodesBySurface,
@@ -127,6 +127,7 @@ export function llmsTxt(): string {
     "Every command accepts `--json` (one line on stdout, failures included) and `--help`. Policy-gated changes take `--confirm`.",
     "## Code-agent implementation",
     `- [${codeAgentsDoc.title}](${DOCS_ORIGIN}${docsPath.codeAgentsMarkdown()}): ${codeAgentsDoc.summary}`,
+    `Install the Splitch skill for Codex, Claude Code, or OpenCode: \`npx skills add ${SPLITCH_SKILL_SOURCE}\``,
     "## Integrations",
     "One guide per runtime, each from `npm install` to a first resolving Flag. `@splitch/sdk` covers Node, browsers, and React; Convex and Cloudflare Workers each ship their own package.",
     sdkIntegrationTopics.map(topicLine).join("\n"),
