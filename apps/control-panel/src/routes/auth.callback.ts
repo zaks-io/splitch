@@ -5,10 +5,10 @@ import {
   completeAuthKitCallback,
   createAuthKitClient,
   createControlPanelRepository,
-} from "#lib/authkit";
-import { controlPanelBindings } from "#lib/bindings";
-import { consumeOAuthState } from "#lib/oauth-state";
-import { appendHttpOnlyCookie, type SerializedHttpOnlyCookie } from "#lib/session-cookie";
+} from "#lib/auth/authkit";
+import { controlPanelBindings } from "#lib/shared/bindings";
+import { consumeOAuthState } from "#lib/auth/oauth-state";
+import { appendHttpOnlyCookie, type SerializedHttpOnlyCookie } from "#lib/sessions/session-cookie";
 
 export const Route = createFileRoute("/auth/callback")({
   server: {

@@ -1,11 +1,11 @@
 import { Button } from "@splitch/ui/components/button";
 import { createFileRoute, redirect } from "@tanstack/react-router";
-import { OrganizationChooser } from "#components/organization-chooser";
-import { SignOutForm } from "#components/sign-out-form";
-import { loginRedirect } from "#lib/login-redirect";
-import type { OrgMembership, SessionPrincipal } from "#lib/session";
-import { type CurrentSessionResult, loadCurrentSession } from "#lib/session-functions";
-import type { StaleSession } from "#lib/stale-session";
+import { OrganizationChooser } from "#components/organizations/organization-chooser";
+import { SignOutForm } from "#components/sessions/sign-out-form";
+import { loginRedirect } from "#lib/auth/login-redirect";
+import type { OrgMembership, SessionPrincipal } from "#lib/sessions/session";
+import { type CurrentSessionResult, loadCurrentSession } from "#lib/sessions/session-functions";
+import type { StaleSession } from "#lib/sessions/stale-session";
 
 export interface IndexLoaderData {
   session: SessionPrincipal;

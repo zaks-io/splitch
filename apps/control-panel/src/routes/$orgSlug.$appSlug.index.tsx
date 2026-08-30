@@ -5,17 +5,17 @@ import { SectionErrorPage } from "@splitch/ui/state/section-error-page";
 import { TableSkeleton } from "@splitch/ui/state/table-skeleton";
 import { createFileRoute, notFound, redirect } from "@tanstack/react-router";
 import { z } from "zod";
-import { FlagsMatrixPage } from "#components/flags-matrix-page";
-import { PanelShell } from "#components/panel-shell";
-import { loadControlPanelFlagsMatrix } from "#lib/control-plane-flag-functions";
-import { recordLastVisitedScope } from "#lib/last-visited-scope-functions";
-import { AccessDeniedError, isAccessDeniedError } from "#lib/loader-context";
+import { FlagsMatrixPage } from "#components/flags/flags-matrix-page";
+import { PanelShell } from "#components/shell/panel-shell";
+import { loadControlPanelFlagsMatrix } from "#lib/flags/control-plane-flag-functions";
+import { recordLastVisitedScope } from "#lib/sessions/last-visited-scope-functions";
+import { AccessDeniedError, isAccessDeniedError } from "#lib/shared/loader-context";
 import {
   configureControlPanelSentryScope,
   reportExpectedDomainFailure,
   reportRouteError,
-} from "#lib/panel-observability";
-import { loadAppScopedSession } from "#lib/session-functions";
+} from "#lib/observability/panel-observability";
+import { loadAppScopedSession } from "#lib/sessions/session-functions";
 
 export const Route = createFileRoute("/$orgSlug/$appSlug/")({
   validateSearch: z.object({ created: z.string().optional() }).strict(),

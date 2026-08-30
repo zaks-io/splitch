@@ -1,8 +1,8 @@
 import { QueryClient } from "@tanstack/react-query";
 import { createRouter } from "@tanstack/react-router";
 import { setupRouterSsrQueryIntegration } from "@tanstack/react-router-ssr-query";
-import type { FlagConfigApi } from "./lib/flag-config-api";
-import { initControlPanelClientSentry } from "./lib/panel-sentry-client";
+import type { FlagConfigApi } from "#lib/flags/flag-config-api";
+import { initControlPanelClientSentry } from "#lib/observability/panel-sentry-client";
 import { routeTree } from "./routeTree.gen";
 
 export async function getRouter(options: { flagConfigApi?: FlagConfigApi } = {}) {

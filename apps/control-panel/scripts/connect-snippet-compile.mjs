@@ -27,7 +27,7 @@ const sdkRoot = join(repoRoot, "packages/sdk");
 const checkRegistry = process.argv.includes("--registry");
 
 const { renderConnectSnippet, renderServerConnectSnippet, SDK_INSTALL_COMMAND } = await import(
-  join(panelRoot, "src/lib/connect-snippet.ts")
+  join(panelRoot, "src/lib/connect/connect-snippet.ts")
 );
 
 const clientSnippet = renderConnectSnippet({

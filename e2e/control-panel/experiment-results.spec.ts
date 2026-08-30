@@ -170,15 +170,15 @@ test.describe("Experiment Results tab", () => {
 
   test("ships no way around the gate", () => {
     const sources = [
-      "apps/control-panel/src/components/experiment-results.tsx",
-      "apps/control-panel/src/components/experiment-results-arms.tsx",
-      "apps/control-panel/src/components/experiment-results-decision.tsx",
-      "apps/control-panel/src/components/experiment-results-hero.tsx",
-      "apps/control-panel/src/components/experiment-results-panel.tsx",
-      "apps/control-panel/src/components/experiment-results-srm.tsx",
-      "apps/control-panel/src/components/experiment-results-station.tsx",
-      "apps/control-panel/src/components/experiment-results-guardrails.tsx",
-      "apps/control-panel/src/components/experiment-results-stations.tsx",
+      "apps/control-panel/src/components/experiments/experiment-results.tsx",
+      "apps/control-panel/src/components/experiments/experiment-results-arms.tsx",
+      "apps/control-panel/src/components/experiments/experiment-results-decision.tsx",
+      "apps/control-panel/src/components/experiments/experiment-results-hero.tsx",
+      "apps/control-panel/src/components/experiments/experiment-results-panel.tsx",
+      "apps/control-panel/src/components/experiments/experiment-results-srm.tsx",
+      "apps/control-panel/src/components/experiments/experiment-results-station.tsx",
+      "apps/control-panel/src/components/experiments/experiment-results-guardrails.tsx",
+      "apps/control-panel/src/components/experiments/experiment-results-stations.tsx",
     ].map((path) => readFileSync(resolve(repoRoot, path), "utf8").toLowerCase());
 
     for (const source of sources) {

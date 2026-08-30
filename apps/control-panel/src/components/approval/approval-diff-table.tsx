@@ -6,7 +6,7 @@ import {
   TableHeader,
   TableRow,
 } from "@splitch/ui/components/table";
-import { type ApprovalDiffRow, approvalDiffGroups } from "#lib/approval-diff-rows";
+import { type ApprovalDiffRow, approvalDiffGroups } from "#lib/approval/approval-diff-rows";
 
 /**
  * The Worker's proposal, as before/after rows grouped by field group.

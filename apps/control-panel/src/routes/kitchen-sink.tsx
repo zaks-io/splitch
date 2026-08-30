@@ -45,10 +45,10 @@ import { StaleDataToast } from "@splitch/ui/state/stale-data-toast";
 import { TableSkeleton } from "@splitch/ui/state/table-skeleton";
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { KitchenSinkForms } from "#components/kitchen-sink-forms";
-import { KitchenSinkOverlays } from "#components/kitchen-sink-overlays";
-import { loginRedirect } from "#lib/login-redirect";
-import { loadCurrentSession } from "#lib/session-functions";
+import { KitchenSinkForms } from "#components/development/kitchen-sink-forms";
+import { KitchenSinkOverlays } from "#components/development/kitchen-sink-overlays";
+import { loginRedirect } from "#lib/auth/login-redirect";
+import { loadCurrentSession } from "#lib/sessions/session-functions";
 
 type ThemeMode = "system" | "light" | "dark";
 

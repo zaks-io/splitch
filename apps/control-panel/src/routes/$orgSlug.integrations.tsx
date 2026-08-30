@@ -1,12 +1,12 @@
 import { Alert, AlertDescription, AlertTitle } from "@splitch/ui/components/alert";
 import { createFileRoute } from "@tanstack/react-router";
-import { OrgIntegrationsPage } from "#components/org-integrations-page";
-import { OrganizationsTruncatedNotice } from "#components/organizations-truncated-notice";
-import { PanelPageBody } from "#components/panel-page-body";
-import { PanelPageHeader } from "#components/panel-page-header";
-import { PanelShell } from "#components/panel-shell";
-import { loginRedirect } from "#lib/login-redirect";
-import { loadPanelNavigation } from "#lib/session-functions";
+import { OrgIntegrationsPage } from "#components/integrations/org-integrations-page";
+import { OrganizationsTruncatedNotice } from "#components/organizations/organizations-truncated-notice";
+import { PanelPageBody } from "#components/shell/panel-page-body";
+import { PanelPageHeader } from "#components/shell/panel-page-header";
+import { PanelShell } from "#components/shell/panel-shell";
+import { loginRedirect } from "#lib/auth/login-redirect";
+import { loadPanelNavigation } from "#lib/sessions/session-functions";
 
 export const Route = createFileRoute("/$orgSlug/integrations")({
   loader: async ({ location, params }) => {

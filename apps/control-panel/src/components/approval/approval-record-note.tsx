@@ -1,6 +1,6 @@
 import { Alert, AlertDescription, AlertTitle } from "@splitch/ui/components/alert";
 import { Badge } from "@splitch/ui/components/badge";
-import type { ApprovalGateRecord } from "#lib/approval-gate-record";
+import type { ApprovalGateRecord } from "#lib/approval/approval-gate-record";
 
 /**
  * The durable audit record a gated change wrote.

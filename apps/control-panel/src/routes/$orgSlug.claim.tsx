@@ -7,9 +7,9 @@ import {
   CardTitle,
 } from "@splitch/ui/components/card";
 import { createFileRoute } from "@tanstack/react-router";
-import { ClaimCeremony } from "#components/claim-ceremony";
-import { loginRedirect } from "#lib/login-redirect";
-import { loadCurrentSession } from "#lib/session-functions";
+import { ClaimCeremony } from "#components/claims/claim-ceremony";
+import { loginRedirect } from "#lib/auth/login-redirect";
+import { loadCurrentSession } from "#lib/sessions/session-functions";
 
 export const Route = createFileRoute("/$orgSlug/claim")({
   loader: async ({ location, params }) => {

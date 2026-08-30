@@ -1,8 +1,12 @@
 import { env as workerEnv } from "cloudflare:workers";
 import { createFileRoute } from "@tanstack/react-router";
-import { controlPanelBindings } from "#lib/bindings";
-import { consentLoginRedirect, forwardClaimConsent, renderConsentPage } from "#lib/claim-consent";
-import { loadSessionFromRequest } from "#lib/session-refresh";
+import { controlPanelBindings } from "#lib/shared/bindings";
+import {
+  consentLoginRedirect,
+  forwardClaimConsent,
+  renderConsentPage,
+} from "#lib/claims/claim-consent";
+import { loadSessionFromRequest } from "#lib/sessions/session-refresh";
 
 export const Route = createFileRoute("/claim/consent/$attemptId")({
   component: () => (

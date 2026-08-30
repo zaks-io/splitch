@@ -2,10 +2,10 @@ import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { ControlPanelBindings } from "#lib/bindings";
-import { createSession } from "#lib/session";
-import { loadSessionFromRequest } from "#lib/session-refresh";
-import { MemoryKv, sessionPrincipal } from "#lib/session-test-harness";
+import type { ControlPanelBindings } from "#lib/shared/bindings";
+import { createSession } from "#lib/sessions/session";
+import { loadSessionFromRequest } from "#lib/sessions/session-refresh";
+import { MemoryKv, sessionPrincipal } from "#lib/sessions/session-test-harness";
 
 /**
  * The enforcement point, not the helper: SPL-227 was a route that hung a

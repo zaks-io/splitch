@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { ExperimentTabStub } from "#components/experiment-detail";
-import { ExperimentResultsPanel } from "#components/experiment-results-panel";
-import { useExperimentDetailRouteData } from "#lib/experiment-detail-route";
+import { ExperimentTabStub } from "#components/experiments/experiment-detail";
+import { ExperimentResultsPanel } from "#components/experiments/experiment-results-panel";
+import { useExperimentDetailRouteData } from "#lib/experiments/experiment-detail-route";
 
 export const Route = createFileRoute(
   "/$orgSlug/$appSlug/$env/experiments/$experimentId/runs/$runId/",

@@ -1,18 +1,18 @@
 import { NotFoundPage } from "@splitch/ui/state/not-found-page";
 import { createFileRoute, notFound } from "@tanstack/react-router";
-import { FlagDetailPage } from "#components/flag-detail-page";
-import { PanelPageBody } from "#components/panel-page-body";
-import { SectionPending } from "#components/section-pending";
-import { SectionUnavailable } from "#components/section-unavailable";
-import { scopedHref } from "#lib/app-shell-navigation";
-import { loadControlPanelFlagDetail } from "#lib/control-plane-flag-functions";
-import { loadControlPanelSettings } from "#lib/control-plane-settings-functions";
-import { isFlagDetailNotFound } from "#lib/flag-detail-data";
-import { AccessDeniedError } from "#lib/loader-context";
-import { loginRedirect } from "#lib/login-redirect";
-import { reportRouteError } from "#lib/panel-observability";
-import { promotionSources } from "#lib/promotion-source";
-import { loadScopedSession } from "#lib/session-functions";
+import { FlagDetailPage } from "#components/flags/flag-detail-page";
+import { PanelPageBody } from "#components/shell/panel-page-body";
+import { SectionPending } from "#components/shared/section-pending";
+import { SectionUnavailable } from "#components/shared/section-unavailable";
+import { scopedHref } from "#lib/shell/app-shell-navigation";
+import { loadControlPanelFlagDetail } from "#lib/flags/control-plane-flag-functions";
+import { loadControlPanelSettings } from "#lib/settings/control-plane-settings-functions";
+import { isFlagDetailNotFound } from "#lib/flags/flag-detail-data";
+import { AccessDeniedError } from "#lib/shared/loader-context";
+import { loginRedirect } from "#lib/auth/login-redirect";
+import { reportRouteError } from "#lib/observability/panel-observability";
+import { promotionSources } from "#lib/promotions/promotion-source";
+import { loadScopedSession } from "#lib/sessions/session-functions";
 
 export const Route = createFileRoute("/$orgSlug/$appSlug/$env/flags/$flagKey")({
   loader: async ({ location, params }) => {

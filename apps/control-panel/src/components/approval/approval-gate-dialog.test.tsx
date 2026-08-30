@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import type { MutationErrorSurface } from "#lib/api";
-import type { ApprovalGateRecord } from "#lib/approval-gate-record";
+import type { MutationErrorSurface } from "#lib/shared/api";
+import type { ApprovalGateRecord } from "#lib/approval/approval-gate-record";
 import { ApprovalGateBody } from "./approval-gate-dialog";
 
 /**

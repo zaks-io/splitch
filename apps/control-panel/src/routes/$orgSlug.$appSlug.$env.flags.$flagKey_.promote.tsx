@@ -1,22 +1,22 @@
 import { NotFoundPage } from "@splitch/ui/state/not-found-page";
 import { createFileRoute, notFound } from "@tanstack/react-router";
-import { PanelPageBody } from "#components/panel-page-body";
-import { PromotionPage } from "#components/promotion-page";
-import { SectionPending } from "#components/section-pending";
-import { SectionUnavailable } from "#components/section-unavailable";
-import { scopedHref } from "#lib/app-shell-navigation";
-import { loadControlPanelFlagDetail } from "#lib/control-plane-flag-functions";
-import { isFlagDetailNotFound } from "#lib/flag-detail-data";
-import type { FlagDetailView } from "#lib/flag-detail-view";
-import { AccessDeniedError } from "#lib/loader-context";
-import { loginRedirect } from "#lib/login-redirect";
-import { reportRouteError } from "#lib/panel-observability";
+import { PanelPageBody } from "#components/shell/panel-page-body";
+import { PromotionPage } from "#components/promotions/promotion-page";
+import { SectionPending } from "#components/shared/section-pending";
+import { SectionUnavailable } from "#components/shared/section-unavailable";
+import { scopedHref } from "#lib/shell/app-shell-navigation";
+import { loadControlPanelFlagDetail } from "#lib/flags/control-plane-flag-functions";
+import { isFlagDetailNotFound } from "#lib/flags/flag-detail-data";
+import type { FlagDetailView } from "#lib/flags/flag-detail-view";
+import { AccessDeniedError } from "#lib/shared/loader-context";
+import { loginRedirect } from "#lib/auth/login-redirect";
+import { reportRouteError } from "#lib/observability/panel-observability";
 import {
   type PromotionSourceOption,
   promotionSources,
   resolvePromotionSource,
-} from "#lib/promotion-source";
-import { loadScopedSession } from "#lib/session-functions";
+} from "#lib/promotions/promotion-source";
+import { loadScopedSession } from "#lib/sessions/session-functions";
 
 type PromotionLoaded = {
   kind: "ready";

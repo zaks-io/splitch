@@ -1,16 +1,19 @@
 import { addBreadcrumb, captureException, setTag, setUser } from "@sentry/cloudflare";
 import { wrapWorkerHandler } from "@splitch/observability/worker";
 import handler from "@tanstack/react-start/server-entry";
-import { controlPanelLiveUpdateBindings } from "#lib/bindings";
-import { createControlPanelApp } from "#lib/control-plane-app-functions";
-import { createControlPanelFlag, loadControlPanelFlags } from "#lib/control-plane-flag-functions";
-import { loadControlPanelPaletteIndex } from "#lib/control-plane-palette-functions";
-import { recordLastVisitedScope } from "#lib/last-visited-scope-functions";
-import { authorizeLiveUpdateUpgrade } from "#lib/live-update-authorization";
-import { handleLiveUpdateUpgrade } from "#lib/live-update-upgrade";
-import { loadOrgAppList } from "#lib/org-app-list-functions";
-import { setControlPanelSentryClient } from "#lib/panel-observability";
-import { withControlPanelSecurityHeaders } from "#lib/security-headers";
+import { controlPanelLiveUpdateBindings } from "#lib/shared/bindings";
+import { createControlPanelApp } from "#lib/apps/control-plane-app-functions";
+import {
+  createControlPanelFlag,
+  loadControlPanelFlags,
+} from "#lib/flags/control-plane-flag-functions";
+import { loadControlPanelPaletteIndex } from "#lib/shell/control-plane-palette-functions";
+import { recordLastVisitedScope } from "#lib/sessions/last-visited-scope-functions";
+import { authorizeLiveUpdateUpgrade } from "#lib/live-updates/live-update-authorization";
+import { handleLiveUpdateUpgrade } from "#lib/live-updates/live-update-upgrade";
+import { loadOrgAppList } from "#lib/organizations/org-app-list-functions";
+import { setControlPanelSentryClient } from "#lib/observability/panel-observability";
+import { withControlPanelSecurityHeaders } from "#lib/auth/security-headers";
 
 // Keep server functions in the Worker graph so their handlers are deployed with
 // the app. Being imported by a component is not enough: the client graph can

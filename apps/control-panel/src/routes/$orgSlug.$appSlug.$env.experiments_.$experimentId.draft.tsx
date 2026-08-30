@@ -1,13 +1,13 @@
 import { useSuspenseQuery } from "@tanstack/react-query";
 import { createFileRoute, getRouteApi } from "@tanstack/react-router";
-import { ExperimentDraftWizard } from "#components/experiment-draft-wizard";
-import { PanelPageBody } from "#components/panel-page-body";
-import { SectionPending } from "#components/section-pending";
-import { SectionUnavailable } from "#components/section-unavailable";
-import { scopedHref } from "#lib/app-shell-navigation";
-import { isExperimentDraftStep } from "#lib/experiment-draft-model";
-import { experimentDetailQuery } from "#lib/experiments-query";
-import { reportRouteError } from "#lib/panel-observability";
+import { ExperimentDraftWizard } from "#components/experiments/experiment-draft-wizard";
+import { PanelPageBody } from "#components/shell/panel-page-body";
+import { SectionPending } from "#components/shared/section-pending";
+import { SectionUnavailable } from "#components/shared/section-unavailable";
+import { scopedHref } from "#lib/shell/app-shell-navigation";
+import { isExperimentDraftStep } from "#lib/experiments/experiment-draft-model";
+import { experimentDetailQuery } from "#lib/experiments/experiments-query";
+import { reportRouteError } from "#lib/observability/panel-observability";
 
 const appScopeRoute = getRouteApi("/$orgSlug/$appSlug/$env");
 

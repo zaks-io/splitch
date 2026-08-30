@@ -65,7 +65,7 @@ const REPO_ROOT = resolve(fileURLToPath(new URL("../../../..", import.meta.url))
 /**
  * Budget for anything that builds a TypeScript program (~1s warm locally, but
  * over 15s on a loaded CI runner; matches the 30s sweep budget in
- * apps/control-panel/src/lib/session-cookie.test.ts).
+ * apps/control-panel/src/lib/sessions/session-cookie.test.ts).
  */
 const PROGRAM_HOOK_TIMEOUT_MS = 30_000;
 

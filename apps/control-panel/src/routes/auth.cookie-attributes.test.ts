@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { MemoryKv } from "#lib/session-test-harness";
+import { MemoryKv } from "#lib/sessions/session-test-harness";
 
 /**
  * Cookie attributes must appear on the Worker response Set-Cookie header, not
@@ -20,8 +20,8 @@ vi.mock("cloudflare:workers", () => ({
   },
 }));
 
-vi.mock("#lib/authkit", async () => {
-  const actual = await vi.importActual<typeof import("#lib/authkit")>("#lib/authkit");
+vi.mock("#lib/auth/authkit", async () => {
+  const actual = await vi.importActual<typeof import("#lib/auth/authkit")>("#lib/auth/authkit");
   return {
     ...actual,
     createAuthKitClient: () => ({

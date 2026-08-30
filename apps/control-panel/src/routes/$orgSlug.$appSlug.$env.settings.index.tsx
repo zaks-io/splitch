@@ -2,9 +2,9 @@ import { PanelSkeleton } from "@splitch/ui/state/panel-skeleton";
 import { SectionErrorPage } from "@splitch/ui/state/section-error-page";
 import { useSuspenseQuery } from "@tanstack/react-query";
 import { createFileRoute, getRouteApi } from "@tanstack/react-router";
-import { AppSettings } from "#components/app-settings";
-import { appSettingsQuery } from "#lib/app-settings-query";
-import { reportRouteError } from "#lib/panel-observability";
+import { AppSettings } from "#components/apps/app-settings";
+import { appSettingsQuery } from "#lib/apps/app-settings-query";
+import { reportRouteError } from "#lib/observability/panel-observability";
 
 const appScopeRoute = getRouteApi("/$orgSlug/$appSlug/$env");
 

@@ -1,13 +1,13 @@
 import { createFileRoute, notFound } from "@tanstack/react-router";
-import { FlagsPage } from "#components/flags-page";
-import { SectionPending } from "#components/section-pending";
-import { SectionUnavailable } from "#components/section-unavailable";
-import { scopedHref } from "#lib/app-shell-navigation";
-import { loadControlPanelFlags } from "#lib/control-plane-flag-functions";
-import { AccessDeniedError } from "#lib/loader-context";
-import { loginRedirect } from "#lib/login-redirect";
-import { reportRouteError } from "#lib/panel-observability";
-import { loadScopedSession } from "#lib/session-functions";
+import { FlagsPage } from "#components/flags/flags-page";
+import { SectionPending } from "#components/shared/section-pending";
+import { SectionUnavailable } from "#components/shared/section-unavailable";
+import { scopedHref } from "#lib/shell/app-shell-navigation";
+import { loadControlPanelFlags } from "#lib/flags/control-plane-flag-functions";
+import { AccessDeniedError } from "#lib/shared/loader-context";
+import { loginRedirect } from "#lib/auth/login-redirect";
+import { reportRouteError } from "#lib/observability/panel-observability";
+import { loadScopedSession } from "#lib/sessions/session-functions";
 
 export const Route = createFileRoute("/$orgSlug/$appSlug/$env/flags/")({
   loader: async ({ location, params }) => {

@@ -2,10 +2,10 @@ import { Button } from "@splitch/ui/components/button";
 import { Card, CardContent, CardHeader } from "@splitch/ui/components/card";
 import { useSuspenseQuery } from "@tanstack/react-query";
 import { createFileRoute, getRouteApi } from "@tanstack/react-router";
-import { ExperimentList } from "#components/experiment-list";
-import { PanelPageBody } from "#components/panel-page-body";
-import { scopedHref } from "#lib/app-shell-navigation";
-import { experimentsListQuery } from "#lib/experiments-query";
+import { ExperimentList } from "#components/experiments/experiment-list";
+import { PanelPageBody } from "#components/shell/panel-page-body";
+import { scopedHref } from "#lib/shell/app-shell-navigation";
+import { experimentsListQuery } from "#lib/experiments/experiments-query";
 
 const appScopeRoute = getRouteApi("/$orgSlug/$appSlug/$env");
 
