@@ -52,7 +52,6 @@ export const ConvexInstallationStatusSchema = ConvexInstallationSchema.extend({
       ]),
       httpStatus: z.number().int().min(100).max(599).optional(),
       retryAfterMs: z.number().int().nonnegative().optional(),
-      causeName: z.string().min(1).optional(),
       occurredAt: z.iso.datetime(),
     })
     .strict()

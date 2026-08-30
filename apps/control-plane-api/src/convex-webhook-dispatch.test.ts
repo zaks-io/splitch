@@ -89,6 +89,45 @@ describe("Convex config webhook dispatch", () => {
       ]),
     );
   });
+
+  it("reports a lease update failure after healthy siblings finish", async () => {
+    const firstBody = '{"deliveryId":"00000000-0000-4000-8000-000000000001"}';
+    const secondBody = '{"deliveryId":"00000000-0000-4000-8000-000000000002"}';
+    const encrypted = await encryptConvexSecret("webhook-secret", KEY, "v1");
+    const finishAttempts: string[] = [];
+    const repo = {
+      convex: {
+        claimDueDeliveries: async () => [
+          delivery(firstBody, encrypted.ciphertext),
+          delivery(secondBody, encrypted.ciphertext, {
+            deliveryId: "00000000-0000-4000-8000-000000000002",
+          }),
+        ],
+        finishDelivery: async (deliveryId: string) => {
+          finishAttempts.push(deliveryId);
+          if (deliveryId === "00000000-0000-4000-8000-000000000001")
+            throw new Error("D1 completion failed");
+        },
+      },
+    } as unknown as Repository;
+
+    await expect(
+      dispatchConvexWebhooks({
+        repo,
+        webhookKek: KEY,
+        fetcher: async () => new Response(null, { status: 202 }),
+        now: () => NOW,
+      }),
+    ).rejects.toThrow("1 Convex delivery lease updates failed");
+
+    expect(finishAttempts).toHaveLength(2);
+    expect(finishAttempts).toEqual(
+      expect.arrayContaining([
+        "00000000-0000-4000-8000-000000000001",
+        "00000000-0000-4000-8000-000000000002",
+      ]),
+    );
+  });
 });
 
 function delivery(

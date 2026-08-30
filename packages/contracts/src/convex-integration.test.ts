@@ -19,14 +19,12 @@ describe("Convex installation status", () => {
         latestDeliveryError: {
           kind: "internal",
           code: "DELIVERY_PREPARATION_FAILED",
-          causeName: "OperationError",
           occurredAt: "2026-08-30T15:35:52.000Z",
         },
       }).latestDeliveryError,
     ).toEqual({
       kind: "internal",
       code: "DELIVERY_PREPARATION_FAILED",
-      causeName: "OperationError",
       occurredAt: "2026-08-30T15:35:52.000Z",
     });
   });

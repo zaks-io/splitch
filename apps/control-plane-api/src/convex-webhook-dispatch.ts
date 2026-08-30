@@ -1,6 +1,6 @@
 import type { Repository } from "@splitch/db";
 import { decryptConvexSecret, signConvexWebhook } from "./convex-secret";
-import { describeCause, postWebhook, retryDelayMs } from "./webhook-transport";
+import { describeCause, postWebhook, retryDelayMs, type WebhookPost } from "./webhook-transport";
 
 const LEASE_MS = 30_000;
 const BATCH_SIZE = 25;
@@ -44,8 +44,9 @@ async function deliverSafely(
   leaseOwner: string,
   now: Date,
 ): Promise<void> {
+  let webhook: WebhookPost;
   try {
-    await deliverOne(deps, delivery, leaseOwner, now);
+    webhook = await prepareWebhook(deps, delivery, now);
   } catch (cause) {
     console.error("convex_webhook_delivery_preparation_failed", {
       deliveryId: delivery.deliveryId,
@@ -54,18 +55,18 @@ async function deliverSafely(
     await finishFailure(deps, delivery, leaseOwner, now, true, {
       kind: "internal",
       code: "DELIVERY_PREPARATION_FAILED",
-      causeName: cause instanceof Error ? cause.name : "UnknownError",
       occurredAt: now.toISOString(),
     });
+    return;
   }
+  await deliverOne(deps, delivery, leaseOwner, now, webhook);
 }
 
-async function deliverOne(
+async function prepareWebhook(
   deps: ConvexWebhookDispatchDeps,
   delivery: Delivery,
-  leaseOwner: string,
   now: Date,
-): Promise<void> {
+): Promise<WebhookPost> {
   const secret = await decryptConvexSecret(
     delivery.secretCiphertext,
     deps.webhookKek,
@@ -74,7 +75,7 @@ async function deliverOne(
   );
   const timestamp = Math.floor(now.getTime() / 1_000).toString();
   const signature = await signConvexWebhook(secret, timestamp, delivery.bodyJson);
-  const result = await postWebhook({
+  return {
     url: delivery.callbackUrl,
     body: delivery.bodyJson,
     headers: {
@@ -84,7 +85,17 @@ async function deliverOne(
       "splitch-timestamp": timestamp,
     },
     fetcher: deps.fetcher,
-  });
+  };
+}
+
+async function deliverOne(
+  deps: ConvexWebhookDispatchDeps,
+  delivery: Delivery,
+  leaseOwner: string,
+  now: Date,
+  webhook: WebhookPost,
+): Promise<void> {
+  const result = await postWebhook(webhook);
 
   if (result.outcome === "transport-failed") {
     console.error("convex_webhook_delivery_transport_failed", {

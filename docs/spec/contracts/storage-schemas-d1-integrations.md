@@ -62,16 +62,14 @@ pending rows.
         "DELIVERY_PREPARATION_FAILED"
   httpStatus?: integer
   retryAfterMs?: integer
-  causeName?: string
   occurredAt: ISO 8601
 }
 ```
 
 It is an allowlisted, at-most-1-KiB UTF-8 JSON value. The dispatcher never captures a response body,
 request body, callback query string, arbitrary header, stack, secret, configuration value, or Entity
-data. `causeName` contains only the runtime error class for a delivery preparation failure. Enum and
-numeric validation makes the envelope bounded before serialization, so fields are stored completely
-rather than truncated.
+data. Enum and numeric validation makes the envelope bounded before serialization, so fields are
+stored completely rather than truncated.
 
 ## Commit and delivery rules
 
