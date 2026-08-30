@@ -57,18 +57,21 @@ pending rows.
 
 ```text
 {
-  kind: "transport" | "http"
-  code: "DNS_ERROR" | "CONNECT_TIMEOUT" | "TLS_ERROR" | "HTTP_STATUS"
+  kind: "transport" | "http" | "internal"
+  code: "DNS_ERROR" | "CONNECT_TIMEOUT" | "TLS_ERROR" | "HTTP_STATUS" |
+        "DELIVERY_PREPARATION_FAILED"
   httpStatus?: integer
   retryAfterMs?: integer
+  causeName?: string
   occurredAt: ISO 8601
 }
 ```
 
 It is an allowlisted, at-most-1-KiB UTF-8 JSON value. The dispatcher never captures a response body,
 request body, callback query string, arbitrary header, stack, secret, configuration value, or Entity
-data. Enum and numeric validation makes the envelope bounded before serialization, so fields are
-stored completely rather than truncated.
+data. `causeName` contains only the runtime error class for a delivery preparation failure. Enum and
+numeric validation makes the envelope bounded before serialization, so fields are stored completely
+rather than truncated.
 
 ## Commit and delivery rules
 
@@ -76,6 +79,9 @@ stored completely rather than truncated.
   transaction as the config change. A transaction that rolls back creates no delivery.
 - Dispatch starts immediately after commit and is also recoverable by the Control Plane Worker's
   once-per-minute scheduled lease scanner.
+- One delivery's preparation or transport failure is isolated from every other claimed delivery. A
+  preparation failure records the delivery ID and bounded error envelope before releasing its lease;
+  healthy siblings still complete and acknowledge their responses.
 - Transient transport, `408`, `429`, and `5xx` failures retry after `5s`, `30s`, `2m`, `10m`, then
   `30m` with up to 20% jitter on every capped retry. A claim lease lasts 60 seconds. Other `4xx`
   responses are terminal until the installation is repaired or replaced.

@@ -24,11 +24,41 @@ export async function dispatchConvexWebhooks(deps: ConvexWebhookDispatchDeps): P
     BATCH_SIZE,
   );
 
-  await Promise.all(deliveries.map((delivery) => deliverOne(deps, delivery, leaseOwner, now)));
+  const settled = await Promise.allSettled(
+    deliveries.map((delivery) => deliverSafely(deps, delivery, leaseOwner, now)),
+  );
+  const rejected = settled.filter((result) => result.status === "rejected");
+  if (rejected.length > 0)
+    throw new AggregateError(
+      rejected.map((result) => result.reason),
+      `${rejected.length} Convex delivery lease updates failed`,
+    );
   return deliveries.length;
 }
 
 type Delivery = Awaited<ReturnType<Repository["convex"]["claimDueDeliveries"]>>[number];
+
+async function deliverSafely(
+  deps: ConvexWebhookDispatchDeps,
+  delivery: Delivery,
+  leaseOwner: string,
+  now: Date,
+): Promise<void> {
+  try {
+    await deliverOne(deps, delivery, leaseOwner, now);
+  } catch (cause) {
+    console.error("convex_webhook_delivery_preparation_failed", {
+      deliveryId: delivery.deliveryId,
+      cause: describeCause(cause),
+    });
+    await finishFailure(deps, delivery, leaseOwner, now, true, {
+      kind: "internal",
+      code: "DELIVERY_PREPARATION_FAILED",
+      causeName: cause instanceof Error ? cause.name : "UnknownError",
+      occurredAt: now.toISOString(),
+    });
+  }
+}
 
 async function deliverOne(
   deps: ConvexWebhookDispatchDeps,
