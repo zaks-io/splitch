@@ -1,5 +1,7 @@
 import type { DocBlock } from "./blocks";
 
+export const SPLITCH_SKILL_SOURCE = "https://github.com/zaks-io/splitch/tree/main/skills/splitch";
+
 /**
  * The contract a coding agent follows after the Control Panel has configured a
  * Flag, Metric, Experiment Run, or runtime integration. The panel-generated
@@ -10,6 +12,16 @@ export const codeAgentsDoc = {
   summary:
     "How to turn a Control Panel Flag, Metric, Experiment Run, or integration handoff into verified consumer code without corrupting Exposure or Metric Event data.",
   blocks: [
+    { kind: "heading", text: "Install the Splitch skill" },
+    {
+      kind: "prose",
+      text: "Install the public [Splitch skill](https://github.com/zaks-io/splitch/blob/main/skills/splitch/SKILL.md) in a consumer repository to make it available for automatic selection in Codex, Claude Code, and OpenCode. It teaches the agent to use the CLI and its stable JSON output instead of operating the Control Panel through a browser.",
+    },
+    {
+      kind: "code",
+      lang: "bash",
+      code: `npx skills add ${SPLITCH_SKILL_SOURCE}`,
+    },
     {
       kind: "prose",
       text: "The Control Panel generates a repository-ready prompt whenever a Splitch change needs consumer code. Paste it into the coding agent that can inspect the application repository. The configuration block is the desired Splitch state; the agent changes the consumer application, not the control plane.",

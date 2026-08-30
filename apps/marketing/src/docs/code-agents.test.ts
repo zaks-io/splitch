@@ -1,17 +1,22 @@
 import { describe, expect, it } from "vitest";
-import { codeAgentsDoc } from "./code-agents";
+import { codeAgentsDoc, SPLITCH_SKILL_SOURCE } from "./code-agents";
 import { codeAgentsDocMarkdown, llmsTxt } from "./markdown";
 import { DOCS_ORIGIN, docsPath } from "./site";
 
 describe("code-agent docs surface", () => {
   it("is indexed for agents through llms.txt", () => {
-    expect(llmsTxt()).toContain(
+    const index = llmsTxt();
+    expect(index).toContain(
       `- [${codeAgentsDoc.title}](${DOCS_ORIGIN}${docsPath.codeAgentsMarkdown()}): ${codeAgentsDoc.summary}`,
     );
+    expect(index).toContain(`npx skills add ${SPLITCH_SKILL_SOURCE}`);
   });
 
   it("pins the Exposure, Metric Event, credential, and completion contracts", () => {
     const markdown = codeAgentsDocMarkdown();
+    expect(markdown).toContain(`npx skills add ${SPLITCH_SKILL_SOURCE}`);
+    expect(markdown).toContain("Codex, Claude Code, and OpenCode");
+    expect(markdown).toContain("skills/splitch/SKILL.md");
     expect(markdown).toContain("<splitch_configuration>");
     expect(markdown).toContain("Client Key is public");
     expect(markdown).toContain("API Key is secret");

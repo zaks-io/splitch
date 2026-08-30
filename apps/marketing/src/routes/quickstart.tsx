@@ -4,6 +4,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { CodeSnippet } from "../components/code-snippet";
 import { QuickstartRecovery } from "../components/quickstart-recovery";
 import { QuickstartSteps } from "../components/quickstart-steps";
+import { SPLITCH_SKILL_SOURCE } from "../docs/code-agents";
 
 export const Route = createFileRoute("/quickstart")({
   head: () => ({
@@ -39,7 +40,13 @@ function QuickstartRoute() {
           <div className="grid max-w-2xl gap-2 rounded-lg border border-border bg-muted p-4">
             <p className="font-medium text-foreground text-sm">Building with a coding agent?</p>
             <p className="text-muted-foreground text-sm leading-relaxed">
-              Add splitch to it instead of pasting this page into its context.
+              Install the Splitch skill in the consumer repository. Codex, Claude Code, and OpenCode
+              will use the CLI and its stable JSON output instead of operating the Control Panel in
+              a browser.
+            </p>
+            <CodeSnippet code={`npx skills add ${SPLITCH_SKILL_SOURCE}`} />
+            <p className="text-muted-foreground text-sm leading-relaxed">
+              For an agent with native MCP support, you can also connect the remote server directly.
             </p>
             <CodeSnippet code="claude mcp add --transport http splitch https://mcp.splitch.dev" />
             <p className="text-muted-foreground text-sm leading-relaxed">
