@@ -28,8 +28,10 @@ test.describe("Experiment Results tab", () => {
       "/acme-labs/checkout-api/dev/experiments/experiment_checkout_significance_e2e/results",
     );
 
-    await expect(page.getByRole("heading", { name: "Lift by Variant" })).toBeVisible();
+    await page.getByRole("button", { name: /Decision metrics/ }).click();
+    await expect(page.getByRole("heading", { name: "Decision metrics" })).toBeVisible();
     await expect(page.getByRole("img", { name: /Relative lift with confidence/ })).toBeVisible();
+    await page.getByRole("button", { name: /Run health/ }).click();
     const srm = page.locator('[data-srm-tier="clean"]');
     await expect(srm.getByText("Balanced").first()).toBeVisible();
     // The gate allows the decision, and the control is still disabled: the
@@ -49,13 +51,15 @@ test.describe("Experiment Results tab", () => {
     await page.setViewportSize({ width: 1440, height: 1100 });
     await page.goto("/acme-labs/checkout-api/prod/experiments/experiment_checkout_srm_e2e/results");
 
+    await page.getByRole("button", { name: /Run health/ }).click();
     const srm = page.locator('[data-srm-tier="confirmed"]');
     await expect(srm).toBeVisible();
     await expect(srm.getByText("Confirmed mismatch").first()).toBeVisible();
 
     // The warning qualifies the numbers; it never replaces them.
+    await page.getByRole("button", { name: /Decision metrics/ }).click();
     await expect(page.getByRole("img", { name: /Relative lift with confidence/ })).toBeVisible();
-    await expect(page.getByRole("heading", { name: "Lift by Variant" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Decision metrics" })).toBeVisible();
     await expect(srm.getByRole("columnheader", { name: "Observed" })).toBeVisible();
     await expect(page.getByText(/Exposures control/)).toBeVisible();
 
@@ -81,7 +85,8 @@ test.describe("Experiment Results tab", () => {
     await expect(blocked).toContainText("No decision-valid result");
     await expect(page.getByRole("button", { name: "Conclude Run" })).toBeDisabled();
     await expect(page.getByText(/Enforced by control-plane-api/)).toBeVisible();
-    // Guardrails and health are reported beside the refusal, not instead of it.
+    // Guardrails and health are reported above the refusal, not instead of it.
+    await page.getByRole("button", { name: /Run health/ }).click();
     await expect(page.getByText("__multiple__ quarantine rate")).toBeVisible();
 
     await captureThemeScreenshots(page, testInfo, "experiment-results-gated");
@@ -106,12 +111,14 @@ test.describe("Experiment Results tab", () => {
     await expect(integrity).toBeVisible();
     await expect(integrity.getByText(/absent from the Variant set this Run froze/)).toBeVisible();
 
+    await page.getByRole("button", { name: /Run health/ }).click();
     const srm = page.locator('[data-srm-tier="confirmed"]');
     await expect(srm).toBeVisible();
     await expect(srm.getByText("Confirmed mismatch").first()).toBeVisible();
 
     // Neither card withholds the numbers.
-    await expect(page.getByRole("heading", { name: "Lift by Variant" })).toBeVisible();
+    await page.getByRole("button", { name: /Decision metrics/ }).click();
+    await expect(page.getByRole("heading", { name: "Decision metrics" })).toBeVisible();
 
     // Distinguishable by icon, not by reading either card's copy.
     const integrityIcon = page.getByTestId("control-integrity-alert-icon");
@@ -146,7 +153,9 @@ test.describe("Experiment Results tab", () => {
     const advisory = page.getByTestId("ship-guardrail-advisory");
     await expect(advisory).toContainText("checkout-reliability");
     await expect(advisory).toContainText("would ship a known regression");
-    await expect(page.getByText("breached").first()).toBeVisible();
+    const guardrails = page.getByRole("button", { name: /Guardrails/ });
+    await expect(guardrails).toContainText("checkout-reliability");
+    await expect(guardrails).toContainText("Concluding now ships a known regression");
 
     await captureThemeScreenshots(page, testInfo, "experiment-results-guardrail-breach");
   });
@@ -162,10 +171,14 @@ test.describe("Experiment Results tab", () => {
   test("ships no way around the gate", () => {
     const sources = [
       "apps/control-panel/src/components/experiment-results.tsx",
+      "apps/control-panel/src/components/experiment-results-arms.tsx",
       "apps/control-panel/src/components/experiment-results-decision.tsx",
+      "apps/control-panel/src/components/experiment-results-hero.tsx",
       "apps/control-panel/src/components/experiment-results-panel.tsx",
       "apps/control-panel/src/components/experiment-results-srm.tsx",
+      "apps/control-panel/src/components/experiment-results-station.tsx",
       "apps/control-panel/src/components/experiment-results-guardrails.tsx",
+      "apps/control-panel/src/components/experiment-results-stations.tsx",
     ].map((path) => readFileSync(resolve(repoRoot, path), "utf8").toLowerCase());
 
     for (const source of sources) {

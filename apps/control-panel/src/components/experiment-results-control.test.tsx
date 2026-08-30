@@ -5,6 +5,7 @@ import { ExperimentResults } from "./experiment-results";
 import {
   controlDisagreementStats,
   resultsFixture,
+  runFixture,
   statsWithAnalysisControl,
 } from "./experiment-results-test-fixtures";
 import { visibleText } from "./experiment-results-test-markup";
@@ -35,7 +36,10 @@ const disagreement: FrozenControlIdentity = {
 function unresolvableHtml() {
   const stats = statsWithAnalysisControl();
   return renderToStaticMarkup(
-    <ExperimentResults results={resultsFixture(stats, { control: unresolvable })} />,
+    <ExperimentResults
+      run={runFixture()}
+      results={resultsFixture(stats, { control: unresolvable })}
+    />,
   );
 }
 
@@ -113,6 +117,13 @@ describe("ExperimentResults with an Analysis Control disagreement", () => {
   function disagreementHtml() {
     return renderToStaticMarkup(
       <ExperimentResults
+        run={runFixture({
+          allocation: { legacy_checkout: 50, control: 50 },
+          variantsJson: JSON.stringify([
+            { id: "variant_legacy", name: "legacy_checkout", value: false },
+            { id: "variant_control", name: "control", value: true },
+          ]),
+        })}
         results={resultsFixture(controlDisagreementStats(), { control: disagreement })}
       />,
     );
@@ -181,8 +192,9 @@ describe("ExperimentResults with an Analysis Control disagreement", () => {
 });
 
 function metricRow(html: string, variant: string): string {
-  const row = (html.match(/<tr[\s\S]*?<\/tr>/g) ?? []).find((candidate) =>
-    candidate.includes(`>${variant}</td>`),
+  const row = (html.match(/<tr[\s\S]*?<\/tr>/g) ?? []).find(
+    (candidate) =>
+      candidate.includes(`>${variant}</td>`) && candidate.includes("checkout_conversion"),
   );
   if (!row) throw new Error(`missing Metric result row for ${variant}`);
   return row;

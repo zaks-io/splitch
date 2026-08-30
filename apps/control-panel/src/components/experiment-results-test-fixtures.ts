@@ -7,6 +7,7 @@ import {
 import type {
   PanelExperimentResultsNoData,
   PanelExperimentResultsReady,
+  PanelExperimentRun,
 } from "@splitch/control-plane-sdk/panel-experiments";
 
 /**
@@ -240,6 +241,43 @@ export function resultsNoDataFixture(
     runStatus: "running",
     control: frozenControl(),
     missing: "metric_events",
+    ...overrides,
+  };
+}
+
+export function runFixture(overrides: Partial<PanelExperimentRun> = {}): PanelExperimentRun {
+  return {
+    id: "run_2",
+    experimentId: "exp_1",
+    environmentId: "env_1",
+    runNumber: 2,
+    status: "running",
+    targetingKey: "userId",
+    targetingKeyType: "user",
+    activationMetricId: null,
+    salt: "salt-2",
+    allocation: { control: 50, treatment: 50 },
+    controlVariantId: "variant_control",
+    variantsJson: JSON.stringify([
+      { id: "variant_control", name: "control", value: false },
+      { id: "variant_treatment", name: "treatment", value: true },
+    ]),
+    targetingRulesJson: "[]",
+    targetN: null,
+    decisionFamilyJson: "[]",
+    guardrailDecisionsJson: "[]",
+    metricVarianceConfigJson: "[]",
+    decisionMetricIds: [],
+    decisionGuardrailMetricIds: [],
+    confidenceLevel: 0.95,
+    horizon: "sequential",
+    sampleSizeLocked: null,
+    configHash: "sha256:2",
+    startedAt: "2026-07-19T00:00:00.000Z",
+    endedAt: null,
+    startReason: null,
+    endReason: null,
+    createdAt: "2026-07-19T00:00:00.000Z",
     ...overrides,
   };
 }

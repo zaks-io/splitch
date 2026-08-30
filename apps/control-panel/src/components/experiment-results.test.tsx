@@ -7,6 +7,7 @@ import {
   breachedGuardrailStats,
   modestLiftStats,
   resultsFixture,
+  runFixture,
   srmFiringStats,
   statsFixture,
   underpoweredStats,
@@ -15,7 +16,7 @@ import {
 describe("ExperimentResults", () => {
   it("renders the lift plot, the numbers and an allowed decision on a clean Run", () => {
     const html = renderToStaticMarkup(
-      <ExperimentResults results={resultsFixture(statsFixture())} />,
+      <ExperimentResults run={runFixture()} results={resultsFixture(statsFixture())} />,
     );
 
     expect(html).toContain("+6.4%");
@@ -30,7 +31,7 @@ describe("ExperimentResults", () => {
   it("counts the checks that passed instead of claiming they all did", () => {
     const results = resultsFixture(statsFixture());
     const passed = results.gate.checks.filter((check) => check.status === "pass").length;
-    const html = renderToStaticMarkup(<ExperimentResults results={results} />);
+    const html = renderToStaticMarkup(<ExperimentResults run={runFixture()} results={results} />);
 
     expect(passed).toBeLessThan(results.gate.checks.length);
     expect(html).toContain(`${passed} of ${results.gate.checks.length} readiness checks passed`);
@@ -39,7 +40,7 @@ describe("ExperimentResults", () => {
 
   it("renders a realistic single-digit lift without collapsing its interval", () => {
     const html = renderToStaticMarkup(
-      <ExperimentResults results={resultsFixture(modestLiftStats())} />,
+      <ExperimentResults run={runFixture()} results={resultsFixture(modestLiftStats())} />,
     );
 
     expect(html).toContain("+2.4%");
@@ -56,6 +57,7 @@ describe("ExperimentResults", () => {
     const render = (pValue: number) =>
       renderToStaticMarkup(
         <ExperimentResults
+          run={runFixture()}
           results={resultsFixture({ ...base, arm_results: [{ ...arm, p_value: pValue }] })}
         />,
       );
@@ -72,6 +74,7 @@ describe("ExperimentResults", () => {
     if (!arm) throw new Error("fixture must produce an arm");
     const html = renderToStaticMarkup(
       <ExperimentResults
+        run={runFixture()}
         results={resultsFixture({
           ...base,
           arm_results: [{ ...arm, ci_lower: -2036.6, ci_upper: 5036.6, is_significant: true }],
@@ -87,7 +90,7 @@ describe("ExperimentResults", () => {
   // otherwise clean gate the most misleading state the tab can reach.
   it("names a breached Guardrail in the ship decision without blocking on it", () => {
     const results = resultsFixture(breachedGuardrailStats());
-    const html = renderToStaticMarkup(<ExperimentResults results={results} />);
+    const html = renderToStaticMarkup(<ExperimentResults run={runFixture()} results={results} />);
 
     expect(results.gate.shipAllowed).toBe(true);
     expect(html).toContain('data-testid="ship-guardrail-advisory"');
@@ -102,7 +105,9 @@ describe("ExperimentResults", () => {
     const stats = statsFixture();
     expect(stats.arm_results.some((arm) => arm.variant === "control")).toBe(false);
 
-    const html = renderToStaticMarkup(<ExperimentResults results={resultsFixture(stats)} />);
+    const html = renderToStaticMarkup(
+      <ExperimentResults run={runFixture()} results={resultsFixture(stats)} />,
+    );
 
     expect(html).toContain("Baseline (control) Variant is missing from these results");
     expect(html).not.toContain("at zero lift by definition");
@@ -114,6 +119,7 @@ describe("ExperimentResults", () => {
   it("fails loud when a frozen Control name matches no drawn arm", () => {
     const html = renderToStaticMarkup(
       <ExperimentResults
+        run={runFixture()}
         results={resultsFixture(statsFixture(), {
           control: {
             state: "frozen",
@@ -137,6 +143,7 @@ describe("ExperimentResults", () => {
     if (!treatment) throw new Error("fixture must produce a treatment arm");
     const html = renderToStaticMarkup(
       <ExperimentResults
+        run={runFixture()}
         results={resultsFixture({
           ...stats,
           arm_results: [
@@ -154,7 +161,9 @@ describe("ExperimentResults", () => {
         })}
       />,
     );
-    const svg = html.slice(html.indexOf("<svg"), html.indexOf("</svg>"));
+    const plotStart = html.indexOf('<svg aria-label="Relative lift with confidence intervals');
+    if (plotStart < 0) throw new Error("missing confidence interval plot");
+    const svg = html.slice(plotStart, html.indexOf("</svg>", plotStart));
 
     expect(svg).toContain("0% by definition");
     expect(svg).toContain("baseline, 0% lift by definition");
@@ -175,9 +184,23 @@ describe("ExperimentResults", () => {
 });
 
 describe("ExperimentResults warning states", () => {
+  it("keeps every Guardrail breach visible while its station is collapsed", () => {
+    const html = renderToStaticMarkup(
+      <ExperimentResults run={runFixture()} results={resultsFixture(breachedGuardrailStats())} />,
+    );
+    const guardrailsTrigger = (html.match(/<button[\s\S]*?<\/button>/g) ?? []).find((button) =>
+      button.includes("Guardrails"),
+    );
+    if (!guardrailsTrigger) throw new Error("missing Guardrails station trigger");
+
+    expect(guardrailsTrigger).toContain('aria-expanded="false"');
+    expect(guardrailsTrigger).toContain("checkout_latency_p95");
+    expect(guardrailsTrigger).toContain("Concluding now ships a known regression");
+  });
+
   it("never hides the numbers behind a firing SRM warning", () => {
     const html = renderToStaticMarkup(
-      <ExperimentResults results={resultsFixture(srmFiringStats())} />,
+      <ExperimentResults run={runFixture()} results={resultsFixture(srmFiringStats())} />,
     );
 
     expect(html).toContain('data-srm-tier="confirmed"');
@@ -194,12 +217,13 @@ describe("ExperimentResults warning states", () => {
     expect(html).toContain("10,110");
   });
 
-  it("blocks the ship action naming the failing SRM check", () => {
+  it("shows the gate's failing check without expanding a station", () => {
     const html = renderToStaticMarkup(
-      <ExperimentResults results={resultsFixture(srmFiringStats())} />,
+      <ExperimentResults run={runFixture()} results={resultsFixture(srmFiringStats())} />,
     );
 
     expect(html).toContain('data-testid="ship-blocked"');
+    expect(html).toContain('aria-expanded="false"');
     expect(html).toContain("Sample Ratio Mismatch is firing");
     expect(html).toContain("Conclude Run");
     expect(html).toMatch(/<button[^>]*\sdisabled=""/);
@@ -207,7 +231,7 @@ describe("ExperimentResults warning states", () => {
 
   it("blocks the ship action naming the underpowered Metric, numbers still shown", () => {
     const html = renderToStaticMarkup(
-      <ExperimentResults results={resultsFixture(underpoweredStats())} />,
+      <ExperimentResults run={runFixture()} results={resultsFixture(underpoweredStats())} />,
     );
 
     expect(html).toContain('data-testid="ship-blocked"');
@@ -219,7 +243,7 @@ describe("ExperimentResults warning states", () => {
 
   it("names the Worker as the source of the refusal", () => {
     const html = renderToStaticMarkup(
-      <ExperimentResults results={resultsFixture(srmFiringStats())} />,
+      <ExperimentResults run={runFixture()} results={resultsFixture(srmFiringStats())} />,
     );
 
     expect(html).toContain("Enforced by control-plane-api");
@@ -250,7 +274,7 @@ describe("ExperimentResults warning states", () => {
         enforcedBy: "control-plane-api",
       },
     });
-    const html = renderToStaticMarkup(<ExperimentResults results={results} />);
+    const html = renderToStaticMarkup(<ExperimentResults run={runFixture()} results={results} />);
 
     expect(html).toContain("No blocking check");
     expect(html).toContain("1 of 2 readiness checks passed");
@@ -264,12 +288,14 @@ describe("ExperimentResults warning states", () => {
    */
   it("never offers a live conclude action while the mutation is unbuilt", () => {
     for (const stats of [statsFixture(), srmFiringStats(), breachedGuardrailStats()]) {
-      const html = renderToStaticMarkup(<ExperimentResults results={resultsFixture(stats)} />);
+      const html = renderToStaticMarkup(
+        <ExperimentResults run={runFixture()} results={resultsFixture(stats)} />,
+      );
       const buttons = html.match(/<button[\s\S]*?<\/button>/g) ?? [];
+      const conclude = buttons.filter((button) => button.includes("Conclude Run"));
 
-      expect(buttons).toHaveLength(1);
-      expect(buttons[0]).toContain("Conclude Run");
-      expect(buttons[0]).toMatch(/\sdisabled=""/);
+      expect(conclude).toHaveLength(1);
+      expect(conclude[0]).toMatch(/\sdisabled=""/);
       expect(html).toContain("SPL-158");
     }
   });

@@ -1,14 +1,16 @@
 import type { FrozenControlIdentity } from "@splitch/contracts";
-import type { PanelExperimentResultsReady } from "@splitch/control-plane-sdk/panel-experiments";
-import { ExperimentResultsCiPlot } from "./experiment-results-ci-plot";
+import type {
+  PanelExperimentResultsReady,
+  PanelExperimentRun,
+} from "@splitch/control-plane-sdk/panel-experiments";
+import { ExperimentResultsArms } from "./experiment-results-arms";
 import {
   analysisControlVariant,
   ExperimentResultsControlIntegrity,
 } from "./experiment-results-control";
 import { ExperimentResultsDecision } from "./experiment-results-decision";
-import { ExperimentResultsGuardrails } from "./experiment-results-guardrails";
-import { ExperimentResultsMetricsTable } from "./experiment-results-metrics-table";
-import { ExperimentResultsSrm } from "./experiment-results-srm";
+import { ExperimentResultsHero } from "./experiment-results-hero";
+import { ExperimentResultsStations } from "./experiment-results-stations";
 
 /**
  * The Results tab for exactly one Run.
@@ -19,60 +21,77 @@ import { ExperimentResultsSrm } from "./experiment-results-srm";
  * last and is the only thing a failing check is allowed to withhold.
  */
 
-export function ExperimentResults({ results }: { results: PanelExperimentResultsReady }) {
+export function ExperimentResults({
+  results,
+  run,
+}: {
+  results: PanelExperimentResultsReady;
+  run: PanelExperimentRun;
+}) {
   const measurementAnchor = analysisControlVariant(results.control);
+  const variantOrder = frozenVariantNames(run.variantsJson);
   return (
-    <section aria-labelledby="results-heading" className="grid gap-6">
-      <header className="grid gap-1">
-        <p className="font-mono text-muted-foreground text-xs uppercase tracking-[0.16em]">
-          Run {results.runNumber} · {results.runStatus}
-        </p>
-        <h2 className="font-semibold text-foreground text-xl" id="results-heading">
-          Results
-        </h2>
-        <p className="max-w-prose text-muted-foreground text-sm">
-          Measured on Run {results.runNumber} alone. splitch never pools data across Runs, so a
-          configuration change always starts a fresh analysis window.
-        </p>
-      </header>
+    <section aria-labelledby="results-heading" className="grid">
+      <ExperimentResultsHero
+        baseline={measurementAnchor}
+        results={results}
+        run={run}
+        variantOrder={variantOrder}
+      />
 
-      <ExperimentResultsControlIntegrity control={results.control} resultsRendered={true} />
+      {results.control.state === "frozen" ? null : (
+        <div className="mt-6">
+          <ExperimentResultsControlIntegrity control={results.control} resultsRendered={true} />
+        </div>
+      )}
 
-      <div className="rounded-lg border border-border bg-card p-5 shadow-sm">
-        <h3 className="font-semibold text-base text-foreground">Lift by Variant</h3>
-        <p className="mt-1 mb-4 max-w-prose text-muted-foreground text-sm">
-          Relative lift against {measurementAnchor}, with an always-valid confidence sequence.
-          Checking mid-Run is safe: the interval already accounts for continuous peeking.
-        </p>
-        <ExperimentResultsCiPlot
+      <div className="pt-9">
+        <ExperimentResultsArms
+          allocation={run.allocation}
+          baseline={measurementAnchor}
+          dedupedCounts={results.stats.health.deduped_counts}
+          variantOrder={variantOrder}
+        />
+        <ExperimentResultsStations
+          baseline={measurementAnchor}
+          results={results}
+          variantOrder={variantOrder}
+        />
+        <ExperimentResultsDecision
+          baseline={measurementAnchor}
           control={results.control}
-          results={results.stats.arm_results}
-          significance={results.significance}
-        />
-      </div>
-
-      <ExperimentResultsMetricsTable
-        control={results.control}
-        results={results.stats.arm_results}
-        significance={results.significance}
-      />
-
-      <div className="grid gap-6 xl:grid-cols-2">
-        <ExperimentResultsSrm srm={results.srm} stats={results.stats} />
-        <ExperimentResultsGuardrails
+          gate={results.gate}
           guardrails={results.stats.guardrail_results}
-          health={results.stats.health}
+          runStatus={results.runStatus}
+          variantOrder={variantOrder}
         />
       </div>
-
-      <ExperimentResultsDecision
-        control={results.control}
-        gate={results.gate}
-        guardrails={results.stats.guardrail_results}
-        runStatus={results.runStatus}
-      />
     </section>
   );
+}
+
+function frozenVariantNames(raw: string): string[] {
+  let value: unknown;
+  try {
+    value = JSON.parse(raw);
+  } catch {
+    throw new Error("Run variantsJson is not valid JSON");
+  }
+  if (!Array.isArray(value) || value.length === 0) throw new Error("Run has no frozen Variants");
+  const names = value.map((variant) => {
+    if (
+      typeof variant !== "object" ||
+      variant === null ||
+      !("name" in variant) ||
+      typeof variant.name !== "string" ||
+      variant.name.length === 0
+    ) {
+      throw new Error("Run contains a frozen Variant without a name");
+    }
+    return variant.name;
+  });
+  if (new Set(names).size !== names.length) throw new Error("Run contains duplicate Variant names");
+  return names;
 }
 
 export function ExperimentResultsEmpty() {
