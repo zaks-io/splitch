@@ -1,3 +1,9 @@
+import {
+  type BeginOutcome,
+  beginDelivery,
+  isUnresolved,
+  type MetricEventDeliveryAttempt,
+} from "./metric-event-delivery-attempt";
 import type { Env } from "./types";
 
 export interface MetricEventClaim {
@@ -26,6 +32,7 @@ interface ClaimState {
   readonly row?: Record<string, unknown>;
   queued: boolean;
   deleted: boolean;
+  delivery?: MetricEventDeliveryAttempt;
 }
 
 const STATE_KEY = "metric-event-claim";
@@ -67,6 +74,8 @@ export class MetricEventOutboxDurableObject {
 
   private async write(path: string, request: Request): Promise<Response> {
     if (path === "/suppress") return this.suppress(request);
+    if (path === "/begin-delivery") return this.beginDelivery(request);
+    if (path === "/settle-delivery") return this.settleDelivery(request);
     if (path !== "/claim") return new Response("not found", { status: 404 });
     const incoming = (await request.json()) as ClaimState;
     const existing = await this.ctx.storage.get<ClaimState>(STATE_KEY);
@@ -94,6 +103,54 @@ export class MetricEventOutboxDurableObject {
     await this.ctx.storage.put(STATE_KEY, state);
   }
 
+  /**
+   * The write-ahead step. Nothing may reach Tinybird for this row until this
+   * record says so, so the decision and the durable write happen here, inside
+   * the object that a privacy deletion also mutates.
+   */
+  private async beginDelivery(request: Request): Promise<Response> {
+    const { attemptId } = (await request.json()) as { attemptId?: unknown };
+    if (typeof attemptId !== "string" || attemptId.length === 0) {
+      return new Response("invalid delivery attempt id", { status: 400 });
+    }
+    const existing = await this.ctx.storage.get<ClaimState>(STATE_KEY);
+    if (existing === undefined) {
+      throw new Error("Metric Event outbox has no record for a queued delivery");
+    }
+    if (existing.deleted) return Response.json({ kind: "deleted" } satisfies BeginOutcome);
+    const { outcome, next } = beginDelivery(existing.delivery, attemptId);
+    if (next) await this.ctx.storage.put(STATE_KEY, { ...existing, delivery: next });
+    if (outcome) return Response.json(outcome);
+    if (existing.row === undefined) {
+      throw new Error("Metric Event outbox row is unavailable");
+    }
+    if (next === undefined) {
+      throw new Error("Metric Event outbox claimed a delivery without recording an attempt");
+    }
+    // The attempt travels with the row so the caller settles the count this
+    // record just wrote, instead of reporting a first attempt on every retry.
+    return Response.json({
+      kind: "claimed",
+      row: existing.row,
+      attempt: next,
+    } satisfies BeginOutcome);
+  }
+
+  private async settleDelivery(request: Request): Promise<Response> {
+    const attempt = (await request.json()) as MetricEventDeliveryAttempt;
+    const existing = await this.ctx.storage.get<ClaimState>(STATE_KEY);
+    if (existing === undefined) {
+      throw new Error("Metric Event outbox has no record for a settled delivery");
+    }
+    if (existing.delivery?.attemptId !== attempt.attemptId) {
+      // A later attempt already owns the record; settling here would overwrite
+      // its state with a stale outcome.
+      return new Response("delivery attempt is no longer current", { status: 409 });
+    }
+    await this.ctx.storage.put(STATE_KEY, { ...existing, delivery: attempt });
+    return Response.json({ settled: attempt.state });
+  }
+
   private async suppress(request: Request): Promise<Response> {
     const input = (await request.json()) as Partial<ClaimState>;
     if (
@@ -106,6 +163,15 @@ export class MetricEventOutboxDurableObject {
     const existing = await this.ctx.storage.get<ClaimState>(STATE_KEY);
     if (existing !== undefined && existing.fingerprint !== input.fingerprint) {
       return new Response("suppression claim conflicts with existing event", { status: 409 });
+    }
+    if (isUnresolved(existing?.delivery)) {
+      // Redacting now would return a deletion proof while this row is still on
+      // its way to Tinybird, or while reconciliation still needs the payload.
+      // The caller retries; an attempt settles within one Tinybird round trip.
+      return new Response(
+        `delivery attempt ${String(existing?.delivery?.state)} for this event is unresolved`,
+        { status: 409 },
+      );
     }
     await this.ctx.storage.put(STATE_KEY, {
       fingerprint: input.fingerprint,

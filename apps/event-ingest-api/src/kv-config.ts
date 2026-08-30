@@ -1,8 +1,8 @@
 import {
   ExperimentConfigKVSchema,
-  RunConfigKVSchema,
   experimentConfigKey,
   kvEnvelope,
+  RunConfigKVSchema,
   runConfigKey,
 } from "@splitch/contracts";
 import { emptyError, serviceUnavailable, validationError } from "./errors";

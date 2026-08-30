@@ -15,13 +15,13 @@ import {
   notDelegatedResponse,
   type Observability,
 } from "@splitch/worker-runtime";
+import { authenticateDelegatedDataPlaneCredential } from "./client-key-auth";
 import { appIdentityPrivacyInventoryStub } from "./entity-metric-privacy";
 import {
   handleEntityMetricPrivacy,
   requireEntityMetricPrivacyBinding,
 } from "./entity-metric-privacy-handler";
 import { EntityMetricPrivacyDurableObject } from "./entity-metric-privacy-store";
-import { authenticateDelegatedDataPlaneCredential } from "./client-key-auth";
 import { renderError } from "./errors";
 import { handleEvaluationCommit } from "./evaluation-commit";
 import { EvaluationCommitOutboxDurableObject } from "./evaluation-commit-outbox";
@@ -256,10 +256,10 @@ function recordRequest(
 }
 
 export {
+  EntityMetricPrivacyDurableObject,
   EvaluationCommitOutboxDurableObject,
   EvaluationUsageReplayWindowDurableObject,
   IngestAdmissionGateDurableObject,
   MetricEventOutboxDurableObject,
   MetricEventRateLimitDurableObject,
-  EntityMetricPrivacyDurableObject,
 };

@@ -5,10 +5,10 @@ import {
 import { describe, expect, it } from "vitest";
 import { authenticateDelegatedDataPlaneCredential } from "./client-key-auth";
 import {
+  type CredentialKind,
   credentialFixtures,
   credentialKey,
   credentialRecord,
-  type CredentialKind,
   delegatedIdentity,
   envWithCredential,
   envWithValues,

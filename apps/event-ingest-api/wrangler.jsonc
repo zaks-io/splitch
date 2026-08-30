@@ -38,12 +38,16 @@
     }
   ],
   "queues": {
-    "producers": [{ "binding": "METRIC_EVENTS_QUEUE", "queue": "splitch-metric-events-local" }],
+    "producers": [
+      { "binding": "METRIC_EVENTS_QUEUE", "queue": "splitch-metric-events-local" },
+      { "binding": "METRIC_EVENTS_DLQ", "queue": "splitch-metric-events-local-dlq" }
+    ],
     "consumers": [
       {
         "queue": "splitch-metric-events-local",
         "max_batch_size": 100,
-        "max_batch_timeout": 5,
+        "max_batch_timeout": 1,
+        "max_concurrency": 5,
         "max_retries": 7,
         "dead_letter_queue": "splitch-metric-events-local-dlq"
       }
@@ -141,13 +145,15 @@
       ],
       "queues": {
         "producers": [
-          { "binding": "METRIC_EVENTS_QUEUE", "queue": "splitch-metric-events-shared-preview" }
+          { "binding": "METRIC_EVENTS_QUEUE", "queue": "splitch-metric-events-shared-preview" },
+          { "binding": "METRIC_EVENTS_DLQ", "queue": "splitch-metric-events-shared-preview-dlq" }
         ],
         "consumers": [
           {
             "queue": "splitch-metric-events-shared-preview",
             "max_batch_size": 100,
-            "max_batch_timeout": 5,
+            "max_batch_timeout": 1,
+            "max_concurrency": 5,
             "max_retries": 7,
             "dead_letter_queue": "splitch-metric-events-shared-preview-dlq"
           }
@@ -247,12 +253,16 @@
         { "binding": "CREDENTIAL_STORE", "id": "2c0082cdd2f4426f8cfeb4d2bbd62277" }
       ],
       "queues": {
-        "producers": [{ "binding": "METRIC_EVENTS_QUEUE", "queue": "splitch-metric-events" }],
+        "producers": [
+          { "binding": "METRIC_EVENTS_QUEUE", "queue": "splitch-metric-events" },
+          { "binding": "METRIC_EVENTS_DLQ", "queue": "splitch-metric-events-dlq" }
+        ],
         "consumers": [
           {
             "queue": "splitch-metric-events",
             "max_batch_size": 100,
-            "max_batch_timeout": 5,
+            "max_batch_timeout": 1,
+            "max_concurrency": 5,
             "max_retries": 7,
             "dead_letter_queue": "splitch-metric-events-dlq"
           }

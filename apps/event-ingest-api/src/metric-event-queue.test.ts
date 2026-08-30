@@ -1,7 +1,14 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import worker from "./index";
 import { METRIC_EVENT_MAX_RETRIES, metricEventRetryDelaySeconds } from "./metric-event-queue";
+import { makeQueueFixture, type QueueFixture } from "./metric-event-queue-test-fixture";
 import type { Env } from "./types";
+
+let fixture: QueueFixture;
+
+beforeEach(() => {
+  fixture = makeQueueFixture();
+});
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -9,87 +16,70 @@ afterEach(() => {
 });
 
 describe("Metric Event queue delivery", () => {
-  it("acknowledges every successfully appended message", async () => {
-    const fetch = vi.fn().mockResolvedValue(new Response(null, { status: 202 }));
-    vi.stubGlobal("fetch", fetch);
-    const first = queueMessage("message-1", metricEvent("event-1"));
-    const second = queueMessage("message-2", metricEvent("event-2"));
-    const batch = messageBatch([first, second]);
-
-    await deliver(batch, deliveryEnv());
-
-    expect(fetch).toHaveBeenCalledTimes(2);
-    expect(first.ack).toHaveBeenCalledOnce();
-    expect(first.retry).not.toHaveBeenCalled();
-    expect(second.ack).toHaveBeenCalledOnce();
-    expect(second.retry).not.toHaveBeenCalled();
-    expect(batch.ackAll).not.toHaveBeenCalled();
-    expect(batch.retryAll).not.toHaveBeenCalled();
-  });
-
-  it("retries a failed message without retrying its successful neighbors", async () => {
-    const fetch = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
-      const row = JSON.parse(String(init?.body)) as { event_id: string };
-      return new Response(null, { status: row.event_id === "event-bad" ? 500 : 202 });
-    });
-    vi.stubGlobal("fetch", fetch);
+  /**
+   * The batch shares one Tinybird request, so per-message isolation now lives
+   * in admission: a row that cannot even be admitted keeps its own failure
+   * instead of stranding the rows that were fine.
+   */
+  it("retries an unadmittable message without retrying its neighbors", async () => {
+    stubTinybird();
     const error = vi.spyOn(console, "error").mockImplementation(() => {});
-    const first = queueMessage("message-1", metricEvent("event-good-1"));
-    const failed = queueMessage("message-2", metricEvent("event-bad"));
-    const third = queueMessage("message-3", metricEvent("event-good-2"));
-    const batch = messageBatch([first, failed, third]);
+    const first = await sealed("event-good-1");
+    const broken = queueMessage("message-broken", withoutDedupKey(metricEvent("event-bad")));
+    const third = await sealed("event-good-2");
+    const batch = messageBatch([first, broken, third]);
 
-    await deliver(batch, deliveryEnv());
+    await deliver(batch, fixture.env);
 
     expect(first.ack).toHaveBeenCalledOnce();
     expect(first.retry).not.toHaveBeenCalled();
-    expect(failed.ack).not.toHaveBeenCalled();
-    expect(failed.retry).toHaveBeenCalledOnce();
+    expect(broken.ack).not.toHaveBeenCalled();
+    expect(broken.retry).toHaveBeenCalledOnce();
     expect(third.ack).toHaveBeenCalledOnce();
-    expect(third.retry).not.toHaveBeenCalled();
     expect(batch.ackAll).not.toHaveBeenCalled();
     expect(batch.retryAll).not.toHaveBeenCalled();
     expect(error).toHaveBeenCalledWith("event-ingest-api Metric Event delivery failed", {
-      queueMessageId: "message-2",
+      queueMessageId: "message-broken",
       attempts: 2,
       maxRetries: 7,
       ...identityOf("event-bad"),
-      errorMessage: "Tinybird append failed with HTTP 500",
+      dedupKey: "<absent>",
+      errorMessage: "Metric Event row has no dedup_key",
     });
   });
 
   it("logs the complete Metric Event identity when its final failed attempt is discarded", async () => {
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(null, { status: 500 })));
+    stubTinybird(500);
     const error = vi.spyOn(console, "error").mockImplementation(() => {});
-    const failed = queueMessage("message-final-attempt", metricEvent("event-discarded"), 8);
+    const failed = await sealed("event-discarded", 8);
 
-    await deliver(messageBatch([failed]), deliveryEnv());
+    await deliver(messageBatch([failed]), fixture.env);
 
-    expect(failed.ack).not.toHaveBeenCalled();
-    expect(failed.retry).toHaveBeenCalledOnce();
-    expect(error).toHaveBeenCalledOnce();
+    // The eighth delivery is the last, so the failure is dead-lettered here
+    // rather than retried into Cloudflare's own queue.
+    expect(failed.ack).toHaveBeenCalledOnce();
+    expect(failed.retry).not.toHaveBeenCalled();
     expect(error).toHaveBeenCalledWith(
       "event-ingest-api Metric Event dead-lettered after final delivery attempt",
       {
-        queueMessageId: "message-final-attempt",
+        queueMessageId: "queue-event-discarded",
         attempts: 8,
         maxRetries: 7,
         ...identityOf("event-discarded"),
-        errorMessage: "Tinybird append failed with HTTP 500",
+        errorMessage: "Tinybird returned HTTP 500 on the final of 8 delivery attempts",
       },
     );
   });
 
   it("keeps a malformed row's identity intact instead of dropping the odd field", async () => {
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(null, { status: 500 })));
+    stubTinybird(500);
     const error = vi.spyOn(console, "error").mockImplementation(() => {});
-    const malformed = metricEvent("event-malformed");
+    const malformed = withoutDedupKey(metricEvent("event-malformed"));
     malformed.event_definition_version_id = 42;
     malformed.targeting_key_hash = { unexpected: "shape" };
-    delete malformed.dedup_key;
     const failed = queueMessage("message-malformed", malformed, 8);
 
-    await deliver(messageBatch([failed]), deliveryEnv());
+    await deliver(messageBatch([failed]), fixture.env);
 
     expect(error).toHaveBeenCalledWith(
       "event-ingest-api Metric Event dead-lettered after final delivery attempt",
@@ -101,7 +91,7 @@ describe("Metric Event queue delivery", () => {
         dedupKey: "<absent>",
         eventDefinitionVersionId: "42",
         targetingKeyHash: '{"unexpected":"shape"}',
-        errorMessage: "Tinybird append failed with HTTP 500",
+        errorMessage: "Metric Event row has no dedup_key",
       },
     );
   });
@@ -132,20 +122,17 @@ describe("Metric Event queue delivery", () => {
     );
   });
 
-  it("acknowledges a suppressed queued retry without re-appending it", async () => {
-    const fetch = vi.fn();
-    vi.stubGlobal("fetch", fetch);
-    const message = queueMessage("message-deleted", {
-      ...metricEvent("event-deleted"),
-      entity_family_hash: "v1:deleted-family",
-    });
-    const env = deliveryEnv();
-    env.ENTITY_METRIC_PRIVACY = {
-      idFromName: () => ({}) as DurableObjectId,
+  it("acknowledges a suppressed queued retry without sending it", async () => {
+    const fetch = stubTinybird();
+    const message = await sealed("event-deleted");
+    const namespace = fixture.env.ENTITY_METRIC_PRIVACY;
+    if (!namespace) throw new Error("fixture privacy namespace is missing");
+    fixture.env.ENTITY_METRIC_PRIVACY = {
+      idFromName: namespace.idFromName,
       get: () => ({ fetch: async () => Response.json({ suppressed: true }) }),
     };
 
-    await deliver(messageBatch([message]), env);
+    await deliver(messageBatch([message]), fixture.env);
 
     expect(message.ack).toHaveBeenCalledOnce();
     expect(message.retry).not.toHaveBeenCalled();
@@ -172,14 +159,14 @@ describe("Metric Event retry backoff", () => {
   });
 
   it("passes the backoff to the runtime when delivery fails", async () => {
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("nope", { status: 500 })));
+    stubTinybird(500);
     vi.spyOn(console, "error").mockImplementation(() => {});
-    const failed = queueMessage("message-1", metricEvent("event-1"), 3);
+    const failed = await sealed("event-1", 3);
 
-    await deliver(messageBatch([failed]), deliveryEnv());
+    await deliver(messageBatch([failed]), fixture.env);
 
     expect(failed.retry).toHaveBeenCalledWith({
-      delaySeconds: metricEventRetryDelaySeconds(3, "message-1"),
+      delaySeconds: metricEventRetryDelaySeconds(3, "queue-event-1"),
     });
   });
 
@@ -220,9 +207,32 @@ describe("Metric Event retry backoff", () => {
   });
 });
 
+/** A 500 has no body Tinybird would commit, so an absent status means a clean commit. */
+function stubTinybird(status?: number) {
+  const fetch = vi.fn(async () =>
+    status === undefined
+      ? Response.json({ successful_rows: 1, quarantined_rows: 0 })
+      : new Response("nope", { status }),
+  );
+  vi.stubGlobal("fetch", fetch);
+  return fetch;
+}
+
+async function sealed(eventId: string, attempts = 2) {
+  const row = metricEvent(eventId);
+  await fixture.seal(row);
+  return queueMessage(`queue-${eventId}`, row, attempts);
+}
+
+function withoutDedupKey(row: Record<string, unknown>): Record<string, unknown> {
+  const { dedup_key: _dropped, ...rest } = row;
+  return rest;
+}
+
 function metricEvent(eventId: string): Record<string, unknown> {
   return {
     dedup_key: `sha256:${eventId}`,
+    entity_family_hash: `v1:${eventId}-family`,
     event_id: eventId,
     app_id: "app_shop",
     environment_id: "env_prod",
@@ -274,14 +284,6 @@ function messageBatch(messages: readonly ReturnType<typeof queueMessage>[]) {
     ackAll: vi.fn(),
     retryAll: vi.fn(),
   } satisfies MessageBatch<Record<string, unknown>>;
-}
-
-function deliveryEnv(): Env {
-  return {
-    SPLITCH_PLATFORM_TARGET: "local",
-    TINYBIRD_API_URL: "https://tinybird.test",
-    TINYBIRD_INGEST_TOKEN: "test-token",
-  };
 }
 
 async function deliver(batch: MessageBatch<Record<string, unknown>>, env: Env): Promise<void> {

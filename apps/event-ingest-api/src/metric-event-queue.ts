@@ -1,8 +1,14 @@
 import { requirePlatformTarget } from "@splitch/contracts";
-import { deliverEntityIdentityRow } from "./entity-identity-row-delivery";
-import { identityVersionForRow } from "./entity-metric-privacy";
+import {
+  type Admission,
+  type AdmittedRow,
+  admitMetricEvent,
+  deliverAdmittedRows,
+} from "./metric-event-batch-delivery";
+import { type PoisonedDelivery, transferToDeadLetter } from "./metric-event-dead-letter";
 import { makeMetricEventSaltStore } from "./metric-event-salt-store";
-import { appendRawEvent, tinybirdDelivery } from "./tinybird";
+import { tinybirdDelivery } from "./tinybird";
+import type { DeliveryOutcome } from "./tinybird-microbatch";
 import type { Env } from "./types";
 
 type MetricEventRow = Record<string, unknown>;
@@ -22,42 +28,173 @@ export const METRIC_EVENT_MAX_RETRIES = 7;
 const RETRY_BASE_SECONDS = 5;
 const RETRY_MAX_SECONDS = 43_200;
 
+/**
+ * Delivers a consumer batch as one bounded Tinybird request per size split,
+ * never one per row.
+ *
+ * Each message is first admitted through the privacy authorities and claims its
+ * write-ahead delivery-attempt record; only claimed rows enter the request. A
+ * message whose admission or settlement throws keeps its own failure, so one
+ * bad row cannot strand the rest of the batch
+ * (docs/adr/0043-event-ingest-will-use-durable-queue-backed-tinybird-microbatches.md).
+ */
 export async function handleMetricEventQueue(
   batch: MessageBatch<MetricEventRow>,
   env: Env,
 ): Promise<void> {
   requirePlatformTarget(env.SPLITCH_PLATFORM_TARGET);
   makeMetricEventSaltStore(env);
+  // Resolved before admission so a configuration failure never claims a
+  // write-ahead record it has no way to send, which would spend the row's
+  // attempt budget on a failure that never reached Tinybird.
   const delivery = tinybirdDelivery(env, "metric_events");
-  await Promise.all(batch.messages.map((message) => deliverMetricEvent(message, env, delivery)));
+  if (!delivery.ok) {
+    for (const message of batch.messages) retryMessage(message, new Error(delivery.error.message));
+    return;
+  }
+  const attemptId = crypto.randomUUID();
+  const admissions = await Promise.all(
+    batch.messages.map(async (message) => {
+      try {
+        return { message, admission: await admitMetricEvent(message, env, attemptId) };
+      } catch (error) {
+        retryMessage(message, error);
+        return undefined;
+      }
+    }),
+  );
+
+  const admitted: AdmittedRow[] = [];
+  const poisoned: PoisonedDelivery[] = [];
+  for (const entry of admissions) {
+    if (!entry) continue;
+    collectAdmission(entry.message, entry.admission, admitted, poisoned);
+  }
+
+  try {
+    const outcomes = await deliverAdmittedRows(admitted, env, delivery.value);
+    for (const entry of admitted) {
+      settleAdmitted(entry, outcomes.get(entry.message), poisoned);
+    }
+  } catch (error) {
+    // The write-ahead records stay `attempting`, which a later invocation reads
+    // as a claim left by a dead one and re-sends, so a throw that never reached
+    // Tinybird strands nothing. The messages still need their retry.
+    for (const entry of admitted) retryMessage(entry.message, error);
+    logBatchFailure(admitted.length, error);
+  }
+
+  await transferPoisoned(poisoned, env);
 }
 
-async function deliverMetricEvent(
+function collectAdmission(
   message: Message<MetricEventRow>,
-  env: Env,
-  delivery: ReturnType<typeof tinybirdDelivery>,
-): Promise<void> {
-  try {
-    if (!delivery.ok) throw new Error(delivery.error.message);
-    if (
-      !env.ENTITY_METRIC_PRIVACY &&
-      (env.SPLITCH_PLATFORM_TARGET === "local" || env.SPLITCH_PLATFORM_TARGET === "pr-ci")
-    ) {
-      await appendRawEvent(message.body, delivery.value);
-    } else {
-      await deliverEntityIdentityRow(
-        env.ENTITY_METRIC_PRIVACY,
-        identityVersionForRow(message.body),
-        "metric_events",
-        message.body,
-        env.SPLITCH_PLATFORM_TARGET,
-      );
-    }
-    message.ack();
-  } catch (error) {
-    logMetricEventFailure(message, error);
-    message.retry({ delaySeconds: metricEventRetryDelaySeconds(message.attempts, message.id) });
+  admission: Admission,
+  admitted: AdmittedRow[],
+  poisoned: PoisonedDelivery[],
+): void {
+  if (admission.kind === "send") {
+    admitted.push(admission.admitted);
+    return;
   }
+  if (admission.kind === "ack") {
+    message.ack();
+    return;
+  }
+  if (admission.attempt.state === "indeterminate") {
+    // Neither retrying nor discarding is safe. The durable record is the
+    // handoff to reconciliation; the queue message has nothing left to do.
+    console.error("event-ingest-api Metric Event delivery is unresolved", {
+      queueMessageId: message.id,
+      dedupKey: admission.dedupKey,
+      attemptId: admission.attempt.attemptId,
+      reason: admission.reason,
+    });
+    message.ack();
+    return;
+  }
+  poisoned.push({
+    message,
+    dedupKey: admission.dedupKey,
+    attempt: admission.attempt,
+    reason: admission.reason,
+  });
+}
+
+function settleAdmitted(
+  entry: AdmittedRow,
+  outcome: DeliveryOutcome | undefined,
+  poisoned: PoisonedDelivery[],
+): void {
+  if (!outcome) {
+    throw new Error("Metric Event delivery produced no outcome for an admitted row");
+  }
+  if (outcome.kind === "delivered") {
+    entry.message.ack();
+    return;
+  }
+  if (outcome.kind === "retryable") {
+    logMetricEventFailure(entry.message, new Error(outcome.reason));
+    entry.message.retry({
+      delaySeconds:
+        // Tinybird's `Retry-After` may be an HTTP date arbitrarily far out. Past
+        // the delay Queues accepts, `retry` throws and the message loses the
+        // attempt entirely, so the upstream hint is honored only up to our own
+        // ceiling.
+        clampDelaySeconds(outcome.retryAfterSeconds) ??
+        metricEventRetryDelaySeconds(entry.message.attempts, entry.message.id),
+    });
+    return;
+  }
+  if (outcome.kind === "indeterminate") {
+    console.error("event-ingest-api Metric Event delivery is unresolved", {
+      queueMessageId: entry.message.id,
+      dedupKey: entry.dedupKey,
+      attemptId: entry.attempt.attemptId,
+      reason: outcome.reason,
+    });
+    entry.message.ack();
+    return;
+  }
+  // Logged here rather than only in the transfer, because this is the line that
+  // carries every identifier of the event an operator has to go find.
+  logMetricEventFailure(entry.message, new Error(outcome.reason));
+  poisoned.push({
+    message: entry.message,
+    dedupKey: entry.dedupKey,
+    attempt: entry.attempt,
+    reason: outcome.reason,
+  });
+}
+
+function clampDelaySeconds(seconds: number | undefined): number | undefined {
+  if (seconds === undefined) return undefined;
+  return Math.min(Math.max(seconds, 0), RETRY_MAX_SECONDS);
+}
+
+/** Acknowledgement follows the dead-letter copy, never precedes it. */
+async function transferPoisoned(poisoned: PoisonedDelivery[], env: Env): Promise<void> {
+  if (poisoned.length === 0) return;
+  try {
+    await transferToDeadLetter(poisoned, env);
+    for (const entry of poisoned) entry.message.ack();
+  } catch (error) {
+    // `poison_pending` survives, so the redelivery resumes the copy without
+    // ever touching Tinybird again.
+    for (const entry of poisoned) retryMessage(entry.message, error);
+  }
+}
+
+function retryMessage(message: Message<MetricEventRow>, error: unknown): void {
+  logMetricEventFailure(message, error);
+  message.retry({ delaySeconds: metricEventRetryDelaySeconds(message.attempts, message.id) });
+}
+
+function logBatchFailure(rowCount: number, error: unknown): void {
+  console.error("event-ingest-api Metric Event batch delivery failed", {
+    rowCount,
+    errorMessage: error instanceof Error ? error.message : "non-error rejection",
+  });
 }
 
 /**
