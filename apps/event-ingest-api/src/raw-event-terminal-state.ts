@@ -1,7 +1,9 @@
-import { appIdentityPrivacyInventoryStub } from "./entity-metric-privacy";
+import type { EntityMetricPrivacyNamespace } from "./entity-metric-privacy";
 import type { Env } from "./types";
 
-const DELIVERY_STATE_PREFIX = "raw-delivery-state:";
+const DELIVERY_STATE_KEY = "raw-delivery-state";
+const DELIVERY_OBJECT_MARKER = "raw-delivery-object";
+const DELIVERY_RETENTION_MS = 15 * 24 * 60 * 60 * 1_000;
 const LOST_ATTEMPT_REASON = "previous Tinybird attempt has no durable outcome";
 
 type StoredDeliveryState =
@@ -25,10 +27,10 @@ export async function beginRawEventAttemptAtAuthority(
   storage: DurableObjectStorage,
   request: Request,
 ): Promise<Response> {
-  const deliveryId = parseDeliveryId(await request.json());
-  const existing = await storage.get<StoredDeliveryState>(key(deliveryId));
+  parseDeliveryId(await request.json());
+  const existing = await storage.get<StoredDeliveryState>(DELIVERY_STATE_KEY);
   if (existing === undefined || existing.kind === "retryable") {
-    await storage.put(key(deliveryId), { kind: "attempting" } satisfies StoredDeliveryState);
+    await storeState(storage, { kind: "attempting" });
     return Response.json({ kind: "send" });
   }
   if (existing.kind === "attempting") {
@@ -38,7 +40,7 @@ export async function beginRawEventAttemptAtAuthority(
       reason: LOST_ATTEMPT_REASON,
       transferred: false,
     };
-    await storage.put(key(deliveryId), terminal);
+    await storeState(storage, terminal);
     return Response.json(terminal);
   }
   return Response.json(existing);
@@ -49,14 +51,14 @@ export async function recordRawEventOutcome(
   request: Request,
 ): Promise<Response> {
   const body = (await request.json()) as Record<string, unknown>;
-  const deliveryId = parseDeliveryId(body);
+  parseDeliveryId(body);
   const proposed = parseOutcome(body);
-  const existing = await storage.get<StoredDeliveryState>(key(deliveryId));
+  const existing = await storage.get<StoredDeliveryState>(DELIVERY_STATE_KEY);
   if (sameOutcome(existing, proposed)) return Response.json({ recorded: true });
   if (existing?.kind !== "attempting") {
     throw new Error("Raw event outcome has no matching active attempt");
   }
-  await storage.put(key(deliveryId), proposed);
+  await storeState(storage, proposed);
   return Response.json({ recorded: true });
 }
 
@@ -64,11 +66,17 @@ export async function recordRawEventTransferred(
   storage: DurableObjectStorage,
   request: Request,
 ): Promise<Response> {
-  const deliveryId = parseDeliveryId(await request.json());
-  const existing = await storage.get<StoredDeliveryState>(key(deliveryId));
+  parseDeliveryId(await request.json());
+  const existing = await storage.get<StoredDeliveryState>(DELIVERY_STATE_KEY);
   if (existing?.kind !== "terminal") throw new Error("Raw event terminal marker is unavailable");
-  if (!existing.transferred) await storage.put(key(deliveryId), { ...existing, transferred: true });
+  if (!existing.transferred) await storeState(storage, { ...existing, transferred: true });
   return Response.json({ recorded: true });
+}
+
+export async function cleanupRawEventDeliveryState(storage: DurableObjectStorage): Promise<void> {
+  if ((await storage.get(DELIVERY_OBJECT_MARKER)) !== true) return;
+  await storage.deleteAlarm();
+  await storage.deleteAll();
 }
 
 export async function beginRawEventAttempt(
@@ -132,9 +140,11 @@ async function post(
   path: string,
   body: Record<string, unknown>,
 ): Promise<Record<string, unknown>> {
-  const response = await appIdentityPrivacyInventoryStub(
+  const deliveryId = parseDeliveryId(body);
+  const response = await rawDeliveryStateStub(
     env.ENTITY_METRIC_PRIVACY,
     appId(row),
+    deliveryId,
   ).fetch(`https://entity-privacy.local${path}`, {
     method: "POST",
     headers: { "content-type": "application/json" },
@@ -144,6 +154,24 @@ async function post(
   const result: unknown = await response.json();
   if (!isRecord(result)) throw new Error("Raw event delivery state returned an invalid result");
   return result;
+}
+
+async function storeState(
+  storage: DurableObjectStorage,
+  state: StoredDeliveryState,
+): Promise<void> {
+  await storage.put(DELIVERY_OBJECT_MARKER, true);
+  await storage.put(DELIVERY_STATE_KEY, state);
+  await storage.setAlarm(Date.now() + DELIVERY_RETENTION_MS);
+}
+
+function rawDeliveryStateStub(
+  namespace: EntityMetricPrivacyNamespace | undefined,
+  appIdValue: string,
+  deliveryId: string,
+) {
+  if (!namespace) throw new Error("ENTITY_METRIC_PRIVACY binding is unavailable");
+  return namespace.get(namespace.idFromName(`${appIdValue}:raw-delivery-state:${deliveryId}`));
 }
 
 function parseOutcome(value: Record<string, unknown>): StoredDeliveryState {
@@ -192,10 +220,6 @@ function appId(row: Record<string, unknown>): string {
 
 function localTarget(env: Env): boolean {
   return env.SPLITCH_PLATFORM_TARGET === "local" || env.SPLITCH_PLATFORM_TARGET === "pr-ci";
-}
-
-function key(deliveryId: string): string {
-  return `${DELIVERY_STATE_PREFIX}${deliveryId}`;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

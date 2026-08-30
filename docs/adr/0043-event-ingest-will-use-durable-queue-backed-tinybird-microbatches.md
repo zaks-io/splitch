@@ -10,10 +10,12 @@ attempts plus a dedicated reconciliation queue; an ambiguous attempt never resub
 raw-datasource absence moves to the reconciliation DLQ for operator review. Raw-only Metric Event
 evidence runs a bounded append Copy Pipe from raw truth and verifies the resulting aggregate state.
 Raw Exposure and Evaluation consumers transfer ambiguous or permanent outcomes to their isolated
-DLQs instead of resubmitting them. Before Tinybird, they persist `attempting` in the App privacy
-authority; only a durable `retryable` outcome can authorize another request. `delivered` and terminal
-states survive acknowledgement ambiguity, while an unresolved `attempting` state is transferred as
-indeterminate instead of replayed. The privacy authorities also persist a delivery permit before an
+DLQs instead of resubmitting them. Before Tinybird, they persist `attempting` in a delivery-scoped
+Durable Object; only a durable `retryable` outcome can authorize another request. `delivered` and
+terminal states survive acknowledgement ambiguity, while an unresolved `attempting` state is
+transferred as indeterminate instead of replayed. Each delivery object deletes itself by alarm after
+15 days, beyond Cloudflare Queues' 14-day maximum retention, so one App coordinator never accumulates
+per-event state. The privacy authorities also persist a delivery permit before an
 admitted row leaves the authority boundary and clear it before primary acknowledgement. Suppression
 or App reset becomes durable but refuses deletion proof while any permit remains, so a queued batch
 cannot append after proof even across a Durable Object restart. Web Event intake and its recovery

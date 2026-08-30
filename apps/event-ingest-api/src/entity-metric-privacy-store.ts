@@ -36,6 +36,7 @@ import {
 import { hasDeliveryPermits } from "./raw-event-delivery-permit";
 import {
   beginRawEventAttemptAtAuthority,
+  cleanupRawEventDeliveryState,
   recordRawEventOutcome,
   recordRawEventTransferred,
 } from "./raw-event-terminal-state";
@@ -55,6 +56,10 @@ export class EntityMetricPrivacyDurableObject {
     private readonly ctx: DurableObjectState,
     private readonly env: Env,
   ) {}
+
+  async alarm(): Promise<void> {
+    await cleanupRawEventDeliveryState(this.ctx.storage);
+  }
 
   async fetch(request: Request): Promise<Response> {
     const route = this.route(request);

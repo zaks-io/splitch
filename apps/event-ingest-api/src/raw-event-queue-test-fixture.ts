@@ -140,6 +140,11 @@ export function rawEventPrivacyNamespace(lostPath?: string, responsesToLose = 1)
   };
   return {
     namespace,
+    async alarm(name: string) {
+      const object = objects.get(name);
+      if (!object) throw new Error(`privacy object ${name} is unavailable`);
+      await object.alarm();
+    },
     fetch(name: string, path: string, body: unknown) {
       return namespace.get(namespace.idFromName(name)).fetch(`https://privacy.test${path}`, {
         method: "POST",
@@ -164,6 +169,7 @@ function queueResult() {
 
 function memoryStorage(): DurableObjectStorage {
   const values = new Map<string, unknown>();
+  let alarm: number | null = null;
   return {
     get: async <T>(key: string) => values.get(key) as T | undefined,
     put: async (key: string, value: unknown) => void values.set(key, structuredClone(value)),
@@ -175,5 +181,15 @@ function memoryStorage(): DurableObjectStorage {
       new Map(
         [...values.entries()].filter(([key]) => key.startsWith(prefix)) as Array<[string, T]>,
       ),
+    getAlarm: async () => alarm,
+    setAlarm: async (scheduledTime: number | Date) => {
+      alarm = typeof scheduledTime === "number" ? scheduledTime : scheduledTime.getTime();
+    },
+    deleteAlarm: async () => {
+      alarm = null;
+    },
+    deleteAll: async () => {
+      values.clear();
+    },
   } as unknown as DurableObjectStorage;
 }

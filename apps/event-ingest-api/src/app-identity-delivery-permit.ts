@@ -48,8 +48,12 @@ export async function completeEntityIdentityRow(
   const body = (await request.json()) as Record<string, unknown>;
   const deliveryId = deliveryPermitId(body);
   if (deliveryId === undefined) throw new Error("Raw event delivery permit id is unavailable");
-  await completeEntityDeliveryPermit(env.ENTITY_METRIC_PRIVACY, entityIdentity(body), deliveryId);
-  return completeDeliveryPermit(storage, requestWithDeliveryId(deliveryId));
+  try {
+    await completeEntityDeliveryPermit(env.ENTITY_METRIC_PRIVACY, entityIdentity(body), deliveryId);
+  } finally {
+    await completeDeliveryPermit(storage, requestWithDeliveryId(deliveryId));
+  }
+  return Response.json({ completed: true });
 }
 
 function entityIdentity(body: Record<string, unknown>) {
