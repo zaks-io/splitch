@@ -19,10 +19,11 @@ import {
  * boundary. Dynamic import keeps deploy-unit boundaries for production code.
  */
 describe("POST /api/sdk/exposures: real Event Ingest seam", () => {
-  it("accepts a batch whose sealed Exposure appends via /api/internal/exposures", async () => {
+  it("accepts a batch whose sealed Exposure queues via /api/internal/exposures", async () => {
     const tinybird = mockTinybirdFetch();
+    const rawEventsQueue = mockRawEventsQueue();
     const eventIngest = await loadEventIngestWorker();
-    const env = makeEventIngestEnv();
+    const env = makeEventIngestEnv(rawEventsQueue);
     const ctx = new TestExecutionContext();
     const httpSink = makeHttpExposureIngestSink({
       token: "internal_ingest_secret",
@@ -56,8 +57,11 @@ describe("POST /api/sdk/exposures: real Event Ingest seam", () => {
       { exposureId: EXPOSURE_ID_A, status: "accepted", code: null },
     ]);
     expect(recording.writes).toHaveLength(1);
-    expect(tinybird).toHaveBeenCalled();
-    const row = JSON.parse(String(tinybird.mock.calls[0]?.[1]?.body)) as Record<string, unknown>;
+    expect(tinybird).not.toHaveBeenCalled();
+    expect(rawEventsQueue.send).toHaveBeenCalledOnce();
+    const queued = rawEventsQueue.send.mock.calls[0]?.[0] as Record<string, unknown>;
+    expect(queued).toMatchObject({ kind: "raw-event-delivery-v1", datasource: "raw_events" });
+    const row = queued.row as Record<string, unknown>;
     expect(row).toMatchObject({
       app_id: APP_ID,
       environment_id: ENVIRONMENT_ID,
@@ -92,6 +96,14 @@ function mockTinybirdFetch() {
   return fetch;
 }
 
+function mockRawEventsQueue() {
+  return {
+    send: vi.fn<(body: Record<string, unknown>) => Promise<void>>(async () => {}),
+    sendBatch: vi.fn(async () => {}),
+    metrics: vi.fn(async () => ({ backlogCount: 0, backlogBytes: 0 })),
+  };
+}
+
 async function loadEventIngestWorker(): Promise<{
   fetch: (request: Request, env: unknown, ctx: ExecutionContext) => Promise<Response>;
 }> {
@@ -109,7 +121,7 @@ async function loadEventIngestWorker(): Promise<{
   };
 }
 
-function makeEventIngestEnv() {
+function makeEventIngestEnv(rawEventsQueue: ReturnType<typeof mockRawEventsQueue>) {
   const kv = new MemoryKV();
   kv.set(
     experimentConfigKey(APP_ID, ENVIRONMENT_ID, EXPERIMENT_ID),
@@ -145,6 +157,7 @@ function makeEventIngestEnv() {
     SPLITCH_EVENT_INGEST_TOKEN: "internal_ingest_secret",
     TINYBIRD_API_URL: "https://tinybird.test",
     TINYBIRD_INGEST_TOKEN: "tb_ingest_secret",
+    RAW_EVENTS_QUEUE: rawEventsQueue,
     INGEST_ADMISSION_GATE: allowAllAdmissionGate(),
   };
 }
