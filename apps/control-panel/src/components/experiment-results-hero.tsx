@@ -177,7 +177,7 @@ function HeroTiles({
       />
       <StatTile
         detail={leading ? `${leading.variant} · ${leading.metric_id}` : undefined}
-        label={leading ? "Leading lift" : "No significance call yet"}
+        label={leading ? "Significant lift" : "No significance call yet"}
         muted={leading === null}
         tone={leading ? armColor({ baseline, variant: leading.variant, variantOrder }) : undefined}
         value={leading ? formatLift(leading.relative_lift_pct) : "–"}

@@ -11,7 +11,7 @@ describe("experimentResultsVerdict", () => {
     const results = resultsFixture(statsWithAnalysisControl());
 
     expect(verdictText(results)).toContain(
-      "treatment leads checkout_conversion +6.4%, significant.",
+      "treatment moves checkout_conversion +6.4%, significant.",
     );
   });
 

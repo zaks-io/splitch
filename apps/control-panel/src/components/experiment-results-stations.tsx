@@ -149,8 +149,11 @@ function runHealthPresentation(
 ): StationPresentation {
   const firing = healthFiringSignals(results, tier);
   const destructive = tier === "confirmed" || results.control.state !== "frozen";
+  // Control identity, exposure SRM, multiple-assignment rate, low-n, plus the
+  // two activation diagnostics only when this Run measures them.
+  const checkCount = 4 + (results.srm.activated ? 1 : 0) + (results.srm.activationBalance ? 1 : 0);
   return {
-    count: "6 checks",
+    count: `${checkCount} checks`,
     keyValue: `${firing.length} firing`,
     keyValueTone:
       firing.length > 0
@@ -180,7 +183,7 @@ function decisionMetricPresentation(
     count: `${count} ${count === 1 ? "comparison" : "comparisons"}`,
     keyValue: formatLift(leading.relative_lift_pct),
     keyValueStyle: { color: armColor({ baseline, variant: leading.variant, variantOrder }) },
-    summary: `${leading.variant} leads ${leading.metric_id}, significant.`,
+    summary: `${leading.variant} moves ${leading.metric_id}, significant.`,
   };
 }
 
@@ -211,8 +214,8 @@ function guardrailsPresentation(
 function exploratoryStationPresentation(count: number): StationPresentation {
   return {
     count: `${count} ${count === 1 ? "metric" : "metrics"}`,
-    keyValue: `${count} warming`,
-    summary: `${count} ${count === 1 ? "Metric is" : "Metrics are"} warming up.`,
+    keyValue: `${count} uncorrected`,
+    summary: "Uncorrected hypotheses, never ship evidence.",
   };
 }
 

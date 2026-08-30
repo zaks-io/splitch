@@ -5,6 +5,7 @@ import type {
   GuardrailResult,
 } from "@splitch/contracts";
 import { significanceKey } from "@splitch/contracts";
+import { formatLift } from "../components/experiment-results-format";
 
 export type ExperimentResultsVerdictSegment = {
   kind: "text" | "arm" | "metric" | "value";
@@ -24,22 +25,19 @@ export function experimentResultsVerdict({
   gate: ExperimentDecisionGate;
   baseline: string;
 }): ExperimentResultsVerdictSegment[] {
-  const significant = armResults.filter(
-    (result) =>
-      result.variant !== baseline && significance[significanceKey(result)] === "significant",
-  );
+  // The same selection as the hero tile and the station summary, so the three
+  // surfaces can never name different arms on one screen.
+  const leadResult = leadingSignificantResult({ armResults, significance, baseline });
   const segments: ExperimentResultsVerdictSegment[] = [];
 
-  if (significant.length === 0) {
+  if (leadResult === null) {
     segments.push({ kind: "text", value: "No affirmative significance call yet. " });
   } else {
-    const leadVariant = leadingVariant(significant, armResults);
-    const leadResult = largestAbsoluteLift(
-      significant.filter((result) => result.variant === leadVariant),
-    );
+    // No Metric polarity exists in the contract, so the copy must not claim a
+    // direction: a negative lift on a lower-is-better Metric is a win.
     segments.push(
       { kind: "arm", value: leadResult.variant },
-      { kind: "text", value: " leads " },
+      { kind: "text", value: " moves " },
       { kind: "metric", value: leadResult.metric_id },
       { kind: "text", value: " " },
       { kind: "value", value: formatLift(leadResult.relative_lift_pct) },
@@ -144,21 +142,6 @@ function guardrailBreachMagnitude(value: {
     : Math.abs(observed);
 }
 
-function leadingVariant(
-  significant: readonly ArmResult[],
-  armResults: readonly ArmResult[],
-): string {
-  const counts = new Map<string, number>();
-  for (const result of significant)
-    counts.set(result.variant, (counts.get(result.variant) ?? 0) + 1);
-  let lead = significant[0]?.variant;
-  if (!lead) throw new Error("A significant result was required");
-  for (const result of armResults) {
-    if ((counts.get(result.variant) ?? 0) > (counts.get(lead) ?? 0)) lead = result.variant;
-  }
-  return lead;
-}
-
 function largestAbsoluteLift(results: readonly ArmResult[]): ArmResult {
   const first = results[0];
   if (!first) throw new Error("A significant result was required");
@@ -173,9 +156,4 @@ function liftMagnitude(result: ArmResult): number {
   return result.relative_lift_pct === null
     ? Number.NEGATIVE_INFINITY
     : Math.abs(result.relative_lift_pct);
-}
-
-function formatLift(value: number | null): string {
-  if (value === null) return "not estimable";
-  return `${value > 0 ? "+" : ""}${value.toFixed(1)}%`;
 }
