@@ -84,14 +84,17 @@ export function makeEntityMetricPrivacyStoreFixture() {
     restart() {
       object = new EntityMetricPrivacyDurableObject(ctx, env);
     },
-    async post(path: string, body: unknown) {
-      const response = await object.fetch(
+    request(path: string, body: unknown) {
+      return object.fetch(
         new Request(`https://entity-privacy.local${path}`, {
           method: "POST",
           headers: { "content-type": "application/json" },
           body: JSON.stringify(body),
         }),
       );
+    },
+    async post(path: string, body: unknown) {
+      const response = await this.request(path, body);
       expect(response.status).toBe(200);
       return response.json();
     },

@@ -1,0 +1,44 @@
+DESCRIPTION >
+    Proves whether one ambiguous Metric Event request committed to the raw datasource.
+
+NODE committed_metric_event
+SQL >
+    %
+    {% if not defined(app_id) %}
+    {{error('app_id is required')}}
+    {% end %}
+    {% if not defined(environment_id) %}
+    {{error('environment_id is required')}}
+    {% end %}
+    {% if not defined(event_definition_id) %}
+    {{error('event_definition_id is required')}}
+    {% end %}
+    {% if not defined(dedup_key) %}
+    {{error('dedup_key is required')}}
+    {% end %}
+    {% if not defined(server_received_at) %}
+    {{error('server_received_at is required')}}
+    {% end %}
+    SELECT
+        sumIf(rows, source = 'raw') AS raw_rows,
+        sumIf(rows, source = 'state') AS state_rows
+    FROM
+    (
+        SELECT 'raw' AS source, count() AS rows
+        FROM metric_events
+        WHERE app_id = {{String(app_id)}}
+            AND environment_id = {{String(environment_id)}}
+            AND event_definition_id = {{String(event_definition_id)}}
+            AND dedup_key = {{String(dedup_key)}}
+            AND toYYYYMM(server_received_at) = toYYYYMM(toDate({{DateTime64(server_received_at)}}))
+        UNION ALL
+        SELECT 'state' AS source, count() AS rows
+        FROM deduped_metric_events_state
+        WHERE app_id = {{String(app_id)}}
+            AND environment_id = {{String(environment_id)}}
+            AND event_definition_id = {{String(event_definition_id)}}
+            AND dedup_key = {{String(dedup_key)}}
+            AND event_date = toDate({{DateTime64(server_received_at)}})
+    )
+
+TYPE ENDPOINT

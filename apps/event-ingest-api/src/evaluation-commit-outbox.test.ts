@@ -87,17 +87,17 @@ describe("Evaluation commit outbox privacy", () => {
     const released = new Promise<void>((resolve) => {
       releaseAppend = resolve;
     });
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async () => {
-        appendStarted();
-        await released;
-        return new Response(null, { status: 202 });
-      }),
-    );
     const object = new EvaluationCommitOutboxDurableObject(durableState(), {
-      TINYBIRD_API_URL: "https://tinybird.test",
-      TINYBIRD_INGEST_TOKEN: "test-token",
+      RAW_EVALUATIONS_QUEUE: {
+        send: vi.fn(async () => {
+          appendStarted();
+          await released;
+          return queueResult();
+        }),
+        sendBatch: vi.fn(),
+        metrics: vi.fn(),
+      },
+      RAW_EVENTS_QUEUE: { send: vi.fn(), sendBatch: vi.fn(), metrics: vi.fn() },
       SPLITCH_PLATFORM_TARGET: "local",
     } as Env);
     await post(object, "/commit", {
@@ -136,7 +136,6 @@ describe("Evaluation commit outbox privacy", () => {
       delivered: true,
       payload: { usage: { privacyDeleted: true }, exposureRows: [] },
     });
-    vi.unstubAllGlobals();
   });
 });
 
@@ -154,6 +153,10 @@ async function post(
   );
   expect(response.status).toBe(200);
   return response.json();
+}
+
+function queueResult() {
+  return { metadata: { metrics: { backlogCount: 0, backlogBytes: 0 } } };
 }
 
 function durableState(): DurableObjectState {

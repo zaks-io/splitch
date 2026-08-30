@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { makeEntityDeliveryFixture } from "./app-identity-delivery-test-fixture";
+import { commitResponse, makeEntityDeliveryFixture } from "./app-identity-delivery-test-fixture";
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -46,7 +46,7 @@ describe("App identity delivery throughput", () => {
       peak = Math.max(peak, inFlight);
       await gate;
       inFlight -= 1;
-      return new Response(null, { status: 202 });
+      return commitResponse();
     });
     vi.stubGlobal("fetch", append);
 
@@ -72,7 +72,7 @@ describe("App identity delivery throughput", () => {
     });
     const append = vi.fn(async () => {
       await gate;
-      return new Response(null, { status: 202 });
+      return commitResponse();
     });
     vi.stubGlobal("fetch", append);
 

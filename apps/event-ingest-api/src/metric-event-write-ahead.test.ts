@@ -31,12 +31,10 @@ afterEach(() => {
 describe("Metric Event write-ahead delivery attempts", () => {
   /**
    * An invocation that dies between the claim and a confirmed outcome leaves
-   * `attempting` behind. That state is only ambiguous to a *concurrent*
-   * deletion; to a later invocation it means nothing ever confirmed a dispatch,
-   * so the row is re-sent. Acknowledging it instead drops the event with no
-   * record anywhere that it ever existed.
+   * `attempting` behind. The request may already have committed, so a later
+   * invocation must durably hand the row to reconciliation without resending.
    */
-  it("re-sends a claim left behind by an invocation that died mid-delivery", async () => {
+  it("reconciles a claim left behind by an invocation that died mid-delivery", async () => {
     stubTinybird(commit(2));
     failEverySettle();
     const stranded = await seal(fixture, ["event-1", "event-2"]);
@@ -49,14 +47,13 @@ describe("Metric Event write-ahead delivery attempts", () => {
     const redelivered = queueMessage("event-1", 3);
     await deliver(fixture.env, [redelivered]);
 
-    expect(fetch, "the stranded row is never sent again").toHaveBeenCalledOnce();
+    expect(fetch, "an ambiguous request must not be sent again").not.toHaveBeenCalled();
     expect(redelivered.ack).toHaveBeenCalledOnce();
-    expect(fixture.deliveryState("sha256:event-1")).toBe("delivered");
+    expect(fixture.deliveryState("sha256:event-1")).toBe("attempting");
   });
 
   /**
-   * The other half of what `attempting` means. A redelivery may re-send it, but
-   * a deletion arriving while the claiming invocation is still alive must not:
+   * A deletion arriving while the claiming invocation is still alive must not:
    * that row may be mid-flight, and the proof would cover a row that lands.
    */
   it("refuses to redact an event whose delivery is still in flight", async () => {

@@ -76,30 +76,30 @@ afterEach(() => {
  */
 describe("Evaluation binding entrypoint", () => {
   it("reaches the Exposure ingest handler", async () => {
-    const { response, fetch } = await internal("/api/internal/exposures", baseExposure());
+    const { response, fetch, env } = await internal("/api/internal/exposures", baseExposure());
 
     expect(response.status).toBe(202);
-    expect(fetch.mock.calls[0]?.[0]).toBe("https://tinybird.test/v0/events?name=raw_events");
+    expect(fetch).not.toHaveBeenCalled();
+    expect(env.__queuedRows).toHaveLength(1);
   });
 
   it("reaches the Evaluation usage handler", async () => {
-    const { response, fetch } = await internal("/api/internal/evaluations", usagePayload());
+    const { response, fetch, env } = await internal("/api/internal/evaluations", usagePayload());
 
     expect(response.status).toBe(202);
-    expect(fetch.mock.calls[0]?.[0]).toBe("https://tinybird.test/v0/events?name=raw_evaluations");
+    expect(fetch).not.toHaveBeenCalled();
+    expect(env.__queuedRows).toHaveLength(1);
   });
 
   it("reaches the Evaluation commit handler", async () => {
-    const { response, fetch } = await internal("/api/internal/evaluation-commits", {
+    const { response, fetch, env } = await internal("/api/internal/evaluation-commits", {
       ...usagePayload(),
       exposures: [baseExposure()],
     });
 
     expect(response.status).toBe(202);
-    // The sealed pair, in order: only this handler appends the Exposure beside
-    // the usage row, so the second call is what tells it apart from its sibling.
-    expect(fetch.mock.calls[0]?.[0]).toBe("https://tinybird.test/v0/events?name=raw_evaluations");
-    expect(fetch.mock.calls[1]?.[0]).toBe("https://tinybird.test/v0/events?name=raw_events");
+    expect(fetch).not.toHaveBeenCalled();
+    expect(env.__queuedRows).toHaveLength(2);
   });
 
   it("rejects a missing internal token without appending", async () => {
@@ -197,8 +197,8 @@ async function internal(path: string, body: unknown) {
   vi.spyOn(Date, "now").mockReturnValue(new Date(fixedNow).getTime());
   const fetch = mockTinybirdFetch();
   const ctx = new TestExecutionContext();
-  const env = makeEnv() as Env;
-  const response = await new EvaluationEntrypoint(ctx, env).fetch(
+  const env = makeEnv();
+  const response = await new EvaluationEntrypoint(ctx, env as Env).fetch(
     new Request(`https://splitch-event-ingest.internal${path}`, {
       method: "POST",
       headers: {
@@ -212,7 +212,7 @@ async function internal(path: string, body: unknown) {
     }),
   );
   await Promise.all(ctx.waits);
-  return { response, fetch };
+  return { response, fetch, env };
 }
 
 function usagePayload() {

@@ -59,7 +59,7 @@ describe("Entity Metric privacy Durable Object", () => {
     const append = vi.fn(async () => {
       markAppendStarted();
       await appendGate;
-      return new Response(null, { status: 202 });
+      return Response.json({ successful_rows: 1, quarantined_rows: 0 });
     });
     vi.stubGlobal("fetch", append);
     const row = {
@@ -89,6 +89,36 @@ describe("Entity Metric privacy Durable Object", () => {
       suppressed: true,
     });
     expect(append).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps a durable queue delivery permit across restart until completion", async () => {
+    const fixture = makeEntityMetricPrivacyStoreFixture();
+    const row = {
+      app_id: "app_1",
+      id_type: "user",
+      entity_family_hash: "app-v1:family",
+      targeting_key_hash: "app-v1:entity",
+      server_received_at: ENTRY.serverReceivedAt,
+    };
+    await expect(
+      fixture.post("/admit-row", {
+        datasource: "raw_events",
+        deliveryId: "queue:raw_events:message-1",
+        row,
+      }),
+    ).resolves.toEqual({ suppressed: false });
+    fixture.restart();
+
+    const blocked = await fixture.request("/suppress", {
+      deleteBeforeTs: "2026-08-07T00:00:01.000Z",
+    });
+    expect(blocked.status).toBe(409);
+    await expect(
+      fixture.post("/complete-row", { deliveryId: "queue:raw_events:message-1" }),
+    ).resolves.toEqual({ completed: true });
+    await expect(
+      fixture.post("/suppress", { deleteBeforeTs: "2026-08-07T00:00:01.000Z" }),
+    ).resolves.toEqual({ proofs: ["metric-event-queue-suppression:2026-08-07T00:00:01.000Z"] });
   });
 
   it("exports pending outbox rows, redacts stale claims, and returns idempotent proofs", async () => {

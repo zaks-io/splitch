@@ -69,6 +69,22 @@ describe("Metric Event Tinybird microbatches", () => {
     expect(peak()).toBeGreaterThan(1);
   });
 
+  it("retries only the row whose write-ahead settlement failed", async () => {
+    const fetch = stubTinybird(commit(2));
+    failSettleFor("sha256:event-2");
+    const messages = await seal(fixture, ["event-1", "event-2"]);
+
+    await deliver(fixture.env, messages);
+
+    expect(fetch).toHaveBeenCalledOnce();
+    expect(messages[0]?.ack).toHaveBeenCalledOnce();
+    expect(messages[0]?.retry).not.toHaveBeenCalled();
+    expect(messages[1]?.ack).not.toHaveBeenCalled();
+    expect(messages[1]?.retry).toHaveBeenCalledOnce();
+    expect(fixture.deliveryState("sha256:event-1")).toBe("delivered");
+    expect(fixture.deliveryState("sha256:event-2")).toBe("attempting");
+  });
+
   it("records a delivered write-ahead state for every acknowledged row", async () => {
     stubTinybird(commit(2));
     await deliver(fixture.env, await seal(fixture, ["event-1", "event-2"]));
@@ -122,6 +138,23 @@ describe("Metric Event Tinybird microbatches", () => {
     expect(fixture.deliveryState("sha256:event-1")).toBe("indeterminate");
   });
 
+  it("parks a no-response batch for reconciliation rather than resubmitting it", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        throw new Error("connection reset");
+      }),
+    );
+    const messages = await seal(fixture, ["event-1"]);
+
+    await deliver(fixture.env, messages);
+
+    expect(messages[0]?.retry).not.toHaveBeenCalled();
+    expect(messages[0]?.ack).toHaveBeenCalledOnce();
+    expect(fixture.deliveryState("sha256:event-1")).toBe("indeterminate");
+    expect(fixture.env.METRIC_EVENTS_RECONCILIATION_QUEUE?.sendBatch).toHaveBeenCalledOnce();
+  });
+
   it("excludes a privacy-deleted row from the request and acknowledges it", async () => {
     const row = metricEvent("event-2");
     await fixture.seal(metricEvent("event-1"));
@@ -163,6 +196,23 @@ function trackSettleConcurrency(): () => number {
     },
   } as NonNullable<QueueFixture["env"]["METRIC_EVENT_OUTBOX"]>;
   return () => peak;
+}
+
+function failSettleFor(dedupKey: string): void {
+  const outbox = fixture.env.METRIC_EVENT_OUTBOX;
+  if (!outbox) throw new Error("fixture outbox is missing");
+  fixture.env.METRIC_EVENT_OUTBOX = {
+    idFromName: (name: string) => outbox.idFromName(name),
+    get: (id: DurableObjectId) => {
+      const stub = outbox.get(id);
+      return {
+        fetch: async (input: RequestInfo | URL, init?: RequestInit) =>
+          String(id) === dedupKey && String(input).endsWith("/settle-delivery")
+            ? new Response("settle unavailable", { status: 503 })
+            : stub.fetch(input, init),
+      };
+    },
+  } as NonNullable<QueueFixture["env"]["METRIC_EVENT_OUTBOX"]>;
 }
 
 async function ndjsonOf(fetch: TinybirdStub): Promise<Record<string, unknown>[]> {

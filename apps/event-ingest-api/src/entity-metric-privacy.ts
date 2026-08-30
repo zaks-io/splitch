@@ -127,29 +127,48 @@ export async function registerAppEvaluationCommit(
   return body.suppressed;
 }
 
-export async function deliverAppIdentityRow(
+export async function admitAppIdentityRow(
   namespace: EntityMetricPrivacyNamespace | undefined,
   appId: string,
   identityVersion: string,
   datasource: string,
   row: Record<string, unknown>,
   platformTarget: string | undefined,
+  deliveryId?: string,
 ): Promise<boolean> {
   if (!namespace && (platformTarget === "local" || platformTarget === "pr-ci")) return false;
   const response = await appIdentityPrivacyInventoryStub(namespace, appId).fetch(
-    "https://entity-privacy.local/deliver-app-row",
+    "https://entity-privacy.local/admit-app-row",
     {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ appId, identityVersion, datasource, row }),
+      body: JSON.stringify({ appId, identityVersion, datasource, row, deliveryId }),
     },
   );
-  if (!response.ok) throw new Error(`App identity delivery returned HTTP ${response.status}`);
+  if (!response.ok) throw new Error(`App identity admission returned HTTP ${response.status}`);
   const body = (await response.json()) as { suppressed?: unknown };
   if (typeof body.suppressed !== "boolean") {
-    throw new Error("App Evaluation delivery returned an invalid result");
+    throw new Error("App identity admission returned an invalid result");
   }
   return body.suppressed;
+}
+
+export async function completeAppIdentityRow(
+  namespace: EntityMetricPrivacyNamespace | undefined,
+  appId: string,
+  deliveryId: string,
+  platformTarget: string | undefined,
+): Promise<void> {
+  if (!namespace && (platformTarget === "local" || platformTarget === "pr-ci")) return;
+  const response = await appIdentityPrivacyInventoryStub(namespace, appId).fetch(
+    "https://entity-privacy.local/complete-app-row",
+    {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ deliveryId }),
+    },
+  );
+  if (!response.ok) throw new Error(`App identity completion returned HTTP ${response.status}`);
 }
 
 export function identityVersionForRow(row: Record<string, unknown>): string {

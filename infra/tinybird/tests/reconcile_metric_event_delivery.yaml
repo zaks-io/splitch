@@ -1,0 +1,6 @@
+- name: proves_raw_and_materialized_metric_event_presence
+  description: Reconciliation is scoped to the exact App, definition, month, and retry key.
+  parameters: app_id=app_1&environment_id=env_prod&event_definition_id=event_definition_signup&dedup_key=metric-app-1-control&server_received_at=2026-07-02%2000%3A00%3A00.000
+  expected_http_status: 200
+  expected_result: |
+    {"raw_rows":2,"state_rows":1}

@@ -62,14 +62,18 @@ export class MetricEventOutboxDurableObject {
   }
 
   private async read(path: string): Promise<Response> {
-    if (path !== "/lookup" && path !== "/export") {
+    if (path !== "/lookup" && path !== "/export" && path !== "/delivery") {
       return new Response("not found", { status: 404 });
     }
     const existing = await this.ctx.storage.get<ClaimState>(STATE_KEY);
     if (existing === undefined) return new Response("not found", { status: 404 });
-    return path === "/lookup"
-      ? Response.json(asLookup(existing))
-      : Response.json({ deleted: existing.deleted, row: existing.row ?? null });
+    if (path === "/lookup") return Response.json(asLookup(existing));
+    if (path === "/delivery") {
+      return existing.delivery === undefined
+        ? new Response("not found", { status: 404 })
+        : Response.json(existing.delivery);
+    }
+    return Response.json({ deleted: existing.deleted, row: existing.row ?? null });
   }
 
   private async write(path: string, request: Request): Promise<Response> {

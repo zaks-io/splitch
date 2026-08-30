@@ -19,6 +19,9 @@ export const NDJSON_MAX_BYTES = 5 * 1024 * 1024;
 /** Attempts, including the first. `max_retries = 7` in wrangler.jsonc is the other seven. */
 export const MAX_DELIVERY_ATTEMPTS = 8;
 
+/** Keeps a stalled upstream below the Queue consumer's invocation lifetime. */
+const TINYBIRD_REQUEST_TIMEOUT_MS = 15_000;
+
 export type DeliveryOutcome =
   | { kind: "delivered"; successfulRows: number }
   | { kind: "retryable"; reason: string; retryAfterSeconds?: number }
@@ -84,11 +87,13 @@ export async function sendNdjsonBatch(
         "content-encoding": "gzip",
       },
       body: gzip(body),
+      signal: AbortSignal.timeout(TINYBIRD_REQUEST_TIMEOUT_MS),
     });
   } catch (error) {
-    // Pre-response network failure: the request may or may not have been
-    // received, so it is retryable but never blindly acknowledged.
-    return { kind: "retryable", reason: `network failure: ${describe(error)}` };
+    // Fetch does not prove whether a request reached Tinybird before a timeout
+    // or connection failure. Treat every no-response outcome as ambiguous so
+    // the caller reconciles or dead-letters it instead of blindly resending.
+    return { kind: "indeterminate", reason: `no response: ${describe(error)}` };
   }
   return classifyResponse(response, rowCount);
 }
@@ -100,6 +105,14 @@ async function classifyResponse(response: Response, rowCount: number): Promise<D
     return { kind: "indeterminate", reason: "Tinybird returned HTTP 422" };
   }
   if (response.status === 429 || response.status === 500 || response.status === 503) {
+    if (response.status === 429) {
+      console.warn("event-ingest-api Tinybird rate limited a microbatch", {
+        retryAfter: response.headers.get("retry-after"),
+        rateLimitLimit: response.headers.get("x-ratelimit-limit"),
+        rateLimitRemaining: response.headers.get("x-ratelimit-remaining"),
+        rateLimitReset: response.headers.get("x-ratelimit-reset"),
+      });
+    }
     return {
       kind: "retryable",
       reason: `Tinybird returned HTTP ${response.status}`,

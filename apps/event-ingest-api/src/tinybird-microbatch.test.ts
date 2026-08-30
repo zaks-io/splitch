@@ -56,6 +56,21 @@ describe("NDJSON batching", () => {
 });
 
 describe("Tinybird response classification", () => {
+  it("bounds every upstream request with an abort signal", async () => {
+    let signal: AbortSignal | null | undefined;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+        signal = init?.signal;
+        return Response.json({ successful_rows: 1, quarantined_rows: 0 });
+      }),
+    );
+
+    await send();
+
+    expect(signal).toBeInstanceOf(AbortSignal);
+  });
+
   it("reads Retry-After given as an HTTP date", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-08-30T00:00:00.000Z"));
@@ -88,7 +103,7 @@ describe("Tinybird response classification", () => {
   });
 
   /** A request that never got an answer may still have been committed. */
-  it("treats a network failure as retryable rather than delivered", async () => {
+  it("treats a network failure as indeterminate rather than resubmitting", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn(async () => {
@@ -97,8 +112,8 @@ describe("Tinybird response classification", () => {
     );
 
     expect(await send()).toEqual({
-      kind: "retryable",
-      reason: "network failure: connection reset",
+      kind: "indeterminate",
+      reason: "no response: connection reset",
     });
   });
 });

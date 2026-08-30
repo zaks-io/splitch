@@ -112,16 +112,16 @@ describe("internal ingest authority", () => {
   });
 
   it("accepts the current scoped Exposure payload over the binding", async () => {
-    const { response, fetch } = await binding("/api/internal/exposures", {
+    const { response, env } = await binding("/api/internal/exposures", {
       body: JSON.stringify(baseExposure()),
     });
 
     expect(response.status).toBe(202);
-    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(env.__queuedRows).toHaveLength(1);
   });
 
   it("keeps binding writes on the authenticated App and Environment headers", async () => {
-    const { response, fetch } = await binding("/api/internal/exposures", {
+    const { response, env } = await binding("/api/internal/exposures", {
       headers: {
         "x-splitch-app-id": appId,
         "x-splitch-environment-id": environmentId,
@@ -134,7 +134,7 @@ describe("internal ingest authority", () => {
     });
 
     expect(response.status).toBe(202);
-    const row = JSON.parse(String(fetch.mock.calls[0]?.[1]?.body)) as Record<string, unknown>;
+    const row = env.__queuedRows[0] as Record<string, unknown>;
     expect(row.app_id).toBe(appId);
     expect(row.environment_id).toBe(environmentId);
     expect(row.app_id).not.toBe("app_from_client");
@@ -165,12 +165,13 @@ async function binding(
     headers.set("authorization", options.authorization);
   }
 
-  const response = await new EvaluationEntrypoint(ctx, makeEnv() as Env).fetch(
+  const env = makeEnv();
+  const response = await new EvaluationEntrypoint(ctx, env as Env).fetch(
     new Request(`${BINDING_ORIGIN}${path}`, {
       method: "POST",
       headers,
       body: options.body,
     }),
   );
-  return { response, fetch, ctx };
+  return { response, fetch, ctx, env };
 }

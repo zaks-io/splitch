@@ -31,7 +31,9 @@ import { IngestAdmissionGateDurableObject } from "./ingest-admission-gate";
 import { handleAuthorizedMetricEvent } from "./metric-event-ingest";
 import { MetricEventOutboxDurableObject } from "./metric-event-outbox";
 import { handleMetricEventQueue } from "./metric-event-queue";
+import { handleMetricEventReconciliationQueue } from "./metric-event-reconciliation";
 import { MetricEventRateLimitDurableObject } from "./metric-event-rate-limit";
+import { handleRawEventQueue } from "./raw-event-queue";
 import { makeMetricEventSaltStore } from "./metric-event-salt-store";
 import type { Env } from "./types";
 
@@ -40,6 +42,24 @@ const ingestPath = "/api/internal/exposures";
 const evaluationIngestPath = "/api/internal/evaluations";
 const evaluationCommitPath = "/api/internal/evaluation-commits";
 const metricEventPath = "/api/sdk/events";
+const rawEventQueueNames = new Set([
+  "splitch-raw-events-local",
+  "splitch-raw-evaluations-local",
+  "splitch-raw-events-shared-preview",
+  "splitch-raw-evaluations-shared-preview",
+  "splitch-raw-events",
+  "splitch-raw-evaluations",
+]);
+const metricEventQueueNames = new Set([
+  "splitch-metric-events-local",
+  "splitch-metric-events-shared-preview",
+  "splitch-metric-events",
+]);
+const metricEventReconciliationQueueNames = new Set([
+  "splitch-metric-events-reconciliation-local",
+  "splitch-metric-events-reconciliation-shared-preview",
+  "splitch-metric-events-reconciliation",
+]);
 const metricEventRoutes = routesDelegatedTo("event-ingest-api").filter(
   (route) => route.operationId === "sdk_track",
 );
@@ -92,8 +112,19 @@ const handler = {
     }
     return new Response("not found", { status: 404 });
   },
-  queue: handleMetricEventQueue,
+  queue: handleQueue,
 } satisfies ExportedHandler<Env, Record<string, unknown>>;
+
+async function handleQueue(batch: MessageBatch<Record<string, unknown>>, env: Env): Promise<void> {
+  if (rawEventQueueNames.has(batch.queue)) {
+    return handleRawEventQueue(batch, env);
+  }
+  if (metricEventReconciliationQueueNames.has(batch.queue)) {
+    return handleMetricEventReconciliationQueue(batch, env);
+  }
+  if (metricEventQueueNames.has(batch.queue)) return handleMetricEventQueue(batch, env);
+  throw new Error(`event-ingest-api received an unknown queue: ${batch.queue}`);
+}
 
 /**
  * Everything `splitch-evaluation-api` may send over the single `EVENT_INGEST`

@@ -10,6 +10,9 @@
  * holding a Durable Object lock across `fetch()` an anti-pattern for exactly
  * this reason:
  * https://developers.cloudflare.com/durable-objects/best-practices/rules-of-durable-objects/
+ * Queue-backed microbatches cannot retain a request section across their
+ * cross-authority append, so they extend this invariant with durable delivery
+ * permits instead.
  *
  * Deliveries only need to exclude a reset, not each other, so they take the
  * shared side and run concurrently. A reset takes the exclusive side: it waits

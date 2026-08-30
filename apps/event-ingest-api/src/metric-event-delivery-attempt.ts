@@ -25,17 +25,18 @@ export interface MetricEventDeliveryAttempt {
   readonly state: MetricEventDeliveryState;
   readonly attempts: number;
   readonly reason?: string;
+  readonly reconciliation?:
+    | { readonly kind: "copy-starting"; readonly claimedAt: string }
+    | { readonly kind: "copy-job"; readonly jobId: string };
 }
 
 /**
  * States that still owe an answer to a *concurrent* privacy deletion. A
  * deletion may not clear the referenced payload while one is open.
  *
- * `attempting` blocks a deletion and nothing else: while the invocation that
- * claimed it is alive, its row may be mid-flight to Tinybird, so redacting now
- * would return a proof for a row that still lands. A redelivery reading that
- * same state is asking a different question, and gets a different answer in
- * `beginDelivery`.
+ * `attempting` is ambiguous after ownership changes: the prior invocation may
+ * have reached Tinybird before it died. It blocks deletion and can only move
+ * through reconciliation, exactly like an indeterminate response.
  */
 const BLOCKS_DELETION: readonly MetricEventDeliveryState[] = [
   "attempting",
@@ -83,13 +84,15 @@ export function beginDelivery(
     // and acknowledging could lose one, so only reconciliation may resolve it.
     return { outcome: { kind: "unresolved", attempt: existing } };
   }
+  if (existing.state === "attempting") {
+    return { outcome: { kind: "unresolved", attempt: existing } };
+  }
   if (existing.state === "poison_pending") {
     return { outcome: { kind: "poison", attempt: existing } };
   }
-  // `attempting` reaching here belongs to an invocation that has since died, so
-  // nothing ever confirmed a dispatch for it. Re-sending risks a duplicate that
-  // the retry-stable `dedup_key` makes reconcilable; acknowledging would drop
-  // the event silently, which nothing can recover.
+  // Only an explicitly retryable Tinybird response may be resubmitted. An
+  // attempting or indeterminate record above has no proof that the first
+  // request was absent and therefore belongs to reconciliation.
   const attempts = existing.attempts + 1;
   if (attempts > MAX_DELIVERY_ATTEMPTS) {
     const attempt = {
@@ -120,6 +123,22 @@ export async function settleMetricEventDelivery(
   attempt: MetricEventDeliveryAttempt,
 ): Promise<void> {
   await outboxFetch(namespace, dedupKey, "/settle-delivery", attempt);
+}
+
+/** Reads the current attempt before reconciliation performs an external side effect. */
+export async function readMetricEventDelivery(
+  namespace: MetricEventOutboxNamespace | undefined,
+  dedupKey: string,
+): Promise<MetricEventDeliveryAttempt | undefined> {
+  if (!namespace) throw new Error("METRIC_EVENT_OUTBOX binding is unavailable");
+  const response = await namespace
+    .get(namespace.idFromName(dedupKey))
+    .fetch("https://metric-event-outbox.local/delivery", { method: "GET" });
+  if (response.status === 404) return undefined;
+  if (!response.ok) {
+    throw new Error(`Metric Event outbox /delivery returned HTTP ${response.status}`);
+  }
+  return (await response.json()) as MetricEventDeliveryAttempt;
 }
 
 async function outboxFetch(
