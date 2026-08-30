@@ -2,13 +2,13 @@ import { clientKeyCacheKey } from "@splitch/contracts";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { authenticateDelegatedDataPlaneCredential } from "./client-key-auth";
 import {
-  credentialFixtures as fixtures,
+  type CredentialKind,
   credentialLabel,
   credentialRecord,
-  type CredentialKind,
-  delegatedIdentity as identity,
   envWithCredential,
   envWithValues,
+  credentialFixtures as fixtures,
+  delegatedIdentity as identity,
 } from "./client-key-auth.test-fixture";
 import { renderError } from "./errors";
 

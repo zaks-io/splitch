@@ -1,4 +1,4 @@
-import { eventDefinitionConfigKey, ErrorResponseSchema, getRoute } from "@splitch/contracts";
+import { ErrorResponseSchema, eventDefinitionConfigKey, getRoute } from "@splitch/contracts";
 import { describe, expect, it, vi } from "vitest";
 import {
   hotConfig,

@@ -1,4 +1,4 @@
-import { httpStatusForError, type ErrorResponse } from "@splitch/contracts";
+import { type ErrorResponse, httpStatusForError } from "@splitch/contracts";
 
 type EmptyDetailCode =
   | "UNAUTHORIZED"

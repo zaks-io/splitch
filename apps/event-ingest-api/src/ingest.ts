@@ -1,6 +1,6 @@
 import { timingSafeEqualString } from "@splitch/worker-runtime";
-import { deliverAppIdentityRow, identityVersionForRow } from "./entity-metric-privacy";
 import { deliverEntityIdentityRow } from "./entity-identity-row-delivery";
+import { deliverAppIdentityRow, identityVersionForRow } from "./entity-metric-privacy";
 import { emptyError, renderError, serviceUnavailable } from "./errors";
 import { evaluationUsageReplayWindow } from "./evaluation-usage-replay-window";
 import { rejectIngestAdmission } from "./ingest-admission";

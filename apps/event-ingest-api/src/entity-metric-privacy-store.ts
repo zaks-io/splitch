@@ -1,4 +1,5 @@
 import {
+  admitEntityIdentityRow,
   completeAppIdentityDeliveryReset,
   deliverAppIdentityRow,
   deliverEntityIdentityRow,
@@ -6,19 +7,26 @@ import {
   registerAppEvaluation,
   resetAppIdentityDelivery,
 } from "./app-identity-event-inventory";
+import { DeliveryResetLock } from "./delivery-reset-lock";
+import {
+  admitEntityRowResponse,
+  deliverEntityRowAtAuthority,
+} from "./entity-identity-row-delivery";
 import {
   atOrBefore,
   type EntityEvaluationInventoryEntry,
   type EntityMetricInventoryEntry,
-  evaluationEntryGroups,
   evaluationEntryKey,
   parseDeleteBefore,
   parseEntry,
   parseEvaluationEntry,
 } from "./entity-metric-privacy";
-import { DeliveryResetLock } from "./delivery-reset-lock";
-import { evaluationCommitOutbox } from "./evaluation-commit-outbox-client";
-import { deliverEntityRowAtAuthority } from "./entity-identity-row-delivery";
+import {
+  deleteEvaluationRecords,
+  deleteMetricRecords,
+  exportEvaluationRecords,
+  exportMetricRecords,
+} from "./entity-metric-privacy-records";
 import type { Env } from "./types";
 
 const SUPPRESSION_KEY = "privacy:suppression";
@@ -64,7 +72,9 @@ export class EntityMetricPrivacyDurableObject {
       "/register-app-evaluation": concurrent(() => this.registerAppEvaluation(request)),
       "/deliver-app-row": concurrent(() => this.deliverAppRow(request)),
       "/deliver-entity-row": concurrent(() => this.deliverEntityRow(request)),
+      "/admit-entity-row": concurrent(() => this.admitEntityRow(request)),
       "/deliver-row": concurrent(() => this.deliverRow(request)),
+      "/admit-row": concurrent(() => this.admitRow(request)),
       "/reset-app": alone(() => this.resetApp(request)),
       "/complete-reset": alone(() => this.completeReset(request)),
     };
@@ -87,8 +97,16 @@ export class EntityMetricPrivacyDurableObject {
     return deliverEntityIdentityRow(this.ctx.storage, this.env, request);
   }
 
+  private async admitEntityRow(request: Request): Promise<Response> {
+    return admitEntityIdentityRow(this.ctx.storage, this.env, request);
+  }
+
   private async deliverRow(request: Request): Promise<Response> {
     return deliverEntityRowAtAuthority(this.ctx.storage, this.env, request);
+  }
+
+  private async admitRow(request: Request): Promise<Response> {
+    return admitEntityRowResponse(this.ctx.storage, request);
   }
 
   private async resetApp(request: Request): Promise<Response> {
@@ -148,13 +166,13 @@ export class EntityMetricPrivacyDurableObject {
   }
 
   private async exportRecords(): Promise<Response> {
-    const metricEntries = await this.metricEntries();
-    const evaluationEntries = await this.evaluationEntries();
-    const metricRecords = await this.exportMetricRecords(metricEntries);
-    const evaluationRecords = await this.exportEvaluationRecords(evaluationEntries);
-    const records = [...metricRecords, ...evaluationRecords];
+    const metricRecords = await exportMetricRecords(this.env, await this.metricEntries());
+    const evaluationRecords = await exportEvaluationRecords(
+      this.env,
+      await this.evaluationEntries(),
+    );
     return Response.json({
-      records,
+      records: [...metricRecords, ...evaluationRecords],
       proofs: [
         `metric-event-outbox-inventory:rows=${String(metricRecords.length)}`,
         `evaluation-commit-outbox-inventory:rows=${String(evaluationRecords.length)}`,
@@ -162,41 +180,11 @@ export class EntityMetricPrivacyDurableObject {
     });
   }
 
-  private async exportMetricRecords(
-    entries: readonly EntityMetricInventoryEntry[],
-  ): Promise<Record<string, unknown>[]> {
-    const records = [];
-    for (const entry of entries) {
-      const response = await this.outbox(entry.dedupKey).fetch(
-        "https://metric-event-outbox.local/export",
-      );
-      if (response.status === 404) continue;
-      if (!response.ok)
-        throw new Error(`Metric Event outbox export returned HTTP ${response.status}`);
-      const exported = (await response.json()) as { deleted?: unknown; row?: unknown };
-      if (exported.deleted !== true && !isRecord(exported.row)) {
-        throw new Error("Metric Event outbox export returned an invalid record");
-      }
-      if (isRecord(exported.row)) records.push(exported.row);
-    }
-    return records;
-  }
-
-  private async exportEvaluationRecords(
-    entries: readonly EntityEvaluationInventoryEntry[],
-  ): Promise<Record<string, unknown>[]> {
-    const records = [];
-    for (const [identity, eventIds] of evaluationEntryGroups(entries)) {
-      records.push(...(await this.evaluationOutbox().privacyExport(identity, eventIds)));
-    }
-    return records;
-  }
-
   private async deleteRecords(): Promise<Response> {
     const metricEntries = await this.metricEntries();
     const evaluationEntries = await this.evaluationEntries();
-    const metricCount = await this.deleteMetricRecords(metricEntries);
-    const evaluationCount = await this.deleteEvaluationRecords(evaluationEntries);
+    const metricCount = await deleteMetricRecords(this.env, metricEntries);
+    const evaluationCount = await deleteEvaluationRecords(this.env, evaluationEntries);
     await this.ctx.storage.delete([
       ...metricEntries.map((entry) => `${EVENT_PREFIX}${entry.dedupKey}`),
       ...evaluationEntries.map(evaluationEntryKey),
@@ -208,44 +196,6 @@ export class EntityMetricPrivacyDurableObject {
         "metric-event-queue:protected-by-durable-cutoff",
       ],
     });
-  }
-
-  private async deleteMetricRecords(
-    entries: readonly EntityMetricInventoryEntry[],
-  ): Promise<number> {
-    let deletedCount = 0;
-    for (const entry of entries) {
-      const response = await this.outbox(entry.dedupKey).fetch(
-        "https://metric-event-outbox.local/suppress",
-        {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify(entry),
-        },
-      );
-      if (!response.ok)
-        throw new Error(`Metric Event outbox deletion returned HTTP ${response.status}`);
-      const result = (await response.json()) as { deleted?: unknown; proof?: unknown };
-      if (
-        result.deleted !== true ||
-        typeof result.proof !== "string" ||
-        result.proof.length === 0
-      ) {
-        throw new Error("Metric Event outbox deletion omitted its proof");
-      }
-      deletedCount += 1;
-    }
-    return deletedCount;
-  }
-
-  private async deleteEvaluationRecords(
-    entries: readonly EntityEvaluationInventoryEntry[],
-  ): Promise<number> {
-    let deletedCount = 0;
-    for (const [identity, eventIds] of evaluationEntryGroups(entries)) {
-      deletedCount += await this.evaluationOutbox().privacyDelete(identity, eventIds);
-    }
-    return deletedCount;
   }
 
   private async metricEntries(): Promise<EntityMetricInventoryEntry[]> {
@@ -265,18 +215,6 @@ export class EntityMetricPrivacyDurableObject {
       ).values(),
     ];
   }
-
-  private outbox(dedupKey: string) {
-    const namespace = this.env.METRIC_EVENT_OUTBOX;
-    if (!namespace) throw new Error("METRIC_EVENT_OUTBOX binding is unavailable");
-    return namespace.get(namespace.idFromName(dedupKey));
-  }
-
-  private evaluationOutbox() {
-    const outbox = evaluationCommitOutbox(this.env.EVALUATION_COMMIT_OUTBOX);
-    if (!outbox) throw new Error("EVALUATION_COMMIT_OUTBOX binding is unavailable");
-    return outbox;
-  }
 }
 
 interface Route {
@@ -290,8 +228,4 @@ function concurrent(run: () => Promise<Response>): Route {
 
 function alone(run: () => Promise<Response>): Route {
   return { exclusive: true, run };
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }

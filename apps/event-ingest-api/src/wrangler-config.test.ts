@@ -97,13 +97,63 @@ describe("Event Ingest Worker Wrangler runtime config", () => {
       ).toBe(`${consumer.queue}-dlq`);
     }
   });
+
+  /**
+   * The dead-letter copy is deliberate: the consumer sends a poisoned row to the
+   * DLQ itself and only then acknowledges it. Without a producer binding for the
+   * same queue the consumer names as its dead_letter_queue, that copy throws and
+   * the row can only reach the DLQ by exhausting retries.
+   */
+  it.each([
+    ["local", config],
+    ["shared-preview", config.env?.["shared-preview"]],
+    ["production", config.env?.production],
+  ])("binds the Metric Event dead-letter queue as a producer for %s", (target, env) => {
+    const producers = env?.queues?.producers ?? [];
+    const consumers = env?.queues?.consumers ?? [];
+
+    expect(consumers.length, `${target} declares no Metric Event consumer`).toBeGreaterThan(0);
+    for (const consumer of consumers) {
+      expect(
+        producers,
+        `${target} cannot write to ${String(consumer.dead_letter_queue)}`,
+      ).toContainEqual({
+        binding: "METRIC_EVENTS_DLQ",
+        queue: consumer.dead_letter_queue,
+      });
+    }
+  });
+
+  /**
+   * The whole point of the queue is that Tinybird sees one request per batch,
+   * not one per row, against a documented ceiling of 100 requests per second per
+   * data source. A short batch timeout keeps ingest latency low, and the
+   * concurrency bounds how far a backlog may fan out into that ceiling: an
+   * invocation issues about one request per batch, so five concurrent consumers
+   * stay near a third of the budget even when each batch turns around fast
+   * (docs/adr/0043-event-ingest-will-use-durable-queue-backed-tinybird-microbatches.md).
+   */
+  it.each([
+    ["local", config],
+    ["shared-preview", config.env?.["shared-preview"]],
+    ["production", config.env?.production],
+  ])("microbatches Metric Event delivery for %s", (target, env) => {
+    const consumers = env?.queues?.consumers ?? [];
+
+    expect(consumers.length, `${target} declares no Metric Event consumer`).toBeGreaterThan(0);
+    for (const consumer of consumers) {
+      expect(consumer.max_batch_size, `${target} batches too few rows per request`).toBe(100);
+      expect(consumer.max_batch_timeout, `${target} holds a batch too long`).toBe(1);
+      expect(consumer.max_concurrency, `${target} fans out past the Tinybird ceiling`).toBe(5);
+    }
+  });
 });
 
 interface WranglerConfig {
   durable_objects?: DurableObjectsConfig;
   env?: Record<string, WranglerTarget | undefined>;
   migrations?: Migration[];
-  queues?: { consumers?: Array<QueueConsumer> };
+  queues?: Queues;
   secrets?: { required?: string[] };
   vars?: Record<string, unknown>;
 }
@@ -111,15 +161,23 @@ interface WranglerConfig {
 interface WranglerTarget {
   durable_objects?: DurableObjectsConfig;
   migrations?: Migration[];
-  queues?: { consumers?: Array<QueueConsumer> };
+  queues?: Queues;
   routes?: Array<{ pattern?: string; custom_domain?: boolean }>;
   secrets?: { required?: string[] };
   vars?: Record<string, unknown>;
   workers_dev?: boolean;
 }
 
+interface Queues {
+  producers?: Array<{ binding?: string; queue?: string }>;
+  consumers?: QueueConsumer[];
+}
+
 interface QueueConsumer {
   queue?: string;
+  max_batch_size?: number;
+  max_batch_timeout?: number;
+  max_concurrency?: number;
   max_retries?: number;
   dead_letter_queue?: string;
 }

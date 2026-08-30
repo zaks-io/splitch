@@ -72,6 +72,24 @@ export async function deliverEntityIdentityRow(
   env: Env,
   request: Request,
 ): Promise<Response> {
+  return forwardEntityIdentityRow(storage, env, request, "deliver-row");
+}
+
+/** The admission half, for queue-backed datasources that batch the append themselves. */
+export async function admitEntityIdentityRow(
+  storage: DurableObjectStorage,
+  env: Env,
+  request: Request,
+): Promise<Response> {
+  return forwardEntityIdentityRow(storage, env, request, "admit-row");
+}
+
+async function forwardEntityIdentityRow(
+  storage: DurableObjectStorage,
+  env: Env,
+  request: Request,
+  entityRoute: string,
+): Promise<Response> {
   const body = (await request.json()) as Record<string, unknown>;
   if (
     !isRecord(body.row) ||
@@ -96,7 +114,7 @@ export async function deliverEntityIdentityRow(
   };
   await storage.put(`${APP_ENTITY_PREFIX}${ref.idType}:${ref.entityFamilyHash}`, ref);
   const response = await entityStub(env.ENTITY_METRIC_PRIVACY, ref).fetch(
-    "https://entity-privacy.local/deliver-row",
+    `https://entity-privacy.local/${entityRoute}`,
     {
       method: "POST",
       headers: { "content-type": "application/json" },

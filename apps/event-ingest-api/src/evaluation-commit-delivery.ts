@@ -1,10 +1,10 @@
-import { deliverAppIdentityRow, identityVersionForRow } from "./entity-metric-privacy";
 import { deliverEntityIdentityRow } from "./entity-identity-row-delivery";
+import { deliverAppIdentityRow, identityVersionForRow } from "./entity-metric-privacy";
 import {
   appendRawEvent,
+  type EvaluationUsageEventInput,
   tinybirdDelivery,
   toEvaluationUsageTinybirdRow,
-  type EvaluationUsageEventInput,
 } from "./tinybird";
 import type { Env, TinybirdDelivery } from "./types";
 
