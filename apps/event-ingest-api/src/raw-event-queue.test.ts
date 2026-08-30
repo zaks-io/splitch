@@ -48,6 +48,21 @@ describe("raw event queue delivery", () => {
     );
   });
 
+  it("durably transfers a no-response outcome without resubmitting it", async () => {
+    const fetch = vi.fn(async () => {
+      throw new Error("connection reset");
+    });
+    vi.stubGlobal("fetch", fetch);
+    const queued = message("one");
+
+    const { rawEventsDlq } = await deliver("splitch-raw-events", [queued]);
+
+    expect(fetch).toHaveBeenCalledOnce();
+    expect(rawEventsDlq.sendBatch).toHaveBeenCalledOnce();
+    expect(queued.ack).toHaveBeenCalledOnce();
+    expect(queued.retry).not.toHaveBeenCalled();
+  });
+
   it("transfers a permanent failure to the datasource DLQ after one Tinybird request", async () => {
     const fetch = vi.fn(async () => new Response(null, { status: 400 }));
     vi.stubGlobal("fetch", fetch);
@@ -73,6 +88,38 @@ describe("raw event queue delivery", () => {
     expect(rawEventsDlq.sendBatch).not.toHaveBeenCalled();
     expect(queued.ack).not.toHaveBeenCalled();
     expect(queued.retry).toHaveBeenCalledOnce();
+  });
+
+  it("emits payload-free backlog and outcome telemetry", async () => {
+    const info = vi.spyOn(console, "info").mockImplementation(() => {});
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => Response.json({ successful_rows: 1, quarantined_rows: 0 })),
+    );
+    const queued = message("telemetry", "raw_evaluations");
+
+    await deliver("splitch-raw-evaluations", [queued]);
+
+    const settlement = info.mock.calls.find(
+      ([message]) => message === "event-ingest-api raw event batch settled",
+    );
+    expect(settlement?.[1]).toEqual(
+      expect.objectContaining({
+        queue: "splitch-raw-evaluations",
+        datasource: "raw_evaluations",
+        rowCount: 1,
+        deliveredCount: 1,
+        retryableCount: 0,
+        indeterminateCount: 0,
+        poisonCount: 0,
+        suppressedCount: 0,
+        backlogCount: 1,
+        backlogBytes: 1_024,
+        oldestMessageTimestamp: "2026-08-30T00:00:00.000Z",
+      }),
+    );
+    expect(JSON.stringify(settlement?.[1])).not.toContain("app_id");
+    expect(JSON.stringify(settlement?.[1])).not.toContain("sha256:telemetry");
   });
 
   it("rejects a datasource envelope on the wrong queue", async () => {

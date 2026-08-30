@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import type { MetricEventDeliveryAttempt } from "./metric-event-delivery-attempt";
 import { handleMetricEventReconciliationQueue } from "./metric-event-reconciliation";
 import type { Env } from "./types";
 
@@ -37,21 +38,20 @@ describe("Metric Event reconciliation", () => {
       );
     vi.stubGlobal("fetch", fetch);
     const outbox = outboxNamespace();
-    const reconciliationQueue = queue();
     const queued = message(2);
 
-    await handleMetricEventReconciliationQueue(batch(queued), env(outbox, reconciliationQueue));
+    await handleMetricEventReconciliationQueue(batch(queued), env(outbox));
 
-    expect(queued.ack).toHaveBeenCalledOnce();
-    expect(queued.retry).not.toHaveBeenCalled();
-    expect(outbox.fetch).not.toHaveBeenCalled();
+    expect(queued.ack).not.toHaveBeenCalled();
+    expect(queued.retry).toHaveBeenCalledOnce();
     expect(fetch).toHaveBeenCalledTimes(2);
     const populateUrl = new URL(String(fetch.mock.calls[1]?.[0]));
     expect(populateUrl.pathname).toBe("/v0/pipes/populate_metric_event_delivery_state/copy");
     expect(fetch.mock.calls[1]?.[1]).toEqual(expect.objectContaining({ method: "POST" }));
-    expect(reconciliationQueue.send).toHaveBeenCalledWith(
-      expect.objectContaining({ copyJobId: "copy-job-1" }),
-    );
+    expect(outbox.delivery().reconciliation).toEqual({
+      kind: "copy-job",
+      jobId: "copy-job-1",
+    });
   });
 
   it("polls the same Copy job before verifying and settling aggregate state", async () => {
@@ -61,9 +61,12 @@ describe("Metric Event reconciliation", () => {
       .mockResolvedValueOnce(Response.json({ status: "done" }))
       .mockResolvedValueOnce(Response.json({ data: [{ raw_rows: 1, state_rows: 1 }] }));
     vi.stubGlobal("fetch", fetch);
-    const outbox = outboxNamespace();
+    const outbox = outboxNamespace({
+      kind: "copy-job",
+      jobId: "copy-job-1",
+    });
     const reconciliationQueue = queue();
-    const queued = message(3, "copy-job-1");
+    const queued = message(3);
 
     await handleMetricEventReconciliationQueue(batch(queued), env(outbox, reconciliationQueue));
 
@@ -85,9 +88,12 @@ describe("Metric Event reconciliation", () => {
       .mockResolvedValueOnce(Response.json({ data: [{ raw_rows: 1, state_rows: 0 }] }))
       .mockResolvedValueOnce(Response.json({ status: "working" }));
     vi.stubGlobal("fetch", fetch);
-    const outbox = outboxNamespace();
+    const outbox = outboxNamespace({
+      kind: "copy-job",
+      jobId: "copy-job-1",
+    });
     const reconciliationQueue = queue();
-    const queued = message(3, "copy-job-1");
+    const queued = message(3);
 
     await handleMetricEventReconciliationQueue(batch(queued), env(outbox, reconciliationQueue));
 
@@ -95,7 +101,30 @@ describe("Metric Event reconciliation", () => {
     expect(queued.retry).toHaveBeenCalledOnce();
     expect(reconciliationQueue.send).not.toHaveBeenCalled();
     expect(fetch).toHaveBeenCalledTimes(2);
-    expect(outbox.fetch).not.toHaveBeenCalled();
+    expect(outbox.delivery().reconciliation).toEqual({
+      kind: "copy-job",
+      jobId: "copy-job-1",
+    });
+  });
+
+  it("never starts a second Copy job after the first start loses its response", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const fetch = vi
+      .fn<typeof globalThis.fetch>()
+      .mockResolvedValueOnce(Response.json({ data: [{ raw_rows: 1, state_rows: 0 }] }))
+      .mockRejectedValueOnce(new Error("Copy response lost"))
+      .mockResolvedValueOnce(Response.json({ data: [{ raw_rows: 1, state_rows: 0 }] }));
+    vi.stubGlobal("fetch", fetch);
+    const outbox = outboxNamespace();
+    const queued = message(2);
+
+    await handleMetricEventReconciliationQueue(batch(queued), env(outbox));
+    await handleMetricEventReconciliationQueue(batch(queued), env(outbox));
+
+    expect(queued.retry).toHaveBeenCalledTimes(2);
+    expect(queued.ack).not.toHaveBeenCalled();
+    expect(outbox.delivery().reconciliation?.kind).toBe("copy-starting");
+    expect(fetch.mock.calls.filter((call) => call[1]?.method === "POST")).toHaveLength(1);
   });
 
   it("keeps a scoped absence unresolved for DLQ and operator review", async () => {
@@ -114,7 +143,7 @@ describe("Metric Event reconciliation", () => {
   });
 });
 
-function message(attempts: number, copyJobId?: string) {
+function message(attempts: number) {
   return {
     id: "reconcile-1",
     timestamp: new Date("2026-08-30T00:00:00.000Z"),
@@ -127,7 +156,6 @@ function message(attempts: number, copyJobId?: string) {
       environmentId: "env_1",
       eventDefinitionId: "event_definition_1",
       serverReceivedAt: "2026-08-30T00:00:00.000Z",
-      ...(copyJobId === undefined ? {} : { copyJobId }),
     },
     ack: vi.fn(),
     retry: vi.fn(),
@@ -144,10 +172,25 @@ function batch(queued: ReturnType<typeof message>) {
   } satisfies MessageBatch<Record<string, unknown>>;
 }
 
-function outboxNamespace() {
-  const fetch = vi.fn(async () => Response.json({ ok: true }));
+function outboxNamespace(reconciliation?: MetricEventDeliveryAttempt["reconciliation"]) {
+  let delivery: MetricEventDeliveryAttempt = {
+    attemptId: "attempt-1",
+    state: "indeterminate",
+    attempts: 1,
+    ...(reconciliation === undefined ? {} : { reconciliation }),
+  };
+  const fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+    const path = new URL(String(input)).pathname;
+    if (path === "/delivery") return Response.json(delivery);
+    if (path === "/settle-delivery") {
+      delivery = JSON.parse(String(init?.body)) as typeof delivery;
+      return Response.json({ settled: delivery.state });
+    }
+    return Response.json({ ok: true });
+  });
   return {
     fetch,
+    delivery: () => delivery,
     namespace: {
       idFromName: (name: string) => name as unknown as DurableObjectId,
       get: () => ({ fetch }),

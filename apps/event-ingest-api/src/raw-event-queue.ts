@@ -8,6 +8,11 @@ import {
   type RawEventQueueEnvelope,
 } from "./raw-event-queue-envelope";
 import {
+  emptyRawEventOutcomeCounts,
+  logRawEventBatchSettlement,
+  type RawEventOutcomeCounts,
+} from "./raw-event-queue-telemetry";
+import {
   markRawEventDelivered,
   markRawEventRetryable,
   markRawEventTerminal,
@@ -35,17 +40,27 @@ export async function handleRawEventQueue(
 ): Promise<void> {
   requirePlatformTarget(env.SPLITCH_PLATFORM_TARGET);
   const queueDatasource = datasourceForQueue(batch.queue);
-  const groups = await admitBatch(batch.messages, queueDatasource, env);
-  for (const [datasource, admitted] of groups) await deliverGroup(datasource, admitted, env);
+  const outcomes = emptyRawEventOutcomeCounts();
+  try {
+    const groups = await admitBatch(batch.messages, queueDatasource, env, outcomes);
+    for (const [datasource, admitted] of groups) {
+      await deliverGroup(datasource, admitted, env, outcomes);
+    }
+  } finally {
+    logRawEventBatchSettlement(batch, queueDatasource, outcomes);
+  }
 }
 
 async function admitBatch(
   messages: readonly Message<Record<string, unknown>>[],
   queueDatasource: RawEventDatasource,
   env: Env,
+  outcomes: RawEventOutcomeCounts,
 ): Promise<Map<RawEventDatasource, AdmittedRawEvent[]>> {
   const groups = new Map<RawEventDatasource, AdmittedRawEvent[]>();
-  await Promise.all(messages.map((message) => admitMessage(message, queueDatasource, env, groups)));
+  await Promise.all(
+    messages.map((message) => admitMessage(message, queueDatasource, env, groups, outcomes)),
+  );
   return groups;
 }
 
@@ -54,6 +69,7 @@ async function admitMessage(
   queueDatasource: RawEventDatasource,
   env: Env,
   groups: Map<RawEventDatasource, AdmittedRawEvent[]>,
+  outcomes: RawEventOutcomeCounts,
 ): Promise<void> {
   let queued: RawEventQueueEnvelope;
   try {
@@ -62,6 +78,7 @@ async function admitMessage(
       throw new Error(`${queued.datasource} envelope arrived on ${queueDatasource} queue`);
     }
   } catch (error) {
+    outcomes.retryable += 1;
     retry(message, error);
     return;
   }
@@ -69,13 +86,21 @@ async function admitMessage(
   const item = { message, envelope: queued, deliveryId };
   try {
     const privacy = await admitRawEventPrivacy(queued.datasource, queued.row, deliveryId, env);
-    if (privacy.kind === "suppressed") return message.ack();
+    if (privacy.kind === "suppressed") {
+      outcomes.suppressed += 1;
+      return message.ack();
+    }
     if (privacy.kind === "delivered") {
+      outcomes.delivered += 1;
       await settleCompletedAdmissions([item], env, (completed) => completed.message.ack());
       return;
     }
-    if (privacy.kind === "terminal") return resumeTerminalFailure(item, privacy.state, env);
+    if (privacy.kind === "terminal") {
+      outcomes[privacy.state.classification] += 1;
+      return resumeTerminalFailure(item, privacy.state, env);
+    }
   } catch (error) {
+    outcomes.retryable += 1;
     await cleanupFailedAdmission(item, env, error);
     return;
   }
@@ -104,9 +129,11 @@ async function deliverGroup(
   datasource: RawEventDatasource,
   admitted: readonly AdmittedRawEvent[],
   env: Env,
+  outcomes: RawEventOutcomeCounts,
 ): Promise<void> {
   const delivery = tinybirdDelivery(env, datasource);
   if (!delivery.ok) {
+    outcomes.retryable += admitted.length;
     await recordThenComplete(admitted, env, markRawEventRetryable, (item) =>
       retry(item.message, new Error(delivery.error.message)),
     );
@@ -114,6 +141,7 @@ async function deliverGroup(
   }
   for (const microbatch of ndjsonBatches(admitted, (item) => item.envelope.row)) {
     const outcome = await sendNdjsonBatch(microbatch.body, microbatch.items.length, delivery.value);
+    outcomes[outcome.kind] += microbatch.items.length;
     await settleMicrobatch(datasource, microbatch.items, outcome, env);
   }
 }

@@ -90,9 +90,10 @@ export async function sendNdjsonBatch(
       signal: AbortSignal.timeout(TINYBIRD_REQUEST_TIMEOUT_MS),
     });
   } catch (error) {
-    // Pre-response network failure: the request may or may not have been
-    // received, so it is retryable but never blindly acknowledged.
-    return { kind: "retryable", reason: `network failure: ${describe(error)}` };
+    // Fetch does not prove whether a request reached Tinybird before a timeout
+    // or connection failure. Treat every no-response outcome as ambiguous so
+    // the caller reconciles or dead-letters it instead of blindly resending.
+    return { kind: "indeterminate", reason: `no response: ${describe(error)}` };
   }
   return classifyResponse(response, rowCount);
 }

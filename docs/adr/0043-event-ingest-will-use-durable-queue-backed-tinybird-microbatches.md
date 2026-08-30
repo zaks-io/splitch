@@ -41,9 +41,9 @@ Each datasource queue has a fixed drain governor: `max_concurrency = 1`,
 request at a time and caps each uncompressed NDJSON request at 5 MiB. It sequentially splits an
 oversized consumer batch at row boundaries. Queue depth never automatically increases consumer
 concurrency. Tinybird `429`, `500`, and `503` responses honor `Retry-After`, when present, then retry
-with exponential backoff and jitter. HTTP/2 `GOAWAY` recreates the connection before the same bounded
-retry path; pre-response network failures use it as well. Growing oldest-message age alerts operators
-instead of relaxing the governor.
+with exponential backoff and jitter. A timeout, connection loss, or other no-response outcome cannot
+prove the request was absent, so it is indeterminate and never enters the ordinary retry path.
+Growing oldest-message age alerts operators instead of relaxing the governor.
 
 Queue delivery envelopes are independently bounded to 120,000 serialized bytes, below Cloudflare's
 128 KB message limit. Producers split Queue `sendBatch` calls at 100 messages or 240,000 aggregate
@@ -81,8 +81,7 @@ Tinybird; `poison_pending` resumes the DLQ transfer and `poison_transferred` res
 If the post-response state transition fails, the attempt remains `attempting`, and redelivery
 transfers it to reconciliation without resubmitting. The consumer does not recursively
 split or replay the batch to discover a poison row because that would reinsert successful rows and add
-Tinybird load. `429`,
-`500`, `503`, and pre-response network failures receive at most eight total delivery attempts.
+Tinybird load. `429`, `500`, and `503` receive at most eight total delivery attempts.
 Exhaustion enters `poison_pending` and follows the same successful-DLQ-copy then
 `poison_transferred` acknowledgement sequence as a permanent response. Replay is manual, preserves
 every original per-row dedup key, and rechecks current privacy deletion suppression.
@@ -103,7 +102,8 @@ store cannot clear referenced payloads while the record is unresolved. Reconcili
 
 1. raw rows and expected materialized states present means delivered;
 2. raw rows present but states absent triggers a bounded state populate from raw truth, never a raw
-   Events API replay;
+   Events API replay. The outbox persists `copy-starting` before the external Copy POST and persists
+   the returned job ID before polling. A lost start response never authorizes a second Copy job;
 3. raw rows absent permits operator-reviewed replay only after the Tinybird request is settled and
    repeated scoped reads confirm absence; and
 4. mixed or unresolved evidence remains blocked and alerted.

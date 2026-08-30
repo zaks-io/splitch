@@ -103,7 +103,7 @@ describe("Tinybird response classification", () => {
   });
 
   /** A request that never got an answer may still have been committed. */
-  it("treats a network failure as retryable rather than delivered", async () => {
+  it("treats a network failure as indeterminate rather than resubmitting", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn(async () => {
@@ -112,8 +112,8 @@ describe("Tinybird response classification", () => {
     );
 
     expect(await send()).toEqual({
-      kind: "retryable",
-      reason: "network failure: connection reset",
+      kind: "indeterminate",
+      reason: "no response: connection reset",
     });
   });
 });

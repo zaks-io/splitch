@@ -138,6 +138,23 @@ describe("Metric Event Tinybird microbatches", () => {
     expect(fixture.deliveryState("sha256:event-1")).toBe("indeterminate");
   });
 
+  it("parks a no-response batch for reconciliation rather than resubmitting it", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        throw new Error("connection reset");
+      }),
+    );
+    const messages = await seal(fixture, ["event-1"]);
+
+    await deliver(fixture.env, messages);
+
+    expect(messages[0]?.retry).not.toHaveBeenCalled();
+    expect(messages[0]?.ack).toHaveBeenCalledOnce();
+    expect(fixture.deliveryState("sha256:event-1")).toBe("indeterminate");
+    expect(fixture.env.METRIC_EVENTS_RECONCILIATION_QUEUE?.sendBatch).toHaveBeenCalledOnce();
+  });
+
   it("excludes a privacy-deleted row from the request and acknowledges it", async () => {
     const row = metricEvent("event-2");
     await fixture.seal(metricEvent("event-1"));

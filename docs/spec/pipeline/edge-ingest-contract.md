@@ -135,6 +135,7 @@ deterministic on retry.
 | Durable Exposure outbox seal fails before response       | Evaluation fails loud; no Assignment Store write begins        | Retry the same Evaluation idempotency key                                      |
 | Queue publication fails after durable outbox seal        | Accepted rows remain unavailable to analysis until publication | Durable outbox retries Queue publication                                       |
 | Retryable Tinybird `429`/`500`/`503` after queue handoff | Accepted rows remain unavailable to analysis until redelivery  | Bounded queue retry with stable per-row dedup keys                             |
+| Tinybird timeout or other no-response outcome            | Commit status is indeterminate                                 | Durable reconciliation or datasource DLQ transfer; no ordinary retry           |
 | Tinybird `422` materialized-view interruption            | Raw and derived commit status is indeterminate                 | Durable reconciliation record; no ordinary retry                               |
 | Permanent Tinybird failure or quarantined rows           | Affected delivery leaves the primary queue                     | Durable datasource DLQ copy plus critical alert; manual replay only            |
 | DO write fails after durable outbox seal                 | Holdover miss for up to ~60s + retry window                    | `assign()` is deterministic — same Variant computed on miss; DO retry picks up |
@@ -204,9 +205,11 @@ Response handling transitions the same record before queue acknowledgement or re
 
 - a complete `200` becomes `delivered`; redelivery skips Tinybird and resumes acknowledgement;
 - `422` becomes `indeterminate` and enters scoped reconciliation;
-- `429`, `500`, `503`, or HTTP/2 `GOAWAY` becomes `retryable` with the next permitted attempt time;
-  `GOAWAY` also recreates the connection. Before another request, the consumer atomically increments
-  the attempt count and returns the record to `attempting`;
+- `429`, `500`, or `503` becomes `retryable` with the next permitted attempt time. Before another
+  request, the consumer atomically increments the attempt count and returns the record to
+  `attempting`;
+- a timeout, connection loss, or other no-response outcome becomes `indeterminate` because the
+  transport cannot prove the request was absent;
 - a permanent response becomes nonterminal `poison_pending`; and
 - a response-transition failure leaves `state = 'attempting'`.
 
@@ -233,10 +236,10 @@ message age, or producer rate never increases this value automatically. Capacity
 explicit reviewed configuration change backed by observed Tinybird ingestion capacity.
 
 On Tinybird `429`, `500`, or `503`, the consumer honors `Retry-After`, when present, before retrying
-the unacknowledged delivery with exponential backoff and jitter. HTTP/2 `GOAWAY` recreates the
-connection before retry. Pre-response network failures use the same bounded path after their
-write-ahead attempt is classified. The consumer records Tinybird rate-limit headers, retry count,
-queue depth, and oldest-message age. Growing age alerts operators but never relaxes the governor.
+the unacknowledged delivery with exponential backoff and jitter. A no-response transport failure is
+indeterminate and never blindly retried. The consumer records Tinybird rate-limit headers, retry
+count, per-outcome counts, queue depth, and oldest-message age. Growing age alerts operators but
+never relaxes the governor.
 
 ### Poison delivery and dead-letter isolation
 
@@ -264,8 +267,8 @@ load. If the poison transition fails after the Tinybird response, the write-ahea
 operator action, preserves each original row and `dedup_key`, and rechecks current privacy deletion
 suppression before publication.
 
-Tinybird `429`, `500`, `503`, and classified pre-response network failures are retryable. A delivery
-receives at most eight total attempts, including the initial attempt. Exhaustion follows the same
+Tinybird `429`, `500`, and `503` are retryable. A delivery receives at most eight total attempts,
+including the initial attempt. Exhaustion follows the same
 state machine as a permanent response: transition to `poison_pending`, copy the original messages to
 the datasource's dead-letter queue, transition to `poison_transferred` only after that copy succeeds,
 then acknowledge the primary messages and emit the same critical alert. Cloudflare consumer
@@ -285,7 +288,9 @@ The reconciliation worker waits for the Tinybird request to settle, then queries
 and any expected materialized target by recorded App, Environment, date, and retry keys:
 
 1. raw rows and expected states present marks the delivery complete;
-2. raw rows present but states absent runs a bounded state populate from raw truth and reconciles it;
+2. raw rows present but states absent durably claims `copy-starting`, runs one bounded state populate
+   from raw truth, persists the returned Copy job ID, and polls that job. If the start response is
+   lost, subsequent attempts recheck raw and state evidence but never issue a second Copy POST;
 3. raw rows absent permits operator-reviewed replay only after repeated scoped reads confirm absence;
 4. mixed or unresolved evidence remains blocked and alerted without Tinybird replay.
 

@@ -25,6 +25,9 @@ export interface MetricEventDeliveryAttempt {
   readonly state: MetricEventDeliveryState;
   readonly attempts: number;
   readonly reason?: string;
+  readonly reconciliation?:
+    | { readonly kind: "copy-starting"; readonly claimedAt: string }
+    | { readonly kind: "copy-job"; readonly jobId: string };
 }
 
 /**
@@ -120,6 +123,22 @@ export async function settleMetricEventDelivery(
   attempt: MetricEventDeliveryAttempt,
 ): Promise<void> {
   await outboxFetch(namespace, dedupKey, "/settle-delivery", attempt);
+}
+
+/** Reads the current attempt before reconciliation performs an external side effect. */
+export async function readMetricEventDelivery(
+  namespace: MetricEventOutboxNamespace | undefined,
+  dedupKey: string,
+): Promise<MetricEventDeliveryAttempt | undefined> {
+  if (!namespace) throw new Error("METRIC_EVENT_OUTBOX binding is unavailable");
+  const response = await namespace
+    .get(namespace.idFromName(dedupKey))
+    .fetch("https://metric-event-outbox.local/delivery", { method: "GET" });
+  if (response.status === 404) return undefined;
+  if (!response.ok) {
+    throw new Error(`Metric Event outbox /delivery returned HTTP ${response.status}`);
+  }
+  return (await response.json()) as MetricEventDeliveryAttempt;
 }
 
 async function outboxFetch(

@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import type { MetricEventDeliveryAttempt } from "./metric-event-delivery-attempt";
 import { MetricEventOutboxDurableObject } from "./metric-event-outbox";
 import type { Env } from "./types";
 
@@ -69,6 +70,22 @@ describe("Metric Event outbox Durable Object", () => {
 
     expect(lookup.status).toBe(404);
     expect(outbox.send).not.toHaveBeenCalled();
+  });
+
+  it("returns the durable delivery attempt used to fence Copy job creation", async () => {
+    const outbox = makeOutbox();
+    const delivery = {
+      attemptId: "attempt-1",
+      state: "indeterminate",
+      attempts: 1,
+      reconciliation: { kind: "copy-starting", claimedAt: "2026-08-30T00:00:00.000Z" },
+    } as const satisfies MetricEventDeliveryAttempt;
+    outbox.seed({ ...row("entity-7"), queued: true, delivery });
+
+    const response = await outbox.delivery();
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual(delivery);
   });
 
   it("rejects a different event reusing the same dedup key", async () => {
@@ -154,7 +171,7 @@ function makeOutbox(sendImpl: () => Promise<void> = async () => {}) {
 
   return {
     send,
-    seed(state: ClaimInput & { queued: boolean }) {
+    seed(state: ClaimInput & { queued: boolean; delivery?: MetricEventDeliveryAttempt }) {
       storage.set(STATE_KEY, structuredClone(state));
     },
     stored() {
@@ -174,6 +191,11 @@ function makeOutbox(sendImpl: () => Promise<void> = async () => {}) {
     lookup() {
       return object.fetch(
         new Request("https://metric-event-outbox.local/lookup", { method: "GET" }),
+      );
+    },
+    delivery() {
+      return object.fetch(
+        new Request("https://metric-event-outbox.local/delivery", { method: "GET" }),
       );
     },
     async suppress(input: ClaimInput) {

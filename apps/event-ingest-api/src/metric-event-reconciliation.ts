@@ -1,6 +1,9 @@
 import { requirePlatformTarget } from "@splitch/contracts";
 import type { MetricEventDeliveryAttempt } from "./metric-event-delivery-attempt";
-import { settleMetricEventDelivery } from "./metric-event-delivery-attempt";
+import {
+  readMetricEventDelivery,
+  settleMetricEventDelivery,
+} from "./metric-event-delivery-attempt";
 import { queueRetryDelaySeconds } from "./queue-retry";
 import type { Env } from "./types";
 
@@ -24,14 +27,9 @@ interface ReconciliationEnvelope extends Record<string, unknown> {
   readonly environmentId: string;
   readonly eventDefinitionId: string;
   readonly serverReceivedAt: string;
-  readonly copyJobId?: string;
 }
 
-type ReconciliationOutcome =
-  | "committed"
-  | "absent"
-  | "copy-pending"
-  | { readonly copyJobId: string };
+type ReconciliationOutcome = "committed" | "absent" | "copy-pending";
 
 /** Acknowledge the primary message only after its recovery work is durable. */
 export async function transferToReconciliation(
@@ -50,19 +48,14 @@ export async function handleMetricEventReconciliationQueue(
   env: Env,
 ): Promise<void> {
   requirePlatformTarget(env.SPLITCH_PLATFORM_TARGET);
-  const reconciliationQueue = env.METRIC_EVENTS_RECONCILIATION_QUEUE;
-  if (!reconciliationQueue) {
-    throw new Error("METRIC_EVENTS_RECONCILIATION_QUEUE binding is unavailable");
-  }
   for (const message of batch.messages) {
-    await handleReconciliationMessage(message, env, reconciliationQueue);
+    await handleReconciliationMessage(message, env);
   }
 }
 
 async function handleReconciliationMessage(
   message: Message<Record<string, unknown>>,
   env: Env,
-  reconciliationQueue: Queue<Record<string, unknown>>,
 ): Promise<void> {
   try {
     const envelope = parseReconciliationEnvelope(message.body);
@@ -73,11 +66,6 @@ async function handleReconciliationMessage(
         state: "delivered",
         reason: undefined,
       });
-      message.ack();
-      return;
-    }
-    if (typeof outcome === "object") {
-      await reconciliationQueue.send({ ...envelope, copyJobId: outcome.copyJobId });
       message.ack();
       return;
     }
@@ -100,21 +88,60 @@ async function reconcileMetricEvent(
   envelope: ReconciliationEnvelope,
   env: Env,
 ): Promise<ReconciliationOutcome> {
-  let evidence = await readEvidence(envelope, env);
+  const evidence = await readEvidence(envelope, env);
   if (evidence.rawRows > 0 && evidence.stateRows === 0) {
-    if (envelope.copyJobId === undefined) {
-      return { copyJobId: await startStatePopulate(envelope, env) };
-    }
-    if ((await readCopyJobStatus(envelope.copyJobId, env)) !== "done") {
-      return "copy-pending";
-    }
-    evidence = await readEvidence(envelope, env);
+    return reconcileRawOnlyEvidence(envelope, env);
   }
+  return classifyEvidence(evidence);
+}
+
+async function reconcileRawOnlyEvidence(
+  envelope: ReconciliationEnvelope,
+  env: Env,
+): Promise<ReconciliationOutcome> {
+  const current = await currentAttempt(envelope, env);
+  if (current.reconciliation?.kind === "copy-starting") {
+    // The start request may already have created a job. Raw/state evidence is
+    // checked before this branch on every retry, so never issue a second POST.
+    throw new Error("Tinybird Copy job start outcome is unresolved");
+  }
+  if (current.reconciliation?.kind !== "copy-job") {
+    const claimed = {
+      ...current,
+      reconciliation: { kind: "copy-starting", claimedAt: new Date().toISOString() },
+    } as const;
+    await settleMetricEventDelivery(env.METRIC_EVENT_OUTBOX, envelope.dedupKey, claimed);
+    const copyJobId = await startStatePopulate(envelope, env);
+    await settleMetricEventDelivery(env.METRIC_EVENT_OUTBOX, envelope.dedupKey, {
+      ...claimed,
+      reconciliation: { kind: "copy-job", jobId: copyJobId },
+    });
+    return "copy-pending";
+  }
+  if ((await readCopyJobStatus(current.reconciliation.jobId, env)) !== "done") {
+    return "copy-pending";
+  }
+  return classifyEvidence(await readEvidence(envelope, env));
+}
+
+function classifyEvidence(evidence: ReconciliationEvidence): ReconciliationOutcome {
   if (evidence.rawRows > 0 && evidence.stateRows > 0) return "committed";
   if (evidence.rawRows === 0 && evidence.stateRows === 0) return "absent";
   throw new Error(
     `Tinybird reconciliation returned mixed evidence raw=${String(evidence.rawRows)} state=${String(evidence.stateRows)}`,
   );
+}
+
+async function currentAttempt(
+  envelope: ReconciliationEnvelope,
+  env: Env,
+): Promise<MetricEventDeliveryAttempt> {
+  const current = await readMetricEventDelivery(env.METRIC_EVENT_OUTBOX, envelope.dedupKey);
+  if (!current) throw new Error("Metric Event reconciliation has no delivery attempt");
+  if (current.attemptId !== envelope.attempt.attemptId) {
+    throw new Error("Metric Event reconciliation attempt is no longer current");
+  }
+  return current;
 }
 
 interface ReconciliationEvidence {
@@ -230,7 +257,6 @@ function parseReconciliationEnvelope(value: Record<string, unknown>): Reconcilia
   ) {
     throw new Error("Metric Event reconciliation envelope is invalid");
   }
-  if (value.copyJobId !== undefined) requiredString(value, "copyJobId");
   for (const field of [
     "dedupKey",
     "appId",
