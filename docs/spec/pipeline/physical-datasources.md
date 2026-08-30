@@ -208,6 +208,11 @@ SCHEMA:
   event_definition_version_id String
   event_name                  String
   session_id_hash             String
+  visitor_hash                String
+  pathname                    String
+  referrer_hostname           Nullable(String)
+  country                     Nullable(LowCardinality(String))
+  device_class                LowCardinality(String)
   capture_source              LowCardinality(String)
   sdk_version                 String
   trace_id                    Nullable(String)
@@ -233,6 +238,17 @@ for an explicitly Entity-identified event. The raw Targeting Key is never stored
 Version. The producer omits `ingest_ts`; Tinybird assigns this physical insertion timestamp. The
 JSONPath precedes `DEFAULT` for valid datasource-file syntax.
 
+`pathname` and `referrer_hostname` are the caller-supplied page-context envelope defined in
+[web-event-identity.md](./web-event-identity.md#page-context); both are validated bounded strings,
+never full URLs. `visitor_hash`, `country`, and `device_class` are server-derived at accept time
+from request metadata and sealed into the canonical delivery payload; they are never caller-supplied
+and are excluded from the retry fingerprint, so a retry from a different network or day still
+resolves to the originally sealed values through its existing claim. `device_class` is one of
+`desktop`, `mobile`, `tablet`, or `unknown`. `country` is an uppercase ISO 3166-1 alpha-2 code or
+null when unavailable. `visitor_hash` is the daily-rotating visitor pseudonym defined in
+[web-event-identity.md](./web-event-identity.md#visitor-pseudonym); the raw client IP and User-Agent
+that derive it are never stored.
+
 ### Web retry state (`deduped_web_events_state`)
 
 ```text
@@ -253,7 +269,7 @@ SCHEMA:
   targeting_key_hash_scope    String
   session_id_hash             String
   dedup_key                   String
-  canonical_state             AggregateFunction(argMin, Tuple(String, String, String, String, Nullable(String), Nullable(String), String, String, DateTime64(3), DateTime64(6)), DateTime64(6))
+  canonical_state             AggregateFunction(argMin, Tuple(String, String, String, String, String, String, Nullable(String), Nullable(String), LowCardinality(String), Nullable(String), Nullable(String), String, String, DateTime64(3), DateTime64(6)), DateTime64(6))
 
 BACKFILL skip
 ```
@@ -261,8 +277,9 @@ BACKFILL skip
 `event_date` is `toDate(server_received_at)` in the materialized Pipe. The full timestamp is also a
 grouping dimension for exact raw/state TTL parity and bounded pre-merge filtering. The canonical tuple
 order is
-`(event_id, event_definition_version_id, event_name, sdk_version, trace_id, span_id, fields,
-dimensions, server_received_at, ingest_ts)` with the exact types declared above. The materialized
+`(event_id, event_definition_version_id, event_name, sdk_version, visitor_hash, pathname,
+referrer_hostname, country, device_class, trace_id, span_id, fields, dimensions,
+server_received_at, ingest_ts)` with the exact types declared above. The materialized
 Pipe normalizes anonymous identity to `has_entity = 0`, empty `id_type_scope`, and
 empty `targeting_key_hash_scope`, avoiding nullable sorting-key dimensions. Serving reconstructs both
 identity fields as null when `has_entity = 0` and otherwise uses the two scoped values. The Pipe groups

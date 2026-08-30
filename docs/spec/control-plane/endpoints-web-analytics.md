@@ -72,6 +72,7 @@ Its response is:
   totals: {
     eventCount: number;
     sessionCount: number;
+    visitorCount: number;
     anonymousSessionCount: number;
     associatedSessionCount: number;
     ambiguousSessionCount: number;
@@ -82,12 +83,33 @@ Its response is:
     to: string;
     eventCount: number;
     sessionCount: number;
+    visitorCount: number;
   }>;
   events: Array<{
     eventDefinitionId: string;
     eventName: string;
     eventCount: number;
     sessionCount: number;
+  }>;
+  pages: Array<{
+    pathname: string;
+    pageViewCount: number;
+    visitorCount: number;
+  }>;
+  referrers: Array<{
+    referrerHostname: string;
+    pageViewCount: number;
+    visitorCount: number;
+  }>;
+  countries: Array<{
+    country: string;
+    pageViewCount: number;
+    visitorCount: number;
+  }>;
+  deviceClasses: Array<{
+    deviceClass: string;
+    pageViewCount: number;
+    visitorCount: number;
   }>;
 }
 ```
@@ -110,6 +132,19 @@ Session with events in multiple buckets counts once in each relevant bucket, so 
 The `events` array groups across Event Definition Versions by stable `eventDefinitionId` and
 `eventName`, ordered by `eventCount` descending and then `eventName` ascending. It returns no event
 field or Dimension values.
+
+`visitorCount` is `uniq` over the daily-rotating `visitor_hash` defined in
+[web-event-identity.md](../pipeline/web-event-identity.md#visitor-pseudonym). It is exact for a
+window inside one UTC day and an approximate upper bound across longer windows because the pseudonym
+rotates at UTC midnight; the panel labels multi-day visitor counts accordingly rather than hiding
+the semantics.
+
+The `pages`, `referrers`, `countries`, and `deviceClasses` breakdowns count only logical events with
+`capture_source = 'page_view'`, so five Web Vitals reports on one page load do not inflate page
+traffic. Each breakdown returns at most its top 50 groups ordered by `pageViewCount` descending and
+then the group value ascending; rows beyond 50 are omitted, not aggregated into an "other" bucket.
+The `referrers` breakdown omits events with no referrer hostname, and the `countries` breakdown
+groups null countries under the literal value `unknown`.
 
 ### `GET /apps/{appId}/envs/{environmentId}/web-analytics/sessions`
 
