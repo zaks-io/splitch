@@ -2,14 +2,14 @@ import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Doc } from "./_generated/dataModel";
 import { internalMutation, type MutationCtx } from "./_generated/server";
-import { scheduleDeliveryWatch } from "./exposure_delivery";
+import { ensureExposureDrainScheduled } from "./exposure_batch";
 import { requiredIntegration } from "./integration_state";
 import { scheduleMetricEventDeliveryWatch } from "./metric_event_delivery";
 import { ensureRetentionScheduled } from "./retention";
 
 const CURRENT_KEY = "current" as const;
 const ADOPTION_BATCH_SIZE = 25;
-export const RECOVERY_GENERATION = 1;
+export const RECOVERY_GENERATION = 2;
 export const SYNC_RECOVERY_DELAY_MS = 60_000;
 
 export const adoptExistingWork = internalMutation({
@@ -53,9 +53,10 @@ export async function adoptExistingWorkHandler(
     legacyMetricEventDeliveries(ctx, "delivering"),
   ]);
   for (const row of [...pending, ...delivering]) {
-    await scheduleDeliveryWatch(ctx, row.exposureId, 0);
     await ctx.db.patch(row._id, { recoveryWatchGeneration: args.generation });
   }
+  if (pending.length > 0 || delivering.length > 0)
+    await ensureExposureDrainScheduled(ctx, Date.now());
   for (const row of [...pendingMetricEvents, ...deliveringMetricEvents]) {
     await scheduleMetricEventDeliveryWatch(ctx, row.eventId, 0);
     await ctx.db.patch(row._id, { recoveryWatchGeneration: args.generation });
@@ -84,21 +85,29 @@ export async function adoptExistingWorkHandler(
 }
 
 function legacyExposureDeliveries(ctx: MutationCtx, state: "pending" | "delivering") {
-  return ctx.db
-    .query("exposureOutbox")
-    .withIndex("by_recovery_watch_state", (q) =>
-      q.eq("recoveryWatchGeneration", undefined).eq("state", state),
-    )
-    .take(ADOPTION_BATCH_SIZE);
+  return legacyDeliveries(ctx, "exposureOutbox", state) as Promise<Doc<"exposureOutbox">[]>;
 }
 
 function legacyMetricEventDeliveries(ctx: MutationCtx, state: "pending" | "delivering") {
-  return ctx.db
-    .query("metricEventOutbox")
-    .withIndex("by_recovery_watch_state", (q) =>
-      q.eq("recoveryWatchGeneration", undefined).eq("state", state),
-    )
-    .take(ADOPTION_BATCH_SIZE);
+  return legacyDeliveries(ctx, "metricEventOutbox", state) as Promise<Doc<"metricEventOutbox">[]>;
+}
+
+async function legacyDeliveries(
+  ctx: MutationCtx,
+  table: "exposureOutbox" | "metricEventOutbox",
+  state: "pending" | "delivering",
+) {
+  const read = (generation: number | undefined) =>
+    ctx.db
+      .query(table)
+      .withIndex("by_recovery_watch_state", (q) =>
+        q.eq("recoveryWatchGeneration", generation).eq("state", state),
+      )
+      .take(ADOPTION_BATCH_SIZE);
+  const withoutGeneration = await read(undefined);
+  if (withoutGeneration.length === ADOPTION_BATCH_SIZE) return withoutGeneration;
+  const firstGeneration = await read(1);
+  return [...withoutGeneration, ...firstGeneration].slice(0, ADOPTION_BATCH_SIZE);
 }
 
 export async function recoverSyncHandler(

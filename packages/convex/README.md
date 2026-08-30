@@ -2,8 +2,8 @@
 
 The first-party Convex Component for local Splitch Flag evaluation. Configuration is synced into
 component-private tables, so a Query can resolve a Flag with no network access, and a Mutation can
-put the resulting Exposure or Metric Event into a transactional outbox alongside your application
-writes. It installs `@splitch/sdk`, which owns the shared local evaluator and contract types.
+put the resulting Exposure into a transactional outbox alongside your application writes. It
+installs `@splitch/sdk`, which owns the shared local evaluator and contract types.
 
 - Full guide: <https://splitch.dev/docs/sdk/convex>
 - Every failure code, with its cause and its fix: <https://splitch.dev/docs/errors>
@@ -45,17 +45,15 @@ it defaults to `https://edge.splitch.dev`.
 
 Call `flags.install(ctx)` from an Action after mounting the component, and again after upgrading
 `@splitch/convex`. The request is idempotent. On upgrade it starts one bounded adoption chain for
-Exposure and Metric Event delivery work created by the previous version, resumes stale configuration
-sync, and schedules retention for existing retained rows.
+Exposure delivery work created by the previous version, drains legacy Metric Event rows without
+accepting new ones, resumes stale configuration sync, and schedules retention for retained rows.
 
-The API Key you mount must carry both data-plane scopes. `data-plane:evaluate` covers evaluation;
-`data-plane:write` covers Metric Event delivery. `install` checks this and refuses a Key minted for
-evaluation alone, naming the missing scope, rather than letting every later `track()` fail
-asynchronously where you would not see it.
+The API Key you mount needs the `data-plane:evaluate` scope. Metric Events use a separate
+`data-plane:write` Key at the direct `@splitch/sdk` call site.
 
 ```bash
 splitch api-keys create --env production \
-  --body-json '{"scopes":["data-plane:evaluate","data-plane:write"]}'
+  --body-json '{"scopes":["data-plane:evaluate"]}'
 ```
 
 ```ts
@@ -122,59 +120,9 @@ call falls back to; a resolution that could not be computed reports `reason: "ER
 
 ## Metric Events
 
-`flags.track(ctx, eventName, event)` queues one Metric Event from a Mutation, so the record of the
-outcome commits or rolls back with the write that produced it. Call it in the same Mutation that
-persists the thing being measured.
-
-```ts
-export const completeCheckout = mutation({
-  args: { eventId: v.string(), targetingKey: v.string(), revenue: v.number(), plan: v.string() },
-  returns: v.null(),
-  handler: async (ctx, args) => {
-    await ctx.db.insert("orders", { targetingKey: args.targetingKey, revenue: args.revenue });
-    await flags.track(ctx, "checkout_completed", {
-      targetingKey: args.targetingKey,
-      idType: "user",
-      eventId: args.eventId,
-      fields: { revenue: args.revenue },
-      dimensions: { plan: args.plan },
-    });
-    return null;
-  },
-});
-```
-
-You own the `eventId`: one lowercase UUID per logical Metric Event, reused when the Mutation is
-retried. `fields` carries the measured values the Event Definition declares. `dimensions` carries the
-low-cardinality slice labels (`boolean | string | number`) results break down by.
-
-`track` returns `{ eventId, queued: true }`. That receipt says the delivery intent joined your Convex
-transaction, and nothing more; it is not an acceptance. Splitch validates the Event Definition and
-payload when the queued row is delivered, which happens outside your Mutation.
-
-Malformed input is refused inside the Mutation rather than queued: `eventName` must be a 1 to 64
-character telemetry token, `eventId` a lowercase UUID, every number finite, and the whole event at
-most 32 KiB of UTF-8. Reusing an `eventId` with different content throws `EVENT_ID_CONFLICT`; an
-exact replay returns the original receipt and queues nothing new.
-
-### Following a delivery
-
-```ts
-const status = await flags.trackStatus(ctx, eventId);
-```
-
-| State        | Means                                                                       |
-| ------------ | --------------------------------------------------------------------------- |
-| `missing`    | no Metric Event was ever queued under this `eventId`                        |
-| `queued`     | accepted into the outbox, delivery not yet confirmed                        |
-| `accepted`   | Splitch accepted it                                                         |
-| `terminal`   | delivery stopped; `error` carries the reason Splitch gave                   |
-| `suppressed` | an Entity deletion arrived first, so the event was dropped rather than sent |
-
-`trackStatus` reads from a Query or a Mutation. Delivery retries with backoff on a retryable failure
-(408, 429, 5xx) and goes terminal on anything else. It also goes terminal if it has not succeeded
-within 24 hours, which is the same privacy deadline that bounds how long the raw Targeting Key is
-retained.
+Send Metric Events with `@splitch/sdk` from an Action or HTTP Action. Metric Event transport is not
+application state, so this component does not copy Metric Events, delivery claims, or event history
+through the consumer's Convex deployment.
 
 ## React
 
@@ -231,12 +179,12 @@ These four are Action-only:
 | `flags.uninstall(ctx)`    | Revoke the remote installation, then purge component-private state.  |
 
 `flags.deleteEntity(ctx, { targetingKey, idType })` inside a Mutation removes one Entity's local
-holdovers and suppresses its queued Exposures and Metric Events.
+holdovers and suppresses its queued Exposures.
 
-Background recovery is activity-driven. Configuration nudges and new Exposure or Metric Event outbox
-rows schedule their own recovery mutations, which stop once the work is complete. Retained claims and
-completed Exposure and Metric Event rows share one scheduled cleanup job set for the earliest expiry.
-The component registers no cron jobs and invokes nothing periodically while idle.
+Background recovery is activity-driven. Configuration nudges and new Exposure outbox rows schedule
+one installation-scoped batch drainer, which stops once the work is complete. Retained claims and
+terminal Exposure rows share one scheduled cleanup job set for the earliest expiry. The component
+registers no cron jobs and invokes nothing periodically while idle.
 
 ## When to use `@splitch/sdk` instead
 
@@ -244,10 +192,9 @@ Queries and Mutations cannot call `fetch`, which is why this component exists. U
 directly from an Action or HTTP Action when a request-time round-trip is what you actually want, or
 to mint Precomputed Evaluations for SSR hydration. See <https://splitch.dev/docs/sdk/convex>.
 
-The SDK's `track()` is the Action-side counterpart of this component's: it awaits the platform's
-answer and throws on rejection. The component's commits a queued delivery inside your transaction
-and reports the outcome through `trackStatus`. Prefer the component's from a Mutation, so the
-Metric Event cannot survive a write that rolled back.
+The SDK's `track()` posts directly to Splitch's Cloudflare ingestion path and throws on rejection.
+Do not wrap it in a default Convex Mutation transport because that recreates per-event Convex reads,
+writes, scheduled functions, and transfer.
 
 ## Links
 

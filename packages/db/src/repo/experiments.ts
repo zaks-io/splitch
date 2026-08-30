@@ -40,7 +40,7 @@ export function makeExperimentRepo(db: Db, d1: D1Database) {
       and(eq(experiments.flagId, flagId), eq(experiments.status, "running")),
     );
   const lookups = makeExperimentLookups(experimentsTable);
-  const batchReads = makeExperimentBatchReads(experimentsTable);
+  const batchReads = makeExperimentBatchReads(experimentsTable, runsTable);
 
   return {
     experiments: experimentsTable,

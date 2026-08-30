@@ -77,15 +77,6 @@ declare const queryCtx: GenericQueryCtx<DataModel>;
 void flags.install(actionCtx);
 void flags.peekVariant(queryCtx, "flag", { targetingKey: "entity" }, false);
 void flags.evaluate(mutationCtx, "flag", { targetingKey: "entity", idempotencyKey: "once" }, false);
-const eventId = "018f7a42-8c11-7c5a-9d4e-123456789abc";
-void flags.track(mutationCtx, "model-generation", {
-  targetingKey: "entity",
-  idType: "user",
-  eventId,
-  fields: { generationCount: 1, tokenCount: 500 },
-  dimensions: { model: "claude-sonnet" },
-});
-void flags.trackStatus(queryCtx, eventId);
 const reactQuery = makeFunctionReference<"query", { flagKey: string; defaultValue: boolean }, Awaited<ReturnType<typeof flags.peekDetails>>>("flags:resolve");
 const { useFlag, useFlagDetails } = createSplitchReact(reactQuery);
 void useFlag;

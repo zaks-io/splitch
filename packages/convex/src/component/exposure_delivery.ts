@@ -1,6 +1,4 @@
-import type { CommitTsPlaceholder } from "convex/values";
 import { internal } from "./_generated/api";
-import type { Doc } from "./_generated/dataModel";
 import type { ActionCtx, MutationCtx } from "./_generated/server";
 import { env } from "./_generated/server";
 import {
@@ -9,7 +7,8 @@ import {
   deliveryRetryDelay,
   isRetryableHttpStatus,
 } from "./delivery_policy";
-import { ensureRetentionScheduled } from "./retention";
+import { ensureExposureDrainScheduled } from "./exposure_batch";
+import { commitTimestampIso, makeExposureTerminal } from "./exposure_delivery_state";
 
 export async function scheduleDeliveryWatch(
   ctx: MutationCtx,
@@ -26,9 +25,13 @@ export async function claimDeliveryHandler(ctx: MutationCtx, args: { exposureId:
     .unique();
   if (!row || row.state === "accepted" || row.state === "terminal" || row.state === "suppressed")
     return null;
+  if (row.recoveryWatchGeneration === 2) {
+    await ensureExposureDrainScheduled(ctx, Date.now());
+    return null;
+  }
   const now = Date.now();
   if (now - row.createdAt >= DELIVERY_PRIVACY_DEADLINE_MS) {
-    await makeTerminal(ctx, row, "Exposure delivery exceeded the 24-hour privacy deadline");
+    await makeExposureTerminal(ctx, row, "Exposure delivery exceeded the 24-hour privacy deadline");
     return null;
   }
   if (row.nextAttemptAt > now) return null;
@@ -98,11 +101,11 @@ export async function finishDeliveryHandler(
     return;
   }
   if (args.outcome === "terminal") {
-    await makeTerminal(ctx, row, args.error);
+    await makeExposureTerminal(ctx, row, args.error);
     return;
   }
   if (Date.now() - row.createdAt >= DELIVERY_PRIVACY_DEADLINE_MS) {
-    await makeTerminal(ctx, row, "Exposure delivery exceeded the 24-hour privacy deadline");
+    await makeExposureTerminal(ctx, row, "Exposure delivery exceeded the 24-hour privacy deadline");
     return;
   }
   const attemptCount = row.attemptCount + 1;
@@ -187,6 +190,10 @@ export async function watchDeliveryHandler(
     .unique();
   if (!row || row.state === "accepted" || row.state === "terminal" || row.state === "suppressed")
     return;
+  if (row.recoveryWatchGeneration === 2) {
+    await ensureExposureDrainScheduled(ctx, Date.now());
+    return;
+  }
 
   const now = Date.now();
   if (row.nextAttemptAt <= now) {
@@ -197,26 +204,4 @@ export async function watchDeliveryHandler(
 
   const grace = row.state === "pending" ? DELIVERY_LEASE_MS : 0;
   await scheduleDeliveryWatch(ctx, args.exposureId, row.nextAttemptAt - now + grace);
-}
-
-function commitTimestampIso(value: bigint | CommitTsPlaceholder): string {
-  if (typeof value !== "bigint")
-    throw new Error("Persisted Convex Exposure has an unresolved commit timestamp");
-  return new Date(Number(value / 1_000_000n)).toISOString();
-}
-
-async function makeTerminal(
-  ctx: MutationCtx,
-  row: Doc<"exposureOutbox">,
-  error: string | undefined,
-): Promise<void> {
-  await ctx.db.patch(row._id, {
-    state: "terminal",
-    targetingKeyHash: undefined,
-    targetingKey: undefined,
-    attributesJson: undefined,
-    terminalAt: Date.now(),
-    lastError: error,
-  });
-  await ensureRetentionScheduled(ctx);
 }

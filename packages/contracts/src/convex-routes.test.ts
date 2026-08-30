@@ -8,11 +8,8 @@ const route = (operationId: string) => {
 };
 
 describe("Convex integration routes", () => {
-  it("requires the write scope to install, because the mounted Key also delivers Metric Events", () => {
-    expect(route("convex_installations_create").scopes).toEqual([
-      "data-plane:evaluate",
-      "data-plane:write",
-    ]);
+  it("requires only evaluation scope because Metric Events bypass Convex", () => {
+    expect(route("convex_installations_create").scopes).toEqual(["data-plane:evaluate"]);
   });
 
   it("leaves the read-only Convex routes on the evaluate scope alone", () => {

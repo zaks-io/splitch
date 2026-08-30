@@ -7,7 +7,7 @@ import {
 } from "./integration_recovery";
 
 describe("scheduled recovery adoption", () => {
-  it("attaches recovery watches to pre-upgrade delivery rows", async () => {
+  it("adopts Exposures into one batch drain while legacy Metric Events keep per-row recovery", async () => {
     const pending = [{ _id: "pending_id", exposureId: "exp_pending" }];
     const delivering = [{ _id: "delivering_id", exposureId: "exp_delivering" }];
     const metricPending = [{ _id: "metric_pending_id", eventId: "evt_pending" }];
@@ -21,10 +21,9 @@ describe("scheduled recovery adoption", () => {
 
     await adoptExistingWorkHandler(ctx, { generation: RECOVERY_GENERATION });
 
-    expect(runAfter).toHaveBeenCalledTimes(4);
+    expect(runAfter).toHaveBeenCalledTimes(3);
     expect(runAfter.mock.calls.map((call) => call[2])).toEqual([
-      { exposureId: "exp_pending" },
-      { exposureId: "exp_delivering" },
+      {},
       { eventId: "evt_pending" },
       { eventId: "evt_delivering" },
     ]);
@@ -55,9 +54,9 @@ describe("scheduled recovery adoption", () => {
 
     await adoptExistingWorkHandler(ctx, { generation: RECOVERY_GENERATION });
 
-    expect(runAfter).toHaveBeenCalledTimes(26);
-    expect(runAfter.mock.calls[25]?.[0]).toBe(0);
-    expect(runAfter.mock.calls[25]?.[2]).toEqual({ generation: RECOVERY_GENERATION });
+    expect(runAfter).toHaveBeenCalledTimes(2);
+    expect(runAfter.mock.calls[1]?.[0]).toBe(0);
+    expect(runAfter.mock.calls[1]?.[2]).toEqual({ generation: RECOVERY_GENERATION });
     expect(patch).toHaveBeenCalledWith("integration_id", {
       recoveryAdoptionJobId: "scheduled_job",
     });
@@ -130,14 +129,20 @@ function recoveryRows<Row>(pending: Row[] = [], delivering: Row[] = []) {
       if (index !== "by_recovery_watch_state")
         return { order: vi.fn(() => ({ first: vi.fn().mockResolvedValue(null) })) };
       let state: "pending" | "delivering" | undefined;
+      let generation: number | undefined;
       const indexQuery = {
         eq: vi.fn((field: string, value: unknown) => {
           if (field === "state") state = value as "pending" | "delivering";
+          if (field === "recoveryWatchGeneration") generation = value as number | undefined;
           return indexQuery;
         }),
       };
       applyIndex(indexQuery);
-      return { take: vi.fn().mockResolvedValue(state === "pending" ? pending : delivering) };
+      return {
+        take: vi
+          .fn()
+          .mockResolvedValue(generation === 1 ? (state === "pending" ? pending : delivering) : []),
+      };
     }),
   };
 }

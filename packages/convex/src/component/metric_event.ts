@@ -1,6 +1,6 @@
 import type { TrackRequest } from "@splitch/sdk";
 import { v } from "convex/values";
-import { internalAction, internalMutation, mutation, query } from "./_generated/server";
+import { internalAction, internalMutation, internalQuery } from "./_generated/server";
 import {
   claimMetricEventDeliveryHandler,
   deliverMetricEventHandler,
@@ -26,7 +26,7 @@ export interface MetricEventDeliveryStatus {
   readonly error?: string;
 }
 
-export const track = mutation({
+export const track = internalMutation({
   args: metricEventArgsValidator,
   returns: metricEventTrackReceiptValidator,
   handler: async (ctx, args): Promise<MetricEventTrackReceipt> => {
@@ -35,7 +35,7 @@ export const track = mutation({
   },
 });
 
-export const status = query({
+export const status = internalQuery({
   args: { eventId: v.string() },
   returns: metricEventDeliveryStatusValidator,
   handler: metricEventStatusHandler,

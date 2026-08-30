@@ -27,15 +27,14 @@ The component declares one required secret environment value, `SPLITCH_API_KEY`.
 mounted callback URL from `CONVEX_SITE_URL`. `install()` generates and privately stores the
 installation ID and webhook secret, registers them through the API-Key-only
 [Convex integration API](./convex-integration-api.md), and performs the first full sync. Missing or
-malformed credentials fail before any integration or config row is written. That Key must hold both
-`data-plane:evaluate` and `data-plane:write`: it authenticates Metric Event delivery too, and
-delivery runs after the caller's Mutation has committed, so an evaluate-only Key would fail every
-`track()` asynchronously and terminally. Install rejects it and names the missing scope.
+malformed credentials fail before any integration or config row is written. That Key needs only
+`data-plane:evaluate`; Metric Events go directly through `@splitch/sdk` with a separately scoped
+write credential.
 
 `install()` is an exact-retry-safe upgrade entrypoint as well as the initial installation call.
 After a package upgrade, rerunning it resumes stale configuration sync, schedules retention for
-existing retained rows, and activates one versioned, bounded adoption chain that attaches recovery
-watches to pending or delivering Exposure rows created by the prior component version.
+existing retained rows, and activates one bounded adoption chain for pending or delivering work
+created by the prior component version.
 
 Each additional Splitch Environment uses another named component instance, API Key, HTTP prefix,
 configuration store, local Assignment Store, and outbox. No instance can read another instance's
@@ -98,11 +97,11 @@ keeps scheduling the Action once per minute only while the stored snapshot remai
 announced version, and cancels its next run when a current snapshot commits. Duplicate or older
 versions return `202` without another pull.
 
-There is no reconciliation cron. Configuration and Exposure recovery chains are created atomically
-with the durable work they protect. Retained claims and terminal Exposure rows share one scheduled
-cleanup Mutation set for the earliest expiry; it schedules its successor only while retained data
-remains. An idempotent `install()` retry after an upgrade runs the finite adoption chain for durable
-Exposure delivery work created before these scheduling fields existed. Activation separately seeds
+There is no reconciliation cron. Configuration recovery and one installation-scoped Exposure batch
+successor are created atomically with the durable work they protect. The drainer claims up to 25
+Exposures within the 32 KiB request bound and settles the batch in one Mutation. Retained claims and
+terminal Exposure rows share one scheduled cleanup Mutation set for the earliest expiry; it
+schedules its successor only while retained data remains. Activation separately seeds
 version-scoped recovery when configuration is stale.
 
 D1 triggers insert the webhook outbox in the same transaction as the authoritative Flag Configuration
@@ -124,6 +123,10 @@ splitch.evaluateDetails(ctx, flagKey, context, defaultValue);
 `idempotencyKey` in the Evaluation Context. Their result shapes and fail-loud behavior match
 `@splitch/sdk`; there is no `sendExposure` option.
 
+Evaluation parses the current snapshot first, identifies the Flag's live Experiment, and reads at
+most that one `(idType, targetingKeyHash, experimentId)` Assignment. It never scans the Entity's
+Assignment history.
+
 If no fresh live-Run Assignment occurs, `evaluate` writes no Exposure. For a fresh Assignment it
 atomically creates the local holdover and Exposure outbox row described in
 [convex-exposure-delivery.md](./convex-exposure-delivery.md). A query that needs an Exposure must
@@ -132,16 +135,11 @@ Exposure Ticket flow.
 
 ## Metric Events
 
-`track(ctx, eventName, event)` accepts Mutation context only and uses the same Metric Event request
-shape as `@splitch/sdk`: explicit Targeting Key, Entity type, caller-stable lowercase UUID `eventId`,
-fields, and Dimensions. It atomically claims the ID, writes a private outbox row, and schedules
-delivery alongside the caller's application writes. See
+`@splitch/convex` exposes no `track` or `trackStatus` API. Metric Events are analytics transport, not
+application state, and go directly from `@splitch/sdk` to the Cloudflare Event Ingest API. The
+component retains migration-only delivery functions until legacy rows are drained; no new Metric
+Event row can enter through the component's public API. See
 [convex-metric-event-delivery.md](./convex-metric-event-delivery.md).
-
-Its `{ eventId, queued: true }` receipt proves local transactional durability, not remote schema
-acceptance. The synced component snapshot contains Flags and Experiment Runs, not Event Definitions,
-so the Event Ingest API remains authoritative asynchronously. `trackStatus(ctx, eventId)` exposes
-`queued`, `accepted`, `terminal`, `suppressed`, or `missing` without revealing Event payload values.
 
 ## React bindings
 
