@@ -2,12 +2,15 @@ import type { App, ResourceDeleteBlocker } from "@splitch/contracts";
 import { Alert, AlertDescription, AlertTitle } from "@splitch/ui/components/alert";
 import { Button } from "@splitch/ui/components/button";
 import { Input } from "@splitch/ui/components/input";
+import { useRouter } from "@tanstack/react-router";
 import { useState } from "react";
+import { AppDeleteConsequenceList } from "#components/apps/app-delete-consequence-list";
+import { AppSessionStaleNotice } from "#components/sessions/app-session-stale-notice";
 import { isDeleteConfirmed } from "#lib/apps/app-delete-confirmation";
 import { deleteConsequences } from "#lib/apps/app-delete-consequences";
 import { type DeleteOutcome, destroyApp } from "#lib/apps/app-settings-mutations";
-import { AppDeleteConsequenceList } from "#components/apps/app-delete-consequence-list";
-import { AppSessionStaleNotice } from "#components/sessions/app-session-stale-notice";
+
+type DeleteError = { message: string; partial: boolean; reload: boolean };
 
 /**
  * The typed confirmation. The operator must type this App's URL slug exactly;
@@ -29,8 +32,9 @@ export function AppDeleteCeremony({
   environmentNames: readonly string[];
   onCancel: () => void;
 }) {
+  const router = useRouter();
   const [typed, setTyped] = useState("");
-  const [error, setError] = useState<string>();
+  const [error, setError] = useState<DeleteError>();
   const [stale, setStale] = useState<{ reason: string; remedy: "reauth" | "retry" }>();
   const [isDeleting, setIsDeleting] = useState(false);
 
@@ -38,8 +42,15 @@ export function AppDeleteCeremony({
   const confirmed = isDeleteConfirmed(typed, app.key);
 
   async function settle(outcome: DeleteOutcome) {
-    if (outcome.kind === "refused") setError(outcome.message);
-    else if (outcome.kind === "stale") setStale(outcome);
+    if (outcome.kind === "refused") {
+      setError({ message: outcome.message, partial: false, reload: false });
+      return;
+    }
+    if (outcome.kind === "partially-deleted") {
+      setError(await partialDeleteError(outcome, () => router.invalidate()));
+      return;
+    }
+    if (outcome.kind === "stale") setStale(outcome);
     else globalThis.location.assign("/");
   }
 
@@ -70,8 +81,15 @@ export function AppDeleteCeremony({
 
       {error ? (
         <Alert data-testid="app-delete-error" variant="destructive">
-          <AlertTitle>App not deleted</AlertTitle>
-          <AlertDescription>{error}</AlertDescription>
+          <AlertTitle>{error.partial ? "App partially deleted" : "App not deleted"}</AlertTitle>
+          <AlertDescription className="grid gap-3">
+            <p>{error.message}</p>
+            {error.reload ? (
+              <Button onClick={() => globalThis.location.reload()} type="button" variant="outline">
+                Reload page
+              </Button>
+            ) : null}
+          </AlertDescription>
         </Alert>
       ) : null}
 
@@ -98,7 +116,7 @@ export function AppDeleteCeremony({
         </Button>
         <Button
           data-testid="app-delete-submit"
-          disabled={!confirmed || isDeleting}
+          disabled={!confirmed || isDeleting || error?.reload === true}
           onClick={destroy}
           type="button"
           variant="destructive"
@@ -108,4 +126,24 @@ export function AppDeleteCeremony({
       </div>
     </div>
   );
+}
+
+async function partialDeleteError(
+  outcome: Extract<DeleteOutcome, { kind: "partially-deleted" }>,
+  refresh: () => Promise<unknown>,
+): Promise<DeleteError> {
+  try {
+    await refresh();
+    return {
+      message: `${outcome.message} The App remains, but ${outcome.removedCount} ${outcome.removedCount === 1 ? "resource was" : "resources were"} deleted before Review stopped. This page was refreshed.`,
+      partial: true,
+      reload: false,
+    };
+  } catch {
+    return {
+      message: `${outcome.message} The App remains, but some resources were deleted before Review stopped. Reload this page before retrying.`,
+      partial: true,
+      reload: true,
+    };
+  }
 }

@@ -1,3 +1,4 @@
+import type { PanelAppDeleteProgress } from "@splitch/control-plane-sdk/panel-app-settings";
 import {
   deleteControlPanelApp,
   updateControlPanelApp,
@@ -50,6 +51,11 @@ export async function renameApp(input: {
 
 export type DeleteOutcome =
   | { readonly kind: "refused"; readonly message: string }
+  | {
+      readonly kind: "partially-deleted";
+      readonly message: string;
+      readonly removedCount: number;
+    }
   | ({ readonly kind: "stale" } & Stale)
   | { readonly kind: "deleted" };
 
@@ -66,7 +72,20 @@ export async function destroyApp(appId: string): Promise<DeleteOutcome> {
       message: "The Control Plane did not answer. This App may or may not have been deleted.",
     };
   }
-  if (!result.ok) return { kind: "refused", message: result.error.message };
+  if (!result.ok) {
+    const partialDelete =
+      "partialDelete" in result
+        ? (result.partialDelete as PanelAppDeleteProgress | undefined)
+        : undefined;
+    if (partialDelete) {
+      return {
+        kind: "partially-deleted",
+        message: result.error.message,
+        removedCount: partialDelete.removed.length + partialDelete.appliedApprovalRequestIds.length,
+      };
+    }
+    return { kind: "refused", message: result.error.message };
+  }
   if (result.data.deleted !== true) {
     return {
       kind: "refused",

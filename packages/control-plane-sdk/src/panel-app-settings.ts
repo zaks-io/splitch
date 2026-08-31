@@ -1,4 +1,10 @@
-import type { App, AppMember, ResourceDeletePendingApproval, UserRole } from "@splitch/contracts";
+import type {
+  App,
+  AppMember,
+  ResourceDeletePendingApproval,
+  ResourceDeleteRemoved,
+  UserRole,
+} from "@splitch/contracts";
 import { AppMemberSchema, AppSchema, UserRoleSchema } from "@splitch/contracts";
 import type {
   AppMembersAddOutput,
@@ -146,7 +152,7 @@ export interface PanelAppSettingsClient {
     appId: string;
     dryRun?: boolean;
     force?: boolean;
-  }): Promise<ControlPlaneOperationResult<AppsDeleteOutput>>;
+  }): Promise<PanelAppDeleteResult>;
   addMember(input: {
     appId: string;
     userId: string;
@@ -162,6 +168,19 @@ export interface PanelAppSettingsClient {
     userId: string;
   }): Promise<ControlPlaneOperationResult<AppMembersRemoveOutput>>;
 }
+
+export interface PanelAppDeleteProgress {
+  readonly removed: readonly ResourceDeleteRemoved[];
+  readonly appliedApprovalRequestIds: readonly string[];
+}
+
+export type PanelAppDeleteResult =
+  | Extract<ControlPlaneOperationResult<AppsDeleteOutput>, { ok: true }>
+  | (Extract<ControlPlaneOperationResult<AppsDeleteOutput>, { ok: false }> & {
+      readonly partialDelete?: PanelAppDeleteProgress;
+    });
+
+type PendingAppDelete = Extract<AppsDeleteOutput, { deleted: false; force: true }>;
 
 export function createPanelAppSettingsClient(options: {
   fetch: typeof fetch;
@@ -194,7 +213,7 @@ export function createPanelAppSettingsClient(options: {
 async function deletePanelApp(
   sdk: ReturnType<typeof createControlPlaneSdk>,
   input: { appId: string; dryRun?: boolean; force?: boolean },
-): Promise<ControlPlaneOperationResult<AppsDeleteOutput>> {
+): Promise<PanelAppDeleteResult> {
   const request = {
     appId: input.appId,
     ...(input.dryRun === true ? { dryRun: true } : {}),
@@ -204,21 +223,30 @@ async function deletePanelApp(
   if (input.force !== true) return result;
 
   const reviewed = new Set<string>();
-  let pending = pendingDeleteApprovals(result);
-  while (pending) {
-    const refusal = await reviewDeleteApprovals(sdk, input.appId, pending, reviewed);
-    if (refusal) return refusal;
+  const removed: ResourceDeleteRemoved[] = [];
+  const appliedApprovalRequestIds: string[] = [];
+  while (result.ok) {
+    const pending = pendingDeleteResult(result);
+    if (!pending) return result;
+    removed.push(...pending.removed);
+    const refusal = await reviewDeleteApprovals(
+      sdk,
+      input.appId,
+      pending.pendingApprovals,
+      reviewed,
+      appliedApprovalRequestIds,
+    );
+    if (refusal) return withDeleteProgress(refusal, removed, appliedApprovalRequestIds);
     result = await sdk.apps.delete(request);
-    pending = pendingDeleteApprovals(result);
   }
-  return result;
+  return withDeleteProgress(result, removed, appliedApprovalRequestIds);
 }
 
-function pendingDeleteApprovals(
+function pendingDeleteResult(
   result: ControlPlaneOperationResult<AppsDeleteOutput>,
-): readonly ResourceDeletePendingApproval[] | null {
+): PendingAppDelete | null {
   if (!result.ok || result.data.deleted || !("pendingApprovals" in result.data)) return null;
-  return result.data.pendingApprovals;
+  return result.data;
 }
 
 async function reviewDeleteApprovals(
@@ -226,6 +254,7 @@ async function reviewDeleteApprovals(
   appId: string,
   approvals: readonly ResourceDeletePendingApproval[],
   reviewed: Set<string>,
+  appliedApprovalRequestIds: string[],
 ): Promise<Extract<ControlPlaneOperationResult, { ok: false }> | null> {
   for (const approval of approvals) {
     if (reviewed.has(approval.approvalRequestId)) {
@@ -241,6 +270,19 @@ async function reviewDeleteApprovals(
     });
     if (!review.ok) return review;
     reviewed.add(approval.approvalRequestId);
+    appliedApprovalRequestIds.push(approval.approvalRequestId);
   }
   return null;
+}
+
+function withDeleteProgress(
+  refusal: Extract<ControlPlaneOperationResult, { ok: false }>,
+  removed: readonly ResourceDeleteRemoved[],
+  appliedApprovalRequestIds: readonly string[],
+): PanelAppDeleteResult {
+  if (removed.length === 0 && appliedApprovalRequestIds.length === 0) return refusal;
+  return {
+    ...refusal,
+    partialDelete: { removed, appliedApprovalRequestIds },
+  };
 }

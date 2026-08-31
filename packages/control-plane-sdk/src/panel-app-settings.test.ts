@@ -91,18 +91,25 @@ describe("Panel App Settings contract", () => {
     });
   });
 
-  it("returns a typed Review refusal without resuming the App delete", async () => {
+  it("returns a typed Review refusal with cumulative partial-delete progress", async () => {
     const reviewRefusal = {
       code: "FORBIDDEN",
       message: "Approval Request review is not permitted",
       details: {},
     };
     const requests: Request[] = [];
+    let deleteCount = 0;
+    let reviewCount = 0;
     const fetcher = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const incoming = new Request(input as RequestInfo, init);
       requests.push(incoming);
-      return incoming.method === "DELETE"
-        ? Response.json(pendingDelete)
+      if (incoming.method === "DELETE") {
+        deleteCount += 1;
+        return Response.json(deleteCount === 1 ? pendingDelete : secondPendingDelete);
+      }
+      reviewCount += 1;
+      return reviewCount === 1
+        ? Response.json(appliedDeleteApproval)
         : Response.json(reviewRefusal, { status: 403 });
     });
     const client = createPanelAppSettingsClient({
@@ -114,8 +121,12 @@ describe("Panel App Settings contract", () => {
       ok: false,
       status: 403,
       error: reviewRefusal,
+      partialDelete: {
+        removed: [...pendingDelete.removed, ...secondPendingDelete.removed],
+        appliedApprovalRequestIds: [appliedDeleteApproval.id],
+      },
     });
-    expect(requests.map(({ method }) => method)).toEqual(["DELETE", "POST"]);
+    expect(requests.map(({ method }) => method)).toEqual(["DELETE", "POST", "DELETE", "POST"]);
   });
 
   it("fails before Reviewing an Approval Request returned after it was applied", async () => {
@@ -190,6 +201,20 @@ const pendingDelete = {
       approvalRequestId: appliedDeleteApproval.id,
       operation: "flags_delete",
       targetId: "flag_checkout",
+      reviewCommand: "splitch approval-request-reviews create ...",
+    },
+  ],
+} as const;
+
+const secondPendingDelete = {
+  deleted: false,
+  force: true,
+  removed: [{ childType: "metrics", id: "metric_checkout" }],
+  pendingApprovals: [
+    {
+      approvalRequestId: "apr_01J00000000000000000000001",
+      operation: "flags_delete",
+      targetId: "flag_recommendations",
       reviewCommand: "splitch approval-request-reviews create ...",
     },
   ],
