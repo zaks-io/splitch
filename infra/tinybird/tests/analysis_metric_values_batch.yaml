@@ -1,0 +1,12 @@
+- name: activation_gate_reanchors_the_conversion_window
+  description: A gated Run excludes an event inside the post-Exposure window when it occurred before Activation, and retains the activated Entity with a zero value.
+  parameters: "app_id=app_delayed&environment_id=env_prod&experiment_id=exp_delayed&run_id=run_delayed&activation_gated=1&metric_query_config=%5B%7B%22metric_id%22%3A%22metric_signup%22%2C%22metric_type%22%3A%22binomial%22%2C%22event_definition_id%22%3A%22event_definition_signup%22%2C%22window_duration_ms%22%3A900000%2C%22cuped_lookback_ms%22%3A86400000%7D%5D&from_ts=2026-07-05%2000%3A00%3A00.000&to_ts=2026-07-06%2000%3A00%3A00.000"
+  expected_http_status: 200
+  expected_result: |
+    {"targeting_key_hash":"tk_delayed_convex","run_id":"run_delayed","metric_id":"metric_signup","metric_type":"binomial","value":0,"num_value":0,"denom_value":0,"in_window":1}
+- name: ungated_run_keeps_the_exposure_anchor
+  description: The same frozen Metric counts an event inside the post-Exposure window when the Run has no Activation gate.
+  parameters: "app_id=app_delayed&environment_id=env_prod&experiment_id=exp_delayed&run_id=run_delayed&activation_gated=0&metric_query_config=%5B%7B%22metric_id%22%3A%22metric_signup%22%2C%22metric_type%22%3A%22binomial%22%2C%22event_definition_id%22%3A%22event_definition_signup%22%2C%22window_duration_ms%22%3A900000%2C%22cuped_lookback_ms%22%3A86400000%7D%5D&from_ts=2026-07-05%2000%3A00%3A00.000&to_ts=2026-07-06%2000%3A00%3A00.000"
+  expected_http_status: 200
+  expected_result: |
+    {"targeting_key_hash":"tk_delayed_convex","run_id":"run_delayed","metric_id":"metric_signup","metric_type":"binomial","value":1,"num_value":0,"denom_value":0,"in_window":1}

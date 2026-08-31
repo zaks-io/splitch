@@ -56,9 +56,21 @@ function locationFor(pathname: string) {
 // fixture rather than the full loader context.
 // biome-ignore lint/suspicious/noExplicitAny: see comment above
 const loader = Route.options.loader as any;
+// biome-ignore lint/suspicious/noExplicitAny: see comment above
+const beforeLoad = Route.options.beforeLoad as any;
 
 async function runLoader(pathname: string): Promise<unknown> {
-  return loader({ location: locationFor(pathname), params });
+  const location = locationFor(pathname);
+  const routeContext = await beforeLoad({
+    context: {
+      queryClient: {
+        fetchQuery: (options: { queryFn: () => Promise<unknown> }) => options.queryFn(),
+      },
+    },
+    location,
+    params,
+  });
+  return loader({ context: routeContext, location, params });
 }
 
 describe("$orgSlug/$appSlug/$env loader — deferred deep link enforcement", () => {

@@ -21,8 +21,8 @@ describe("GET experiment results insufficient-data typing (SPL-302)", () => {
   it("returns 200 no_data naming Metric Events when Exposures exist but Metric pipes are empty", async () => {
     const { app } = makeResultsHarness({
       ...rowsByPipe(),
-      analysis_metric_values: [],
-      analysis_pre_period_covariates: [],
+      analysis_metric_values_batch: [],
+      analysis_pre_period_covariates_batch: [],
     });
 
     const res = await app.request(`${RESULTS_PATH}?runId=${RUN_ID}`, resultsAuthInit("GET"));
@@ -69,8 +69,8 @@ describe("GET experiment results insufficient-data typing (SPL-302)", () => {
           guardrail_decisions: JSON.stringify([]),
         },
       ],
-      analysis_metric_values: [],
-      analysis_pre_period_covariates: [],
+      analysis_metric_values_batch: [],
+      analysis_pre_period_covariates_batch: [],
     });
 
     const res = await app.request(`${RESULTS_PATH}?runId=${RUN_ID}`, resultsAuthInit("GET"));
@@ -107,7 +107,7 @@ describe("GET experiment results production-shaped Run inputs", () => {
   it("names Metric Events for MetricRef-shaped snapshots with Exposures but no Metric rows", async () => {
     const { app } = makeResultsHarness({
       ...productionShapedRows(),
-      analysis_metric_values: [],
+      analysis_metric_values_batch: [],
     });
 
     const res = await app.request(`${RESULTS_PATH}?runId=${RUN_ID}`, resultsAuthInit("GET"));
@@ -210,7 +210,7 @@ describe("GET experiment results real Tinybird transport path (SPL-302)", () => 
   });
 
   it("names Metric Events through the real transport when the Metric pipe returns []", async () => {
-    const fixture = { ...productionShapedRows(), analysis_metric_values: [] };
+    const fixture = { ...productionShapedRows(), analysis_metric_values_batch: [] };
     ({ server, baseUrl } = await listenPipeServer(fixture));
     const tinybird = createTinybirdReadTransport(pipeEnv(baseUrl));
 
@@ -269,7 +269,7 @@ function multiTreatmentRows(): RowsByPipe {
       exposure("treatment_b", "treatment_b_0"),
       exposure("treatment_b", "treatment_b_1"),
     ],
-    analysis_metric_values: [
+    analysis_metric_values_batch: [
       metricValue("control_0", 1),
       metricValue("control_1", 0),
       metricValue("treatment_a_0", 1),

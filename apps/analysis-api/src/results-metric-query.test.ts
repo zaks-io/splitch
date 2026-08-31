@@ -11,29 +11,36 @@ describe("GET experiment results Metric query contract", () => {
     const res = await app.request(`${RESULTS_PATH}?runId=${RUN_ID}`, resultsAuthInit("GET"));
 
     expect(res.status).toBe(200);
-    const metricCall = tinybird.calls.find((call) => call.pipeName === "analysis_metric_values");
+    const metricCall = tinybird.calls.find(
+      (call) => call.pipeName === "analysis_metric_values_batch",
+    );
     expect(metricCall?.params).toMatchObject({
       app_id: "app_checkout",
       environment_id: "env_prod",
       experiment_id: "exp_checkout_banner",
       run_id: RUN_ID,
-      metric_id: "conversion",
-      event_definition_id: "event_definition_conversion",
-      window_duration_ms: "259200000",
       from_ts: "2026-07-01 00:00:00.000",
+      activation_gated: "0",
     });
+    expect(JSON.parse(metricCall?.params.metric_query_config ?? "null")).toEqual([
+      expect.objectContaining({
+        metric_id: "conversion",
+        event_definition_id: "event_definition_conversion",
+        window_duration_ms: 259_200_000,
+      }),
+    ]);
     expect(metricCall?.params.to_ts).toMatch(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3}$/);
+    expect(metricCall?.options).toEqual({ method: "POST" });
 
     const prePeriodCall = tinybird.calls.find(
-      (call) => call.pipeName === "analysis_pre_period_covariates",
+      (call) => call.pipeName === "analysis_pre_period_covariates_batch",
     );
     expect(prePeriodCall?.params).toMatchObject({
-      metric_id: "conversion",
-      event_definition_id: "event_definition_conversion",
-      lookback_ms: "604800000",
       from_ts: "2026-06-24 00:00:00.000",
     });
+    expect(prePeriodCall?.params.metric_query_config).toBe(metricCall?.params.metric_query_config);
     expect(prePeriodCall?.params.to_ts).toBe(metricCall?.params.to_ts);
+    expect(prePeriodCall?.options).toEqual({ method: "POST" });
   });
 
   it("queries Count, Revenue, and Ratio Metrics from their frozen source bindings", async () => {
@@ -73,6 +80,7 @@ describe("GET experiment results Metric query contract", () => {
       configs,
       "2026-08-01T00:00:00.000Z",
       "2026-08-02 00:00:00.000",
+      false,
     );
     await readPrePeriodRows(
       tinybird,
@@ -82,39 +90,14 @@ describe("GET experiment results Metric query contract", () => {
       "2026-08-02 00:00:00.000",
     );
 
-    expect(tinybird.calls).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          pipeName: "analysis_metric_values",
-          params: expect.objectContaining({
-            metric_id: "duration",
-            metric_type: "count",
-            event_field_name: "duration_ms",
-          }),
-        }),
-        expect.objectContaining({
-          pipeName: "analysis_metric_values",
-          params: expect.objectContaining({
-            metric_id: "cost",
-            metric_type: "revenue",
-            event_field_name: "cost_usd",
-          }),
-        }),
-        expect.objectContaining({
-          pipeName: "analysis_ratio_metric_values",
-          params: expect.objectContaining({
-            metric_id: "errors_per_request",
-            numerator_metric_type: "count",
-            numerator_event_field_name: "error_count",
-            denominator_metric_type: "count",
-            denominator_event_field_name: "request_count",
-          }),
-        }),
-      ]),
-    );
-    expect(
-      tinybird.calls.filter((call) => call.pipeName === "analysis_pre_period_covariates"),
-    ).toHaveLength(2);
+    expect(tinybird.calls.map((call) => call.pipeName)).toEqual([
+      "analysis_metric_values_batch",
+      "analysis_pre_period_covariates_batch",
+    ]);
+    const metricConfigs = JSON.parse(tinybird.calls[0]?.params.metric_query_config ?? "null");
+    expect(metricConfigs).toEqual(configs);
+    const prePeriodConfigs = JSON.parse(tinybird.calls[1]?.params.metric_query_config ?? "null");
+    expect(prePeriodConfigs).toEqual(configs.slice(0, 2));
   });
 });
 

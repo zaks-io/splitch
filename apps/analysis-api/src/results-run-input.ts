@@ -88,11 +88,17 @@ export function assertAnalysisInputsPresent(input: {
   decision_family: readonly unknown[];
   exposures: readonly unknown[];
   metric_values: readonly unknown[];
+  activation_rows?: readonly unknown[];
 }): void {
   if (input.exposures.length === 0) {
     throw new ResultsInsufficientDataError("exposures", input.run_id, input.control_variant);
   }
-  if (input.decision_family.length > 0 && input.metric_values.length === 0) {
+  const hasIntentionallyEmptyActivatedPopulation = input.activation_rows?.length === 0;
+  if (
+    input.decision_family.length > 0 &&
+    input.metric_values.length === 0 &&
+    !hasIntentionallyEmptyActivatedPopulation
+  ) {
     throw new ResultsInsufficientDataError("metric_events", input.run_id, input.control_variant);
   }
 }

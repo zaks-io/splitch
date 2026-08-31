@@ -71,6 +71,41 @@ describe("Control Panel Flags principal", () => {
     expect(authorizeApp).toHaveBeenCalledWith("user_1", "app_1", undefined);
   });
 
+  it("uses durable deletion authority only for an App DELETE", async () => {
+    const authorizeApp = vi.fn<PanelSessionAccess["authorizeApp"]>(async () => null);
+    const authorizeAppDeletionResume = vi.fn<PanelSessionAccess["authorizeAppDeletionResume"]>(
+      async () => ({ appId: "app_1", appRole: "owner" }),
+    );
+    const resolver = makeResolver({ authorizeApp, authorizeAppDeletionResume });
+
+    const read = await resolver(await panelRequest("GET", "/apps/app_1/flags"));
+    const dryRun = await resolver(await panelRequest("DELETE", "/apps/app_1?dryRun=true"));
+    const deletion = await resolver(await panelRequest("DELETE", "/apps/app_1"));
+
+    expect(read).toMatchObject({ ok: false, error: { code: "FORBIDDEN" } });
+    expect(dryRun).toMatchObject({
+      ok: true,
+      principal: {
+        id: "user_1",
+        scopes: ["app:app_1:owner"],
+        orgId: null,
+        appId: "app_1",
+      },
+    });
+    expect(deletion).toMatchObject({
+      ok: true,
+      principal: {
+        id: "user_1",
+        scopes: ["app:app_1:owner"],
+        orgId: null,
+        appId: "app_1",
+      },
+    });
+    expect(authorizeAppDeletionResume).toHaveBeenCalledTimes(2);
+    expect(authorizeAppDeletionResume).toHaveBeenNthCalledWith(1, "user_1", "app_1");
+    expect(authorizeAppDeletionResume).toHaveBeenNthCalledWith(2, "user_1", "app_1");
+  });
+
   it("does not redeem a panel delegation outside the named entrypoint mode", async () => {
     const verify = vi.fn(async () => null);
     const resolver = makeControlPlaneAuthResolver(deps(verify));
@@ -113,11 +148,18 @@ describe("Control Panel Flags principal", () => {
   });
 });
 
-function makeResolver(panelAccess: PanelSessionAccess) {
+function makeResolver(
+  panelAccess: Pick<PanelSessionAccess, "authorizeApp"> &
+    Partial<Pick<PanelSessionAccess, "authorizeAppDeletionResume" | "authorizeOrg">>,
+) {
   return makeControlPlaneAuthResolver(deps(), {
     allowPanelDelegation: true,
     panelDelegationSecret: DELEGATION_SECRET,
-    panelAccess,
+    panelAccess: {
+      authorizeAppDeletionResume: async () => null,
+      authorizeOrg: async () => null,
+      ...panelAccess,
+    },
     panelDelegationReplay: { consume: async () => true } as PanelDelegationReplayStore,
   });
 }

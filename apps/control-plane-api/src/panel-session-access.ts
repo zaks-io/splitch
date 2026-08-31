@@ -1,4 +1,4 @@
-import { appScope, type Repository } from "@splitch/db";
+import { appDeletionRetryActorHash, appScope, type Repository } from "@splitch/db";
 
 type MembershipRole = "owner" | "admin" | "member";
 
@@ -14,12 +14,21 @@ interface PanelOrgAccess {
   orgRole: MembershipRole;
 }
 
+interface PanelAppDeletionResumeAccess {
+  appId: string;
+  appRole: "owner";
+}
+
 export interface PanelSessionAccess {
   authorizeApp(
     actorId: string,
     appId: string,
     environmentId?: string,
   ): Promise<PanelAppAccess | null>;
+  authorizeAppDeletionResume(
+    actorId: string,
+    appId: string,
+  ): Promise<PanelAppDeletionResumeAccess | null>;
   authorizeOrg(actorId: string, orgId: string): Promise<PanelOrgAccess | null>;
 }
 
@@ -49,6 +58,22 @@ export function makePanelSessionAccess(repo: Pick<Repository, "identity">): Pane
         orgId: app.organizationId,
         orgRole: orgMembership.role as MembershipRole,
       };
+    },
+
+    /**
+     * Once the atomic D1 cascade removes the App and its memberships, only the
+     * durable deletion saga can authorize the original owner to finish cleanup.
+     * A saga that has not crossed that boundary grants nothing.
+     */
+    async authorizeAppDeletionResume(actorId, appId) {
+      const saga = await repo.identity.getAppDeletionSaga(appId);
+      if (!saga || saga.phase === "started") return null;
+      const actorMatches =
+        saga.phase === "complete"
+          ? saga.retryActorHash !== null &&
+            saga.retryActorHash === (await appDeletionRetryActorHash(appId, actorId))
+          : saga.actorId === actorId;
+      return actorMatches ? { appId, appRole: "owner" } : null;
     },
 
     /**

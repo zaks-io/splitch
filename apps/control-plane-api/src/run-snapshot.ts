@@ -29,6 +29,7 @@ export interface RunSnapshotRow {
   allocation: string;
   control_variant: string;
   control_variant_id: string;
+  activation_metric_id: string | null;
   decision_family: string;
   guardrail_decisions: string;
   metric_query_config: string;
@@ -72,6 +73,7 @@ export function runSnapshotRow(
     allocation: run.allocation,
     control_variant: controlVariant.name,
     control_variant_id: run.controlVariantId,
+    activation_metric_id: run.activationMetricId,
     // D1 stores MetricRef[]; analysis reads DecisionFamilyMember[]. Expand here
     // so Tinybird never holds the D1 shape (SPL-302).
     decision_family: analysisDecisionFamily(run.decisionFamily, allocation, controlVariant.name),

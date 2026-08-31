@@ -65,7 +65,15 @@ export default defineConfig(({ mode }) => {
           : true,
         viteEnvironment: { name: "ssr" },
       }),
-      tanstackStart(),
+      tanstackStart({
+        router: {
+          codeSplittingOptions: {
+            defaultBehavior: [
+              ["component", "pendingComponent", "errorComponent", "notFoundComponent"],
+            ],
+          },
+        },
+      }),
       react(),
     ],
     define: {

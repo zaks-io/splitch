@@ -17,6 +17,7 @@ import { createControlPanelCloudflareClient } from "#lib/integrations/control-pl
 import { createControlPanelConvexClient } from "#lib/integrations/control-plane-convex";
 import { createControlPanelSegmentsClient } from "#lib/segments/control-plane-segments";
 import { createControlPanelSentryClient } from "#lib/integrations/control-plane-sentry";
+import { createControlPanelSettingsClient } from "#lib/settings/control-plane-settings";
 import { loadSessionFromRequest } from "#lib/sessions/session-refresh";
 import { resyncSessionMemberships } from "#lib/sessions/session-resync";
 
@@ -194,6 +195,34 @@ export async function authorizedAppSettingsClient(): Promise<AuthorizedAppSettin
     ),
     resyncSession: async () => {
       await resyncSessionMemberships(bindings, loaded.tokenHash, loaded.session);
+    },
+  };
+}
+
+export async function authorizedAppSettingsPageClients(environmentId: string) {
+  const authorized = await panelBindingContext();
+  if (!authorized.ok) return authorized;
+  const { bindings, actor } = authorized;
+  const delegationSecret = bindings.CONTROL_PANEL_DELEGATION_SECRET;
+  return {
+    ok: true as const,
+    client: {
+      appSettings: createControlPanelAppSettingsClient(
+        bindings.CONTROL_PLANE_API,
+        actor,
+        delegationSecret,
+      ),
+      environmentSettings: createControlPanelSettingsClient(
+        bindings.CONTROL_PLANE_API,
+        actor,
+        delegationSecret,
+      ),
+      exposureStatus: createControlPanelExposureStatusClient(
+        bindings.CONTROL_PLANE_API,
+        actor,
+        environmentId,
+        delegationSecret,
+      ),
     },
   };
 }

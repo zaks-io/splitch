@@ -1,7 +1,7 @@
 import { SlugSchema, UserRoleSchema } from "@splitch/contracts";
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
-import { settleAppMutation } from "#lib/apps/app-settings-outcome";
+import { settleAppDelete, settleAppMutation } from "#lib/apps/app-settings-outcome";
 import { authorizedAppSettingsClient } from "#lib/auth/panel-authorized-clients";
 
 /**
@@ -51,10 +51,11 @@ export const deleteControlPanelApp = createServerFn({ method: "POST" })
     const authorized = await authorizedAppSettingsClient();
     if (!authorized.ok) return authorized.result;
     const result = await authorized.client.deleteApp(data);
-    // A dry run and a force run that stopped for Review both leave the App
-    // standing, so the session still describes reality and must not be churned.
-    const removed = result.ok && result.data.deleted === true;
-    return settleAppMutation(result, removed ? authorized.resyncSession : async () => {});
+    return settleAppDelete(
+      result,
+      () => authorized.client.deleteApp({ appId: data.appId, force: true }),
+      authorized.resyncSession,
+    );
   });
 
 export const addControlPanelAppMember = createServerFn({ method: "POST" })

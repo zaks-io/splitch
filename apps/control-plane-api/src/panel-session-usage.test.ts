@@ -92,6 +92,7 @@ function makeResolver(panelAccess: Pick<PanelSessionAccess, "authorizeOrg">) {
     panelDelegationSecret: DELEGATION_SECRET,
     panelAccess: {
       authorizeApp: async () => null,
+      authorizeAppDeletionResume: async () => null,
       ...panelAccess,
     },
     panelDelegationReplay: { consume: async () => true } as PanelDelegationReplayStore,

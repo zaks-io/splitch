@@ -1,31 +1,22 @@
-import { createFileRoute, notFound } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
 import { ExperimentCreateForm } from "#components/experiments/experiment-create-form";
 import { PanelPageBody } from "#components/shell/panel-page-body";
 import { SectionPending } from "#components/shared/section-pending";
 import { SectionUnavailable } from "#components/shared/section-unavailable";
 import { scopedHref } from "#lib/shell/app-shell-navigation";
 import { loadControlPanelFlags } from "#lib/flags/control-plane-flag-functions";
-import { AccessDeniedError } from "#lib/shared/loader-context";
-import { loginRedirect } from "#lib/auth/login-redirect";
 import { reportRouteError } from "#lib/observability/panel-observability";
-import { loadScopedSession } from "#lib/sessions/session-functions";
 
 export const Route = createFileRoute("/$orgSlug/$appSlug/$env/experiments/new")({
-  loader: async ({ location, params }) => {
-    const scoped = await loadScopedSession({ data: params });
-    if (scoped.kind === "unauthenticated") {
-      throw loginRedirect(location.href);
-    }
-    if (scoped.kind === "forbidden") throw new AccessDeniedError();
-    if (scoped.kind === "notFound") throw notFound();
-
+  loader: async ({ context }) => {
+    const scoped = context.scoped;
     // An Experiment controls exactly one Flag, so the Flag catalog is what step 1
     // is choosing from. Reusing the Flags page read keeps one source for it.
-    const flags = await loadControlPanelFlags({ data: scoped.context.scope });
+    const flags = await loadControlPanelFlags({ data: scoped.scope });
     if (!flags.ok) throw new Error(flags.error.message);
     return {
       flags: flags.data.items.map((item) => item.definition),
-      scope: scoped.context.scope,
+      scope: scoped.scope,
     };
   },
   onError: ({ error }) => {

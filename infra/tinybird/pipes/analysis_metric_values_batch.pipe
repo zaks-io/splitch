@@ -1,0 +1,297 @@
+DESCRIPTION >
+    Returns per-Entity values for every frozen Metric configuration in one Run-scoped query.
+
+NODE config_payload
+SQL >
+    %
+    {% if not defined(metric_query_config) %} {{ error('metric_query_config is required') }}{% end %}
+    SELECT {{ String(metric_query_config) }} AS config_json
+    WHERE
+        throwIf(
+            NOT isValidJSON(config_json) OR empty(JSONExtractArrayRaw(config_json)),
+            'metric_query_config must be a non-empty JSON array'
+        )
+        = 0
+
+NODE metric_configs
+SQL >
+    SELECT
+        JSONExtractString(config_json, 'metric_id') AS metric_id,
+        JSONExtractString(config_json, 'metric_type') AS metric_type,
+        JSONExtractString(config_json, 'event_definition_id') AS event_definition_id,
+        JSONExtractString(config_json, 'event_field_name') AS event_field_name,
+        JSONExtractUInt(config_json, 'window_duration_ms') AS window_duration_ms,
+        JSONExtractString(config_json, 'numerator', 'metric_type') AS numerator_metric_type,
+        JSONExtractString(
+            config_json, 'numerator', 'event_definition_id'
+        ) AS numerator_event_definition_id,
+        JSONExtractString(config_json, 'numerator', 'event_field_name') AS numerator_event_field_name,
+        JSONExtractString(config_json, 'denominator', 'metric_type') AS denominator_metric_type,
+        JSONExtractString(
+            config_json, 'denominator', 'event_definition_id'
+        ) AS denominator_event_definition_id,
+        JSONExtractString(
+            config_json, 'denominator', 'event_field_name'
+        ) AS denominator_event_field_name
+    FROM config_payload ARRAY
+    JOIN JSONExtractArrayRaw(config_payload.config_json) AS config_json
+    WHERE
+        throwIf(
+            metric_id = ''
+            OR metric_type NOT IN ('binomial', 'count', 'revenue', 'ratio')
+            OR NOT JSONHas(config_json, 'window_duration_ms')
+            OR (
+                metric_type != 'ratio'
+                AND (
+                    event_definition_id = ''
+                    OR (metric_type IN ('count', 'revenue') AND event_field_name = '')
+                )
+            )
+            OR (
+                metric_type = 'ratio'
+                AND (
+                    numerator_metric_type NOT IN ('binomial', 'count', 'revenue')
+                    OR numerator_event_definition_id = ''
+                    OR (
+                        numerator_metric_type IN ('count', 'revenue')
+                        AND numerator_event_field_name = ''
+                    )
+                    OR denominator_metric_type NOT IN ('binomial', 'count', 'revenue')
+                    OR denominator_event_definition_id = ''
+                    OR (
+                        denominator_metric_type IN ('count', 'revenue')
+                        AND denominator_event_field_name = ''
+                    )
+                )
+            ),
+            'metric_query_config contains an invalid Metric binding'
+        )
+        = 0
+
+NODE source_bindings
+SQL >
+    SELECT
+        metric_id,
+        metric_type,
+        'value' AS operand,
+        event_definition_id,
+        metric_type AS source_metric_type,
+        event_field_name,
+        window_duration_ms
+    FROM metric_configs
+    WHERE metric_type != 'ratio'
+    UNION ALL
+    SELECT
+        metric_id,
+        metric_type,
+        'numerator' AS operand,
+        numerator_event_definition_id AS event_definition_id,
+        numerator_metric_type AS source_metric_type,
+        numerator_event_field_name AS event_field_name,
+        window_duration_ms
+    FROM metric_configs
+    WHERE metric_type = 'ratio'
+    UNION ALL
+    SELECT
+        metric_id,
+        metric_type,
+        'denominator' AS operand,
+        denominator_event_definition_id AS event_definition_id,
+        denominator_metric_type AS source_metric_type,
+        denominator_event_field_name AS event_field_name,
+        window_duration_ms
+    FROM metric_configs
+    WHERE metric_type = 'ratio'
+
+NODE activation_candidates
+SQL >
+    %
+    {% if not defined(app_id) %} {{ error('app_id is required') }}{% end %}
+    {% if not defined(environment_id) %} {{ error('environment_id is required') }}{% end %}
+    {% if not defined(experiment_id) %} {{ error('experiment_id is required') }}{% end %}
+    {% if not defined(run_id) %} {{ error('run_id is required') }}{% end %}
+    SELECT
+        raw_events.app_id AS app_id,
+        raw_events.environment_id AS environment_id,
+        raw_events.run_id AS run_id,
+        raw_events.id_type AS id_type,
+        raw_events.targeting_key_hash AS targeting_key_hash,
+        assumeNotNull(raw_events.activation_ts) AS activation_ts
+    FROM raw_events
+    LEFT JOIN app_identity_generation_tombstones AS generation_tombstones
+        ON generation_tombstones.app_id = raw_events.app_id
+        AND generation_tombstones.targeting_key_version = splitByChar(':', raw_events.targeting_key_hash)[1]
+    WHERE
+        raw_events.type = 'activation'
+        AND raw_events.activation_ts IS NOT NULL
+        AND raw_events.app_id = {{ String(app_id) }}
+        AND raw_events.environment_id = {{ String(environment_id) }}
+        AND raw_events.experiment_id = {{ String(experiment_id) }}
+        AND raw_events.run_id = {{ String(run_id) }}
+        AND raw_events.counterfactual = 0
+        AND generation_tombstones.app_id = ''
+    GROUP BY
+        raw_events.app_id,
+        raw_events.environment_id,
+        raw_events.run_id,
+        raw_events.id_type,
+        raw_events.targeting_key_hash,
+        raw_events.activation_ts
+
+NODE activation_anchors
+SQL >
+    SELECT
+        candidates.app_id AS app_id,
+        candidates.environment_id AS environment_id,
+        candidates.run_id AS run_id,
+        candidates.id_type AS id_type,
+        candidates.targeting_key_hash AS targeting_key_hash,
+        min(candidates.activation_ts) AS activation_ts
+    FROM activation_candidates AS candidates
+    INNER JOIN serve_deduped_exposures AS exposures
+        ON exposures.app_id = candidates.app_id
+        AND exposures.environment_id = candidates.environment_id
+        AND exposures.run_id = candidates.run_id
+        AND exposures.id_type = candidates.id_type
+        AND exposures.targeting_key_hash = candidates.targeting_key_hash
+    WHERE candidates.activation_ts > exposures.first_exposure_ts
+    GROUP BY
+        candidates.app_id,
+        candidates.environment_id,
+        candidates.run_id,
+        candidates.id_type,
+        candidates.targeting_key_hash
+
+NODE scoped_exposures
+SQL >
+    %
+    {% if not defined(app_id) %} {{ error('app_id is required') }}{% end %}
+    {% if not defined(environment_id) %} {{ error('environment_id is required') }}{% end %}
+    {% if not defined(experiment_id) %} {{ error('experiment_id is required') }}{% end %}
+    {% if not defined(run_id) %} {{ error('run_id is required') }}{% end %}
+    {% if not defined(activation_gated) %} {{ error('activation_gated is required') }}{% end %}
+    {% if activation_gated not in ['0', '1'] %}
+        {{ error('activation_gated must be 0 or 1') }}
+    {% end %}
+    SELECT
+        exposures.app_id AS app_id,
+        exposures.environment_id AS environment_id,
+        exposures.run_id AS run_id,
+        exposures.id_type AS id_type,
+        exposures.targeting_key_hash AS targeting_key_hash,
+        exposures.entity_family_hash AS entity_family_hash,
+        {% if activation_gated == '1' %}
+            anchors.activation_ts AS window_anchor
+        {% else %}
+            exposures.first_exposure_ts AS window_anchor
+        {% end %}
+    FROM serve_deduped_exposures AS exposures
+    {% if activation_gated == '1' %}
+    INNER JOIN activation_anchors AS anchors
+        ON anchors.app_id = exposures.app_id
+        AND anchors.environment_id = exposures.environment_id
+        AND anchors.run_id = exposures.run_id
+        AND anchors.id_type = exposures.id_type
+        AND anchors.targeting_key_hash = exposures.targeting_key_hash
+    {% end %}
+    WHERE
+        exposures.app_id = {{ String(app_id) }}
+        AND exposures.environment_id = {{ String(environment_id) }}
+        AND exposures.experiment_id = {{ String(experiment_id) }}
+        AND exposures.run_id = {{ String(run_id) }}
+
+NODE scoped_metric_events
+SQL >
+    %
+    {% if not defined(from_ts) %} {{ error('from_ts is required') }}{% end %}
+    {% if not defined(to_ts) %} {{ error('to_ts is required') }}{% end %}
+    SELECT
+        app_id,
+        environment_id,
+        event_definition_id,
+        id_type,
+        targeting_key_hash,
+        entity_family_hash,
+        accepted_at,
+        fields
+    FROM serve_deduped_metric_events
+    WHERE
+        app_id = {{ String(app_id) }}
+        AND environment_id = {{ String(environment_id) }}
+        AND event_definition_id IN (SELECT event_definition_id FROM source_bindings)
+        AND accepted_at >= {{ DateTime64(from_ts) }}
+        AND accepted_at < {{ DateTime64(to_ts) }}
+
+NODE operand_values
+SQL >
+    SELECT
+        exposures.targeting_key_hash AS targeting_key_hash,
+        exposures.run_id AS run_id,
+        bindings.metric_id AS metric_id,
+        bindings.metric_type AS metric_type,
+        bindings.operand AS operand,
+        if(
+            bindings.source_metric_type = 'binomial',
+            toFloat64(countIf(events.event_definition_id != '') > 0),
+            sum(
+                if(
+                    bindings.source_metric_type = 'binomial' OR events.event_definition_id = '',
+                    toFloat64(0),
+                    toFloat64(JSONExtractRaw(events.fields, bindings.event_field_name))
+                )
+            )
+        ) AS operand_value
+    FROM scoped_exposures AS exposures
+    CROSS JOIN source_bindings AS bindings
+    LEFT JOIN
+        scoped_metric_events AS events
+        ON events.app_id = exposures.app_id
+        AND events.environment_id = exposures.environment_id
+        AND events.event_definition_id = bindings.event_definition_id
+        AND events.id_type = exposures.id_type
+        AND (
+            events.entity_family_hash = exposures.entity_family_hash
+            OR if(
+                startsWith(events.targeting_key_hash, 'local-v1:'),
+                concat('v1:', substring(events.targeting_key_hash, 10)),
+                events.targeting_key_hash
+            ) = if(
+                startsWith(exposures.targeting_key_hash, 'local-v1:'),
+                concat('v1:', substring(exposures.targeting_key_hash, 10)),
+                exposures.targeting_key_hash
+            )
+        )
+        AND events.accepted_at >= exposures.window_anchor
+        AND (
+            bindings.window_duration_ms = 0
+            OR events.accepted_at
+            < addMilliseconds(exposures.window_anchor, bindings.window_duration_ms)
+        )
+        AND (
+            bindings.source_metric_type = 'binomial'
+            OR JSONHas(events.fields, bindings.event_field_name)
+        )
+    GROUP BY
+        exposures.targeting_key_hash,
+        exposures.run_id,
+        bindings.metric_id,
+        bindings.metric_type,
+        bindings.operand,
+        bindings.source_metric_type
+
+NODE metric_values
+SQL >
+    SELECT
+        targeting_key_hash,
+        run_id,
+        metric_id,
+        metric_type,
+        if(metric_type = 'ratio', toFloat64(0), maxIf(operand_value, operand = 'value')) AS value,
+        maxIf(operand_value, operand = 'numerator') AS num_value,
+        maxIf(operand_value, operand = 'denominator') AS denom_value,
+        toUInt8(1) AS in_window
+    FROM operand_values
+    GROUP BY targeting_key_hash, run_id, metric_id, metric_type
+    ORDER BY metric_id, targeting_key_hash
+
+TYPE ENDPOINT

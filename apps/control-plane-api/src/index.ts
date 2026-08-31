@@ -40,6 +40,7 @@ import { controlPlaneHealthResponse } from "./health";
 import { handleCredentialCacheBackfillGate, handleLiveUpdateTestControl } from "./internal-routes";
 import { makeCachedJwksVerifier } from "./jwks-verify";
 import { PanelDelegationReplayDurableObject } from "./panel-delegation-replay-do";
+import { repositoryForPanelRequest } from "./panel-request-repository";
 import { runControlPlaneScheduled } from "./scheduled";
 import { makeSessionStore } from "./session-store";
 import {
@@ -185,10 +186,15 @@ async function handleRequest(
     controlPlaneAudience,
   });
 
-  const repo = createRepository(env.DB);
-  const membershipAccess = makeTokenMembershipAccess(repo);
   const panelProtocol: PanelProtocol =
     typeof authMode === "object" || authMode === "mcp" ? "none" : authMode;
+  const baseRepo = createRepository(env.DB);
+  // Signed Panel GETs perform a live authorization read in the resolver and
+  // repeat the same fail-closed check in the handler. Reusing only identical
+  // request-local identity reads preserves both checks while collapsing their
+  // sequential D1 batches. Mutations keep the uncached repository.
+  const repo = repositoryForPanelRequest(baseRepo, panelProtocol, request.method);
+  const membershipAccess = makeTokenMembershipAccess(repo);
   const panelAuthResolver = makeControlPlaneAuthResolver(
     {
       verifier,

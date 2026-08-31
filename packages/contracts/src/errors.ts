@@ -315,7 +315,13 @@ const errorMembers = [
   ),
 
   member("RATE_LIMITED", z.object({ retryAfterMs: z.number() })),
-  member("SERVICE_UNAVAILABLE", z.object({ retryAfterMs: z.number() })),
+  member(
+    "SERVICE_UNAVAILABLE",
+    z.object({
+      retryAfterMs: z.number(),
+      mutationCommitted: z.literal(true).optional(),
+    }),
+  ),
   member(
     "PRIVACY_JOB_FAILED",
     z.object({ requestId: z.string(), failedStores: z.array(z.string()) }),

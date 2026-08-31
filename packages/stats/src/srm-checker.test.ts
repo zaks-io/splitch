@@ -107,6 +107,21 @@ describe("SRMChecker", () => {
     expect(result.health.activation_balance_mismatch).toBe(true);
     expect(result.health.activation_balance_p_value).toBeLessThan(0.001);
   });
+
+  it("fires both activation guardrails when a gated Run has no Activations", () => {
+    const result = checkSrmHealth({
+      run_id: RUN_ID,
+      allocation: { control: 50, treatment: 50 },
+      exposures: [...exposures("control", 120), ...exposures("treatment", 120)],
+      activation_rows: [],
+    });
+
+    expect(result.srm.activated_srm_p_value).toBe(0);
+    expect(result.srm.activated_srm_mismatch).toBe(true);
+    expect(result.health.activation_rates).toEqual({ control: 0, treatment: 0 });
+    expect(result.health.activation_balance_p_value).toBe(0);
+    expect(result.health.activation_balance_mismatch).toBe(true);
+  });
 });
 
 function omitField(input: Record<string, unknown>, field: string): Record<string, unknown> {

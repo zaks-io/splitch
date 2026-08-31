@@ -213,13 +213,21 @@ describe("PanelSidebar", () => {
     expect(html).not.toContain("data-environment-pill");
   });
 
-  it("renders Environment pills with no active pill or sections on the App home", () => {
+  it("keeps App sections stable with no active Environment on the App home", () => {
     currentHref = "/acme-labs/checkout-api";
     const html = renderSidebar({ app: { appId: "app_checkout", appSlug: "checkout-api" } });
 
     expect(html).toContain('href="/acme-labs/checkout-api/dev/flags"');
     expect(html).toContain('href="/acme-labs/checkout-api/prod/flags"');
-    expect(html).not.toContain('aria-label="App sections"');
+    expect(html).toContain('aria-label="App sections"');
+    expect(html).toMatch(
+      /<nav aria-label="App sections"[^>]*>.*?<a[^>]*data-link-to="\/\$orgSlug\/\$appSlug"[^>]*href="\/acme-labs\/checkout-api"[^>]*>.*?>Flags</su,
+    );
+    expect(html).toContain('href="/acme-labs/checkout-api/dev/experiments"');
+    const labels = ["Flags", "Experiments", "Overview", "Segments", "Metrics", "Settings"];
+    const positions = labels.map((label) => html.indexOf(`>${label}<`));
+    expect(positions.every((position) => position >= 0)).toBe(true);
+    expect(positions).toEqual([...positions].sort((a, b) => a - b));
     expect(html.match(/data-environment-pill="dev"[^>]*bg-primary/u)).toBeNull();
   });
 
