@@ -12,13 +12,13 @@ SCHEMA >
     `allocation` String `json:$.allocation`,
     `control_variant` String `json:$.control_variant`,
     `control_variant_id` String `json:$.control_variant_id`,
-    `activation_metric_id` Nullable(String) `json:$.activation_metric_id`,
     `decision_family` String `json:$.decision_family`,
     `guardrail_decisions` String `json:$.guardrail_decisions`,
     `metric_query_config` String `json:$.metric_query_config` DEFAULT '[]',
     `metric_variance_config` String `json:$.metric_variance_config` DEFAULT '[]',
     `dimensions` String `json:$.dimensions`,
-    `config_hash` String `json:$.config_hash`
+    `config_hash` String `json:$.config_hash`,
+    `activation_metric_id` Nullable(String) `json:$.activation_metric_id`
 
 ENGINE "MergeTree"
 ENGINE_SORTING_KEY "app_id, environment_id, experiment_id, started_at"

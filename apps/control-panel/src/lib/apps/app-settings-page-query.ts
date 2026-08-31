@@ -23,18 +23,24 @@ export async function prefetchAppSettingsPage(
       throw Object.assign(new Error(appSettings.error.message), { status: appSettings.status });
     }
     queryClient.setQueryData(queryKeys.app.settings(scope.appId), appSettings.data);
-    if (environmentSettings.ok) {
-      queryClient.setQueryData(
-        queryKeys.environment.settings(scope.appId, scope.environmentId),
-        environmentSettings.data,
-      );
+    if (!environmentSettings.ok) {
+      throw Object.assign(new Error(environmentSettings.error.message), {
+        status: environmentSettings.status,
+      });
     }
-    if (exposureStatus.ok) {
-      queryClient.setQueryData(
-        queryKeys.environment.exposureStatus(scope.appId, scope.environmentId),
-        exposureStatus.data,
-      );
+    queryClient.setQueryData(
+      queryKeys.environment.settings(scope.appId, scope.environmentId),
+      environmentSettings.data,
+    );
+    if (!exposureStatus.ok) {
+      throw Object.assign(new Error(exposureStatus.error.message), {
+        status: exposureStatus.status,
+      });
     }
+    queryClient.setQueryData(
+      queryKeys.environment.exposureStatus(scope.appId, scope.environmentId),
+      exposureStatus.data,
+    );
   } finally {
     queryClient.removeQueries({ queryKey, exact: true });
   }

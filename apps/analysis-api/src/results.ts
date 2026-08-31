@@ -151,6 +151,7 @@ export async function readStatsInputFromTinybird(
     decision_family: run.decision_family,
     exposures,
     metric_values,
+    activation_rows: gatedActivationRows(activationGated, activationRows),
   });
 
   const input = StatsInputSchema.parse({
@@ -170,6 +171,13 @@ export async function readStatsInputFromTinybird(
   });
 
   return input;
+}
+
+function gatedActivationRows(
+  activationGated: boolean,
+  activationRows: readonly unknown[],
+): readonly unknown[] | undefined {
+  return activationGated ? activationRows : undefined;
 }
 
 async function pipeRows(

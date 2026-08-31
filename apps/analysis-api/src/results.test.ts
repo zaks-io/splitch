@@ -109,20 +109,25 @@ describe("GET/POST experiment results", () => {
     });
   });
 
-  it("preserves an empty activation population and reanchors the Metric batch for gated Runs", async () => {
+  it("analyzes an empty activated population and reanchors the Metric batch for gated Runs", async () => {
     const fixture = rowsByPipe();
     const runInput = fixture.analysis_run_inputs?.[0] as Record<string, unknown>;
     runInput.activation_metric_id = "metric_activation";
-    const tinybird = new FakeTinybird(fixture);
+    fixture.analysis_metric_values_batch = [];
+    fixture.analysis_activation_rows = [];
+    const { app, tinybird } = makeHarness(fixture);
 
-    const input = await readStatsInputFromTinybird(tinybird, {
-      appId: APP_ID,
-      environmentId: ENVIRONMENT_ID,
-      experimentId: EXPERIMENT_ID,
-      runId: RUN_ID,
+    const response = await app.request(`${PATH}?runId=${RUN_ID}`, resultsAuthInit("GET"));
+    const envelope = AnalysisResultsEnvelopeSchema.parse(await response.json());
+
+    expect(response.status).toBe(200);
+    expect(envelope).toMatchObject({
+      state: "ready",
+      stats: {
+        health: { activation_rates: { control: 0, treatment: 0 } },
+        srm: { activated_srm_p_value: 1, activated_srm_mismatch: false },
+      },
     });
-
-    expect(input.activation_rows).toEqual([]);
     expect(
       tinybird.calls.find((call) => call.pipeName === "analysis_metric_values_batch")?.params,
     ).toMatchObject({ activation_gated: "1" });

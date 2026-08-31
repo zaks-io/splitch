@@ -47,4 +47,33 @@ describe("prefetchAppSettingsPage", () => {
       queryClient.getQueryData(queryKeys.app.settingsPage(scope.appId, scope.environmentId)),
     ).toBeUndefined();
   });
+
+  it.each([
+    ["Environment settings", "environmentSettings", 404],
+    ["Exposure status", "exposureStatus", 503],
+  ] as const)("fails loudly when %s fails", async (message, failedOperation, status) => {
+    loadAppSettingsPageMock.mockResolvedValue({
+      ok: true,
+      data: {
+        appSettings: { ok: true, data: { app: { id: "app_1" } } },
+        environmentSettings:
+          failedOperation === "environmentSettings"
+            ? { ok: false, status, error: { message } }
+            : { ok: true, data: { environment: { id: "env_1" } } },
+        exposureStatus:
+          failedOperation === "exposureStatus"
+            ? { ok: false, status, error: { message } }
+            : { ok: true, data: { status: "not_received" } },
+      },
+    });
+    const queryClient = new QueryClient();
+
+    await expect(prefetchAppSettingsPage(queryClient, scope)).rejects.toMatchObject({
+      message,
+      status,
+    });
+    expect(
+      queryClient.getQueryData(queryKeys.app.settingsPage(scope.appId, scope.environmentId)),
+    ).toBeUndefined();
+  });
 });
