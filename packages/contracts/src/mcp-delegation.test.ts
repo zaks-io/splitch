@@ -221,6 +221,55 @@ describe("MCP delegated credential rejection", () => {
 });
 
 describe("MCP delegated credential shape", () => {
+  it("round-trips a closed live-membership marker without membership scopes", async () => {
+    const request = new Request("https://control-plane.internal/apps/app_one/flags");
+    const credential = await createMcpDelegationHeader({
+      operationId: "flags_list",
+      actor: {
+        subject: "user_one",
+        scopes: [],
+        authDoor: "device_flow",
+        liveMembership: true,
+      },
+      request,
+      secret: SECRET,
+      nowSeconds: 100,
+      jti: "live-membership-delegation",
+    });
+
+    await expect(
+      parseMcpDelegation({
+        request: withCredential(request, credential),
+        surface: "control-plane-api",
+        secret: SECRET,
+        replayGuard: memoryReplayGuard(),
+        nowSeconds: 100,
+      }),
+    ).resolves.toEqual({
+      subject: "user_one",
+      scopes: [],
+      authDoor: "device_flow",
+      liveMembership: true,
+    });
+  });
+
+  it("refuses to mix the live-membership marker with carried scopes", async () => {
+    const request = new Request("https://control-plane.internal/apps/app_one/flags");
+    await expect(
+      createMcpDelegationHeader({
+        operationId: "flags_list",
+        actor: {
+          subject: "user_one",
+          scopes: ["app:app_one:admin"],
+          authDoor: "device_flow",
+          liveMembership: true,
+        },
+        request,
+        secret: SECRET,
+      }),
+    ).rejects.toThrow("contracts: live MCP membership delegation cannot carry scopes");
+  });
+
   it.each([
     ["missing", undefined],
     ["unrecognized", "trusted_backdoor"],

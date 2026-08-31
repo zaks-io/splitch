@@ -9,8 +9,8 @@ import {
   type ApiRouteContract,
   getRoute,
   HydratedFlagListResponseSchema,
-  HydratedPrincipalFlagListResponseSchema,
   HydratedFlagResponseSchema,
+  HydratedPrincipalFlagListResponseSchema,
   publicSurfaceFor,
 } from "@splitch/contracts";
 import { IdempotencyKeyRequiredError } from "@splitch/control-plane-sdk/idempotency-header";
@@ -25,7 +25,7 @@ import {
   jsonRpcInternalError,
   jsonRpcResult,
 } from "./json-rpc";
-import type { McpAccessTokenActor } from "./mcp-access-token";
+import { delegationActor, type McpAccessTokenActor } from "./mcp-access-token";
 import type { McpFaultReporter } from "./mcp-fault";
 import type { OperationSdk, OperationSdkResolver } from "./mcp-operation-sdks";
 import {
@@ -105,7 +105,7 @@ export async function callTool(
     }
     const operationInput = withFlagReadDefaults(call.name, input.value);
     const result = await sdk.callOperationById(call.name, operationInput, {
-      delegation: { subject: actor.subject, scopes: actor.scopes, authDoor: actor.authDoor },
+      delegation: delegationActor(actor),
     });
     assertHydratedFlagResult(call.name, operationInput, result);
     return recordToolResult(

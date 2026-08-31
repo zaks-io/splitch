@@ -3,7 +3,7 @@ import {
   MCP_DELEGATION_HEADER,
   type McpDelegationReplayGuard,
 } from "@splitch/contracts";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { makeMcpDelegationAuthResolver } from "./mcp-delegation-auth";
 
 const SECRET = "d".repeat(32);
@@ -42,6 +42,44 @@ describe("MCP delegation auth resolver", () => {
     });
   });
 
+  it("resolves unbounded live membership only after validating the signed delegation", async () => {
+    const scopes = Array.from({ length: 70 }, (_, index) => `app:app_${index}:member`);
+    const request = await delegatedRequest(
+      "https://worker.internal/apps/app_one/flags",
+      "device_flow",
+      true,
+    );
+    const resolveLiveScopes = vi.fn(async () => scopes);
+    const liveResolver = makeMcpDelegationAuthResolver({
+      surface: "control-plane-api",
+      secret: SECRET,
+      replayGuard: memoryReplayGuard(),
+      resolveLiveScopes,
+    });
+
+    await expect(liveResolver(request)).resolves.toMatchObject({
+      ok: true,
+      principal: {
+        id: "user_one",
+        scopes,
+        liveMembership: true,
+        authDoor: "device_flow",
+      },
+    });
+    expect(resolveLiveScopes).toHaveBeenCalledWith("user_one");
+  });
+
+  it("fails loud when a live delegation reaches a Worker without a membership resolver", async () => {
+    const request = await delegatedRequest(
+      "https://worker.internal/apps/app_one/flags",
+      "device_flow",
+      true,
+    );
+    await expect(resolver("control-plane-api")(request)).rejects.toThrow(
+      "worker-runtime: live MCP membership resolver is required",
+    );
+  });
+
   it("rejects public omission, replay, and the wrong public surface", async () => {
     const replayGuard = memoryReplayGuard();
     const request = await delegatedRequest("https://worker.internal/apps/app_one/flags");
@@ -69,7 +107,8 @@ describe("MCP delegation auth resolver", () => {
 
 async function delegatedRequest(
   url: string,
-  authDoor: "id_jag" | "anonymous" = "id_jag",
+  authDoor: "id_jag" | "anonymous" | "device_flow" = "id_jag",
+  liveMembership = false,
 ): Promise<Request> {
   const request = new Request(url);
   request.headers.set(
@@ -78,8 +117,9 @@ async function delegatedRequest(
       operationId: "flags_list",
       actor: {
         subject: "user_one",
-        scopes: ["org:org_one:owner", "app:app_one:admin"],
+        scopes: liveMembership ? [] : ["org:org_one:owner", "app:app_one:admin"],
         authDoor,
+        ...(liveMembership ? { liveMembership: true } : {}),
       },
       request,
       secret: SECRET,

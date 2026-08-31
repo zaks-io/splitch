@@ -109,6 +109,30 @@ describe("withBearerMembershipCheck", () => {
       error: { code: "FORBIDDEN", message: "live membership is required" },
     });
   });
+
+  it("does not repeat membership reads already resolved after delegation validation", async () => {
+    const authorize = vi.fn();
+    const principal = {
+      kind: "control-plane-token" as const,
+      id: USER,
+      scopes: [`app:${APP}:admin`],
+      orgId: null,
+      appId: APP,
+      environmentId: null,
+      authDoor: "device_flow" as const,
+      liveMembership: true as const,
+    };
+    const wrapped = withBearerMembershipCheck(
+      async () => ({ ok: true, principal }),
+      fakeAccess({ authorize }),
+    );
+
+    await expect(wrapped(new Request("https://cp.test"))).resolves.toEqual({
+      ok: true,
+      principal,
+    });
+    expect(authorize).not.toHaveBeenCalled();
+  });
 });
 
 describe("makeTokenMembershipAccess", () => {

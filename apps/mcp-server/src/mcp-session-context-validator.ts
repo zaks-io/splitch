@@ -1,4 +1,4 @@
-import type { McpAccessTokenActor } from "./mcp-access-token";
+import { delegationActor, type McpAccessTokenActor } from "./mcp-access-token";
 import type { OperationSdkResolver } from "./mcp-operation-sdks";
 import type { McpSessionContextValidator } from "./mcp-session-context";
 
@@ -17,7 +17,7 @@ export function controlPlaneContextValidator(
   actor: McpAccessTokenActor,
 ): McpSessionContextValidator {
   const callOptions = {
-    delegation: { subject: actor.subject, scopes: actor.scopes, authDoor: actor.authDoor },
+    delegation: delegationActor(actor),
   };
   return async (context) => {
     const sdk = controlPlane();

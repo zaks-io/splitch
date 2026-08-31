@@ -54,7 +54,12 @@ export interface SeenDownstream extends SeenRequest {
   // `authDoor` is recorded, not just `subject`/`scopes`: it is the claim the
   // Organization-creation gate keys on, so a delegation that silently upgraded
   // the door would be a privilege escalation no other assertion here would see.
-  delegation: { subject: string; scopes: readonly string[]; authDoor: string } | null;
+  delegation: {
+    subject: string;
+    scopes: readonly string[];
+    authDoor: string;
+    liveMembership?: true;
+  } | null;
 }
 
 export async function request(
@@ -64,7 +69,6 @@ export async function request(
     authBaseUrl?: string;
     oauthAuthorizationServer?: string;
     oauthJwksUrl?: string;
-    resolveAuthKitScopes?: (subject: string) => Promise<string[]>;
     controlPlaneBaseUrl?: string;
     controlPlaneFetch?: typeof fetch;
     sessionStore?: McpSessionStore;
@@ -94,7 +98,6 @@ export async function mcp(
     authBaseUrl?: string;
     oauthAuthorizationServer?: string;
     oauthJwksUrl?: string;
-    resolveAuthKitScopes?: (subject: string) => Promise<string[]>;
     now?: () => number;
   },
 ): Promise<Response> {
@@ -174,7 +177,10 @@ export async function bootAuthApi(seen: SeenRequest[]): Promise<{
   };
 }
 
-export async function bootControlPlaneApi(seen: SeenDownstream[]): Promise<string> {
+export async function bootControlPlaneApi(
+  seen: SeenDownstream[],
+  expectedActor: NonNullable<SeenDownstream["delegation"]> = actor,
+): Promise<string> {
   const replayGuard = memoryMcpDelegationReplayGuard();
   return bootServer(async (request, response) => {
     const authorization = request.headers.authorization ?? null;
@@ -198,9 +204,10 @@ export async function bootControlPlaneApi(seen: SeenDownstream[]): Promise<strin
       request.method !== "GET" ||
       request.url !== "/apps/app_local/flags?include=config" ||
       authorization !== null ||
-      delegation?.subject !== actor.subject ||
-      delegation.scopes.join(" ") !== actor.scopes.join(" ") ||
-      delegation.authDoor !== actor.authDoor
+      delegation?.subject !== expectedActor.subject ||
+      delegation.scopes.join(" ") !== expectedActor.scopes.join(" ") ||
+      delegation.authDoor !== expectedActor.authDoor ||
+      delegation.liveMembership !== expectedActor.liveMembership
     ) {
       writeJson(response, 401, { code: "UNAUTHORIZED", message: "UNAUTHORIZED", details: {} });
       return;

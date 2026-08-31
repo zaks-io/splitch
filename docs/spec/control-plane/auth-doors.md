@@ -240,12 +240,14 @@ metadata endpoints; AuthKit stamps the selected value into the access token's
 The MCP Worker verifies the AuthKit JWT against `${issuer}/oauth2/jwks`, exact
 issuer, exact resource audience, expiry, and subject. It does not translate
 AuthKit's OAuth `scope` claim into Splitch authority. Instead, its existing
-Control Plane service binding resolves the WorkOS User's complete current
-Organization and App memberships. The MCP Worker carries those canonical
-membership scopes in the existing operation-, request-, and replay-bound
-one-call delegation. The Control Plane repeats the live membership check before
-route authorization. A provider token therefore cannot carry stale or invented
-Splitch tenant authority.
+Control Plane service binding carries a signed one-call delegation with an empty
+scope list and a closed live-membership marker. After validating that
+operation-, request-, body-, and replay-bound credential, the Control Plane
+resolves the WorkOS User's complete current Organization and App memberships
+from D1 and runs the existing route scope and co-scope gates. This keeps
+membership lists out of headers, avoids the carried-scope count limit, and
+prevents a provider token from carrying stale or invented Splitch tenant
+authority.
 
 ## Shared-preview smoke grant: client_credentials
 

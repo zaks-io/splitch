@@ -88,13 +88,6 @@ export class McpEntrypoint extends WorkerEntrypoint<ControlPlaneApiEnv> {
       this.ctx,
     );
   }
-
-  async resolveMcpMembershipScopes(userId: string): Promise<string[]> {
-    return resolveMcpMembershipScopes(
-      makeTokenMembershipAccess(createRepository(this.env.DB)),
-      userId,
-    );
-  }
 }
 
 /** Binding-only V2 entrypoint used by the Control Panel for signed least-privilege delegation. */
@@ -212,6 +205,7 @@ async function handleRequest(
             makeMcpDelegationAuthResolver({
               surface: "control-plane-api",
               secret: requiredMcpDelegationSecret(env.MCP_CONTROL_PLANE_DELEGATION_SECRET),
+              resolveLiveScopes: (userId) => resolveMcpMembershipScopes(membershipAccess, userId),
               replayGuard: makeDurableMcpDelegationReplayGuard(
                 requiredMcpReplayBinding(env.MCP_DELEGATION_REPLAY),
               ),

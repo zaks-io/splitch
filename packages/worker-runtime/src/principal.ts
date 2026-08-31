@@ -48,6 +48,8 @@ export interface Principal {
   authorization?: AccessTokenAuthorization;
   /** Live D1 result for a membership-wide token. Never populated from JWT claims. */
   memberships?: PrincipalMemberships;
+  /** Membership scopes were resolved live after a signed MCP delegation was validated. */
+  liveMembership?: true;
   /**
    * Which door minted this credential, when the auth kind carries one. `null`
    * for kinds with no door concept (public, Client Key, API Key) — those are

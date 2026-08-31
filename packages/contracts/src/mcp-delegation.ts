@@ -16,6 +16,8 @@ const MIN_SECRET_LENGTH = 32;
 export interface McpDelegationActor {
   subject: string;
   scopes: readonly string[];
+  /** Resolve current membership after this signed one-call credential is validated. */
+  liveMembership?: true;
   /**
    * Which door minted the MCP access token this delegation stands in for. It is
    * signed with the rest of the credential so the downstream Worker learns that
@@ -56,6 +58,7 @@ interface McpDelegationCredential {
   operationId: string;
   subject: string;
   scopes: string[];
+  liveMembership?: true;
   authDoor: AuthDoor;
   method: string;
   target: string;
@@ -74,6 +77,9 @@ export async function createMcpDelegationHeader(options: {
   jti?: string;
 }): Promise<string> {
   assertStrongSecret(options.secret);
+  if (options.actor.liveMembership && options.actor.scopes.length > 0) {
+    throw new Error("contracts: live MCP membership delegation cannot carry scopes");
+  }
   const route = getRoute(options.operationId);
   if (!route)
     throw new Error(`contracts: unknown MCP delegation operation "${options.operationId}"`);
@@ -86,6 +92,7 @@ export async function createMcpDelegationHeader(options: {
     operationId: options.operationId,
     subject: options.actor.subject,
     scopes: [...options.actor.scopes],
+    ...(options.actor.liveMembership ? { liveMembership: true } : {}),
     authDoor: options.actor.authDoor,
     method: options.request.method,
     target: requestTarget(options.request),
@@ -148,6 +155,7 @@ export async function parseMcpDelegation(options: {
   return {
     subject: credential.subject,
     scopes: credential.scopes,
+    ...(credential.liveMembership ? { liveMembership: true } : {}),
     authDoor: credential.authDoor,
   };
 }
@@ -224,6 +232,8 @@ function decodeCredential(encoded: string): McpDelegationCredential | null {
       !value.scopes.every(
         (scope) => typeof scope === "string" && scope.length > 0 && scope.length <= 512,
       ) ||
+      (value.liveMembership !== undefined && value.liveMembership !== true) ||
+      (value.liveMembership === true && value.scopes.length !== 0) ||
       !AuthDoorSchema.safeParse(value.authDoor).success ||
       typeof value.method !== "string" ||
       typeof value.target !== "string" ||

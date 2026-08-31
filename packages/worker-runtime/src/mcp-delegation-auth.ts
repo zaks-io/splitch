@@ -1,8 +1,8 @@
 import {
   type McpDelegationActor,
   type McpDelegationReplayGuard,
-  parseMcpDelegation,
   type PublicSurface,
+  parseMcpDelegation,
 } from "@splitch/contracts";
 import type { AuthResolver, Principal } from "./principal";
 
@@ -18,16 +18,20 @@ export function makeMcpDelegationAuthResolver(options: {
   surface: PublicSurface;
   secret: string;
   replayGuard: McpDelegationReplayGuard;
+  resolveLiveScopes?: (subject: string) => Promise<string[]>;
 }): AuthResolver {
   return async (request) => {
     const actor = await parseMcpDelegation({ request, ...options });
     if (!actor) return { ok: false, reason: "UNAUTHORIZED" };
-    return { ok: true, principal: principalFromActor(actor) };
+    return { ok: true, principal: await principalFromActor(actor, options.resolveLiveScopes) };
   };
 }
 
-function principalFromActor(actor: McpDelegationActor): Principal {
-  const scopes = actor.scopes;
+async function principalFromActor(
+  actor: McpDelegationActor,
+  resolveLiveScopes: ((subject: string) => Promise<string[]>) | undefined,
+): Promise<Principal> {
+  const scopes = await actorScopes(actor, resolveLiveScopes);
   return {
     kind: "control-plane-token",
     id: actor.subject,
@@ -36,7 +40,19 @@ function principalFromActor(actor: McpDelegationActor): Principal {
     appId: soleId(idsInScopes(scopes, APP_SCOPE)),
     environmentId: null,
     authDoor: actor.authDoor,
+    ...(actor.liveMembership ? { liveMembership: true } : {}),
   };
+}
+
+async function actorScopes(
+  actor: McpDelegationActor,
+  resolveLiveScopes: ((subject: string) => Promise<string[]>) | undefined,
+): Promise<readonly string[]> {
+  if (!actor.liveMembership) return actor.scopes;
+  if (!resolveLiveScopes) {
+    throw new Error("worker-runtime: live MCP membership resolver is required");
+  }
+  return resolveLiveScopes(actor.subject);
 }
 
 function idsInScopes(scopes: readonly string[], pattern: RegExp): Set<string> {

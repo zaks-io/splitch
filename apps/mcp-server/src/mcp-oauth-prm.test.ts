@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import { flagPage } from "./mcp-flag-fixtures";
 import { actor, NOW_SECONDS } from "./mcp-oauth-prm-actor";
 import {
@@ -206,23 +206,50 @@ describe("MCP hosted OAuth authorization server", () => {
   it("verifies the hosted issuer token and resolves live Splitch authority", async () => {
     const authRequests: SeenRequest[] = [];
     const auth = await bootAuthApi(authRequests);
+    const seenDownstream: SeenDownstream[] = [];
+    const controlPlaneBaseUrl = await bootControlPlaneApi(seenDownstream, {
+      subject: actor.subject,
+      scopes: [],
+      authDoor: "device_flow",
+      liveMembership: true,
+    });
     const tokenResponse = await fetch(`${auth.baseUrl}/oauth2/token`, { method: "POST" });
     const token = ((await tokenResponse.json()) as { access_token: string }).access_token;
-    const resolveAuthKitScopes = vi.fn(async () => actor.scopes.slice());
-
+    const sessionStore = memorySessionStore();
     const response = await mcp("initialize", undefined, `Bearer ${token}`, {
-      controlPlaneBaseUrl: "https://control-plane.splitch.test",
-      controlPlaneFetch: async () => Response.json({}),
-      sessionStore: memorySessionStore(),
+      controlPlaneBaseUrl,
+      sessionStore,
       authBaseUrl: "https://auth.splitch.test",
       oauthAuthorizationServer: auth.baseUrl,
       oauthJwksUrl: `${auth.baseUrl}/oauth2/jwks`,
-      resolveAuthKitScopes,
       now: () => NOW_SECONDS * 1000,
     });
 
     expect(response.status).toBe(200);
-    expect(resolveAuthKitScopes).toHaveBeenCalledWith(actor.subject);
+    const sessionId = response.headers.get("mcp-session-id");
+    expect(sessionId).toBeTruthy();
+    const toolResponse = await mcp(
+      "tools/call",
+      { name: "flags_list", arguments: { appId: "app_local" } },
+      `Bearer ${token}`,
+      {
+        controlPlaneBaseUrl,
+        sessionStore,
+        sessionId: sessionId ?? undefined,
+        authBaseUrl: "https://auth.splitch.test",
+        oauthAuthorizationServer: auth.baseUrl,
+        oauthJwksUrl: `${auth.baseUrl}/oauth2/jwks`,
+        now: () => NOW_SECONDS * 1000,
+      },
+    );
+    expect(toolResponse.status).toBe(200);
+    expect(seenDownstream).toHaveLength(1);
+    expect(seenDownstream[0]?.delegation).toEqual({
+      subject: actor.subject,
+      scopes: [],
+      authDoor: "device_flow",
+      liveMembership: true,
+    });
     expect(authRequests).toEqual([
       { method: "POST", path: "/oauth2/token" },
       { method: "GET", path: "/oauth2/jwks" },

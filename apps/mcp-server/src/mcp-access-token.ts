@@ -1,9 +1,16 @@
-import { type AuthDoor, AuthDoorSchema, isCanonicalHeldScopes } from "@splitch/contracts";
+import {
+  type AuthDoor,
+  AuthDoorSchema,
+  isCanonicalHeldScopes,
+  type McpDelegationActor,
+} from "@splitch/contracts";
 import { remoteJwksSignatureVerifier } from "@splitch/worker-runtime";
 
 export interface McpAccessTokenActor {
   subject: string;
   scopes: string[];
+  /** Splitch authority must be resolved from live Control Plane membership. */
+  liveMembership?: true;
   /**
    * Which door minted the token. Defaults to the LEAST-privileged door when the
    * claim is missing or unrecognized: an unidentifiable token must not be
@@ -25,11 +32,19 @@ export interface McpAccessTokenVerifier {
   ): Promise<McpAccessTokenActor | null>;
 }
 
+export function delegationActor(actor: McpAccessTokenActor): McpDelegationActor {
+  return {
+    subject: actor.subject,
+    scopes: actor.scopes,
+    authDoor: actor.authDoor,
+    ...(actor.liveMembership ? { liveMembership: true } : {}),
+  };
+}
+
 interface HttpMcpAccessTokenVerifierOptions {
   issuer: string;
   jwksUrl?: string;
   profile?: "splitch" | "authkit";
-  resolveAuthKitScopes?: (subject: string) => Promise<string[]>;
   fetchJwks?: () => Promise<Jwks>;
 }
 
@@ -65,10 +80,11 @@ async function verifyHttpToken(
     return actorFromClaims(parsed.payload, { issuer, expectedAudience, nowSeconds });
   }
   const subject = standardSubject(parsed.payload, { issuer, expectedAudience, nowSeconds });
-  if (!subject || !options.resolveAuthKitScopes) return null;
+  if (!subject) return null;
   return {
     subject,
-    scopes: await options.resolveAuthKitScopes(subject),
+    scopes: [],
+    liveMembership: true,
     authDoor: "device_flow",
   };
 }

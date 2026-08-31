@@ -46,7 +46,6 @@ export interface McpServerRequestOptions {
   readonly authBaseUrl?: string;
   readonly oauthAuthorizationServer?: string;
   readonly oauthJwksUrl?: string;
-  readonly resolveAuthKitScopes?: (subject: string) => Promise<string[]>;
   readonly controlPlaneBaseUrl?: string;
   readonly controlPlaneFetch?: typeof fetch;
   readonly controlPlaneDelegationSecret?: string;
@@ -119,7 +118,6 @@ function defaultTokenVerifier(options: McpServerRequestOptions): McpAccessTokenV
     issuer,
     profile: "authkit",
     ...(options.oauthJwksUrl ? { jwksUrl: options.oauthJwksUrl } : {}),
-    ...(options.resolveAuthKitScopes ? { resolveAuthKitScopes: options.resolveAuthKitScopes } : {}),
   });
 }
 

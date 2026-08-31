@@ -121,6 +121,7 @@ export function withBearerMembershipCheck(
   return async (request) => {
     const result = await resolver(request);
     if (!result.ok) return result;
+    if (result.principal.liveMembership) return result;
     return (
       (await authorizeBearerMembership(access, result.principal.id, result.principal.scopes)) ??
       result

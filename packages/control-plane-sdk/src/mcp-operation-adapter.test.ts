@@ -213,6 +213,40 @@ describe("mcp operation adapter", () => {
   });
 });
 
+describe("live MCP membership delegation", () => {
+  it("preserves the marker while carrying no membership scopes", async () => {
+    let forwardedRequest: Request | undefined;
+    const adapter = createMcpOperationAdapter({
+      baseUrl: "https://control-plane.test",
+      delegationSecret: "d".repeat(32),
+      fetch: async (request) => {
+        forwardedRequest = request instanceof Request ? request : new Request(request);
+        return Response.json(flagPage);
+      },
+    });
+
+    await adapter.callOperationById(
+      "flags_list",
+      { appId: "app_local" },
+      {
+        delegation: {
+          subject: "user_mcp",
+          scopes: [],
+          authDoor: "device_flow",
+          liveMembership: true,
+        },
+      },
+    );
+
+    await expect(delegatedActor(forwardedRequest, "control-plane-api")).resolves.toEqual({
+      subject: "user_mcp",
+      scopes: [],
+      authDoor: "device_flow",
+      liveMembership: true,
+    });
+  });
+});
+
 async function delegatedActor(request: Request | undefined, surface: "control-plane-api") {
   expect(request).toBeDefined();
   return parseMcpDelegation({

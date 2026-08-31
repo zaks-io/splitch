@@ -9,10 +9,12 @@ configured WorkOS AuthKit issuer directly from the MCP Protected Resource
 Metadata. AuthKit owns CIMD, Dynamic Client Registration, consent, S256 PKCE,
 authorization codes, refresh rotation, and OAuth token issuance. Splitch remains
 the resource server: it verifies the AuthKit JWT against the issuer's OAuth JWKS
-and the exact MCP Resource Indicator, then resolves the WorkOS User's current
-Splitch Organization and App memberships before signing a one-call internal
-delegation. Provider OAuth scopes are never interpreted as Splitch membership
-authority.
+and the exact MCP Resource Indicator, then signs a closed live-membership marker
+into the operation-, request-, and replay-bound one-call delegation. Only after
+the Control Plane validates that delegation does it resolve the WorkOS User's
+current Splitch Organization and App memberships from D1. Membership lists never
+ride in bearer tokens or delegation headers, and provider OAuth scopes are never
+interpreted as Splitch membership authority.
 
 The existing Splitch auth-api remains the auth.md and device-flow issuer. This is
 one principal reached through provider-managed browser OAuth, not a new principal
