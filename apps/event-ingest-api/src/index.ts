@@ -32,10 +32,10 @@ import { createIngestPhaseTiming } from "./ingest-phase-timing";
 import { handleAuthorizedMetricEvent } from "./metric-event-ingest";
 import { MetricEventOutboxDurableObject } from "./metric-event-outbox";
 import { handleMetricEventQueue } from "./metric-event-queue";
-import { handleMetricEventReconciliationQueue } from "./metric-event-reconciliation";
 import { MetricEventRateLimitDurableObject } from "./metric-event-rate-limit";
-import { handleRawEventQueue } from "./raw-event-queue";
+import { handleMetricEventReconciliationQueue } from "./metric-event-reconciliation";
 import { makeMetricEventSaltStore } from "./metric-event-salt-store";
+import { handleRawEventQueue } from "./raw-event-queue";
 import type { Env } from "./types";
 
 const service = "splitch-event-ingest-api";
@@ -159,7 +159,7 @@ const delegatedHandler = {
       authenticateDelegatedDataPlaneCredential(identity, env),
     );
     if (!credential.ok) {
-      timing.emit("rejected");
+      timing.emit("rejected", { serializedBytes: null });
       return renderError(credential.error);
     }
     return handleAuthorizedMetricEvent(request, env, credential.value, timing);

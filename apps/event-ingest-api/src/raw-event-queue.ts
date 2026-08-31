@@ -1,4 +1,5 @@
 import { requirePlatformTarget } from "@splitch/contracts";
+import { createIngestPhaseTiming } from "./ingest-phase-timing";
 import { queueRetryDelaySeconds } from "./queue-retry";
 import {
   type RawEventFailureSource,
@@ -8,13 +9,13 @@ import {
 import { admitRawEventPrivacy, completeRawEventPrivacy } from "./raw-event-privacy-delivery";
 import {
   parseRawEventEnvelope,
-  rawEventDatasourceForQueue,
   type RawEventDatasource,
   type RawEventQueueEnvelope,
+  rawEventDatasourceForQueue,
 } from "./raw-event-queue-envelope";
 import {
+  emitRawEventBatchSettlement,
   emptyRawEventOutcomeCounts,
-  logRawEventBatchSettlement,
   type RawEventOutcomeCounts,
 } from "./raw-event-queue-telemetry";
 import {
@@ -44,31 +45,24 @@ export async function handleRawEventQueue(
   env: Env,
 ): Promise<void> {
   requirePlatformTarget(env.SPLITCH_PLATFORM_TARGET);
-  const startedAt = performance.now();
   const queueDatasource = rawEventDatasourceForQueue(batch.queue);
+  const timing = createIngestPhaseTiming(env, {
+    route: "raw_queue_settlement",
+    stream: queueDatasource,
+  });
   const outcomes = emptyRawEventOutcomeCounts();
-  let admissionMs: number | undefined;
-  let deliveryMs: number | undefined;
   try {
-    const admissionStartedAt = performance.now();
-    const groups = await admitBatch(batch.messages, queueDatasource, env, outcomes);
-    admissionMs = elapsedMs(admissionStartedAt);
-    const deliveryStartedAt = performance.now();
-    for (const [datasource, admitted] of groups) {
-      await deliverGroup(datasource, admitted, env, outcomes);
-    }
-    deliveryMs = elapsedMs(deliveryStartedAt);
-  } finally {
-    logRawEventBatchSettlement(batch, queueDatasource, outcomes, {
-      totalMs: elapsedMs(startedAt),
-      admissionMs,
-      deliveryMs,
+    const groups = await timing.measure("admission", () =>
+      admitBatch(batch.messages, queueDatasource, env, outcomes),
+    );
+    await timing.measure("delivery", async () => {
+      for (const [datasource, admitted] of groups) {
+        await deliverGroup(datasource, admitted, env, outcomes);
+      }
     });
+  } finally {
+    emitRawEventBatchSettlement(timing, batch, queueDatasource, outcomes);
   }
-}
-
-function elapsedMs(startedAt: number): number {
-  return Math.round(Math.max(0, performance.now() - startedAt) * 1_000) / 1_000;
 }
 
 async function admitBatch(

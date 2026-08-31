@@ -149,7 +149,7 @@ export async function handleEvaluationIngest(request: Request, env: Env): Promis
 }
 
 function timedRejection(timing: ReturnType<typeof createIngestPhaseTiming>, response: Response) {
-  timing.emit("rejected");
+  timing.emit("rejected", { serializedBytes: null });
   return response;
 }
 

@@ -2,9 +2,14 @@ import { createScrubbedEmitter, secretsFromEnv } from "@splitch/observability";
 
 type IngestTimingOutcome = "accepted" | "rejected" | "fault";
 
+interface IngestTimingFields extends Record<string, unknown> {
+  readonly serializedBytes: number | null;
+  readonly itemCount?: number;
+}
+
 export interface IngestPhaseTiming {
   measure<T>(phase: string, run: () => T | Promise<T>): Promise<T>;
-  emit(outcome: IngestTimingOutcome, fields?: Record<string, unknown>): void;
+  emit(outcome: IngestTimingOutcome, fields: IngestTimingFields): void;
 }
 
 export function createIngestPhaseTiming(
@@ -30,15 +35,17 @@ export function createIngestPhaseTiming(
         phaseDurations[`${phase}Ms`] = milliseconds(now() - phaseStartedAt);
       }
     },
-    emit(outcome, fields = {}) {
+    emit(outcome, fields) {
       if (env.SPLITCH_PLATFORM_TARGET === "local") return;
+      const { itemCount = 1, serializedBytes, ...details } = fields;
       emitter.log("info", "ingest_phase_timing", {
+        ...details,
         ...context,
         outcome,
-        itemCount: 1,
+        itemCount,
         totalMs: milliseconds(now() - startedAt),
         ...phaseDurations,
-        ...fields,
+        serializedBytes,
       });
     },
   };

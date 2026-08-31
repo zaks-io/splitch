@@ -1,3 +1,5 @@
+import { queuePayloadBytes } from "./ingest-admission-gate";
+import type { IngestPhaseTiming } from "./ingest-phase-timing";
 import type { RawEventDatasource } from "./raw-event-queue-envelope";
 
 type RawEventOutcome = "delivered" | "retryable" | "indeterminate" | "poison" | "suppressed";
@@ -7,14 +9,19 @@ export function emptyRawEventOutcomeCounts(): RawEventOutcomeCounts {
   return { delivered: 0, retryable: 0, indeterminate: 0, poison: 0, suppressed: 0 };
 }
 
-export function logRawEventBatchSettlement(
+export function emitRawEventBatchSettlement(
+  timing: IngestPhaseTiming,
   batch: MessageBatch<Record<string, unknown>>,
   datasource: RawEventDatasource,
   outcomes: RawEventOutcomeCounts,
-  timings?: { totalMs: number; admissionMs?: number; deliveryMs?: number },
 ): void {
   const oldestTimestamp = oldestMessageTimestamp(batch.messages);
-  console.info("event-ingest-api raw event batch settled", {
+  timing.emit(batchTimingOutcome(outcomes), {
+    serializedBytes: batch.messages.reduce(
+      (total, message) => total + queuePayloadBytes(message.body),
+      0,
+    ),
+    itemCount: batch.messages.length,
     queue: batch.queue,
     datasource,
     rowCount: batch.messages.length,
@@ -29,14 +36,13 @@ export function logRawEventBatchSettlement(
     oldestMessageAgeMs: oldestTimestamp
       ? Math.max(0, Date.now() - oldestTimestamp.getTime())
       : null,
-    ...(timings
-      ? {
-          totalMs: timings.totalMs,
-          ...(timings.admissionMs === undefined ? {} : { admissionMs: timings.admissionMs }),
-          ...(timings.deliveryMs === undefined ? {} : { deliveryMs: timings.deliveryMs }),
-        }
-      : {}),
   });
+}
+
+function batchTimingOutcome(outcomes: RawEventOutcomeCounts): "accepted" | "rejected" | "fault" {
+  if (outcomes.retryable + outcomes.indeterminate + outcomes.poison > 0) return "fault";
+  if (outcomes.delivered === 0 && outcomes.suppressed > 0) return "rejected";
+  return "accepted";
 }
 
 function oldestMessageTimestamp(

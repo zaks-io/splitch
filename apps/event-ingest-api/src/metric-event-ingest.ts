@@ -11,18 +11,22 @@ import {
   type EventDefinitionMismatchSink,
   recordEventDefinitionMismatch,
 } from "./event-definition-mismatch-diagnostics";
+import { createIngestPhaseTiming, type IngestPhaseTiming } from "./ingest-phase-timing";
 import {
   admitAndClaimMetricEvent,
   replayExistingMetricEvent,
   schemaMismatch,
 } from "./metric-event-admission";
 import { resolveMetricEventIdentityMaterial } from "./metric-event-identity";
-import { createIngestPhaseTiming, type IngestPhaseTiming } from "./ingest-phase-timing";
 import { checkMetricEventRateLimit } from "./metric-event-rate-limit";
 import type { Env } from "./types";
 
 const MAX_BODY_BYTES = 32_768;
 const hotConfigEnvelope = kvEnvelope(EventDefinitionHotConfigSchema);
+
+type MetricEventParseResult =
+  | { readonly ok: true; readonly value: MetricEventTrackRequest; readonly serializedBytes: number }
+  | { readonly ok: false; readonly response: Response; readonly serializedBytes: number | null };
 
 export async function handleAuthorizedMetricEvent(
   request: Request,
@@ -33,12 +37,15 @@ export async function handleAuthorizedMetricEvent(
     stream: "metric_events",
   }),
 ): Promise<Response> {
-  const parsed = await timing.measure("parse", () => parseMetricEventRequest(request));
-  if (parsed instanceof Response) return timedMetricResponse(timing, parsed);
+  const parsedResult = await timing.measure("parse", () => parseMetricEventRequest(request));
+  if (!parsedResult.ok) {
+    return timedMetricResponse(timing, parsedResult.response, parsedResult.serializedBytes);
+  }
+  const { value: parsed, serializedBytes } = parsedResult;
   const limited = await timing.measure("rateLimit", () =>
     enforceCredentialRateLimit(env, credential),
   );
-  if (limited) return timedMetricResponse(timing, limited);
+  if (limited) return timedMetricResponse(timing, limited, serializedBytes);
 
   const identityMaterial = await timing.measure("identity", () =>
     resolveMetricEventIdentityMaterial(env, credential, parsed),
@@ -56,14 +63,14 @@ export async function handleAuthorizedMetricEvent(
       disclosure,
     ),
   );
-  if (replay) return timedMetricResponse(timing, replay);
+  if (replay) return timedMetricResponse(timing, replay, serializedBytes);
 
   const hot = await timing.measure("config", () =>
     loadDefinition(env, credential, parsed, disclosure),
   );
-  if (hot instanceof Response) return timedMetricResponse(timing, hot);
+  if (hot instanceof Response) return timedMetricResponse(timing, hot, serializedBytes);
   const mismatch = schemaMismatch(parsed, hot, disclosure);
-  if (mismatch) return timedMetricResponse(timing, mismatch);
+  if (mismatch) return timedMetricResponse(timing, mismatch, serializedBytes);
 
   const response = await timing.measure("admissionQueue", () =>
     admitAndClaimMetricEvent(env, credential, parsed, {
@@ -75,39 +82,55 @@ export async function handleAuthorizedMetricEvent(
       eventDefinitionVersionId: hot.version.id,
     }),
   );
-  return timedMetricResponse(timing, response);
+  return timedMetricResponse(timing, response, serializedBytes);
 }
 
-function timedMetricResponse(timing: IngestPhaseTiming, response: Response): Response {
-  timing.emit(response.status < 400 ? "accepted" : "rejected");
+function timedMetricResponse(
+  timing: IngestPhaseTiming,
+  response: Response,
+  serializedBytes: number | null,
+): Response {
+  timing.emit(response.status < 400 ? "accepted" : "rejected", { serializedBytes });
   return response;
 }
 
-async function parseMetricEventRequest(request: Request) {
-  const text = await readMetricEventBody(request);
-  if (text === null) {
-    return renderError(validation("Metric Event body exceeds 32768 bytes", []));
+async function parseMetricEventRequest(request: Request): Promise<MetricEventParseResult> {
+  const body = await readMetricEventBody(request);
+  if (body === null) {
+    return {
+      ok: false,
+      response: renderError(validation("Metric Event body exceeds 32768 bytes", [])),
+      serializedBytes: null,
+    };
   }
   let candidate: unknown;
   try {
-    candidate = JSON.parse(text);
+    candidate = JSON.parse(body.text);
   } catch {
-    return renderError(validation("Metric Event body must be JSON", []));
+    return {
+      ok: false,
+      response: renderError(validation("Metric Event body must be JSON", [])),
+      serializedBytes: body.serializedBytes,
+    };
   }
   const parsed = MetricEventTrackRequestSchema.safeParse(candidate);
   if (!parsed.success) {
-    return renderError({
-      code: "VALIDATION_ERROR",
-      message: "Metric Event request is invalid",
-      details: {
-        issues: parsed.error.issues.map((issue) => ({
-          path: issue.path.map(String),
-          message: issue.message,
-        })),
-      },
-    });
+    return {
+      ok: false,
+      response: renderError({
+        code: "VALIDATION_ERROR",
+        message: "Metric Event request is invalid",
+        details: {
+          issues: parsed.error.issues.map((issue) => ({
+            path: issue.path.map(String),
+            message: issue.message,
+          })),
+        },
+      }),
+      serializedBytes: body.serializedBytes,
+    };
   }
-  return parsed.data;
+  return { ok: true, value: parsed.data, serializedBytes: body.serializedBytes };
 }
 
 async function enforceCredentialRateLimit(
@@ -133,9 +156,11 @@ async function enforceCredentialRateLimit(
   }
 }
 
-async function readMetricEventBody(request: Request): Promise<string | null> {
+async function readMetricEventBody(
+  request: Request,
+): Promise<{ readonly text: string; readonly serializedBytes: number } | null> {
   if (bodyTooLargeFromHeader(request.headers.get("content-length"))) return null;
-  if (request.body === null) return "";
+  if (request.body === null) return { text: "", serializedBytes: 0 };
 
   const reader = request.body.getReader();
   const chunks: Uint8Array[] = [];
@@ -161,7 +186,7 @@ async function readMetricEventBody(request: Request): Promise<string | null> {
     bytes.set(chunk, offset);
     offset += chunk.byteLength;
   }
-  return new TextDecoder().decode(bytes);
+  return { text: new TextDecoder().decode(bytes), serializedBytes: byteLength };
 }
 
 function bodyTooLargeFromHeader(contentLength: string | null): boolean {
