@@ -23,6 +23,7 @@ export function PanelSidebar({ app, navigation, onOpenPalette, org, userId }: Pa
     throw new Error("Panel sidebar Organization is missing from navigation");
   }
   const activeApp: ActiveSidebarApp | undefined = app;
+  const sectionEnv = resolveSectionEnvironment(activeApp, currentOrg);
   const avatarLabel = userId.at(0);
   if (!avatarLabel) {
     throw new Error("Panel sidebar User ID is empty");
@@ -43,11 +44,8 @@ export function PanelSidebar({ app, navigation, onOpenPalette, org, userId }: Pa
       {activeApp ? (
         <>
           <PanelSidebarAppBlock app={activeApp} currentOrg={currentOrg} orgSlug={org.orgSlug} />
-          {activeApp.env ? (
-            <PanelSidebarSections
-              app={{ ...activeApp, env: activeApp.env }}
-              orgSlug={org.orgSlug}
-            />
+          {sectionEnv ? (
+            <PanelSidebarSections app={activeApp} orgSlug={org.orgSlug} sectionEnv={sectionEnv} />
           ) : null}
           <PanelSidebarOrganization navigation={navigation} org={org} />
         </>
@@ -73,4 +71,20 @@ export function PanelSidebar({ app, navigation, onOpenPalette, org, userId }: Pa
       </div>
     </aside>
   );
+}
+
+function resolveSectionEnvironment(
+  app: ActiveSidebarApp | undefined,
+  org: ScopeNavigation["orgs"][number],
+): string | undefined {
+  if (!app) return undefined;
+  const currentApp = org.apps.find((candidate) => candidate.appId === app.appId);
+  if (!currentApp) {
+    throw new Error("Panel sidebar App is missing from navigation");
+  }
+  const sectionEnv = app.env ?? currentApp.environments.at(0)?.env;
+  if (!sectionEnv) {
+    throw new Error("Panel sidebar App has no Environment for section navigation");
+  }
+  return sectionEnv;
 }
