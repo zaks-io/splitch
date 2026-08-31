@@ -19,6 +19,7 @@ SQL >
         allocation,
         control_variant,
         control_variant_id,
+        activation_metric_id,
         decision_family,
         guardrail_decisions,
         metric_query_config,

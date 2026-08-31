@@ -17,7 +17,8 @@ SCHEMA >
     `metric_query_config` String `json:$.metric_query_config` DEFAULT '[]',
     `metric_variance_config` String `json:$.metric_variance_config` DEFAULT '[]',
     `dimensions` String `json:$.dimensions`,
-    `config_hash` String `json:$.config_hash`
+    `config_hash` String `json:$.config_hash`,
+    `activation_metric_id` Nullable(String) `json:$.activation_metric_id`
 
 ENGINE "MergeTree"
 ENGINE_SORTING_KEY "app_id, environment_id, experiment_id, started_at"

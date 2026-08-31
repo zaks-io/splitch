@@ -29,6 +29,7 @@ describe("runSnapshotRow", () => {
       allocation: '{"control":40,"treatment":60}',
       control_variant: "control",
       control_variant_id: "variant_control",
+      activation_metric_id: null,
       decision_family: '[{"metric_id":"metric_1","variant":"treatment"}]',
       guardrail_decisions: "[]",
       metric_query_config: JSON.stringify(metricQueryConfig),

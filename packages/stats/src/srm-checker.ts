@@ -44,11 +44,19 @@ export function checkSrmHealth(input: SrmCheckerInput): SrmCheckerOutput {
   const activatedSrm =
     activatedCounts === null
       ? null
-      : chiSquareAgainstAllocation(activatedCounts, input.allocation, variants);
+      : activationGuardrail(
+          activatedCounts,
+          () => chiSquareAgainstAllocation(activatedCounts, input.allocation, variants),
+          variants,
+        );
   const activationBalance =
     activatedCounts === null
       ? null
-      : chiSquareActivationBalance(activatedCounts, dedupedCounts, variants);
+      : activationGuardrail(
+          activatedCounts,
+          () => chiSquareActivationBalance(activatedCounts, dedupedCounts, variants),
+          variants,
+        );
   const activationRates =
     activatedCounts === null
       ? null
@@ -84,6 +92,17 @@ export function checkSrmHealth(input: SrmCheckerInput): SrmCheckerOutput {
       low_n_warning: variants.some((variant) => (dedupedCounts[variant] ?? 0) < 100),
     },
   };
+}
+
+function activationGuardrail(
+  activatedCounts: Readonly<Record<string, number>>,
+  calculate: () => InternalChiSquareResult,
+  variants: readonly string[],
+): InternalChiSquareResult {
+  if (variants.every((variant) => (activatedCounts[variant] ?? 0) === 0)) {
+    return { p_value: 0, is_mismatch: true, chi2_stat: 0 };
+  }
+  return calculate();
 }
 
 function allocationVariants(allocation: Readonly<Record<string, number>>): string[] {

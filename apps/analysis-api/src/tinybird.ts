@@ -1,9 +1,14 @@
 import type { AnalysisApiEnv } from "./env";
 
 export type PipeParams = Record<string, string>;
+export type TinybirdReadOptions = { method: "GET" | "POST" };
 
 export interface TinybirdReadTransport {
-  readPipe(pipeName: string, params: PipeParams): Promise<readonly unknown[]>;
+  readPipe(
+    pipeName: string,
+    params: PipeParams,
+    options?: TinybirdReadOptions,
+  ): Promise<readonly unknown[]>;
 }
 
 export interface TinybirdCopyTransport {
@@ -82,14 +87,16 @@ export function createTinybirdReadTransport(
   const apiUrl = requiredConfig(env.TINYBIRD_API_URL, "TINYBIRD_API_URL");
 
   return {
-    async readPipe(pipeName, params) {
+    async readPipe(pipeName, params, options = { method: "GET" }) {
       assertScoped(params);
+      const request = pipeRequest(apiUrl, pipeName, params, options);
       const response = await fetchWithTimeout(
         fetchFn,
-        pipeUrl(apiUrl, pipeName, params),
+        request.url,
         requiredReadToken(env),
         timeoutMs,
         "pipe read",
+        request.init,
       );
       if (!response.ok) {
         throw new TinybirdReadError(`Tinybird pipe read failed with HTTP ${response.status}`);
@@ -147,6 +154,19 @@ function pipeUrl(apiUrl: string, pipeName: string, params: PipeParams): URL {
     url.searchParams.set(key, value);
   }
   return url;
+}
+
+function pipeRequest(
+  apiUrl: string,
+  pipeName: string,
+  params: PipeParams,
+  options: TinybirdReadOptions,
+): { url: URL; init: RequestInit } {
+  if (options.method === "GET") return { url: pipeUrl(apiUrl, pipeName, params), init: {} };
+  return {
+    url: pipeUrl(apiUrl, pipeName, {}),
+    init: { method: "POST", body: new URLSearchParams(params) },
+  };
 }
 
 function copyPipeUrl(apiUrl: string, pipeName: string, params: PipeParams): URL {
@@ -224,9 +244,11 @@ async function fetchWithTimeout(
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
   try {
+    const headers = new Headers(init.headers);
+    headers.set("authorization", `Bearer ${token}`);
     return await fetchFn(url, {
       ...init,
-      headers: { authorization: `Bearer ${token}` },
+      headers,
       signal: controller.signal,
     });
   } catch (cause) {
