@@ -51,6 +51,7 @@ export async function renameApp(input: {
 
 export type DeleteOutcome =
   | { readonly kind: "refused"; readonly message: string }
+  | { readonly kind: "indeterminate"; readonly message: string }
   | { readonly kind: "cleanup-pending"; readonly message: string }
   | {
       readonly kind: "partially-deleted";
@@ -69,31 +70,15 @@ export async function destroyApp(appId: string): Promise<DeleteOutcome> {
     result = await deleteControlPanelApp({ data: { appId, force: true } });
   } catch {
     return {
-      kind: "refused",
-      message: "The Control Plane did not answer. This App may or may not have been deleted.",
+      kind: "indeterminate",
+      message: "The Control Plane did not answer.",
     };
   }
   return deleteOutcome(result);
 }
 
 function deleteOutcome(result: Awaited<ReturnType<typeof deleteControlPanelApp>>): DeleteOutcome {
-  if (!result.ok) {
-    if ("appDeleted" in result && result.appDeleted === true) {
-      return { kind: "cleanup-pending", message: result.error.message };
-    }
-    const partialDelete =
-      "partialDelete" in result
-        ? (result.partialDelete as PanelAppDeleteProgress | undefined)
-        : undefined;
-    if (partialDelete) {
-      return {
-        kind: "partially-deleted",
-        message: result.error.message,
-        removedCount: partialDelete.removed.length + partialDelete.appliedApprovalRequestIds.length,
-      };
-    }
-    return { kind: "refused", message: result.error.message };
-  }
+  if (!result.ok) return failedDeleteOutcome(result);
   if (result.data.deleted !== true) {
     return {
       kind: "refused",
@@ -102,4 +87,26 @@ function deleteOutcome(result: Awaited<ReturnType<typeof deleteControlPanelApp>>
   }
   if (!result.sessionResync.ok) return { kind: "stale", ...result.sessionResync };
   return { kind: "deleted" };
+}
+
+function failedDeleteOutcome(
+  result: Extract<Awaited<ReturnType<typeof deleteControlPanelApp>>, { ok: false }>,
+): DeleteOutcome {
+  if ("appDeleted" in result && result.appDeleted === true) {
+    return { kind: "cleanup-pending", message: result.error.message };
+  }
+  if ("deleteIndeterminate" in result && result.deleteIndeterminate === true) {
+    return { kind: "indeterminate", message: result.error.message };
+  }
+  const partialDelete =
+    "partialDelete" in result
+      ? (result.partialDelete as PanelAppDeleteProgress | undefined)
+      : undefined;
+  return partialDelete
+    ? {
+        kind: "partially-deleted",
+        message: result.error.message,
+        removedCount: partialDelete.removed.length + partialDelete.appliedApprovalRequestIds.length,
+      }
+    : { kind: "refused", message: result.error.message };
 }

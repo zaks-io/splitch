@@ -44,6 +44,8 @@ describe("partial App deletion read-back", () => {
     expect(recovery).toContain("reload: true");
     expect(ceremony).toContain("error?.reload === true");
     expect(ceremony).toContain("globalThis.location.reload()");
+    expect(ceremony).toContain('if (outcome.kind === "indeterminate")');
+    expect(ceremony).toContain('title: "App deletion unconfirmed"');
   });
 
   it("keeps post-boundary cleanup retryable without claiming the App remains", () => {

@@ -28,6 +28,7 @@ type DeleteFailure = Extract<PanelAppDeleteResult, { ok: false }>;
 export type AppDeleteSettlementResult =
   | DeleteFailure
   | (DeleteFailure & { readonly appDeleted: true })
+  | (DeleteFailure & { readonly deleteIndeterminate: true })
   | (Extract<PanelAppDeleteResult, { ok: true }> & {
       readonly sessionResync: SessionResync;
     });
@@ -65,13 +66,23 @@ export async function settleAppDelete(
   if (result.ok) {
     return settleAppMutation(result, result.data.deleted === true ? resync : async () => {});
   }
+  return settleAppDeleteFailure(result, resume, resync);
+}
+
+async function settleAppDeleteFailure(
+  result: DeleteFailure,
+  resume: () => Promise<PanelAppDeleteResult>,
+  resync: () => Promise<void>,
+): Promise<AppDeleteSettlementResult> {
   if (!shouldResumeDelete(result)) return committedDeleteFailure(result);
 
   let resumed: PanelAppDeleteResult;
   try {
     resumed = await resume();
   } catch {
-    return committedDeleteFailure(result);
+    return deleteCommitted(result)
+      ? { ...result, appDeleted: true }
+      : { ...result, deleteIndeterminate: true };
   }
   if (!resumed.ok) {
     const combined = combinePartialDelete(result, resumed);
@@ -85,7 +96,8 @@ export async function settleAppDelete(
 
 function shouldResumeDelete(result: DeleteFailure): boolean {
   return (
-    result.error.code === "SERVICE_UNAVAILABLE" ||
+    (result.error.code === "SERVICE_UNAVAILABLE" &&
+      (deleteCommitted(result) || result.partialDelete !== undefined)) ||
     errorDetail(result, "fault") === "panel_app_delete_partial_failure"
   );
 }

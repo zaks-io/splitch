@@ -42,17 +42,9 @@ export function AppDeleteCeremony({
   const confirmed = isDeleteConfirmed(typed, app.key);
 
   async function settle(outcome: DeleteOutcome) {
-    if (outcome.kind === "refused") {
-      setError({ message: outcome.message, partial: false, reload: false });
-      return;
-    }
-    if (outcome.kind === "cleanup-pending") {
-      setError({
-        message: `${outcome.message} The App was deleted, but cleanup could not be confirmed. Retry deletion to finish or confirm cleanup.`,
-        partial: true,
-        reload: false,
-        title: "App cleanup unconfirmed",
-      });
+    const immediateError = immediateDeleteError(outcome);
+    if (immediateError) {
+      setError(immediateError);
       return;
     }
     if (outcome.kind === "partially-deleted") {
@@ -137,6 +129,29 @@ export function AppDeleteCeremony({
       </div>
     </div>
   );
+}
+
+function immediateDeleteError(outcome: DeleteOutcome): DeleteError | undefined {
+  if (outcome.kind === "indeterminate") {
+    return {
+      message: `${outcome.message} The App may or may not have been deleted. Reload this page before retrying.`,
+      partial: false,
+      reload: true,
+      title: "App deletion unconfirmed",
+    };
+  }
+  if (outcome.kind === "refused") {
+    return { message: outcome.message, partial: false, reload: false };
+  }
+  if (outcome.kind === "cleanup-pending") {
+    return {
+      message: `${outcome.message} The App was deleted, but cleanup could not be confirmed. Retry deletion to finish or confirm cleanup.`,
+      partial: true,
+      reload: false,
+      title: "App cleanup unconfirmed",
+    };
+  }
+  return undefined;
 }
 
 async function partialDeleteError(

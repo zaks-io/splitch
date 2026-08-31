@@ -79,9 +79,11 @@ describe("Control Panel Flags principal", () => {
     const resolver = makeResolver({ authorizeApp, authorizeAppDeletionResume });
 
     const read = await resolver(await panelRequest("GET", "/apps/app_1/flags"));
+    const dryRun = await resolver(await panelRequest("DELETE", "/apps/app_1?dryRun=true"));
     const deletion = await resolver(await panelRequest("DELETE", "/apps/app_1"));
 
     expect(read).toMatchObject({ ok: false, error: { code: "FORBIDDEN" } });
+    expect(dryRun).toMatchObject({ ok: false, error: { code: "FORBIDDEN" } });
     expect(deletion).toMatchObject({
       ok: true,
       principal: {

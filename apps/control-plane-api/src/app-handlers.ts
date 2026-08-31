@@ -85,19 +85,36 @@ async function deleteAppRequest(
   requestId: string,
 ): Promise<Response> {
   const appId = pathParam(input, "appId");
+  const mode = queryFlags(input);
   const app = await deps.repo.identity.getApp(appId);
   if (!app) {
-    return resumeOrRethrowAppGone(deps, appId, principal, requestId);
+    return mode.dryRun
+      ? appNotFound(requestId)
+      : resumeOrRethrowAppGone(deps, appId, principal, requestId);
   }
+  return deleteExistingAppRequest(deps, app, principal, requestId, mode);
+}
+
+async function deleteExistingAppRequest(
+  deps: AppEnvironmentDeps,
+  app: AppRow,
+  principal: HandlerArgs<unknown>["principal"],
+  requestId: string,
+  mode: { dryRun: boolean; force: boolean },
+): Promise<Response> {
+  const appId = app.id;
   const deleteError = await requireAppDelete(deps, appId, principal, requestId);
   if (deleteError) return deleteError;
-  const mode = queryFlags(input);
   try {
     return await deleteAppAfterAuth(deps, app, principal, requestId, mode);
   } catch (cause) {
     const cleanupError = renderAppDeleteCleanupError(cause, requestId);
-    if (cleanupError) return cleanupError;
-    throw cause;
+    if (!cleanupError) throw cause;
+    const saga = await deps.repo.identity.getAppDeletionSaga(appId);
+    const appDeleted = saga?.phase === "d1_deleted" || saga?.phase === "complete";
+    return appDeleted
+      ? (renderAppDeleteCleanupError(cause, requestId, true) ?? cleanupError)
+      : cleanupError;
   }
 }
 

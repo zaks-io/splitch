@@ -27,6 +27,15 @@ describe("App Settings mutation transport failures", () => {
     });
   });
 
+  it("does not claim an App remains when the delete response is lost", async () => {
+    vi.mocked(deleteControlPanelApp).mockRejectedValueOnce(new TypeError("response was lost"));
+
+    await expect(destroyApp("app_checkout")).resolves.toEqual({
+      kind: "indeterminate",
+      message: "The Control Plane did not answer.",
+    });
+  });
+
   it("preserves partial progress when the delete cascade stops on an invariant", async () => {
     vi.mocked(deleteControlPanelApp).mockResolvedValueOnce({
       ok: false,
@@ -46,6 +55,24 @@ describe("App Settings mutation transport failures", () => {
       kind: "partially-deleted",
       message: "The Control Plane returned an Approval Request after Review already applied it.",
       removedCount: 2,
+    });
+  });
+
+  it("does not claim the App remains when deletion could not be confirmed", async () => {
+    vi.mocked(deleteControlPanelApp).mockResolvedValueOnce({
+      ok: false,
+      status: 503,
+      error: {
+        code: "SERVICE_UNAVAILABLE",
+        message: "Holdover write outbox cleanup is unavailable",
+        details: { retryAfterMs: 30_000 },
+      },
+      deleteIndeterminate: true,
+    } as Awaited<ReturnType<typeof deleteControlPanelApp>>);
+
+    await expect(destroyApp("app_checkout")).resolves.toEqual({
+      kind: "indeterminate",
+      message: "Holdover write outbox cleanup is unavailable",
     });
   });
 

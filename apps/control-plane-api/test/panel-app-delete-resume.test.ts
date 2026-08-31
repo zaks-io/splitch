@@ -67,6 +67,11 @@ describe("Signed Control Panel App deletion resume", () => {
   it("lets only the original Panel actor resume after the App row is gone", async () => {
     const entrypoint = new SignedControlPanelEntrypoint(testCtx, testEnv);
 
+    const dryRun = await signedDelete(entrypoint, OWNER, "nonce_delete_resume_dry_run_1234", true);
+    expect(dryRun.status).toBe(403);
+    expect(evaluationFetch).not.toHaveBeenCalled();
+    expect(analysisFetch).not.toHaveBeenCalled();
+
     const resumed = await signedDelete(entrypoint, OWNER, "nonce_delete_resume_owner_1234");
 
     expect(resumed.status).toBe(200);
@@ -92,8 +97,10 @@ async function signedDelete(
   entrypoint: SignedControlPanelEntrypoint,
   actorId: string,
   nonce: string,
+  dryRun = false,
 ): Promise<Response> {
-  const request = new Request(`${AUDIENCE}/apps/${APP_ID}?force=true`, { method: "DELETE" });
+  const query = dryRun ? "dryRun=true" : "force=true";
+  const request = new Request(`${AUDIENCE}/apps/${APP_ID}?${query}`, { method: "DELETE" });
   request.headers.set(
     CONTROL_PANEL_DELEGATION_HEADER,
     await issueControlPanelDelegation(

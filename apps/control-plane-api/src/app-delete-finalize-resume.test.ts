@@ -70,9 +70,17 @@ describe("App delete public finalize resume after D1 cascade", () => {
 
     const first = await deleteRequest(app);
     expect(first.status).toBe(503);
+    expect(await first.json()).toMatchObject({
+      code: "SERVICE_UNAVAILABLE",
+      details: { mutationCommitted: true },
+    });
     expect(await createRepository(bindings.d1).identity.getApp(APP_ID)).toBeNull();
     expect(phases).toEqual(["prepare", "mark-d1-deleted", "finalize"]);
     expect(phases).not.toContain("cancel");
+
+    const dryRun = await deleteRequest(app, undefined, "?dryRun=true");
+    expect(dryRun.status).toBe(404);
+    expect(phases).toEqual(["prepare", "mark-d1-deleted", "finalize"]);
 
     const retry = await deleteRequest(app);
     expect(retry.status).toBe(503);
@@ -286,8 +294,8 @@ function createTestApp(
   });
 }
 
-function deleteRequest(app: ReturnType<typeof createTestApp>, requestId?: string) {
-  return app.request(`/apps/${APP_ID}`, {
+function deleteRequest(app: ReturnType<typeof createTestApp>, requestId?: string, query = "") {
+  return app.request(`/apps/${APP_ID}${query}`, {
     method: "DELETE",
     headers: {
       authorization: "Bearer device-flow-token",

@@ -117,7 +117,7 @@ describe("settleAppDelete", () => {
     expect(resync).not.toHaveBeenCalled();
   });
 
-  it("keeps the partial result when the retry response is lost", async () => {
+  it("marks deletion indeterminate when the retry response is lost", async () => {
     const resume = vi.fn(async () => {
       throw new TypeError("response was lost");
     });
@@ -125,7 +125,7 @@ describe("settleAppDelete", () => {
 
     const settled = await settleAppDelete(partial, resume, resync);
 
-    expect(settled).toBe(partial);
+    expect(settled).toEqual({ ...partial, deleteIndeterminate: true });
     expect(resume).toHaveBeenCalledOnce();
     expect(resync).not.toHaveBeenCalled();
   });
@@ -148,6 +148,22 @@ describe("settleAppDelete", () => {
       ...committed,
       appDeleted: true,
     });
+  });
+
+  it("does not retry an uncommitted cleanup failure without partial progress", async () => {
+    const uncommitted = {
+      ok: false,
+      status: 503,
+      error: {
+        code: "SERVICE_UNAVAILABLE",
+        message: "Holdover write outbox cleanup is unavailable",
+        details: { retryAfterMs: 30_000 },
+      },
+    } as const;
+    const resume = vi.fn();
+
+    await expect(settleAppDelete(uncommitted, resume, async () => {})).resolves.toBe(uncommitted);
+    expect(resume).not.toHaveBeenCalled();
   });
 
   it("does not retry a repeated Approval Request invariant", async () => {
