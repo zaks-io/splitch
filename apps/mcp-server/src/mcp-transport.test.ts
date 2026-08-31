@@ -19,6 +19,7 @@ describe("MCP transport authenticator requirement", () => {
   });
 
   it.each([
+    "GET",
     "POST",
     "DELETE",
   ] as const)("fails closed on protected %s when authenticateBearer is missing", async (method) => {

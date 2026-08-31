@@ -19,13 +19,13 @@ afterEach(closeBootedServers);
 
 describe("MCP OAuth protected-resource boundary", () => {
   it("challenges an unauthenticated connect with discoverable protected-resource metadata", async () => {
-    for (const [path, metadataPath] of [
-      ["/", "/.well-known/oauth-protected-resource"],
-      ["/mcp", "/.well-known/oauth-protected-resource/mcp"],
+    for (const [method, path, metadataPath] of [
+      ["GET", "/", "/.well-known/oauth-protected-resource"],
+      ["POST", "/", "/.well-known/oauth-protected-resource"],
+      ["GET", "/mcp", "/.well-known/oauth-protected-resource/mcp"],
+      ["POST", "/mcp", "/.well-known/oauth-protected-resource/mcp"],
     ]) {
-      const response = await request(
-        new Request(`https://mcp.splitch.test${path}`, { method: "POST" }),
-      );
+      const response = await request(new Request(`https://mcp.splitch.test${path}`, { method }));
 
       expect(response.status).toBe(401);
       expect(response.headers.get("www-authenticate")).toBe(
