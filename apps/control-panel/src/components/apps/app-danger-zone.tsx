@@ -8,9 +8,11 @@ import {
   CardHeader,
   CardTitle,
 } from "@splitch/ui/components/card";
+import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { deleteControlPanelApp } from "#lib/apps/control-plane-app-settings-functions";
 import { AppDeleteCeremony } from "#components/apps/app-delete-ceremony";
+import { refreshAppSettings } from "#lib/apps/app-settings-query";
+import { deleteControlPanelApp } from "#lib/apps/control-plane-app-settings-functions";
 
 /**
  * Deleting an App is owner-only and irreversible, so the button here opens the
@@ -27,6 +29,7 @@ export function AppDangerZone({
   app: App;
   environmentNames: readonly string[];
 }) {
+  const queryClient = useQueryClient();
   const [preview, setPreview] = useState<Awaited<ReturnType<typeof deleteControlPanelApp>>>();
   const [error, setError] = useState<string>();
   const [isLoading, setIsLoading] = useState(false);
@@ -46,6 +49,13 @@ export function AppDangerZone({
     } finally {
       setIsLoading(false);
     }
+  }
+
+  async function refreshAfterPartialDelete() {
+    await refreshAppSettings(queryClient, { appId: app.id });
+    const result = await deleteControlPanelApp({ data: { appId: app.id, dryRun: true } });
+    if (!result.ok) throw new Error(result.error.message);
+    setPreview(result);
   }
 
   const blockers = preview?.ok && "blockers" in preview.data ? preview.data.blockers : undefined;
@@ -73,6 +83,7 @@ export function AppDangerZone({
             blockers={blockers}
             environmentNames={environmentNames}
             onCancel={() => setPreview(undefined)}
+            onPartialDelete={refreshAfterPartialDelete}
           />
         ) : (
           <div>

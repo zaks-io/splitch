@@ -2,14 +2,14 @@ import type { App, ResourceDeleteBlocker } from "@splitch/contracts";
 import { Alert, AlertDescription, AlertTitle } from "@splitch/ui/components/alert";
 import { Button } from "@splitch/ui/components/button";
 import { Input } from "@splitch/ui/components/input";
-import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
+import { AppDeleteConsequenceList } from "#components/apps/app-delete-consequence-list";
+import { AppSessionStaleNotice } from "#components/sessions/app-session-stale-notice";
 import { isDeleteConfirmed } from "#lib/apps/app-delete-confirmation";
 import { deleteConsequences } from "#lib/apps/app-delete-consequences";
 import { type DeleteOutcome, destroyApp } from "#lib/apps/app-settings-mutations";
-import { refreshAppSettings } from "#lib/apps/app-settings-query";
-import { AppDeleteConsequenceList } from "#components/apps/app-delete-consequence-list";
-import { AppSessionStaleNotice } from "#components/sessions/app-session-stale-notice";
+
+type DeleteError = { message: string; partial: boolean; reload: boolean; title?: string };
 
 /**
  * The typed confirmation. The operator must type this App's URL slug exactly;
@@ -25,36 +25,33 @@ export function AppDeleteCeremony({
   blockers,
   environmentNames,
   onCancel,
+  onPartialDelete,
 }: {
   app: App;
   blockers: readonly ResourceDeleteBlocker[];
   environmentNames: readonly string[];
   onCancel: () => void;
+  onPartialDelete: () => Promise<void>;
 }) {
-  const queryClient = useQueryClient();
   const [typed, setTyped] = useState("");
-  const [error, setError] = useState<string>();
+  const [error, setError] = useState<DeleteError>();
   const [stale, setStale] = useState<{ reason: string; remedy: "reauth" | "retry" }>();
-  const [pending, setPending] = useState<string[]>();
   const [isDeleting, setIsDeleting] = useState(false);
 
   const consequences = deleteConsequences(blockers);
   const confirmed = isDeleteConfirmed(typed, app.key);
 
   async function settle(outcome: DeleteOutcome) {
-    if (outcome.kind === "refused") setError(outcome.message);
-    else if (outcome.kind === "review") {
-      setPending(outcome.reviewCommands);
-      // The cascade already removed part of the App; the cards above render
-      // from the same settings query and must not keep showing what is gone.
-      try {
-        await refreshAppSettings(queryClient, { appId: app.id });
-      } catch {
-        setError(
-          "Part of this App was removed, but this screen could not reload. Reload the page to see what remains.",
-        );
-      }
-    } else if (outcome.kind === "stale") setStale(outcome);
+    const immediateError = immediateDeleteError(outcome);
+    if (immediateError) {
+      setError(immediateError);
+      return;
+    }
+    if (outcome.kind === "partially-deleted") {
+      setError(await partialDeleteError(outcome, onPartialDelete));
+      return;
+    }
+    if (outcome.kind === "stale") setStale(outcome);
     else globalThis.location.assign("/");
   }
 
@@ -62,7 +59,6 @@ export function AppDeleteCeremony({
     if (!confirmed) return;
     setError(undefined);
     setStale(undefined);
-    setPending(undefined);
     setIsDeleting(true);
     try {
       await settle(await destroyApp(app.id));
@@ -75,23 +71,6 @@ export function AppDeleteCeremony({
     <div className="grid gap-4" data-testid="app-delete-ceremony">
       <AppDeleteConsequenceList consequences={consequences} environmentNames={environmentNames} />
 
-      {pending ? (
-        <Alert data-testid="app-delete-pending-approvals" variant="destructive">
-          <AlertTitle>Deletion stopped for Review</AlertTitle>
-          <AlertDescription className="grid gap-2">
-            <span>
-              Part of this App was removed. The rest is gated by Environment Policy and now has
-              Approval Requests waiting. Nothing else is deleted until they are reviewed.
-            </span>
-            {pending.map((command) => (
-              <code className="block break-words text-xs" key={command}>
-                {command}
-              </code>
-            ))}
-          </AlertDescription>
-        </Alert>
-      ) : null}
-
       {stale ? (
         <AppSessionStaleNotice
           appName={app.name}
@@ -103,8 +82,17 @@ export function AppDeleteCeremony({
 
       {error ? (
         <Alert data-testid="app-delete-error" variant="destructive">
-          <AlertTitle>App not deleted</AlertTitle>
-          <AlertDescription>{error}</AlertDescription>
+          <AlertTitle>
+            {error.title ?? (error.partial ? "App partially deleted" : "App not deleted")}
+          </AlertTitle>
+          <AlertDescription className="grid gap-3">
+            <p>{error.message}</p>
+            {error.reload ? (
+              <Button onClick={() => globalThis.location.reload()} type="button" variant="outline">
+                Reload page
+              </Button>
+            ) : null}
+          </AlertDescription>
         </Alert>
       ) : null}
 
@@ -131,7 +119,7 @@ export function AppDeleteCeremony({
         </Button>
         <Button
           data-testid="app-delete-submit"
-          disabled={!confirmed || isDeleting}
+          disabled={!confirmed || isDeleting || error?.reload === true}
           onClick={destroy}
           type="button"
           variant="destructive"
@@ -141,4 +129,47 @@ export function AppDeleteCeremony({
       </div>
     </div>
   );
+}
+
+function immediateDeleteError(outcome: DeleteOutcome): DeleteError | undefined {
+  if (outcome.kind === "indeterminate") {
+    return {
+      message: `${outcome.message} The App may or may not have been deleted. Reload this page before retrying.`,
+      partial: false,
+      reload: true,
+      title: "App deletion unconfirmed",
+    };
+  }
+  if (outcome.kind === "refused") {
+    return { message: outcome.message, partial: false, reload: false };
+  }
+  if (outcome.kind === "cleanup-pending") {
+    return {
+      message: `${outcome.message} The App was deleted, but cleanup could not be confirmed. Retry deletion to finish or confirm cleanup.`,
+      partial: true,
+      reload: false,
+      title: "App cleanup unconfirmed",
+    };
+  }
+  return undefined;
+}
+
+async function partialDeleteError(
+  outcome: Extract<DeleteOutcome, { kind: "partially-deleted" }>,
+  refresh: () => Promise<unknown>,
+): Promise<DeleteError> {
+  try {
+    await refresh();
+    return {
+      message: `${outcome.message} The App remains, but ${outcome.removedCount} ${outcome.removedCount === 1 ? "resource was" : "resources were"} deleted before the operation stopped. This page was refreshed.`,
+      partial: true,
+      reload: false,
+    };
+  } catch {
+    return {
+      message: `${outcome.message} The App may or may not have been deleted, and some resources were deleted before the operation stopped. Reload this page before retrying.`,
+      partial: true,
+      reload: true,
+    };
+  }
 }

@@ -1,5 +1,5 @@
-import { describe, expect, it } from "vitest";
-import { settleAppMutation } from "#lib/apps/app-settings-outcome";
+import { describe, expect, it, vi } from "vitest";
+import { settleAppDelete, settleAppMutation } from "#lib/apps/app-settings-outcome";
 
 /**
  * Renaming or deleting an App changes what the session says about itself, so the
@@ -55,5 +55,133 @@ describe("settleAppMutation", () => {
       reason: "session expired",
       remedy: "reauth",
     });
+  });
+});
+
+describe("settleAppDelete", () => {
+  const partial = {
+    ok: false,
+    status: 503,
+    error: {
+      code: "SERVICE_UNAVAILABLE",
+      message: "App deletion committed, but cleanup did not finish",
+      details: { retryAfterMs: 1000 },
+    },
+    partialDelete: {
+      removed: [{ childType: "experiments", id: "exp_1" }],
+      appliedApprovalRequestIds: ["apr_1"],
+    },
+  } as const;
+
+  it("completes deletion and resyncs when the retry resumes the saga", async () => {
+    const resume = vi.fn(async () => ({
+      ok: true as const,
+      status: 200,
+      data: { deleted: true as const },
+    }));
+    const resync = vi.fn(async () => {});
+
+    const settled = await settleAppDelete(partial, resume, resync);
+
+    expect(settled).toEqual({
+      ok: true,
+      status: 200,
+      data: {
+        deleted: true,
+      },
+      sessionResync: { ok: true },
+    });
+    expect(resume).toHaveBeenCalledOnce();
+    expect(resync).toHaveBeenCalledOnce();
+  });
+
+  it("keeps cleanup retryable when the resumed response proves the App is gone", async () => {
+    const resumedFailure = {
+      ok: false,
+      status: 503,
+      error: {
+        code: "SERVICE_UNAVAILABLE",
+        message: "Exposure status cleanup is unavailable",
+        details: { retryAfterMs: 30_000, mutationCommitted: true },
+      },
+    } as const;
+    const resync = vi.fn(async () => {});
+
+    const settled = await settleAppDelete(partial, async () => resumedFailure, resync);
+
+    expect(settled).toEqual({
+      ...resumedFailure,
+      partialDelete: partial.partialDelete,
+      appDeleted: true,
+    });
+    expect(resync).not.toHaveBeenCalled();
+  });
+
+  it("marks deletion indeterminate when the retry response is lost", async () => {
+    const resume = vi.fn(async () => {
+      throw new TypeError("response was lost");
+    });
+    const resync = vi.fn(async () => {});
+
+    const settled = await settleAppDelete(partial, resume, resync);
+
+    expect(settled).toEqual({ ...partial, deleteIndeterminate: true });
+    expect(resume).toHaveBeenCalledOnce();
+    expect(resync).not.toHaveBeenCalled();
+  });
+
+  it("keeps a committed cleanup failure actionable without partial progress", async () => {
+    const committed = {
+      ok: false,
+      status: 503,
+      error: {
+        code: "SERVICE_UNAVAILABLE",
+        message: "Exposure status cleanup is unavailable",
+        details: { retryAfterMs: 30_000, mutationCommitted: true },
+      },
+    } as const;
+    const resume = vi.fn(async () => {
+      throw new TypeError("response was lost");
+    });
+
+    await expect(settleAppDelete(committed, resume, async () => {})).resolves.toEqual({
+      ...committed,
+      appDeleted: true,
+    });
+  });
+
+  it("does not retry an uncommitted cleanup failure without partial progress", async () => {
+    const uncommitted = {
+      ok: false,
+      status: 503,
+      error: {
+        code: "SERVICE_UNAVAILABLE",
+        message: "Holdover write outbox cleanup is unavailable",
+        details: { retryAfterMs: 30_000 },
+      },
+    } as const;
+    const resume = vi.fn();
+
+    await expect(settleAppDelete(uncommitted, resume, async () => {})).resolves.toBe(uncommitted);
+    expect(resume).not.toHaveBeenCalled();
+  });
+
+  it("does not retry a repeated Approval Request invariant", async () => {
+    const invariant = {
+      ...partial,
+      error: {
+        ...partial.error,
+        code: "INTERNAL_SERVER_ERROR",
+        details: { fault: "panel_app_delete_repeated_approval" },
+      },
+    } as const;
+    const resume = vi.fn();
+    const resync = vi.fn(async () => {});
+
+    const settled = await settleAppDelete(invariant, resume, resync);
+
+    expect(settled).toBe(invariant);
+    expect(resume).not.toHaveBeenCalled();
+    expect(resync).not.toHaveBeenCalled();
   });
 });

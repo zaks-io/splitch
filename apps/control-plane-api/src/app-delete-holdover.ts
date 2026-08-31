@@ -9,8 +9,8 @@ import { type HandlerArgs, renderError } from "@splitch/worker-runtime";
 import { revokeEnvironmentCredentialsForAppDelete } from "./app-environment-credentials";
 import {
   type AppEnvironmentDeps,
-  type EnvironmentRow,
   appNotFound,
+  type EnvironmentRow,
   nowIso,
 } from "./app-environment-model";
 import { EnvironmentExposureStatusCleanupError } from "./environment-exposure-status-cleanup";
@@ -19,13 +19,17 @@ import {
   HoldoverWriteOutboxCleanupError,
 } from "./holdover-write-outbox-cleanup";
 
-export function renderAppDeleteCleanupError(cause: unknown, requestId: string): Response | null {
+export function renderAppDeleteCleanupError(
+  cause: unknown,
+  requestId: string,
+  appDeleted = false,
+): Response | null {
   if (cause instanceof EnvironmentExposureStatusCleanupError) {
     return renderError(
       {
         code: "SERVICE_UNAVAILABLE",
         message: "Exposure status cleanup is unavailable",
-        details: { retryAfterMs: 30_000 },
+        details: { retryAfterMs: 30_000, ...(appDeleted ? { mutationCommitted: true } : {}) },
       },
       { requestId },
     );
@@ -35,7 +39,7 @@ export function renderAppDeleteCleanupError(cause: unknown, requestId: string): 
       {
         code: "SERVICE_UNAVAILABLE",
         message: "Holdover write outbox cleanup is unavailable",
-        details: { retryAfterMs: 30_000 },
+        details: { retryAfterMs: 30_000, ...(appDeleted ? { mutationCommitted: true } : {}) },
       },
       { requestId },
     );

@@ -1,4 +1,5 @@
 import type { ControlPlaneOperationResult } from "@splitch/control-plane-sdk";
+import type { PanelAppDeleteResult } from "@splitch/control-plane-sdk/panel-app-settings";
 import { type ResyncRemedy, resyncRemedy } from "#lib/live-updates/resync-remedy";
 
 /**
@@ -22,6 +23,16 @@ export type AppSettingsMutationResult<T> =
       readonly sessionResync: SessionResync;
     });
 
+type DeleteFailure = Extract<PanelAppDeleteResult, { ok: false }>;
+
+export type AppDeleteSettlementResult =
+  | DeleteFailure
+  | (DeleteFailure & { readonly appDeleted: true })
+  | (DeleteFailure & { readonly deleteIndeterminate: true })
+  | (Extract<PanelAppDeleteResult, { ok: true }> & {
+      readonly sessionResync: SessionResync;
+    });
+
 export async function settleAppMutation<T>(
   result: ControlPlaneOperationResult<T>,
   resync: () => Promise<void>,
@@ -40,4 +51,99 @@ export async function settleAppMutation<T>(
       },
     };
   }
+}
+
+/**
+ * A forced cascade can cross the App deletion boundary before a later cleanup
+ * or response fails. One retry lets the same actor resume the durable deletion
+ * saga; only the resumed response may prove that the App is gone.
+ */
+export async function settleAppDelete(
+  result: PanelAppDeleteResult,
+  resume: () => Promise<PanelAppDeleteResult>,
+  resync: () => Promise<void>,
+): Promise<AppDeleteSettlementResult> {
+  if (result.ok) {
+    return settleAppMutation(result, result.data.deleted === true ? resync : async () => {});
+  }
+  return settleAppDeleteFailure(result, resume, resync);
+}
+
+async function settleAppDeleteFailure(
+  result: DeleteFailure,
+  resume: () => Promise<PanelAppDeleteResult>,
+  resync: () => Promise<void>,
+): Promise<AppDeleteSettlementResult> {
+  if (!shouldResumeDelete(result)) return committedDeleteFailure(result);
+
+  let resumed: PanelAppDeleteResult;
+  try {
+    resumed = await resume();
+  } catch {
+    return deleteCommitted(result)
+      ? { ...result, appDeleted: true }
+      : { ...result, deleteIndeterminate: true };
+  }
+  if (!resumed.ok) {
+    const combined = combinePartialDelete(result, resumed);
+    return deleteCommitted(result) || deleteCommitted(resumed)
+      ? { ...combined, appDeleted: true }
+      : combined;
+  }
+  if (resumed.data.deleted !== true) return result;
+  return settleAppMutation(resumed, resync);
+}
+
+function shouldResumeDelete(result: DeleteFailure): boolean {
+  return (
+    (result.error.code === "SERVICE_UNAVAILABLE" &&
+      (deleteCommitted(result) || result.partialDelete !== undefined)) ||
+    errorDetail(result, "fault") === "panel_app_delete_partial_failure"
+  );
+}
+
+function errorDetail(result: Extract<PanelAppDeleteResult, { ok: false }>, key: string): unknown {
+  return (result.error.details as Record<string, unknown>)[key];
+}
+
+function deleteCommitted(result: DeleteFailure): boolean {
+  return errorDetail(result, "mutationCommitted") === true;
+}
+
+function committedDeleteFailure(
+  result: DeleteFailure,
+): DeleteFailure | (DeleteFailure & { readonly appDeleted: true }) {
+  return deleteCommitted(result) ? { ...result, appDeleted: true } : result;
+}
+
+function combinePartialDelete(original: DeleteFailure, latest: DeleteFailure): DeleteFailure {
+  const originalProgress = original.partialDelete;
+  const latestProgress = latest.partialDelete;
+  if (!originalProgress) return latest;
+  if (!latestProgress) return { ...latest, partialDelete: originalProgress };
+  return {
+    ...latest,
+    partialDelete: {
+      removed: uniqueBy(
+        [...originalProgress.removed, ...latestProgress.removed],
+        ({ childType, id }) => `${childType}:${id}`,
+      ),
+      appliedApprovalRequestIds: [
+        ...new Set([
+          ...originalProgress.appliedApprovalRequestIds,
+          ...latestProgress.appliedApprovalRequestIds,
+        ]),
+      ],
+    },
+  };
+}
+
+function uniqueBy<T>(items: readonly T[], keyFor: (item: T) => string): T[] {
+  const known = new Set<string>();
+  return items.filter((item) => {
+    const key = keyFor(item);
+    if (known.has(key)) return false;
+    known.add(key);
+    return true;
+  });
 }

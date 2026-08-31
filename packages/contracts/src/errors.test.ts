@@ -249,6 +249,18 @@ describe("ErrorResponse contract", () => {
   });
 });
 
+describe("SERVICE_UNAVAILABLE mutation state", () => {
+  it("preserves a committed mutation marker", () => {
+    const parsed = ErrorResponseSchema.parse({
+      code: "SERVICE_UNAVAILABLE",
+      message: "cleanup is unavailable",
+      details: { retryAfterMs: 1000, mutationCommitted: true },
+    });
+
+    expect(parsed.details).toEqual({ retryAfterMs: 1000, mutationCommitted: true });
+  });
+});
+
 describe("HTTP status map", () => {
   it("maps every ErrorCode to a status", () => {
     for (const code of errorCodes) {
