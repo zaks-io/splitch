@@ -56,6 +56,7 @@ describe("Experiment Start Run Snapshot delivery", () => {
       allocation: stored?.allocation,
       control_variant: "control",
       control_variant_id: stored?.controlVariantId,
+      activation_metric_id: stored?.activationMetricId,
       // D1 keeps MetricRef[]; the snapshot expands to DecisionFamilyMember[].
       decision_family: analysisDecisionFamilyFromD1(stored?.decisionFamily ?? "[]"),
       guardrail_decisions: stored?.guardrailDecisions,

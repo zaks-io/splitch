@@ -1,9 +1,9 @@
 import { readFileSync } from "node:fs";
+import { activationScopeProofs, STRADDLE } from "./tinybird-analysis-activation-scope-proof.mjs";
 
 // The Entity whose targeting key collides across every tenant axis in the
 // fixtures: one Exposure in app_1/env_prod, and Metric Events under the same
 // hash in app_2/env_prod and app_1/env_dev.
-const STRADDLE = "tk_straddle";
 // The lookback the pre-period fixtures and the covariate test both use.
 const PRE_PERIOD_LOOKBACK_MS = 86_400_000;
 // `accepted_at` on serve_deduped_metric_events is the raw row's
@@ -28,12 +28,15 @@ export async function proveAnalysisScopePredicates(root, runQuery, fail) {
 
 function batchMetricValueProofs(root) {
   const pipe = readPipe(root, "analysis_metric_values_batch");
-  return scopedEventAndJoinProofs(
-    pipeNode(pipe, "scoped_metric_events"),
-    pipeNode(pipe, "operand_values"),
-    "batched Metric Event",
-    "",
-  );
+  return [
+    ...scopedEventAndJoinProofs(
+      pipeNode(pipe, "scoped_metric_events"),
+      pipeNode(pipe, "operand_values"),
+      "batched Metric Event",
+      "",
+    ),
+    ...activationScopeProofs({ pipe, pipeNode, predicate }),
+  ];
 }
 
 function batchPrePeriodProofs(root) {

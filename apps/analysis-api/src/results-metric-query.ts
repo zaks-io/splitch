@@ -11,6 +11,7 @@ export async function readMetricRows(
   configs: readonly MetricQueryConfig[],
   startedAt: string,
   toTs: string,
+  activationGated: boolean,
 ): Promise<readonly unknown[]> {
   if (configs.length === 0) return [];
   return tinybird.readPipe(
@@ -18,6 +19,7 @@ export async function readMetricRows(
     {
       ...params,
       metric_query_config: JSON.stringify(configs),
+      activation_gated: activationGated ? "1" : "0",
       from_ts: tinybirdDateTime64(startedAt),
       to_ts: toTs,
     },

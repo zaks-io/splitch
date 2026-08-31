@@ -20,6 +20,7 @@ describe("GET experiment results Metric query contract", () => {
       experiment_id: "exp_checkout_banner",
       run_id: RUN_ID,
       from_ts: "2026-07-01 00:00:00.000",
+      activation_gated: "0",
     });
     expect(JSON.parse(metricCall?.params.metric_query_config ?? "null")).toEqual([
       expect.objectContaining({
@@ -79,6 +80,7 @@ describe("GET experiment results Metric query contract", () => {
       configs,
       "2026-08-01T00:00:00.000Z",
       "2026-08-02 00:00:00.000",
+      false,
     );
     await readPrePeriodRows(
       tinybird,

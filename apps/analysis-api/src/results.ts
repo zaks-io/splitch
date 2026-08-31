@@ -135,10 +135,11 @@ export async function readStatsInputFromTinybird(
     run.decision_family.length > 0 || (run.guardrail_decisions?.length ?? 0) > 0;
   if (hasAnalyzedMetrics) assertMetricQueryCoverage(run, metricQueryConfig);
   const startedAt = stringField(rowObject(runInput), "started_at");
+  const activationGated = optionalString(rowObject(runInput).activation_metric_id) !== undefined;
   const toTs = tinybirdDateTime64(new Date().toISOString());
   const [metricRows, prePeriodRows, activationRows] = hasAnalyzedMetrics
     ? await Promise.all([
-        readMetricRows(tinybird, params, metricQueryConfig, startedAt, toTs),
+        readMetricRows(tinybird, params, metricQueryConfig, startedAt, toTs, activationGated),
         readPrePeriodRows(tinybird, params, metricQueryConfig, startedAt, toTs),
         pipeRows(tinybird, ACTIVATION_PIPE, params),
       ])
@@ -163,7 +164,7 @@ export async function readStatsInputFromTinybird(
           ),
         }
       : {}),
-    ...(activationRows.length > 0
+    ...(activationGated
       ? { activation_rows: canonicalizeAnalysisRows(activationRows.map(materializeActivationRow)) }
       : {}),
   });

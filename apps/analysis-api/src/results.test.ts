@@ -109,6 +109,25 @@ describe("GET/POST experiment results", () => {
     });
   });
 
+  it("preserves an empty activation population and reanchors the Metric batch for gated Runs", async () => {
+    const fixture = rowsByPipe();
+    const runInput = fixture.analysis_run_inputs?.[0] as Record<string, unknown>;
+    runInput.activation_metric_id = "metric_activation";
+    const tinybird = new FakeTinybird(fixture);
+
+    const input = await readStatsInputFromTinybird(tinybird, {
+      appId: APP_ID,
+      environmentId: ENVIRONMENT_ID,
+      experimentId: EXPERIMENT_ID,
+      runId: RUN_ID,
+    });
+
+    expect(input.activation_rows).toEqual([]);
+    expect(
+      tinybird.calls.find((call) => call.pipeName === "analysis_metric_values_batch")?.params,
+    ).toMatchObject({ activation_gated: "1" });
+  });
+
   it("joins historical shared-root Exposure and Metric Event hashes before stats", async () => {
     const digest = "485bdba84f840c9627db32bcc99a6f00722b5253754e513ff473c90a8febc588";
     const fixture = rowsByPipe();

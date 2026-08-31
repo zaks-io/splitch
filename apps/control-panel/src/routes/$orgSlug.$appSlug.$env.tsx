@@ -24,7 +24,7 @@ import { scopedSessionQuery } from "#lib/sessions/scoped-session-query";
 
 export const Route = createFileRoute("/$orgSlug/$appSlug/$env")({
   beforeLoad: async ({ context, location, params }) => {
-    const result = await context.queryClient.ensureQueryData(scopedSessionQuery(params));
+    const result = await context.queryClient.fetchQuery(scopedSessionQuery(params));
     if (result.kind === "unauthenticated") {
       throw loginRedirect(location.href);
     }

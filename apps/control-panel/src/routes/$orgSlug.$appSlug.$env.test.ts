@@ -64,7 +64,7 @@ async function runLoader(pathname: string): Promise<unknown> {
   const routeContext = await beforeLoad({
     context: {
       queryClient: {
-        ensureQueryData: (options: { queryFn: () => Promise<unknown> }) => options.queryFn(),
+        fetchQuery: (options: { queryFn: () => Promise<unknown> }) => options.queryFn(),
       },
     },
     location,

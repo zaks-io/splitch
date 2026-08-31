@@ -36,6 +36,7 @@ export function rowsByPipe(): RowsByPipe {
         horizon: "sequential",
         allocation: JSON.stringify({ control: 50, treatment: 50 }),
         control_variant: "control",
+        activation_metric_id: null,
         started_at: "2026-07-01T00:00:00.000Z",
         decision_family: JSON.stringify([{ metric_id: "conversion", variant: "treatment" }]),
         guardrail_decisions: JSON.stringify([]),

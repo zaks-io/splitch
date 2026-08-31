@@ -16,19 +16,26 @@ describe("scopedSessionQuery", () => {
     loadScopedSessionMock.mockReset();
   });
 
-  it("shares one scope request across concurrent parent and child route reads", async () => {
+  it("deduplicates concurrent reads but refreshes authorization on the next route load", async () => {
     const queryClient = new QueryClient({
       defaultOptions: { queries: { staleTime: 60_000 } },
     });
-    loadScopedSessionMock.mockResolvedValue({ kind: "ok", context: { scope: {} } });
+    loadScopedSessionMock
+      .mockResolvedValueOnce({ kind: "ok", context: { session: { userId: "user_1" } } })
+      .mockResolvedValueOnce({ kind: "forbidden" });
 
-    await Promise.all([
-      queryClient.ensureQueryData(scopedSessionQuery(params)),
-      queryClient.ensureQueryData(scopedSessionQuery(params)),
+    const concurrent = await Promise.all([
+      queryClient.fetchQuery(scopedSessionQuery(params)),
+      queryClient.fetchQuery(scopedSessionQuery(params)),
     ]);
-    await queryClient.ensureQueryData(scopedSessionQuery(params));
+    const refreshed = await queryClient.fetchQuery(scopedSessionQuery(params));
 
-    expect(loadScopedSessionMock).toHaveBeenCalledTimes(1);
+    expect(concurrent).toEqual([
+      { kind: "ok", context: { session: { userId: "user_1" } } },
+      { kind: "ok", context: { session: { userId: "user_1" } } },
+    ]);
+    expect(refreshed).toEqual({ kind: "forbidden" });
+    expect(loadScopedSessionMock).toHaveBeenCalledTimes(2);
     expect(loadScopedSessionMock).toHaveBeenCalledWith({ data: params });
   });
 });
