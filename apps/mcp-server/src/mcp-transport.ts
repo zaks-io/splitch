@@ -65,7 +65,10 @@ async function authenticateRequest(
 }
 
 function requiresBearer(request: Request, url: URL): boolean {
-  return isMcpPath(url) && (request.method === "POST" || request.method === "DELETE");
+  return (
+    isMcpPath(url) &&
+    (request.method === "GET" || request.method === "POST" || request.method === "DELETE")
+  );
 }
 
 function isProtectedResourcePath(pathname: string): boolean {
@@ -171,7 +174,7 @@ function deadSessionResponse(): Response {
 }
 
 function isHealthRequest(request: Request, url: URL): boolean {
-  return request.method === "GET" && (url.pathname === "/" || url.pathname === "/health");
+  return request.method === "GET" && url.pathname === "/health";
 }
 
 function isMcpPath(url: URL): boolean {
