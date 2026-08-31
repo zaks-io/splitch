@@ -10,17 +10,20 @@ import {
   leadingSignificantResult,
   worstGuardrailBreach,
 } from "#lib/experiments/experiment-results-verdict";
+import { type MetricNames, metricDisplayName } from "#lib/experiments/metric-names";
 import { formatLift } from "./experiment-results-format";
 
 export function ExperimentResultsHero({
   results,
   run,
   baseline,
+  metricNames,
   variantOrder,
 }: {
   results: PanelExperimentResultsReady;
   run: PanelExperimentRun;
   baseline: string;
+  metricNames: MetricNames;
   variantOrder: readonly string[];
 }) {
   const breached = results.stats.guardrail_results.filter(
@@ -37,6 +40,7 @@ export function ExperimentResultsHero({
     guardrails: results.stats.guardrail_results,
     gate: results.gate,
     baseline,
+    metricNames,
   });
   const dedupedTotal = Object.values(results.stats.health.deduped_counts).reduce(
     (total, count) => total + count,
@@ -64,6 +68,7 @@ export function ExperimentResultsHero({
           baseline={baseline}
           dedupedTotal={dedupedTotal}
           leading={leading}
+          metricNames={metricNames}
           results={results}
           run={run}
           variantOrder={variantOrder}
@@ -148,6 +153,7 @@ function HeroTiles({
   baseline,
   dedupedTotal,
   leading,
+  metricNames,
   results,
   run,
   variantOrder,
@@ -156,6 +162,7 @@ function HeroTiles({
   baseline: string;
   dedupedTotal: number;
   leading: ArmResult | null;
+  metricNames: MetricNames;
   results: PanelExperimentResultsReady;
   run: PanelExperimentRun;
   variantOrder: readonly string[];
@@ -176,7 +183,11 @@ function HeroTiles({
         value={formatRuntime(run.startedAt, run.endedAt)}
       />
       <StatTile
-        detail={leading ? `${leading.variant} · ${leading.metric_id}` : undefined}
+        detail={
+          leading
+            ? `${leading.variant} · ${metricDisplayName(leading.metric_id, metricNames)}`
+            : undefined
+        }
         label={leading ? "Significant lift" : "No significance call yet"}
         muted={leading === null}
         tone={leading ? armColor({ baseline, variant: leading.variant, variantOrder }) : undefined}
@@ -185,7 +196,7 @@ function HeroTiles({
       {worstBreach ? (
         <StatTile
           detail={`${worstBreach.guardrail.variant} · threshold ${formatThreshold(worstBreach.guardrail.threshold)}`}
-          label={`${worstBreach.guardrail.metric_id} breached`}
+          label={`${metricDisplayName(worstBreach.guardrail.metric_id, metricNames)} breached`}
           tone="var(--warning-foreground)"
           value={breachValue(worstBreach.guardrail, worstBreach.armResult)}
         />

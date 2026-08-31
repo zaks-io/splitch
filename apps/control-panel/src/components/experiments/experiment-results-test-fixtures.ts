@@ -245,6 +245,14 @@ export function resultsNoDataFixture(
   };
 }
 
+/** Catalog rows for the Metric ids the stats fixtures use, as the detail read returns them. */
+export function metricsFixture(): { id: string; name: string }[] {
+  return [
+    { id: "checkout_conversion", name: "Checkout conversion" },
+    { id: "checkout_latency_p95", name: "Checkout latency p95" },
+  ];
+}
+
 export function runFixture(overrides: Partial<PanelExperimentRun> = {}): PanelExperimentRun {
   return {
     id: "run_2",

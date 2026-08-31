@@ -7,6 +7,7 @@ import type {
 import { formatPValue, significanceKey } from "@splitch/contracts";
 import { Badge } from "@splitch/ui/components/badge";
 import { analysisControlVariant } from "#components/experiments/experiment-results-control";
+import { type MetricNames, metricDisplayName } from "#lib/experiments/metric-names";
 import { formatInterval, formatLift } from "./experiment-results-format";
 
 /**
@@ -19,10 +20,12 @@ import { formatInterval, formatLift } from "./experiment-results-format";
 export function ExperimentResultsMetricsTable({
   results,
   control,
+  metricNames,
   significance,
 }: {
   results: ArmResult[];
   control: FrozenControlIdentity;
+  metricNames: MetricNames;
   significance: ExperimentSignificanceDisplays;
 }) {
   if (results.length === 0) return null;
@@ -54,6 +57,7 @@ export function ExperimentResultsMetricsTable({
               <Row
                 baseline={baseline}
                 key={`${result.metric_id}:${result.variant}`}
+                metricNames={metricNames}
                 result={result}
                 significance={significance}
               />
@@ -80,16 +84,20 @@ export function ExperimentResultsMetricsTable({
 function Row({
   result,
   baseline,
+  metricNames,
   significance,
 }: {
   result: ArmResult;
   baseline: string;
+  metricNames: MetricNames;
   significance: ExperimentSignificanceDisplays;
 }) {
   const isBaseline = result.variant === baseline;
   return (
     <tr className="border-border border-t">
-      <td className="px-4 py-2 font-mono text-foreground text-xs">{result.metric_id}</td>
+      <td className="px-4 py-2 text-foreground">
+        {metricDisplayName(result.metric_id, metricNames)}
+      </td>
       <td className="px-4 py-2 text-foreground">{result.variant}</td>
       <td className="px-4 py-2 text-right font-mono text-foreground">
         {result.sample_size_n.toLocaleString("en-US")}

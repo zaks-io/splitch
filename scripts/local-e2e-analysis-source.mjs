@@ -75,6 +75,8 @@ function pipeRows(pipeName, params) {
         decision_family: JSON.stringify(fixture.decisionFamily),
         guardrail_decisions: JSON.stringify(fixture.guardrailDecisions),
         metric_variance_config: JSON.stringify(fixture.metricVarianceConfig),
+        metric_query_config: JSON.stringify(fixture.metricQueryConfig),
+        started_at: "2026-07-18T00:00:00.000Z",
         dimensions: "[]",
       },
     ];
@@ -83,7 +85,12 @@ function pipeRows(pipeName, params) {
     return fixture.exposures;
   }
   if (pipeName === "analysis_metric_values" && params.get("run_id") === fixture.runId) {
-    return fixture.metricValues;
+    // The Analysis Worker issues one read per metric_query_config entry, so a
+    // multi-Metric Run would double every row if this returned the whole set.
+    const metricId = params.get("metric_id");
+    return metricId === null
+      ? fixture.metricValues
+      : fixture.metricValues.filter((row) => row.metric_id === metricId);
   }
   return [];
 }

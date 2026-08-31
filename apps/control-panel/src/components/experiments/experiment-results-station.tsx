@@ -14,6 +14,7 @@ export function ExperimentResultsStation({
   keyValueStyle,
   keyValueTone,
   muted = false,
+  siding = false,
   summary,
   title,
   value,
@@ -28,6 +29,7 @@ export function ExperimentResultsStation({
   keyValueStyle?: React.CSSProperties;
   keyValueTone?: string;
   muted?: boolean;
+  siding?: boolean;
   summary: string;
   title: string;
   value: string;
@@ -38,7 +40,9 @@ export function ExperimentResultsStation({
     <AccordionItem className={`${RESULTS_RAIL_GRID} border-b-0!`} value={value}>
       <ExperimentResultsRails
         baseline={baseline}
+        connect={!siding}
         flaggedVariant={flaggedVariant}
+        siding={siding}
         variantOrder={variantOrder}
       />
       <div className="pb-6">

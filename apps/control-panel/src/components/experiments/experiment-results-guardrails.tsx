@@ -1,8 +1,15 @@
 import type { GuardrailResult, HealthMetrics } from "@splitch/contracts";
+import { type MetricNames, metricDisplayName } from "#lib/experiments/metric-names";
 
 /** Guardrail detail stays advisory even when its collapsed station is loud. */
 
-export function ExperimentResultsGuardrails({ guardrails }: { guardrails: GuardrailResult[] }) {
+export function ExperimentResultsGuardrails({
+  guardrails,
+  metricNames,
+}: {
+  guardrails: GuardrailResult[];
+  metricNames: MetricNames;
+}) {
   const breached = guardrails.filter((guardrail) => guardrail.is_breached === true);
   return (
     <section aria-labelledby="results-guardrails-heading" className="grid gap-3">
@@ -27,7 +34,9 @@ export function ExperimentResultsGuardrails({ guardrails }: { guardrails: Guardr
               key={`${guardrail.metric_id}:${guardrail.variant}`}
             >
               <span className="text-sm">
-                <span className="font-mono text-foreground text-xs">{guardrail.metric_id}</span>
+                <span className="text-foreground">
+                  {metricDisplayName(guardrail.metric_id, metricNames)}
+                </span>
                 <span className="text-muted-foreground"> · {guardrail.variant}</span>
               </span>
               <span className="flex flex-wrap items-baseline gap-3 font-mono text-xs">

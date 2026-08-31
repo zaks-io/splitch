@@ -22,6 +22,7 @@ function AdaptivePinnedRunTab() {
       appId={route.scope.appId}
       environmentId={route.scope.environmentId}
       experimentId={route.data.experiment.id}
+      metrics={route.data.metrics}
       run={run}
     />
   );
