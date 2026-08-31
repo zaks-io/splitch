@@ -51,6 +51,7 @@ export async function renameApp(input: {
 
 export type DeleteOutcome =
   | { readonly kind: "refused"; readonly message: string }
+  | { readonly kind: "cleanup-pending"; readonly message: string }
   | {
       readonly kind: "partially-deleted";
       readonly message: string;
@@ -72,7 +73,14 @@ export async function destroyApp(appId: string): Promise<DeleteOutcome> {
       message: "The Control Plane did not answer. This App may or may not have been deleted.",
     };
   }
+  return deleteOutcome(result);
+}
+
+function deleteOutcome(result: Awaited<ReturnType<typeof deleteControlPanelApp>>): DeleteOutcome {
   if (!result.ok) {
+    if ("appDeleted" in result && result.appDeleted === true) {
+      return { kind: "cleanup-pending", message: result.error.message };
+    }
     const partialDelete =
       "partialDelete" in result
         ? (result.partialDelete as PanelAppDeleteProgress | undefined)

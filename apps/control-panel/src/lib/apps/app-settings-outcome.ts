@@ -1,4 +1,3 @@
-import type { AppsDeleteOutput } from "@splitch/contracts/route-types";
 import type { ControlPlaneOperationResult } from "@splitch/control-plane-sdk";
 import type {
   PanelAppDeleteProgress,
@@ -27,6 +26,17 @@ export type AppSettingsMutationResult<T> =
       readonly sessionResync: SessionResync;
     });
 
+type PartialDeleteFailure = Extract<PanelAppDeleteResult, { ok: false }> & {
+  readonly partialDelete: PanelAppDeleteProgress;
+};
+
+export type AppDeleteSettlementResult =
+  | Extract<PanelAppDeleteResult, { ok: false }>
+  | (PartialDeleteFailure & { readonly appDeleted: true })
+  | (Extract<PanelAppDeleteResult, { ok: true }> & {
+      readonly sessionResync: SessionResync;
+    });
+
 export async function settleAppMutation<T>(
   result: ControlPlaneOperationResult<T>,
   resync: () => Promise<void>,
@@ -49,23 +59,34 @@ export async function settleAppMutation<T>(
 
 /**
  * A forced cascade can cross the App deletion boundary before a later cleanup
- * or response fails. Read the App back before treating that failure as partial:
- * APP_NOT_FOUND proves deletion committed and makes session resync mandatory.
+ * or response fails. APP_NOT_FOUND proves the boundary crossed, so the same
+ * actor resumes required cleanup before deletion is reported as complete.
  */
 export async function settleAppDelete(
   result: PanelAppDeleteResult,
   readBack: () => Promise<ControlPlaneOperationResult<unknown>>,
+  resume: () => Promise<PanelAppDeleteResult>,
   resync: () => Promise<void>,
-) {
+): Promise<AppDeleteSettlementResult> {
   if (result.ok) {
     return settleAppMutation(result, result.data.deleted === true ? resync : async () => {});
   }
-  if (!result.partialDelete) return result;
+  const partialDelete = result.partialDelete;
+  if (!partialDelete) return result;
+  const partialResult: PartialDeleteFailure = { ...result, partialDelete };
 
   const existence = await readAppExistence(readBack);
   if (existence !== "deleted") return result;
 
-  return settleAppMutation(completedDelete(result.partialDelete), resync);
+  let resumed: PanelAppDeleteResult;
+  try {
+    resumed = await resume();
+  } catch {
+    return afterDeleteBoundary(partialResult, result);
+  }
+  if (!resumed.ok) return afterDeleteBoundary(partialResult, resumed);
+  if (resumed.data.deleted !== true) return afterDeleteBoundary(partialResult, result);
+  return settleAppMutation(resumed, resync);
 }
 
 async function readAppExistence(
@@ -80,12 +101,13 @@ async function readAppExistence(
   }
 }
 
-function completedDelete(
-  progress: PanelAppDeleteProgress,
-): Extract<ControlPlaneOperationResult<AppsDeleteOutput>, { ok: true }> {
+function afterDeleteBoundary(
+  original: PartialDeleteFailure,
+  latest: Extract<PanelAppDeleteResult, { ok: false }>,
+): PartialDeleteFailure & { readonly appDeleted: true } {
   return {
-    ok: true,
-    status: 200,
-    data: { deleted: true, force: true, removed: [...progress.removed] },
+    ...latest,
+    partialDelete: original.partialDelete,
+    appDeleted: true,
   };
 }

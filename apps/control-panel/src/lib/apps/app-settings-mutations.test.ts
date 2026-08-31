@@ -48,4 +48,26 @@ describe("App Settings mutation transport failures", () => {
       removedCount: 2,
     });
   });
+
+  it("keeps post-boundary cleanup failures actionable", async () => {
+    vi.mocked(deleteControlPanelApp).mockResolvedValueOnce({
+      ok: false,
+      status: 503,
+      error: {
+        code: "SERVICE_UNAVAILABLE",
+        message: "Exposure status cleanup is unavailable",
+        details: { retryAfterMs: 30_000 },
+      },
+      partialDelete: {
+        removed: [{ childType: "experiments", id: "exp_checkout" }],
+        appliedApprovalRequestIds: ["apr_checkout"],
+      },
+      appDeleted: true,
+    } as Awaited<ReturnType<typeof deleteControlPanelApp>>);
+
+    await expect(destroyApp("app_checkout")).resolves.toEqual({
+      kind: "cleanup-pending",
+      message: "Exposure status cleanup is unavailable",
+    });
+  });
 });

@@ -9,7 +9,7 @@ import { isDeleteConfirmed } from "#lib/apps/app-delete-confirmation";
 import { deleteConsequences } from "#lib/apps/app-delete-consequences";
 import { type DeleteOutcome, destroyApp } from "#lib/apps/app-settings-mutations";
 
-type DeleteError = { message: string; partial: boolean; reload: boolean };
+type DeleteError = { message: string; partial: boolean; reload: boolean; title?: string };
 
 /**
  * The typed confirmation. The operator must type this App's URL slug exactly;
@@ -44,6 +44,15 @@ export function AppDeleteCeremony({
   async function settle(outcome: DeleteOutcome) {
     if (outcome.kind === "refused") {
       setError({ message: outcome.message, partial: false, reload: false });
+      return;
+    }
+    if (outcome.kind === "cleanup-pending") {
+      setError({
+        message: `${outcome.message} The App was deleted, but cleanup did not finish. Retry deletion to finish cleanup.`,
+        partial: true,
+        reload: false,
+        title: "App cleanup incomplete",
+      });
       return;
     }
     if (outcome.kind === "partially-deleted") {
@@ -81,7 +90,9 @@ export function AppDeleteCeremony({
 
       {error ? (
         <Alert data-testid="app-delete-error" variant="destructive">
-          <AlertTitle>{error.partial ? "App partially deleted" : "App not deleted"}</AlertTitle>
+          <AlertTitle>
+            {error.title ?? (error.partial ? "App partially deleted" : "App not deleted")}
+          </AlertTitle>
           <AlertDescription className="grid gap-3">
             <p>{error.message}</p>
             {error.reload ? (

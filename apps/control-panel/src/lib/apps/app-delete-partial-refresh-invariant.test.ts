@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 
 const dangerZone = source("../../components/apps/app-danger-zone.tsx");
 const ceremony = source("../../components/apps/app-delete-ceremony.tsx");
+const serverFunctions = source("./control-plane-app-settings-functions.ts");
 
 describe("partial App deletion read-back", () => {
   it("refreshes App settings and then replaces the dry-run preview", () => {
@@ -43,6 +44,28 @@ describe("partial App deletion read-back", () => {
     expect(recovery).toContain("reload: true");
     expect(ceremony).toContain("error?.reload === true");
     expect(ceremony).toContain("globalThis.location.reload()");
+  });
+
+  it("keeps post-boundary cleanup retryable without claiming the App remains", () => {
+    expect(ceremony).toContain('if (outcome.kind === "cleanup-pending")');
+    expect(ceremony).toContain("The App was deleted, but cleanup did not finish.");
+    expect(ceremony).toContain("Retry deletion to finish cleanup.");
+  });
+
+  it("resumes post-boundary cleanup with a second forced DELETE before resync", () => {
+    const handler = section(
+      serverFunctions,
+      "export const deleteControlPanelApp",
+      "\n\nexport const addControlPanelAppMember",
+    );
+    const readBack = handler.indexOf("authorized.client.read({ appId: data.appId })");
+    const resume = handler.indexOf(
+      "authorized.client.deleteApp({ appId: data.appId, force: true })",
+    );
+
+    expect(readBack).toBeGreaterThan(-1);
+    expect(resume).toBeGreaterThan(readBack);
+    expect(handler).toContain("authorized.resyncSession");
   });
 });
 
