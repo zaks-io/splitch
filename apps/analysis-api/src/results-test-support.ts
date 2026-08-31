@@ -1,4 +1,4 @@
-import type { PipeParams, TinybirdReadTransport } from "./tinybird";
+import type { PipeParams, TinybirdReadOptions, TinybirdReadTransport } from "./tinybird";
 
 export const APP_ID = "app_checkout";
 export const OTHER_APP_ID = "app_other";
@@ -9,12 +9,20 @@ export const RUN_ID = "run_checkout_banner_1";
 export type RowsByPipe = Record<string, readonly unknown[]>;
 
 export class FakeTinybird implements TinybirdReadTransport {
-  readonly calls: { pipeName: string; params: PipeParams }[] = [];
+  readonly calls: {
+    pipeName: string;
+    params: PipeParams;
+    options: TinybirdReadOptions | undefined;
+  }[] = [];
 
   constructor(private readonly rows: RowsByPipe = rowsByPipe()) {}
 
-  async readPipe(pipeName: string, params: PipeParams): Promise<readonly unknown[]> {
-    this.calls.push({ pipeName, params: { ...params } });
+  async readPipe(
+    pipeName: string,
+    params: PipeParams,
+    options?: TinybirdReadOptions,
+  ): Promise<readonly unknown[]> {
+    this.calls.push({ pipeName, params: { ...params }, options });
     return this.rows[pipeName] ?? [];
   }
 }
@@ -48,12 +56,12 @@ export function rowsByPipe(): RowsByPipe {
       exposure("treatment", "treatment_0"),
       exposure("treatment", "treatment_1"),
     ],
-    analysis_metric_values: [
+    analysis_metric_values_batch: [
       metricValue("control_0", 1),
       metricValue("treatment_0", 1),
       metricValue("treatment_1", 1),
     ],
-    analysis_pre_period_covariates: [],
+    analysis_pre_period_covariates_batch: [],
     analysis_activation_rows: [],
   };
 }

@@ -2,9 +2,8 @@ import type { MetricQueryConfig, StatsInput } from "@splitch/contracts";
 import { ResultsInputError } from "./results-errors";
 import { tinybirdDateTime64, type TinybirdReadTransport } from "./tinybird";
 
-const METRIC_VALUES_PIPE = "analysis_metric_values";
-const RATIO_METRIC_VALUES_PIPE = "analysis_ratio_metric_values";
-const PRE_PERIOD_PIPE = "analysis_pre_period_covariates";
+const METRIC_VALUES_PIPE = "analysis_metric_values_batch";
+const PRE_PERIOD_PIPE = "analysis_pre_period_covariates_batch";
 
 export async function readMetricRows(
   tinybird: TinybirdReadTransport,
@@ -13,23 +12,17 @@ export async function readMetricRows(
   startedAt: string,
   toTs: string,
 ): Promise<readonly unknown[]> {
-  const rows = await Promise.all(
-    configs.map((config) => {
-      return tinybird.readPipe(
-        config.metric_type === "ratio" ? RATIO_METRIC_VALUES_PIPE : METRIC_VALUES_PIPE,
-        {
-          ...params,
-          metric_id: config.metric_id,
-          metric_type: config.metric_type,
-          window_duration_ms: String(config.window_duration_ms),
-          from_ts: tinybirdDateTime64(startedAt),
-          to_ts: toTs,
-          ...sourceParams(config),
-        },
-      );
-    }),
+  if (configs.length === 0) return [];
+  return tinybird.readPipe(
+    METRIC_VALUES_PIPE,
+    {
+      ...params,
+      metric_query_config: JSON.stringify(configs),
+      from_ts: tinybirdDateTime64(startedAt),
+      to_ts: toTs,
+    },
+    { method: "POST" },
   );
-  return rows.flat();
 }
 
 export async function readPrePeriodRows(
@@ -43,25 +36,19 @@ export async function readPrePeriodRows(
   if (!Number.isFinite(startedAtMs)) {
     throw new ResultsInputError("analysis_run_inputs.started_at is not a timestamp");
   }
-  const rows = await Promise.all(
-    configs
-      .filter((config) => config.metric_type !== "ratio")
-      .map((config) => {
-        return tinybird.readPipe(PRE_PERIOD_PIPE, {
-          ...params,
-          metric_id: config.metric_id,
-          metric_type: config.metric_type,
-          event_definition_id: config.event_definition_id,
-          ...(config.event_field_name ? { event_field_name: config.event_field_name } : {}),
-          lookback_ms: String(config.cuped_lookback_ms),
-          from_ts: tinybirdDateTime64(
-            new Date(startedAtMs - config.cuped_lookback_ms).toISOString(),
-          ),
-          to_ts: toTs,
-        });
-      }),
+  const eligibleConfigs = configs.filter((config) => config.metric_type !== "ratio");
+  if (eligibleConfigs.length === 0) return [];
+  const maxLookbackMs = Math.max(...eligibleConfigs.map((config) => config.cuped_lookback_ms));
+  return tinybird.readPipe(
+    PRE_PERIOD_PIPE,
+    {
+      ...params,
+      metric_query_config: JSON.stringify(eligibleConfigs),
+      from_ts: tinybirdDateTime64(new Date(startedAtMs - maxLookbackMs).toISOString()),
+      to_ts: toTs,
+    },
+    { method: "POST" },
   );
-  return rows.flat();
 }
 
 export function assertMetricQueryCoverage(
@@ -85,25 +72,4 @@ export function assertMetricQueryCoverage(
       `metric_query_config is missing analyzed Metrics: ${missing.sort().join(", ")}; re-Start the Run`,
     );
   }
-}
-
-function sourceParams(config: MetricQueryConfig): Record<string, string> {
-  if (config.metric_type !== "ratio") {
-    return {
-      event_definition_id: config.event_definition_id,
-      ...(config.event_field_name ? { event_field_name: config.event_field_name } : {}),
-    };
-  }
-  return {
-    numerator_metric_type: config.numerator.metric_type,
-    numerator_event_definition_id: config.numerator.event_definition_id,
-    ...(config.numerator.event_field_name
-      ? { numerator_event_field_name: config.numerator.event_field_name }
-      : {}),
-    denominator_metric_type: config.denominator.metric_type,
-    denominator_event_definition_id: config.denominator.event_definition_id,
-    ...(config.denominator.event_field_name
-      ? { denominator_event_field_name: config.denominator.event_field_name }
-      : {}),
-  };
 }

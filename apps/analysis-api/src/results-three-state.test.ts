@@ -19,8 +19,8 @@ describe("GET experiment results three-state distinction (SPL-290/SPL-302)", () 
   it("returns 200 no_data naming Metric Events when Exposures exist but Metric pipes are empty", async () => {
     const { app, tinybird } = makeResultsHarness({
       ...rowsByPipe(),
-      analysis_metric_values: [],
-      analysis_pre_period_covariates: [],
+      analysis_metric_values_batch: [],
+      analysis_pre_period_covariates_batch: [],
     });
 
     const res = await app.request(`${RESULTS_PATH}?runId=${RUN_ID}`, resultsAuthInit("GET"));
@@ -36,8 +36,8 @@ describe("GET experiment results three-state distinction (SPL-290/SPL-302)", () 
     expect(tinybird.calls.map((call) => call.pipeName)).toEqual([
       "analysis_run_inputs",
       "analysis_deduped_exposures",
-      "analysis_metric_values",
-      "analysis_pre_period_covariates",
+      "analysis_metric_values_batch",
+      "analysis_pre_period_covariates_batch",
       "analysis_activation_rows",
     ]);
   });

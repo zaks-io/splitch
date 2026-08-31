@@ -20,8 +20,66 @@ const STRADDLE_ANCHOR = `(
 
 export async function proveAnalysisScopePredicates(root, runQuery, fail) {
   await prove("analysis_metric_values", metricValueProofs(root), runQuery, fail);
+  await prove("analysis_metric_values_batch", batchMetricValueProofs(root), runQuery, fail);
   await prove("analysis_pre_period_covariates", prePeriodProofs(root), runQuery, fail);
+  await prove("analysis_pre_period_covariates_batch", batchPrePeriodProofs(root), runQuery, fail);
   await prove("analysis_ratio_metric_values", ratioProofs(root), runQuery, fail);
+}
+
+function batchMetricValueProofs(root) {
+  const pipe = readPipe(root, "analysis_metric_values_batch");
+  return scopedEventAndJoinProofs(
+    pipeNode(pipe, "scoped_metric_events"),
+    pipeNode(pipe, "operand_values"),
+    "batched Metric Event",
+    "",
+  );
+}
+
+function batchPrePeriodProofs(root) {
+  const pipe = readPipe(root, "analysis_pre_period_covariates_batch");
+  return scopedEventAndJoinProofs(
+    pipeNode(pipe, "scoped_pre_period_events"),
+    pipeNode(pipe, "pre_period_values"),
+    "batched pre-period Metric Event",
+    PRE_PERIOD_BOUNDS,
+  );
+}
+
+function scopedEventAndJoinProofs(events, values, label, bounds) {
+  const prePeriod = bounds.length > 0;
+  return [
+    {
+      name: `${label} App predicate`,
+      predicate: predicate(events, "WHERE app_id = {{String(app_id)}}", { app_id: "app_1" }),
+      query: (scope) =>
+        scanAttack("app_id != 'app_1'", "environment_id = 'env_prod'", scope, bounds),
+    },
+    {
+      name: `${label} Environment predicate`,
+      predicate: predicate(events, "AND environment_id = {{String(environment_id)}}", {
+        environment_id: "env_prod",
+      }),
+      query: (scope) =>
+        scanAttack("environment_id != 'env_prod'", "app_id = 'app_1'", scope, bounds),
+    },
+    {
+      name: `${label} to Exposure App join predicate`,
+      predicate: predicate(values, "ON events.app_id = exposures.app_id"),
+      query: (scope) =>
+        prePeriod
+          ? prePeriodJoinAttack(FOREIGN_APP, scope)
+          : windowlessJoinAttack(FOREIGN_APP, scope),
+    },
+    {
+      name: `${label} to Exposure Environment join predicate`,
+      predicate: predicate(values, "AND events.environment_id = exposures.environment_id"),
+      query: (scope) =>
+        prePeriod
+          ? prePeriodJoinAttack(FOREIGN_ENVIRONMENT, scope)
+          : windowlessJoinAttack(FOREIGN_ENVIRONMENT, scope),
+    },
+  ];
 }
 
 function metricValueProofs(root) {

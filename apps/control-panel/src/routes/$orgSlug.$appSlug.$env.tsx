@@ -20,11 +20,11 @@ import {
   reportExpectedDomainFailure,
   reportRouteError,
 } from "#lib/observability/panel-observability";
-import { loadScopedSession } from "#lib/sessions/session-functions";
+import { scopedSessionQuery } from "#lib/sessions/scoped-session-query";
 
 export const Route = createFileRoute("/$orgSlug/$appSlug/$env")({
-  loader: async ({ location, params }): Promise<ScopedLoaderContext> => {
-    const result = await loadScopedSession({ data: params });
+  beforeLoad: async ({ context, location, params }) => {
+    const result = await context.queryClient.ensureQueryData(scopedSessionQuery(params));
     if (result.kind === "unauthenticated") {
       throw loginRedirect(location.href);
     }
@@ -49,16 +49,21 @@ export const Route = createFileRoute("/$orgSlug/$appSlug/$env")({
       throw notFound({ data: { deferred: true } });
     }
 
+    configureControlPanelSentryScope(result.context);
+    return { scoped: result.context };
+  },
+  loader: async ({ context, location, params }): Promise<ScopedLoaderContext> => {
+    const scoped = context.scoped;
+
     await recordLastVisitedScope({
       data: {
-        orgId: result.context.scope.orgId,
+        orgId: scoped.scope.orgId,
         appSlug: params.appSlug,
         env: params.env,
         path: location.pathname,
       },
     });
-    configureControlPanelSentryScope(result.context);
-    return result.context;
+    return scoped;
   },
   onError: ({ error }) => {
     reportRouteError("section", error, "/$orgSlug/$appSlug/$env");

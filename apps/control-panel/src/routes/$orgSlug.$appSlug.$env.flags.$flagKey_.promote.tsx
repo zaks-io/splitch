@@ -8,15 +8,12 @@ import { scopedHref } from "#lib/shell/app-shell-navigation";
 import { loadControlPanelFlagDetail } from "#lib/flags/control-plane-flag-functions";
 import { isFlagDetailNotFound } from "#lib/flags/flag-detail-data";
 import type { FlagDetailView } from "#lib/flags/flag-detail-view";
-import { AccessDeniedError } from "#lib/shared/loader-context";
-import { loginRedirect } from "#lib/auth/login-redirect";
 import { reportRouteError } from "#lib/observability/panel-observability";
 import {
   type PromotionSourceOption,
   promotionSources,
   resolvePromotionSource,
 } from "#lib/promotions/promotion-source";
-import { loadScopedSession } from "#lib/sessions/session-functions";
 
 type PromotionLoaded = {
   kind: "ready";
@@ -54,17 +51,11 @@ export const Route = createFileRoute("/$orgSlug/$appSlug/$env/flags/$flagKey_/pr
     from: typeof search.from === "string" && search.from.length > 0 ? search.from : undefined,
   }),
   loaderDeps: ({ search }) => ({ from: search.from }),
-  loader: async ({ deps, location, params }): Promise<PromotionLoaded | PromotionBlocked> => {
-    const scoped = await loadScopedSession({ data: params });
-    if (scoped.kind === "unauthenticated") {
-      throw loginRedirect(location.href);
-    }
-    if (scoped.kind === "forbidden") throw new AccessDeniedError();
-    if (scoped.kind === "notFound") throw notFound();
-
-    const scope = scoped.context.scope;
+  loader: async ({ context, deps, params }): Promise<PromotionLoaded | PromotionBlocked> => {
+    const scoped = context.scoped;
+    const scope = scoped.scope;
     const base = { scopeHref: scopedHref(scope), flagKey: params.flagKey, env: scope.env };
-    const sources = promotionSources(scoped.context.navigation, scope.appId, scope.env);
+    const sources = promotionSources(scoped.navigation, scope.appId, scope.env);
     if (sources.length === 0) return { kind: "no-sources", ...base };
 
     const source = resolvePromotionSource(sources, deps.from);

@@ -96,6 +96,41 @@ describe("Tinybird read transport", () => {
     expect(calledSearch.get("environment_id")).toBe("env_prod");
   });
 
+  it("posts large pipe parameters in the request body", async () => {
+    let calledUrl = new URL("https://tinybird.test");
+    let calledMethod: string | undefined;
+    let calledBody = new URLSearchParams();
+    const transport = createTinybirdReadTransport(
+      {
+        TINYBIRD_API_URL: "https://tinybird.test",
+        TINYBIRD_READ_TOKEN: "test-token",
+      },
+      {
+        fetchFn: async (input, init) => {
+          calledUrl = new URL(String(input));
+          calledMethod = init?.method;
+          calledBody = new URLSearchParams(String(init?.body));
+          return Response.json({ data: [] });
+        },
+      },
+    );
+
+    await transport.readPipe(
+      "analysis_metric_values_batch",
+      {
+        app_id: "app_1",
+        environment_id: "env_prod",
+        metric_query_config: '[{"metric_id":"metric_1"}]',
+      },
+      { method: "POST" },
+    );
+
+    expect(calledUrl.search).toBe("");
+    expect(calledMethod).toBe("POST");
+    expect(calledBody.get("app_id")).toBe("app_1");
+    expect(calledBody.get("metric_query_config")).toBe('[{"metric_id":"metric_1"}]');
+  });
+
   it("builds the Organization usage scope without accepting a caller-selected app", () => {
     expect(
       scopedUsagePipeParams({

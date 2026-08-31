@@ -69,8 +69,8 @@ describe("GET/POST experiment results", () => {
     expect(tinybird.calls.map((call) => call.pipeName)).toEqual([
       "analysis_run_inputs",
       "analysis_deduped_exposures",
-      "analysis_metric_values",
-      "analysis_pre_period_covariates",
+      "analysis_metric_values_batch",
+      "analysis_pre_period_covariates_batch",
       "analysis_activation_rows",
     ]);
     expect(tinybird.calls.every((call) => call.params.app_id === APP_ID)).toBe(true);
@@ -113,7 +113,7 @@ describe("GET/POST experiment results", () => {
     const digest = "485bdba84f840c9627db32bcc99a6f00722b5253754e513ff473c90a8febc588";
     const fixture = rowsByPipe();
     const exposures = fixture.analysis_deduped_exposures as { targeting_key_hash: string }[];
-    const metrics = fixture.analysis_metric_values as { targeting_key_hash: string }[];
+    const metrics = fixture.analysis_metric_values_batch as { targeting_key_hash: string }[];
     if (exposures[0]) exposures[0].targeting_key_hash = `local-v1:${digest}`;
     if (metrics[0]) metrics[0].targeting_key_hash = `v1:${digest}`;
     const tinybird = new FakeTinybird(fixture);

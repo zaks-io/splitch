@@ -24,6 +24,10 @@ function variantList(appId: string, environmentId: string, flagId: string) {
 }
 
 export const queryKeys = {
+  session: {
+    scope: (orgSlug: string, appSlug: string, env: string) =>
+      ["session", "scope", orgSlug, appSlug, env] as const,
+  },
   org: {
     // Sentry keeps one signing secret per provider for a whole Sentry
     // organization, so the installation is Org-scoped and its key must not sit
@@ -32,6 +36,8 @@ export const queryKeys = {
   },
   app: {
     root,
+    settingsPage: (appId: string, environmentId: string) =>
+      [...root(appId, environmentId), "settings-page"] as const,
     // App Settings is App-scoped, so its key is NOT under an Environment: the
     // same data must not be cached once per Environment the operator visits.
     settings: (appId: string) => ["app", appId, "settings"] as const,

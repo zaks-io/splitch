@@ -4,11 +4,16 @@ import { useSuspenseQuery } from "@tanstack/react-query";
 import { createFileRoute, getRouteApi } from "@tanstack/react-router";
 import { AppSettings } from "#components/apps/app-settings";
 import { appSettingsQuery } from "#lib/apps/app-settings-query";
+import { prefetchAppSettingsPage } from "#lib/apps/app-settings-page-query";
 import { reportRouteError } from "#lib/observability/panel-observability";
 
 const appScopeRoute = getRouteApi("/$orgSlug/$appSlug/$env");
 
 export const Route = createFileRoute("/$orgSlug/$appSlug/$env/settings/")({
+  loader: async ({ context }) => {
+    const { appId, environmentId } = context.scoped.scope;
+    await prefetchAppSettingsPage(context.queryClient, { appId, environmentId });
+  },
   onError: ({ error }) => {
     reportRouteError("section", error, "/$orgSlug/$appSlug/$env/settings/");
   },
