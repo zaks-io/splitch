@@ -94,6 +94,7 @@ function protectedResourceResponse(
     {
       resource: `${resourceUrl.origin}${resourcePath}`,
       authorization_servers: [authorizationServer],
+      bearer_methods_supported: ["header"],
     },
     { headers: corsHeaders() },
   );

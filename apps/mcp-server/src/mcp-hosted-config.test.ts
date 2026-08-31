@@ -46,6 +46,7 @@ describe("MCP hosted configuration", () => {
     expect(await response.json()).toEqual({
       resource: "https://mcp.test",
       authorization_servers: ["http://localhost:8791"],
+      bearer_methods_supported: ["header"],
     });
   });
 

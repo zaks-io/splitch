@@ -89,6 +89,7 @@ describe("MCP OAuth protected-resource boundary", () => {
       expect(await response.json()).toEqual({
         resource: "https://mcp.splitch.test",
         authorization_servers: [target[1]],
+        bearer_methods_supported: ["header"],
       });
     }
   });
@@ -198,6 +199,7 @@ describe("MCP hosted OAuth authorization server", () => {
     await expect(response.json()).resolves.toEqual({
       resource: "https://mcp.splitch.test",
       authorization_servers: ["https://splitch.authkit.test"],
+      bearer_methods_supported: ["header"],
     });
   });
 
