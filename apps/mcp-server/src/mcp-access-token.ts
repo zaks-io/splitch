@@ -1,9 +1,16 @@
-import { type AuthDoor, AuthDoorSchema, isCanonicalHeldScopes } from "@splitch/contracts";
+import {
+  type AuthDoor,
+  AuthDoorSchema,
+  isCanonicalHeldScopes,
+  type McpDelegationActor,
+} from "@splitch/contracts";
 import { remoteJwksSignatureVerifier } from "@splitch/worker-runtime";
 
 export interface McpAccessTokenActor {
   subject: string;
   scopes: string[];
+  /** Splitch authority must be resolved from live Control Plane membership. */
+  liveMembership?: true;
   /**
    * Which door minted the token. Defaults to the LEAST-privileged door when the
    * claim is missing or unrecognized: an unidentifiable token must not be
@@ -25,30 +32,71 @@ export interface McpAccessTokenVerifier {
   ): Promise<McpAccessTokenActor | null>;
 }
 
-export function makeHttpMcpAccessTokenVerifier(options: {
+export function delegationActor(actor: McpAccessTokenActor): McpDelegationActor {
+  return {
+    subject: actor.subject,
+    scopes: actor.scopes,
+    authDoor: actor.authDoor,
+    ...(actor.liveMembership ? { liveMembership: true } : {}),
+  };
+}
+
+interface HttpMcpAccessTokenVerifierOptions {
   issuer: string;
+  jwksUrl?: string;
+  profile?: "splitch" | "authkit";
   fetchJwks?: () => Promise<Jwks>;
-}): McpAccessTokenVerifier {
+}
+
+export function makeHttpMcpAccessTokenVerifier(
+  options: HttpMcpAccessTokenVerifierOptions,
+): McpAccessTokenVerifier {
   const issuer = new URL(options.issuer).origin;
-  const signatureValid = makeSignatureVerifier(issuer, options.fetchJwks);
+  const signatureValid = makeSignatureVerifier(
+    options.jwksUrl ?? `${issuer}/.well-known/jwks.json`,
+    options.fetchJwks,
+  );
 
   return {
-    async verify(authorization, expectedAudience, nowSeconds) {
-      const token = bearerToken(authorization);
-      if (!token) return null;
-      const parsed = parseJwt(token);
-      if (parsed?.header.alg !== "RS256") return null;
-      if (!(await signatureValid(token, parsed))) return null;
-      return actorFromClaims(parsed.payload, { issuer, expectedAudience, nowSeconds });
-    },
+    verify: (authorization, expectedAudience, nowSeconds) =>
+      verifyHttpToken(options, signatureValid, issuer, authorization, expectedAudience, nowSeconds),
+  };
+}
+
+async function verifyHttpToken(
+  options: HttpMcpAccessTokenVerifierOptions,
+  signatureValid: SignatureVerifier,
+  issuer: string,
+  authorization: string | null,
+  expectedAudience: string,
+  nowSeconds: number,
+): Promise<McpAccessTokenActor | null> {
+  const token = bearerToken(authorization);
+  if (!token) return null;
+  const parsed = parseJwt(token);
+  if (parsed?.header.alg !== "RS256") return null;
+  if (!(await signatureValid(token, parsed))) return null;
+  if (options.profile !== "authkit") {
+    return actorFromClaims(parsed.payload, { issuer, expectedAudience, nowSeconds });
+  }
+  const subject = standardSubject(parsed.payload, { issuer, expectedAudience, nowSeconds });
+  if (!subject) return null;
+  return {
+    subject,
+    scopes: [],
+    liveMembership: true,
+    authDoor: "device_flow",
   };
 }
 
 type SignatureVerifier = (token: string, parsed: ParsedJwt) => Promise<boolean>;
 
-function makeSignatureVerifier(issuer: string, fetchJwks?: () => Promise<Jwks>): SignatureVerifier {
+function makeSignatureVerifier(
+  jwksUrl: string,
+  fetchJwks?: () => Promise<Jwks>,
+): SignatureVerifier {
   if (!fetchJwks) {
-    const remote = remoteJwksSignatureVerifier(`${issuer}/.well-known/jwks.json`);
+    const remote = remoteJwksSignatureVerifier(jwksUrl);
     return (token) => remote.verify(token);
   }
   return async (_token, parsed) => {
@@ -56,6 +104,29 @@ function makeSignatureVerifier(issuer: string, fetchJwks?: () => Promise<Jwks>):
     const key = selectKey(await fetchJwks(), kid);
     return key ? safeSignatureValid(parsed, key) : false;
   };
+}
+
+function standardSubject(
+  claims: Record<string, unknown>,
+  options: { issuer: string; expectedAudience: string; nowSeconds: number },
+): string | null {
+  if (
+    claims.iss !== options.issuer ||
+    claims.aud !== options.expectedAudience ||
+    typeof claims.exp !== "number" ||
+    claims.exp <= options.nowSeconds ||
+    !validNotBefore(claims.nbf, options.nowSeconds) ||
+    typeof claims.sub !== "string" ||
+    claims.sub.length === 0 ||
+    claims.sub.length > 256
+  ) {
+    return null;
+  }
+  return claims.sub;
+}
+
+function validNotBefore(notBefore: unknown, nowSeconds: number): boolean {
+  return notBefore === undefined || (typeof notBefore === "number" && notBefore <= nowSeconds);
 }
 
 interface ParsedJwt {
@@ -94,6 +165,7 @@ function actorFromClaims(
     claims.aud !== options.expectedAudience ||
     typeof claims.exp !== "number" ||
     claims.exp <= options.nowSeconds ||
+    !validNotBefore(claims.nbf, options.nowSeconds) ||
     typeof claims.sub !== "string" ||
     claims.sub.length === 0 ||
     claims.sub.length > 256 ||

@@ -47,7 +47,11 @@ import {
   handleSignedControlPanelRequest,
   type PanelProtocol,
 } from "./signed-control-panel-request";
-import { makeTokenMembershipAccess, withBearerMembershipCheck } from "./token-membership";
+import {
+  makeTokenMembershipAccess,
+  resolveMcpMembershipScopes,
+  withBearerMembershipCheck,
+} from "./token-membership";
 
 const handler = {
   async fetch(request, env, ctx): Promise<Response> {
@@ -207,6 +211,7 @@ async function handleRequest(
             makeMcpDelegationAuthResolver({
               surface: "control-plane-api",
               secret: requiredMcpDelegationSecret(env.MCP_CONTROL_PLANE_DELEGATION_SECRET),
+              resolveLiveScopes: (userId) => resolveMcpMembershipScopes(membershipAccess, userId),
               replayGuard: makeDurableMcpDelegationReplayGuard(
                 requiredMcpReplayBinding(env.MCP_DELEGATION_REPLAY),
               ),

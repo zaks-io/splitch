@@ -54,7 +54,12 @@ export interface SeenDownstream extends SeenRequest {
   // `authDoor` is recorded, not just `subject`/`scopes`: it is the claim the
   // Organization-creation gate keys on, so a delegation that silently upgraded
   // the door would be a privilege escalation no other assertion here would see.
-  delegation: { subject: string; scopes: readonly string[]; authDoor: string } | null;
+  delegation: {
+    subject: string;
+    scopes: readonly string[];
+    authDoor: string;
+    liveMembership?: true;
+  } | null;
 }
 
 export async function request(
@@ -62,6 +67,8 @@ export async function request(
   options: {
     platformTarget?: string;
     authBaseUrl?: string;
+    oauthAuthorizationServer?: string;
+    oauthJwksUrl?: string;
     controlPlaneBaseUrl?: string;
     controlPlaneFetch?: typeof fetch;
     sessionStore?: McpSessionStore;
@@ -89,6 +96,8 @@ export async function mcp(
     sessionStore: McpSessionStore;
     sessionId?: string;
     authBaseUrl?: string;
+    oauthAuthorizationServer?: string;
+    oauthJwksUrl?: string;
     now?: () => number;
   },
 ): Promise<Response> {
@@ -126,7 +135,10 @@ export async function bootAuthApi(seen: SeenRequest[]): Promise<{
   let issuer = "";
   const baseUrl = await bootServer(async (request, response) => {
     seen.push({ method: request.method ?? "", path: request.url ?? "" });
-    if (request.method === "GET" && request.url === "/.well-known/jwks.json") {
+    if (
+      request.method === "GET" &&
+      (request.url === "/.well-known/jwks.json" || request.url === "/oauth2/jwks")
+    ) {
       writeJson(response, 200, { keys: [{ ...publicJwk, kid: "fake-auth" }] });
       return;
     }
@@ -165,7 +177,10 @@ export async function bootAuthApi(seen: SeenRequest[]): Promise<{
   };
 }
 
-export async function bootControlPlaneApi(seen: SeenDownstream[]): Promise<string> {
+export async function bootControlPlaneApi(
+  seen: SeenDownstream[],
+  expectedActor: NonNullable<SeenDownstream["delegation"]> = actor,
+): Promise<string> {
   const replayGuard = memoryMcpDelegationReplayGuard();
   return bootServer(async (request, response) => {
     const authorization = request.headers.authorization ?? null;
@@ -189,9 +204,10 @@ export async function bootControlPlaneApi(seen: SeenDownstream[]): Promise<strin
       request.method !== "GET" ||
       request.url !== "/apps/app_local/flags?include=config" ||
       authorization !== null ||
-      delegation?.subject !== actor.subject ||
-      delegation.scopes.join(" ") !== actor.scopes.join(" ") ||
-      delegation.authDoor !== actor.authDoor
+      delegation?.subject !== expectedActor.subject ||
+      delegation.scopes.join(" ") !== expectedActor.scopes.join(" ") ||
+      delegation.authDoor !== expectedActor.authDoor ||
+      delegation.liveMembership !== expectedActor.liveMembership
     ) {
       writeJson(response, 401, { code: "UNAUTHORIZED", message: "UNAUTHORIZED", details: {} });
       return;

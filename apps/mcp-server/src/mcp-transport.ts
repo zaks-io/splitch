@@ -16,6 +16,7 @@ export async function routeTransportRequest(options: {
   deployedCommitSha?: string;
   platformTarget?: string;
   authBaseUrl?: string;
+  oauthAuthorizationServer?: string;
   sessionStore?: McpSessionStore;
   authenticateBearer?: (authorization: string, audience: string) => Promise<string | null>;
 }): Promise<Response | undefined> {
@@ -30,7 +31,11 @@ export async function routeTransportRequest(options: {
     );
   }
   if (options.request.method === "GET" && isProtectedResourcePath(url.pathname)) {
-    return protectedResourceResponse(url, options.platformTarget, options.authBaseUrl);
+    return protectedResourceResponse(
+      url,
+      options.platformTarget,
+      options.oauthAuthorizationServer ?? options.authBaseUrl,
+    );
   }
   if (options.request.method === "OPTIONS") {
     return new Response(null, { status: 204, headers: corsHeaders() });
@@ -89,6 +94,7 @@ function protectedResourceResponse(
     {
       resource: `${resourceUrl.origin}${resourcePath}`,
       authorization_servers: [authorizationServer],
+      bearer_methods_supported: ["header"],
     },
     { headers: corsHeaders() },
   );

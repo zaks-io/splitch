@@ -88,7 +88,7 @@ function scopedDelegationActor(
   route: ApiRouteContract,
   input: unknown,
   actor: NonNullable<McpOperationCallOptions["delegation"]>,
-) {
+): McpDelegationActor {
   const record = inputRecord(input);
   const targets = [
     route.path.includes(":orgId") ? scopeTarget("org", record.orgId) : null,
@@ -99,6 +99,7 @@ function scopedDelegationActor(
     // Narrowed to the union of the route's Org and App targets. The door is not
     // narrowable: it says who the caller is, not what they may reach.
     authDoor: actor.authDoor,
+    ...(actor.liveMembership ? { liveMembership: true } : {}),
     scopes:
       targets.length === 0
         ? actor.scopes

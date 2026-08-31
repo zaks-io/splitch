@@ -21,6 +21,7 @@ const service = "splitch-mcp-server";
 type Env = {
   CONTROL_PLANE_API?: Fetcher;
   AUTH_API_ORIGIN?: string;
+  MCP_OAUTH_AUTHORIZATION_SERVER?: string;
   CONTROL_PLANE_API_ORIGIN?: string;
   MCP_CONTROL_PLANE_DELEGATION_SECRET?: string;
   SPLITCH_DEPLOYED_COMMIT_SHA?: string;
@@ -53,6 +54,10 @@ const handler = {
       deployedCommitSha: env.SPLITCH_DEPLOYED_COMMIT_SHA,
       platformTarget: env.SPLITCH_PLATFORM_TARGET,
       authBaseUrl: env.AUTH_API_ORIGIN,
+      oauthAuthorizationServer: env.MCP_OAUTH_AUTHORIZATION_SERVER,
+      oauthJwksUrl: env.MCP_OAUTH_AUTHORIZATION_SERVER
+        ? `${new URL(env.MCP_OAUTH_AUTHORIZATION_SERVER).origin}/oauth2/jwks`
+        : undefined,
       controlPlaneBaseUrl: env.CONTROL_PLANE_API_ORIGIN,
       controlPlaneFetch: serviceBindingFetch(env.CONTROL_PLANE_API),
       controlPlaneDelegationSecret: env.MCP_CONTROL_PLANE_DELEGATION_SECRET,

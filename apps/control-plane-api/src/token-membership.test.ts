@@ -4,6 +4,7 @@ import {
   authorizeBearerMembership,
   makeTokenMembershipAccess,
   requireTokenMembershipAccess,
+  resolveMcpMembershipScopes,
   withBearerMembershipCheck,
 } from "./token-membership";
 
@@ -108,6 +109,30 @@ describe("withBearerMembershipCheck", () => {
       error: { code: "FORBIDDEN", message: "live membership is required" },
     });
   });
+
+  it("does not repeat membership reads already resolved after delegation validation", async () => {
+    const authorize = vi.fn();
+    const principal = {
+      kind: "control-plane-token" as const,
+      id: USER,
+      scopes: [`app:${APP}:admin`],
+      orgId: null,
+      appId: APP,
+      environmentId: null,
+      authDoor: "device_flow" as const,
+      liveMembership: true as const,
+    };
+    const wrapped = withBearerMembershipCheck(
+      async () => ({ ok: true, principal }),
+      fakeAccess({ authorize }),
+    );
+
+    await expect(wrapped(new Request("https://cp.test"))).resolves.toEqual({
+      ok: true,
+      principal,
+    });
+    expect(authorize).not.toHaveBeenCalled();
+  });
 });
 
 describe("makeTokenMembershipAccess", () => {
@@ -199,6 +224,32 @@ describe("makeTokenMembershipAccess", () => {
       ],
       apps: [{ id: APP, organizationId: ORG, role: "owner" }],
     });
+  });
+});
+
+describe("resolveMcpMembershipScopes", () => {
+  it("converts the complete live membership set to canonical delegation scopes", async () => {
+    const resolve = vi.fn(async () => ({
+      organizations: [{ id: ORG, role: "admin" as const }],
+      apps: [{ id: APP, organizationId: ORG, role: "owner" as const }],
+    }));
+
+    await expect(resolveMcpMembershipScopes(fakeAccess({ resolve }), USER)).resolves.toEqual([
+      `app:${APP}:owner`,
+      `org:${ORG}:admin`,
+    ]);
+    expect(resolve).toHaveBeenCalledWith(USER);
+  });
+
+  it.each([
+    "",
+    "x".repeat(257),
+  ])("rejects invalid user id %j before membership lookup", async (userId) => {
+    const resolve = vi.fn();
+    await expect(resolveMcpMembershipScopes(fakeAccess({ resolve }), userId)).rejects.toThrow(
+      "control-plane-api: invalid MCP user id",
+    );
+    expect(resolve).not.toHaveBeenCalled();
   });
 });
 

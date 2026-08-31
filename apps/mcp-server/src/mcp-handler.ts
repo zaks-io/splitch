@@ -44,6 +44,8 @@ export interface McpServerRequestOptions {
   readonly deployedCommitSha?: string;
   readonly platformTarget?: string;
   readonly authBaseUrl?: string;
+  readonly oauthAuthorizationServer?: string;
+  readonly oauthJwksUrl?: string;
   readonly controlPlaneBaseUrl?: string;
   readonly controlPlaneFetch?: typeof fetch;
   readonly controlPlaneDelegationSecret?: string;
@@ -59,11 +61,7 @@ export interface McpServerRequestOptions {
 
 export async function handleMcpServerRequest(options: McpServerRequestOptions): Promise<Response> {
   let actor: McpAccessTokenActor | null = null;
-  const verifier =
-    options.tokenVerifier ??
-    makeHttpMcpAccessTokenVerifier({
-      issuer: authIssuer(options.authBaseUrl, options.platformTarget),
-    });
+  const verifier = options.tokenVerifier ?? defaultTokenVerifier(options);
   const transportResponse = await routeTransportRequest({
     ...options,
     authenticateBearer: async (authorization, audience) => {
@@ -106,6 +104,21 @@ export async function handleMcpServerRequest(options: McpServerRequestOptions): 
       ? await createBoundSession(sessionStore, actor)
       : undefined;
   return jsonResponse(response, 200, responseSessionId);
+}
+
+function defaultTokenVerifier(options: McpServerRequestOptions): McpAccessTokenVerifier {
+  const issuer = authIssuer(
+    options.oauthAuthorizationServer ?? options.authBaseUrl,
+    options.platformTarget,
+  );
+  if (!options.oauthAuthorizationServer) {
+    return makeHttpMcpAccessTokenVerifier({ issuer });
+  }
+  return makeHttpMcpAccessTokenVerifier({
+    issuer,
+    profile: "authkit",
+    ...(options.oauthJwksUrl ? { jwksUrl: options.oauthJwksUrl } : {}),
+  });
 }
 
 function requiredRevocations(revocations: McpRevocationReader | undefined): McpRevocationReader {

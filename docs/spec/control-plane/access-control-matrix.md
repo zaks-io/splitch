@@ -6,7 +6,7 @@ trusted-IdP allow-list table, the Worker responsibility split, and revocation.
 For how a principal authenticates (the three identity doors, claim ceremony, and shared-preview
 `client_credentials` smoke grant), see [auth-doors.md](auth-doors.md).
 
-## Resource access token
+## Splitch-issued resource access token
 
 Short-lived bearer token (JWT, default TTL 1h) issued by `/oauth2/token`.
 
@@ -84,6 +84,27 @@ does not belong to never widens the result. Every other Organization route co-sc
 8. Otherwise, extract `scopes` and match against the required scope for the
    requested operation.
 9. Extract `sub` as `user_id` for audit logging
+
+## AuthKit-issued MCP browser access token
+
+Remote MCP browser clients use WorkOS AuthKit as the authorization server. AuthKit owns Client ID
+Metadata Documents, dynamic client registration, authorization codes with S256 PKCE, refresh, and
+revocation. The MCP protected-resource metadata advertises only the exact AuthKit issuer and the
+header bearer method. The configured AuthKit resource indicators are the MCP origin and `/mcp`
+resource for each hosted environment.
+
+The MCP Worker verifies the AuthKit token's RS256 signature against AuthKit JWKS, exact issuer,
+exact endpoint audience, expiry, optional not-before time, and non-empty subject. It does not treat
+OIDC profile scopes as Splitch authorization. Instead it creates an empty-scope, signed, one-call
+delegation carrying the closed `liveMembership` marker. The delegation is bound to the operation,
+public surface, method, exact path/query, body digest, expiry, and one-use replay identifier.
+
+Only after that delegation is fully validated and claimed does the Control Plane resolve the
+subject's current Organization and App memberships from D1 into canonical Splitch scopes. Normal
+route scope and Organization/App co-scope checks then run unchanged. For a user with multiple
+Organizations, selector resolution may bind the principal to the exact canonical route
+Organization only when that Organization is present in the freshly resolved scopes. Membership
+rows and scopes never cross the public bearer token or the MCP delegation header.
 
 ## Trusted IdP allow-list
 

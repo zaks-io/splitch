@@ -31,10 +31,11 @@ export interface PrincipalMemberships {
  * co-scope against their complete live `memberships` set.
  *
  * `orgId` follows the same single-value-or-null shape as `appId`: it is the one
- * Org the credential is bound to, meaningful only when the token names exactly
- * one Org (the agent-first provisional Org from Door B). A token naming zero or
- * many Orgs is org-unbound (null), so the guard FORBIDs it from an `:orgId`
- * route rather than silently picking one.
+ * Org the credential is bound to. A token naming zero or many Orgs is initially
+ * org-unbound (null), so the guard FORBIDs it from an `:orgId` route rather than
+ * silently picking one. A live MCP principal may be bound after delegation
+ * validation to the exact canonical route Org already present in its resolved
+ * membership scopes.
  */
 export interface Principal {
   kind: AuthKind;
@@ -48,6 +49,8 @@ export interface Principal {
   authorization?: AccessTokenAuthorization;
   /** Live D1 result for a membership-wide token. Never populated from JWT claims. */
   memberships?: PrincipalMemberships;
+  /** Membership scopes were resolved live after a signed MCP delegation was validated. */
+  liveMembership?: true;
   /**
    * Which door minted this credential, when the auth kind carries one. `null`
    * for kinds with no door concept (public, Client Key, API Key) — those are

@@ -227,6 +227,28 @@ loud. The CLI stores the resulting **refresh token** in keychain or `~/.splitch/
 (mode 0600). The MCP server does not touch disk or forward the client bearer; MCP clients present
 their exact-resource access token on transport requests.
 
+## Remote MCP browser OAuth
+
+Remote MCP clients discover the WorkOS AuthKit issuer through the MCP server's
+RFC 9728 Protected Resource Metadata. AuthKit supplies Client ID Metadata
+Document support, Dynamic Client Registration for older clients, consent,
+authorization code, S256 PKCE, refresh rotation, and token issuance. The
+configured Resource Indicators are the exact MCP origins advertised by the
+metadata endpoints; AuthKit stamps the selected value into the access token's
+`aud` claim.
+
+The MCP Worker verifies the AuthKit JWT against `${issuer}/oauth2/jwks`, exact
+issuer, exact resource audience, expiry, and subject. It does not translate
+AuthKit's OAuth `scope` claim into Splitch authority. Instead, its existing
+Control Plane service binding carries a signed one-call delegation with an empty
+scope list and a closed live-membership marker. After validating that
+operation-, request-, body-, and replay-bound credential, the Control Plane
+resolves the WorkOS User's complete current Organization and App memberships
+from D1 and runs the existing route scope and co-scope gates. This keeps
+membership lists out of headers, avoids the carried-scope count limit, and
+prevents a provider token from carrying stale or invented Splitch tenant
+authority.
+
 ## Shared-preview smoke grant: client_credentials
 
 **Endpoint:** `POST /oauth2/token` on the auth-api Worker

@@ -2,6 +2,24 @@
 
 **Status:** accepted; amended 2026-07-19
 
+## 2026-08-31 amendment: AuthKit is the browser OAuth authorization server
+
+Remote MCP clients that implement the MCP authorization-code flow discover the
+configured WorkOS AuthKit issuer directly from the MCP Protected Resource
+Metadata. AuthKit owns CIMD, Dynamic Client Registration, consent, S256 PKCE,
+authorization codes, refresh rotation, and OAuth token issuance. Splitch remains
+the resource server: it verifies the AuthKit JWT against the issuer's OAuth JWKS
+and the exact MCP Resource Indicator, then signs a closed live-membership marker
+into the operation-, request-, and replay-bound one-call delegation. Only after
+the Control Plane validates that delegation does it resolve the WorkOS User's
+current Splitch Organization and App memberships from D1. Membership lists never
+ride in bearer tokens or delegation headers, and provider OAuth scopes are never
+interpreted as Splitch membership authority.
+
+The existing Splitch auth-api remains the auth.md and device-flow issuer. This is
+one principal reached through provider-managed browser OAuth, not a new principal
+class, and authorization continues to derive from live D1 membership.
+
 ## 2026-08-28 amendment: path-selected App binding
 
 An MCP delegation may carry signed scopes for several Apps, so its initial
@@ -68,7 +86,8 @@ flags with long-lived KV-validated API keys. **This agent-auth work touches zero
 - **M2M / client_credentials for agents** — rejected. The user explicitly does not want machine-to-machine
   service accounts; every action must tie to a real, revocable user. ID-JAG + device flow keep one principal
   model; M2M would create a second, user-less principal class — the thing this ADR forbids.
-- **Loopback-redirect (PKCE) as the human/fallback door instead of device flow** — rejected as primary.
+- **Loopback-redirect (PKCE) as the human/fallback door instead of device flow** — rejected as the
+  Splitch CLI's primary door, but required for interoperable remote MCP clients.
   Agents (and remote terminals) frequently run in sandboxes with no browser and no reachable localhost, where
   loopback breaks; device flow degrades gracefully (approve from any device). Device flow is WorkOS's
   first-class "CLI Auth" answer for exactly this.
