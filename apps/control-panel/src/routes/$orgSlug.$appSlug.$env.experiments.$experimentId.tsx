@@ -10,7 +10,7 @@ export const Route = createFileRoute("/$orgSlug/$appSlug/$env/experiments/$exper
 function ExperimentDetailRoute() {
   const route = useExperimentDetailRouteData();
   return (
-    <PanelPageBody>
+    <PanelPageBody className="mx-auto w-full max-w-6xl">
       <ExperimentDetail
         activeTab={route.activeTab}
         data={route.data}

@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
   breachedGuardrailStats,
+  metricsFixture,
   resultsFixture,
   statsWithAnalysisControl,
 } from "../../components/experiments/experiment-results-test-fixtures";
+import { metricNamesById } from "./metric-names";
 import { experimentResultsVerdict } from "./experiment-results-verdict";
 
 describe("experimentResultsVerdict", () => {
@@ -11,7 +13,7 @@ describe("experimentResultsVerdict", () => {
     const results = resultsFixture(statsWithAnalysisControl());
 
     expect(verdictText(results)).toContain(
-      "treatment moves checkout_conversion +6.4%, significant.",
+      "treatment moves Checkout conversion +6.4%, significant.",
     );
   });
 
@@ -84,6 +86,7 @@ function verdictText(results: ReturnType<typeof resultsFixture>): string {
     guardrails: results.stats.guardrail_results,
     gate: results.gate,
     baseline: "control",
+    metricNames: metricNamesById(metricsFixture()),
   })
     .map((segment) => segment.value)
     .join("");

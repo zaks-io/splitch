@@ -1,5 +1,6 @@
 import type { ArmResult, SignificanceDisplay } from "@splitch/contracts";
 import { type CiPlotDomain, ciBoundIsOpen, ciPlotX } from "#lib/experiments/ci-plot-scale";
+import { type MetricNames, metricDisplayName } from "#lib/experiments/metric-names";
 import { LABEL_WIDTH, PLOT_WIDTH, rowY, VALUE_X } from "./experiment-results-ci-plot-geometry";
 import { formatInterval, formatLift } from "./experiment-results-format";
 
@@ -10,14 +11,22 @@ import { formatInterval, formatLift } from "./experiment-results-format";
  * and print.
  */
 
-function RowLabel({ result, y }: { result: ArmResult; y: number }) {
+function RowLabel({
+  result,
+  metricNames,
+  y,
+}: {
+  result: ArmResult;
+  metricNames: MetricNames;
+  y: number;
+}) {
   return (
     <>
       <text className="fill-foreground text-[12px]" x={0} y={y + 4}>
         {result.variant}
       </text>
-      <text className="fill-muted-foreground font-mono text-[10px]" x={0} y={y + 15}>
-        {result.metric_id}
+      <text className="fill-muted-foreground text-[10px]" x={0} y={y + 15}>
+        {metricDisplayName(result.metric_id, metricNames)}
       </text>
     </>
   );
@@ -32,17 +41,19 @@ function RowLabel({ result, y }: { result: ArmResult; y: number }) {
 export function BaselineRow({
   result,
   index,
+  metricNames,
   zeroX,
 }: {
   result: ArmResult;
   index: number;
+  metricNames: MetricNames;
   zeroX: number;
 }) {
   const y = rowY(index);
   return (
     <g>
-      <title>{`${result.variant} · ${result.metric_id}: baseline, 0% lift by definition, n=${result.sample_size_n}`}</title>
-      <RowLabel result={result} y={y} />
+      <title>{`${result.variant} · ${metricDisplayName(result.metric_id, metricNames)}: baseline, 0% lift by definition, n=${result.sample_size_n}`}</title>
+      <RowLabel metricNames={metricNames} result={result} y={y} />
       <circle
         className="fill-[color:var(--arm-control)] stroke-card"
         cx={zeroX}
@@ -65,11 +76,13 @@ export function ArmRow({
   index,
   domain,
   display,
+  metricNames,
 }: {
   result: ArmResult;
   index: number;
   domain: CiPlotDomain;
   display: SignificanceDisplay | undefined;
+  metricNames: MetricNames;
 }) {
   const y = rowY(index);
   const openLower = ciBoundIsOpen(result.ci_lower);
@@ -89,8 +102,8 @@ export function ArmRow({
 
   return (
     <g>
-      <title>{armSummary(result)}</title>
-      <RowLabel result={result} y={y} />
+      <title>{armSummary(result, metricNames)}</title>
+      <RowLabel metricNames={metricNames} result={result} y={y} />
       <line
         className="stroke-[color:var(--arm-treatment-foreground)]"
         strokeLinecap={openLower || openUpper ? "butt" : "round"}
@@ -158,6 +171,6 @@ function openArrowPoints(x: number, y: number, bound: "lower" | "upper"): string
   return `${backX},${y - 5} ${x},${y} ${backX},${y + 5}`;
 }
 
-function armSummary(result: ArmResult): string {
-  return `${result.variant} · ${result.metric_id}: ${formatLift(result.relative_lift_pct)} lift, ${formatInterval(result)}, n=${result.sample_size_n}`;
+function armSummary(result: ArmResult, metricNames: MetricNames): string {
+  return `${result.variant} · ${metricDisplayName(result.metric_id, metricNames)}: ${formatLift(result.relative_lift_pct)} lift, ${formatInterval(result)}, n=${result.sample_size_n}`;
 }

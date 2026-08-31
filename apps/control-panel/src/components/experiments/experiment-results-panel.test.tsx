@@ -2,6 +2,7 @@ import type { PanelExperimentRun } from "@splitch/control-plane-sdk/panel-experi
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import {
+  metricsFixture,
   resultsFixture,
   resultsNoDataFixture,
   statsFixture,
@@ -45,14 +46,7 @@ describe("Experiment Results route no_data waiting state", () => {
   it("renders waiting-for-data for a running Run with no_data instead of the error page copy", () => {
     resultsData.current = resultsNoDataFixture({ missing: "metric_events", runStatus: "running" });
 
-    const html = renderToStaticMarkup(
-      <ExperimentResultsPanel
-        appId="app_1"
-        environmentId="env_1"
-        experimentId="exp_1"
-        run={runningRun()}
-      />,
-    );
+    const html = renderPanel();
 
     expect(html).toContain('data-testid="results-waiting"');
     expect(html).toContain("Run 2 · running");
@@ -65,16 +59,7 @@ describe("Experiment Results route no_data waiting state", () => {
   it("names Exposures when that is the missing input on a running Run", () => {
     resultsData.current = resultsNoDataFixture({ missing: "exposures", runStatus: "running" });
 
-    const html = renderToStaticMarkup(
-      <ExperimentResultsPanel
-        appId="app_1"
-        environmentId="env_1"
-        experimentId="exp_1"
-        run={runningRun()}
-      />,
-    );
-
-    expect(html).toContain("Exposures have not arrived for this Run yet");
+    expect(renderPanel()).toContain("Exposures have not arrived for this Run yet");
   });
 
   it("surfaces a Control disagreement even while a Run is waiting for data", () => {
@@ -87,14 +72,7 @@ describe("Experiment Results route no_data waiting state", () => {
       },
     });
 
-    const html = renderToStaticMarkup(
-      <ExperimentResultsPanel
-        appId="app_1"
-        environmentId="env_1"
-        experimentId="exp_1"
-        run={runningRun()}
-      />,
-    );
+    const html = renderPanel();
 
     expect(alertMarkup(html)).not.toMatch(/\b(?:below|here|numbers)\b/i);
     expect(html).toContain("Analysis Control disagrees with the Run");
@@ -119,14 +97,7 @@ describe("Experiment Results route no_data waiting state", () => {
       },
     });
 
-    const html = renderToStaticMarkup(
-      <ExperimentResultsPanel
-        appId="app_1"
-        environmentId="env_1"
-        experimentId="exp_1"
-        run={runningRun()}
-      />,
-    );
+    const html = renderPanel();
 
     expect(alertMarkup(html)).not.toMatch(/\b(?:below|here|numbers)\b/i);
     expect(html).toContain("Control Variant cannot be identified");
@@ -149,14 +120,11 @@ describe("Experiment Results route no_data waiting state", () => {
   it("does not tell an ended Run that data is still arriving", () => {
     resultsData.current = resultsNoDataFixture({ missing: "metric_events", runStatus: "ended" });
 
-    const html = renderToStaticMarkup(
-      <ExperimentResultsPanel
-        appId="app_1"
-        environmentId="env_1"
-        experimentId="exp_1"
-        run={{ ...runningRun(), status: "ended", endedAt: "2026-07-20T00:00:00.000Z" }}
-      />,
-    );
+    const html = renderPanel({
+      ...runningRun(),
+      status: "ended",
+      endedAt: "2026-07-20T00:00:00.000Z",
+    });
 
     expect(html).toContain('data-testid="results-waiting"');
     expect(html).toContain("Run 2 · ended");
@@ -170,19 +138,24 @@ describe("Experiment Results route no_data waiting state", () => {
   it("still renders measured Results when Analysis answers ready", () => {
     resultsData.current = resultsFixture(statsFixture());
 
-    const html = renderToStaticMarkup(
-      <ExperimentResultsPanel
-        appId="app_1"
-        environmentId="env_1"
-        experimentId="exp_1"
-        run={runningRun()}
-      />,
-    );
+    const html = renderPanel();
 
     expect(html).toContain("+6.4%");
     expect(html).not.toContain('data-testid="results-waiting"');
   });
 });
+
+function renderPanel(run: PanelExperimentRun = runningRun()): string {
+  return renderToStaticMarkup(
+    <ExperimentResultsPanel
+      appId="app_1"
+      environmentId="env_1"
+      experimentId="exp_1"
+      metrics={metricsFixture()}
+      run={run}
+    />,
+  );
+}
 
 function runningRun(): PanelExperimentRun {
   return {

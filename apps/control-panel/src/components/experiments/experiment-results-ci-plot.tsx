@@ -20,6 +20,7 @@ import {
 } from "./experiment-results-ci-plot-geometry";
 import { ArmRow, BaselineRow } from "#components/experiments/experiment-results-ci-plot-rows";
 import { analysisControlVariant } from "#components/experiments/experiment-results-control";
+import type { MetricNames } from "#lib/experiments/metric-names";
 
 /**
  * Per-arm lift with its Confidence Interval, rendered for every Run state.
@@ -33,10 +34,12 @@ import { analysisControlVariant } from "#components/experiments/experiment-resul
 export function ExperimentResultsCiPlot({
   results,
   control,
+  metricNames,
   significance,
 }: {
   results: ArmResult[];
   control: FrozenControlIdentity;
+  metricNames: MetricNames;
   significance: ExperimentSignificanceDisplays;
 }) {
   const analysisControl = analysisControlVariant(control);
@@ -88,6 +91,7 @@ export function ExperimentResultsCiPlot({
               <BaselineRow
                 index={index}
                 key={`${result.metric_id}:${result.variant}`}
+                metricNames={metricNames}
                 result={result}
                 zeroX={zeroX}
               />
@@ -97,6 +101,7 @@ export function ExperimentResultsCiPlot({
                 domain={domain}
                 index={index}
                 key={`${result.metric_id}:${result.variant}`}
+                metricNames={metricNames}
                 result={result}
               />
             ),

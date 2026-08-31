@@ -102,6 +102,17 @@ function analysisInput(environmentId, experimentId, runId, counts, options = {})
     // Binomial Metrics throughout, so every knob is the engine default and no
     // Metric needs an entry here.
     metricVarianceConfig: [],
+    // Every analyzed Metric must appear here or the Analysis Worker refuses the
+    // Run outright (assertMetricQueryCoverage). Binomial end-to-end, so the
+    // event binding is nominal and the windows are unbounded.
+    metricQueryConfig: metricSeries.map((series) => ({
+      metric_id: series.metricId,
+      metric_type: "binomial",
+      event_definition_id: `event_${series.metricId}`,
+      event_field_name: null,
+      window_duration_ms: 0,
+      cuped_lookback_ms: 0,
+    })),
     exposures: Object.entries(counts).flatMap(([variant, count]) =>
       Array.from({ length: count }, (_, index) => ({
         app_id: "app_checkout_e2e",

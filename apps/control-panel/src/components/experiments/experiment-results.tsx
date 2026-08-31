@@ -1,8 +1,9 @@
-import type { FrozenControlIdentity } from "@splitch/contracts";
+import type { FrozenControlIdentity, Metric } from "@splitch/contracts";
 import type {
   PanelExperimentResultsReady,
   PanelExperimentRun,
 } from "@splitch/control-plane-sdk/panel-experiments";
+import { metricNamesById } from "#lib/experiments/metric-names";
 import { ExperimentResultsArms } from "./experiment-results-arms";
 import {
   analysisControlVariant,
@@ -22,18 +23,22 @@ import { ExperimentResultsStations } from "./experiment-results-stations";
  */
 
 export function ExperimentResults({
+  metrics,
   results,
   run,
 }: {
+  metrics: readonly Pick<Metric, "id" | "name">[];
   results: PanelExperimentResultsReady;
   run: PanelExperimentRun;
 }) {
   const measurementAnchor = analysisControlVariant(results.control);
   const variantOrder = frozenVariantNames(run.variantsJson);
+  const metricNames = metricNamesById(metrics);
   return (
     <section aria-labelledby="results-heading" className="grid">
       <ExperimentResultsHero
         baseline={measurementAnchor}
+        metricNames={metricNames}
         results={results}
         run={run}
         variantOrder={variantOrder}
@@ -54,6 +59,7 @@ export function ExperimentResults({
         />
         <ExperimentResultsStations
           baseline={measurementAnchor}
+          metricNames={metricNames}
           results={results}
           variantOrder={variantOrder}
         />
@@ -62,6 +68,7 @@ export function ExperimentResults({
           control={results.control}
           gate={results.gate}
           guardrails={results.stats.guardrail_results}
+          metricNames={metricNames}
           runStatus={results.runStatus}
           variantOrder={variantOrder}
         />

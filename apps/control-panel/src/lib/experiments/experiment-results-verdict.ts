@@ -6,6 +6,7 @@ import type {
 } from "@splitch/contracts";
 import { significanceKey } from "@splitch/contracts";
 import { formatLift } from "../../components/experiments/experiment-results-format";
+import { type MetricNames, metricDisplayName } from "./metric-names";
 
 export type ExperimentResultsVerdictSegment = {
   kind: "text" | "arm" | "metric" | "value";
@@ -18,12 +19,14 @@ export function experimentResultsVerdict({
   guardrails,
   gate,
   baseline,
+  metricNames,
 }: {
   armResults: readonly ArmResult[];
   significance: ExperimentSignificanceDisplays;
   guardrails: readonly GuardrailResult[];
   gate: ExperimentDecisionGate;
   baseline: string;
+  metricNames: MetricNames;
 }): ExperimentResultsVerdictSegment[] {
   // The same selection as the hero tile and the station summary, so the three
   // surfaces can never name different arms on one screen.
@@ -38,18 +41,21 @@ export function experimentResultsVerdict({
     segments.push(
       { kind: "arm", value: leadResult.variant },
       { kind: "text", value: " moves " },
-      { kind: "metric", value: leadResult.metric_id },
+      { kind: "metric", value: metricDisplayName(leadResult.metric_id, metricNames) },
       { kind: "text", value: " " },
       { kind: "value", value: formatLift(leadResult.relative_lift_pct) },
       { kind: "text", value: ", significant. " },
     );
   }
 
-  segments.push(...breachSegments(guardrails), ...gateSegments(gate));
+  segments.push(...breachSegments(guardrails, metricNames), ...gateSegments(gate));
   return segments;
 }
 
-function breachSegments(guardrails: readonly GuardrailResult[]): ExperimentResultsVerdictSegment[] {
+function breachSegments(
+  guardrails: readonly GuardrailResult[],
+  metricNames: MetricNames,
+): ExperimentResultsVerdictSegment[] {
   const breached = guardrails.filter((guardrail) => guardrail.is_breached === true);
   if (breached.length === 0) return [];
   if (breached.length > 1) {
@@ -61,7 +67,7 @@ function breachSegments(guardrails: readonly GuardrailResult[]): ExperimentResul
   const [guardrail] = breached;
   if (!guardrail) throw new Error("A breached Guardrail was counted but not found");
   return [
-    { kind: "metric", value: guardrail.metric_id },
+    { kind: "metric", value: metricDisplayName(guardrail.metric_id, metricNames) },
     { kind: "text", value: " is breached on " },
     { kind: "arm", value: guardrail.variant },
     { kind: "text", value: ". " },

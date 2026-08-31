@@ -17,6 +17,7 @@ function AdaptiveExperimentTab() {
       appId={route.scope.appId}
       environmentId={route.scope.environmentId}
       experimentId={route.data.experiment.id}
+      metrics={route.data.metrics}
       run={route.data.runs[0]}
     />
   );

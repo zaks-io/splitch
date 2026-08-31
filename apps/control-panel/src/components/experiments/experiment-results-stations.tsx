@@ -3,6 +3,7 @@ import type { PanelExperimentResultsReady } from "@splitch/control-plane-sdk/pan
 import { Accordion } from "@splitch/ui/components/accordion";
 import { armColor } from "#lib/experiments/arm-colors";
 import { leadingSignificantResult } from "#lib/experiments/experiment-results-verdict";
+import { type MetricNames, metricDisplayName } from "#lib/experiments/metric-names";
 import { ExperimentResultsCiPlot } from "./experiment-results-ci-plot";
 import { formatLift } from "./experiment-results-format";
 import {
@@ -17,10 +18,12 @@ import { ExperimentResultsStation } from "./experiment-results-station";
 export function ExperimentResultsStations({
   results,
   baseline,
+  metricNames,
   variantOrder,
 }: {
   results: PanelExperimentResultsReady;
   baseline: string;
+  metricNames: MetricNames;
   variantOrder: readonly string[];
 }) {
   const decisionResults = filteredResults(results.stats.arm_results, baseline, "decision");
@@ -45,11 +48,13 @@ export function ExperimentResultsStations({
     leading,
     baseline,
     variantOrder,
+    metricNames,
   );
   const guardrailPresentation = guardrailsPresentation(
     results.stats.guardrail_results,
     breached,
     results.stats.arm_results,
+    metricNames,
   );
   const exploratoryPresentation = exploratoryStationPresentation(exploratoryCount);
 
@@ -81,11 +86,13 @@ export function ExperimentResultsStations({
           </p>
           <ExperimentResultsCiPlot
             control={results.control}
+            metricNames={metricNames}
             results={decisionResults}
             significance={results.significance}
           />
           <ExperimentResultsMetricsTable
             control={results.control}
+            metricNames={metricNames}
             results={decisionResults}
             significance={results.significance}
           />
@@ -100,7 +107,10 @@ export function ExperimentResultsStations({
         value="guardrails"
         variantOrder={variantOrder}
       >
-        <ExperimentResultsGuardrails guardrails={results.stats.guardrail_results} />
+        <ExperimentResultsGuardrails
+          guardrails={results.stats.guardrail_results}
+          metricNames={metricNames}
+        />
       </ExperimentResultsStation>
 
       {exploratoryCount > 0 ? (
@@ -108,12 +118,14 @@ export function ExperimentResultsStations({
           baseline={baseline}
           {...exploratoryPresentation}
           muted
+          siding
           title="Exploratory"
           value="exploratory"
           variantOrder={variantOrder}
         >
           <ExperimentResultsMetricsTable
             control={results.control}
+            metricNames={metricNames}
             results={exploratoryResults}
             significance={results.significance}
           />
@@ -171,6 +183,7 @@ function decisionMetricPresentation(
   leading: ArmResult | null,
   baseline: string,
   variantOrder: readonly string[],
+  metricNames: MetricNames,
 ): StationPresentation {
   const count = results.filter((result) => result.variant !== baseline).length;
   if (!leading) {
@@ -184,7 +197,7 @@ function decisionMetricPresentation(
     count: `${count} ${count === 1 ? "comparison" : "comparisons"}`,
     keyValue: formatLift(leading.relative_lift_pct),
     keyValueStyle: { color: armColor({ baseline, variant: leading.variant, variantOrder }) },
-    summary: `${leading.variant} moves ${leading.metric_id}, significant.`,
+    summary: `${leading.variant} moves ${metricDisplayName(leading.metric_id, metricNames)}, significant.`,
   };
 }
 
@@ -192,6 +205,7 @@ function guardrailsPresentation(
   guardrails: readonly GuardrailResult[],
   breached: readonly GuardrailResult[],
   armResults: readonly ArmResult[],
+  metricNames: MetricNames,
 ): StationPresentation {
   const count = guardrails.length;
   const countLabel = `${count} ${count === 1 ? "check" : "checks"}`;
@@ -208,7 +222,7 @@ function guardrailsPresentation(
     keyValue: guardrailKeyValue(breached[0], armResults),
     keyValueTone: "text-warning-foreground",
     summary: `${breached.length} of ${count} breached.`,
-    warnings: breached.map((guardrail) => guardrailWarning(guardrail, armResults)),
+    warnings: breached.map((guardrail) => guardrailWarning(guardrail, armResults, metricNames)),
   };
 }
 
@@ -254,13 +268,18 @@ function guardrailKeyValue(
     : formatLift(result.relative_lift_pct);
 }
 
-function guardrailWarning(guardrail: GuardrailResult, armResults: readonly ArmResult[]): string {
+function guardrailWarning(
+  guardrail: GuardrailResult,
+  armResults: readonly ArmResult[],
+  metricNames: MetricNames,
+): string {
   const result = findGuardrailArmResult(guardrail, armResults);
   const threshold = formatPercent(guardrail.threshold);
+  const metric = metricDisplayName(guardrail.metric_id, metricNames);
   if (result?.relative_lift_pct === null || result?.relative_lift_pct === undefined) {
-    return `${guardrail.metric_id} on ${guardrail.variant} has CI lower bound ${formatPercent(guardrail.ci_lower)} against a ${threshold} threshold. Concluding now ships a known regression.`;
+    return `${metric} on ${guardrail.variant} has CI lower bound ${formatPercent(guardrail.ci_lower)} against a ${threshold} threshold. Concluding now ships a known regression.`;
   }
-  return `${guardrail.metric_id} on ${guardrail.variant} is ${formatLift(result.relative_lift_pct)} against a ${threshold} threshold. Concluding now ships a known regression.`;
+  return `${metric} on ${guardrail.variant} is ${formatLift(result.relative_lift_pct)} against a ${threshold} threshold. Concluding now ships a known regression.`;
 }
 
 function findGuardrailArmResult(

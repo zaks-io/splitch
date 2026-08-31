@@ -6,6 +6,12 @@ import type {
 } from "@splitch/contracts";
 import { Button } from "@splitch/ui/components/button";
 import { armColor } from "#lib/experiments/arm-colors";
+import { RAIL_NODE_TOP, railOffset } from "./experiment-results-arms";
+import {
+  type MetricNames,
+  metricDisplayName,
+  withMetricNames,
+} from "#lib/experiments/metric-names";
 
 /**
  * The ship-decision gate, rendered exactly as the Worker computed it.
@@ -22,6 +28,7 @@ export function ExperimentResultsDecision({
   control,
   gate,
   guardrails,
+  metricNames,
   runStatus,
   variantOrder,
 }: {
@@ -29,6 +36,7 @@ export function ExperimentResultsDecision({
   control: FrozenControlIdentity;
   gate: ExperimentDecisionGate;
   guardrails: readonly GuardrailResult[];
+  metricNames: MetricNames;
   runStatus: "running" | "ended";
   variantOrder: readonly string[];
 }) {
@@ -64,7 +72,7 @@ export function ExperimentResultsDecision({
           <ConcludeAction shipAllowed={gate.shipAllowed} />
         </div>
 
-        <GuardrailAdvisory guardrails={guardrails} />
+        <GuardrailAdvisory guardrails={guardrails} metricNames={metricNames} />
 
         {gate.shipAllowed ? null : (
           <div
@@ -92,7 +100,7 @@ export function ExperimentResultsDecision({
                 <span className="font-medium text-foreground">{check.title}</span>
                 <span className="text-muted-foreground">
                   {": "}
-                  <CheckDetail check={check} control={control} />
+                  <CheckDetail check={check} control={control} metricNames={metricNames} />
                 </span>
               </span>
             </li>
@@ -131,7 +139,7 @@ function TerminalRails({
         viewBox={`0 0 ${width} 112`}
       >
         {variantOrder.map((variant, index) => {
-          const x = ((index + 0.5) * width) / variantOrder.length;
+          const x = center + railOffset(index, variantOrder.length);
           return (
             <path
               d={`M${x} 0 C${x} 34 ${center} 38 ${center} 72`}
@@ -145,7 +153,7 @@ function TerminalRails({
           cx={center}
           cy="86"
           fill="var(--background)"
-          r="11"
+          r="12"
           stroke={blocked ? "var(--destructive)" : "var(--success)"}
           strokeWidth="2"
         />
@@ -157,6 +165,10 @@ function TerminalRails({
         />
       </svg>
       <span className="absolute top-0 left-1/2 h-14 border-border border-l-2 sm:hidden" />
+      <span
+        className="absolute left-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-border bg-background sm:hidden"
+        style={{ height: 8, top: RAIL_NODE_TOP, width: 8 }}
+      />
     </div>
   );
 }
@@ -164,12 +176,14 @@ function TerminalRails({
 function CheckDetail({
   check,
   control,
+  metricNames,
 }: {
   check: DecisionGateCheck;
   control: FrozenControlIdentity;
+  metricNames: MetricNames;
 }) {
   if (check.id !== "control_identity" || control.state !== "unresolvable") {
-    return check.detail;
+    return withMetricNames(check.detail, metricNames);
   }
   const recordedValue = `"${control.variantId}"`;
   const recordedValueIndex = check.detail.indexOf(recordedValue);
@@ -226,7 +240,13 @@ function ConcludeAction({ shipAllowed }: { shipAllowed: boolean }) {
  * Guardrails deliberately do not gate, so a breach can sit beside a clean gate.
  * Naming it here is the difference between a decision and an accident.
  */
-function GuardrailAdvisory({ guardrails }: { guardrails: readonly GuardrailResult[] }) {
+function GuardrailAdvisory({
+  guardrails,
+  metricNames,
+}: {
+  guardrails: readonly GuardrailResult[];
+  metricNames: MetricNames;
+}) {
   const breached = guardrails.filter((guardrail) => guardrail.is_breached === true);
   if (breached.length === 0) return null;
   return (
@@ -235,8 +255,9 @@ function GuardrailAdvisory({ guardrails }: { guardrails: readonly GuardrailResul
       data-testid="ship-guardrail-advisory"
     >
       {breached.length} Guardrail {breached.length === 1 ? "Metric is" : "Metrics are"} breached on
-      this Run: {breached.map((guardrail) => guardrail.metric_id).join(", ")}. A Guardrail breach
-      does not block the gate, so this decision would ship a known regression.
+      this Run:{" "}
+      {breached.map((guardrail) => metricDisplayName(guardrail.metric_id, metricNames)).join(", ")}.
+      A Guardrail breach does not block the gate, so this decision would ship a known regression.
     </p>
   );
 }

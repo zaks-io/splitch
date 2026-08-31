@@ -1,3 +1,4 @@
+import type { Metric } from "@splitch/contracts";
 import type { PanelExperimentRun } from "@splitch/control-plane-sdk/panel-experiments";
 import { useSuspenseQuery } from "@tanstack/react-query";
 import { experimentResultsQuery } from "#lib/experiments/experiments-query";
@@ -21,11 +22,13 @@ export function ExperimentResultsPanel({
   appId,
   environmentId,
   experimentId,
+  metrics,
   run,
 }: {
   appId: string;
   environmentId: string;
   experimentId: string;
+  metrics: readonly Pick<Metric, "id" | "name">[];
   run: PanelExperimentRun | undefined;
 }) {
   if (!run) return <ExperimentResultsEmpty />;
@@ -34,6 +37,7 @@ export function ExperimentResultsPanel({
       appId={appId}
       environmentId={environmentId}
       experimentId={experimentId}
+      metrics={metrics}
       run={run}
     />
   );
@@ -43,11 +47,13 @@ function ExperimentResultsForRun({
   appId,
   environmentId,
   experimentId,
+  metrics,
   run,
 }: {
   appId: string;
   environmentId: string;
   experimentId: string;
+  metrics: readonly Pick<Metric, "id" | "name">[];
   run: PanelExperimentRun;
 }) {
   const { data } = useSuspenseQuery(
@@ -66,5 +72,5 @@ function ExperimentResultsForRun({
       />
     );
   }
-  return <ExperimentResults results={data} run={run} />;
+  return <ExperimentResults metrics={metrics} results={data} run={run} />;
 }
