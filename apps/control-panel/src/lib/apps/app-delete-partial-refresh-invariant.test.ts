@@ -34,9 +34,9 @@ describe("partial App deletion read-back", () => {
     expect(partialOutcome).toContain(
       "setError(await partialDeleteError(outcome, onPartialDelete))",
     );
-    expect(recovery.indexOf("await refresh()")).toBeLessThan(
-      recovery.indexOf("This page was refreshed."),
-    );
+    const refreshCall = recovery.indexOf("await refresh()");
+    expect(refreshCall).toBeGreaterThan(-1);
+    expect(refreshCall).toBeLessThan(recovery.indexOf("This page was refreshed."));
     expect(recovery).toContain("reload: false");
     expect(recovery).toContain("Reload this page before retrying.");
     expect(recovery).toContain("reload: true");
