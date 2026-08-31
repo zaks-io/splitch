@@ -1,8 +1,9 @@
-import type {
-  ConvexExposureVerificationBatchRequest,
-  ConvexExposureVerificationBatchResult,
-  ConvexExposureVerificationRequest,
-  ConvexExposureVerificationResult,
+import {
+  type ConvexExposureVerificationBatchRequest,
+  type ConvexExposureVerificationBatchResult,
+  type ConvexExposureVerificationRequest,
+  ConvexExposureVerificationRequestSchema,
+  type ConvexExposureVerificationResult,
 } from "@splitch/contracts";
 import type { Repository } from "@splitch/db";
 import { loadExposureVerificationConfigs } from "./exposure-verification-batch";
@@ -18,7 +19,7 @@ export async function loadCloudflareExposureVerificationConfig(
   repo: Repository,
   input: ConvexExposureVerificationRequest,
 ): Promise<ConvexExposureVerificationResult> {
-  const { appId, environmentId, ...item } = input;
+  const { appId, environmentId, ...item } = ConvexExposureVerificationRequestSchema.parse(input);
   const [result] = await loadCloudflareExposureVerificationConfigs(repo, {
     appId,
     environmentId,

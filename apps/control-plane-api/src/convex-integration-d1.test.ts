@@ -1,6 +1,7 @@
 import { createRepository, envScope } from "@splitch/db";
 import { createLocalD1 } from "@splitch/db/test-d1";
 import { describe, expect, it, vi } from "vitest";
+import { loadCloudflareExposureVerificationConfig } from "./cloudflare-exposure-verification";
 import {
   loadConvexExposureVerificationConfig,
   loadConvexExposureVerificationConfigs,
@@ -36,6 +37,12 @@ describe("Convex integration D1 transaction", () => {
           .bind("flag_1", "app_1", "checkout", "Checkout", now, now),
       ]);
       const repo = createRepository(local.d1);
+      await expect(
+        loadConvexExposureVerificationConfig(repo, null as never),
+      ).rejects.toThrowError();
+      await expect(
+        loadCloudflareExposureVerificationConfig(repo, null as never),
+      ).rejects.toThrowError();
       await repo.convex.createInstallation(envScope("app_1", "env_1"), {
         installationId: "00000000-0000-4000-8000-000000000001",
         callbackUrl: "https://example.convex.site/integrations/splitch/configuration",
