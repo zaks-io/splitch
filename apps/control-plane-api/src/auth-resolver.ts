@@ -7,6 +7,7 @@ import type { AuthResolver } from "@splitch/worker-runtime";
 import { parseControlPanelBindingOperation } from "./control-panel-operation";
 import type { JwksVerifier } from "./jwks-verify";
 import type { PanelDelegationReplayStore } from "./panel-identity-replay";
+import { resolvePanelResourcePrincipal } from "./panel-resource-principal";
 import type { PanelSessionAccess } from "./panel-session-access";
 import { deriveBinding } from "./scope-binding";
 import type { PanelSessionStore, SessionStore } from "./session-store";
@@ -304,7 +305,7 @@ async function resolveDelegatedPrincipal(
   if (!("appId" in operation)) {
     throw new Error(`control-plane: no authority derivation for operation ${operation.id}`);
   }
-  return resolvePanelResourcePrincipal(operation, actorId, panelAccess);
+  return resolvePanelResourcePrincipal(operation, actorId, panelAccess, PANEL_AUTH_DOOR);
 }
 
 async function resolveBoundedPanelSessionPrincipal(
@@ -365,50 +366,6 @@ async function resolvePanelOrgPrincipal(
       scopes: [`org:${access.orgId}:${access.orgRole}`],
       orgId: access.orgId,
       appId: null,
-      environmentId: null,
-      authDoor: PANEL_AUTH_DOOR,
-    },
-  };
-}
-
-/**
- * Selected on the App id rather than by excluding a list of ids, so a new
- * operation that names no App cannot land here by default and be co-scoped
- * against an `operation.appId` it does not have.
- */
-type AppScopedPanelOperation = Extract<
-  NonNullable<ReturnType<typeof parseControlPanelBindingOperation>>,
-  { appId: string }
->;
-
-async function resolvePanelResourcePrincipal(
-  operation: AppScopedPanelOperation,
-  actorId: string,
-  panelAccess?: PanelSessionAccess,
-) {
-  if (!panelAccess) return null;
-  const environmentId = "environmentId" in operation ? operation.environmentId : undefined;
-  const access = await panelAccess.authorizeApp(actorId, operation.appId, environmentId);
-  if (!access) {
-    return {
-      ok: false as const,
-      reason: "UNAUTHORIZED" as const,
-      error: {
-        code: "FORBIDDEN" as const,
-        message: "live App membership and resource access are required",
-        details: {},
-      },
-    };
-  }
-
-  return {
-    ok: true as const,
-    principal: {
-      kind: "control-plane-token" as const,
-      id: actorId,
-      scopes: [`org:${access.orgId}:${access.orgRole}`, `app:${access.appId}:${access.appRole}`],
-      orgId: access.orgId,
-      appId: access.appId,
       environmentId: null,
       authDoor: PANEL_AUTH_DOOR,
     },

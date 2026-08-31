@@ -48,10 +48,10 @@ export function AppDeleteCeremony({
     }
     if (outcome.kind === "cleanup-pending") {
       setError({
-        message: `${outcome.message} The App was deleted, but cleanup did not finish. Retry deletion to finish cleanup.`,
+        message: `${outcome.message} The App was deleted, but cleanup could not be confirmed. Retry deletion to finish or confirm cleanup.`,
         partial: true,
         reload: false,
-        title: "App cleanup incomplete",
+        title: "App cleanup unconfirmed",
       });
       return;
     }

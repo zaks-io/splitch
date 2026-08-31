@@ -182,6 +182,8 @@ export type PanelAppDeleteResult =
 
 type PendingAppDelete = Extract<AppsDeleteOutput, { deleted: false; force: true }>;
 
+class RepeatedDeleteApprovalError extends Error {}
+
 export function createPanelAppSettingsClient(options: {
   fetch: typeof fetch;
   baseUrl?: string;
@@ -254,7 +256,12 @@ async function continuePanelAppDelete(
             error instanceof Error
               ? error.message
               : "App deletion stopped after partially deleting the App.",
-          details: { fault: "panel_app_delete_partial_failure" },
+          details: {
+            fault:
+              error instanceof RepeatedDeleteApprovalError
+                ? "panel_app_delete_repeated_approval"
+                : "panel_app_delete_partial_failure",
+          },
         },
       },
       removed,
@@ -319,7 +326,7 @@ async function reviewDeleteApprovals(
 ): Promise<Extract<ControlPlaneOperationResult, { ok: false }> | null> {
   for (const approval of approvals) {
     if (reviewed.has(approval.approvalRequestId)) {
-      throw new Error(
+      throw new RepeatedDeleteApprovalError(
         `The Control Plane returned Approval Request ${approval.approvalRequestId} after Review already applied it.`,
       );
     }

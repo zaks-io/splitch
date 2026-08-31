@@ -48,8 +48,8 @@ describe("partial App deletion read-back", () => {
 
   it("keeps post-boundary cleanup retryable without claiming the App remains", () => {
     expect(ceremony).toContain('if (outcome.kind === "cleanup-pending")');
-    expect(ceremony).toContain("The App was deleted, but cleanup did not finish.");
-    expect(ceremony).toContain("Retry deletion to finish cleanup.");
+    expect(ceremony).toContain("The App was deleted, but cleanup could not be confirmed.");
+    expect(ceremony).toContain("Retry deletion to finish or confirm cleanup.");
   });
 
   it("resumes post-boundary cleanup with a second forced DELETE before resync", () => {
@@ -58,13 +58,12 @@ describe("partial App deletion read-back", () => {
       "export const deleteControlPanelApp",
       "\n\nexport const addControlPanelAppMember",
     );
-    const readBack = handler.indexOf("authorized.client.read({ appId: data.appId })");
     const resume = handler.indexOf(
       "authorized.client.deleteApp({ appId: data.appId, force: true })",
     );
 
-    expect(readBack).toBeGreaterThan(-1);
-    expect(resume).toBeGreaterThan(readBack);
+    expect(resume).toBeGreaterThan(-1);
+    expect(handler).not.toContain("authorized.client.read({ appId: data.appId })");
     expect(handler).toContain("authorized.resyncSession");
   });
 });

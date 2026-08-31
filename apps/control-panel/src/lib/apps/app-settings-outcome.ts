@@ -1,8 +1,5 @@
 import type { ControlPlaneOperationResult } from "@splitch/control-plane-sdk";
-import type {
-  PanelAppDeleteProgress,
-  PanelAppDeleteResult,
-} from "@splitch/control-plane-sdk/panel-app-settings";
+import type { PanelAppDeleteResult } from "@splitch/control-plane-sdk/panel-app-settings";
 import { type ResyncRemedy, resyncRemedy } from "#lib/live-updates/resync-remedy";
 
 /**
@@ -26,13 +23,11 @@ export type AppSettingsMutationResult<T> =
       readonly sessionResync: SessionResync;
     });
 
-type PartialDeleteFailure = Extract<PanelAppDeleteResult, { ok: false }> & {
-  readonly partialDelete: PanelAppDeleteProgress;
-};
+type DeleteFailure = Extract<PanelAppDeleteResult, { ok: false }>;
 
 export type AppDeleteSettlementResult =
-  | Extract<PanelAppDeleteResult, { ok: false }>
-  | (PartialDeleteFailure & { readonly appDeleted: true })
+  | DeleteFailure
+  | (DeleteFailure & { readonly appDeleted: true })
   | (Extract<PanelAppDeleteResult, { ok: true }> & {
       readonly sessionResync: SessionResync;
     });
@@ -59,55 +54,84 @@ export async function settleAppMutation<T>(
 
 /**
  * A forced cascade can cross the App deletion boundary before a later cleanup
- * or response fails. APP_NOT_FOUND proves the boundary crossed, so the same
- * actor resumes required cleanup before deletion is reported as complete.
+ * or response fails. One retry lets the same actor resume the durable deletion
+ * saga; only the resumed response may prove that the App is gone.
  */
 export async function settleAppDelete(
   result: PanelAppDeleteResult,
-  readBack: () => Promise<ControlPlaneOperationResult<unknown>>,
   resume: () => Promise<PanelAppDeleteResult>,
   resync: () => Promise<void>,
 ): Promise<AppDeleteSettlementResult> {
   if (result.ok) {
     return settleAppMutation(result, result.data.deleted === true ? resync : async () => {});
   }
-  const partialDelete = result.partialDelete;
-  if (!partialDelete) return result;
-  const partialResult: PartialDeleteFailure = { ...result, partialDelete };
-
-  const existence = await readAppExistence(readBack);
-  if (existence !== "deleted") return result;
+  if (!shouldResumeDelete(result)) return committedDeleteFailure(result);
 
   let resumed: PanelAppDeleteResult;
   try {
     resumed = await resume();
   } catch {
-    return afterDeleteBoundary(partialResult, result);
+    return committedDeleteFailure(result);
   }
-  if (!resumed.ok) return afterDeleteBoundary(partialResult, resumed);
-  if (resumed.data.deleted !== true) return afterDeleteBoundary(partialResult, result);
+  if (!resumed.ok) {
+    const combined = combinePartialDelete(result, resumed);
+    return deleteCommitted(result) || deleteCommitted(resumed)
+      ? { ...combined, appDeleted: true }
+      : combined;
+  }
+  if (resumed.data.deleted !== true) return result;
   return settleAppMutation(resumed, resync);
 }
 
-async function readAppExistence(
-  readBack: () => Promise<ControlPlaneOperationResult<unknown>>,
-): Promise<"exists" | "deleted" | "unknown"> {
-  try {
-    const result = await readBack();
-    if (result.ok) return "exists";
-    return result.error.code === "APP_NOT_FOUND" ? "deleted" : "unknown";
-  } catch {
-    return "unknown";
-  }
+function shouldResumeDelete(result: DeleteFailure): boolean {
+  return (
+    result.error.code === "SERVICE_UNAVAILABLE" ||
+    errorDetail(result, "fault") === "panel_app_delete_partial_failure"
+  );
 }
 
-function afterDeleteBoundary(
-  original: PartialDeleteFailure,
-  latest: Extract<PanelAppDeleteResult, { ok: false }>,
-): PartialDeleteFailure & { readonly appDeleted: true } {
+function errorDetail(result: Extract<PanelAppDeleteResult, { ok: false }>, key: string): unknown {
+  return (result.error.details as Record<string, unknown>)[key];
+}
+
+function deleteCommitted(result: DeleteFailure): boolean {
+  return errorDetail(result, "mutationCommitted") === true;
+}
+
+function committedDeleteFailure(
+  result: DeleteFailure,
+): DeleteFailure | (DeleteFailure & { readonly appDeleted: true }) {
+  return deleteCommitted(result) ? { ...result, appDeleted: true } : result;
+}
+
+function combinePartialDelete(original: DeleteFailure, latest: DeleteFailure): DeleteFailure {
+  const originalProgress = original.partialDelete;
+  const latestProgress = latest.partialDelete;
+  if (!originalProgress) return latest;
+  if (!latestProgress) return { ...latest, partialDelete: originalProgress };
   return {
     ...latest,
-    partialDelete: original.partialDelete,
-    appDeleted: true,
+    partialDelete: {
+      removed: uniqueBy(
+        [...originalProgress.removed, ...latestProgress.removed],
+        ({ childType, id }) => `${childType}:${id}`,
+      ),
+      appliedApprovalRequestIds: [
+        ...new Set([
+          ...originalProgress.appliedApprovalRequestIds,
+          ...latestProgress.appliedApprovalRequestIds,
+        ]),
+      ],
+    },
   };
+}
+
+function uniqueBy<T>(items: readonly T[], keyFor: (item: T) => string): T[] {
+  const known = new Set<string>();
+  return items.filter((item) => {
+    const key = keyFor(item);
+    if (known.has(key)) return false;
+    known.add(key);
+    return true;
+  });
 }

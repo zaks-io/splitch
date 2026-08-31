@@ -1,12 +1,11 @@
-import { describe, expect, it } from "vitest";
-import { createApp } from "./app";
-import type { AuthResolver, RateLimiter } from "@splitch/worker-runtime";
 import { createRepository } from "@splitch/db";
-import { afterEach, beforeEach } from "vitest";
-import { type LocalBindings, makeLocalBindings } from "./test-fixtures";
+import type { AuthResolver, RateLimiter } from "@splitch/worker-runtime";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { createApp } from "./app";
+import { makeControlPlaneAuthResolver } from "./auth-resolver";
 import type { EnvironmentExposureStatusCleanupInput } from "./environment-exposure-status-cleanup";
 import type { HoldoverWriteOutboxCleanup } from "./holdover-write-outbox-cleanup";
-import { makeControlPlaneAuthResolver } from "./auth-resolver";
+import { type LocalBindings, makeLocalBindings } from "./test-fixtures";
 
 const APP_ID = "app_finalize_resume";
 const ORG_ID = "org_finalize_resume";
@@ -39,7 +38,7 @@ afterEach(async () => bindings.dispose());
 describe("App delete public finalize resume after D1 cascade", () => {
   it("DELETE retry after finalize failure completes without cancel/rollback", async () => {
     const phases: string[] = [];
-    let finalizeFailsRemaining = 1;
+    let finalizeFailsRemaining = 2;
     const holdover: HoldoverWriteOutboxCleanup = {
       async prepare() {
         phases.push("prepare");
@@ -76,8 +75,11 @@ describe("App delete public finalize resume after D1 cascade", () => {
     expect(phases).not.toContain("cancel");
 
     const retry = await deleteRequest(app);
-    expect(retry.status).toBe(200);
-    expect(await retry.json()).toEqual({ deleted: true });
+    expect(retry.status).toBe(503);
+    expect(await retry.json()).toMatchObject({
+      code: "SERVICE_UNAVAILABLE",
+      details: { mutationCommitted: true },
+    });
     expect(phases).toEqual([
       "prepare",
       "mark-d1-deleted",
@@ -86,6 +88,10 @@ describe("App delete public finalize resume after D1 cascade", () => {
       "finalize",
     ]);
     expect(phases.filter((phase) => phase === "cancel")).toEqual([]);
+
+    const finalRetry = await deleteRequest(app);
+    expect(finalRetry.status).toBe(200);
+    expect(await finalRetry.json()).toEqual({ deleted: true });
     expect(exposures).toHaveLength(1);
 
     const completedRetry = await deleteRequest(app);

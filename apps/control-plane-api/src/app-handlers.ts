@@ -110,7 +110,7 @@ async function resumeOrRethrowAppGone(
   try {
     return await resumeHoldoverFinalizeAfterAppGone(deps, appId, principal, requestId);
   } catch (cause) {
-    const cleanupError = renderAppDeleteCleanupError(cause, requestId);
+    const cleanupError = renderAppDeleteCleanupError(cause, requestId, true);
     if (cleanupError) return cleanupError;
     throw cause;
   }

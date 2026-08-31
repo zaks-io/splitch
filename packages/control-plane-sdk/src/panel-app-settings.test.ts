@@ -149,7 +149,7 @@ describe("Panel App Settings contract", () => {
       error: {
         code: "INTERNAL_SERVER_ERROR",
         message: `The Control Plane returned Approval Request ${appliedDeleteApproval.id} after Review already applied it.`,
-        details: { fault: "panel_app_delete_partial_failure" },
+        details: { fault: "panel_app_delete_repeated_approval" },
       },
       partialDelete: {
         removed: pendingDelete.removed,
@@ -157,6 +157,45 @@ describe("Panel App Settings contract", () => {
       },
     });
     expect(requests.map(({ method }) => method)).toEqual(["DELETE", "POST", "DELETE"]);
+  });
+});
+
+describe("Panel App delete cleanup state", () => {
+  it("preserves the committed mutation marker when cleanup is unavailable", async () => {
+    let deleteCount = 0;
+    const fetcher = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const incoming = new Request(input as RequestInfo, init);
+      if (incoming.method === "POST") return Response.json(appliedDeleteApproval);
+      deleteCount += 1;
+      return deleteCount === 1
+        ? Response.json(pendingDelete)
+        : Response.json(
+            {
+              code: "SERVICE_UNAVAILABLE",
+              message: "Exposure status cleanup is unavailable",
+              details: { retryAfterMs: 30_000, mutationCommitted: true },
+            },
+            { status: 503 },
+          );
+    });
+    const client = createPanelAppSettingsClient({
+      baseUrl: "https://control-plane.test",
+      fetch: fetcher,
+    });
+
+    await expect(client.deleteApp({ appId: "app_checkout", force: true })).resolves.toEqual({
+      ok: false,
+      status: 503,
+      error: {
+        code: "SERVICE_UNAVAILABLE",
+        message: "Exposure status cleanup is unavailable",
+        details: { retryAfterMs: 30_000, mutationCommitted: true },
+      },
+      partialDelete: {
+        removed: pendingDelete.removed,
+        appliedApprovalRequestIds: [appliedDeleteApproval.id],
+      },
+    });
   });
 });
 

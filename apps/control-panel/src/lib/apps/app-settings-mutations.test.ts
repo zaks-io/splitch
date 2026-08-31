@@ -34,7 +34,7 @@ describe("App Settings mutation transport failures", () => {
       error: {
         code: "INTERNAL_SERVER_ERROR",
         message: "The Control Plane returned an Approval Request after Review already applied it.",
-        details: { fault: "panel_app_delete_partial_failure" },
+        details: { fault: "panel_app_delete_repeated_approval" },
       },
       partialDelete: {
         removed: [{ childType: "experiments", id: "exp_checkout" }],
@@ -57,10 +57,6 @@ describe("App Settings mutation transport failures", () => {
         code: "SERVICE_UNAVAILABLE",
         message: "Exposure status cleanup is unavailable",
         details: { retryAfterMs: 30_000 },
-      },
-      partialDelete: {
-        removed: [{ childType: "experiments", id: "exp_checkout" }],
-        appliedApprovalRequestIds: ["apr_checkout"],
       },
       appDeleted: true,
     } as Awaited<ReturnType<typeof deleteControlPanelApp>>);

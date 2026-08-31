@@ -73,7 +73,7 @@ describe("settleAppDelete", () => {
     },
   } as const;
 
-  it("completes deletion and resyncs when read-back proves the App is gone", async () => {
+  it("completes deletion and resyncs when the retry resumes the saga", async () => {
     const resume = vi.fn(async () => ({
       ok: true as const,
       status: 200,
@@ -81,16 +81,7 @@ describe("settleAppDelete", () => {
     }));
     const resync = vi.fn(async () => {});
 
-    const settled = await settleAppDelete(
-      partial,
-      async () => ({
-        ok: false,
-        status: 404,
-        error: { code: "APP_NOT_FOUND", message: "App not found", details: {} },
-      }),
-      resume,
-      resync,
-    );
+    const settled = await settleAppDelete(partial, resume, resync);
 
     expect(settled).toEqual({
       ok: true,
@@ -104,28 +95,19 @@ describe("settleAppDelete", () => {
     expect(resync).toHaveBeenCalledOnce();
   });
 
-  it("keeps cleanup retryable when the App is gone but finalize still fails", async () => {
+  it("keeps cleanup retryable when the resumed response proves the App is gone", async () => {
     const resumedFailure = {
       ok: false,
       status: 503,
       error: {
         code: "SERVICE_UNAVAILABLE",
         message: "Exposure status cleanup is unavailable",
-        details: { retryAfterMs: 30_000 },
+        details: { retryAfterMs: 30_000, mutationCommitted: true },
       },
     } as const;
     const resync = vi.fn(async () => {});
 
-    const settled = await settleAppDelete(
-      partial,
-      async () => ({
-        ok: false,
-        status: 404,
-        error: { code: "APP_NOT_FOUND", message: "App not found", details: {} },
-      }),
-      async () => resumedFailure,
-      resync,
-    );
+    const settled = await settleAppDelete(partial, async () => resumedFailure, resync);
 
     expect(settled).toEqual({
       ...resumedFailure,
@@ -135,36 +117,54 @@ describe("settleAppDelete", () => {
     expect(resync).not.toHaveBeenCalled();
   });
 
-  it("keeps the partial result when read-back cannot determine existence", async () => {
-    const resume = vi.fn();
+  it("keeps the partial result when the retry response is lost", async () => {
+    const resume = vi.fn(async () => {
+      throw new TypeError("response was lost");
+    });
     const resync = vi.fn(async () => {});
 
-    const settled = await settleAppDelete(
-      partial,
-      async () => {
-        throw new TypeError("response was lost");
-      },
-      resume,
-      resync,
-    );
+    const settled = await settleAppDelete(partial, resume, resync);
 
     expect(settled).toBe(partial);
-    expect(resume).not.toHaveBeenCalled();
+    expect(resume).toHaveBeenCalledOnce();
     expect(resync).not.toHaveBeenCalled();
   });
 
-  it("keeps the partial result when read-back confirms the App still exists", async () => {
+  it("keeps a committed cleanup failure actionable without partial progress", async () => {
+    const committed = {
+      ok: false,
+      status: 503,
+      error: {
+        code: "SERVICE_UNAVAILABLE",
+        message: "Exposure status cleanup is unavailable",
+        details: { retryAfterMs: 30_000, mutationCommitted: true },
+      },
+    } as const;
+    const resume = vi.fn(async () => {
+      throw new TypeError("response was lost");
+    });
+
+    await expect(settleAppDelete(committed, resume, async () => {})).resolves.toEqual({
+      ...committed,
+      appDeleted: true,
+    });
+  });
+
+  it("does not retry a repeated Approval Request invariant", async () => {
+    const invariant = {
+      ...partial,
+      error: {
+        ...partial.error,
+        code: "INTERNAL_SERVER_ERROR",
+        details: { fault: "panel_app_delete_repeated_approval" },
+      },
+    } as const;
     const resume = vi.fn();
     const resync = vi.fn(async () => {});
 
-    const settled = await settleAppDelete(
-      partial,
-      async () => ({ ok: true, status: 200, data: { app: { id: "app_1" } } }),
-      resume,
-      resync,
-    );
+    const settled = await settleAppDelete(invariant, resume, resync);
 
-    expect(settled).toBe(partial);
+    expect(settled).toBe(invariant);
     expect(resume).not.toHaveBeenCalled();
     expect(resync).not.toHaveBeenCalled();
   });

@@ -53,7 +53,6 @@ export const deleteControlPanelApp = createServerFn({ method: "POST" })
     const result = await authorized.client.deleteApp(data);
     return settleAppDelete(
       result,
-      () => authorized.client.read({ appId: data.appId }),
       () => authorized.client.deleteApp({ appId: data.appId, force: true }),
       authorized.resyncSession,
     );
