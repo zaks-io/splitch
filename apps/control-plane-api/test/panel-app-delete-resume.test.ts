@@ -68,7 +68,8 @@ describe("Signed Control Panel App deletion resume", () => {
     const entrypoint = new SignedControlPanelEntrypoint(testCtx, testEnv);
 
     const dryRun = await signedDelete(entrypoint, OWNER, "nonce_delete_resume_dry_run_1234", true);
-    expect(dryRun.status).toBe(403);
+    expect(dryRun.status).toBe(404);
+    expect(await dryRun.json()).toMatchObject({ code: "APP_NOT_FOUND" });
     expect(evaluationFetch).not.toHaveBeenCalled();
     expect(analysisFetch).not.toHaveBeenCalled();
 

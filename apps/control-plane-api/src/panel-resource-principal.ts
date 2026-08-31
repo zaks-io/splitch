@@ -13,12 +13,11 @@ export async function resolvePanelResourcePrincipal(
   actorId: string,
   panelAccess: PanelSessionAccess | undefined,
   authDoor: AuthDoor,
-  allowAppDeletionResume: boolean,
 ) {
   if (!panelAccess) return null;
   const environmentId = "environmentId" in operation ? operation.environmentId : undefined;
   const access = await panelAccess.authorizeApp(actorId, operation.appId, environmentId);
-  if (!access && operation.id === "apps_delete" && allowAppDeletionResume) {
+  if (!access && operation.id === "apps_delete") {
     const resumeAccess = await panelAccess.authorizeAppDeletionResume(actorId, operation.appId);
     if (resumeAccess) {
       return {

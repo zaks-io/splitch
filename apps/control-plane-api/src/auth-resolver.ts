@@ -231,14 +231,7 @@ async function resolvePanelPrincipal(
   ) {
     return null;
   }
-  const allowAppDeletionResume =
-    operation.id !== "apps_delete" || new URL(request.url).searchParams.get("dryRun") !== "true";
-  return resolveDelegatedPrincipal(
-    operation,
-    delegation.actorId,
-    panelAccess,
-    allowAppDeletionResume,
-  );
+  return resolveDelegatedPrincipal(operation, delegation.actorId, panelAccess);
 }
 
 /** Authority for a verified delegation, by what the operation names. */
@@ -246,7 +239,6 @@ async function resolveDelegatedPrincipal(
   operation: NonNullable<ReturnType<typeof parseControlPanelBindingOperation>>,
   actorId: string,
   panelAccess: PanelSessionAccess | undefined,
-  allowAppDeletionResume: boolean,
 ) {
   if (operation.id === "apps_create") {
     return {
@@ -313,13 +305,7 @@ async function resolveDelegatedPrincipal(
   if (!("appId" in operation)) {
     throw new Error(`control-plane: no authority derivation for operation ${operation.id}`);
   }
-  return resolvePanelResourcePrincipal(
-    operation,
-    actorId,
-    panelAccess,
-    PANEL_AUTH_DOOR,
-    allowAppDeletionResume,
-  );
+  return resolvePanelResourcePrincipal(operation, actorId, panelAccess, PANEL_AUTH_DOOR);
 }
 
 async function resolveBoundedPanelSessionPrincipal(

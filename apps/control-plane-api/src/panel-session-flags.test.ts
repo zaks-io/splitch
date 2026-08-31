@@ -83,7 +83,15 @@ describe("Control Panel Flags principal", () => {
     const deletion = await resolver(await panelRequest("DELETE", "/apps/app_1"));
 
     expect(read).toMatchObject({ ok: false, error: { code: "FORBIDDEN" } });
-    expect(dryRun).toMatchObject({ ok: false, error: { code: "FORBIDDEN" } });
+    expect(dryRun).toMatchObject({
+      ok: true,
+      principal: {
+        id: "user_1",
+        scopes: ["app:app_1:owner"],
+        orgId: null,
+        appId: "app_1",
+      },
+    });
     expect(deletion).toMatchObject({
       ok: true,
       principal: {
@@ -93,8 +101,9 @@ describe("Control Panel Flags principal", () => {
         appId: "app_1",
       },
     });
-    expect(authorizeAppDeletionResume).toHaveBeenCalledOnce();
-    expect(authorizeAppDeletionResume).toHaveBeenCalledWith("user_1", "app_1");
+    expect(authorizeAppDeletionResume).toHaveBeenCalledTimes(2);
+    expect(authorizeAppDeletionResume).toHaveBeenNthCalledWith(1, "user_1", "app_1");
+    expect(authorizeAppDeletionResume).toHaveBeenNthCalledWith(2, "user_1", "app_1");
   });
 
   it("does not redeem a panel delegation outside the named entrypoint mode", async () => {
