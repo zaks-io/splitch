@@ -3,7 +3,6 @@ import { serviceUnavailable } from "./errors";
 import { claimEvaluationUsageEventId } from "./evaluation-usage-replay";
 import type { EvaluationUsageReplayWindow } from "./evaluation-usage-replay-window";
 import { stringField, stringValue } from "./payload";
-import { sendNdjsonBatch } from "./tinybird-microbatch";
 import type { CredentialScope, Env, Outcome, Payload, RunScope, TinybirdDelivery } from "./types";
 
 const rawEventsDatasource = "raw_events";
@@ -257,11 +256,6 @@ function invalidEvaluationUsageField(field: string): ErrorResponse {
     message: `${field} is invalid`,
     details: { issues: [{ path: ["body", field], message: "invalid value" }] },
   };
-}
-
-export async function appendRawEvent(row: Record<string, unknown>, delivery: TinybirdDelivery) {
-  const outcome = await sendNdjsonBatch(JSON.stringify(row), 1, delivery);
-  if (outcome.kind !== "delivered") throw new Error(`Tinybird append failed: ${outcome.reason}`);
 }
 
 async function exposureDedupKey(

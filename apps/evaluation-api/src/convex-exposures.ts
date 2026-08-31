@@ -36,11 +36,11 @@ import type {
 } from "./exposure-redemption-claim-core";
 
 export interface ConvexExposureConfigurationResolver {
-  resolve(
+  resolveBatch(
     principal: Principal,
-    item: ConvexServerExposureItem,
+    items: readonly ConvexServerExposureItem[],
     requestId: string,
-  ): Promise<ConvexExposureVerificationResult>;
+  ): Promise<readonly ConvexExposureVerificationResult[]>;
 }
 
 interface ConvexExposureDeps extends EvaluatePathDeps {
@@ -94,24 +94,40 @@ async function handleBatch(
     identityAdmission: admitted.admission,
   };
   const body = ConvexServerExposureRequestSchema.parse(inputBody(input));
-  const results: ConvexServerExposureResponse["results"] = [];
-  for (const item of body.exposures) {
-    results.push(
-      await verifyAndIngest(resolver, sourceKind, principal, item, requestId, requestDeps),
-    );
-  }
+  const verifications = await resolver.resolveBatch(principal, body.exposures, requestId);
+  const results = await settleVerifiedBatch(sourceKind, body.exposures, verifications, requestDeps);
   return Response.json(ConvexServerExposureResponseSchema.parse({ results }), { status: 202 });
 }
 
-async function verifyAndIngest(
-  resolver: ConvexExposureConfigurationResolver,
+async function settleVerifiedBatch(
   sourceKind: "convex" | "cloudflare",
-  principal: Principal,
+  exposures: readonly ConvexServerExposureItem[],
+  verifications: readonly ConvexExposureVerificationResult[],
+  deps: AdmittedConvexExposureDeps,
+): Promise<ConvexServerExposureResponse["results"]> {
+  if (verifications.length !== exposures.length) {
+    throw new Error(
+      `evaluation-api: ${sourceKind} Exposure verification returned ${String(verifications.length)} results for ${String(exposures.length)} items`,
+    );
+  }
+  const results: ConvexServerExposureResponse["results"] = [];
+  for (let index = 0; index < exposures.length; index += 1) {
+    const item = exposures[index];
+    const verification = verifications[index];
+    if (!item || !verification) {
+      throw new Error(`evaluation-api: missing ${sourceKind} verification at index ${index}`);
+    }
+    results.push(await verifyAndIngest(verification, sourceKind, item, deps));
+  }
+  return results;
+}
+
+async function verifyAndIngest(
+  verification: ConvexExposureVerificationResult,
+  sourceKind: "convex" | "cloudflare",
   item: ConvexServerExposureItem,
-  requestId: string,
   deps: AdmittedConvexExposureDeps,
 ): Promise<ConvexServerExposureResponse["results"][number]> {
-  const verification = await resolver.resolve(principal, item, requestId);
   if (verification.status === "installation_not_found")
     return rejected(item.exposureId, installationNotFoundCode(sourceKind), false);
   if (verification.status === "configuration_not_found")

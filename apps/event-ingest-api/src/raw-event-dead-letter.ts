@@ -1,4 +1,5 @@
 import type { RawEventDatasource } from "./raw-event-queue-envelope";
+import type { Env } from "./types";
 
 export interface RawEventFailureSource {
   readonly message: Message<Record<string, unknown>>;
@@ -62,6 +63,15 @@ export function rawFailureChunks(
   }
   if (current.length > 0) chunks.push(current);
   return chunks;
+}
+
+export function requiredRawEventDeadLetterQueue(
+  env: Env,
+  datasource: RawEventDatasource,
+): Queue<Record<string, unknown>> {
+  const queue = datasource === "raw_events" ? env.RAW_EVENTS_DLQ : env.RAW_EVALUATIONS_DLQ;
+  if (!queue) throw new Error(`${datasource} dead-letter queue binding is unavailable`);
+  return queue;
 }
 
 function byteLength(value: string): number {

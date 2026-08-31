@@ -1,4 +1,4 @@
-import { listPushInstallations } from "./push-installation-list";
+import { listPushInstallations, listPushInstallationsByIds } from "./push-installation-list";
 import type { EnvScope } from "./scope";
 import { assertMintedScope } from "./scope";
 
@@ -84,6 +84,9 @@ export function makeCloudflareIntegrationRepo(d1: D1Database) {
         options,
       );
     },
+
+    listInstallationsByIds: (scope: EnvScope, installationIds: readonly string[]) =>
+      listCloudflareInstallationsByIds(d1, scope, installationIds),
 
     async createInstallation(
       scope: EnvScope,
@@ -226,6 +229,20 @@ export function makeCloudflareIntegrationRepo(d1: D1Database) {
       await finishCloudflareDelivery(d1, deliveryId, leaseOwner, input);
     },
   };
+}
+
+function listCloudflareInstallationsByIds(
+  d1: D1Database,
+  scope: EnvScope,
+  installationIds: readonly string[],
+) {
+  assertMintedScope(scope);
+  return listPushInstallationsByIds<CloudflareInstallationRow>(
+    d1,
+    scope,
+    INSTALLATION_SELECT,
+    installationIds,
+  );
 }
 
 const INSTALLATION_SELECT = `SELECT installation_id AS installationId, app_id AS appId,

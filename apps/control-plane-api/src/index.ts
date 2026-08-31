@@ -1,7 +1,7 @@
 import { WorkerEntrypoint } from "cloudflare:workers";
 import {
+  type ConvexExposureVerificationBatchRequest,
   type ConvexExposureVerificationRequest,
-  type ConvexExposureVerificationResult,
   routesDelegatedTo,
 } from "@splitch/contracts";
 import { createRepository } from "@splitch/db";
@@ -15,12 +15,8 @@ import {
   makeMcpDelegationAuthResolver,
   notDelegatedResponse,
 } from "@splitch/worker-runtime";
-import { createAnalysisResultsReader } from "./attention-analysis-reader";
 import { authJwksUri } from "./auth-jwks-config";
 import { makeControlPlaneAuthResolver } from "./auth-resolver";
-import { loadCloudflareExposureVerificationConfig } from "./cloudflare-exposure-verification";
-import { durableConfigStoreAccess } from "./config-store-access";
-import { durableAppIdentityResetAccess } from "./config-store-app-identity-access";
 import { ConfigStoreDurableObject } from "./config-store-do";
 import { parseControlPanelBindingOperation } from "./control-panel-operation";
 import { handleControlPlaneAppRequest } from "./control-plane-app-request";
@@ -30,26 +26,27 @@ import {
   requiredMcpDelegationSecret,
   requiredMcpReplayBinding,
 } from "./control-plane-runtime-config";
-import { loadConvexExposureVerificationConfig } from "./convex-exposure-verification";
 import { CredentialCacheBackfillDurableObject } from "./credential-cache-backfill-do";
-import {
-  CredentialCacheWriterDurableObject,
-  durableCredentialCacheWriterAccess,
-} from "./credential-cache-writer-do";
+import { CredentialCacheWriterDurableObject } from "./credential-cache-writer-do";
 import type { ControlPlaneApiEnv } from "./env";
+import {
+  loadCloudflareExposureVerificationConfigFromEnv,
+  loadCloudflareExposureVerificationConfigsFromEnv,
+  loadConvexExposureVerificationConfigFromEnv,
+  loadConvexExposureVerificationConfigsFromEnv,
+  resetCompromisedAppIdentityFromEnv,
+} from "./exposure-verification-entrypoint";
 import { controlPlaneHealthResponse } from "./health";
 import { handleCredentialCacheBackfillGate, handleLiveUpdateTestControl } from "./internal-routes";
 import { makeCachedJwksVerifier } from "./jwks-verify";
-import { makeSessionCacheMemberProfileResolver } from "./member-profile-cache";
-import { panelAppSettingsRead } from "./panel-app-settings";
 import { PanelDelegationReplayDurableObject } from "./panel-delegation-replay-do";
-import { handleSignedPanelExperiments } from "./panel-experiments-route";
-import { panelOverviewRead } from "./panel-overview";
-import { panelSettingsRead } from "./panel-settings";
 import { runControlPlaneScheduled } from "./scheduled";
 import { makeSessionStore } from "./session-store";
+import {
+  handleSignedControlPanelRequest,
+  type PanelProtocol,
+} from "./signed-control-panel-request";
 import { makeTokenMembershipAccess, withBearerMembershipCheck } from "./token-membership";
-import { unauthorized } from "./unauthorized";
 
 const handler = {
   async fetch(request, env, ctx): Promise<Response> {
@@ -122,27 +119,27 @@ export class EvaluationEntrypoint extends WorkerEntrypoint<ControlPlaneApiEnv> {
     );
   }
 
-  async loadConvexExposureVerificationConfig(
-    input: ConvexExposureVerificationRequest,
-  ): Promise<ConvexExposureVerificationResult> {
-    return loadConvexExposureVerificationConfig(createRepository(this.env.DB), input);
+  loadConvexExposureVerificationConfigs(input: ConvexExposureVerificationBatchRequest) {
+    return loadConvexExposureVerificationConfigsFromEnv(this.env, input);
   }
 
-  async loadCloudflareExposureVerificationConfig(
-    input: ConvexExposureVerificationRequest,
-  ): Promise<ConvexExposureVerificationResult> {
-    return loadCloudflareExposureVerificationConfig(createRepository(this.env.DB), input);
+  loadConvexExposureVerificationConfig(input: ConvexExposureVerificationRequest) {
+    return loadConvexExposureVerificationConfigFromEnv(this.env, input);
+  }
+
+  loadCloudflareExposureVerificationConfigs(input: ConvexExposureVerificationBatchRequest) {
+    return loadCloudflareExposureVerificationConfigsFromEnv(this.env, input);
+  }
+
+  loadCloudflareExposureVerificationConfig(input: ConvexExposureVerificationRequest) {
+    return loadCloudflareExposureVerificationConfigFromEnv(this.env, input);
   }
 
   resetCompromisedAppIdentity(appId: string, resetId: string): Promise<string> {
-    return durableAppIdentityResetAccess(this.env.CONFIG_STORE_WRITER).resetCompromisedAppIdentity(
-      appId,
-      resetId,
-    );
+    return resetCompromisedAppIdentityFromEnv(this.env, appId, resetId);
   }
 }
 
-type PanelProtocol = "none" | "signed" | "bounded-session";
 type AuthMode = PanelProtocol | "mcp";
 
 function bindingHandler(authMode: Exclude<AuthMode, "none">) {
@@ -229,91 +226,6 @@ async function handleRequest(
     repo,
     delegated: typeof authMode === "object",
   });
-}
-
-async function handleSignedControlPanelRequest(
-  request: Request,
-  env: ControlPlaneApiEnv,
-  protocol: PanelProtocol,
-  authResolver: ReturnType<typeof makeControlPlaneAuthResolver>,
-  repo: ReturnType<typeof createRepository>,
-): Promise<Response | null> {
-  return (
-    (await handleSignedPanelExperiments(request, env, protocol, authResolver)) ??
-    (await handleSignedPanelOverview(request, env, protocol, authResolver, repo)) ??
-    (await handleSignedPanelAppSettings(request, env, protocol, authResolver, repo)) ??
-    handleSignedPanelSettings(request, env, protocol, authResolver, repo)
-  );
-}
-
-async function handleSignedPanelAppSettings(
-  request: Request,
-  env: ControlPlaneApiEnv,
-  protocol: PanelProtocol,
-  authResolver: ReturnType<typeof makeControlPlaneAuthResolver>,
-  repo: ReturnType<typeof createRepository>,
-): Promise<Response | null> {
-  if (protocol !== "signed") return null;
-  const operation = parseControlPanelBindingOperation(request);
-  if (operation?.id !== "app_settings_get") return null;
-  const auth = await authResolver(request);
-  if (!auth.ok) return unauthorized();
-  return panelAppSettingsRead(
-    { repo, memberProfileResolver: makeSessionCacheMemberProfileResolver(env.SESSION_STORE) },
-    { appId: operation.appId, actorId: auth.principal.id },
-    request,
-  );
-}
-
-async function handleSignedPanelOverview(
-  request: Request,
-  env: ControlPlaneApiEnv,
-  protocol: PanelProtocol,
-  authResolver: ReturnType<typeof makeControlPlaneAuthResolver>,
-  repo: ReturnType<typeof createRepository>,
-): Promise<Response | null> {
-  if (protocol !== "signed") return null;
-  const operation = parseControlPanelBindingOperation(request);
-  if (operation?.id !== "overview_get") return null;
-  const auth = await authResolver(request);
-  if (!auth.ok) return unauthorized();
-  const configStore = durableConfigStoreAccess(env.CONFIG_STORE_WRITER, env.CONFIG_STORE);
-  return panelOverviewRead(
-    {
-      repo,
-      analysisResults: createAnalysisResultsReader(env.ANALYSIS_API, undefined, configStore),
-    },
-    {
-      actorId: auth.principal.id,
-      appId: operation.appId,
-      environmentId: operation.environmentId,
-    },
-  );
-}
-
-async function handleSignedPanelSettings(
-  request: Request,
-  env: ControlPlaneApiEnv,
-  protocol: PanelProtocol,
-  authResolver: ReturnType<typeof makeControlPlaneAuthResolver>,
-  repo: ReturnType<typeof createRepository>,
-): Promise<Response | null> {
-  // Keep this binding-only read narrow like handleSignedPanelExperiments; mutation
-  // routes still inherit the full createApp rate-limit and observability stack below.
-  if (protocol !== "signed") return null;
-  const operation = parseControlPanelBindingOperation(request);
-  if (operation?.id !== "settings_get") return null;
-  const auth = await authResolver(request);
-  if (!auth.ok) return unauthorized();
-  return panelSettingsRead(
-    {
-      repo,
-      credentialStore: env.CREDENTIAL_STORE,
-      credentialCacheWriter: durableCredentialCacheWriterAccess(env.CREDENTIAL_CACHE_WRITER),
-    },
-    operation,
-    auth.principal,
-  );
 }
 
 export {

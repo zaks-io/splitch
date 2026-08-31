@@ -1,15 +1,21 @@
 import { requirePlatformTarget } from "@splitch/contracts";
+import { createIngestPhaseTiming } from "./ingest-phase-timing";
 import { queueRetryDelaySeconds } from "./queue-retry";
-import { type RawEventFailureSource, rawFailureChunks } from "./raw-event-dead-letter";
+import {
+  type RawEventFailureSource,
+  rawFailureChunks,
+  requiredRawEventDeadLetterQueue,
+} from "./raw-event-dead-letter";
 import { admitRawEventPrivacy, completeRawEventPrivacy } from "./raw-event-privacy-delivery";
 import {
   parseRawEventEnvelope,
   type RawEventDatasource,
   type RawEventQueueEnvelope,
+  rawEventDatasourceForQueue,
 } from "./raw-event-queue-envelope";
 import {
+  emitRawEventBatchSettlement,
   emptyRawEventOutcomeCounts,
-  logRawEventBatchSettlement,
   type RawEventOutcomeCounts,
 } from "./raw-event-queue-telemetry";
 import {
@@ -39,15 +45,23 @@ export async function handleRawEventQueue(
   env: Env,
 ): Promise<void> {
   requirePlatformTarget(env.SPLITCH_PLATFORM_TARGET);
-  const queueDatasource = datasourceForQueue(batch.queue);
+  const queueDatasource = rawEventDatasourceForQueue(batch.queue);
+  const timing = createIngestPhaseTiming(env, {
+    route: "raw_queue_settlement",
+    stream: queueDatasource,
+  });
   const outcomes = emptyRawEventOutcomeCounts();
   try {
-    const groups = await admitBatch(batch.messages, queueDatasource, env, outcomes);
-    for (const [datasource, admitted] of groups) {
-      await deliverGroup(datasource, admitted, env, outcomes);
-    }
+    const groups = await timing.measure("admission", () =>
+      admitBatch(batch.messages, queueDatasource, env, outcomes),
+    );
+    await timing.measure("delivery", async () => {
+      for (const [datasource, admitted] of groups) {
+        await deliverGroup(datasource, admitted, env, outcomes);
+      }
+    });
   } finally {
-    logRawEventBatchSettlement(batch, queueDatasource, outcomes);
+    emitRawEventBatchSettlement(timing, batch, queueDatasource, outcomes);
   }
 }
 
@@ -165,12 +179,6 @@ async function settleMicrobatch(
   await transferTerminalFailure(datasource, items, outcome, env);
 }
 
-function datasourceForQueue(queue: string): RawEventDatasource {
-  if (queue.includes("raw-evaluations")) return "raw_evaluations";
-  if (queue.includes("raw-events")) return "raw_events";
-  throw new Error(`unknown raw event queue ${queue}`);
-}
-
 async function completeAdmission(item: AdmittedRawEvent, env: Env): Promise<void> {
   await completeRawEventPrivacy(item.envelope.datasource, item.envelope.row, item.deliveryId, env);
 }
@@ -251,7 +259,7 @@ async function transferTerminalFailure(
     markRawEventTerminal(env, item.envelope.row, item.deliveryId, terminal),
   );
   const chunks = rawFailureChunks(marked, terminal);
-  const queue = requiredDeadLetterQueue(env, datasource);
+  const queue = requiredRawEventDeadLetterQueue(env, datasource);
   for (let index = 0; index < chunks.length; index += 1) {
     const chunk = chunks[index] ?? [];
     try {
@@ -284,7 +292,7 @@ async function resumeTerminalFailure(
     const entry = rawFailureChunks([item], terminal)[0]?.[0];
     if (!entry) throw new Error("Raw event terminal failure envelope is unavailable");
     try {
-      await requiredDeadLetterQueue(env, item.envelope.datasource).send(entry.envelope);
+      await requiredRawEventDeadLetterQueue(env, item.envelope.datasource).send(entry.envelope);
       await markRawEventTransferred(env, item.envelope.row, item.deliveryId);
     } catch (error) {
       retry(item.message, error);
@@ -301,13 +309,4 @@ function retry(message: Message<Record<string, unknown>>, error: unknown): void 
     errorMessage: error instanceof Error ? error.message : "non-error rejection",
   });
   message.retry({ delaySeconds: queueRetryDelaySeconds(message.attempts, message.id) });
-}
-
-function requiredDeadLetterQueue(
-  env: Env,
-  datasource: RawEventDatasource,
-): Queue<Record<string, unknown>> {
-  const queue = datasource === "raw_events" ? env.RAW_EVENTS_DLQ : env.RAW_EVALUATIONS_DLQ;
-  if (!queue) throw new Error(`${datasource} dead-letter queue binding is unavailable`);
-  return queue;
 }

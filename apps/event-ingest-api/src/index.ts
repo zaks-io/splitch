@@ -28,13 +28,14 @@ import { EvaluationCommitOutboxDurableObject } from "./evaluation-commit-outbox"
 import { EvaluationUsageReplayWindowDurableObject } from "./evaluation-usage-replay-window";
 import { handleEvaluationIngest, handleIngest } from "./ingest";
 import { IngestAdmissionGateDurableObject } from "./ingest-admission-gate";
+import { createIngestPhaseTiming, ingestTimingOutcomeFor } from "./ingest-phase-timing";
 import { handleAuthorizedMetricEvent } from "./metric-event-ingest";
 import { MetricEventOutboxDurableObject } from "./metric-event-outbox";
 import { handleMetricEventQueue } from "./metric-event-queue";
-import { handleMetricEventReconciliationQueue } from "./metric-event-reconciliation";
 import { MetricEventRateLimitDurableObject } from "./metric-event-rate-limit";
-import { handleRawEventQueue } from "./raw-event-queue";
+import { handleMetricEventReconciliationQueue } from "./metric-event-reconciliation";
 import { makeMetricEventSaltStore } from "./metric-event-salt-store";
+import { handleRawEventQueue } from "./raw-event-queue";
 import type { Env } from "./types";
 
 const service = "splitch-event-ingest-api";
@@ -150,9 +151,19 @@ const delegatedHandler = {
     const identity = delegatedIdentityFor(request, metricEventRoutes);
     if (!identity) return notDelegatedResponse(request);
     recordRequest(observability, request, url, "metric-event-request");
-    const credential = await authenticateDelegatedDataPlaneCredential(identity, env);
-    if (!credential.ok) return renderError(credential.error);
-    return handleAuthorizedMetricEvent(request, env, credential.value);
+    const timing = createIngestPhaseTiming(env, {
+      route: "sdk_metric_event",
+      stream: "metric_events",
+    });
+    const credential = await timing.measure("auth", () =>
+      authenticateDelegatedDataPlaneCredential(identity, env),
+    );
+    if (!credential.ok) {
+      const response = renderError(credential.error);
+      timing.emit(ingestTimingOutcomeFor(response), { serializedBytes: null });
+      return response;
+    }
+    return handleAuthorizedMetricEvent(request, env, credential.value, timing);
   },
 } satisfies ExportedHandler<Env>;
 

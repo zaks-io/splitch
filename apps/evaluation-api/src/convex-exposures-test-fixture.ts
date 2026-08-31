@@ -1,47 +1,9 @@
 import type { HandlerArgs } from "@splitch/worker-runtime";
-import { describe, expect, it } from "vitest";
-import { makeConvexExposuresHandler } from "./convex-exposures";
-import { RecordingExposureIngestSink } from "./exposure-redemption";
-import { MemoryExposureRedemptionClaimStore } from "./exposure-redemption-claim";
 
-describe("Convex server Exposure identity admission", () => {
-  it("rejects integration work paused across an App identity replacement", async () => {
-    const sink = new RecordingExposureIngestSink();
-    const identity = pausingSaltStore();
-    const handler = makeConvexExposuresHandler({
-      provider: provider(),
-      assignmentStore: readOnlyAssignments(),
-      convexConfigurationResolver: resolver(),
-      exposureIngestSink: sink,
-      exposureRedemptionClaims: new MemoryExposureRedemptionClaimStore(),
-      holdoverWrite: { ensure: async () => ({ status: "completed" as const }) },
-      saltStore: identity.store,
-      now: () => new Date("2026-08-25T12:00:01.000Z"),
-    });
+export const EXPOSURE_ID = "00000000-0000-4000-8000-000000000001";
+export const INSTALLATION_ID = "00000000-0000-4000-8000-000000000002";
 
-    const response = handler(requestArgs());
-    await identity.paused;
-    identity.replace();
-
-    expect(await (await response).json()).toEqual({
-      results: [
-        {
-          exposureId: EXPOSURE_ID,
-          status: "rejected",
-          code: "SERVICE_UNAVAILABLE",
-          message: "SERVICE_UNAVAILABLE",
-          retryable: true,
-        },
-      ],
-    });
-    expect(sink.writes).toEqual([]);
-  });
-});
-
-const EXPOSURE_ID = "00000000-0000-4000-8000-000000000001";
-const INSTALLATION_ID = "00000000-0000-4000-8000-000000000002";
-
-function requestArgs(): HandlerArgs<unknown> {
+export function requestArgs(): HandlerArgs<unknown> {
   return {
     input: {
       body: {
@@ -78,7 +40,7 @@ function requestArgs(): HandlerArgs<unknown> {
   };
 }
 
-function provider() {
+export function provider() {
   const variants = [
     { id: "control", name: "control", value: false },
     { id: "treatment", name: "treatment", value: true },
@@ -123,7 +85,11 @@ function provider() {
   };
 }
 
-function resolver() {
+export function resolver(overrides: { endedAt?: string | null } = {}) {
+  const variants = [
+    { id: "control", name: "control", value: false },
+    { id: "treatment", name: "treatment", value: true },
+  ];
   return {
     async resolveBatch(_principal: unknown, items: readonly unknown[]) {
       return items.map(() => ({
@@ -140,20 +106,17 @@ function resolver() {
           controlVariantId: "control",
           salt: "salt",
           allocation: { control: 0, treatment: 100 },
-          variantSet: [
-            { id: "control", name: "control", value: false },
-            { id: "treatment", name: "treatment", value: true },
-          ],
+          variantSet: variants,
           targetingRules: [],
           startedAt: "2026-08-25T11:00:00.000Z",
-          endedAt: null,
+          endedAt: overrides.endedAt ?? null,
         },
       }));
     },
   };
 }
 
-function readOnlyAssignments() {
+export function readOnlyAssignments() {
   const refuse = async () => {
     throw new Error("read-only");
   };
@@ -166,38 +129,25 @@ function readOnlyAssignments() {
   };
 }
 
-function pausingSaltStore() {
-  let calls = 0;
-  let version = "app-v1";
-  let resume!: () => void;
-  const gate = new Promise<void>((resolve) => {
-    resume = resolve;
-  });
-  let entered!: () => void;
-  const paused = new Promise<void>((resolve) => {
-    entered = resolve;
-  });
+export function completedHoldover(writes: unknown[] = []) {
   return {
-    paused,
-    replace() {
-      version = "app-v2";
-      resume();
+    async ensure(input: unknown) {
+      writes.push(input);
+      return { status: "completed" as const };
     },
-    store: {
-      async currentKeyVersion() {
-        calls += 1;
-        if (calls === 2) {
-          entered();
-          await gate;
-        }
-        return version;
-      },
-      async saltFor() {
-        return new TextEncoder().encode("test-salt") as Uint8Array<ArrayBuffer>;
-      },
-      async retainedKeyVersions() {
-        return [version];
-      },
+  };
+}
+
+export function saltStore() {
+  return {
+    async currentKeyVersion() {
+      return "v1";
+    },
+    async saltFor() {
+      return new TextEncoder().encode("test-salt") as Uint8Array<ArrayBuffer>;
+    },
+    async retainedKeyVersions() {
+      return ["v1"];
     },
   };
 }

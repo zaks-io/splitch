@@ -46,49 +46,15 @@ describe("Entity Metric privacy Durable Object", () => {
     await expect(fixture.post("/register", ENTRY)).resolves.toEqual({ suppressed: true });
   });
 
-  it("does not let suppression and zero proof overtake an admitted Tinybird append", async () => {
+  it("does not expose the retired direct Tinybird delivery routes", async () => {
     const fixture = makeEntityMetricPrivacyStoreFixture();
-    let releaseAppend!: () => void;
-    let markAppendStarted!: () => void;
-    const appendStarted = new Promise<void>((resolve) => {
-      markAppendStarted = resolve;
-    });
-    const appendGate = new Promise<void>((resolve) => {
-      releaseAppend = resolve;
-    });
-    const append = vi.fn(async () => {
-      markAppendStarted();
-      await appendGate;
-      return Response.json({ successful_rows: 1, quarantined_rows: 0 });
-    });
-    vi.stubGlobal("fetch", append);
-    const row = {
-      app_id: "app_1",
-      id_type: "user",
-      entity_family_hash: "app-v1:family",
-      targeting_key_hash: "app-v1:entity",
-      server_received_at: ENTRY.serverReceivedAt,
-    };
+    const responses = await Promise.all(
+      ["/deliver-app-row", "/deliver-entity-row", "/deliver-row"].map((path) =>
+        fixture.request(path, {}),
+      ),
+    );
 
-    const delivery = fixture.post("/deliver-row", { datasource: "raw_events", row });
-    await appendStarted;
-    let deletionSettled = false;
-    const deletion = fixture
-      .post("/suppress", { deleteBeforeTs: "2026-08-07T00:00:01.000Z" })
-      .then(() => fixture.post("/delete", {}))
-      .finally(() => {
-        deletionSettled = true;
-      });
-    await Promise.resolve();
-    expect(deletionSettled).toBe(false);
-
-    releaseAppend();
-    await expect(delivery).resolves.toEqual({ suppressed: false });
-    await expect(deletion).resolves.toMatchObject({ proofs: expect.any(Array) });
-    await expect(fixture.post("/deliver-row", { datasource: "raw_events", row })).resolves.toEqual({
-      suppressed: true,
-    });
-    expect(append).toHaveBeenCalledTimes(1);
+    expect(responses.map((response) => response.status)).toEqual([404, 404, 404]);
   });
 
   it("keeps a durable queue delivery permit across restart until completion", async () => {

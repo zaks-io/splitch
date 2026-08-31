@@ -42,6 +42,12 @@ export function parseRawEventEnvelope(value: Record<string, unknown>): RawEventQ
   return value as RawEventQueueEnvelope;
 }
 
+export function rawEventDatasourceForQueue(queue: string): RawEventDatasource {
+  if (queue.includes("raw-evaluations")) return "raw_evaluations";
+  if (queue.includes("raw-events")) return "raw_events";
+  throw new Error(`unknown raw event queue ${queue}`);
+}
+
 function envelope(
   datasource: RawEventDatasource,
   row: Record<string, unknown>,

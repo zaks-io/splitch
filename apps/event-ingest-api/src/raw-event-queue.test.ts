@@ -97,17 +97,29 @@ describe("raw event queue delivery", () => {
       vi.fn(async () => Response.json({ successful_rows: 1, quarantined_rows: 0 })),
     );
     const queued = message("telemetry", "raw_evaluations");
+    const privacy = privacyNamespace();
 
-    await deliver("splitch-raw-evaluations", [queued]);
+    await deliver("splitch-raw-evaluations", [queued], {
+      SPLITCH_PLATFORM_TARGET: "production",
+      ENTITY_METRIC_PRIVACY: privacy.namespace,
+    });
 
-    const settlement = info.mock.calls.find(
-      ([message]) => message === "event-ingest-api raw event batch settled",
-    );
-    expect(settlement?.[1]).toEqual(
+    const settlement = info.mock.calls
+      .map(([event]) => event)
+      .find(
+        (event) =>
+          typeof event === "object" &&
+          event !== null &&
+          "message" in event &&
+          event.message === "ingest_phase_timing" &&
+          "route" in event &&
+          event.route === "raw_queue_settlement",
+      );
+    expect(settlement).toEqual(
       expect.objectContaining({
         queue: "splitch-raw-evaluations",
         datasource: "raw_evaluations",
-        rowCount: 1,
+        itemCount: 1,
         deliveredCount: 1,
         retryableCount: 0,
         indeterminateCount: 0,
@@ -115,11 +127,11 @@ describe("raw event queue delivery", () => {
         suppressedCount: 0,
         backlogCount: 1,
         backlogBytes: 1_024,
-        oldestMessageTimestamp: "2026-08-30T00:00:00.000Z",
+        oldestMessageTimestamp: expect.any(String),
       }),
     );
-    expect(JSON.stringify(settlement?.[1])).not.toContain("app_id");
-    expect(JSON.stringify(settlement?.[1])).not.toContain("sha256:telemetry");
+    expect(JSON.stringify(settlement)).not.toContain("app_id");
+    expect(JSON.stringify(settlement)).not.toContain("sha256:telemetry");
   });
 
   it("rejects a datasource envelope on the wrong queue", async () => {

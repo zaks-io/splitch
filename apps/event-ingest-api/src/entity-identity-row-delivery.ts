@@ -4,15 +4,12 @@ import {
   type EntityMetricPrivacyNamespace,
   rowIdentity,
 } from "./entity-metric-privacy";
-import { appendRawEvent, tinybirdDelivery } from "./tinybird";
 import {
   completeDeliveryPermit,
   deliveryPermitId,
   recordDeliveryPermit,
   releaseDeliveryPermit,
 } from "./raw-event-delivery-permit";
-import type { Env } from "./types";
-
 interface SuppressionState {
   readonly deleteBeforeTs: string;
 }
@@ -87,19 +84,6 @@ async function postEntityIdentityRow(
     throw new Error("Entity identity delivery returned an invalid result");
   }
   return body.suppressed;
-}
-
-export async function deliverEntityRowAtAuthority(
-  storage: DurableObjectStorage,
-  env: Env,
-  request: Request,
-): Promise<Response> {
-  const admitted = await admitEntityRowAtAuthority(storage, request);
-  if (admitted.suppressed) return Response.json({ suppressed: true });
-  const delivery = tinybirdDelivery(env, admitted.datasource);
-  if (!delivery.ok) throw new Error(delivery.error.message);
-  await appendRawEvent(admitted.row, delivery.value);
-  return Response.json({ suppressed: false });
 }
 
 export async function admitEntityRowResponse(
