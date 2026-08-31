@@ -124,8 +124,12 @@ describe("GET/POST experiment results", () => {
     expect(envelope).toMatchObject({
       state: "ready",
       stats: {
-        health: { activation_rates: { control: 0, treatment: 0 } },
-        srm: { activated_srm_p_value: 1, activated_srm_mismatch: false },
+        health: {
+          activation_rates: { control: 0, treatment: 0 },
+          activation_balance_p_value: 0,
+          activation_balance_mismatch: true,
+        },
+        srm: { activated_srm_p_value: 0, activated_srm_mismatch: true },
       },
     });
     expect(
