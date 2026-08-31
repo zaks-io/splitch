@@ -15,6 +15,7 @@ import {
 import { membershipClaimsInScopes } from "./scope-binding";
 
 const APP_ID_PREFIX = "app_";
+const ORG_ID_PREFIX = "org_";
 const ENVIRONMENT_ID_PREFIX = "env_";
 const FLAG_ID_PREFIX = "flag_";
 
@@ -29,7 +30,10 @@ export async function resolveControlPlanePathSelectors(
 ): Promise<AuthenticatedInputResolution> {
   const resolvedParams = { ...params };
 
-  const rawPrincipal = bindResolvedApp(principal, canonicalAppId(params.appId));
+  const rawPrincipal = bindResolvedOrganization(
+    bindResolvedApp(principal, canonicalAppId(params.appId)),
+    canonicalOrganizationId(params.orgId),
+  );
   const rawAppError = appScopeError(rawPrincipal, canonicalAppId(params.appId));
   if (rawAppError) return { ok: false, error: rawAppError };
 
@@ -238,9 +242,27 @@ function bindResolvedApp(principal: Principal, appId: string | undefined): Princ
   return { ...principal, appId };
 }
 
+function bindResolvedOrganization(principal: Principal, orgId: string | undefined): Principal {
+  if (
+    !principal.liveMembership ||
+    orgId === undefined ||
+    principal.orgId !== null ||
+    !hasOrganizationScope(principal.scopes, orgId)
+  ) {
+    return principal;
+  }
+  return { ...principal, orgId };
+}
+
 function hasAppScope(scopes: readonly string[], appId: string): boolean {
   return membershipClaimsInScopes(scopes).some(
     (claim) => claim.axis === "app" && claim.id === appId,
+  );
+}
+
+function hasOrganizationScope(scopes: readonly string[], orgId: string): boolean {
+  return membershipClaimsInScopes(scopes).some(
+    (claim) => claim.axis === "org" && claim.id === orgId,
   );
 }
 
@@ -265,6 +287,10 @@ function appScopeError(principal: Principal, appId: string | undefined): ErrorRe
 
 function canonicalAppId(selector: string | undefined): string | undefined {
   return selector?.startsWith(APP_ID_PREFIX) ? selector : undefined;
+}
+
+function canonicalOrganizationId(selector: string | undefined): string | undefined {
+  return selector?.startsWith(ORG_ID_PREFIX) ? selector : undefined;
 }
 
 function flagLookupBy(contractId: string, request: Request): "auto" | "key" {
