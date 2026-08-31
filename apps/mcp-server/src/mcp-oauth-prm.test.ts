@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { flagPage } from "./mcp-flag-fixtures";
 import { actor, NOW_SECONDS } from "./mcp-oauth-prm-actor";
 import {
@@ -181,6 +181,50 @@ describe("MCP OAuth protected-resource boundary", () => {
       expect(rejected.status).toBe(401);
     }
     expect(seenDownstream).toHaveLength(1);
+  });
+});
+
+describe("MCP hosted OAuth authorization server", () => {
+  it("is advertised independently of the Splitch auth.md issuer", async () => {
+    const response = await request(
+      new Request("https://mcp.splitch.test/.well-known/oauth-protected-resource"),
+      {
+        platformTarget: "production",
+        authBaseUrl: "https://auth.splitch.test",
+        oauthAuthorizationServer: "https://splitch.authkit.test",
+      },
+    );
+
+    await expect(response.json()).resolves.toEqual({
+      resource: "https://mcp.splitch.test",
+      authorization_servers: ["https://splitch.authkit.test"],
+    });
+  });
+
+  it("verifies the hosted issuer token and resolves live Splitch authority", async () => {
+    const authRequests: SeenRequest[] = [];
+    const auth = await bootAuthApi(authRequests);
+    const tokenResponse = await fetch(`${auth.baseUrl}/oauth2/token`, { method: "POST" });
+    const token = ((await tokenResponse.json()) as { access_token: string }).access_token;
+    const resolveAuthKitScopes = vi.fn(async () => actor.scopes.slice());
+
+    const response = await mcp("initialize", undefined, `Bearer ${token}`, {
+      controlPlaneBaseUrl: "https://control-plane.splitch.test",
+      controlPlaneFetch: async () => Response.json({}),
+      sessionStore: memorySessionStore(),
+      authBaseUrl: "https://auth.splitch.test",
+      oauthAuthorizationServer: auth.baseUrl,
+      oauthJwksUrl: `${auth.baseUrl}/oauth2/jwks`,
+      resolveAuthKitScopes,
+      now: () => NOW_SECONDS * 1000,
+    });
+
+    expect(response.status).toBe(200);
+    expect(resolveAuthKitScopes).toHaveBeenCalledWith(actor.subject);
+    expect(authRequests).toEqual([
+      { method: "POST", path: "/oauth2/token" },
+      { method: "GET", path: "/oauth2/jwks" },
+    ]);
   });
 });
 

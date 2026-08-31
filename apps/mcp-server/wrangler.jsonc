@@ -70,6 +70,7 @@
       "vars": {
         "SPLITCH_PLATFORM_TARGET": "shared-preview",
         "AUTH_API_ORIGIN": "https://auth.preview.splitch.dev",
+        "MCP_OAUTH_AUTHORIZATION_SERVER": "https://soulful-path-50.authkit.app",
         "CONTROL_PLANE_API_ORIGIN": "https://api.preview.splitch.dev"
       },
       "durable_objects": {
@@ -109,6 +110,7 @@
       "vars": {
         "SPLITCH_PLATFORM_TARGET": "production",
         "AUTH_API_ORIGIN": "https://auth.splitch.dev",
+        "MCP_OAUTH_AUTHORIZATION_SERVER": "https://soulful-path-50.authkit.app",
         "CONTROL_PLANE_API_ORIGIN": "https://api.splitch.dev"
       },
       "durable_objects": {

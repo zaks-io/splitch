@@ -4,6 +4,7 @@ import {
   authorizeBearerMembership,
   makeTokenMembershipAccess,
   requireTokenMembershipAccess,
+  resolveMcpMembershipScopes,
   withBearerMembershipCheck,
 } from "./token-membership";
 
@@ -199,6 +200,32 @@ describe("makeTokenMembershipAccess", () => {
       ],
       apps: [{ id: APP, organizationId: ORG, role: "owner" }],
     });
+  });
+});
+
+describe("resolveMcpMembershipScopes", () => {
+  it("converts the complete live membership set to canonical delegation scopes", async () => {
+    const resolve = vi.fn(async () => ({
+      organizations: [{ id: ORG, role: "admin" as const }],
+      apps: [{ id: APP, organizationId: ORG, role: "owner" as const }],
+    }));
+
+    await expect(resolveMcpMembershipScopes(fakeAccess({ resolve }), USER)).resolves.toEqual([
+      `app:${APP}:owner`,
+      `org:${ORG}:admin`,
+    ]);
+    expect(resolve).toHaveBeenCalledWith(USER);
+  });
+
+  it.each([
+    "",
+    "x".repeat(257),
+  ])("rejects invalid user id %j before membership lookup", async (userId) => {
+    const resolve = vi.fn();
+    await expect(resolveMcpMembershipScopes(fakeAccess({ resolve }), userId)).rejects.toThrow(
+      "control-plane-api: invalid MCP user id",
+    );
+    expect(resolve).not.toHaveBeenCalled();
   });
 });
 

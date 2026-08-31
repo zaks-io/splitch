@@ -1,4 +1,4 @@
-import { beforeAll, describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it, vi } from "vitest";
 import { makeHttpMcpAccessTokenVerifier } from "./mcp-access-token";
 
 const ISSUER = "https://auth.splitch.test";
@@ -24,6 +24,35 @@ beforeAll(async () => {
 });
 
 describe("MCP access-token verifier", () => {
+  it("validates AuthKit tokens and resolves authorization from live Splitch membership", async () => {
+    const resolveAuthKitScopes = vi.fn(async () => ["app:app_local:admin"]);
+    const verifier = makeHttpMcpAccessTokenVerifier({
+      issuer: "https://splitch.authkit.test",
+      profile: "authkit",
+      resolveAuthKitScopes,
+      fetchJwks: async () => ({ keys: [{ ...publicJwk, kty: "RSA", kid: "test" }] }),
+    });
+    const token = await sign({
+      sub: "user_workos",
+      iss: "https://splitch.authkit.test",
+      aud: AUDIENCE,
+      exp: NOW + 60,
+      scope: "openid profile email offline_access",
+    });
+
+    await expect(verifier.verify(`Bearer ${token}`, AUDIENCE, NOW)).resolves.toEqual({
+      subject: "user_workos",
+      scopes: ["app:app_local:admin"],
+      authDoor: "device_flow",
+    });
+    expect(resolveAuthKitScopes).toHaveBeenCalledWith("user_workos");
+
+    await expect(
+      verifier.verify(`Bearer ${token}`, "https://other-resource.test", NOW),
+    ).resolves.toBeNull();
+    expect(resolveAuthKitScopes).toHaveBeenCalledTimes(1);
+  });
+
   it("validates signature, type, issuer, expiry, audience, and scope shape", async () => {
     const verifier = makeHttpMcpAccessTokenVerifier({
       issuer: ISSUER,

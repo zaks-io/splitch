@@ -62,6 +62,9 @@ export async function request(
   options: {
     platformTarget?: string;
     authBaseUrl?: string;
+    oauthAuthorizationServer?: string;
+    oauthJwksUrl?: string;
+    resolveAuthKitScopes?: (subject: string) => Promise<string[]>;
     controlPlaneBaseUrl?: string;
     controlPlaneFetch?: typeof fetch;
     sessionStore?: McpSessionStore;
@@ -89,6 +92,9 @@ export async function mcp(
     sessionStore: McpSessionStore;
     sessionId?: string;
     authBaseUrl?: string;
+    oauthAuthorizationServer?: string;
+    oauthJwksUrl?: string;
+    resolveAuthKitScopes?: (subject: string) => Promise<string[]>;
     now?: () => number;
   },
 ): Promise<Response> {
@@ -126,7 +132,10 @@ export async function bootAuthApi(seen: SeenRequest[]): Promise<{
   let issuer = "";
   const baseUrl = await bootServer(async (request, response) => {
     seen.push({ method: request.method ?? "", path: request.url ?? "" });
-    if (request.method === "GET" && request.url === "/.well-known/jwks.json") {
+    if (
+      request.method === "GET" &&
+      (request.url === "/.well-known/jwks.json" || request.url === "/oauth2/jwks")
+    ) {
       writeJson(response, 200, { keys: [{ ...publicJwk, kid: "fake-auth" }] });
       return;
     }

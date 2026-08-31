@@ -18,9 +18,14 @@ const service = "splitch-mcp-server";
  * binding and no owner registry, so every management tool passes the Control
  * Plane's gates before anything is delegated onward (ADR-0023/0046).
  */
+interface ControlPlaneBinding extends Fetcher {
+  resolveMcpMembershipScopes(userId: string): Promise<string[]>;
+}
+
 type Env = {
-  CONTROL_PLANE_API?: Fetcher;
+  CONTROL_PLANE_API?: ControlPlaneBinding;
   AUTH_API_ORIGIN?: string;
+  MCP_OAUTH_AUTHORIZATION_SERVER?: string;
   CONTROL_PLANE_API_ORIGIN?: string;
   MCP_CONTROL_PLANE_DELEGATION_SECRET?: string;
   SPLITCH_DEPLOYED_COMMIT_SHA?: string;
@@ -53,6 +58,11 @@ const handler = {
       deployedCommitSha: env.SPLITCH_DEPLOYED_COMMIT_SHA,
       platformTarget: env.SPLITCH_PLATFORM_TARGET,
       authBaseUrl: env.AUTH_API_ORIGIN,
+      oauthAuthorizationServer: env.MCP_OAUTH_AUTHORIZATION_SERVER,
+      oauthJwksUrl: env.MCP_OAUTH_AUTHORIZATION_SERVER
+        ? `${new URL(env.MCP_OAUTH_AUTHORIZATION_SERVER).origin}/oauth2/jwks`
+        : undefined,
+      resolveAuthKitScopes: membershipScopeResolver(env.CONTROL_PLANE_API),
       controlPlaneBaseUrl: env.CONTROL_PLANE_API_ORIGIN,
       controlPlaneFetch: serviceBindingFetch(env.CONTROL_PLANE_API),
       controlPlaneDelegationSecret: env.MCP_CONTROL_PLANE_DELEGATION_SECRET,
@@ -68,7 +78,7 @@ export default wrapWorkerHandler(handler, { surface: "mcp-server" });
 
 export { handleMcpServerRequest, McpSessionDurableObject };
 
-function serviceBindingFetch(service: Fetcher | undefined): typeof fetch | undefined {
+function serviceBindingFetch(service: ControlPlaneBinding | undefined): typeof fetch | undefined {
   if (!service) {
     return undefined;
   }
@@ -77,6 +87,12 @@ function serviceBindingFetch(service: Fetcher | undefined): typeof fetch | undef
     const request = input instanceof Request ? input : new Request(input, init);
     return service.fetch(request);
   };
+}
+
+function membershipScopeResolver(
+  service: ControlPlaneBinding | undefined,
+): ((subject: string) => Promise<string[]>) | undefined {
+  return service ? (subject) => service.resolveMcpMembershipScopes(subject) : undefined;
 }
 
 function requiredSessionStore(store: KVNamespace | undefined): KVNamespace {

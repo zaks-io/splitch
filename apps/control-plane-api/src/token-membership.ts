@@ -74,6 +74,20 @@ export async function resolveBearerMemberships(
   return access.resolve(userId);
 }
 
+export async function resolveMcpMembershipScopes(
+  access: TokenMembershipAccess,
+  userId: string,
+): Promise<string[]> {
+  if (!userId || userId.length > 256) {
+    throw new Error("control-plane-api: invalid MCP user id");
+  }
+  const memberships = await access.resolve(userId);
+  return [
+    ...memberships.organizations.map((membership) => `org:${membership.id}:${membership.role}`),
+    ...memberships.apps.map((membership) => `app:${membership.id}:${membership.role}`),
+  ].sort();
+}
+
 /** Fail loud when the bearer resolver is constructed without a membership port. */
 export function requireTokenMembershipAccess(
   access: TokenMembershipAccess | undefined,

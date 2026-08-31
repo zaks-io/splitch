@@ -46,7 +46,11 @@ import {
   handleSignedControlPanelRequest,
   type PanelProtocol,
 } from "./signed-control-panel-request";
-import { makeTokenMembershipAccess, withBearerMembershipCheck } from "./token-membership";
+import {
+  makeTokenMembershipAccess,
+  resolveMcpMembershipScopes,
+  withBearerMembershipCheck,
+} from "./token-membership";
 
 const handler = {
   async fetch(request, env, ctx): Promise<Response> {
@@ -82,6 +86,13 @@ export class McpEntrypoint extends WorkerEntrypoint<ControlPlaneApiEnv> {
       request as Parameters<typeof mcpHandler.fetch>[0],
       this.env,
       this.ctx,
+    );
+  }
+
+  async resolveMcpMembershipScopes(userId: string): Promise<string[]> {
+    return resolveMcpMembershipScopes(
+      makeTokenMembershipAccess(createRepository(this.env.DB)),
+      userId,
     );
   }
 }
