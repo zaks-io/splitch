@@ -38,6 +38,7 @@ describe("partial App deletion read-back", () => {
     expect(refreshCall).toBeGreaterThan(-1);
     expect(refreshCall).toBeLessThan(recovery.indexOf("This page was refreshed."));
     expect(recovery).toContain("reload: false");
+    expect(recovery).toContain("The App may or may not have been deleted");
     expect(recovery).toContain("Reload this page before retrying.");
     expect(recovery).toContain("reload: true");
     expect(ceremony).toContain("error?.reload === true");

@@ -1,4 +1,9 @@
+import type { AppsDeleteOutput } from "@splitch/contracts/route-types";
 import type { ControlPlaneOperationResult } from "@splitch/control-plane-sdk";
+import type {
+  PanelAppDeleteProgress,
+  PanelAppDeleteResult,
+} from "@splitch/control-plane-sdk/panel-app-settings";
 import { type ResyncRemedy, resyncRemedy } from "#lib/live-updates/resync-remedy";
 
 /**
@@ -40,4 +45,47 @@ export async function settleAppMutation<T>(
       },
     };
   }
+}
+
+/**
+ * A forced cascade can cross the App deletion boundary before a later cleanup
+ * or response fails. Read the App back before treating that failure as partial:
+ * APP_NOT_FOUND proves deletion committed and makes session resync mandatory.
+ */
+export async function settleAppDelete(
+  result: PanelAppDeleteResult,
+  readBack: () => Promise<ControlPlaneOperationResult<unknown>>,
+  resync: () => Promise<void>,
+) {
+  if (result.ok) {
+    return settleAppMutation(result, result.data.deleted === true ? resync : async () => {});
+  }
+  if (!result.partialDelete) return result;
+
+  const existence = await readAppExistence(readBack);
+  if (existence !== "deleted") return result;
+
+  return settleAppMutation(completedDelete(result.partialDelete), resync);
+}
+
+async function readAppExistence(
+  readBack: () => Promise<ControlPlaneOperationResult<unknown>>,
+): Promise<"exists" | "deleted" | "unknown"> {
+  try {
+    const result = await readBack();
+    if (result.ok) return "exists";
+    return result.error.code === "APP_NOT_FOUND" ? "deleted" : "unknown";
+  } catch {
+    return "unknown";
+  }
+}
+
+function completedDelete(
+  progress: PanelAppDeleteProgress,
+): Extract<ControlPlaneOperationResult<AppsDeleteOutput>, { ok: true }> {
+  return {
+    ok: true,
+    status: 200,
+    data: { deleted: true, force: true, removed: [...progress.removed] },
+  };
 }

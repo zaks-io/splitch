@@ -135,13 +135,13 @@ async function partialDeleteError(
   try {
     await refresh();
     return {
-      message: `${outcome.message} The App remains, but ${outcome.removedCount} ${outcome.removedCount === 1 ? "resource was" : "resources were"} deleted before Review stopped. This page was refreshed.`,
+      message: `${outcome.message} The App remains, but ${outcome.removedCount} ${outcome.removedCount === 1 ? "resource was" : "resources were"} deleted before the operation stopped. This page was refreshed.`,
       partial: true,
       reload: false,
     };
   } catch {
     return {
-      message: `${outcome.message} The App remains, but some resources were deleted before Review stopped. Reload this page before retrying.`,
+      message: `${outcome.message} The App may or may not have been deleted, and some resources were deleted before the operation stopped. Reload this page before retrying.`,
       partial: true,
       reload: true,
     };

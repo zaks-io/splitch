@@ -1,5 +1,5 @@
-import { describe, expect, it } from "vitest";
-import { settleAppMutation } from "#lib/apps/app-settings-outcome";
+import { describe, expect, it, vi } from "vitest";
+import { settleAppDelete, settleAppMutation } from "#lib/apps/app-settings-outcome";
 
 /**
  * Renaming or deleting an App changes what the session says about itself, so the
@@ -55,5 +55,75 @@ describe("settleAppMutation", () => {
       reason: "session expired",
       remedy: "reauth",
     });
+  });
+});
+
+describe("settleAppDelete", () => {
+  const partial = {
+    ok: false,
+    status: 503,
+    error: {
+      code: "SERVICE_UNAVAILABLE",
+      message: "App deletion committed, but cleanup did not finish",
+      details: { retryAfterMs: 1000 },
+    },
+    partialDelete: {
+      removed: [{ childType: "experiments", id: "exp_1" }],
+      appliedApprovalRequestIds: ["apr_1"],
+    },
+  } as const;
+
+  it("completes deletion and resyncs when read-back proves the App is gone", async () => {
+    const resync = vi.fn(async () => {});
+
+    const settled = await settleAppDelete(
+      partial,
+      async () => ({
+        ok: false,
+        status: 404,
+        error: { code: "APP_NOT_FOUND", message: "App not found", details: {} },
+      }),
+      resync,
+    );
+
+    expect(settled).toEqual({
+      ok: true,
+      status: 200,
+      data: {
+        deleted: true,
+        force: true,
+        removed: [{ childType: "experiments", id: "exp_1" }],
+      },
+      sessionResync: { ok: true },
+    });
+    expect(resync).toHaveBeenCalledOnce();
+  });
+
+  it("keeps the partial result when read-back cannot determine existence", async () => {
+    const resync = vi.fn(async () => {});
+
+    const settled = await settleAppDelete(
+      partial,
+      async () => {
+        throw new TypeError("response was lost");
+      },
+      resync,
+    );
+
+    expect(settled).toBe(partial);
+    expect(resync).not.toHaveBeenCalled();
+  });
+
+  it("keeps the partial result when read-back confirms the App still exists", async () => {
+    const resync = vi.fn(async () => {});
+
+    const settled = await settleAppDelete(
+      partial,
+      async () => ({ ok: true, status: 200, data: { app: { id: "app_1" } } }),
+      resync,
+    );
+
+    expect(settled).toBe(partial);
+    expect(resync).not.toHaveBeenCalled();
   });
 });
