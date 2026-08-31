@@ -1,4 +1,4 @@
-import type { App, AppMember, UserRole } from "@splitch/contracts";
+import type { App, AppMember, ResourceDeletePendingApproval, UserRole } from "@splitch/contracts";
 import { AppMemberSchema, AppSchema, UserRoleSchema } from "@splitch/contracts";
 import type {
   AppMembersAddOutput,
@@ -137,8 +137,10 @@ export interface PanelAppSettingsClient {
   }): Promise<ControlPlaneOperationResult<AppsUpdateOutput>>;
   /**
    * `dryRun` names exactly what a delete would destroy without destroying any of
-   * it, which is what the danger zone confirms against. `force` cascades that
-   * same tree; the two are mutually exclusive in the contract.
+   * it, which is what the danger zone confirms against. A forced Panel delete
+   * Reviews any Confirmation-gated children as the signed-in operator, then
+   * resumes the cascade. The underlying Apps client still stops at Review so
+   * CLI and MCP callers keep the safer default.
    */
   deleteApp(input: {
     appId: string;
@@ -182,14 +184,63 @@ export function createPanelAppSettingsClient(options: {
         ...(name !== undefined ? { name } : {}),
         ...(key !== undefined ? { key } : {}),
       }),
-    deleteApp: ({ appId, dryRun, force }) =>
-      sdk.apps.delete({
-        appId,
-        ...(dryRun === true ? { dryRun } : {}),
-        ...(force === true ? { force } : {}),
-      }),
+    deleteApp: (input) => deletePanelApp(sdk, input),
     addMember: ({ appId, userId, role }) => sdk.apps.members.add({ appId, userId, role }),
     updateMember: ({ appId, userId, role }) => sdk.apps.members.update({ appId, userId, role }),
     removeMember: ({ appId, userId }) => sdk.apps.members.remove({ appId, userId }),
   };
+}
+
+async function deletePanelApp(
+  sdk: ReturnType<typeof createControlPlaneSdk>,
+  input: { appId: string; dryRun?: boolean; force?: boolean },
+): Promise<ControlPlaneOperationResult<AppsDeleteOutput>> {
+  const request = {
+    appId: input.appId,
+    ...(input.dryRun === true ? { dryRun: true } : {}),
+    ...(input.force === true ? { force: true } : {}),
+  };
+  let result = await sdk.apps.delete(request);
+  if (input.force !== true) return result;
+
+  const reviewed = new Set<string>();
+  let pending = pendingDeleteApprovals(result);
+  while (pending) {
+    const refusal = await reviewDeleteApprovals(sdk, input.appId, pending, reviewed);
+    if (refusal) return refusal;
+    result = await sdk.apps.delete(request);
+    pending = pendingDeleteApprovals(result);
+  }
+  return result;
+}
+
+function pendingDeleteApprovals(
+  result: ControlPlaneOperationResult<AppsDeleteOutput>,
+): readonly ResourceDeletePendingApproval[] | null {
+  if (!result.ok || result.data.deleted || !("pendingApprovals" in result.data)) return null;
+  return result.data.pendingApprovals;
+}
+
+async function reviewDeleteApprovals(
+  sdk: ReturnType<typeof createControlPlaneSdk>,
+  appId: string,
+  approvals: readonly ResourceDeletePendingApproval[],
+  reviewed: Set<string>,
+): Promise<Extract<ControlPlaneOperationResult, { ok: false }> | null> {
+  for (const approval of approvals) {
+    if (reviewed.has(approval.approvalRequestId)) {
+      throw new Error(
+        `control-plane-sdk: apps_delete returned reviewed Approval Request ${approval.approvalRequestId}`,
+      );
+    }
+    const review = await sdk.approvals.review({
+      appId,
+      id: approval.approvalRequestId,
+      action: "approve_and_apply",
+      idempotency_key: `panel_app_delete_${approval.approvalRequestId}`,
+    });
+    if (!review.ok) return review;
+    reviewed.add(approval.approvalRequestId);
+  }
+  return null;
 }

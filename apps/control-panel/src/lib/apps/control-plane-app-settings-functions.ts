@@ -51,8 +51,9 @@ export const deleteControlPanelApp = createServerFn({ method: "POST" })
     const authorized = await authorizedAppSettingsClient();
     if (!authorized.ok) return authorized.result;
     const result = await authorized.client.deleteApp(data);
-    // A dry run and a force run that stopped for Review both leave the App
-    // standing, so the session still describes reality and must not be churned.
+    // A dry run leaves the App standing, so the session still describes reality
+    // and must not be churned. A confirmed force run Reviews gated children and
+    // resumes inside the Panel client before it can return deleted=true.
     const removed = result.ok && result.data.deleted === true;
     return settleAppMutation(result, removed ? authorized.resyncSession : async () => {});
   });

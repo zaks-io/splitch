@@ -50,8 +50,6 @@ export async function renameApp(input: {
 
 export type DeleteOutcome =
   | { readonly kind: "refused"; readonly message: string }
-  /** Force stopped at an Environment Policy gate: Approval Requests are waiting. */
-  | { readonly kind: "review"; readonly reviewCommands: string[] }
   | ({ readonly kind: "stale" } & Stale)
   | { readonly kind: "deleted" };
 
@@ -71,11 +69,8 @@ export async function destroyApp(appId: string): Promise<DeleteOutcome> {
   if (!result.ok) return { kind: "refused", message: result.error.message };
   if (result.data.deleted !== true) {
     return {
-      kind: "review",
-      reviewCommands:
-        "pendingApprovals" in result.data
-          ? result.data.pendingApprovals.map((approval) => approval.reviewCommand)
-          : [],
+      kind: "refused",
+      message: "The Control Plane did not delete this App.",
     };
   }
   if (!result.sessionResync.ok) return { kind: "stale", ...result.sessionResync };

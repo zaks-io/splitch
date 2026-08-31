@@ -2,12 +2,10 @@ import type { App, ResourceDeleteBlocker } from "@splitch/contracts";
 import { Alert, AlertDescription, AlertTitle } from "@splitch/ui/components/alert";
 import { Button } from "@splitch/ui/components/button";
 import { Input } from "@splitch/ui/components/input";
-import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { isDeleteConfirmed } from "#lib/apps/app-delete-confirmation";
 import { deleteConsequences } from "#lib/apps/app-delete-consequences";
 import { type DeleteOutcome, destroyApp } from "#lib/apps/app-settings-mutations";
-import { refreshAppSettings } from "#lib/apps/app-settings-query";
 import { AppDeleteConsequenceList } from "#components/apps/app-delete-consequence-list";
 import { AppSessionStaleNotice } from "#components/sessions/app-session-stale-notice";
 
@@ -31,11 +29,9 @@ export function AppDeleteCeremony({
   environmentNames: readonly string[];
   onCancel: () => void;
 }) {
-  const queryClient = useQueryClient();
   const [typed, setTyped] = useState("");
   const [error, setError] = useState<string>();
   const [stale, setStale] = useState<{ reason: string; remedy: "reauth" | "retry" }>();
-  const [pending, setPending] = useState<string[]>();
   const [isDeleting, setIsDeleting] = useState(false);
 
   const consequences = deleteConsequences(blockers);
@@ -43,18 +39,7 @@ export function AppDeleteCeremony({
 
   async function settle(outcome: DeleteOutcome) {
     if (outcome.kind === "refused") setError(outcome.message);
-    else if (outcome.kind === "review") {
-      setPending(outcome.reviewCommands);
-      // The cascade already removed part of the App; the cards above render
-      // from the same settings query and must not keep showing what is gone.
-      try {
-        await refreshAppSettings(queryClient, { appId: app.id });
-      } catch {
-        setError(
-          "Part of this App was removed, but this screen could not reload. Reload the page to see what remains.",
-        );
-      }
-    } else if (outcome.kind === "stale") setStale(outcome);
+    else if (outcome.kind === "stale") setStale(outcome);
     else globalThis.location.assign("/");
   }
 
@@ -62,7 +47,6 @@ export function AppDeleteCeremony({
     if (!confirmed) return;
     setError(undefined);
     setStale(undefined);
-    setPending(undefined);
     setIsDeleting(true);
     try {
       await settle(await destroyApp(app.id));
@@ -74,23 +58,6 @@ export function AppDeleteCeremony({
   return (
     <div className="grid gap-4" data-testid="app-delete-ceremony">
       <AppDeleteConsequenceList consequences={consequences} environmentNames={environmentNames} />
-
-      {pending ? (
-        <Alert data-testid="app-delete-pending-approvals" variant="destructive">
-          <AlertTitle>Deletion stopped for Review</AlertTitle>
-          <AlertDescription className="grid gap-2">
-            <span>
-              Part of this App was removed. The rest is gated by Environment Policy and now has
-              Approval Requests waiting. Nothing else is deleted until they are reviewed.
-            </span>
-            {pending.map((command) => (
-              <code className="block break-words text-xs" key={command}>
-                {command}
-              </code>
-            ))}
-          </AlertDescription>
-        </Alert>
-      ) : null}
 
       {stale ? (
         <AppSessionStaleNotice
