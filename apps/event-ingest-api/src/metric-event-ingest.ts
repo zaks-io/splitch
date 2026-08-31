@@ -11,7 +11,11 @@ import {
   type EventDefinitionMismatchSink,
   recordEventDefinitionMismatch,
 } from "./event-definition-mismatch-diagnostics";
-import { createIngestPhaseTiming, type IngestPhaseTiming } from "./ingest-phase-timing";
+import {
+  createIngestPhaseTiming,
+  type IngestPhaseTiming,
+  ingestTimingOutcomeFor,
+} from "./ingest-phase-timing";
 import {
   admitAndClaimMetricEvent,
   replayExistingMetricEvent,
@@ -90,7 +94,7 @@ function timedMetricResponse(
   response: Response,
   serializedBytes: number | null,
 ): Response {
-  timing.emit(response.status < 400 ? "accepted" : "rejected", { serializedBytes });
+  timing.emit(ingestTimingOutcomeFor(response), { serializedBytes });
   return response;
 }
 

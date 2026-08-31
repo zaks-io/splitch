@@ -1,9 +1,19 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createIngestPhaseTiming } from "./ingest-phase-timing";
+import { createIngestPhaseTiming, ingestTimingOutcomeFor } from "./ingest-phase-timing";
 
 afterEach(() => vi.restoreAllMocks());
 
 describe("ingest phase timing", () => {
+  it.each([
+    [202, "accepted"],
+    [400, "rejected"],
+    [429, "rejected"],
+    [500, "fault"],
+    [503, "fault"],
+  ] as const)("classifies HTTP %i as %s", (status, outcome) => {
+    expect(ingestTimingOutcomeFor(new Response(null, { status }))).toBe(outcome);
+  });
+
   it("emits stable phase durations without identity values", async () => {
     const info = vi.spyOn(console, "info").mockImplementation(() => undefined);
     const ticks = [0, 1, 3, 5];

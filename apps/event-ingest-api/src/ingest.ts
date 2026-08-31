@@ -2,7 +2,7 @@ import { timingSafeEqualString } from "@splitch/worker-runtime";
 import { emptyError, renderError, serviceUnavailable } from "./errors";
 import { evaluationUsageReplayWindow } from "./evaluation-usage-replay-window";
 import { ingestAdmissionCost, rejectIngestAdmission } from "./ingest-admission";
-import { createIngestPhaseTiming } from "./ingest-phase-timing";
+import { createIngestPhaseTiming, ingestTimingOutcomeFor } from "./ingest-phase-timing";
 import { loadRunScope } from "./kv-config";
 import { readJsonObject, stringField } from "./payload";
 import { enqueueRawEvent } from "./raw-event-queue-envelope";
@@ -33,13 +33,13 @@ export function requiredIdentity(
 export async function handleIngest(request: Request, env: Env): Promise<Response> {
   const timing = createIngestPhaseTiming(env, { route: "internal_exposure", stream: "raw_events" });
   const credential = await timing.measure("auth", () => credentialScope(request, env));
-  if (!credential.ok) return timedRejection(timing, renderError(credential.error));
+  if (!credential.ok) return timedResponse(timing, renderError(credential.error));
 
   const payload = await timing.measure("parse", () => readJsonObject(request));
-  if (!payload.ok) return timedRejection(timing, renderError(payload.error));
+  if (!payload.ok) return timedResponse(timing, renderError(payload.error));
 
   const fields = await timing.measure("identity", () => requiredIdentity(payload.value));
-  if (!fields.ok) return timedRejection(timing, renderError(fields.error));
+  if (!fields.ok) return timedResponse(timing, renderError(fields.error));
 
   // The payload's runId is the SDK fire-time stamp — validated against its own
   // Run config, never replaced by the ingest-time live-run pointer.
@@ -52,12 +52,12 @@ export async function handleIngest(request: Request, env: Env): Promise<Response
       fields.value.runId,
     ),
   );
-  if (!runScope.ok) return timedRejection(timing, renderError(runScope.error));
+  if (!runScope.ok) return timedResponse(timing, renderError(runScope.error));
 
   const event = await timing.measure("event", () =>
     exposureEvent(payload.value, credential.value, runScope.value, env),
   );
-  if (!event.ok) return timedRejection(timing, renderError(event.error));
+  if (!event.ok) return timedResponse(timing, renderError(event.error));
   const row = await timing.measure("row", () => toTinybirdRow(event.value, payload.value));
   const denied = await timing.measure("admission", () =>
     rejectIngestAdmission(
@@ -71,7 +71,7 @@ export async function handleIngest(request: Request, env: Env): Promise<Response
       "Exposure ingest admission capacity exceeded",
     ),
   );
-  if (denied) return timedRejection(timing, denied);
+  if (denied) return timedResponse(timing, denied);
 
   try {
     await timing.measure("queue", () => enqueueRawEvent(env, "raw_events", row));
@@ -102,10 +102,10 @@ export async function handleEvaluationIngest(request: Request, env: Env): Promis
     stream: "raw_evaluations",
   });
   const scope = await timing.measure("auth", () => evaluationUsageScope(request, env));
-  if (!scope.ok) return timedRejection(timing, renderError(scope.error));
+  if (!scope.ok) return timedResponse(timing, renderError(scope.error));
 
   const payload = await timing.measure("parse", () => readJsonObject(request));
-  if (!payload.ok) return timedRejection(timing, renderError(payload.error));
+  if (!payload.ok) return timedResponse(timing, renderError(payload.error));
 
   const event = await timing.measure("row", () =>
     evaluationUsageEvent(
@@ -114,7 +114,7 @@ export async function handleEvaluationIngest(request: Request, env: Env): Promis
       evaluationUsageReplayWindow(env.EVALUATION_USAGE_REPLAY_WINDOW),
     ),
   );
-  if (!event.ok) return timedRejection(timing, renderError(event.error));
+  if (!event.ok) return timedResponse(timing, renderError(event.error));
 
   const row = toEvaluationUsageTinybirdRow(event.value);
   const denied = await timing.measure("admission", () =>
@@ -129,7 +129,7 @@ export async function handleEvaluationIngest(request: Request, env: Env): Promis
       "Evaluation usage ingest admission capacity exceeded",
     ),
   );
-  if (denied) return timedRejection(timing, denied);
+  if (denied) return timedResponse(timing, denied);
 
   try {
     await timing.measure("queue", () => enqueueRawEvent(env, "raw_evaluations", row));
@@ -148,8 +148,8 @@ export async function handleEvaluationIngest(request: Request, env: Env): Promis
   return Response.json({ ok: true, eventId: event.value.eventId }, { status: 202 });
 }
 
-function timedRejection(timing: ReturnType<typeof createIngestPhaseTiming>, response: Response) {
-  timing.emit("rejected", { serializedBytes: null });
+function timedResponse(timing: ReturnType<typeof createIngestPhaseTiming>, response: Response) {
+  timing.emit(ingestTimingOutcomeFor(response), { serializedBytes: null });
   return response;
 }
 

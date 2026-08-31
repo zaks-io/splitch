@@ -22,6 +22,20 @@ function productionEnv() {
   };
 }
 
+function productionEnvWithoutInternalToken() {
+  const env = productionEnv();
+  delete (env as Partial<typeof env>).SPLITCH_EVENT_INGEST_TOKEN;
+  return env;
+}
+
+function metricProductionEnv() {
+  return {
+    SPLITCH_PLATFORM_TARGET: "production",
+    EVALUATION_PRIVACY_SALT: privacySalt,
+    ENTITY_METRIC_PRIVACY: makeEnv().ENTITY_METRIC_PRIVACY,
+  };
+}
+
 afterEach(() => {
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
@@ -66,11 +80,7 @@ describe("ingest timing contract", () => {
 
   it("emits the stable scrubbed Metric Event timing shape", async () => {
     const info = vi.spyOn(console, "info").mockImplementation(() => undefined);
-    const fixture = await makeMetricEventFixture({
-      SPLITCH_PLATFORM_TARGET: "production",
-      EVALUATION_PRIVACY_SALT: privacySalt,
-      ENTITY_METRIC_PRIVACY: makeEnv().ENTITY_METRIC_PRIVACY,
-    });
+    const fixture = await makeMetricEventFixture(metricProductionEnv());
     const body = metricEventBody();
 
     const response = await sendMetricEvent(fixture, body);
@@ -117,6 +127,65 @@ describe("ingest timing contract", () => {
     );
     expect(JSON.stringify(event)).not.toContain("app_id");
     expect(JSON.stringify(event)).not.toContain("sha256:timing-contract");
+  });
+
+  it("classifies Exposure infrastructure unavailability as a fault", async () => {
+    const info = vi.spyOn(console, "info").mockImplementation(() => undefined);
+
+    const calls = await postExposure({ env: productionEnvWithoutInternalToken() });
+
+    expect(calls.response.status).toBe(503);
+    expect(timingEvent(info.mock.calls, "internal_exposure")).toEqual(
+      expect.objectContaining({ outcome: "fault", serializedBytes: null }),
+    );
+  });
+
+  it("classifies Evaluation usage infrastructure unavailability as a fault", async () => {
+    const info = vi.spyOn(console, "info").mockImplementation(() => undefined);
+
+    const calls = await postEvaluationAt(
+      fixedNow,
+      {},
+      undefined,
+      productionEnvWithoutInternalToken(),
+    );
+
+    expect(calls.response.status).toBe(503);
+    expect(timingEvent(info.mock.calls, "internal_evaluation_usage")).toEqual(
+      expect.objectContaining({ outcome: "fault", serializedBytes: null }),
+    );
+  });
+
+  it("classifies delegated credential-store unavailability as a fault", async () => {
+    const info = vi.spyOn(console, "info").mockImplementation(() => undefined);
+    const fixture = await makeMetricEventFixture(metricProductionEnv(), "client_key", {
+      omitCredentialStore: true,
+    });
+
+    const response = await sendMetricEvent(fixture, metricEventBody());
+
+    expect(response.status).toBe(503);
+    expect(timingEvent(info.mock.calls, "sdk_metric_event")).toEqual(
+      expect.objectContaining({ outcome: "fault", serializedBytes: null }),
+    );
+  });
+
+  it("classifies Metric Event rate-limiter unavailability as a fault", async () => {
+    const info = vi.spyOn(console, "info").mockImplementation(() => undefined);
+    const fixture = await makeMetricEventFixture(metricProductionEnv(), "client_key", {
+      credential: { rateLimitRps: 1 },
+    });
+    const body = metricEventBody();
+
+    const response = await sendMetricEvent(fixture, body);
+
+    expect(response.status).toBe(503);
+    expect(timingEvent(info.mock.calls, "sdk_metric_event")).toEqual(
+      expect.objectContaining({
+        outcome: "fault",
+        serializedBytes: new TextEncoder().encode(JSON.stringify(body)).byteLength,
+      }),
+    );
   });
 });
 

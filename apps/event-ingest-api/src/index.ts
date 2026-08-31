@@ -28,7 +28,7 @@ import { EvaluationCommitOutboxDurableObject } from "./evaluation-commit-outbox"
 import { EvaluationUsageReplayWindowDurableObject } from "./evaluation-usage-replay-window";
 import { handleEvaluationIngest, handleIngest } from "./ingest";
 import { IngestAdmissionGateDurableObject } from "./ingest-admission-gate";
-import { createIngestPhaseTiming } from "./ingest-phase-timing";
+import { createIngestPhaseTiming, ingestTimingOutcomeFor } from "./ingest-phase-timing";
 import { handleAuthorizedMetricEvent } from "./metric-event-ingest";
 import { MetricEventOutboxDurableObject } from "./metric-event-outbox";
 import { handleMetricEventQueue } from "./metric-event-queue";
@@ -159,8 +159,9 @@ const delegatedHandler = {
       authenticateDelegatedDataPlaneCredential(identity, env),
     );
     if (!credential.ok) {
-      timing.emit("rejected", { serializedBytes: null });
-      return renderError(credential.error);
+      const response = renderError(credential.error);
+      timing.emit(ingestTimingOutcomeFor(response), { serializedBytes: null });
+      return response;
     }
     return handleAuthorizedMetricEvent(request, env, credential.value, timing);
   },

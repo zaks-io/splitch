@@ -42,7 +42,7 @@ export async function makeMetricEventFixture(
   credentialKind: "api_key" | "client_key" = "client_key",
   options: {
     admission?: AdmissionOption;
-    credential?: { revoked?: boolean; scopes?: string[] };
+    credential?: { revoked?: boolean; scopes?: string[]; rateLimitRps?: number | null };
     omitCredentialStore?: boolean;
   } = {},
 ): Promise<MetricEventFixture> {
@@ -169,7 +169,7 @@ async function sha256Hex(value: string): Promise<string> {
 
 function credentialRecord(
   kind: "api_key" | "client_key",
-  patch: { revoked?: boolean; scopes?: string[] } = {},
+  patch: { revoked?: boolean; scopes?: string[]; rateLimitRps?: number | null } = {},
 ): string {
   return JSON.stringify({
     schemaVersion: CURRENT_KV_SCHEMA_VERSION,
@@ -180,7 +180,9 @@ function credentialRecord(
       appId: METRIC_APP_ID,
       environmentId: METRIC_ENVIRONMENT_ID,
       scopes: patch.scopes ?? ["data-plane:evaluate", "data-plane:write"],
-      ...(kind === "client_key" ? { originAllowlist: null, rateLimitRps: null } : {}),
+      ...(kind === "client_key"
+        ? { originAllowlist: null, rateLimitRps: patch.rateLimitRps ?? null }
+        : {}),
       revoked: patch.revoked ?? false,
       cachedAt: "2026-08-07T00:00:00.000Z",
     },

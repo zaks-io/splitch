@@ -12,6 +12,11 @@ export interface IngestPhaseTiming {
   emit(outcome: IngestTimingOutcome, fields: IngestTimingFields): void;
 }
 
+export function ingestTimingOutcomeFor(response: Response): IngestTimingOutcome {
+  if (response.status >= 500) return "fault";
+  return response.status >= 400 ? "rejected" : "accepted";
+}
+
 export function createIngestPhaseTiming(
   env: { SENTRY_DSN?: string; SPLITCH_PLATFORM_TARGET?: string },
   context: { route: string; stream: string },
