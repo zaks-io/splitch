@@ -129,7 +129,7 @@ describe("Panel App Settings contract", () => {
     expect(requests.map(({ method }) => method)).toEqual(["DELETE", "POST", "DELETE", "POST"]);
   });
 
-  it("fails before Reviewing an Approval Request returned after it was applied", async () => {
+  it("returns partial progress before Reviewing an Approval Request returned after it was applied", async () => {
     const requests: Request[] = [];
     const fetcher = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const incoming = new Request(input as RequestInfo, init);
@@ -143,9 +143,19 @@ describe("Panel App Settings contract", () => {
       fetch: fetcher,
     });
 
-    await expect(client.deleteApp({ appId: "app_checkout", force: true })).rejects.toThrow(
-      `control-plane-sdk: apps_delete returned reviewed Approval Request ${appliedDeleteApproval.id}`,
-    );
+    await expect(client.deleteApp({ appId: "app_checkout", force: true })).resolves.toEqual({
+      ok: false,
+      status: 500,
+      error: {
+        code: "INTERNAL_SERVER_ERROR",
+        message: `The Control Plane returned Approval Request ${appliedDeleteApproval.id} after Review already applied it.`,
+        details: { fault: "panel_app_delete_partial_failure" },
+      },
+      partialDelete: {
+        removed: pendingDelete.removed,
+        appliedApprovalRequestIds: [appliedDeleteApproval.id],
+      },
+    });
     expect(requests.map(({ method }) => method)).toEqual(["DELETE", "POST", "DELETE"]);
   });
 });

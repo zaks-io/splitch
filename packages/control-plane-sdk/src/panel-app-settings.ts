@@ -219,19 +219,67 @@ async function deletePanelApp(
     ...(input.dryRun === true ? { dryRun: true } : {}),
     ...(input.force === true ? { force: true } : {}),
   };
-  let result = await sdk.apps.delete(request);
+  const result = await sdk.apps.delete(request);
   if (input.force !== true) return result;
 
-  const reviewed = new Set<string>();
+  return continuePanelAppDelete(sdk, input.appId, request, result);
+}
+
+async function continuePanelAppDelete(
+  sdk: ReturnType<typeof createControlPlaneSdk>,
+  appId: string,
+  request: { appId: string; dryRun?: boolean; force?: boolean },
+  initialResult: ControlPlaneOperationResult<AppsDeleteOutput>,
+): Promise<PanelAppDeleteResult> {
   const removed: ResourceDeleteRemoved[] = [];
   const appliedApprovalRequestIds: string[] = [];
+  try {
+    return await runPanelAppDelete(
+      sdk,
+      appId,
+      request,
+      initialResult,
+      removed,
+      appliedApprovalRequestIds,
+    );
+  } catch (error) {
+    if (removed.length === 0 && appliedApprovalRequestIds.length === 0) throw error;
+    return withDeleteProgress(
+      {
+        ok: false,
+        status: 500,
+        error: {
+          code: "INTERNAL_SERVER_ERROR",
+          message:
+            error instanceof Error
+              ? error.message
+              : "App deletion stopped after partially deleting the App.",
+          details: { fault: "panel_app_delete_partial_failure" },
+        },
+      },
+      removed,
+      appliedApprovalRequestIds,
+    );
+  }
+}
+
+async function runPanelAppDelete(
+  sdk: ReturnType<typeof createControlPlaneSdk>,
+  appId: string,
+  request: { appId: string; dryRun?: boolean; force?: boolean },
+  initialResult: ControlPlaneOperationResult<AppsDeleteOutput>,
+  removed: ResourceDeleteRemoved[],
+  appliedApprovalRequestIds: string[],
+): Promise<PanelAppDeleteResult> {
+  const reviewed = new Set<string>();
+  let result = initialResult;
   while (result.ok) {
     const pending = pendingDeleteResult(result);
     if (!pending) return result;
-    removed.push(...pending.removed);
+    appendRemoved(removed, pending.removed);
     const refusal = await reviewDeleteApprovals(
       sdk,
-      input.appId,
+      appId,
       pending.pendingApprovals,
       reviewed,
       appliedApprovalRequestIds,
@@ -240,6 +288,19 @@ async function deletePanelApp(
     result = await sdk.apps.delete(request);
   }
   return withDeleteProgress(result, removed, appliedApprovalRequestIds);
+}
+
+function appendRemoved(
+  cumulative: ResourceDeleteRemoved[],
+  next: readonly ResourceDeleteRemoved[],
+): void {
+  const known = new Set(cumulative.map(({ childType, id }) => `${childType}:${id}`));
+  for (const removed of next) {
+    const key = `${removed.childType}:${removed.id}`;
+    if (known.has(key)) continue;
+    cumulative.push(removed);
+    known.add(key);
+  }
 }
 
 function pendingDeleteResult(
@@ -259,7 +320,7 @@ async function reviewDeleteApprovals(
   for (const approval of approvals) {
     if (reviewed.has(approval.approvalRequestId)) {
       throw new Error(
-        `control-plane-sdk: apps_delete returned reviewed Approval Request ${approval.approvalRequestId}`,
+        `The Control Plane returned Approval Request ${approval.approvalRequestId} after Review already applied it.`,
       );
     }
     const review = await sdk.approvals.review({
