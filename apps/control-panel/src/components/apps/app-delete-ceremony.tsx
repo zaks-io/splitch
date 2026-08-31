@@ -2,7 +2,6 @@ import type { App, ResourceDeleteBlocker } from "@splitch/contracts";
 import { Alert, AlertDescription, AlertTitle } from "@splitch/ui/components/alert";
 import { Button } from "@splitch/ui/components/button";
 import { Input } from "@splitch/ui/components/input";
-import { useRouter } from "@tanstack/react-router";
 import { useState } from "react";
 import { AppDeleteConsequenceList } from "#components/apps/app-delete-consequence-list";
 import { AppSessionStaleNotice } from "#components/sessions/app-session-stale-notice";
@@ -26,13 +25,14 @@ export function AppDeleteCeremony({
   blockers,
   environmentNames,
   onCancel,
+  onPartialDelete,
 }: {
   app: App;
   blockers: readonly ResourceDeleteBlocker[];
   environmentNames: readonly string[];
   onCancel: () => void;
+  onPartialDelete: () => Promise<void>;
 }) {
-  const router = useRouter();
   const [typed, setTyped] = useState("");
   const [error, setError] = useState<DeleteError>();
   const [stale, setStale] = useState<{ reason: string; remedy: "reauth" | "retry" }>();
@@ -47,7 +47,7 @@ export function AppDeleteCeremony({
       return;
     }
     if (outcome.kind === "partially-deleted") {
-      setError(await partialDeleteError(outcome, () => router.invalidate()));
+      setError(await partialDeleteError(outcome, onPartialDelete));
       return;
     }
     if (outcome.kind === "stale") setStale(outcome);
