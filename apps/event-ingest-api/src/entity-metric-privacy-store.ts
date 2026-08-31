@@ -6,18 +6,12 @@ import {
 import {
   admitEntityIdentityRow,
   completeAppIdentityDeliveryReset,
-  deliverAppIdentityRow,
-  deliverEntityIdentityRow,
   registerAppEntity,
   registerAppEvaluation,
   resetAppIdentityDelivery,
 } from "./app-identity-event-inventory";
 import { DeliveryResetLock } from "./delivery-reset-lock";
-import {
-  admitEntityRowResponse,
-  completeEntityRowDelivery,
-  deliverEntityRowAtAuthority,
-} from "./entity-identity-row-delivery";
+import { admitEntityRowResponse, completeEntityRowDelivery } from "./entity-identity-row-delivery";
 import {
   atOrBefore,
   type EntityEvaluationInventoryEntry,
@@ -87,13 +81,10 @@ export class EntityMetricPrivacyDurableObject {
       "/delete": alone(() => this.deleteRecords()),
       "/register-app-entity": concurrent(() => this.registerAppEntity(request)),
       "/register-app-evaluation": concurrent(() => this.registerAppEvaluation(request)),
-      "/deliver-app-row": concurrent(() => this.deliverAppRow(request)),
       "/admit-app-row": concurrent(() => this.admitAppRow(request)),
       "/complete-app-row": concurrent(() => this.completeAppRow(request)),
-      "/deliver-entity-row": concurrent(() => this.deliverEntityRow(request)),
       "/admit-entity-row": concurrent(() => this.admitEntityRow(request)),
       "/complete-entity-row": concurrent(() => this.completeEntityRow(request)),
-      "/deliver-row": concurrent(() => this.deliverRow(request)),
       "/admit-row": concurrent(() => this.admitRow(request)),
       "/complete-row": concurrent(() => this.completeRow(request)),
       "/begin-raw-attempt": concurrent(() =>
@@ -117,10 +108,6 @@ export class EntityMetricPrivacyDurableObject {
     return registerAppEvaluation(this.ctx.storage, request);
   }
 
-  private async deliverAppRow(request: Request): Promise<Response> {
-    return deliverAppIdentityRow(this.ctx.storage, this.env, request);
-  }
-
   private async admitAppRow(request: Request): Promise<Response> {
     return admitAppIdentityRow(this.ctx.storage, request);
   }
@@ -129,20 +116,12 @@ export class EntityMetricPrivacyDurableObject {
     return completeAppIdentityRow(this.ctx.storage, request);
   }
 
-  private async deliverEntityRow(request: Request): Promise<Response> {
-    return deliverEntityIdentityRow(this.ctx.storage, this.env, request);
-  }
-
   private async admitEntityRow(request: Request): Promise<Response> {
     return admitEntityIdentityRow(this.ctx.storage, this.env, request);
   }
 
   private async completeEntityRow(request: Request): Promise<Response> {
     return completeEntityIdentityRow(this.ctx.storage, this.env, request);
-  }
-
-  private async deliverRow(request: Request): Promise<Response> {
-    return deliverEntityRowAtAuthority(this.ctx.storage, this.env, request);
   }
 
   private async admitRow(request: Request): Promise<Response> {

@@ -225,33 +225,35 @@ async function handleRequest(
 
 function makeCloudflareConfigurationResolver(binding: ConvexControlPlaneBinding) {
   return makeIntegrationConfigurationResolver("Cloudflare", (input) =>
-    binding.loadCloudflareExposureVerificationConfig(input),
+    binding.loadCloudflareExposureVerificationConfigs(input),
   );
 }
 
 function makeConvexConfigurationResolver(binding: ConvexControlPlaneBinding) {
   return makeIntegrationConfigurationResolver("Convex", (input) =>
-    binding.loadConvexExposureVerificationConfig(input),
+    binding.loadConvexExposureVerificationConfigs(input),
   );
 }
 
 function makeIntegrationConfigurationResolver(
   kind: "Cloudflare" | "Convex",
   load: (
-    input: Parameters<ConvexControlPlaneBinding["loadConvexExposureVerificationConfig"]>[0],
-  ) => ReturnType<ConvexControlPlaneBinding["loadConvexExposureVerificationConfig"]>,
+    input: Parameters<ConvexControlPlaneBinding["loadConvexExposureVerificationConfigs"]>[0],
+  ) => ReturnType<ConvexControlPlaneBinding["loadConvexExposureVerificationConfigs"]>,
 ) {
   return {
-    async resolve(principal: Principal, item: ConvexServerExposureItem) {
+    async resolveBatch(principal: Principal, items: readonly ConvexServerExposureItem[]) {
       if (!principal.appId || !principal.environmentId)
         throw new Error(`evaluation-api: ${kind} Exposure principal has no Environment scope`);
       return load({
         appId: principal.appId,
         environmentId: principal.environmentId,
-        installationId: item.installationId,
-        flagKey: item.flagKey,
-        experimentId: item.experimentId,
-        runId: item.runId,
+        items: items.map((item) => ({
+          installationId: item.installationId,
+          flagKey: item.flagKey,
+          experimentId: item.experimentId,
+          runId: item.runId,
+        })),
       });
     },
   };

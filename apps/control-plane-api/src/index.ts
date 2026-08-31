@@ -1,9 +1,5 @@
 import { WorkerEntrypoint } from "cloudflare:workers";
-import {
-  type ConvexExposureVerificationRequest,
-  type ConvexExposureVerificationResult,
-  routesDelegatedTo,
-} from "@splitch/contracts";
+import { routesDelegatedTo } from "@splitch/contracts";
 import { createRepository } from "@splitch/db";
 import { wrapWorkerHandler } from "@splitch/observability/worker";
 import {
@@ -18,9 +14,7 @@ import {
 import { createAnalysisResultsReader } from "./attention-analysis-reader";
 import { authJwksUri } from "./auth-jwks-config";
 import { makeControlPlaneAuthResolver } from "./auth-resolver";
-import { loadCloudflareExposureVerificationConfig } from "./cloudflare-exposure-verification";
 import { durableConfigStoreAccess } from "./config-store-access";
-import { durableAppIdentityResetAccess } from "./config-store-app-identity-access";
 import { ConfigStoreDurableObject } from "./config-store-do";
 import { parseControlPanelBindingOperation } from "./control-panel-operation";
 import { handleControlPlaneAppRequest } from "./control-plane-app-request";
@@ -30,13 +24,13 @@ import {
   requiredMcpDelegationSecret,
   requiredMcpReplayBinding,
 } from "./control-plane-runtime-config";
-import { loadConvexExposureVerificationConfig } from "./convex-exposure-verification";
 import { CredentialCacheBackfillDurableObject } from "./credential-cache-backfill-do";
 import {
   CredentialCacheWriterDurableObject,
   durableCredentialCacheWriterAccess,
 } from "./credential-cache-writer-do";
 import type { ControlPlaneApiEnv } from "./env";
+import { ExposureVerificationEntrypoint } from "./exposure-verification-entrypoint";
 import { controlPlaneHealthResponse } from "./health";
 import { handleCredentialCacheBackfillGate, handleLiveUpdateTestControl } from "./internal-routes";
 import { makeCachedJwksVerifier } from "./jwks-verify";
@@ -113,31 +107,12 @@ const evaluationHandler = {
 } satisfies ExportedHandler<ControlPlaneApiEnv>;
 
 /** Binding-only entrypoint for API-Key Convex routes surfaced by Evaluation. */
-export class EvaluationEntrypoint extends WorkerEntrypoint<ControlPlaneApiEnv> {
+export class EvaluationEntrypoint extends ExposureVerificationEntrypoint {
   override async fetch(request: Request): Promise<Response> {
     return wrapWorkerHandler(evaluationHandler, { surface: "control-plane-api" }).fetch(
       request as Parameters<typeof evaluationHandler.fetch>[0],
       this.env,
       this.ctx,
-    );
-  }
-
-  async loadConvexExposureVerificationConfig(
-    input: ConvexExposureVerificationRequest,
-  ): Promise<ConvexExposureVerificationResult> {
-    return loadConvexExposureVerificationConfig(createRepository(this.env.DB), input);
-  }
-
-  async loadCloudflareExposureVerificationConfig(
-    input: ConvexExposureVerificationRequest,
-  ): Promise<ConvexExposureVerificationResult> {
-    return loadCloudflareExposureVerificationConfig(createRepository(this.env.DB), input);
-  }
-
-  resetCompromisedAppIdentity(appId: string, resetId: string): Promise<string> {
-    return durableAppIdentityResetAccess(this.env.CONFIG_STORE_WRITER).resetCompromisedAppIdentity(
-      appId,
-      resetId,
     );
   }
 }

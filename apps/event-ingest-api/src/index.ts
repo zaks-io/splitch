@@ -28,6 +28,7 @@ import { EvaluationCommitOutboxDurableObject } from "./evaluation-commit-outbox"
 import { EvaluationUsageReplayWindowDurableObject } from "./evaluation-usage-replay-window";
 import { handleEvaluationIngest, handleIngest } from "./ingest";
 import { IngestAdmissionGateDurableObject } from "./ingest-admission-gate";
+import { createIngestPhaseTiming } from "./ingest-phase-timing";
 import { handleAuthorizedMetricEvent } from "./metric-event-ingest";
 import { MetricEventOutboxDurableObject } from "./metric-event-outbox";
 import { handleMetricEventQueue } from "./metric-event-queue";
@@ -150,9 +151,18 @@ const delegatedHandler = {
     const identity = delegatedIdentityFor(request, metricEventRoutes);
     if (!identity) return notDelegatedResponse(request);
     recordRequest(observability, request, url, "metric-event-request");
-    const credential = await authenticateDelegatedDataPlaneCredential(identity, env);
-    if (!credential.ok) return renderError(credential.error);
-    return handleAuthorizedMetricEvent(request, env, credential.value);
+    const timing = createIngestPhaseTiming(env, {
+      route: "sdk_metric_event",
+      stream: "metric_events",
+    });
+    const credential = await timing.measure("auth", () =>
+      authenticateDelegatedDataPlaneCredential(identity, env),
+    );
+    if (!credential.ok) {
+      timing.emit("rejected");
+      return renderError(credential.error);
+    }
+    return handleAuthorizedMetricEvent(request, env, credential.value, timing);
   },
 } satisfies ExportedHandler<Env>;
 

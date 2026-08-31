@@ -11,6 +11,7 @@ export function logRawEventBatchSettlement(
   batch: MessageBatch<Record<string, unknown>>,
   datasource: RawEventDatasource,
   outcomes: RawEventOutcomeCounts,
+  timings?: { totalMs: number; admissionMs?: number; deliveryMs?: number },
 ): void {
   const oldestTimestamp = oldestMessageTimestamp(batch.messages);
   console.info("event-ingest-api raw event batch settled", {
@@ -28,6 +29,13 @@ export function logRawEventBatchSettlement(
     oldestMessageAgeMs: oldestTimestamp
       ? Math.max(0, Date.now() - oldestTimestamp.getTime())
       : null,
+    ...(timings
+      ? {
+          totalMs: timings.totalMs,
+          ...(timings.admissionMs === undefined ? {} : { admissionMs: timings.admissionMs }),
+          ...(timings.deliveryMs === undefined ? {} : { deliveryMs: timings.deliveryMs }),
+        }
+      : {}),
   });
 }
 

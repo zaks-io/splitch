@@ -2,6 +2,15 @@
 
 **Status:** accepted
 
+## Queue-backed amendment
+
+ADR-0043 moved Tinybird appends into queue consumers. The direct
+`/deliver-app-row`, `/deliver-entity-row`, and `/deliver-row` routes were then unreachable and are
+removed. Their active replacements split the privacy protocol into `/admit-app-row`,
+`/admit-entity-row`, and `/admit-row` before a batched Tinybird append, followed by the matching
+`/complete-*` route after terminal delivery. Durable delivery permits preserve the reset exclusion
+across that asynchronous boundary.
+
 The App-identity inventory is one Durable Object per App, addressed
 `idFromName(`${appId}:app-identity-inventory`)`, so every event an App sends passes through a single
 object worldwide (`apps/event-ingest-api/src/entity-metric-privacy.ts:31`). That object wrapped
@@ -20,9 +29,9 @@ deletion proof was returned (ADR-0032).
 
 1. **Delivery and reset are a readers-writer section, not a mutex.** Per-row work (`/register`,
    `/register-evaluation`, `/suppressed`, `/register-app-entity`, `/register-app-evaluation`,
-   `/deliver-app-row`, `/deliver-entity-row`, `/deliver-row`) takes the shared side and runs
-   concurrently. Whole-inventory work (`/suppress`, `/delete`, `/reset-app`, `/complete-reset`,
-   `GET /export`) takes the exclusive side. The lock lives in
+   `/admit-app-row`, `/complete-app-row`, `/admit-entity-row`, `/complete-entity-row`, `/admit-row`,
+   `/complete-row`) takes the shared side and runs concurrently. Whole-inventory work (`/suppress`,
+   `/delete`, `/reset-app`, `/complete-reset`, `GET /export`) takes the exclusive side. The lock lives in
    `apps/event-ingest-api/src/delivery-reset-lock.ts`.
 
 2. **The exclusion the mutex provided is preserved exactly.** An exclusive section waits for every
@@ -53,9 +62,8 @@ deletion proof was returned (ADR-0032).
 
 ## Consequences
 
-- One App's ingest is no longer serialized on Tinybird latency. Concurrent deliveries are in flight
-  against Tinybird simultaneously, proved by
-  `apps/event-ingest-api/src/app-identity-delivery-throughput.test.ts`.
+- One App's ingest is no longer serialized on Tinybird latency. Queue consumers batch admitted rows
+  into Tinybird requests outside the privacy Durable Objects (ADR-0043).
 - A privacy reset now waits for in-flight deliveries rather than for a mutex turn, so its latency is
   bounded by the slowest admitted delivery instead of by the queue ahead of it.
 - The lock is in-memory per Durable Object instance, which is the same scope the mutex had. It
@@ -64,7 +72,7 @@ deletion proof was returned (ADR-0032).
 - A failed section releases the lock and the rejection reaches the caller, so a throwing reset
   cannot wedge an App's ingest shut.
 - Tinybird's per-request ceiling is now the binding constraint on delivery instead of this lock.
-  Batching rows into one request is separate work (ADR-0043, SPL-447).
+  ADR-0043 and SPL-447 added the queue-backed batch boundary.
 
 ## Sources
 

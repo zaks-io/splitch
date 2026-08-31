@@ -1,9 +1,14 @@
 import { createRepository, envScope } from "@splitch/db";
 import { createLocalD1 } from "@splitch/db/test-d1";
-import { describe, expect, it } from "vitest";
-import { loadConvexExposureVerificationConfig } from "./convex-exposure-verification";
+import { describe, expect, it, vi } from "vitest";
+import {
+  loadConvexExposureVerificationConfig,
+  loadConvexExposureVerificationConfigs,
+} from "./convex-exposure-verification";
 
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: one seeded D1 lifecycle proves delivery triggers and immutable verification read the same committed snapshot.
 describe("Convex integration D1 transaction", () => {
+  // biome-ignore lint/complexity/noExcessiveLinesPerFunction: splitting this transaction would duplicate a large relational fixture and weaken the commit-boundary proof.
   it("increments the Environment version and enqueues one delivery with the config commit", async () => {
     const local = await createLocalD1();
     try {
@@ -120,6 +125,62 @@ describe("Convex integration D1 transaction", () => {
         createdAt: now,
       });
 
+      const installationReads = vi.spyOn(repo.convex, "listInstallationsByIds");
+      const experimentReads = vi.spyOn(repo.experiments, "listExperimentsByIds");
+      const flagReads = vi.spyOn(repo.flags, "listFlagsByIds");
+      const runReads = vi.spyOn(repo.experiments, "listRunsByIds");
+      await expect(
+        loadConvexExposureVerificationConfigs(repo, {
+          appId: "app_1",
+          environmentId: "env_1",
+          items: [
+            {
+              installationId: "00000000-0000-4000-8000-000000000001",
+              flagKey: "checkout",
+              experimentId: "experiment_1",
+              runId: "run_1",
+            },
+            {
+              installationId: "00000000-0000-4000-8000-000000000099",
+              flagKey: "checkout",
+              experimentId: "experiment_1",
+              runId: "run_1",
+            },
+            {
+              installationId: "00000000-0000-4000-8000-000000000001",
+              flagKey: "wrong-key",
+              experimentId: "experiment_1",
+              runId: "run_1",
+            },
+            {
+              installationId: "00000000-0000-4000-8000-000000000001",
+              flagKey: "checkout",
+              experimentId: "experiment_1",
+              runId: "run_1",
+            },
+          ],
+        }),
+      ).resolves.toEqual([
+        expect.objectContaining({
+          status: "found",
+          config: expect.objectContaining({
+            runId: "run_1",
+            runConfigHash: "sha256:run-1",
+            endedAt: "2026-08-25T12:30:00.000Z",
+          }),
+        }),
+        { status: "installation_not_found" },
+        { status: "configuration_not_found" },
+        expect.objectContaining({
+          status: "found",
+          config: expect.objectContaining({ runId: "run_1" }),
+        }),
+      ]);
+      expect(installationReads).toHaveBeenCalledTimes(1);
+      expect(experimentReads).toHaveBeenCalledTimes(1);
+      expect(flagReads).toHaveBeenCalledTimes(1);
+      expect(runReads).toHaveBeenCalledTimes(1);
+
       await expect(
         loadConvexExposureVerificationConfig(repo, {
           appId: "app_1",
@@ -131,12 +192,27 @@ describe("Convex integration D1 transaction", () => {
         }),
       ).resolves.toMatchObject({
         status: "found",
-        config: {
-          runId: "run_1",
-          runConfigHash: "sha256:run-1",
-          endedAt: "2026-08-25T12:30:00.000Z",
-        },
+        config: { runId: "run_1", runConfigHash: "sha256:run-1" },
       });
+
+      await local.d1
+        .prepare("UPDATE experiments SET status = 'archived' WHERE id = ?")
+        .bind("experiment_1")
+        .run();
+      await expect(
+        loadConvexExposureVerificationConfigs(repo, {
+          appId: "app_1",
+          environmentId: "env_1",
+          items: [
+            {
+              installationId: "00000000-0000-4000-8000-000000000001",
+              flagKey: "checkout",
+              experimentId: "experiment_1",
+              runId: "run_1",
+            },
+          ],
+        }),
+      ).resolves.toEqual([{ status: "configuration_not_found" }]);
     } finally {
       await local.dispose();
     }

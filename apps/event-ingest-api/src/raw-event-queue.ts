@@ -1,9 +1,14 @@
 import { requirePlatformTarget } from "@splitch/contracts";
 import { queueRetryDelaySeconds } from "./queue-retry";
-import { type RawEventFailureSource, rawFailureChunks } from "./raw-event-dead-letter";
+import {
+  type RawEventFailureSource,
+  rawFailureChunks,
+  requiredRawEventDeadLetterQueue,
+} from "./raw-event-dead-letter";
 import { admitRawEventPrivacy, completeRawEventPrivacy } from "./raw-event-privacy-delivery";
 import {
   parseRawEventEnvelope,
+  rawEventDatasourceForQueue,
   type RawEventDatasource,
   type RawEventQueueEnvelope,
 } from "./raw-event-queue-envelope";
@@ -39,16 +44,31 @@ export async function handleRawEventQueue(
   env: Env,
 ): Promise<void> {
   requirePlatformTarget(env.SPLITCH_PLATFORM_TARGET);
-  const queueDatasource = datasourceForQueue(batch.queue);
+  const startedAt = performance.now();
+  const queueDatasource = rawEventDatasourceForQueue(batch.queue);
   const outcomes = emptyRawEventOutcomeCounts();
+  let admissionMs: number | undefined;
+  let deliveryMs: number | undefined;
   try {
+    const admissionStartedAt = performance.now();
     const groups = await admitBatch(batch.messages, queueDatasource, env, outcomes);
+    admissionMs = elapsedMs(admissionStartedAt);
+    const deliveryStartedAt = performance.now();
     for (const [datasource, admitted] of groups) {
       await deliverGroup(datasource, admitted, env, outcomes);
     }
+    deliveryMs = elapsedMs(deliveryStartedAt);
   } finally {
-    logRawEventBatchSettlement(batch, queueDatasource, outcomes);
+    logRawEventBatchSettlement(batch, queueDatasource, outcomes, {
+      totalMs: elapsedMs(startedAt),
+      admissionMs,
+      deliveryMs,
+    });
   }
+}
+
+function elapsedMs(startedAt: number): number {
+  return Math.round(Math.max(0, performance.now() - startedAt) * 1_000) / 1_000;
 }
 
 async function admitBatch(
@@ -165,12 +185,6 @@ async function settleMicrobatch(
   await transferTerminalFailure(datasource, items, outcome, env);
 }
 
-function datasourceForQueue(queue: string): RawEventDatasource {
-  if (queue.includes("raw-evaluations")) return "raw_evaluations";
-  if (queue.includes("raw-events")) return "raw_events";
-  throw new Error(`unknown raw event queue ${queue}`);
-}
-
 async function completeAdmission(item: AdmittedRawEvent, env: Env): Promise<void> {
   await completeRawEventPrivacy(item.envelope.datasource, item.envelope.row, item.deliveryId, env);
 }
@@ -251,7 +265,7 @@ async function transferTerminalFailure(
     markRawEventTerminal(env, item.envelope.row, item.deliveryId, terminal),
   );
   const chunks = rawFailureChunks(marked, terminal);
-  const queue = requiredDeadLetterQueue(env, datasource);
+  const queue = requiredRawEventDeadLetterQueue(env, datasource);
   for (let index = 0; index < chunks.length; index += 1) {
     const chunk = chunks[index] ?? [];
     try {
@@ -284,7 +298,7 @@ async function resumeTerminalFailure(
     const entry = rawFailureChunks([item], terminal)[0]?.[0];
     if (!entry) throw new Error("Raw event terminal failure envelope is unavailable");
     try {
-      await requiredDeadLetterQueue(env, item.envelope.datasource).send(entry.envelope);
+      await requiredRawEventDeadLetterQueue(env, item.envelope.datasource).send(entry.envelope);
       await markRawEventTransferred(env, item.envelope.row, item.deliveryId);
     } catch (error) {
       retry(item.message, error);
@@ -301,13 +315,4 @@ function retry(message: Message<Record<string, unknown>>, error: unknown): void 
     errorMessage: error instanceof Error ? error.message : "non-error rejection",
   });
   message.retry({ delaySeconds: queueRetryDelaySeconds(message.attempts, message.id) });
-}
-
-function requiredDeadLetterQueue(
-  env: Env,
-  datasource: RawEventDatasource,
-): Queue<Record<string, unknown>> {
-  const queue = datasource === "raw_events" ? env.RAW_EVENTS_DLQ : env.RAW_EVALUATIONS_DLQ;
-  if (!queue) throw new Error(`${datasource} dead-letter queue binding is unavailable`);
-  return queue;
 }

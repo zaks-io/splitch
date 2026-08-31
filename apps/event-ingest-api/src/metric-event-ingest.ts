@@ -5,7 +5,6 @@ import {
   type MetricEventTrackRequest,
   MetricEventTrackRequestSchema,
 } from "@splitch/contracts";
-import { canonicalizeAnalysisEntityHash, resolveEntityPrivacyIdentity } from "@splitch/privacy";
 import type { MetricEventCredentialScope } from "./client-key-auth";
 import { renderError, serviceUnavailable } from "./errors";
 import {
@@ -14,12 +13,12 @@ import {
 } from "./event-definition-mismatch-diagnostics";
 import {
   admitAndClaimMetricEvent,
-  canonicalJson,
   replayExistingMetricEvent,
   schemaMismatch,
 } from "./metric-event-admission";
+import { resolveMetricEventIdentityMaterial } from "./metric-event-identity";
+import { createIngestPhaseTiming, type IngestPhaseTiming } from "./ingest-phase-timing";
 import { checkMetricEventRateLimit } from "./metric-event-rate-limit";
-import { makeMetricEventSaltStore } from "./metric-event-salt-store";
 import type { Env } from "./types";
 
 const MAX_BODY_BYTES = 32_768;
@@ -29,62 +28,59 @@ export async function handleAuthorizedMetricEvent(
   request: Request,
   env: Env,
   credential: MetricEventCredentialScope,
+  timing: IngestPhaseTiming = createIngestPhaseTiming(env, {
+    route: "sdk_metric_event",
+    stream: "metric_events",
+  }),
 ): Promise<Response> {
-  const parsed = await parseMetricEventRequest(request);
-  if (parsed instanceof Response) return parsed;
-  const limited = await enforceCredentialRateLimit(env, credential);
-  if (limited) return limited;
-
-  const saltStore = makeMetricEventSaltStore(env);
-  const identity = await resolveEntityPrivacyIdentity(saltStore, {
-    appId: credential.appId,
-    idType: parsed.idType,
-    targetingKey: parsed.targetingKey,
-  });
-  const targetingKeyHash = canonicalizeAnalysisEntityHash(identity.targetingKeyHashes);
-  const fingerprint = await metricEventPayloadFingerprint({
-    eventName: parsed.eventName,
-    idType: parsed.idType,
-    targetingKeyHash,
-    fields: parsed.fields,
-    dimensions: parsed.dimensions,
-  });
-  const retainedFingerprints = await retainedMetricEventFingerprints(identity.targetingKeyHashes, {
-    eventName: parsed.eventName,
-    idType: parsed.idType,
-    targetingKeyHash,
-    fields: parsed.fields,
-    dimensions: parsed.dimensions,
-  });
-  const dedupKey = await metricEventDedupKey(
-    credential.appId,
-    credential.environmentId,
-    parsed.eventId,
+  const parsed = await timing.measure("parse", () => parseMetricEventRequest(request));
+  if (parsed instanceof Response) return timedMetricResponse(timing, parsed);
+  const limited = await timing.measure("rateLimit", () =>
+    enforceCredentialRateLimit(env, credential),
   );
+  if (limited) return timedMetricResponse(timing, limited);
+
+  const identityMaterial = await timing.measure("identity", () =>
+    resolveMetricEventIdentityMaterial(env, credential, parsed),
+  );
+  const { identity, targetingKeyHash, fingerprint, retainedFingerprints, dedupKey } =
+    identityMaterial;
   const disclosure = credential.credentialKind === "api_key" ? "trusted" : "public";
-  const replay = await replayExistingMetricEvent(
-    env,
-    parsed.eventId,
-    dedupKey,
-    fingerprint,
-    retainedFingerprints,
-    disclosure,
+  const replay = await timing.measure("replay", () =>
+    replayExistingMetricEvent(
+      env,
+      parsed.eventId,
+      dedupKey,
+      fingerprint,
+      retainedFingerprints,
+      disclosure,
+    ),
   );
-  if (replay) return replay;
+  if (replay) return timedMetricResponse(timing, replay);
 
-  const hot = await loadDefinition(env, credential, parsed, disclosure);
-  if (hot instanceof Response) return hot;
+  const hot = await timing.measure("config", () =>
+    loadDefinition(env, credential, parsed, disclosure),
+  );
+  if (hot instanceof Response) return timedMetricResponse(timing, hot);
   const mismatch = schemaMismatch(parsed, hot, disclosure);
-  if (mismatch) return mismatch;
+  if (mismatch) return timedMetricResponse(timing, mismatch);
 
-  return admitAndClaimMetricEvent(env, credential, parsed, {
-    targetingKeyHash,
-    entityFamilyHash: identity.entityFamilyHash,
-    fingerprint,
-    dedupKey,
-    eventDefinitionId: hot.eventDefinition.id,
-    eventDefinitionVersionId: hot.version.id,
-  });
+  const response = await timing.measure("admissionQueue", () =>
+    admitAndClaimMetricEvent(env, credential, parsed, {
+      targetingKeyHash,
+      entityFamilyHash: identity.entityFamilyHash,
+      fingerprint,
+      dedupKey,
+      eventDefinitionId: hot.eventDefinition.id,
+      eventDefinitionVersionId: hot.version.id,
+    }),
+  );
+  return timedMetricResponse(timing, response);
+}
+
+function timedMetricResponse(timing: IngestPhaseTiming, response: Response): Response {
+  timing.emit(response.status < 400 ? "accepted" : "rejected");
+  return response;
 }
 
 async function parseMetricEventRequest(request: Request) {
@@ -236,63 +232,6 @@ async function loadDefinition(
   }
 }
 
-export async function metricEventDedupKey(
-  appId: string,
-  environmentId: string,
-  eventId: string,
-): Promise<string> {
-  return sha256(`metric:${appId}:${environmentId}:${eventId}`);
-}
-
-export async function metricEventPayloadFingerprint(input: {
-  eventName: string;
-  idType: string;
-  targetingKeyHash: string;
-  fields: unknown;
-  dimensions: unknown;
-}): Promise<string> {
-  return sha256(
-    canonicalJson({
-      eventName: input.eventName,
-      idType: input.idType,
-      targetingKeyHash: input.targetingKeyHash,
-      fields: input.fields,
-      dimensions: input.dimensions,
-    }),
-  );
-}
-
-async function retainedMetricEventFingerprints(
-  hashes: readonly string[],
-  input: {
-    eventName: string;
-    idType: string;
-    targetingKeyHash: string;
-    fields: unknown;
-    dimensions: unknown;
-  },
-): Promise<readonly string[]> {
-  const fingerprints = [];
-  for (const hash of hashes) {
-    if (hash === input.targetingKeyHash) continue;
-    fingerprints.push(
-      await metricEventPayloadFingerprint({
-        eventName: input.eventName,
-        idType: input.idType,
-        targetingKeyHash: hash,
-        fields: input.fields,
-        dimensions: input.dimensions,
-      }),
-    );
-  }
-  return fingerprints;
-}
-
 function validation(message: string, path: string[]) {
   return { code: "VALIDATION_ERROR" as const, message, details: { issues: [{ path, message }] } };
-}
-
-async function sha256(value: string): Promise<string> {
-  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));
-  return `sha256:${[...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("")}`;
 }

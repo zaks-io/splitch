@@ -1,10 +1,58 @@
-import type { HandlerArgs } from "@splitch/worker-runtime";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import {
+  completedHoldover,
+  EXPOSURE_ID,
+  INSTALLATION_ID,
+  provider,
+  readOnlyAssignments,
+  requestArgs,
+  resolver,
+  saltStore,
+} from "./convex-exposures-test-fixture";
 import { makeConvexExposuresHandler } from "./convex-exposures";
 import { RecordingExposureIngestSink } from "./exposure-redemption";
 import { MemoryExposureRedemptionClaimStore } from "./exposure-redemption-claim";
 
 describe("Convex server Exposure verification", () => {
+  it("verifies the bounded batch once and preserves result order", async () => {
+    const resolveBatch = vi.fn(async (_principal: unknown, _items: readonly unknown[]) => [
+      { status: "installation_not_found" as const },
+      { status: "configuration_not_found" as const },
+    ]);
+    const handler = makeConvexExposuresHandler({
+      provider: provider(),
+      assignmentStore: readOnlyAssignments(),
+      convexConfigurationResolver: { resolveBatch },
+      exposureIngestSink: new RecordingExposureIngestSink(),
+      exposureRedemptionClaims: new MemoryExposureRedemptionClaimStore(),
+      holdoverWrite: completedHoldover(),
+      saltStore: saltStore(),
+    });
+    const args = requestArgs();
+    const body = (args.input as { body: { exposures: Array<{ exposureId: string }> } }).body;
+    body.exposures.push({
+      ...body.exposures[0],
+      exposureId: "00000000-0000-4000-8000-000000000003",
+    });
+
+    const response = await handler(args);
+
+    expect(resolveBatch).toHaveBeenCalledTimes(1);
+    expect(resolveBatch.mock.calls[0]?.[1]).toHaveLength(2);
+    expect(await response.json()).toEqual({
+      results: [
+        expect.objectContaining({
+          exposureId: EXPOSURE_ID,
+          code: "CONVEX_INSTALLATION_NOT_FOUND",
+        }),
+        expect.objectContaining({
+          exposureId: "00000000-0000-4000-8000-000000000003",
+          code: "STALE_CONFIGURATION",
+        }),
+      ],
+    });
+  });
+
   it("recomputes the Variant, hashes identity, ingests, and deduplicates retries", async () => {
     const sink = new RecordingExposureIngestSink();
     const holdoverWrites: unknown[] = [];
@@ -49,6 +97,35 @@ describe("Convex server Exposure verification", () => {
     expect(JSON.stringify(holdoverWrites[0])).not.toContain("user@example.com");
   });
 
+  it("settles duplicate Exposure ids in request order after one batch verification", async () => {
+    const sink = new RecordingExposureIngestSink();
+    const resolveBatch = vi.fn(resolver().resolveBatch);
+    const handler = makeConvexExposuresHandler({
+      provider: provider(),
+      assignmentStore: readOnlyAssignments(),
+      convexConfigurationResolver: { resolveBatch },
+      exposureIngestSink: sink,
+      exposureRedemptionClaims: new MemoryExposureRedemptionClaimStore(),
+      holdoverWrite: completedHoldover(),
+      saltStore: saltStore(),
+      now: () => new Date("2026-08-25T12:00:01.000Z"),
+    });
+    const args = requestArgs();
+    const body = (args.input as { body: { exposures: Array<Record<string, unknown>> } }).body;
+    body.exposures.push({ ...body.exposures[0] });
+
+    expect(await (await handler(args)).json()).toEqual({
+      results: [
+        { exposureId: EXPOSURE_ID, status: "accepted" },
+        { exposureId: EXPOSURE_ID, status: "deduplicated" },
+      ],
+    });
+    expect(resolveBatch).toHaveBeenCalledTimes(1);
+    expect(sink.writes).toHaveLength(1);
+  });
+});
+
+describe("Convex server Exposure validation", () => {
   it("rejects a Variant assertion that the shared evaluator cannot reproduce", async () => {
     const handler = makeConvexExposuresHandler({
       provider: provider(),
@@ -151,155 +228,3 @@ describe("Convex server Exposure verification", () => {
     });
   });
 });
-
-const EXPOSURE_ID = "00000000-0000-4000-8000-000000000001";
-const INSTALLATION_ID = "00000000-0000-4000-8000-000000000002";
-
-function requestArgs(): HandlerArgs<unknown> {
-  return {
-    input: {
-      body: {
-        exposures: [
-          {
-            exposureId: EXPOSURE_ID,
-            installationId: INSTALLATION_ID,
-            flagKey: "checkout",
-            experimentId: "exp_1",
-            runId: "run_1",
-            runConfigHash: "sha256:run-1",
-            evaluationContext: {
-              targetingKey: "user@example.com",
-              idType: "user",
-              attributes: {},
-            },
-            variantName: "treatment",
-            exposureAt: "2026-08-25T12:00:00.000Z",
-          },
-        ],
-      },
-    },
-    principal: {
-      kind: "api-key",
-      id: "api_key:test",
-      scopes: ["data-plane:evaluate"],
-      orgId: "org_1",
-      appId: "app_1",
-      environmentId: "env_1",
-      authDoor: null,
-    },
-    requestId: "request_1",
-    request: new Request("https://edge.splitch.dev/api/integrations/convex/exposures"),
-  };
-}
-
-function provider() {
-  const variants = [
-    { id: "control", name: "control", value: false },
-    { id: "treatment", name: "treatment", value: true },
-  ];
-  return {
-    async getFlag() {
-      return {
-        flagKey: "checkout",
-        appId: "app_1",
-        environmentId: "env_1",
-        experimentId: "exp_1",
-        enabled: true,
-        defaultVariant: "control",
-        variants,
-        availableVariantNames: ["control", "treatment"],
-        targetingRules: [],
-        rollout: null,
-      };
-    },
-    async getFlags() {
-      return [await this.getFlag()];
-    },
-    async getExperiment() {
-      return {
-        experimentId: "exp_1",
-        appId: "app_1",
-        environmentId: "env_1",
-        targetingKeyType: "user",
-        status: "running" as const,
-        liveRunId: "run_1",
-        liveRun: {
-          runId: "run_1",
-          salt: "salt",
-          allocation: { control: 0, treatment: 100 },
-          variantSet: variants,
-          targetingRules: [],
-          targetingKey: "userId",
-          configHash: "sha256:run-1",
-        },
-      };
-    },
-  };
-}
-
-function resolver(overrides: { endedAt?: string | null } = {}) {
-  const variants = [
-    { id: "control", name: "control", value: false },
-    { id: "treatment", name: "treatment", value: true },
-  ];
-  return {
-    async resolve() {
-      return {
-        status: "found" as const,
-        config: {
-          appId: "app_1",
-          environmentId: "env_1",
-          flagKey: "checkout",
-          experimentId: "exp_1",
-          runId: "run_1",
-          runConfigHash: "sha256:run-1",
-          targetingKey: "userId",
-          targetingKeyType: "user",
-          controlVariantId: "control",
-          salt: "salt",
-          allocation: { control: 0, treatment: 100 },
-          variantSet: variants,
-          targetingRules: [],
-          startedAt: "2026-08-25T11:00:00.000Z",
-          endedAt: overrides.endedAt ?? null,
-        },
-      };
-    },
-  };
-}
-
-function readOnlyAssignments() {
-  const refuse = async () => {
-    throw new Error("read-only");
-  };
-  return {
-    async getAll() {
-      return new Map();
-    },
-    put: refuse,
-    putHashed: refuse,
-  };
-}
-
-function completedHoldover(writes: unknown[] = []) {
-  return {
-    async ensure(input: unknown) {
-      writes.push(input);
-      return { status: "completed" as const };
-    },
-  };
-}
-
-function saltStore() {
-  return {
-    async currentKeyVersion() {
-      return "v1";
-    },
-    async saltFor() {
-      return new TextEncoder().encode("test-salt") as Uint8Array<ArrayBuffer>;
-    },
-    async retainedKeyVersions() {
-      return ["v1"];
-    },
-  };
-}

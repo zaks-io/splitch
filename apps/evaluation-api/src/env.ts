@@ -1,6 +1,6 @@
 import type {
-  ConvexExposureVerificationRequest,
-  ConvexExposureVerificationResult,
+  ConvexExposureVerificationBatchRequest,
+  ConvexExposureVerificationBatchResult,
 } from "@splitch/contracts";
 import type { McpDelegationReplayDurableObjectNamespace } from "@splitch/worker-runtime";
 import type { HoldoverWriteAppInventoryNamespace } from "./assignment/holdover-write-app-inventory";
@@ -14,12 +14,12 @@ interface ExposureIngestFetcher {
 }
 
 export interface ConvexControlPlaneBinding extends ExposureIngestFetcher {
-  loadConvexExposureVerificationConfig(
-    input: ConvexExposureVerificationRequest,
-  ): Promise<ConvexExposureVerificationResult>;
-  loadCloudflareExposureVerificationConfig(
-    input: ConvexExposureVerificationRequest,
-  ): Promise<ConvexExposureVerificationResult>;
+  loadConvexExposureVerificationConfigs(
+    input: ConvexExposureVerificationBatchRequest,
+  ): Promise<ConvexExposureVerificationBatchResult>;
+  loadCloudflareExposureVerificationConfigs(
+    input: ConvexExposureVerificationBatchRequest,
+  ): Promise<ConvexExposureVerificationBatchResult>;
   resetCompromisedAppIdentity(appId: string, resetId: string): Promise<string>;
 }
 

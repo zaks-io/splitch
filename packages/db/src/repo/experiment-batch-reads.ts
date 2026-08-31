@@ -1,4 +1,4 @@
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, ne } from "drizzle-orm";
 import { experiments, runs } from "../schema/index";
 import { idBatches, twoAxisIdBatches } from "./id-batches";
 import type { EnvScope, TenantScope } from "./scope";
@@ -9,6 +9,19 @@ export function makeExperimentBatchReads(
   runsTable: ScopedTable<typeof runs>,
 ) {
   return {
+    async listExperimentsByIds(scope: EnvScope, experimentIds: readonly string[]) {
+      if (experimentIds.length === 0) return [] as (typeof experiments.$inferSelect)[];
+      const pages = await Promise.all(
+        idBatches(experimentIds).map((batch) =>
+          experimentsTable.findMany(
+            scope,
+            and(inArray(experiments.id, [...batch]), ne(experiments.status, "archived")),
+          ),
+        ),
+      );
+      return pages.flat();
+    },
+
     async listRunningExperimentsForFlags(scope: EnvScope, flagIds: readonly string[]) {
       if (flagIds.length === 0) return [] as (typeof experiments.$inferSelect)[];
       const pages = await Promise.all(

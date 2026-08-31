@@ -1,4 +1,5 @@
 import type { EnvScope } from "./scope";
+import { idBatches } from "./id-batches";
 
 interface DeliveryHealthAggregateRow {
   installationId: string;
@@ -14,6 +15,29 @@ export interface DeliveryHealth {
 }
 
 type DeliveryTable = "cloudflare_config_deliveries" | "config_webhook_deliveries";
+
+export async function listPushInstallationsByIds<T>(
+  d1: D1Database,
+  scope: EnvScope,
+  installationSelect: string,
+  installationIds: readonly string[],
+): Promise<T[]> {
+  const ids = [...new Set(installationIds)];
+  if (ids.length === 0) return [];
+  const pages = await Promise.all(
+    idBatches(ids).map(async (batch) => {
+      const placeholders = batch.map(() => "?").join(", ");
+      const result = await d1
+        .prepare(
+          `${installationSelect} WHERE app_id = ? AND environment_id = ? AND installation_id IN (${placeholders})`,
+        )
+        .bind(scope.appId, scope.environmentId, ...batch)
+        .all<T>();
+      return result.results;
+    }),
+  );
+  return pages.flat();
+}
 
 export async function listPushInstallations<T extends { installationId: string }>(
   d1: D1Database,

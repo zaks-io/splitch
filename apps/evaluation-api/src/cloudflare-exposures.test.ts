@@ -7,7 +7,7 @@ describe("Cloudflare server Exposure verification", () => {
     const convexResolve = vi.fn();
     const handler = makeConvexExposuresHandler({
       integrationKind: "cloudflare",
-      convexConfigurationResolver: { resolve: convexResolve },
+      convexConfigurationResolver: { resolveBatch: convexResolve },
     } as unknown as Parameters<typeof makeConvexExposuresHandler>[0]);
 
     const response = await handler(requestArgs());

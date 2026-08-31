@@ -132,6 +132,22 @@ export const ConvexExposureVerificationResultSchema = z.discriminatedUnion("stat
   z.object({ status: z.literal("found"), config: ConvexExposureVerificationConfigSchema }).strict(),
 ]);
 
+export const ConvexExposureVerificationBatchRequestSchema = z
+  .object({
+    appId: z.string(),
+    environmentId: z.string(),
+    items: z
+      .array(ConvexExposureVerificationRequestSchema.omit({ appId: true, environmentId: true }))
+      .min(1)
+      .max(CONVEX_SERVER_EXPOSURE_MAX_ITEMS),
+  })
+  .strict();
+
+export const ConvexExposureVerificationBatchResultSchema = z
+  .array(ConvexExposureVerificationResultSchema)
+  .min(1)
+  .max(CONVEX_SERVER_EXPOSURE_MAX_ITEMS);
+
 export const ConvexServerExposureRequestSchema = z
   .object({
     exposures: z.array(ConvexServerExposureItemSchema).min(1).max(CONVEX_SERVER_EXPOSURE_MAX_ITEMS),
@@ -160,6 +176,12 @@ export type ConvexConfigChanged = z.infer<typeof ConvexConfigChangedSchema>;
 export type ConvexConfigSnapshot = ConfigSnapshot;
 export type ConvexExposureVerificationConfig = z.infer<
   typeof ConvexExposureVerificationConfigSchema
+>;
+export type ConvexExposureVerificationBatchRequest = z.infer<
+  typeof ConvexExposureVerificationBatchRequestSchema
+>;
+export type ConvexExposureVerificationBatchResult = z.infer<
+  typeof ConvexExposureVerificationBatchResultSchema
 >;
 export type ConvexExposureVerificationRequest = z.infer<
   typeof ConvexExposureVerificationRequestSchema
