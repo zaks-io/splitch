@@ -30,13 +30,14 @@ describe("MCP access-token verifier", () => {
       profile: "authkit",
       fetchJwks: async () => ({ keys: [{ ...publicJwk, kty: "RSA", kid: "test" }] }),
     });
-    const token = await sign({
+    const claims = {
       sub: "user_workos",
       iss: "https://splitch.authkit.test",
       aud: AUDIENCE,
       exp: NOW + 60,
       scope: "openid profile email offline_access",
-    });
+    };
+    const token = await sign(claims);
 
     await expect(verifier.verify(`Bearer ${token}`, AUDIENCE, NOW)).resolves.toEqual({
       subject: "user_workos",
@@ -47,6 +48,9 @@ describe("MCP access-token verifier", () => {
 
     await expect(
       verifier.verify(`Bearer ${token}`, "https://other-resource.test", NOW),
+    ).resolves.toBeNull();
+    await expect(
+      verifier.verify(`Bearer ${await sign({ ...claims, nbf: NOW + 1 })}`, AUDIENCE, NOW),
     ).resolves.toBeNull();
   });
 
@@ -95,6 +99,8 @@ describe("MCP access-token verifier", () => {
       { ...validClaims, iss: "https://attacker.test" },
       { ...validClaims, aud: "https://api.splitch.test" },
       { ...validClaims, exp: NOW - 1 },
+      { ...validClaims, nbf: NOW + 1 },
+      { ...validClaims, nbf: "not-a-number" },
       { ...validClaims, scopes: [42] },
       { ...validClaims, scopes: [""] },
       { ...validClaims, scopes: ["bogus"] },

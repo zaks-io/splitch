@@ -115,6 +115,7 @@ function standardSubject(
     claims.aud !== options.expectedAudience ||
     typeof claims.exp !== "number" ||
     claims.exp <= options.nowSeconds ||
+    !validNotBefore(claims.nbf, options.nowSeconds) ||
     typeof claims.sub !== "string" ||
     claims.sub.length === 0 ||
     claims.sub.length > 256
@@ -122,6 +123,10 @@ function standardSubject(
     return null;
   }
   return claims.sub;
+}
+
+function validNotBefore(notBefore: unknown, nowSeconds: number): boolean {
+  return notBefore === undefined || (typeof notBefore === "number" && notBefore <= nowSeconds);
 }
 
 interface ParsedJwt {
@@ -160,6 +165,7 @@ function actorFromClaims(
     claims.aud !== options.expectedAudience ||
     typeof claims.exp !== "number" ||
     claims.exp <= options.nowSeconds ||
+    !validNotBefore(claims.nbf, options.nowSeconds) ||
     typeof claims.sub !== "string" ||
     claims.sub.length === 0 ||
     claims.sub.length > 256 ||

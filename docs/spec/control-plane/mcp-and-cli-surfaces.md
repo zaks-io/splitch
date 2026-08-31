@@ -205,10 +205,11 @@ remedy, never a silent default.
 **Who:** AI agents (Claude, Cursor, OpenAI Agents SDK).
 **Auth:** In-band via MCP OAuth Protected Resource Metadata (PRM), with `auth.md` as the
 human/agent-readable companion. Connecting triggers the handshake (401 + WWW-Authenticate
-→ agent follows PRM + authorization-server metadata → exact MCP-resource token → subsequent tool
-calls carry that token in the Authorization header). The MCP Worker validates issuer, expiry,
-exact audience, and scope shape before JSON-RPC dispatch. No on-disk credential; the client token
-lives only in the transport session and is never forwarded downstream.
+→ agent follows PRM + AuthKit authorization-server metadata → authorization code with S256 PKCE →
+exact MCP-resource token → subsequent tool calls carry that token in the Authorization header).
+The MCP Worker validates the AuthKit signature, exact issuer and audience, expiry, not-before time,
+and subject before JSON-RPC dispatch. No on-disk credential; the client token lives only in the
+transport session and is never forwarded downstream.
 **Deployment:** Remote Worker URL (not stdio/subprocess). Zero install for agents.
 
 ### OAuth PRM + auth.md discovery chain
@@ -217,37 +218,32 @@ lives only in the transport session and is never forwarded downstream.
 Agent connects to MCP server URL
   → 401 + WWW-Authenticate: Bearer realm="splitch", resource_metadata="${mcpOrigin}/.well-known/oauth-protected-resource{/mcp}"
   → GET ${mcpOrigin}/.well-known/oauth-protected-resource{/mcp}   → { resource, authorization_servers }
-  → GET /.well-known/oauth-authorization-server  → { agent_auth: { identity_endpoint, claim_endpoint, ... } }
-  → Agent picks an advertised door
-      Door B (anonymous / pre-claim):
-        → POST /agent/identity with Turnstile token → identity_assertion
-        → POST /oauth2/token with identity_assertion + resource=<exact MCP resource>
-        → Auth API issues the exact-resource access_token for the anonymous identity
-      Door C (device flow):
-        → POST /oauth2/device_authorization with one App ID or slug selector → device_code + human verification URL
-        → Human approves in WorkOS
-        → Poll POST /oauth2/token with the sealed device grant + resource=<exact MCP resource>
-        → Auth resolves the selector to a canonical App ID inside WorkOS organization_id
-        → Auth API issues the exact-resource access_token for the authenticated WorkOS User
-  → Subsequent tool calls: Authorization: Bearer <access_token>
+  → GET ${authkitIssuer}/.well-known/oauth-authorization-server
+  → Agent supplies a Client ID Metadata Document or dynamically registers a public client
+  → Agent starts AuthKit authorization code flow with resource=<exact MCP resource> and S256 PKCE
+  → Human signs in and consents through WorkOS/AuthKit
+  → Agent exchanges the one-use code with the same client, redirect URI, and PKCE verifier
+  → AuthKit issues the exact-resource access token and owns refresh and revocation
+  → Subsequent tool calls: Authorization: Bearer <authkit_access_token>
 ```
 
 For each tool call, MCP creates a separate short-lived delegated credential bound to the derived
-operation, the public surface that operation is addressed at, verified actor and scopes, method,
-exact downstream path/query, and body digest. Every management operation is addressed at the Control
+operation, the public surface that operation is addressed at, verified actor, method, exact
+downstream path/query, and body digest. An AuthKit actor carries an empty-scope signed
+`liveMembership` marker rather than membership rows or scopes. Every management operation is addressed at the Control
 Plane, because a route's public address follows its credential rather than its owner (ADR-0046); the
-Control Plane runs its gates and then delegates onward to Analysis or Evaluation when the registered
-route says so. The credential is signed with the Control Plane delegation key, expires after 30
-seconds, and carries a one-use identifier consumed by the Worker's replay guard. Only named Worker
-service-binding entrypoints accept it. Public Worker entrypoints do not, and downstream requests
-never contain the client bearer. The signed delegated principal carries only the already-verified
-actor and scopes, so it cannot be forged or widen the caller's authority. Replay identifiers are
-claimed atomically through a Durable Object; missing secrets or replay bindings and storage errors
-fail closed before downstream route dispatch.
+Control Plane validates the delegation signature, operation, surface, method, target, body,
+freshness, and one-use replay identifier before resolving the actor's current Organization and App
+memberships from D1. It then runs the unchanged route scope and tenant co-scope gates and delegates
+onward to Analysis or Evaluation when the registered route says so. Legacy Splitch-issued MCP
+tokens continue to carry their already-verified bounded scopes in the same one-call credential.
+Only named Worker service-binding entrypoints accept the delegation. Public Worker entrypoints do
+not, and downstream requests never contain the client bearer. Replay identifiers are claimed
+atomically through a Durable Object; missing secrets, replay bindings, membership access, and
+storage errors fail closed before downstream route dispatch.
 
-Door A (ID-JAG) is paused. While paused, authorization-server metadata and `auth.md` advertise only
-Door B (anonymous) and Door C (device flow). A paused door is absent from discovery rather than a
-broken endpoint an agent can select.
+The Splitch Auth API's anonymous and first-party CLI device doors remain separate from browser MCP
+OAuth. Dynamically registered AuthKit clients cannot use the first-party device door.
 
 ### MCP tool schema derivation
 
