@@ -90,6 +90,53 @@ describe("Panel App Settings contract", () => {
       idempotency_key: `panel_app_delete_${appliedDeleteApproval.id}`,
     });
   });
+
+  it("returns a typed Review refusal without resuming the App delete", async () => {
+    const reviewRefusal = {
+      code: "FORBIDDEN",
+      message: "Approval Request review is not permitted",
+      details: {},
+    };
+    const requests: Request[] = [];
+    const fetcher = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const incoming = new Request(input as RequestInfo, init);
+      requests.push(incoming);
+      return incoming.method === "DELETE"
+        ? Response.json(pendingDelete)
+        : Response.json(reviewRefusal, { status: 403 });
+    });
+    const client = createPanelAppSettingsClient({
+      baseUrl: "https://control-plane.test",
+      fetch: fetcher,
+    });
+
+    await expect(client.deleteApp({ appId: "app_checkout", force: true })).resolves.toEqual({
+      ok: false,
+      status: 403,
+      error: reviewRefusal,
+    });
+    expect(requests.map(({ method }) => method)).toEqual(["DELETE", "POST"]);
+  });
+
+  it("fails before Reviewing an Approval Request returned after it was applied", async () => {
+    const requests: Request[] = [];
+    const fetcher = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const incoming = new Request(input as RequestInfo, init);
+      requests.push(incoming);
+      return incoming.method === "POST"
+        ? Response.json(appliedDeleteApproval)
+        : Response.json(pendingDelete);
+    });
+    const client = createPanelAppSettingsClient({
+      baseUrl: "https://control-plane.test",
+      fetch: fetcher,
+    });
+
+    await expect(client.deleteApp({ appId: "app_checkout", force: true })).rejects.toThrow(
+      `control-plane-sdk: apps_delete returned reviewed Approval Request ${appliedDeleteApproval.id}`,
+    );
+    expect(requests.map(({ method }) => method)).toEqual(["DELETE", "POST", "DELETE"]);
+  });
 });
 
 const targetVersion = `sha256:${"1".repeat(64)}`;
@@ -132,4 +179,18 @@ const appliedDeleteApproval = {
     resultingTargetVersion: targetVersion,
     error: null,
   },
+} as const;
+
+const pendingDelete = {
+  deleted: false,
+  force: true,
+  removed: [{ childType: "experiments", id: "exp_checkout" }],
+  pendingApprovals: [
+    {
+      approvalRequestId: appliedDeleteApproval.id,
+      operation: "flags_delete",
+      targetId: "flag_checkout",
+      reviewCommand: "splitch approval-request-reviews create ...",
+    },
+  ],
 } as const;
