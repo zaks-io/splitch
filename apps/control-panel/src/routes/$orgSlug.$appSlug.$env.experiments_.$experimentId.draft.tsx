@@ -72,8 +72,7 @@ async function loadExperimentDraftRoute(input: ExperimentDraftRouteInput) {
   if (matches.length > 1) {
     throw new Error("Experiment draft reference resolves to multiple local Experiments");
   }
-  const experiment =
-    matches[0] ?? (await resolveMissingDraft(input, app.environments, catalog.items));
+  const experiment = matches[0] ?? (await resolveMissingDraft(input, catalog.items));
   if (input.experimentRef !== experiment.key) {
     const current = new URL(input.href, "https://panel.splitch.dev");
     throw redirect({
@@ -92,14 +91,12 @@ async function loadExperimentDraftRoute(input: ExperimentDraftRouteInput) {
 
 async function resolveMissingDraft(
   input: ExperimentDraftRouteInput,
-  environments: ReadonlyArray<{ environmentId: string; env: string }>,
   items: PanelExperimentListItem[],
 ): Promise<PanelExperimentListItem> {
   const resolved = await resolveControlPanelExperimentEnvironment({
     data: {
       appId: input.scoped.scope.appId,
       targetEnvironmentId: input.scoped.scope.environmentId,
-      environments,
       experimentRef: input.experimentRef,
     },
   });

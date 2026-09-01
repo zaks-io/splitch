@@ -68,6 +68,7 @@ export type ControlPanelOperation =
   | { id: "experiments_detail" }
   | { id: "experiments_list" }
   | { id: "experiments_results" }
+  | { id: "experiments_route_resolution" }
   | { id: "organizations_create" }
   | {
       id: "experiments_update" | "experiments_start";
@@ -213,6 +214,7 @@ const APPS_PATH = /^\/orgs\/([^/]+)\/apps\/?$/;
 const APP_ATTENTION_PATH = /^\/apps\/([^/]+)\/attention-rollup\/?$/;
 const EXPERIMENT_DETAIL_PATH = "/control-panel/experiments/detail";
 const EXPERIMENT_RESULTS_PATH = "/control-panel/experiments/results";
+const EXPERIMENT_ROUTE_RESOLUTION_PATH = "/control-panel/experiments/resolve-route";
 const EXPERIMENTS_PATH = "/control-panel/experiments/list";
 const EXPERIMENT_MUTATION_PATH =
   /^\/apps\/([^/]+)\/envs\/([^/]+)\/experiments\/([^/]+)(\/start)?\/?$/;
@@ -276,6 +278,7 @@ function parseExperimentsList(method: string, pathname: string): ControlPanelOpe
   if (pathname === EXPERIMENTS_PATH) return { id: "experiments_list" };
   if (pathname === EXPERIMENT_DETAIL_PATH) return { id: "experiments_detail" };
   if (pathname === EXPERIMENT_RESULTS_PATH) return { id: "experiments_results" };
+  if (pathname === EXPERIMENT_ROUTE_RESOLUTION_PATH) return { id: "experiments_route_resolution" };
   return null;
 }
 

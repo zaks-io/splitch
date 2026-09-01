@@ -20,6 +20,11 @@ import {
   parsePanelExperimentResultsOutput,
 } from "./panel-experiment-results";
 import {
+  type PanelExperimentRouteResolutionInput,
+  type PanelExperimentRouteResolutionOutput,
+  parsePanelExperimentRouteResolutionOutput,
+} from "./panel-experiment-route-resolution";
+import {
   type PanelExperimentsListInput,
   type PanelExperimentsListOutput,
   parsePanelExperimentsListOutput,
@@ -46,6 +51,10 @@ export type {
   PanelExperimentResultsReady,
 } from "./panel-experiment-results";
 export type {
+  PanelExperimentRouteResolutionInput,
+  PanelExperimentRouteResolutionOutput,
+} from "./panel-experiment-route-resolution";
+export type {
   PanelExperimentHealth,
   PanelExperimentListItem,
   PanelExperimentsListInput,
@@ -64,6 +73,7 @@ export {
 const PANEL_EXPERIMENTS_PATH = "/control-panel/experiments/list";
 const PANEL_EXPERIMENT_DETAIL_PATH = "/control-panel/experiments/detail";
 const PANEL_EXPERIMENT_RESULTS_PATH = "/control-panel/experiments/results";
+const PANEL_EXPERIMENT_ROUTE_RESOLUTION_PATH = "/control-panel/experiments/resolve-route";
 
 export function createPanelExperimentsClient(options: { fetch: typeof fetch; baseUrl?: string }) {
   const baseUrl = options.baseUrl ?? "https://control-plane.internal";
@@ -115,6 +125,23 @@ export function createPanelExperimentsClient(options: { fetch: typeof fetch; bas
         {
           safeParse: parsePanelExperimentResultsOutput,
         },
+      );
+    },
+    async resolveRoute(
+      input: PanelExperimentRouteResolutionInput,
+    ): Promise<ControlPlaneOperationResult<PanelExperimentRouteResolutionOutput>> {
+      const response = await options.fetch(
+        new URL(PANEL_EXPERIMENT_ROUTE_RESOLUTION_PATH, baseUrl),
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(input),
+        },
+      );
+      return parseControlPlaneResponse<PanelExperimentRouteResolutionOutput>(
+        response,
+        "panel_experiment_route_resolution",
+        { safeParse: parsePanelExperimentRouteResolutionOutput },
       );
     },
     create: mutations.create,

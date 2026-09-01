@@ -10,15 +10,15 @@ import {
   type ExperimentEnvironmentResolution,
   resolveControlPanelExperimentEnvironment,
 } from "#lib/experiments/experiment-environment-resolution-functions";
+import {
+  canonicalExperimentHref,
+  type ExperimentNotFoundData,
+  experimentNotFoundData,
+} from "#lib/experiments/experiment-route-navigation";
 import { experimentDetailQuery, experimentsListQuery } from "#lib/experiments/experiments-query";
 import { reportExpectedDomainFailure } from "#lib/observability/panel-observability";
 import type { ScopedLoaderContext } from "#lib/shared/loader-context";
 import { scopedHref } from "#lib/shell/app-shell-navigation";
-
-type ExperimentNotFoundData =
-  | { kind: "experiment"; env: string }
-  | { kind: "run"; env: string }
-  | { kind: "run_elsewhere"; env: string; sourceEnv: string; href: string };
 
 export const Route = createFileRoute("/$orgSlug/$appSlug/$env/experiments/$experimentId")({
   loader: ({ context, location, params }) =>
@@ -61,20 +61,16 @@ async function loadExperimentRoute(input: ExperimentRouteInput) {
   }
   const experiment = matches[0];
   return experiment
-    ? loadLocalExperiment(input, environments, experiment, activeEnvironment.guarded)
-    : resolveMissingExperiment(input, environments);
+    ? loadLocalExperiment(input, experiment, activeEnvironment.guarded)
+    : resolveMissingExperiment(input);
 }
 
-async function resolveMissingExperiment(
-  input: ExperimentRouteInput,
-  environments: ReturnType<typeof currentAppEnvironments>,
-) {
+async function resolveMissingExperiment(input: ExperimentRouteInput) {
   const runId = experimentRunId(input.pathname);
   const resolved = await resolveControlPanelExperimentEnvironment({
     data: {
       appId: input.scoped.scope.appId,
       targetEnvironmentId: input.scoped.scope.environmentId,
-      environments,
       experimentRef: input.experimentRef,
       runId,
     },
@@ -97,7 +93,6 @@ async function resolveMissingExperiment(
 
 async function loadLocalExperiment(
   input: ExperimentRouteInput,
-  environments: ReturnType<typeof currentAppEnvironments>,
   experiment: { id: string; key: string },
   guarded: boolean,
 ) {
@@ -119,7 +114,6 @@ async function loadLocalExperiment(
       data: {
         appId: input.scoped.scope.appId,
         targetEnvironmentId: input.scoped.scope.environmentId,
-        environments,
         experimentRef: experiment.key,
         runId,
       },
@@ -200,49 +194,10 @@ function throwResolvedNotFound(
   reportExpectedDomainFailure(404, new URL(currentHref, "https://panel.splitch.dev").pathname, {
     boundary: "section",
   });
-  if (resolution.kind === "run_elsewhere") {
-    if (resolution.env === scope.env) {
-      throw new Error("Run resolution contradicts the loaded Experiment detail");
-    }
-    throw notFound({
-      data: {
-        kind: "run_elsewhere",
-        env: scope.env,
-        sourceEnv: resolution.env,
-        href: canonicalExperimentHref(
-          { ...scope, env: resolution.env },
-          resolution.experimentKey,
-          currentHref,
-          resolution.runId,
-        ),
-      } satisfies ExperimentNotFoundData,
-    });
+  if (resolution.kind === "experiment") {
+    throw new Error("Experiment resolution returned an unexpected local Experiment");
   }
-  if (resolution.kind === "run_not_found") {
-    throw notFound({ data: { kind: "run", env: scope.env } satisfies ExperimentNotFoundData });
-  }
-  if (
-    resolution.kind === "experiment_not_found" ||
-    resolution.kind === "experiment_not_in_environment"
-  ) {
-    throw notFound({
-      data: { kind: "experiment", env: scope.env } satisfies ExperimentNotFoundData,
-    });
-  }
-  throw new Error("Experiment resolution returned an unexpected local Experiment");
-}
-
-function canonicalExperimentHref(
-  scope: { orgSlug: string; appSlug: string; env: string },
-  experimentKey: string,
-  currentHref: string,
-  runId?: string,
-): string {
-  const current = new URL(currentHref, "https://panel.splitch.dev");
-  const tab = current.pathname.match(/\/(results|setup)\/?$/)?.[1];
-  const experiment = `${scopedHref(scope)}/experiments/${encodeURIComponent(experimentKey)}`;
-  const run = runId ? `${experiment}/runs/${encodeURIComponent(runId)}` : experiment;
-  return `${run}${tab ? `/${tab}` : ""}${current.search}${current.hash}`;
+  throw notFound({ data: experimentNotFoundData(resolution, scope, currentHref) });
 }
 
 function experimentRunId(pathname: string): string | undefined {

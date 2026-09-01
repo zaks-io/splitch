@@ -35,6 +35,7 @@ const UNBOUND_OPERATION_IDS = [
   "experiments_list",
   "experiments_detail",
   "experiments_results",
+  "experiments_route_resolution",
   "organizations_create",
 ] as const;
 
@@ -305,7 +306,7 @@ function isApiKeyRevokeOperation(value: Record<string, unknown>): boolean {
  * structurally and stays total by construction.
  *
  * Members that carry no scope fields (`experiments_list`, `experiments_detail`,
- * `experiments_results`, `organizations_create`) still match on the id alone,
+ * `experiments_results`, `experiments_route_resolution`, `organizations_create`) still match on the id alone,
  * as they did under the switch: their key set is `["id"]`, so equal ids compare
  * equal. That is deliberate and documented in `control-panel-operation.ts`.
  */

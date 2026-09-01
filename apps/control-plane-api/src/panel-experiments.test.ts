@@ -44,6 +44,7 @@ describe("panel Experiments composite read", () => {
       items: [
         {
           id: EXPERIMENT_ID,
+          key: "checkout-test",
           flag: { id: "flag_panel_list", name: "Checkout Flag" },
           liveRunId: RUN_ID,
           health: {
