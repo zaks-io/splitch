@@ -145,7 +145,7 @@ export async function makeQuickstartHarness(): Promise<QuickstartHarness> {
           return Promise.resolve(harnessSalt);
         },
       },
-      sourceId: "quickstart-drift-test",
+      sourceId: () => "quickstart-drift-test",
       newEventId: () => "evt-quickstart-1",
       now: () => new Date(Date.parse(NOW_ISO)),
     },
