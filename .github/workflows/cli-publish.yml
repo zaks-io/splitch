@@ -25,7 +25,7 @@ jobs:
       cli_version: ${{ steps.target.outputs.cli_version }}
     steps:
       - name: Harden runner
-        uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0
+        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
         with:
           egress-policy: audit
 
@@ -188,7 +188,7 @@ jobs:
 
       - name: Sync Linear release
         id: linear-release
-        uses: linear/linear-release-action@3858a5d7892435dc63302ac76b0cdb587435caa9 # v0.14.6
+        uses: linear/linear-release-action@0a25abab892a91062ebf42260dbb2ce6277aa205 # v0.16.0
         with:
           access_key: ${{ secrets.CLI_LINEAR_ACCESS_KEY }}
           name: "@splitch/cli ${{ needs.publish.outputs.cli_version }}"
