@@ -155,6 +155,24 @@ describe("handleExposureRedemptionClaimFetch (production handler)", () => {
   });
 });
 
+describe("Exposure Redemption claim reset", () => {
+  it("deletes the full claim store without listing or batching keys", async () => {
+    const ctx = claimMemoryCtx();
+    await ctx.storage.put("exposure:e1", claimBody);
+    await ctx.storage.put("ticket:fp", claimBody);
+
+    const response = await handleExposureRedemptionClaimFetch(
+      ctx,
+      new Request("https://do/delete-all", { method: "POST" }),
+    );
+
+    expect(await response.json()).toEqual({ deleted: true });
+    expect(ctx.listCalls).toHaveLength(0);
+    expect(await ctx.storage.get("exposure:e1")).toBeUndefined();
+    expect(await ctx.storage.get("ticket:fp")).toBeUndefined();
+  });
+});
+
 describe("DurableExposureRedemptionClaimStore HTTP guards", () => {
   it("throws when the Durable Object returns a non-OK HTTP status (even with a success-shaped body)", async () => {
     const namespace: ExposureRedemptionClaimNamespace = {

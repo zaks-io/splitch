@@ -6,7 +6,7 @@ import {
   admissionBinding,
 } from "./admission-test-fixture";
 import { entityMetricPrivacyFixtureFetch } from "./entity-metric-privacy.test-fixture";
-import type { EvaluationCommitOutbox } from "./evaluation-commit-outbox";
+import type { EvaluationCommitOutbox } from "./evaluation-commit-outbox-contract";
 import type { EvaluationUsageReplayWindow } from "./evaluation-usage-replay-window";
 import type { ExposurePayload } from "./event-ingest-test-types";
 import type worker from "./index";
@@ -111,6 +111,9 @@ export async function postEvaluationAt(
       }),
     }),
   );
+  if (env.EVALUATION_COMMIT_OUTBOX instanceof MemoryEvaluationCommitOutbox) {
+    await env.EVALUATION_COMMIT_OUTBOX.flush(env as Env);
+  }
   return captureQueuedResponse(ctx, fetch, response, env, queuedStart);
 }
 
@@ -152,6 +155,9 @@ export async function postEvaluationCommit(
       }),
     }),
   );
+  if (env.EVALUATION_COMMIT_OUTBOX instanceof MemoryEvaluationCommitOutbox) {
+    await env.EVALUATION_COMMIT_OUTBOX.flush(env as Env);
+  }
   return captureQueuedResponse(ctx, fetch, response, env, queuedStart);
 }
 
@@ -219,7 +225,7 @@ export function expectRow(rows: Record<string, unknown>[]): Record<string, unkno
 }
 
 export class TestExecutionContext implements ExecutionContext {
-  readonly exports: Cloudflare.Exports = {};
+  readonly exports = {} as Cloudflare.Exports;
   readonly props = {};
   readonly tracing = {} as Tracing;
   waits: Promise<unknown>[] = [];

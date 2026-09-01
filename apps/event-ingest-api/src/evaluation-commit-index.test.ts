@@ -16,7 +16,7 @@ describe("Evaluation commit ingest", () => {
     const first = await postEvaluationCommit({ env });
     const retry = await postEvaluationCommit({ env });
 
-    expect(first.response.status).toBe(503);
+    expect(first.response.status).toBe(202);
     expect(first.rows).toHaveLength(1);
     expect(first.rows[0]).toMatchObject({ evaluation_count: 1, has_exposure: 1 });
     expect(retry.response.status).toBe(202);

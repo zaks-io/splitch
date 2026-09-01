@@ -7,7 +7,7 @@ import {
   recordEventDefinitionMismatch,
 } from "./event-definition-mismatch-diagnostics";
 import { rejectIngestAdmission } from "./ingest-admission";
-import { claimMetricEvent, lookupMetricEvent } from "./metric-event-outbox";
+import { claimMetricEvent, lookupMetricEvent } from "./metric-event-outbox-client";
 import { validateMetricEvent } from "./metric-event-validation";
 import { publicValidationIssues } from "./public-schema-mismatch";
 import type { Env } from "./types";

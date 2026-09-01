@@ -2,7 +2,7 @@ import {
   registerAppEvaluationCommit,
   registerEntityEvaluationCommit,
 } from "./entity-metric-privacy";
-import type { EvaluationCommitOutbox } from "./evaluation-commit-outbox";
+import type { EvaluationCommitOutbox } from "./evaluation-commit-outbox-contract";
 import type { Env } from "./types";
 
 interface InventoryCommit {
@@ -35,26 +35,29 @@ export async function inventoryEvaluationCommit(
     await prepared.outbox.privacyDeleteAll(prepared.identity);
     return true;
   }
-  const suppressedEventIds = [];
-  for (const row of prepared.payload.exposureRows) {
-    const eventId = rowString(row, "event_id");
-    const suppressed = await registerEntityEvaluationCommit(
-      env.ENTITY_METRIC_PRIVACY,
-      {
-        appId: rowString(row, "app_id"),
-        idType: rowString(row, "id_type"),
-        entityFamilyHash: rowString(row, "entity_family_hash"),
-        identityVersion: identityVersion(rowString(row, "targeting_key_hash")),
-      },
-      {
-        commitIdentity: prepared.identity,
-        eventId,
-        serverReceivedAt: rowString(row, "server_received_at"),
-      },
-      env.SPLITCH_PLATFORM_TARGET,
-    );
-    if (suppressed) suppressedEventIds.push(eventId);
-  }
+  const suppressedEventIds = (
+    await Promise.all(
+      prepared.payload.exposureRows.map(async (row) => {
+        const eventId = rowString(row, "event_id");
+        const suppressed = await registerEntityEvaluationCommit(
+          env.ENTITY_METRIC_PRIVACY,
+          {
+            appId: rowString(row, "app_id"),
+            idType: rowString(row, "id_type"),
+            entityFamilyHash: rowString(row, "entity_family_hash"),
+            identityVersion: identityVersion(rowString(row, "targeting_key_hash")),
+          },
+          {
+            commitIdentity: prepared.identity,
+            eventId,
+            serverReceivedAt: rowString(row, "server_received_at"),
+          },
+          env.SPLITCH_PLATFORM_TARGET,
+        );
+        return suppressed ? eventId : null;
+      }),
+    )
+  ).filter((eventId): eventId is string => eventId !== null);
   if (suppressedEventIds.length > 0) {
     await prepared.outbox.privacyDelete(prepared.identity, suppressedEventIds);
   }

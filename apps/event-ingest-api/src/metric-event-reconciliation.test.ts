@@ -143,9 +143,36 @@ describe("Metric Event reconciliation", () => {
   });
 });
 
-function message(attempts: number) {
+describe("Metric Event reconciliation batch ordering", () => {
+  it("serializes duplicate messages before starting a Copy job", async () => {
+    const fetch = vi
+      .fn<typeof globalThis.fetch>()
+      .mockResolvedValueOnce(Response.json({ data: [{ raw_rows: 1, state_rows: 0 }] }))
+      .mockResolvedValueOnce(
+        Response.json({ job: { job_id: "copy-job-1", status: "waiting" } }, { status: 202 }),
+      )
+      .mockResolvedValueOnce(Response.json({ data: [{ raw_rows: 1, state_rows: 0 }] }))
+      .mockResolvedValueOnce(Response.json({ status: "working" }));
+    vi.stubGlobal("fetch", fetch);
+    const outbox = outboxNamespace();
+    const first = message(2, "reconcile-1");
+    const duplicate = message(2, "reconcile-2");
+
+    await handleMetricEventReconciliationQueue(batch(first, duplicate), env(outbox));
+
+    expect(first.retry).toHaveBeenCalledOnce();
+    expect(duplicate.retry).toHaveBeenCalledOnce();
+    expect(fetch.mock.calls.filter((call) => call[1]?.method === "POST")).toHaveLength(1);
+    expect(outbox.delivery().reconciliation).toEqual({
+      kind: "copy-job",
+      jobId: "copy-job-1",
+    });
+  });
+});
+
+function message(attempts: number, id = "reconcile-1") {
   return {
-    id: "reconcile-1",
+    id,
     timestamp: new Date("2026-08-30T00:00:00.000Z"),
     attempts,
     body: {
@@ -162,11 +189,11 @@ function message(attempts: number) {
   } satisfies Message<Record<string, unknown>>;
 }
 
-function batch(queued: ReturnType<typeof message>) {
+function batch(...messages: ReturnType<typeof message>[]) {
   return {
     queue: "splitch-metric-events-reconciliation",
-    messages: [queued],
-    metadata: { metrics: { backlogCount: 1, backlogBytes: 1_024 } },
+    messages,
+    metadata: { metrics: { backlogCount: messages.length, backlogBytes: 1_024 } },
     ackAll: vi.fn(),
     retryAll: vi.fn(),
   } satisfies MessageBatch<Record<string, unknown>>;

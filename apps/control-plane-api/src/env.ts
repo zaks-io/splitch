@@ -20,6 +20,7 @@ interface EvaluationControlPlaneBinding extends Fetcher {
 }
 
 interface EventIngestControlPlaneBinding extends Fetcher {
+  adoptMetricEventClaimRetention(): Promise<void>;
   purgeAppIdentityDelivery(appId: string, resetId: string, currentVersion: string): Promise<string>;
   completeAppIdentityReset(appId: string, resetId: string, nextVersion: string): Promise<void>;
 }

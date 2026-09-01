@@ -1,13 +1,8 @@
 import type {
+  EvaluationCommit,
   EvaluationCommitOutbox,
   EvaluationCommitOutboxNamespace,
-} from "./evaluation-commit-outbox";
-
-interface EvaluationCommit {
-  readonly eventId: string;
-  readonly payload: unknown;
-  readonly delivered: boolean;
-}
+} from "./evaluation-commit-outbox-contract";
 
 export function evaluationCommitOutbox(
   binding: EvaluationCommitOutbox | EvaluationCommitOutboxNamespace | undefined,
@@ -31,14 +26,10 @@ function durableEvaluationCommitOutbox(
       requireOk(response, "Evaluation commit outbox");
       return parseEvaluationCommit(await response.json());
     },
-    async deliver(identity) {
-      const response = await post(namespace, identity, "deliver", { identity });
-      requireOk(response, "Evaluation commit delivery");
+    async activate(identity) {
+      const response = await post(namespace, identity, "activate", { identity });
+      requireOk(response, "Evaluation commit outbox activation");
       return parseEvaluationCommit(await response.json());
-    },
-    async acknowledge(identity) {
-      const response = await post(namespace, identity, "acknowledge", { identity });
-      requireOk(response, "Evaluation commit acknowledgement");
     },
     async privacyExport(identity, eventIds) {
       const response = await privacyRequest(namespace, identity, "privacy-export", eventIds);
@@ -104,7 +95,8 @@ function parseEvaluationCommit(body: unknown): EvaluationCommit {
     typeof commit.eventId !== "string" ||
     !/^sha256:[a-f0-9]{64}$/.test(commit.eventId) ||
     commit.payload === undefined ||
-    typeof commit.delivered !== "boolean"
+    typeof commit.delivered !== "boolean" ||
+    typeof commit.ready !== "boolean"
   ) {
     throw new Error("Evaluation commit outbox returned an invalid commit");
   }

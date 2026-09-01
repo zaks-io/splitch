@@ -67,6 +67,9 @@ function scheduledEnv(): ControlPlaneApiEnv {
     CREDENTIAL_CACHE_BACKFILL: {
       getByName: () => ({ fetch: () => Promise.resolve(new Response(null, { status: 204 })) }),
     },
+    EVENT_INGEST_API: {
+      adoptMetricEventClaimRetention: () => Promise.resolve(),
+    },
     SPLITCH_PLATFORM_TARGET: "local",
     TINYBIRD_API_URL: "https://api.tinybird.test",
     TINYBIRD_APPROVAL_ARCHIVE_WRITE_TOKEN: "write-token",

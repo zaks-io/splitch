@@ -25,9 +25,10 @@ const PENDING_EXPIRY_FLOOR_KEY = "__pending_expiry_floor";
  * Max keys listed per alarm tick. This is a tick-size bound, not a bound on
  * total work: a full Environment keyspace is still scanned page-by-page at
  * alarm-delivery rate (worst observed: 1024 key reads to collect 1 record
- * behind a live page). Do not treat 256 as a cap on GC cost.
+ * behind a live page). The page also stays within Durable Object storage's
+ * 128-key batch-delete limit.
  */
-export const EXPOSURE_REDEMPTION_SWEEP_PAGE_SIZE = 256;
+export const EXPOSURE_REDEMPTION_SWEEP_PAGE_SIZE = 128;
 
 type SweepCursor = {
   readonly after: string;
@@ -58,10 +59,9 @@ export async function handleExposureRedemptionClaimFetch(
     return Response.json({ error: "not found" }, { status: 404 });
   }
   if (new URL(request.url).pathname === "/delete-all") {
-    const keys = await ctx.storage.list();
-    await ctx.storage.delete([...keys.keys()]);
+    await ctx.storage.deleteAll();
     await ctx.storage.deleteAlarm();
-    return Response.json({ deleted: keys.size });
+    return Response.json({ deleted: true });
   }
   const body = await parseClaimBody(request);
   if (body === null) {

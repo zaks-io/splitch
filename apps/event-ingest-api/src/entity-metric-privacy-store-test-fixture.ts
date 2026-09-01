@@ -45,6 +45,9 @@ export function makeEntityMetricPrivacyStoreFixture() {
     commit: vi.fn(async () => {
       throw new Error("not used");
     }),
+    activate: vi.fn(async () => {
+      throw new Error("not used");
+    }),
     deliver: vi.fn(async () => {
       throw new Error("not used");
     }),
