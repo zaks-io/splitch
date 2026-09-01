@@ -4,8 +4,8 @@ import {
   DEFAULT_WINSORIZE,
   DEFAULT_WINSORIZE_PCT,
   type GuardrailDecision,
-  type MetricRef,
   type MetricQueryConfig,
+  type MetricRef,
   type MetricVarianceConfig,
 } from "@splitch/contracts";
 import { appScope, type Repository } from "@splitch/db";
@@ -37,7 +37,11 @@ export interface FrozenAnalysisConfig {
 export async function frozenAnalysisConfig(
   repo: Repository,
   appId: string,
-  refs: { metrics: MetricRef[]; guardrailMetrics: MetricRef[] },
+  refs: {
+    metrics: MetricRef[];
+    guardrailMetrics: MetricRef[];
+    activationMetricId?: string | null;
+  },
   treatments: string[],
   conversionWindowMs: number,
   targetingKeyType: string,
@@ -45,7 +49,24 @@ export async function frozenAnalysisConfig(
 ): Promise<Result<FrozenAnalysisConfig>> {
   const guardrailIds = uniqueIds(refs.guardrailMetrics);
   const analyzedIds = uniqueIds([...refs.metrics, ...refs.guardrailMetrics]);
-  const rows = await loadMetrics(repo, appId, analyzedIds);
+  const validationIds = [
+    ...analyzedIds,
+    ...(refs.activationMetricId ? [refs.activationMetricId] : []),
+  ];
+  const rows = await loadMetrics(repo, appId, validationIds);
+  const missing = [...new Set(validationIds)].filter((metricId) => !rows.has(metricId));
+  if (missing.length > 0) {
+    return {
+      ok: false,
+      response: experimentStartInvalid(
+        missing.map((metricId) => ({
+          path: ["body", "metrics", metricId],
+          message: `Metric ${metricId} must belong to this App`,
+        })),
+        requestId,
+      ),
+    };
+  }
 
   const bounded: Array<{ metricId: string; threshold: number }> = [];
   const unbounded: string[] = [];
@@ -117,17 +138,8 @@ async function loadMetrics(
   metricIds: string[],
 ): Promise<Map<string, MetricRow>> {
   const scope = appScope(appId);
-  const rows = new Map<string, MetricRow>();
-  for (const metricId of metricIds) {
-    const row = await repo.experiments.getMetric(scope, metricId);
-    // validateMetricRefs already proved every ref resolves, so a miss here means
-    // the Metric was deleted between that read and this one.
-    if (!row) {
-      throw new Error(`prepareStart: Metric ${metricId} disappeared between validation and freeze`);
-    }
-    rows.set(metricId, row);
-  }
-  return rows;
+  const rows = await repo.experiments.listMetricsByIds(scope, metricIds);
+  return new Map(rows.map((row) => [row.id, row]));
 }
 
 /**

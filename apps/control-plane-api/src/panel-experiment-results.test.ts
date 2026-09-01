@@ -1,8 +1,8 @@
+import type { AnalysisResultsEnvelope, StatsOutput } from "@splitch/contracts";
 import {
   type PanelExperimentResultsOutput,
   parsePanelExperimentResultsOutput,
 } from "@splitch/control-plane-sdk/panel-experiments";
-import type { AnalysisResultsEnvelope, StatsOutput } from "@splitch/contracts";
 import type { Repository } from "@splitch/db";
 import { DELEGATED_IDENTITY_HEADER } from "@splitch/worker-runtime";
 import { describe, expect, it, vi } from "vitest";
@@ -51,6 +51,10 @@ function repository(overrides: Record<string, unknown> = {}): Repository {
     experiments: {
       getExperiment: vi.fn(async () => experiment),
       listRunsForExperiment: vi.fn(async () => runs),
+      findLatestRunForExperiment: vi.fn(
+        async () => [...runs].sort((left, right) => right.runNumber - left.runNumber)[0] ?? null,
+      ),
+      getRun: vi.fn(async (_scope, runId) => runs.find((run) => run.id === runId) ?? null),
     },
   } as unknown as Repository;
 }

@@ -9,6 +9,7 @@ import {
 import { canonicalizeAnalysisRows } from "@splitch/privacy";
 import { StatsEngine as DefaultStatsEngine } from "@splitch/stats";
 import { type HandlerArgs, renderError } from "@splitch/worker-runtime";
+import { readInitialResultsRows, readResultsExposureRows } from "./results-bootstrap";
 import {
   AnalysisIsolationError,
   AnalysisProvenanceError,
@@ -17,6 +18,11 @@ import {
   ResultsInsufficientDataError,
   ResultsNotFoundError,
 } from "./results-errors";
+import {
+  assertMetricQueryCoverage,
+  readMetricRows,
+  readPrePeriodRows,
+} from "./results-metric-query";
 import {
   booleanField,
   jsonField,
@@ -32,19 +38,12 @@ import {
   materializeRunInput,
 } from "./results-run-input";
 import {
-  assertMetricQueryCoverage,
-  readMetricRows,
-  readPrePeriodRows,
-} from "./results-metric-query";
-import {
   scopedPipeParams,
-  tinybirdDateTime64,
   TinybirdReadError,
   type TinybirdReadTransport,
+  tinybirdDateTime64,
 } from "./tinybird";
 
-const RUN_INPUTS_PIPE = "analysis_run_inputs";
-const EXPOSURES_PIPE = "analysis_deduped_exposures";
 const ACTIVATION_PIPE = "analysis_activation_rows";
 
 interface ResultsDeps {
@@ -99,7 +98,8 @@ export async function readStatsInputFromTinybird(
   scope: ResultsScope,
 ): Promise<StatsInput> {
   const baseParams = scopedPipeParams(scope);
-  const runInputs = await pipeRows(tinybird, RUN_INPUTS_PIPE, baseParams);
+  const initialRows = await readInitialResultsRows(tinybird, scope.runId, baseParams);
+  const runInputs = initialRows.runInputs;
   const runInput = runInputs[0];
   if (runInput === undefined) {
     // Analysis only sees Tinybird. Empty run-input rows mean "no Run inputs
@@ -121,7 +121,7 @@ export async function readStatsInputFromTinybird(
   }
   const params = scopedPipeParams({ ...scope, runId: run.run_id });
 
-  const exposureRows = await pipeRows(tinybird, EXPOSURES_PIPE, params);
+  const exposureRows = await readResultsExposureRows(tinybird, params, initialRows.exposureRows);
   const exposures = canonicalizeAnalysisRows(
     exposureRows.map((row) => materializeExposure(row, scope)),
   );

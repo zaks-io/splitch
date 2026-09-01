@@ -1,8 +1,8 @@
 import { and, desc, eq, isNull, ne } from "drizzle-orm";
 import { experiments, metrics, runs } from "../schema/index";
 import type { Db } from "./client";
-import { makeExperimentBatchReads } from "./experiment-batch-reads";
 import { makePurgeArchivedExperimentsInEnvironment } from "./experiment-archive-purge";
+import { makeExperimentBatchReads } from "./experiment-batch-reads";
 import { makeEndRun } from "./experiment-end-run";
 import { makeStartRun } from "./experiment-start-run";
 import { assertMintedScope, type EnvScope, type TenantScope } from "./scope";
@@ -40,7 +40,7 @@ export function makeExperimentRepo(db: Db, d1: D1Database) {
       and(eq(experiments.flagId, flagId), eq(experiments.status, "running")),
     );
   const lookups = makeExperimentLookups(experimentsTable);
-  const batchReads = makeExperimentBatchReads(experimentsTable, runsTable);
+  const batchReads = makeExperimentBatchReads(db, experimentsTable, runsTable, metricsTable);
 
   return {
     experiments: experimentsTable,
@@ -121,6 +121,14 @@ export function makeExperimentRepo(db: Db, d1: D1Database) {
         ...options,
         orderBy: options?.orderBy ?? [desc(runs.runNumber), desc(runs.id)],
       });
+    },
+
+    async findLatestRunForExperiment(scope: EnvScope, experimentId: string) {
+      const rows = await runsTable.findMany(scope, eq(runs.experimentId, experimentId), {
+        limit: 1,
+        orderBy: [desc(runs.runNumber), desc(runs.id)],
+      });
+      return rows[0] ?? null;
     },
 
     countRunsForExperiment(scope: EnvScope, experimentId: string): Promise<number> {

@@ -1,11 +1,11 @@
-import { appScope } from "@splitch/db";
+import { appScope, type Repository } from "@splitch/db";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { frozenAnalysisConfig } from "../src/experiment-start-analysis";
 import {
   type ExperimentRunHarness,
   experimentFixture,
   makeExperimentRunHarness,
 } from "../src/experiment-run-test-fixture";
+import { frozenAnalysisConfig } from "../src/experiment-start-analysis";
 import { errorBody } from "../src/flag-definition-test-harness";
 import {
   ensureMetricEventDefinition,
@@ -79,6 +79,87 @@ async function refusal(
   const body = await errorBody(frozen.response);
   return { code: body.code, details: JSON.stringify(body.details) };
 }
+
+describe("Experiment Start Metric read batching", () => {
+  it("loads an analyzed Metric set, Ratio operands, and published Versions with constant repository calls", async () => {
+    const fx = await experimentFixture(ctx);
+    const countIds = await Promise.all(
+      Array.from({ length: 10 }, (_, index) =>
+        metric(
+          fx.appId,
+          `metric_batched_count_${index}`,
+          { kind: "count", eventFieldName: "quantity" },
+          { fieldName: "quantity" },
+        ),
+      ),
+    );
+    const numeratorMetricId = await metric(fx.appId, "metric_batched_numerator");
+    const denominatorMetricId = await metric(fx.appId, "metric_batched_denominator");
+    const ratioMetricId = await metric(fx.appId, "metric_batched_ratio", {
+      kind: "ratio",
+      numeratorMetricId,
+      denominatorMetricId,
+    });
+    const calls = {
+      getMetric: 0,
+      getEventDefinition: 0,
+      getEventDefinitionVersion: 0,
+      listMetricsByIds: 0,
+      listCurrentPublishedVersions: 0,
+    };
+    const measured: Repository = {
+      ...ctx.repo,
+      experiments: {
+        ...ctx.repo.experiments,
+        getMetric: async (...args) => {
+          calls.getMetric += 1;
+          return ctx.repo.experiments.getMetric(...args);
+        },
+        listMetricsByIds: async (...args) => {
+          calls.listMetricsByIds += 1;
+          return ctx.repo.experiments.listMetricsByIds(...args);
+        },
+      },
+      eventDefinitions: {
+        ...ctx.repo.eventDefinitions,
+        get: async (...args) => {
+          calls.getEventDefinition += 1;
+          return ctx.repo.eventDefinitions.get(...args);
+        },
+        getVersion: async (...args) => {
+          calls.getEventDefinitionVersion += 1;
+          return ctx.repo.eventDefinitions.getVersion(...args);
+        },
+        listCurrentPublishedVersions: async (...args) => {
+          calls.listCurrentPublishedVersions += 1;
+          return ctx.repo.eventDefinitions.listCurrentPublishedVersions(...args);
+        },
+      },
+    };
+
+    const frozen = await frozenAnalysisConfig(
+      measured,
+      fx.appId,
+      {
+        metrics: [...countIds, ratioMetricId].map((metricId) => ({ metricId })),
+        guardrailMetrics: [],
+      },
+      ["treatment"],
+      60_000,
+      "user",
+      "req_metric_batching",
+    );
+
+    expect(frozen.ok).toBe(true);
+    expect(calls).toEqual({
+      getMetric: 0,
+      getEventDefinition: 0,
+      getEventDefinitionVersion: 0,
+      listMetricsByIds: 2,
+      listCurrentPublishedVersions: 1,
+    });
+  });
+});
 
 describe("Experiment Start refuses an unreadable Metric source binding", () => {
   it("refuses a Count Metric whose field is absent from the published Version", async () => {

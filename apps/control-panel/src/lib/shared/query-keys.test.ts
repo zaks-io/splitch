@@ -10,6 +10,7 @@ const scope = { appId: "app_1", environmentId: "env_prod" };
 describe("Control Panel query keys", () => {
   it("builds every pinned key from the App and Environment root", () => {
     expect([
+      queryKeys.session.scopedVisit("acme", "checkout", "prod", "/acme/checkout/prod/flags"),
       queryKeys.app.root(scope.appId, scope.environmentId),
       queryKeys.environment.exposureStatus(scope.appId, scope.environmentId),
       queryKeys.experiment.prefix(scope.appId, scope.environmentId),
@@ -32,6 +33,7 @@ describe("Control Panel query keys", () => {
       queryKeys.segment.list(scope.appId, scope.environmentId),
       queryKeys.segment.detail(scope.appId, scope.environmentId, "segment_1"),
     ]).toEqual([
+      ["session", "scope", "acme", "checkout", "prod", "/acme/checkout/prod/flags"],
       ["app", "app_1", "env", "env_prod"],
       ["app", "app_1", "env", "env_prod", "environment", "exposure-status"],
       ["app", "app_1", "env", "env_prod", "experiment"],

@@ -122,13 +122,15 @@ export async function validateMetricRefs(
     ...((body.guardrailMetrics as MetricRef[] | undefined) ?? []),
     ...(typeof body.activationMetricId === "string" ? [{ metricId: body.activationMetricId }] : []),
   ];
-  for (const ref of refs) {
-    if (!(await repo.experiments.getMetric(appScope(appId), ref.metricId))) {
-      return validationError(requestId, [
-        ["body", "metrics"],
-        `Metric ${ref.metricId} must belong to this App`,
-      ]);
-    }
+  const metricIds = [...new Set(refs.map(({ metricId }) => metricId))];
+  const rows = await repo.experiments.listMetricsByIds(appScope(appId), metricIds);
+  const found = new Set(rows.map(({ id }) => id));
+  const missing = metricIds.find((metricId) => !found.has(metricId));
+  if (missing) {
+    return validationError(requestId, [
+      ["body", "metrics"],
+      `Metric ${missing} must belong to this App`,
+    ]);
   }
   return null;
 }

@@ -1,4 +1,4 @@
-import { and, asc, eq, inArray, notExists, sql, type SQL } from "drizzle-orm";
+import { and, eq, inArray, notExists, sql } from "drizzle-orm";
 import { flags, targetingRules, variants } from "../schema/index";
 import { approvalPendingCondition, approvalReviewLanded } from "./approval-atomic";
 import type { Db } from "./client";
@@ -8,6 +8,12 @@ import {
   makeUpdateVariant,
   type VariantWriteOptions,
 } from "./flag-variant-approval";
+import {
+  type FlagInScope,
+  makeEnsureCreateVariant,
+  makeEnsureCreateVariants,
+  variantsInInsertOrder,
+} from "./flag-variant-create";
 import {
   liveRunUsingVariant,
   type VariantIdentity,
@@ -26,60 +32,7 @@ import type { ScopedTable } from "./scoped-table";
  * boundary for the catalog (ADR-0018), so no operation in this file may skip
  * it — batched reads included.
  */
-export type FlagInScope = (
-  scope: TenantScope,
-  flagId: string,
-) => Promise<typeof flags.$inferSelect | null>;
-
-type VariantByName = (
-  scope: TenantScope,
-  flagId: string,
-  name: string,
-) => Promise<typeof variants.$inferSelect | null>;
-
-function variantsInInsertOrder(db: Db, predicate: SQL<unknown>) {
-  return db
-    .select()
-    .from(variants)
-    .where(predicate)
-    .orderBy(asc(sql`${variants}.rowid`));
-}
-
-async function insertCreateVariantOrWinner(
-  db: Db,
-  variantByName: VariantByName,
-  scope: TenantScope,
-  flagId: string,
-  values: Omit<typeof variants.$inferInsert, "flagId">,
-): Promise<typeof variants.$inferSelect> {
-  try {
-    const rows = await db
-      .insert(variants)
-      .values({ ...values, flagId })
-      .returning();
-    const inserted = rows[0];
-    if (!inserted) throw new Error("ensureCreateVariant: no row returned");
-    return inserted;
-  } catch (cause) {
-    const winner = await variantByName(scope, flagId, values.name);
-    if (winner) return winner;
-    throw cause;
-  }
-}
-
-function makeEnsureCreateVariant(db: Db, flagInScope: FlagInScope, variantByName: VariantByName) {
-  return async function ensureCreateVariant(
-    scope: TenantScope,
-    flagId: string,
-    values: Omit<typeof variants.$inferInsert, "flagId">,
-  ): Promise<typeof variants.$inferSelect> {
-    const flag = await flagInScope(scope, flagId);
-    if (!flag) throw new Error("ensureCreateVariant: flag is not in this App scope");
-    const existing = await variantByName(scope, flagId, values.name);
-    if (existing) return existing;
-    return insertCreateVariantOrWinner(db, variantByName, scope, flagId, values);
-  };
-}
+export type { FlagInScope } from "./flag-variant-create";
 
 export type TargetingRuleVariantRef = {
   id: string;
@@ -303,6 +256,13 @@ export function makeVariantOps(
 
     /** Concurrent create retries converge on the row chosen by the database. */
     ensureCreateVariant: makeEnsureCreateVariant(db, flagInScope, variantByName),
+
+    /**
+     * Idempotent create-time catalog provisioning in a single D1 batch. The
+     * read-before/write/read shape preserves retry and race behavior without a
+     * separate scope lookup and insert round trip for every Variant.
+     */
+    ensureCreateVariants: makeEnsureCreateVariants(db, flagInScope),
 
     getVariantByName: variantByName,
 

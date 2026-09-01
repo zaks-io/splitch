@@ -1,0 +1,82 @@
+DESCRIPTION Returns the frozen Run input and its complete Exposure denominator in one request so Results needs one Tinybird round trip before deciding whether Metric reads are warranted.
+
+NODE selected_run
+SQL >
+    %
+    {% if not defined(app_id) %}
+    {{error('app_id is required')}}
+    {% end %}
+    {% if not defined(environment_id) %}
+    {{error('environment_id is required')}}
+    {% end %}
+    {% if not defined(experiment_id) %}
+    {{error('experiment_id is required')}}
+    {% end %}
+    {% if not defined(run_id) %}
+    {{error('run_id is required')}}
+    {% end %}
+    SELECT
+        run_id,
+        confidence_level,
+        horizon,
+        target_n,
+        sample_size_locked,
+        allocation,
+        control_variant,
+        control_variant_id,
+        activation_metric_id,
+        decision_family,
+        guardrail_decisions,
+        metric_query_config,
+        metric_variance_config,
+        dimensions,
+        started_at
+    FROM run_snapshots
+    WHERE app_id = {{String(app_id)}}
+        AND environment_id = {{String(environment_id)}}
+        AND experiment_id = {{String(experiment_id)}}
+        AND run_id = {{String(run_id)}}
+    ORDER BY started_at DESC, snapshot_at DESC
+    LIMIT 1
+
+NODE bootstrap_rows
+SQL >
+    SELECT
+        'run' AS row_type,
+        toJSONString(tuple(
+            run_id AS run_id,
+            confidence_level AS confidence_level,
+            horizon AS horizon,
+            target_n AS target_n,
+            sample_size_locked AS sample_size_locked,
+            allocation AS allocation,
+            control_variant AS control_variant,
+            control_variant_id AS control_variant_id,
+            activation_metric_id AS activation_metric_id,
+            decision_family AS decision_family,
+            guardrail_decisions AS guardrail_decisions,
+            metric_query_config AS metric_query_config,
+            metric_variance_config AS metric_variance_config,
+            dimensions AS dimensions,
+            started_at AS started_at
+        )) AS payload
+    FROM selected_run
+
+    UNION ALL
+
+    SELECT
+        'exposure' AS row_type,
+        toJSONString(tuple(
+            app_id AS app_id,
+            environment_id AS environment_id,
+            id_type AS id_type,
+            run_id AS run_id,
+            targeting_key_hash AS targeting_key_hash,
+            variant AS variant,
+            first_exposure_ts AS first_exposure_ts,
+            first_exposure_ts AS window_anchor
+        )) AS payload
+    FROM serve_deduped_exposures
+    ORDER BY row_type DESC, payload
+
+TYPE ENDPOINT

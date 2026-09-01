@@ -7,13 +7,6 @@ import { createFileRoute, notFound, Outlet } from "@tanstack/react-router";
 import { LiveUpdatesClient } from "#components/live-updates/live-updates-client";
 import { PanelPageBody } from "#components/shell/panel-page-body";
 import { PanelShell } from "#components/shell/panel-shell";
-import { deferredDestinationAt } from "#lib/shell/app-shell-navigation";
-import {
-  AccessDeniedError,
-  isAccessDeniedError,
-  type ScopedLoaderContext,
-} from "#lib/shared/loader-context";
-import { recordLastVisitedScope } from "#lib/sessions/last-visited-scope-functions";
 import { loginRedirect } from "#lib/auth/login-redirect";
 import {
   configureControlPanelSentryScope,
@@ -21,10 +14,18 @@ import {
   reportRouteError,
 } from "#lib/observability/panel-observability";
 import { scopedSessionQuery } from "#lib/sessions/scoped-session-query";
+import {
+  AccessDeniedError,
+  isAccessDeniedError,
+  type ScopedLoaderContext,
+} from "#lib/shared/loader-context";
+import { deferredDestinationAt } from "#lib/shell/app-shell-navigation";
 
 export const Route = createFileRoute("/$orgSlug/$appSlug/$env")({
   beforeLoad: async ({ context, location, params }) => {
-    const result = await context.queryClient.fetchQuery(scopedSessionQuery(params));
+    const result = await context.queryClient.fetchQuery(
+      scopedSessionQuery(params, location.pathname),
+    );
     if (result.kind === "unauthenticated") {
       throw loginRedirect(location.href);
     }
@@ -52,19 +53,7 @@ export const Route = createFileRoute("/$orgSlug/$appSlug/$env")({
     configureControlPanelSentryScope(result.context);
     return { scoped: result.context };
   },
-  loader: async ({ context, location, params }): Promise<ScopedLoaderContext> => {
-    const scoped = context.scoped;
-
-    await recordLastVisitedScope({
-      data: {
-        orgId: scoped.scope.orgId,
-        appSlug: params.appSlug,
-        env: params.env,
-        path: location.pathname,
-      },
-    });
-    return scoped;
-  },
+  loader: ({ context }): ScopedLoaderContext => context.scoped,
   onError: ({ error }) => {
     reportRouteError("section", error, "/$orgSlug/$appSlug/$env");
   },

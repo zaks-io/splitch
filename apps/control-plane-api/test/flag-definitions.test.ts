@@ -75,7 +75,9 @@ describe("control-plane Flag definition CRUD", () => {
       ),
     ).toEqual([]);
   });
+});
 
+describe("control-plane Flag definition lists", () => {
   it("lists multiple Flags with one Environment's configuration inline", async () => {
     const createdApp = await createDefaultApp(h);
     const jwt = await appToken(h, createdApp.app.id);
@@ -195,17 +197,18 @@ describe("control-plane Flag definition CRUD", () => {
     expect(response.status).toBe(400);
     expect(await response.json()).toMatchObject({ code: "VALIDATION_ERROR" });
   });
+});
 
+describe("control-plane Flag definition recovery", () => {
   it("resumes the Flag when catalog Variant insertion fails", async () => {
     const createdApp = await createDefaultApp(h);
     const jwt = await appToken(h, createdApp.app.id);
     const repo = createRepository(h.bindings.d1);
     const originalEnsureVariant = repo.flags.ensureCreateVariant.bind(repo.flags);
-    let addAttempt = 0;
-    repo.flags.ensureCreateVariant = async (...args) => {
-      addAttempt += 1;
-      if (addAttempt === 2) throw new Error("injected catalog insert failure");
-      return originalEnsureVariant(...args);
+    repo.flags.ensureCreateVariants = async (scope, flagId, values) => {
+      const first = values[0];
+      if (first) await originalEnsureVariant(scope, flagId, first);
+      throw new Error("injected catalog insert failure");
     };
     const failingApp = makeAppForRepo(h, repo);
     const idempotencyKey = `idem-create-flag-${crypto.randomUUID()}`;

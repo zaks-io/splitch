@@ -1,7 +1,7 @@
 import {
   DEFAULT_CUPED_LOOKBACK_MS,
-  type MetricQueryConfig,
   MetricKindSchema,
+  type MetricQueryConfig,
 } from "@splitch/contracts";
 import { appScope, type Repository } from "@splitch/db";
 import { experimentStartInvalid } from "./experiment-errors";
@@ -10,6 +10,9 @@ type MetricRow = NonNullable<Awaited<ReturnType<Repository["experiments"]["getMe
 type EventDefinitionVersion = NonNullable<
   Awaited<ReturnType<Repository["eventDefinitions"]["getVersion"]>>
 >;
+type PublishedSource = Awaited<
+  ReturnType<Repository["eventDefinitions"]["listCurrentPublishedVersions"]>
+>[number];
 type Result<T> = { ok: true; value: T } | { ok: false; response: Response };
 type SourceBinding = Extract<MetricQueryConfig, { metric_type: "ratio" }>["numerator"];
 
@@ -22,12 +25,34 @@ export async function frozenMetricQueryConfig(
   targetingKeyType: string,
   requestId: string,
 ): Promise<Result<MetricQueryConfig[]>> {
+  const operandIds = [...rows.values()].flatMap((row) =>
+    row.kind === "ratio"
+      ? [row.numeratorMetricId, row.denominatorMetricId].filter((id): id is string => id !== null)
+      : [],
+  );
+  const unloadedOperandIds = [...new Set(operandIds)].filter((id) => !rows.has(id));
+  const operands = await repo.experiments.listMetricsByIds(appScope(appId), unloadedOperandIds);
+  for (const operand of operands) rows.set(operand.id, operand);
+
+  const sourceDefinitionIds = [
+    ...new Set(
+      [...rows.values()]
+        .filter((row) => row.kind !== "ratio")
+        .map((row) => row.eventDefinitionId)
+        .filter((id): id is string => id !== null),
+    ),
+  ];
+  const publishedSources = await repo.eventDefinitions.listCurrentPublishedVersions(
+    appScope(appId),
+    sourceDefinitionIds,
+  );
+  const sources = new Map(publishedSources.map((source) => [source.definition.id, source]));
+
   const configs: MetricQueryConfig[] = [];
   for (const metricId of metricIds) {
-    const config = await queryConfig(
-      repo,
-      appId,
+    const config = queryConfig(
       rows,
+      sources,
       metricId,
       conversionWindowMs,
       targetingKeyType,
@@ -39,19 +64,18 @@ export async function frozenMetricQueryConfig(
   return { ok: true, value: configs };
 }
 
-async function queryConfig(
-  repo: Repository,
-  appId: string,
+function queryConfig(
   rows: Map<string, MetricRow>,
+  sources: Map<string, PublishedSource>,
   metricId: string,
   conversionWindowMs: number,
   targetingKeyType: string,
   requestId: string,
-): Promise<Result<MetricQueryConfig>> {
+): Result<MetricQueryConfig> {
   const row = rows.get(metricId);
   if (!row) throw new Error(`prepareStart: Metric ${metricId} was not loaded`);
   if (row.kind === "ratio") {
-    return ratioQueryConfig(repo, appId, row, conversionWindowMs, targetingKeyType, requestId);
+    return ratioQueryConfig(rows, sources, row, conversionWindowMs, targetingKeyType, requestId);
   }
   if (!row.eventDefinitionId) {
     return invalidMetric(metricId, "has no Event Definition", requestId);
@@ -61,7 +85,7 @@ async function queryConfig(
     throw new Error(`prepareStart: Ratio Metric ${metricId} escaped its branch`);
   }
   if (metricType === "count" || metricType === "revenue") {
-    const source = await sourceBinding(repo, appId, row, targetingKeyType, metricId, requestId);
+    const source = sourceBinding(sources, row, targetingKeyType, metricId, requestId);
     if (!source.ok) return source;
     return {
       ok: true,
@@ -86,17 +110,17 @@ async function queryConfig(
   };
 }
 
-async function ratioQueryConfig(
-  repo: Repository,
-  appId: string,
+function ratioQueryConfig(
+  rows: Map<string, MetricRow>,
+  sources: Map<string, PublishedSource>,
   row: MetricRow,
   conversionWindowMs: number,
   targetingKeyType: string,
   requestId: string,
-): Promise<Result<MetricQueryConfig>> {
-  const numerator = await ratioOperandBinding(
-    repo,
-    appId,
+): Result<MetricQueryConfig> {
+  const numerator = ratioOperandBinding(
+    rows,
+    sources,
     row.numeratorMetricId,
     "numerator",
     targetingKeyType,
@@ -104,9 +128,9 @@ async function ratioQueryConfig(
     requestId,
   );
   if (!numerator.ok) return numerator;
-  const denominator = await ratioOperandBinding(
-    repo,
-    appId,
+  const denominator = ratioOperandBinding(
+    rows,
+    sources,
     row.denominatorMetricId,
     "denominator",
     targetingKeyType,
@@ -130,17 +154,17 @@ async function ratioQueryConfig(
   };
 }
 
-async function ratioOperandBinding(
-  repo: Repository,
-  appId: string,
+function ratioOperandBinding(
+  rows: Map<string, MetricRow>,
+  sources: Map<string, PublishedSource>,
   operandId: string | null,
   name: "numerator" | "denominator",
   targetingKeyType: string,
   ratioMetricId: string,
   requestId: string,
-): Promise<Result<SourceBinding>> {
+): Result<SourceBinding> {
   if (!operandId) return invalidMetric(ratioMetricId, `has no ${name} Metric`, requestId);
-  const operand = await repo.experiments.getMetric(appScope(appId), operandId);
+  const operand = rows.get(operandId);
   if (!operand) {
     return invalidMetric(
       ratioMetricId,
@@ -151,18 +175,17 @@ async function ratioOperandBinding(
   if (operand.kind === "ratio") {
     return invalidMetric(ratioMetricId, `${name} Metric ${operandId} is itself a Ratio`, requestId);
   }
-  return sourceBinding(repo, appId, operand, targetingKeyType, ratioMetricId, requestId);
+  return sourceBinding(sources, operand, targetingKeyType, ratioMetricId, requestId);
 }
 
-async function sourceBinding(
-  repo: Repository,
-  appId: string,
+function sourceBinding(
+  sources: Map<string, PublishedSource>,
   row: MetricRow,
   targetingKeyType: string,
   analyzedMetricId: string,
   requestId: string,
-): Promise<Result<SourceBinding>> {
-  const version = await sourceEventDefinitionVersion(repo, appId, row, analyzedMetricId, requestId);
+): Result<SourceBinding> {
+  const version = sourceEventDefinitionVersion(sources, row, analyzedMetricId, requestId);
   if (!version.ok) return version;
   const versionIssue = sourceVersionIssue(
     row,
@@ -175,13 +198,12 @@ async function sourceBinding(
   return sourceBindingValue(row);
 }
 
-async function sourceEventDefinitionVersion(
-  repo: Repository,
-  appId: string,
+function sourceEventDefinitionVersion(
+  sources: Map<string, PublishedSource>,
   row: MetricRow,
   analyzedMetricId: string,
   requestId: string,
-): Promise<Result<EventDefinitionVersion>> {
+): Result<EventDefinitionVersion> {
   if (!row.eventDefinitionId) {
     return invalidMetric(
       analyzedMetricId,
@@ -189,7 +211,8 @@ async function sourceEventDefinitionVersion(
       requestId,
     );
   }
-  const definition = await repo.eventDefinitions.get(appScope(appId), row.eventDefinitionId);
+  const source = sources.get(row.eventDefinitionId);
+  const definition = source?.definition;
   if (definition?.family !== "metric" || !definition.currentPublishedVersionId) {
     return invalidMetric(
       analyzedMetricId,
@@ -197,11 +220,7 @@ async function sourceEventDefinitionVersion(
       requestId,
     );
   }
-  const version = await repo.eventDefinitions.getVersion(
-    appScope(appId),
-    definition.id,
-    definition.currentPublishedVersionId,
-  );
+  const version = source?.version;
   if (!version) {
     return invalidMetric(
       analyzedMetricId,

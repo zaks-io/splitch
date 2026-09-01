@@ -8,7 +8,7 @@ import {
   RESULTS_PATH,
   resultsAuthInit,
 } from "./results-test-harness";
-import { type RowsByPipe, RUN_ID, rowsByPipe } from "./results-test-support";
+import { type RowsByPipe, RUN_ID, rowsByPipe, rowsForPipe } from "./results-test-support";
 import { createTinybirdReadTransport } from "./tinybird";
 
 /**
@@ -51,10 +51,7 @@ describe("GET experiment results insufficient-data typing (SPL-302)", () => {
       control_variant: "control",
       missing: "exposures",
     });
-    expect(tinybird.calls.map((call) => call.pipeName)).toEqual([
-      "analysis_run_inputs",
-      "analysis_deduped_exposures",
-    ]);
+    expect(tinybird.calls.map((call) => call.pipeName)).toEqual(["analysis_run_bootstrap"]);
   });
 
   it("returns Exposure health without querying per-Metric pipes for a Run with no Metrics", async () => {
@@ -83,8 +80,7 @@ describe("GET experiment results insufficient-data typing (SPL-302)", () => {
       stats: { health: { deduped_counts: { control: 2, treatment: 2 } } },
     });
     expect(tinybird.calls.map((call) => call.pipeName)).toEqual([
-      "analysis_run_inputs",
-      "analysis_deduped_exposures",
+      "analysis_run_bootstrap",
       "analysis_activation_rows",
     ]);
   });
@@ -318,7 +314,7 @@ function listenPipeServer(rows: RowsByPipe): Promise<{ server: Server; baseUrl: 
         return;
       }
       response.writeHead(200, { "content-type": "application/json" });
-      response.end(JSON.stringify({ data: rows[pipeName] ?? [] }));
+      response.end(JSON.stringify({ data: rowsForPipe(rows, pipeName) }));
     });
     server.once("error", reject);
     server.listen(0, "127.0.0.1", () => {

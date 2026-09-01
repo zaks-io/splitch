@@ -1,9 +1,22 @@
 import { env as workerEnv } from "cloudflare:workers";
 import { createRepository } from "@splitch/db";
 import { createServerFn } from "@tanstack/react-start";
-import { getRequest } from "@tanstack/react-start/server";
+import { getRequest, setResponseHeader } from "@tanstack/react-start/server";
+import { z } from "zod";
+import { readPendingResync } from "#lib/live-updates/pending-resync";
+import {
+  lastVisitedEntry,
+  lastVisitedOrgId,
+  parseLastVisitedCookie,
+  recordVisit,
+  serializeLastVisitedCookie,
+} from "#lib/sessions/last-visited-scope";
+import { createEnvironmentResolver, rehydrateLegacySession } from "#lib/sessions/membership";
+import { publicSession, type SessionPrincipal } from "#lib/sessions/session";
+import { loadSessionFromRequest } from "#lib/sessions/session-refresh";
+import { retryPendingResync } from "#lib/sessions/session-resync";
+import type { StaleSession } from "#lib/sessions/stale-session";
 import { type ControlPanelBindings, controlPanelBindings } from "#lib/shared/bindings";
-import { lastVisitedOrgId, parseLastVisitedCookie } from "#lib/sessions/last-visited-scope";
 import {
   AccessDeniedError,
   type AppScopedLoaderContext,
@@ -14,14 +27,8 @@ import {
   resolveScopedLoaderContext,
   ScopedNotFoundError,
   type ScopeNavigation,
-  type ScopeParams,
 } from "#lib/shared/loader-context";
-import { createEnvironmentResolver, rehydrateLegacySession } from "#lib/sessions/membership";
-import { readPendingResync } from "#lib/live-updates/pending-resync";
-import { publicSession, type SessionPrincipal } from "#lib/sessions/session";
-import { loadSessionFromRequest } from "#lib/sessions/session-refresh";
-import { retryPendingResync } from "#lib/sessions/session-resync";
-import type { StaleSession } from "#lib/sessions/stale-session";
+import { deferredDestinationAt } from "#lib/shell/app-shell-navigation";
 
 export type CurrentSessionResult =
   | {
@@ -162,16 +169,65 @@ export const loadPanelNavigation = createServerFn({ method: "GET" }).handler(() 
   loadPanelNavigationForRequest(controlPanelBindings(workerEnv), getRequest()),
 );
 
+const ScopedSessionInputSchema = z.object({
+  orgSlug: z.string().min(1),
+  appSlug: z.string().min(1),
+  env: z.string().min(1),
+  visitPath: z
+    .string()
+    .regex(/^\/(?!\/)[^\\?#\s]*$/)
+    .nullable(),
+});
+
+export type ScopedSessionInput = z.infer<typeof ScopedSessionInputSchema>;
+
 export const loadScopedSession = createServerFn({ method: "GET" })
-  .validator((data: ScopeParams) => data)
-  .handler(
-    ({ data }): Promise<ScopedSessionResult> =>
-      loadScopedContextForRequest(
-        controlPanelBindings(workerEnv),
-        getRequest(),
-        (session, resolver) => resolveScopedLoaderContext(session, data, resolver),
-      ),
+  .validator((data: unknown) => ScopedSessionInputSchema.parse(data))
+  .handler(async ({ data }): Promise<ScopedSessionResult> => {
+    const request = getRequest();
+    const result = await loadScopedSessionForRequest(
+      controlPanelBindings(workerEnv),
+      request,
+      data,
+    );
+    const cookie = scopedVisitCookie(result, request, data);
+    if (cookie) setResponseHeader("set-cookie", cookie);
+    return result;
+  });
+
+async function loadScopedSessionForRequest(
+  bindings: ControlPanelBindings,
+  request: Request,
+  data: ScopedSessionInput,
+): Promise<ScopedSessionResult> {
+  return loadScopedContextForRequest(bindings, request, (session, resolver) =>
+    resolveScopedLoaderContext(session, data, resolver),
   );
+}
+
+function scopedVisitCookie(
+  result: ScopedSessionResult,
+  request: Request,
+  data: ScopedSessionInput,
+): string | null {
+  if (
+    result.kind !== "ok" ||
+    data.visitPath === null ||
+    deferredDestinationAt(data.visitPath, data)
+  ) {
+    return null;
+  }
+
+  const { scope, session } = result.context;
+  return serializeLastVisitedCookie(
+    recordVisit(
+      parseLastVisitedCookie(request.headers.get("cookie"), session.userId),
+      session.userId,
+      scope.orgId,
+      lastVisitedEntry(scope.appSlug, scope.env, data.visitPath, Date.now()),
+    ),
+  );
+}
 
 export const loadAppScopedSession = createServerFn({ method: "GET" })
   .validator((data: AppScopeParams) => data)

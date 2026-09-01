@@ -1,8 +1,8 @@
 import type {
   Condition,
   GuardrailDecision,
-  MetricRef,
   MetricQueryConfig,
+  MetricRef,
   MetricVarianceConfig,
   ResolvedTargetingRule,
   TargetingRule,
@@ -16,7 +16,6 @@ import {
   segmentReferenceMissing,
   variantNotAvailable,
 } from "./experiment-errors";
-import { validateMetricRefs } from "./experiment-handler-shared";
 import {
   type ExperimentRow,
   jsonArray,
@@ -67,13 +66,16 @@ export async function prepareStart(
   if (!resolved.ok) return resolved;
   const targetingRules = resolved.value;
 
-  const metricsReady = await frozenMetricRefs(repo, scope.appId, experiment, requestId);
+  const metricsReady = await frozenMetricRefs(experiment);
   if (!metricsReady.ok) return metricsReady;
 
   const analysis = await frozenAnalysisConfig(
     repo,
     scope.appId,
-    metricsReady.value,
+    {
+      ...metricsReady.value,
+      activationMetricId: experiment.activationMetricId,
+    },
     treatmentVariants(allocation, variants.value),
     experiment.conversionWindowMs,
     experiment.targetingKeyType,
@@ -169,32 +171,11 @@ async function frozenVariantSet(
   return { ok: true, value: { variantSet: variantSet.value, controlVariantId } };
 }
 
-/**
- * Metric delete after End is allowed (SPL-289), so a draft can still name a
- * Metric that no longer exists. Re-check with the same Create/PATCH helper
- * before freezing the decision family into the Run.
- */
 async function frozenMetricRefs(
-  repo: Repository,
-  appId: string,
   experiment: ExperimentRow,
-  requestId: string,
 ): Promise<Result<{ metrics: MetricRef[]; guardrailMetrics: MetricRef[] }>> {
   const metrics = jsonArray<MetricRef>(experiment.metrics);
   const guardrailMetrics = jsonArray<MetricRef>(experiment.guardrailMetrics);
-  const metricError = await validateMetricRefs(
-    repo,
-    appId,
-    {
-      metrics,
-      guardrailMetrics,
-      ...(experiment.activationMetricId
-        ? { activationMetricId: experiment.activationMetricId }
-        : {}),
-    },
-    requestId,
-  );
-  if (metricError) return { ok: false, response: metricError };
   return { ok: true, value: { metrics, guardrailMetrics } };
 }
 

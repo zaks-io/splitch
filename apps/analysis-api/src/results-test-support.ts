@@ -23,8 +23,59 @@ export class FakeTinybird implements TinybirdReadTransport {
     options?: TinybirdReadOptions,
   ): Promise<readonly unknown[]> {
     this.calls.push({ pipeName, params: { ...params }, options });
-    return this.rows[pipeName] ?? [];
+    return rowsForPipe(this.rows, pipeName);
   }
+}
+
+export function rowsForPipe(rows: RowsByPipe, pipeName: string): readonly unknown[] {
+  if (pipeName !== "analysis_run_bootstrap" || rows[pipeName] !== undefined) {
+    return rows[pipeName] ?? [];
+  }
+  return [
+    ...(rows.analysis_run_inputs ?? []).map((payload) => ({
+      row_type: "run",
+      payload: JSON.stringify(runBootstrapTuple(payload)),
+    })),
+    ...(rows.analysis_deduped_exposures ?? []).map((payload) => ({
+      row_type: "exposure",
+      payload: JSON.stringify(exposureBootstrapTuple(payload)),
+    })),
+  ];
+}
+
+function runBootstrapTuple(payload: unknown): unknown[] {
+  const row = payload as Record<string, unknown>;
+  return [
+    row.run_id,
+    row.confidence_level,
+    row.horizon,
+    row.target_n ?? null,
+    row.sample_size_locked ?? null,
+    row.allocation,
+    row.control_variant,
+    row.control_variant_id ?? null,
+    row.activation_metric_id ?? null,
+    row.decision_family,
+    row.guardrail_decisions,
+    row.metric_query_config ?? "[]",
+    row.metric_variance_config ?? "[]",
+    row.dimensions ?? "[]",
+    row.started_at,
+  ];
+}
+
+function exposureBootstrapTuple(payload: unknown): unknown[] {
+  const row = payload as Record<string, unknown>;
+  return [
+    row.app_id,
+    row.environment_id,
+    row.id_type,
+    row.run_id,
+    row.targeting_key_hash,
+    row.variant,
+    row.first_exposure_ts,
+    row.window_anchor ?? row.first_exposure_ts,
+  ];
 }
 
 export function rowsByPipe(): RowsByPipe {
