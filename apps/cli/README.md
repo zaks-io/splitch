@@ -52,11 +52,11 @@ splitch login
 splitch use --app "$SPLITCH_APP" --env "$SPLITCH_ENV" --json
 ```
 
-After browser approval, `splitch use` writes the nearest `.splitch/config.json` and reports the
+After browser approval, `splitch use` writes the nearest `splitch.json` and reports the
 selected scope:
 
 ```json
-{ "path": "/path/to/product/.splitch/config.json", "app": "checkout", "environment": "dev" }
+{ "path": "/path/to/product/splitch.json", "app": "checkout", "environment": "dev" }
 ```
 
 The CLI login is separate from the credentials used by your application at runtime:

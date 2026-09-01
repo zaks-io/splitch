@@ -45,7 +45,7 @@ splitch use --app <app-id-or-slug> --env <environment-id-or-slug> --json
 splitch context --json
 ```
 
-`splitch use` writes `.splitch/config.json`. Command flags take precedence over `SPLITCH_APP` and
+`splitch use` writes `splitch.json`. Command flags take precedence over `SPLITCH_APP` and
 `SPLITCH_ENV`, which take precedence over that file. Never guess an unresolved or ambiguous scope.
 
 ## Treat JSON as the agent contract

@@ -35,9 +35,9 @@ describe("env-policy get server-side selector resolution", () => {
     const { dir, credentialPath } = await makeTempHome();
     await writeFile(credentialPath, `${JSON.stringify(storedCredential())}\n`);
     const configDir = join(dir, "project");
-    await mkdir(join(configDir, ".splitch"), { recursive: true });
+    await mkdir(configDir, { recursive: true });
     await writeFile(
-      join(configDir, ".splitch", "config.json"),
+      join(configDir, "splitch.json"),
       '{"version":1,"app":"app_1","environment":"env_1"}\n',
     );
     const transport = new FakeCliTransport([

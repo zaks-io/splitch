@@ -1,5 +1,4 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { SplitchCliError } from "./errors.js";
 
@@ -82,7 +81,7 @@ export async function writeNearestConfig(
   // `environment: null` explicitly clears the stored value (an App switch
   // invalidates the old App's Environment); undefined leaves it unchanged.
   const discovered = await discoverConfig(cwd);
-  const path = discovered?.path ?? join(cwd, ".splitch", "config.json");
+  const path = discovered?.path ?? join(cwd, "splitch.json");
   const existing: SplitchConfig = discovered?.config ?? { version: 1 };
   const next: SplitchConfig = {
     version: 1,
@@ -149,7 +148,7 @@ async function discoverConfig(
   let current = resolve(cwd);
   const root = resolve("/");
   while (true) {
-    const candidate = join(current, ".splitch", "config.json");
+    const candidate = join(current, "splitch.json");
     const config = await readConfig(candidate);
     if (config) {
       return { path: candidate, config };
@@ -159,9 +158,7 @@ async function discoverConfig(
     }
     current = dirname(current);
   }
-  const homeConfig = join(homedir(), ".splitch", "config.json");
-  const home = await readConfig(homeConfig);
-  return home ? { path: homeConfig, config: home } : null;
+  return null;
 }
 
 async function readConfig(path: string): Promise<SplitchConfig | null> {
@@ -174,7 +171,7 @@ async function readConfig(path: string): Promise<SplitchConfig | null> {
     throw new SplitchCliError({
       code: "CLI_CONFIG_READ_FAILED",
       causeSummary: error instanceof Error ? error.message : String(error),
-      remediation: "Fix or remove the unreadable .splitch/config.json file and retry the command",
+      remediation: "Fix or remove the unreadable splitch.json file and retry the command",
       originalError: error,
     });
   }

@@ -101,7 +101,7 @@ for the common case. The response includes the App **and** its two Environments:
 So you stop retyping `--app` / `--env` on every call:
 
 ```
-splitch use --app <app|slug> --env dev      # CLI: writes nearest .splitch/config.json
+splitch use --app <app|slug> --env dev      # CLI: writes nearest splitch.json
 context_use { app, environment: "dev" }     # MCP: carried in the transport session
 ```
 

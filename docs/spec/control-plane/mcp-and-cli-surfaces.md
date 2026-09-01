@@ -80,18 +80,18 @@ Resolution order for `app_id` / `environment_id`, first match wins:
 
 1. Explicit `--app` / `--env` flag on the command (always wins; the override)
 2. `SPLITCH_APP` / `SPLITCH_ENV` environment variable
-3. `.splitch/config.json` discovered by walking up from the cwd (nearest wins), then `~/.splitch/config.json`
+3. `splitch.json` discovered by walking up from the cwd (nearest wins)
 4. If still unresolved and the command needs it: **fail loud** with a message naming the missing
    scope and how to set it (`splitch use ...` / `--app`), never a silent guess or a default to an
    arbitrary App.
 
 ```json
-// .splitch/config.json (project-local; safe to commit — holds IDs/slugs, never credentials)
+// splitch.json (project-local; safe to commit — holds IDs/slugs, never credentials)
 { "version": 1, "app": "app_...", "environment": "env_..." }
 ```
 
 ```
-splitch use --app <app_id|slug> [--env <environment_id|slug>]   # writes nearest .splitch/config.json
+splitch use --app <app_id|slug> [--env <environment_id|slug>]   # writes nearest splitch.json
 splitch use --env <environment_id|slug>                          # switch Environment within the current App
 splitch context                                                  # print the principal plus the resolved app/env and where each came from; CLI_NOT_AUTHENTICATED (exit 2) with no session
 ```
@@ -119,13 +119,13 @@ failure is visible but does not prevent manual approval.
 ### Command structure (illustrative; mirrors endpoint inventory)
 
 `--app` / `--env` below are shown for completeness; with an active context set (`splitch use`,
-`SPLITCH_APP`/`SPLITCH_ENV`, or `.splitch/config.json`) they are **optional** and only needed to
+`SPLITCH_APP`/`SPLITCH_ENV`, or `splitch.json`) they are **optional** and only needed to
 override. Flags that resolve from context are marked `[ctx]`.
 
 ```
 splitch login [--app <app_id|slug>]  # cold start needs no App; --app pre-binds the session to one
 splitch logout                       # revokes token; removes credential file entry
-splitch use --app <app|slug> [--env <env|slug>]   # set active context (writes .splitch/config.json)
+splitch use --app <app|slug> [--env <env|slug>]   # set active context (writes splitch.json)
 splitch context                                    # show principal + resolved app/env and source
 splitch orgs get <org_id>
 splitch apps list --org <org_id>

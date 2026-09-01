@@ -11,7 +11,7 @@ afterEach(async () => {
 describe("writeNearestConfig", () => {
   it("updates the ancestor project config instead of shadowing it from a subdirectory", async () => {
     const { dir } = await makeTempHome();
-    const rootConfig = join(dir, ".splitch", "config.json");
+    const rootConfig = join(dir, "splitch.json");
     await writeFile(rootConfig, '{"version":1,"app":"app_a","environment":"env_dev"}\n');
     const subdir = join(dir, "packages", "foo");
     await mkdir(subdir, { recursive: true });
@@ -36,7 +36,7 @@ describe("writeNearestConfig", () => {
 
     const written = await writeNearestConfig(subdir, { app: "app_new" });
 
-    expect(written).toBe(join(subdir, ".splitch", "config.json"));
+    expect(written).toBe(join(subdir, "splitch.json"));
     const config = JSON.parse(await readFile(written, "utf8"));
     expect(config).toMatchObject({ version: 1, app: "app_new" });
   });

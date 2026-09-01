@@ -100,7 +100,7 @@ export const cliErrorDocs = {
     related: ["CLI_ROUTE_SURFACE_UNSUPPORTED", "CLI_SERVER_CODE_UNRECOGNIZED"],
   },
   CLI_CONFIG_READ_FAILED: {
-    cause: "`.splitch/config.json` exists but could not be read or parsed.",
+    cause: "`splitch.json` exists but could not be read or parsed.",
     fix: "Fix or remove the file and retry. It only holds the `splitch use` selection, so deleting it costs nothing but the App and Environment defaults.",
     exitCode: 1,
     related: ["CLI_CREDENTIAL_STORE_FAILED", "CLI_SCOPE_UNRESOLVED"],

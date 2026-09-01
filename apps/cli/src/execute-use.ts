@@ -18,7 +18,7 @@ interface NamedResource {
 
 /**
  * `splitch use` resolves the selectors to canonical IDs against the live
- * control plane and writes THOSE to .splitch/config.json. Later commands can
+ * control plane and writes THOSE to splitch.json. Later commands can
  * use selectors directly, but validating here proves the App/Environment
  * exist while the user is still looking at the command that named them. The
  * canonical IDs also avoid selector reads on every later command.
