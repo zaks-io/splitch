@@ -254,6 +254,7 @@ describe("panel cookie attributes", () => {
       "lib/sessions/last-visited-scope-cookie.ts: setResponseHeader",
       "lib/sessions/session-cookie.ts: append",
       "lib/sessions/session-functions.ts: setResponseHeader",
+      "lib/sessions/session-functions.ts: setResponseHeader",
     ]);
     expectTypeOf<string>().not.toExtend<SerializedHttpOnlyCookie>();
     expectTypeOf(serializeHttpOnlyCookie).returns.toEqualTypeOf<SerializedHttpOnlyCookie>();
