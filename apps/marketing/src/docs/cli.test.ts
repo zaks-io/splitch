@@ -21,6 +21,10 @@ describe("CLI docs surface", () => {
     expect(markdown).toContain("docsUrl");
     expect(markdown).toContain("details.approvalRequestId");
     expect(markdown).toContain("SPLITCH_APP");
+    expect(markdown).toContain("splitch.json");
+    expect(markdown).toContain('"version": 1');
+    expect(markdown).toContain("each parent directory");
+    expect(markdown).toContain("safe to commit");
     expect(markdown).toContain("CLI_SCOPE_UNRESOLVED");
     expect(markdown).toContain("--output-file");
     expect(markdown).toContain("valueWrittenTo");

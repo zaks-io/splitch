@@ -31,7 +31,7 @@ function commandTable(): DocBlock {
 export const cliDoc = {
   title: "CLI",
   summary:
-    "Install, authenticate, select scope, and read every command: --json on any command, --confirm on Policy-gated changes, and stable exit codes.",
+    "Install, authenticate, automatically select project scope with splitch.json, and read every command: --json on any command, --confirm on Policy-gated changes, and stable exit codes.",
   blocks: [
     {
       kind: "prose",
@@ -56,13 +56,27 @@ export const cliDoc = {
       items: [
         "`--app` / `--env` on the command.",
         "`SPLITCH_APP` / `SPLITCH_ENV` in the environment.",
-        "`.splitch/config.json` in the current directory or an ancestor, written by `splitch use`.",
+        "`splitch.json` in the current directory or an ancestor, written by `splitch use`.",
       ],
     },
     {
       kind: "code",
       lang: "bash",
       code: "splitch use --app checkout --env dev\nsplitch flags list --json",
+    },
+    { kind: "heading", text: "Project configuration" },
+    {
+      kind: "prose",
+      text: "Place `splitch.json` in a project directory to select its App automatically. The file is optional. The CLI checks the current directory and then each parent directory, stopping at the nearest file. This lets commands run from any nested package or source directory without repeating `--app`.",
+    },
+    {
+      kind: "code",
+      lang: "json",
+      code: '{\n  "version": 1,\n  "app": "app_...",\n  "environment": "env_..."\n}',
+    },
+    {
+      kind: "prose",
+      text: "`environment` is optional when the repository should select only the App. The file contains no credentials and is safe to commit. `splitch use --app <app> [--env <env>]` validates the selectors, writes canonical IDs, and updates the nearest existing `splitch.json`. If no parent contains one, it creates the file in the current directory.",
     },
     {
       kind: "prose",

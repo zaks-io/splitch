@@ -79,6 +79,15 @@ describe("published CLI help", () => {
     expect(health).toContain("splitch health --json");
   });
 
+  it("documents the project config format and nearest-parent behavior", () => {
+    const use = renderMetaHelp("use");
+
+    expect(use).toContain('{"version":1,"app":"app_...","environment":"env_..."}');
+    expect(use).toContain("current directory and each parent for splitch.json");
+    expect(use).toContain("the nearest file wins");
+    expect(use).toContain("creates splitch.json in the current directory when none exists");
+  });
+
   it("documents hydrated Flag reads and the compact human summary", () => {
     const help = renderHelp(["flags", "list", "--help"]);
     const getHelp = renderHelp(["flags", "get", "--help"]);
