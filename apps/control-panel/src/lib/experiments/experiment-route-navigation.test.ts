@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   canonicalExperimentHref,
+  experimentKeyRouteRef,
+  experimentLookupRef,
   experimentNotFoundData,
 } from "#lib/experiments/experiment-route-navigation";
 
@@ -16,8 +18,14 @@ describe("Experiment route navigation", () => {
         "run_1",
       ),
     ).toBe(
-      "/zaks-io/neuron/dev/experiments/assistant-model/runs/run_1/results?window=all#decision",
+      "/zaks-io/neuron/dev/experiments/~assistant-model/runs/run_1/results?window=all#decision",
     );
+  });
+
+  it("namespaces every stable key away from static Experiment routes", () => {
+    expect(experimentKeyRouteRef("new")).toBe("~new");
+    expect(experimentLookupRef("~new")).toBe("new");
+    expect(experimentLookupRef("exp_legacy")).toBe("exp_legacy");
   });
 
   it("builds the owning Environment action for a Run found elsewhere", () => {
@@ -37,7 +45,7 @@ describe("Experiment route navigation", () => {
       kind: "run_elsewhere",
       env: "dev",
       sourceEnv: "prod",
-      href: "/zaks-io/neuron/prod/experiments/assistant-model/runs/run_1/results",
+      href: "/zaks-io/neuron/prod/experiments/~assistant-model/runs/run_1/results",
     });
   });
 

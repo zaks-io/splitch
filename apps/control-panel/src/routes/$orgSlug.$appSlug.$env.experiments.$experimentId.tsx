@@ -12,10 +12,12 @@ import {
 } from "#lib/experiments/experiment-environment-resolution-functions";
 import {
   canonicalExperimentHref,
+  experimentKeyRouteRef,
+  experimentLookupRef,
   type ExperimentNotFoundData,
   experimentNotFoundData,
 } from "#lib/experiments/experiment-route-navigation";
-import { experimentDetailQuery, experimentsListQuery } from "#lib/experiments/experiments-query";
+import { experimentDetailQuery } from "#lib/experiments/experiments-query";
 import { reportExpectedDomainFailure } from "#lib/observability/panel-observability";
 import type { ScopedLoaderContext } from "#lib/shared/loader-context";
 import { scopedHref } from "#lib/shell/app-shell-navigation";
@@ -41,37 +43,18 @@ type ExperimentRouteInput = {
   pathname: string;
 };
 
-async function loadExperimentRoute(input: ExperimentRouteInput) {
+export async function loadExperimentRoute(input: ExperimentRouteInput) {
   const environments = currentAppEnvironments(input.scoped);
   const activeEnvironment = environments.find(
     (environment) => environment.environmentId === input.scoped.scope.environmentId,
   );
   if (!activeEnvironment) throw new Error("Active Environment is missing from App navigation");
-  const catalog = await input.queryClient.ensureQueryData(
-    experimentsListQuery({
-      appId: input.scoped.scope.appId,
-      environmentId: input.scoped.scope.environmentId,
-    }),
-  );
-  const matches = catalog.items.filter(
-    (experiment) => experiment.id === input.experimentRef || experiment.key === input.experimentRef,
-  );
-  if (matches.length > 1) {
-    throw new Error("Experiment route reference resolves to multiple local Experiments");
-  }
-  const experiment = matches[0];
-  return experiment
-    ? loadLocalExperiment(input, experiment, activeEnvironment.guarded)
-    : resolveMissingExperiment(input);
-}
-
-async function resolveMissingExperiment(input: ExperimentRouteInput) {
   const runId = experimentRunId(input.pathname);
   const resolved = await resolveControlPanelExperimentEnvironment({
     data: {
       appId: input.scoped.scope.appId,
       targetEnvironmentId: input.scoped.scope.environmentId,
-      experimentRef: input.experimentRef,
+      experimentRef: experimentLookupRef(input.experimentRef),
       runId,
     },
   });
@@ -81,49 +64,24 @@ async function resolveMissingExperiment(input: ExperimentRouteInput) {
   if (resolved.data.kind !== "experiment") {
     throwResolvedNotFound(resolved.data, input.scoped.scope, input.href);
   }
-  throw redirect({
-    href: canonicalExperimentHref(
-      input.scoped.scope,
-      resolved.data.experimentKey,
-      input.href,
-      runId,
-    ),
-  });
-}
-
-async function loadLocalExperiment(
-  input: ExperimentRouteInput,
-  experiment: { id: string; key: string },
-  guarded: boolean,
-) {
-  const runId = experimentRunId(input.pathname);
-  if (input.experimentRef !== experiment.key) {
+  if (input.experimentRef !== experimentKeyRouteRef(resolved.data.experimentKey)) {
     throw redirect({
-      href: canonicalExperimentHref(input.scoped.scope, experiment.key, input.href, runId),
+      href: canonicalExperimentHref(
+        input.scoped.scope,
+        resolved.data.experimentKey,
+        input.href,
+        runId,
+      ),
     });
   }
-  const detail = await input.queryClient.ensureQueryData(
+  await input.queryClient.ensureQueryData(
     experimentDetailQuery({
       appId: input.scoped.scope.appId,
       environmentId: input.scoped.scope.environmentId,
-      experimentId: experiment.id,
+      experimentId: resolved.data.experimentId,
     }),
   );
-  if (runId && !detail.runs.some((run) => run.id === runId)) {
-    const resolved = await resolveControlPanelExperimentEnvironment({
-      data: {
-        appId: input.scoped.scope.appId,
-        targetEnvironmentId: input.scoped.scope.environmentId,
-        experimentRef: experiment.key,
-        runId,
-      },
-    });
-    if (!resolved.ok) {
-      throw Object.assign(new Error(resolved.error.message), { status: resolved.status });
-    }
-    throwResolvedNotFound(resolved.data, input.scoped.scope, input.href);
-  }
-  return { experimentId: experiment.id, guarded };
+  return { experimentId: resolved.data.experimentId, guarded: activeEnvironment.guarded };
 }
 
 function ExperimentDetailRoute() {

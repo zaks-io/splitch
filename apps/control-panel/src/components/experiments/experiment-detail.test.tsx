@@ -24,9 +24,9 @@ describe("ExperimentDetail", () => {
     expect(html).toContain("Allocation 50%/50% → 70%/30%");
     expect(html).toContain("Note: Increase treatment traffic");
     expect(html).toContain("End note: Prepared a larger treatment allocation");
-    expect(html).toContain('href="/acme/checkout/dev/experiments/checkout-copy/runs/run_2/setup"');
+    expect(html).toContain('href="/acme/checkout/dev/experiments/~checkout-copy/runs/run_2/setup"');
     expect(html).toContain(
-      'href="/acme/checkout/dev/experiments/checkout-copy/runs/run_1/results"',
+      'href="/acme/checkout/dev/experiments/~checkout-copy/runs/run_1/results"',
     );
     expect(html).toContain('data-active-environment="dev"');
   });

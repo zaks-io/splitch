@@ -8,6 +8,18 @@ export type ExperimentNotFoundData =
   | { kind: "run"; env: string }
   | { kind: "run_elsewhere"; env: string; sourceEnv: string; href: string };
 
+const EXPERIMENT_KEY_ROUTE_PREFIX = "~";
+
+/** Every canonical key reference starts with `~`, so it cannot equal a static child route. */
+export function experimentKeyRouteRef(experimentKey: string): string {
+  return `${EXPERIMENT_KEY_ROUTE_PREFIX}${encodeURIComponent(experimentKey)}`;
+}
+
+/** Legacy IDs and unprefixed key bookmarks remain valid resolver inputs. */
+export function experimentLookupRef(routeRef: string): string {
+  return routeRef.startsWith(EXPERIMENT_KEY_ROUTE_PREFIX) ? routeRef.slice(1) : routeRef;
+}
+
 export function experimentNotFoundData(
   resolution: Exclude<PanelExperimentRouteResolutionOutput, { kind: "experiment" }>,
   scope: RouteScope,
@@ -42,7 +54,7 @@ export function canonicalExperimentHref(
 ): string {
   const current = new URL(currentHref, "https://panel.splitch.dev");
   const tab = current.pathname.match(/\/(results|setup)\/?$/)?.[1];
-  const experiment = `${scopedHref(scope)}/experiments/${encodeURIComponent(experimentKey)}`;
+  const experiment = `${scopedHref(scope)}/experiments/${experimentKeyRouteRef(experimentKey)}`;
   const run = runId ? `${experiment}/runs/${encodeURIComponent(runId)}` : experiment;
   return `${run}${tab ? `/${tab}` : ""}${current.search}${current.hash}`;
 }

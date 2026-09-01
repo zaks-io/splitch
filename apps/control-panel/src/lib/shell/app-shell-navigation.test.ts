@@ -197,11 +197,11 @@ describe("App shell navigation", () => {
   it("keeps the stable Experiment key but drops an Environment-specific Run", () => {
     expect(
       environmentSwitchHref(
-        "/acme-labs/checkout-api/dev/experiments/checkout-copy/runs/run_dev/results?metric=signup#lift",
+        "/acme-labs/checkout-api/dev/experiments/~checkout-copy/runs/run_dev/results?metric=signup#lift",
         scope,
         "prod",
       ),
-    ).toBe("/acme-labs/checkout-api/prod/experiments/checkout-copy/results?metric=signup#lift");
+    ).toBe("/acme-labs/checkout-api/prod/experiments/~checkout-copy/results?metric=signup#lift");
   });
 
   it("fails closed to the next scope root when the current URL contradicts the scope", () => {

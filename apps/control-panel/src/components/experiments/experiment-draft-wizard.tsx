@@ -11,6 +11,7 @@ import {
   EXPERIMENT_DRAFT_STEPS,
   type ExperimentDraftStep,
 } from "#lib/experiments/experiment-draft-model";
+import { experimentKeyRouteRef } from "#lib/experiments/experiment-route-navigation";
 
 /**
  * The guided draft. Every step writes to the same `draft` Experiment row, so the
@@ -29,7 +30,7 @@ export function ExperimentDraftWizard({
   step: ExperimentDraftStep;
 }) {
   const navigate = useNavigate();
-  const experimentHref = `${scopeHref}/experiments/${encodeURIComponent(data.experiment.key)}`;
+  const experimentHref = `${scopeHref}/experiments/${experimentKeyRouteRef(data.experiment.key)}`;
   const goTo = (next: ExperimentDraftStep) =>
     navigate({ href: `${experimentHref}/draft?step=${next}` });
 

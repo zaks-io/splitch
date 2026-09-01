@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader } from "@splitch/ui/components/card";
 import type { ReactNode } from "react";
 import { ActiveEnvironmentBadge } from "#components/environments/active-environment-badge";
 import type { ExperimentTab } from "#lib/experiments/experiment-detail-route";
+import { experimentKeyRouteRef } from "#lib/experiments/experiment-route-navigation";
 import { describeRunChange } from "#lib/experiments/experiment-run-diff";
 import { scopedHref, type UrlScope } from "#lib/shell/app-shell-navigation";
 
@@ -27,7 +28,7 @@ export function ExperimentDetail({
   scope,
   selectedRunId,
 }: ExperimentDetailProps) {
-  const experimentHref = `${scopedHref(scope)}/experiments/${encodeURIComponent(data.experiment.key)}`;
+  const experimentHref = `${scopedHref(scope)}/experiments/${experimentKeyRouteRef(data.experiment.key)}`;
   const selectedRun = selectedRunId
     ? data.runs.find((run) => run.id === selectedRunId)
     : data.runs[0];

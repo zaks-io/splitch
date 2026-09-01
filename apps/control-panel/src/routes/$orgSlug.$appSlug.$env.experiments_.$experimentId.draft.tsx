@@ -1,4 +1,3 @@
-import type { PanelExperimentListItem } from "@splitch/control-plane-sdk/panel-experiments";
 import { Button } from "@splitch/ui/components/button";
 import { NotFoundPage } from "@splitch/ui/state/not-found-page";
 import type { QueryClient } from "@tanstack/react-query";
@@ -10,7 +9,11 @@ import { SectionUnavailable } from "#components/shared/section-unavailable";
 import { PanelPageBody } from "#components/shell/panel-page-body";
 import { isExperimentDraftStep } from "#lib/experiments/experiment-draft-model";
 import { resolveControlPanelExperimentEnvironment } from "#lib/experiments/experiment-environment-resolution-functions";
-import { experimentDetailQuery, experimentsListQuery } from "#lib/experiments/experiments-query";
+import {
+  experimentKeyRouteRef,
+  experimentLookupRef,
+} from "#lib/experiments/experiment-route-navigation";
+import { experimentDetailQuery } from "#lib/experiments/experiments-query";
 import {
   reportExpectedDomainFailure,
   reportRouteError,
@@ -55,62 +58,39 @@ type ExperimentDraftRouteInput = {
   pathname: string;
 };
 
-async function loadExperimentDraftRoute(input: ExperimentDraftRouteInput) {
+export async function loadExperimentDraftRoute(input: ExperimentDraftRouteInput) {
   const app = input.scoped.navigation.orgs
     .find((org) => org.orgId === input.scoped.scope.orgId)
     ?.apps.find((candidate) => candidate.appId === input.scoped.scope.appId);
   if (!app) throw new Error("Active App is missing from navigation");
-  const catalog = await input.queryClient.ensureQueryData(
-    experimentsListQuery({
+  const resolved = await resolveControlPanelExperimentEnvironment({
+    data: {
       appId: input.scoped.scope.appId,
-      environmentId: input.scoped.scope.environmentId,
-    }),
-  );
-  const matches = catalog.items.filter(
-    (experiment) => experiment.id === input.experimentRef || experiment.key === input.experimentRef,
-  );
-  if (matches.length > 1) {
-    throw new Error("Experiment draft reference resolves to multiple local Experiments");
+      targetEnvironmentId: input.scoped.scope.environmentId,
+      experimentRef: experimentLookupRef(input.experimentRef),
+    },
+  });
+  if (!resolved.ok) {
+    throw Object.assign(new Error(resolved.error.message), { status: resolved.status });
   }
-  const experiment = matches[0] ?? (await resolveMissingDraft(input, catalog.items));
-  if (input.experimentRef !== experiment.key) {
+  if (resolved.data.kind !== "experiment") {
+    reportExpectedDomainFailure(404, input.pathname, { boundary: "section" });
+    throw notFound();
+  }
+  if (input.experimentRef !== experimentKeyRouteRef(resolved.data.experimentKey)) {
     const current = new URL(input.href, "https://panel.splitch.dev");
     throw redirect({
-      href: `${scopedHref(input.scoped.scope)}/experiments/${encodeURIComponent(experiment.key)}/draft${current.search}${current.hash}`,
+      href: `${scopedHref(input.scoped.scope)}/experiments/${experimentKeyRouteRef(resolved.data.experimentKey)}/draft${current.search}${current.hash}`,
     });
   }
   await input.queryClient.ensureQueryData(
     experimentDetailQuery({
       appId: input.scoped.scope.appId,
       environmentId: input.scoped.scope.environmentId,
-      experimentId: experiment.id,
+      experimentId: resolved.data.experimentId,
     }),
   );
-  return { experimentId: experiment.id };
-}
-
-async function resolveMissingDraft(
-  input: ExperimentDraftRouteInput,
-  items: PanelExperimentListItem[],
-): Promise<PanelExperimentListItem> {
-  const resolved = await resolveControlPanelExperimentEnvironment({
-    data: {
-      appId: input.scoped.scope.appId,
-      targetEnvironmentId: input.scoped.scope.environmentId,
-      experimentRef: input.experimentRef,
-    },
-  });
-  if (!resolved.ok) {
-    throw Object.assign(new Error(resolved.error.message), { status: resolved.status });
-  }
-  const experimentId = resolved.data.kind === "experiment" ? resolved.data.experimentId : undefined;
-  if (!experimentId) {
-    reportExpectedDomainFailure(404, input.pathname, { boundary: "section" });
-    throw notFound();
-  }
-  const experiment = items.find((item) => item.id === experimentId);
-  if (!experiment) throw new Error("Resolved Experiment is absent from local catalog");
-  return experiment;
+  return { experimentId: resolved.data.experimentId };
 }
 
 function ExperimentDraftRoute() {
