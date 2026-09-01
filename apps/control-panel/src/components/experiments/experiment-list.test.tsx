@@ -42,7 +42,7 @@ describe("ExperimentList", () => {
     expect(html).toContain("Significance reached");
     expect(html).toContain("SRM firing");
     expect(html).toContain("Guardrail breached");
-    expect(html).toContain('href="/acme/checkout/dev/experiments/exp_significant"');
+    expect(html).toContain('href="/acme/checkout/dev/experiments/significant"');
   });
 
   it("routes a never-started draft into the guided flow and a former draft to its detail", () => {
@@ -53,9 +53,9 @@ describe("ExperimentList", () => {
       <ExperimentList items={[neverStarted, formerDraft]} scopeHref="/acme/checkout/dev" />,
     );
 
-    expect(html).toContain('href="/acme/checkout/dev/experiments/exp_new/draft"');
-    expect(html).toContain('href="/acme/checkout/dev/experiments/exp_old"');
-    expect(html).not.toContain('href="/acme/checkout/dev/experiments/exp_old/draft"');
+    expect(html).toContain('href="/acme/checkout/dev/experiments/new/draft"');
+    expect(html).toContain('href="/acme/checkout/dev/experiments/old"');
+    expect(html).not.toContain('href="/acme/checkout/dev/experiments/old/draft"');
   });
 
   it("teaches the concept and provides one primary entry point when empty", () => {
@@ -76,6 +76,7 @@ function experiment(
 ): PanelExperimentListItem {
   return {
     id,
+    key: id.replace(/^exp_/, ""),
     name,
     status,
     flag: { id: "flag_checkout", name: "Checkout Flag" },

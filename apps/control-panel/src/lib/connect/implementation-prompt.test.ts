@@ -125,6 +125,7 @@ function experimentDetail(): PanelExperimentDetailOutput {
   return {
     experiment: {
       id: "experiment_checkout",
+      key: "checkout-copy",
       name: "Checkout copy",
       description: "",
       owner: "",

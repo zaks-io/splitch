@@ -5,15 +5,17 @@ import type {
 import { Badge } from "@splitch/ui/components/badge";
 import { Card, CardContent, CardHeader } from "@splitch/ui/components/card";
 import type { ReactNode } from "react";
-import { scopedHref, type UrlScope } from "#lib/shell/app-shell-navigation";
+import { ActiveEnvironmentBadge } from "#components/environments/active-environment-badge";
 import type { ExperimentTab } from "#lib/experiments/experiment-detail-route";
 import { describeRunChange } from "#lib/experiments/experiment-run-diff";
+import { scopedHref, type UrlScope } from "#lib/shell/app-shell-navigation";
 
 type ExperimentDetailProps = {
   activeTab: ExperimentTab;
   children: ReactNode;
   data: PanelExperimentDetailOutput;
   scope: UrlScope;
+  guarded?: boolean;
   selectedRunId?: string;
 };
 
@@ -21,10 +23,11 @@ export function ExperimentDetail({
   activeTab,
   children,
   data,
+  guarded,
   scope,
   selectedRunId,
 }: ExperimentDetailProps) {
-  const experimentHref = `${scopedHref(scope)}/experiments/${encodeURIComponent(data.experiment.id)}`;
+  const experimentHref = `${scopedHref(scope)}/experiments/${encodeURIComponent(data.experiment.key)}`;
   const selectedRun = selectedRunId
     ? data.runs.find((run) => run.id === selectedRunId)
     : data.runs[0];
@@ -38,9 +41,7 @@ export function ExperimentDetail({
       <CardHeader className="grid gap-4 px-0 pt-0">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="grid gap-1.5">
-            <p className="font-mono text-muted-foreground text-xs uppercase tracking-[0.16em]">
-              {scope.env} Environment · Experiment
-            </p>
+            <ActiveEnvironmentBadge env={scope.env} guarded={guarded} />
             <h1 className="font-semibold text-3xl text-foreground tracking-tight">
               {data.experiment.name}
             </h1>

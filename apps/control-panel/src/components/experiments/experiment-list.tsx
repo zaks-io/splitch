@@ -13,8 +13,8 @@ import {
   TableRow,
 } from "@splitch/ui/components/table";
 import { EmptyState } from "@splitch/ui/state/empty-state";
-import { parityHint } from "#lib/connect/parity-hints";
 import { ParityNote } from "#components/connect/parity-note";
+import { parityHint } from "#lib/connect/parity-hints";
 
 type ExperimentListProps = {
   items: PanelExperimentListItem[];
@@ -70,7 +70,7 @@ function ExperimentRow({
   // An Experiment that has never opened a Run has no Results and no Run history
   // to show, so it links back into the flow that opens its first one. A `draft`
   // whose Run ended is NOT that: it keeps its detail screen.
-  const experimentHref = `${scopeHref}/experiments/${encodeURIComponent(experiment.id)}`;
+  const experimentHref = `${scopeHref}/experiments/${encodeURIComponent(experiment.key)}`;
   const detailHref =
     experiment.status === "draft" && !experiment.hasRuns
       ? `${experimentHref}/draft`

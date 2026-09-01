@@ -8,6 +8,7 @@ describe("panel experiments binding transport", () => {
         items: [
           {
             id: "exp_1",
+            key: "checkout",
             name: "Checkout",
             status: "running",
             flag: { id: "flag_1", name: "Checkout Flag" },
@@ -40,6 +41,7 @@ describe("panel experiments binding transport", () => {
       Response.json({
         experiment: {
           id: "exp_1",
+          key: "checkout",
           name: "Checkout",
           description: "",
           owner: "",

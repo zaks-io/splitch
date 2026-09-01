@@ -1,8 +1,8 @@
 import type { PanelExperimentDetailOutput } from "@splitch/control-plane-sdk/panel-experiments";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import { useRunDraftState } from "#lib/experiments/experiment-run-draft-state";
 import { ExperimentRunDraftFields } from "#components/experiments/experiment-run-draft-fields";
+import { useRunDraftState } from "#lib/experiments/experiment-run-draft-state";
 
 describe("ExperimentRunDraftFields", () => {
   it("renders the Horizon label instead of its stored value", () => {
@@ -27,6 +27,7 @@ function experimentDetail(): PanelExperimentDetailOutput {
   return {
     experiment: {
       id: "experiment_1",
+      key: "checkout-copy",
       name: "Checkout Copy",
       description: "",
       owner: "",

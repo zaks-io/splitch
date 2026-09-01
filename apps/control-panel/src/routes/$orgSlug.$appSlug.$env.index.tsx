@@ -1,11 +1,11 @@
 import { PanelSkeleton } from "@splitch/ui/state/panel-skeleton";
 import { createFileRoute, useRouter } from "@tanstack/react-router";
 import { OverviewPage } from "#components/overview/overview-page";
-import { PanelPageBody } from "#components/shell/panel-page-body";
 import { SectionUnavailable } from "#components/shared/section-unavailable";
-import { scopedHref } from "#lib/shell/app-shell-navigation";
-import { loadControlPanelOverview } from "#lib/overview/control-plane-overview-functions";
+import { PanelPageBody } from "#components/shell/panel-page-body";
 import { reportRouteError } from "#lib/observability/panel-observability";
+import { loadControlPanelOverview } from "#lib/overview/control-plane-overview-functions";
+import { scopedHref } from "#lib/shell/app-shell-navigation";
 
 export const Route = createFileRoute("/$orgSlug/$appSlug/$env/")({
   loader: async ({ context }) => {
@@ -17,7 +17,12 @@ export const Route = createFileRoute("/$orgSlug/$appSlug/$env/")({
       },
     });
     if (!result.ok) throw new Error(result.error.message);
-    return { overview: result.data, scope: scoped.scope };
+    const environment = scoped.navigation.orgs
+      .find((org) => org.orgId === scoped.scope.orgId)
+      ?.apps.find((app) => app.appId === scoped.scope.appId)
+      ?.environments.find((candidate) => candidate.environmentId === scoped.scope.environmentId);
+    if (!environment) throw new Error("Active Environment is missing from App navigation");
+    return { overview: result.data, scope: scoped.scope, guarded: environment.guarded };
   },
   onError: ({ error }) => {
     reportRouteError("section", error, "/$orgSlug/$appSlug/$env/");
@@ -32,13 +37,14 @@ export const Route = createFileRoute("/$orgSlug/$appSlug/$env/")({
 });
 
 function OverviewSectionRoute() {
-  const { overview, scope } = Route.useLoaderData();
+  const { guarded, overview, scope } = Route.useLoaderData();
   const router = useRouter();
 
   return (
     <PanelPageBody>
       <OverviewPage
         env={scope.env}
+        guarded={guarded}
         onRetry={() => {
           void router.invalidate();
         }}

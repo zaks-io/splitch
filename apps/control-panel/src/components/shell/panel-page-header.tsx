@@ -1,6 +1,6 @@
-import { Badge } from "@splitch/ui/components/badge";
 import { cn } from "@splitch/ui/lib/utils";
 import type { ReactNode } from "react";
+import { ActiveEnvironmentBadge } from "#components/environments/active-environment-badge";
 
 export type PanelPageHeaderProps = {
   crumb?: string;
@@ -37,10 +37,8 @@ export function PanelPageHeader({
           {title}
         </h1>
         {environmentControl}
-        {environment?.guarded ? (
-          <Badge data-environment-guard-badge variant="outline">
-            {environment.env}
-          </Badge>
+        {environment ? (
+          <ActiveEnvironmentBadge env={environment.env} guarded={environment.guarded} />
         ) : null}
       </div>
       {actions ? <div className="flex shrink-0 items-center gap-2">{actions}</div> : null}

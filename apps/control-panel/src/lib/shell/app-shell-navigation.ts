@@ -148,5 +148,17 @@ export function environmentSwitchHref(
     return nextRoot;
   }
 
-  return `${nextRoot}${url.pathname.slice(currentRoot.length)}${url.search}${url.hash}`;
+  const remainder = environmentSafeRemainder(url.pathname.slice(currentRoot.length));
+  return `${nextRoot}${remainder}${url.search}${url.hash}`;
+}
+
+/** Runs belong to one Environment, even when the Experiment key exists in several. */
+function environmentSafeRemainder(remainder: string): string {
+  const pinnedRun = remainder.match(
+    /^(\/experiments\/[^/]+)\/runs\/[^/]+(?:\/(results|setup))?\/?$/,
+  );
+  if (!pinnedRun) return remainder;
+  const experimentPath = pinnedRun[1];
+  if (!experimentPath) throw new Error("Pinned Experiment Run path has no Experiment");
+  return pinnedRun[2] ? `${experimentPath}/${pinnedRun[2]}` : experimentPath;
 }

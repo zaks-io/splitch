@@ -1,6 +1,6 @@
-import { DELEGATED_IDENTITY_HEADER } from "@splitch/worker-runtime";
 import type { StatsOutput } from "@splitch/contracts";
 import type { Repository } from "@splitch/db";
+import { DELEGATED_IDENTITY_HEADER } from "@splitch/worker-runtime";
 import { describe, expect, it, vi } from "vitest";
 import { panelExperimentDetail, panelExperimentsList } from "./panel-experiments";
 import {
@@ -179,7 +179,12 @@ describe("panel Experiments composite read", () => {
 
     expect(response.status).toBe(200);
     expect(await response.json()).toMatchObject({
-      experiment: { id: EXPERIMENT_ID, status: "running", liveRunId: RUN_ID },
+      experiment: {
+        id: EXPERIMENT_ID,
+        key: "checkout-test",
+        status: "running",
+        liveRunId: RUN_ID,
+      },
       flag: { id: "flag_panel_list", key: "checkout-flag", name: "Checkout Flag" },
       eventDefinitions: [{ id: "signed_up", name: "signed_up" }],
       runs: [

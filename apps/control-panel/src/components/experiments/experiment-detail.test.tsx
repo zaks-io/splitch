@@ -24,8 +24,11 @@ describe("ExperimentDetail", () => {
     expect(html).toContain("Allocation 50%/50% → 70%/30%");
     expect(html).toContain("Note: Increase treatment traffic");
     expect(html).toContain("End note: Prepared a larger treatment allocation");
-    expect(html).toContain('href="/acme/checkout/dev/experiments/experiment_1/runs/run_2/setup"');
-    expect(html).toContain('href="/acme/checkout/dev/experiments/experiment_1/runs/run_1/results"');
+    expect(html).toContain('href="/acme/checkout/dev/experiments/checkout-copy/runs/run_2/setup"');
+    expect(html).toContain(
+      'href="/acme/checkout/dev/experiments/checkout-copy/runs/run_1/results"',
+    );
+    expect(html).toContain('data-active-environment="dev"');
   });
 
   it("teaches a draft with no Run that its first landing is Setup", () => {
@@ -73,6 +76,7 @@ function detail(overrides: Partial<PanelExperimentDetailOutput> = {}): PanelExpe
 function experiment(): PanelExperimentDetailOutput["experiment"] {
   return {
     id: "experiment_1",
+    key: "checkout-copy",
     name: "Checkout Copy",
     description: "",
     owner: "",

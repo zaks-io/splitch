@@ -26,6 +26,7 @@ function detail(): PanelExperimentDetailOutput {
   return {
     experiment: {
       id: "experiment_1",
+      key: "checkout-copy",
       name: "Checkout",
       description: "",
       owner: "",
