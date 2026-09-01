@@ -5,7 +5,7 @@ import type { Env } from "./types";
 const IDENTITY = "a".repeat(64);
 
 describe("Evaluation commit outbox privacy", () => {
-  it("seals a commit and schedules queue publication without waiting for Queue", async () => {
+  it("keeps a sealed commit unpublishable until inventory confirmation activates it", async () => {
     vi.spyOn(Date, "now").mockReturnValue(Date.parse("2026-08-28T00:00:00.000Z"));
     const state = durableState();
     const send = vi.fn();
@@ -20,8 +20,13 @@ describe("Evaluation commit outbox privacy", () => {
       payload: { usage: { idempotencyKey: "evaluation-1" }, exposureRows: [] },
     });
 
-    expect(committed).toMatchObject({ delivered: false });
+    expect(committed).toMatchObject({ delivered: false, ready: false });
     expect(send).not.toHaveBeenCalled();
+    expect(state.alarmTime()).toBeGreaterThan(Date.now());
+
+    await object.alarm();
+    expect(send).not.toHaveBeenCalled();
+    await post(object, "/activate", { identity: IDENTITY });
     expect(state.alarmTime()).toBe(Date.now());
   });
 
@@ -139,6 +144,7 @@ describe("Evaluation commit outbox privacy", () => {
         exposureRows: [],
       },
     });
+    await post(object, "/activate", { identity: IDENTITY });
 
     const delivery = object.alarm();
     await started;
@@ -174,6 +180,7 @@ describe("Evaluation commit outbox publication retry", () => {
       identity: IDENTITY,
       payload: { usage: { idempotencyKey: "evaluation-1" }, exposureRows: [] },
     });
+    await post(object, "/activate", { identity: IDENTITY });
 
     await object.alarm();
 

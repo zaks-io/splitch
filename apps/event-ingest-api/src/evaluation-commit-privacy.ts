@@ -2,7 +2,7 @@ import {
   registerAppEvaluationCommit,
   registerEntityEvaluationCommit,
 } from "./entity-metric-privacy";
-import type { EvaluationCommitOutbox } from "./evaluation-commit-outbox";
+import type { EvaluationCommitOutbox } from "./evaluation-commit-outbox-contract";
 import type { Env } from "./types";
 
 interface InventoryCommit {

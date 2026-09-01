@@ -139,7 +139,9 @@ describe("Metric Event outbox Durable Object", () => {
     await expect(outbox.suppress(row("entity-7"))).resolves.toMatchObject({ deleted: true });
     await expect(outbox.exported()).resolves.toEqual({ deleted: true, row: null });
   });
+});
 
+describe("Metric Event outbox retention", () => {
   it("deletes claim state when the Metric Event retention window ends", async () => {
     const now = Date.parse("2026-08-31T00:00:00.000Z");
     vi.spyOn(Date, "now").mockReturnValue(now);
@@ -168,6 +170,19 @@ describe("Metric Event outbox Durable Object", () => {
       expiresAt: receivedAt + METRIC_EVENT_CLAIM_RETENTION_MS,
     });
     expect(outbox.alarmTime()).toBe(receivedAt + METRIC_EVENT_CLAIM_RETENTION_MS);
+  });
+
+  it("adopts retention when a legacy queued row reaches delivery after the backfill scan", async () => {
+    const receivedAt = Date.parse("2026-08-07T00:00:00.000Z");
+    vi.spyOn(Date, "now").mockReturnValue(receivedAt + 24 * 60 * 60 * 1_000);
+    const outbox = makeOutbox();
+    outbox.seed({ ...row("entity-7"), queued: true });
+
+    await outbox.beginDelivery("attempt-1");
+
+    expect(outbox.stored()?.expiresAt).toBe(receivedAt + METRIC_EVENT_CLAIM_RETENTION_MS);
+    expect(outbox.alarmTime()).toBe(receivedAt + METRIC_EVENT_CLAIM_RETENTION_MS);
+    expect(outbox.stored()?.delivery).toMatchObject({ state: "attempting" });
   });
 
   it("removes an already expired pre-upgrade claim during adoption", async () => {

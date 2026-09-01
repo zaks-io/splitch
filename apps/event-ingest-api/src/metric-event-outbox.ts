@@ -206,10 +206,11 @@ export class MetricEventOutboxDurableObject {
     if (typeof attemptId !== "string" || attemptId.length === 0) {
       return new Response("invalid delivery attempt id", { status: 400 });
     }
-    const existing = await this.ctx.storage.get<ClaimState>(STATE_KEY);
-    if (existing === undefined) {
+    const stored = await this.ctx.storage.get<ClaimState>(STATE_KEY);
+    if (stored === undefined) {
       throw new Error("Metric Event outbox has no record for a queued delivery");
     }
+    const existing = await this.retain(stored);
     if (existing.deleted) return Response.json({ kind: "deleted" } satisfies BeginOutcome);
     const { outcome, next } = beginDelivery(existing.delivery, attemptId);
     if (next) await this.ctx.storage.put(STATE_KEY, { ...existing, delivery: next });

@@ -3,7 +3,7 @@ import type { EntityMetricPrivacyNamespace } from "./entity-metric-privacy";
 import type {
   EvaluationCommitOutbox,
   EvaluationCommitOutboxNamespace,
-} from "./evaluation-commit-outbox";
+} from "./evaluation-commit-outbox-contract";
 import type {
   EvaluationUsageReplayWindow,
   EvaluationUsageReplayWindowNamespace,

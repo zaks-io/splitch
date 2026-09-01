@@ -2,34 +2,11 @@ import {
   deliverSealedEvaluationCommit,
   parseSealedEvaluationCommitPayload,
 } from "./evaluation-commit-delivery";
+import type { EvaluationCommit } from "./evaluation-commit-outbox-contract";
 import { queueRetryDelaySeconds } from "./queue-retry";
 import type { Env } from "./types";
 
 const EVALUATION_COMMIT_REPLAY_WINDOW_MS = 24 * 60 * 60 * 1000;
-
-export interface EvaluationCommitOutbox {
-  lookup(identity: string): Promise<EvaluationCommit | null>;
-  commit(identity: string, payload: unknown): Promise<EvaluationCommit>;
-  privacyExport(
-    identity: string,
-    eventIds: readonly string[],
-  ): Promise<readonly Record<string, unknown>[]>;
-  privacyDelete(identity: string, eventIds: readonly string[]): Promise<number>;
-  privacyDeleteAll(identity: string): Promise<"evaluation-commit-outbox-purged-v1">;
-}
-
-export interface EvaluationCommitOutboxNamespace {
-  idFromName(name: string): DurableObjectId;
-  get(id: DurableObjectId): {
-    fetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response>;
-  };
-}
-
-interface EvaluationCommit {
-  readonly eventId: string;
-  readonly payload: unknown;
-  readonly delivered: boolean;
-}
 
 interface OutboxState {
   readonly eventId: string;
@@ -37,7 +14,7 @@ interface OutboxState {
   readonly expiresAt: number;
   readonly deliveredAt?: string;
   readonly privacyDeletedAt?: string;
-  readonly deliveryState?: "pending" | "publishing" | "delivered";
+  readonly deliveryState?: "sealed" | "pending" | "publishing" | "delivered";
   readonly publicationAttempts?: number;
   readonly publicationRetryAt?: number;
 }
@@ -70,6 +47,7 @@ export class EvaluationCommitOutboxDurableObject {
     const handlers: Record<string, () => Promise<Response>> = {
       "/lookup": () => this.lookup(),
       "/commit": () => this.commit(identity, request),
+      "/activate": () => this.activate(),
       "/privacy-export": () => this.privacyExport(request),
       "/privacy-delete": () => this.privacyDelete(request),
       "/privacy-delete-all": () => this.privacyDeleteAll(),
@@ -85,6 +63,10 @@ export class EvaluationCommitOutboxDurableObject {
       return;
     }
     if (isDelivered(state)) {
+      await this.ctx.storage.setAlarm(state.expiresAt);
+      return;
+    }
+    if (state.deliveryState === "sealed") {
       await this.ctx.storage.setAlarm(state.expiresAt);
       return;
     }
@@ -158,7 +140,9 @@ export class EvaluationCommitOutboxDurableObject {
     if (existing === undefined || existing.expiresAt <= Date.now()) {
       return new Response("commit not found", { status: 404 });
     }
-    if (!isDelivered(existing)) await this.schedulePublication(existing);
+    if (isPublishable(existing) && !isDelivered(existing)) {
+      await this.schedulePublication(existing);
+    }
     return Response.json(asResponse(existing));
   }
 
@@ -170,7 +154,9 @@ export class EvaluationCommitOutboxDurableObject {
     const eventId = `sha256:${await sha256Hex(`${identity}\u001f${now}`)}`;
     const existing = await this.ctx.storage.get<OutboxState>(STATE_KEY);
     if (existing !== undefined && existing.expiresAt > Date.now()) {
-      if (!isDelivered(existing)) await this.schedulePublication(existing);
+      if (isPublishable(existing) && !isDelivered(existing)) {
+        await this.schedulePublication(existing);
+      }
       return Response.json(asResponse(existing));
     }
 
@@ -182,12 +168,26 @@ export class EvaluationCommitOutboxDurableObject {
         ? { usage: { privacyDeleted: true }, exposureRows: [] }
         : withoutExposureRows(payload, redactedEventIds),
       expiresAt: now + EVALUATION_COMMIT_REPLAY_WINDOW_MS,
-      deliveryState: privacyDeleted ? "delivered" : "pending",
+      deliveryState: privacyDeleted ? "delivered" : "sealed",
       ...(privacyDeleted ? { privacyDeletedAt: new Date(now).toISOString() } : {}),
     };
     await this.ctx.storage.put(STATE_KEY, state);
-    await this.ctx.storage.setAlarm(privacyDeleted ? state.expiresAt : now);
+    await this.ctx.storage.setAlarm(state.expiresAt);
     return Response.json(asResponse(state));
+  }
+
+  private async activate(): Promise<Response> {
+    const state = await this.currentState();
+    if (state === undefined) return new Response("commit not found", { status: 404 });
+    if (isDelivered(state)) {
+      await this.ctx.storage.setAlarm(state.expiresAt);
+      return Response.json(asResponse(state));
+    }
+    const ready =
+      state.deliveryState === "sealed" ? { ...state, deliveryState: "pending" as const } : state;
+    if (ready !== state) await this.ctx.storage.put(STATE_KEY, ready);
+    await this.schedulePublication(ready);
+    return Response.json(asResponse(ready));
   }
 
   private async privacyExport(request: Request): Promise<Response> {
@@ -245,7 +245,12 @@ function asResponse(state: OutboxState): EvaluationCommit {
     eventId: state.eventId,
     payload: state.payload,
     delivered: isDelivered(state),
+    ready: isPublishable(state),
   };
+}
+
+function isPublishable(state: OutboxState): boolean {
+  return state.deliveryState !== "sealed";
 }
 
 function isDelivered(state: OutboxState): boolean {

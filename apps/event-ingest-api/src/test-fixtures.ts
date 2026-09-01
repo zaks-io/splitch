@@ -6,7 +6,7 @@ import {
   admissionBinding,
 } from "./admission-test-fixture";
 import { entityMetricPrivacyFixtureFetch } from "./entity-metric-privacy.test-fixture";
-import type { EvaluationCommitOutbox } from "./evaluation-commit-outbox";
+import type { EvaluationCommitOutbox } from "./evaluation-commit-outbox-contract";
 import type { EvaluationUsageReplayWindow } from "./evaluation-usage-replay-window";
 import type { ExposurePayload } from "./event-ingest-test-types";
 import type worker from "./index";

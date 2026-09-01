@@ -63,6 +63,14 @@ async function prepareEvaluationCommit(
   try {
     const existing = await outbox.lookup(identity);
     if (existing !== null) {
+      if (!isEvaluationCommitPayload(existing.payload)) return preparedCommit(existing);
+      if (!existing.ready) {
+        await confirmEvaluationCommitInventory(
+          { identity, outbox, payload: existing.payload },
+          env,
+        );
+        return preparedCommit(await outbox.activate(identity));
+      }
       return preparedCommit(existing);
     }
 
@@ -73,9 +81,9 @@ async function prepareEvaluationCommit(
     if (await inventoryEvaluationCommit(inventory, env)) {
       throw new Error("Evaluation commit is suppressed by App identity reset");
     }
-    const sealed = await outbox.commit(identity, payload);
+    await outbox.commit(identity, payload);
     await confirmEvaluationCommitInventory(inventory, env);
-    return preparedCommit(sealed);
+    return preparedCommit(await outbox.activate(identity));
   } catch {
     return { ok: false, error: serviceUnavailable("Evaluation commit outbox is unavailable") };
   }
