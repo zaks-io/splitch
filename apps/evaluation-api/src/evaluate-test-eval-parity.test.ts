@@ -151,7 +151,7 @@ async function makeParityHttpHarness(targetingRules = planParityRules()) {
     assignmentStore: sdk.assignmentStore,
     exposureAssembly: {
       saltStore: new StaticSaltStore(),
-      sourceId: "pop-parity",
+      sourceId: () => "pop-parity",
     },
     exposureTicket: {
       saltStore: new StaticSaltStore(),
