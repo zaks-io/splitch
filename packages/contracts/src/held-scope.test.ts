@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  HeldScopeSchema,
   isCanonicalHeldScope,
   isCanonicalHeldScopes,
   MAX_HELD_SCOPE_COUNT,
@@ -11,6 +12,7 @@ describe("canonical held scopes", () => {
     const maxLengthScope = `app:${"a".repeat(MAX_HELD_SCOPE_LENGTH - "app::member".length)}:member`;
 
     expect(maxLengthScope).toHaveLength(MAX_HELD_SCOPE_LENGTH);
+    expect(HeldScopeSchema.parse(maxLengthScope)).toBe(maxLengthScope);
     expect(isCanonicalHeldScope(maxLengthScope)).toBe(true);
     expect(isCanonicalHeldScopes([])).toBe(true);
     expect(
@@ -18,6 +20,10 @@ describe("canonical held scopes", () => {
         Array.from({ length: MAX_HELD_SCOPE_COUNT }, () => "org:org_demo:owner"),
       ),
     ).toBe(true);
+  });
+
+  it("rejects malformed individual scope values", () => {
+    expect(HeldScopeSchema.safeParse("app:app_demo:viewer").success).toBe(false);
   });
 
   it.each([

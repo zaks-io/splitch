@@ -1,4 +1,5 @@
 import { z } from "@hono/zod-openapi";
+import { HeldScopeSchema } from "../held-scope";
 import { OrganizationMemberSchema } from "../leaf-schemas-runtime";
 import { type ApiRouteContract, defineApiRoute } from "../openapi-route";
 import {
@@ -28,7 +29,7 @@ const RATE = "control-plane-actor" as const;
 const OrgListResponse = listResponse(OrganizationResponseSchema);
 const PrincipalCapabilitiesResponse = z
   .object({
-    scopes: z.array(z.string()),
+    scopes: z.array(HeldScopeSchema),
     membershipWideRead: z.boolean(),
   })
   .strict();

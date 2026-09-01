@@ -84,10 +84,11 @@ Notes:
 - `splitch://context` and `splitch://auth` are the **same files** the human-readable docs surface
   (CONTEXT.md, auth.md) — the resource is a transport of the canonical file, not a paraphrase. No
   glossary drift between what a human reads and what an agent reads.
-- `splitch://active-context` and `splitch://capabilities` are **session-scoped**: they reflect the
-  transport session's active App/Environment and effective live scopes (set via `context_use`, carried in
-  the session, never persisted server-side, never widening scope —
-  [mcp-and-cli-surfaces.md](./mcp-and-cli-surfaces.md)).
+- `splitch://active-context` and `splitch://capabilities` are **session-scoped**. `context_use`
+  selects the active App/Environment carried in the session; it does not set or carry authority.
+  `splitch://capabilities` resolves effective scopes from the principal's current Control Plane
+  membership, so session context cannot preserve stale authority or widen scope. Neither resource is
+  persisted server-side ([mcp-and-cli-surfaces.md](./mcp-and-cli-surfaces.md)).
 - Resources are read-only by protocol; an agent reading `splitch://capabilities` to plan before
   acting cannot change anything by reading it.
 

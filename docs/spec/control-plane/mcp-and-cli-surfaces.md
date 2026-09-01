@@ -272,6 +272,8 @@ The canonical naming rule and complete tool list live in
 a second tool-name table. Experiment, Run, credential, and test-eval tools take `app_id` +
 `environment_id` inputs (per-Env, ADR-0027); the schemas are derived from the per-Env route
 definitions, so parity with the CLI holds by construction.
+At the MCP protocol boundary, those selectors may be omitted when session context supplies them.
+The resolved Worker request always contains both IDs and passes the unchanged execution schema.
 
 ### Discovery layer (prompts + resources)
 

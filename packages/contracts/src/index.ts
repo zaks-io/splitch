@@ -87,6 +87,7 @@ export {
   requirePlatformTarget,
 } from "./health-response";
 export {
+  HeldScopeSchema,
   isCanonicalHeldScope,
   isCanonicalHeldScopes,
   MAX_HELD_SCOPE_COUNT,
