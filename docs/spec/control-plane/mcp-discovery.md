@@ -141,8 +141,8 @@ the canonical workflows are all in-band MCP capabilities.
 3. **Parity-shaped.** Every prompt's step sequence maps 1:1 to the CLI quickstart and the panel
    onboarding sequence (ADR-0023).
 4. **Every workflow ends on verify.** Time-to-first-confidence is one round-trip (ADR-0037).
-5. **Session-scoped, scope-respecting.** Resources reflect the session's active context and token
-   scopes; reading them never widens scope or persists server-side.
+5. **Session-scoped, scope-respecting.** Resources reflect the session's active context and effective
+   live scopes; reading them never widens scope or persists server-side.
 
 ## Sources
 
