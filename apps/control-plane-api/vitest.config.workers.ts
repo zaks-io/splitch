@@ -34,7 +34,11 @@ export default defineConfig(async () => {
             script: `
               import { WorkerEntrypoint } from "cloudflare:workers";
 
-              export class ControlPlaneEntrypoint extends WorkerEntrypoint {}
+              export class ControlPlaneEntrypoint extends WorkerEntrypoint {
+                adoptMetricEventClaimRetention() {
+                  return Promise.resolve();
+                }
+              }
             `,
           })),
         },

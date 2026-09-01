@@ -29,6 +29,7 @@ import { EvaluationUsageReplayWindowDurableObject } from "./evaluation-usage-rep
 import { handleEvaluationIngest, handleIngest } from "./ingest";
 import { IngestAdmissionGateDurableObject } from "./ingest-admission-gate";
 import { createIngestPhaseTiming, ingestTimingOutcomeFor } from "./ingest-phase-timing";
+import { MetricEventClaimRetentionBackfillDurableObject } from "./metric-event-claim-retention-backfill";
 import { handleAuthorizedMetricEvent } from "./metric-event-ingest";
 import { MetricEventOutboxDurableObject } from "./metric-event-outbox";
 import { handleMetricEventQueue } from "./metric-event-queue";
@@ -214,6 +215,19 @@ export class ControlPlaneEntrypoint extends WorkerEntrypoint<Env> {
   completeAppIdentityReset(appId: string, resetId: string, nextVersion: string): Promise<void> {
     return completeAppIdentityReset(this.env, appId, resetId, nextVersion);
   }
+
+  async adoptMetricEventClaimRetention(): Promise<void> {
+    const namespace = this.env.METRIC_EVENT_CLAIM_RETENTION_BACKFILL;
+    if (!namespace) {
+      throw new Error("METRIC_EVENT_CLAIM_RETENTION_BACKFILL binding is unavailable");
+    }
+    const response = await namespace.getByName("legacy-v1").fetch("https://backfill.local/run", {
+      method: "POST",
+    });
+    if (!response.ok) {
+      throw new Error(`Metric Event claim retention backfill returned ${response.status}`);
+    }
+  }
 }
 
 async function purgeAppIdentityDelivery(
@@ -302,6 +316,7 @@ export {
   EvaluationCommitOutboxDurableObject,
   EvaluationUsageReplayWindowDurableObject,
   IngestAdmissionGateDurableObject,
+  MetricEventClaimRetentionBackfillDurableObject,
   MetricEventOutboxDurableObject,
   MetricEventRateLimitDurableObject,
 };

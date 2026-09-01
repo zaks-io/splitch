@@ -11,8 +11,9 @@
     "dev": "wrangler dev --local --port 8788 --show-interactive-dev-session=false",
     "lint": "biome lint src",
     "test": "vitest run --passWithNoTests",
-    "typecheck": "tsc -p tsconfig.json --noEmit",
-    "wrangler:types": "wrangler types src/worker-configuration.d.ts"
+    "typecheck": "pnpm wrangler:types:check && tsc -p tsconfig.json --noEmit",
+    "wrangler:types": "wrangler types src/worker-configuration.d.ts",
+    "wrangler:types:check": "wrangler types src/worker-configuration.d.ts --check"
   },
   "dependencies": {
     "@splitch/contracts": "workspace:*",

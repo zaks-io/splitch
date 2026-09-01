@@ -188,7 +188,7 @@ async function handleRequest(
     },
     exposureAssembly: {
       saltStore,
-      sourceId: env.SPLITCH_SOURCE_ID ?? "local",
+      sourceId: exposureSourceId(request, env, platformTarget),
     },
     exposureTicket: {
       saltStore,
@@ -221,6 +221,18 @@ async function handleRequest(
     ),
   });
   return app.fetch(request, env);
+}
+
+function exposureSourceId(
+  request: Request,
+  env: EvaluationApiEnv,
+  platformTarget: "local" | "pr-ci" | "shared-preview" | "production",
+): string {
+  if (env.SPLITCH_SOURCE_ID) return env.SPLITCH_SOURCE_ID;
+  const colo = request.cf?.colo;
+  if (typeof colo === "string" && colo.length > 0) return colo;
+  if (platformTarget === "local" || platformTarget === "pr-ci") return "local";
+  throw new Error("evaluation-api: Cloudflare colo is unavailable for Exposure source identity");
 }
 
 function makeCloudflareConfigurationResolver(binding: ConvexControlPlaneBinding) {

@@ -23,7 +23,7 @@ export interface ConvexControlPlaneBinding extends ExposureIngestFetcher {
   resetCompromisedAppIdentity(appId: string, resetId: string): Promise<string>;
 }
 
-export interface EvaluationApiEnv {
+interface WorkerProtocolBindings {
   ASSIGNMENTS_KV: KVNamespace;
   ASSIGNMENT_STORE_WRITER: AssignmentWriterNamespace;
   CONFIG_STORE: KVNamespace;
@@ -55,3 +55,7 @@ export interface EvaluationApiEnv {
   /** Cloudflare Rate Limit binding for per-credential Evaluation traffic. */
   EVALUATION_RATE_LIMITER?: RateLimit;
 }
+
+/** Wrangler owns platform binding types; this layer only adds protocol-rich stubs and injected vars. */
+export type EvaluationApiEnv = Partial<Omit<Cloudflare.Env, keyof WorkerProtocolBindings>> &
+  WorkerProtocolBindings;

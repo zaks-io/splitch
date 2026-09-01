@@ -109,6 +109,7 @@ function memoryStorage(values: Map<string, unknown>): DurableObjectStorage {
       Array.isArray(key)
         ? key.reduce((count, item) => count + Number(values.delete(item)), 0)
         : values.delete(key),
+    setAlarm: async () => {},
     list: async <T>({ prefix }: { prefix: string }) =>
       new Map(
         [...values.entries()].filter(([key]) => key.startsWith(prefix)) as Array<[string, T]>,

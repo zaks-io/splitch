@@ -31,6 +31,7 @@ export function runControlPlaneScheduled(
   }
   ctx.waitUntil(runDemoReaper(env, event, ctx));
   ctx.waitUntil(runCredentialCacheBackfill(env));
+  ctx.waitUntil(env.EVENT_INGEST_API.adoptMetricEventClaimRetention());
   ctx.waitUntil(runApprovalArchive(env, event, ctx));
   ctx.waitUntil(runFlagChangeLogRetention(env, event, ctx));
 }

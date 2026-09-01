@@ -4,12 +4,13 @@ import {
   appId,
   baseExposure,
   environmentId,
+  liveRunId,
   makeEnv,
   mockTinybirdFetch,
   TestExecutionContext,
   workerRequest,
 } from "./test-fixtures";
-import { tinybirdDelivery } from "./tinybird";
+import { exposureEvent, tinybirdDelivery } from "./tinybird";
 import type { Env } from "./types";
 
 afterEach(() => {
@@ -82,6 +83,29 @@ describe("tinybirdDelivery", () => {
     expect(delivery.error).toMatchObject({
       code: "SERVICE_UNAVAILABLE",
       message: "Tinybird ingest token is unavailable",
+    });
+  });
+});
+
+describe("Exposure source identity", () => {
+  it("fails hosted ingest when neither the caller nor Worker supplies a source", async () => {
+    const payload: Record<string, unknown> = { ...baseExposure() };
+    delete payload.sourceId;
+
+    const result = await exposureEvent(
+      payload,
+      { appId, environmentId },
+      { runId: liveRunId, idType: "user" },
+      { SPLITCH_PLATFORM_TARGET: "production" } as Env,
+    );
+
+    expect(result).toEqual({
+      ok: false,
+      error: {
+        code: "SERVICE_UNAVAILABLE",
+        message: "Exposure source identity is unavailable",
+        details: { retryAfterMs: 1_000 },
+      },
     });
   });
 });

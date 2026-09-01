@@ -1,8 +1,13 @@
-import type { EvaluationCommitOutbox } from "./evaluation-commit-outbox";
+import {
+  deliverSealedEvaluationCommit,
+  parseSealedEvaluationCommitPayload,
+} from "./evaluation-commit-delivery";
+import type { EvaluationCommitOutbox } from "./evaluation-commit-outbox-contract";
 import {
   EVALUATION_USAGE_REPLAY_WINDOW_MS,
   type EvaluationUsageReplayWindow,
 } from "./evaluation-usage-replay-window";
+import type { Env } from "./types";
 
 export class MemoryReplayWindow implements EvaluationUsageReplayWindow {
   private readonly claims = new Map<string, { eventId: string; expiresAt: number }>();
@@ -23,7 +28,7 @@ export class MemoryEvaluationCommitOutbox implements EvaluationCommitOutbox {
   private readonly redactedEventIds = new Map<string, Set<string>>();
   private readonly commits = new Map<
     string,
-    { eventId: string; payload: unknown; delivered: boolean; expiresAt: number }
+    { eventId: string; payload: unknown; delivered: boolean; ready: boolean; expiresAt: number }
   >();
 
   identities(): readonly string[] {
@@ -48,10 +53,18 @@ export class MemoryEvaluationCommitOutbox implements EvaluationCommitOutbox {
         ? { usage: { privacyDeleted: true }, exposureRows: [] }
         : withoutSelectedExposureRows(payload, this.redactedEventIds.get(identity) ?? new Set()),
       delivered: this.privacyDeleted.has(identity),
+      ready: this.privacyDeleted.has(identity),
       expiresAt: now + EVALUATION_USAGE_REPLAY_WINDOW_MS,
     };
     this.commits.set(identity, next);
     return next;
+  }
+
+  async activate(identity: string) {
+    const existing = await this.lookup(identity);
+    if (existing === null) throw new Error("commit not found");
+    existing.ready = true;
+    return existing;
   }
 
   async acknowledge(identity: string): Promise<void> {
@@ -64,6 +77,22 @@ export class MemoryEvaluationCommitOutbox implements EvaluationCommitOutbox {
     const existing = await this.lookup(identity);
     if (existing === null) throw new Error("commit not found");
     return existing;
+  }
+
+  async flush(env: Env): Promise<void> {
+    for (const [identity, commit] of this.commits) {
+      if (commit.delivered || !commit.ready) continue;
+      try {
+        await deliverSealedEvaluationCommit(
+          env,
+          commit.eventId,
+          parseSealedEvaluationCommitPayload(commit.payload),
+        );
+      } catch {
+        continue;
+      }
+      await this.acknowledge(identity);
+    }
   }
 
   async privacyExport(identity: string, eventIds: readonly string[]) {
@@ -95,6 +124,7 @@ export class MemoryEvaluationCommitOutbox implements EvaluationCommitOutbox {
     if (existing !== null) {
       existing.payload = { usage: { privacyDeleted: true }, exposureRows: [] };
       existing.delivered = true;
+      existing.ready = true;
     }
     return "evaluation-commit-outbox-purged-v1";
   }
