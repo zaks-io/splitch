@@ -282,6 +282,7 @@ async function resolveDelegatedPrincipal(
     operation.id === "experiments_list" ||
     operation.id === "experiments_detail" ||
     operation.id === "experiments_results" ||
+    operation.id === "experiments_route_resolution" ||
     operation.id === "organizations_create"
   ) {
     return {

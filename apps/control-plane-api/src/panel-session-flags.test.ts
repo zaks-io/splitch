@@ -148,6 +148,31 @@ describe("Control Panel Flags principal", () => {
   });
 });
 
+describe("Control Panel Experiment principal", () => {
+  it("lets route resolution authorize its body scope in the handler", async () => {
+    const authorizeApp = vi.fn<PanelSessionAccess["authorizeApp"]>(async () => null);
+    const resolver = makeResolver({ authorizeApp });
+
+    const result = await resolver(
+      await panelRequest("POST", "/control-panel/experiments/resolve-route"),
+    );
+
+    expect(result).toEqual({
+      ok: true,
+      principal: {
+        kind: "control-plane-token",
+        id: "user_1",
+        scopes: [],
+        orgId: null,
+        appId: null,
+        environmentId: null,
+        authDoor: "id_jag",
+      },
+    });
+    expect(authorizeApp).not.toHaveBeenCalled();
+  });
+});
+
 function makeResolver(
   panelAccess: Pick<PanelSessionAccess, "authorizeApp"> &
     Partial<Pick<PanelSessionAccess, "authorizeAppDeletionResume" | "authorizeOrg">>,
