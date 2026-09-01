@@ -36,7 +36,7 @@ interface ExposuresRouteDeps {
   readonly exposureIngestSink: ExposureIngestSink;
   readonly exposureRedemptionClaims: ExposureRedemptionClaimStore;
   readonly exposureTicket: MintExposureTicketDeps & { readonly previousTicketKey?: string };
-  readonly sourceId: string;
+  readonly sourceId: () => string;
   readonly logger?: { error(message: string, detail: unknown): void };
   readonly now?: () => Date;
 }
@@ -186,7 +186,7 @@ async function sealIngestAndConfirm(
     environmentId: claimInput.environmentId,
     exposureId: item.exposureId,
     clientTimestamp: item.clientTimestamp,
-    sourceId: deps.sourceId,
+    sourceId: deps.sourceId(),
     now: deps.now ?? deps.exposureTicket.now,
   });
 

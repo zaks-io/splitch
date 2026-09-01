@@ -102,7 +102,7 @@ So you stop retyping `--app` / `--env` on every call:
 
 ```
 splitch use --app <app|slug> --env dev      # CLI: writes nearest splitch.json
-context_use { app, environment: "dev" }     # MCP: carried in the transport session
+context_use { appId: "<app.id>", environmentId: "<dev environment.id>" } # MCP: transport session
 ```
 
 The CLI searches the current directory and each parent, then reads or updates the nearest file. If
@@ -122,7 +122,7 @@ https://splitch.dev/docs/sdk/credentials.
 
 ```
 splitch client-key get          # public, safe to ship — paste keyMaterial (pk_…), not keyId (ck_…)
-api_keys_create                 # secret, surfaced once — store it in a secret manager
+api_keys_create { scopes: ["data-plane:evaluate"] } # secret, surfaced once; store it in a secret manager
 ```
 
 Your Client Key is **auto-provisioned and open to all origins** so it works immediately.
@@ -133,7 +133,15 @@ Before shipping to production, lock it to your app's origins in one step (contro
 
 ```
 splitch flags create --key new-checkout --variants on,off       # CLI
-flags_create { key: "new-checkout", variants: [...] }           # MCP tool
+flags_create {
+  name: "New checkout",
+  key: "new-checkout",
+  variants: [
+    { name: "on", value: true, isDefault: false },
+    { name: "off", value: false, isDefault: true }
+  ],
+  idempotency_key: "create-new-checkout-v1"
+} # MCP tool
 ```
 
 Flag definition is App-level; serving config is per-Environment. Promote it into your
@@ -149,7 +157,12 @@ Turn the Flag on and set the baseline rollout so the non-default Variant is actu
 
 ```
 splitch flag-config update new-checkout --enabled true --rollout 100     # CLI
-flag_config_update { flagId, enabled: true, rollout: { percentage: 100 } }   # MCP tool
+flag_config_update {
+  flagId: "<flag.id>",
+  enabled: true,
+  rollout: { percentage: 100 },
+  idempotency_key: "enable-new-checkout-v1"
+} # MCP tool
 ```
 
 `--enabled true` makes the Flag live. `--rollout 100` puts 100% of fall-through traffic on the

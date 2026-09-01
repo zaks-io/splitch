@@ -222,7 +222,7 @@ export async function makeSdkRouteHarness(options: SdkRouteHarnessOptions = {}) 
     entityAssignmentPrivacy: options.door === "binding" ? stubEntityAssignmentPrivacy() : undefined,
     exposureAssembly: {
       saltStore,
-      sourceId: "pop-route-test",
+      sourceId: () => "pop-route-test",
       newEventId: () => "evt-route-1",
       now: () => new Date("2026-07-03T00:00:00.000Z"),
     },

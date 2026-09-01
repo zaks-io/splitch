@@ -67,7 +67,7 @@ function seededKv(): FakeKv {
     );
 }
 
-function makeHarness(saltStore = new StaticSaltStore()) {
+function makeHarness(saltStore = new StaticSaltStore(), sourceId: () => string = () => "pop-test") {
   const configKv = seededKv();
   const assignmentStore = new RecordingAssignmentStore();
   const app = createApp({
@@ -80,7 +80,7 @@ function makeHarness(saltStore = new StaticSaltStore()) {
     assignmentStore,
     exposureAssembly: {
       saltStore,
-      sourceId: "pop-test",
+      sourceId,
     },
     exposureTicket: {
       saltStore,
@@ -123,8 +123,10 @@ describe("POST /apps/:appId/envs/:environmentId/flags/:flagKey/test-eval", () =>
     expect(assignmentStore.putCalls).toEqual([]);
   });
 
-  it("returns the full rule_matched reason from KV config with liveRunId null", async () => {
-    const { app, assignmentStore, configKv } = makeHarness();
+  it("returns the full rule_matched reason without resolving an Exposure source", async () => {
+    const { app, assignmentStore, configKv } = makeHarness(new StaticSaltStore(), () => {
+      throw new Error("Cloudflare colo is unavailable for Exposure source identity");
+    });
 
     const res = await app.request(PATH, testEvalInit("cp-app-A"));
 

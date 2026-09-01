@@ -188,7 +188,7 @@ async function handleRequest(
     },
     exposureAssembly: {
       saltStore,
-      sourceId: exposureSourceId(request, env, platformTarget),
+      sourceId: () => exposureSourceId(request, env, platformTarget),
     },
     exposureTicket: {
       saltStore,
