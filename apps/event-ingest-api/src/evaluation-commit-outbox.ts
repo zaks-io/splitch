@@ -9,8 +9,6 @@ const EVALUATION_COMMIT_REPLAY_WINDOW_MS = 24 * 60 * 60 * 1000;
 export interface EvaluationCommitOutbox {
   lookup(identity: string): Promise<EvaluationCommit | null>;
   commit(identity: string, payload: unknown): Promise<EvaluationCommit>;
-  deliver(identity: string): Promise<EvaluationCommit>;
-  acknowledge(identity: string): Promise<void>;
   privacyExport(
     identity: string,
     eventIds: readonly string[],
@@ -38,11 +36,13 @@ interface OutboxState {
   readonly expiresAt: number;
   readonly deliveredAt?: string;
   readonly privacyDeletedAt?: string;
+  readonly deliveryState?: "pending" | "publishing" | "delivered";
 }
 
 const STATE_KEY = "evaluation-commit-outbox";
 const PRIVACY_DELETED_KEY = "evaluation-commit-privacy-deleted";
 const REDACTED_EVENT_IDS_KEY = "evaluation-commit-redacted-event-ids";
+const DELIVERY_RETRY_DELAY_MS = 1_000;
 
 /**
  * The durable boundary for one remote Evaluation. It seals the usage row and
@@ -60,7 +60,7 @@ export class EvaluationCommitOutboxDurableObject {
     const identity = await requestIdentity(request);
     if (identity === null) return new Response("invalid commit identity", { status: 400 });
     return request.method === "POST"
-      ? this.ctx.blockConcurrencyWhile(() => this.write(path, identity, request))
+      ? this.write(path, identity, request)
       : new Response("not found", { status: 404 });
   }
 
@@ -68,8 +68,6 @@ export class EvaluationCommitOutboxDurableObject {
     const handlers: Record<string, () => Promise<Response>> = {
       "/lookup": () => this.lookup(),
       "/commit": () => this.commit(identity, request),
-      "/deliver": () => this.deliver(),
-      "/acknowledge": () => this.acknowledge(identity),
       "/privacy-export": () => this.privacyExport(request),
       "/privacy-delete": () => this.privacyDelete(request),
       "/privacy-delete-all": () => this.privacyDeleteAll(),
@@ -78,12 +76,45 @@ export class EvaluationCommitOutboxDurableObject {
   }
 
   async alarm(): Promise<void> {
-    await this.ctx.blockConcurrencyWhile(async () => {
-      const state = await this.ctx.storage.get<OutboxState>(STATE_KEY);
-      if (state !== undefined && state.expiresAt <= Date.now()) {
-        await this.ctx.storage.delete([STATE_KEY, PRIVACY_DELETED_KEY, REDACTED_EVENT_IDS_KEY]);
-      }
+    const state = await this.ctx.storage.get<OutboxState>(STATE_KEY);
+    if (state === undefined) return;
+    if (state.expiresAt <= Date.now()) {
+      await this.ctx.storage.delete([STATE_KEY, PRIVACY_DELETED_KEY, REDACTED_EVENT_IDS_KEY]);
+      return;
+    }
+    if (isDelivered(state)) {
+      await this.ctx.storage.setAlarm(state.expiresAt);
+      return;
+    }
+    if (!this.env) throw new Error("Evaluation commit delivery environment is unavailable");
+
+    const publishing = { ...state, deliveryState: "publishing" as const };
+    await this.ctx.storage.put(STATE_KEY, publishing);
+    try {
+      await deliverSealedEvaluationCommit(
+        this.env,
+        state.eventId,
+        parseSealedEvaluationCommitPayload(state.payload),
+      );
+    } catch (error) {
+      await this.ctx.storage.put(STATE_KEY, { ...state, deliveryState: "pending" });
+      await this.ctx.storage.setAlarm(Date.now() + DELIVERY_RETRY_DELAY_MS);
+      console.error("event-ingest-api Evaluation commit outbox publication failed", {
+        errorMessage: error instanceof Error ? error.message : "non-error rejection",
+      });
+      return;
+    }
+
+    const current = await this.ctx.storage.get<OutboxState>(STATE_KEY);
+    if (current === undefined || current.privacyDeletedAt !== undefined) {
+      throw new Error("Evaluation commit outbox changed during queue publication");
+    }
+    await this.ctx.storage.put(STATE_KEY, {
+      ...current,
+      deliveryState: "delivered",
+      deliveredAt: new Date().toISOString(),
     });
+    await this.ctx.storage.setAlarm(current.expiresAt);
   }
 
   private async lookup(): Promise<Response> {
@@ -91,6 +122,7 @@ export class EvaluationCommitOutboxDurableObject {
     if (existing === undefined || existing.expiresAt <= Date.now()) {
       return new Response("commit not found", { status: 404 });
     }
+    if (!isDelivered(existing)) await this.ctx.storage.setAlarm(Date.now());
     return Response.json(asResponse(existing));
   }
 
@@ -98,53 +130,28 @@ export class EvaluationCommitOutboxDurableObject {
     const payload = await requestPayload(request);
     if (payload === undefined) return new Response("invalid commit payload", { status: 400 });
 
+    const now = Date.now();
+    const eventId = `sha256:${await sha256Hex(`${identity}\u001f${now}`)}`;
     const existing = await this.ctx.storage.get<OutboxState>(STATE_KEY);
     if (existing !== undefined && existing.expiresAt > Date.now()) {
+      if (!isDelivered(existing)) await this.ctx.storage.setAlarm(Date.now());
       return Response.json(asResponse(existing));
     }
 
-    const now = Date.now();
     const privacyDeleted = Boolean(await this.ctx.storage.get(PRIVACY_DELETED_KEY));
     const redactedEventIds = (await this.ctx.storage.get<string[]>(REDACTED_EVENT_IDS_KEY)) ?? [];
     const state: OutboxState = {
-      eventId: `sha256:${await sha256Hex(`${identity}\u001f${now}`)}`,
+      eventId,
       payload: privacyDeleted
         ? { usage: { privacyDeleted: true }, exposureRows: [] }
         : withoutExposureRows(payload, redactedEventIds),
       expiresAt: now + EVALUATION_COMMIT_REPLAY_WINDOW_MS,
+      deliveryState: privacyDeleted ? "delivered" : "pending",
       ...(privacyDeleted ? { privacyDeletedAt: new Date(now).toISOString() } : {}),
     };
     await this.ctx.storage.put(STATE_KEY, state);
-    await this.ctx.storage.setAlarm(state.expiresAt);
+    await this.ctx.storage.setAlarm(privacyDeleted ? state.expiresAt : now);
     return Response.json(asResponse(state));
-  }
-
-  private async deliver(): Promise<Response> {
-    const state = await this.currentState();
-    if (state === undefined) return new Response("commit not found", { status: 404 });
-    if (state.deliveredAt !== undefined || state.privacyDeletedAt !== undefined) {
-      return Response.json(asResponse(state));
-    }
-    if (!this.env) throw new Error("Evaluation commit delivery environment is unavailable");
-    await deliverSealedEvaluationCommit(
-      this.env,
-      state.eventId,
-      parseSealedEvaluationCommitPayload(state.payload),
-    );
-    const delivered = { ...state, deliveredAt: new Date().toISOString() };
-    await this.ctx.storage.put(STATE_KEY, delivered);
-    return Response.json(asResponse(delivered));
-  }
-
-  private async acknowledge(identity: string): Promise<Response> {
-    const state = await this.ctx.storage.get<OutboxState>(STATE_KEY);
-    if (state === undefined || state.expiresAt <= Date.now()) {
-      return new Response("commit not found", { status: 404 });
-    }
-    if (state.deliveredAt === undefined) {
-      await this.ctx.storage.put(STATE_KEY, { ...state, deliveredAt: new Date().toISOString() });
-    }
-    return Response.json({ ok: true, identity });
   }
 
   private async privacyExport(request: Request): Promise<Response> {
@@ -159,6 +166,9 @@ export class EvaluationCommitOutboxDurableObject {
     const eventIds = await requestEventIds(request);
     if (eventIds === null) return new Response("invalid Event ids", { status: 400 });
     const state = await this.currentState();
+    if (state?.deliveryState === "publishing") {
+      return new Response("queue publication is unresolved", { status: 409 });
+    }
     const prior = (await this.ctx.storage.get<string[]>(REDACTED_EVENT_IDS_KEY)) ?? [];
     await this.ctx.storage.put(REDACTED_EVENT_IDS_KEY, [...new Set([...prior, ...eventIds])]);
     if (state === undefined) return Response.json({ deletedCount: 0 });
@@ -173,8 +183,11 @@ export class EvaluationCommitOutboxDurableObject {
   }
 
   private async privacyDeleteAll(): Promise<Response> {
-    await this.ctx.storage.put(PRIVACY_DELETED_KEY, true);
     const state = await this.currentState();
+    if (state?.deliveryState === "publishing") {
+      return new Response("queue publication is unresolved", { status: 409 });
+    }
+    await this.ctx.storage.put(PRIVACY_DELETED_KEY, true);
     if (state !== undefined && state.privacyDeletedAt === undefined) {
       await this.ctx.storage.put(STATE_KEY, {
         ...state,
@@ -195,8 +208,12 @@ function asResponse(state: OutboxState): EvaluationCommit {
   return {
     eventId: state.eventId,
     payload: state.payload,
-    delivered: state.deliveredAt !== undefined || state.privacyDeletedAt !== undefined,
+    delivered: isDelivered(state),
   };
+}
+
+function isDelivered(state: OutboxState): boolean {
+  return state.deliveredAt !== undefined || state.privacyDeletedAt !== undefined;
 }
 
 async function requestIdentity(request: Request): Promise<string | null> {

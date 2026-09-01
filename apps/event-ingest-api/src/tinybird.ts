@@ -34,9 +34,12 @@ export async function exposureEvent(
   const now = new Date(Date.now()).toISOString();
   const eventId = stringField(payload, "eventId");
   const eventType = stringField(payload, "type");
-  const sourceId = stringValue(payload.sourceId) ?? env.SPLITCH_SOURCE_ID ?? "local";
+  const sourceId = stringValue(payload.sourceId) ?? env.SPLITCH_SOURCE_ID;
   if (!eventId.ok) return eventId;
   if (!eventType.ok) return eventType;
+  if (!sourceId && env.SPLITCH_PLATFORM_TARGET !== "local") {
+    return { ok: false, error: serviceUnavailable("Exposure source identity is unavailable") };
+  }
 
   const candidate = {
     ...payload,
@@ -44,7 +47,7 @@ export async function exposureEvent(
     environmentId: scope.environmentId,
     runId: runScope.runId,
     idType: runScope.idType,
-    sourceId,
+    sourceId: sourceId ?? "local",
     exposureAt: now,
     serverReceivedAt: now,
     dedupKey: await exposureDedupKey(
@@ -53,7 +56,7 @@ export async function exposureEvent(
       runScope,
       eventId.value,
       eventType.value,
-      sourceId,
+      sourceId ?? "local",
     ),
   };
   const parsed = ExposureEventSchema.safeParse(candidate);

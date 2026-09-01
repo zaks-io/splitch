@@ -48,9 +48,7 @@ export async function handleMetricEventReconciliationQueue(
   env: Env,
 ): Promise<void> {
   requirePlatformTarget(env.SPLITCH_PLATFORM_TARGET);
-  for (const message of batch.messages) {
-    await handleReconciliationMessage(message, env);
-  }
+  await Promise.all(batch.messages.map((message) => handleReconciliationMessage(message, env)));
 }
 
 async function handleReconciliationMessage(

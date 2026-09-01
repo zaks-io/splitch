@@ -80,7 +80,7 @@ class RecordingDownstream {
 }
 
 class TestExecutionContext implements ExecutionContext {
-  readonly exports: Cloudflare.Exports = {};
+  readonly exports = {} as Cloudflare.Exports;
   readonly props = {};
   readonly tracing = {} as Tracing;
   waits: Promise<unknown>[] = [];

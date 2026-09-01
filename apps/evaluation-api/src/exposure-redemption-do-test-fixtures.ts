@@ -26,6 +26,9 @@ export function claimMemoryCtx(): ClaimMemoryCtx {
       if (Array.isArray(key)) for (const k of key) map.delete(k);
       else map.delete(key);
     },
+    deleteAll: async () => {
+      map.clear();
+    },
     list: async <T>(options?: { limit?: number; startAfter?: string }) => {
       // Byte order (code-unit), matching real DO storage — not localeCompare.
       let entries = Array.from(map.entries()).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));

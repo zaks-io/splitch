@@ -12,7 +12,7 @@ import type { IngestAdmissionGateNamespace } from "./ingest-admission-gate";
 import type { MetricEventOutboxNamespace } from "./metric-event-outbox";
 import type { MetricEventRateLimitNamespace } from "./metric-event-rate-limit";
 
-export type Env = {
+interface WorkerProtocolBindings {
   CONFIG_STORE?: KVNamespace;
   CONFIG_STORE_WRITER?: {
     getByName(name: string): {
@@ -47,7 +47,11 @@ export type Env = {
     | EvaluationUsageReplayWindowNamespace;
   EVALUATION_COMMIT_OUTBOX?: EvaluationCommitOutbox | EvaluationCommitOutboxNamespace;
   SENTRY_DSN?: string;
-};
+}
+
+/** Wrangler owns platform binding types; this layer only adds protocol-rich stubs and injected vars. */
+export type Env = Partial<Omit<Cloudflare.Env, keyof WorkerProtocolBindings>> &
+  WorkerProtocolBindings;
 
 export type Payload = Record<string, unknown>;
 

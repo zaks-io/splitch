@@ -102,9 +102,9 @@ describe("ExposureRedemptionClaim pendingExpiryFloor", () => {
   it("arms a below-cursor seal expiry when the paged drain completes", async () => {
     const ctx = claimMemoryCtx();
     const now = Date.now();
-    // 180 exposure+ticket pairs (360 keys): tick 1 fills a page and leaves a
+    // 90 exposure+ticket pairs (180 keys): tick 1 fills a page and leaves a
     // continuation alarm; seal keys sort before the cursor so tick 2 never sees them.
-    for (let i = 0; i < 180; i += 1) {
+    for (let i = 0; i < 90; i += 1) {
       const id = `exp-${String(i).padStart(4, "0")}`;
       await ctx.storage.put(`exposure:${id}`, {
         ticketFingerprint: `m-${String(i).padStart(4, "0")}`,

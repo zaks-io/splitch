@@ -1,6 +1,5 @@
 import type { ErrorResponse } from "@splitch/contracts";
 import { emptyError, renderError, serviceUnavailable, validationError } from "./errors";
-import { deliverSealedEvaluationCommit } from "./evaluation-commit-delivery";
 import { evaluationCommitOutbox } from "./evaluation-commit-outbox-client";
 import {
   confirmEvaluationCommitInventory,
@@ -36,22 +35,11 @@ const EVALUATION_COMMIT_USAGE_BYTE_COST_EVENT_ID = `sha256:${"0".repeat(64)}`;
 export async function handleEvaluationCommit(request: Request, env: Env): Promise<Response> {
   const prepared = await prepareEvaluationCommit(request, env);
   if (!prepared.ok) return renderError(prepared.error);
-  const { commit } = prepared.value;
-  if (commit.delivered)
-    return Response.json({ ok: true, eventId: commit.eventId }, { status: 202 });
-
-  return deliverEvaluationCommit(prepared.value, env);
+  return Response.json({ ok: true, eventId: prepared.value.eventId }, { status: 202 });
 }
 
 interface PreparedEvaluationCommit {
-  readonly scope: EvaluationUsageScope;
-  readonly identity: string;
-  readonly outbox: NonNullable<ReturnType<typeof evaluationCommitOutbox>>;
-  readonly commit: {
-    readonly eventId: string;
-    readonly payload: EvaluationCommitPayload;
-    readonly delivered: boolean;
-  };
+  readonly eventId: string;
 }
 
 async function prepareEvaluationCommit(
@@ -75,7 +63,7 @@ async function prepareEvaluationCommit(
   try {
     const existing = await outbox.lookup(identity);
     if (existing !== null) {
-      return preparedCommit(scope, identity, outbox, existing);
+      return preparedCommit(existing);
     }
 
     const denied = await chargeNewEvaluationCommit(env, scope, payload);
@@ -87,18 +75,16 @@ async function prepareEvaluationCommit(
     }
     const sealed = await outbox.commit(identity, payload);
     await confirmEvaluationCommitInventory(inventory, env);
-    return preparedCommit(scope, identity, outbox, sealed);
+    return preparedCommit(sealed);
   } catch {
     return { ok: false, error: serviceUnavailable("Evaluation commit outbox is unavailable") };
   }
 }
 
-function preparedCommit(
-  scope: EvaluationUsageScope,
-  identity: string,
-  outbox: NonNullable<ReturnType<typeof evaluationCommitOutbox>>,
-  sealed: { eventId: string; payload: unknown; delivered: boolean },
-): Outcome<PreparedEvaluationCommit> {
+function preparedCommit(sealed: {
+  eventId: string;
+  payload: unknown;
+}): Outcome<PreparedEvaluationCommit> {
   if (!isEvaluationCommitPayload(sealed.payload)) {
     return {
       ok: false,
@@ -107,12 +93,7 @@ function preparedCommit(
   }
   return {
     ok: true,
-    value: {
-      scope,
-      identity,
-      outbox,
-      commit: { eventId: sealed.eventId, payload: sealed.payload, delivered: sealed.delivered },
-    },
+    value: { eventId: sealed.eventId },
   };
 }
 
@@ -180,31 +161,6 @@ async function evaluationCommitInput(
   };
 }
 
-async function deliverEvaluationCommit(
-  prepared: PreparedEvaluationCommit,
-  env: Env,
-): Promise<Response> {
-  const { commit, identity, outbox, scope } = prepared;
-
-  try {
-    const delivered = await outbox.deliver(identity);
-    if (!delivered.delivered) {
-      await deliverSealedEvaluationCommit(env, commit.eventId, commit.payload);
-      await outbox.acknowledge(identity);
-    }
-  } catch (error) {
-    console.error("event-ingest-api Evaluation commit delivery failed", {
-      organizationId: scope.organizationId,
-      appId: scope.appId,
-      environmentId: scope.environmentId,
-      errorMessage: error instanceof Error ? error.message : "non-error rejection",
-    });
-    return renderError(serviceUnavailable("Evaluation commit delivery failed"));
-  }
-
-  return Response.json({ ok: true, eventId: commit.eventId }, { status: 202 });
-}
-
 interface EvaluationCommitPayload {
   readonly usage: EvaluationUsageEventInput;
   readonly exposureRows: readonly Record<string, unknown>[];
@@ -232,11 +188,13 @@ async function evaluationCommitExposureRows(
     };
   }
 
+  const outcomes = await Promise.all(
+    exposures.map((candidate) => evaluationCommitExposureRow(candidate, scope, env)),
+  );
   const rows: Record<string, unknown>[] = [];
-  for (const candidate of exposures) {
-    const row = await evaluationCommitExposureRow(candidate, scope, env);
-    if (!row.ok) return row;
-    rows.push(row.value);
+  for (const outcome of outcomes) {
+    if (!outcome.ok) return outcome;
+    rows.push(outcome.value);
   }
   return { ok: true, value: rows };
 }

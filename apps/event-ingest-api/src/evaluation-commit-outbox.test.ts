@@ -5,9 +5,29 @@ import type { Env } from "./types";
 const IDENTITY = "a".repeat(64);
 
 describe("Evaluation commit outbox privacy", () => {
+  it("seals a commit and schedules queue publication without waiting for Queue", async () => {
+    vi.spyOn(Date, "now").mockReturnValue(Date.parse("2026-08-28T00:00:00.000Z"));
+    const state = durableState();
+    const send = vi.fn();
+    const object = new EvaluationCommitOutboxDurableObject(state.ctx, {
+      RAW_EVALUATIONS_QUEUE: { send },
+      RAW_EVENTS_QUEUE: { sendBatch: vi.fn() },
+      SPLITCH_PLATFORM_TARGET: "local",
+    } as unknown as Env);
+
+    const committed = await post(object, "/commit", {
+      identity: IDENTITY,
+      payload: { usage: { idempotencyKey: "evaluation-1" }, exposureRows: [] },
+    });
+
+    expect(committed).toMatchObject({ delivered: false });
+    expect(send).not.toHaveBeenCalled();
+    expect(state.alarmTime()).toBe(Date.now());
+  });
+
   it("exports and redacts only the selected Entity exposure while retaining usage", async () => {
     vi.spyOn(Date, "now").mockReturnValue(Date.parse("2026-08-28T00:00:00.000Z"));
-    const object = new EvaluationCommitOutboxDurableObject(durableState());
+    const object = new EvaluationCommitOutboxDurableObject(durableState().ctx);
     await post(object, "/commit", {
       identity: IDENTITY,
       payload: {
@@ -40,7 +60,7 @@ describe("Evaluation commit outbox privacy", () => {
 
   it("purges the sealed usage and Exposure payload and makes retries non-delivering", async () => {
     vi.spyOn(Date, "now").mockReturnValue(Date.parse("2026-08-28T00:00:00.000Z"));
-    const object = new EvaluationCommitOutboxDurableObject(durableState());
+    const object = new EvaluationCommitOutboxDurableObject(durableState().ctx);
     await post(object, "/commit", {
       identity: IDENTITY,
       payload: {
@@ -63,7 +83,7 @@ describe("Evaluation commit outbox privacy", () => {
 
   it("persists an App reset tombstone before a zero-Exposure commit can seal", async () => {
     vi.spyOn(Date, "now").mockReturnValue(Date.parse("2026-08-28T00:00:00.000Z"));
-    const object = new EvaluationCommitOutboxDurableObject(durableState());
+    const object = new EvaluationCommitOutboxDurableObject(durableState().ctx);
 
     await post(object, "/privacy-delete-all", { identity: IDENTITY });
     const committed = await post(object, "/commit", {
@@ -77,7 +97,7 @@ describe("Evaluation commit outbox privacy", () => {
     });
   });
 
-  it("serializes an in-flight append before reset deletion can prove the outbox purged", async () => {
+  it("fails reset deletion loud while asynchronous Queue publication is unresolved", async () => {
     vi.spyOn(Date, "now").mockReturnValue(Date.parse("2026-08-28T00:00:00.000Z"));
     let releaseAppend!: () => void;
     let appendStarted!: () => void;
@@ -87,7 +107,7 @@ describe("Evaluation commit outbox privacy", () => {
     const released = new Promise<void>((resolve) => {
       releaseAppend = resolve;
     });
-    const object = new EvaluationCommitOutboxDurableObject(durableState(), {
+    const object = new EvaluationCommitOutboxDurableObject(durableState().ctx, {
       RAW_EVALUATIONS_QUEUE: {
         send: vi.fn(async () => {
           appendStarted();
@@ -120,18 +140,15 @@ describe("Evaluation commit outbox privacy", () => {
       },
     });
 
-    const delivery = post(object, "/deliver", { identity: IDENTITY });
+    const delivery = object.alarm();
     await started;
-    let resetProved = false;
-    const reset = post(object, "/privacy-delete-all", { identity: IDENTITY }).then((value) => {
-      resetProved = true;
-      return value;
-    });
-    await Promise.resolve();
-    expect(resetProved).toBe(false);
+    const unresolved = await request(object, "/privacy-delete-all", { identity: IDENTITY });
+    expect(unresolved.status).toBe(409);
     releaseAppend();
     await delivery;
-    await expect(reset).resolves.toEqual({ proof: "evaluation-commit-outbox-purged-v1" });
+    await expect(post(object, "/privacy-delete-all", { identity: IDENTITY })).resolves.toEqual({
+      proof: "evaluation-commit-outbox-purged-v1",
+    });
     await expect(post(object, "/lookup", { identity: IDENTITY })).resolves.toMatchObject({
       delivered: true,
       payload: { usage: { privacyDeleted: true }, exposureRows: [] },
@@ -144,33 +161,33 @@ async function post(
   path: string,
   body: unknown,
 ): Promise<unknown> {
-  const response = await object.fetch(
+  const response = await request(object, path, body);
+  expect(response.status).toBe(200);
+  return response.json();
+}
+
+function request(
+  object: EvaluationCommitOutboxDurableObject,
+  path: string,
+  body: unknown,
+): Promise<Response> {
+  return object.fetch(
     new Request(`https://evaluation-commit-outbox.local${path}`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(body),
     }),
   );
-  expect(response.status).toBe(200);
-  return response.json();
 }
 
 function queueResult() {
   return { metadata: { metrics: { backlogCount: 0, backlogBytes: 0 } } };
 }
 
-function durableState(): DurableObjectState {
+function durableState(): { ctx: DurableObjectState; alarmTime(): number | null } {
   const storage = new Map<string, unknown>();
-  let section = Promise.resolve();
-  return {
-    blockConcurrencyWhile<T>(run: () => Promise<T>) {
-      const result = section.then(run, run);
-      section = result.then(
-        () => undefined,
-        () => undefined,
-      );
-      return result;
-    },
+  let alarmTime: number | null = null;
+  const ctx = {
     storage: {
       async get<T>(key: string) {
         return storage.has(key) ? (structuredClone(storage.get(key)) as T) : undefined;
@@ -184,7 +201,10 @@ function durableState(): DurableObjectState {
         }
         return storage.delete(key);
       },
-      async setAlarm() {},
+      async setAlarm(time: number | Date) {
+        alarmTime = typeof time === "number" ? time : time.getTime();
+      },
     },
   } as unknown as DurableObjectState;
+  return { ctx, alarmTime: () => alarmTime };
 }

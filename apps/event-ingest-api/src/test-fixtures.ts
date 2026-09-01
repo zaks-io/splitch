@@ -111,6 +111,9 @@ export async function postEvaluationAt(
       }),
     }),
   );
+  if (env.EVALUATION_COMMIT_OUTBOX instanceof MemoryEvaluationCommitOutbox) {
+    await env.EVALUATION_COMMIT_OUTBOX.flush(env as Env);
+  }
   return captureQueuedResponse(ctx, fetch, response, env, queuedStart);
 }
 
@@ -152,6 +155,9 @@ export async function postEvaluationCommit(
       }),
     }),
   );
+  if (env.EVALUATION_COMMIT_OUTBOX instanceof MemoryEvaluationCommitOutbox) {
+    await env.EVALUATION_COMMIT_OUTBOX.flush(env as Env);
+  }
   return captureQueuedResponse(ctx, fetch, response, env, queuedStart);
 }
 
@@ -219,7 +225,7 @@ export function expectRow(rows: Record<string, unknown>[]): Record<string, unkno
 }
 
 export class TestExecutionContext implements ExecutionContext {
-  readonly exports: Cloudflare.Exports = {};
+  readonly exports = {} as Cloudflare.Exports;
   readonly props = {};
   readonly tracing = {} as Tracing;
   waits: Promise<unknown>[] = [];

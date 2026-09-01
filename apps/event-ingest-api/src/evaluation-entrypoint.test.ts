@@ -91,7 +91,7 @@ describe("Evaluation binding entrypoint", () => {
     expect(env.__queuedRows).toHaveLength(1);
   });
 
-  it("reaches the Evaluation commit handler", async () => {
+  it("seals an Evaluation commit without waiting for Queue publication", async () => {
     const { response, fetch, env } = await internal("/api/internal/evaluation-commits", {
       ...usagePayload(),
       exposures: [baseExposure()],
@@ -99,7 +99,7 @@ describe("Evaluation binding entrypoint", () => {
 
     expect(response.status).toBe(202);
     expect(fetch).not.toHaveBeenCalled();
-    expect(env.__queuedRows).toHaveLength(2);
+    expect(env.__queuedRows).toHaveLength(0);
   });
 
   it("rejects a missing internal token without appending", async () => {

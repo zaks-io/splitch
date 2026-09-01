@@ -1,8 +1,13 @@
 import type { EvaluationCommitOutbox } from "./evaluation-commit-outbox";
 import {
+  deliverSealedEvaluationCommit,
+  parseSealedEvaluationCommitPayload,
+} from "./evaluation-commit-delivery";
+import {
   EVALUATION_USAGE_REPLAY_WINDOW_MS,
   type EvaluationUsageReplayWindow,
 } from "./evaluation-usage-replay-window";
+import type { Env } from "./types";
 
 export class MemoryReplayWindow implements EvaluationUsageReplayWindow {
   private readonly claims = new Map<string, { eventId: string; expiresAt: number }>();
@@ -64,6 +69,22 @@ export class MemoryEvaluationCommitOutbox implements EvaluationCommitOutbox {
     const existing = await this.lookup(identity);
     if (existing === null) throw new Error("commit not found");
     return existing;
+  }
+
+  async flush(env: Env): Promise<void> {
+    for (const [identity, commit] of this.commits) {
+      if (commit.delivered) continue;
+      try {
+        await deliverSealedEvaluationCommit(
+          env,
+          commit.eventId,
+          parseSealedEvaluationCommitPayload(commit.payload),
+        );
+      } catch {
+        continue;
+      }
+      await this.acknowledge(identity);
+    }
   }
 
   async privacyExport(identity: string, eventIds: readonly string[]) {
