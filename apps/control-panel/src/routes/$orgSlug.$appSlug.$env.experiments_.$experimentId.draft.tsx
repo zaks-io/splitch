@@ -63,11 +63,12 @@ export async function loadExperimentDraftRoute(input: ExperimentDraftRouteInput)
     .find((org) => org.orgId === input.scoped.scope.orgId)
     ?.apps.find((candidate) => candidate.appId === input.scoped.scope.appId);
   if (!app) throw new Error("Active App is missing from navigation");
+  const routeReference = experimentRouteReference(input.experimentRef);
   const resolved = await resolveControlPanelExperimentEnvironment({
     data: {
       appId: input.scoped.scope.appId,
       targetEnvironmentId: input.scoped.scope.environmentId,
-      ...experimentRouteReference(input.experimentRef),
+      ...routeReference,
     },
   });
   if (!resolved.ok) {
@@ -77,7 +78,10 @@ export async function loadExperimentDraftRoute(input: ExperimentDraftRouteInput)
     reportExpectedDomainFailure(404, input.pathname, { boundary: "section" });
     throw notFound();
   }
-  if (input.experimentRef !== experimentKeyRouteRef(resolved.data.experimentKey)) {
+  if (
+    routeReference.referenceKind !== "key" ||
+    routeReference.experimentRef !== resolved.data.experimentKey
+  ) {
     const current = new URL(input.href, "https://panel.splitch.dev");
     throw redirect({
       href: `${scopedHref(input.scoped.scope)}/experiments/${experimentKeyRouteRef(resolved.data.experimentKey)}/draft${current.search}${current.hash}`,

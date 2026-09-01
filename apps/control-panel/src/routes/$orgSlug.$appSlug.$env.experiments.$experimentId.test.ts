@@ -64,6 +64,26 @@ describe("Experiment detail route identity", () => {
     expect(ensureQueryData).toHaveBeenCalledOnce();
   });
 
+  it("loads a canonical percent-encoded key after the Router decodes the parameter", async () => {
+    resolveMock.mockResolvedValue({
+      ok: true,
+      data: { kind: "experiment", experimentId: "exp_space", experimentKey: "hello world" },
+    });
+    const ensureQueryData = vi.fn(async () => ({ id: "exp_space" }));
+
+    await expect(
+      loadExperimentRoute({
+        queryClient: { ensureQueryData } as unknown as QueryClient,
+        scoped: scopedContext(),
+        experimentRef: "~hello world",
+        href: "/acme/checkout/dev/experiments/~hello%20world",
+        pathname: "/acme/checkout/dev/experiments/~hello%20world",
+      }),
+    ).resolves.toEqual({ experimentId: "exp_space", guarded: false });
+
+    expect(ensureQueryData).toHaveBeenCalledOnce();
+  });
+
   it("loads a draft directly without reading the Analysis-backed list", async () => {
     resolveMock.mockResolvedValue({
       ok: true,
@@ -82,6 +102,26 @@ describe("Experiment detail route identity", () => {
     ).resolves.toEqual({ experimentId: "exp_new" });
 
     expect(listQueryMock).not.toHaveBeenCalled();
+    expect(ensureQueryData).toHaveBeenCalledOnce();
+  });
+
+  it("loads a draft with a percent-encoded key after the Router decodes the parameter", async () => {
+    resolveMock.mockResolvedValue({
+      ok: true,
+      data: { kind: "experiment", experimentId: "exp_space", experimentKey: "hello world" },
+    });
+    const ensureQueryData = vi.fn(async () => ({ id: "exp_space" }));
+
+    await expect(
+      loadExperimentDraftRoute({
+        queryClient: { ensureQueryData } as unknown as QueryClient,
+        scoped: scopedContext(),
+        experimentRef: "~hello world",
+        href: "/acme/checkout/dev/experiments/~hello%20world/draft",
+        pathname: "/acme/checkout/dev/experiments/~hello%20world/draft",
+      }),
+    ).resolves.toEqual({ experimentId: "exp_space" });
+
     expect(ensureQueryData).toHaveBeenCalledOnce();
   });
 });

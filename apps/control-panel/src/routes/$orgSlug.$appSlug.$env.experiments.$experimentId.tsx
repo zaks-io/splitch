@@ -12,7 +12,6 @@ import {
 } from "#lib/experiments/experiment-environment-resolution-functions";
 import {
   canonicalExperimentHref,
-  experimentKeyRouteRef,
   type ExperimentNotFoundData,
   experimentNotFoundData,
   experimentRouteReference,
@@ -50,11 +49,12 @@ export async function loadExperimentRoute(input: ExperimentRouteInput) {
   );
   if (!activeEnvironment) throw new Error("Active Environment is missing from App navigation");
   const runId = experimentRunId(input.pathname);
+  const routeReference = experimentRouteReference(input.experimentRef);
   const resolved = await resolveControlPanelExperimentEnvironment({
     data: {
       appId: input.scoped.scope.appId,
       targetEnvironmentId: input.scoped.scope.environmentId,
-      ...experimentRouteReference(input.experimentRef),
+      ...routeReference,
       runId,
     },
   });
@@ -64,7 +64,10 @@ export async function loadExperimentRoute(input: ExperimentRouteInput) {
   if (resolved.data.kind !== "experiment") {
     throwResolvedNotFound(resolved.data, input.scoped.scope, input.href);
   }
-  if (input.experimentRef !== experimentKeyRouteRef(resolved.data.experimentKey)) {
+  if (
+    routeReference.referenceKind !== "key" ||
+    routeReference.experimentRef !== resolved.data.experimentKey
+  ) {
     throw redirect({
       href: canonicalExperimentHref(
         input.scoped.scope,
