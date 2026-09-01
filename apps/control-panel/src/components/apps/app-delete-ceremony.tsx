@@ -42,6 +42,7 @@ export function AppDeleteCeremony({
   const confirmed = isDeleteConfirmed(typed, app.key);
 
   async function settle(outcome: DeleteOutcome) {
+    if (outcome.kind === "cleanup-pending" && outcome.stale) setStale(outcome.stale);
     const immediateError = immediateDeleteError(outcome);
     if (immediateError) {
       setError(immediateError);

@@ -1,11 +1,12 @@
 import { describe, expect, it } from "vitest";
+import type { SessionPrincipal } from "#lib/sessions/session";
 import {
   AccessDeniedError,
   type EnvironmentResolver,
   resolveAppLoaderContext,
+  resolveNavigation,
   resolveScopedLoaderContext,
 } from "#lib/shared/loader-context";
-import type { SessionPrincipal } from "#lib/sessions/session";
 
 describe("scoped loader context", () => {
   it("resolves URL org, app, and environment through membership and D1 seams", async () => {
@@ -149,6 +150,27 @@ describe("App-scoped loader context", () => {
         resolverFor([]),
       ),
     ).rejects.toMatchObject({ resource: "environment", status: 404 });
+  });
+});
+
+describe("scope navigation", () => {
+  it("omits a deleted App while its stale KV session membership is still visible", async () => {
+    const staleSession = sessionPrincipal();
+    staleSession.orgs[0]?.apps.push({
+      appId: "app_2",
+      appSlug: "billing-api",
+      role: "admin",
+    });
+
+    const navigation = await resolveNavigation(staleSession, {
+      async listEnvironments(appId) {
+        return appId === "app_1"
+          ? [{ environmentId: "env_1", env: "dev", guarded: false, name: "Development" }]
+          : [];
+      },
+    });
+
+    expect(navigation.orgs[0]?.apps.map((app) => app.appSlug)).toEqual(["checkout-api"]);
   });
 });
 

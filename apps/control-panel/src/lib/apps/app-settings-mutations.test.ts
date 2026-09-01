@@ -86,11 +86,39 @@ describe("App Settings mutation transport failures", () => {
         details: { retryAfterMs: 30_000 },
       },
       appDeleted: true,
+      sessionResync: { ok: true },
     } as Awaited<ReturnType<typeof deleteControlPanelApp>>);
 
     await expect(destroyApp("app_checkout")).resolves.toEqual({
       kind: "cleanup-pending",
       message: "Exposure status cleanup is unavailable",
+    });
+  });
+
+  it("carries a failed session refresh alongside pending cleanup", async () => {
+    vi.mocked(deleteControlPanelApp).mockResolvedValueOnce({
+      ok: false,
+      status: 503,
+      error: {
+        code: "SERVICE_UNAVAILABLE",
+        message: "Exposure status cleanup is unavailable",
+        details: { retryAfterMs: 30_000 },
+      },
+      appDeleted: true,
+      sessionResync: {
+        ok: false,
+        reason: "session store unavailable",
+        remedy: "retry",
+      },
+    } as Awaited<ReturnType<typeof deleteControlPanelApp>>);
+
+    await expect(destroyApp("app_checkout")).resolves.toEqual({
+      kind: "cleanup-pending",
+      message: "Exposure status cleanup is unavailable",
+      stale: {
+        reason: "session store unavailable",
+        remedy: "retry",
+      },
     });
   });
 });
