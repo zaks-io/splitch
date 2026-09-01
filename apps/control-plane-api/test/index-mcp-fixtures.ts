@@ -12,6 +12,7 @@ export const OWNER = "user_index_owner_1c91";
 export const TENANT_A = {
   orgId: "org_mcp_door_a_241b",
   orgName: "MCP Door Alpha",
+  orgSlug: "mcp-door-alpha",
   appId: "app_mcp_door_a_241b",
   appName: "MCP Door Alpha App",
   appKey: "mcp-door-alpha",
@@ -25,6 +26,7 @@ export const TENANT_A = {
 export const TENANT_B = {
   orgId: "org_mcp_door_b_7f62",
   orgName: "MCP Door Beta",
+  orgSlug: "mcp-door-beta",
   appId: "app_mcp_door_b_7f62",
   appName: "MCP Door Beta App",
   appKey: "mcp-door-beta",
@@ -55,6 +57,7 @@ export async function setupMcpDoorTestEnv(): Promise<ControlPlaneApiEnv> {
 interface TenantFixture {
   orgId: string;
   orgName: string;
+  orgSlug: string;
   appId: string;
   appName: string;
   appKey: string;

@@ -105,6 +105,8 @@ route scope and Organization/App co-scope checks then run unchanged. For a user 
 Organizations, selector resolution may bind the principal to the exact canonical route
 Organization only when that Organization is present in the freshly resolved scopes. Membership
 rows and scopes never cross the public bearer token or the MCP delegation header.
+The selector-free `principal_flags_list` read derives its App set from those freshly resolved App
+scopes; it does not require or mint a membership-wide MCP bearer token.
 
 ## Trusted IdP allow-list
 

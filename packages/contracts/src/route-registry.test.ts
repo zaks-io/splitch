@@ -45,6 +45,7 @@ const CANONICAL_OPERATION_IDS = [
   "organizations_get",
   "organizations_update",
   "organizations_delete",
+  "principal_capabilities_get",
   "organization_members_list",
   "organization_members_add",
   "organization_members_update",
@@ -190,7 +191,6 @@ describe("route registry: canonical coverage", () => {
 
   it("registers a non-trivial number of routes (N > 0)", () => {
     expect(routeRegistry.length).toBe(CANONICAL_OPERATION_IDS.length);
-    expect(routeRegistry.length).toBeGreaterThan(0);
   });
 
   it("exposes a single frozen registry structure", () => {

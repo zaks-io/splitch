@@ -62,27 +62,27 @@ const experimentsSdkRoutes = [
 
 // Only `organizations_create` (SPL-171). The rest of the Organization surface
 // reaches the Panel through its own binding path, not this SDK.
-const organizationsSdkRoutes = [accountRoutes[1]] as const;
+const organizationsSdkRoutes = [accountRoutes[2]] as const;
 
 const appsSdkRoutes = [
-  accountRoutes[9],
   accountRoutes[10],
   accountRoutes[11],
   accountRoutes[12],
   accountRoutes[13],
+  accountRoutes[14],
   attentionRoutes[0],
-  accountRoutes[19],
   accountRoutes[20],
   accountRoutes[21],
   accountRoutes[22],
+  accountRoutes[23],
 ] as const;
 
 const environmentsSdkRoutes = [
-  accountRoutes[14],
   accountRoutes[15],
   accountRoutes[16],
   accountRoutes[17],
   accountRoutes[18],
+  accountRoutes[19],
 ] as const;
 
 const credentialsSdkRoutes = [

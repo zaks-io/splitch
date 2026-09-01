@@ -2,6 +2,12 @@
 // the list explicit makes every new exception a reviewed contract decision.
 export const CLI_MCP_CONTRACT_EXCEPTIONS = [
   {
+    operationId: "principal_capabilities_get",
+    cli: false,
+    mcp: false,
+    reason: "internal MCP-to-Control-Plane authority resolution route",
+  },
+  {
     operationId: "organizations_delete",
     cli: false,
     mcp: false,

@@ -76,7 +76,7 @@ cacheable, read-only, and carry no side effects.
 | `splitch://context`        | text/markdown    | The CONTEXT.md ubiquitous-language glossary (Flag, Variant, Run, Exposure, Targeting Key, …). One source.                                                                                                                                                               |
 | `splitch://auth`           | text/markdown    | The `auth.md` companion: the three identity doors, how the agent authenticated, how to widen scope (ADR-0022).                                                                                                                                                          |
 | `splitch://active-context` | application/json | The resolved active `{ app, environment, source }` for this session — the same data `context` returns. Includes `demoExpiresAt` (ISO 8601) when the Org is a provisional anon-door demo, so the agent can see the 24h deadline and prompt the human to claim before it. |
-| `splitch://capabilities`   | application/json | The token's scopes + which tools they gate, so the agent knows up front what it can and cannot do.                                                                                                                                                                      |
+| `splitch://capabilities`   | application/json | The principal's effective live scopes + which tools they gate, so the agent knows up front what it can and cannot do.                                                                                                                                                   |
 | `splitch://quickstart`     | text/markdown    | The agent-first quickstart: transports [../quickstart.md](../quickstart.md) verbatim — the canonical first-run narrative the `onboard_new_app` prompt automates.                                                                                                        |
 
 Notes:
@@ -85,7 +85,7 @@ Notes:
   (CONTEXT.md, auth.md) — the resource is a transport of the canonical file, not a paraphrase. No
   glossary drift between what a human reads and what an agent reads.
 - `splitch://active-context` and `splitch://capabilities` are **session-scoped**: they reflect the
-  transport session's active App/Environment and token scopes (set via `context_use`, carried in
+  transport session's active App/Environment and effective live scopes (set via `context_use`, carried in
   the session, never persisted server-side, never widening scope —
   [mcp-and-cli-surfaces.md](./mcp-and-cli-surfaces.md)).
 - Resources are read-only by protocol; an agent reading `splitch://capabilities` to plan before
