@@ -56,6 +56,7 @@ const organizationRoutes = [
     method: "GET",
     path: "/principal/capabilities",
     summary: "Read the principal's effective live Control Plane authority.",
+    exposure: "mcp-binding",
     response: PrincipalCapabilitiesResponse,
     auth: AUTH,
     rateLimit: RATE,

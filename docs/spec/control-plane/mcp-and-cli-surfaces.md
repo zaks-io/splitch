@@ -252,9 +252,14 @@ MCP tool schemas are derived from the same Zod route definitions that validate t
 - Tool `inputSchema` = Zod request body schema (converted to JSON Schema)
 - Tool `outputSchema` = Zod response body schema
 
-No hand-written tool definitions exist. A new endpoint registered in `@splitch/contracts` becomes
-a new MCP tool at build/startup. An agent never hits "valid per tool schema, rejected by server"
-because the schemas are byte-for-byte identical.
+No hand-written tool definitions exist. Public agent operations registered in `@splitch/contracts`
+become MCP tools at build/startup. Explicit internal operations, including MCP-to-Control-Plane
+binding plumbing, are excluded from tool discovery.
+
+The execution schema remains byte-for-byte identical to the Worker schema. The protocol schema may
+make an App or Environment selector optional when MCP session context can fill that selector before
+execution. After context resolution, the unchanged execution schema validates the complete input,
+so the server never executes a request that the Worker schema rejects.
 
 ### Tool naming convention
 

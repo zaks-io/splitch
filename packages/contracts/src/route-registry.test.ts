@@ -14,6 +14,7 @@ import {
   getRoute,
   operationIds,
   routeRegistry,
+  routesBindingOnlyTo,
   routesDelegatedBy,
   routesDelegatedTo,
   routesMountedBy,
@@ -355,9 +356,7 @@ describe("route registry: public surface is total over AuthKind", () => {
     for (const worker of routeOwners) {
       const surfaced = ids(routesSurfacedBy(worker));
       const delegated = ids(routesDelegatedTo(worker));
-      const internal = ids(
-        routeRegistry.filter((route) => route.owner === worker && publicSurfaceFor(route) === null),
-      );
+      const internal = ids(routesBindingOnlyTo(worker));
       expect(surfaced.filter((id) => delegated.includes(id))).toEqual([]);
       expect(surfaced.filter((id) => internal.includes(id))).toEqual([]);
       expect([...surfaced, ...delegated, ...internal].sort()).toEqual(ids(routesMountedBy(worker)));

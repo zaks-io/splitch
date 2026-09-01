@@ -224,7 +224,9 @@ export function createApp(deps: AppDeps): Hono {
   );
   registrar.mount(app, controlPlaneRoute("organizations_get"), handlers.getOrg);
   registrar.mount(app, controlPlaneRoute("organizations_list"), handlers.listOrganizations);
-  registrar.mount(app, controlPlaneRoute("principal_capabilities_get"), getPrincipalCapabilities);
+  if (deps.door === "binding") {
+    registrar.mount(app, controlPlaneRoute("principal_capabilities_get"), getPrincipalCapabilities);
+  }
   registrar.mount(app, controlPlaneRoute("organizations_create"), handlers.createOrganization);
   registrar.mount(app, controlPlaneRoute("organizations_update"), handlers.updateOrg);
   registrar.mount(app, controlPlaneRoute("organization_members_list"), handlers.listMembers);
