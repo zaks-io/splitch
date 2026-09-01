@@ -1,5 +1,4 @@
 import { Button } from "@splitch/ui/components/button";
-import { Card, CardContent, CardHeader } from "@splitch/ui/components/card";
 import { useSuspenseQuery } from "@tanstack/react-query";
 import { createFileRoute, getRouteApi } from "@tanstack/react-router";
 import { ActiveEnvironmentBadge } from "#components/environments/active-environment-badge";
@@ -29,24 +28,20 @@ function ExperimentsSectionRoute() {
     ?.environments.find((candidate) => candidate.environmentId === context.scope.environmentId);
   if (!environment) throw new Error("Active Environment is missing from App navigation");
   return (
-    <PanelPageBody>
-      <Card className="border-0 bg-transparent shadow-none">
-        <CardHeader className="flex flex-row items-start justify-between gap-4 px-0 pt-0">
-          <div className="grid gap-1.5">
-            <ActiveEnvironmentBadge env={environment.env} guarded={environment.guarded} />
-            <h1 className="font-semibold text-3xl text-foreground tracking-tight">Experiments</h1>
-            <p className="max-w-2xl text-muted-foreground text-sm leading-6">
-              Track lifecycle and live Run health for every Experiment in this Environment.
-            </p>
-          </div>
-          {data.items.length > 0 ? (
-            <Button render={<a href={`${rootHref}/experiments/new`}>New Experiment</a>} />
-          ) : null}
-        </CardHeader>
-        <CardContent className="px-0">
-          <ExperimentList items={data.items} scopeHref={rootHref} />
-        </CardContent>
-      </Card>
+    <PanelPageBody className="grid gap-6">
+      <div className="flex flex-row items-start justify-between gap-4">
+        <div className="grid gap-1.5">
+          <ActiveEnvironmentBadge env={environment.env} guarded={environment.guarded} />
+          <h1 className="font-semibold text-3xl text-foreground tracking-tight">Experiments</h1>
+          <p className="max-w-2xl text-muted-foreground text-sm leading-6">
+            Track lifecycle and live Run health for every Experiment in this Environment.
+          </p>
+        </div>
+        {data.items.length > 0 ? (
+          <Button render={<a href={`${rootHref}/experiments/new`}>New Experiment</a>} />
+        ) : null}
+      </div>
+      <ExperimentList items={data.items} scopeHref={rootHref} />
     </PanelPageBody>
   );
 }
