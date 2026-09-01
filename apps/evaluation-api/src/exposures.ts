@@ -12,7 +12,7 @@ import {
 } from "./app-identity-traffic";
 import type { HoldoverWriteCoordinator } from "./assignment/holdover-write-outbox";
 import { errorCauseChain } from "./error-cause-chain";
-import { assembleExposureFromTicket } from "./evaluate/exposure-assembly";
+import { type AssembledExposure, assembleExposureFromTicket } from "./evaluate/exposure-assembly";
 import type { ExposureTicketPayload, MintExposureTicketDeps } from "./evaluate/exposure-ticket";
 import {
   type ExposureIngestSink,
@@ -36,7 +36,7 @@ interface ExposuresRouteDeps {
   readonly exposureIngestSink: ExposureIngestSink;
   readonly exposureRedemptionClaims: ExposureRedemptionClaimStore;
   readonly exposureTicket: MintExposureTicketDeps & { readonly previousTicketKey?: string };
-  readonly sourceId: string;
+  readonly sourceId: () => string;
   readonly logger?: { error(message: string, detail: unknown): void };
   readonly now?: () => Date;
 }
@@ -178,20 +178,11 @@ async function sealIngestAndConfirm(
   admission: AppIdentityAdmission,
   deps: ExposuresRouteDeps,
 ): Promise<ExposureBatchResult> {
-  const stale = await staleExposure(item.exposureId, admission);
-  if (stale !== null) return stale;
-  const exposure = await assembleExposureFromTicket({
-    ticket,
-    appId: claimInput.appId,
-    environmentId: claimInput.environmentId,
-    exposureId: item.exposureId,
-    clientTimestamp: item.clientTimestamp,
-    sourceId: deps.sourceId,
-    now: deps.now ?? deps.exposureTicket.now,
-  });
+  const prepared = await assembleClaimedExposure(item, ticket, claimInput, admission, deps);
+  if (!prepared.ok) return prepared.result;
 
   const ingestFailure = await ingestExposure(
-    exposure,
+    prepared.exposure,
     item.exposureId,
     claimInput,
     admission,
@@ -234,6 +225,49 @@ async function sealIngestAndConfirm(
       deps,
     );
   }
+}
+
+async function assembleClaimedExposure(
+  item: ExposureBatchRequest["exposures"][number],
+  ticket: ExposureTicketPayload,
+  claimInput: RedemptionClaimContext,
+  admission: AppIdentityAdmission,
+  deps: ExposuresRouteDeps,
+): Promise<
+  | { readonly ok: true; readonly exposure: AssembledExposure }
+  | { readonly ok: false; readonly result: ExposureBatchResult }
+> {
+  const stale = await staleExposure(item.exposureId, admission);
+  if (stale !== null) return { ok: false, result: stale };
+
+  let sourceId: string;
+  try {
+    sourceId = deps.sourceId();
+  } catch (cause) {
+    await releaseClaimQuietly(claimInput, deps);
+    deps.logger?.error("exposure_source_identity_failed", {
+      requestId: claimInput.requestId,
+      appId: claimInput.appId,
+      environmentId: claimInput.environmentId,
+      exposureId: item.exposureId,
+      causeChain: errorCauseChain(cause),
+    });
+    return {
+      ok: false,
+      result: rejected(item.exposureId, RETRYABLE_EXPOSURE_REJECTION_CODE),
+    };
+  }
+
+  const exposure = await assembleExposureFromTicket({
+    ticket,
+    appId: claimInput.appId,
+    environmentId: claimInput.environmentId,
+    exposureId: item.exposureId,
+    clientTimestamp: item.clientTimestamp,
+    sourceId,
+    now: deps.now ?? deps.exposureTicket.now,
+  });
+  return { ok: true, exposure };
 }
 
 async function ingestExposure(

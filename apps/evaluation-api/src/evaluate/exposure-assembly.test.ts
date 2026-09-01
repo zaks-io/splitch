@@ -42,7 +42,7 @@ const NOW = "2026-07-02T03:00:00.000Z";
 function exposureDeps(overrides: Partial<ExposureAssemblyDeps> = {}): ExposureAssemblyDeps {
   return {
     saltStore: new StaticSaltStore(),
-    sourceId: "pop-test",
+    sourceId: () => "pop-test",
     newEventId: () => "evt-1",
     now: () => new Date(NOW),
     ...overrides,
@@ -136,7 +136,7 @@ describe("evaluate Exposure assembly", () => {
     expect(exposure.clientTimestamp).toBe("2026-07-02T02:59:59.000Z");
   });
 
-  it("holdover replay assembles zero Exposures and writes no Assignment Store record", async () => {
+  it("holdover replay requires no Exposure source and writes no Assignment Store record", async () => {
     const store = new RecordingAssignmentStore({
       holdovers: new Map([[EXPERIMENT_ID, { runId: "run-prior", variant: "control" }]]),
     });
@@ -152,7 +152,11 @@ describe("evaluate Exposure assembly", () => {
     const output = await evaluate(
       baseInput(),
       { assignmentStore: store, provider },
-      exposureDeps(),
+      exposureDeps({
+        sourceId: () => {
+          throw new Error("Exposure source identity is unavailable");
+        },
+      }),
     );
 
     expect(output.result).toMatchObject({

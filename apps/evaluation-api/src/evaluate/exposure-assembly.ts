@@ -7,7 +7,7 @@ const EXPOSURE_TYPE = "exposure" as const;
 
 export interface ExposureAssemblyDeps {
   readonly saltStore: SaltStore;
-  readonly sourceId: string;
+  readonly sourceId: () => string;
   readonly newEventId?: () => string;
   readonly now?: () => Date;
 }
@@ -27,6 +27,7 @@ export async function assembleEvaluateExposures(
     return [];
   }
 
+  const sourceId = deps.sourceId();
   const timestamp = (deps.now ?? (() => new Date()))().toISOString();
   const eventId = (deps.newEventId ?? (() => crypto.randomUUID()))();
   const identity = {
@@ -45,7 +46,7 @@ export async function assembleEvaluateExposures(
     experimentId: result.exposure.experimentId,
     idType: result.exposure.idType,
     runId,
-    sourceId: deps.sourceId,
+    sourceId,
     targetingKeyHash,
     type: EXPOSURE_TYPE,
   });
@@ -63,7 +64,7 @@ export async function assembleEvaluateExposures(
       type: EXPOSURE_TYPE,
       eventId,
       dedupKey,
-      sourceId: deps.sourceId,
+      sourceId,
       counterfactual: false,
       isHoldover: false,
       clientTimestamp: timestamp,
