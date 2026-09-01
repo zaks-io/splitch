@@ -52,8 +52,15 @@ splitch login
 splitch use --app "$SPLITCH_APP" --env "$SPLITCH_ENV" --json
 ```
 
-After browser approval, `splitch use` writes the nearest `splitch.json` and reports the
-selected scope:
+After browser approval, `splitch use` searches the current directory and each parent directory for
+`splitch.json`. It updates the nearest file, or creates one in the current directory when none
+exists. The file contains canonical scope IDs and is safe to commit:
+
+```json
+{ "version": 1, "app": "app_...", "environment": "env_..." }
+```
+
+`environment` is optional. The command reports the selected scope:
 
 ```json
 { "path": "/path/to/product/splitch.json", "app": "checkout", "environment": "dev" }

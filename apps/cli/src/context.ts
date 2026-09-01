@@ -1,10 +1,10 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, unlink, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { SplitchCliError } from "./errors.js";
 
 interface SplitchConfig {
   readonly version: 1;
-  readonly app?: string;
+  readonly app: string;
   readonly environment?: string;
 }
 
@@ -82,12 +82,21 @@ export async function writeNearestConfig(
   // invalidates the old App's Environment); undefined leaves it unchanged.
   const discovered = await discoverConfig(cwd);
   const path = discovered?.path ?? join(cwd, "splitch.json");
-  const existing: SplitchConfig = discovered?.config ?? { version: 1 };
+  const app = update.app ?? discovered?.config.app;
+  if (!app) {
+    throw new SplitchCliError({
+      code: "CLI_SCOPE_UNRESOLVED",
+      causeSummary: "splitch.json requires an App",
+      remediation: "Pass --app, or run splitch use from a directory with a valid splitch.json",
+    });
+  }
   const next: SplitchConfig = {
     version: 1,
-    app: update.app ?? existing.app,
+    app,
     environment:
-      update.environment === null ? undefined : (update.environment ?? existing.environment),
+      update.environment === null
+        ? undefined
+        : (update.environment ?? discovered?.config.environment),
   };
   await mkdir(dirname(path), { recursive: true });
   await writeFile(path, `${JSON.stringify(next, null, 2)}\n`);
@@ -108,8 +117,8 @@ export async function clearDeletedAppFromConfig(
   if (!discovered || discovered.config.app !== deletedAppId) {
     return false;
   }
-  const next: SplitchConfig = { version: 1 };
-  await writeFile(discovered.path, `${JSON.stringify(next, null, 2)}\n`);
+  // With the selected App gone, no valid project scope remains to persist.
+  await unlink(discovered.path);
   return true;
 }
 
@@ -162,8 +171,9 @@ async function discoverConfig(
 }
 
 async function readConfig(path: string): Promise<SplitchConfig | null> {
+  let parsed: unknown;
   try {
-    return JSON.parse(await readFile(path, "utf8")) as SplitchConfig;
+    parsed = JSON.parse(await readFile(path, "utf8"));
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") {
       return null;
@@ -175,4 +185,24 @@ async function readConfig(path: string): Promise<SplitchConfig | null> {
       originalError: error,
     });
   }
+  if (!isSplitchConfig(parsed)) {
+    throw new SplitchCliError({
+      code: "CLI_CONFIG_READ_FAILED",
+      causeSummary: `${path} must contain version 1, a non-empty app string, and an optional non-empty environment string`,
+      remediation: "Fix or remove the invalid splitch.json file and retry the command",
+    });
+  }
+  return parsed;
+}
+
+function isSplitchConfig(value: unknown): value is SplitchConfig {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
+  const config = value as Record<string, unknown>;
+  return (
+    config.version === 1 &&
+    typeof config.app === "string" &&
+    config.app.trim().length > 0 &&
+    (config.environment === undefined ||
+      (typeof config.environment === "string" && config.environment.trim().length > 0))
+  );
 }
