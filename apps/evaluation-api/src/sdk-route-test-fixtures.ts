@@ -72,6 +72,11 @@ interface SdkRouteHarnessOptions {
   readonly clientKeyRateLimitRps?: number | null;
   readonly saltStore?: SaltStore;
   readonly assignmentStore?: RecordingAssignmentStore;
+  readonly exposureSourceId?: () => string;
+}
+
+function routeExposureSourceId(options: SdkRouteHarnessOptions): () => string {
+  return options.exposureSourceId ?? (() => "pop-route-test");
 }
 
 function seededConfigKv(options: SdkRouteHarnessOptions = {}): FakeKv {
@@ -222,7 +227,7 @@ export async function makeSdkRouteHarness(options: SdkRouteHarnessOptions = {}) 
     entityAssignmentPrivacy: options.door === "binding" ? stubEntityAssignmentPrivacy() : undefined,
     exposureAssembly: {
       saltStore,
-      sourceId: () => "pop-route-test",
+      sourceId: routeExposureSourceId(options),
       newEventId: () => "evt-route-1",
       now: () => new Date("2026-07-03T00:00:00.000Z"),
     },

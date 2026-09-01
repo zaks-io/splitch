@@ -208,7 +208,11 @@ the Flag Configuration's **baseline rollout** — one percentage, no Targeting R
 
 ```
 splitch flag-config update new-checkout --rollout 10              # CLI
-flag_config_update { flagId, rollout: { percentage: 10 } }     # MCP tool
+flag_config_update {
+  flagId: "<flag.id>",
+  rollout: { percentage: 10 },
+  idempotency_key: "dial-new-checkout-rollout-v1"
+} # MCP tool
 ```
 
 That is the whole step. The baseline applies to traffic matching no Targeting Rule; if you later add
