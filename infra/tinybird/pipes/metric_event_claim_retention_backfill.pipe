@@ -1,5 +1,5 @@
 DESCRIPTION >
-    Pages legacy Metric Event claims by their original receipt time for Durable Object retention adoption.
+    Pages legacy Metric Event claims by their original receipt time for Durable Object retention adoption. Reads metric_events directly because serve_deduped_metric_events does not expose server_received_at.
 
 NODE legacy_metric_event_claims
 SQL >
@@ -19,8 +19,8 @@ SQL >
             dedup_key,
             min(server_received_at) AS first_server_received_at
         FROM metric_events
-        WHERE metric_events.server_received_at >= {{DateTime64(retained_after)}}
         GROUP BY dedup_key
+        HAVING first_server_received_at >= {{DateTime64(retained_after)}}
     )
     WHERE 1
         {% if defined(after_server_received_at) %}

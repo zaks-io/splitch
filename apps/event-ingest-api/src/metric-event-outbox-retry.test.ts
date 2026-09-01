@@ -1,5 +1,7 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { makeOutbox, row } from "./metric-event-outbox.fixture";
+
+afterEach(() => vi.restoreAllMocks());
 
 describe("Metric Event outbox publication retry", () => {
   it("backs off without failing the accepted claim", async () => {
