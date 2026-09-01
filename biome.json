@@ -8,7 +8,7 @@
   "files": {
     "includes": [
       "**",
-      "!**/.claude/worktrees",
+      "!.claude/worktrees",
       "!**/worker-configuration.d.ts",
       "!**/*.gen.ts",
       "!packages/sdk/scripts/generated",
