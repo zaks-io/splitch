@@ -1,10 +1,10 @@
 import { applySchema, migrationStatements } from "@splitch/db/test-d1";
 import { Miniflare } from "miniflare";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { ControlPanelBindings } from "#lib/shared/bindings";
 import { markPendingResync, readPendingResync } from "#lib/live-updates/pending-resync";
 import { refreshSession, SESSION_COOKIE_NAME, type StoredSession } from "#lib/sessions/session";
 import { tokenHash as hashOpaqueToken } from "#lib/sessions/session-cookie";
+import type { ControlPanelBindings } from "#lib/shared/bindings";
 
 // `org-app-list-functions.ts` imports the Cloudflare Workers runtime module
 // at the top level for the exported `loadOrgAppList` server function; it is
@@ -88,6 +88,35 @@ const lastVisitedHint = (actor: string) =>
       },
     }),
   );
+
+describe("authoritative App list", () => {
+  it("reads current D1 App memberships instead of rendering a long-deleted session App", async () => {
+    await seedOrganization(bindings.DB, "org_000", "org-000");
+    await seedApp(bindings.DB, "app_current", "org_000", "current-app");
+    await refreshSession(bindings.SESSION_STORE, tokenHash, {
+      version: 2,
+      userId: "user_cap",
+      workosSessionId: "session_cap",
+      expiresAt: Math.floor(Date.now() / 1000) + 3_600,
+      orgs: [
+        {
+          orgId: "org_000",
+          orgSlug: "org-000",
+          orgRole: "owner",
+          isProvisional: false,
+          demoExpiresAt: null,
+          apps: [{ appId: "app_deleted", appSlug: "deleted-app", role: "owner" }],
+        },
+      ],
+    });
+
+    const result = await loadOrgAppListForRequest(bindings, requestWithSessionCookie(), "org-000");
+
+    if (result.kind !== "ok") throw new Error(`expected kind "ok", got "${result.kind}"`);
+    expect(result.view.apps.map((app) => app.appSlug)).toEqual(["current-app"]);
+    expect(result.view.apps[0]?.environments).toEqual([]);
+  }, 20_000);
+});
 
 describe("loadOrgAppListForRequest", () => {
   it("re-attempts a pending App resync on load, returning the previously-missing App and clearing the marker", async () => {

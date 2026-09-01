@@ -113,8 +113,9 @@ describe("settleAppDelete", () => {
       ...resumedFailure,
       partialDelete: partial.partialDelete,
       appDeleted: true,
+      sessionResync: { ok: true },
     });
-    expect(resync).not.toHaveBeenCalled();
+    expect(resync).toHaveBeenCalledOnce();
   });
 
   it("marks deletion indeterminate when the retry response is lost", async () => {
@@ -144,9 +145,43 @@ describe("settleAppDelete", () => {
       throw new TypeError("response was lost");
     });
 
-    await expect(settleAppDelete(committed, resume, async () => {})).resolves.toEqual({
+    const resync = vi.fn(async () => {});
+
+    await expect(settleAppDelete(committed, resume, resync)).resolves.toEqual({
       ...committed,
       appDeleted: true,
+      sessionResync: { ok: true },
+    });
+    expect(resync).toHaveBeenCalledOnce();
+  });
+
+  it("reports a stale session without pretending committed cleanup finished", async () => {
+    const committed = {
+      ok: false,
+      status: 503,
+      error: {
+        code: "SERVICE_UNAVAILABLE",
+        message: "Exposure status cleanup is unavailable",
+        details: { retryAfterMs: 30_000, mutationCommitted: true },
+      },
+    } as const;
+
+    await expect(
+      settleAppDelete(
+        committed,
+        async () => committed,
+        async () => {
+          throw new Error("session store unavailable");
+        },
+      ),
+    ).resolves.toEqual({
+      ...committed,
+      appDeleted: true,
+      sessionResync: {
+        ok: false,
+        reason: "session store unavailable",
+        remedy: "retry",
+      },
     });
   });
 

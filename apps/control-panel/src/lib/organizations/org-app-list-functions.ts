@@ -2,19 +2,8 @@ import { env as workerEnv } from "cloudflare:workers";
 import { createRepository } from "@splitch/db";
 import { createServerFn } from "@tanstack/react-start";
 import { getRequest } from "@tanstack/react-start/server";
-import { type ControlPanelBindings, controlPanelBindings } from "#lib/shared/bindings";
-import {
-  createControlPanelAppsClient,
-  createControlPanelFlagsClient,
-} from "#lib/shared/control-plane-apps";
 import { createDelegationEnvironment } from "#lib/flags/flags-matrix-data";
-import {
-  authorizedEntry,
-  entryFor,
-  parseLastVisitedCookie,
-} from "#lib/sessions/last-visited-scope";
-import { rememberOrganizationVisit } from "#lib/sessions/last-visited-scope-cookie";
-import { createEnvironmentResolver, rehydrateLegacySession } from "#lib/sessions/membership";
+import { type PendingResync, readPendingResync } from "#lib/live-updates/pending-resync";
 import type {
   AppAttention,
   OrgAppListApp,
@@ -22,10 +11,21 @@ import type {
   OrgAppListView,
   PendingAppResync,
 } from "#lib/organizations/org-app-list";
-import { type PendingResync, readPendingResync } from "#lib/live-updates/pending-resync";
+import {
+  authorizedEntry,
+  entryFor,
+  parseLastVisitedCookie,
+} from "#lib/sessions/last-visited-scope";
+import { rememberOrganizationVisit } from "#lib/sessions/last-visited-scope-cookie";
+import { createEnvironmentResolver, rehydrateLegacySession } from "#lib/sessions/membership";
 import type { StoredSession } from "#lib/sessions/session";
 import { loadSessionFromRequest } from "#lib/sessions/session-refresh";
 import { retryPendingResync } from "#lib/sessions/session-resync";
+import { type ControlPanelBindings, controlPanelBindings } from "#lib/shared/bindings";
+import {
+  createControlPanelAppsClient,
+  createControlPanelFlagsClient,
+} from "#lib/shared/control-plane-apps";
 
 export type OrgAppListResult =
   | { kind: "ok"; view: OrgAppListView; actorId: string }
@@ -85,15 +85,18 @@ export async function loadOrgAppListForRequest(
 
   const resolver = createEnvironmentResolver(repo);
   const actor = { actorId: session.userId, sessionExpiresAt: loaded.session.expiresAt };
+  const currentApps = await repo.identity.listAppMembershipsWithAppForUser(session.userId, [
+    organization.orgId,
+  ]);
 
   const apps = await Promise.all(
-    organization.apps.map(async (app): Promise<OrgAppListApp> => {
-      const environments = await resolver.listEnvironments(app.appId);
+    currentApps.map(async ({ app }): Promise<OrgAppListApp> => {
+      const environments = await resolver.listEnvironments(app.id);
       const [attention, flags] = await Promise.all([
-        readAttention(bindings, actor, app.appId),
-        readFlags(bindings, actor, app.appId, environments),
+        readAttention(bindings, actor, app.id),
+        readFlags(bindings, actor, app.id, environments),
       ]);
-      return { appId: app.appId, appSlug: app.appSlug, environments, attention, flags };
+      return { appId: app.id, appSlug: app.key, environments, attention, flags };
     }),
   );
   return {

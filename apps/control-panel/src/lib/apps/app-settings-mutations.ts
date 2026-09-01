@@ -52,7 +52,7 @@ export async function renameApp(input: {
 export type DeleteOutcome =
   | { readonly kind: "refused"; readonly message: string }
   | { readonly kind: "indeterminate"; readonly message: string }
-  | { readonly kind: "cleanup-pending"; readonly message: string }
+  | { readonly kind: "cleanup-pending"; readonly message: string; readonly stale?: Stale }
   | {
       readonly kind: "partially-deleted";
       readonly message: string;
@@ -93,7 +93,12 @@ function failedDeleteOutcome(
   result: Extract<Awaited<ReturnType<typeof deleteControlPanelApp>>, { ok: false }>,
 ): DeleteOutcome {
   if ("appDeleted" in result && result.appDeleted === true) {
-    return { kind: "cleanup-pending", message: result.error.message };
+    const stale = committedDeleteStale(result);
+    return {
+      kind: "cleanup-pending",
+      message: result.error.message,
+      ...(stale ? { stale } : {}),
+    };
   }
   if ("deleteIndeterminate" in result && result.deleteIndeterminate === true) {
     return { kind: "indeterminate", message: result.error.message };
@@ -109,4 +114,25 @@ function failedDeleteOutcome(
         removedCount: partialDelete.removed.length + partialDelete.appliedApprovalRequestIds.length,
       }
     : { kind: "refused", message: result.error.message };
+}
+
+function committedDeleteStale(result: object): Stale | undefined {
+  if (!("sessionResync" in result)) {
+    throw new Error("Committed App deletion did not report session resync state");
+  }
+  const value = result.sessionResync;
+  if (typeof value !== "object" || value === null || !("ok" in value)) {
+    throw new Error("Committed App deletion reported invalid session resync state");
+  }
+  if (value.ok === true) return undefined;
+  if (
+    value.ok === false &&
+    "reason" in value &&
+    typeof value.reason === "string" &&
+    "remedy" in value &&
+    (value.remedy === "reauth" || value.remedy === "retry")
+  ) {
+    return { reason: value.reason, remedy: value.remedy };
+  }
+  throw new Error("Committed App deletion reported invalid session resync state");
 }
