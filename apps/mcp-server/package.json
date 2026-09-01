@@ -22,6 +22,6 @@
     "@splitch/worker-runtime": "workspace:*"
   },
   "devDependencies": {
-    "@cloudflare/vitest-pool-workers": "0.18.8"
+    "@cloudflare/vitest-pool-workers": "0.22.0"
   }
 }

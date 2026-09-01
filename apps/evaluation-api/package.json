@@ -20,10 +20,10 @@
     "@splitch/observability": "workspace:*",
     "@splitch/privacy": "workspace:*",
     "@splitch/worker-runtime": "workspace:*",
-    "hono": "^4.12.32"
+    "hono": "^4.13.4"
   },
   "devDependencies": {
     "@splitch/sdk": "workspace:*",
-    "miniflare": "^4.20260722.0"
+    "miniflare": "^4.20260730.0"
   }
 }

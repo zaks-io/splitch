@@ -10,7 +10,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@sentry/node": "^10.68.0",
+    "@sentry/node": "^10.71.0",
     "@splitch/sdk": "workspace:*"
   },
   "devDependencies": {

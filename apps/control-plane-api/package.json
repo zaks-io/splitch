@@ -21,12 +21,12 @@
     "@splitch/observability": "workspace:*",
     "@splitch/privacy": "workspace:*",
     "@splitch/worker-runtime": "workspace:*",
-    "hono": "^4.12.32"
+    "hono": "^4.13.4"
   },
   "devDependencies": {
-    "@cloudflare/vitest-pool-workers": "0.18.8",
-    "@vitest/runner": "4.1.10",
-    "miniflare": "^4.20260722.0",
-    "vitest": "4.1.10"
+    "@cloudflare/vitest-pool-workers": "0.22.0",
+    "@vitest/runner": "4.1.11",
+    "miniflare": "^4.20260730.0",
+    "vitest": "4.1.11"
   }
 }

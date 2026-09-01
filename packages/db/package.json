@@ -35,9 +35,9 @@
     "drizzle-orm": "^0.45.2"
   },
   "devDependencies": {
-    "@cloudflare/vitest-pool-workers": "0.18.8",
+    "@cloudflare/vitest-pool-workers": "0.22.0",
     "drizzle-kit": "^0.31.10",
-    "miniflare": "^4.20260722.0",
+    "miniflare": "^4.20260730.0",
     "typescript": "^6.0.3"
   }
 }
