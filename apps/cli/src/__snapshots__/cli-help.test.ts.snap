@@ -2140,7 +2140,7 @@ Flags:
 
 Example:
   splitch logout --json",
-    "use": "Select the default App and Environment for the current directory.
+    "use": "Select the default App and Environment for this project.
 
 Usage:
   splitch use [--app <app>] [--env <environment>] [flags]
@@ -2150,6 +2150,11 @@ Flags:
   --env <environment>  [type: string; default: unchanged] Environment ID or key.
   --json               [type: boolean; default: false] Write machine-readable JSON to stdout.
   -h, --help           [type: boolean; default: false] Show help and exit.
+
+Project config:
+  {"version":1,"app":"app_...","environment":"env_..."}
+  Searches the current directory and each parent for splitch.json; the nearest file wins.
+  Updates the nearest file, or creates splitch.json in the current directory when none exists.
 
 Example:
   splitch use --app checkout --env dev --json",
@@ -2163,7 +2168,7 @@ Usage:
 Commands:
   login           Authenticate the control-plane session with the browser device flow.
   logout          Revoke and remove the stored control-plane session.
-  use             Select the default App and Environment for the current directory.
+  use             Select the default App and Environment for this project.
   context         Show the logged-in principal and the resolved App and Environment.
   health          Check the Control Plane API health endpoint.
 

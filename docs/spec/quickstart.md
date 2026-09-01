@@ -101,8 +101,15 @@ for the common case. The response includes the App **and** its two Environments:
 So you stop retyping `--app` / `--env` on every call:
 
 ```
-splitch use --app <app|slug> --env dev      # CLI: writes nearest .splitch/config.json
+splitch use --app <app|slug> --env dev      # CLI: writes nearest splitch.json
 context_use { app, environment: "dev" }     # MCP: carried in the transport session
+```
+
+The CLI searches the current directory and each parent, then reads or updates the nearest file. If
+none exists, `splitch use` creates one in the current directory. `environment` is optional:
+
+```json
+{ "version": 1, "app": "app_...", "environment": "env_..." }
 ```
 
 Active context is a pure convenience — it fills in IDs, never widens authorization.

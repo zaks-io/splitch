@@ -41,8 +41,8 @@ async function useProject(app: string, environment: string) {
   const home = await makeTempHome();
   await writeFile(home.credentialPath, `${JSON.stringify(storedCredential())}\n`);
   const configDir = join(home.dir, "project");
-  await mkdir(join(configDir, ".splitch"), { recursive: true });
-  const configPath = join(configDir, ".splitch", "config.json");
+  await mkdir(configDir, { recursive: true });
+  const configPath = join(configDir, "splitch.json");
   await writeFile(configPath, `${JSON.stringify({ version: 1, app, environment })}\n`);
   return { credentialPath: home.credentialPath, configDir, configPath };
 }

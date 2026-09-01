@@ -1,4 +1,4 @@
-import { mkdir, writeFile } from "node:fs/promises";
+import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { runCli } from "./cli.js";
@@ -52,9 +52,8 @@ async function credentialPath(): Promise<string> {
 async function selectedScope() {
   const home = await makeTempHome();
   await writeFile(home.credentialPath, `${JSON.stringify(storedCredential())}\n`);
-  await mkdir(join(home.dir, ".splitch"), { recursive: true });
   await writeFile(
-    join(home.dir, ".splitch", "config.json"),
+    join(home.dir, "splitch.json"),
     `${JSON.stringify({ version: 1, app: "app_1", environment: "env_dev" })}\n`,
   );
   return home;

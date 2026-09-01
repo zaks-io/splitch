@@ -57,6 +57,15 @@ export function renderMetaHelp(command: (typeof META_COMMANDS)[number]): string 
     "",
     "Flags:",
     formatFlags(metaFlags(command)),
+    ...(command === "use"
+      ? [
+          "",
+          "Project config:",
+          '  {"version":1,"app":"app_...","environment":"env_..."}',
+          "  Searches the current directory and each parent for splitch.json; the nearest file wins.",
+          "  Updates the nearest file, or creates splitch.json in the current directory when none exists.",
+        ]
+      : []),
     "",
     "Example:",
     `  ${META_EXAMPLES[command]}`,
