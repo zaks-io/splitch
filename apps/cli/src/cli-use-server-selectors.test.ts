@@ -108,4 +108,46 @@ describe("splitch use server-side selector validation", () => {
       environment: "env_previous",
     });
   });
+
+  it("creates a config with the canonical owning App for an env-only selection", async () => {
+    const home = await makeTempHome();
+    await writeFile(home.credentialPath, `${JSON.stringify(storedCredential())}\n`);
+    const cwd = join(home.dir, "project");
+    await mkdir(cwd, { recursive: true });
+    const transport = new FakeCliTransport([
+      oauthTokenMint(),
+      {
+        match: (request) => new URL(request.url).pathname === "/apps/app_checkout/envs/prod",
+        status: 200,
+        body: {
+          id: "env_prod",
+          appId: "app_checkout",
+          key: "prod",
+          name: "Production",
+          policy: {
+            variantAvailability: "allow",
+            targetingRolloutValue: "allow",
+            enabledState: "allow",
+            startExperimentRun: "allow",
+          },
+          createdAt: timestamp,
+          updatedAt: timestamp,
+        },
+      },
+    ]);
+
+    const code = await runCli(["use", "--env", "prod", "--json"], {
+      credentialPath: home.credentialPath,
+      cwd,
+      env: { SPLITCH_APP: "app_checkout" },
+      fetch: transport.fetch,
+    });
+
+    expect(code).toBe(EXIT_OK);
+    expect(JSON.parse(await readFile(join(cwd, "splitch.json"), "utf8"))).toEqual({
+      version: 1,
+      app: "app_checkout",
+      environment: "env_prod",
+    });
+  });
 });

@@ -12,6 +12,7 @@ import { exitCodeForServerError, writeServerError } from "./server-errors.js";
 
 interface NamedResource {
   readonly id: string;
+  readonly appId?: string;
   readonly key?: string;
   readonly name?: string;
 }
@@ -119,11 +120,12 @@ async function persistSelection(
   },
 ): Promise<{ path: string; clearedEnvironmentId?: string }> {
   const { current, app, environment } = selection;
-  const switchedApp = app !== undefined && app.id !== current.appId;
+  const selectedAppId = app?.id ?? environment?.appId;
+  const switchedApp = selectedAppId !== undefined && selectedAppId !== current.appId;
   const staleEnvironmentId =
     switchedApp && environment === undefined ? current.environmentId : undefined;
   const path = await writeNearestConfig(deps.cwd ?? process.cwd(), {
-    app: app?.id,
+    app: selectedAppId,
     environment: staleEnvironmentId ? null : environment?.id,
   });
   return { path, ...(staleEnvironmentId ? { clearedEnvironmentId: staleEnvironmentId } : {}) };
@@ -203,9 +205,10 @@ function readNamedResource(data: unknown, operationId: string): NamedResource {
       remediation: `Retry the command and report the ${operationId} response shape if it persists`,
     });
   }
-  const resource = data as { id: string; key?: unknown; name?: unknown };
+  const resource = data as { id: string; appId?: unknown; key?: unknown; name?: unknown };
   return {
     id: resource.id,
+    ...(typeof resource.appId === "string" ? { appId: resource.appId } : {}),
     ...(typeof resource.key === "string" ? { key: resource.key } : {}),
     ...(typeof resource.name === "string" ? { name: resource.name } : {}),
   };
