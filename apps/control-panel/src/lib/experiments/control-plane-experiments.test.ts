@@ -56,6 +56,7 @@ describe("Control Panel Experiments transport", () => {
           return Response.json({
             experiment: {
               id: "exp_1",
+              key: "checkout",
               name: "Checkout",
               description: "",
               owner: "",

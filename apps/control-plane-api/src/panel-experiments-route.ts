@@ -3,6 +3,7 @@ import type { makeControlPlaneAuthResolver } from "./auth-resolver";
 import { parseControlPanelBindingOperation } from "./control-panel-operation";
 import type { ControlPlaneApiEnv } from "./env";
 import { panelAnalysisFailureResponse } from "./panel-analysis-failure";
+import { panelExperimentRouteResolution } from "./panel-experiment-route-resolution";
 import {
   panelExperimentDetail,
   panelExperimentResults,
@@ -28,7 +29,8 @@ export async function handleSignedPanelExperiments(
   if (
     operation !== "experiments_list" &&
     operation !== "experiments_detail" &&
-    operation !== "experiments_results"
+    operation !== "experiments_results" &&
+    operation !== "experiments_route_resolution"
   ) {
     return null;
   }
@@ -41,9 +43,16 @@ async function handlePanelExperimentsRequest(
   request: Request,
   env: ControlPlaneApiEnv,
   actorId: string,
-  operation: "experiments_detail" | "experiments_list" | "experiments_results",
+  operation:
+    | "experiments_detail"
+    | "experiments_list"
+    | "experiments_results"
+    | "experiments_route_resolution",
 ): Promise<Response> {
   const input = await request.json().catch(() => null);
+  if (operation === "experiments_route_resolution") {
+    return handleRouteResolution(input, env, actorId);
+  }
   if (!isPanelExperimentsInput(input)) {
     return Response.json(
       {
@@ -87,6 +96,52 @@ async function handlePanelExperimentsRequest(
   } catch (cause) {
     return panelAnalysisFailureResponse(cause);
   }
+}
+
+async function handleRouteResolution(
+  input: unknown,
+  env: ControlPlaneApiEnv,
+  actorId: string,
+): Promise<Response> {
+  if (!isPanelExperimentRouteResolutionInput(input)) {
+    return Response.json(
+      {
+        code: "VALIDATION_ERROR",
+        message: "appId, targetEnvironmentId, experimentRef, and referenceKind are required",
+        details: {},
+      },
+      { status: 400 },
+    );
+  }
+  try {
+    return await panelExperimentRouteResolution(
+      { repo: createRepository(env.DB) },
+      { actorId, ...input },
+    );
+  } catch (cause) {
+    return panelAnalysisFailureResponse(cause);
+  }
+}
+
+function isPanelExperimentRouteResolutionInput(value: unknown): value is {
+  appId: string;
+  targetEnvironmentId: string;
+  experimentRef: string;
+  referenceKind: "key" | "legacy";
+  runId?: string;
+} {
+  if (typeof value !== "object" || value === null) return false;
+  const input = value as Record<string, unknown>;
+  return (
+    typeof input.appId === "string" &&
+    input.appId.length > 0 &&
+    typeof input.targetEnvironmentId === "string" &&
+    input.targetEnvironmentId.length > 0 &&
+    typeof input.experimentRef === "string" &&
+    input.experimentRef.length > 0 &&
+    (input.referenceKind === "key" || input.referenceKind === "legacy") &&
+    (input.runId === undefined || (typeof input.runId === "string" && input.runId.length > 0))
+  );
 }
 
 function isPanelExperimentDetailInput(value: {

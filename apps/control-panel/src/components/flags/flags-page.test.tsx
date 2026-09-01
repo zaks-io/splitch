@@ -1,10 +1,10 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { FlagsPageItem } from "#lib/flags/flags-page-data";
 import { FlagsEmptyState } from "#components/flags/flags-empty-state";
 import { FlagsPage } from "#components/flags/flags-page";
 import { FlagsTable } from "#components/flags/flags-table";
 import { FlagsTruncatedNotice } from "#components/flags/flags-truncated-notice";
+import type { FlagsPageItem } from "#lib/flags/flags-page-data";
 
 const submit = vi.fn();
 let switchProps: Array<{ checked: boolean; onCheckedChange(next: boolean): void }> = [];
@@ -85,16 +85,16 @@ describe("Flags page", () => {
     const html = renderFlagsPage(true, "production");
 
     expect(html).toContain("bg-warning-muted/40");
-    expect(html).toContain("data-environment-guard-badge");
+    expect(html).toContain('data-active-environment="production"');
     expect(html).toContain(">production</span>");
     expect(html).toContain("data-environment-segmented");
   });
 
-  it("renders no guard treatment for an allowing Environment", () => {
+  it("names an allowing Environment without guard treatment", () => {
     const html = renderFlagsPage(false, "dev");
 
     expect(html).not.toContain("bg-warning-muted/40");
-    expect(html).not.toContain("data-environment-guard-badge");
+    expect(html).toContain('data-active-environment="dev"');
     expect(html).toContain("data-environment-segmented");
   });
 

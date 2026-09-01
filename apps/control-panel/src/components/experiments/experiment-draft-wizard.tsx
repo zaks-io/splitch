@@ -2,14 +2,16 @@ import type { PanelExperimentDetailOutput } from "@splitch/control-plane-sdk/pan
 import { Badge } from "@splitch/ui/components/badge";
 import { Card, CardContent, CardDescription, CardHeader } from "@splitch/ui/components/card";
 import { useNavigate } from "@tanstack/react-router";
+import { ActiveEnvironmentBadge } from "#components/environments/active-environment-badge";
+import { ExperimentDraftDecisionStep } from "#components/experiments/experiment-draft-decision-step";
+import { ExperimentDraftMeasurementStep } from "#components/experiments/experiment-draft-measurement-step";
+import { ExperimentDraftRunStep } from "#components/experiments/experiment-draft-run-step";
 import {
   EXPERIMENT_DRAFT_STEP_LABELS,
   EXPERIMENT_DRAFT_STEPS,
   type ExperimentDraftStep,
 } from "#lib/experiments/experiment-draft-model";
-import { ExperimentDraftDecisionStep } from "#components/experiments/experiment-draft-decision-step";
-import { ExperimentDraftMeasurementStep } from "#components/experiments/experiment-draft-measurement-step";
-import { ExperimentDraftRunStep } from "#components/experiments/experiment-draft-run-step";
+import { experimentKeyRouteRef } from "#lib/experiments/experiment-route-navigation";
 
 /**
  * The guided draft. Every step writes to the same `draft` Experiment row, so the
@@ -23,18 +25,19 @@ export function ExperimentDraftWizard({
   step,
 }: {
   data: PanelExperimentDetailOutput;
-  scope: { appId: string; environmentId: string };
+  scope: { appId: string; environmentId: string; env: string };
   scopeHref: string;
   step: ExperimentDraftStep;
 }) {
   const navigate = useNavigate();
-  const experimentHref = `${scopeHref}/experiments/${encodeURIComponent(data.experiment.id)}`;
+  const experimentHref = `${scopeHref}/experiments/${experimentKeyRouteRef(data.experiment.key)}`;
   const goTo = (next: ExperimentDraftStep) =>
     navigate({ href: `${experimentHref}/draft?step=${next}` });
 
   return (
     <Card className="mx-auto w-full max-w-3xl">
       <CardHeader>
+        <ActiveEnvironmentBadge env={scope.env} />
         <CardDescription>
           Draft Experiment · {data.experiment.name} · Flag {data.flag.name}
         </CardDescription>

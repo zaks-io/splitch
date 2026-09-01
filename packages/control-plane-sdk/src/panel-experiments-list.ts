@@ -19,6 +19,8 @@ export interface PanelExperimentHealth {
 
 export interface PanelExperimentListItem {
   id: string;
+  /** Stable Experiment identity shared by corresponding rows across Environments. */
+  key: string;
   name: string;
   status: "draft" | "running" | "ended";
   flag: { id: string; name: string };
@@ -43,6 +45,7 @@ function parsePanelExperimentItem(input: unknown): PanelExperimentListItem | nul
   if (!isObject(input) || !isObject(input.flag)) return null;
   if (
     !isNonEmptyString(input.id) ||
+    !isNonEmptyString(input.key) ||
     !isNonEmptyString(input.name) ||
     !isLifecycle(input.status) ||
     !isNonEmptyString(input.flag.id) ||
@@ -56,6 +59,7 @@ function parsePanelExperimentItem(input: unknown): PanelExperimentListItem | nul
   if (input.health !== null && health === null) return null;
   return {
     id: input.id,
+    key: input.key,
     name: input.name,
     status: input.status,
     flag: { id: input.flag.id, name: input.flag.name },

@@ -87,6 +87,7 @@ function flagsClient(readTruncated: boolean): Pick<FlagsClient, "list"> {
 function experimentsClient() {
   const item: PanelExperimentListItem = {
     id: "experiment_checkout",
+    key: "checkout-copy",
     name: "New Checkout",
     status: "running",
     flag: { id: "flag_checkout", name: "New Checkout" },

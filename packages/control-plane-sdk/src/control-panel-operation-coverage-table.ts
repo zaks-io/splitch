@@ -97,6 +97,10 @@ export const OPERATION_ROUTES: OperationCoverage = {
     route: { method: "POST", pathname: "/control-panel/experiments/results" },
     operation: { id: "experiments_results" },
   },
+  experiments_route_resolution: {
+    route: { method: "POST", pathname: "/control-panel/experiments/resolve-route" },
+    operation: { id: "experiments_route_resolution" },
+  },
   experiments_create: {
     route: { method: "POST", pathname: `/apps/${APP}/envs/${ENV}/experiments` },
     operation: { id: "experiments_create", appId: APP, environmentId: ENV },

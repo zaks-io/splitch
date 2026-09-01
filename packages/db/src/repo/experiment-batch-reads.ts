@@ -1,4 +1,4 @@
-import { and, eq, inArray, ne } from "drizzle-orm";
+import { and, eq, inArray, ne, or } from "drizzle-orm";
 import { experiments, runs } from "../schema/index";
 import { idBatches, twoAxisIdBatches } from "./id-batches";
 import type { EnvScope, TenantScope } from "./scope";
@@ -9,6 +9,47 @@ export function makeExperimentBatchReads(
   runsTable: ScopedTable<typeof runs>,
 ) {
   return {
+    async findExperimentsByReferenceAcrossEnvironments(
+      scope: TenantScope,
+      environmentIds: readonly string[],
+      experimentRef: string,
+    ) {
+      return readEnvironmentBatches(environmentIds, (batch) =>
+        experimentsTable.findManyAcrossEnvironments(
+          scope,
+          batch,
+          and(
+            ne(experiments.status, "archived"),
+            or(eq(experiments.id, experimentRef), eq(experiments.key, experimentRef)),
+          ),
+        ),
+      );
+    },
+
+    async findExperimentsByKeyAcrossEnvironments(
+      scope: TenantScope,
+      environmentIds: readonly string[],
+      experimentKey: string,
+    ) {
+      return readEnvironmentBatches(environmentIds, (batch) =>
+        experimentsTable.findManyAcrossEnvironments(
+          scope,
+          batch,
+          and(ne(experiments.status, "archived"), eq(experiments.key, experimentKey)),
+        ),
+      );
+    },
+
+    async findRunsByIdAcrossEnvironments(
+      scope: TenantScope,
+      environmentIds: readonly string[],
+      runId: string,
+    ) {
+      return readEnvironmentBatches(environmentIds, (batch) =>
+        runsTable.findManyAcrossEnvironments(scope, batch, eq(runs.id, runId)),
+      );
+    },
+
     async listExperimentsByIds(scope: EnvScope, experimentIds: readonly string[]) {
       if (experimentIds.length === 0) return [] as (typeof experiments.$inferSelect)[];
       const pages = await Promise.all(
@@ -60,4 +101,13 @@ export function makeExperimentBatchReads(
       return pages.flat();
     },
   };
+}
+
+async function readEnvironmentBatches<T>(
+  environmentIds: readonly string[],
+  read: (batch: string[]) => Promise<T[]>,
+): Promise<T[]> {
+  const rows: T[] = [];
+  for (const batch of idBatches(environmentIds)) rows.push(...(await read(batch)));
+  return rows;
 }

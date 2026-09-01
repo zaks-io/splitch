@@ -2,8 +2,8 @@ import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import {
-  appSectionRegistry,
   appHomeHref,
+  appSectionRegistry,
   deferredDestinationAt,
   environmentSwitchHref,
   type NavigationDestination,
@@ -192,6 +192,16 @@ describe("App shell navigation", () => {
         "prod",
       ),
     ).toBe("/acme-labs/checkout-api/prod/flags/flag_1?tab=rules#rollout");
+  });
+
+  it("keeps the stable Experiment key but drops an Environment-specific Run", () => {
+    expect(
+      environmentSwitchHref(
+        "/acme-labs/checkout-api/dev/experiments/~checkout-copy/runs/run_dev/results?metric=signup#lift",
+        scope,
+        "prod",
+      ),
+    ).toBe("/acme-labs/checkout-api/prod/experiments/~checkout-copy/results?metric=signup#lift");
   });
 
   it("fails closed to the next scope root when the current URL contradicts the scope", () => {

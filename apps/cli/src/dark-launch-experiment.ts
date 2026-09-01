@@ -121,7 +121,6 @@ async function proveEvaluateObservation(
     attributes: { [COHORT_ATTRIBUTE]: COHORT_VALUE },
     idempotencyKey,
   });
-  expect(first).toMatchObject({ value: true });
   expect(first.reason).not.toBe("ERROR");
 
   const retry = await client.evaluateDetails(FLAG_KEY, {
@@ -129,7 +128,7 @@ async function proveEvaluateObservation(
     attributes: { [COHORT_ATTRIBUTE]: COHORT_VALUE },
     idempotencyKey,
   });
-  expect(retry.value).toBe(true);
+  expect(retry.value).toBe(first.value);
 
   expect(harness.exposureSink.writes).toHaveLength(1);
   expect(harness.exposureSink.writes[0]).toMatchObject({

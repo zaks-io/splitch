@@ -8,6 +8,7 @@ describe("panel experiments binding transport", () => {
         items: [
           {
             id: "exp_1",
+            key: "checkout",
             name: "Checkout",
             status: "running",
             flag: { id: "flag_1", name: "Checkout Flag" },
@@ -28,7 +29,10 @@ describe("panel experiments binding transport", () => {
       environmentId: "env_1",
     });
 
-    expect(result).toMatchObject({ ok: true, data: { items: [{ liveRunId: "run_1" }] } });
+    expect(result).toMatchObject({
+      ok: true,
+      data: { items: [{ key: "checkout", liveRunId: "run_1" }] },
+    });
     expect(String(fetcher.mock.calls[0]?.[0])).toBe(
       "https://control-plane.internal/control-panel/experiments/list",
     );
@@ -40,6 +44,7 @@ describe("panel experiments binding transport", () => {
       Response.json({
         experiment: {
           id: "exp_1",
+          key: "checkout",
           name: "Checkout",
           description: "",
           owner: "",
@@ -83,13 +88,48 @@ describe("panel experiments binding transport", () => {
         // A Run freezes resolved Targeting Rules, never the Segment references
         // behind them, so dropping this here would make staged references
         // unreadable everywhere in the Panel.
-        experiment: { id: "exp_1", draftSegmentIds: ["segment_paid"] },
+        experiment: { id: "exp_1", key: "checkout", draftSegmentIds: ["segment_paid"] },
         runs: [{ runNumber: 2 }],
       },
     });
     expect(String(fetcher.mock.calls[0]?.[0])).toBe(
       "https://control-plane.internal/control-panel/experiments/detail",
     );
+  });
+
+  it("resolves an Experiment route with its stable key and owning Environment", async () => {
+    const fetcher = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) =>
+      Response.json({
+        kind: "run_elsewhere",
+        env: "prod",
+        experimentId: "exp_prod",
+        experimentKey: "checkout",
+        runId: "run_prod",
+      }),
+    );
+
+    const result = await createPanelExperimentsClient({ fetch: fetcher }).resolveRoute({
+      appId: "app_1",
+      targetEnvironmentId: "env_dev",
+      experimentRef: "exp_dev",
+      referenceKind: "legacy",
+      runId: "run_prod",
+    });
+
+    expect(result).toMatchObject({
+      ok: true,
+      data: { kind: "run_elsewhere", env: "prod", experimentKey: "checkout" },
+    });
+    expect(String(fetcher.mock.calls[0]?.[0])).toBe(
+      "https://control-plane.internal/control-panel/experiments/resolve-route",
+    );
+    expect(JSON.parse(String(fetcher.mock.calls[0]?.[1]?.body))).toEqual({
+      appId: "app_1",
+      targetEnvironmentId: "env_dev",
+      experimentRef: "exp_dev",
+      referenceKind: "legacy",
+      runId: "run_prod",
+    });
   });
 
   /**

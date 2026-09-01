@@ -40,6 +40,8 @@ export interface PanelExperimentRun {
 
 export interface PanelExperimentDetail {
   id: string;
+  /** Stable Experiment identity shared by corresponding rows across Environments. */
+  key: string;
   name: string;
   description: string;
   owner: string;
@@ -190,6 +192,7 @@ function parsePanelExperimentDetail(input: unknown): PanelExperimentDetail | nul
   if (
     !isObject(input) ||
     !isNonEmptyString(input.id) ||
+    !isNonEmptyString(input.key) ||
     !isNonEmptyString(input.name) ||
     typeof input.description !== "string" ||
     typeof input.owner !== "string" ||
@@ -216,6 +219,7 @@ function parsePanelExperimentDetail(input: unknown): PanelExperimentDetail | nul
   }
   return {
     id: input.id,
+    key: input.key,
     name: input.name,
     description: input.description,
     owner: input.owner,

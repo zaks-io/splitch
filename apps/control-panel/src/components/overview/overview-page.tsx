@@ -1,19 +1,22 @@
 import type { AppOverviewResponse } from "@splitch/contracts";
-import { isCalmOverview } from "#lib/overview/overview-view";
+import { ActiveEnvironmentBadge } from "#components/environments/active-environment-badge";
 import { OverviewCalmState } from "#components/overview/overview-calm-state";
 import { OverviewDecisionCard } from "#components/overview/overview-decision-card";
 import { OverviewEnvironmentCard } from "#components/overview/overview-environment-card";
 import { OverviewFailureCard } from "#components/overview/overview-failure-card";
 import { OverviewFlagChangesCard } from "#components/overview/overview-flag-changes-card";
 import { OverviewNoDataCard } from "#components/overview/overview-no-data-card";
+import { isCalmOverview } from "#lib/overview/overview-view";
 
 export function OverviewPage({
   env,
+  guarded = false,
   onRetry,
   overview,
   scopeHref,
 }: {
   env: string;
+  guarded?: boolean;
   onRetry: () => void;
   overview: AppOverviewResponse;
   scopeHref: string;
@@ -29,9 +32,7 @@ export function OverviewPage({
   return (
     <section aria-labelledby="overview-title" className="grid gap-6" data-overview="ready">
       <header className="grid gap-2">
-        <p className="font-mono text-muted-foreground text-xs uppercase tracking-[0.16em]">
-          {env} Environment
-        </p>
+        <ActiveEnvironmentBadge env={env} guarded={guarded} />
         <h1 className="font-semibold text-3xl text-foreground tracking-tight" id="overview-title">
           Overview
         </h1>

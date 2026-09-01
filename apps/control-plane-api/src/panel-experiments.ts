@@ -67,6 +67,7 @@ export async function panelExperimentsList(
       if (!flagName) throw new Error(`Experiment ${experiment.id} references a missing Flag`);
       return {
         id: experiment.id,
+        key: experiment.key,
         name: experiment.name,
         status: experiment.status,
         flag: { id: experiment.flagId, name: flagName },
@@ -111,6 +112,7 @@ export async function panelExperimentDetail(
   return Response.json({
     experiment: {
       id: row.id,
+      key: row.key,
       name: row.name,
       description: row.description ?? "",
       owner: row.owner ?? "",
