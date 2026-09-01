@@ -27,7 +27,7 @@ type DeleteFailure = Extract<PanelAppDeleteResult, { ok: false }>;
 
 export type AppDeleteSettlementResult =
   | DeleteFailure
-  | (DeleteFailure & { readonly appDeleted: true })
+  | (DeleteFailure & { readonly appDeleted: true; readonly sessionResync: SessionResync })
   | (DeleteFailure & { readonly deleteIndeterminate: true })
   | (Extract<PanelAppDeleteResult, { ok: true }> & {
       readonly sessionResync: SessionResync;
@@ -38,17 +38,18 @@ export async function settleAppMutation<T>(
   resync: () => Promise<void>,
 ): Promise<AppSettingsMutationResult<T>> {
   if (!result.ok) return result;
+  return { ...result, sessionResync: await settleSessionResync(resync) };
+}
+
+async function settleSessionResync(resync: () => Promise<void>): Promise<SessionResync> {
   try {
     await resync();
-    return { ...result, sessionResync: { ok: true } };
+    return { ok: true };
   } catch (cause) {
     return {
-      ...result,
-      sessionResync: {
-        ok: false,
-        reason: cause instanceof Error ? cause.message : "the session could not be refreshed",
-        remedy: resyncRemedy(cause),
-      },
+      ok: false,
+      reason: cause instanceof Error ? cause.message : "the session could not be refreshed",
+      remedy: resyncRemedy(cause),
     };
   }
 }
@@ -74,20 +75,20 @@ async function settleAppDeleteFailure(
   resume: () => Promise<PanelAppDeleteResult>,
   resync: () => Promise<void>,
 ): Promise<AppDeleteSettlementResult> {
-  if (!shouldResumeDelete(result)) return committedDeleteFailure(result);
+  if (!shouldResumeDelete(result)) return committedDeleteFailure(result, resync);
 
   let resumed: PanelAppDeleteResult;
   try {
     resumed = await resume();
   } catch {
     return deleteCommitted(result)
-      ? { ...result, appDeleted: true }
+      ? committedDeleteFailure(result, resync)
       : { ...result, deleteIndeterminate: true };
   }
   if (!resumed.ok) {
     const combined = combinePartialDelete(result, resumed);
     return deleteCommitted(result) || deleteCommitted(resumed)
-      ? { ...combined, appDeleted: true }
+      ? committedDeleteFailure(combined, resync)
       : combined;
   }
   if (resumed.data.deleted !== true) return result;
@@ -110,10 +111,16 @@ function deleteCommitted(result: DeleteFailure): boolean {
   return errorDetail(result, "mutationCommitted") === true;
 }
 
-function committedDeleteFailure(
+async function committedDeleteFailure(
   result: DeleteFailure,
-): DeleteFailure | (DeleteFailure & { readonly appDeleted: true }) {
-  return deleteCommitted(result) ? { ...result, appDeleted: true } : result;
+  resync: () => Promise<void>,
+): Promise<
+  | DeleteFailure
+  | (DeleteFailure & { readonly appDeleted: true; readonly sessionResync: SessionResync })
+> {
+  return deleteCommitted(result)
+    ? { ...result, appDeleted: true, sessionResync: await settleSessionResync(resync) }
+    : result;
 }
 
 function combinePartialDelete(original: DeleteFailure, latest: DeleteFailure): DeleteFailure {

@@ -166,17 +166,24 @@ export async function resolveNavigation(
 ): Promise<ScopeNavigation> {
   return {
     orgs: await Promise.all(
-      session.orgs.map(async (membership) => ({
-        orgId: membership.orgId,
-        orgSlug: membership.orgSlug,
-        apps: await Promise.all(
+      session.orgs.map(async (membership) => {
+        const apps = await Promise.all(
           membership.apps.map(async (candidate) => ({
             appId: candidate.appId,
             appSlug: candidate.appSlug,
             environments: await resolver.listEnvironments(candidate.appId),
           })),
-        ),
-      })),
+        );
+        return {
+          orgId: membership.orgId,
+          orgSlug: membership.orgSlug,
+          // Session snapshots live in eventually consistent KV. The D1-backed
+          // Environment read is the current reachability check, so a deleted
+          // App must not remain as a dead navigation destination while the old
+          // snapshot is still visible at this edge location.
+          apps: apps.filter((app) => app.environments.length > 0),
+        };
+      }),
     ),
   };
 }

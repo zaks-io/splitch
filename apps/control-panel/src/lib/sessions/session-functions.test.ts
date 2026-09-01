@@ -1,10 +1,10 @@
 import { applySchema, migrationStatements } from "@splitch/db/test-d1";
 import { Miniflare } from "miniflare";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { ControlPanelBindings } from "#lib/shared/bindings";
 import { markPendingResync, readPendingResync } from "#lib/live-updates/pending-resync";
 import { refreshSession, SESSION_COOKIE_NAME, type StoredSession } from "#lib/sessions/session";
 import { tokenHash as hashOpaqueToken } from "#lib/sessions/session-cookie";
+import type { ControlPanelBindings } from "#lib/shared/bindings";
 
 // `session-functions.ts` imports the Cloudflare Workers runtime module at
 // the top level for the exported `loadCurrentSession` server function; it is
@@ -68,6 +68,34 @@ function requestWithSessionCookie(): Request {
 }
 
 describe("loadPanelNavigationForRequest", () => {
+  it("does not render a deleted App from an eventually consistent session snapshot", async () => {
+    await seedOrganization(bindings.DB, "org_000", "org-000");
+    await refreshSession(bindings.SESSION_STORE, tokenHash, {
+      version: 2,
+      userId: "user_cap",
+      workosSessionId: "session_cap",
+      expiresAt: Math.floor(Date.now() / 1000) + 3_600,
+      orgs: [
+        {
+          orgId: "org_000",
+          orgSlug: "org-000",
+          orgRole: "owner",
+          isProvisional: false,
+          demoExpiresAt: null,
+          apps: [{ appId: "app_deleted", appSlug: "deleted-app", role: "owner" }],
+        },
+      ],
+    });
+
+    const result = await loadPanelNavigationForRequest(bindings, requestWithSessionCookie());
+
+    if (result.kind !== "authenticated") {
+      throw new Error(`expected kind "authenticated", got "${result.kind}"`);
+    }
+    expect(result.session.orgs[0]?.apps.map((app) => app.appSlug)).toEqual(["deleted-app"]);
+    expect(result.navigation.orgs[0]?.apps).toEqual([]);
+  }, 20_000);
+
   it("re-attempts a pending Organization resync before resolving navigation, so Organization screens do not render stale navigation forever", async () => {
     await seedOrganization(bindings.DB, "org_000", "org-000");
     const stale: StoredSession = {
