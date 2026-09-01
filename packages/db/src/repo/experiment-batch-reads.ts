@@ -9,39 +9,45 @@ export function makeExperimentBatchReads(
   runsTable: ScopedTable<typeof runs>,
 ) {
   return {
-    findExperimentsByReferenceAcrossEnvironments(
+    async findExperimentsByReferenceAcrossEnvironments(
       scope: TenantScope,
       environmentIds: readonly string[],
       experimentRef: string,
     ) {
-      return experimentsTable.findManyAcrossEnvironments(
-        scope,
-        environmentIds,
-        and(
-          ne(experiments.status, "archived"),
-          or(eq(experiments.id, experimentRef), eq(experiments.key, experimentRef)),
+      return readEnvironmentBatches(environmentIds, (batch) =>
+        experimentsTable.findManyAcrossEnvironments(
+          scope,
+          batch,
+          and(
+            ne(experiments.status, "archived"),
+            or(eq(experiments.id, experimentRef), eq(experiments.key, experimentRef)),
+          ),
         ),
       );
     },
 
-    findExperimentsByKeyAcrossEnvironments(
+    async findExperimentsByKeyAcrossEnvironments(
       scope: TenantScope,
       environmentIds: readonly string[],
       experimentKey: string,
     ) {
-      return experimentsTable.findManyAcrossEnvironments(
-        scope,
-        environmentIds,
-        and(ne(experiments.status, "archived"), eq(experiments.key, experimentKey)),
+      return readEnvironmentBatches(environmentIds, (batch) =>
+        experimentsTable.findManyAcrossEnvironments(
+          scope,
+          batch,
+          and(ne(experiments.status, "archived"), eq(experiments.key, experimentKey)),
+        ),
       );
     },
 
-    findRunsByIdAcrossEnvironments(
+    async findRunsByIdAcrossEnvironments(
       scope: TenantScope,
       environmentIds: readonly string[],
       runId: string,
     ) {
-      return runsTable.findManyAcrossEnvironments(scope, environmentIds, eq(runs.id, runId));
+      return readEnvironmentBatches(environmentIds, (batch) =>
+        runsTable.findManyAcrossEnvironments(scope, batch, eq(runs.id, runId)),
+      );
     },
 
     async listExperimentsByIds(scope: EnvScope, experimentIds: readonly string[]) {
@@ -95,4 +101,13 @@ export function makeExperimentBatchReads(
       return pages.flat();
     },
   };
+}
+
+async function readEnvironmentBatches<T>(
+  environmentIds: readonly string[],
+  read: (batch: string[]) => Promise<T[]>,
+): Promise<T[]> {
+  const rows: T[] = [];
+  for (const batch of idBatches(environmentIds)) rows.push(...(await read(batch)));
+  return rows;
 }
