@@ -9,8 +9,8 @@ export type {
   HttpMethod,
   IdempotencyMode,
   PublicSurface,
-  RawBodyByteLimit,
   RateLimitClass,
+  RawBodyByteLimit,
   RouteContract,
   RouteOwner,
 } from "../route-contract";
@@ -32,9 +32,9 @@ export {
   publicSurfaceFor,
   publicSurfaces,
   RateLimitClassSchema,
-  rawBodyByteLimitFor,
   RouteOwnerSchema,
   rateLimitClasses,
+  rawBodyByteLimitFor,
   routeOwners,
 } from "../route-contract";
 export {
@@ -42,6 +42,7 @@ export {
   mountedOperationIds,
   operationIds,
   routeRegistry,
+  routesBindingOnlyTo,
   routesDelegatedBy,
   routesDelegatedTo,
   routesMountedBy,

@@ -43,7 +43,7 @@ export function buildOpenApiDocument(
 ): ReturnType<OpenAPIHono["getOpenAPI31Document"]> {
   const app = new OpenAPIHono();
   for (const route of routeRegistry) {
-    if (publicSurfaceFor(route) === null) continue;
+    if (publicSurfaceFor(route) === null || route.exposure !== "public") continue;
     app.openapi(route.openapi, unusedHandler);
   }
   return app.getOpenAPI31Document({

@@ -1,4 +1,5 @@
 import { z } from "@hono/zod-openapi";
+import { HeldScopeSchema } from "../held-scope";
 import { OrganizationMemberSchema } from "../leaf-schemas-runtime";
 import { type ApiRouteContract, defineApiRoute } from "../openapi-route";
 import {
@@ -7,13 +8,13 @@ import {
   PatchOrganizationRequestSchema,
 } from "../resource-envelopes-account";
 import { listResponse } from "../wire-envelopes-core";
-import { appEnvironmentRoutes } from "./routes-app-environment";
 import {
   AddMemberRequestSchema,
   OrgMemberParams,
   OrgParams,
   UpdateMemberRequestSchema,
 } from "./route-shapes";
+import { appEnvironmentRoutes } from "./routes-app-environment";
 
 /**
  * Organization, member, App, and Environment management routes — all on the
@@ -26,6 +27,12 @@ const AUTH = "control-plane-token" as const;
 const RATE = "control-plane-actor" as const;
 
 const OrgListResponse = listResponse(OrganizationResponseSchema);
+const PrincipalCapabilitiesResponse = z
+  .object({
+    scopes: z.array(HeldScopeSchema),
+    membershipWideRead: z.boolean(),
+  })
+  .strict();
 const MemberListResponse = listResponse(OrganizationMemberSchema);
 const MemberResponse = OrganizationMemberSchema;
 const MemberUpdateResponse = OrganizationMemberSchema;
@@ -39,6 +46,19 @@ const organizationRoutes = [
     path: "/orgs",
     summary: "List organizations the token can reach (agent cold-start entry).",
     response: OrgListResponse,
+    auth: AUTH,
+    rateLimit: RATE,
+    idempotency: "none",
+    errors: [],
+  }),
+  defineApiRoute({
+    operationId: "principal_capabilities_get",
+    owner: OWNER,
+    method: "GET",
+    path: "/principal/capabilities",
+    summary: "Read the principal's effective live Control Plane authority.",
+    exposure: "mcp-binding",
+    response: PrincipalCapabilitiesResponse,
     auth: AUTH,
     rateLimit: RATE,
     idempotency: "none",

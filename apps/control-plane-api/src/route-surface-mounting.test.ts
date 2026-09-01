@@ -1,4 +1,4 @@
-import { mountedOperationIds, routesMountedBy } from "@splitch/contracts";
+import { mountedOperationIds, routesMountedBy, routesSurfacedBy } from "@splitch/contracts";
 import type { Repository } from "@splitch/db";
 import type { AuthResolver, RateLimiter } from "@splitch/worker-runtime";
 import { describe, expect, it } from "vitest";
@@ -20,6 +20,15 @@ describe("control-plane-api mounts exactly the routes addressed at its hostname"
 
     expect([...mountedOperationIds(createApp(stubDeps()).routes)].sort()).toEqual(
       [...expected].sort(),
+    );
+  });
+
+  it("does not mount MCP binding routes on the public door", () => {
+    const mounted = mountedOperationIds(createApp({ ...stubDeps(), door: "public" }).routes);
+
+    expect(mounted).not.toContain("principal_capabilities_get");
+    expect([...mounted].sort()).toEqual(
+      [...routesSurfacedBy("control-plane-api").map((route) => route.operationId)].sort(),
     );
   });
 });

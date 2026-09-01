@@ -39,6 +39,7 @@ import { mountLiveUpdateRoute } from "./live-updates";
 import { makeMetricSegmentHandlers } from "./metric-segment-handlers";
 import type { MemberProfileResolver } from "./org-handlers";
 import { makePathSelectorResolver } from "./path-selector-resolution";
+import { getPrincipalCapabilities } from "./principal-capabilities-handler";
 import { controlPlaneRoute } from "./routes";
 import type { SentryHandlerDeps } from "./sentry-handlers";
 import { mountSentryRoutes } from "./sentry-route-mounting";
@@ -223,6 +224,9 @@ export function createApp(deps: AppDeps): Hono {
   );
   registrar.mount(app, controlPlaneRoute("organizations_get"), handlers.getOrg);
   registrar.mount(app, controlPlaneRoute("organizations_list"), handlers.listOrganizations);
+  if (deps.door === "binding") {
+    registrar.mount(app, controlPlaneRoute("principal_capabilities_get"), getPrincipalCapabilities);
+  }
   registrar.mount(app, controlPlaneRoute("organizations_create"), handlers.createOrganization);
   registrar.mount(app, controlPlaneRoute("organizations_update"), handlers.updateOrg);
   registrar.mount(app, controlPlaneRoute("organization_members_list"), handlers.listMembers);

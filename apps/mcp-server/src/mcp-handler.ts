@@ -8,10 +8,12 @@ import {
   jsonRpcResult,
 } from "./json-rpc";
 import {
+  delegationActor,
   type McpAccessTokenActor,
   type McpAccessTokenVerifier,
   makeHttpMcpAccessTokenVerifier,
 } from "./mcp-access-token";
+import type { McpEffectiveAuthority } from "./mcp-capabilities";
 import { localMcpFaultReporter, type McpFaultReporter } from "./mcp-fault";
 import { createControlPlaneOperationSdk, type OperationSdkResolver } from "./mcp-operation-sdks";
 import { PROMPT_DEFINITIONS } from "./mcp-prompt-types";
@@ -218,6 +220,7 @@ async function dispatchMethod(
       authBaseUrl: authIssuer(options.authBaseUrl, options.platformTarget),
       fetchAuthMarkdown: options.fetchAuthMarkdown,
       reportFault: fault.reportFault,
+      resolveCapabilities: () => resolveCapabilities(controlPlane, actor),
     });
   }
   if (request.method === "prompts/list") {
@@ -242,6 +245,21 @@ async function dispatchMethod(
     );
   }
   return jsonRpcError(id, JSON_RPC_METHOD_NOT_FOUND, "Method not found");
+}
+
+async function resolveCapabilities(
+  controlPlane: OperationSdkResolver,
+  actor: McpAccessTokenActor,
+): Promise<McpEffectiveAuthority> {
+  const result = await controlPlane().callOperationById(
+    "principal_capabilities_get",
+    {},
+    { delegation: delegationActor(actor) },
+  );
+  if (!result.ok) {
+    throw new Error(`mcp-server: capability resolution failed with ${result.error.code}`);
+  }
+  return result.data as McpEffectiveAuthority;
 }
 
 function authIssuer(configured: string | undefined, platformTarget: string | undefined): string {

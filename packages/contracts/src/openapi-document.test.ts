@@ -15,7 +15,9 @@ import { routeRegistry } from "./route-registry";
  */
 
 const doc = buildOpenApiDocument();
-const publicRoutes = routeRegistry.filter((route) => publicSurfaceFor(route) !== null);
+const publicRoutes = routeRegistry.filter(
+  (route) => route.exposure === "public" && publicSurfaceFor(route) !== null,
+);
 
 /** Collect every (operationId, path, method) the emitted document advertises. */
 function documentOperations(): { operationId: string; path: string; method: string }[] {
@@ -143,6 +145,12 @@ describe("openapi document: full route coverage", () => {
           operationId === "entity_assignment_privacy_delete",
       ),
     }).toEqual({ internalPaths: [], cleanupOperations: [] });
+  });
+
+  it("does not publish the MCP binding authority route", () => {
+    expect(documentOperations()).not.toContainEqual(
+      expect.objectContaining({ operationId: "principal_capabilities_get" }),
+    );
   });
 
   it("emits only the error codes declared by each route", () => {

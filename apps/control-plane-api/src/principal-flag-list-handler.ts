@@ -12,18 +12,20 @@ import type { FlagDefinitionDeps } from "./flag-definition-handler-utils";
 import { composeHydratedFlags, FlagConfigurationMissingError } from "./flag-definition-hydration";
 import { flagFrom } from "./flag-definition-model";
 import { optionalQueryParam } from "./handler-input";
+import { FLAG_LIST_READ_LIMIT } from "./overview-thresholds";
 import {
   EnvironmentSelectorMissError,
   resolveEnvironmentSelectors,
 } from "./principal-environment-selectors";
-import { FLAG_LIST_READ_LIMIT } from "./overview-thresholds";
+import { membershipClaimsInScopes } from "./scope-binding";
 
 /** Every readable Flag across the live membership set, bounded globally. */
 export async function listPrincipalFlags(
   deps: FlagDefinitionDeps,
   { input, principal, requestId }: HandlerArgs<unknown>,
 ): Promise<Response> {
-  if (principal.authorization !== MEMBERSHIP_WIDE_READ_AUTHORIZATION) {
+  const appIds = principalAppIds(principal);
+  if (!appIds) {
     return renderError(
       {
         code: "FORBIDDEN",
@@ -34,10 +36,6 @@ export async function listPrincipalFlags(
     );
   }
 
-  const memberships = requireWideMemberships(principal);
-  // resolveBearerMemberships establishes this boundary through
-  // listAppMembershipsWithAppForUser; this is already the principal's live App set.
-  const appIds = memberships.apps.map((membership) => membership.id);
   const scope = multiAppScope(appIds);
   const [descriptors, scanned] = await Promise.all([
     deps.repo.flags.listAppDescriptors(scope),
@@ -81,6 +79,16 @@ export async function listPrincipalFlags(
   }
 
   return Response.json({ ...page, items: composed });
+}
+
+function principalAppIds(principal: HandlerArgs<unknown>["principal"]): string[] | null {
+  if (principal.authorization === MEMBERSHIP_WIDE_READ_AUTHORIZATION) {
+    return requireWideMemberships(principal).apps.map((membership) => membership.id);
+  }
+  if (!principal.liveMembership) return null;
+  return membershipClaimsInScopes(principal.scopes)
+    .filter((claim) => claim.axis === "app")
+    .map((claim) => claim.id);
 }
 
 async function hydratedItems(

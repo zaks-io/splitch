@@ -235,6 +235,7 @@ async function handleRequest(
     ctx,
     authResolver,
     repo,
+    door: authMode === "none" ? "public" : "binding",
     delegated: typeof authMode === "object",
   });
 }

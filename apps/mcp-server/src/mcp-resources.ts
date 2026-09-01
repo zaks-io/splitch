@@ -7,7 +7,7 @@ import {
   jsonRpcResult,
 } from "./json-rpc";
 import type { McpAccessTokenActor } from "./mcp-access-token";
-import { buildCapabilitiesResource } from "./mcp-capabilities";
+import { buildCapabilitiesResource, type McpEffectiveAuthority } from "./mcp-capabilities";
 import type { McpFaultReporter } from "./mcp-fault";
 import { CONTEXT_MD, QUICKSTART_MD } from "./mcp-resource-files.generated";
 import type { McpSessionContext, McpSessionStore } from "./mcp-session-context";
@@ -49,6 +49,7 @@ interface ReadMcpResourceContext {
   readonly authBaseUrl: string;
   readonly fetchAuthMarkdown?: (authBaseUrl: string) => Promise<string>;
   readonly reportFault: McpFaultReporter;
+  readonly resolveCapabilities: () => Promise<McpEffectiveAuthority>;
 }
 
 interface ReadMcpResourceOptions extends ReadMcpResourceContext {
@@ -133,7 +134,14 @@ async function readMcpResource(
         await buildActiveContext(options.sessionId, options.sessionStore, options.actor.subject),
       );
     case "splitch://capabilities":
-      return jsonResource("splitch://capabilities", buildCapabilitiesResource(options.actor));
+      return jsonResource(
+        "splitch://capabilities",
+        buildCapabilitiesResource(
+          options.actor.liveMembership
+            ? await options.resolveCapabilities()
+            : { scopes: options.actor.scopes, membershipWideRead: false },
+        ),
+      );
     default:
       return null;
   }

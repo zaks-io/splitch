@@ -61,13 +61,16 @@ export const unavailableControlPlaneOperationIds = [
 ] as const;
 
 const UNAVAILABLE_CONTROL_PLANE_OPERATIONS = new Set<string>(unavailableControlPlaneOperationIds);
+const INTERNAL_CONTROL_PLANE_OPERATIONS = new Set<string>(["principal_capabilities_get"]);
 
 export type UnavailableControlPlaneOperationId =
   (typeof unavailableControlPlaneOperationIds)[number];
 
 export function isMcpToolRoute(route: ApiRouteContract): boolean {
   return (
-    route.auth === MCP_AUTH_KIND && !UNAVAILABLE_CONTROL_PLANE_OPERATIONS.has(route.operationId)
+    route.auth === MCP_AUTH_KIND &&
+    !UNAVAILABLE_CONTROL_PLANE_OPERATIONS.has(route.operationId) &&
+    !INTERNAL_CONTROL_PLANE_OPERATIONS.has(route.operationId)
   );
 }
 
@@ -216,11 +219,43 @@ export function deriveMcpTools(): readonly McpToolDefinition[] {
 }
 
 export function deriveMcpProtocolTools(): readonly McpProtocolToolDefinition[] {
-  return deriveMcpTools().map((tool) => ({
-    name: tool.name,
-    title: tool.name,
-    description: tool.description,
-    inputSchema: z.toJSONSchema(tool.inputSchema) as Record<string, unknown>,
-    outputSchema: z.toJSONSchema(tool.outputSchema) as Record<string, unknown>,
-  }));
+  return routeRegistry.filter(isMcpToolRoute).map((route) => {
+    const tool = deriveTool(route);
+    return {
+      name: tool.name,
+      title: tool.name,
+      description: tool.description,
+      inputSchema: contextAwareProtocolInputSchema(route, tool.inputSchema),
+      outputSchema: z.toJSONSchema(tool.outputSchema) as Record<string, unknown>,
+    };
+  });
+}
+
+/**
+ * App and Environment path fields are required by the HTTP route but optional
+ * at the MCP protocol boundary because `context_use` can supply them from the
+ * transport session before the shared SDK validates the operation input.
+ */
+function contextAwareProtocolInputSchema(
+  route: ApiRouteContract,
+  schema: z.ZodTypeAny,
+): Record<string, unknown> {
+  const input = z.toJSONSchema(schema) as Record<string, unknown>;
+  const required = Array.isArray(input.required)
+    ? input.required.filter(
+        (field) => typeof field !== "string" || !contextScopeFields(route.path).includes(field),
+      )
+    : undefined;
+  if (required === undefined) return input;
+  if (required.length === 0) {
+    const { required: _required, ...optionalInput } = input;
+    return optionalInput;
+  }
+  return { ...input, required };
+}
+
+function contextScopeFields(path: string): readonly string[] {
+  return ["appId", "environmentId", "targetEnvironmentId"].filter((field) =>
+    path.includes(`:${field}`),
+  );
 }

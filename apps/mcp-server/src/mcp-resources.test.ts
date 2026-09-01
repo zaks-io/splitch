@@ -192,6 +192,40 @@ describe("MCP resource reads", () => {
     });
   });
 
+  it("resolves live AuthKit membership before reporting capabilities", async () => {
+    const response = await mcp(
+      "resources/read",
+      { uri: "splitch://capabilities" },
+      {
+        actor: {
+          subject: "user_live",
+          scopes: [],
+          liveMembership: true,
+          authDoor: "device_flow",
+        },
+        effectiveAuthority: {
+          scopes: ["org:org_live:owner", "app:app_live:admin"],
+          membershipWideRead: true,
+        },
+      },
+    );
+    const body = (await response.json()) as JsonRpcSuccess<{
+      contents: Array<{ text: string }>;
+    }>;
+    const payload = JSON.parse(body.result.contents[0]?.text ?? "{}") as {
+      scopes: string[];
+      tools: Array<{ name: string; grantedBy: string[] }>;
+    };
+
+    expect(payload.scopes).toEqual(["org:org_live:owner", "app:app_live:admin"]);
+    expect(payload.tools.find((tool) => tool.name === "flags_list")?.grantedBy).toEqual([
+      "app:app_live:admin",
+    ]);
+    expect(payload.tools.find((tool) => tool.name === "principal_flags_list")?.grantedBy).toEqual([
+      "membership-wide-read",
+    ]);
+  });
+
   it("performs zero writes while reading every resource", async () => {
     const sessionStore = trackingSessionStore();
     const sessionId = await initializeSession(sessionStore, anonymousActor);
