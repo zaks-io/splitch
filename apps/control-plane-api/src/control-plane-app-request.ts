@@ -25,15 +25,16 @@ export async function handleControlPlaneAppRequest(input: {
   ctx: ExecutionContext;
   authResolver: AuthResolver;
   repo: Repository;
+  door: "public" | "binding";
   delegated: boolean;
 }): Promise<Response> {
-  const { request, env, ctx, authResolver, repo, delegated } = input;
+  const { request, env, ctx, authResolver, repo, door, delegated } = input;
   const configStore = durableConfigStoreAccess(env.CONFIG_STORE_WRITER, env.CONFIG_STORE, {
     repo,
     waitUntil: (promise) => ctx.waitUntil(promise),
   });
   const app = createApp({
-    door: delegated ? "binding" : "public",
+    door,
     authResolver,
     rateLimiter: rateLimiterForTarget(
       env.SPLITCH_PLATFORM_TARGET,

@@ -65,6 +65,7 @@ export interface McpCallOptions {
   sessionId?: string;
   sessionStore?: McpSessionStore;
   actor?: McpAccessTokenActor;
+  effectiveAuthority?: { scopes: string[]; membershipWideRead: boolean };
 }
 
 export async function mcp(
@@ -88,8 +89,18 @@ export async function mcp(
     tokenVerifier: staticMcpTokenVerifier(options.actor ?? DEFAULT_ACTOR),
     revocations: allowMcpRevocations(),
     controlPlaneDelegationSecret: TEST_MCP_DELEGATION_SECRET,
-    controlPlaneFetch: async () =>
-      Response.json({ items: [], readLimit: 200, readTruncated: false, cursor: null }),
+    controlPlaneFetch: async (input) => {
+      const request = input instanceof Request ? input : new Request(input);
+      if (new URL(request.url).pathname === "/principal/capabilities") {
+        return Response.json(
+          options.effectiveAuthority ?? {
+            scopes: options.actor?.scopes ?? DEFAULT_ACTOR.scopes,
+            membershipWideRead: options.actor?.liveMembership === true,
+          },
+        );
+      }
+      return Response.json({ items: [], readLimit: 200, readTruncated: false, cursor: null });
+    },
     sessionContextValidator: async () => ({ ok: true }),
     sessionStore: options.sessionStore ?? trackingSessionStore(),
     fetchAuthMarkdown: async () => authFixture,

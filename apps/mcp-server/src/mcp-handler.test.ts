@@ -11,8 +11,8 @@ import {
   type ProtocolTool,
   type SeenRequest,
   service,
-  toolsListRequest,
   type ToolResult,
+  toolsListRequest,
   updatedFlag,
   useMcpServers,
   validationError,
@@ -123,8 +123,9 @@ describe("mcp server Streamable HTTP transport", () => {
         name: expect.any(Object),
         description: expect.any(Object),
       }),
-      required: expect.arrayContaining(["appId", "flagId"]),
+      required: expect.arrayContaining(["flagId"]),
     });
+    expect(updateTool?.inputSchema.required).not.toContain("appId");
 
     const seen: SeenRequest[] = [];
     const baseUrl = await bootControlPlaneApi(seen);

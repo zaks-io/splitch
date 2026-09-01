@@ -4,7 +4,10 @@ import {
   membershipGatePatterns,
   scopeSatisfiesMembershipGate,
 } from "@splitch/contracts";
-import type { McpAccessTokenActor } from "./mcp-access-token";
+export interface McpEffectiveAuthority {
+  readonly scopes: readonly string[];
+  readonly membershipWideRead: boolean;
+}
 
 interface McpToolCapability {
   readonly name: string;
@@ -17,16 +20,22 @@ interface McpCapabilitiesResource {
   readonly tools: readonly McpToolCapability[];
 }
 
-export function buildCapabilitiesResource(actor: McpAccessTokenActor): McpCapabilitiesResource {
+export function buildCapabilitiesResource(
+  authority: McpEffectiveAuthority,
+): McpCapabilitiesResource {
   const tools = deriveMcpTools().map((tool) => {
     const gate = membershipGatePatterns(getRouteMembershipGate(tool.name));
+    const scopeGrants = authority.scopes.filter((scope) =>
+      gate.some((pattern) => scopeSatisfiesMembershipGate(scope, pattern)),
+    );
     return {
       name: tool.name,
       gate,
-      grantedBy: actor.scopes.filter((scope) =>
-        gate.some((pattern) => scopeSatisfiesMembershipGate(scope, pattern)),
-      ),
+      grantedBy:
+        authority.membershipWideRead && gate.includes("membership-wide-read")
+          ? [...scopeGrants, "membership-wide-read"]
+          : scopeGrants,
     };
   });
-  return { scopes: [...actor.scopes], tools };
+  return { scopes: [...authority.scopes], tools };
 }

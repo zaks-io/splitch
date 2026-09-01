@@ -55,6 +55,8 @@ export interface DefineApiRouteInput {
   /** Hono path; co-scope params are `:appId` / `:environmentId` (ADR-0027). */
   path: string;
   summary: string;
+  /** Which HTTP door may mount this route. Defaults to the public credential surface. */
+  exposure?: "public" | "mcp-binding";
   request?: ApiRouteRequest;
   /** The 200 response body Zod schema. */
   response: z.ZodTypeAny;
@@ -82,6 +84,7 @@ export interface ApiRouteContract<
 > extends RouteContract<Input, Output> {
   operationId: string;
   summary: string;
+  exposure: "public" | "mcp-binding";
   /** The @hono/zod-openapi route definition derived from the same schemas. */
   openapi: RouteConfig;
 }
@@ -206,6 +209,7 @@ export function defineApiRoute<const Input extends DefineApiRouteInput>(input: I
     ...contract,
     operationId: input.operationId,
     summary: input.summary,
+    exposure: input.exposure ?? "public",
     openapi: createRoute({
       method: input.method.toLowerCase() as Lowercase<HttpMethod>,
       path: honoPathToOpenApiPath(input.path) as HonoToOpenApiPath<Input["path"]>,

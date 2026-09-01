@@ -62,4 +62,56 @@ describe("index.ts: MCP delegation entrypoint", () => {
     });
     await expect(missingReplay.fetch(request)).rejects.toThrow("MCP_DELEGATION_REPLAY is required");
   });
+
+  it("lists Flags across the live MCP principal's App memberships", async () => {
+    const request = new Request(`${AUDIENCE}/flags?include=config`);
+    request.headers.set(
+      MCP_DELEGATION_HEADER,
+      await createMcpDelegationHeader({
+        operationId: "principal_flags_list",
+        actor: {
+          subject: OWNER,
+          scopes: [],
+          liveMembership: true,
+          authDoor: "device_flow",
+        },
+        request,
+        secret: MCP_DELEGATION_SECRET,
+        jti: "index-principal-flags-delegation",
+      }),
+    );
+
+    const response = await new McpEntrypoint(testCtx, testEnv).fetch(request);
+    expect(response.status, await response.clone().text()).toBe(200);
+    expect(await response.json()).toMatchObject({
+      items: [{ app: { id: TENANT_A.appId }, id: TENANT_A.flagId }],
+      readTruncated: false,
+    });
+  });
+
+  it("returns effective live scopes for MCP capability discovery", async () => {
+    const request = new Request(`${AUDIENCE}/principal/capabilities`);
+    request.headers.set(
+      MCP_DELEGATION_HEADER,
+      await createMcpDelegationHeader({
+        operationId: "principal_capabilities_get",
+        actor: {
+          subject: OWNER,
+          scopes: [],
+          liveMembership: true,
+          authDoor: "device_flow",
+        },
+        request,
+        secret: MCP_DELEGATION_SECRET,
+        jti: "index-principal-capabilities-delegation",
+      }),
+    );
+
+    const response = await new McpEntrypoint(testCtx, testEnv).fetch(request);
+    expect(response.status, await response.clone().text()).toBe(200);
+    expect(await response.json()).toEqual({
+      scopes: [`app:${TENANT_A.appId}:owner`, `org:${TENANT_A.orgId}:owner`],
+      membershipWideRead: true,
+    });
+  });
 });

@@ -14,6 +14,7 @@ import {
   getRoute,
   operationIds,
   routeRegistry,
+  routesBindingOnlyTo,
   routesDelegatedBy,
   routesDelegatedTo,
   routesMountedBy,
@@ -45,6 +46,7 @@ const CANONICAL_OPERATION_IDS = [
   "organizations_get",
   "organizations_update",
   "organizations_delete",
+  "principal_capabilities_get",
   "organization_members_list",
   "organization_members_add",
   "organization_members_update",
@@ -190,7 +192,6 @@ describe("route registry: canonical coverage", () => {
 
   it("registers a non-trivial number of routes (N > 0)", () => {
     expect(routeRegistry.length).toBe(CANONICAL_OPERATION_IDS.length);
-    expect(routeRegistry.length).toBeGreaterThan(0);
   });
 
   it("exposes a single frozen registry structure", () => {
@@ -355,9 +356,7 @@ describe("route registry: public surface is total over AuthKind", () => {
     for (const worker of routeOwners) {
       const surfaced = ids(routesSurfacedBy(worker));
       const delegated = ids(routesDelegatedTo(worker));
-      const internal = ids(
-        routeRegistry.filter((route) => route.owner === worker && publicSurfaceFor(route) === null),
-      );
+      const internal = ids(routesBindingOnlyTo(worker));
       expect(surfaced.filter((id) => delegated.includes(id))).toEqual([]);
       expect(surfaced.filter((id) => internal.includes(id))).toEqual([]);
       expect([...surfaced, ...delegated, ...internal].sort()).toEqual(ids(routesMountedBy(worker)));

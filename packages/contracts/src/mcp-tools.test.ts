@@ -19,6 +19,7 @@ const toolNames = new Set(tools.map((tool) => tool.name));
 // public OpenAPI discovery doc. Listed explicitly so a future data-plane route
 // leaking into the tool set fails loudly here.
 const NON_TOOL_OPERATION_IDS = [
+  "principal_capabilities_get",
   "sdk_evaluate",
   "sdk_cached_evaluation_telemetry",
   "sdk_peek",
