@@ -107,7 +107,7 @@ async function handleRouteResolution(
     return Response.json(
       {
         code: "VALIDATION_ERROR",
-        message: "appId, targetEnvironmentId, and experimentRef are required",
+        message: "appId, targetEnvironmentId, experimentRef, and referenceKind are required",
         details: {},
       },
       { status: 400 },
@@ -127,6 +127,7 @@ function isPanelExperimentRouteResolutionInput(value: unknown): value is {
   appId: string;
   targetEnvironmentId: string;
   experimentRef: string;
+  referenceKind: "key" | "legacy";
   runId?: string;
 } {
   if (typeof value !== "object" || value === null) return false;
@@ -138,6 +139,7 @@ function isPanelExperimentRouteResolutionInput(value: unknown): value is {
     input.targetEnvironmentId.length > 0 &&
     typeof input.experimentRef === "string" &&
     input.experimentRef.length > 0 &&
+    (input.referenceKind === "key" || input.referenceKind === "legacy") &&
     (input.runId === undefined || (typeof input.runId === "string" && input.runId.length > 0))
   );
 }

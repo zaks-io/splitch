@@ -15,6 +15,39 @@ const ids: PanelExperimentIds = {
 };
 
 describe("panel Experiment route resolution", () => {
+  it("keeps a canonical key distinct from another Experiment's matching ID", async () => {
+    const keyOwner = { ...experimentRow(ids), id: "exp_key_owner", key: "exp_collision" };
+    const idOwner = {
+      ...experimentRow(ids),
+      id: "exp_collision",
+      key: "different-key",
+      environmentId: "env_prod",
+    };
+    const repo = repository({
+      referenced: [keyOwner, idOwner],
+      candidates: [keyOwner],
+      runs: [],
+    });
+
+    const response = await panelExperimentRouteResolution(
+      { repo },
+      {
+        actorId: ids.actorId,
+        appId: ids.appId,
+        targetEnvironmentId: ids.environmentId,
+        experimentRef: "exp_collision",
+        referenceKind: "key",
+      },
+    );
+
+    expect(await response.json()).toEqual({
+      kind: "experiment",
+      experimentId: "exp_key_owner",
+      experimentKey: "exp_collision",
+    });
+    expect(repo.experiments.findExperimentsByReferenceAcrossEnvironments).not.toHaveBeenCalled();
+  });
+
   it("canonicalizes a foreign legacy Experiment ID when the Run is local", async () => {
     const foreign = { ...experimentRow(ids), id: "exp_prod", environmentId: "env_prod" };
     const response = await resolve({
@@ -93,6 +126,7 @@ function resolve(input: {
       appId: ids.appId,
       targetEnvironmentId: ids.environmentId,
       experimentRef: input.experimentRef,
+      referenceKind: "legacy",
       runId: input.runId,
     },
   );

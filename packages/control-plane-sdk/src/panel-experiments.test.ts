@@ -112,6 +112,7 @@ describe("panel experiments binding transport", () => {
       appId: "app_1",
       targetEnvironmentId: "env_dev",
       experimentRef: "exp_dev",
+      referenceKind: "legacy",
       runId: "run_prod",
     });
 
@@ -122,6 +123,13 @@ describe("panel experiments binding transport", () => {
     expect(String(fetcher.mock.calls[0]?.[0])).toBe(
       "https://control-plane.internal/control-panel/experiments/resolve-route",
     );
+    expect(JSON.parse(String(fetcher.mock.calls[0]?.[1]?.body))).toEqual({
+      appId: "app_1",
+      targetEnvironmentId: "env_dev",
+      experimentRef: "exp_dev",
+      referenceKind: "legacy",
+      runId: "run_prod",
+    });
   });
 
   /**

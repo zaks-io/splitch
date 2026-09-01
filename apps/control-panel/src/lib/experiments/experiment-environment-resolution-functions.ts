@@ -11,6 +11,7 @@ const ResolutionInputSchema = z.object({
   appId: z.string().min(1),
   targetEnvironmentId: z.string().min(1),
   experimentRef: z.string().min(1),
+  referenceKind: z.enum(["key", "legacy"]),
   runId: z.string().min(1).optional(),
 });
 

@@ -13,9 +13,9 @@ import {
 import {
   canonicalExperimentHref,
   experimentKeyRouteRef,
-  experimentLookupRef,
   type ExperimentNotFoundData,
   experimentNotFoundData,
+  experimentRouteReference,
 } from "#lib/experiments/experiment-route-navigation";
 import { experimentDetailQuery } from "#lib/experiments/experiments-query";
 import { reportExpectedDomainFailure } from "#lib/observability/panel-observability";
@@ -54,7 +54,7 @@ export async function loadExperimentRoute(input: ExperimentRouteInput) {
     data: {
       appId: input.scoped.scope.appId,
       targetEnvironmentId: input.scoped.scope.environmentId,
-      experimentRef: experimentLookupRef(input.experimentRef),
+      ...experimentRouteReference(input.experimentRef),
       runId,
     },
   });

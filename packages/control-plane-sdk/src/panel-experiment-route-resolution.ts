@@ -4,6 +4,7 @@ export type PanelExperimentRouteResolutionInput = {
   appId: string;
   targetEnvironmentId: string;
   experimentRef: string;
+  referenceKind: "key" | "legacy";
   runId?: string;
 };
 

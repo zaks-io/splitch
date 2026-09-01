@@ -7,6 +7,7 @@ interface RouteResolutionInput {
   appId: string;
   targetEnvironmentId: string;
   experimentRef: string;
+  referenceKind: "key" | "legacy";
   runId?: string;
 }
 
@@ -25,11 +26,18 @@ export async function panelExperimentRouteResolution(
   const scope = appScope(input.appId);
   const environments = await deps.repo.identity.listEnvironments(scope);
   const environmentIds = environments.map((environment) => environment.id);
-  const referenced = await deps.repo.experiments.findExperimentsByReferenceAcrossEnvironments(
-    scope,
-    environmentIds,
-    input.experimentRef,
-  );
+  const referenced =
+    input.referenceKind === "key"
+      ? await deps.repo.experiments.findExperimentsByKeyAcrossEnvironments(
+          scope,
+          environmentIds,
+          input.experimentRef,
+        )
+      : await deps.repo.experiments.findExperimentsByReferenceAcrossEnvironments(
+          scope,
+          environmentIds,
+          input.experimentRef,
+        );
   if (referenced.length === 0) return success({ kind: "experiment_not_found" });
   const keys = new Set(referenced.map((experiment) => experiment.key));
   if (keys.size !== 1) throw new Error("Experiment route reference resolves to multiple keys");

@@ -11,7 +11,7 @@ import { isExperimentDraftStep } from "#lib/experiments/experiment-draft-model";
 import { resolveControlPanelExperimentEnvironment } from "#lib/experiments/experiment-environment-resolution-functions";
 import {
   experimentKeyRouteRef,
-  experimentLookupRef,
+  experimentRouteReference,
 } from "#lib/experiments/experiment-route-navigation";
 import { experimentDetailQuery } from "#lib/experiments/experiments-query";
 import {
@@ -67,7 +67,7 @@ export async function loadExperimentDraftRoute(input: ExperimentDraftRouteInput)
     data: {
       appId: input.scoped.scope.appId,
       targetEnvironmentId: input.scoped.scope.environmentId,
-      experimentRef: experimentLookupRef(input.experimentRef),
+      ...experimentRouteReference(input.experimentRef),
     },
   });
   if (!resolved.ok) {

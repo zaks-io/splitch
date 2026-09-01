@@ -51,6 +51,7 @@ describe("Experiment detail route identity", () => {
         appId: "app_1",
         targetEnvironmentId: "env_dev",
         experimentRef: "new",
+        referenceKind: "key",
         runId: undefined,
       },
     });

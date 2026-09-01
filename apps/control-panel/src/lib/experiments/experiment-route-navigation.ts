@@ -15,9 +15,14 @@ export function experimentKeyRouteRef(experimentKey: string): string {
   return `${EXPERIMENT_KEY_ROUTE_PREFIX}${encodeURIComponent(experimentKey)}`;
 }
 
-/** Legacy IDs and unprefixed key bookmarks remain valid resolver inputs. */
-export function experimentLookupRef(routeRef: string): string {
-  return routeRef.startsWith(EXPERIMENT_KEY_ROUTE_PREFIX) ? routeRef.slice(1) : routeRef;
+/** Canonical references are key-only; old unprefixed bookmarks retain ID-or-key fallback. */
+export function experimentRouteReference(routeRef: string): {
+  experimentRef: string;
+  referenceKind: "key" | "legacy";
+} {
+  return routeRef.startsWith(EXPERIMENT_KEY_ROUTE_PREFIX)
+    ? { experimentRef: routeRef.slice(1), referenceKind: "key" }
+    : { experimentRef: routeRef, referenceKind: "legacy" };
 }
 
 export function experimentNotFoundData(

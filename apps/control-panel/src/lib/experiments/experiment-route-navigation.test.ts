@@ -2,8 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   canonicalExperimentHref,
   experimentKeyRouteRef,
-  experimentLookupRef,
   experimentNotFoundData,
+  experimentRouteReference,
 } from "#lib/experiments/experiment-route-navigation";
 
 const scope = { orgSlug: "zaks-io", appSlug: "neuron", env: "dev" };
@@ -24,8 +24,14 @@ describe("Experiment route navigation", () => {
 
   it("namespaces every stable key away from static Experiment routes", () => {
     expect(experimentKeyRouteRef("new")).toBe("~new");
-    expect(experimentLookupRef("~new")).toBe("new");
-    expect(experimentLookupRef("exp_legacy")).toBe("exp_legacy");
+    expect(experimentRouteReference("~new")).toEqual({
+      experimentRef: "new",
+      referenceKind: "key",
+    });
+    expect(experimentRouteReference("exp_legacy")).toEqual({
+      experimentRef: "exp_legacy",
+      referenceKind: "legacy",
+    });
   });
 
   it("builds the owning Environment action for a Run found elsewhere", () => {
