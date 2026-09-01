@@ -8,7 +8,6 @@ import {
   loadControlPanelFlags,
 } from "#lib/flags/control-plane-flag-functions";
 import { loadControlPanelPaletteIndex } from "#lib/shell/control-plane-palette-functions";
-import { recordLastVisitedScope } from "#lib/sessions/last-visited-scope-functions";
 import { authorizeLiveUpdateUpgrade } from "#lib/live-updates/live-update-authorization";
 import { handleLiveUpdateUpgrade } from "#lib/live-updates/live-update-upgrade";
 import { loadOrgAppList } from "#lib/organizations/org-app-list-functions";
@@ -23,7 +22,6 @@ void createControlPanelFlag;
 void loadControlPanelFlags;
 void loadControlPanelPaletteIndex;
 void loadOrgAppList;
-void recordLastVisitedScope;
 
 type ControlPanelWorkerEnv = {
   DB: D1Database;

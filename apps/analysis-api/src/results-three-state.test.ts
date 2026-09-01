@@ -34,8 +34,7 @@ describe("GET experiment results three-state distinction (SPL-290/SPL-302)", () 
       missing: "metric_events",
     });
     expect(tinybird.calls.map((call) => call.pipeName)).toEqual([
-      "analysis_run_inputs",
-      "analysis_deduped_exposures",
+      "analysis_run_bootstrap",
       "analysis_metric_values_batch",
       "analysis_pre_period_covariates_batch",
       "analysis_activation_rows",

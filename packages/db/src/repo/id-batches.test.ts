@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { appScope, createRepository } from "../index";
-import { createLocalD1, type LocalD1 } from "./test-d1-pool";
+import { appScope, createRepository, envScope } from "../index";
 import { twoAxisIdBatches } from "./id-batches";
+import { createLocalD1, type LocalD1 } from "./test-d1-pool";
 import { seedTwoTenants } from "./test-seed";
 
 /**
@@ -69,6 +69,49 @@ describe("id-set reads past D1's bound-parameter cap", () => {
     // The scope proof runs per batch, so it has to survive batching too.
     expect(catalogs.has(seed.b.flagId)).toBe(false);
     expect(catalogs.get(bulkIds[BULK - 1] as string)).toHaveLength(1);
+  });
+
+  it("provisions a maximum-size Variant catalog without exceeding D1's binding cap", async () => {
+    const scope = appScope(seed.a.appId);
+    const values = Array.from({ length: 100 }, (_, index) => ({
+      id: `var_create_batch_${index}`,
+      name: `batched-${index}`,
+      value: JSON.stringify(index),
+      createdAt: "2026-07-01T00:00:00.000Z",
+    }));
+
+    const created = await repo.flags.ensureCreateVariants(scope, seed.a.flagId, values);
+    const replayed = await repo.flags.ensureCreateVariants(scope, seed.a.flagId, values);
+
+    expect(created).toHaveLength(100);
+    expect(replayed.map((variant) => variant.id)).toEqual(created.map((variant) => variant.id));
+  });
+
+  it("selects the latest Run and isolates batched Run existence to one Environment", async () => {
+    const scope = envScope(seed.a.appId, seed.a.environmentId);
+    const first = await repo.experiments.getRun(scope, seed.a.runId);
+    if (!first) throw new Error("seeded Run is missing");
+    await repo.experiments.updateRunStatus(scope, first.id, {
+      status: "ended",
+      endedAt: "2026-07-01T12:00:00.000Z",
+    });
+    await repo.experiments.runs.insert(scope, {
+      ...first,
+      id: "run_a_latest",
+      runNumber: 2,
+      salt: "salt_run_a_latest",
+      startedAt: "2026-07-02T00:00:00.000Z",
+      createdAt: "2026-07-02T00:00:00.000Z",
+    });
+
+    const latest = await repo.experiments.findLatestRunForExperiment(scope, seed.a.experimentId);
+    const withRuns = await repo.experiments.listExperimentIdsWithRuns(scope, [
+      seed.a.experimentId,
+      seed.b.experimentId,
+    ]);
+
+    expect(latest?.id).toBe("run_a_latest");
+    expect(withRuns).toEqual([seed.a.experimentId]);
   });
 });
 

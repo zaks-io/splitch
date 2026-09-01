@@ -1,0 +1,9 @@
+- name: returns_the_pinned_run_as_a_typed_json_payload
+  parameters: "app_id=app_checkout&environment_id=env_prod&experiment_id=exp_checkout&run_id=run_checkout_1"
+  expected_http_status: 200
+  expected_result: |
+    {"row_type":"run","payload":"[\"run_checkout_1\",0.95,\"sequential\",1000,null,\"{\\\"control\\\":50,\\\"treatment\\\":50}\",\"control\",\"variant_control\",null,\"[{\\\"metric_id\\\":\\\"metric_signup\\\"}]\",\"[]\",\"[{\\\"metric_id\\\":\\\"metric_signup\\\",\\\"metric_type\\\":\\\"binomial\\\",\\\"event_definition_id\\\":\\\"event_definition_signup\\\",\\\"window_duration_ms\\\":259200000,\\\"cuped_lookback_ms\\\":604800000}]\",\"[{\\\"metric_id\\\":\\\"metric_signup\\\",\\\"winsorize\\\":false,\\\"winsorize_pct\\\":99.9,\\\"cuped\\\":true,\\\"cuped_coverage_threshold_pct\\\":70}]\",\"[]\",\"2026-07-01 10:00:00.000\"]"}
+- name: missing_run_id_is_rejected
+  parameters: "app_id=app_checkout&environment_id=env_prod&experiment_id=exp_checkout"
+  expected_http_status: 400
+  expected_result: "run_id is required"

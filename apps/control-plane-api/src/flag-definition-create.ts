@@ -2,12 +2,12 @@ import { FlagResponseSchema, schemaDefinitionIssues } from "@splitch/contracts";
 import { appScope, type CreateFlagResult, type TenantScope } from "@splitch/db";
 import type { HandlerArgs } from "@splitch/worker-runtime";
 import { nowIso } from "./app-environment-model";
-import { randomHex } from "./credential-cache";
 import {
   createIdempotencyConflict,
   createIdempotencyKey,
   createRequestHash,
 } from "./create-idempotency";
+import { randomHex } from "./credential-cache";
 import { initializeFlagConfigsForFlag } from "./flag-config-lifecycle";
 import { validationError, validationErrors } from "./flag-definition-errors";
 import {
@@ -134,13 +134,19 @@ async function resumeFlagCreateProvisioning(
   if (current.some((variant) => !expectedNames.has(variant.name))) {
     throw new Error("flags_create replay found a Variant outside the original request");
   }
+  const missing = expected.filter(
+    (variant) => !current.some((candidate) => candidate.name === variant.name),
+  );
+  const resumed = await deps.repo.flags.ensureCreateVariants(
+    scope,
+    flag.id,
+    missing.map((variant) => replayedVariantRow(deps, flag.defaultVariantId, variant)),
+  );
+  const settled = new Map([...current, ...resumed].map((variant) => [variant.name, variant]));
   for (const variant of expected) {
-    const existing = current.find((candidate) => candidate.name === variant.name);
-    if (existing) {
-      assertReplayedVariant(existing, variant, flag.defaultVariantId);
-      continue;
-    }
-    await addReplayedVariant(deps, scope, flag.id, flag.defaultVariantId, variant);
+    const existing = settled.get(variant.name);
+    if (!existing) throw new Error(`flags_create replay lost Variant ${variant.name}`);
+    assertReplayedVariant(existing, variant, flag.defaultVariantId);
   }
   if (!flag.defaultVariantId) throw new Error("flags_create replay has no Default Variant id");
   await initializeFlagConfigsForFlag(deps, {
@@ -163,23 +169,26 @@ function assertReplayedVariant(
   }
 }
 
-async function addReplayedVariant(
+function replayedVariantRow(
   deps: FlagDefinitionDeps,
-  scope: TenantScope,
-  flagId: string,
   defaultVariantId: string | null,
   variant: { name: string; value: unknown; description?: string; isDefault?: boolean },
-): Promise<void> {
+): {
+  id: string;
+  name: string;
+  value: string;
+  description?: string;
+  createdAt: string;
+} {
   const id = variant.isDefault ? defaultVariantId : `var_${randomHex(12)}`;
   if (!id) throw new Error("flags_create replay has no Default Variant id");
-  const existing = await deps.repo.flags.ensureCreateVariant(scope, flagId, {
+  return {
     id,
     name: variant.name,
     value: JSON.stringify(variant.value),
     ...(variant.description ? { description: variant.description } : {}),
     createdAt: nowIso(deps),
-  });
-  assertReplayedVariant(existing, variant, defaultVariantId);
+  };
 }
 
 interface PreparedCreateFlag {
@@ -259,14 +268,20 @@ async function insertVariants(
   now: string,
 ): Promise<void> {
   const defaultVariantId = variants.find((item) => item.input.isDefault)?.id ?? null;
-  for (const variant of variants) {
-    const existing = await deps.repo.flags.ensureCreateVariant(scope, flagId, {
+  const inserted = await deps.repo.flags.ensureCreateVariants(
+    scope,
+    flagId,
+    variants.map((variant) => ({
       id: variant.id,
       name: variant.input.name,
       value: JSON.stringify(variant.input.value),
       ...(variant.input.description ? { description: variant.input.description } : {}),
       createdAt: now,
-    });
+    })),
+  );
+  for (const [index, existing] of inserted.entries()) {
+    const variant = variants[index];
+    if (!variant) throw new Error("createFlag: Variant batch result is misaligned");
     assertReplayedVariant(existing, variant.input, defaultVariantId);
   }
 }

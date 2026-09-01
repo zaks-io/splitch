@@ -262,6 +262,9 @@ function repository(
     },
     eventDefinitions: {
       get: vi.fn(async (_scope, id) => ({ id, name: id })),
+      listDefinitionsByIds: vi.fn(async (_scope, definitionIds) =>
+        definitionIds.map((id) => ({ id, name: id })),
+      ),
     },
     experiments: {
       metrics: {
@@ -270,6 +273,7 @@ function repository(
       listExperiments: vi.fn(async () => [experimentRow(ids)]),
       getExperiment: vi.fn(async () => experimentRow(ids)),
       listRunsForExperiment: vi.fn(async () => [runRow(ids, 1), runRow(ids, 2)]),
+      listExperimentIdsWithRuns: vi.fn(async () => []),
     },
   } as unknown as Repository;
 }

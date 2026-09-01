@@ -27,6 +27,8 @@ export const queryKeys = {
   session: {
     scope: (orgSlug: string, appSlug: string, env: string) =>
       ["session", "scope", orgSlug, appSlug, env] as const,
+    scopedVisit: (orgSlug: string, appSlug: string, env: string, visitPath: string | null) =>
+      ["session", "scope", orgSlug, appSlug, env, visitPath ?? "no-visit"] as const,
   },
   org: {
     // Sentry keeps one signing secret per provider for a whole Sentry

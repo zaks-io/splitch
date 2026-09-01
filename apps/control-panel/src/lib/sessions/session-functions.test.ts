@@ -2,6 +2,7 @@ import { applySchema, migrationStatements } from "@splitch/db/test-d1";
 import { Miniflare } from "miniflare";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { markPendingResync, readPendingResync } from "#lib/live-updates/pending-resync";
+import { entryFor, parseLastVisitedCookie } from "#lib/sessions/last-visited-scope";
 import { refreshSession, SESSION_COOKIE_NAME, type StoredSession } from "#lib/sessions/session";
 import { tokenHash as hashOpaqueToken } from "#lib/sessions/session-cookie";
 import type { ControlPanelBindings } from "#lib/shared/bindings";
@@ -12,8 +13,12 @@ import type { ControlPanelBindings } from "#lib/shared/bindings";
 // by `loadCurrentSessionForRequest`, the function under test here.
 vi.mock("cloudflare:workers", () => ({ env: {} }));
 
-const { loadCurrentSessionForRequest, loadPanelNavigationForRequest, loadScopedContextForRequest } =
-  await import("#lib/sessions/session-functions");
+const {
+  appScopedVisitCookie,
+  loadCurrentSessionForRequest,
+  loadPanelNavigationForRequest,
+  loadScopedContextForRequest,
+} = await import("#lib/sessions/session-functions");
 
 /**
  * The loader-level proof for SPL-203's self-heal (round 2, Blocker 2),
@@ -66,6 +71,65 @@ function requestWithSessionCookie(): Request {
     headers: { cookie: `${SESSION_COOKIE_NAME}=${TOKEN}` },
   });
 }
+
+describe("appScopedVisitCookie", () => {
+  const result = {
+    kind: "ok" as const,
+    context: {
+      session: {
+        userId: "user_cap",
+        orgs: [
+          {
+            orgId: "org_000",
+            orgSlug: "org-000",
+            orgRole: "owner" as const,
+            isProvisional: false,
+            demoExpiresAt: null,
+            apps: [{ appId: "app_000", appSlug: "checkout-api", role: "owner" as const }],
+          },
+        ],
+      },
+      navigation: { orgs: [] },
+      scope: {
+        orgId: "org_000",
+        orgSlug: "org-000",
+        orgRole: "owner" as const,
+        appId: "app_000",
+        appSlug: "checkout-api",
+        appRole: "owner" as const,
+        environments: [
+          { environmentId: "env_000", env: "production", name: "Production", guarded: true },
+        ],
+      },
+    },
+  };
+
+  it("records the resolved actor and App scope in the authenticated session response", () => {
+    const cookie = appScopedVisitCookie(result, requestWithSessionCookie(), {
+      orgSlug: "org-000",
+      appSlug: "checkout-api",
+      visitPath: "/org-000/checkout-api",
+    });
+
+    expect(cookie).not.toBeNull();
+    const stored = parseLastVisitedCookie(cookie, "user_cap");
+    expect(entryFor(stored, "org_000")).toMatchObject({
+      appSlug: "checkout-api",
+      env: null,
+      path: "/org-000/checkout-api",
+    });
+  });
+
+  it("rejects a visit path outside the App scope resolved by authorization", () => {
+    expect(() =>
+      appScopedVisitCookie(result, requestWithSessionCookie(), {
+        orgSlug: "org-000",
+        appSlug: "checkout-api",
+        visitPath: "/other-org/checkout-api",
+      }),
+    ).toThrow("Cannot record a visit outside the resolved App scope");
+  });
+});
 
 describe("loadPanelNavigationForRequest", () => {
   it("does not render a deleted App from an eventually consistent session snapshot", async () => {

@@ -102,15 +102,14 @@ describe("flags_create idempotency", () => {
     const createdApp = await createDefaultApp(h);
     const jwt = await appToken(h, createdApp.app.id);
     const repo = createRepository(h.bindings.d1);
-    let calls = 0;
     h.app = makeAppForRepo(h, {
       ...repo,
       flags: {
         ...repo.flags,
-        ensureCreateVariant: async (...args) => {
-          calls += 1;
-          if (calls === 2) throw new Error("injected Variant provisioning failure");
-          return repo.flags.ensureCreateVariant(...args);
+        ensureCreateVariants: async (scope, flagId, values) => {
+          const first = values[0];
+          if (first) await repo.flags.ensureCreateVariant(scope, flagId, first);
+          throw new Error("injected Variant provisioning failure");
         },
       },
     });
@@ -177,11 +176,11 @@ function synchronizeFirstTwoCreateAttempts(harness: FlagDefinitionHarness): void
         await lookupGate;
         return result;
       },
-      ensureCreateVariant: async (...args) => {
+      ensureCreateVariants: async (...args) => {
         variantWrites += 1;
         if (variantWrites === 2) releaseVariants();
         if (variantWrites <= 2) await variantGate;
-        return repo.flags.ensureCreateVariant(...args);
+        return repo.flags.ensureCreateVariants(...args);
       },
     },
   };

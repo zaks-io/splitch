@@ -57,6 +57,14 @@ export async function panelExperimentsList(
     deps.repo.flags.flags.findMany(appScope(input.appId)),
   ]);
   const flags = new Map(flagRows.map((flag) => [flag.id, flag.name]));
+  const draftExperimentIds = experimentRows
+    .filter((row) => row.status === "draft")
+    .map((row) => row.id);
+  const experimentIdsWithRuns = new Set(
+    draftExperimentIds.length > 0
+      ? await deps.repo.experiments.listExperimentIdsWithRuns(scope, draftExperimentIds)
+      : [],
+  );
   const items = await Promise.all(
     experimentRows.map(async (row): Promise<PanelExperimentListItem> => {
       const experiment = experimentResponse(row);
@@ -76,10 +84,7 @@ export async function panelExperimentsList(
         // not mean "never ran" and cannot decide whether the Experiment belongs
         // in the creation flow. Counted only for drafts: every other status has
         // a Run by definition.
-        hasRuns:
-          experiment.status === "draft"
-            ? (await deps.repo.experiments.countRunsForExperiment(scope, experiment.id)) > 0
-            : true,
+        hasRuns: experiment.status === "draft" ? experimentIdsWithRuns.has(experiment.id) : true,
         health: await runningHealth(deps.analysis, input.actorId, experiment),
       };
     }),
@@ -184,13 +189,13 @@ async function referencedEventDefinitions(
   metrics: Array<{ eventDefinitionId: string | null }>,
 ): Promise<Array<{ id: string; name: string }>> {
   const ids = [...new Set(metrics.flatMap(({ eventDefinitionId }) => eventDefinitionId ?? []))];
-  return Promise.all(
-    ids.map(async (id) => {
-      const definition = await repo.eventDefinitions.get(appScope(appId), id);
-      if (!definition) throw new Error(`Metric references a missing Event Definition: ${id}`);
-      return { id: definition.id, name: definition.name };
-    }),
-  );
+  const definitions = await repo.eventDefinitions.listDefinitionsByIds(appScope(appId), ids);
+  const byId = new Map(definitions.map((definition) => [definition.id, definition]));
+  return ids.map((id) => {
+    const definition = byId.get(id);
+    if (!definition) throw new Error(`Metric references a missing Event Definition: ${id}`);
+    return { id: definition.id, name: definition.name };
+  });
 }
 
 /**
@@ -208,17 +213,15 @@ export async function panelExperimentResults(
   if (accessError) return accessError;
 
   const scope = envScope(input.appId, input.environmentId);
-  const experiment = await deps.repo.experiments.getExperiment(scope, input.experimentId);
+  const [experiment, selectedRun] = await Promise.all([
+    deps.repo.experiments.getExperiment(scope, input.experimentId),
+    input.runId
+      ? deps.repo.experiments.getRun(scope, input.runId)
+      : deps.repo.experiments.findLatestRunForExperiment(scope, input.experimentId),
+  ]);
   if (!experiment) return experimentNotFound(requestId);
 
-  const runs = await deps.repo.experiments.listRunsForExperiment(scope, input.experimentId);
-  const run = input.runId
-    ? runs.find((candidate) => candidate.id === input.runId)
-    : runs.reduce<(typeof runs)[number] | undefined>(
-        (latest, candidate) =>
-          latest && latest.runNumber > candidate.runNumber ? latest : candidate,
-        undefined,
-      );
+  const run = selectedRun?.experimentId === input.experimentId ? selectedRun : null;
   // Draft Experiment: exists, never Started. Typed no_run (not RUN_NOT_FOUND /
   // EXPERIMENT_NOT_FOUND) so an agent is pointed at Start (SPL-305). A pinned
   // missing Run id is still RUN_NOT_FOUND — that is a different condition.

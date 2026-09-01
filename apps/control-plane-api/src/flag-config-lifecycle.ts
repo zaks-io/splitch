@@ -59,20 +59,24 @@ export class FlagConfigPurgeIncompleteError extends Error {
 }
 
 const FLAG_CONFIG_PURGE_ATTEMPTS = 3;
+// Workers allow six simultaneous outbound connections per invocation. Keep
+// provisioning at that platform bound so large Apps improve in batches without
+// creating an unbounded D1/Durable Object fan-out.
+const FLAG_CONFIG_PROVISIONING_BATCH_SIZE = 6;
 
 export async function initializeFlagConfigsForFlag(
   deps: FlagConfigLifecycleDeps,
   input: InitialFlagConfigInput,
 ): Promise<void> {
   const environments = await deps.repo.identity.listEnvironments(appScope(input.appId));
-  for (const environment of environments) {
-    await ensureInitialFlagConfig(deps, {
+  await inProvisioningBatches(environments, (environment) =>
+    ensureInitialFlagConfig(deps, {
       appId: input.appId,
       environmentId: environment.id,
       flagId: input.flagId,
       defaultVariantId: input.defaultVariantId,
-    });
-  }
+    }),
+  );
 }
 
 export async function initializeFlagConfigsForEnvironment(
@@ -81,18 +85,37 @@ export async function initializeFlagConfigsForEnvironment(
   environmentId: string,
 ): Promise<void> {
   const flags = await deps.repo.flags.flags.findMany(appScope(appId));
-  for (const flag of flags) {
+  await inProvisioningBatches(flags, (flag) => {
     if (!flag.defaultVariantId) {
       throw new Error(
         `initializeFlagConfigsForEnvironment: flag ${flag.id} has no defaultVariantId`,
       );
     }
-    await ensureInitialFlagConfig(deps, {
+    return ensureInitialFlagConfig(deps, {
       appId,
       environmentId,
       flagId: flag.id,
       defaultVariantId: flag.defaultVariantId,
     });
+  });
+}
+
+async function inProvisioningBatches<T>(
+  values: readonly T[],
+  provision: (value: T) => Promise<void>,
+): Promise<void> {
+  for (let start = 0; start < values.length; start += FLAG_CONFIG_PROVISIONING_BATCH_SIZE) {
+    const settled = await Promise.allSettled(
+      values
+        .slice(start, start + FLAG_CONFIG_PROVISIONING_BATCH_SIZE)
+        .map((value) => provision(value)),
+    );
+    const failures = settled.flatMap((result) =>
+      result.status === "rejected" ? [result.reason] : [],
+    );
+    if (failures.length > 0) {
+      throw new AggregateError(failures, "flag-config lifecycle: provisioning batch failed");
+    }
   }
 }
 

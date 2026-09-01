@@ -25,10 +25,12 @@ describe("scopedSessionQuery", () => {
       .mockResolvedValueOnce({ kind: "forbidden" });
 
     const concurrent = await Promise.all([
-      queryClient.fetchQuery(scopedSessionQuery(params)),
-      queryClient.fetchQuery(scopedSessionQuery(params)),
+      queryClient.fetchQuery(scopedSessionQuery(params, "/acme/checkout-api/production/flags")),
+      queryClient.fetchQuery(scopedSessionQuery(params, "/acme/checkout-api/production/flags")),
     ]);
-    const refreshed = await queryClient.fetchQuery(scopedSessionQuery(params));
+    const refreshed = await queryClient.fetchQuery(
+      scopedSessionQuery(params, "/acme/checkout-api/production/flags"),
+    );
 
     expect(concurrent).toEqual([
       { kind: "ok", context: { session: { userId: "user_1" } } },
@@ -36,6 +38,8 @@ describe("scopedSessionQuery", () => {
     ]);
     expect(refreshed).toEqual({ kind: "forbidden" });
     expect(loadScopedSessionMock).toHaveBeenCalledTimes(2);
-    expect(loadScopedSessionMock).toHaveBeenCalledWith({ data: params });
+    expect(loadScopedSessionMock).toHaveBeenCalledWith({
+      data: { ...params, visitPath: "/acme/checkout-api/production/flags" },
+    });
   });
 });

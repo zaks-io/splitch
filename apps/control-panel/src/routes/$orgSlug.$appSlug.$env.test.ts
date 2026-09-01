@@ -13,13 +13,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const loadScopedSessionMock = vi.fn();
 const deferredDestinationAtMock = vi.fn();
-const recordLastVisitedScopeMock = vi.fn();
 
 vi.mock("#lib/sessions/session-functions", () => ({
   loadScopedSession: (...args: unknown[]) => loadScopedSessionMock(...args),
-}));
-vi.mock("#lib/sessions/last-visited-scope-functions", () => ({
-  recordLastVisitedScope: (...args: unknown[]) => recordLastVisitedScopeMock(...args),
 }));
 vi.mock("#components/shell/command-palette", () => ({ CommandPalette: () => null }));
 // The sidebar's Create Organization dialog reaches the create server function.
@@ -78,8 +74,6 @@ describe("$orgSlug/$appSlug/$env loader — deferred deep link enforcement", () 
     loadScopedSessionMock.mockReset();
     deferredDestinationAtMock.mockReset();
     deferredDestinationAtMock.mockReturnValue(undefined);
-    recordLastVisitedScopeMock.mockReset();
-    recordLastVisitedScopeMock.mockResolvedValue(undefined);
   });
 
   it("404s a direct request for a deferred destination once membership resolves", async () => {
@@ -110,12 +104,10 @@ describe("$orgSlug/$appSlug/$env loader — deferred deep link enforcement", () 
     loadScopedSessionMock.mockResolvedValue(okResult);
     await expect(runLoader("/acme-labs/checkout-api/dev/flags")).resolves.toBe(okResult.context);
     await expect(runLoader("/acme-labs/checkout-api/dev/segments")).resolves.toBe(okResult.context);
-    expect(recordLastVisitedScopeMock).toHaveBeenLastCalledWith({
+    expect(loadScopedSessionMock).toHaveBeenLastCalledWith({
       data: {
-        orgId: "org_1",
-        appSlug: "checkout-api",
-        env: "dev",
-        path: "/acme-labs/checkout-api/dev/segments",
+        ...params,
+        visitPath: "/acme-labs/checkout-api/dev/segments",
       },
     });
   });
@@ -124,6 +116,8 @@ describe("$orgSlug/$appSlug/$env loader — deferred deep link enforcement", () 
     loadScopedSessionMock.mockResolvedValue({ kind: "unauthenticated" });
     await expect(runLoader("/acme-labs/checkout-api/dev/segments")).rejects.toSatisfy(isRedirect);
     expect(deferredDestinationAtMock).not.toHaveBeenCalled();
-    expect(recordLastVisitedScopeMock).not.toHaveBeenCalled();
+    expect(loadScopedSessionMock).toHaveBeenCalledWith({
+      data: { ...params, visitPath: "/acme-labs/checkout-api/dev/segments" },
+    });
   });
 });

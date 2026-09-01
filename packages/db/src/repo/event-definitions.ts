@@ -1,12 +1,14 @@
 import { and, desc, eq } from "drizzle-orm";
 import { eventDefinitions, eventDefinitionVersions } from "../schema/index";
 import type { Db } from "./client";
+import { makeEventDefinitionBatchReads } from "./event-definition-batch-reads";
 import { assertMintedScope, type TenantScope } from "./scope";
 import { type ReadOptions, scopedTable } from "./scoped-table";
 
 export function makeEventDefinitionRepo(db: Db, d1: D1Database) {
   const definitions = scopedTable(db, eventDefinitions);
   const versions = scopedTable(db, eventDefinitionVersions);
+  const batchReads = makeEventDefinitionBatchReads(db, definitions);
   return {
     definitions,
     versions,
@@ -20,6 +22,7 @@ export function makeEventDefinitionRepo(db: Db, d1: D1Database) {
     get(scope: TenantScope, id: string) {
       return definitions.findOne(scope, eq(eventDefinitions.id, id));
     },
+    ...batchReads,
     findByName(scope: TenantScope, name: string) {
       return definitions.findOne(scope, eq(eventDefinitions.name, name));
     },

@@ -4,16 +4,12 @@ import { AccessDeniedError } from "#lib/shared/loader-context";
 
 const loadAppScopedSessionMock = vi.fn();
 const loadControlPanelFlagsMatrixMock = vi.fn();
-const recordLastVisitedScopeMock = vi.fn();
 
 vi.mock("#lib/sessions/session-functions", () => ({
   loadAppScopedSession: (...args: unknown[]) => loadAppScopedSessionMock(...args),
 }));
 vi.mock("#lib/flags/control-plane-flag-functions", () => ({
   loadControlPanelFlagsMatrix: (...args: unknown[]) => loadControlPanelFlagsMatrixMock(...args),
-}));
-vi.mock("#lib/sessions/last-visited-scope-functions", () => ({
-  recordLastVisitedScope: (...args: unknown[]) => recordLastVisitedScopeMock(...args),
 }));
 vi.mock("#components/flags/flags-matrix-page", () => ({ FlagsMatrixPage: () => null }));
 vi.mock("#components/shell/command-palette", () => ({ CommandPalette: () => null }));
@@ -43,8 +39,6 @@ describe("$orgSlug/$appSlug loader", () => {
   beforeEach(() => {
     loadAppScopedSessionMock.mockReset();
     loadControlPanelFlagsMatrixMock.mockReset();
-    recordLastVisitedScopeMock.mockReset();
-    recordLastVisitedScopeMock.mockResolvedValue(undefined);
   });
 
   it("redirects unauthenticated requests to login", async () => {
@@ -88,58 +82,16 @@ describe("$orgSlug/$appSlug loader", () => {
     });
 
     await expect(runLoader()).resolves.toMatchObject({ matrix: { rows: [] } });
+    expect(loadAppScopedSessionMock).toHaveBeenCalledOnce();
+    expect(loadAppScopedSessionMock).toHaveBeenCalledWith({
+      data: {
+        appSlug: "checkout-api",
+        orgSlug: "acme-labs",
+        visitPath: "/acme-labs/checkout-api",
+      },
+    });
     expect(loadControlPanelFlagsMatrixMock).toHaveBeenCalledWith({
       data: { appId: "app_1", environmentIds: ["env_dev", "env_prod"] },
     });
-    expect(recordLastVisitedScopeMock).toHaveBeenCalledWith({
-      data: {
-        orgId: "org_1",
-        appSlug: "checkout-api",
-        env: null,
-        path: "/acme-labs/checkout-api",
-      },
-    });
-  });
-
-  it("does not put visit bookkeeping in front of the matrix read", async () => {
-    loadAppScopedSessionMock.mockResolvedValue({
-      kind: "ok",
-      context: {
-        scope: {
-          appId: "app_1",
-          appRole: "member",
-          orgId: "org_1",
-          environments: [{ environmentId: "env_dev", env: "dev" }],
-        },
-        session: { userId: "user_1" },
-        navigation: { orgs: [] },
-      },
-    });
-    const visitStarted = deferred<void>();
-    const releaseVisit = deferred<void>();
-    recordLastVisitedScopeMock.mockImplementation(async () => {
-      visitStarted.resolve();
-      await releaseVisit.promise;
-    });
-    loadControlPanelFlagsMatrixMock.mockResolvedValue({
-      ok: true,
-      data: { rows: [], readLimit: 200, readTruncated: false },
-    });
-
-    const result = runLoader();
-    await visitStarted.promise;
-
-    expect(loadControlPanelFlagsMatrixMock).toHaveBeenCalledOnce();
-    releaseVisit.resolve();
-    await expect(result).resolves.toMatchObject({ matrix: { rows: [] } });
   });
 });
-
-function deferred<T>() {
-  let resolvePromise: ((value: T | PromiseLike<T>) => void) | undefined;
-  const promise = new Promise<T>((resolve) => {
-    resolvePromise = resolve;
-  });
-  if (!resolvePromise) throw new Error("deferred promise was not initialized");
-  return { promise, resolve: resolvePromise };
-}

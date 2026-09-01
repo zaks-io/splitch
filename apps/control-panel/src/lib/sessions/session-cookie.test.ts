@@ -6,14 +6,11 @@ import {
   CONTROL_PANEL_ENVIRONMENT_HEADER,
 } from "@splitch/control-plane-sdk/control-panel-identity";
 import { describe, expect, expectTypeOf, it } from "vitest";
-import { createCookieHeaderWriteDiscovery } from "#lib/testing/cookie-header-write-test-helpers";
-import { createFormPostSurfaceDiscovery } from "#lib/testing/form-post-surface-test-helpers";
+import { createOAuthState, OAUTH_STATE_COOKIE_NAME } from "#lib/auth/oauth-state";
 import {
   LAST_VISITED_COOKIE_NAME,
   serializeLastVisitedCookie,
 } from "#lib/sessions/last-visited-scope";
-import { createOAuthState, OAUTH_STATE_COOKIE_NAME } from "#lib/auth/oauth-state";
-import { createServerFnSurfaceDiscovery } from "#lib/testing/server-fn-surface-test-helpers";
 import { createSession, SESSION_COOKIE_NAME } from "#lib/sessions/session";
 import {
   PANEL_COOKIE_ATTRIBUTES,
@@ -21,6 +18,9 @@ import {
   serializeHttpOnlyCookie,
 } from "#lib/sessions/session-cookie";
 import { MemoryKv, NOW, sessionPrincipal } from "#lib/sessions/session-test-harness";
+import { createCookieHeaderWriteDiscovery } from "#lib/testing/cookie-header-write-test-helpers";
+import { createFormPostSurfaceDiscovery } from "#lib/testing/form-post-surface-test-helpers";
+import { createServerFnSurfaceDiscovery } from "#lib/testing/server-fn-surface-test-helpers";
 import { projectProgram } from "#lib/testing/typescript-program-test-helpers";
 
 const SRC = fileURLToPath(new URL("../..", import.meta.url));
@@ -253,6 +253,8 @@ describe("panel cookie attributes", () => {
     expect(headerWrites.sort()).toEqual([
       "lib/sessions/last-visited-scope-cookie.ts: setResponseHeader",
       "lib/sessions/session-cookie.ts: append",
+      "lib/sessions/session-functions.ts: setResponseHeader",
+      "lib/sessions/session-functions.ts: setResponseHeader",
     ]);
     expectTypeOf<string>().not.toExtend<SerializedHttpOnlyCookie>();
     expectTypeOf(serializeHttpOnlyCookie).returns.toEqualTypeOf<SerializedHttpOnlyCookie>();
