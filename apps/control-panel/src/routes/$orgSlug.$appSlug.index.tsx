@@ -8,7 +8,6 @@ import { z } from "zod";
 import { FlagsMatrixPage } from "#components/flags/flags-matrix-page";
 import { PanelShell } from "#components/shell/panel-shell";
 import { loadControlPanelFlagsMatrix } from "#lib/flags/control-plane-flag-functions";
-import { recordLastVisitedScope } from "#lib/sessions/last-visited-scope-functions";
 import { AccessDeniedError, isAccessDeniedError } from "#lib/shared/loader-context";
 import {
   configureControlPanelSentryScope,
@@ -20,7 +19,9 @@ import { loadAppScopedSession } from "#lib/sessions/session-functions";
 export const Route = createFileRoute("/$orgSlug/$appSlug/")({
   validateSearch: z.object({ created: z.string().optional() }).strict(),
   loader: async ({ location, params }) => {
-    const result = await loadAppScopedSession({ data: params });
+    const result = await loadAppScopedSession({
+      data: { ...params, visitPath: location.pathname },
+    });
     if (result.kind === "unauthenticated") {
       throw redirect({ href: `/auth/login?returnTo=${encodeURIComponent(location.href)}` });
     }
@@ -34,24 +35,14 @@ export const Route = createFileRoute("/$orgSlug/$appSlug/")({
     }
 
     configureControlPanelSentryScope(result.context);
-    const [, matrix] = await Promise.all([
-      recordLastVisitedScope({
-        data: {
-          orgId: result.context.scope.orgId,
-          appSlug: params.appSlug,
-          env: null,
-          path: location.pathname,
-        },
-      }),
-      loadControlPanelFlagsMatrix({
-        data: {
-          appId: result.context.scope.appId,
-          environmentIds: result.context.scope.environments.map(
-            (environment) => environment.environmentId,
-          ),
-        },
-      }),
-    ]);
+    const matrix = await loadControlPanelFlagsMatrix({
+      data: {
+        appId: result.context.scope.appId,
+        environmentIds: result.context.scope.environments.map(
+          (environment) => environment.environmentId,
+        ),
+      },
+    });
     if (!matrix.ok) throw new Error(matrix.error.message);
     return {
       scope: result.context.scope,

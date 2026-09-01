@@ -10,7 +10,7 @@ import {
 // these from server function handlers only, where the Start compiler strips the
 // reference before bundling the client.
 
-export function writeLastVisitedCookie(value: LastVisitedScope) {
+function writeLastVisitedCookie(value: LastVisitedScope) {
   setResponseHeader("set-cookie", serializeLastVisitedCookie(value));
 }
 

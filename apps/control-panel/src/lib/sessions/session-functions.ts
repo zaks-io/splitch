@@ -5,6 +5,7 @@ import { getRequest, setResponseHeader } from "@tanstack/react-start/server";
 import { z } from "zod";
 import { readPendingResync } from "#lib/live-updates/pending-resync";
 import {
+  authorizedEntry,
   lastVisitedEntry,
   lastVisitedOrgId,
   parseLastVisitedCookie,
@@ -20,7 +21,6 @@ import { type ControlPanelBindings, controlPanelBindings } from "#lib/shared/bin
 import {
   AccessDeniedError,
   type AppScopedLoaderContext,
-  type AppScopeParams,
   type EnvironmentResolver,
   resolveAppLoaderContext,
   resolveNavigation,
@@ -229,16 +229,70 @@ function scopedVisitCookie(
   );
 }
 
+const AppScopedSessionInputSchema = z.object({
+  orgSlug: z.string().min(1),
+  appSlug: z.string().min(1),
+  visitPath: z
+    .string()
+    .regex(/^\/(?!\/)[^\\?#\s]*$/)
+    .nullable(),
+});
+
+export type AppScopedSessionInput = z.infer<typeof AppScopedSessionInputSchema>;
+
 export const loadAppScopedSession = createServerFn({ method: "GET" })
-  .validator((data: AppScopeParams) => data)
-  .handler(
-    ({ data }): Promise<AppScopedSessionResult> =>
-      loadScopedContextForRequest(
-        controlPanelBindings(workerEnv),
-        getRequest(),
-        (session, resolver) => resolveAppLoaderContext(session, data, resolver),
-      ),
+  .validator((data: unknown) => AppScopedSessionInputSchema.parse(data))
+  .handler(async ({ data }): Promise<AppScopedSessionResult> => {
+    const request = getRequest();
+    const result = await loadAppScopedSessionForRequest(
+      controlPanelBindings(workerEnv),
+      request,
+      data,
+    );
+    const cookie = appScopedVisitCookie(result, request, data);
+    if (cookie) setResponseHeader("set-cookie", cookie);
+    return result;
+  });
+
+async function loadAppScopedSessionForRequest(
+  bindings: ControlPanelBindings,
+  request: Request,
+  data: AppScopedSessionInput,
+): Promise<AppScopedSessionResult> {
+  return loadScopedContextForRequest(bindings, request, (session, resolver) =>
+    resolveAppLoaderContext(session, data, resolver),
   );
+}
+
+export function appScopedVisitCookie(
+  result: AppScopedSessionResult,
+  request: Request,
+  data: AppScopedSessionInput,
+): string | null {
+  if (result.kind !== "ok" || data.visitPath === null) return null;
+
+  const { scope, session } = result.context;
+  const entry = lastVisitedEntry(scope.appSlug, null, data.visitPath, Date.now());
+  const authorized = authorizedEntry(entry, {
+    orgSlug: scope.orgSlug,
+    apps: [
+      {
+        appSlug: scope.appSlug,
+        environments: scope.environments,
+      },
+    ],
+  });
+  if (!authorized) throw new Error("Cannot record a visit outside the resolved App scope");
+
+  return serializeLastVisitedCookie(
+    recordVisit(
+      parseLastVisitedCookie(request.headers.get("cookie"), session.userId),
+      session.userId,
+      scope.orgId,
+      authorized,
+    ),
+  );
+}
 
 type AnyScopedSessionResult<T> =
   | { kind: "ok"; context: T }
