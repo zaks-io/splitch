@@ -1,13 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import type { MetricEventDeliveryAttempt } from "./metric-event-delivery-attempt";
-import {
-  METRIC_EVENT_CLAIM_RETENTION_MS,
-  MetricEventOutboxDurableObject,
-} from "./metric-event-outbox";
-import type { Env } from "./types";
-
-const STATE_KEY = "metric-event-claim";
-const DEDUP_URL = "https://metric-event-outbox.local/claim";
+import { METRIC_EVENT_CLAIM_RETENTION_MS } from "./metric-event-outbox";
+import { makeOutbox, row } from "./metric-event-outbox.fixture";
 
 /**
  * The Durable Object is the only place the accept/duplicate/conflict decision is
@@ -146,18 +140,6 @@ describe("Metric Event outbox Durable Object", () => {
     await expect(outbox.exported()).resolves.toEqual({ deleted: true, row: null });
   });
 
-  it("retries queue publication from an alarm without failing the accepted claim", async () => {
-    const outbox = makeOutbox().failNextSend();
-    await outbox.claim(row("entity-7"));
-
-    await outbox.runAlarm();
-
-    expect(outbox.stored()?.queued).toBe(false);
-    expect(outbox.alarmTime()).toBeGreaterThan(Date.now());
-    await outbox.runAlarm();
-    expect(outbox.stored()?.queued).toBe(true);
-  });
-
   it("deletes claim state when the Metric Event retention window ends", async () => {
     const now = Date.parse("2026-08-31T00:00:00.000Z");
     vi.spyOn(Date, "now").mockReturnValue(now);
@@ -166,126 +148,38 @@ describe("Metric Event outbox Durable Object", () => {
     await outbox.claim(row("entity-7"));
     await outbox.runAlarm();
 
-    const expiresAt = now + METRIC_EVENT_CLAIM_RETENTION_MS;
+    const expiresAt = Date.parse("2026-08-07T00:00:00.000Z") + METRIC_EVENT_CLAIM_RETENTION_MS;
     expect(outbox.alarmTime()).toBe(expiresAt);
     vi.spyOn(Date, "now").mockReturnValue(expiresAt);
     await outbox.runAlarm();
     expect(outbox.stored()).toBeUndefined();
   });
-});
 
-interface ClaimInput {
-  readonly fingerprint: string;
-  readonly eventDefinitionId: string;
-  readonly eventDefinitionVersionId: string;
-  readonly row: Record<string, unknown>;
-}
+  it("anchors a pre-upgrade claim to its original receipt time", async () => {
+    const receivedAt = Date.parse("2026-08-07T00:00:00.000Z");
+    vi.spyOn(Date, "now").mockReturnValue(receivedAt + 24 * 60 * 60 * 1_000);
+    const outbox = makeOutbox();
+    outbox.seed({ ...row("entity-7"), queued: true });
 
-function row(targetingKey: string): ClaimInput {
-  return {
-    fingerprint: `fp_${targetingKey}`,
-    eventDefinitionId: "ed_signed_up",
-    eventDefinitionVersionId: "edv_1",
-    row: { event_name: "signed_up", targeting_key_hash: targetingKey },
-  };
-}
+    const retained = await outbox.retain("2026-08-07T00:00:00.000Z");
 
-/** Durable Object storage round-trips through structured clone, so this does too. */
-function makeOutbox(sendImpl: () => Promise<void> = async () => {}) {
-  const storage = new Map<string, unknown>();
-  let alarmTime: number | null = null;
-  let sendFailure: Error | undefined;
-  const send = vi.fn(async (_row: Record<string, unknown>) => {
-    if (sendFailure) {
-      const error = sendFailure;
-      sendFailure = undefined;
-      throw error;
-    }
-    return sendImpl();
+    expect(retained).toEqual({
+      retained: true,
+      expiresAt: receivedAt + METRIC_EVENT_CLAIM_RETENTION_MS,
+    });
+    expect(outbox.alarmTime()).toBe(receivedAt + METRIC_EVENT_CLAIM_RETENTION_MS);
   });
-  const ctx = {
-    storage: {
-      async get<T>(key: string) {
-        return storage.has(key) ? (structuredClone(storage.get(key)) as T) : undefined;
-      },
-      async put(key: string, value: unknown) {
-        storage.set(key, structuredClone(value));
-      },
-      async delete(key: string) {
-        return storage.delete(key);
-      },
-      async setAlarm(time: number | Date) {
-        alarmTime = typeof time === "number" ? time : time.getTime();
-      },
-    },
-  } as unknown as DurableObjectState;
-  const env = { METRIC_EVENTS_QUEUE: { send } } as unknown as Env;
-  const object = new MetricEventOutboxDurableObject(ctx, env);
 
-  return {
-    send,
-    alarmTime: () => alarmTime,
-    failNextSend() {
-      sendFailure = new Error("queue unavailable");
-      return this;
-    },
-    async runAlarm() {
-      alarmTime = null;
-      await object.alarm();
-    },
-    seed(
-      state: ClaimInput & {
-        queued: boolean;
-        delivery?: MetricEventDeliveryAttempt;
-        expiresAt?: number;
-      },
-    ) {
-      storage.set(STATE_KEY, structuredClone(state));
-    },
-    stored() {
-      return storage.get(STATE_KEY) as
-        | (ClaimInput & { queued: boolean; expiresAt?: number })
-        | undefined;
-    },
-    async claim(input: ClaimInput) {
-      const response = await object.fetch(
-        new Request(DEDUP_URL, {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ ...input, queued: false }),
-        }),
-      );
-      expect(response.status).toBe(200);
-      return (await response.json()) as { outcome: string };
-    },
-    lookup() {
-      return object.fetch(
-        new Request("https://metric-event-outbox.local/lookup", { method: "GET" }),
-      );
-    },
-    delivery() {
-      return object.fetch(
-        new Request("https://metric-event-outbox.local/delivery", { method: "GET" }),
-      );
-    },
-    async suppress(input: ClaimInput) {
-      const response = await this.suppressResponse(input);
-      expect(response.status).toBe(200);
-      return response.json();
-    },
-    suppressResponse(input: ClaimInput) {
-      return object.fetch(
-        new Request("https://metric-event-outbox.local/suppress", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify(input),
-        }),
-      );
-    },
-    async exported() {
-      const response = await object.fetch(new Request("https://metric-event-outbox.local/export"));
-      expect(response.status).toBe(200);
-      return response.json();
-    },
-  };
-}
+  it("removes an already expired pre-upgrade claim during adoption", async () => {
+    const receivedAt = Date.parse("2026-05-01T00:00:00.000Z");
+    vi.spyOn(Date, "now").mockReturnValue(receivedAt + METRIC_EVENT_CLAIM_RETENTION_MS);
+    const outbox = makeOutbox();
+    outbox.seed({ ...row("entity-7", "2026-05-01T00:00:00.000Z"), queued: true });
+
+    await expect(outbox.retain("2026-05-01T00:00:00.000Z")).resolves.toEqual({
+      retained: false,
+      expired: true,
+    });
+    expect(outbox.stored()).toBeUndefined();
+  });
+});

@@ -115,6 +115,10 @@
         "class_name": "MetricEventOutboxDurableObject"
       },
       {
+        "name": "METRIC_EVENT_CLAIM_RETENTION_BACKFILL",
+        "class_name": "MetricEventClaimRetentionBackfillDurableObject"
+      },
+      {
         "name": "METRIC_EVENT_RATE_LIMIT",
         "class_name": "MetricEventRateLimitDurableObject"
       },
@@ -148,6 +152,10 @@
     {
       "tag": "v5_entity_metric_privacy",
       "new_sqlite_classes": ["EntityMetricPrivacyDurableObject"]
+    },
+    {
+      "tag": "v6_metric_event_claim_retention_backfill",
+      "new_sqlite_classes": ["MetricEventClaimRetentionBackfillDurableObject"]
     }
   ],
   "env": {
@@ -265,6 +273,10 @@
             "class_name": "MetricEventOutboxDurableObject"
           },
           {
+            "name": "METRIC_EVENT_CLAIM_RETENTION_BACKFILL",
+            "class_name": "MetricEventClaimRetentionBackfillDurableObject"
+          },
+          {
             "name": "METRIC_EVENT_RATE_LIMIT",
             "class_name": "MetricEventRateLimitDurableObject"
           },
@@ -301,6 +313,10 @@
         {
           "tag": "v5_entity_metric_privacy",
           "new_sqlite_classes": ["EntityMetricPrivacyDurableObject"]
+        },
+        {
+          "tag": "v6_metric_event_claim_retention_backfill",
+          "new_sqlite_classes": ["MetricEventClaimRetentionBackfillDurableObject"]
         }
       ]
     },
@@ -412,6 +428,10 @@
             "class_name": "MetricEventOutboxDurableObject"
           },
           {
+            "name": "METRIC_EVENT_CLAIM_RETENTION_BACKFILL",
+            "class_name": "MetricEventClaimRetentionBackfillDurableObject"
+          },
+          {
             "name": "METRIC_EVENT_RATE_LIMIT",
             "class_name": "MetricEventRateLimitDurableObject"
           },
@@ -448,6 +468,10 @@
         {
           "tag": "v5_entity_metric_privacy",
           "new_sqlite_classes": ["EntityMetricPrivacyDurableObject"]
+        },
+        {
+          "tag": "v6_metric_event_claim_retention_backfill",
+          "new_sqlite_classes": ["MetricEventClaimRetentionBackfillDurableObject"]
         }
       ]
     }

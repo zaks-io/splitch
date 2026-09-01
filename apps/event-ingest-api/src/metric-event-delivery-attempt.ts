@@ -1,4 +1,4 @@
-import type { MetricEventOutboxNamespace } from "./metric-event-outbox";
+import type { MetricEventOutboxNamespace } from "./metric-event-outbox-client";
 import { MAX_DELIVERY_ATTEMPTS } from "./tinybird-microbatch";
 
 /**

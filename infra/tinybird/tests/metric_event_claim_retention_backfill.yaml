@@ -1,0 +1,7 @@
+- name: pages_legacy_claims_in_original_receipt_order
+  description: Duplicate raw rows collapse to one claim and the cursor advances by receipt time and key.
+  parameters: retained_after=2026-07-02%2000%3A00%3A00.000&after_server_received_at=2026-07-01%2023%3A59%3A00.000&after_dedup_key=&limit=2
+  expected_http_status: 200
+  expected_result: |
+    {"dedup_key":"llm-control","server_received_at":"2026-07-02 00:00:00.000"}
+    {"dedup_key":"llm-other-app","server_received_at":"2026-07-02 00:00:00.000"}

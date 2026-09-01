@@ -1,0 +1,35 @@
+DESCRIPTION >
+    Pages legacy Metric Event claims by their original receipt time for Durable Object retention adoption.
+
+NODE legacy_metric_event_claims
+SQL >
+    %
+    {% if not defined(retained_after) %}
+    {{error('retained_after is required')}}
+    {% end %}
+    {% if not defined(limit) %}
+    {{error('limit is required')}}
+    {% end %}
+    SELECT
+        dedup_key,
+        first_server_received_at AS server_received_at
+    FROM
+    (
+        SELECT
+            dedup_key,
+            min(server_received_at) AS first_server_received_at
+        FROM metric_events
+        WHERE metric_events.server_received_at >= {{DateTime64(retained_after)}}
+        GROUP BY dedup_key
+    )
+    WHERE 1
+        {% if defined(after_server_received_at) %}
+        AND (first_server_received_at, dedup_key) > (
+            {{DateTime64(after_server_received_at)}},
+            {{String(after_dedup_key)}}
+        )
+        {% end %}
+    ORDER BY first_server_received_at, dedup_key
+    LIMIT {{Int32(limit)}}
+
+TYPE ENDPOINT

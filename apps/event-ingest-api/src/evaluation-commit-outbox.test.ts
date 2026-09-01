@@ -156,6 +156,38 @@ describe("Evaluation commit outbox privacy", () => {
   });
 });
 
+describe("Evaluation commit outbox publication retry", () => {
+  it("backs off repeated Queue publication failures", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const now = Date.parse("2026-08-28T00:00:00.000Z");
+    vi.spyOn(Date, "now").mockReturnValue(now);
+    const state = durableState();
+    const send = vi.fn(async () => {
+      throw new Error("queue unavailable");
+    });
+    const object = new EvaluationCommitOutboxDurableObject(state.ctx, {
+      RAW_EVALUATIONS_QUEUE: { send },
+      RAW_EVENTS_QUEUE: { sendBatch: vi.fn() },
+      SPLITCH_PLATFORM_TARGET: "local",
+    } as unknown as Env);
+    await post(object, "/commit", {
+      identity: IDENTITY,
+      payload: { usage: { idempotencyKey: "evaluation-1" }, exposureRows: [] },
+    });
+
+    await object.alarm();
+
+    expect(state.stored()?.publicationAttempts).toBe(1);
+    expect(state.alarmTime()).toBeGreaterThanOrEqual(now + 5_000);
+    await object.alarm();
+    expect(send).toHaveBeenCalledOnce();
+    vi.spyOn(Date, "now").mockReturnValue(state.alarmTime() ?? now);
+    await object.alarm();
+    expect(state.stored()?.publicationAttempts).toBe(2);
+    expect(send).toHaveBeenCalledTimes(2);
+  });
+});
+
 async function post(
   object: EvaluationCommitOutboxDurableObject,
   path: string,
@@ -184,7 +216,11 @@ function queueResult() {
   return { metadata: { metrics: { backlogCount: 0, backlogBytes: 0 } } };
 }
 
-function durableState(): { ctx: DurableObjectState; alarmTime(): number | null } {
+function durableState(): {
+  ctx: DurableObjectState;
+  alarmTime(): number | null;
+  stored(): { publicationAttempts?: number } | undefined;
+} {
   const storage = new Map<string, unknown>();
   let alarmTime: number | null = null;
   const ctx = {
@@ -206,5 +242,10 @@ function durableState(): { ctx: DurableObjectState; alarmTime(): number | null }
       },
     },
   } as unknown as DurableObjectState;
-  return { ctx, alarmTime: () => alarmTime };
+  return {
+    ctx,
+    alarmTime: () => alarmTime,
+    stored: () =>
+      storage.get("evaluation-commit-outbox") as { publicationAttempts?: number } | undefined,
+  };
 }

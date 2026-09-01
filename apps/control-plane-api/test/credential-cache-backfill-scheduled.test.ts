@@ -13,17 +13,24 @@ describe("Control Plane API scheduled credential cache backfill", () => {
   it("dispatches through its Durable Object binding", async () => {
     const fetch = vi.fn(async () => new Response(null, { status: 204 }));
     const getByName = vi.fn(() => ({ fetch }));
+    const adoptMetricEventClaimRetention = vi.fn(async () => undefined);
 
-    await runScheduled({ getByName });
+    await runScheduled({ getByName }, { adoptMetricEventClaimRetention });
 
     expect(getByName).toHaveBeenCalledWith("schema-v1");
     expect(fetch).toHaveBeenCalledWith("https://backfill/run", { method: "POST" });
+    expect(adoptMetricEventClaimRetention).toHaveBeenCalledOnce();
   });
 });
 
-async function runScheduled(credentialCacheBackfill: {
-  getByName: () => { fetch: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response> };
-}): Promise<void> {
+async function runScheduled(
+  credentialCacheBackfill: {
+    getByName: () => { fetch: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response> };
+  },
+  eventIngest: {
+    adoptMetricEventClaimRetention: () => Promise<void>;
+  },
+): Promise<void> {
   const waits: Promise<unknown>[] = [];
   worker.scheduled?.(
     {
@@ -34,6 +41,7 @@ async function runScheduled(credentialCacheBackfill: {
     {
       ...env,
       CREDENTIAL_CACHE_BACKFILL: credentialCacheBackfill,
+      EVENT_INGEST_API: eventIngest,
       SPLITCH_PLATFORM_TARGET: "local",
     } as ControlPlaneApiEnv,
     {

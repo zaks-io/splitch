@@ -70,6 +70,21 @@ describe("Event Ingest Worker Wrangler runtime config", () => {
     ["local", config],
     ["shared-preview", config.env?.["shared-preview"]],
     ["production", config.env?.production],
+  ])("binds the Metric Event claim retention cutover for %s", (_target, target) => {
+    expect(target?.durable_objects?.bindings).toContainEqual({
+      name: "METRIC_EVENT_CLAIM_RETENTION_BACKFILL",
+      class_name: "MetricEventClaimRetentionBackfillDurableObject",
+    });
+    expect(target?.migrations).toContainEqual({
+      tag: "v6_metric_event_claim_retention_backfill",
+      new_sqlite_classes: ["MetricEventClaimRetentionBackfillDurableObject"],
+    });
+  });
+
+  it.each([
+    ["local", config],
+    ["shared-preview", config.env?.["shared-preview"]],
+    ["production", config.env?.production],
   ])("retries Metric Event delivery as many times as the handler counts for %s", (target, env) => {
     const consumers = env?.queues?.consumers ?? [];
 

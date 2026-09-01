@@ -2,6 +2,7 @@ import {
   deliverSealedEvaluationCommit,
   parseSealedEvaluationCommitPayload,
 } from "./evaluation-commit-delivery";
+import { queueRetryDelaySeconds } from "./queue-retry";
 import type { Env } from "./types";
 
 const EVALUATION_COMMIT_REPLAY_WINDOW_MS = 24 * 60 * 60 * 1000;
@@ -37,12 +38,13 @@ interface OutboxState {
   readonly deliveredAt?: string;
   readonly privacyDeletedAt?: string;
   readonly deliveryState?: "pending" | "publishing" | "delivered";
+  readonly publicationAttempts?: number;
+  readonly publicationRetryAt?: number;
 }
 
 const STATE_KEY = "evaluation-commit-outbox";
 const PRIVACY_DELETED_KEY = "evaluation-commit-privacy-deleted";
 const REDACTED_EVENT_IDS_KEY = "evaluation-commit-redacted-event-ids";
-const DELIVERY_RETRY_DELAY_MS = 1_000;
 
 /**
  * The durable boundary for one remote Evaluation. It seals the usage row and
@@ -86,9 +88,21 @@ export class EvaluationCommitOutboxDurableObject {
       await this.ctx.storage.setAlarm(state.expiresAt);
       return;
     }
+    if (state.publicationRetryAt !== undefined && state.publicationRetryAt > Date.now()) {
+      await this.ctx.storage.setAlarm(state.publicationRetryAt);
+      return;
+    }
+    await this.publish(state);
+  }
+
+  private async publish(state: OutboxState): Promise<void> {
     if (!this.env) throw new Error("Evaluation commit delivery environment is unavailable");
 
-    const publishing = { ...state, deliveryState: "publishing" as const };
+    const publishing = {
+      ...state,
+      deliveryState: "publishing" as const,
+      publicationAttempts: (state.publicationAttempts ?? 0) + 1,
+    };
     await this.ctx.storage.put(STATE_KEY, publishing);
     try {
       await deliverSealedEvaluationCommit(
@@ -97,11 +111,7 @@ export class EvaluationCommitOutboxDurableObject {
         parseSealedEvaluationCommitPayload(state.payload),
       );
     } catch (error) {
-      await this.ctx.storage.put(STATE_KEY, { ...state, deliveryState: "pending" });
-      await this.ctx.storage.setAlarm(Date.now() + DELIVERY_RETRY_DELAY_MS);
-      console.error("event-ingest-api Evaluation commit outbox publication failed", {
-        errorMessage: error instanceof Error ? error.message : "non-error rejection",
-      });
+      await this.retryPublication(publishing, error);
       return;
     }
 
@@ -117,12 +127,38 @@ export class EvaluationCommitOutboxDurableObject {
     await this.ctx.storage.setAlarm(current.expiresAt);
   }
 
+  private async retryPublication(publishing: OutboxState, error: unknown): Promise<void> {
+    const current = await this.ctx.storage.get<OutboxState>(STATE_KEY);
+    if (current === undefined || current.privacyDeletedAt !== undefined) {
+      throw new Error("Evaluation commit outbox changed during queue publication");
+    }
+    const publicationAttempts = publishing.publicationAttempts ?? 1;
+    const publicationRetryAt =
+      Date.now() + queueRetryDelaySeconds(publicationAttempts, publishing.eventId) * 1_000;
+    await this.ctx.storage.put(STATE_KEY, {
+      ...current,
+      deliveryState: "pending",
+      publicationAttempts,
+      publicationRetryAt,
+    });
+    await this.ctx.storage.setAlarm(publicationRetryAt);
+    console.error("event-ingest-api Evaluation commit outbox publication failed", {
+      errorMessage: error instanceof Error ? error.message : "non-error rejection",
+    });
+  }
+
+  private schedulePublication(state: OutboxState): Promise<void> {
+    return this.ctx.storage.setAlarm(
+      Math.max(Date.now(), state.publicationRetryAt ?? Number.NEGATIVE_INFINITY),
+    );
+  }
+
   private async lookup(): Promise<Response> {
     const existing = await this.ctx.storage.get<OutboxState>(STATE_KEY);
     if (existing === undefined || existing.expiresAt <= Date.now()) {
       return new Response("commit not found", { status: 404 });
     }
-    if (!isDelivered(existing)) await this.ctx.storage.setAlarm(Date.now());
+    if (!isDelivered(existing)) await this.schedulePublication(existing);
     return Response.json(asResponse(existing));
   }
 
@@ -134,7 +170,7 @@ export class EvaluationCommitOutboxDurableObject {
     const eventId = `sha256:${await sha256Hex(`${identity}\u001f${now}`)}`;
     const existing = await this.ctx.storage.get<OutboxState>(STATE_KEY);
     if (existing !== undefined && existing.expiresAt > Date.now()) {
-      if (!isDelivered(existing)) await this.ctx.storage.setAlarm(Date.now());
+      if (!isDelivered(existing)) await this.schedulePublication(existing);
       return Response.json(asResponse(existing));
     }
 

@@ -9,7 +9,8 @@ import type {
   EvaluationUsageReplayWindowNamespace,
 } from "./evaluation-usage-replay-window";
 import type { IngestAdmissionGateNamespace } from "./ingest-admission-gate";
-import type { MetricEventOutboxNamespace } from "./metric-event-outbox";
+import type { MetricEventClaimRetentionBackfillNamespace } from "./metric-event-claim-retention-backfill";
+import type { MetricEventOutboxNamespace } from "./metric-event-outbox-client";
 import type { MetricEventRateLimitNamespace } from "./metric-event-rate-limit";
 
 interface WorkerProtocolBindings {
@@ -24,6 +25,7 @@ interface WorkerProtocolBindings {
   EVALUATION_PRIVACY_SALT?: string;
   INGEST_ADMISSION_GATE?: IngestAdmissionGateNamespace;
   METRIC_EVENT_OUTBOX?: MetricEventOutboxNamespace;
+  METRIC_EVENT_CLAIM_RETENTION_BACKFILL?: MetricEventClaimRetentionBackfillNamespace;
   METRIC_EVENT_RATE_LIMIT?: MetricEventRateLimitNamespace;
   ENTITY_METRIC_PRIVACY?: EntityMetricPrivacyNamespace;
   RAW_EVENTS_QUEUE?: Queue<Record<string, unknown>>;

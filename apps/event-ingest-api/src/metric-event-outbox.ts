@@ -4,26 +4,9 @@ import {
   isUnresolved,
   type MetricEventDeliveryAttempt,
 } from "./metric-event-delivery-attempt";
+import type { MetricEventClaim, MetricEventLookup } from "./metric-event-outbox-client";
+import { queueRetryDelaySeconds } from "./queue-retry";
 import type { Env } from "./types";
-
-export interface MetricEventClaim {
-  readonly outcome: "accepted" | "duplicate" | "conflict";
-  readonly eventDefinitionId: string;
-  readonly eventDefinitionVersionId: string;
-}
-
-export interface MetricEventLookup {
-  readonly fingerprint: string;
-  readonly eventDefinitionId: string;
-  readonly eventDefinitionVersionId: string;
-}
-
-export interface MetricEventOutboxNamespace {
-  idFromName(name: string): DurableObjectId;
-  get(id: DurableObjectId): {
-    fetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response>;
-  };
-}
 
 interface ClaimState {
   readonly fingerprint: string;
@@ -33,12 +16,13 @@ interface ClaimState {
   queued: boolean;
   deleted: boolean;
   publishing?: boolean;
+  publicationAttempts?: number;
+  publicationRetryAt?: number;
   delivery?: MetricEventDeliveryAttempt;
   readonly expiresAt?: number;
 }
 
 const STATE_KEY = "metric-event-claim";
-const QUEUE_RETRY_DELAY_MS = 1_000;
 /** Matches the default Metric Event replay and analysis retention window. */
 export const METRIC_EVENT_CLAIM_RETENTION_MS = 90 * 24 * 60 * 60 * 1_000;
 
@@ -67,6 +51,10 @@ export class MetricEventOutboxDurableObject {
       await this.ctx.storage.setAlarm(expiresAt);
       return;
     }
+    if (state.publicationRetryAt !== undefined && state.publicationRetryAt > Date.now()) {
+      await this.ctx.storage.setAlarm(state.publicationRetryAt);
+      return;
+    }
     await this.publish(state, expiresAt);
   }
 
@@ -76,15 +64,17 @@ export class MetricEventOutboxDurableObject {
       throw new Error("METRIC_EVENTS_QUEUE binding is unavailable");
     }
 
-    await this.ctx.storage.put(STATE_KEY, { ...state, expiresAt, publishing: true });
+    const publishing = {
+      ...state,
+      expiresAt,
+      publishing: true,
+      publicationAttempts: (state.publicationAttempts ?? 0) + 1,
+    };
+    await this.ctx.storage.put(STATE_KEY, publishing);
     try {
       await this.env.METRIC_EVENTS_QUEUE.send(state.row);
     } catch (error) {
-      await this.ctx.storage.put(STATE_KEY, { ...state, expiresAt, publishing: false });
-      await this.ctx.storage.setAlarm(Date.now() + QUEUE_RETRY_DELAY_MS);
-      console.error("event-ingest-api Metric Event outbox publication failed", {
-        errorMessage: error instanceof Error ? error.message : "non-error rejection",
-      });
+      await this.retryPublication(publishing, error);
       return;
     }
 
@@ -99,6 +89,26 @@ export class MetricEventOutboxDurableObject {
       publishing: false,
     });
     await this.ctx.storage.setAlarm(expiresAt);
+  }
+
+  private async retryPublication(publishing: ClaimState, error: unknown): Promise<void> {
+    const current = await this.ctx.storage.get<ClaimState>(STATE_KEY);
+    if (current === undefined || current.deleted) {
+      throw new Error("Metric Event outbox changed during queue publication");
+    }
+    const publicationAttempts = publishing.publicationAttempts ?? 1;
+    const publicationRetryAt =
+      Date.now() + queueRetryDelaySeconds(publicationAttempts, publishing.fingerprint) * 1_000;
+    await this.ctx.storage.put(STATE_KEY, {
+      ...current,
+      publishing: false,
+      publicationAttempts,
+      publicationRetryAt,
+    });
+    await this.ctx.storage.setAlarm(publicationRetryAt);
+    console.error("event-ingest-api Metric Event outbox publication failed", {
+      errorMessage: error instanceof Error ? error.message : "non-error rejection",
+    });
   }
 
   private async handle(request: Request): Promise<Response> {
@@ -127,6 +137,7 @@ export class MetricEventOutboxDurableObject {
 
   private async write(path: string, request: Request): Promise<Response> {
     if (path === "/suppress") return this.suppress(request);
+    if (path === "/retain") return this.retainExisting(request);
     if (path === "/begin-delivery") return this.beginDelivery(request);
     if (path === "/settle-delivery") return this.settleDelivery(request);
     if (path !== "/claim") return new Response("not found", { status: 404 });
@@ -141,10 +152,7 @@ export class MetricEventOutboxDurableObject {
       return Response.json(asClaim("duplicate", existing));
     }
 
-    const accepted = {
-      ...incoming,
-      expiresAt: Date.now() + METRIC_EVENT_CLAIM_RETENTION_MS,
-    };
+    const accepted = { ...incoming, expiresAt: claimExpiresAt(incoming) };
     await this.ctx.storage.put(STATE_KEY, accepted);
     await this.schedulePublication(accepted);
     return Response.json(asClaim("accepted", accepted));
@@ -156,7 +164,9 @@ export class MetricEventOutboxDurableObject {
       return;
     }
     if (state.row === undefined) throw new Error("Metric Event outbox row is unavailable");
-    await this.ctx.storage.setAlarm(Date.now());
+    await this.ctx.storage.setAlarm(
+      Math.max(Date.now(), state.publicationRetryAt ?? Number.NEGATIVE_INFINITY),
+    );
   }
 
   private async retain(state: ClaimState): Promise<ClaimState> {
@@ -167,6 +177,23 @@ export class MetricEventOutboxDurableObject {
       state.queued || state.deleted ? retained.expiresAt : Date.now(),
     );
     return retained;
+  }
+
+  private async retainExisting(request: Request): Promise<Response> {
+    const body = (await request.json()) as { serverReceivedAt?: unknown };
+    if (typeof body.serverReceivedAt !== "string") {
+      return new Response("invalid Metric Event retention timestamp", { status: 400 });
+    }
+    const existing = await this.ctx.storage.get<ClaimState>(STATE_KEY);
+    if (existing === undefined) return new Response("not found", { status: 404 });
+    const expiresAt = claimExpiresAt(existing, body.serverReceivedAt);
+    if (expiresAt <= Date.now()) {
+      await this.ctx.storage.delete(STATE_KEY);
+      return Response.json({ retained: false, expired: true });
+    }
+    await this.ctx.storage.put(STATE_KEY, { ...existing, expiresAt });
+    await this.ctx.storage.setAlarm(existing.queued || existing.deleted ? expiresAt : Date.now());
+    return Response.json({ retained: true, expiresAt });
   }
 
   /**
@@ -218,7 +245,9 @@ export class MetricEventOutboxDurableObject {
   }
 
   private async suppress(request: Request): Promise<Response> {
-    const input = (await request.json()) as Partial<ClaimState>;
+    const input = (await request.json()) as Partial<ClaimState> & {
+      serverReceivedAt?: unknown;
+    };
     if (
       typeof input.fingerprint !== "string" ||
       typeof input.eventDefinitionId !== "string" ||
@@ -242,7 +271,7 @@ export class MetricEventOutboxDurableObject {
         { status: 409 },
       );
     }
-    const expiresAt = existing?.expiresAt ?? Date.now() + METRIC_EVENT_CLAIM_RETENTION_MS;
+    const expiresAt = claimExpiresAt(existing ?? input, input.serverReceivedAt);
     await this.ctx.storage.put(STATE_KEY, {
       fingerprint: input.fingerprint,
       eventDefinitionId: existing?.eventDefinitionId ?? input.eventDefinitionId,
@@ -257,8 +286,36 @@ export class MetricEventOutboxDurableObject {
   }
 }
 
-function claimExpiresAt(state: ClaimState): number {
-  return state.expiresAt ?? Date.now() + METRIC_EVENT_CLAIM_RETENTION_MS;
+function claimExpiresAt(state: Partial<ClaimState>, suppliedServerReceivedAt?: unknown): number {
+  const storedServerReceivedAt = state.row?.server_received_at;
+  if (storedServerReceivedAt !== undefined && suppliedServerReceivedAt !== undefined) {
+    if (
+      typeof storedServerReceivedAt !== "string" ||
+      typeof suppliedServerReceivedAt !== "string" ||
+      metricEventReceivedAt(storedServerReceivedAt) !==
+        metricEventReceivedAt(suppliedServerReceivedAt)
+    ) {
+      throw new Error("Metric Event retention timestamp conflicts with the sealed row");
+    }
+  }
+  if (state.expiresAt !== undefined) {
+    if (!Number.isFinite(state.expiresAt)) throw new Error("Metric Event claim expiry is invalid");
+    return state.expiresAt;
+  }
+  const serverReceivedAt = storedServerReceivedAt ?? suppliedServerReceivedAt;
+  if (typeof serverReceivedAt !== "string") {
+    throw new Error("Metric Event claim has no retention timestamp");
+  }
+  return metricEventReceivedAt(serverReceivedAt) + METRIC_EVENT_CLAIM_RETENTION_MS;
+}
+
+function metricEventReceivedAt(value: string): number {
+  const parsed = Date.parse(
+    /^\d{4}-\d{2}-\d{2} /u.test(value) ? `${value.replace(" ", "T")}Z` : value,
+  );
+  if (!Number.isFinite(parsed))
+    throw new Error("Metric Event claim retention timestamp is invalid");
+  return parsed;
 }
 
 function asClaim(outcome: MetricEventClaim["outcome"], state: ClaimState): MetricEventClaim {
@@ -275,50 +332,4 @@ function asLookup(state: ClaimState): MetricEventLookup {
     eventDefinitionId: state.eventDefinitionId,
     eventDefinitionVersionId: state.eventDefinitionVersionId,
   };
-}
-
-export async function lookupMetricEvent(
-  namespace: MetricEventOutboxNamespace | undefined,
-  dedupKey: string,
-): Promise<MetricEventLookup | null> {
-  if (!namespace) throw new Error("METRIC_EVENT_OUTBOX binding is unavailable");
-  const response = await namespace
-    .get(namespace.idFromName(dedupKey))
-    .fetch("https://metric-event-outbox.local/lookup", { method: "GET" });
-  if (response.status === 404) return null;
-  if (!response.ok) throw new Error(`Metric Event outbox lookup returned HTTP ${response.status}`);
-  const lookup = (await response.json()) as Partial<MetricEventLookup>;
-  if (
-    typeof lookup.fingerprint !== "string" ||
-    typeof lookup.eventDefinitionId !== "string" ||
-    typeof lookup.eventDefinitionVersionId !== "string"
-  ) {
-    throw new Error("Metric Event outbox returned an invalid lookup");
-  }
-  return {
-    fingerprint: lookup.fingerprint,
-    eventDefinitionId: lookup.eventDefinitionId,
-    eventDefinitionVersionId: lookup.eventDefinitionVersionId,
-  };
-}
-
-export async function claimMetricEvent(
-  namespace: MetricEventOutboxNamespace | undefined,
-  dedupKey: string,
-  state: Omit<ClaimState, "queued" | "deleted">,
-): Promise<MetricEventClaim> {
-  if (!namespace) throw new Error("METRIC_EVENT_OUTBOX binding is unavailable");
-  const response = await namespace
-    .get(namespace.idFromName(dedupKey))
-    .fetch("https://metric-event-outbox.local/claim", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ ...state, queued: false, deleted: false }),
-    });
-  if (!response.ok) throw new Error(`Metric Event outbox returned HTTP ${response.status}`);
-  const claim = (await response.json()) as MetricEventClaim;
-  if (!["accepted", "duplicate", "conflict"].includes(claim.outcome)) {
-    throw new Error("Metric Event outbox returned an invalid claim");
-  }
-  return claim;
 }
