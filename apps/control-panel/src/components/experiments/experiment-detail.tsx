@@ -3,7 +3,6 @@ import type {
   PanelExperimentRun,
 } from "@splitch/control-plane-sdk/panel-experiments";
 import { Badge } from "@splitch/ui/components/badge";
-import { Card, CardContent, CardHeader } from "@splitch/ui/components/card";
 import type { ReactNode } from "react";
 import { ActiveEnvironmentBadge } from "#components/environments/active-environment-badge";
 import type { ExperimentTab } from "#lib/experiments/experiment-detail-route";
@@ -38,8 +37,8 @@ export function ExperimentDetail({
     : experimentHref;
 
   return (
-    <Card className="border-0 bg-transparent shadow-none">
-      <CardHeader className="grid gap-4 px-0 pt-0">
+    <div className="grid gap-6">
+      <div className="grid gap-4">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="grid gap-1.5">
             <ActiveEnvironmentBadge env={scope.env} guarded={guarded} />
@@ -59,9 +58,9 @@ export function ExperimentDetail({
           selectedRunId={selectedRun?.id}
         />
         <ExperimentTabs activeTab={activeTab} baseHref={viewHref} />
-      </CardHeader>
-      <CardContent className="px-0">{children}</CardContent>
-    </Card>
+      </div>
+      {children}
+    </div>
   );
 }
 
