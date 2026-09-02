@@ -4,11 +4,13 @@ import { createControlPanelAppsClient } from "#lib/shared/control-plane-apps";
 const TRACE_ID = "0123456789abcdef0123456789abcdef";
 const SENTRY_TRACE = `${TRACE_ID}-0123456789abcdef-1`;
 const BAGGAGE = `sentry-trace_id=${TRACE_ID}`;
+const TRACEPARENT = `00-${TRACE_ID}-0123456789abcdef-01`;
 
 vi.mock("@sentry/cloudflare", () => ({
-  getTraceData: () => ({
+  getTraceData: (options?: { propagateTraceparent?: boolean }) => ({
     "sentry-trace": "0123456789abcdef0123456789abcdef-0123456789abcdef-1",
     baggage: "sentry-trace_id=0123456789abcdef0123456789abcdef",
+    ...(options?.propagateTraceparent ? { traceparent: TRACEPARENT } : {}),
   }),
 }));
 
@@ -33,5 +35,6 @@ describe("Control Plane trace propagation", () => {
 
     expect(capturedRequest?.headers.get("sentry-trace")).toBe(SENTRY_TRACE);
     expect(capturedRequest?.headers.get("baggage")).toBe(BAGGAGE);
+    expect(capturedRequest?.headers.get("traceparent")).toBe(TRACEPARENT);
   });
 });

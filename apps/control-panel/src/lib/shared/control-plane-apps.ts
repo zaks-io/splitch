@@ -213,7 +213,7 @@ function replaceTraceHeaders(headers: Headers): void {
   headers.delete("sentry-trace");
   headers.delete("baggage");
   headers.delete("traceparent");
-  const traceData = getTraceData();
+  const traceData = getTraceData({ propagateTraceparent: true });
   if (traceData["sentry-trace"]) headers.set("sentry-trace", traceData["sentry-trace"]);
   if (traceData.baggage) headers.set("baggage", traceData.baggage);
   if (traceData.traceparent) headers.set("traceparent", traceData.traceparent);
