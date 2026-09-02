@@ -67,6 +67,23 @@ describe("scrubSentryTransaction", () => {
     expect(serialized.includes("user_7f3c9a2b@example.com")).toBe(false);
   });
 
+  it("redacts fetch breadcrumb URLs whose tenant IDs do not match PII patterns", () => {
+    const scrubbed = scrubSentryTransaction({
+      type: "transaction",
+      breadcrumbs: [
+        {
+          category: "fetch",
+          data: {
+            url: "https://api.tinybird.co/v0/pipes/results.json?app_id=app_123&environment_id=env_456",
+          },
+        },
+      ],
+    });
+
+    expect(JSON.stringify(scrubbed).includes("app_123")).toBe(false);
+    expect(JSON.stringify(scrubbed).includes("env_456")).toBe(false);
+  });
+
   it("scrubs a sibling context that never went through the span hook", () => {
     const scrubbed = scrubSentryTransaction(transactionEvent());
     const contexts = scrubbed.contexts as Record<string, unknown>;

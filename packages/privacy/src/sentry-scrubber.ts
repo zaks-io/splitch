@@ -14,7 +14,7 @@
  * see docs/spec/frontend/observability-pii-scrubbing.md "What is NOT scrubbed".
  */
 
-import { isPiiKey, REDACTED } from "./redaction-rules";
+import { REDACTED } from "./redaction-rules";
 import { type ScrubOptions, scrubValue } from "./scrubber";
 
 export type SentryEventLike = Record<string, unknown>;
@@ -148,31 +148,6 @@ const ALLOWED_SPAN_ATTRIBUTE_KEYS = new Set<string>([
   "auth.result",
 ]);
 
-/**
- * The two attribute namespaces Sentry's own MCP instrumentation puts behind
- * `sendDefaultPii` / `recordInputs` / `recordOutputs`: raw tool arguments and raw
- * tool result content. Redacted by namespace rather than by leaf-key policy
- * because their leaves are caller-chosen -- an argument named `plan` or a content
- * entry keyed `text` reads as innocuous and carries Evaluation Context anyway.
- *
- * This server never enables those options, so nothing should ever match. It is
- * here so that turning one on later fails closed instead of shipping the payload.
- */
-const DENIED_SPAN_ATTRIBUTE_PREFIXES = ["mcp.request.argument", "mcp.tool.result.content"];
-
-/**
- * OpenTelemetry attribute names are dotted namespaces, and `normalize()` in
- * redaction-rules.ts folds `_`/`-` but not `.`. Without splitting, a key like
- * `mcp.request.argument.email` reaches the value scrubber as one opaque name and
- * the leaf-key policy never sees the `email` it ends in.
- */
-function spanAttributeKeyIsPii(key: string): boolean {
-  if (DENIED_SPAN_ATTRIBUTE_PREFIXES.some((prefix) => key.startsWith(prefix))) {
-    return true;
-  }
-  return key.split(".").some(isPiiKey);
-}
-
 function scrubSpanAttributes(data: unknown, options: ScrubOptions): unknown {
   if (typeof data !== "object" || data === null || Array.isArray(data)) {
     return scrubValue(data, options);
@@ -182,7 +157,10 @@ function scrubSpanAttributes(data: unknown, options: ScrubOptions): unknown {
     if (ALLOWED_SPAN_ATTRIBUTE_KEYS.has(key)) {
       output[key] = value;
     } else {
-      output[key] = spanAttributeKeyIsPii(key) ? REDACTED : scrubValue(value, options);
+      // Sentry's fetch integration records full URLs and query strings under
+      // several evolving attribute names. Fail closed for every attribute that
+      // has not been explicitly vouched for above.
+      output[key] = REDACTED;
     }
   }
   return output;
@@ -203,6 +181,8 @@ export function scrubSentrySpan<T extends SentryEventLike>(span: T, options: Scr
       output[key] = value;
     } else if (key === "data") {
       output[key] = scrubSpanAttributes(value, options);
+    } else if (key === "description" && span.op === "http.client") {
+      output[key] = REDACTED;
     } else {
       output[key] = scrubValue(value, options);
     }
