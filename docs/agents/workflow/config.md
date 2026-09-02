@@ -91,14 +91,13 @@ in this config; refresh them from Linear during each workflow run.
 - PR CI: `.github/workflows/ci.yml` on Blacksmith, running `pnpm verify:ci` plus
   a range-scoped Gitleaks secret scan.
 - npm package publish: the OIDC `.github/workflows/sdk-publish.yml`,
-  `.github/workflows/cli-publish.yml`, and `.github/workflows/convex-publish.yml` workflows are
+  `.github/workflows/cli-publish.yml`, `.github/workflows/cloudflare-publish.yml`, and
+  `.github/workflows/convex-publish.yml` workflows are
   explicit Blacksmith exceptions. Each runs only after its namespaced GitHub Release is published,
   on GitHub-hosted `ubuntu-24.04` because npm trusted publishing does not support Blacksmith, and
-  carries no long-lived npm token. After npm publication succeeds, a separate Blacksmith job bound
-  to the GitHub `production` environment syncs the package's dedicated Linear release using
-  `SDK_LINEAR_ACCESS_KEY`, `CLI_LINEAR_ACCESS_KEY`, or `CONVEX_LINEAR_ACCESS_KEY`. CLI
-  bootstrap, trusted-publisher configuration, and provider-side verification remain human-owned
-  and unverified.
+  carries no long-lived npm token. Package publish workflows do not create Linear Releases. CLI
+  bootstrap, trusted-publisher configuration, and provider-side verification remain human-owned and
+  unverified.
 - Shared preview deploy: workflow and hosted smoke wired, Cloudflare D1/KV resources are provisioned, the Tinybird
   `shared_preview` Branch exists, and Worker secret sync is wired before deploy. Cloudflare Custom
   Domain DNS/cert activation can lag after first deploy. See
