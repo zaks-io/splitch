@@ -64,10 +64,10 @@ Construct the client with exactly one credential. Zero or both throws
 `SDK_CREDENTIAL_CONFIGURATION_INVALID` at construction, because the two unlock
 different methods and the client cannot guess which you meant.
 
-| Option      | Credential                | Where it may live                                  | Unlocks                                                         |
-| ----------- | ------------------------- | -------------------------------------------------- | --------------------------------------------------------------- |
-| `clientKey` | public Client Key (`pk_`) | browsers, mobile, servers: anything that evaluates | `evaluate`, `evaluateDetails`, `verify`, `evaluateAll`, `track` |
-| `apiKey`    | secret API Key (`sk_`)    | servers only; never ship it to a client            | `peekVariant`, `verify`, `evaluateAll`, `track`                 |
+| Option      | Credential                | Where it may live                                  | Unlocks                                                                     |
+| ----------- | ------------------------- | -------------------------------------------------- | --------------------------------------------------------------------------- |
+| `clientKey` | public Client Key (`pk_`) | browsers, mobile, servers: anything that evaluates | `evaluate`, `evaluateDetails`, `verify`, `evaluateAll`, `track`, `activate` |
+| `apiKey`    | secret API Key (`sk_`)    | servers only; never ship it to a client            | `peekVariant`, `verify`, `evaluateAll`, `track`, `activate`                 |
 
 A server-side integration that fires Exposures uses a Client Key, not an API
 Key. The API Key cannot call `evaluate` or `evaluateDetails`; present a Client
@@ -80,12 +80,12 @@ The data plane has two scopes. A Client Key carries both, which is why it can
 `splitch api-keys create`, so an API Key minted for evaluation alone is refused
 by `track` with `INSUFFICIENT_SCOPES`.
 
-| Scope                 | Covers                                                                |
-| --------------------- | --------------------------------------------------------------------- |
-| `data-plane:evaluate` | `evaluate`, `evaluateDetails`, `peekVariant`, `verify`, `evaluateAll` |
-| `data-plane:write`    | `track`, the Metric Event append                                      |
+| Scope                 | Covers                                                                                    |
+| --------------------- | ----------------------------------------------------------------------------------------- |
+| `data-plane:evaluate` | `evaluate`, `evaluateDetails`, `peekVariant`, `verify`, `evaluateAll`                     |
+| `data-plane:write`    | `track` and `activate`; Metric Event append and Activation materialization where eligible |
 
-## The six methods
+## The seven methods
 
 An **Exposure** is the "this subject saw this Variant" event that experiment
 analysis counts. Which methods fire one is the core thing to get right:
