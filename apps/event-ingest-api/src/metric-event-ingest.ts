@@ -87,9 +87,12 @@ export async function handleAuthorizedMetricEvent(
           env,
           credential,
           parsed,
-          { targetingKeyHash, entityFamilyHash: identity.entityFamilyHash },
+          {
+            targetingKeyHash,
+            targetingKeyHashes: identity.targetingKeyHashes,
+            entityFamilyHash: identity.entityFamilyHash,
+          },
           hot.eventDefinition.id,
-          new Date().toISOString(),
         ),
       );
     } catch {

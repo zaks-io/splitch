@@ -103,6 +103,17 @@ describe("ExposureEventSchema", () => {
     expect(a.type).toBe("activation");
   });
 
+  it("requires the Exposure-derived Variant on an activation row", () => {
+    const { variantName: _, ...withoutVariant } = validExposure;
+    expect(ExposureEventSchema.safeParse({ ...withoutVariant, type: "activation" }).success).toBe(
+      false,
+    );
+    expect(
+      ExposureEventSchema.safeParse({ ...validExposure, type: "activation", variantName: null })
+        .success,
+    ).toBe(false);
+  });
+
   it("defaults counterfactual to false when omitted (NOT null)", () => {
     const { counterfactual: _, ...withoutCf } = validExposure;
     const e = ExposureEventSchema.parse(withoutCf);

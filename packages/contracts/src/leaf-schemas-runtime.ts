@@ -106,7 +106,7 @@ export const ExposureEventSchema = z.discriminatedUnion("type", [
   ExposureEventBaseSchema.extend({ type: z.literal("exposure"), variantName: z.string() }),
   ExposureEventBaseSchema.extend({
     type: z.literal("activation"),
-    variantName: z.string().nullable().optional(),
+    variantName: z.string(),
   }),
 ]);
 export type ExposureEvent = z.infer<typeof ExposureEventSchema>;

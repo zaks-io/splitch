@@ -2,7 +2,7 @@
 
 ## What activation is
 
-An **Activation Metric** gates analysis to Entities who performed a defined action (the "activation") after their first Exposure. It is a query-time filter composing with first-touch dedup — not a separate pipeline or event type.
+An **Activation Metric** gates analysis to Entities who performed a defined action (the "activation") after their first Exposure. Activation is a first-class event row on the Exposure log. It shares that ingestion pipeline and composes with first-touch dedup at query time.
 
 An Entity is **activated** when it performs the activation action with `activation_ts > first_exposure_ts`. Pre-exposure activations never count: filtering on pre-exposure data breaks randomization (post-treatment selection bias per Kohavi/OCE literature).
 
@@ -16,22 +16,25 @@ frozen Activation Metric uses that Event Definition, and appends one Activation
 row per match. Callers provide Entity identity and the product event only. They
 never provide Experiment, Run, or Variant identity. A call with no matching live
 Run fails before claiming the Metric Event, so a retry after configuration
-propagates can still succeed.
+propagates can still succeed. Splitch likewise waits for an Exposure-backed
+Assignment in each matching Run and derives the Variant from it. A call with no
+matching exposed Run fails without claiming the Metric Event, so a retry after
+Exposure propagation can still succeed.
 
 ### Activation row additional fields
 
-| Field                | Type             | Req | Meaning                                                                                                              |
-| -------------------- | ---------------- | --- | -------------------------------------------------------------------------------------------------------------------- |
-| `app_id`             | `string`         | ✓   | Data-isolation key                                                                                                   |
-| `environment_id`     | `string`         | ✓   | Environment scope; Exposures/activations are per-Environment (ADR-0027)                                              |
-| `experiment_id`      | `string`         | ✓   | Owning Experiment                                                                                                    |
-| `run_id`             | `string`         | ✓   | Experiment Run at activation time                                                                                    |
-| `targeting_key_hash` | `string`         | ✓   | HMAC-derived Entity identifier                                                                                       |
-| `id_type`            | `string`         | ✓   | Entity type; always explicit                                                                                         |
-| `server_received_at` | `timestamp`      | ✓   | Server-received-at                                                                                                   |
-| `type`               | `"activation"`   | ✓   | Discriminator                                                                                                        |
-| `counterfactual`     | `boolean`        | ✓   | `false` for ordinary rows; `true` for Control-arm would-have-activated events (additive extension, no schema change) |
-| `variant`            | `string \| null` | ✓   | `null` for API-materialized Activations; the first Exposure supplies the analyzed Variant                            |
+| Field                | Type           | Req | Meaning                                                                                                              |
+| -------------------- | -------------- | --- | -------------------------------------------------------------------------------------------------------------------- |
+| `app_id`             | `string`       | ✓   | Data-isolation key                                                                                                   |
+| `environment_id`     | `string`       | ✓   | Environment scope; Exposures/activations are per-Environment (ADR-0027)                                              |
+| `experiment_id`      | `string`       | ✓   | Owning Experiment                                                                                                    |
+| `run_id`             | `string`       | ✓   | Experiment Run at activation time                                                                                    |
+| `targeting_key_hash` | `string`       | ✓   | HMAC-derived Entity identifier                                                                                       |
+| `id_type`            | `string`       | ✓   | Entity type; always explicit                                                                                         |
+| `server_received_at` | `timestamp`    | ✓   | Server-received-at                                                                                                   |
+| `type`               | `"activation"` | ✓   | Discriminator                                                                                                        |
+| `counterfactual`     | `boolean`      | ✓   | `false` for ordinary rows; `true` for Control-arm would-have-activated events (additive extension, no schema change) |
+| `variant`            | `string`       | ✓   | Assigned Variant derived from the Entity's existing Exposure                                                         |
 
 Counterfactual triggering is additive: the future Kohavi-correct gate is implemented as the Control arm emitting an activation row with `counterfactual: true`. Same log, same join, same anchor, same SRM. Zero schema change. (ADR-0013)
 

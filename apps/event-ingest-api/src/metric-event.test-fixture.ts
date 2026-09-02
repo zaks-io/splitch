@@ -1,5 +1,6 @@
 import {
   apiKeyCacheKey,
+  assignmentKey,
   CURRENT_KV_SCHEMA_VERSION,
   clientKeyCacheKey,
   eventDefinitionConfigKey,
@@ -14,6 +15,7 @@ import {
   TestExecutionContext,
 } from "./test-fixtures";
 import type { Env } from "./types";
+import { resolveMetricEventIdentityMaterial } from "./metric-event-identity";
 
 export const METRIC_APP_ID = "app_shop";
 export const METRIC_ENVIRONMENT_ID = "env_prod";
@@ -32,6 +34,7 @@ interface Claim {
 export interface MetricEventFixture {
   readonly env: Env;
   readonly config: Map<string, string>;
+  readonly assignments: Map<string, string>;
   readonly claims: Map<string, Claim>;
   readonly admissionCharges: AdmissionCharge[];
   readonly hash: string;
@@ -57,6 +60,7 @@ export async function makeMetricEventFixture(
     [eventDefinitionConfigKey(METRIC_APP_ID, METRIC_EVENT_NAME), hotConfig("edv_1", 1)],
   ]);
   const claims = new Map<string, Claim>();
+  const assignments = new Map<string, string>();
   const admissionCharges: AdmissionCharge[] = [];
   const env = {
     SPLITCH_PLATFORM_TARGET: "local",
@@ -64,10 +68,38 @@ export async function makeMetricEventFixture(
     ...(options.omitCredentialStore ? {} : { CREDENTIAL_STORE: kv(credential) }),
     CONFIG_STORE: mergedConfigStore(base.CONFIG_STORE, config),
     CONFIG_STORE_WRITER: base.CONFIG_STORE_WRITER ?? appIdentityWriter(config),
+    ASSIGNMENTS_KV: base.ASSIGNMENTS_KV ?? kv(assignments),
     METRIC_EVENT_OUTBOX: outboxStub(claims),
     ...admissionBinding(options.admission, admissionCharges),
   } as unknown as Env;
-  return { env, config, claims, admissionCharges, hash, credentialKind };
+  return { env, config, assignments, claims, admissionCharges, hash, credentialKind };
+}
+
+export async function seedMetricEventAssignment(
+  fixture: MetricEventFixture,
+  input: { experimentId: string; runId: string; variant: string },
+): Promise<void> {
+  const event = metricEventBody();
+  const identity = await resolveMetricEventIdentityMaterial(
+    fixture.env,
+    {
+      appId: METRIC_APP_ID,
+      environmentId: METRIC_ENVIRONMENT_ID,
+      credentialHash: fixture.hash,
+      credentialKind: fixture.credentialKind,
+      rateLimitRps: null,
+    },
+    event,
+  );
+  fixture.assignments.set(
+    assignmentKey(METRIC_APP_ID, event.idType, identity.targetingKeyHash),
+    JSON.stringify({
+      schemaVersion: CURRENT_KV_SCHEMA_VERSION,
+      data: {
+        [input.experimentId]: { runId: input.runId, variant: input.variant },
+      },
+    }),
+  );
 }
 
 function appIdentityWriter(values: Map<string, string>): NonNullable<Env["CONFIG_STORE_WRITER"]> {

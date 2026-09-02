@@ -14,6 +14,7 @@ import type { MetricEventOutboxNamespace } from "./metric-event-outbox-client";
 import type { MetricEventRateLimitNamespace } from "./metric-event-rate-limit";
 
 interface WorkerProtocolBindings {
+  ASSIGNMENTS_KV?: KVNamespace;
   CONFIG_STORE?: KVNamespace;
   CONFIG_STORE_WRITER?: {
     getByName(name: string): {

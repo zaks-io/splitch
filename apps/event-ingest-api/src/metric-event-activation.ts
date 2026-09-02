@@ -1,7 +1,10 @@
 import {
   type ActivationBindingKV,
   ActivationConfigKVSchema,
+  type AssignmentStoreValue,
+  AssignmentStoreValueSchema,
   activationConfigKey,
+  assignmentKey,
   kvEnvelope,
   type MetricEventTrackRequest,
 } from "@splitch/contracts";
@@ -9,21 +12,25 @@ import type { MetricEventCredentialScope } from "./client-key-auth";
 import type { Env } from "./types";
 
 const ActivationConfigEnvelope = kvEnvelope(ActivationConfigKVSchema);
+const AssignmentEnvelope = kvEnvelope(AssignmentStoreValueSchema);
 
 export async function activationRows(
   env: Env,
   credential: MetricEventCredentialScope,
   event: MetricEventTrackRequest,
-  identity: { targetingKeyHash: string; entityFamilyHash: string },
+  identity: {
+    targetingKeyHash: string;
+    targetingKeyHashes: readonly string[];
+    entityFamilyHash: string;
+  },
   eventDefinitionId: string,
-  serverReceivedAt: string,
 ): Promise<Record<string, unknown>[]> {
   if (!env.CONFIG_STORE) throw new Error("CONFIG_STORE binding is unavailable");
   const raw = await env.CONFIG_STORE.get(
     activationConfigKey(credential.appId, credential.environmentId),
     "text",
   );
-  if (raw === null) return [];
+  if (raw === null) throw new Error("Activation configuration is unavailable");
   const config = ActivationConfigEnvelope.parse(JSON.parse(raw)).data;
   const bindings = config.bindings.filter(
     (binding) => binding.eventDefinitionId === eventDefinitionId,
@@ -36,14 +43,61 @@ export async function activationRows(
       throw new Error("Activation binding Entity type does not match its Event Definition");
     }
   }
+  const assignments = await loadAssignments(env, credential.appId, event.idType, identity);
+  const exposedBindings = bindings.flatMap((binding) => {
+    const assignment = assignments[binding.experimentId];
+    return assignment?.runId === binding.runId ? [{ binding, assignment }] : [];
+  });
+  if (exposedBindings.length === 0) {
+    throw new Error("Exposure proof is unavailable for matching live Experiment Runs");
+  }
   const sourceId =
     env.SPLITCH_SOURCE_ID ?? (env.SPLITCH_PLATFORM_TARGET === "local" ? "local" : null);
   if (!sourceId) throw new Error("Activation source identity is unavailable");
+  const serverReceivedAt = new Date().toISOString();
   return Promise.all(
-    bindings.map((binding) =>
-      activationRow(credential, event, identity, binding, sourceId, serverReceivedAt),
+    exposedBindings.map(({ assignment, binding }) =>
+      activationRow(
+        credential,
+        event,
+        identity,
+        binding,
+        assignment.variant,
+        sourceId,
+        serverReceivedAt,
+      ),
     ),
   );
+}
+
+async function loadAssignments(
+  env: Env,
+  appId: string,
+  idType: string,
+  identity: { targetingKeyHashes: readonly string[] },
+): Promise<AssignmentStoreValue> {
+  const assignmentsKv = env.ASSIGNMENTS_KV;
+  if (!assignmentsKv) throw new Error("ASSIGNMENTS_KV binding is unavailable");
+  const values = await Promise.all(
+    identity.targetingKeyHashes.map(async (targetingKeyHash) => {
+      const raw = await assignmentsKv.get(assignmentKey(appId, idType, targetingKeyHash), "text");
+      return raw === null ? {} : AssignmentEnvelope.parse(JSON.parse(raw)).data;
+    }),
+  );
+  const merged: AssignmentStoreValue = {};
+  for (const value of values) {
+    for (const [experimentId, assignment] of Object.entries(value)) {
+      const existing = merged[experimentId];
+      if (
+        existing !== undefined &&
+        (existing.runId !== assignment.runId || existing.variant !== assignment.variant)
+      ) {
+        throw new Error("Conflicting Assignment values across retained Entity identities");
+      }
+      merged[experimentId] = assignment;
+    }
+  }
+  return merged;
 }
 
 async function activationRow(
@@ -51,6 +105,7 @@ async function activationRow(
   event: MetricEventTrackRequest,
   identity: { targetingKeyHash: string; entityFamilyHash: string },
   binding: ActivationBindingKV,
+  variant: string,
   sourceId: string,
   serverReceivedAt: string,
 ): Promise<Record<string, unknown>> {
@@ -63,7 +118,7 @@ async function activationRow(
     id_type: binding.idType,
     targeting_key_hash: identity.targetingKeyHash,
     entity_family_hash: identity.entityFamilyHash,
-    variant: null,
+    variant,
     type: "activation",
     event_id: event.eventId,
     counterfactual: 0,
