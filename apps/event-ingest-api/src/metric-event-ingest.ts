@@ -93,7 +93,7 @@ export async function handleAuthorizedMetricEvent(
     } catch (cause) {
       return timedMetricResponse(
         timing,
-        activationFailure(cause, parsed, hot.eventDefinition.id),
+        activationFailure(cause, parsed, hot.eventDefinition.id, disclosure),
         serializedBytes,
       );
     }
@@ -119,15 +119,18 @@ export async function handleAuthorizedMetricEvent(
 }
 
 /**
- * Six distinct resolution failures used to collapse into one opaque 503 with no
+ * Eight distinct resolution failures used to collapse into one opaque 503 with no
  * log line, which made a broken Activation indistinguishable from an unpublished
- * config blob. The response now names the step that failed; the ids behind it are
- * operator-only, so they go to the log untruncated and never to the body.
+ * config blob. The step that failed is named only for an API Key: to a public
+ * Client Key these messages would answer "is this Entity enrolled?" and "which
+ * Event Definitions gate an Activation?" one request at a time. Operators get the
+ * full cause plus ids from the log, which is where the ids only ever go.
  */
 function activationFailure(
   cause: unknown,
   event: MetricEventTrackRequest,
   eventDefinitionId: string,
+  disclosure: "trusted" | "public",
 ): Response {
   const resolution = cause instanceof ActivationResolutionError ? cause : null;
   console.error(
@@ -142,9 +145,11 @@ function activationFailure(
       stack: cause instanceof Error ? cause.stack : null,
     }),
   );
-  return renderError(
-    serviceUnavailable(resolution?.message ?? "Activation configuration is unavailable"),
-  );
+  const message =
+    disclosure === "trusted" && resolution
+      ? resolution.message
+      : "Activation configuration is unavailable";
+  return renderError(serviceUnavailable(message));
 }
 
 function timedMetricResponse(

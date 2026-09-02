@@ -26,19 +26,24 @@ export async function activationBindingsForExperiment(
   const eventDefinitionIds = new Map(
     metrics.map((metric) => [metric.id, metric.eventDefinitionId]),
   );
-  return activating.map(({ run, activationMetricId }) => {
-    if (!eventDefinitionIds.has(activationMetricId)) {
-      throw new Error("config-store: activation Metric does not exist");
-    }
+  return activating.flatMap(({ run, activationMetricId }) => {
     const eventDefinitionId = eventDefinitionIds.get(activationMetricId);
+    // Deleting a Metric is allowed once no Run is running (SPL-289), and an ended
+    // Run keeps pointing at it, so a missing row is a reachable state rather than
+    // a broken invariant. That Run has nothing left to activate on; publishing no
+    // binding fails it loud at ingest instead of wedging every config read for
+    // this Flag. A Metric that exists without an Event Definition is still corrupt.
+    if (eventDefinitionId === undefined) return [];
     if (!eventDefinitionId) {
       throw new Error("config-store: activation Metric has no Event Definition");
     }
-    return ActivationBindingKVSchema.parse({
-      eventDefinitionId,
-      experimentId: run.experimentId,
-      runId: run.id,
-      idType: run.targetingKeyType,
-    });
+    return [
+      ActivationBindingKVSchema.parse({
+        eventDefinitionId,
+        experimentId: run.experimentId,
+        runId: run.id,
+        idType: run.targetingKeyType,
+      }),
+    ];
   });
 }

@@ -118,6 +118,32 @@ describe("config store Activation bindings", () => {
     });
   });
 
+  // Deleting a Metric is allowed once no Run is running, and the ended Run keeps
+  // pointing at it. Resolving that Run must not throw: buildSnapshot feeds every
+  // flag-config read and write for this Flag, so a throw here would wedge them all
+  // with no API path back.
+  it("skips a Run whose frozen activation Metric was deleted", async () => {
+    await seedActivationMetric("metric_activation", LIVE_EVENT_DEFINITION_ID, "generation");
+    await freezeActivationMetric(ids.liveRunId, "metric_activation");
+    await startSeededExperiment(h.d1);
+    const store = makeStore();
+    await syncSeededExperiment(store);
+
+    await h.d1
+      .prepare("UPDATE experiments SET status = 'ended', live_run_id = NULL WHERE id = ?")
+      .bind(ids.experimentId)
+      .run();
+    await h.d1
+      .prepare("DELETE FROM metrics WHERE app_id = ? AND id = ?")
+      .bind(ids.appId, "metric_activation")
+      .run();
+
+    await expect(syncSeededExperiment(store)).resolves.toBeDefined();
+    expect(await kvJson(h.kv, activationConfigKey(ids.appId, ids.environmentId))).toMatchObject({
+      data: { bindings: [] },
+    });
+  });
+
   it("publishes nothing when no Run froze an activation Metric", async () => {
     await startSeededExperiment(h.d1);
 

@@ -1,4 +1,4 @@
-import { activationConfigKey, liveRunKey } from "@splitch/contracts";
+import { activationConfigKey } from "@splitch/contracts";
 import { describe, expect, it } from "vitest";
 import { entityMetricPrivacyFixtureFetch } from "./entity-metric-privacy.test-fixture";
 import { ingestAdmissionScopeName } from "./ingest-admission-config";
@@ -10,7 +10,7 @@ import {
   sendActivation,
   sendMetricEvent,
 } from "./metric-event.test-fixture";
-import { activationConfig, liveRun } from "./metric-event-activation.test-fixture";
+import { activationConfig } from "./metric-event-activation.test-fixture";
 import { seedMetricEventAssignment } from "./metric-event-assignment.test-fixture";
 
 describe("Activation ingest", () => {
@@ -19,10 +19,6 @@ describe("Activation ingest", () => {
     fixture.config.set(
       activationConfigKey(METRIC_APP_ID, METRIC_ENVIRONMENT_ID),
       activationConfig(),
-    );
-    fixture.config.set(
-      liveRunKey(METRIC_APP_ID, METRIC_ENVIRONMENT_ID, "exp_signup"),
-      liveRun("run_signup"),
     );
     await seedMetricEventAssignment(fixture, {
       experimentId: "exp_signup",

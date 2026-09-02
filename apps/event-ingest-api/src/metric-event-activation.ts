@@ -6,8 +6,6 @@ import {
   activationConfigKey,
   assignmentKey,
   kvEnvelope,
-  LiveRunKVSchema,
-  liveRunKey,
   type MetricEventTrackRequest,
 } from "@splitch/contracts";
 import type { MetricEventCredentialScope } from "./client-key-auth";
@@ -15,7 +13,6 @@ import type { Env } from "./types";
 
 const ActivationConfigEnvelope = kvEnvelope(ActivationConfigKVSchema);
 const AssignmentEnvelope = kvEnvelope(AssignmentStoreValueSchema);
-const LiveRunEnvelope = kvEnvelope(LiveRunKVSchema);
 
 /**
  * A named resolution failure, so the ingest handler can report WHICH step failed
@@ -104,11 +101,6 @@ export async function activationRows(
   const sourceId =
     env.SPLITCH_SOURCE_ID ?? (env.SPLITCH_PLATFORM_TARGET === "local" ? "local" : null);
   if (!sourceId) throw new ActivationResolutionError("Activation source identity is unavailable");
-  const liveRunIds = await loadLiveRunIds(
-    env,
-    credential,
-    exposedBindings.map(({ binding }) => binding.experimentId),
-  );
   const serverReceivedAt = new Date().toISOString();
   return Promise.all(
     exposedBindings.map(({ assignment, binding, targetingKeyHash }) =>
@@ -118,7 +110,6 @@ export async function activationRows(
         { entityFamilyHash: identity.entityFamilyHash, targetingKeyHash },
         binding,
         assignment.variant,
-        liveRunIds.get(binding.experimentId) !== binding.runId,
         sourceId,
         serverReceivedAt,
       ),
@@ -169,34 +160,6 @@ async function loadAssignments(
   return merged;
 }
 
-/**
- * The live Run pointer per Experiment, so `is_holdover` reports what the row
- * actually is. The key is absent when the Experiment has no live Run, which
- * makes every remaining Entity a holdover — the same answer, without a default
- * standing in for a missing read.
- */
-async function loadLiveRunIds(
-  env: Env,
-  credential: MetricEventCredentialScope,
-  experimentIds: readonly string[],
-): Promise<Map<string, string | null>> {
-  const configStore = env.CONFIG_STORE;
-  if (!configStore) {
-    throw new ActivationResolutionError("Activation configuration store is unavailable");
-  }
-  const entries = await Promise.all(
-    [...new Set(experimentIds)].map(async (experimentId): Promise<[string, string | null]> => {
-      const raw = await configStore.get(
-        liveRunKey(credential.appId, credential.environmentId, experimentId),
-        "text",
-      );
-      if (raw === null) return [experimentId, null];
-      return [experimentId, LiveRunEnvelope.parse(JSON.parse(raw)).data.runId];
-    }),
-  );
-  return new Map(entries);
-}
-
 interface LocatedAssignment {
   readonly assignment: AssignmentStoreEntry;
   readonly targetingKeyHash: string;
@@ -208,7 +171,6 @@ async function activationRow(
   identity: { targetingKeyHash: string; entityFamilyHash: string },
   binding: ActivationBindingKV,
   variant: string,
-  isHoldover: boolean,
   sourceId: string,
   serverReceivedAt: string,
 ): Promise<Record<string, unknown>> {
@@ -230,7 +192,9 @@ async function activationRow(
     exposure_at: serverReceivedAt,
     server_received_at: serverReceivedAt,
     activation_ts: serverReceivedAt,
-    is_holdover: isHoldover ? 1 : 0,
+    // Exposure-only signal: it reports whether the SDK replayed a stored Variant
+    // instead of calling assign(). Activation rows are always 0.
+    is_holdover: 0,
     sdk_version: null,
   };
 }

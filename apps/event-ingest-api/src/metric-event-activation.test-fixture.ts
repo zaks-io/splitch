@@ -1,6 +1,6 @@
 import { CURRENT_KV_SCHEMA_VERSION } from "@splitch/contracts";
 
-/** The two KV blobs Activation resolution reads, and the failure it reports. */
+/** The Activation config blob resolution reads, and the failure it reports. */
 
 export function activationConfig(
   bindings: readonly Record<string, unknown>[] = [
@@ -13,10 +13,6 @@ export function activationConfig(
   ],
 ): string {
   return JSON.stringify({ schemaVersion: CURRENT_KV_SCHEMA_VERSION, data: { bindings } });
-}
-
-export function liveRun(runId: string): string {
-  return JSON.stringify({ schemaVersion: CURRENT_KV_SCHEMA_VERSION, data: { runId } });
 }
 
 export async function errorMessage(response: Response): Promise<string> {

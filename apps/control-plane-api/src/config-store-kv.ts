@@ -170,7 +170,7 @@ export async function writeSnapshot(
   } else if (snapshot.experiment) {
     await kv.delete(liveRunKey(scope.appId, scope.environmentId, snapshot.experiment.id));
   }
-  const experimentId = snapshot.experiment?.id ?? snapshot.activationBindings[0]?.experimentId;
+  const experimentId = snapshot.experiment?.id;
   if (experimentId) {
     await updateActivationConfig(kv, scope, [experimentId], snapshot.activationBindings);
   }
