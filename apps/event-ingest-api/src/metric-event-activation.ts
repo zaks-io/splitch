@@ -1,7 +1,7 @@
 import {
   type ActivationBindingKV,
   ActivationConfigKVSchema,
-  type AssignmentStoreValue,
+  type AssignmentStoreEntry,
   AssignmentStoreValueSchema,
   activationConfigKey,
   assignmentKey,
@@ -45,8 +45,8 @@ export async function activationRows(
   }
   const assignments = await loadAssignments(env, credential.appId, event.idType, identity);
   const exposedBindings = bindings.flatMap((binding) => {
-    const assignment = assignments[binding.experimentId];
-    return assignment?.runId === binding.runId ? [{ binding, assignment }] : [];
+    const located = assignments[binding.experimentId];
+    return located?.assignment.runId === binding.runId ? [{ binding, ...located }] : [];
   });
   if (exposedBindings.length === 0) {
     throw new Error("Exposure proof is unavailable for matching live Experiment Runs");
@@ -56,11 +56,11 @@ export async function activationRows(
   if (!sourceId) throw new Error("Activation source identity is unavailable");
   const serverReceivedAt = new Date().toISOString();
   return Promise.all(
-    exposedBindings.map(({ assignment, binding }) =>
+    exposedBindings.map(({ assignment, binding, targetingKeyHash }) =>
       activationRow(
         credential,
         event,
-        identity,
+        { entityFamilyHash: identity.entityFamilyHash, targetingKeyHash },
         binding,
         assignment.variant,
         sourceId,
@@ -75,29 +75,38 @@ async function loadAssignments(
   appId: string,
   idType: string,
   identity: { targetingKeyHashes: readonly string[] },
-): Promise<AssignmentStoreValue> {
+): Promise<Record<string, LocatedAssignment>> {
   const assignmentsKv = env.ASSIGNMENTS_KV;
   if (!assignmentsKv) throw new Error("ASSIGNMENTS_KV binding is unavailable");
   const values = await Promise.all(
     identity.targetingKeyHashes.map(async (targetingKeyHash) => {
       const raw = await assignmentsKv.get(assignmentKey(appId, idType, targetingKeyHash), "text");
-      return raw === null ? {} : AssignmentEnvelope.parse(JSON.parse(raw)).data;
+      return {
+        targetingKeyHash,
+        assignments: raw === null ? {} : AssignmentEnvelope.parse(JSON.parse(raw)).data,
+      };
     }),
   );
-  const merged: AssignmentStoreValue = {};
+  const merged: Record<string, LocatedAssignment> = {};
   for (const value of values) {
-    for (const [experimentId, assignment] of Object.entries(value)) {
+    for (const [experimentId, assignment] of Object.entries(value.assignments)) {
       const existing = merged[experimentId];
       if (
         existing !== undefined &&
-        (existing.runId !== assignment.runId || existing.variant !== assignment.variant)
+        (existing.assignment.runId !== assignment.runId ||
+          existing.assignment.variant !== assignment.variant)
       ) {
         throw new Error("Conflicting Assignment values across retained Entity identities");
       }
-      merged[experimentId] = assignment;
+      merged[experimentId] = { assignment, targetingKeyHash: value.targetingKeyHash };
     }
   }
   return merged;
+}
+
+interface LocatedAssignment {
+  readonly assignment: AssignmentStoreEntry;
+  readonly targetingKeyHash: string;
 }
 
 async function activationRow(

@@ -1,6 +1,5 @@
 import {
   apiKeyCacheKey,
-  assignmentKey,
   CURRENT_KV_SCHEMA_VERSION,
   clientKeyCacheKey,
   eventDefinitionConfigKey,
@@ -15,7 +14,6 @@ import {
   TestExecutionContext,
 } from "./test-fixtures";
 import type { Env } from "./types";
-import { resolveMetricEventIdentityMaterial } from "./metric-event-identity";
 
 export const METRIC_APP_ID = "app_shop";
 export const METRIC_ENVIRONMENT_ID = "env_prod";
@@ -73,33 +71,6 @@ export async function makeMetricEventFixture(
     ...admissionBinding(options.admission, admissionCharges),
   } as unknown as Env;
   return { env, config, assignments, claims, admissionCharges, hash, credentialKind };
-}
-
-export async function seedMetricEventAssignment(
-  fixture: MetricEventFixture,
-  input: { experimentId: string; runId: string; variant: string },
-): Promise<void> {
-  const event = metricEventBody();
-  const identity = await resolveMetricEventIdentityMaterial(
-    fixture.env,
-    {
-      appId: METRIC_APP_ID,
-      environmentId: METRIC_ENVIRONMENT_ID,
-      credentialHash: fixture.hash,
-      credentialKind: fixture.credentialKind,
-      rateLimitRps: null,
-    },
-    event,
-  );
-  fixture.assignments.set(
-    assignmentKey(METRIC_APP_ID, event.idType, identity.targetingKeyHash),
-    JSON.stringify({
-      schemaVersion: CURRENT_KV_SCHEMA_VERSION,
-      data: {
-        [input.experimentId]: { runId: input.runId, variant: input.variant },
-      },
-    }),
-  );
 }
 
 function appIdentityWriter(values: Map<string, string>): NonNullable<Env["CONFIG_STORE_WRITER"]> {

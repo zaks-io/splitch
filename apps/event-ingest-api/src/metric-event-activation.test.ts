@@ -1,15 +1,16 @@
 import { activationConfigKey, CURRENT_KV_SCHEMA_VERSION } from "@splitch/contracts";
 import { describe, expect, it } from "vitest";
+import { entityMetricPrivacyFixtureFetch } from "./entity-metric-privacy.test-fixture";
 import { ingestAdmissionScopeName } from "./ingest-admission-config";
 import {
   METRIC_APP_ID,
   METRIC_ENVIRONMENT_ID,
   makeMetricEventFixture,
   metricEventBody,
-  seedMetricEventAssignment,
   sendActivation,
   sendMetricEvent,
 } from "./metric-event.test-fixture";
+import { seedMetricEventAssignment } from "./metric-event-assignment.test-fixture";
 
 describe("Activation ingest", () => {
   it("accepts one Metric Event and materializes matching live-Run Activations", async () => {
@@ -144,6 +145,58 @@ describe("Activation ingest", () => {
     expect(response.status).toBe(409);
     const body = (await response.json()) as { code?: unknown };
     expect(body.code).toBe("EVENT_ID_CONFLICT");
+  });
+});
+
+describe("Activation identity", () => {
+  it("uses the retained identity hash that owns the Exposure-backed Assignment", async () => {
+    const fixture = await makeMetricEventFixture();
+    fixture.config.set(
+      activationConfigKey(METRIC_APP_ID, METRIC_ENVIRONMENT_ID),
+      activationConfig(),
+    );
+    const retainedHash = await seedMetricEventAssignment(fixture, {
+      experimentId: "exp_signup",
+      runId: "run_signup",
+      variant: "treatment",
+      identityEpoch: "oldest",
+    });
+
+    const response = await sendActivation(fixture, metricEventBody());
+
+    expect(response.status).toBe(202);
+    expect([...fixture.claims.values()][0]?.activationRows).toEqual([
+      expect.objectContaining({ targeting_key_hash: retainedHash }),
+    ]);
+  });
+
+  it("uses the configured source identity outside local development", async () => {
+    const fixture = await makeMetricEventFixture({
+      ENTITY_METRIC_PRIVACY: {
+        idFromName: (name) => name as unknown as DurableObjectId,
+        get: () => ({ fetch: entityMetricPrivacyFixtureFetch }),
+      },
+      EVALUATION_PRIVACY_SALT: "test-root-secret-do-not-use",
+      SPLITCH_PLATFORM_TARGET: "production",
+      SPLITCH_SOURCE_ID: "event-ingest-api",
+    });
+    fixture.config.set(
+      activationConfigKey(METRIC_APP_ID, METRIC_ENVIRONMENT_ID),
+      activationConfig(),
+    );
+    await seedMetricEventAssignment(fixture, {
+      experimentId: "exp_signup",
+      runId: "run_signup",
+      variant: "treatment",
+    });
+
+    const response = await sendActivation(fixture, metricEventBody());
+    const body = await response.json();
+
+    expect(response.status, JSON.stringify(body)).toBe(202);
+    expect([...fixture.claims.values()][0]?.activationRows).toEqual([
+      expect.objectContaining({ source_id: "event-ingest-api" }),
+    ]);
   });
 });
 

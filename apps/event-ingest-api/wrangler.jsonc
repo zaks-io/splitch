@@ -30,6 +30,7 @@
   },
   "vars": {
     "SPLITCH_PLATFORM_TARGET": "local",
+    "SPLITCH_SOURCE_ID": "event-ingest-api",
     "TINYBIRD_API_URL": "https://api.us-west-2.aws.tinybird.co"
   },
   "kv_namespaces": [
@@ -194,6 +195,7 @@
       },
       "vars": {
         "SPLITCH_PLATFORM_TARGET": "shared-preview",
+        "SPLITCH_SOURCE_ID": "event-ingest-api",
         "TINYBIRD_API_URL": "https://api.us-west-2.aws.tinybird.co"
       },
       "kv_namespaces": [
@@ -356,6 +358,7 @@
       },
       "vars": {
         "SPLITCH_PLATFORM_TARGET": "production",
+        "SPLITCH_SOURCE_ID": "event-ingest-api",
         "TINYBIRD_API_URL": "https://api.us-west-2.aws.tinybird.co"
       },
       "kv_namespaces": [
