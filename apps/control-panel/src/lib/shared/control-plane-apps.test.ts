@@ -2,6 +2,11 @@ import {
   CONTROL_PANEL_DELEGATION_HEADER,
   verifyControlPanelDelegation,
 } from "@splitch/control-plane-sdk/control-panel-identity";
+import type {
+  PerformanceSpanAttribute,
+  PerformanceSpanDescriptor,
+  PerformanceSpanRecorder,
+} from "@splitch/observability/performance-spans";
 import { describe, expect, it, vi } from "vitest";
 import { createControlPanelAppsClient, panelDelegationFetch } from "#lib/shared/control-plane-apps";
 
@@ -10,6 +15,54 @@ const DELEGATION_SECRET = "test-control-panel-delegation-secret-1234";
 const TOKEN_HASH = "a".repeat(64);
 
 describe("Control Panel Apps transport", () => {
+  it("records the binding operation and status without resource identifiers", async () => {
+    const recorded: Array<{
+      descriptor: PerformanceSpanDescriptor;
+      attributes: Record<string, PerformanceSpanAttribute>;
+    }> = [];
+    const spanRecorder: PerformanceSpanRecorder = {
+      async record(descriptor, run) {
+        const attributes = { ...descriptor.attributes };
+        recorded.push({ descriptor, attributes });
+        return run({
+          setAttribute(key, value) {
+            attributes[key] = value;
+          },
+          setAttributes(values) {
+            Object.assign(attributes, values);
+          },
+        });
+      },
+    };
+    const apps = createControlPanelAppsClient(
+      { fetch: async () => Response.json(createdApp()) } as unknown as Fetcher,
+      ACTOR,
+      DELEGATION_SECRET,
+      {
+        nowSeconds: () => 1_800_000_000,
+        nonce: () => "nonce_span_123456789",
+        spanRecorder,
+      },
+    );
+
+    await apps.create({ orgId: "org_secret", name: "Checkout", key: "checkout" });
+
+    expect(recorded).toEqual([
+      {
+        descriptor: expect.objectContaining({
+          name: "Control Plane apps_create",
+          op: "rpc.client",
+        }),
+        attributes: {
+          "rpc.system": "cloudflare.service_binding",
+          "rpc.method": "apps_create",
+          "rpc.response.status_code": 200,
+        },
+      },
+    ]);
+    expect(JSON.stringify(recorded)).not.toContain("org_secret");
+  });
+
   it("carries only an authenticated operation-scoped delegation over the Worker binding", async () => {
     let capturedRequest: Request | undefined;
     const fetcher = vi.fn(async (request: Request) => {

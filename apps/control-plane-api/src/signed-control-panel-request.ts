@@ -1,4 +1,5 @@
 import type { createRepository } from "@splitch/db";
+import { createPerformanceSpanRecorder } from "@splitch/observability/performance-spans";
 import { createAnalysisResultsReader } from "./attention-analysis-reader";
 import type { makeControlPlaneAuthResolver } from "./auth-resolver";
 import { durableConfigStoreAccess } from "./config-store-access";
@@ -64,7 +65,12 @@ async function handleSignedPanelOverview(
   return panelOverviewRead(
     {
       repo,
-      analysisResults: createAnalysisResultsReader(env.ANALYSIS_API, undefined, configStore),
+      analysisResults: createAnalysisResultsReader(
+        env.ANALYSIS_API,
+        undefined,
+        configStore,
+        createPerformanceSpanRecorder(env),
+      ),
     },
     {
       actorId: auth.principal.id,

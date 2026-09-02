@@ -165,6 +165,29 @@ describe("scrubSentrySpan allow-list traversal", () => {
     });
   });
 
+  it("preserves only payload-free performance attributes verbatim", () => {
+    const data = {
+      "db.system": "tinybird",
+      "db.operation.name": "read",
+      "db.response.returned_rows": 4,
+      "http.request.method": "POST",
+      "http.response.status_code": 200,
+      "rpc.system": "cloudflare.service_binding",
+      "rpc.method": "overview_get",
+      "rpc.response.status_code": 200,
+      "tinybird.pipe.name": "analysis_run_bootstrap",
+      "panel.app.count": 2,
+      "panel.environment.count": 3,
+      "panel.membership.count": 2,
+      "session.pending_resync": false,
+      "session.resync_attempted": false,
+      "session.resync_succeeded": false,
+      "auth.result": "ok",
+    };
+
+    expect(scrubSentrySpan({ data }).data).toEqual(data);
+  });
+
   /**
    * The dotted attribute keys Sentry's own MCP instrumentation would emit if it
    * were ever turned on. `normalize()` folds `_` and `-` but not `.`, so the PII

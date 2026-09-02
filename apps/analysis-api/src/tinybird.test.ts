@@ -1,4 +1,9 @@
 import { describe, expect, it } from "vitest";
+import type {
+  PerformanceSpanAttribute,
+  PerformanceSpanDescriptor,
+  PerformanceSpanRecorder,
+} from "@splitch/observability/performance-spans";
 import {
   createTinybirdCopyTransport,
   createTinybirdReadTransport,
@@ -7,6 +12,63 @@ import {
   TinybirdReadError,
   tinybirdDateTime64,
 } from "./tinybird";
+
+describe("Tinybird observability", () => {
+  it("records the pipe, HTTP outcome, and row count without query parameters", async () => {
+    const recorded: Array<{
+      descriptor: PerformanceSpanDescriptor;
+      attributes: Record<string, PerformanceSpanAttribute>;
+    }> = [];
+    const spanRecorder: PerformanceSpanRecorder = {
+      async record(descriptor, run) {
+        const attributes = { ...descriptor.attributes };
+        recorded.push({ descriptor, attributes });
+        return run({
+          setAttribute(key, value) {
+            attributes[key] = value;
+          },
+          setAttributes(values) {
+            Object.assign(attributes, values);
+          },
+        });
+      },
+    };
+    const transport = createTinybirdReadTransport(
+      {
+        TINYBIRD_API_URL: "https://tinybird.test",
+        TINYBIRD_READ_TOKEN: "test-token",
+      },
+      {
+        spanRecorder,
+        fetchFn: async () => Response.json({ data: [{ run_id: "run_1" }] }),
+      },
+    );
+
+    await transport.readPipe("analysis_run_inputs", {
+      app_id: "app_secret",
+      environment_id: "env_secret",
+    });
+
+    expect(recorded).toEqual([
+      {
+        descriptor: expect.objectContaining({
+          name: "Tinybird read analysis_run_inputs",
+          op: "http.client",
+        }),
+        attributes: {
+          "db.system": "tinybird",
+          "db.operation.name": "read",
+          "http.request.method": "GET",
+          "tinybird.pipe.name": "analysis_run_inputs",
+          "http.response.status_code": 200,
+          "db.response.returned_rows": 1,
+        },
+      },
+    ]);
+    expect(JSON.stringify(recorded)).not.toContain("app_secret");
+    expect(JSON.stringify(recorded)).not.toContain("env_secret");
+  });
+});
 
 describe("Tinybird read transport", () => {
   it("requires the full Organization usage scope at the read chokepoint", async () => {

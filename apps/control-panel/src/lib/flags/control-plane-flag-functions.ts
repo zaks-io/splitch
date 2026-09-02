@@ -1,6 +1,7 @@
 import { env as workerEnv } from "cloudflare:workers";
 import type { ControlPlaneOperationResult } from "@splitch/control-plane-sdk";
 import { createRepository } from "@splitch/db";
+import { createPerformanceSpanRecorder } from "@splitch/observability/performance-spans";
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { controlPanelBindings } from "#lib/shared/bindings";
@@ -56,11 +57,27 @@ export const loadControlPanelFlagsMatrix = createServerFn({ method: "GET" })
   .handler(async ({ data }): Promise<ControlPlaneOperationResult<FlagsMatrixData>> => {
     const authorized = await authorizedFlagsClients(data.environmentIds);
     if (!authorized.ok) return authorized.result;
-    const repo = createRepository(controlPanelBindings(workerEnv).DB);
-    const environments = await createEnvironmentResolver(repo).listEnvironments(data.appId);
+    const bindings = controlPanelBindings(workerEnv);
+    const spans = createPerformanceSpanRecorder(bindings);
+    const repo = createRepository(bindings.DB);
+    const environments = await spans.record(
+      { name: "Panel environments read", op: "db.query" },
+      async (span) => {
+        const rows = await createEnvironmentResolver(repo).listEnvironments(data.appId);
+        span.setAttribute("panel.environment.count", rows.length);
+        return rows;
+      },
+    );
     assertMatrixEnvironments(data.environmentIds, environments);
 
-    return readFlagsMatrix(authorized.client, data.appId);
+    return spans.record(
+      {
+        name: "Panel flags matrix read",
+        op: "function",
+        attributes: { "panel.environment.count": data.environmentIds.length },
+      },
+      () => readFlagsMatrix(authorized.client, data.appId),
+    );
   });
 
 /**

@@ -1,4 +1,8 @@
 import type { AnalysisApiEnv } from "./env";
+import {
+  createPerformanceSpanRecorder,
+  type PerformanceSpanRecorder,
+} from "@splitch/observability/performance-spans";
 
 export type PipeParams = Record<string, string>;
 export type TinybirdReadOptions = { method: "GET" | "POST" };
@@ -80,56 +84,87 @@ export function scopedUsagePipeParams(input: {
 
 export function createTinybirdReadTransport(
   env: AnalysisApiEnv,
-  opts: { fetchFn?: typeof fetch; timeoutMs?: number } = {},
+  opts: {
+    fetchFn?: typeof fetch;
+    timeoutMs?: number;
+    spanRecorder?: PerformanceSpanRecorder;
+  } = {},
 ): TinybirdReadTransport {
   const fetchFn = opts.fetchFn ?? fetch;
   const timeoutMs = opts.timeoutMs ?? DEFAULT_TINYBIRD_TIMEOUT_MS;
   const apiUrl = requiredConfig(env.TINYBIRD_API_URL, "TINYBIRD_API_URL");
+  const spans = opts.spanRecorder ?? createPerformanceSpanRecorder(env);
 
   return {
     async readPipe(pipeName, params, options = { method: "GET" }) {
-      assertScoped(params);
-      const request = pipeRequest(apiUrl, pipeName, params, options);
-      const response = await fetchWithTimeout(
-        fetchFn,
-        request.url,
-        requiredReadToken(env),
-        timeoutMs,
-        "pipe read",
-        request.init,
-      );
-      if (!response.ok) {
-        throw new TinybirdReadError(`Tinybird pipe read failed with HTTP ${response.status}`);
-      }
+      return spans.record(tinybirdSpan(pipeName, "read", options.method), async (span) => {
+        assertScoped(params);
+        const request = pipeRequest(apiUrl, pipeName, params, options);
+        const response = await fetchWithTimeout(
+          fetchFn,
+          request.url,
+          requiredReadToken(env),
+          timeoutMs,
+          "pipe read",
+          request.init,
+        );
+        span.setAttribute("http.response.status_code", response.status);
+        if (!response.ok) {
+          throw new TinybirdReadError(`Tinybird pipe read failed with HTTP ${response.status}`);
+        }
 
-      return parseRows(await responseBody(response));
+        const rows = parseRows(await responseBody(response));
+        span.setAttribute("db.response.returned_rows", rows.length);
+        return rows;
+      });
     },
   };
 }
 
 export function createTinybirdCopyTransport(
   env: AnalysisApiEnv,
-  opts: { fetchFn?: typeof fetch; timeoutMs?: number } = {},
+  opts: {
+    fetchFn?: typeof fetch;
+    timeoutMs?: number;
+    spanRecorder?: PerformanceSpanRecorder;
+  } = {},
 ): TinybirdCopyTransport {
   const fetchFn = opts.fetchFn ?? fetch;
   const timeoutMs = opts.timeoutMs ?? DEFAULT_TINYBIRD_TIMEOUT_MS;
   const apiUrl = requiredConfig(env.TINYBIRD_API_URL, "TINYBIRD_API_URL");
+  const spans = opts.spanRecorder ?? createPerformanceSpanRecorder(env);
 
   return {
     async runCopyPipe(pipeName, params) {
-      const response = await fetchWithTimeout(
-        fetchFn,
-        copyPipeUrl(apiUrl, pipeName, params),
-        requiredCopyToken(env),
-        timeoutMs,
-        "copy run",
-        { method: "POST" },
-      );
-      if (!response.ok) {
-        throw new TinybirdCopyError(`Tinybird copy run failed with HTTP ${response.status}`);
-      }
+      return spans.record(tinybirdSpan(pipeName, "copy", "POST"), async (span) => {
+        const response = await fetchWithTimeout(
+          fetchFn,
+          copyPipeUrl(apiUrl, pipeName, params),
+          requiredCopyToken(env),
+          timeoutMs,
+          "copy run",
+          { method: "POST" },
+        );
+        span.setAttribute("http.response.status_code", response.status);
+        if (!response.ok) {
+          throw new TinybirdCopyError(`Tinybird copy run failed with HTTP ${response.status}`);
+        }
+      });
     },
   };
+}
+
+function tinybirdSpan(pipeName: string, operation: "read" | "copy", method: "GET" | "POST") {
+  return {
+    name: `Tinybird ${operation} ${pipeName}`,
+    op: "http.client",
+    attributes: {
+      "db.system": "tinybird",
+      "db.operation.name": operation,
+      "http.request.method": method,
+      "tinybird.pipe.name": pipeName,
+    },
+  } as const;
 }
 
 function requiredReadToken(env: AnalysisApiEnv): string {

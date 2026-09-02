@@ -1,5 +1,6 @@
 import { env as workerEnv } from "cloudflare:workers";
 import { createRepository } from "@splitch/db";
+import { createPerformanceSpanRecorder } from "@splitch/observability/performance-spans";
 import { createServerFn } from "@tanstack/react-start";
 import { getRequest, setResponseHeader } from "@tanstack/react-start/server";
 import { z } from "zod";
@@ -87,16 +88,16 @@ async function loadHealedSession(
   bindings: ControlPanelBindings,
   request: Request,
 ): Promise<HealedSession> {
-  const loaded = await loadSessionFromRequest(bindings, request);
+  const spans = createPerformanceSpanRecorder(bindings);
+  const loaded = await spans.record({ name: "Panel session load", op: "cache.get" }, () =>
+    loadSessionFromRequest(bindings, request),
+  );
   if (!loaded.ok) {
     return { kind: "unauthenticated" };
   }
   const repo = createRepository(bindings.DB);
-  const rehydrated = await rehydrateLegacySession(
-    repo,
-    bindings.SESSION_STORE,
-    loaded.tokenHash,
-    loaded.session,
+  const rehydrated = await spans.record({ name: "Panel session rehydrate", op: "function" }, () =>
+    rehydrateLegacySession(repo, bindings.SESSION_STORE, loaded.tokenHash, loaded.session),
   );
 
   // The self-heal half of "Reload to check again" (SPL-203 review round 2,
@@ -104,14 +105,30 @@ async function loadHealedSession(
   // Organization marker means the last resync failed, so landing here again
   // actually re-attempts it instead of re-reading the identical stale
   // principal forever.
-  const pendingBefore = await readPendingResync(
-    bindings.SESSION_STORE,
-    loaded.tokenHash,
-    "organization",
+  const pendingBefore = await spans.record(
+    { name: "Panel pending resync read", op: "cache.get" },
+    () => readPendingResync(bindings.SESSION_STORE, loaded.tokenHash, "organization"),
   );
-  const session = pendingBefore
-    ? await retryPendingResync(bindings, loaded.tokenHash, rehydrated)
-    : rehydrated;
+  const session = await spans.record(
+    {
+      name: "Panel session resync",
+      op: "function",
+      attributes: {
+        "session.pending_resync": pendingBefore !== null,
+        "session.resync_attempted": pendingBefore !== null,
+      },
+    },
+    async (span) => {
+      const resolved = pendingBefore
+        ? await retryPendingResync(bindings, loaded.tokenHash, rehydrated)
+        : rehydrated;
+      span.setAttribute(
+        "session.resync_succeeded",
+        Boolean(pendingBefore && resolved !== rehydrated),
+      );
+      return resolved;
+    },
+  );
   // One SESSION_STORE read covers both the retry guard above and the notice
   // below (mirrors org-app-list-functions.ts): `retryPendingResync` clears
   // the marker on success, always handing back a new session reference
@@ -158,10 +175,13 @@ export async function loadPanelNavigationForRequest(
   const healed = await loadHealedSession(bindings, request);
   if (healed.kind === "unauthenticated") return healed;
   const principal = publicSession(healed.session);
+  const spans = createPerformanceSpanRecorder(bindings);
   return {
     kind: "authenticated",
     session: principal,
-    navigation: await resolveNavigation(principal, createEnvironmentResolver(healed.repo)),
+    navigation: await spans.record({ name: "Panel navigation resolve", op: "db.query" }, () =>
+      resolveNavigation(principal, createEnvironmentResolver(healed.repo)),
+    ),
   };
 }
 
@@ -308,9 +328,12 @@ export async function loadScopedContextForRequest<T>(
   const healed = await loadHealedSession(bindings, request);
   if (healed.kind === "unauthenticated") return healed;
   try {
+    const spans = createPerformanceSpanRecorder(bindings);
     return {
       kind: "ok",
-      context: await resolve(publicSession(healed.session), createEnvironmentResolver(healed.repo)),
+      context: await spans.record({ name: "Panel scoped context resolve", op: "db.query" }, () =>
+        resolve(publicSession(healed.session), createEnvironmentResolver(healed.repo)),
+      ),
     };
   } catch (error) {
     if (error instanceof AccessDeniedError) return { kind: "forbidden" };

@@ -5,6 +5,7 @@ import {
   routesDelegatedTo,
 } from "@splitch/contracts";
 import { createRepository } from "@splitch/db";
+import { createPerformanceSpanRecorder } from "@splitch/observability/performance-spans";
 import { wrapWorkerHandler } from "@splitch/observability/worker";
 import {
   type DelegatedIdentity,
@@ -203,7 +204,7 @@ async function handleRequest(
     },
     controlPanelAuthOptions(env, repo, panelProtocol),
   );
-  const authResolver =
+  const rawAuthResolver =
     typeof authMode === "object"
       ? delegatedAuthResolver(authMode.identity)
       : authMode === "mcp"
@@ -219,6 +220,15 @@ async function handleRequest(
             membershipAccess,
           )
         : panelAuthResolver;
+  const authResolver: typeof rawAuthResolver = (authRequest) =>
+    createPerformanceSpanRecorder(env).record(
+      { name: "Control Plane authorization", op: "auth" },
+      async (span) => {
+        const result = await rawAuthResolver(authRequest);
+        span.setAttribute("auth.result", result.ok ? "ok" : result.reason);
+        return result;
+      },
+    );
   const panelResponse = await handleSignedControlPanelRequest(
     request,
     env,

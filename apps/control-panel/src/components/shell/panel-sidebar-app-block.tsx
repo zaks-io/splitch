@@ -7,7 +7,12 @@ import {
   ShellMenuGroup,
   ShellMenuLink,
 } from "#components/shell/shell-menu";
-import { appHomeHref, environmentSwitchHref, scopedHref } from "#lib/shell/app-shell-navigation";
+import {
+  appHomeHref,
+  appSectionAtPathname,
+  environmentSwitchHref,
+  scopedHref,
+} from "#lib/shell/app-shell-navigation";
 import type { ScopeNavigation } from "#lib/shared/loader-context";
 import { EnvironmentWarningDot } from "#components/environments/environment-warning-dot";
 
@@ -44,7 +49,7 @@ export function PanelSidebarAppBlock({ app, currentOrg, orgSlug }: PanelSidebarA
         <ShellMenuGroup label="Apps">
           {currentOrg.apps.map((candidate) => (
             <ShellMenuLink
-              href={appHomeHref({ orgSlug, appSlug: candidate.appSlug })}
+              href={appSwitcherHref(href, orgSlug, app, candidate)}
               key={candidate.appId}
             >
               {candidate.appSlug}
@@ -82,6 +87,36 @@ export function PanelSidebarAppBlock({ app, currentOrg, orgSlug }: PanelSidebarA
       ) : null}
     </div>
   );
+}
+
+/**
+ * Keep App changes within the current Environment-scoped route branch so the
+ * persistent shell is not replaced. Detail routes step back to their section
+ * because their resource IDs do not belong to the destination App.
+ */
+function appSwitcherHref(
+  currentHref: string,
+  orgSlug: string,
+  currentApp: ActiveSidebarApp,
+  candidate: NavigationOrg["apps"][number],
+): string {
+  if (candidate.appId === currentApp.appId) return currentHref;
+  if (!currentApp.env || candidate.environments.length === 0) {
+    return appHomeHref({ orgSlug, appSlug: candidate.appSlug });
+  }
+
+  const environment =
+    candidate.environments.find(({ env }) => env === currentApp.env) ??
+    candidate.environments.at(0);
+  if (!environment) {
+    throw new Error("Panel sidebar App has no Environment for App switching");
+  }
+  const pathname = new URL(currentHref, "https://panel.splitch.dev").pathname;
+  const section = appSectionAtPathname(pathname, {
+    appSlug: currentApp.appSlug,
+    env: currentApp.env,
+  });
+  return scopedHref({ orgSlug, appSlug: candidate.appSlug, env: environment.env }, section);
 }
 
 /**

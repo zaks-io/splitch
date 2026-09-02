@@ -82,7 +82,6 @@ function AppHomeRoute() {
   return (
     <PanelShell
       markers={{ "data-app-shell": "ready", "data-app-id": scope.appId }}
-      rootKey={scope.appId}
       sidebar={{
         navigation,
         org: { orgId: scope.orgId, orgSlug: scope.orgSlug },

@@ -1,5 +1,6 @@
 import { env as workerEnv } from "cloudflare:workers";
 import { createRepository } from "@splitch/db";
+import { createPerformanceSpanRecorder } from "@splitch/observability/performance-spans";
 import { createServerFn } from "@tanstack/react-start";
 import { getRequest } from "@tanstack/react-start/server";
 import { createDelegationEnvironment } from "#lib/flags/flags-matrix-data";
@@ -50,15 +51,15 @@ export async function loadOrgAppListForRequest(
   orgSlug: string,
 ): Promise<OrgAppListResult> {
   const now = Date.now();
-  const loaded = await loadSessionFromRequest(bindings, request);
+  const spans = createPerformanceSpanRecorder(bindings);
+  const loaded = await spans.record({ name: "Panel session load", op: "cache.get" }, () =>
+    loadSessionFromRequest(bindings, request),
+  );
   if (!loaded.ok) return { kind: "unauthenticated" };
 
   const repo = createRepository(bindings.DB);
-  const rehydrated = await rehydrateLegacySession(
-    repo,
-    bindings.SESSION_STORE,
-    loaded.tokenHash,
-    loaded.session,
+  const rehydrated = await spans.record({ name: "Panel session rehydrate", op: "function" }, () =>
+    rehydrateLegacySession(repo, bindings.SESSION_STORE, loaded.tokenHash, loaded.session),
   );
   const organization0 = rehydrated.orgs.find((org) => org.orgSlug === orgSlug);
   if (!organization0) return { kind: "forbidden" };
@@ -67,11 +68,28 @@ export async function loadOrgAppListForRequest(
   // Blocker 2): a pending marker for THIS Organization's App means the last
   // resync failed, so a reload actually re-attempts it instead of re-reading
   // the identical stale principal forever.
-  const pendingBefore = await readPendingResync(bindings.SESSION_STORE, loaded.tokenHash, "app");
+  const pendingBefore = await spans.record(
+    { name: "Panel pending resync read", op: "cache.get" },
+    () => readPendingResync(bindings.SESSION_STORE, loaded.tokenHash, "app"),
+  );
   const retryEligible = pendingBefore?.orgId === organization0.orgId;
-  const session: StoredSession = retryEligible
-    ? await retryPendingResync(bindings, loaded.tokenHash, rehydrated)
-    : rehydrated;
+  const session: StoredSession = await spans.record(
+    {
+      name: "Panel session resync",
+      op: "function",
+      attributes: {
+        "session.pending_resync": pendingBefore !== null,
+        "session.resync_attempted": retryEligible,
+      },
+    },
+    async (span) => {
+      const resolved = retryEligible
+        ? await retryPendingResync(bindings, loaded.tokenHash, rehydrated)
+        : rehydrated;
+      span.setAttribute("session.resync_succeeded", retryEligible && resolved !== rehydrated);
+      return resolved;
+    },
+  );
   // One SESSION_STORE read covers both the retry guard above and the notice
   // below: `retryPendingResync` clears the marker on success, always handing
   // back a new session reference (never the `rehydrated` one it was given —
@@ -85,18 +103,31 @@ export async function loadOrgAppListForRequest(
 
   const resolver = createEnvironmentResolver(repo);
   const actor = { actorId: session.userId, sessionExpiresAt: loaded.session.expiresAt };
-  const currentApps = await repo.identity.listAppMembershipsWithAppForUser(session.userId, [
-    organization.orgId,
-  ]);
+  const currentApps = await spans.record(
+    { name: "Panel App memberships read", op: "db.query" },
+    async (span) => {
+      const memberships = await repo.identity.listAppMembershipsWithAppForUser(session.userId, [
+        organization.orgId,
+      ]);
+      span.setAttributes({
+        "panel.membership.count": memberships.length,
+        "panel.app.count": memberships.length,
+      });
+      return memberships;
+    },
+  );
 
   const apps = await Promise.all(
     currentApps.map(async ({ app }): Promise<OrgAppListApp> => {
-      const environments = await resolver.listEnvironments(app.id);
-      const [attention, flags] = await Promise.all([
-        readAttention(bindings, actor, app.id),
-        readFlags(bindings, actor, app.id, environments),
-      ]);
-      return { appId: app.id, appSlug: app.key, environments, attention, flags };
+      return spans.record({ name: "Panel App home hydrate", op: "function" }, async (span) => {
+        const environments = await resolver.listEnvironments(app.id);
+        span.setAttribute("panel.environment.count", environments.length);
+        const [attention, flags] = await Promise.all([
+          readAttention(bindings, actor, app.id),
+          readFlags(bindings, actor, app.id, environments),
+        ]);
+        return { appId: app.id, appSlug: app.key, environments, attention, flags };
+      });
     }),
   );
   return {

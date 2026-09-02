@@ -130,6 +130,22 @@ const ALLOWED_SPAN_ATTRIBUTE_KEYS = new Set<string>([
   "network.transport",
   "mcp.tool.result.is_error",
   "mcp.tool.result.content_count",
+  "db.system",
+  "db.operation.name",
+  "db.response.returned_rows",
+  "http.request.method",
+  "http.response.status_code",
+  "rpc.system",
+  "rpc.method",
+  "rpc.response.status_code",
+  "tinybird.pipe.name",
+  "panel.app.count",
+  "panel.environment.count",
+  "panel.membership.count",
+  "session.pending_resync",
+  "session.resync_attempted",
+  "session.resync_succeeded",
+  "auth.result",
 ]);
 
 /**

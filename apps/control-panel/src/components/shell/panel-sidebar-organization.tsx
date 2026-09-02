@@ -54,11 +54,13 @@ export function PanelSidebarOrganization({
           <span className="truncate text-sm font-medium">{org.orgSlug}</span>
         </div>
       )}
+      {/* These authenticated loaders should run for the chosen destination, not on hover. */}
       <Link
         activeOptions={{ exact: true }}
         activeProps={{ className: panelSidebarActiveLinkClassName }}
         className={panelSidebarLinkClassName}
         params={{ orgSlug: org.orgSlug }}
+        preload={false}
         to="/$orgSlug"
       >
         Apps
@@ -67,6 +69,7 @@ export function PanelSidebarOrganization({
         activeProps={{ className: panelSidebarActiveLinkClassName }}
         className={panelSidebarLinkClassName}
         params={{ orgSlug: org.orgSlug }}
+        preload={false}
         to="/$orgSlug/members"
       >
         Members
@@ -75,6 +78,7 @@ export function PanelSidebarOrganization({
         activeProps={{ className: panelSidebarActiveLinkClassName }}
         className={panelSidebarLinkClassName}
         params={{ orgSlug: org.orgSlug }}
+        preload={false}
         to="/$orgSlug/integrations"
       >
         Integrations
@@ -83,6 +87,7 @@ export function PanelSidebarOrganization({
         activeProps={{ className: panelSidebarActiveLinkClassName }}
         className={panelSidebarLinkClassName}
         params={{ orgSlug: org.orgSlug }}
+        preload={false}
         to="/$orgSlug/billing"
       >
         Billing &amp; Usage

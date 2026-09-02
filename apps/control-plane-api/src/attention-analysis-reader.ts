@@ -5,6 +5,8 @@ import {
   type StatsOutput,
 } from "@splitch/contracts";
 import { isAnalysisInsufficientData } from "@splitch/control-plane-sdk/panel-experiments";
+import type { PerformanceSpanRecorder } from "@splitch/observability/performance-spans";
+import { fetchAnalysis } from "./analysis-binding";
 import { type AnalysisResultsScope, analysisResultsRequest } from "./analysis-results-request";
 import { ExperimentIntegrityError } from "./attention-rollup-errors";
 
@@ -44,16 +46,20 @@ export function createAnalysisResultsReader(
   fetcher: FetcherLike,
   timeoutMs: number = ANALYSIS_READ_TIMEOUT_MS,
   trafficGate?: AppIdentityTrafficGate,
+  spanRecorder?: PerformanceSpanRecorder,
 ): AnalysisResultsReader {
   return {
     async read(scope, actorId) {
       let response: Response;
       try {
         await trafficGate?.assertAppIdentityTrafficAllowed(scope.appId);
-        response = await fetcher.fetch(
+        response = await fetchAnalysis(
+          fetcher,
           new Request(analysisResultsRequest(scope, actorId), {
             signal: AbortSignal.timeout(timeoutMs),
           }),
+          "results_read",
+          spanRecorder,
         );
       } catch (cause) {
         throw new AnalysisResultsUnavailableError(cause);

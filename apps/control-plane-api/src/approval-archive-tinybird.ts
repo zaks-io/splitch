@@ -4,6 +4,7 @@ import type {
   ApprovalArchiveStore,
 } from "./approval-archive";
 import { APPROVAL_ARCHIVE_VERSION } from "./approval-archive";
+import { createPerformanceSpanRecorder } from "@splitch/observability/performance-spans";
 import type { ControlPlaneApiEnv } from "./env";
 
 const PIPE_NAME = "approval_request_archives";
@@ -13,6 +14,7 @@ export function approvalArchiveStoreFromEnv(
   env: ControlPlaneApiEnv,
   fetchFn: typeof fetch = fetch,
 ): ApprovalArchiveStore {
+  const spans = createPerformanceSpanRecorder(env);
   return {
     async append(event) {
       const response = await fetchFn(eventsUrl(requiredApiUrl(env)), {
@@ -47,13 +49,14 @@ export function approvalArchiveStoreFromEnv(
         env,
         fetchFn,
         pipeParams({ appId, requestId, limit: 1 }, { archive_version: String(archiveVersion) }),
+        spans,
       );
       const row = rows[0];
       return row ? parseArchiveEvent(row) : null;
     },
 
     async list(query) {
-      const rows = await readRows(env, fetchFn, pipeParams(query));
+      const rows = await readRows(env, fetchFn, pipeParams(query), spans);
       return rows.map(parseArchiveEvent);
     },
   };
@@ -80,22 +83,41 @@ async function readRows(
   env: ControlPlaneApiEnv,
   fetchFn: typeof fetch,
   params: URLSearchParams,
+  spans: ReturnType<typeof createPerformanceSpanRecorder>,
 ): Promise<unknown[]> {
-  const url = new URL(`/v0/pipes/${PIPE_NAME}.json`, requiredApiUrl(env));
-  url.search = params.toString();
-  const response = await fetchFn(url, {
-    headers: {
-      authorization: `Bearer ${requiredToken(env.TINYBIRD_APPROVAL_ARCHIVE_READ_TOKEN, "read")}`,
+  return spans.record(
+    {
+      name: `Tinybird read ${PIPE_NAME}`,
+      op: "http.client",
+      attributes: {
+        "db.system": "tinybird",
+        "db.operation.name": "read",
+        "http.request.method": "GET",
+        "tinybird.pipe.name": PIPE_NAME,
+      },
     },
-  });
-  if (!response.ok) {
-    throw new Error(`Tinybird Approval Request archive read failed with HTTP ${response.status}`);
-  }
-  const body = (await response.json().catch(() => null)) as { data?: unknown } | null;
-  if (!body || !Array.isArray(body.data)) {
-    throw new Error("Tinybird Approval Request archive read returned a malformed payload");
-  }
-  return body.data;
+    async (span) => {
+      const url = new URL(`/v0/pipes/${PIPE_NAME}.json`, requiredApiUrl(env));
+      url.search = params.toString();
+      const response = await fetchFn(url, {
+        headers: {
+          authorization: `Bearer ${requiredToken(env.TINYBIRD_APPROVAL_ARCHIVE_READ_TOKEN, "read")}`,
+        },
+      });
+      span.setAttribute("http.response.status_code", response.status);
+      if (!response.ok) {
+        throw new Error(
+          `Tinybird Approval Request archive read failed with HTTP ${response.status}`,
+        );
+      }
+      const body = (await response.json().catch(() => null)) as { data?: unknown } | null;
+      if (!body || !Array.isArray(body.data)) {
+        throw new Error("Tinybird Approval Request archive read returned a malformed payload");
+      }
+      span.setAttribute("db.response.returned_rows", body.data.length);
+      return body.data;
+    },
+  );
 }
 
 function parseArchiveEvent(value: unknown): ApprovalArchiveEvent {
