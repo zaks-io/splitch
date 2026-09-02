@@ -18,30 +18,46 @@ import { describe, expect, it } from "vitest";
 const routesDir = fileURLToPath(new URL("../../routes", import.meta.url));
 
 /**
- * TanStack Router's flat file convention: dots are path separators, `[.]` is an
- * escaped literal dot, and a leading `$` marks a param. `$orgSlug.claim.tsx` is
- * `/:orgSlug/claim`, whose first segment is dynamic and therefore claims no
- * fixed word; `robots[.]txt.ts` is the single segment `robots.txt`.
+ * TanStack Router's flat file convention, as it bears on shadowing:
+ *
+ * - dots separate path segments, and `[.]` is an escaped literal dot, so
+ *   `robots[.]txt.ts` is the single segment `robots.txt`;
+ * - `$` marks a param, so `$orgSlug.claim.tsx` claims no fixed word;
+ * - a leading `_` marks a pathless layout, which contributes no URL segment of
+ *   its own, so `_authed.dashboard.tsx` routes `/dashboard` and the word that
+ *   can be shadowed is `dashboard`;
+ * - a trailing `_` un-nests from the parent layout without changing the URL, so
+ *   `pricing_.plans.tsx` routes `/pricing/plans` and shadows `pricing`.
+ *
+ * Both underscore forms are already in use in this directory, and both hide the
+ * shadowed word behind a spelling no Org slug can match, so neither may be
+ * dropped on the way to the reservation check.
  */
 function topLevelStaticSegments(): string[] {
   return readdirSync(routesDir)
     .filter((file) => /\.(tsx|ts)$/.test(file))
-    .map((file) => firstPathSegment(file.replace(/\.(tsx|ts)$/, "")))
+    .map((file) => topLevelUrlSegment(file.replace(/\.(tsx|ts)$/, "")))
     .filter((segment) => segment.length > 0)
-    .filter((segment) => !segment.startsWith("$") && !segment.startsWith("__"))
+    .filter((segment) => !segment.startsWith("$"))
     .filter((segment) => segment !== "index");
 }
 
 const ESCAPED_DOT = "[.]";
 const ESCAPED_DOT_PLACEHOLDER = "\u0000";
 
-function firstPathSegment(routeName: string): string {
-  return (
-    routeName
-      .replaceAll(ESCAPED_DOT, ESCAPED_DOT_PLACEHOLDER)
-      .split(".")[0]
-      ?.replaceAll(ESCAPED_DOT_PLACEHOLDER, ".") ?? ""
-  );
+/** The first segment this route file contributes to the URL, or `""` for none. */
+function topLevelUrlSegment(routeName: string): string {
+  const segments = routeName
+    .replaceAll(ESCAPED_DOT, ESCAPED_DOT_PLACEHOLDER)
+    .split(".")
+    .map((segment) => segment.replaceAll(ESCAPED_DOT_PLACEHOLDER, "."))
+    .filter((segment) => !segment.startsWith("_"));
+  return segments[0]?.replace(/_$/, "") ?? "";
+}
+
+/** Only a segment a slug can actually spell is capable of shadowing a route. */
+function slugShapedSegments(): string[] {
+  return topLevelStaticSegments().filter((segment) => SlugSchema.safeParse(segment).success);
 }
 
 describe("reserved Organization slugs vs the Panel router", () => {
@@ -50,18 +66,29 @@ describe("reserved Organization slugs vs the Panel router", () => {
     // route, so only slug-shaped segments have to be reserved. SlugSchema, not
     // OrganizationSlugSchema: the latter already rejects reserved words, which
     // would make this vacuous.
-    const unreserved = topLevelStaticSegments()
-      .filter((segment) => SlugSchema.safeParse(segment).success)
-      .filter((segment) => !isReservedOrganizationSlug(segment));
+    const unreserved = slugShapedSegments().filter(
+      (segment) => !isReservedOrganizationSlug(segment),
+    );
 
     expect(unreserved).toEqual([]);
   });
 
   it("finds the segments it claims to be checking", () => {
-    // Guards the guard: a glob that silently matched nothing would make the
-    // assertion above vacuous, and it would pass forever.
+    // Guards the guard twice over: a glob that matched nothing, or a slug filter
+    // that rejected ordinary route words, would each empty the checked list and
+    // pass forever. So assert the raw scan AND the filtered list it checks.
     expect(topLevelStaticSegments()).toEqual(
       expect.arrayContaining(["auth", "claim", "health", "robots.txt"]),
     );
+    expect(slugShapedSegments()).toEqual(
+      expect.arrayContaining(["auth", "claim", "health", "kitchen-sink"]),
+    );
+  });
+
+  it("reads the underscore conventions as the URL segments they produce", () => {
+    expect(topLevelUrlSegment("pricing_.plans")).toBe("pricing");
+    expect(topLevelUrlSegment("_authed.dashboard")).toBe("dashboard");
+    expect(topLevelUrlSegment("robots[.]txt")).toBe("robots.txt");
+    expect(topLevelUrlSegment("__root")).toBe("");
   });
 });

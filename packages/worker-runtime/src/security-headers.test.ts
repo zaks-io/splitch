@@ -27,6 +27,15 @@ describe("baseline security header policy", () => {
     expect(CONTROL_PANEL_SECURITY_HEADERS["x-frame-options"]).toBe("DENY");
     expect(CONTROL_PANEL_SECURITY_HEADERS["x-robots-tag"]).toBe("noindex, nofollow");
   });
+
+  it("keeps noindex when a route response advertises itself as indexable", () => {
+    const response = applyResponseHeaders(
+      new Response("ok", { headers: { "x-robots-tag": "all" } }),
+      CONTROL_PANEL_SECURITY_HEADERS,
+    );
+
+    expect(response.headers.get("x-robots-tag")).toBe("noindex, nofollow");
+  });
 });
 
 describe("mergeHeaderRecords", () => {

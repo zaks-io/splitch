@@ -139,6 +139,11 @@ function mergeHeaderValue(name: string, current: string, extra: string): string 
   if (key === "referrer-policy") {
     return strongerReferrerPolicy(current, extra);
   }
+  if (key === "x-robots-tag") {
+    return strongerToken(current, extra, (value) =>
+      value.toLowerCase().includes("noindex") ? 1 : 0,
+    );
+  }
   return current;
 }
 

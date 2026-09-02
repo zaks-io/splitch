@@ -43,6 +43,19 @@ describe("Control Panel anti-framing and baseline headers", () => {
     expectPanelSecurity(rejectedUpgrade);
   });
 
+  it("keeps the crawler opt-out on the login redirect a crawler would follow", () => {
+    const redirect = withControlPanelSecurityHeaders(
+      new Response(null, {
+        status: 307,
+        headers: { location: "/auth/login?returnTo=%2F" },
+      }),
+    );
+
+    expect(redirect.status).toBe(307);
+    expect(redirect.headers.get("location")).toBe("/auth/login?returnTo=%2F");
+    expectPanelSecurity(redirect);
+  });
+
   it("upgrades a comma-delimited policy list so frame-ancestors https: cannot remain", () => {
     const response = withControlPanelSecurityHeaders(
       new Response("ok", {
