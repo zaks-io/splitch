@@ -7,6 +7,9 @@ export default defineConfig({
       "@splitch/sdk/control-plane": fileURLToPath(
         new URL("../../packages/sdk/src/control-plane/index.ts", import.meta.url),
       ),
+      "@splitch/observability/performance-spans": fileURLToPath(
+        new URL("../../packages/observability/src/performance-spans.ts", import.meta.url),
+      ),
       "@splitch/observability": fileURLToPath(
         new URL("../../packages/observability/src/index.ts", import.meta.url),
       ),
