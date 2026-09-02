@@ -72,7 +72,7 @@ test("the Tinybird composite pins exact Python and uv, then verifies both", () =
 
 test("cloudflare-publish pins and verifies exact npm without widening permissions", () => {
   const workflow = readFileSync(CLOUDFLARE_PUBLISH, "utf8");
-  const publishJob = workflow.match(/\n {2}publish:\n([\s\S]*?)\n {2}linear-release:\n/)?.[1] ?? "";
+  const publishJob = workflow.match(/\n {2}publish:\n([\s\S]*)$/)?.[1] ?? "";
 
   assert.match(workflow, /^permissions:\n {2}contents: read\n/m);
   assert.match(publishJob, /permissions:\n {6}contents: read\n {6}id-token: write\n/);

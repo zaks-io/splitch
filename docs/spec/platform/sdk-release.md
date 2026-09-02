@@ -158,10 +158,7 @@ Use this only after a human approves the package release.
    checked-out commit, and `GITHUB_SHA`.
 3. Confirm the summary reports OIDC/provenance, dist-tag `latest`, and either `publish` or
    `skip-already-published`. A skip is valid only when the exact immutable version already exists.
-4. Confirm the package-specific Linear release job succeeded and linked the GitHub Release, npm
-   package version, and GitHub Actions run.
-5. Retain the immutable release URL, npm package URL, Linear release URL, commit, workflow URLs, and
-   checksum evidence.
+4. Retain the immutable release URL, npm package URL, commit, workflow URLs, and checksum evidence.
 
 If a provider check fails, stop. Fix the setup or metadata, then repeat only the draft-safe steps.
 Never add an npm token, publish ad hoc, or move a published release/tag around the failure.
