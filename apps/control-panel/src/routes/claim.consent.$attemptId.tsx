@@ -1,14 +1,16 @@
 import { env as workerEnv } from "cloudflare:workers";
 import { createFileRoute } from "@tanstack/react-router";
-import { controlPanelBindings } from "#lib/shared/bindings";
 import {
   consentLoginRedirect,
   forwardClaimConsent,
   renderConsentPage,
 } from "#lib/claims/claim-consent";
 import { loadSessionFromRequest } from "#lib/sessions/session-refresh";
+import { controlPanelBindings } from "#lib/shared/bindings";
+import { documentTitle } from "#lib/shell/document-title";
 
 export const Route = createFileRoute("/claim/consent/$attemptId")({
+  head: () => ({ meta: [{ title: documentTitle("Approve account linking") }] }),
   component: () => (
     <div className="mx-auto w-full max-w-6xl px-6 py-8">
       <main>

@@ -20,6 +20,7 @@ import {
 } from "#lib/observability/panel-observability";
 import type { ScopedLoaderContext } from "#lib/shared/loader-context";
 import { scopedHref } from "#lib/shell/app-shell-navigation";
+import { documentTitle } from "#lib/shell/document-title";
 
 const appScopeRoute = getRouteApi("/$orgSlug/$appSlug/$env");
 
@@ -41,6 +42,17 @@ export const Route = createFileRoute("/$orgSlug/$appSlug/$env/experiments_/$expe
       href: location.href,
       pathname: location.pathname,
     }),
+  head: ({ loaderData, params }) => ({
+    meta: [
+      {
+        title: documentTitle(
+          loaderData ? `Draft ${loaderData.experimentName}` : "Experiment draft unavailable",
+          params.appSlug,
+          params.env,
+        ),
+      },
+    ],
+  }),
   onError: ({ error }) => {
     reportRouteError("section", error, "/$orgSlug/$appSlug/$env/experiments/$experimentId/draft");
   },
@@ -87,14 +99,14 @@ export async function loadExperimentDraftRoute(input: ExperimentDraftRouteInput)
       href: `${scopedHref(input.scoped.scope)}/experiments/${experimentKeyRouteRef(resolved.data.experimentKey)}/draft${current.search}${current.hash}`,
     });
   }
-  await input.queryClient.ensureQueryData(
+  const detail = await input.queryClient.ensureQueryData(
     experimentDetailQuery({
       appId: input.scoped.scope.appId,
       environmentId: input.scoped.scope.environmentId,
       experimentId: resolved.data.experimentId,
     }),
   );
-  return { experimentId: resolved.data.experimentId };
+  return { experimentId: resolved.data.experimentId, experimentName: detail.experiment.name };
 }
 
 function ExperimentDraftRoute() {

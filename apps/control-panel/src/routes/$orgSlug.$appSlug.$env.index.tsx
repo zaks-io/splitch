@@ -6,6 +6,7 @@ import { PanelPageBody } from "#components/shell/panel-page-body";
 import { reportRouteError } from "#lib/observability/panel-observability";
 import { loadControlPanelOverview } from "#lib/overview/control-plane-overview-functions";
 import { scopedHref } from "#lib/shell/app-shell-navigation";
+import { documentTitle } from "#lib/shell/document-title";
 
 export const Route = createFileRoute("/$orgSlug/$appSlug/$env/")({
   loader: async ({ context }) => {
@@ -24,6 +25,9 @@ export const Route = createFileRoute("/$orgSlug/$appSlug/$env/")({
     if (!environment) throw new Error("Active Environment is missing from App navigation");
     return { overview: result.data, scope: scoped.scope, guarded: environment.guarded };
   },
+  head: ({ params }) => ({
+    meta: [{ title: documentTitle("Overview", params.appSlug, params.env) }],
+  }),
   onError: ({ error }) => {
     reportRouteError("section", error, "/$orgSlug/$appSlug/$env/");
   },

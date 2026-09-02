@@ -8,13 +8,14 @@ import { z } from "zod";
 import { FlagsMatrixPage } from "#components/flags/flags-matrix-page";
 import { PanelShell } from "#components/shell/panel-shell";
 import { loadControlPanelFlagsMatrix } from "#lib/flags/control-plane-flag-functions";
-import { AccessDeniedError, isAccessDeniedError } from "#lib/shared/loader-context";
 import {
   configureControlPanelSentryScope,
   reportExpectedDomainFailure,
   reportRouteError,
 } from "#lib/observability/panel-observability";
 import { loadAppScopedSession } from "#lib/sessions/session-functions";
+import { AccessDeniedError, isAccessDeniedError } from "#lib/shared/loader-context";
+import { documentTitle } from "#lib/shell/document-title";
 
 export const Route = createFileRoute("/$orgSlug/$appSlug/")({
   validateSearch: z.object({ created: z.string().optional() }).strict(),
@@ -51,6 +52,7 @@ export const Route = createFileRoute("/$orgSlug/$appSlug/")({
       matrix: matrix.data,
     };
   },
+  head: ({ params }) => ({ meta: [{ title: documentTitle("Flags", params.appSlug) }] }),
   onError: ({ error }) => {
     reportRouteError("section", error, "/$orgSlug/$appSlug/");
   },

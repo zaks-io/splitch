@@ -1,11 +1,12 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { MetricsPage } from "#components/metrics/metrics-page";
-import { PanelPageBody } from "#components/shell/panel-page-body";
 import { SectionPending } from "#components/shared/section-pending";
 import { SectionUnavailable } from "#components/shared/section-unavailable";
+import { PanelPageBody } from "#components/shell/panel-page-body";
 import { loadControlPanelMetrics } from "#lib/metrics/control-plane-metric-functions";
-import { loadControlPanelSettings } from "#lib/settings/control-plane-settings-functions";
 import { reportRouteError } from "#lib/observability/panel-observability";
+import { loadControlPanelSettings } from "#lib/settings/control-plane-settings-functions";
+import { documentTitle } from "#lib/shell/document-title";
 
 export const Route = createFileRoute("/$orgSlug/$appSlug/$env/metrics")({
   loader: async ({ context }) => {
@@ -24,6 +25,9 @@ export const Route = createFileRoute("/$orgSlug/$appSlug/$env/metrics")({
       scope: scoped.scope,
     };
   },
+  head: ({ params }) => ({
+    meta: [{ title: documentTitle("Metrics", params.appSlug, params.env) }],
+  }),
   onError: ({ error }) => {
     reportRouteError("section", error, "/$orgSlug/$appSlug/$env/metrics");
   },

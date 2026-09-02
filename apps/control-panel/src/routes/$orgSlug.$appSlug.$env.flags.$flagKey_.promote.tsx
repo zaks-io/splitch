@@ -1,10 +1,9 @@
 import { NotFoundPage } from "@splitch/ui/state/not-found-page";
 import { createFileRoute, notFound } from "@tanstack/react-router";
-import { PanelPageBody } from "#components/shell/panel-page-body";
 import { PromotionPage } from "#components/promotions/promotion-page";
 import { SectionPending } from "#components/shared/section-pending";
 import { SectionUnavailable } from "#components/shared/section-unavailable";
-import { scopedHref } from "#lib/shell/app-shell-navigation";
+import { PanelPageBody } from "#components/shell/panel-page-body";
 import { loadControlPanelFlagDetail } from "#lib/flags/control-plane-flag-functions";
 import { isFlagDetailNotFound } from "#lib/flags/flag-detail-data";
 import type { FlagDetailView } from "#lib/flags/flag-detail-view";
@@ -14,6 +13,8 @@ import {
   promotionSources,
   resolvePromotionSource,
 } from "#lib/promotions/promotion-source";
+import { scopedHref } from "#lib/shell/app-shell-navigation";
+import { documentTitle } from "#lib/shell/document-title";
 
 type PromotionLoaded = {
   kind: "ready";
@@ -85,6 +86,21 @@ export const Route = createFileRoute("/$orgSlug/$appSlug/$env/flags/$flagKey_/pr
       scopeHref: base.scopeHref,
     };
   },
+  head: ({ loaderData, params }) => ({
+    meta: [
+      {
+        title: documentTitle(
+          `Promote ${
+            loaderData?.kind === "ready"
+              ? loaderData.target.name
+              : (loaderData?.flagKey ?? params.flagKey)
+          }`,
+          params.appSlug,
+          params.env,
+        ),
+      },
+    ],
+  }),
   onError: ({ error }) => {
     reportRouteError("section", error, "/$orgSlug/$appSlug/$env/flags/$flagKey/promote");
   },

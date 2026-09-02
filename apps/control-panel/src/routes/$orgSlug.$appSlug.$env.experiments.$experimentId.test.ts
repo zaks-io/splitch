@@ -23,18 +23,38 @@ vi.mock("#components/experiments/experiment-draft-wizard", () => ({
   ExperimentDraftWizard: () => null,
 }));
 
-const { loadExperimentRoute } = await import("./$orgSlug.$appSlug.$env.experiments.$experimentId");
+const { Route: experimentRoute, loadExperimentRoute } = await import(
+  "./$orgSlug.$appSlug.$env.experiments.$experimentId"
+);
 const { loadExperimentDraftRoute } = await import(
   "./$orgSlug.$appSlug.$env.experiments_.$experimentId.draft"
 );
 
 describe("Experiment detail route identity", () => {
+  it("builds the scoped title from server-loaded Experiment data", async () => {
+    const head = experimentRoute.options.head;
+    if (!head) throw new Error("Experiment route has no document head");
+
+    const result = await head({
+      loaderData: {
+        experimentId: "exp_checkout",
+        experimentName: "Checkout copy",
+        guarded: false,
+      },
+      params: { appSlug: "checkout", env: "prod" },
+    } as never);
+
+    expect(result.meta).toContainEqual({
+      title: "Checkout copy · checkout · prod · splitch",
+    });
+  });
+
   it("loads a namespaced `new` key without reading the Analysis-backed list", async () => {
     resolveMock.mockResolvedValue({
       ok: true,
       data: { kind: "experiment", experimentId: "exp_new", experimentKey: "new" },
     });
-    const ensureQueryData = vi.fn(async () => ({ id: "exp_new" }));
+    const ensureQueryData = vi.fn(async () => ({ experiment: { name: "New checkout" } }));
 
     await expect(
       loadExperimentRoute({
@@ -44,7 +64,11 @@ describe("Experiment detail route identity", () => {
         href: "/acme/checkout/dev/experiments/~new",
         pathname: "/acme/checkout/dev/experiments/~new",
       }),
-    ).resolves.toEqual({ experimentId: "exp_new", guarded: false });
+    ).resolves.toEqual({
+      experimentId: "exp_new",
+      experimentName: "New checkout",
+      guarded: false,
+    });
 
     expect(resolveMock).toHaveBeenCalledWith({
       data: {
@@ -69,7 +93,7 @@ describe("Experiment detail route identity", () => {
       ok: true,
       data: { kind: "experiment", experimentId: "exp_space", experimentKey: "hello world" },
     });
-    const ensureQueryData = vi.fn(async () => ({ id: "exp_space" }));
+    const ensureQueryData = vi.fn(async () => ({ experiment: { name: "Hello world" } }));
 
     await expect(
       loadExperimentRoute({
@@ -79,7 +103,11 @@ describe("Experiment detail route identity", () => {
         href: "/acme/checkout/dev/experiments/~hello%20world",
         pathname: "/acme/checkout/dev/experiments/~hello%20world",
       }),
-    ).resolves.toEqual({ experimentId: "exp_space", guarded: false });
+    ).resolves.toEqual({
+      experimentId: "exp_space",
+      experimentName: "Hello world",
+      guarded: false,
+    });
 
     expect(ensureQueryData).toHaveBeenCalledOnce();
   });
@@ -89,7 +117,7 @@ describe("Experiment detail route identity", () => {
       ok: true,
       data: { kind: "experiment", experimentId: "exp_new", experimentKey: "new" },
     });
-    const ensureQueryData = vi.fn(async () => ({ id: "exp_new" }));
+    const ensureQueryData = vi.fn(async () => ({ experiment: { name: "New checkout" } }));
 
     await expect(
       loadExperimentDraftRoute({
@@ -99,7 +127,7 @@ describe("Experiment detail route identity", () => {
         href: "/acme/checkout/dev/experiments/~new/draft",
         pathname: "/acme/checkout/dev/experiments/~new/draft",
       }),
-    ).resolves.toEqual({ experimentId: "exp_new" });
+    ).resolves.toEqual({ experimentId: "exp_new", experimentName: "New checkout" });
 
     expect(listQueryMock).not.toHaveBeenCalled();
     expect(ensureQueryData).toHaveBeenCalledOnce();
@@ -110,7 +138,7 @@ describe("Experiment detail route identity", () => {
       ok: true,
       data: { kind: "experiment", experimentId: "exp_space", experimentKey: "hello world" },
     });
-    const ensureQueryData = vi.fn(async () => ({ id: "exp_space" }));
+    const ensureQueryData = vi.fn(async () => ({ experiment: { name: "Hello world" } }));
 
     await expect(
       loadExperimentDraftRoute({
@@ -120,7 +148,7 @@ describe("Experiment detail route identity", () => {
         href: "/acme/checkout/dev/experiments/~hello%20world/draft",
         pathname: "/acme/checkout/dev/experiments/~hello%20world/draft",
       }),
-    ).resolves.toEqual({ experimentId: "exp_space" });
+    ).resolves.toEqual({ experimentId: "exp_space", experimentName: "Hello world" });
 
     expect(ensureQueryData).toHaveBeenCalledOnce();
   });
