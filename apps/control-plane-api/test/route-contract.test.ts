@@ -10,7 +10,7 @@ import { makeJwksVerifier } from "../src/jwks-verify";
 import { appAdminScope } from "../src/scope-binding";
 import { makeSessionStore } from "../src/session-store";
 import type { LocalBindings } from "../src/test-fixtures";
-import { seedOrgApp, seedOrgMember } from "../src/test-seeds";
+import { seedAppMember, seedOrgApp, seedOrgMember } from "../src/test-seeds";
 import { makePoolBindings as makeLocalBindings } from "./pool-bindings";
 
 const AUDIENCE = "https://cp.splitch.test";
@@ -57,7 +57,12 @@ beforeAll(async () => {
   await seedOrgMember(bindings.d1, { orgId: PRIMARY.orgId, userId: USER, role: "member" });
   await seedOrgMember(bindings.d1, { orgId: SECONDARY.orgId, userId: USER, role: "member" });
   await seedOrgMember(bindings.d1, { orgId: PRIMARY.orgId, userId: ORG_OWNER, role: "owner" });
-  await seedAppMember(bindings, PRIMARY.appId, APP_ADMIN, "admin");
+  await seedAppMember(bindings.d1, {
+    appId: PRIMARY.appId,
+    userId: APP_ADMIN,
+    role: "admin",
+    createdAt: "2026-07-18T12:00:00.000Z",
+  });
   await seedPrivacyRequest(bindings, {
     requestId: PRIVACY_REQUEST_ID,
     orgId: PRIMARY.orgId,
@@ -72,6 +77,7 @@ beforeEach(async () => {
   h = {
     app: createApp({
       door: "binding",
+      apiVersion: () => "local",
       authResolver: makeControlPlaneAuthResolver({
         verifier: makeJwksVerifier({
           issuer: "https://auth.splitch.test",
@@ -173,7 +179,11 @@ describe("control-plane route contract", () => {
     ]);
 
     expect(openapi.status).toBe(200);
-    expect(await openapi.json()).toMatchObject({ openapi: "3.1.0", paths: { "/orgs": {} } });
+    expect(await openapi.json()).toMatchObject({
+      openapi: "3.1.0",
+      info: { version: "local" },
+      paths: { "/orgs": {} },
+    });
     expect(privacy.status).toBe(503);
     expect(((await privacy.json()) as ErrorResponse).code).toBe("SERVICE_UNAVAILABLE");
   });
@@ -307,18 +317,6 @@ function request(method: string, path: string, jwt: string, body?: Record<string
 
 function entityBody(): Record<string, string> {
   return { idType: "user", targetingKey: "subject_route_contract" };
-}
-
-async function seedAppMember(
-  bindings: LocalBindings,
-  appId: string,
-  userId: string,
-  role: "owner" | "admin" | "member",
-): Promise<void> {
-  await bindings.d1
-    .prepare("INSERT INTO app_memberships (app_id, user_id, role, created_at) VALUES (?,?,?,?)")
-    .bind(appId, userId, role, "2026-07-18T12:00:00.000Z")
-    .run();
 }
 
 async function seedPrivacyRequest(

@@ -1,4 +1,9 @@
 import { OpenAPIHono } from "@hono/zod-openapi";
+import {
+  FullCommitShaSchema,
+  isHostedPlatformTarget,
+  parsePlatformTarget,
+} from "./health-response";
 import { publicSurfaceFor } from "./route-contract";
 import { routeRegistry } from "./route-registry";
 
@@ -19,14 +24,43 @@ import { routeRegistry } from "./route-registry";
  */
 
 export interface OpenApiDocumentInfo {
-  title: string;
+  title?: string;
   version: string;
 }
 
-const DEFAULT_INFO: OpenApiDocumentInfo = {
-  title: "splitch control-plane API",
-  version: "0.0.0",
-};
+const DEFAULT_TITLE = "splitch control-plane API";
+
+/**
+ * `info.version` is the only handle a consumer has for telling two emitted
+ * documents apart, so it carries the deployed commit SHA — the same identity
+ * `GET /health` reports (health-response.ts). No published semver exists for the
+ * control plane, and a placeholder like `0.0.0` would make every deploy look
+ * identical to a client diffing the contract.
+ *
+ * Hosted targets must carry a real SHA: throwing beats serving a document that
+ * claims to be a build nobody can name. Local and PR CI have no deployment, so
+ * they say so by name rather than inventing a version.
+ */
+export function resolveApiDocumentVersion(
+  platformTarget: string | undefined,
+  deployedCommitSha: string | undefined,
+): string {
+  if (deployedCommitSha !== undefined) {
+    const parsed = FullCommitShaSchema.safeParse(deployedCommitSha);
+    if (!parsed.success) {
+      throw new Error(
+        `SPLITCH_DEPLOYED_COMMIT_SHA "${deployedCommitSha}" is not a full commit SHA`,
+      );
+    }
+    return parsed.data;
+  }
+  if (isHostedPlatformTarget(platformTarget)) {
+    throw new Error(
+      `SPLITCH_DEPLOYED_COMMIT_SHA is required to version the OpenAPI document on ${platformTarget}`,
+    );
+  }
+  return parsePlatformTarget(platformTarget);
+}
 
 /** Handler the emitter never calls — the app exists only to emit, not to serve. */
 function unusedHandler(_c: { json: (body: unknown, status: number) => Response }): never {
@@ -39,7 +73,7 @@ function unusedHandler(_c: { json: (body: unknown, status: number) => Response }
  * it or assert over it; this function does NOT serialize or persist it.
  */
 export function buildOpenApiDocument(
-  info: OpenApiDocumentInfo = DEFAULT_INFO,
+  info: OpenApiDocumentInfo,
 ): ReturnType<OpenAPIHono["getOpenAPI31Document"]> {
   const app = new OpenAPIHono();
   for (const route of routeRegistry) {
@@ -48,6 +82,6 @@ export function buildOpenApiDocument(
   }
   return app.getOpenAPI31Document({
     openapi: "3.1.0",
-    info: { title: info.title, version: info.version },
+    info: { title: info.title ?? DEFAULT_TITLE, version: info.version },
   });
 }

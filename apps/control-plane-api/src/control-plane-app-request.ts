@@ -1,3 +1,4 @@
+import { resolveApiDocumentVersion } from "@splitch/contracts";
 import type { Repository } from "@splitch/db";
 import {
   createWorkerFaultReporter,
@@ -36,6 +37,8 @@ export async function handleControlPlaneAppRequest(input: {
   });
   const app = createApp({
     door,
+    apiVersion: () =>
+      resolveApiDocumentVersion(env.SPLITCH_PLATFORM_TARGET, env.SPLITCH_DEPLOYED_COMMIT_SHA),
     authResolver,
     rateLimiter: rateLimiterForTarget(
       env.SPLITCH_PLATFORM_TARGET,

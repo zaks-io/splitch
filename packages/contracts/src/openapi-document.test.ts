@@ -1,7 +1,7 @@
 import { z } from "@hono/zod-openapi";
 import { describe, expect, it } from "vitest";
 import { EvaluateAllEntrySchema } from "./leaves/evaluate-all-wire";
-import { buildOpenApiDocument } from "./openapi-document";
+import { buildOpenApiDocument, resolveApiDocumentVersion } from "./openapi-document";
 import { renderOpenApiSchema } from "./openapi-proto-safe-record";
 import { publicSurfaceFor } from "./route-contract";
 import { routeRegistry } from "./route-registry";
@@ -14,7 +14,7 @@ import { routeRegistry } from "./route-registry";
  * with no second authoring step while binding-only contracts stay private.
  */
 
-const doc = buildOpenApiDocument();
+const doc = buildOpenApiDocument({ version: "test" });
 const publicRoutes = routeRegistry.filter(
   (route) => route.exposure === "public" && publicSurfaceFor(route) !== null,
 );
@@ -62,6 +62,35 @@ describe("openapi document: validity", () => {
     const custom = buildOpenApiDocument({ title: "custom-title", version: "9.9.9" });
     expect(custom.info.title).toBe("custom-title");
     expect(custom.info.version).toBe("9.9.9");
+  });
+});
+
+describe("openapi document: version identity", () => {
+  const sha = "a".repeat(40);
+
+  it("versions the document by deployed commit SHA", () => {
+    expect(resolveApiDocumentVersion("production", sha)).toBe(sha);
+  });
+
+  it("names the target when there is no deployment to version", () => {
+    expect(resolveApiDocumentVersion("local", undefined)).toBe("local");
+    expect(resolveApiDocumentVersion("pr-ci", undefined)).toBe("pr-ci");
+  });
+
+  it("refuses to serve an unnamed build on a hosted target", () => {
+    for (const target of ["production", "shared-preview"]) {
+      expect(() => resolveApiDocumentVersion(target, undefined)).toThrow(
+        /SPLITCH_DEPLOYED_COMMIT_SHA is required/,
+      );
+    }
+  });
+
+  it("rejects a truncated or non-hex commit SHA rather than stamping it", () => {
+    for (const bad of ["a".repeat(7), "abc", "A".repeat(40), `${sha}0`]) {
+      expect(() => resolveApiDocumentVersion("production", bad)).toThrow(
+        /is not a full commit SHA/,
+      );
+    }
   });
 });
 

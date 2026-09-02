@@ -214,7 +214,6 @@ export {
   membershipRoles,
   scopeSatisfiesMembershipGate,
 } from "./mcp-tool-membership-gates";
-export { buildOpenApiDocument, type OpenApiDocumentInfo } from "./openapi-document";
 export type { ApiRouteContract, ApiRouteRequest, DefineApiRouteInput } from "./openapi-route";
 export { defineApiRoute } from "./openapi-route";
 export { type ControlPlaneRpcApp, controlPlaneRpcApp } from "./openapi-rpc";

@@ -140,6 +140,10 @@ month boundary cannot appear in both months.
 Unauthenticated. Returns the OpenAPI 3.1 document generated from Zod schemas at build time.
 Agents can fetch this at handshake time to discover all tool schemas.
 
+`info.version` carries the deployed commit SHA, the same build identity `GET /health` reports as
+`deployedCommitSha`, so a consumer can tell two emitted documents apart. Hosted targets refuse to
+serve the document without one; `local` and `pr-ci` have no deployment and report the target name.
+
 ## Sources
 
 - [../../adr/0023-remote-mcp-and-cli-as-parity-skins-over-a-shared-typed-client.md](../../adr/0023-remote-mcp-and-cli-as-parity-skins-over-a-shared-typed-client.md)
