@@ -1,3 +1,4 @@
+import { getTraceData } from "@sentry/cloudflare";
 import {
   type ApprovalsClient,
   type AppsClient,
@@ -185,6 +186,7 @@ export function panelDelegationFetch(
         },
       },
       async (span) => {
+        replaceTraceHeaders(headers);
         const nowSeconds = options.nowSeconds?.() ?? Math.floor(Date.now() / 1000);
         headers.set(
           CONTROL_PANEL_DELEGATION_HEADER,
@@ -205,6 +207,16 @@ export function panelDelegationFetch(
       },
     );
   };
+}
+
+function replaceTraceHeaders(headers: Headers): void {
+  headers.delete("sentry-trace");
+  headers.delete("baggage");
+  headers.delete("traceparent");
+  const traceData = getTraceData();
+  if (traceData["sentry-trace"]) headers.set("sentry-trace", traceData["sentry-trace"]);
+  if (traceData.baggage) headers.set("baggage", traceData.baggage);
+  if (traceData.traceparent) headers.set("traceparent", traceData.traceparent);
 }
 
 function refuseBindingRedirect(response: Response): Response {
