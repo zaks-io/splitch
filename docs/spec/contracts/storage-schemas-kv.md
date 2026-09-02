@@ -29,7 +29,9 @@ authoritative Config Store DO; control-plane readers rebuild KV from D1 (see
 
 App identity is not a KV read model. The App-scoped Config Store Durable Object stores the
 AES-GCM-wrapped `app:{appId}:entity-identity` atom in strongly consistent DO storage and owns
-provision, lifecycle checkpoints, reset, and every hosted data-plane read (ADR-0044).
+provision, lifecycle checkpoints, reset, and every hosted data-plane read (ADR-0044). A hosted read
+may carry the bounded traffic lease defined by ADR-0057. The authority waits for every issued lease
+before a destructive reset, so the lease does not weaken the reset fence or create a KV replica.
 
 ### FlagConfigKV
 

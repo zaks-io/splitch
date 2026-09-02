@@ -17,7 +17,10 @@ interface WorkerProtocolBindings {
   CONFIG_STORE?: KVNamespace;
   CONFIG_STORE_WRITER?: {
     getByName(name: string): {
-      readAppIdentity?(appId: string): Promise<string | null>;
+      readAppIdentity?(
+        appId: string,
+        options?: { readonly lease: true },
+      ): Promise<string | null | { readonly value: string | null; readonly expiresAt: number }>;
       putAppIdentityIfAbsent?(appId: string, value: string): Promise<string>;
     };
   };

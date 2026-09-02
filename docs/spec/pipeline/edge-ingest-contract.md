@@ -409,8 +409,9 @@ its row between claim and queue handoff.
 
 The Evaluation Worker likewise waits for the scoped claim, result fingerprint, retry-stable Exposure
 row, and payload to be sealed atomically in the `raw_events` outbox before returning its Variant; it
-does not wait for Queue or Tinybird. Other intake returns an accepted response only after its
-canonical delivery payload is durably sealed in an equivalent outbox or accepted by Cloudflare Queue.
+does not wait for Queue or Tinybird. Non-cached `evaluate-all` usage takes the same Evaluation commit
+path with an empty Exposure set. Other intake returns an accepted response only after its canonical
+delivery payload is durably sealed in an equivalent outbox or accepted by Cloudflare Queue.
 The queue consumer then uses `wait=true` and
 acknowledges its queue messages after a complete `200` commit acknowledgement or after a `422` is
 durably transferred to indeterminate reconciliation. Tinybird latency and retries never extend the

@@ -134,7 +134,7 @@ const DURABLE_OBJECT_ONLY: Record<string, string> = {
   webSocketError: "no-op",
   alarm: "revalidates live sockets",
   setLiveUpdatesAvailable: "flips a DO storage flag and closes sockets",
-  readAppIdentity: "reads the authoritative App identity atom; no D1 write",
+  readAppIdentity: "reads App identity and optionally records a bounded reset fence; no D1 write",
   putAppIdentityIfAbsent:
     "serialized App identity provision in DO storage; writes no Flag Configuration row",
   resetCompromisedAppIdentity:

@@ -58,16 +58,12 @@ export class EvaluationCommitOutboxDurableObject {
   async alarm(): Promise<void> {
     const state = await this.ctx.storage.get<OutboxState>(STATE_KEY);
     if (state === undefined) return;
-    if (state.expiresAt <= Date.now()) {
-      await this.ctx.storage.delete([STATE_KEY, PRIVACY_DELETED_KEY, REDACTED_EVENT_IDS_KEY]);
+    if (state.deliveryState === "sealed") {
+      await this.expireOrSchedule(state);
       return;
     }
     if (isDelivered(state)) {
-      await this.ctx.storage.setAlarm(state.expiresAt);
-      return;
-    }
-    if (state.deliveryState === "sealed") {
-      await this.ctx.storage.setAlarm(state.expiresAt);
+      await this.expireOrSchedule(state);
       return;
     }
     if (state.publicationRetryAt !== undefined && state.publicationRetryAt > Date.now()) {
@@ -106,7 +102,7 @@ export class EvaluationCommitOutboxDurableObject {
       deliveryState: "delivered",
       deliveredAt: new Date().toISOString(),
     });
-    await this.ctx.storage.setAlarm(current.expiresAt);
+    await this.expireOrSchedule(current);
   }
 
   private async retryPublication(publishing: OutboxState, error: unknown): Promise<void> {
@@ -135,9 +131,17 @@ export class EvaluationCommitOutboxDurableObject {
     );
   }
 
+  private async expireOrSchedule(state: OutboxState): Promise<void> {
+    if (state.expiresAt > Date.now()) {
+      await this.ctx.storage.setAlarm(state.expiresAt);
+      return;
+    }
+    await this.ctx.storage.delete([STATE_KEY, PRIVACY_DELETED_KEY, REDACTED_EVENT_IDS_KEY]);
+  }
+
   private async lookup(): Promise<Response> {
     const existing = await this.ctx.storage.get<OutboxState>(STATE_KEY);
-    if (existing === undefined || existing.expiresAt <= Date.now()) {
+    if (existing === undefined || !isCurrent(existing)) {
       return new Response("commit not found", { status: 404 });
     }
     if (isPublishable(existing) && !isDelivered(existing)) {
@@ -153,7 +157,7 @@ export class EvaluationCommitOutboxDurableObject {
     const now = Date.now();
     const eventId = `sha256:${await sha256Hex(`${identity}\u001f${now}`)}`;
     const existing = await this.ctx.storage.get<OutboxState>(STATE_KEY);
-    if (existing !== undefined && existing.expiresAt > Date.now()) {
+    if (existing !== undefined && isCurrent(existing)) {
       if (isPublishable(existing) && !isDelivered(existing)) {
         await this.schedulePublication(existing);
       }
@@ -236,7 +240,7 @@ export class EvaluationCommitOutboxDurableObject {
 
   private async currentState(): Promise<OutboxState | undefined> {
     const state = await this.ctx.storage.get<OutboxState>(STATE_KEY);
-    return state !== undefined && state.expiresAt > Date.now() ? state : undefined;
+    return state !== undefined && isCurrent(state) ? state : undefined;
   }
 }
 
@@ -255,6 +259,10 @@ function isPublishable(state: OutboxState): boolean {
 
 function isDelivered(state: OutboxState): boolean {
   return state.deliveredAt !== undefined || state.privacyDeletedAt !== undefined;
+}
+
+function isCurrent(state: OutboxState): boolean {
+  return state.expiresAt > Date.now() || (isPublishable(state) && !isDelivered(state));
 }
 
 async function requestIdentity(request: Request): Promise<string | null> {

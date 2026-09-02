@@ -21,10 +21,10 @@ import {
 import { entryFor } from "./evaluate-all-entry";
 import { etagMaterial, ifNoneMatchMatches, strongEtag } from "./evaluate-all-exposure-identity";
 import { sdkRuntime } from "./evaluate-response";
+import type { EvaluationCommitSink } from "./evaluation-commit-sink";
+import { EvaluationCommitSinkError } from "./evaluation-commit-sink";
 import { errorResponse } from "./evaluation-error-response";
 import type { EvaluationUsageScope } from "./evaluation-usage";
-import type { EvaluationUsageSink } from "./evaluation-usage-sink";
-import { EvaluationUsageSinkError } from "./evaluation-usage-sink";
 import type { FlagConfig } from "./provider/provider";
 
 /**
@@ -35,7 +35,7 @@ import type { FlagConfig } from "./provider/provider";
 const BATCH_USAGE_FLAG_KEY = "*";
 
 interface EvaluateAllRouteDeps extends EvaluatePathDeps {
-  readonly evaluationUsageSink: EvaluationUsageSink;
+  readonly evaluationCommitSink: EvaluationCommitSink;
   readonly exposureTicket: MintExposureTicketDeps;
 }
 
@@ -72,8 +72,6 @@ async function completeEvaluateAll(
 ): Promise<Response> {
   const payload = await resolveAll(requestBody, scope, deps);
   if (!payload.ok) return renderError(payload.error, { requestId });
-  const stale = await appIdentityAdmissionValidationError(admission);
-  if (stale !== null) return renderError(stale, { requestId });
 
   const body = EvaluateAllResponseSchema.parse({ evaluations: payload.evaluations });
   const etag = await strongEtag(
@@ -161,39 +159,40 @@ async function resolveAll(
 
   const assignmentStore = memoizeGetAll(deps.assignmentStore);
   const pathDeps: EvaluatePathDeps = { ...deps, assignmentStore };
-  const evaluations: Record<string, EvaluateAllEntry> = {};
   const ticketNow = (deps.exposureTicket.now ?? (() => new Date()))();
   const ticketDeps: MintExposureTicketDeps = {
     ...deps.exposureTicket,
     now: () => ticketNow,
   };
-  let hasExposureTicket = false;
-
-  for (const flag of flags) {
-    if (flag.flagKey === "__proto__") {
-      return {
-        ok: false,
-        error: errorResponse(
-          "UNSUPPORTED_OBJECT_KEY",
-          'Flag Key "__proto__" cannot be included in Precomputed Evaluations',
-        ),
-      };
-    }
-    const routeInput: EvaluatePathInput = {
-      appId: scope.appId,
-      environmentId: scope.environmentId,
-      flagKey: flag.flagKey,
-      evaluationContext: {
-        targetingKey: body.targetingKey,
-        idType: body.idType,
-        attributes: body.attributes,
-      },
+  if (flags.some((flag) => flag.flagKey === "__proto__")) {
+    return {
+      ok: false,
+      error: errorResponse(
+        "UNSUPPORTED_OBJECT_KEY",
+        'Flag Key "__proto__" cannot be included in Precomputed Evaluations',
+      ),
     };
-    const output = await evaluateAllFlag(routeInput, pathDeps);
-    const entry = await entryFor(output.result, flag, ticketDeps);
-    evaluations[flag.flagKey] = entry;
-    hasExposureTicket ||= entry.exposureTicket !== null;
   }
+
+  const entries = await Promise.all(
+    flags.map(async (flag) => {
+      const routeInput: EvaluatePathInput = {
+        appId: scope.appId,
+        environmentId: scope.environmentId,
+        flagKey: flag.flagKey,
+        evaluationContext: {
+          targetingKey: body.targetingKey,
+          idType: body.idType,
+          attributes: body.attributes,
+        },
+      };
+      const output = await evaluateAllFlag(routeInput, pathDeps);
+      const entry = await entryFor(output.result, flag, ticketDeps);
+      return [flag.flagKey, entry] as const;
+    }),
+  );
+  const evaluations = Object.fromEntries(entries) as Record<string, EvaluateAllEntry>;
+  const hasExposureTicket = entries.some(([, entry]) => entry.exposureTicket !== null);
 
   return {
     ok: true,
@@ -262,22 +261,25 @@ async function writeBatchUsage(
   if (stale !== null) return { ok: false, error: stale };
 
   try {
-    await deps.evaluationUsageSink.write({
-      idempotencyKey,
-      organizationId: scope.organizationId,
-      appId: scope.appId,
-      identityVersion: admission.identityVersion,
-      environmentId: scope.environmentId,
-      flagKey: BATCH_USAGE_FLAG_KEY,
-      sdkRuntime: sdkRuntime(request),
-      evaluationCount: flagCount,
-      isBatch: true,
-      isCached: false,
-      hasExposure: false,
+    await deps.evaluationCommitSink.write({
+      usage: {
+        idempotencyKey,
+        organizationId: scope.organizationId,
+        appId: scope.appId,
+        identityVersion: admission.identityVersion,
+        environmentId: scope.environmentId,
+        flagKey: BATCH_USAGE_FLAG_KEY,
+        sdkRuntime: sdkRuntime(request),
+        evaluationCount: flagCount,
+        isBatch: true,
+        isCached: false,
+        hasExposure: false,
+      },
+      exposures: [],
     });
     return { ok: true };
   } catch (cause) {
-    if (!(cause instanceof EvaluationUsageSinkError)) throw cause;
+    if (!(cause instanceof EvaluationCommitSinkError)) throw cause;
     deps.logger?.error("evaluate_all_usage_sink_failed", { cause });
     return {
       ok: false,

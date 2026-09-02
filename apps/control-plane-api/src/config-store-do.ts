@@ -10,6 +10,7 @@ import { type ConfigStoreWriter, makeConfigStore } from "./config-store";
 import type { EvaluationFlagConfigRead, EvaluationFlagConfigSnapshot } from "./config-store-access";
 import {
   assertConfigStoreAppIdentityTrafficAllowed,
+  leaseConfigStoreAppIdentity,
   putConfigStoreAppIdentityIfAbsent,
   readConfigStoreAppIdentity,
   resetConfigStoreAppIdentity,
@@ -187,8 +188,13 @@ export class ConfigStoreDurableObject
    * Serialized first provision of one App identity record. Evaluation and Event
    * Ingest call this on `app-identity:${appId}` so both planes share one winner.
    */
-  readAppIdentity(appId: string): Promise<string | null> {
-    return readConfigStoreAppIdentity(this.ctx, appId);
+  readAppIdentity(
+    appId: string,
+    options?: { readonly lease: true },
+  ): Promise<string | null | { readonly value: string | null; readonly expiresAt: number }> {
+    return options?.lease === true
+      ? leaseConfigStoreAppIdentity(this.ctx, appId)
+      : readConfigStoreAppIdentity(this.ctx, appId);
   }
 
   async putAppIdentityIfAbsent(appId: string, value: string): Promise<string> {

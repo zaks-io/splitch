@@ -4,7 +4,10 @@ import type {
 } from "./config-store-app-identity-ledger";
 
 export interface ConfigStoreAppIdentityDurableObjectStub {
-  readAppIdentity(appId: string): Promise<string | null>;
+  readAppIdentity(
+    appId: string,
+    options?: { readonly lease: true },
+  ): Promise<string | null | { readonly value: string | null; readonly expiresAt: number }>;
   putAppIdentityIfAbsent(appId: string, value: string): Promise<string>;
   resetCompromisedAppIdentity(appId: string, resetId: string): Promise<string>;
   assertAppIdentityTrafficAllowed(appId: string): Promise<void>;
