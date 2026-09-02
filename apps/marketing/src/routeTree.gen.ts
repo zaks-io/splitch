@@ -15,6 +15,7 @@ import { Route as LlmsDottxtRouteImport } from './routes/llms[.]txt'
 import { Route as QuickstartRouteImport } from './routes/quickstart'
 import { Route as RobotsDottxtRouteImport } from './routes/robots[.]txt'
 import { Route as SitemapDotxmlRouteImport } from './routes/sitemap[.]xml'
+import { Route as DotwellKnownApiCatalogRouteImport } from './routes/[.]well-known.api-catalog'
 import { Route as DocsIndexRouteImport } from './routes/docs.index'
 import { Route as DocsCliRouteImport } from './routes/docs.cli'
 import { Route as DocsCliDotmdRouteImport } from './routes/docs.cli[.]md'
@@ -55,6 +56,11 @@ const RobotsDottxtRoute = RobotsDottxtRouteImport.update({
 const SitemapDotxmlRoute = SitemapDotxmlRouteImport.update({
   id: '/sitemap.xml',
   path: '/sitemap.xml',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DotwellKnownApiCatalogRoute = DotwellKnownApiCatalogRouteImport.update({
+  id: '/.well-known/api-catalog',
+  path: '/.well-known/api-catalog',
   getParentRoute: () => rootRouteImport,
 } as any)
 const DocsIndexRoute = DocsIndexRouteImport.update({
@@ -120,6 +126,7 @@ export interface FileRoutesByFullPath {
   '/quickstart': typeof QuickstartRoute
   '/robots.txt': typeof RobotsDottxtRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
+  '/.well-known/api-catalog': typeof DotwellKnownApiCatalogRoute
   '/docs/cli': typeof DocsCliRoute
   '/docs/cli.md': typeof DocsCliDotmdRoute
   '/docs/code-agents': typeof DocsCodeAgentsRoute
@@ -139,6 +146,7 @@ export interface FileRoutesByTo {
   '/quickstart': typeof QuickstartRoute
   '/robots.txt': typeof RobotsDottxtRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
+  '/.well-known/api-catalog': typeof DotwellKnownApiCatalogRoute
   '/docs/cli': typeof DocsCliRoute
   '/docs/cli.md': typeof DocsCliDotmdRoute
   '/docs/code-agents': typeof DocsCodeAgentsRoute
@@ -159,6 +167,7 @@ export interface FileRoutesById {
   '/quickstart': typeof QuickstartRoute
   '/robots.txt': typeof RobotsDottxtRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
+  '/.well-known/api-catalog': typeof DotwellKnownApiCatalogRoute
   '/docs/cli': typeof DocsCliRoute
   '/docs/cli.md': typeof DocsCliDotmdRoute
   '/docs/code-agents': typeof DocsCodeAgentsRoute
@@ -180,6 +189,7 @@ export interface FileRouteTypes {
     | '/quickstart'
     | '/robots.txt'
     | '/sitemap.xml'
+    | '/.well-known/api-catalog'
     | '/docs/cli'
     | '/docs/cli.md'
     | '/docs/code-agents'
@@ -199,6 +209,7 @@ export interface FileRouteTypes {
     | '/quickstart'
     | '/robots.txt'
     | '/sitemap.xml'
+    | '/.well-known/api-catalog'
     | '/docs/cli'
     | '/docs/cli.md'
     | '/docs/code-agents'
@@ -218,6 +229,7 @@ export interface FileRouteTypes {
     | '/quickstart'
     | '/robots.txt'
     | '/sitemap.xml'
+    | '/.well-known/api-catalog'
     | '/docs/cli'
     | '/docs/cli.md'
     | '/docs/code-agents'
@@ -238,6 +250,7 @@ export interface RootRouteChildren {
   QuickstartRoute: typeof QuickstartRoute
   RobotsDottxtRoute: typeof RobotsDottxtRoute
   SitemapDotxmlRoute: typeof SitemapDotxmlRoute
+  DotwellKnownApiCatalogRoute: typeof DotwellKnownApiCatalogRoute
   DocsCliRoute: typeof DocsCliRoute
   DocsCliDotmdRoute: typeof DocsCliDotmdRoute
   DocsCodeAgentsRoute: typeof DocsCodeAgentsRoute
@@ -293,6 +306,13 @@ declare module '@tanstack/react-router' {
       path: '/sitemap.xml'
       fullPath: '/sitemap.xml'
       preLoaderRoute: typeof SitemapDotxmlRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/.well-known/api-catalog': {
+      id: '/.well-known/api-catalog'
+      path: '/.well-known/api-catalog'
+      fullPath: '/.well-known/api-catalog'
+      preLoaderRoute: typeof DotwellKnownApiCatalogRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/docs/': {
@@ -382,6 +402,7 @@ const rootRouteChildren: RootRouteChildren = {
   QuickstartRoute: QuickstartRoute,
   RobotsDottxtRoute: RobotsDottxtRoute,
   SitemapDotxmlRoute: SitemapDotxmlRoute,
+  DotwellKnownApiCatalogRoute: DotwellKnownApiCatalogRoute,
   DocsCliRoute: DocsCliRoute,
   DocsCliDotmdRoute: DocsCliDotmdRoute,
   DocsCodeAgentsRoute: DocsCodeAgentsRoute,
