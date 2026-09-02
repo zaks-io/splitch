@@ -1,6 +1,6 @@
 {
   "name": "splitch Control Panel",
-  "short_name": "splitch",
+  "short_name": "splitch Panel",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#0a0c10",

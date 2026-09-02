@@ -35,9 +35,10 @@ const APPLE_TOUCH_CONTENT = 164;
 // rather than square: padding is the header's job, not the asset's.
 const HEADER_MARK_HEIGHT = 156;
 
-// A maskable icon is cropped to whatever shape the launcher wants, so the mark
-// has to survive a circle inscribed in the square: 60% keeps it inside the
-// 40%-diameter safe zone the spec guarantees.
+// A maskable icon is cropped to whatever shape the launcher wants, and the spec
+// guarantees only a safe circle of 80% the icon's width. This resizes the whole
+// master square, padding included, so 60% of the canvas puts the visible mark at
+// roughly half of it: inside the circle at every mask shape, with room to spare.
 const MASKABLE_SIZE = 512;
 const MASKABLE_CONTENT = Math.round(MASKABLE_SIZE * 0.6);
 
@@ -49,11 +50,15 @@ const apps = [
   {
     publicDir: "apps/marketing/public",
     manifestName: "splitch",
+    // Launchers label a home-screen icon with short_name, and the two apps ship
+    // the same glyph, so this is the only thing telling them apart.
+    manifestShortName: "splitch",
     ogCard: true,
   },
   {
     publicDir: "apps/control-panel/public",
     manifestName: "splitch Control Panel",
+    manifestShortName: "splitch Panel",
     ogCard: false,
   },
 ];
@@ -139,10 +144,10 @@ function insetOnWhite(size, content) {
   ];
 }
 
-function manifest(name) {
+function manifest(name, shortName) {
   return {
     name,
-    short_name: "splitch",
+    short_name: shortName,
     start_url: "/",
     display: "standalone",
     // The dark neutral surface base. A manifest takes one value, and the mark
@@ -203,7 +208,7 @@ for (const app of apps) {
 
   writeFileSync(
     absoluteOutput(`${app.publicDir}/site.webmanifest`),
-    `${JSON.stringify(manifest(app.manifestName), null, 2)}\n`,
+    `${JSON.stringify(manifest(app.manifestName, app.manifestShortName), null, 2)}\n`,
   );
 
   if (app.ogCard) {
