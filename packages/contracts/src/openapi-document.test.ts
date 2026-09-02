@@ -85,6 +85,15 @@ describe("openapi document: version identity", () => {
     }
   });
 
+  it("refuses to impersonate local when the target is unset or unrecognized", () => {
+    expect(() => resolveApiDocumentVersion(undefined, undefined)).toThrow(
+      /SPLITCH_PLATFORM_TARGET is required/,
+    );
+    expect(() => resolveApiDocumentVersion("prod", undefined)).toThrow(
+      /"prod" is not a platform target/,
+    );
+  });
+
   it("rejects a truncated or non-hex commit SHA rather than stamping it", () => {
     for (const bad of ["a".repeat(7), "abc", "A".repeat(40), `${sha}0`]) {
       expect(() => resolveApiDocumentVersion("production", bad)).toThrow(

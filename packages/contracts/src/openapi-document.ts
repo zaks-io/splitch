@@ -2,7 +2,7 @@ import { OpenAPIHono } from "@hono/zod-openapi";
 import {
   FullCommitShaSchema,
   isHostedPlatformTarget,
-  parsePlatformTarget,
+  requirePlatformTarget,
 } from "./health-response";
 import { publicSurfaceFor } from "./route-contract";
 import { routeRegistry } from "./route-registry";
@@ -39,7 +39,9 @@ const DEFAULT_TITLE = "splitch control-plane API";
  *
  * Hosted targets must carry a real SHA: throwing beats serving a document that
  * claims to be a build nobody can name. Local and PR CI have no deployment, so
- * they say so by name rather than inventing a version.
+ * they say so by name rather than inventing a version. An unset or unrecognized
+ * target throws too: `parsePlatformTarget` would coerce it to `local`, and a
+ * production document stamped `local` is a more convincing lie than `0.0.0`.
  */
 export function resolveApiDocumentVersion(
   platformTarget: string | undefined,
@@ -59,7 +61,7 @@ export function resolveApiDocumentVersion(
       `SPLITCH_DEPLOYED_COMMIT_SHA is required to version the OpenAPI document on ${platformTarget}`,
     );
   }
-  return parsePlatformTarget(platformTarget);
+  return requirePlatformTarget(platformTarget);
 }
 
 /** Handler the emitter never calls — the app exists only to emit, not to serve. */
