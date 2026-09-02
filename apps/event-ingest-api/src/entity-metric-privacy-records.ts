@@ -15,7 +15,7 @@ export async function exportMetricRecords(
   env: Env,
   entries: readonly EntityMetricInventoryEntry[],
 ): Promise<Record<string, unknown>[]> {
-  const records = [];
+  const records: Record<string, unknown>[] = [];
   for (const entry of entries) {
     const response = await outbox(env, entry.dedupKey).fetch(
       "https://metric-event-outbox.local/export",
@@ -24,13 +24,36 @@ export async function exportMetricRecords(
     if (!response.ok) {
       throw new Error(`Metric Event outbox export returned HTTP ${response.status}`);
     }
-    const exported = (await response.json()) as { deleted?: unknown; row?: unknown };
-    if (exported.deleted !== true && !isRecord(exported.row)) {
-      throw new Error("Metric Event outbox export returned an invalid record");
-    }
-    if (isRecord(exported.row)) records.push(exported.row);
+    appendMetricExport(
+      records,
+      (await response.json()) as {
+        deleted?: unknown;
+        row?: unknown;
+        activationRows?: unknown;
+      },
+    );
   }
   return records;
+}
+
+function appendMetricExport(
+  records: Record<string, unknown>[],
+  exported: { deleted?: unknown; row?: unknown; activationRows?: unknown },
+): void {
+  if (exported.deleted !== true && !isRecord(exported.row)) {
+    throw new Error("Metric Event outbox export returned an invalid record");
+  }
+  if (isRecord(exported.row)) records.push(exported.row);
+  if (exported.activationRows === undefined) return;
+  if (!Array.isArray(exported.activationRows)) {
+    throw new Error("Metric Event outbox export returned invalid Activation records");
+  }
+  for (const row of exported.activationRows) {
+    if (!isRecord(row)) {
+      throw new Error("Metric Event outbox export returned an invalid Activation record");
+    }
+    records.push(row);
+  }
 }
 
 export async function exportEvaluationRecords(

@@ -1,6 +1,6 @@
 {
   "name": "@splitch/sdk",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "description": "Public JavaScript/TypeScript SDK for splitch evaluation and typed platform integrations",
   "license": "Apache-2.0",
   "homepage": "https://splitch.dev",

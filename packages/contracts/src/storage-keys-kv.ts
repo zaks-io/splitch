@@ -51,6 +51,11 @@ export function eventDefinitionConfigKey(appId: string, eventName: string): stri
   return `app:${appId}:event-definition:${eventName}`;
 }
 
+/** Live activation bindings for one App and Environment. */
+export function activationConfigKey(appId: string, environmentId: string): string {
+  return `app:${appId}:${environmentId}:activation-config`;
+}
+
 /** `live_run:{appId}:{environmentId}:{experimentId}` — explicit live Experiment Run pointer. */
 export function liveRunKey(appId: string, environmentId: string, experimentId: string): string {
   return `live_run:${appId}:${environmentId}:${experimentId}`;

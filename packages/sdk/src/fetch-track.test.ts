@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { postMetricEvent, trackFailure } from "./fetch-track";
+import { postActivation, postMetricEvent, trackFailure } from "./fetch-track";
 import { stubFetch } from "./test-fixtures";
 
 const REQUEST = {
@@ -71,6 +71,26 @@ describe("postMetricEvent", () => {
       accepted: false,
       eventId: null,
       duplicate: false,
+    });
+  });
+});
+
+describe("postActivation", () => {
+  it("returns the number of live Runs activated by one Metric Event", async () => {
+    const result = await postActivation(
+      { credential: "sk_test", fetchImpl: stubFetch(accepted({ activatedRuns: 2 })) },
+      new URL("https://edge.test/api/sdk/activations"),
+      REQUEST,
+      new AbortController().signal,
+      async () => ({ status: 400, errorCode: "VALIDATION_ERROR", errorMessage: "invalid" }),
+    );
+
+    expect(result).toMatchObject({
+      status: 202,
+      accepted: true,
+      eventId: REQUEST.eventId,
+      duplicate: false,
+      activatedRuns: 2,
     });
   });
 });

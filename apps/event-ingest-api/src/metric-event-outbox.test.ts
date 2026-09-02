@@ -18,6 +18,7 @@ describe("Metric Event outbox Durable Object", () => {
       outcome: "accepted",
       eventDefinitionId: "ed_signed_up",
       eventDefinitionVersionId: "edv_1",
+      activatedRuns: 0,
     });
     expect(outbox.send).not.toHaveBeenCalled();
     expect(outbox.alarmTime()).toBeTypeOf("number");
@@ -28,6 +29,35 @@ describe("Metric Event outbox Durable Object", () => {
     expect(outbox.send).toHaveBeenCalledTimes(1);
     expect(outbox.send.mock.calls[0]?.[0]).toEqual(row("entity-7").row);
     expect(outbox.stored()?.queued).toBe(true);
+  });
+
+  it("publishes the Metric Event and its Activation rows from one durable claim", async () => {
+    const outbox = makeOutbox();
+    const activationRows = [{ event_id: "event-1", type: "activation" }];
+
+    const claim = await outbox.claim({
+      ...row("entity-7"),
+      activationRows,
+      activatedRuns: 1,
+    });
+    await outbox.runAlarm();
+
+    expect(claim).toMatchObject({ outcome: "accepted", activatedRuns: 1 });
+    expect(outbox.send).toHaveBeenCalledTimes(1);
+    expect(outbox.sendBatch).toHaveBeenCalledWith([
+      {
+        body: {
+          kind: "raw-event-delivery-v1",
+          datasource: "raw_events",
+          row: activationRows[0],
+        },
+      },
+    ]);
+    expect(outbox.stored()).toMatchObject({
+      queued: true,
+      metricQueued: true,
+      activationsQueued: true,
+    });
   });
 
   it("re-enqueues a replay whose first queue send never landed", async () => {
@@ -66,6 +96,7 @@ describe("Metric Event outbox Durable Object", () => {
       fingerprint: "fp_entity-7",
       eventDefinitionId: "ed_signed_up",
       eventDefinitionVersionId: "edv_1",
+      activatedRuns: 0,
     });
     expect(outbox.send).not.toHaveBeenCalled();
   });
@@ -118,7 +149,7 @@ describe("Metric Event outbox Durable Object", () => {
 
     expect(deleted).toEqual({ deleted: true, proof: "metric-event-outbox-redacted-v1" });
     expect(replay.outcome).toBe("duplicate");
-    expect(exported).toEqual({ deleted: true, row: null });
+    expect(exported).toEqual({ deleted: true, row: null, activationRows: [] });
     expect(outbox.stored()).not.toHaveProperty("row");
     expect(outbox.send).not.toHaveBeenCalled();
   });
@@ -137,7 +168,11 @@ describe("Metric Event outbox Durable Object", () => {
     releaseSend();
     await publication;
     await expect(outbox.suppress(row("entity-7"))).resolves.toMatchObject({ deleted: true });
-    await expect(outbox.exported()).resolves.toEqual({ deleted: true, row: null });
+    await expect(outbox.exported()).resolves.toEqual({
+      deleted: true,
+      row: null,
+      activationRows: [],
+    });
   });
 });
 

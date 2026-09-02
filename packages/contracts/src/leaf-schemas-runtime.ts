@@ -83,7 +83,7 @@ export const exposureTypes = ["exposure", "activation"] as const;
 export const ExposureTypeSchema = z.enum(exposureTypes);
 export type ExposureType = z.infer<typeof ExposureTypeSchema>;
 
-export const ExposureEventSchema = z.object({
+const ExposureEventBaseSchema = z.object({
   dedupKey: z.string(),
   eventId: z.string(),
   appId: z.string(),
@@ -93,8 +93,6 @@ export const ExposureEventSchema = z.object({
   idType: z.string(),
   targetingKeyHash: z.string(),
   entityFamilyHash: z.string(),
-  variantName: z.string(),
-  type: ExposureTypeSchema,
   sourceId: z.string(),
   // Spec-mandated default (NOT a silent fallback): a row that omits
   // `counterfactual` parses as `false`, never null.
@@ -103,6 +101,14 @@ export const ExposureEventSchema = z.object({
   exposureAt: z.string(),
   serverReceivedAt: z.string(),
 });
+
+export const ExposureEventSchema = z.discriminatedUnion("type", [
+  ExposureEventBaseSchema.extend({ type: z.literal("exposure"), variantName: z.string() }),
+  ExposureEventBaseSchema.extend({
+    type: z.literal("activation"),
+    variantName: z.string(),
+  }),
+]);
 export type ExposureEvent = z.infer<typeof ExposureEventSchema>;
 
 // ResolutionDetails leaves are defined in ./leaves/* and re-exported above.

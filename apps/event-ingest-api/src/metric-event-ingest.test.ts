@@ -13,8 +13,8 @@ import {
   metricEventBody,
   sendMetricEvent,
 } from "./metric-event.test-fixture";
-import { handleAuthorizedMetricEvent } from "./metric-event-ingest";
 import { metricEventDedupKey, metricEventPayloadFingerprint } from "./metric-event-identity";
+import { handleAuthorizedMetricEvent } from "./metric-event-ingest";
 import { makeMetricEventSaltStore } from "./metric-event-salt-store";
 import { TestExecutionContext } from "./test-fixtures";
 

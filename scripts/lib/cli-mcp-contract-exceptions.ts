@@ -156,6 +156,12 @@ export const CLI_MCP_CONTRACT_EXCEPTIONS = [
     reason: "SDK Metric Event data-plane operation",
   },
   {
+    operationId: "sdk_activate",
+    cli: false,
+    mcp: false,
+    reason: "SDK Activation data-plane operation",
+  },
+  {
     operationId: "sdk_cached_evaluation_telemetry",
     cli: false,
     mcp: false,

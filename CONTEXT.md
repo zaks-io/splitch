@@ -106,8 +106,9 @@ client cannot report an Exposure the server did not resolve. See
 family is selected when created, and its immutable published versions are shared across
 Environments.
 
-**Metric Event**: an App/Environment/Entity fact submitted with top-level `track()`. It supplies
-Metric values but never becomes the Exposure denominator.
+**Metric Event**: an App/Environment/Entity fact submitted with top-level `track()` or `activate()`.
+`activate()` atomically stores the Metric Event and materializes matching Exposure-backed Activation
+rows. Metric Events supply Metric values but never become the Exposure denominator.
 
 **Web Event**: an App/Environment browser telemetry fact used for exploratory web analytics, never
 as a Metric input or the Exposure denominator.

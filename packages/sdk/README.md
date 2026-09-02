@@ -64,10 +64,10 @@ Construct the client with exactly one credential. Zero or both throws
 `SDK_CREDENTIAL_CONFIGURATION_INVALID` at construction, because the two unlock
 different methods and the client cannot guess which you meant.
 
-| Option      | Credential                | Where it may live                                  | Unlocks                                                         |
-| ----------- | ------------------------- | -------------------------------------------------- | --------------------------------------------------------------- |
-| `clientKey` | public Client Key (`pk_`) | browsers, mobile, servers: anything that evaluates | `evaluate`, `evaluateDetails`, `verify`, `evaluateAll`, `track` |
-| `apiKey`    | secret API Key (`sk_`)    | servers only; never ship it to a client            | `peekVariant`, `verify`, `evaluateAll`, `track`                 |
+| Option      | Credential                | Where it may live                                  | Unlocks                                                                     |
+| ----------- | ------------------------- | -------------------------------------------------- | --------------------------------------------------------------------------- |
+| `clientKey` | public Client Key (`pk_`) | browsers, mobile, servers: anything that evaluates | `evaluate`, `evaluateDetails`, `verify`, `evaluateAll`, `track`, `activate` |
+| `apiKey`    | secret API Key (`sk_`)    | servers only; never ship it to a client            | `peekVariant`, `verify`, `evaluateAll`, `track`, `activate`                 |
 
 A server-side integration that fires Exposures uses a Client Key, not an API
 Key. The API Key cannot call `evaluate` or `evaluateDetails`; present a Client
@@ -80,24 +80,25 @@ The data plane has two scopes. A Client Key carries both, which is why it can
 `splitch api-keys create`, so an API Key minted for evaluation alone is refused
 by `track` with `INSUFFICIENT_SCOPES`.
 
-| Scope                 | Covers                                                                |
-| --------------------- | --------------------------------------------------------------------- |
-| `data-plane:evaluate` | `evaluate`, `evaluateDetails`, `peekVariant`, `verify`, `evaluateAll` |
-| `data-plane:write`    | `track`, the Metric Event append                                      |
+| Scope                 | Covers                                                                                    |
+| --------------------- | ----------------------------------------------------------------------------------------- |
+| `data-plane:evaluate` | `evaluate`, `evaluateDetails`, `peekVariant`, `verify`, `evaluateAll`                     |
+| `data-plane:write`    | `track` and `activate`; Metric Event append and Activation materialization where eligible |
 
-## The six methods
+## The seven methods
 
 An **Exposure** is the "this subject saw this Variant" event that experiment
 analysis counts. Which methods fire one is the core thing to get right:
 
-| Method            | Returns                       | Fires an Exposure | Credential                                        |
-| ----------------- | ----------------------------- | ----------------- | ------------------------------------------------- |
-| `evaluate`        | the Variant value             | yes               | Client Key only                                   |
-| `evaluateDetails` | full `ResolutionDetails`      | yes               | Client Key only                                   |
-| `peekVariant`     | the Variant value             | no                | API Key only                                      |
-| `verify`          | full `ResolutionDetails`      | no                | Client Key or API Key                             |
-| `evaluateAll`     | every Flag, in one round trip | no                | Client Key or API Key                             |
-| `track`           | the accepted Metric Event     | no                | Client Key, or an API Key with `data-plane:write` |
+| Method            | Returns                          | Fires an Exposure | Credential                                        |
+| ----------------- | -------------------------------- | ----------------- | ------------------------------------------------- |
+| `evaluate`        | the Variant value                | yes               | Client Key only                                   |
+| `evaluateDetails` | full `ResolutionDetails`         | yes               | Client Key only                                   |
+| `peekVariant`     | the Variant value                | no                | API Key only                                      |
+| `verify`          | full `ResolutionDetails`         | no                | Client Key or API Key                             |
+| `evaluateAll`     | every Flag, in one round trip    | no                | Client Key or API Key                             |
+| `track`           | the accepted Metric Event        | no                | Client Key, or an API Key with `data-plane:write` |
+| `activate`        | the accepted event and Run count | no                | Client Key, or an API Key with `data-plane:write` |
 
 - `evaluate` or `evaluateDetails` on the real user path. These belong in
   production request handling; reach for `evaluateDetails` when the handler needs
@@ -110,6 +111,9 @@ analysis counts. Which methods fire one is the core thing to get right:
 - `track` to append the Metric Event an experiment measures. It is the other
   half of the pair: Exposures are the denominator, Metric Events are the
   numerator.
+- `activate` when that Metric Event is also the Experiment's Activation Metric.
+  Splitch derives every matching live Run; the caller supplies no Experiment,
+  Run, or Variant identity.
 
 ## track: recording a Metric Event
 
@@ -133,6 +137,25 @@ result.duplicate; // true when this eventId was already appended
 `fields` carries the measured values the Event Definition declares.
 `dimensions` carries the low-cardinality slice labels (`boolean | string |
 number`) you want to break results down by.
+
+`activate` accepts the same declared event and atomically claims its Metric
+Event plus the matching Activation rows:
+
+```ts
+const result = await splitch.activate("generation_completed", {
+  targetingKey: conversation.id,
+  idType: "conversation",
+  eventId: generationEventId,
+  fields: { generation_count: 1 },
+  dimensions: { outcome: "success" },
+});
+
+result.activatedRuns; // one or more live Runs
+```
+
+It fails loudly when no live Run uses that Event Definition as its frozen
+Activation Metric. Retrying the same `eventId` is safe and returns the original
+Run count.
 
 Unlike `evaluate`, `track` has no Default Variant to fall back to, so it throws
 `SplitchSdkError` on rejection rather than returning a partial result. An

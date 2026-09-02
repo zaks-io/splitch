@@ -44,6 +44,7 @@ const ingestPath = "/api/internal/exposures";
 const evaluationIngestPath = "/api/internal/evaluations";
 const evaluationCommitPath = "/api/internal/evaluation-commits";
 const metricEventPath = "/api/sdk/events";
+const activationPath = "/api/sdk/activations";
 const rawEventQueueNames = new Set([
   "splitch-raw-events-local",
   "splitch-raw-evaluations-local",
@@ -63,7 +64,7 @@ const metricEventReconciliationQueueNames = new Set([
   "splitch-metric-events-reconciliation",
 ]);
 const metricEventRoutes = routesDelegatedTo("event-ingest-api").filter(
-  (route) => route.operationId === "sdk_track",
+  (route) => route.operationId === "sdk_track" || route.operationId === "sdk_activate",
 );
 const entityPrivacyOperations = [
   "entity_event_privacy_export",
@@ -146,7 +147,10 @@ const delegatedHandler = {
     const observability = observabilityFor(env, ctx);
     const internal = await handleInternalRoute(request, env, observability, url);
     if (internal) return internal;
-    if (request.method !== "POST" || url.pathname !== metricEventPath) {
+    if (
+      request.method !== "POST" ||
+      (url.pathname !== metricEventPath && url.pathname !== activationPath)
+    ) {
       return notDelegatedResponse(request);
     }
     const identity = delegatedIdentityFor(request, metricEventRoutes);
@@ -164,7 +168,13 @@ const delegatedHandler = {
       timing.emit(ingestTimingOutcomeFor(response), { serializedBytes: null });
       return response;
     }
-    return handleAuthorizedMetricEvent(request, env, credential.value, timing);
+    return handleAuthorizedMetricEvent(
+      request,
+      env,
+      credential.value,
+      timing,
+      identity.operation === "sdk_activate",
+    );
   },
 } satisfies ExportedHandler<Env>;
 

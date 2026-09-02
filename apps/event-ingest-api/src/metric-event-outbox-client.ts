@@ -2,12 +2,14 @@ export interface MetricEventClaim {
   readonly outcome: "accepted" | "duplicate" | "conflict";
   readonly eventDefinitionId: string;
   readonly eventDefinitionVersionId: string;
+  readonly activatedRuns: number;
 }
 
 export interface MetricEventLookup {
   readonly fingerprint: string;
   readonly eventDefinitionId: string;
   readonly eventDefinitionVersionId: string;
+  readonly activatedRuns: number;
 }
 
 export interface MetricEventOutboxNamespace {
@@ -22,6 +24,8 @@ interface MetricEventClaimInput {
   readonly eventDefinitionId: string;
   readonly eventDefinitionVersionId: string;
   readonly row?: Record<string, unknown>;
+  readonly activationRows?: readonly Record<string, unknown>[];
+  readonly activatedRuns?: number;
   readonly expiresAt?: number;
 }
 
@@ -39,7 +43,8 @@ export async function lookupMetricEvent(
   if (
     typeof lookup.fingerprint !== "string" ||
     typeof lookup.eventDefinitionId !== "string" ||
-    typeof lookup.eventDefinitionVersionId !== "string"
+    typeof lookup.eventDefinitionVersionId !== "string" ||
+    (lookup.activatedRuns !== undefined && typeof lookup.activatedRuns !== "number")
   ) {
     throw new Error("Metric Event outbox returned an invalid lookup");
   }
@@ -47,6 +52,7 @@ export async function lookupMetricEvent(
     fingerprint: lookup.fingerprint,
     eventDefinitionId: lookup.eventDefinitionId,
     eventDefinitionVersionId: lookup.eventDefinitionVersionId,
+    activatedRuns: lookup.activatedRuns ?? 0,
   };
 }
 
@@ -65,7 +71,10 @@ export async function claimMetricEvent(
     });
   if (!response.ok) throw new Error(`Metric Event outbox returned HTTP ${response.status}`);
   const claim = (await response.json()) as MetricEventClaim;
-  if (!["accepted", "duplicate", "conflict"].includes(claim.outcome)) {
+  if (
+    !["accepted", "duplicate", "conflict"].includes(claim.outcome) ||
+    typeof claim.activatedRuns !== "number"
+  ) {
     throw new Error("Metric Event outbox returned an invalid claim");
   }
   return claim;

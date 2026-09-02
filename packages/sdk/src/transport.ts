@@ -117,12 +117,17 @@ export interface TrackResult extends TransportFailure {
   readonly duplicate: boolean;
 }
 
+export interface ActivateResult extends TrackResult {
+  readonly activatedRuns: number;
+}
+
 export interface Transport {
   evaluate(request: TransportRequest): Promise<TransportResult>;
   peek(request: TransportRequest): Promise<TransportResult>;
   verify(request: TransportRequest): Promise<VerifyTransportResult>;
   evaluateAll(request: EvaluateAllTransportRequest): Promise<EvaluateAllTransportResult>;
   track(request: TrackRequest): Promise<TrackResult>;
+  activate(request: TrackRequest): Promise<ActivateResult>;
   /** Best-effort non-billable telemetry for a local cache result. */
   recordCachedEvaluation?(event: CachedEvaluationTelemetry): Promise<void>;
 }

@@ -1,8 +1,8 @@
+import { execFileSync } from "node:child_process";
 import { cpSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { execFileSync } from "node:child_process";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const fixtureRoot = join(repoRoot, "fixtures/external-dark-launch-product");
@@ -76,9 +76,7 @@ export function runExternalResolve(consumer, action, options) {
   if (options.idempotencyKey) {
     args.push("--idempotency-key", options.idempotencyKey);
   }
-  for (const [key, value] of Object.entries(options.attributes ?? {})) {
-    args.push("--attribute", `${key}=${value}`);
-  }
+  appendEntries(args, "--attribute", options.attributes);
 
   let stdout;
   try {
@@ -102,6 +100,36 @@ export function runExternalResolve(consumer, action, options) {
     throw new Error(`external resolve produced no JSON details:\n${stdout}`);
   }
   return details;
+}
+
+/** Run the packed SDK consumer's top-level track call. */
+export function runExternalTrack(consumer, options) {
+  const args = [
+    consumer.resolveScript,
+    "track",
+    "--event",
+    options.eventName,
+    "--targeting-key",
+    options.targetingKey,
+    "--event-id",
+    options.eventId,
+  ];
+  appendEntries(args, "--field", options.fields);
+  const stdout = execFileSync(process.execPath, args, {
+    encoding: "utf8",
+    env: {
+      ...process.env,
+      SPLITCH_CLIENT_KEY: options.clientKey,
+      SPLITCH_ENDPOINT: options.endpoint,
+    },
+  });
+  const result = parseLastJsonLine(stdout);
+  if (!result) throw new Error(`external track produced no JSON result:\n${stdout}`);
+  return result;
+}
+
+function appendEntries(args, flag, entries = {}) {
+  for (const [key, value] of Object.entries(entries)) args.push(flag, `${key}=${value}`);
 }
 
 function parseLastJsonLine(text) {

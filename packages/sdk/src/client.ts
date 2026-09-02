@@ -8,7 +8,7 @@ import { createFetchTransport } from "./fetch-transport";
 import type { VariantValue } from "./generated/contract-surface.js";
 import type { SdkResolutionDetails } from "./resolution";
 import { SeenSet } from "./seen-set";
-import type { TrackRequest, Transport } from "./transport";
+import type { TrackRequest, TrackResult, Transport } from "./transport";
 
 /**
  * Options for {@link createSplitchClient}. Exactly one credential is required:
@@ -59,6 +59,14 @@ export interface SplitchClientOptions {
 }
 
 export interface SplitchClient {
+  /**
+   * Append one declared Metric Event and materialize an Activation for every
+   * matching live Experiment Run. The caller never supplies Run or Variant ids.
+   */
+  activate(
+    eventName: string,
+    event: Omit<TrackRequest, "eventName">,
+  ): Promise<{ eventId: string; duplicate: boolean; activatedRuns: number }>;
   /**
    * Append one declared Metric Event. The caller owns the UUID `eventId` and
    * reuses it for retries of the same logical event.
@@ -186,16 +194,19 @@ export function createSplitchClient(options: SplitchClientOptions): SplitchClien
   };
 
   return {
+    async activate(eventName, event) {
+      const result = await deps.transport.activate({ eventName, ...event });
+      if (!result.accepted || result.eventId === null) throw metricEventError(result);
+      return {
+        eventId: result.eventId,
+        duplicate: result.duplicate,
+        activatedRuns: result.activatedRuns,
+      };
+    },
     async track(eventName, event) {
       const result = await deps.transport.track({ eventName, ...event });
       if (!result.accepted || result.eventId === null) {
-        throw new SplitchSdkError({
-          code: result.errorCode ?? "SDK_TRANSPORT_PARSE",
-          causeSummary: result.errorMessage ?? "Metric Event was rejected",
-          remediation: "Correct the Event Definition, identity, or payload and retry",
-          status: result.status ?? undefined,
-          originalError: result.cause,
-        });
+        throw metricEventError(result);
       }
       return {
         eventId: result.eventId,
@@ -226,6 +237,16 @@ export function createSplitchClient(options: SplitchClientOptions): SplitchClien
     options.onResolution?.(flagKey, details);
     return details;
   }
+}
+
+function metricEventError(result: TrackResult): SplitchSdkError {
+  return new SplitchSdkError({
+    code: result.errorCode ?? "SDK_TRANSPORT_PARSE",
+    causeSummary: result.errorMessage ?? "Metric Event was rejected",
+    remediation: "Correct the Event Definition, identity, or payload and retry",
+    status: result.status ?? undefined,
+    originalError: result.cause,
+  });
 }
 
 /**
