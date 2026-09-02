@@ -13,6 +13,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as HealthRouteImport } from './routes/health'
 import { Route as LlmsDottxtRouteImport } from './routes/llms[.]txt'
 import { Route as QuickstartRouteImport } from './routes/quickstart'
+import { Route as DotwellKnownApiCatalogRouteImport } from './routes/[.]well-known.api-catalog'
 import { Route as DocsIndexRouteImport } from './routes/docs.index'
 import { Route as DocsCliRouteImport } from './routes/docs.cli'
 import { Route as DocsCliDotmdRouteImport } from './routes/docs.cli[.]md'
@@ -43,6 +44,11 @@ const LlmsDottxtRoute = LlmsDottxtRouteImport.update({
 const QuickstartRoute = QuickstartRouteImport.update({
   id: '/quickstart',
   path: '/quickstart',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DotwellKnownApiCatalogRoute = DotwellKnownApiCatalogRouteImport.update({
+  id: '/.well-known/api-catalog',
+  path: '/.well-known/api-catalog',
   getParentRoute: () => rootRouteImport,
 } as any)
 const DocsIndexRoute = DocsIndexRouteImport.update({
@@ -106,6 +112,7 @@ export interface FileRoutesByFullPath {
   '/health': typeof HealthRoute
   '/llms.txt': typeof LlmsDottxtRoute
   '/quickstart': typeof QuickstartRoute
+  '/.well-known/api-catalog': typeof DotwellKnownApiCatalogRoute
   '/docs/cli': typeof DocsCliRoute
   '/docs/cli.md': typeof DocsCliDotmdRoute
   '/docs/code-agents': typeof DocsCodeAgentsRoute
@@ -123,6 +130,7 @@ export interface FileRoutesByTo {
   '/health': typeof HealthRoute
   '/llms.txt': typeof LlmsDottxtRoute
   '/quickstart': typeof QuickstartRoute
+  '/.well-known/api-catalog': typeof DotwellKnownApiCatalogRoute
   '/docs/cli': typeof DocsCliRoute
   '/docs/cli.md': typeof DocsCliDotmdRoute
   '/docs/code-agents': typeof DocsCodeAgentsRoute
@@ -141,6 +149,7 @@ export interface FileRoutesById {
   '/health': typeof HealthRoute
   '/llms.txt': typeof LlmsDottxtRoute
   '/quickstart': typeof QuickstartRoute
+  '/.well-known/api-catalog': typeof DotwellKnownApiCatalogRoute
   '/docs/cli': typeof DocsCliRoute
   '/docs/cli.md': typeof DocsCliDotmdRoute
   '/docs/code-agents': typeof DocsCodeAgentsRoute
@@ -160,6 +169,7 @@ export interface FileRouteTypes {
     | '/health'
     | '/llms.txt'
     | '/quickstart'
+    | '/.well-known/api-catalog'
     | '/docs/cli'
     | '/docs/cli.md'
     | '/docs/code-agents'
@@ -177,6 +187,7 @@ export interface FileRouteTypes {
     | '/health'
     | '/llms.txt'
     | '/quickstart'
+    | '/.well-known/api-catalog'
     | '/docs/cli'
     | '/docs/cli.md'
     | '/docs/code-agents'
@@ -194,6 +205,7 @@ export interface FileRouteTypes {
     | '/health'
     | '/llms.txt'
     | '/quickstart'
+    | '/.well-known/api-catalog'
     | '/docs/cli'
     | '/docs/cli.md'
     | '/docs/code-agents'
@@ -212,6 +224,7 @@ export interface RootRouteChildren {
   HealthRoute: typeof HealthRoute
   LlmsDottxtRoute: typeof LlmsDottxtRoute
   QuickstartRoute: typeof QuickstartRoute
+  DotwellKnownApiCatalogRoute: typeof DotwellKnownApiCatalogRoute
   DocsCliRoute: typeof DocsCliRoute
   DocsCliDotmdRoute: typeof DocsCliDotmdRoute
   DocsCodeAgentsRoute: typeof DocsCodeAgentsRoute
@@ -253,6 +266,13 @@ declare module '@tanstack/react-router' {
       path: '/quickstart'
       fullPath: '/quickstart'
       preLoaderRoute: typeof QuickstartRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/.well-known/api-catalog': {
+      id: '/.well-known/api-catalog'
+      path: '/.well-known/api-catalog'
+      fullPath: '/.well-known/api-catalog'
+      preLoaderRoute: typeof DotwellKnownApiCatalogRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/docs/': {
@@ -340,6 +360,7 @@ const rootRouteChildren: RootRouteChildren = {
   HealthRoute: HealthRoute,
   LlmsDottxtRoute: LlmsDottxtRoute,
   QuickstartRoute: QuickstartRoute,
+  DotwellKnownApiCatalogRoute: DotwellKnownApiCatalogRoute,
   DocsCliRoute: DocsCliRoute,
   DocsCliDotmdRoute: DocsCliDotmdRoute,
   DocsCodeAgentsRoute: DocsCodeAgentsRoute,
