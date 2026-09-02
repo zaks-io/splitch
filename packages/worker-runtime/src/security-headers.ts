@@ -140,6 +140,9 @@ function mergeHeaderValue(name: string, current: string, extra: string): string 
     return strongerReferrerPolicy(current, extra);
   }
   if (key === "x-robots-tag") {
+    // Whole-value check. Per-crawler groups (`googlebot: noindex, bingbot: all`)
+    // would score as already-noindex and keep the weaker group, which is fine
+    // while the Panel policy is this header's only writer in the repo.
     return strongerToken(current, extra, (value) =>
       value.toLowerCase().includes("noindex") ? 1 : 0,
     );

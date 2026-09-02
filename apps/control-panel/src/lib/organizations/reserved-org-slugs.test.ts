@@ -32,6 +32,11 @@ const routesDir = fileURLToPath(new URL("../../routes", import.meta.url));
  * Both underscore forms are already in use in this directory, and both hide the
  * shadowed word behind a spelling no Org slug can match, so neither may be
  * dropped on the way to the reservation check.
+ *
+ * This reads flat files only. TanStack also accepts directory routes
+ * (`routes/pricing/plans.tsx`), whose segment lives in the directory name and
+ * would never reach this scan, so the test below fails loud the day one appears
+ * rather than letting it slip past unreserved.
  */
 function topLevelStaticSegments(): string[] {
   return readdirSync(routesDir)
@@ -83,6 +88,14 @@ describe("reserved Organization slugs vs the Panel router", () => {
     expect(slugShapedSegments()).toEqual(
       expect.arrayContaining(["auth", "claim", "health", "kitchen-sink"]),
     );
+  });
+
+  it("fails loud if a directory route appears, whose segment this scan cannot see", () => {
+    const directories = readdirSync(routesDir, { withFileTypes: true })
+      .filter((entry) => entry.isDirectory())
+      .map((entry) => entry.name);
+
+    expect(directories).toEqual([]);
   });
 
   it("reads the underscore conventions as the URL segments they produce", () => {
