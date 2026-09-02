@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { acceptsMarkdown, markdownResponse, withVaryAccept } from "./serve-markdown";
+import {
+  acceptsMarkdown,
+  hasMarkdownMediaRange,
+  markdownResponse,
+  withVaryAccept,
+} from "./serve-markdown";
 
 describe("acceptsMarkdown", () => {
   it("accepts markdown among multiple media types", () => {
@@ -14,6 +19,15 @@ describe("acceptsMarkdown", () => {
       headers: { accept: "text/markdown; q=0, text/html" },
     });
     expect(acceptsMarkdown(request)).toBe(false);
+  });
+});
+
+describe("hasMarkdownMediaRange", () => {
+  it("detects an explicitly disabled markdown representation", () => {
+    const request = new Request("https://splitch.dev", {
+      headers: { accept: "text/markdown; q=0" },
+    });
+    expect(hasMarkdownMediaRange(request)).toBe(true);
   });
 });
 

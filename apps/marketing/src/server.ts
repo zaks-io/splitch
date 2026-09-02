@@ -2,8 +2,8 @@ import { wrapWorkerHandler } from "@splitch/observability/worker";
 import handler from "@tanstack/react-start/server-entry";
 import { handleAgentSkillsRequest } from "./agent-skills";
 import { withHomepageLinkHeaders } from "./agent-discovery";
-import { markdownForPath } from "./docs/markdown-route";
-import { acceptsMarkdown, markdownResponse, withVaryAccept } from "./docs/serve-markdown";
+import { negotiateMarkdownRequest } from "./docs/negotiate-markdown";
+import { withVaryAccept } from "./docs/serve-markdown";
 
 type MarketingWorkerEnv = {
   SENTRY_DSN?: string;
@@ -21,18 +21,12 @@ const marketingHandler = {
       return withHomepageLinkHeaders(request, agentSkillsResponse);
     }
 
-    let renderRequest = request;
-    if (request.method === "GET" && acceptsMarkdown(request)) {
-      const markdown = markdownForPath(new URL(request.url).pathname);
-      if (markdown !== null) {
-        return withHomepageLinkHeaders(request, withVaryAccept(markdownResponse(markdown)));
-      }
-      const headers = new Headers(request.headers);
-      headers.set("accept", "text/html");
-      renderRequest = new Request(request, { headers }) as typeof request;
+    const negotiation = negotiateMarkdownRequest(request);
+    if (negotiation.kind === "response") {
+      return withHomepageLinkHeaders(request, negotiation.response);
     }
 
-    const response = await startHandler.fetch(renderRequest, env, ctx);
+    const response = await startHandler.fetch(negotiation.request, env, ctx);
     const negotiatedResponse = response.headers.get("content-type")?.startsWith("text/html")
       ? withVaryAccept(response)
       : response;
