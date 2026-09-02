@@ -1,5 +1,6 @@
 import { wrapWorkerHandler } from "@splitch/observability/worker";
 import handler from "@tanstack/react-start/server-entry";
+import { handleAgentSkillsRequest } from "./agent-skills";
 
 type MarketingWorkerEnv = {
   SENTRY_DSN?: string;
@@ -7,8 +8,15 @@ type MarketingWorkerEnv = {
   SPLITCH_PLATFORM_TARGET?: string;
 };
 
+const startHandler = handler as unknown as ExportedHandler<MarketingWorkerEnv> &
+  Required<Pick<ExportedHandler<MarketingWorkerEnv>, "fetch">>;
+
 export default wrapWorkerHandler(
-  handler as unknown as ExportedHandler<MarketingWorkerEnv> &
-    Required<Pick<ExportedHandler<MarketingWorkerEnv>, "fetch">>,
+  {
+    async fetch(request, env, ctx) {
+      const agentSkillsResponse = await handleAgentSkillsRequest(request);
+      return agentSkillsResponse ?? startHandler.fetch(request, env, ctx);
+    },
+  },
   { surface: "marketing" },
 );
