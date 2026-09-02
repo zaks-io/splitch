@@ -37,6 +37,10 @@ export {
   rawBodyByteLimitFor,
   routeOwners,
 } from "../route-contract";
+// The emitted OpenAPI document is the registry rendered for public discovery,
+// so it lives with the registry rather than beside unrelated leaf contracts.
+export type { OpenApiDocumentInfo } from "../openapi-document";
+export { buildOpenApiDocument, resolveApiDocumentVersion } from "../openapi-document";
 export {
   getRoute,
   mountedOperationIds,

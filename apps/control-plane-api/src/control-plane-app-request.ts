@@ -6,6 +6,7 @@ import {
 } from "@splitch/observability/worker";
 import { createPerformanceSpanRecorder } from "@splitch/observability/performance-spans";
 import type { AuthResolver } from "@splitch/worker-runtime";
+import { apiDocumentVersion } from "./api-document-version";
 import { createApp } from "./app";
 import { approvalArchiveStoreFromEnv } from "./approval-archive-tinybird";
 import { createAnalysisResultsReader } from "./attention-analysis-reader";
@@ -36,6 +37,7 @@ export async function handleControlPlaneAppRequest(input: {
   });
   const app = createApp({
     door,
+    apiVersion: () => apiDocumentVersion(env),
     authResolver,
     rateLimiter: rateLimiterForTarget(
       env.SPLITCH_PLATFORM_TARGET,

@@ -68,6 +68,13 @@ import { mountUnavailableControlPlaneRoutes } from "./unavailable-handler";
 
 export interface AppDeps {
   door?: "public" | "binding";
+  /**
+   * Deployed build identity stamped into the served OpenAPI document's
+   * `info.version`. Lazy: only the discovery route needs it, and resolving it
+   * fails loud on a hosted target with no commit SHA — a failure that belongs to
+   * that one route, not to every request the Worker serves.
+   */
+  apiVersion?: () => string;
   authResolver: AuthResolver;
   rateLimiter: RateLimiter;
   repo: Repository;
@@ -179,7 +186,12 @@ export function createApp(deps: AppDeps): Hono {
     }),
   );
 
-  app.get("/.well-known/openapi.json", (c) => c.json(buildOpenApiDocument()));
+  app.get("/.well-known/openapi.json", (c) => {
+    if (deps.apiVersion === undefined) {
+      throw new Error("createApp: apiVersion is required to serve /.well-known/openapi.json");
+    }
+    return c.json(buildOpenApiDocument({ version: deps.apiVersion() }));
+  });
 
   mountLiveUpdateRoute(app, {
     authResolver: deps.authResolver,
