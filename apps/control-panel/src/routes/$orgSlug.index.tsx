@@ -7,6 +7,7 @@ import { PanelShell } from "#components/shell/panel-shell";
 import { loginRedirect } from "#lib/auth/login-redirect";
 import { loadOrgAppList } from "#lib/organizations/org-app-list-functions";
 import { loadPanelNavigation } from "#lib/sessions/session-functions";
+import { documentTitle } from "#lib/shell/document-title";
 
 export const Route = createFileRoute("/$orgSlug/")({
   loader: async ({ location, params }) => {
@@ -22,6 +23,7 @@ export const Route = createFileRoute("/$orgSlug/")({
       panel,
     };
   },
+  head: ({ params }) => ({ meta: [{ title: documentTitle(params.orgSlug) }] }),
   component: OrganizationRoute,
 });
 

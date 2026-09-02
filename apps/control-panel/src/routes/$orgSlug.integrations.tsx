@@ -7,6 +7,7 @@ import { PanelPageHeader } from "#components/shell/panel-page-header";
 import { PanelShell } from "#components/shell/panel-shell";
 import { loginRedirect } from "#lib/auth/login-redirect";
 import { loadPanelNavigation } from "#lib/sessions/session-functions";
+import { documentTitle } from "#lib/shell/document-title";
 
 export const Route = createFileRoute("/$orgSlug/integrations")({
   loader: async ({ location, params }) => {
@@ -27,6 +28,7 @@ export const Route = createFileRoute("/$orgSlug/integrations")({
       truncatedLimit: membership || !panel.session.orgsTruncated ? null : panel.session.orgs.length,
     };
   },
+  head: ({ params }) => ({ meta: [{ title: documentTitle("Integrations", params.orgSlug) }] }),
   component: OrganizationIntegrationsRoute,
 });
 

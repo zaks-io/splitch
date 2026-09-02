@@ -49,10 +49,12 @@ import { KitchenSinkForms } from "#components/development/kitchen-sink-forms";
 import { KitchenSinkOverlays } from "#components/development/kitchen-sink-overlays";
 import { loginRedirect } from "#lib/auth/login-redirect";
 import { loadCurrentSession } from "#lib/sessions/session-functions";
+import { documentTitle } from "#lib/shell/document-title";
 
 type ThemeMode = "system" | "light" | "dark";
 
 export const Route = createFileRoute("/kitchen-sink")({
+  head: () => ({ meta: [{ title: documentTitle("Kitchen sink") }] }),
   loader: async ({ location }) => {
     const result = await loadCurrentSession();
     if (result.kind === "unauthenticated") {

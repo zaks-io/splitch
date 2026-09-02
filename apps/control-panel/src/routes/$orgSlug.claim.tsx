@@ -10,6 +10,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { ClaimCeremony } from "#components/claims/claim-ceremony";
 import { loginRedirect } from "#lib/auth/login-redirect";
 import { loadCurrentSession } from "#lib/sessions/session-functions";
+import { documentTitle } from "#lib/shell/document-title";
 
 export const Route = createFileRoute("/$orgSlug/claim")({
   loader: async ({ location, params }) => {
@@ -20,6 +21,9 @@ export const Route = createFileRoute("/$orgSlug/claim")({
     const organization = result.session.orgs.find((org) => org.orgSlug === params.orgSlug);
     return organization ?? null;
   },
+  head: ({ params }) => ({
+    meta: [{ title: documentTitle("Claim Organization", params.orgSlug) }],
+  }),
   component: ClaimRoute,
 });
 

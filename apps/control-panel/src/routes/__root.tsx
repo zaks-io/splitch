@@ -6,6 +6,7 @@ import { PanelSkeleton } from "@splitch/ui/state/panel-skeleton";
 import { createRootRouteWithContext, HeadContent, Scripts } from "@tanstack/react-router";
 import type { ReactNode } from "react";
 import { reportRouteError } from "#lib/observability/panel-observability";
+import { documentTitle } from "#lib/shell/document-title";
 import type { ControlPanelRouterContext } from "#lib/shell/router-context";
 import appCss from "../styles/app.css?url";
 
@@ -14,7 +15,7 @@ export const Route = createRootRouteWithContext<ControlPanelRouterContext>()({
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "splitch Control Panel" },
+      { title: documentTitle("Control Panel") },
       {
         name: "description",
         content: "Control Panel shell for splitch feature flags and A/B experimentation.",

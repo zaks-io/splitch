@@ -20,6 +20,7 @@ import {
   type ScopedLoaderContext,
 } from "#lib/shared/loader-context";
 import { deferredDestinationAt } from "#lib/shell/app-shell-navigation";
+import { documentTitle } from "#lib/shell/document-title";
 
 export const Route = createFileRoute("/$orgSlug/$appSlug/$env")({
   beforeLoad: async ({ context, location, params }) => {
@@ -54,6 +55,9 @@ export const Route = createFileRoute("/$orgSlug/$appSlug/$env")({
     return { scoped: result.context };
   },
   loader: ({ context }): ScopedLoaderContext => context.scoped,
+  head: ({ params }) => ({
+    meta: [{ title: documentTitle(params.appSlug, params.env) }],
+  }),
   onError: ({ error }) => {
     reportRouteError("section", error, "/$orgSlug/$appSlug/$env");
   },

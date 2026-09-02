@@ -28,6 +28,7 @@ describe("claim consent browser ceremony", () => {
     const body = await response.text();
 
     expect(response.status).toBe(200);
+    expect(body).toContain("<title>Approve account linking · splitch</title>");
     expect(body).toContain('method="post"');
     expect(body).toContain('name="decision" value="approve"');
     expect(body).toContain('name="decision" value="deny"');

@@ -20,6 +20,7 @@ import { experimentDetailQuery } from "#lib/experiments/experiments-query";
 import { reportExpectedDomainFailure } from "#lib/observability/panel-observability";
 import type { ScopedLoaderContext } from "#lib/shared/loader-context";
 import { scopedHref } from "#lib/shell/app-shell-navigation";
+import { documentTitle } from "#lib/shell/document-title";
 
 export const Route = createFileRoute("/$orgSlug/$appSlug/$env/experiments/$experimentId")({
   loader: ({ context, location, params }) =>
@@ -30,6 +31,17 @@ export const Route = createFileRoute("/$orgSlug/$appSlug/$env/experiments/$exper
       href: location.href,
       pathname: location.pathname,
     }),
+  head: ({ loaderData, params }) => ({
+    meta: [
+      {
+        title: documentTitle(
+          loaderData?.experimentName ?? "Experiment unavailable",
+          params.appSlug,
+          params.env,
+        ),
+      },
+    ],
+  }),
   notFoundComponent: ExperimentRouteNotFound,
   component: ExperimentDetailRoute,
 });
@@ -77,14 +89,18 @@ export async function loadExperimentRoute(input: ExperimentRouteInput) {
       ),
     });
   }
-  await input.queryClient.ensureQueryData(
+  const detail = await input.queryClient.ensureQueryData(
     experimentDetailQuery({
       appId: input.scoped.scope.appId,
       environmentId: input.scoped.scope.environmentId,
       experimentId: resolved.data.experimentId,
     }),
   );
-  return { experimentId: resolved.data.experimentId, guarded: activeEnvironment.guarded };
+  return {
+    experimentId: resolved.data.experimentId,
+    experimentName: detail.experiment.name,
+    guarded: activeEnvironment.guarded,
+  };
 }
 
 function ExperimentDetailRoute() {

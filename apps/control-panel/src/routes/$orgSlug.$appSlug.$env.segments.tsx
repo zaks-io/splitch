@@ -1,10 +1,11 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { PanelPageBody } from "#components/shell/panel-page-body";
+import { SegmentsPage } from "#components/segments/segments-page";
 import { SectionPending } from "#components/shared/section-pending";
 import { SectionUnavailable } from "#components/shared/section-unavailable";
-import { SegmentsPage } from "#components/segments/segments-page";
-import { loadControlPanelSegments } from "#lib/segments/control-plane-segment-functions";
+import { PanelPageBody } from "#components/shell/panel-page-body";
 import { reportRouteError } from "#lib/observability/panel-observability";
+import { loadControlPanelSegments } from "#lib/segments/control-plane-segment-functions";
+import { documentTitle } from "#lib/shell/document-title";
 
 export const Route = createFileRoute("/$orgSlug/$appSlug/$env/segments")({
   loader: async ({ context }) => {
@@ -19,6 +20,9 @@ export const Route = createFileRoute("/$orgSlug/$appSlug/$env/segments")({
       scope: scoped.scope,
     };
   },
+  head: ({ params }) => ({
+    meta: [{ title: documentTitle("Segments", params.appSlug, params.env) }],
+  }),
   onError: ({ error }) => {
     reportRouteError("section", error, "/$orgSlug/$appSlug/$env/segments");
   },

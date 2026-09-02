@@ -7,6 +7,7 @@ import { PanelShell } from "#components/shell/panel-shell";
 import { loginRedirect } from "#lib/auth/login-redirect";
 import { loadOrgBilling } from "#lib/billing/org-billing-functions";
 import { loadPanelNavigation } from "#lib/sessions/session-functions";
+import { documentTitle } from "#lib/shell/document-title";
 
 export const Route = createFileRoute("/$orgSlug/billing")({
   loader: async ({ location, params }) => {
@@ -22,6 +23,7 @@ export const Route = createFileRoute("/$orgSlug/billing")({
       panel,
     };
   },
+  head: ({ params }) => ({ meta: [{ title: documentTitle("Billing & Usage", params.orgSlug) }] }),
   component: BillingRoute,
 });
 
