@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>splitch social card</title>
+    <!--
+      Source for apps/*/public/og-card.png. Rendered at 1200x630 by
+      `pnpm brand:assets`; edit here, never the PNG.
+
+      Hexes are literal because this file renders outside the app, with no
+      token layer to resolve. They are the dark-surface values from
+      packages/ui/src/styles/{palette,semantic}.css; keep them in sync.
+    -->
+    <style>
+      :root {
+        --background: #0a0c10; /* neutral-950 */
+        --foreground: #f8f9fb; /* neutral-50 */
+        --muted-foreground: #7c8492;
+        --arm-control: #4f86e8; /* brand-control-400, the dark-surface rung */
+        --arm-treatment: #b4f000; /* brand-treatment-500 */
+        --brand-control-500: #2563d9;
+        --font-display: "Söhne", "Inter Variable", "Inter", system-ui, sans-serif;
+        --font-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", "Menlo", monospace;
+      }
+
+      * {
+        box-sizing: border-box;
+        margin: 0;
+      }
+
+      body {
+        width: 1200px;
+        height: 630px;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+        padding: 72px;
+        background: var(--background);
+        color: var(--foreground);
+        font-family: var(--font-display);
+        -webkit-font-smoothing: antialiased;
+      }
+
+      /* Mirrors packages/ui/src/components/brand-mark.tsx: glyph, then the
+         wordmark split by a half-cobalt half-chartreuse bar. */
+      .lockup {
+        display: flex;
+        align-items: center;
+        font-size: 40px;
+        font-weight: 700;
+        letter-spacing: -0.02em;
+      }
+
+      .lockup img {
+        height: 1.1em;
+        width: auto;
+        margin-right: 0.5rem;
+      }
+
+      .divider {
+        display: inline-block;
+        width: 6px;
+        height: 0.72em;
+        margin: 0 2px;
+        border-radius: 2px;
+        background: linear-gradient(
+          180deg,
+          var(--brand-control-500) 0 50%,
+          var(--arm-treatment) 50% 100%
+        );
+      }
+
+      h1 {
+        max-width: 980px;
+        font-size: 68px;
+        font-weight: 700;
+        line-height: 1.06;
+        letter-spacing: -0.03em;
+        text-wrap: balance;
+      }
+
+      h1 .control {
+        color: var(--arm-control);
+      }
+
+      h1 .treatment {
+        color: var(--arm-treatment);
+      }
+
+      p {
+        max-width: 760px;
+        margin-top: 28px;
+        font-size: 26px;
+        line-height: 1.45;
+        color: var(--muted-foreground);
+        text-wrap: balance;
+      }
+
+      .foot {
+        font-family: var(--font-mono);
+        font-size: 20px;
+        color: var(--muted-foreground);
+      }
+    </style>
+  </head>
+  <body>
+    <div class="lockup">
+      <img alt="" src="splitch-mark.png" />
+      <span>split<span class="divider"></span>ch</span>
+    </div>
+
+    <div>
+      <h1>
+        Ship it behind a flag<span class="control">.</span> Prove it moved the
+        number<span class="treatment">.</span>
+      </h1>
+      <p>
+        Flip features without a deploy, then measure what they did to conversion and revenue.
+      </p>
+    </div>
+
+    <div class="foot">splitch.dev</div>
+  </body>
+</html>

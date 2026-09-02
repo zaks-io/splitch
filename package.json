@@ -13,6 +13,7 @@
   },
   "scripts": {
     "build": "turbo run build",
+    "brand:assets": "node scripts/generate-brand-assets.mjs",
     "check:cli-mcp-parity": "pnpm --filter @splitch/cli exec tsx ../../scripts/check-cli-mcp-parity.ts",
     "clean": "turbo run clean && rm -rf node_modules .turbo coverage",
     "depcruise": "dependency-cruiser --config .dependency-cruiser.cjs apps packages",
