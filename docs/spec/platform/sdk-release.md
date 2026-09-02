@@ -43,9 +43,8 @@ repo-wide candidate, prepare artifacts, and create or update a draft GitHub Rele
 publish to npm. Publishing the reviewed GitHub Release triggers the matching package's
 GitHub-hosted `ubuntu-24.04` workflow, which revalidates live release state and runs
 `npm publish --provenance --access public --tag latest` through npm trusted publishing/OIDC. After
-that job succeeds, a separate job bound to the GitHub `production` environment syncs the package's
-dedicated Linear release pipeline. The SDK pipeline reads `SDK_LINEAR_ACCESS_KEY`; the CLI pipeline
-reads `CLI_LINEAR_ACCESS_KEY`. The platform deploy continues to use `LINEAR_ACCESS_KEY`.
+that job succeeds, the package publish workflow is complete. Package releases do not create Linear
+Releases. The platform deploy continues to use `LINEAR_ACCESS_KEY` for platform release tracking.
 
 Pushing a namespaced tag alone does not publish. The publish workflows accept only a
 `release: published` event and filter their own `sdk-v*`, `cli-v*`, `convex-v*`, or `cloudflare-v*` namespace.
@@ -159,10 +158,7 @@ Use this only after a human approves the package release.
    checked-out commit, and `GITHUB_SHA`.
 3. Confirm the summary reports OIDC/provenance, dist-tag `latest`, and either `publish` or
    `skip-already-published`. A skip is valid only when the exact immutable version already exists.
-4. Confirm the package-specific Linear release job succeeded and linked the GitHub Release, npm
-   package version, and GitHub Actions run.
-5. Retain the immutable release URL, npm package URL, Linear release URL, commit, workflow URLs, and
-   checksum evidence.
+4. Retain the immutable release URL, npm package URL, commit, workflow URLs, and checksum evidence.
 
 If a provider check fails, stop. Fix the setup or metadata, then repeat only the draft-safe steps.
 Never add an npm token, publish ad hoc, or move a published release/tag around the failure.
