@@ -73,9 +73,11 @@ export const install = action({
   }> => {
     const cloudUrl = process.env.CONVEX_CLOUD_URL;
     if (!cloudUrl) throw new Error("CONVEX_CLOUD_URL is required to install @splitch/convex");
+    const siteUrl = process.env.CONVEX_SITE_URL;
+    if (!siteUrl) throw new Error("CONVEX_SITE_URL is required to install @splitch/convex");
     const endpoint = normalizedEndpoint(env.SPLITCH_ENDPOINT ?? DEFAULT_ENDPOINT);
     const headers = requestHeaders();
-    const callbackUrl = canonicalCallbackUrl(cloudUrl);
+    const callbackUrl = canonicalCallbackUrl(cloudUrl, siteUrl);
     const initialized = await ctx.runMutation(internal.integration.initialize, {
       installationId: crypto.randomUUID(),
       webhookSecret: randomSecret(),

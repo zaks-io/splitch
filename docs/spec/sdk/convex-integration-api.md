@@ -16,8 +16,9 @@ Authorization: Bearer <apiKey>
 { installationId, callbackUrl, webhookSecret }
 ```
 
-`callbackUrl` must be the HTTPS `CONVEX_SITE_URL` host under `*.convex.site` plus the component's
-mounted `/integrations/splitch/configuration` path. IP literals, credentials, query strings, fragments,
+`callbackUrl` combines the canonical deployment name from `CONVEX_CLOUD_URL` with the mounted
+component path from `CONVEX_SITE_URL`, then appends `/configuration` on the resulting HTTPS
+`*.convex.site` URL. IP literals, credentials, query strings, fragments,
 nonstandard ports, redirects, and other hosts fail validation. Splitch excludes the request body
 from logs, encrypts the secret under the Control Plane Worker's required 32-byte base64
 `CONVEX_WEBHOOK_KEK`, and never returns it.

@@ -46,20 +46,34 @@ export function ensureTrailingSlash(value: string): string {
   return value.endsWith("/") ? value : `${value}/`;
 }
 
-export function canonicalCallbackUrl(cloudUrl: string): string {
-  const url = new URL(cloudUrl);
+export function canonicalCallbackUrl(cloudUrl: string, siteUrl: string): string {
+  const cloud = new URL(cloudUrl);
   if (
-    url.protocol !== "https:" ||
-    !url.hostname.endsWith(".convex.cloud") ||
-    url.username ||
-    url.password ||
-    url.port ||
-    url.search ||
-    url.hash
+    cloud.protocol !== "https:" ||
+    !cloud.hostname.endsWith(".convex.cloud") ||
+    cloud.username ||
+    cloud.password ||
+    cloud.port ||
+    cloud.pathname !== "/" ||
+    cloud.search ||
+    cloud.hash
   )
     throw new Error("CONVEX_CLOUD_URL must be a canonical HTTPS *.convex.cloud URL");
-  url.hostname = `${url.hostname.slice(0, -".convex.cloud".length)}.convex.site`;
-  return new URL("configuration", ensureTrailingSlash(url.toString())).toString();
+  const site = new URL(siteUrl);
+  if (
+    site.protocol !== "https:" ||
+    site.username ||
+    site.password ||
+    site.port ||
+    site.search ||
+    site.hash
+  )
+    throw new Error("CONVEX_SITE_URL must be an HTTPS URL containing the component mount path");
+  cloud.hostname = `${cloud.hostname.slice(0, -".convex.cloud".length)}.convex.site`;
+  return new URL(
+    "configuration",
+    `${cloud.origin}${ensureTrailingSlash(site.pathname)}`,
+  ).toString();
 }
 
 export function isCanonicalCallbackUrl(value: string): boolean {
