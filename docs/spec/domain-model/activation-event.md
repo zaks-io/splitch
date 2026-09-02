@@ -10,19 +10,28 @@ An Entity is **activated** when it performs the activation action with `activati
 
 Activation is its own row type on the same append-only Exposure log (ADR-0010, ADR-0013), identified by `type = "activation"`. See [assignment-exposure-run.md](./assignment-exposure-run.md) for the unified row shape.
 
+Applications create it through `activate(eventName, event)`. The call validates
+and durably claims the declared Metric Event, resolves every live Run whose
+frozen Activation Metric uses that Event Definition, and appends one Activation
+row per match. Callers provide Entity identity and the product event only. They
+never provide Experiment, Run, or Variant identity. A call with no matching live
+Run fails before claiming the Metric Event, so a retry after configuration
+propagates can still succeed.
+
 ### Activation row additional fields
 
-| Field                | Type           | Req | Meaning                                                                                                              |
-| -------------------- | -------------- | --- | -------------------------------------------------------------------------------------------------------------------- |
-| `app_id`             | `string`       | ✓   | Data-isolation key                                                                                                   |
-| `environment_id`     | `string`       | ✓   | Environment scope; Exposures/activations are per-Environment (ADR-0027)                                              |
-| `experiment_id`      | `string`       | ✓   | Owning Experiment                                                                                                    |
-| `run_id`             | `string`       | ✓   | Experiment Run at activation time                                                                                    |
-| `targeting_key_hash` | `string`       | ✓   | HMAC-derived Entity identifier                                                                                       |
-| `id_type`            | `string`       | ✓   | Entity type; always explicit                                                                                         |
-| `server_received_at` | `timestamp`    | ✓   | Server-received-at                                                                                                   |
-| `type`               | `"activation"` | ✓   | Discriminator                                                                                                        |
-| `counterfactual`     | `boolean`      | ✓   | `false` for ordinary rows; `true` for Control-arm would-have-activated events (additive extension, no schema change) |
+| Field                | Type             | Req | Meaning                                                                                                              |
+| -------------------- | ---------------- | --- | -------------------------------------------------------------------------------------------------------------------- |
+| `app_id`             | `string`         | ✓   | Data-isolation key                                                                                                   |
+| `environment_id`     | `string`         | ✓   | Environment scope; Exposures/activations are per-Environment (ADR-0027)                                              |
+| `experiment_id`      | `string`         | ✓   | Owning Experiment                                                                                                    |
+| `run_id`             | `string`         | ✓   | Experiment Run at activation time                                                                                    |
+| `targeting_key_hash` | `string`         | ✓   | HMAC-derived Entity identifier                                                                                       |
+| `id_type`            | `string`         | ✓   | Entity type; always explicit                                                                                         |
+| `server_received_at` | `timestamp`      | ✓   | Server-received-at                                                                                                   |
+| `type`               | `"activation"`   | ✓   | Discriminator                                                                                                        |
+| `counterfactual`     | `boolean`        | ✓   | `false` for ordinary rows; `true` for Control-arm would-have-activated events (additive extension, no schema change) |
+| `variant`            | `string \| null` | ✓   | `null` for API-materialized Activations; the first Exposure supplies the analyzed Variant                            |
 
 Counterfactual triggering is additive: the future Kohavi-correct gate is implemented as the Control arm emitting an activation row with `counterfactual: true`. Same log, same join, same anchor, same SRM. Zero schema change. (ADR-0013)
 

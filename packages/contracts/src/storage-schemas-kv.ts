@@ -99,6 +99,23 @@ export const RunConfigKVSchema = z
   .strict();
 export type RunConfigKV = z.infer<typeof RunConfigKVSchema>;
 
+export const ActivationBindingKVSchema = z
+  .object({
+    eventDefinitionId: z.string(),
+    experimentId: z.string(),
+    runId: z.string(),
+    idType: z.string(),
+  })
+  .strict();
+
+export const ActivationConfigKVSchema = z
+  .object({
+    bindings: z.array(ActivationBindingKVSchema),
+  })
+  .strict();
+export type ActivationBindingKV = z.infer<typeof ActivationBindingKVSchema>;
+export type ActivationConfigKV = z.infer<typeof ActivationConfigKVSchema>;
+
 // ---------------------------------------------------------------------------
 // ExperimentConfigKV
 //

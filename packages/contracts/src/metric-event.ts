@@ -42,5 +42,10 @@ export const MetricEventTrackResponseSchema = z
   })
   .strict();
 
+export const MetricEventActivateResponseSchema = MetricEventTrackResponseSchema.extend({
+  activatedRuns: z.number().int().positive(),
+}).strict();
+
 export type MetricEventTrackRequest = z.infer<typeof MetricEventTrackRequestSchema>;
 export type MetricEventTrackResponse = z.infer<typeof MetricEventTrackResponseSchema>;
+export type MetricEventActivateResponse = z.infer<typeof MetricEventActivateResponseSchema>;

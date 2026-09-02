@@ -25,6 +25,8 @@ interface Claim {
   fingerprint: string;
   eventDefinitionId: string;
   eventDefinitionVersionId: string;
+  activatedRuns?: number;
+  activationRows?: readonly Record<string, unknown>[];
 }
 
 export interface MetricEventFixture {
@@ -97,6 +99,27 @@ export async function sendMetricEvent(
       {
         operation: "sdk_track",
         actorId: options.actorId ?? `${fixture.credentialKind}:${fixture.hash}`,
+        orgId: METRIC_ORGANIZATION_ID,
+        appId: METRIC_APP_ID,
+        environmentId: METRIC_ENVIRONMENT_ID,
+      },
+      { body },
+    ),
+  );
+}
+
+export async function sendActivation(
+  fixture: Pick<MetricEventFixture, "credentialKind" | "env" | "hash">,
+  body: unknown,
+): Promise<Response> {
+  const route = getRoute("sdk_activate");
+  if (!route) throw new Error("sdk_activate route is missing");
+  return new EvaluationEntrypoint(new TestExecutionContext(), fixture.env).fetch(
+    delegatedRequest(
+      route,
+      {
+        operation: "sdk_activate",
+        actorId: `${fixture.credentialKind}:${fixture.hash}`,
         orgId: METRIC_ORGANIZATION_ID,
         appId: METRIC_APP_ID,
         environmentId: METRIC_ENVIRONMENT_ID,
@@ -228,9 +251,23 @@ function lookupClaim(claims: Map<string, Claim>, key: string): Promise<Response>
 function claimOrConflict(claims: Map<string, Claim>, key: string, body: Claim): Promise<Response> {
   const existing = claims.get(key);
   if (existing && existing.fingerprint !== body.fingerprint) {
-    return Promise.resolve(Response.json({ outcome: "conflict", ...existing }));
+    return Promise.resolve(
+      Response.json({
+        outcome: "conflict",
+        activatedRuns: existing.activatedRuns ?? 0,
+        ...existing,
+      }),
+    );
   }
-  if (existing) return Promise.resolve(Response.json({ outcome: "duplicate", ...existing }));
+  if (existing) {
+    return Promise.resolve(
+      Response.json({
+        outcome: "duplicate",
+        activatedRuns: existing.activatedRuns ?? 0,
+        ...existing,
+      }),
+    );
+  }
   claims.set(key, body);
   return Promise.resolve(Response.json({ outcome: "accepted", ...body }));
 }

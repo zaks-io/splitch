@@ -115,6 +115,10 @@ export class FakeTransport implements Transport {
   track(_request: TrackRequest): Promise<TrackResult> {
     throw new Error("FakeTransport: unexpected track call");
   }
+
+  activate(_request: TrackRequest) {
+    throw new Error("FakeTransport: unexpected activate call");
+  }
 }
 
 /** Captures loud error logs and debug logs so tests can assert fail-loud + seen-set DEBUG. */
