@@ -1,0 +1,82 @@
+export type QuickstartStep = {
+  title: string;
+  body: string;
+  code: string;
+};
+
+export const quickstartSteps: readonly QuickstartStep[] = [
+  {
+    title: "Install and authenticate",
+    body: "The CLI ships on npm. Log in with the device flow: it prints a verification URL and polls until approved.",
+    code: "npm install --global @splitch/cli\nsplitch login",
+  },
+  {
+    title: "Pick an Organization",
+    body: "Discover the Organizations your token can reach, then pick one.",
+    code: "splitch orgs list",
+  },
+  {
+    title: "Create an App",
+    body: "A dev and a prod Environment are auto-provisioned. You do not create Environments by hand for the common case.",
+    code: 'splitch apps create --org <orgId> --name "My App"',
+  },
+  {
+    title: "Select the dev Environment",
+    body: "Active context fills in IDs on every later call. It is convenience only and never widens authorization.",
+    code: "splitch use --app my-app --env dev",
+  },
+  {
+    title: "Get your credential",
+    body: "The Client Key is public and safe to ship in a browser. The API Key is secret, surfaced once, for trusted servers. New Client Keys start open to all origins so they work immediately; lock them to your origins before production.",
+    code: "splitch client-key get",
+  },
+  {
+    title: "Create a Flag",
+    body: "Flag definition is App-level; serving config is per-Environment. A fresh Flag starts disabled with rollout null — it only ever serves the Default Variant until you flip Configuration.",
+    code: "splitch flags create --key new-checkout --variants on,off",
+  },
+  {
+    title: "Enable and roll out",
+    body: "Turn the Flag on and set the baseline rollout to 100% so every Targeting Key in this Environment gets the non-default Variant. Configuration fields are documented at /docs/flags.",
+    code: "splitch flag-config update new-checkout --enabled true --rollout 100",
+  },
+  {
+    title: "Verify",
+    body: 'Confirm the Flag resolves for a Targeting Key without firing an Exposure. reason "DISABLED" means the Flag is still inert (enabled false) — that is not a pass. After the enable step you should see reason "SPLIT" and value true. One green round-trip with SPLIT proves auth, Environment, credential, and Flag config all line up.',
+    code: `splitch flags verify new-checkout --targeting-key test-user-1 --json
+# before enable: {"value":false,"variantName":"off","reason":"DISABLED"}
+# after enable:  {"value":true,"variantName":"on","reason":"SPLIT"}`,
+  },
+  {
+    title: "Wire the SDK",
+    body: "evaluate() fires the first real Exposure and closes the loop. Fail-loud is one check: an error resolution names its code instead of hiding behind a default.",
+    code: `import { createSplitchClient } from "@splitch/sdk";
+
+// Paste keyMaterial from \`splitch client-key get\` (pk_…; not the ck_… keyId).
+const splitch = createSplitchClient({ clientKey: "pk_..." });
+
+const d = await splitch.evaluateDetails("new-checkout", { targetingKey: userId });
+if (d.reason === "ERROR") renderFallback(d.errorCode);
+else render(d.value);`,
+  },
+];
+
+export const quickstartRecoveries = [
+  [
+    "APPROVAL_REVIEW_REQUIRED",
+    "the Environment Policy gates this change",
+    "review the durable request",
+  ],
+  [
+    "VARIANT_NOT_AVAILABLE",
+    "the Variant is not promoted to this Environment",
+    "promote the Variant to this Environment, then retry",
+  ],
+  ["RUN_FROZEN", "the edit touches a running Run", "clone into a new draft Run"],
+  ["APP_MISMATCH", "wrong key for this App or Environment", "fetch the credential for this Env"],
+  [
+    "401 / 403",
+    "bad or revoked key, or origin not allowed",
+    "check the key and its origin allow-list",
+  ],
+] as const;

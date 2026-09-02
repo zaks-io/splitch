@@ -14,6 +14,7 @@ import {
   surfaceLabels,
 } from "./errors";
 import { flagsDoc } from "./flags";
+import { quickstartRecoveries, quickstartSteps } from "./quickstart";
 import { type SdkTopic, sdkGuideTopics, sdkIntegrationTopics } from "./sdk";
 import { DOCS_ORIGIN, docsPath } from "./site";
 
@@ -50,6 +51,23 @@ export function codeAgentsDocMarkdown(): string {
     codeAgentsDoc.summary,
     blocksToMarkdown(codeAgentsDoc.blocks),
     `Source: ${DOCS_ORIGIN}${docsPath.codeAgents()}`,
+  ].join("\n\n");
+}
+
+export function quickstartMarkdown(): string {
+  const steps = quickstartSteps.map(
+    (step, index) =>
+      `## ${index + 1}. ${step.title}\n\n${step.body}\n\n\`\`\`\n${step.code}\n\`\`\``,
+  );
+  const recoveries = quickstartRecoveries
+    .map(([token, meaning, action]) => `| ${token} | ${meaning} | ${action} |`)
+    .join("\n");
+  return [
+    "# Zero to a resolving Flag",
+    "This quickstart walks the CLI path, and every step ends on a verify round-trip.",
+    ...steps,
+    `## When a step fails\n\n| You hit | It means | Do |\n| --- | --- | --- |\n${recoveries}`,
+    `Source: ${DOCS_ORIGIN}/quickstart`,
   ].join("\n\n");
 }
 

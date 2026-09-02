@@ -6,26 +6,7 @@ import {
   TableHeader,
   TableRow,
 } from "@splitch/ui/components/table";
-
-const recoveries = [
-  [
-    "APPROVAL_REVIEW_REQUIRED",
-    "the Environment Policy gates this change",
-    "review the durable request",
-  ],
-  [
-    "VARIANT_NOT_AVAILABLE",
-    "the Variant is not promoted to this Environment",
-    "promote the Variant to this Environment, then retry",
-  ],
-  ["RUN_FROZEN", "the edit touches a running Run", "clone into a new draft Run"],
-  ["APP_MISMATCH", "wrong key for this App or Environment", "fetch the credential for this Env"],
-  [
-    "401 / 403",
-    "bad or revoked key, or origin not allowed",
-    "check the key and its origin allow-list",
-  ],
-] as const;
+import { quickstartRecoveries } from "../docs/quickstart";
 
 export function QuickstartRecovery() {
   return (
@@ -48,7 +29,7 @@ export function QuickstartRecovery() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {recoveries.map(([token, meaning, action]) => (
+            {quickstartRecoveries.map(([token, meaning, action]) => (
               <TableRow key={token}>
                 <TableCell className="font-mono text-xs">{token}</TableCell>
                 <TableCell className="text-muted-foreground">{meaning}</TableCell>

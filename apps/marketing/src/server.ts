@@ -2,6 +2,8 @@ import { wrapWorkerHandler } from "@splitch/observability/worker";
 import handler from "@tanstack/react-start/server-entry";
 import { handleAgentSkillsRequest } from "./agent-skills";
 import { withHomepageLinkHeaders } from "./agent-discovery";
+import { markdownForPath } from "./docs/markdown-route";
+import { acceptsMarkdown, markdownResponse, withVaryAccept } from "./docs/serve-markdown";
 
 type MarketingWorkerEnv = {
   SENTRY_DSN?: string;
@@ -12,13 +14,30 @@ type MarketingWorkerEnv = {
 const startHandler = handler as unknown as ExportedHandler<MarketingWorkerEnv> &
   Required<Pick<ExportedHandler<MarketingWorkerEnv>, "fetch">>;
 
-export default wrapWorkerHandler(
-  {
-    async fetch(request, env, ctx) {
-      const agentSkillsResponse = await handleAgentSkillsRequest(request);
-      const response = agentSkillsResponse ?? (await startHandler.fetch(request, env, ctx));
-      return withHomepageLinkHeaders(request, response);
-    },
+const marketingHandler = {
+  async fetch(request, env, ctx) {
+    const agentSkillsResponse = await handleAgentSkillsRequest(request);
+    if (agentSkillsResponse !== undefined) {
+      return withHomepageLinkHeaders(request, agentSkillsResponse);
+    }
+
+    let renderRequest = request;
+    if (request.method === "GET" && acceptsMarkdown(request)) {
+      const markdown = markdownForPath(new URL(request.url).pathname);
+      if (markdown !== null) {
+        return withHomepageLinkHeaders(request, withVaryAccept(markdownResponse(markdown)));
+      }
+      const headers = new Headers(request.headers);
+      headers.set("accept", "text/html");
+      renderRequest = new Request(request, { headers }) as typeof request;
+    }
+
+    const response = await startHandler.fetch(renderRequest, env, ctx);
+    const negotiatedResponse = response.headers.get("content-type")?.startsWith("text/html")
+      ? withVaryAccept(response)
+      : response;
+    return withHomepageLinkHeaders(request, negotiatedResponse);
   },
-  { surface: "marketing" },
-);
+} satisfies ExportedHandler<MarketingWorkerEnv>;
+
+export default wrapWorkerHandler(marketingHandler, { surface: "marketing" });
