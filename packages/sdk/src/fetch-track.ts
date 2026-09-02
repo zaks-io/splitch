@@ -1,4 +1,4 @@
-import type { TrackRequest, TrackResult, TransportFailure } from "./transport";
+import type { ActivateResult, TrackRequest, TrackResult, TransportFailure } from "./transport";
 
 interface TrackFetchConfig {
   readonly credential: string;
@@ -39,6 +39,44 @@ export async function postMetricEvent(
   };
 }
 
+export async function postActivation(
+  config: TrackFetchConfig,
+  url: URL,
+  request: TrackRequest,
+  signal: AbortSignal,
+  readFailure: (response: Response) => Promise<TransportFailure>,
+): Promise<ActivateResult> {
+  const response = await config.fetchImpl(url, {
+    method: "POST",
+    headers: {
+      authorization: `Bearer ${config.credential}`,
+      "content-type": "application/json",
+      "x-splitch-sdk-runtime": "javascript",
+    },
+    body: JSON.stringify(request),
+    signal,
+  });
+  if (!response.ok) return activationFailure(await readFailure(response));
+  const body = (await response.json()) as Record<string, unknown>;
+  if (
+    body.accepted !== true ||
+    typeof body.eventId !== "string" ||
+    typeof body.duplicate !== "boolean" ||
+    typeof body.activatedRuns !== "number" ||
+    !Number.isSafeInteger(body.activatedRuns) ||
+    body.activatedRuns < 1
+  ) {
+    throw new Error("Metric Event response did not match the activate contract");
+  }
+  return {
+    status: response.status,
+    accepted: true,
+    eventId: body.eventId,
+    duplicate: body.duplicate,
+    activatedRuns: body.activatedRuns,
+  };
+}
+
 export function trackFailure(failure: TransportFailure): TrackResult {
   return {
     ...failure,
@@ -46,4 +84,8 @@ export function trackFailure(failure: TransportFailure): TrackResult {
     eventId: null,
     duplicate: false,
   };
+}
+
+export function activationFailure(failure: TransportFailure): ActivateResult {
+  return { ...trackFailure(failure), activatedRuns: 0 };
 }

@@ -1,4 +1,5 @@
 import type {
+  ActivationBindingKV,
   AuthKind,
   DeltaNudge,
   ExperimentConfigKV,
@@ -192,6 +193,8 @@ export interface Snapshot {
   authoringTargetingRules: TargetingRule[];
   experiment: ExperimentConfigKV | null;
   run: RunConfigKV | null;
+  /** Frozen live-Run activation binding, published for the ingest hot path. */
+  activationBinding: ActivationBindingKV | null;
   version: number;
   /**
    * The RUNNING Experiment that owns part of this Flag Configuration, or null.

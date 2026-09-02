@@ -1,4 +1,6 @@
 import {
+  ActivationConfigKVSchema,
+  activationConfigKey,
   CURRENT_KV_SCHEMA_VERSION,
   controlPlaneFlagConfigKey,
   ExperimentConfigKVSchema,
@@ -21,6 +23,7 @@ const ControlPlaneFlagConfigEnvelope = kvEnvelope(controlPlaneRoute("flag_config
 const ExperimentConfigEnvelope = kvEnvelope(ExperimentConfigKVSchema);
 const RunConfigEnvelope = kvEnvelope(RunConfigKVSchema);
 const LiveRunEnvelope = kvEnvelope(LiveRunKVSchema);
+const ActivationConfigEnvelope = kvEnvelope(ActivationConfigKVSchema);
 const DELETED_SNAPSHOT_EXPIRATION_TTL_SECONDS = 62;
 
 export function parseFlagConfigEnvelope(raw: string): FlagConfigKV {
@@ -122,6 +125,7 @@ export async function deleteFlagConfigSnapshot(
     await kv.delete(experimentConfigKey(scope.appId, scope.environmentId, experimentId));
     await kv.delete(liveRunKey(scope.appId, scope.environmentId, experimentId));
   }
+  await updateActivationConfig(kv, scope, experimentIds, null);
 }
 
 export async function writeSnapshot(
@@ -166,6 +170,26 @@ export async function writeSnapshot(
   } else if (snapshot.experiment) {
     await kv.delete(liveRunKey(scope.appId, scope.environmentId, snapshot.experiment.id));
   }
+  const experimentId = snapshot.experiment?.id ?? snapshot.activationBinding?.experimentId;
+  if (experimentId) {
+    await updateActivationConfig(kv, scope, [experimentId], snapshot.activationBinding);
+  }
+}
+
+async function updateActivationConfig(
+  kv: KVNamespace,
+  scope: EnvScope,
+  replacedExperimentIds: readonly string[],
+  binding: Snapshot["activationBinding"],
+): Promise<void> {
+  const key = activationConfigKey(scope.appId, scope.environmentId);
+  const raw = await kv.get(key, "text");
+  const current = raw ? ActivationConfigEnvelope.parse(JSON.parse(raw)).data : { bindings: [] };
+  const replaced = new Set(replacedExperimentIds);
+  const bindings = current.bindings.filter((item) => !replaced.has(item.experimentId));
+  if (binding) bindings.push(binding);
+  bindings.sort((a, b) => a.experimentId.localeCompare(b.experimentId));
+  await kv.put(key, envelope(ActivationConfigEnvelope, { bindings }));
 }
 
 function parseControlPlaneFlagConfigSnapshot(raw: string): ControlPlaneFlagConfigSnapshot {

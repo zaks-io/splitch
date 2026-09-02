@@ -2,13 +2,24 @@
 
 ## What activation is
 
-An **Activation Metric** gates analysis to Entities who performed a defined action (the "activation") after their first Exposure. It is a query-time filter composing with first-touch dedup — not a separate pipeline or event type.
+An **Activation Metric** gates analysis to Entities who performed a defined action (the "activation") after their first Exposure. Activation is a first-class event row on the Exposure log. It shares that ingestion pipeline and composes with first-touch dedup at query time.
 
 An Entity is **activated** when it performs the activation action with `activation_ts > first_exposure_ts`. Pre-exposure activations never count: filtering on pre-exposure data breaks randomization (post-treatment selection bias per Kohavi/OCE literature).
 
 ## Activation as a first-class logged event
 
 Activation is its own row type on the same append-only Exposure log (ADR-0010, ADR-0013), identified by `type = "activation"`. See [assignment-exposure-run.md](./assignment-exposure-run.md) for the unified row shape.
+
+Applications create it through `activate(eventName, event)`. The call validates
+and durably claims the declared Metric Event, resolves every live Run whose
+frozen Activation Metric uses that Event Definition, and appends one Activation
+row per match. Callers provide Entity identity and the product event only. They
+never provide Experiment, Run, or Variant identity. A call with no matching live
+Run fails before claiming the Metric Event, so a retry after configuration
+propagates can still succeed. Splitch likewise waits for an Exposure-backed
+Assignment in each matching Run and derives the Variant from it. A call with no
+matching exposed Run fails without claiming the Metric Event, so a retry after
+Exposure propagation can still succeed.
 
 ### Activation row additional fields
 
@@ -23,6 +34,7 @@ Activation is its own row type on the same append-only Exposure log (ADR-0010, A
 | `server_received_at` | `timestamp`    | ✓   | Server-received-at                                                                                                   |
 | `type`               | `"activation"` | ✓   | Discriminator                                                                                                        |
 | `counterfactual`     | `boolean`      | ✓   | `false` for ordinary rows; `true` for Control-arm would-have-activated events (additive extension, no schema change) |
+| `variant`            | `string`       | ✓   | Assigned Variant derived from the Entity's existing Exposure                                                         |
 
 Counterfactual triggering is additive: the future Kohavi-correct gate is implemented as the Control arm emitting an activation row with `counterfactual: true`. Same log, same join, same anchor, same SRM. Zero schema change. (ADR-0013)
 

@@ -17,7 +17,7 @@ type Assert<T extends true> = T;
 const assertClientSurface: Assert<
   Equal<
     keyof SplitchClient,
-    "evaluate" | "evaluateDetails" | "peekVariant" | "verify" | "evaluateAll"
+    "activate" | "track" | "evaluate" | "evaluateDetails" | "peekVariant" | "verify" | "evaluateAll"
   >
 > = true;
 type PublicModule = typeof import("./index");
@@ -168,6 +168,7 @@ describe("public SDK surface guard", () => {
     expect(surface).toEqual(
       [
         "SplitchSdkError",
+        "activate",
         "createSplitchClient",
         "evaluate",
         "evaluateAll",

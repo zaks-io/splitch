@@ -90,7 +90,7 @@ export function toTinybirdRow(event: ExposureEvent, payload: Payload): Record<st
     id_type: event.idType,
     targeting_key_hash: event.targetingKeyHash,
     entity_family_hash: event.entityFamilyHash,
-    variant: event.variantName,
+    variant: event.variantName ?? null,
     type: event.type,
     event_id: event.eventId,
     counterfactual: event.counterfactual ? 1 : 0,

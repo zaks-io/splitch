@@ -18,6 +18,23 @@ await splitch.track("checkout_completed", {
 });
 ```
 
+When the same product fact is the frozen Activation Metric, use `activate`
+instead of issuing separate Metric Event and Activation calls:
+
+```ts
+await splitch.activate("checkout_completed", {
+  targetingKey,
+  idType: "user",
+  eventId,
+  fields: { revenue },
+  dimensions: { plan },
+});
+```
+
+The Activation API derives matching live Experiment Runs from published
+configuration and durably claims the Metric Event and Activation rows together.
+The application never supplies Experiment, Run, or Variant identity.
+
 The caller owns one lowercase UUID per logical Metric Event and reuses it for retries. The Event
 Ingest API remains authoritative for Event Definition validation, idempotency, queue recovery,
 Tinybird persistence, and terminal delivery diagnostics.

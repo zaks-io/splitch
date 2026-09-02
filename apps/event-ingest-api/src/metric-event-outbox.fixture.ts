@@ -11,6 +11,8 @@ export interface ClaimInput {
   readonly eventDefinitionId: string;
   readonly eventDefinitionVersionId: string;
   readonly row: Record<string, unknown>;
+  readonly activationRows?: readonly Record<string, unknown>[];
+  readonly activatedRuns?: number;
 }
 
 export function row(
@@ -42,6 +44,7 @@ export function makeOutbox(sendImpl: () => Promise<void> = async () => {}) {
     }
     return sendImpl();
   });
+  const sendBatch = vi.fn(async (_rows: readonly { body: Record<string, unknown> }[]) => {});
   const ctx = {
     storage: {
       async get<T>(key: string) {
@@ -58,11 +61,15 @@ export function makeOutbox(sendImpl: () => Promise<void> = async () => {}) {
       },
     },
   } as unknown as DurableObjectState;
-  const env = { METRIC_EVENTS_QUEUE: { send } } as unknown as Env;
+  const env = {
+    METRIC_EVENTS_QUEUE: { send },
+    RAW_EVENTS_QUEUE: { sendBatch },
+  } as unknown as Env;
   const object = new MetricEventOutboxDurableObject(ctx, env);
 
   return {
     send,
+    sendBatch,
     alarmTime: () => alarmTime,
     failNextSend() {
       sendFailure = new Error("queue unavailable");

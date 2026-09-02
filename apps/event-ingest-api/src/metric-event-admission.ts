@@ -19,6 +19,7 @@ export async function replayExistingMetricEvent(
   fingerprint: string,
   retainedFingerprints: readonly string[] = [],
   disclosure: "public" | "trusted" = "public",
+  includeActivatedRuns = false,
 ): Promise<Response | null> {
   try {
     const existing = await lookupMetricEvent(env.METRIC_EVENT_OUTBOX, dedupKey);
@@ -26,13 +27,15 @@ export async function replayExistingMetricEvent(
     const matched =
       existing.fingerprint === fingerprint || retainedFingerprints.includes(existing.fingerprint);
     if (!matched) return eventIdConflict(eventId);
+    if (includeActivatedRuns && existing.activatedRuns < 1) return eventIdConflict(eventId);
     const replay = await claimMetricEvent(env.METRIC_EVENT_OUTBOX, dedupKey, {
       fingerprint: existing.fingerprint,
       eventDefinitionId: existing.eventDefinitionId,
       eventDefinitionVersionId: existing.eventDefinitionVersionId,
+      activatedRuns: existing.activatedRuns,
       row: {},
     });
-    return acceptedMetricEvent(eventId, replay, disclosure);
+    return acceptedMetricEvent(eventId, replay, disclosure, includeActivatedRuns);
   } catch {
     return renderError(serviceUnavailable("Metric Event outbox is unavailable"));
   }
@@ -50,6 +53,8 @@ export async function admitAndClaimMetricEvent(
     eventDefinitionId: string;
     eventDefinitionVersionId: string;
   },
+  activationRows: readonly Record<string, unknown>[] = [],
+  includeActivatedRuns = false,
 ): Promise<Response> {
   const serverReceivedAt = new Date().toISOString();
   const row = {
@@ -69,6 +74,8 @@ export async function admitAndClaimMetricEvent(
   };
   const denied = await chargeNewMetricEvent(env, credential, row);
   if (denied) return denied;
+  const activationDenied = await chargeActivationRows(env, credential, activationRows);
+  if (activationDenied) return activationDenied;
   try {
     const suppressed = await registerEntityMetricEvent(
       env.ENTITY_METRIC_PRIVACY,
@@ -94,8 +101,10 @@ export async function admitAndClaimMetricEvent(
           eventDefinitionId: identity.eventDefinitionId,
           eventDefinitionVersionId: identity.eventDefinitionVersionId,
           outcome: "duplicate",
+          activatedRuns: activationRows.length,
         },
         credential.credentialKind === "api_key" ? "trusted" : "public",
+        includeActivatedRuns,
       );
     }
     const claim = await claimMetricEvent(env.METRIC_EVENT_OUTBOX, identity.dedupKey, {
@@ -103,12 +112,15 @@ export async function admitAndClaimMetricEvent(
       eventDefinitionId: identity.eventDefinitionId,
       eventDefinitionVersionId: identity.eventDefinitionVersionId,
       row,
+      activationRows,
+      activatedRuns: activationRows.length,
     });
     if (claim.outcome === "conflict") return eventIdConflict(parsed.eventId);
     return acceptedMetricEvent(
       parsed.eventId,
       claim,
       credential.credentialKind === "api_key" ? "trusted" : "public",
+      includeActivatedRuns,
     );
   } catch {
     return renderError(serviceUnavailable("Metric Event outbox is unavailable"));
@@ -184,6 +196,24 @@ async function chargeNewMetricEvent(
   );
 }
 
+async function chargeActivationRows(
+  env: Env,
+  credential: MetricEventCredentialScope,
+  rows: readonly Record<string, unknown>[],
+): Promise<Response | null> {
+  if (rows.length === 0) return null;
+  return rejectIngestAdmission(
+    env.INGEST_ADMISSION_GATE,
+    {
+      appId: credential.appId,
+      environmentId: credential.environmentId,
+      ingestStream: "raw_events",
+    },
+    rows,
+    "Activation ingest admission capacity exceeded",
+  );
+}
+
 function eventIdConflict(eventId: string): Response {
   return renderError({
     code: "EVENT_ID_CONFLICT",
@@ -194,14 +224,21 @@ function eventIdConflict(eventId: string): Response {
 
 function acceptedMetricEvent(
   eventId: string,
-  claim: { eventDefinitionId: string; eventDefinitionVersionId: string; outcome: string },
+  claim: {
+    eventDefinitionId: string;
+    eventDefinitionVersionId: string;
+    outcome: string;
+    activatedRuns: number;
+  },
   disclosure: "public" | "trusted",
+  includeActivatedRuns: boolean,
 ): Response {
   return Response.json(
     {
       accepted: true,
       duplicate: claim.outcome === "duplicate",
       eventId,
+      ...(includeActivatedRuns ? { activatedRuns: claim.activatedRuns } : {}),
       ...(disclosure === "trusted"
         ? {
             eventDefinitionId: claim.eventDefinitionId,
