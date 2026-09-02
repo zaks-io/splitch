@@ -1,5 +1,6 @@
 import type { ControlPanelBindings } from "#lib/shared/bindings";
 import { rejectCrossOriginWrite } from "#lib/auth/panel-csrf";
+import { documentTitle } from "#lib/shell/document-title";
 import { loadSessionFromRequest } from "#lib/sessions/session-refresh";
 
 /** Browser sends only its opaque cookie. The WorkOS JWT stays in the KV record. */
@@ -51,8 +52,9 @@ export function consentLoginRedirect(request: Request): Response {
 
 export function renderConsentPage(attemptId: string): Response {
   const escapedAttemptId = escapeHtml(attemptId);
+  const title = documentTitle("Approve account linking");
   return new Response(
-    `<!doctype html><html><head><title>Approve account linking</title></head><body>
+    `<!doctype html><html><head><title>${title}</title></head><body>
       <main><h1>Approve account linking</h1>
       <p>This approval links the provisional Organization to your signed-in identity.</p>
       <form method="post" action="/claim/consent/${escapedAttemptId}">
