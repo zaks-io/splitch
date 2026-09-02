@@ -20,7 +20,10 @@ interface ConfigStoreStub {
     environmentId: string;
     flagKey: string;
   }): Promise<EvaluationConfigSnapshot | null>;
-  readAppIdentity?(appId: string): Promise<string | null>;
+  readAppIdentity?(
+    appId: string,
+    options?: { readonly lease: true },
+  ): Promise<string | null | { readonly value: string | null; readonly expiresAt: number }>;
   putAppIdentityIfAbsent?(appId: string, value: string): Promise<string>;
 }
 

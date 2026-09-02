@@ -193,6 +193,34 @@ describe("Evaluation commit outbox publication retry", () => {
     expect(state.stored()?.publicationAttempts).toBe(2);
     expect(send).toHaveBeenCalledTimes(2);
   });
+
+  it("retains accepted usage past replay expiry until Queue publication succeeds", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const now = Date.parse("2026-08-28T00:00:00.000Z");
+    const clock = vi.spyOn(Date, "now").mockReturnValue(now);
+    const state = durableState();
+    const send = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("queue unavailable"))
+      .mockResolvedValue(queueResult());
+    const object = new EvaluationCommitOutboxDurableObject(state.ctx, {
+      RAW_EVALUATIONS_QUEUE: { send },
+      RAW_EVENTS_QUEUE: { sendBatch: vi.fn() },
+      SPLITCH_PLATFORM_TARGET: "local",
+    } as unknown as Env);
+    await post(object, "/commit", {
+      identity: IDENTITY,
+      payload: { usage: { idempotencyKey: "evaluation-1" }, exposureRows: [] },
+    });
+    await post(object, "/activate", { identity: IDENTITY });
+    await object.alarm();
+
+    clock.mockReturnValue(now + 24 * 60 * 60 * 1_000 + 1);
+    await object.alarm();
+
+    expect(send).toHaveBeenCalledTimes(2);
+    expect(state.stored()).toBeUndefined();
+  });
 });
 
 async function post(

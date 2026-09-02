@@ -21,6 +21,10 @@ import {
   unwrapAppIdentityRecord,
   wrapAppIdentityRecord,
 } from "./app-identity-record";
+import {
+  type AppIdentityCoordinatorNamespace,
+  makeAppIdentityCoordinator,
+} from "./app-identity-coordinator";
 import { HISTORICAL_SHARED_ROOT_KEY_VERSIONS } from "./derived-salt-store-versions";
 import { utf8Bytes } from "./hmac";
 import type { SaltBytes } from "./salt-store";
@@ -34,12 +38,7 @@ export interface AppIdentityStore {
   putIfAbsent(appId: string, record: AppIdentityRecord): Promise<AppIdentityRecord>;
 }
 
-export interface AppIdentityCoordinatorNamespace {
-  getByName(name: string): {
-    readAppIdentity?(appId: string): Promise<string | null>;
-    putAppIdentityIfAbsent?(appId: string, value: string): Promise<string>;
-  };
-}
+export type { AppIdentityCoordinatorNamespace } from "./app-identity-coordinator";
 
 export function mintInitialAppIdentityRecord(rootSecret: string | SaltBytes): AppIdentityRecord {
   const compatibility = rootSecretBytes(rootSecret);
@@ -146,10 +145,11 @@ export function makeDurableAppIdentityStore(options: {
   rootSecret: string | SaltBytes;
 }): AppIdentityStore {
   const exclusive = makeInProcessAppIdentityExclusive();
+  const coordinator = makeAppIdentityCoordinator(options.namespace);
   return {
     resetSerialization: "process-local",
     async load(appId) {
-      const raw = await coordinatorFor(options.namespace, appId).readAppIdentity(appId);
+      const raw = await coordinator.load(appId);
       if (raw === null) return null;
       return unwrapAppIdentityRecord(parseWrappedAppIdentityRecord(raw), options.rootSecret, appId);
     },
@@ -164,10 +164,7 @@ export function makeDurableAppIdentityStore(options: {
         const wrapped = JSON.stringify(
           await wrapAppIdentityRecord(record, options.rootSecret, appId),
         );
-        const winner = await coordinatorFor(options.namespace, appId).putAppIdentityIfAbsent(
-          appId,
-          wrapped,
-        );
+        const winner = await coordinator.putIfAbsent(appId, wrapped);
         return unwrapAppIdentityRecord(
           parseWrappedAppIdentityRecord(winner),
           options.rootSecret,
@@ -175,26 +172,6 @@ export function makeDurableAppIdentityStore(options: {
         );
       });
     },
-  };
-}
-
-function coordinatorFor(
-  namespace: AppIdentityCoordinatorNamespace,
-  appId: string,
-): {
-  readAppIdentity(appId: string): Promise<string | null>;
-  putAppIdentityIfAbsent(appId: string, value: string): Promise<string>;
-} {
-  const stub = namespace.getByName(`app-identity:${appId}`);
-  if (
-    typeof stub.readAppIdentity !== "function" ||
-    typeof stub.putAppIdentityIfAbsent !== "function"
-  ) {
-    throw new Error("privacy: App identity coordinator is unavailable");
-  }
-  return {
-    readAppIdentity: stub.readAppIdentity.bind(stub),
-    putAppIdentityIfAbsent: stub.putAppIdentityIfAbsent.bind(stub),
   };
 }
 

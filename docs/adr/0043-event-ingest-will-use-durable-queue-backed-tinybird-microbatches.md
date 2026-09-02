@@ -9,6 +9,8 @@ those queues instead of looping over Tinybird requests. Metric Event delivery ha
 attempts plus a dedicated reconciliation queue; an ambiguous attempt never resubmits, and repeated
 raw-datasource absence moves to the reconciliation DLQ for operator review. Raw-only Metric Event
 evidence runs a bounded append Copy Pipe from raw truth and verifies the resulting aggregate state.
+Non-cached batch Evaluation usage uses the existing Evaluation commit outbox with an empty Exposure
+set, so `evaluate-all` returns after the durable seal instead of Queue publication (ADR-0057).
 The reconciliation consumer accepts at most 10 messages per invocation, leaving headroom below
 Cloudflare's 15-minute consumer limit even when one message performs three sequential 15-second
 Tinybird reads.

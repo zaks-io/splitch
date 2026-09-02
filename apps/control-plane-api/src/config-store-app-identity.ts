@@ -14,6 +14,9 @@ import {
 } from "./app-identity-reset-runtime";
 import type { ControlPlaneApiEnv } from "./env";
 
+const APP_IDENTITY_TRAFFIC_LEASE_MS = 10_000;
+const APP_IDENTITY_TRAFFIC_LEASE_KEY = "app-identity-traffic-lease-expires-at";
+
 export function putConfigStoreAppIdentityIfAbsent(
   ctx: DurableObjectState,
   env: ControlPlaneApiEnv,
@@ -45,6 +48,20 @@ export function readConfigStoreAppIdentity(
     .then((value) => value ?? null);
 }
 
+export async function leaseConfigStoreAppIdentity(
+  ctx: DurableObjectState,
+  appId: string,
+): Promise<{ readonly value: string | null; readonly expiresAt: number }> {
+  assertAppIdentityScope(ctx, appId);
+  const expiresAt = Date.now() + APP_IDENTITY_TRAFFIC_LEASE_MS;
+  const value = await ctx.storage.transaction(async (txn) => {
+    const currentExpiry = (await txn.get<number>(APP_IDENTITY_TRAFFIC_LEASE_KEY)) ?? 0;
+    await txn.put(APP_IDENTITY_TRAFFIC_LEASE_KEY, Math.max(currentExpiry, expiresAt));
+    return (await txn.get<string>(defaultAppEntityIdentityRecordKey(appId))) ?? null;
+  });
+  return { value, expiresAt };
+}
+
 export function resetConfigStoreAppIdentity(
   ctx: DurableObjectState,
   env: ControlPlaneApiEnv,
@@ -53,6 +70,7 @@ export function resetConfigStoreAppIdentity(
 ): Promise<string> {
   assertAppIdentityScope(ctx, appId);
   return ctx.blockConcurrencyWhile(async () => {
+    await waitForAppIdentityTrafficLeases(ctx);
     const record = await resetCompromisedAppIdentity(
       configStoreAppIdentityStore(ctx, env, appId),
       appId,
@@ -62,6 +80,15 @@ export function resetConfigStoreAppIdentity(
     );
     return record.currentVersion;
   });
+}
+
+export async function waitForAppIdentityTrafficLeases(ctx: DurableObjectState): Promise<void> {
+  const expiresAt = (await ctx.storage.get<number>(APP_IDENTITY_TRAFFIC_LEASE_KEY)) ?? 0;
+  const remainingMs = expiresAt - Date.now();
+  if (remainingMs > 0) {
+    await new Promise<void>((resolve) => setTimeout(resolve, remainingMs));
+  }
+  await ctx.storage.delete(APP_IDENTITY_TRAFFIC_LEASE_KEY);
 }
 
 export async function assertConfigStoreAppIdentityTrafficAllowed(

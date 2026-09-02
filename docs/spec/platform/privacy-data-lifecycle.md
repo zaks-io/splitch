@@ -110,7 +110,9 @@ Rules:
 - `app_entity_identity_key` is random, secret, App-scoped, and stored outside Tinybird.
 - The App-scoped Config Store Durable Object is the sole authority for the wrapped identity atom,
   lifecycle, and reset checkpoints. Hosted Evaluation and Event Ingest read it through that
-  Durable Object and never accept a CONFIG_STORE replica for identity decisions.
+  Durable Object and never accept a CONFIG_STORE replica for identity decisions. Those reads may
+  reuse a 10-second authority-issued traffic lease. A destructive reset blocks new leases and waits
+  for the latest lease expiry before purge begins (ADR-0057).
 - The identity key is immutable for one App identity epoch so Exposures, Assignments, Metric Events,
   and Entity-identified Web Events continue to join across retries and retention windows.
 - Routine secret rotation rotates or rewraps the key-encryption key while preserving the underlying
