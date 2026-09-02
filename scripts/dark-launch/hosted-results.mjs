@@ -20,6 +20,10 @@ export function assertToolParity(tools) {
     "experiments_delete",
     "runs_end",
     "experiment_results_get",
+    "event_definitions_create",
+    "event_definition_versions_create",
+    "metrics_create",
+    "metrics_delete",
     "flags_delete",
     "approval_request_reviews_create",
   ];

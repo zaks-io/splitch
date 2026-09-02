@@ -2,9 +2,10 @@
 /**
  * Shared-preview hosted onboarding proof (SPL-148).
  *
- * Runs the external-product dark-launch journey twice consecutively against the
- * pre-authorized shared-preview smoke identity through OAuth PRM and exact-resource
- * MCP tokens. Each run owns a transient App and uses only product surfaces.
+ * Runs the external-product dark-launch journey and a balanced three-Variant
+ * Experiment simulation twice against the pre-authorized shared-preview smoke
+ * identity. Each run owns a transient App and uses only OAuth/MCP and SDK product
+ * surfaces.
  *
  * Required env:
  *   SPLITCH_SMOKE_CLIENT_SECRET
@@ -22,6 +23,8 @@ import {
 } from "../lib/shared-preview-deployment-evidence.mjs";
 import { SMOKE_IDS } from "../seed-shared-preview-smoke-sql.mjs";
 import { throwPrimaryWithCleanup } from "./cleanup-failures.mjs";
+import { runBalancedExperimentSimulation } from "./experiment-simulation.mjs";
+import { assertSharedPreviewOrigins } from "./experiment-simulation-assertions.mjs";
 import {
   assertRevokedCredential,
   cleanupDeferredRuns,
@@ -36,7 +39,12 @@ import {
 } from "./hosted-results.mjs";
 import { PROPAGATION_WINDOW_MS, runDarkLaunchJourney } from "./journey.mjs";
 import { createMcpClient } from "./mcp-client.mjs";
-import { installPackedSdkConsumer, runExternalResolve, writeEvidence } from "./pack-consumer.mjs";
+import {
+  installPackedSdkConsumer,
+  runExternalResolve,
+  runExternalTrack,
+  writeEvidence,
+} from "./pack-consumer.mjs";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const runs = Math.max(1, Number(process.env.SPLITCH_SMOKE_RUNS ?? "2"));
@@ -45,6 +53,12 @@ const evidencePath =
   resolve(repoRoot, "test-results/shared-preview/dark-launch-evidence.json");
 
 const config = readConfig();
+assertSharedPreviewOrigins({
+  auth: config.authBaseUrl,
+  controlPlane: config.controlPlaneBaseUrl,
+  evaluation: config.evaluationBaseUrl,
+  mcp: config.mcpBaseUrl,
+});
 const expectedCommitSha = requireFullCommitSha(
   process.env.SPLITCH_SMOKE_COMMIT_SHA ?? process.env.SPLITCH_DEPLOYED_COMMIT_SHA,
   "SPLITCH_SMOKE_COMMIT_SHA",
@@ -124,7 +138,7 @@ try {
         observedResults = results;
       },
     });
-    runResults.push({
+    const runResult = {
       runId,
       appKey: result.keys.appKey,
       flagKey: result.keys.flagKey,
@@ -139,6 +153,19 @@ try {
       },
       cleanup: result.cleanup,
       steps: result.steps,
+    };
+    runResults.push(runResult);
+    runResult.experimentSimulation = await runBalancedExperimentSimulation({
+      appId: result.resources.appId,
+      environmentId: result.resources.environmentId,
+      clientKey: result.resources.clientKeyMaterial,
+      evaluationBaseUrl: config.evaluationBaseUrl,
+      runId,
+      propagationWindowMs: PROPAGATION_WINDOW_MS,
+      callTool: mcp.callTool,
+      callToolResult: mcp.callToolResult,
+      resolve: (action, options) => runExternalResolve(consumer, action, options),
+      track: (options) => runExternalTrack(consumer, options),
     });
   }
 
@@ -209,6 +236,15 @@ const payload = {
         run.exposureHealth.exposureTotal === 1 &&
         run.exposureHealth.dedupedTotal === 1 &&
         run.exposureHealth.multipleCount === 0,
+    ),
+    balancedExperimentSimulation: runResults.every(
+      (run) =>
+        Object.values(run.experimentSimulation.exposureCounts).every((count) => count === 4) &&
+        run.experimentSimulation.activationRates === null &&
+        run.experimentSimulation.metricResults.every(
+          (result) => result.sample_size_n === 4 && result.point_estimate === 1,
+        ) &&
+        run.experimentSimulation.metricEventRetryDuplicate,
     ),
     negativeAuthorization: runResults.every(
       (run) =>
