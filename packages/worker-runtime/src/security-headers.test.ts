@@ -19,12 +19,13 @@ describe("baseline security header policy", () => {
     );
   });
 
-  it("adds Control Panel anti-framing on top of the baseline", () => {
+  it("adds Control Panel anti-framing and a crawler opt-out on top of the baseline", () => {
     expect(CONTROL_PANEL_SECURITY_HEADERS).toMatchObject(WORKER_BASELINE_SECURITY_HEADERS);
     expect(CONTROL_PANEL_SECURITY_HEADERS["content-security-policy"]).toBe(
       "frame-ancestors 'none'",
     );
     expect(CONTROL_PANEL_SECURITY_HEADERS["x-frame-options"]).toBe("DENY");
+    expect(CONTROL_PANEL_SECURITY_HEADERS["x-robots-tag"]).toBe("noindex, nofollow");
   });
 });
 

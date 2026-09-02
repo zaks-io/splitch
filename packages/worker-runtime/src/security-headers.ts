@@ -13,11 +13,16 @@ export const WORKER_BASELINE_SECURITY_HEADERS = {
   "referrer-policy": "strict-origin-when-cross-origin",
 } as const satisfies Record<string, string>;
 
-/** Baseline plus clickjacking controls. Applied at the Control Panel boundary. */
+/**
+ * Baseline plus clickjacking controls and a crawler opt-out. Applied at the
+ * Control Panel boundary: every page there is private and authenticated, so no
+ * response belongs in a search index.
+ */
 export const CONTROL_PANEL_SECURITY_HEADERS = {
   ...WORKER_BASELINE_SECURITY_HEADERS,
   "content-security-policy": "frame-ancestors 'none'",
   "x-frame-options": "DENY",
+  "x-robots-tag": "noindex, nofollow",
 } as const satisfies Record<string, string>;
 
 const PROTOCOL_HEADER_NAMES = new Set([

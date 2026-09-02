@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as HealthRouteImport } from './routes/health'
 import { Route as KitchenSinkRouteImport } from './routes/kitchen-sink'
+import { Route as RobotsDottxtRouteImport } from './routes/robots[.]txt'
 import { Route as OrgSlugIndexRouteImport } from './routes/$orgSlug.index'
 import { Route as OrgSlugBillingRouteImport } from './routes/$orgSlug.billing'
 import { Route as OrgSlugClaimRouteImport } from './routes/$orgSlug.claim'
@@ -58,6 +59,11 @@ const HealthRoute = HealthRouteImport.update({
 const KitchenSinkRoute = KitchenSinkRouteImport.update({
   id: '/kitchen-sink',
   path: '/kitchen-sink',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const RobotsDottxtRoute = RobotsDottxtRouteImport.update({
+  id: '/robots.txt',
+  path: '/robots.txt',
   getParentRoute: () => rootRouteImport,
 } as any)
 const OrgSlugIndexRoute = OrgSlugIndexRouteImport.update({
@@ -248,6 +254,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/health': typeof HealthRoute
   '/kitchen-sink': typeof KitchenSinkRoute
+  '/robots.txt': typeof RobotsDottxtRoute
   '/$orgSlug/billing': typeof OrgSlugBillingRoute
   '/$orgSlug/claim': typeof OrgSlugClaimRoute
   '/$orgSlug/integrations': typeof OrgSlugIntegrationsRoute
@@ -285,6 +292,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/health': typeof HealthRoute
   '/kitchen-sink': typeof KitchenSinkRoute
+  '/robots.txt': typeof RobotsDottxtRoute
   '/$orgSlug/billing': typeof OrgSlugBillingRoute
   '/$orgSlug/claim': typeof OrgSlugClaimRoute
   '/$orgSlug/integrations': typeof OrgSlugIntegrationsRoute
@@ -318,6 +326,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/health': typeof HealthRoute
   '/kitchen-sink': typeof KitchenSinkRoute
+  '/robots.txt': typeof RobotsDottxtRoute
   '/$orgSlug/billing': typeof OrgSlugBillingRoute
   '/$orgSlug/claim': typeof OrgSlugClaimRoute
   '/$orgSlug/integrations': typeof OrgSlugIntegrationsRoute
@@ -357,6 +366,7 @@ export interface FileRouteTypes {
     | '/'
     | '/health'
     | '/kitchen-sink'
+    | '/robots.txt'
     | '/$orgSlug/billing'
     | '/$orgSlug/claim'
     | '/$orgSlug/integrations'
@@ -394,6 +404,7 @@ export interface FileRouteTypes {
     | '/'
     | '/health'
     | '/kitchen-sink'
+    | '/robots.txt'
     | '/$orgSlug/billing'
     | '/$orgSlug/claim'
     | '/$orgSlug/integrations'
@@ -426,6 +437,7 @@ export interface FileRouteTypes {
     | '/'
     | '/health'
     | '/kitchen-sink'
+    | '/robots.txt'
     | '/$orgSlug/billing'
     | '/$orgSlug/claim'
     | '/$orgSlug/integrations'
@@ -464,6 +476,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   HealthRoute: typeof HealthRoute
   KitchenSinkRoute: typeof KitchenSinkRoute
+  RobotsDottxtRoute: typeof RobotsDottxtRoute
   OrgSlugBillingRoute: typeof OrgSlugBillingRoute
   OrgSlugClaimRoute: typeof OrgSlugClaimRoute
   OrgSlugIntegrationsRoute: typeof OrgSlugIntegrationsRoute
@@ -498,6 +511,13 @@ declare module '@tanstack/react-router' {
       path: '/kitchen-sink'
       fullPath: '/kitchen-sink'
       preLoaderRoute: typeof KitchenSinkRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/robots.txt': {
+      id: '/robots.txt'
+      path: '/robots.txt'
+      fullPath: '/robots.txt'
+      preLoaderRoute: typeof RobotsDottxtRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/$orgSlug/': {
@@ -843,6 +863,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   HealthRoute: HealthRoute,
   KitchenSinkRoute: KitchenSinkRoute,
+  RobotsDottxtRoute: RobotsDottxtRoute,
   OrgSlugBillingRoute: OrgSlugBillingRoute,
   OrgSlugClaimRoute: OrgSlugClaimRoute,
   OrgSlugIntegrationsRoute: OrgSlugIntegrationsRoute,
