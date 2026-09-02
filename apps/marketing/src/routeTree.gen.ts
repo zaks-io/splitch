@@ -13,6 +13,8 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as HealthRouteImport } from './routes/health'
 import { Route as LlmsDottxtRouteImport } from './routes/llms[.]txt'
 import { Route as QuickstartRouteImport } from './routes/quickstart'
+import { Route as RobotsDottxtRouteImport } from './routes/robots[.]txt'
+import { Route as SitemapDotxmlRouteImport } from './routes/sitemap[.]xml'
 import { Route as DocsIndexRouteImport } from './routes/docs.index'
 import { Route as DocsCliRouteImport } from './routes/docs.cli'
 import { Route as DocsCliDotmdRouteImport } from './routes/docs.cli[.]md'
@@ -43,6 +45,16 @@ const LlmsDottxtRoute = LlmsDottxtRouteImport.update({
 const QuickstartRoute = QuickstartRouteImport.update({
   id: '/quickstart',
   path: '/quickstart',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const RobotsDottxtRoute = RobotsDottxtRouteImport.update({
+  id: '/robots.txt',
+  path: '/robots.txt',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SitemapDotxmlRoute = SitemapDotxmlRouteImport.update({
+  id: '/sitemap.xml',
+  path: '/sitemap.xml',
   getParentRoute: () => rootRouteImport,
 } as any)
 const DocsIndexRoute = DocsIndexRouteImport.update({
@@ -106,6 +118,8 @@ export interface FileRoutesByFullPath {
   '/health': typeof HealthRoute
   '/llms.txt': typeof LlmsDottxtRoute
   '/quickstart': typeof QuickstartRoute
+  '/robots.txt': typeof RobotsDottxtRoute
+  '/sitemap.xml': typeof SitemapDotxmlRoute
   '/docs/cli': typeof DocsCliRoute
   '/docs/cli.md': typeof DocsCliDotmdRoute
   '/docs/code-agents': typeof DocsCodeAgentsRoute
@@ -123,6 +137,8 @@ export interface FileRoutesByTo {
   '/health': typeof HealthRoute
   '/llms.txt': typeof LlmsDottxtRoute
   '/quickstart': typeof QuickstartRoute
+  '/robots.txt': typeof RobotsDottxtRoute
+  '/sitemap.xml': typeof SitemapDotxmlRoute
   '/docs/cli': typeof DocsCliRoute
   '/docs/cli.md': typeof DocsCliDotmdRoute
   '/docs/code-agents': typeof DocsCodeAgentsRoute
@@ -141,6 +157,8 @@ export interface FileRoutesById {
   '/health': typeof HealthRoute
   '/llms.txt': typeof LlmsDottxtRoute
   '/quickstart': typeof QuickstartRoute
+  '/robots.txt': typeof RobotsDottxtRoute
+  '/sitemap.xml': typeof SitemapDotxmlRoute
   '/docs/cli': typeof DocsCliRoute
   '/docs/cli.md': typeof DocsCliDotmdRoute
   '/docs/code-agents': typeof DocsCodeAgentsRoute
@@ -160,6 +178,8 @@ export interface FileRouteTypes {
     | '/health'
     | '/llms.txt'
     | '/quickstart'
+    | '/robots.txt'
+    | '/sitemap.xml'
     | '/docs/cli'
     | '/docs/cli.md'
     | '/docs/code-agents'
@@ -177,6 +197,8 @@ export interface FileRouteTypes {
     | '/health'
     | '/llms.txt'
     | '/quickstart'
+    | '/robots.txt'
+    | '/sitemap.xml'
     | '/docs/cli'
     | '/docs/cli.md'
     | '/docs/code-agents'
@@ -194,6 +216,8 @@ export interface FileRouteTypes {
     | '/health'
     | '/llms.txt'
     | '/quickstart'
+    | '/robots.txt'
+    | '/sitemap.xml'
     | '/docs/cli'
     | '/docs/cli.md'
     | '/docs/code-agents'
@@ -212,6 +236,8 @@ export interface RootRouteChildren {
   HealthRoute: typeof HealthRoute
   LlmsDottxtRoute: typeof LlmsDottxtRoute
   QuickstartRoute: typeof QuickstartRoute
+  RobotsDottxtRoute: typeof RobotsDottxtRoute
+  SitemapDotxmlRoute: typeof SitemapDotxmlRoute
   DocsCliRoute: typeof DocsCliRoute
   DocsCliDotmdRoute: typeof DocsCliDotmdRoute
   DocsCodeAgentsRoute: typeof DocsCodeAgentsRoute
@@ -253,6 +279,20 @@ declare module '@tanstack/react-router' {
       path: '/quickstart'
       fullPath: '/quickstart'
       preLoaderRoute: typeof QuickstartRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/robots.txt': {
+      id: '/robots.txt'
+      path: '/robots.txt'
+      fullPath: '/robots.txt'
+      preLoaderRoute: typeof RobotsDottxtRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/sitemap.xml': {
+      id: '/sitemap.xml'
+      path: '/sitemap.xml'
+      fullPath: '/sitemap.xml'
+      preLoaderRoute: typeof SitemapDotxmlRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/docs/': {
@@ -340,6 +380,8 @@ const rootRouteChildren: RootRouteChildren = {
   HealthRoute: HealthRoute,
   LlmsDottxtRoute: LlmsDottxtRoute,
   QuickstartRoute: QuickstartRoute,
+  RobotsDottxtRoute: RobotsDottxtRoute,
+  SitemapDotxmlRoute: SitemapDotxmlRoute,
   DocsCliRoute: DocsCliRoute,
   DocsCliDotmdRoute: DocsCliDotmdRoute,
   DocsCodeAgentsRoute: DocsCodeAgentsRoute,
