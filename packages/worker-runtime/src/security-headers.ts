@@ -13,11 +13,16 @@ export const WORKER_BASELINE_SECURITY_HEADERS = {
   "referrer-policy": "strict-origin-when-cross-origin",
 } as const satisfies Record<string, string>;
 
-/** Baseline plus clickjacking controls. Applied at the Control Panel boundary. */
+/**
+ * Baseline plus clickjacking controls and a crawler opt-out. Applied at the
+ * Control Panel boundary: every page there is private and authenticated, so no
+ * response belongs in a search index.
+ */
 export const CONTROL_PANEL_SECURITY_HEADERS = {
   ...WORKER_BASELINE_SECURITY_HEADERS,
   "content-security-policy": "frame-ancestors 'none'",
   "x-frame-options": "DENY",
+  "x-robots-tag": "noindex, nofollow",
 } as const satisfies Record<string, string>;
 
 const PROTOCOL_HEADER_NAMES = new Set([
@@ -133,6 +138,14 @@ function mergeHeaderValue(name: string, current: string, extra: string): string 
   }
   if (key === "referrer-policy") {
     return strongerReferrerPolicy(current, extra);
+  }
+  if (key === "x-robots-tag") {
+    // Whole-value check. Per-crawler groups (`googlebot: noindex, bingbot: all`)
+    // would score as already-noindex and keep the weaker group, which is fine
+    // while the Panel policy is this header's only writer in the repo.
+    return strongerToken(current, extra, (value) =>
+      value.toLowerCase().includes("noindex") ? 1 : 0,
+    );
   }
   return current;
 }
