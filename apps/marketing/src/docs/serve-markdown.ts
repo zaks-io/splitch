@@ -14,9 +14,40 @@ export function markdownResponse(body: string): Response {
   });
 }
 
+export function acceptsMarkdown(request: Pick<Request, "headers">): boolean {
+  const accept = request.headers.get("accept");
+  if (accept === null) return false;
+
+  return accept.split(",").some((entry) => {
+    const [mediaType, ...parameters] = entry.split(";").map((part) => part.trim());
+    if (mediaType?.toLowerCase() !== "text/markdown") return false;
+    const quality = parameters.find((parameter) => parameter.toLowerCase().startsWith("q="));
+    if (quality === undefined) return true;
+    const value = Number(quality.slice(2));
+    return Number.isFinite(value) && value > 0;
+  });
+}
+
 export function markdownNotFound(body: string): Response {
   return new Response(`${body}\n`, {
     status: 404,
     headers: { "content-type": "text/plain; charset=utf-8" },
+  });
+}
+
+export function withVaryAccept(response: Response): Response {
+  const headers = new Headers(response.headers);
+  const vary = headers
+    .get("vary")
+    ?.split(",")
+    .map((value) => value.trim())
+    .filter(Boolean);
+  if (!vary?.some((value) => value.toLowerCase() === "accept")) {
+    headers.set("vary", [...(vary ?? []), "Accept"].join(", "));
+  }
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
   });
 }
