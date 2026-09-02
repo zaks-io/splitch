@@ -40,8 +40,8 @@ const DEFAULT_TITLE = "splitch control-plane API";
  * Hosted targets must carry a real SHA: throwing beats serving a document that
  * claims to be a build nobody can name. Local and PR CI have no deployment, so
  * they say so by name rather than inventing a version. An unset or unrecognized
- * target throws too: `parsePlatformTarget` would coerce it to `local`, and a
- * production document stamped `local` is a more convincing lie than `0.0.0`.
+ * target throws too: a production document stamped `local` would be a more
+ * convincing lie than the `0.0.0` this replaced.
  */
 export function resolveApiDocumentVersion(
   platformTarget: string | undefined,
