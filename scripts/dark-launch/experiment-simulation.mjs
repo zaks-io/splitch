@@ -95,7 +95,14 @@ async function createOutcomeDefinition(deps, keys) {
     eventDefinitionId: definition.id,
     entityType: "user",
     fields: [
-      { name: OUTCOME_FIELD, type: "number", required: true, numberKind: "count", minimum: 0 },
+      {
+        name: OUTCOME_FIELD,
+        type: "number",
+        required: true,
+        numberKind: "count",
+        minimum: 0,
+        maximum: 1,
+      },
     ],
     dimensions: [],
     idempotency_key: `experiment-smoke-event-version-${deps.runId}`,

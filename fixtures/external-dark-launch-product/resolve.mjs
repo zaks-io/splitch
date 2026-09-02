@@ -30,39 +30,39 @@ if (action === "track") {
     fields: args.fields,
     dimensions: {},
   });
-  writeJson(result);
-  process.exit(0);
+  await writeJson(result);
+} else {
+  const context = {
+    targetingKey: requiredFlag(args, "targeting-key"),
+    idType: args["id-type"] ?? "user",
+    attributes: args.attributes,
+  };
+
+  if (action === "verify") {
+    const details = await client.verify(requiredFlag(args, "flag"), context);
+    await writeJson(details);
+    if (details.reason === "ERROR") process.exitCode = 2;
+  } else if (action === "evaluate") {
+    const idempotencyKey = requiredFlag(args, "idempotency-key");
+    const details = await client.evaluateDetails(requiredFlag(args, "flag"), {
+      ...context,
+      idempotencyKey,
+    });
+    await writeJson(details);
+    if (details.reason === "ERROR") process.exitCode = 2;
+  } else {
+    console.error("usage: node resolve.mjs verify|evaluate|track --targeting-key <id> ...");
+    process.exitCode = 1;
+  }
 }
-
-const context = {
-  targetingKey: requiredFlag(args, "targeting-key"),
-  idType: args["id-type"] ?? "user",
-  attributes: args.attributes,
-};
-
-if (action === "verify") {
-  const details = await client.verify(requiredFlag(args, "flag"), context);
-  writeJson(details);
-  if (details.reason === "ERROR") process.exit(2);
-  process.exit(0);
-}
-
-if (action === "evaluate") {
-  const idempotencyKey = requiredFlag(args, "idempotency-key");
-  const details = await client.evaluateDetails(requiredFlag(args, "flag"), {
-    ...context,
-    idempotencyKey,
-  });
-  writeJson(details);
-  if (details.reason === "ERROR") process.exit(2);
-  process.exit(0);
-}
-
-console.error("usage: node resolve.mjs verify|evaluate|track --targeting-key <id> ...");
-process.exit(1);
 
 function writeJson(value) {
-  process.stdout.write(`${JSON.stringify(value)}\n`);
+  return new Promise((resolve, reject) => {
+    process.stdout.write(`${JSON.stringify(value)}\n`, (error) => {
+      if (error) reject(error);
+      else resolve();
+    });
+  });
 }
 
 function requiredEnv(name) {
