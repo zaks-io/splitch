@@ -21,7 +21,12 @@ export const Route = createRootRouteWithContext<ControlPanelRouterContext>()({
         content: "Control Panel shell for splitch feature flags and A/B experimentation.",
       },
     ],
-    links: [{ rel: "stylesheet", href: appCss }],
+    links: [
+      { rel: "stylesheet", href: appCss },
+      { rel: "icon", href: "/favicon.ico", sizes: "32x32 16x16" },
+      { rel: "apple-touch-icon", href: "/apple-touch-icon.png" },
+      { rel: "manifest", href: "/site.webmanifest" },
+    ],
     scripts: cloudflareWebAnalyticsScripts({
       platformTarget: import.meta.env.VITE_SPLITCH_PLATFORM_TARGET,
       siteToken: import.meta.env.VITE_CLOUDFLARE_WEB_ANALYTICS_TOKEN,

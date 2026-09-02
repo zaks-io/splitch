@@ -69,6 +69,19 @@ tracking-wide text-arm-control` (see marketing `SectionEyebrow`). Prose stays
 - Mobile-first: single column by default, `sm:`/`lg:` grid splits. Any wide
   element (tables, code) wraps in `overflow-x-auto` inside a `min-w-0` parent.
 
+## The logo
+
+`BrandMark` (`packages/ui/src/components/brand-mark.tsx`) is the whole lockup:
+glyph plus wordmark. It is the only logo treatment; the header, the footer, and
+the panel sidebar all render the same component and scale it with `text-*`.
+
+The glyph is raster, not a component: `assets/brand/splitch-mark.png` is the
+master, and `pnpm brand:assets` derives every served size from it into each
+app's `public/` (`favicon.ico`, `apple-touch-icon.png`, `brand/splitch-mark.png`).
+Edit the master and re-run, never the outputs. Those exact paths are the only
+rasters `scripts/check-binary-assets.mjs` lets into the repo, so a new size
+needs a line there too.
+
 ## Live references
 
 - **Component gallery:** `/kitchen-sink` in the control panel — every primitive

@@ -1,5 +1,15 @@
 import { cn } from "#lib/utils";
 
+/**
+ * Served from each app's own asset bundle, written by
+ * `pnpm brand:assets` from the master in `assets/brand/`.
+ */
+const MARK_SRC = "/brand/splitch-mark.png";
+
+/** Intrinsic size of that file, so the glyph reserves its box before it loads. */
+const MARK_WIDTH = 193;
+const MARK_HEIGHT = 156;
+
 export function BrandMark({ className }: { className?: string }) {
   return (
     <span
@@ -8,6 +18,14 @@ export function BrandMark({ className }: { className?: string }) {
         className,
       )}
     >
+      <img
+        alt=""
+        aria-hidden="true"
+        className="mr-2 h-[1.1em] w-auto"
+        height={MARK_HEIGHT}
+        src={MARK_SRC}
+        width={MARK_WIDTH}
+      />
       split
       <span
         aria-hidden="true"
