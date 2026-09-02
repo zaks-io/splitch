@@ -23,13 +23,19 @@ The package depends on `@splitch/sdk` for its public evaluation types and the
 `@splitch/sdk/local-evaluation` evaluator interface. Private contracts and evaluation-core modules
 never appear in the published Convex dependency graph.
 
-The component declares one required secret environment value, `SPLITCH_API_KEY`. It obtains the
-mounted callback URL from `CONVEX_SITE_URL`. `install()` generates and privately stores the
-installation ID and webhook secret, registers them through the API-Key-only
+The component declares one required secret environment value, `SPLITCH_API_KEY`. It derives the
+mounted callback URL from the canonical `CONVEX_CLOUD_URL`, converting only its Convex-owned
+`*.convex.cloud` origin to `*.convex.site` while preserving the component mount path. Custom HTTP
+Action domains therefore never widen the Control Plane callback allowlist. `install()` generates
+and privately stores the installation ID and webhook secret, registers them through the API-Key-only
 [Convex integration API](./convex-integration-api.md), and performs the first full sync. Missing or
 malformed credentials fail before any integration or config row is written. That Key needs only
 `data-plane:evaluate`; Metric Events go directly through `@splitch/sdk` with a separately scoped
 write credential.
+
+An installation left pending by the former custom-domain callback behavior repairs that local
+callback on the next `install()` call before retrying registration. An already canonical pending
+installation retains its original content so an ambiguous remote outcome remains exactly retry-safe.
 
 `install()` is an exact-retry-safe upgrade entrypoint as well as the initial installation call.
 After a package upgrade, rerunning it resumes stale configuration sync, schedules retention for

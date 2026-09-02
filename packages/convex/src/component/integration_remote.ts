@@ -46,6 +46,40 @@ export function ensureTrailingSlash(value: string): string {
   return value.endsWith("/") ? value : `${value}/`;
 }
 
+export function canonicalCallbackUrl(cloudUrl: string): string {
+  const url = new URL(cloudUrl);
+  if (
+    url.protocol !== "https:" ||
+    !url.hostname.endsWith(".convex.cloud") ||
+    url.username ||
+    url.password ||
+    url.port ||
+    url.search ||
+    url.hash
+  )
+    throw new Error("CONVEX_CLOUD_URL must be a canonical HTTPS *.convex.cloud URL");
+  url.hostname = `${url.hostname.slice(0, -".convex.cloud".length)}.convex.site`;
+  return new URL("configuration", ensureTrailingSlash(url.toString())).toString();
+}
+
+export function isCanonicalCallbackUrl(value: string): boolean {
+  try {
+    const url = new URL(value);
+    return (
+      url.protocol === "https:" &&
+      url.hostname.endsWith(".convex.site") &&
+      !url.username &&
+      !url.password &&
+      !url.port &&
+      !url.search &&
+      !url.hash &&
+      url.pathname.endsWith("/configuration")
+    );
+  } catch {
+    return false;
+  }
+}
+
 export function installRejected(status: number, body: string): Error {
   return new Error(`install Convex integration failed with HTTP ${status}: ${body}`);
 }
