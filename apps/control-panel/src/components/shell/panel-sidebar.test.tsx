@@ -18,6 +18,7 @@ vi.mock("@tanstack/react-router", () => ({
     children,
     hash,
     params,
+    preload,
     search,
     to,
     ...props
@@ -25,6 +26,7 @@ vi.mock("@tanstack/react-router", () => ({
     <a
       {...props}
       data-link-hash={hash === true ? "preserve" : undefined}
+      data-link-preload={preload === false ? "disabled" : undefined}
       data-link-search={search === true ? "preserve" : undefined}
       data-link-to={to}
       href={routeHref(to, params, search, hash)}
@@ -52,6 +54,7 @@ type MockLinkProps = {
   "data-environment-pill"?: string;
   hash?: true;
   params?: Record<string, string | undefined>;
+  preload?: false;
   search?: true;
   title?: string;
   to: string;
@@ -166,8 +169,19 @@ describe("PanelSidebar", () => {
     expect(guardedHtml.match(/<a[^>]*data-environment-pill="prod"[^>]*>/u)?.[0]).toContain(
       "bg-warning-muted",
     );
-    expect(html).toContain('href="/acme-labs/billing-api"');
-    expect(html).toContain('href="/acme-labs/agent-console"');
+    expect(html).toContain('href="/acme-labs/billing-api/dev/flags"');
+    expect(html).toContain('href="/acme-labs/agent-console/prod/flags"');
+    expect(html.match(/data-link-preload="disabled"/gu)).toHaveLength(10);
+  });
+
+  it("keeps the current section while changing Apps", () => {
+    currentHref = "/acme-labs/checkout-api/prod/experiments/experiment-1/results";
+    const html = renderSidebar({
+      app: { appId: "app_checkout", appSlug: "checkout-api", env: "prod" },
+    });
+
+    expect(html).toContain('href="/acme-labs/billing-api/dev/experiments"');
+    expect(html).toContain('href="/acme-labs/agent-console/prod/experiments"');
   });
 
   it("keeps search and hash on Environment pill hrefs", () => {

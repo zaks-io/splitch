@@ -25,6 +25,8 @@ export function PanelSidebarSections({
         const allEnvironmentsFlags =
           app.env === undefined && section.to === "/$orgSlug/$appSlug/$env/flags";
         return (
+          // Each destination has an authenticated Worker loader. Preloading as
+          // the pointer crosses the sidebar makes those loaders compete with the click target.
           <Link
             activeOptions={{
               exact: allEnvironmentsFlags || section.to === "/$orgSlug/$appSlug/$env",
@@ -33,6 +35,7 @@ export function PanelSidebarSections({
             className={panelSidebarLinkClassName}
             key={section.label}
             params={{ appSlug: app.appSlug, env: sectionEnv, orgSlug }}
+            preload={false}
             to={allEnvironmentsFlags ? "/$orgSlug/$appSlug" : section.to}
           >
             <span>{section.label}</span>

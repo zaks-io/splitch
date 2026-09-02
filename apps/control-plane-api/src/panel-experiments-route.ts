@@ -1,4 +1,5 @@
 import { createRepository } from "@splitch/db";
+import { createPerformanceSpanRecorder } from "@splitch/observability/performance-spans";
 import type { makeControlPlaneAuthResolver } from "./auth-resolver";
 import { parseControlPanelBindingOperation } from "./control-panel-operation";
 import type { ControlPlaneApiEnv } from "./env";
@@ -66,7 +67,11 @@ async function handlePanelExperimentsRequest(
   try {
     if (operation === "experiments_list") {
       return await panelExperimentsList(
-        { repo: createRepository(env.DB), analysis: env.ANALYSIS_API },
+        {
+          repo: createRepository(env.DB),
+          analysis: env.ANALYSIS_API,
+          spans: createPerformanceSpanRecorder(env),
+        },
         { actorId, ...input },
       );
     }
@@ -90,7 +95,11 @@ async function handlePanelExperimentsRequest(
       );
     }
     return await panelExperimentResults(
-      { repo: createRepository(env.DB), analysis: env.ANALYSIS_API },
+      {
+        repo: createRepository(env.DB),
+        analysis: env.ANALYSIS_API,
+        spans: createPerformanceSpanRecorder(env),
+      },
       { actorId, ...input },
     );
   } catch (cause) {

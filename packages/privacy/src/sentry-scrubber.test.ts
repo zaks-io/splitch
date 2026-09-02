@@ -165,6 +165,29 @@ describe("scrubSentrySpan allow-list traversal", () => {
     });
   });
 
+  it("preserves only payload-free performance attributes verbatim", () => {
+    const data = {
+      "db.system": "tinybird",
+      "db.operation.name": "read",
+      "db.response.returned_rows": 4,
+      "http.request.method": "POST",
+      "http.response.status_code": 200,
+      "rpc.system": "cloudflare.service_binding",
+      "rpc.method": "overview_get",
+      "rpc.response.status_code": 200,
+      "tinybird.pipe.name": "analysis_run_bootstrap",
+      "panel.app.count": 2,
+      "panel.environment.count": 3,
+      "panel.membership.count": 2,
+      "session.pending_resync": false,
+      "session.resync_attempted": false,
+      "session.resync_succeeded": false,
+      "auth.result": "ok",
+    };
+
+    expect(scrubSentrySpan({ data }).data).toEqual(data);
+  });
+
   /**
    * The dotted attribute keys Sentry's own MCP instrumentation would emit if it
    * were ever turned on. `normalize()` folds `_` and `-` but not `.`, so the PII
@@ -202,18 +225,33 @@ describe("scrubSentrySpan allow-list traversal", () => {
     expect(data["http.response.status_code"]).toBe(200);
   });
 
-  /**
-   * Auto-instrumented fetch spans are named after their URL, and a Targeting Key
-   * rides in an evaluation path. That is why `description` is deliberately absent
-   * from the span allow-list.
-   */
-  it("scrubs the span description rather than allowing it verbatim", () => {
-    const scrubbed = scrubSentrySpan(
-      { description: "GET https://api.test/v1/evaluate?targetingKey=tk-secret" },
-      { extraPatterns: [/tk-secret/g] },
-    );
+  it("redacts auto-instrumented fetch URLs even when their IDs do not match PII patterns", () => {
+    const scrubbed = scrubSentrySpan({
+      op: "http.client",
+      description:
+        "GET https://api.tinybird.co/v0/pipes/results.json?app_id=app_123&environment_id=env_456",
+      data: {
+        url: "https://api.tinybird.co/v0/pipes/results.json?app_id=app_123&environment_id=env_456",
+        "http.url":
+          "https://api.tinybird.co/v0/pipes/results.json?app_id=app_123&environment_id=env_456",
+        "url.full":
+          "https://api.tinybird.co/v0/pipes/results.json?app_id=app_123&environment_id=env_456",
+        "http.query": "?app_id=app_123&environment_id=env_456",
+        "server.address": "api.tinybird.co",
+        "http.request.method": "GET",
+      },
+    });
 
-    expect(String(scrubbed.description).includes("tk-secret")).toBe(false);
+    expect(JSON.stringify(scrubbed).includes("app_123")).toBe(false);
+    expect(JSON.stringify(scrubbed).includes("env_456")).toBe(false);
+    expect(scrubbed.description).toBe("[Redacted]");
+    expect((scrubbed.data as Record<string, unknown>)["http.request.method"]).toBe("GET");
+  });
+
+  it("keeps the closed-vocabulary description of a non-HTTP manual span", () => {
+    expect(scrubSentrySpan({ op: "db.query", description: "tinybird.pipe.read" }).description).toBe(
+      "tinybird.pipe.read",
+    );
   });
 
   it("scrubs an unknown future span field by default", () => {

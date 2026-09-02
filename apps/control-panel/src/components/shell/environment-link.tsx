@@ -1,3 +1,4 @@
+import { RouterAnchor } from "#components/shell/shell-menu";
 import { scopedHref } from "#lib/shell/app-shell-navigation";
 import {
   attentionLabel,
@@ -29,14 +30,14 @@ export function EnvironmentLink({
 
   return (
     <span className="relative inline-flex">
-      <a
+      <RouterAnchor
         className="flex min-h-10 items-center gap-2 rounded-md border border-border bg-background px-3 py-2 font-medium text-foreground text-sm transition-colors hover:border-primary/50 hover:bg-accent hover:text-accent-foreground focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-2"
         data-environment-link={environment.env}
         href={scopedHref({ appSlug, env: environment.env, orgSlug })}
         {...(describedById ? { "aria-describedby": describedById } : {})}
       >
         {environment.name}
-      </a>
+      </RouterAnchor>
       <AttentionMarker attention={attention} environmentId={environment.environmentId} />
       {label && describedById ? (
         <span className="sr-only" id={describedById}>

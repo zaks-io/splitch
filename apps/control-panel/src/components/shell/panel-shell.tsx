@@ -7,10 +7,9 @@ export type PanelShellProps = {
   children: ReactNode;
   sidebar: Omit<PanelSidebarProps, "onOpenPalette">;
   markers: Record<`data-${string}`, string>;
-  rootKey?: string;
 };
 
-export function PanelShell({ children, markers, rootKey, sidebar }: PanelShellProps) {
+export function PanelShell({ children, markers, sidebar }: PanelShellProps) {
   const isHydrated = useHydrated();
   const [paletteOpen, setPaletteOpen] = useState(false);
 
@@ -19,7 +18,6 @@ export function PanelShell({ children, markers, rootKey, sidebar }: PanelShellPr
       className="flex min-h-screen bg-background flex-col md:flex-row"
       data-hydrated={isHydrated ? "true" : "false"}
       data-panel-shell="ready"
-      key={rootKey}
       {...markers}
     >
       <PanelSidebar {...sidebar} onOpenPalette={() => setPaletteOpen(true)} />

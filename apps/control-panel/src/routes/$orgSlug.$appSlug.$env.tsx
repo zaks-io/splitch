@@ -108,7 +108,6 @@ function AppScopeRoute() {
         "data-app-id": context.scope.appId,
         "data-environment-id": context.scope.environmentId,
       }}
-      rootKey={`${context.scope.appId}:${context.scope.environmentId}`}
       sidebar={{
         navigation: context.navigation,
         org: { orgId: context.scope.orgId, orgSlug: context.scope.orgSlug },

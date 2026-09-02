@@ -4,6 +4,7 @@ import type { PanelExposureStatusClient } from "@splitch/control-plane-sdk/panel
 import type { PanelCloudflareClient } from "@splitch/control-plane-sdk/panel-cloudflare";
 import type { PanelConvexClient } from "@splitch/control-plane-sdk/panel-convex";
 import type { PanelSentryClient } from "@splitch/control-plane-sdk/panel-sentry";
+import { createPerformanceSpanRecorder } from "@splitch/observability/performance-spans";
 import { getRequest } from "@tanstack/react-start/server";
 import { controlPanelMutationBindings } from "#lib/shared/bindings";
 import { createControlPanelAppSettingsClient } from "#lib/apps/control-plane-app-settings";
@@ -280,7 +281,10 @@ export async function authorizedCloudflareClient(): Promise<
 
 async function panelBindingContext() {
   const bindings = controlPanelMutationBindings(workerEnv);
-  const loaded = await loadSessionFromRequest(bindings, getRequest());
+  const loaded = await createPerformanceSpanRecorder(bindings).record(
+    { name: "Panel session load", op: "cache.get" },
+    () => loadSessionFromRequest(bindings, getRequest()),
+  );
   if (!loaded.ok) return unauthorized();
   return {
     ok: true as const,

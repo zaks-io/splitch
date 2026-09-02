@@ -52,6 +52,9 @@ const LEAF_PII_KEYS = [
   "username",
   "address",
   "ipaddress",
+  "url",
+  "query",
+  "querystring",
   "setcookie",
   "ssn",
 ] as const;

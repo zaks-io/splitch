@@ -2,6 +2,7 @@ import { Badge } from "@splitch/ui/components/badge";
 import { TableCell, TableRow } from "@splitch/ui/components/table";
 import { AppSplitMark } from "#components/shared/app-split-mark";
 import { EnvironmentLink } from "#components/shell/environment-link";
+import { RouterAnchor } from "#components/shell/shell-menu";
 import { appHomeHref } from "#lib/shell/app-shell-navigation";
 import {
   type AppAttentionSeverity,
@@ -32,7 +33,7 @@ export function HomeAppsTableRow({ app, orgSlug }: { app: OrgAppListApp; orgSlug
     <TableRow data-app-row={app.appSlug}>
       <TableCell>
         {app.environments.length > 0 ? (
-          <a
+          <RouterAnchor
             className="group inline-flex min-w-0 items-center gap-2 font-mono font-medium text-foreground"
             href={appHomeHref({ orgSlug, appSlug: app.appSlug })}
           >
@@ -40,7 +41,7 @@ export function HomeAppsTableRow({ app, orgSlug }: { app: OrgAppListApp; orgSlug
             <span className="truncate underline underline-offset-4 group-hover:no-underline">
               {app.appSlug}
             </span>
-          </a>
+          </RouterAnchor>
         ) : (
           <span className="inline-flex min-w-0 items-center gap-2 font-mono font-medium text-foreground">
             <AppSplitMark />

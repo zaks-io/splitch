@@ -21,6 +21,10 @@
       "types": "./src/mcp-spans.ts",
       "default": "./src/mcp-spans.ts"
     },
+    "./performance-spans": {
+      "types": "./src/performance-spans.ts",
+      "default": "./src/performance-spans.ts"
+    },
     "./sentry-module": {
       "types": "./src/sentry-module.ts",
       "default": "./src/sentry-module.ts"

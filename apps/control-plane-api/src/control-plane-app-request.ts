@@ -4,6 +4,7 @@ import {
   createWorkerObservability,
   workerObservabilityWithWaitUntil,
 } from "@splitch/observability/worker";
+import { createPerformanceSpanRecorder } from "@splitch/observability/performance-spans";
 import type { AuthResolver } from "@splitch/worker-runtime";
 import { createApp } from "./app";
 import { approvalArchiveStoreFromEnv } from "./approval-archive-tinybird";
@@ -55,7 +56,12 @@ export async function handleControlPlaneAppRequest(input: {
       env,
       workerObservabilityWithWaitUntil("control-plane-api", ctx),
     ),
-    analysisResults: createAnalysisResultsReader(env.ANALYSIS_API, undefined, configStore),
+    analysisResults: createAnalysisResultsReader(
+      env.ANALYSIS_API,
+      undefined,
+      configStore,
+      createPerformanceSpanRecorder(env),
+    ),
     delegationBindings: {
       "analysis-api": env.ANALYSIS_API,
       "evaluation-api": env.EVALUATION_API,

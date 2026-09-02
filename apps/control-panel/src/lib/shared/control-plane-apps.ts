@@ -1,3 +1,4 @@
+import { getTraceData } from "@sentry/cloudflare";
 import {
   type ApprovalsClient,
   type AppsClient,
@@ -12,6 +13,10 @@ import {
   issueControlPanelDelegation,
   parseControlPanelOperation,
 } from "@splitch/control-plane-sdk/control-panel-identity";
+import {
+  activePerformanceSpanRecorder,
+  type PerformanceSpanRecorder,
+} from "@splitch/observability/performance-spans";
 
 const CONTROL_PLANE_INTERNAL_ORIGIN = "https://control-plane.internal";
 
@@ -23,6 +28,7 @@ export interface ControlPanelActor {
 export interface DelegationOptions {
   nowSeconds?: () => number;
   nonce?: () => string;
+  spanRecorder?: PerformanceSpanRecorder;
 }
 
 /** Server-only typed Apps client over the Control Plane Worker binding. */
@@ -170,22 +176,47 @@ export function panelDelegationFetch(
       url.searchParams,
     );
     if (!operation) throw new Error("control-panel attempted an unsupported binding operation");
-    const nowSeconds = options.nowSeconds?.() ?? Math.floor(Date.now() / 1000);
-    headers.set(
-      CONTROL_PANEL_DELEGATION_HEADER,
-      await issueControlPanelDelegation(request, operation, actor.actorId, delegationSecret, {
-        nowSeconds,
-        sessionExpiresAt: actor.sessionExpiresAt,
-        ...(options.nonce ? { nonce: options.nonce() } : {}),
-      }),
-    );
-    // Default fetch follows 3xx and replays every header, including this signed
-    // delegation, onto Location. Cloudflare accepts `manual`, not `error`, so
-    // refuse the returned redirect before the SDK can observe or follow it.
-    return refuseBindingRedirect(
-      await controlPlane.fetch(new Request(request, { headers, redirect: "manual" })),
+    return (options.spanRecorder ?? activePerformanceSpanRecorder).record(
+      {
+        name: `Control Plane ${operation.id}`,
+        op: "rpc.client",
+        attributes: {
+          "rpc.system": "cloudflare.service_binding",
+          "rpc.method": operation.id,
+        },
+      },
+      async (span) => {
+        replaceTraceHeaders(headers);
+        const nowSeconds = options.nowSeconds?.() ?? Math.floor(Date.now() / 1000);
+        headers.set(
+          CONTROL_PANEL_DELEGATION_HEADER,
+          await issueControlPanelDelegation(request, operation, actor.actorId, delegationSecret, {
+            nowSeconds,
+            sessionExpiresAt: actor.sessionExpiresAt,
+            ...(options.nonce ? { nonce: options.nonce() } : {}),
+          }),
+        );
+        // Default fetch follows 3xx and replays every header, including this signed
+        // delegation, onto Location. Cloudflare accepts `manual`, not `error`, so
+        // refuse the returned redirect before the SDK can observe or follow it.
+        const response = await controlPlane.fetch(
+          new Request(request, { headers, redirect: "manual" }),
+        );
+        span.setAttribute("rpc.response.status_code", response.status);
+        return refuseBindingRedirect(response);
+      },
     );
   };
+}
+
+function replaceTraceHeaders(headers: Headers): void {
+  headers.delete("sentry-trace");
+  headers.delete("baggage");
+  headers.delete("traceparent");
+  const traceData = getTraceData({ propagateTraceparent: true });
+  if (traceData["sentry-trace"]) headers.set("sentry-trace", traceData["sentry-trace"]);
+  if (traceData.baggage) headers.set("baggage", traceData.baggage);
+  if (traceData.traceparent) headers.set("traceparent", traceData.traceparent);
 }
 
 function refuseBindingRedirect(response: Response): Response {
