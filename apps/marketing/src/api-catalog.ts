@@ -19,7 +19,7 @@ export const apiCatalog = {
 } as const;
 
 const headers = {
-  "content-type": "application/linkset+json",
+  "content-type": 'application/linkset+json; profile="https://www.rfc-editor.org/info/rfc9727"',
   "cache-control": "public, max-age=300",
   link: `<${API_CATALOG_URL}>; rel="api-catalog"`,
 };

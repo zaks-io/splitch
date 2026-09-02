@@ -24,7 +24,9 @@ describe("RFC 9727 API catalog", () => {
     const response = apiCatalogResponse("GET");
 
     expect(response.status).toBe(200);
-    expect(response.headers.get("content-type")).toBe("application/linkset+json");
+    expect(response.headers.get("content-type")).toBe(
+      'application/linkset+json; profile="https://www.rfc-editor.org/info/rfc9727"',
+    );
     expect(response.headers.get("link")).toBe(
       '<https://splitch.dev/.well-known/api-catalog>; rel="api-catalog"',
     );
@@ -35,7 +37,9 @@ describe("RFC 9727 API catalog", () => {
     const response = apiCatalogResponse("HEAD");
 
     expect(response.status).toBe(200);
-    expect(response.headers.get("content-type")).toBe("application/linkset+json");
+    expect(response.headers.get("content-type")).toBe(
+      'application/linkset+json; profile="https://www.rfc-editor.org/info/rfc9727"',
+    );
     expect(await response.text()).toBe("");
   });
 });
