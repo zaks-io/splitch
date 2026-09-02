@@ -1,4 +1,5 @@
 import {
+  ActivationBindingKVSchema,
   DeltaNudgeSchema,
   ExperimentConfigKVSchema,
   FlagConfigKVSchema,
@@ -134,6 +135,7 @@ async function buildSnapshot(
   if (experiment?.liveRunId && !run) {
     throw new Error("config-store: experiment liveRunId points at no Run");
   }
+  const activationBinding = await activationBindingForRun(repo, scope, run);
 
   return {
     flag: FlagConfigKVSchema.parse({
@@ -154,8 +156,27 @@ async function buildSnapshot(
     controllingExperiment:
       experiment?.status === "running" ? { id: experiment.id, name: experiment.name } : null,
     run: runConfig(run),
+    activationBinding,
     version: config.version,
   };
+}
+
+async function activationBindingForRun(
+  repo: Repository,
+  scope: EnvScope,
+  run: Awaited<ReturnType<Repository["experiments"]["getRun"]>>,
+) {
+  if (!run?.activationMetricId) return null;
+  const metric = await repo.experiments.getMetric(appScope(scope.appId), run.activationMetricId);
+  if (!metric?.eventDefinitionId) {
+    throw new Error("config-store: activation Metric has no Event Definition");
+  }
+  return ActivationBindingKVSchema.parse({
+    eventDefinitionId: metric.eventDefinitionId,
+    experimentId: run.experimentId,
+    runId: run.id,
+    idType: run.targetingKeyType,
+  });
 }
 
 export async function loadFlagConfigWriteContext(

@@ -16,6 +16,7 @@ import {
   type IngestPhaseTiming,
   ingestTimingOutcomeFor,
 } from "./ingest-phase-timing";
+import { activationRows } from "./metric-event-activation";
 import {
   admitAndClaimMetricEvent,
   replayExistingMetricEvent,
@@ -40,6 +41,7 @@ export async function handleAuthorizedMetricEvent(
     route: "sdk_metric_event",
     stream: "metric_events",
   }),
+  activate = false,
 ): Promise<Response> {
   const parsedResult = await timing.measure("parse", () => parseMetricEventRequest(request));
   if (!parsedResult.ok) {
@@ -65,6 +67,7 @@ export async function handleAuthorizedMetricEvent(
       fingerprint,
       retainedFingerprints,
       disclosure,
+      activate,
     ),
   );
   if (replay) return timedMetricResponse(timing, replay, serializedBytes);
@@ -76,15 +79,46 @@ export async function handleAuthorizedMetricEvent(
   const mismatch = schemaMismatch(parsed, hot, disclosure);
   if (mismatch) return timedMetricResponse(timing, mismatch, serializedBytes);
 
+  let matchedActivationRows: Record<string, unknown>[] = [];
+  if (activate) {
+    try {
+      matchedActivationRows = await timing.measure("activationConfig", () =>
+        activationRows(
+          env,
+          credential,
+          parsed,
+          {
+            targetingKeyHash,
+            targetingKeyHashes: identity.targetingKeyHashes,
+            entityFamilyHash: identity.entityFamilyHash,
+          },
+          hot.eventDefinition.id,
+        ),
+      );
+    } catch {
+      return timedMetricResponse(
+        timing,
+        renderError(serviceUnavailable("Activation configuration is unavailable")),
+        serializedBytes,
+      );
+    }
+  }
   const response = await timing.measure("admissionQueue", () =>
-    admitAndClaimMetricEvent(env, credential, parsed, {
-      targetingKeyHash,
-      entityFamilyHash: identity.entityFamilyHash,
-      fingerprint,
-      dedupKey,
-      eventDefinitionId: hot.eventDefinition.id,
-      eventDefinitionVersionId: hot.version.id,
-    }),
+    admitAndClaimMetricEvent(
+      env,
+      credential,
+      parsed,
+      {
+        targetingKeyHash,
+        entityFamilyHash: identity.entityFamilyHash,
+        fingerprint,
+        dedupKey,
+        eventDefinitionId: hot.eventDefinition.id,
+        eventDefinitionVersionId: hot.version.id,
+      },
+      matchedActivationRows,
+      activate,
+    ),
   );
   return timedMetricResponse(timing, response, serializedBytes);
 }

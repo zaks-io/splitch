@@ -183,6 +183,7 @@ const CANONICAL_OPERATION_IDS = [
   "sdk_evaluate_all",
   "sdk_exposures",
   "sdk_track",
+  "sdk_activate",
 ] as const;
 
 describe("route registry: canonical coverage", () => {

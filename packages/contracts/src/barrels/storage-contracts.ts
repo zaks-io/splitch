@@ -1,5 +1,6 @@
 // biome-ignore lint/performance/noBarrelFile: keeps the public entry point below the repository size limit
 export {
+  activationConfigKey,
   apiKeyCacheKey,
   appEntityIdentityKey,
   assignmentKey,
@@ -15,6 +16,8 @@ export {
   TERMINAL_CREDENTIAL_REVOCATION_MARKER,
 } from "../storage-keys-kv";
 export type {
+  ActivationBindingKV,
+  ActivationConfigKV,
   AssignmentStoreEntry,
   AssignmentStoreValue,
   CredentialCacheKV,
@@ -26,6 +29,8 @@ export type {
   RunConfigKV,
 } from "../storage-schemas-kv";
 export {
+  ActivationBindingKVSchema,
+  ActivationConfigKVSchema,
   AssignmentStoreEntrySchema,
   AssignmentStoreValueSchema,
   CredentialCacheKVSchema,

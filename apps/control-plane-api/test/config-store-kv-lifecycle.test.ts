@@ -8,6 +8,7 @@ describe("control-plane Flag Configuration snapshot lifecycle", () => {
     const put = vi.fn(() => Promise.resolve());
     const kv = {
       delete: vi.fn(() => Promise.resolve()),
+      get: vi.fn(() => Promise.resolve(null)),
       put,
     } as unknown as KVNamespace;
 

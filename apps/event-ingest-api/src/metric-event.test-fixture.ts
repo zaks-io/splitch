@@ -25,11 +25,14 @@ interface Claim {
   fingerprint: string;
   eventDefinitionId: string;
   eventDefinitionVersionId: string;
+  activatedRuns?: number;
+  activationRows?: readonly Record<string, unknown>[];
 }
 
 export interface MetricEventFixture {
   readonly env: Env;
   readonly config: Map<string, string>;
+  readonly assignments: Map<string, string>;
   readonly claims: Map<string, Claim>;
   readonly admissionCharges: AdmissionCharge[];
   readonly hash: string;
@@ -55,6 +58,7 @@ export async function makeMetricEventFixture(
     [eventDefinitionConfigKey(METRIC_APP_ID, METRIC_EVENT_NAME), hotConfig("edv_1", 1)],
   ]);
   const claims = new Map<string, Claim>();
+  const assignments = new Map<string, string>();
   const admissionCharges: AdmissionCharge[] = [];
   const env = {
     SPLITCH_PLATFORM_TARGET: "local",
@@ -62,10 +66,11 @@ export async function makeMetricEventFixture(
     ...(options.omitCredentialStore ? {} : { CREDENTIAL_STORE: kv(credential) }),
     CONFIG_STORE: mergedConfigStore(base.CONFIG_STORE, config),
     CONFIG_STORE_WRITER: base.CONFIG_STORE_WRITER ?? appIdentityWriter(config),
+    ASSIGNMENTS_KV: base.ASSIGNMENTS_KV ?? kv(assignments),
     METRIC_EVENT_OUTBOX: outboxStub(claims),
     ...admissionBinding(options.admission, admissionCharges),
   } as unknown as Env;
-  return { env, config, claims, admissionCharges, hash, credentialKind };
+  return { env, config, assignments, claims, admissionCharges, hash, credentialKind };
 }
 
 function appIdentityWriter(values: Map<string, string>): NonNullable<Env["CONFIG_STORE_WRITER"]> {
@@ -97,6 +102,27 @@ export async function sendMetricEvent(
       {
         operation: "sdk_track",
         actorId: options.actorId ?? `${fixture.credentialKind}:${fixture.hash}`,
+        orgId: METRIC_ORGANIZATION_ID,
+        appId: METRIC_APP_ID,
+        environmentId: METRIC_ENVIRONMENT_ID,
+      },
+      { body },
+    ),
+  );
+}
+
+export async function sendActivation(
+  fixture: Pick<MetricEventFixture, "credentialKind" | "env" | "hash">,
+  body: unknown,
+): Promise<Response> {
+  const route = getRoute("sdk_activate");
+  if (!route) throw new Error("sdk_activate route is missing");
+  return new EvaluationEntrypoint(new TestExecutionContext(), fixture.env).fetch(
+    delegatedRequest(
+      route,
+      {
+        operation: "sdk_activate",
+        actorId: `${fixture.credentialKind}:${fixture.hash}`,
         orgId: METRIC_ORGANIZATION_ID,
         appId: METRIC_APP_ID,
         environmentId: METRIC_ENVIRONMENT_ID,
@@ -228,9 +254,23 @@ function lookupClaim(claims: Map<string, Claim>, key: string): Promise<Response>
 function claimOrConflict(claims: Map<string, Claim>, key: string, body: Claim): Promise<Response> {
   const existing = claims.get(key);
   if (existing && existing.fingerprint !== body.fingerprint) {
-    return Promise.resolve(Response.json({ outcome: "conflict", ...existing }));
+    return Promise.resolve(
+      Response.json({
+        outcome: "conflict",
+        activatedRuns: existing.activatedRuns ?? 0,
+        ...existing,
+      }),
+    );
   }
-  if (existing) return Promise.resolve(Response.json({ outcome: "duplicate", ...existing }));
+  if (existing) {
+    return Promise.resolve(
+      Response.json({
+        outcome: "duplicate",
+        activatedRuns: existing.activatedRuns ?? 0,
+        ...existing,
+      }),
+    );
+  }
   claims.set(key, body);
   return Promise.resolve(Response.json({ outcome: "accepted", ...body }));
 }

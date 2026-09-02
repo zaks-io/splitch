@@ -30,9 +30,15 @@
   },
   "vars": {
     "SPLITCH_PLATFORM_TARGET": "local",
+    "SPLITCH_SOURCE_ID": "event-ingest-api",
     "TINYBIRD_API_URL": "https://api.us-west-2.aws.tinybird.co"
   },
   "kv_namespaces": [
+    {
+      "binding": "ASSIGNMENTS_KV",
+      "id": "local-assignments-kv",
+      "preview_id": "local-assignments-kv"
+    },
     {
       "binding": "CONFIG_STORE",
       "id": "00000000000000000000000000000000"
@@ -189,9 +195,11 @@
       },
       "vars": {
         "SPLITCH_PLATFORM_TARGET": "shared-preview",
+        "SPLITCH_SOURCE_ID": "event-ingest-api",
         "TINYBIRD_API_URL": "https://api.us-west-2.aws.tinybird.co"
       },
       "kv_namespaces": [
+        { "binding": "ASSIGNMENTS_KV", "id": "c3a126c4617443869c0afd1c2c69c70c" },
         { "binding": "CONFIG_STORE", "id": "70cc24e1592e4db4a5b37e8d0dd6d6af" },
         { "binding": "CREDENTIAL_STORE", "id": "05f656eb41b54063aa0d2d23a6082c5b" }
       ],
@@ -350,9 +358,11 @@
       },
       "vars": {
         "SPLITCH_PLATFORM_TARGET": "production",
+        "SPLITCH_SOURCE_ID": "event-ingest-api",
         "TINYBIRD_API_URL": "https://api.us-west-2.aws.tinybird.co"
       },
       "kv_namespaces": [
+        { "binding": "ASSIGNMENTS_KV", "id": "cda6d6de2d974fef88e6e22d03551789" },
         { "binding": "CONFIG_STORE", "id": "b67d6cd1db424778a6dec24f64cbaa8d" },
         { "binding": "CREDENTIAL_STORE", "id": "2c0082cdd2f4426f8cfeb4d2bbd62277" }
       ],
