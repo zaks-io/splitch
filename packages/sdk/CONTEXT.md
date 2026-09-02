@@ -24,10 +24,10 @@ exports or dependencies. There is currently no `web` client option, no `web.trac
 
 **Client Key**:
 The public, non-secret identifier a client-side SDK presents. It is safe to embed in shipped client
-code. It evaluates Flags and submits Metric Events for exactly
-one App in exactly one Environment. Its only write capability is the strictly validated,
-write-only `track()` accessor, which reveals no Event Definition or configuration. (The spec'd
-`web.track()` Web Event accessor would share this property once implemented.)
+code. It evaluates Flags and submits Metric Events for exactly one App in exactly one Environment.
+Its write capabilities are the strictly validated, write-only `track()` and `activate()` accessors,
+which reveal no Event Definition or configuration. (The spec'd `web.track()` Web Event accessor
+would share this property once implemented.)
 It cannot read full flag config, Targeting Rules, salts, Metric Events, Web Events, mint keys, or
 reach another App.
 
@@ -108,6 +108,15 @@ The top-level stateless Metric Event accessor:
 explicit Entity identity and a caller-stable UUID retry ID. There is no `identify()` state and
 callers cannot select an Event Definition Version. The public projection returns `eventId` and
 `duplicate` only; it never exposes Event Definition IDs. It never accepts or infers Web Events.
+
+**Activate**:
+The stronger atomic Metric Event accessor:
+`activate(eventName, { targetingKey, idType, eventId, fields, dimensions })`. It validates and
+stores the same Metric Event as `track()`, then materializes one first-class Activation row for each
+matching live Run where the Entity already has an Exposure-backed Assignment. Splitch derives the
+Experiment, Run, Variant, retained identity hash, source, and timestamp. The caller supplies none of
+them. The public receipt returns `eventId`, `duplicate`, and `activatedRuns`. Callers use one
+`activate()` call, never `track()` plus `activate()` for the same logical event.
 
 **Web Track**:
 The Web Event accessor under `web.track(eventName, event)`. Calling it activates manual Web Event
@@ -225,8 +234,8 @@ Opt-in browser instrumentation that emits only explicitly configured Web Events.
 - Duplicate browser sources within one capture list or across active instrumentation handles fail
   synchronously before any adapter subscription or handle-owned listener is registered. Stopping the
   owner releases the source for later registration.
-- Top-level `track()` submits only Metric Events. `web.track()` submits only Web Events. Neither
-  accessor infers an Event family from the payload or a server lookup.
+- Top-level `track()` and `activate()` submit only Metric Events. `web.track()` submits only Web
+  Events. None of these accessors infers an Event family from the payload or a server lookup.
 - Manual `web.track()` calls and automatic browser instrumentation use the same strict Web Event
   submission path. Manual calls need no local capture-list entry; the Event Ingest Worker remains
   authoritative for the named published `web` Event Definition and closed schema.

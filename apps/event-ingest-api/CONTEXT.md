@@ -46,6 +46,9 @@ material-edit violation.
 
 **Activation event**:
 A first-class logged event used by Activation Metrics. It gets its own row on the Exposure log.
+The atomic `activate()` Metric Event accessor derives matching live Runs from frozen Activation
+Metric bindings and requires an existing Exposure-backed Assignment before appending each row.
+Splitch supplies the Experiment, Run, Variant, retained identity hash, source, and timestamp.
 Future counterfactual triggering can add would-have-activated markers without a schema rewrite.
 
 See [`../analysis-api/CONTEXT.md`](../analysis-api/CONTEXT.md) for Activation Metric interpretation.
@@ -56,9 +59,10 @@ String values are definition-time machine-token allowlists, JSON string leaves a
 direct-PII property names are invalid.
 
 **Metric Event**:
-An App/Environment/Entity product fact submitted through `track()`. It is validated against the
-Event Definition's current published version and appended to the separate `metric_events` log.
-Metric Events supply Metric values but never become the Exposure denominator.
+An App/Environment/Entity product fact submitted through `track()` or `activate()`. Both accessors
+validate it against the Event Definition's current published version and append it to the separate
+`metric_events` log. `activate()` atomically includes matching Activation rows in the same durable
+claim. Metric Events supply Metric values but never become the Exposure denominator.
 
 **Web Event**:
 An App/Environment browser telemetry fact used for exploratory web analytics, never as a Metric
