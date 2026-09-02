@@ -1,5 +1,4 @@
 import {
-  ActivationBindingKVSchema,
   DeltaNudgeSchema,
   ExperimentConfigKVSchema,
   FlagConfigKVSchema,
@@ -11,6 +10,7 @@ import {
   type Variant,
 } from "@splitch/contracts";
 import { appScope, type EnvScope, type Repository } from "@splitch/db";
+import { activationBindingsForExperiment } from "./config-store-activation-bindings";
 import { parseFlagConfigEnvelope, writeSnapshot } from "./config-store-kv";
 import type {
   ApplyApprovedFlagConfigInput,
@@ -135,7 +135,7 @@ async function buildSnapshot(
   if (experiment?.liveRunId && !run) {
     throw new Error("config-store: experiment liveRunId points at no Run");
   }
-  const activationBinding = await activationBindingForRun(repo, scope, run);
+  const activationBindings = await activationBindingsForExperiment(repo, scope, experiment);
 
   return {
     flag: FlagConfigKVSchema.parse({
@@ -156,27 +156,9 @@ async function buildSnapshot(
     controllingExperiment:
       experiment?.status === "running" ? { id: experiment.id, name: experiment.name } : null,
     run: runConfig(run),
-    activationBinding,
+    activationBindings,
     version: config.version,
   };
-}
-
-async function activationBindingForRun(
-  repo: Repository,
-  scope: EnvScope,
-  run: Awaited<ReturnType<Repository["experiments"]["getRun"]>>,
-) {
-  if (!run?.activationMetricId) return null;
-  const metric = await repo.experiments.getMetric(appScope(scope.appId), run.activationMetricId);
-  if (!metric?.eventDefinitionId) {
-    throw new Error("config-store: activation Metric has no Event Definition");
-  }
-  return ActivationBindingKVSchema.parse({
-    eventDefinitionId: metric.eventDefinitionId,
-    experimentId: run.experimentId,
-    runId: run.id,
-    idType: run.targetingKeyType,
-  });
 }
 
 export async function loadFlagConfigWriteContext(

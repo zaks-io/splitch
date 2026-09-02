@@ -19,43 +19,96 @@ afterEach(async () => {
   await h.dispose();
 });
 
+const LIVE_EVENT_DEFINITION_ID = "event_definition_generation";
+const PRIOR_EVENT_DEFINITION_ID = "event_definition_checkout";
+
+async function seedActivationMetric(metricId: string, eventDefinitionId: string, key: string) {
+  await h.repo.experiments.metrics.insert(appScope(ids.appId), {
+    id: metricId,
+    appId: ids.appId,
+    key,
+    name: key,
+    kind: "count",
+    eventDefinitionId,
+    createdAt: NOW,
+  });
+}
+
+async function freezeActivationMetric(runId: string, metricId: string) {
+  await h.d1
+    .prepare("UPDATE runs SET activation_metric_id = ? WHERE app_id = ? AND id = ?")
+    .bind(metricId, ids.appId, runId)
+    .run();
+}
+
+function makeStore() {
+  return makeConfigStore({
+    repo: h.repo,
+    kv: h.kv,
+    broadcaster: { broadcast: () => undefined },
+    nextSnapshotRevision: makeSnapshotRevisionCounter(),
+  });
+}
+
+function syncSeededExperiment(store: ReturnType<typeof makeStore>) {
+  return store.syncExperimentConfig({
+    appId: ids.appId,
+    environmentId: ids.environmentId,
+    experimentId: ids.experimentId,
+  });
+}
+
 describe("config store Activation bindings", () => {
-  it("publishes and removes the frozen live-Run binding", async () => {
-    const metricId = "metric_activation";
-    const eventDefinitionId = "event_definition_generation";
-    await h.repo.experiments.metrics.insert(appScope(ids.appId), {
-      id: metricId,
-      appId: ids.appId,
-      key: "generation",
-      name: "Generation",
-      kind: "count",
-      eventDefinitionId,
-      createdAt: NOW,
-    });
-    await h.d1
-      .prepare("UPDATE runs SET activation_metric_id = ? WHERE app_id = ? AND id = ?")
-      .bind(metricId, ids.appId, ids.liveRunId)
-      .run();
+  it("publishes the Metric each Run froze, not just the live Run's", async () => {
+    await seedActivationMetric("metric_activation", LIVE_EVENT_DEFINITION_ID, "generation");
+    await seedActivationMetric("metric_activation_prior", PRIOR_EVENT_DEFINITION_ID, "checkout");
+    await freezeActivationMetric(ids.liveRunId, "metric_activation");
+    await freezeActivationMetric(ids.newerRunId, "metric_activation_prior");
     await startSeededExperiment(h.d1);
-    const store = makeConfigStore({
-      repo: h.repo,
-      kv: h.kv,
-      broadcaster: { broadcast: () => undefined },
-      nextSnapshotRevision: makeSnapshotRevisionCounter(),
-    });
 
-    await store.syncExperimentConfig({
-      appId: ids.appId,
-      environmentId: ids.environmentId,
-      experimentId: ids.experimentId,
-    });
+    await syncSeededExperiment(makeStore());
 
-    const key = activationConfigKey(ids.appId, ids.environmentId);
-    expect(await kvJson(h.kv, key)).toMatchObject({
+    expect(await kvJson(h.kv, activationConfigKey(ids.appId, ids.environmentId))).toMatchObject({
       data: {
         bindings: [
           {
-            eventDefinitionId,
+            eventDefinitionId: LIVE_EVENT_DEFINITION_ID,
+            experimentId: ids.experimentId,
+            runId: ids.liveRunId,
+            idType: "user",
+          },
+          {
+            eventDefinitionId: PRIOR_EVENT_DEFINITION_ID,
+            experimentId: ids.experimentId,
+            runId: ids.newerRunId,
+            idType: "user",
+          },
+        ],
+      },
+    });
+  });
+
+  it("keeps an ended Run's binding so its holdover Entities still activate", async () => {
+    await seedActivationMetric("metric_activation", LIVE_EVENT_DEFINITION_ID, "generation");
+    await freezeActivationMetric(ids.liveRunId, "metric_activation");
+    await startSeededExperiment(h.d1);
+    const store = makeStore();
+    await syncSeededExperiment(store);
+
+    await h.d1
+      .prepare("UPDATE experiments SET status = 'ended', live_run_id = NULL WHERE id = ?")
+      .bind(ids.experimentId)
+      .run();
+    await syncSeededExperiment(store);
+
+    // Ending a Run does not end its measurement: Entities first exposed under it
+    // keep their Variant and keep converting into it (ADR-0006), and ingest can
+    // only attribute those Activations while this binding is still published.
+    expect(await kvJson(h.kv, activationConfigKey(ids.appId, ids.environmentId))).toMatchObject({
+      data: {
+        bindings: [
+          {
+            eventDefinitionId: LIVE_EVENT_DEFINITION_ID,
             experimentId: ids.experimentId,
             runId: ids.liveRunId,
             idType: "user",
@@ -63,17 +116,15 @@ describe("config store Activation bindings", () => {
         ],
       },
     });
+  });
 
-    await h.d1
-      .prepare("UPDATE experiments SET status = 'ended', live_run_id = NULL WHERE id = ?")
-      .bind(ids.experimentId)
-      .run();
-    await store.syncExperimentConfig({
-      appId: ids.appId,
-      environmentId: ids.environmentId,
-      experimentId: ids.experimentId,
+  it("publishes nothing when no Run froze an activation Metric", async () => {
+    await startSeededExperiment(h.d1);
+
+    await syncSeededExperiment(makeStore());
+
+    expect(await kvJson(h.kv, activationConfigKey(ids.appId, ids.environmentId))).toMatchObject({
+      data: { bindings: [] },
     });
-
-    expect(await kvJson(h.kv, key)).toMatchObject({ data: { bindings: [] } });
   });
 });
