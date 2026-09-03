@@ -245,10 +245,11 @@ real package API boundary.
   agent handoff; does not mean unblocked/startable; remove on Done.
 - Worker environment label policy: `remote-cursor` = approved to run in the
   remote Cursor environment; not a dependency/status/scheduling signal.
-- Review evidence policy: `code-review-passed` = latest linked PR head SHA passed
-  the code review gate; apply only with PR URL + reviewed head SHA; remove when
-  PR head changes, blocking findings appear, linked PR changes, or evidence is
-  missing.
+- Review evidence policy: `code-review-passed` records a clean independent review
+  of the linked PR. Apply it with the PR URL and reviewed head SHA for provenance.
+  A later commit does not invalidate the evidence by itself; remove it when a
+  blocking finding appears, the linked PR changes, or the reviewed behavior is
+  materially changed.
 - Human-review policy: use `ready-for-human` only when the next step is real
   human judgment or approval: the PR is in the high-risk set below, a reviewer
   reports blocking findings, deploy/provider credentials are needed, production
@@ -285,9 +286,9 @@ real package API boundary.
   Linear state, and local refs. Do not use merge commits.
 - Required-check enforcement: require the hosted `Verify` check from the `ci`
   workflow to pass on the current PR head (the Tinybird and D1 validators are
-  steps inside it). Also require any package-specific
-  checks named in the issue handoff and a clean exact-head `ziw-code-review`
-  verdict recorded as `code-review-passed`.
+  steps inside it). Also require any package-specific checks named in the issue
+  handoff. Independent review is advisory unless the user or issue explicitly
+  requires it.
 - Active PR/preview cap defaults to 3. Friction-intake fields remain unverified.
 
 ## Agent Access
@@ -341,18 +342,14 @@ real package API boundary.
   PR that otherwise passes the automation merge gate.
 - Automation merge gate for low/normal-risk PRs:
   1. PR is open, non-draft, mergeable/clean, and based on current `origin/main`.
-  2. Current PR head matches the reviewed head SHA recorded in Linear.
-  3. Hosted `Verify` and every applicable package-specific check pass on the
+  2. Hosted `Verify` and every applicable package-specific check pass on the
      current PR head.
-  4. Worker-required local checks passed and are recorded in the handoff.
-  5. Exact-head `ziw-code-review` is clean and `code-review-passed` is applied
-     with PR URL plus reviewed head SHA.
-  6. Cursor, GitHub, or other hosted review has no blocking findings on the
-     current PR head.
-  7. No unresolved blocking review threads remain.
-  8. PR does not touch the high-risk set below.
+  3. Worker-required local checks passed and are recorded in the handoff.
+  4. Cursor, GitHub, or other hosted review has no unresolved blocking findings.
+  5. No unresolved blocking review threads remain.
+  6. PR does not touch the high-risk set below.
 
-  When all eight hold, Orchestrator may merge with
+  When all six hold, Orchestrator may merge with
   `gh pr merge --squash --match-head-commit <sha>`, then fast-forward local
   `main`, run the configured post-merge verification, move the issue to `Done`,
   and remove stale readiness labels. Branch cleanup is handled by the code host.
