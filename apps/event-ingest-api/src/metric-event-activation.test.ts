@@ -59,7 +59,8 @@ describe("Activation ingest", () => {
 
     const unavailable = await sendActivation(fixture, metricEventBody());
 
-    expect(unavailable.status).toBe(503);
+    expect(unavailable.status).toBe(409);
+    expect(unavailable.headers.get("retry-after")).toBeNull();
     expect(fixture.claims.size).toBe(0);
 
     fixture.config.set(
@@ -84,7 +85,8 @@ describe("Activation ingest", () => {
     );
 
     const unavailable = await sendActivation(fixture, metricEventBody());
-    expect(unavailable.status).toBe(503);
+    expect(unavailable.status).toBe(409);
+    expect(unavailable.headers.get("retry-after")).toBeNull();
     expect(fixture.claims.size).toBe(0);
 
     await seedMetricEventAssignment(fixture, {

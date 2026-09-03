@@ -5,7 +5,7 @@ import {
   type MetricEventTrackRequest,
 } from "@splitch/contracts";
 import type { MetricEventCredentialScope } from "./client-key-auth";
-import { renderError, serviceUnavailable } from "./errors";
+import { activationNotAvailable, renderError, serviceUnavailable } from "./errors";
 import {
   type EventDefinitionMismatchSink,
   recordEventDefinitionMismatch,
@@ -145,11 +145,28 @@ function activationFailure(
       stack: cause instanceof Error ? cause.stack : null,
     }),
   );
-  const message =
+  return renderError(activationResolutionError(resolution, disclosure));
+}
+
+function activationResolutionError(
+  resolution: ActivationResolutionError | null,
+  disclosure: "trusted" | "public",
+) {
+  if (
+    resolution?.resolution === "not_available" ||
+    (disclosure === "public" && resolution?.resolution === "unpublished")
+  ) {
+    return activationNotAvailable(
+      disclosure === "trusted" && resolution
+        ? resolution.message
+        : "Activation is not available for this Metric Event",
+    );
+  }
+  return serviceUnavailable(
     disclosure === "trusted" && resolution
       ? resolution.message
-      : "Activation configuration is unavailable";
-  return renderError(serviceUnavailable(message));
+      : "Activation configuration is unavailable",
+  );
 }
 
 function timedMetricResponse(

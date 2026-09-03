@@ -22,6 +22,10 @@ export function serviceUnavailable(message: string): ErrorResponse {
   };
 }
 
+export function activationNotAvailable(message: string): ErrorResponse {
+  return { code: "ACTIVATION_NOT_AVAILABLE", message, details: {} };
+}
+
 export function emptyError(code: EmptyDetailCode, message: string): ErrorResponse {
   return { code, message, details: {} } as ErrorResponse;
 }

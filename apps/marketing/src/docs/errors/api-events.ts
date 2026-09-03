@@ -1,6 +1,14 @@
 import type { ErrorDoc } from "./types";
 
 export const eventErrorDocs = {
+  ACTIVATION_NOT_AVAILABLE: {
+    remediation:
+      "Do not retry unchanged; configure the Activation or call activate after the Entity has a matching Exposure",
+    cause:
+      "The Metric Event cannot activate a matching Experiment Run. The public response stays coarse so it does not reveal whether the Event Definition participates in Activation or whether the Entity has a matching Exposure.",
+    fix: "Check that the Metric Event's Event Definition and Entity type match an Activation Metric, then call `activate()` only after the Entity has an Exposure in that Experiment Run. An API Key response names the permanent condition that failed. A Client Key response intentionally does not.",
+    related: ["EVENT_DEFINITION_UNPUBLISHED", "ENTITY_TYPE_MISMATCH", "SERVICE_UNAVAILABLE"],
+  },
   EVENT_SCHEMA_MISMATCH: {
     remediation: "Send the fields and Dimensions the published Event Definition Version declares",
     cause:

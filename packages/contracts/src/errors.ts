@@ -313,6 +313,7 @@ const errorMembers = [
       recommendedAction: z.literal("READ_PER_ENVIRONMENT"),
     }),
   ),
+  member("ACTIVATION_NOT_AVAILABLE", EmptyDetails),
 
   member("RATE_LIMITED", z.object({ retryAfterMs: z.number() })),
   member(

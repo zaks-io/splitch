@@ -22,10 +22,16 @@ const AssignmentEnvelope = kvEnvelope(AssignmentStoreValueSchema);
  */
 export class ActivationResolutionError extends Error {
   readonly detail: Record<string, unknown>;
+  readonly resolution: "not_available" | "transient" | "unpublished";
 
-  constructor(message: string, detail: Record<string, unknown> = {}) {
+  constructor(
+    message: string,
+    resolution: "not_available" | "transient" | "unpublished",
+    detail: Record<string, unknown> = {},
+  ) {
     super(message);
     this.name = "ActivationResolutionError";
+    this.resolution = resolution;
     this.detail = detail;
   }
 }
@@ -42,7 +48,10 @@ export async function activationRows(
   eventDefinitionId: string,
 ): Promise<Record<string, unknown>[]> {
   if (!env.CONFIG_STORE) {
-    throw new ActivationResolutionError("Activation configuration store is unavailable");
+    throw new ActivationResolutionError(
+      "Activation configuration store is unavailable",
+      "transient",
+    );
   }
   const raw = await env.CONFIG_STORE.get(
     activationConfigKey(credential.appId, credential.environmentId),
@@ -51,6 +60,7 @@ export async function activationRows(
   if (raw === null) {
     throw new ActivationResolutionError(
       "Activation configuration has not been published for this Environment",
+      "unpublished",
       { appId: credential.appId, environmentId: credential.environmentId },
     );
   }
@@ -61,6 +71,7 @@ export async function activationRows(
   if (forDefinition.length === 0) {
     throw new ActivationResolutionError(
       "No Experiment Run uses this Event Definition for Activation",
+      "not_available",
       {
         eventDefinitionId,
         boundEventDefinitionIds: distinct(config.bindings, "eventDefinitionId"),
@@ -71,6 +82,7 @@ export async function activationRows(
   if (bindings.length === 0) {
     throw new ActivationResolutionError(
       "Activation Entity type does not match any Experiment Run using this Event Definition",
+      "not_available",
       { receivedIdType: event.idType, expectedIdTypes: distinct(forDefinition, "idType") },
     );
   }
@@ -92,6 +104,7 @@ export async function activationRows(
   if (exposedBindings.length === 0) {
     throw new ActivationResolutionError(
       "No Experiment Run using this Event Definition has an Exposure for this Entity",
+      "not_available",
       {
         assignedRunIds: Object.values(assignments).map((located) => located.assignment.runId),
         boundRunIds: bindings.map((binding) => binding.runId),
@@ -100,7 +113,9 @@ export async function activationRows(
   }
   const sourceId =
     env.SPLITCH_SOURCE_ID ?? (env.SPLITCH_PLATFORM_TARGET === "local" ? "local" : null);
-  if (!sourceId) throw new ActivationResolutionError("Activation source identity is unavailable");
+  if (!sourceId) {
+    throw new ActivationResolutionError("Activation source identity is unavailable", "transient");
+  }
   const serverReceivedAt = new Date().toISOString();
   return Promise.all(
     exposedBindings.map(({ assignment, binding, targetingKeyHash }) =>
@@ -129,7 +144,7 @@ async function loadAssignments(
 ): Promise<Record<string, LocatedAssignment>> {
   const assignmentsKv = env.ASSIGNMENTS_KV;
   if (!assignmentsKv) {
-    throw new ActivationResolutionError("Assignment store is unavailable");
+    throw new ActivationResolutionError("Assignment store is unavailable", "transient");
   }
   const values = await Promise.all(
     identity.targetingKeyHashes.map(async (targetingKeyHash) => {
@@ -151,6 +166,7 @@ async function loadAssignments(
       ) {
         throw new ActivationResolutionError(
           "Conflicting Assignment values across retained Entity identities",
+          "transient",
           { experimentId },
         );
       }

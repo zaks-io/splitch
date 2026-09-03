@@ -294,6 +294,7 @@ describe("HTTP status map", () => {
     expect(httpStatusForError("DECISION_BLOCKED")).toBe(409);
     expect(httpStatusForError("DECISION_RESULT_UNAVAILABLE")).toBe(409);
     expect(httpStatusForError("EVENT_ID_CONFLICT")).toBe(409);
+    expect(httpStatusForError("ACTIVATION_NOT_AVAILABLE")).toBe(409);
     expect(httpStatusForError("EVENT_DEFINITION_UNPUBLISHED")).toBe(409);
     expect(httpStatusForError("EVENT_DEFINITION_IMMUTABLE")).toBe(409);
     expect(httpStatusForError("EXPOSURE_TICKET_INVALID")).toBe(400);
