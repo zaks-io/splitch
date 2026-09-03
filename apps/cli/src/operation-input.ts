@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { EvaluateContext } from "@splitch/sdk";
-import { deriveMcpTools, getRoute } from "@splitch/sdk/control-plane";
+import { deriveMcpTools, getRoute, TargetingKeyTypeSchema } from "@splitch/sdk/control-plane";
 import { excessPositionalError, requiredPositionalSpecs } from "./command-positionals.js";
 import type { CliCommandDefinition } from "./command-registry.js";
 import type { ResolvedContext } from "./context.js";
@@ -201,7 +201,9 @@ function applyCommandSpecificFields(
   if (command.operationId === "flags_test_eval") {
     input.evaluationContext = parseEvaluationContext(
       invocation.flags.targetingKey,
+      invocation.flags.idType,
       invocation.flags.contextJson,
+      input.evaluationContext,
     );
   }
   if (command.operationId === "flags_create") {
@@ -255,24 +257,53 @@ function applyFlagConfigUpdateFields(
 
 export function parseEvaluationContext(
   targetingKey: string | undefined,
+  idType: string | undefined,
   contextJson: string | undefined,
+  bodyEvaluationContext?: unknown,
 ): EvaluateContext {
-  if (!targetingKey) {
+  const base = evaluationContextSource(contextJson, bodyEvaluationContext);
+  const resolvedTargetingKey = targetingKey ?? base.targetingKey;
+  if (typeof resolvedTargetingKey !== "string" || !resolvedTargetingKey) {
     throw new SplitchCliError({
       code: "CLI_USAGE_INVALID",
-      causeSummary: "flags test-eval requires --targeting-key",
-      remediation: "Pass the Entity Targeting Key with --targeting-key",
+      causeSummary: "flags test-eval requires an Entity Targeting Key",
+      remediation:
+        "Pass it with --targeting-key or as evaluationContext.targetingKey in --body-json",
     });
   }
-  const base = contextJson
-    ? (JSON.parse(contextJson) as Record<string, unknown>)
-    : { attributes: {} };
+  const resolvedIdType =
+    idType !== undefined ? idType : Object.hasOwn(base, "idType") ? base.idType : "user";
+  const parsedIdType = TargetingKeyTypeSchema.safeParse(resolvedIdType);
+  if (!parsedIdType.success) {
+    throw new SplitchCliError({
+      code: "CLI_USAGE_INVALID",
+      causeSummary: "Evaluation Context idType is invalid",
+      remediation:
+        "Pass a lowercase Entity identity type using alphanumerics and single underscores with --id-type",
+    });
+  }
   return {
-    targetingKey,
-    idType: typeof base.idType === "string" ? base.idType : "user",
+    targetingKey: resolvedTargetingKey,
+    idType: parsedIdType.data,
     attributes:
       base.attributes && typeof base.attributes === "object"
         ? (base.attributes as EvaluateContext["attributes"])
         : {},
   };
+}
+
+function evaluationContextSource(
+  contextJson: string | undefined,
+  bodyEvaluationContext: unknown,
+): Record<string, unknown> {
+  const source = contextJson ? JSON.parse(contextJson) : bodyEvaluationContext;
+  if (source === undefined) return { attributes: {} };
+  if (source && typeof source === "object" && !Array.isArray(source)) {
+    return source as Record<string, unknown>;
+  }
+  throw new SplitchCliError({
+    code: "CLI_USAGE_INVALID",
+    causeSummary: "Evaluation Context must be a JSON object",
+    remediation: "Pass an object with --context-json or as evaluationContext in --body-json",
+  });
 }

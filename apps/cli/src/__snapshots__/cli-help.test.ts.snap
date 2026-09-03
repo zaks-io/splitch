@@ -1152,7 +1152,8 @@ Flags:
   --env <environment>    [type: string; default: SPLITCH_ENV or config] Environment ID or key.
   --by <mode>            [type: string; default: automatic] Allowed: id. Resolve a canonical-looking selector explicitly.
   --targeting-key <key>  [type: string; default: none] Entity Targeting Key.
-  --context-json <json>  [type: JSON object; default: {"attributes":{}}] Evaluation Context fields.
+  --id-type <type>       [type: string; default: user] Entity identity type.
+  --context-json <json>  [type: JSON object; default: {"attributes":{}}] Evaluation Context fields; typed flags take precedence.
   --body-json <json>     [type: JSON object; default: none] Request body fields; see Request body below.
   --json                 [type: boolean; default: false] Write machine-readable JSON to stdout.
   -h, --help             [type: boolean; default: false] Show help and exit.
@@ -1163,7 +1164,7 @@ Request body (--body-json):
     {"evaluationContext":{"targetingKey":"userId","idType":"idType","attributes":{"control":true,"treatment":true}}}
 
 Example:
-  splitch flags test-eval <flag-key> --targeting-key user-123 --json",
+  splitch flags test-eval <flag-key> --targeting-key workspace-123 --id-type workspace --json",
     "flags update": "Update a Flag definition's name/description/schema.
 
 Usage:
@@ -1195,7 +1196,8 @@ Flags:
   --env <environment>    [type: string; default: SPLITCH_ENV or config] Environment ID or key.
   --by <mode>            [type: string; default: automatic] Allowed: id. Resolve a canonical-looking selector explicitly.
   --targeting-key <key>  [type: string; default: none] Entity Targeting Key.
-  --context-json <json>  [type: JSON object; default: {"attributes":{}}] Evaluation Context fields.
+  --id-type <type>       [type: string; default: user] Entity identity type.
+  --context-json <json>  [type: JSON object; default: {"attributes":{}}] Evaluation Context fields; typed flags take precedence.
   --json                 [type: boolean; default: false] Write machine-readable JSON to stdout.
   -h, --help             [type: boolean; default: false] Show help and exit.
 
@@ -1203,7 +1205,7 @@ Credential semantics:
   Client Key is public and safe for untrusted clients; flags verify fetches it automatically.
 
 Example:
-  splitch flags verify checkout --targeting-key user-123 --json",
+  splitch flags verify checkout --targeting-key workspace-123 --id-type workspace --json",
     "metrics create": "Create a Metric (binomial, count, revenue, ratio, guardrail).
 
 Usage:
