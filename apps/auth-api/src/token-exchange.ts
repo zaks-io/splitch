@@ -213,7 +213,11 @@ async function verifyAndDecode(token: string, secret: string): Promise<Record<st
     throw new OAuthError("invalid_grant", "identity_assertion signature is invalid");
   }
   try {
-    return JSON.parse(new TextDecoder().decode(base64UrlToBytes(p))) as Record<string, unknown>;
+    const payload: unknown = JSON.parse(new TextDecoder().decode(base64UrlToBytes(p)));
+    if (typeof payload !== "object" || payload === null || Array.isArray(payload)) {
+      throw new Error("identity_assertion payload is not a JSON object");
+    }
+    return payload as Record<string, unknown>;
   } catch {
     throw new OAuthError("invalid_grant", "identity_assertion payload is malformed");
   }
