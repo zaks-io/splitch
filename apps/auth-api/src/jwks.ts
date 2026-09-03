@@ -68,17 +68,19 @@ export function decodeJwt(token: string): DecodedJwt {
   const [headerSeg, payloadSeg, sigSeg] = parts as [string, string, string];
   let header: JwtHeader;
   let payload: Record<string, unknown>;
+  let signature: Uint8Array;
   try {
     header = decodeJsonSegment(headerSeg) as unknown as JwtHeader;
     payload = decodeJsonSegment(payloadSeg);
+    signature = base64UrlToBytes(sigSeg);
   } catch {
-    throw new OAuthError("invalid_token", "JWT header/payload is not valid base64url JSON");
+    throw new OAuthError("invalid_token", "JWT segments are not valid base64url data");
   }
   return {
     header,
     payload,
     signingInput: `${headerSeg}.${payloadSeg}`,
-    signature: base64UrlToBytes(sigSeg),
+    signature,
   };
 }
 

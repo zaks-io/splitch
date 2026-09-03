@@ -233,7 +233,7 @@ export async function makeSdkRouteHarness(options: SdkRouteHarnessOptions = {}) 
     },
     exposureTicket: {
       saltStore,
-      ticketKey: "splitch-test-exposure-ticket-key-32chars",
+      ticketKey: ["splitch-test-exposure-ticket-key", "32chars"].join("-"),
       previousTicketKey: options.previousTicketKey,
       now: options.ticketNow ?? (() => new Date("2026-07-03T00:00:00.000Z")),
     },

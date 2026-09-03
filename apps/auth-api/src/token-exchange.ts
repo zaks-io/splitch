@@ -197,16 +197,26 @@ async function verifyAndDecode(token: string, secret: string): Promise<Record<st
     throw new OAuthError("invalid_grant", "identity_assertion is malformed");
   }
   const [h, p, s] = parts as [string, string, string];
+  let signature: Uint8Array;
+  try {
+    signature = base64UrlToBytes(s);
+  } catch {
+    throw new OAuthError("invalid_grant", "identity_assertion signature is malformed");
+  }
   const ok = await crypto.subtle.verify(
     "HMAC",
     await hmacKey(secret),
-    base64UrlToBytes(s) as unknown as BufferSource,
+    signature as unknown as BufferSource,
     new TextEncoder().encode(`${h}.${p}`) as unknown as BufferSource,
   );
   if (!ok) {
     throw new OAuthError("invalid_grant", "identity_assertion signature is invalid");
   }
-  return JSON.parse(new TextDecoder().decode(base64UrlToBytes(p))) as Record<string, unknown>;
+  try {
+    return JSON.parse(new TextDecoder().decode(base64UrlToBytes(p))) as Record<string, unknown>;
+  } catch {
+    throw new OAuthError("invalid_grant", "identity_assertion payload is malformed");
+  }
 }
 
 /** The verified claims of an identity_assertion (Door B claim reads these). */

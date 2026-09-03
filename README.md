@@ -95,13 +95,14 @@ integration: that is when the dashboard flips to "first Exposure received."
 
 ## Packages
 
-| Package                              | npm                                                                                                       | What it's for                                                                                            |
-| ------------------------------------ | --------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
-| [`@splitch/sdk`](packages/sdk)       | [![npm](https://img.shields.io/npm/v/@splitch/sdk.svg)](https://www.npmjs.com/package/@splitch/sdk)       | Evaluate Flags from servers, browsers, and edge runtimes. Includes `/browser` and `/react` entry points. |
-| [`@splitch/cli`](apps/cli)           | [![npm](https://img.shields.io/npm/v/@splitch/cli.svg)](https://www.npmjs.com/package/@splitch/cli)       | The `splitch` command: manage Orgs, Apps, Environments, Flags, and Experiments with stable JSON output.  |
-| [`@splitch/convex`](packages/convex) | [![npm](https://img.shields.io/npm/v/@splitch/convex.svg)](https://www.npmjs.com/package/@splitch/convex) | Convex Component for synced local evaluation inside queries and mutations. Currently a prerelease.       |
+| Package                                      | npm                                                                                                               | What it's for                                                                                            |
+| -------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| [`@splitch/sdk`](packages/sdk)               | [![npm](https://img.shields.io/npm/v/@splitch/sdk.svg)](https://www.npmjs.com/package/@splitch/sdk)               | Evaluate Flags from servers, browsers, and edge runtimes. Includes `/browser` and `/react` entry points. |
+| [`@splitch/cli`](apps/cli)                   | [![npm](https://img.shields.io/npm/v/@splitch/cli.svg)](https://www.npmjs.com/package/@splitch/cli)               | The `splitch` command: manage Orgs, Apps, Environments, Flags, and Experiments with stable JSON output.  |
+| [`@splitch/convex`](packages/convex)         | [![npm](https://img.shields.io/npm/v/@splitch/convex.svg)](https://www.npmjs.com/package/@splitch/convex)         | Pre-1.0 Convex Component for synced local evaluation inside queries and mutations.                       |
+| [`@splitch/cloudflare`](packages/cloudflare) | [![npm](https://img.shields.io/npm/v/@splitch/cloudflare.svg)](https://www.npmjs.com/package/@splitch/cloudflare) | Customer-owned Worker for durable local evaluation through a Cloudflare service binding.                 |
 
-Everything else in `packages/` and `apps/` is internal to the platform and not published.
+Other packages and apps in the workspace are internal to the platform and not published.
 
 ### Using the SDK
 
@@ -201,6 +202,7 @@ apps/
 packages/
   sdk/                 @splitch/sdk
   convex/              @splitch/convex
+  cloudflare/          @splitch/cloudflare
   contracts/           Zod schemas: the single source of truth for every surface
   evaluation-core/     Pure assignment and resolution logic
   stats/               The statistics engine
@@ -240,7 +242,7 @@ Please do not open a public issue for a security report.
 Enforced on every pull request and push to `main`: gitleaks secret scanning, the full
 contract and correctness gate, Harden-Runner egress auditing, and every GitHub Action
 pinned to a commit SHA. Semgrep, OSV-Scanner, Trivy, and Scorecard run daily and report
-into the Security tab, opening a tracking issue on a finding rather than blocking a merge;
+into the Security tab; an operational scanner failure opens a tracking issue instead of blocking a merge;
 making them gate a pull request waits on a one-time audit of the final dependency set.
 `SECURITY.md` lists exactly what runs and what does not.
 

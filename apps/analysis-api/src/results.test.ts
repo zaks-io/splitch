@@ -70,7 +70,6 @@ describe("GET/POST experiment results", () => {
       "analysis_run_bootstrap",
       "analysis_metric_values_batch",
       "analysis_pre_period_covariates_batch",
-      "analysis_activation_rows",
     ]);
     expect(tinybird.calls.every((call) => call.params.app_id === APP_ID)).toBe(true);
     expect(tinybird.calls.every((call) => call.params.environment_id === ENVIRONMENT_ID)).toBe(
@@ -134,6 +133,7 @@ describe("GET/POST experiment results", () => {
     expect(
       tinybird.calls.find((call) => call.pipeName === "analysis_metric_values_batch")?.params,
     ).toMatchObject({ activation_gated: "1" });
+    expect(tinybird.calls.map((call) => call.pipeName)).toContain("analysis_activation_rows");
   });
 
   it("joins historical shared-root Exposure and Metric Event hashes before stats", async () => {

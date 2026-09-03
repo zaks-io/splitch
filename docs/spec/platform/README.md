@@ -39,8 +39,9 @@ Worker fleet, trust boundaries, runtime flows, and dependency-cruiser enforcemen
    sources are forbidden.
 5. **Tinybird is never queried directly.** All reads proxy through a control-plane endpoint that
    injects `app_id` from auth context.
-6. **One authored source: Zod.** Types, client, OpenAPI, MCP schemas are all derived. Nothing
-   generated is committed.
+6. **One authored contract source: Zod.** Types, client, OpenAPI, and MCP schemas are derived.
+   Generated framework and runtime sources may be committed when repository tooling consumes them;
+   each is labeled as generated and has one owning generator.
 7. **DO writes are persisted-before-announced** (both the per-App fan-out DO and the Assignment
    Store DO). Broadcasts only describe durable state.
 8. **Privacy tombstones win immediately.** Delete requests stop future use before every physical

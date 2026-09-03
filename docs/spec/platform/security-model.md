@@ -79,26 +79,30 @@ PII handling, deletion, and export are an enforced contract in their own right.
 The build is a trust boundary too. The 2025 tj-actions/reviewdog and 2026
 trivy-action compromises were tag-repointing attacks defeated by SHA pinning.
 
-- pnpm install quarantine: `minimumReleaseAge`, `minimumReleaseAgeStrict`,
-  `blockExoticSubdeps` (see [`monorepo-and-toolchain`](./monorepo-and-toolchain.md)).
-- Every GitHub Action pinned to a full commit SHA with a version comment;
-  Harden-Runner egress monitoring on every job; SHA pinning enforced in CI.
-- Continuous scanning: CodeQL, Semgrep (incl. repo-local rules), OSV-Scanner,
-  Trivy, gitleaks, OpenSSF Scorecard. A daily scheduled workflow re-runs these
-  against `main` and opens a tracked issue on any new finding.
+- pnpm install quarantine controls (`minimumReleaseAge`, `minimumReleaseAgeStrict`,
+  `blockExoticSubdeps`) are declared but parked until the launch-lockdown pass (see
+  [`monorepo-and-toolchain`](./monorepo-and-toolchain.md)).
+- Every GitHub Action is pinned to a full commit SHA with a version comment.
+  Harden-Runner monitors egress on each host-run security job; Semgrep runs in a
+  container pinned by digest instead. Pin correctness is currently maintained by
+  convention, Dependabot, and the manually run `pnpm pins:check`; CI enforcement is parked.
+- Gitleaks scans every pull request and push range. A non-gating daily workflow runs
+  Semgrep, OSV-Scanner, Trivy, and OpenSSF Scorecard against `main` and uploads findings
+  as SARIF. It opens a tracked issue only when a scanner job fails to execute.
+- CodeQL is configured as a dispatch-only workflow until the launch-lockdown pass.
 - Disclosure and the full CI control list: [`SECURITY.md`](../../../SECURITY.md).
 
 ## Threat model (summary)
 
-| Threat                            | Boundary | Primary control                                |
-| --------------------------------- | -------- | ---------------------------------------------- |
-| Cross-tenant data access          | 2        | `app_id` scoping in data-access seam           |
-| Leaked / over-scoped credentials  | 3        | API Key never read back; Client Key closed     |
-| Edge abuse (scraping, flooding)   | 1        | Origin-closed Client Keys; Turnstile; quotas   |
-| Privilege escalation across doors | 4        | Access-control matrix                          |
-| Secret in source / logs           | 3        | gitleaks + Semgrep `no-secret-in-logs`         |
-| Malicious dependency / action     | supply   | SHA pins, quarantine, OSV/Trivy, Harden-Runner |
-| PII over-retention / leak         | privacy  | Privacy data-lifecycle contract                |
+| Threat                            | Boundary | Primary control                              |
+| --------------------------------- | -------- | -------------------------------------------- |
+| Cross-tenant data access          | 2        | `app_id` scoping in data-access seam         |
+| Leaked / over-scoped credentials  | 3        | API Key never read back; Client Key closed   |
+| Edge abuse (scraping, flooding)   | 1        | Origin-closed Client Keys; Turnstile; quotas |
+| Privilege escalation across doors | 4        | Access-control matrix                        |
+| Secret in source / logs           | 3        | gitleaks + Semgrep `no-secret-in-logs`       |
+| Malicious dependency / action     | supply   | SHA pins, OSV/Trivy, Harden-Runner           |
+| PII over-retention / leak         | privacy  | Privacy data-lifecycle contract              |
 
 ## Sources
 

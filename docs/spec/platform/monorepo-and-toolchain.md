@@ -81,14 +81,13 @@ signed cache entries — a stale or wrong entry survives at most one day. Workfl
 tasks must (a) route builds through `turbo run` (never `pnpm --filter <pkg> build`, which bypasses
 the cache) and (b) set `SPLITCH_PLATFORM_TARGET: pr-ci` to match the `ci` Verify hash-space, unless
 they intentionally build for another platform target. The npm publish workflows (`sdk-publish`,
-`cli-publish`, and `convex-publish`) are the deliberate exception: they rebuild hermetically from
+`cli-publish`, `convex-publish`, and `cloudflare-publish`) are the deliberate exception: they rebuild hermetically from
 the tagged source on GitHub-hosted runners because npm provenance should attest a from-source build,
 not a cache restore.
 
 Local hook policy lives in [local-quality-gates.md](./local-quality-gates.md). Commit hooks block
 format, lint, type, Knip, and Gitleaks failures before code is committed. The pre-push hook runs the
-same validation set as CI except hosted smoke tests and remote-state mutations, including duplicate-code
-detection.
+lean build-fast graph plus local Tinybird and D1 validation; CI owns the full test and build graph.
 
 ## Package layout
 
@@ -100,6 +99,7 @@ packages/
   control-plane-sdk/   @splitch/control-plane-sdk   Hono hc transport SDK for control-plane consumers
   sdk/                 @splitch/sdk                 Public JS/TS data-plane SDK package
   convex/              @splitch/convex              First-party Convex Component for synced local evaluation
+  cloudflare/          @splitch/cloudflare          Customer-owned Worker for durable local evaluation
   repo-lint/           @splitch/repo-lint           Private repo policy gates (package publishing)
   ui/                  @splitch/ui                  Design system tokens and primitives
 
@@ -118,9 +118,9 @@ infra/
   tinybird/                Tinybird datafiles for the analytics resource project
 ```
 
-The scaffold is intentionally thin: package entrypoints and Worker handlers are present so
-agents can work in parallel with stable imports, scripts, and Turbo cache keys. Domain implementations
-replace those thin handlers slice by slice.
+The workspace is capability-sliced so agents can work in parallel with stable imports, scripts, and
+Turbo cache keys. Runtime orchestration stays in the owning Worker; shared packages exist only for
+proven library boundaries.
 
 Use the Turborepo convention directly:
 
@@ -128,19 +128,17 @@ Use the Turborepo convention directly:
 - `packages/*` are libraries or tooling packages. They can be internal-only or publishable.
 - `infra/*` holds provider resource projects that are source-controlled but not JS workspaces.
 - App-owned code stays inside the owning `apps/*` workspace unless it is a real library boundary.
-- Publishability is not a directory rule. `@splitch/sdk` and `@splitch/convex` live in `packages/`
-  because they are JS/TS libraries installed by customer applications.
+- Publishability is not a directory rule. `@splitch/sdk`, `@splitch/convex`, and
+  `@splitch/cloudflare` live in `packages/` because customer applications install them.
 
 ## Worker topology contract
 
 These Workers are separate deploy units because they are separate capability and trust seams. Do
 not collapse them into generic `api` or `edge` Workers during slicing.
 
-The ownership table describes the accepted target. ADR-0043 is pending: the current Event Ingest
-Worker has no Queue binding and directly posts each implemented `raw_events` and `raw_evaluations`
-row to Tinybird. It also has no Ingest Admission Gate Durable Object binding. Metric Event and Web
-Event intake must be built on the target admission and queue transport rather than copying that
-direct path.
+The ownership table describes the accepted target. ADR-0043's Queue and Ingest Admission Gate
+transport is implemented for `raw_events`, `raw_evaluations`, and Metric Events. Web Event intake
+remains pending and must use the same transport rather than introducing a direct write path.
 
 | Worker                   | Boundary                     | Owns                                                                                                                                                                                                                                                            | Does not own                                                     |
 | ------------------------ | ---------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------- |

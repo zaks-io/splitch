@@ -1,3 +1,4 @@
+import { Buffer } from "node:buffer";
 import { randomBytes, randomUUID } from "node:crypto";
 import { resolve } from "node:path";
 import {
@@ -86,7 +87,7 @@ async function setup(
           environment,
           workerName: workerName(environment),
           installationId: randomUUID(),
-          pushSecret: randomBytes(32).toString("base64url"),
+          pushSecret: Buffer.from(randomBytes(32)).toString("base64url"),
           endpoint: "",
           appConfigPath,
           appBindingPath: await serviceBindingPath(appConfigPath, environment),

@@ -16,6 +16,7 @@ import {
   MemoryReplayWindow,
 } from "./memory-replay-windows.test-fixture";
 import { captureQueuedResponse, rawEventQueueBindings } from "./raw-event-queue-test-fixture";
+import { TestExecutionContext } from "./test-execution-context";
 import type { Env } from "./types";
 
 export type { AdmissionCharge, AdmissionOption };
@@ -222,19 +223,6 @@ export function expectRow(rows: Record<string, unknown>[]): Record<string, unkno
   const row = rows[0];
   if (row === undefined) throw new Error("expected Tinybird row");
   return row;
-}
-
-export class TestExecutionContext implements ExecutionContext {
-  readonly exports = {} as Cloudflare.Exports;
-  readonly props = {};
-  readonly tracing = {} as Tracing;
-  waits: Promise<unknown>[] = [];
-
-  waitUntil(promise: Promise<unknown>): void {
-    this.waits.push(promise);
-  }
-
-  passThroughOnException(): void {}
 }
 
 export function baseExposure(): ExposurePayload {

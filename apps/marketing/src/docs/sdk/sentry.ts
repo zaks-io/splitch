@@ -79,7 +79,7 @@ const splitch = createSplitchClient({
       kind: "list",
       items: [
         "A boolean resolution passes straight through as `new-checkout = true`.",
-        "A multivariate arm becomes one boolean per served Variant: `checkout:treatment = true`. Two arms of the same Flag never collide, because the arm is part of the name.",
+        "A multivariate Flag becomes one boolean per served Variant: `checkout:treatment = true`. Two Variants of the same Flag never collide because the Variant is part of the name.",
         "An `ERROR` resolution is not recorded. The Default Variant was served because evaluation failed, and claiming it as a resolution would be exactly the disguised default splitch refuses.",
         "A non-boolean resolution with no Variant name cannot be encoded at all, so it is logged through your `logger` once per Flag Key rather than dropped silently.",
       ],

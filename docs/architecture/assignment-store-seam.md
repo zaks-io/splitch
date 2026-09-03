@@ -1,6 +1,6 @@
 # The Assignment Store seam (holdover / sticky experience)
 
-Status: designed (no code yet). Output of an upfront architecture grill on 2026-06-20.
+Status: reference design. Output of an upfront architecture grill on 2026-06-20.
 Vocabulary: domain terms per [CONTEXT.md](../../CONTEXT.md); architecture terms (module, seam, adapter,
 depth, locality) per the deepening discipline. Builds directly on the
 [Assignment / Exposure seam](./assignment-exposure-seam.md) and ADR-0006.

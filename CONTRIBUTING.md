@@ -7,8 +7,8 @@ do is tell us what broke.
 
 Open a [GitHub issue](https://github.com/zaks-io/splitch/issues). What helps most:
 
-- The component and version: `@splitch/sdk`, `@splitch/cli`, `@splitch/convex`, the CLI, the
-  MCP server, the control panel, or a commit SHA.
+- The component and version: `@splitch/sdk`, `@splitch/cli`, `@splitch/convex`,
+  `@splitch/cloudflare`, the MCP server, the control panel, or a commit SHA.
 - The stable error code, if you got one. Every failure carries one, and each has a page at
   `https://splitch.dev/docs/error/{code}`.
 - What you expected versus what happened, and the smallest way to reproduce it.

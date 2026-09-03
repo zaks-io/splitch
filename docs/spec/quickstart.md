@@ -51,7 +51,7 @@ splitch orgs list           # CLI
 organizations_list          # MCP tool
 ```
 
-If the list is empty, or the work belongs in a new tenant, create one:
+If the list is empty, or the work belongs in a new Organization, create one:
 
 ```
 splitch orgs create --name "My Org"     # CLI

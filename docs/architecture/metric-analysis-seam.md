@@ -1,6 +1,6 @@
 # The Metric analysis seam (the statistics engine)
 
-Status: designed (no code yet). Output of an upfront architecture grill on 2026-06-20.
+Status: reference design. Output of an upfront architecture grill on 2026-06-20.
 **Production target — not a bootstrap stopgap.** These are the production statistical defaults on the final
 data model. Vocabulary: domain terms per [CONTEXT.md](../../CONTEXT.md); architecture terms per the
 deepening discipline. Reads what the [Exposure pipeline](./exposure-pipeline-seam.md) and

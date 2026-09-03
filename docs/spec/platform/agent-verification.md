@@ -1,6 +1,6 @@
 # Agent verification: local, remote Cursor, and slice Done contracts
 
-Status: scaffold baseline wired; route-level smokes expand slice by slice.
+Status: local verification baseline implemented; route-level smokes expand slice by slice.
 Vocabulary follows [CONTEXT.md](../../../CONTEXT.md).
 
 ## Decision

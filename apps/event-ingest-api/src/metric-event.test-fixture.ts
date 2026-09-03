@@ -7,12 +7,8 @@ import {
 } from "@splitch/contracts";
 import { delegatedRequest } from "@splitch/worker-runtime";
 import { EvaluationEntrypoint } from "./index";
-import {
-  type AdmissionCharge,
-  type AdmissionOption,
-  admissionBinding,
-  TestExecutionContext,
-} from "./test-fixtures";
+import { TestExecutionContext } from "./test-execution-context";
+import { type AdmissionCharge, type AdmissionOption, admissionBinding } from "./test-fixtures";
 import type { Env } from "./types";
 
 export const METRIC_APP_ID = "app_shop";

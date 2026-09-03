@@ -1,0 +1,4 @@
+# Wrangler generates a few trailing spaces in its runtime declaration output.
+apps/evaluation-api/src/worker-configuration.d.ts -whitespace
+apps/event-ingest-api/src/worker-configuration.d.ts -whitespace
+packages/cloudflare/src/worker-configuration.d.ts -whitespace

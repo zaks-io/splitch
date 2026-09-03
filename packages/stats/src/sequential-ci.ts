@@ -1,56 +1,24 @@
-export interface CIAdapter {
-  compute(params: CIParams): CIResult;
-}
+import {
+  type CIAdapter,
+  type CIError,
+  type CIParams,
+  type CIResult,
+  type CISource,
+  type CIWarning,
+  infiniteCIResult,
+  isStableCIResult,
+  validateCIParams,
+} from "./confidence-interval";
 
-export interface CIParams {
-  readonly estimate: number;
-  readonly sampling_var: number;
-  readonly n_t: number;
-  readonly n_c: number;
-  readonly alpha: number;
-  readonly target_n?: number;
-  readonly sample_size_locked?: number;
-}
-
-export type CIStatus = "ok" | "warning" | "error";
-
-export interface CIWarning {
-  readonly code:
-    | "ZERO_SAMPLING_VARIANCE"
-    | "INSUFFICIENT_SAMPLE"
-    | "FIXED_HORIZON_NOT_AT_LOCKED_SAMPLE";
-  readonly message: string;
-}
-
-export interface CIError {
-  readonly code: "INVALID_INPUT" | "NUMERICAL_OVERFLOW" | "FIXED_HORIZON_LOCK_MISSING";
-  readonly message: string;
-}
-
-export interface CISource {
-  readonly family:
-    | "normal-mixture-asymptotic-confidence-sequence"
-    | "fixed-horizon-two-sample-z-test";
-  readonly references: readonly string[];
-}
-
-export interface CIResult {
-  readonly ci_lower: number;
-  readonly ci_upper: number;
-  readonly p_value: number;
-  readonly mode: "sequential" | "fixed";
-  readonly status: CIStatus;
-  readonly source: CISource;
-  readonly n: number;
-  readonly peeking_allowed: boolean;
-  readonly target_n?: number;
-  readonly sample_size_locked?: number;
-  readonly rho_squared?: number;
-  readonly boundary: number;
-  readonly critical_value?: number;
-  readonly warnings?: readonly CIWarning[];
-  readonly error?: CIError;
-}
+export type {
+  CIAdapter,
+  CIError,
+  CIParams,
+  CIResult,
+  CISource,
+  CIStatus,
+  CIWarning,
+} from "./confidence-interval";
 
 export interface SequentialCIOptions {
   readonly defaultTargetN?: number;
@@ -119,7 +87,7 @@ export class SequentialCI implements CIAdapter {
     const ciUpper = params.estimate + boundary;
     const pValue = normalMixturePValue(Math.abs(params.estimate), standardError, n, targetN);
 
-    if (!isStableResult(ciLower, ciUpper, pValue, params.estimate, boundary)) {
+    if (!isStableCIResult(ciLower, ciUpper, pValue, params.estimate, boundary)) {
       return errorResult(params, targetN, {
         code: "NUMERICAL_OVERFLOW",
         message: "SequentialCI produced a numerically unstable interval or p-value.",
@@ -219,45 +187,13 @@ function normalMixtureOptimumEquation(informationRatio: number, target: number):
 }
 
 function validateParams(params: CIParams, targetN: number): CIError | undefined {
-  if (!Number.isFinite(params.estimate)) {
-    return { code: "INVALID_INPUT", message: "estimate must be finite." };
-  }
-  if (!Number.isFinite(params.sampling_var) || params.sampling_var < 0) {
-    return { code: "INVALID_INPUT", message: "sampling_var must be finite and non-negative." };
-  }
-  if (!isCount(params.n_t) || !isCount(params.n_c)) {
-    return { code: "INVALID_INPUT", message: "n_t and n_c must be non-negative safe integers." };
-  }
-  if (!Number.isFinite(params.alpha) || params.alpha <= 0 || params.alpha >= 1) {
-    return { code: "INVALID_INPUT", message: "alpha must be finite and in (0, 1)." };
-  }
+  const commonError = validateCIParams(params);
+  if (commonError) return commonError;
   if (!Number.isFinite(targetN) || targetN <= 0) {
     return { code: "INVALID_INPUT", message: "target_n must be finite and positive." };
   }
 
   return undefined;
-}
-
-function isCount(value: number): boolean {
-  return Number.isSafeInteger(value) && value >= 0;
-}
-
-function isStableResult(
-  ciLower: number,
-  ciUpper: number,
-  pValue: number,
-  estimate: number,
-  boundary: number,
-): boolean {
-  return (
-    Number.isFinite(ciLower) &&
-    Number.isFinite(ciUpper) &&
-    (boundary === 0 ? ciLower <= estimate : ciLower < estimate) &&
-    (boundary === 0 ? estimate <= ciUpper : estimate < ciUpper) &&
-    Number.isFinite(pValue) &&
-    pValue >= 0 &&
-    pValue <= 1
-  );
 }
 
 function infiniteResult(
@@ -268,21 +204,16 @@ function infiniteResult(
   warnings: readonly CIWarning[] = [],
   error?: CIError,
 ): CIResult {
-  return {
-    ci_lower: Number.NEGATIVE_INFINITY,
-    ci_upper: Number.POSITIVE_INFINITY,
-    p_value: 1,
-    mode: "sequential",
-    status,
-    source: SEQUENTIAL_CI_SOURCE,
-    n: params.n_t + params.n_c,
-    peeking_allowed: true,
-    target_n: targetN,
-    rho_squared: rhoSquared,
-    boundary: Number.POSITIVE_INFINITY,
-    warnings,
-    error,
-  };
+  return infiniteCIResult(
+    params,
+    {
+      mode: "sequential",
+      source: SEQUENTIAL_CI_SOURCE,
+      targetN,
+      rhoSquared,
+    },
+    { status, warnings, error },
+  );
 }
 
 function errorResult(params: CIParams, targetN: number, error: CIError): CIResult {

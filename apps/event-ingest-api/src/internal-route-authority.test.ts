@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import worker, { EvaluationEntrypoint } from "./index";
+import { TestExecutionContext } from "./test-execution-context";
 import {
   appId,
   baseExposure,
@@ -8,7 +9,6 @@ import {
   makeEnv,
   mockTinybirdFetch,
   organizationId,
-  TestExecutionContext,
   workerRequest,
 } from "./test-fixtures";
 import type { Env } from "./types";

@@ -7,6 +7,7 @@ const BAGGAGE = `sentry-trace_id=${TRACE_ID}`;
 const TRACEPARENT = `00-${TRACE_ID}-0123456789abcdef-01`;
 
 vi.mock("@sentry/cloudflare", () => ({
+  getActiveSpan: () => undefined,
   getTraceData: (options?: { propagateTraceparent?: boolean }) => ({
     "sentry-trace": "0123456789abcdef0123456789abcdef-0123456789abcdef-1",
     baggage: "sentry-trace_id=0123456789abcdef0123456789abcdef",

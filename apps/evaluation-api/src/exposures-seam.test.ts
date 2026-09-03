@@ -88,6 +88,11 @@ class TestExecutionContext implements ExecutionContext {
     this.waits.push(promise);
   }
   passThroughOnException(): void {}
+  abort(reason?: unknown): never {
+    throw reason instanceof Error
+      ? reason
+      : new Error(String(reason ?? "ExecutionContext aborted"));
+  }
 }
 
 function mockTinybirdFetch() {

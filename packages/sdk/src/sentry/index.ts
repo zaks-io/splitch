@@ -72,9 +72,9 @@ export function sentryResolutionReporter(
       return;
     }
 
-    // A multivariate Flag becomes one boolean per served arm: `checkout:treatment
-    // = true`. Sentry then reads it as an ordinary flag, and two arms of the same
-    // Flag never collide because the arm is part of the name.
+    // A multivariate Flag becomes one boolean per served Variant: `checkout:treatment
+    // = true`. Sentry then reads it as an ordinary flag, and two Variants of the
+    // same Flag never collide because the Variant is part of the name.
     if (details.variantName !== null) {
       integration.addFeatureFlag(`${flagKey}:${details.variantName}`, true);
       return;

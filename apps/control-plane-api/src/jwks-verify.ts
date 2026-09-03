@@ -163,6 +163,12 @@ async function signatureValid(parsed: ParsedJwt, fetchJwks: JwksFetcher): Promis
   if (parsed.header.alg !== "RS256") {
     return false;
   }
+  let signature: Uint8Array;
+  try {
+    signature = base64UrlToBytes(parsed.signature);
+  } catch {
+    return false;
+  }
   const jwk = selectRsaKey(await fetchJwks(), parsed.header.kid);
   if (!jwk) {
     return false;
@@ -170,7 +176,7 @@ async function signatureValid(parsed: ParsedJwt, fetchJwks: JwksFetcher): Promis
   return crypto.subtle.verify(
     "RSASSA-PKCS1-v1_5",
     await importRsaKey(jwk),
-    base64UrlToBytes(parsed.signature) as unknown as BufferSource,
+    signature as unknown as BufferSource,
     new TextEncoder().encode(parsed.signingInput) as unknown as BufferSource,
   );
 }

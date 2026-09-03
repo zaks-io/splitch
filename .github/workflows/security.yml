@@ -1,8 +1,8 @@
 name: security
 
-# Runs daily and reports; it does not gate merges. The `alert` job turns a
-# failed scan into a single deduped GitHub issue, which the GitHub<->Linear sync
-# mirrors into the Splitch team.
+# Runs daily and reports; it does not gate merges. Findings are uploaded as
+# SARIF. The `alert` job turns an operational scan failure into one deduped
+# GitHub issue, which the GitHub<->Linear sync mirrors into the Splitch team.
 #
 # The pull_request + push triggers stay off deliberately. Every job here already
 # branches on the event, so adding them arms the merge gates (`pnpm audit`,
@@ -26,7 +26,7 @@ jobs:
   # ---------------------------------------------------------------------------
   # Dependency vulnerabilities (OSV.dev, pnpm-lock-aware) + native pnpm audit.
   # On PR/push: fails the job so branch protection blocks the merge.
-  # On schedule: uploads SARIF and lets the alert job open an issue.
+  # On schedule: uploads SARIF; an operational job failure opens an issue.
   # ---------------------------------------------------------------------------
   deps:
     name: Dependency scan
@@ -47,7 +47,7 @@ jobs:
           persist-credentials: false
 
       - name: OSV scan (SARIF)
-        uses: google/osv-scanner-action@9a498708959aeaef5ef730655706c5a1df1edbc2 # v2.3.8
+        uses: google/osv-scanner-action/osv-scanner-action@9a498708959aeaef5ef730655706c5a1df1edbc2 # v2.3.8
         continue-on-error: true
         with:
           scan-args: |-
@@ -77,8 +77,8 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       # Gate merges: on PR/push a high/critical advisory fails the job. On the
-      # scheduled run we don't gate (nothing to merge); the SARIF + alert job
-      # carry the signal instead.
+      # scheduled run we don't gate (nothing to merge); SARIF carries findings
+      # and the alert job carries operational failures.
       - name: pnpm audit (gate on PR/push)
         if: github.event_name == 'pull_request' || github.event_name == 'push'
         run: pnpm audit --audit-level=high
@@ -191,7 +191,7 @@ jobs:
           category: scorecard
 
   # ---------------------------------------------------------------------------
-  # Scheduled-only: if any scan job failed/flagged, open or update a single
+  # Scheduled-only: if any scan job failed to execute, open or update a single
   # deduped GitHub issue. The GitHub<->Linear sync mirrors it into the Splitch
   # team automatically. Body comes from a repo-controlled file, never from
   # untrusted github.event.* input -> no workflow-injection surface.
@@ -226,7 +226,7 @@ jobs:
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           {
-            echo "The daily security scan flagged one or more findings."
+            echo "One or more daily security scan jobs failed to execute."
             echo ""
             echo "| Job | Result |"
             echo "| --- | --- |"
@@ -242,6 +242,6 @@ jobs:
         if: needs.deps.result == 'failure' || needs.sast.result == 'failure' || needs.trivy.result == 'failure' || needs.scorecard.result == 'failure'
         uses: peter-evans/create-issue-from-file@fca9117c27cdc29c6c4db3b86c48e4115a786710 # v6.0.0
         with:
-          title: "Daily security scan: findings detected"
+          title: "Daily security scan: operational failure"
           content-filepath: security-alert.md
           labels: security, automated

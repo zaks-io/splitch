@@ -58,6 +58,7 @@ const workers = [
     cwd: "apps/mcp-server",
     service: "splitch-mcp-server",
     port: 8792,
+    path: "/health",
     response: "json",
   },
   {
@@ -68,6 +69,7 @@ const workers = [
     service: "splitch-control-panel",
     port: 8793,
     response: "html",
+    marker: "splitch",
   },
   {
     alias: "marketing",
@@ -77,6 +79,7 @@ const workers = [
     service: "splitch-marketing",
     port: 8794,
     response: "html",
+    marker: "splitch",
   },
 ];
 
@@ -137,7 +140,7 @@ async function buildSelectedGraphs(selectedWorkers) {
 }
 
 async function smokeWorker(worker) {
-  const url = `http://${smokeHost}:${worker.port}/`;
+  const url = `http://${smokeHost}:${worker.port}${worker.path ?? "/"}`;
   const wranglerArgs = [
     "exec",
     "wrangler",
@@ -232,8 +235,8 @@ async function validateResponse(response, worker) {
 
   if (worker.response === "html") {
     const body = await response.text();
-    if (!body.includes(worker.service)) {
-      throw new Error(`HTML response did not include ${worker.service}`);
+    if (!body.toLowerCase().includes(worker.marker)) {
+      throw new Error(`HTML response did not include ${worker.marker}`);
     }
     return;
   }

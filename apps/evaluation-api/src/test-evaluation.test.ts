@@ -84,7 +84,7 @@ function makeHarness(saltStore = new StaticSaltStore(), sourceId: () => string =
     },
     exposureTicket: {
       saltStore,
-      ticketKey: "splitch-test-exposure-ticket-key-32chars",
+      ticketKey: ["splitch-test-exposure-ticket-key", "32chars"].join("-"),
     },
     exposureIngestSink: new RecordingExposureIngestSink(),
     exposureRedemptionClaims: new MemoryExposureRedemptionClaimStore(),

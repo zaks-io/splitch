@@ -79,7 +79,7 @@ EvaluateResult {
 ```
 
 The internal resolution reason uses the discriminated union defined in
-[test-evaluation-endpoint.md](./test-evaluation-endpoint.md). The data-plane SDK response returns
+[test-evaluation-endpoint.md](../sdk/test-evaluation-endpoint.md). The data-plane SDK response returns
 only the **non-revealing** OpenFeature `reason` (`SPLIT`/`DEFAULT`/`DISABLED`/`CACHED`/`STALE`/
 `ERROR`) — never which rule matched (ADR-0018, ADR-0036). The full rule-naming reason is exposed
 only by test-evaluation (control-plane) and the API-Key `verify` tier (ADR-0037), which share the

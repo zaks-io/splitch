@@ -1,3 +1,10 @@
+# Historical deterministic test fixtures. These values only sign local test data.
+a0d6ac0be2e71ecf3e7967567825e596513a140c:apps/evaluation-api/src/evaluate-test-eval-parity.test.ts:generic-api-key:148
+a0d6ac0be2e71ecf3e7967567825e596513a140c:apps/evaluation-api/src/evaluate/exposure-ticket.test.ts:generic-api-key:27
+a0d6ac0be2e71ecf3e7967567825e596513a140c:apps/evaluation-api/src/sdk-route-test-fixtures.ts:generic-api-key:206
+a0d6ac0be2e71ecf3e7967567825e596513a140c:apps/evaluation-api/src/test-evaluation.test.ts:generic-api-key:85
+
+# Historical deterministic Control Panel fixture values. They are not service credentials.
 8a295d89f1c6bf3b277d8642eab609af47aacfd4:apps/control-panel/src/components/environment-settings.test.tsx:generic-api-key:60
 8a295d89f1c6bf3b277d8642eab609af47aacfd4:packages/control-plane-sdk/src/panel-settings.test.ts:generic-api-key:31
 8a295d89f1c6bf3b277d8642eab609af47aacfd4:packages/control-plane-sdk/src/panel-settings.test.ts:generic-api-key:48
