@@ -176,11 +176,12 @@ function operationFlags(command: CliCommandDefinition): HelpFlag[] {
     case "sdk_verify":
       return [
         flag("--targeting-key <key>", "string", "none", "Entity Targeting Key."),
+        flag("--id-type <type>", "string", "user", "Entity identity type."),
         flag(
           "--context-json <json>",
           "JSON object",
           '{"attributes":{}}',
-          "Evaluation Context fields.",
+          "Evaluation Context fields; typed flags take precedence.",
         ),
       ];
     default:

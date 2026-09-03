@@ -6,14 +6,15 @@ export function commandExample(command: CliCommandDefinition): string {
   const simpleExample = simpleCommandExample(command);
   if (simpleExample) return simpleExample;
   if (command.kind === "flags_verify")
-    return "splitch flags verify checkout --targeting-key user-123 --json";
+    return "splitch flags verify checkout --targeting-key workspace-123 --id-type workspace --json";
   const parts = [
     "splitch",
     ...command.path,
     ...requiredPositionals(command).map((name) => `<${name}>`),
   ];
-  if (command.operationId === "flags_test_eval") parts.push("--targeting-key", "user-123");
-  else {
+  if (command.operationId === "flags_test_eval") {
+    parts.push("--targeting-key", "workspace-123", "--id-type", "workspace");
+  } else {
     const bodyExample = bodyJsonExampleFlag(command);
     if (bodyExample) parts.push("--body-json", `'${bodyExample}'`);
   }

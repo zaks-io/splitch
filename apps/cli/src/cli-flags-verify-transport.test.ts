@@ -117,7 +117,11 @@ describe("flags verify transport", () => {
     expect(new URL(clientKeyCall?.url ?? "https://invalid.test").searchParams.get("by")).toBe("id");
     expect(verifyCall?.authorization).toBe(`Bearer ${clientKeyMaterial}`);
     expect(verifyCall?.authorization).not.toBe(authHeader());
-    expect(verifyCall?.body).toMatchObject({ flagKey: "checkout" });
+    expect(verifyCall?.body).toMatchObject({
+      flagKey: "checkout",
+      targetingKey: "workspace-1",
+      idType: "workspace",
+    });
   });
 
   it("returns EXIT_API when the SDK reason is ERROR", async () => {
@@ -175,6 +179,8 @@ function verifyArgs(flagKey: string): string[] {
     "id",
     flagKey,
     "--targeting-key",
-    "user-1",
+    "workspace-1",
+    "--id-type",
+    "workspace",
   ];
 }

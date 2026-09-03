@@ -104,6 +104,7 @@ export async function executeFlagsVerify(
     const clientKey = clientKeyResult.data as { keyMaterial: string };
     const evaluationContext = parseEvaluationContext(
       invocation.flags.targetingKey,
+      invocation.flags.idType,
       invocation.flags.contextJson,
     );
     const client = createSplitchClient({

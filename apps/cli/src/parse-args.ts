@@ -13,6 +13,7 @@ export interface ParsedGlobalFlags {
   readonly name?: string;
   readonly key?: string;
   readonly targetingKey?: string;
+  readonly idType?: string;
   readonly contextJson?: string;
   readonly bodyJson?: string;
   readonly by?: string;
@@ -55,6 +56,7 @@ const KNOWN_FLAGS = new Set([
   "name",
   "key",
   "targetingKey",
+  "idType",
   "contextJson",
   "bodyJson",
   "by",
@@ -184,6 +186,7 @@ function toParsedFlags(flags: Record<string, ParsedFlagValue>): ParsedGlobalFlag
     name: stringFlag(flags.name),
     key: stringFlag(flags.key),
     targetingKey: stringFlag(flags.targetingKey),
+    idType: stringFlag(flags.idType),
     contextJson: stringFlag(flags.contextJson),
     bodyJson: stringFlag(flags.bodyJson),
     by: stringFlag(flags.by),

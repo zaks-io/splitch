@@ -209,11 +209,61 @@ describe("remaining API command exit codes", () => {
         "flag_1",
         "--targeting-key",
         "user-1",
+        "--id-type",
+        "workspace",
       ],
       { credentialPath, fetch: transport.fetch },
     );
     expect(code).toBe(EXIT_OK);
     const call = transport.requests.find((request) => request.url.includes("/test-eval"));
     expect(call?.authorization).toBe(authHeader());
+    expect(call?.body).toMatchObject({
+      evaluationContext: { targetingKey: "user-1", idType: "workspace", attributes: {} },
+    });
+  });
+
+  it("flags test-eval preserves the Evaluation Context from --body-json", async () => {
+    const { credentialPath } = await makeTempHome();
+    await writeFile(credentialPath, `${JSON.stringify(storedCredential())}\n`);
+    const transport = new FakeCliTransport([
+      ...scopeResolutionStubs(),
+      {
+        match: (request) => request.url.includes("/test-eval") && request.method === "POST",
+        status: 200,
+        body: testEvalResponse,
+      },
+    ]);
+
+    const code = await runCli(
+      [
+        "flags",
+        "test-eval",
+        "--json",
+        "--app",
+        "app_1",
+        "--env",
+        "env_1",
+        "flag_1",
+        "--body-json",
+        JSON.stringify({
+          evaluationContext: {
+            targetingKey: "workspace-1",
+            idType: "workspace",
+            attributes: { plan: "pro" },
+          },
+        }),
+      ],
+      { credentialPath, fetch: transport.fetch },
+    );
+
+    expect(code).toBe(EXIT_OK);
+    const call = transport.requests.find((request) => request.url.includes("/test-eval"));
+    expect(call?.body).toMatchObject({
+      evaluationContext: {
+        targetingKey: "workspace-1",
+        idType: "workspace",
+        attributes: { plan: "pro" },
+      },
+    });
   });
 });
