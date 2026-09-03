@@ -21,7 +21,7 @@ test("daily OSV findings report without masking scanner failures", () => {
   assert.match(depsJob, /id: osv/);
   assert.match(
     depsJob,
-    /set \+e\n[\s\S]*?--entrypoint osv-scanner[\s\S]*?ghcr\.io\/google\/osv-scanner-action@sha256:[a-f0-9]{64}[\s\S]*?--recursive \\\n {12}\.\/\n {10}scan_status=\$\?\n {10}set -e/,
+    /set \+e\n[\s\S]*?--entrypoint osv-scanner[\s\S]*?ghcr\.io\/google\/osv-scanner-action@sha256:48406c58197201fe55e56615ad9d414f85063da320e204d0b0ed460fb3908dba[\s\S]*?--recursive \\\n {12}\.\/\n {10}scan_status=\$\?\n {10}set -e/,
   );
   assert.match(depsJob, /--volume "\$\{GITHUB_WORKSPACE\}:\/src:ro"/);
   assert.match(depsJob, /--volume "\$\{RUNNER_TEMP\}\/osv-scanner:\/out"/);
