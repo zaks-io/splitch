@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { EvaluateContext } from "@splitch/sdk";
-import { deriveMcpTools, getRoute } from "@splitch/sdk/control-plane";
+import { deriveMcpTools, getRoute, TargetingKeyTypeSchema } from "@splitch/sdk/control-plane";
 import { excessPositionalError, requiredPositionalSpecs } from "./command-positionals.js";
 import type { CliCommandDefinition } from "./command-registry.js";
 import type { ResolvedContext } from "./context.js";
@@ -271,17 +271,20 @@ export function parseEvaluationContext(
         "Pass it with --targeting-key or as evaluationContext.targetingKey in --body-json",
     });
   }
-  const resolvedIdType = idType ?? base.idType ?? "user";
-  if (typeof resolvedIdType !== "string" || !resolvedIdType) {
+  const resolvedIdType =
+    idType !== undefined ? idType : Object.hasOwn(base, "idType") ? base.idType : "user";
+  const parsedIdType = TargetingKeyTypeSchema.safeParse(resolvedIdType);
+  if (!parsedIdType.success) {
     throw new SplitchCliError({
       code: "CLI_USAGE_INVALID",
-      causeSummary: "Evaluation Context idType must be a non-empty string",
-      remediation: "Pass the Entity identity type with --id-type",
+      causeSummary: "Evaluation Context idType is invalid",
+      remediation:
+        "Pass a lowercase Entity identity type using alphanumerics and single underscores with --id-type",
     });
   }
   return {
     targetingKey: resolvedTargetingKey,
-    idType: resolvedIdType,
+    idType: parsedIdType.data,
     attributes:
       base.attributes && typeof base.attributes === "object"
         ? (base.attributes as EvaluateContext["attributes"])
