@@ -23,12 +23,12 @@ interface DownstreamAnalysisRows {
 export async function readDownstreamAnalysisRows(
   input: DownstreamAnalysisRowsInput,
 ): Promise<DownstreamAnalysisRows> {
-  if (!input.hasAnalyzedMetrics) {
-    return { metricRows: [], prePeriodRows: [], activationRows: [] };
-  }
   const activationRows = input.activationGated
     ? input.tinybird.readPipe(ACTIVATION_PIPE, input.params)
     : Promise.resolve([]);
+  if (!input.hasAnalyzedMetrics) {
+    return { metricRows: [], prePeriodRows: [], activationRows: await activationRows };
+  }
   const [metricRows, prePeriodRows, resolvedActivationRows] = await Promise.all([
     readMetricRows(
       input.tinybird,
