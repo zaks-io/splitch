@@ -5,11 +5,11 @@ name: security
 # GitHub issue, which the GitHub<->Linear sync mirrors into the Splitch team.
 #
 # The pull_request + push triggers stay off deliberately. Every job here already
-# branches on the event, so adding them arms the merge gates (`pnpm audit`,
-# Semgrep `--error`) — and a transitive dev-dep advisory that has nothing to do
-# with the branch would then block an unrelated PR. Turn them on in the
-# dependency lockdown pass, once the tree is settled enough that a finding is
-# signal about the change in flight.
+# branches on the event, so adding them arms the `pnpm audit` merge gate. A
+# transitive dev-dependency advisory unrelated to the branch would then block
+# that PR. Semgrep findings remain non-gating; only scanner execution failures
+# fail its job. Turn the triggers on in the dependency lockdown pass, once the
+# tree is settled enough that a finding is signal about the change in flight.
 on:
   schedule:
     - cron: "23 8 * * *"
@@ -102,20 +102,32 @@ jobs:
           persist-credentials: false
 
       - name: Semgrep scan (SARIF)
+        id: semgrep
         run: |
+          set +e
           semgrep scan \
             --config p/default \
             --config .semgrep/ \
             --sarif --output semgrep.sarif \
             --error
-        continue-on-error: ${{ github.event_name == 'schedule' }}
+          scan_status=$?
+          set -e
+          echo "status=${scan_status}" >> "$GITHUB_OUTPUT"
 
       - name: Upload Semgrep SARIF
-        if: always()
+        if: always() && hashFiles('semgrep.sarif') != ''
         uses: github/codeql-action/upload-sarif@e4fba868fa4b1b91e1fdab776edc8cfbe6e9fb81 # v4.37.3
         with:
           sarif_file: semgrep.sarif
           category: semgrep
+
+      - name: Fail on Semgrep operational error
+        if: always() && steps.semgrep.outputs.status != '0' && steps.semgrep.outputs.status != '1'
+        env:
+          SEMGREP_STATUS: ${{ steps.semgrep.outputs.status }}
+        run: |
+          echo "Semgrep failed to execute (exit ${SEMGREP_STATUS:-unknown})."
+          exit 1
 
   # ---------------------------------------------------------------------------
   # Filesystem CVE scan. trivy-action pinned to the pre-compromise safe SHA

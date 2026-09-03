@@ -83,9 +83,11 @@ in this config; refresh them from Linear during each workflow run.
 - Build: `pnpm build`
 - Test: `pnpm test`
 - Lint / format / typecheck / Knip / Gitleaks: wired through root scripts,
-  Turborepo, Lefthook, and GitHub Actions. Duplicate-code, SAST, audit,
-  CodeQL, OSV, Trivy, Scorecard, and pnpm install quarantine are parked until
-  lockdown unless run manually. See `docs/spec/platform/local-quality-gates.md`.
+  Turborepo, Lefthook, and GitHub Actions. Semgrep, OSV-Scanner, Trivy, and
+  Scorecard run daily, upload SARIF, and remain non-gating; an operational scan
+  failure opens a tracking issue. Duplicate-code and dependency-audit checks are
+  manual, CodeQL is dispatch-only, and pull-request enforcement plus pnpm install
+  quarantine are parked until lockdown. See `docs/spec/platform/local-quality-gates.md`.
 - Generated artifacts: package-local `dist/**`, `.output/**`, `build/**`,
   coverage, `.turbo/`, and `.wrangler/` are ignored.
 - PR CI: `.github/workflows/ci.yml` on Blacksmith, running `pnpm verify:ci` plus

@@ -94,15 +94,17 @@ trivy-action compromises were tag-repointing attacks defeated by SHA pinning.
 
 ## Threat model (summary)
 
-| Threat                            | Boundary | Primary control                              |
-| --------------------------------- | -------- | -------------------------------------------- |
-| Cross-tenant data access          | 2        | `app_id` scoping in data-access seam         |
-| Leaked / over-scoped credentials  | 3        | API Key never read back; Client Key closed   |
-| Edge abuse (scraping, flooding)   | 1        | Origin-closed Client Keys; Turnstile; quotas |
-| Privilege escalation across doors | 4        | Access-control matrix                        |
-| Secret in source / logs           | 3        | gitleaks + Semgrep `no-secret-in-logs`       |
-| Malicious dependency / action     | supply   | SHA pins, OSV/Trivy, Harden-Runner           |
-| PII over-retention / leak         | privacy  | Privacy data-lifecycle contract              |
+| Threat                             | Boundary | Primary control                               |
+| ---------------------------------- | -------- | --------------------------------------------- |
+| Cross-tenant data access           | 2        | `app_id` scoping in data-access seam          |
+| Leaked / over-scoped credentials   | 3        | API Key never read back; Client Key closed    |
+| Edge abuse (scraping, flooding)    | 1        | Origin-closed Client Keys; Turnstile; quotas  |
+| Privilege escalation across doors  | 4        | Access-control matrix                         |
+| Secret in source / logs            | 3        | gitleaks + Semgrep `no-secret-in-logs`        |
+| Known dependency vulnerability     | supply   | Daily OSV/Trivy detection and SARIF reporting |
+| Newly malicious dependency release | supply   | No automated prevention; quarantine is parked |
+| Repointed GitHub Action tag        | supply   | Full action SHA pins; Harden-Runner           |
+| PII over-retention / leak          | privacy  | Privacy data-lifecycle contract               |
 
 ## Sources
 
