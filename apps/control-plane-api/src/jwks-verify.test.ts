@@ -1,6 +1,10 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { makeFixtureSigner } from "./fixture-signer";
-import { makeJwksVerifier } from "./jwks-verify";
+import { makeCachedJwksVerifier, makeJwksVerifier } from "./jwks-verify";
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
 
 describe("makeJwksVerifier", () => {
   it.each([
@@ -32,5 +36,33 @@ describe("makeJwksVerifier", () => {
     });
 
     await expect(verifier.verify(await signer.signPayload(null), 0)).resolves.toBeNull();
+  });
+
+  it("rejects non-base64url signatures before the production verifier fetches JWKS", async () => {
+    const signer = await makeFixtureSigner();
+    const jwksUri = `https://auth-${crypto.randomUUID()}.splitch.test/.well-known/jwks.json`;
+    const fetchJwks = vi.fn(async () => Response.json(signer.jwks));
+    vi.stubGlobal("fetch", fetchJwks);
+    const verifier = makeCachedJwksVerifier({
+      jwksUri,
+      controlPlaneAudience: "https://cp.splitch.test",
+    });
+    const token = await signer.sign({
+      iss: new URL(jwksUri).origin,
+      aud: "https://cp.splitch.test",
+      sub: "user_123",
+      exp: 1_000,
+      scopes: [],
+    });
+    const [header, payload, signature] = token.split(".") as [string, string, string];
+    const malformedTokens = [
+      `${header}.${payload}.${signature.slice(0, 4)} ${signature.slice(4)}`,
+      `${header}.${payload}.${signature}==`,
+    ];
+
+    for (const malformedToken of malformedTokens) {
+      await expect(verifier.verify(malformedToken, 0)).resolves.toBeNull();
+    }
+    expect(fetchJwks).not.toHaveBeenCalled();
   });
 });

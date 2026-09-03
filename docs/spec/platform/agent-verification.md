@@ -114,8 +114,6 @@ and the `splitch` repo-route label from [../../agents/workflow/config.md](../../
 
 - Shared-preview deploy, reset, and smoke are wired with deployed-revision evidence. Production smoke
   and rollback scripts are still not wired.
-- Real provider credentials, real Cloudflare bindings, Tinybird Cloud, code host remote, and repo-route
-  tracker wiring are not provisioned.
 
 ## Sources
 

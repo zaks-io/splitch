@@ -124,7 +124,7 @@ interface ParsedJwt {
   header: JwtHeader;
   payload: Record<string, unknown>;
   signingInput: string;
-  signature: string;
+  signature: Uint8Array;
 }
 
 /** Split + decode a compact JWS. Returns null for any malformed input. */
@@ -139,7 +139,7 @@ function parseJwt(token: string): ParsedJwt | null {
       header: decodeSegment(headerSeg) as unknown as JwtHeader,
       payload: decodeSegment(payloadSeg),
       signingInput: `${headerSeg}.${payloadSeg}`,
-      signature: sigSeg,
+      signature: base64UrlToBytes(sigSeg),
     };
   } catch {
     return null;
@@ -170,12 +170,6 @@ async function signatureValid(parsed: ParsedJwt, fetchJwks: JwksFetcher): Promis
   if (parsed.header.alg !== "RS256") {
     return false;
   }
-  let signature: Uint8Array;
-  try {
-    signature = base64UrlToBytes(parsed.signature);
-  } catch {
-    return false;
-  }
   const jwk = selectRsaKey(await fetchJwks(), parsed.header.kid);
   if (!jwk) {
     return false;
@@ -183,7 +177,7 @@ async function signatureValid(parsed: ParsedJwt, fetchJwks: JwksFetcher): Promis
   return crypto.subtle.verify(
     "RSASSA-PKCS1-v1_5",
     await importRsaKey(jwk),
-    signature as unknown as BufferSource,
+    parsed.signature as unknown as BufferSource,
     new TextEncoder().encode(parsed.signingInput) as unknown as BufferSource,
   );
 }
