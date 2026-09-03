@@ -21,11 +21,16 @@ test("daily OSV findings report without masking scanner failures", () => {
   assert.match(depsJob, /id: osv/);
   assert.match(
     depsJob,
-    /set \+e\n[\s\S]*?--entrypoint osv-scanner[\s\S]*?ghcr\.io\/google\/osv-scanner-action@sha256:[a-f0-9]{64}[\s\S]*?scan_status=\$\?\n {10}set -e/,
+    /set \+e\n[\s\S]*?--entrypoint osv-scanner[\s\S]*?ghcr\.io\/google\/osv-scanner-action@sha256:[a-f0-9]{64}[\s\S]*?--recursive \\\n {12}\.\/\n {10}scan_status=\$\?\n {10}set -e/,
   );
   assert.match(depsJob, /status=\$\{scan_status\}/);
   assert.doesNotMatch(depsJob, /continue-on-error/);
   assert.match(depsJob, /hashFiles\('osv\.sarif'\) != ''/);
+  assert.match(depsJob, /OSV_STATUS: \$\{\{ steps\.osv\.outputs\.status \}\}/);
+  assert.match(
+    depsJob,
+    /case "\$OSV_STATUS" in\n {12}""\|\*\[!0-9\]\*\)[\s\S]*?\n {14}exit 1\n {14};;\n {10}esac/,
+  );
   assert.match(
     depsJob,
     /if \[ "\$OSV_STATUS" -ne 0 \] && \[ "\$OSV_STATUS" -ne 1 \]; then\n[\s\S]*?\n {12}exit 1\n {10}fi/,
