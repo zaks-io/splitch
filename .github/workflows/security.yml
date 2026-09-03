@@ -47,20 +47,46 @@ jobs:
           persist-credentials: false
 
       - name: OSV scan (SARIF)
-        uses: google/osv-scanner-action/osv-scanner-action@9a498708959aeaef5ef730655706c5a1df1edbc2 # v2.3.8
-        continue-on-error: true
-        with:
-          scan-args: |-
-            --output=osv.sarif
-            --format=sarif
-            --recursive
+        id: osv
+        run: |
+          set +e
+          docker run --rm \
+            --entrypoint osv-scanner \
+            --volume "${GITHUB_WORKSPACE}:/src" \
+            --workdir /src \
+            ghcr.io/google/osv-scanner-action@sha256:48406c58197201fe55e56615ad9d414f85063da320e204d0b0ed460fb3908dba \
+            --output-file=/src/osv.sarif \
+            --format=sarif \
+            --recursive \
             ./
+          scan_status=$?
+          set -e
+          echo "status=${scan_status}" >> "$GITHUB_OUTPUT"
 
       - name: Upload OSV SARIF
+        if: always() && hashFiles('osv.sarif') != ''
         uses: github/codeql-action/upload-sarif@e4fba868fa4b1b91e1fdab776edc8cfbe6e9fb81 # v4.37.3
         with:
           sarif_file: osv.sarif
           category: osv-scanner
+
+      # Exit 0 and 1 are normal scan results. Every other status is an execution
+      # failure, which must reach the scheduled alert job.
+      - name: Fail on OSV operational error
+        if: always()
+        env:
+          OSV_STATUS: ${{ steps.osv.outputs.status }}
+        run: |
+          case "$OSV_STATUS" in
+            ""|*[!0-9]*)
+              echo "OSV-Scanner did not report a valid exit status."
+              exit 1
+              ;;
+          esac
+          if [ "$OSV_STATUS" -ne 0 ] && [ "$OSV_STATUS" -ne 1 ]; then
+            echo "OSV-Scanner failed to execute (exit ${OSV_STATUS})."
+            exit 1
+          fi
 
       - name: Setup pnpm
         run: |

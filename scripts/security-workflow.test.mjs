@@ -13,7 +13,24 @@ function jobSection(name) {
 }
 
 const semgrepJob = jobSection("sast");
+const depsJob = jobSection("deps");
 const alertJob = jobSection("alert");
+
+test("daily OSV findings report without masking scanner failures", () => {
+  assert.ok(depsJob);
+  assert.match(depsJob, /id: osv/);
+  assert.match(
+    depsJob,
+    /set \+e\n[\s\S]*?--entrypoint osv-scanner[\s\S]*?ghcr\.io\/google\/osv-scanner-action@sha256:[a-f0-9]{64}[\s\S]*?scan_status=\$\?\n {10}set -e/,
+  );
+  assert.match(depsJob, /status=\$\{scan_status\}/);
+  assert.doesNotMatch(depsJob, /continue-on-error/);
+  assert.match(depsJob, /hashFiles\('osv\.sarif'\) != ''/);
+  assert.match(
+    depsJob,
+    /if \[ "\$OSV_STATUS" -ne 0 \] && \[ "\$OSV_STATUS" -ne 1 \]; then\n[\s\S]*?\n {12}exit 1\n {10}fi/,
+  );
+});
 
 test("daily Semgrep findings report without masking scanner failures", () => {
   assert.ok(semgrepJob);
@@ -38,5 +55,6 @@ test("daily Semgrep findings report without masking scanner failures", () => {
 test("scheduled scanner execution failures reach the alert job", () => {
   assert.ok(alertJob);
   assert.match(alertJob, /needs: \[deps, sast, trivy, scorecard\]/);
+  assert.match(alertJob, /needs\.deps\.result == 'failure'/);
   assert.match(alertJob, /needs\.sast\.result == 'failure'/);
 });
