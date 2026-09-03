@@ -172,6 +172,13 @@ caller can prove which immutable Event Definition Version accepted the event. A 
 response omits both IDs. The public SDK `track()` projection never returns them. The response
 never returns the raw Targeting Key or its hash.
 
+`activate()` returns `409 ACTIVATION_NOT_AVAILABLE` without `Retry-After` when the Metric Event
+cannot activate a matching Experiment Run. Under a Client Key, unpublished Activation configuration,
+no binding for the Event Definition, an incompatible Entity type, and no Exposure-backed Assignment
+all use the same message and empty details so the response cannot identify an Entity's enrollment.
+An API Key receives the same code with a message naming the permanent failed condition. Infrastructure
+and integrity failures remain `503 SERVICE_UNAVAILABLE` with `Retry-After`.
+
 ## Accepted row
 
 The canonical accepted row is defined in

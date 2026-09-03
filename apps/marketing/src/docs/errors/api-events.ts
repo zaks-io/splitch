@@ -1,6 +1,13 @@
 import type { ErrorDoc } from "./types";
 
 export const eventErrorDocs = {
+  ACTIVATION_NOT_AVAILABLE: {
+    remediation:
+      "Do not retry unchanged; review the Activation setup and retry after its configuration or assignment state changes",
+    cause: "The Metric Event cannot activate a matching Experiment Run in its current state.",
+    fix: "Review the Activation and Experiment Run setup. Send a new request after the configuration or assignment state changes.",
+    related: ["EVENT_DEFINITION_UNPUBLISHED", "ENTITY_TYPE_MISMATCH", "SERVICE_UNAVAILABLE"],
+  },
   EVENT_SCHEMA_MISMATCH: {
     remediation: "Send the fields and Dimensions the published Event Definition Version declares",
     cause:

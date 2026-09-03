@@ -66,6 +66,7 @@ export const dataPlaneRoutes = [
       "EVENT_SCHEMA_MISMATCH",
       "ENTITY_TYPE_MISMATCH",
       "EVENT_ID_CONFLICT",
+      "ACTIVATION_NOT_AVAILABLE",
       "RATE_LIMITED",
       "SERVICE_UNAVAILABLE",
     ],

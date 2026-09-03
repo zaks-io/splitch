@@ -148,7 +148,8 @@ describe("Activation resolution failures", () => {
 
     const response = await sendActivation(fixture, metricEventBody());
 
-    expect(response.status).toBe(503);
+    expect(response.status).toBe(409);
+    expect(response.headers.get("retry-after")).toBeNull();
     expect(await errorMessage(response)).toBe(
       "No Experiment Run uses this Event Definition for Activation",
     );
@@ -170,7 +171,8 @@ describe("Activation resolution failures", () => {
 
     const response = await sendActivation(fixture, metricEventBody());
 
-    expect(response.status).toBe(503);
+    expect(response.status).toBe(409);
+    expect(response.headers.get("retry-after")).toBeNull();
     expect(await errorMessage(response)).toBe(
       "Activation Entity type does not match any Experiment Run using this Event Definition",
     );
@@ -190,7 +192,8 @@ describe("Activation resolution failures", () => {
 
     const response = await sendActivation(fixture, metricEventBody());
 
-    expect(response.status).toBe(503);
+    expect(response.status).toBe(409);
+    expect(response.headers.get("retry-after")).toBeNull();
     expect(await errorMessage(response)).toBe(
       "No Experiment Run using this Event Definition has an Exposure for this Entity",
     );
@@ -214,10 +217,39 @@ describe("Activation resolution failures", () => {
       sendActivation(unpublished, metricEventBody()),
     ]);
 
-    expect(responses.map((response) => response.status)).toEqual([503, 503]);
-    expect(await Promise.all(responses.map(errorMessage))).toEqual([
-      "Activation configuration is unavailable",
-      "Activation configuration is unavailable",
+    expect(responses.map((response) => response.status)).toEqual([409, 409]);
+    expect(responses.map((response) => response.headers.get("retry-after"))).toEqual([null, null]);
+    expect(await Promise.all(responses.map((response) => response.json()))).toEqual([
+      {
+        code: "ACTIVATION_NOT_AVAILABLE",
+        message: "Activation is not available for this Metric Event",
+        details: {},
+      },
+      {
+        code: "ACTIVATION_NOT_AVAILABLE",
+        message: "Activation is not available for this Metric Event",
+        details: {},
+      },
     ]);
+  });
+
+  it("keeps infrastructure failures retryable", async () => {
+    const fixture = await trustedFixture();
+    fixture.env.ASSIGNMENTS_KV = undefined;
+    fixture.config.set(
+      activationConfigKey(METRIC_APP_ID, METRIC_ENVIRONMENT_ID),
+      activationConfig(),
+    );
+
+    const response = await sendActivation(fixture, metricEventBody());
+    const body = await response.json();
+
+    expect(response.status).toBe(503);
+    expect(response.headers.get("retry-after")).toBe("1");
+    expect(body).toEqual({
+      code: "SERVICE_UNAVAILABLE",
+      message: "Assignment store is unavailable",
+      details: { retryAfterMs: 1000 },
+    });
   });
 });
