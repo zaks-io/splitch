@@ -56,7 +56,7 @@ export function flagConfigApprovalFlow(deps: ApprovalFlowDeps, input: FlagConfig
 
   return {
     async replay(): Promise<Response | null> {
-      const replay = await replayApprovalIfExists(deps, input, { ignoreMismatch: true });
+      const replay = await replayApprovalIfExists(deps, input);
       if (replay === null) return null;
       if (!replay.ok) return replay.response;
       return appliedResponse(writer, readInput, input, replay.approvalRequest);

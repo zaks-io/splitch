@@ -23,9 +23,15 @@ test("daily OSV findings report without masking scanner failures", () => {
     depsJob,
     /set \+e\n[\s\S]*?--entrypoint osv-scanner[\s\S]*?ghcr\.io\/google\/osv-scanner-action@sha256:[a-f0-9]{64}[\s\S]*?--recursive \\\n {12}\.\/\n {10}scan_status=\$\?\n {10}set -e/,
   );
+  assert.match(depsJob, /--volume "\$\{GITHUB_WORKSPACE\}:\/src:ro"/);
+  assert.match(depsJob, /--volume "\$\{RUNNER_TEMP\}\/osv-scanner:\/out"/);
+  assert.match(depsJob, /--output-file=\/out\/osv\.sarif/);
   assert.match(depsJob, /status=\$\{scan_status\}/);
   assert.doesNotMatch(depsJob, /continue-on-error/);
-  assert.match(depsJob, /hashFiles\('osv\.sarif'\) != ''/);
+  assert.match(depsJob, /echo "sarif=true" >> "\$GITHUB_OUTPUT"/);
+  assert.match(depsJob, /echo "sarif=false" >> "\$GITHUB_OUTPUT"/);
+  assert.match(depsJob, /steps\.osv\.outputs\.sarif == 'true'/);
+  assert.match(depsJob, /sarif_file: \$\{\{ runner\.temp \}\}\/osv-scanner\/osv\.sarif/);
   assert.match(depsJob, /OSV_STATUS: \$\{\{ steps\.osv\.outputs\.status \}\}/);
   assert.match(
     depsJob,

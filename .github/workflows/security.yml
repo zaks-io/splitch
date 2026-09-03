@@ -49,25 +49,32 @@ jobs:
       - name: OSV scan (SARIF)
         id: osv
         run: |
+          mkdir -p "${RUNNER_TEMP}/osv-scanner"
           set +e
           docker run --rm \
             --entrypoint osv-scanner \
-            --volume "${GITHUB_WORKSPACE}:/src" \
+            --volume "${GITHUB_WORKSPACE}:/src:ro" \
+            --volume "${RUNNER_TEMP}/osv-scanner:/out" \
             --workdir /src \
             ghcr.io/google/osv-scanner-action@sha256:48406c58197201fe55e56615ad9d414f85063da320e204d0b0ed460fb3908dba \
-            --output-file=/src/osv.sarif \
+            --output-file=/out/osv.sarif \
             --format=sarif \
             --recursive \
             ./
           scan_status=$?
           set -e
           echo "status=${scan_status}" >> "$GITHUB_OUTPUT"
+          if [ -f "${RUNNER_TEMP}/osv-scanner/osv.sarif" ]; then
+            echo "sarif=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "sarif=false" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Upload OSV SARIF
-        if: always() && hashFiles('osv.sarif') != ''
+        if: always() && steps.osv.outputs.sarif == 'true'
         uses: github/codeql-action/upload-sarif@e4fba868fa4b1b91e1fdab776edc8cfbe6e9fb81 # v4.37.3
         with:
-          sarif_file: osv.sarif
+          sarif_file: ${{ runner.temp }}/osv-scanner/osv.sarif
           category: osv-scanner
 
       # Exit 0 and 1 are normal scan results. Every other status is an execution

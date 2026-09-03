@@ -119,7 +119,7 @@ describe("flag configuration and promotion routes", () => {
     });
     expect(enable.status).toBe(200);
 
-    const disable = await patchFlagConfig(h, { enabled: false });
+    const disable = await patchFlagConfig(h, { enabled: false }, "idem_kill_switch_disable");
 
     expect(disable.status).toBe(200);
     expect(await disable.json()).toMatchObject({
