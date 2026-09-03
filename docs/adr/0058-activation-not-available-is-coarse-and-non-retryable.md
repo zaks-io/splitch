@@ -39,8 +39,9 @@ and identifiers on both disclosure tiers.
 
 - Callers stop retrying the same request on `ACTIVATION_NOT_AVAILABLE`. They may submit a later
   request after the configuration or Entity state changes.
-- A public caller can learn only that the request is not currently activatable, which success versus
-  failure already reveals. It cannot identify which configuration or enrollment predicate failed.
+- A public caller can learn only that the request is not currently activatable. The success or
+  failure response already reveals that fact. It cannot identify which configuration or enrollment
+  predicate failed.
 - The new code is limited to `sdk_activate`; ordinary `track()` and Exposure redemption retry
   semantics do not change.
 
