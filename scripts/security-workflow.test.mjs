@@ -18,14 +18,20 @@ const alertJob = jobSection("alert");
 test("daily Semgrep findings report without masking scanner failures", () => {
   assert.ok(semgrepJob);
   assert.match(semgrepJob, /id: semgrep/);
-  assert.match(semgrepJob, /--sarif --output semgrep\.sarif \\\n {12}--error/);
-  assert.match(semgrepJob, /scan_status=\$\?/);
+  assert.match(
+    semgrepJob,
+    /set \+e\n[\s\S]*?--sarif --output semgrep\.sarif \\\n {12}--error\n {10}scan_status=\$\?\n {10}set -e/,
+  );
   assert.match(semgrepJob, /status=\$\{scan_status\}/);
   assert.doesNotMatch(semgrepJob, /continue-on-error/);
   assert.match(semgrepJob, /hashFiles\('semgrep\.sarif'\) != ''/);
   assert.match(
     semgrepJob,
     /steps\.semgrep\.outputs\.status != '0' && steps\.semgrep\.outputs\.status != '1'/,
+  );
+  assert.match(
+    semgrepJob,
+    /- name: Fail on Semgrep operational error[\s\S]*?\n {10}exit 1(?:\n|$)/,
   );
 });
 
