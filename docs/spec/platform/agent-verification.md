@@ -22,6 +22,8 @@ Each `kind-slice` body should end with a `Done` section containing:
 4. **Negative proof** — at least one failure case for auth, validation, idempotency, no-write, or
    isolation when the slice touches those contracts.
 5. **Not proven** — any hosted, production, scale, or provider behavior the local proof cannot cover.
+6. **Hosted handoff** — for PR work, the `ci` workflow's `Verify` check passes on the current PR head;
+   its verification plan uses `PR_HEAD_SHA` and runs `verify:ci`.
 
 If a slice cannot meet this shape, it is not ready for agent implementation.
 

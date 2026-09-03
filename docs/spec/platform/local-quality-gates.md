@@ -105,8 +105,8 @@ an explicit command described in [agent-verification.md](./agent-verification.md
 `pre-push` mirrors CI without smoke tests:
 
 - **Build-fast phase:** `verify:push` runs the lean static set (format check, lint, typecheck, Knip,
-  Gitleaks) plus the real local D1 migration gate (`d1:migrate:local`, SPL-9). The fuller sequence
-  below is the target once the app exists.
+  Gitleaks) plus `tinybird:local`, `d1:migrate:local` (SPL-9), and `d1:migrate:populated`. The fuller
+  sequence below is the target once the app exists.
 - **Target sequence** (restored at lockdown / as apps and migrations land): format check, lint,
   typecheck, tests, build, local API Worker smoke, dependency-cruiser, jscpd, Knip, Gitleaks, local D1
   migrations, and Tinybird Local validation.
