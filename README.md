@@ -242,8 +242,10 @@ Please do not open a public issue for a security report.
 Enforced on every pull request and push to `main`: gitleaks secret scanning, the full
 contract and correctness gate, Harden-Runner egress auditing, and every GitHub Action
 pinned to a commit SHA. Semgrep, OSV-Scanner, Trivy, and Scorecard run daily and report
-into the Security tab; an operational scanner failure opens a tracking issue instead of blocking a merge;
-making them gate a pull request waits on a one-time audit of the final dependency set.
+into the Security tab. Scheduled operational scanner failures fail their jobs and open a tracking
+issue. Manually dispatched runs fail their jobs on operational errors but skip alerting and create no
+issue. The security workflow has no pull-request or push trigger, so it does not gate merges. Making
+it gate pull requests waits on a one-time audit of the final dependency set.
 `SECURITY.md` lists exactly what runs and what does not.
 
 ## Contributing

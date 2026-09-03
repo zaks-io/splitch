@@ -183,3 +183,27 @@ describe("flag configuration and promotion routes", () => {
     expect(h.nudges).toHaveLength(nudgeCount);
   });
 });
+
+describe("config store route harness", () => {
+  it("keeps the explicit helper idempotency key in the request body", async () => {
+    await setProdPolicy(h, confirmPolicy);
+    const idempotencyKey = "idem_explicit_config_update";
+
+    const first = await patchFlagConfig(
+      h,
+      { availableVariantNames: ["control"], idempotency_key: "ignored_first" },
+      idempotencyKey,
+    );
+    const replay = await patchFlagConfig(
+      h,
+      { availableVariantNames: ["control"], idempotency_key: "ignored_second" },
+      idempotencyKey,
+    );
+
+    expect(first.status).toBe(409);
+    expect(replay.status).toBe(409);
+    const firstBody = (await first.json()) as { details: { approvalRequestId: string } };
+    const replayBody = (await replay.json()) as { details: { approvalRequestId: string } };
+    expect(replayBody.details.approvalRequestId).toBe(firstBody.details.approvalRequestId);
+  });
+});

@@ -199,7 +199,7 @@ export async function authedPatch(
   idempotencyKey = TEST_IDEMPOTENCY_KEY,
 ) {
   const jwt = await token(signer);
-  const requestBody = { idempotency_key: idempotencyKey, ...body };
+  const requestBody = approvalMutationBody(body, idempotencyKey);
   return app.request(`/apps/${ids.appId}/envs/${ids.environmentId}/flags/${ids.flagId}/config`, {
     method: "PATCH",
     headers: {
@@ -211,8 +211,11 @@ export async function authedPatch(
   });
 }
 
-function approvalMutationBody(body: Record<string, unknown>): Record<string, unknown> {
-  return { idempotency_key: TEST_IDEMPOTENCY_KEY, ...body };
+function approvalMutationBody(
+  body: Record<string, unknown>,
+  idempotencyKey = TEST_IDEMPOTENCY_KEY,
+): Record<string, unknown> {
+  return { ...body, idempotency_key: idempotencyKey };
 }
 
 export function token(signer: FixtureSigner, scopes = [appAdminScope(ids.appId)]): Promise<string> {
