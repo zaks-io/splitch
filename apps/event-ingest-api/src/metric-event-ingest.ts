@@ -3,7 +3,6 @@ import {
   eventDefinitionConfigKey,
   kvEnvelope,
   type MetricEventTrackRequest,
-  MetricEventTrackRequestSchema,
 } from "@splitch/contracts";
 import type { MetricEventCredentialScope } from "./client-key-auth";
 import { renderError, serviceUnavailable } from "./errors";
@@ -16,22 +15,18 @@ import {
   type IngestPhaseTiming,
   ingestTimingOutcomeFor,
 } from "./ingest-phase-timing";
-import { activationRows } from "./metric-event-activation";
+import { ActivationResolutionError, activationRows } from "./metric-event-activation";
 import {
   admitAndClaimMetricEvent,
   replayExistingMetricEvent,
   schemaMismatch,
 } from "./metric-event-admission";
+import { parseMetricEventRequest } from "./metric-event-body";
 import { resolveMetricEventIdentityMaterial } from "./metric-event-identity";
 import { checkMetricEventRateLimit } from "./metric-event-rate-limit";
 import type { Env } from "./types";
 
-const MAX_BODY_BYTES = 32_768;
 const hotConfigEnvelope = kvEnvelope(EventDefinitionHotConfigSchema);
-
-type MetricEventParseResult =
-  | { readonly ok: true; readonly value: MetricEventTrackRequest; readonly serializedBytes: number }
-  | { readonly ok: false; readonly response: Response; readonly serializedBytes: number | null };
 
 export async function handleAuthorizedMetricEvent(
   request: Request,
@@ -95,10 +90,10 @@ export async function handleAuthorizedMetricEvent(
           hot.eventDefinition.id,
         ),
       );
-    } catch {
+    } catch (cause) {
       return timedMetricResponse(
         timing,
-        renderError(serviceUnavailable("Activation configuration is unavailable")),
+        activationFailure(cause, parsed, hot.eventDefinition.id, disclosure),
         serializedBytes,
       );
     }
@@ -123,6 +118,40 @@ export async function handleAuthorizedMetricEvent(
   return timedMetricResponse(timing, response, serializedBytes);
 }
 
+/**
+ * Eight distinct resolution failures used to collapse into one opaque 503 with no
+ * log line, which made a broken Activation indistinguishable from an unpublished
+ * config blob. The step that failed is named only for an API Key: to a public
+ * Client Key these messages would answer "is this Entity enrolled?" and "which
+ * Event Definitions gate an Activation?" one request at a time. Operators get the
+ * full cause plus ids from the log, which is where the ids only ever go.
+ */
+function activationFailure(
+  cause: unknown,
+  event: MetricEventTrackRequest,
+  eventDefinitionId: string,
+  disclosure: "trusted" | "public",
+): Response {
+  const resolution = cause instanceof ActivationResolutionError ? cause : null;
+  console.error(
+    "event-ingest-api activation resolution failed",
+    JSON.stringify({
+      eventName: event.eventName,
+      eventId: event.eventId,
+      idType: event.idType,
+      eventDefinitionId,
+      message: cause instanceof Error ? cause.message : String(cause),
+      detail: resolution?.detail ?? null,
+      stack: cause instanceof Error ? cause.stack : null,
+    }),
+  );
+  const message =
+    disclosure === "trusted" && resolution
+      ? resolution.message
+      : "Activation configuration is unavailable";
+  return renderError(serviceUnavailable(message));
+}
+
 function timedMetricResponse(
   timing: IngestPhaseTiming,
   response: Response,
@@ -130,105 +159,6 @@ function timedMetricResponse(
 ): Response {
   timing.emit(ingestTimingOutcomeFor(response), { serializedBytes });
   return response;
-}
-
-async function parseMetricEventRequest(request: Request): Promise<MetricEventParseResult> {
-  const body = await readMetricEventBody(request);
-  if (body === null) {
-    return {
-      ok: false,
-      response: renderError(validation("Metric Event body exceeds 32768 bytes", [])),
-      serializedBytes: null,
-    };
-  }
-  let candidate: unknown;
-  try {
-    candidate = JSON.parse(body.text);
-  } catch {
-    return {
-      ok: false,
-      response: renderError(validation("Metric Event body must be JSON", [])),
-      serializedBytes: body.serializedBytes,
-    };
-  }
-  const parsed = MetricEventTrackRequestSchema.safeParse(candidate);
-  if (!parsed.success) {
-    return {
-      ok: false,
-      response: renderError({
-        code: "VALIDATION_ERROR",
-        message: "Metric Event request is invalid",
-        details: {
-          issues: parsed.error.issues.map((issue) => ({
-            path: issue.path.map(String),
-            message: issue.message,
-          })),
-        },
-      }),
-      serializedBytes: body.serializedBytes,
-    };
-  }
-  return { ok: true, value: parsed.data, serializedBytes: body.serializedBytes };
-}
-
-async function enforceCredentialRateLimit(
-  env: Env,
-  credential: MetricEventCredentialScope,
-): Promise<Response | null> {
-  try {
-    const rate = await checkMetricEventRateLimit(
-      env.METRIC_EVENT_RATE_LIMIT,
-      credential.credentialHash,
-      credential.rateLimitRps,
-    );
-    if (rate.limited) {
-      return renderError({
-        code: "RATE_LIMITED",
-        message: "Client Key rate limit exceeded",
-        details: { retryAfterMs: rate.retryAfterMs },
-      });
-    }
-    return null;
-  } catch {
-    return renderError(serviceUnavailable("Metric Event rate limiter is unavailable"));
-  }
-}
-
-async function readMetricEventBody(
-  request: Request,
-): Promise<{ readonly text: string; readonly serializedBytes: number } | null> {
-  if (bodyTooLargeFromHeader(request.headers.get("content-length"))) return null;
-  if (request.body === null) return { text: "", serializedBytes: 0 };
-
-  const reader = request.body.getReader();
-  const chunks: Uint8Array[] = [];
-  let byteLength = 0;
-  try {
-    while (true) {
-      const next = await reader.read();
-      if (next.done) break;
-      if (next.value.byteLength > MAX_BODY_BYTES - byteLength) {
-        await reader.cancel().catch(() => undefined);
-        return null;
-      }
-      chunks.push(next.value);
-      byteLength += next.value.byteLength;
-    }
-  } finally {
-    reader.releaseLock();
-  }
-
-  const bytes = new Uint8Array(byteLength);
-  let offset = 0;
-  for (const chunk of chunks) {
-    bytes.set(chunk, offset);
-    offset += chunk.byteLength;
-  }
-  return { text: new TextDecoder().decode(bytes), serializedBytes: byteLength };
-}
-
-function bodyTooLargeFromHeader(contentLength: string | null): boolean {
-  return /^\d+$/u.test(contentLength ?? "") && Number(contentLength) > MAX_BODY_BYTES;
 }
 
 async function loadDefinition(
@@ -295,6 +225,25 @@ async function loadDefinition(
   }
 }
 
-function validation(message: string, path: string[]) {
-  return { code: "VALIDATION_ERROR" as const, message, details: { issues: [{ path, message }] } };
+async function enforceCredentialRateLimit(
+  env: Env,
+  credential: MetricEventCredentialScope,
+): Promise<Response | null> {
+  try {
+    const rate = await checkMetricEventRateLimit(
+      env.METRIC_EVENT_RATE_LIMIT,
+      credential.credentialHash,
+      credential.rateLimitRps,
+    );
+    if (rate.limited) {
+      return renderError({
+        code: "RATE_LIMITED",
+        message: "Client Key rate limit exceeded",
+        details: { retryAfterMs: rate.retryAfterMs },
+      });
+    }
+    return null;
+  } catch {
+    return renderError(serviceUnavailable("Metric Event rate limiter is unavailable"));
+  }
 }

@@ -14,6 +14,22 @@ import type { Env } from "./types";
 const ActivationConfigEnvelope = kvEnvelope(ActivationConfigKVSchema);
 const AssignmentEnvelope = kvEnvelope(AssignmentStoreValueSchema);
 
+/**
+ * A named resolution failure, so the ingest handler can report WHICH step failed
+ * instead of collapsing every cause into one opaque "configuration is
+ * unavailable". `detail` is operator-only: it names ids the public Client Key
+ * response must not carry, and goes to the log, never to the body.
+ */
+export class ActivationResolutionError extends Error {
+  readonly detail: Record<string, unknown>;
+
+  constructor(message: string, detail: Record<string, unknown> = {}) {
+    super(message);
+    this.name = "ActivationResolutionError";
+    this.detail = detail;
+  }
+}
+
 export async function activationRows(
   env: Env,
   credential: MetricEventCredentialScope,
@@ -25,35 +41,66 @@ export async function activationRows(
   },
   eventDefinitionId: string,
 ): Promise<Record<string, unknown>[]> {
-  if (!env.CONFIG_STORE) throw new Error("CONFIG_STORE binding is unavailable");
+  if (!env.CONFIG_STORE) {
+    throw new ActivationResolutionError("Activation configuration store is unavailable");
+  }
   const raw = await env.CONFIG_STORE.get(
     activationConfigKey(credential.appId, credential.environmentId),
     "text",
   );
-  if (raw === null) throw new Error("Activation configuration is unavailable");
+  if (raw === null) {
+    throw new ActivationResolutionError(
+      "Activation configuration has not been published for this Environment",
+      { appId: credential.appId, environmentId: credential.environmentId },
+    );
+  }
   const config = ActivationConfigEnvelope.parse(JSON.parse(raw)).data;
-  const bindings = config.bindings.filter(
+  const forDefinition = config.bindings.filter(
     (binding) => binding.eventDefinitionId === eventDefinitionId,
   );
+  if (forDefinition.length === 0) {
+    throw new ActivationResolutionError(
+      "No Experiment Run uses this Event Definition for Activation",
+      {
+        eventDefinitionId,
+        boundEventDefinitionIds: distinct(config.bindings, "eventDefinitionId"),
+      },
+    );
+  }
+  const bindings = forDefinition.filter((binding) => binding.idType === event.idType);
   if (bindings.length === 0) {
-    throw new Error("No live Experiment Run uses this Event Definition for Activation");
+    throw new ActivationResolutionError(
+      "Activation Entity type does not match any Experiment Run using this Event Definition",
+      { receivedIdType: event.idType, expectedIdTypes: distinct(forDefinition, "idType") },
+    );
   }
-  for (const binding of bindings) {
-    if (binding.idType !== event.idType) {
-      throw new Error("Activation binding Entity type does not match its Event Definition");
-    }
-  }
+
   const assignments = await loadAssignments(env, credential.appId, event.idType, identity);
-  const exposedBindings = bindings.flatMap((binding) => {
-    const located = assignments[binding.experimentId];
-    return located?.assignment.runId === binding.runId ? [{ binding, ...located }] : [];
+  /**
+   * Attribution is by the Run the Entity was first exposed under, not by the
+   * live Run (ADR-0006). A holdover keeps its prior Variant and its rows stay
+   * attached to its own Run, so the binding that measures it is the one
+   * published for THAT Run — and analysis discards any activation row whose
+   * `run_id` is foreign to the Run being analyzed, so stamping the live Run
+   * would produce a row nothing can ever join.
+   */
+  const bindingByRun = new Map(bindings.map((binding) => [binding.runId, binding]));
+  const exposedBindings = Object.entries(assignments).flatMap(([experimentId, located]) => {
+    const binding = bindingByRun.get(located.assignment.runId);
+    return binding?.experimentId === experimentId ? [{ binding, ...located }] : [];
   });
   if (exposedBindings.length === 0) {
-    throw new Error("Exposure proof is unavailable for matching live Experiment Runs");
+    throw new ActivationResolutionError(
+      "No Experiment Run using this Event Definition has an Exposure for this Entity",
+      {
+        assignedRunIds: Object.values(assignments).map((located) => located.assignment.runId),
+        boundRunIds: bindings.map((binding) => binding.runId),
+      },
+    );
   }
   const sourceId =
     env.SPLITCH_SOURCE_ID ?? (env.SPLITCH_PLATFORM_TARGET === "local" ? "local" : null);
-  if (!sourceId) throw new Error("Activation source identity is unavailable");
+  if (!sourceId) throw new ActivationResolutionError("Activation source identity is unavailable");
   const serverReceivedAt = new Date().toISOString();
   return Promise.all(
     exposedBindings.map(({ assignment, binding, targetingKeyHash }) =>
@@ -70,6 +117,10 @@ export async function activationRows(
   );
 }
 
+function distinct(bindings: readonly ActivationBindingKV[], field: keyof ActivationBindingKV) {
+  return [...new Set(bindings.map((binding) => binding[field]))];
+}
+
 async function loadAssignments(
   env: Env,
   appId: string,
@@ -77,7 +128,9 @@ async function loadAssignments(
   identity: { targetingKeyHashes: readonly string[] },
 ): Promise<Record<string, LocatedAssignment>> {
   const assignmentsKv = env.ASSIGNMENTS_KV;
-  if (!assignmentsKv) throw new Error("ASSIGNMENTS_KV binding is unavailable");
+  if (!assignmentsKv) {
+    throw new ActivationResolutionError("Assignment store is unavailable");
+  }
   const values = await Promise.all(
     identity.targetingKeyHashes.map(async (targetingKeyHash) => {
       const raw = await assignmentsKv.get(assignmentKey(appId, idType, targetingKeyHash), "text");
@@ -96,7 +149,10 @@ async function loadAssignments(
         (existing.assignment.runId !== assignment.runId ||
           existing.assignment.variant !== assignment.variant)
       ) {
-        throw new Error("Conflicting Assignment values across retained Entity identities");
+        throw new ActivationResolutionError(
+          "Conflicting Assignment values across retained Entity identities",
+          { experimentId },
+        );
       }
       merged[experimentId] = { assignment, targetingKeyHash: value.targetingKeyHash };
     }
@@ -136,6 +192,8 @@ async function activationRow(
     exposure_at: serverReceivedAt,
     server_received_at: serverReceivedAt,
     activation_ts: serverReceivedAt,
+    // Exposure-only signal: it reports whether the SDK replayed a stored Variant
+    // instead of calling assign(). Activation rows are always 0.
     is_holdover: 0,
     sdk_version: null,
   };

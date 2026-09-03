@@ -1,4 +1,4 @@
-import { activationConfigKey, CURRENT_KV_SCHEMA_VERSION } from "@splitch/contracts";
+import { activationConfigKey } from "@splitch/contracts";
 import { describe, expect, it } from "vitest";
 import { entityMetricPrivacyFixtureFetch } from "./entity-metric-privacy.test-fixture";
 import { ingestAdmissionScopeName } from "./ingest-admission-config";
@@ -10,6 +10,7 @@ import {
   sendActivation,
   sendMetricEvent,
 } from "./metric-event.test-fixture";
+import { activationConfig } from "./metric-event-activation.test-fixture";
 import { seedMetricEventAssignment } from "./metric-event-assignment.test-fixture";
 
 describe("Activation ingest", () => {
@@ -43,6 +44,7 @@ describe("Activation ingest", () => {
           id_type: "user",
           type: "activation",
           variant: "treatment",
+          is_holdover: 0,
         },
       ],
     });
@@ -101,25 +103,20 @@ describe("Activation ingest", () => {
     const fixture = await makeMetricEventFixture();
     fixture.config.set(
       activationConfigKey(METRIC_APP_ID, METRIC_ENVIRONMENT_ID),
-      JSON.stringify({
-        schemaVersion: CURRENT_KV_SCHEMA_VERSION,
-        data: {
-          bindings: [
-            {
-              eventDefinitionId: "ed_signed_up",
-              experimentId: "exp_signup",
-              runId: "run_signup",
-              idType: "user",
-            },
-            {
-              eventDefinitionId: "ed_signed_up",
-              experimentId: "exp_unexposed",
-              runId: "run_unexposed",
-              idType: "user",
-            },
-          ],
+      activationConfig([
+        {
+          eventDefinitionId: "ed_signed_up",
+          experimentId: "exp_signup",
+          runId: "run_signup",
+          idType: "user",
         },
-      }),
+        {
+          eventDefinitionId: "ed_signed_up",
+          experimentId: "exp_unexposed",
+          runId: "run_unexposed",
+          idType: "user",
+        },
+      ]),
     );
     await seedMetricEventAssignment(fixture, {
       experimentId: "exp_signup",
@@ -199,19 +196,3 @@ describe("Activation identity", () => {
     ]);
   });
 });
-
-function activationConfig(): string {
-  return JSON.stringify({
-    schemaVersion: CURRENT_KV_SCHEMA_VERSION,
-    data: {
-      bindings: [
-        {
-          eventDefinitionId: "ed_signed_up",
-          experimentId: "exp_signup",
-          runId: "run_signup",
-          idType: "user",
-        },
-      ],
-    },
-  });
-}

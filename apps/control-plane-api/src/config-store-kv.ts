@@ -125,7 +125,7 @@ export async function deleteFlagConfigSnapshot(
     await kv.delete(experimentConfigKey(scope.appId, scope.environmentId, experimentId));
     await kv.delete(liveRunKey(scope.appId, scope.environmentId, experimentId));
   }
-  await updateActivationConfig(kv, scope, experimentIds, null);
+  await updateActivationConfig(kv, scope, experimentIds, []);
 }
 
 export async function writeSnapshot(
@@ -170,25 +170,43 @@ export async function writeSnapshot(
   } else if (snapshot.experiment) {
     await kv.delete(liveRunKey(scope.appId, scope.environmentId, snapshot.experiment.id));
   }
-  const experimentId = snapshot.experiment?.id ?? snapshot.activationBinding?.experimentId;
+  const experimentId = snapshot.experiment?.id;
   if (experimentId) {
-    await updateActivationConfig(kv, scope, [experimentId], snapshot.activationBinding);
+    await updateActivationConfig(kv, scope, [experimentId], snapshot.activationBindings);
   }
 }
+
+/**
+ * Ingest reads and parses this whole blob on every Activation, and it holds one
+ * binding per Run that ever froze an activation Metric, with nothing that prunes
+ * a Run (ADR-0006 keeps ended Runs published for their holdovers). Growth is
+ * linear in Runs per Environment, so this is the signal that says when keying the
+ * blob by Event Definition stops being premature. ~140 bytes a binding.
+ */
+const ACTIVATION_BINDING_WARN_COUNT = 500;
 
 async function updateActivationConfig(
   kv: KVNamespace,
   scope: EnvScope,
   replacedExperimentIds: readonly string[],
-  binding: Snapshot["activationBinding"],
+  published: Snapshot["activationBindings"],
 ): Promise<void> {
   const key = activationConfigKey(scope.appId, scope.environmentId);
   const raw = await kv.get(key, "text");
   const current = raw ? ActivationConfigEnvelope.parse(JSON.parse(raw)).data : { bindings: [] };
   const replaced = new Set(replacedExperimentIds);
   const bindings = current.bindings.filter((item) => !replaced.has(item.experimentId));
-  if (binding) bindings.push(binding);
-  bindings.sort((a, b) => a.experimentId.localeCompare(b.experimentId));
+  bindings.push(...published);
+  bindings.sort(
+    (a, b) => a.experimentId.localeCompare(b.experimentId) || a.runId.localeCompare(b.runId),
+  );
+  if (bindings.length > ACTIVATION_BINDING_WARN_COUNT) {
+    console.warn("config_store_activation_bindings_large", {
+      appId: scope.appId,
+      environmentId: scope.environmentId,
+      bindingCount: bindings.length,
+    });
+  }
   await kv.put(key, envelope(ActivationConfigEnvelope, { bindings }));
 }
 

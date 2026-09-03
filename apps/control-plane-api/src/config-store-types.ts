@@ -193,8 +193,13 @@ export interface Snapshot {
   authoringTargetingRules: TargetingRule[];
   experiment: ExperimentConfigKV | null;
   run: RunConfigKV | null;
-  /** Frozen live-Run activation binding, published for the ingest hot path. */
-  activationBinding: ActivationBindingKV | null;
+  /**
+   * One activation binding per Run of this Experiment that froze an activation
+   * Metric — not just the live one. A holdover's rows stay attached to its own
+   * Run (ADR-0006), so ingest can only resolve them if that Run's binding is
+   * still published.
+   */
+  activationBindings: readonly ActivationBindingKV[];
   version: number;
   /**
    * The RUNNING Experiment that owns part of this Flag Configuration, or null.
