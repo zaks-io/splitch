@@ -33,6 +33,8 @@ export interface FixtureSigner {
   jwks: Jwks;
   /** Sign a JWT with the given claims (RS256, fixture kid). */
   sign(claims: Record<string, unknown>): Promise<string>;
+  /** Sign an exact payload so malformed-claim tests still exercise a valid signature. */
+  signPayload(payload: unknown): Promise<string>;
 }
 
 export async function makeFixtureSigner(): Promise<FixtureSigner> {
@@ -52,17 +54,21 @@ export async function makeFixtureSigner(): Promise<FixtureSigner> {
     e: string;
   };
 
+  const signPayload = async (payload: unknown): Promise<string> => {
+    const signingInput = `${encodeSegment({ alg: "RS256", typ: "JWT", kid: KID })}.${encodeSegment(payload)}`;
+    const signature = await crypto.subtle.sign(
+      "RSASSA-PKCS1-v1_5",
+      pair.privateKey,
+      new TextEncoder().encode(signingInput) as unknown as BufferSource,
+    );
+    return `${signingInput}.${bytesToBase64Url(new Uint8Array(signature))}`;
+  };
+
   return {
     jwks: { keys: [{ kty: publicJwk.kty, kid: KID, n: publicJwk.n, e: publicJwk.e }] },
-    async sign(claims) {
-      const payload = { typ: "access_token", ...claims };
-      const signingInput = `${encodeSegment({ alg: "RS256", typ: "JWT", kid: KID })}.${encodeSegment(payload)}`;
-      const signature = await crypto.subtle.sign(
-        "RSASSA-PKCS1-v1_5",
-        pair.privateKey,
-        new TextEncoder().encode(signingInput) as unknown as BufferSource,
-      );
-      return `${signingInput}.${bytesToBase64Url(new Uint8Array(signature))}`;
+    sign(claims) {
+      return signPayload({ typ: "access_token", ...claims });
     },
+    signPayload,
   };
 }

@@ -97,6 +97,9 @@ export function makeCachedJwksVerifier(options: {
 }
 
 function base64UrlToBytes(input: string): Uint8Array {
+  if (!/^[A-Za-z0-9_-]+$/.test(input) || input.length % 4 === 1) {
+    throw new Error("invalid base64url");
+  }
   const padded = input
     .replace(/-/g, "+")
     .replace(/_/g, "/")
@@ -110,7 +113,11 @@ function base64UrlToBytes(input: string): Uint8Array {
 }
 
 function decodeSegment(segment: string): Record<string, unknown> {
-  return JSON.parse(new TextDecoder().decode(base64UrlToBytes(segment))) as Record<string, unknown>;
+  const value: unknown = JSON.parse(new TextDecoder().decode(base64UrlToBytes(segment)));
+  if (value === null || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("JWT segment is not a JSON object");
+  }
+  return value as Record<string, unknown>;
 }
 
 interface ParsedJwt {
