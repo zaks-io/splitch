@@ -238,6 +238,52 @@ async function resolveContextMiss(
  *      value. A later call past the TTL that returns a NEW runId stores a new
  *      Exposure slot, so a Run boundary fires a fresh Exposure.
  */
+/**
+ * `sdk_evaluate` declares `idempotency: "required"`, and
+ * `worker-runtime/steps/idempotency.ts` reads the `Idempotency-Key` HEADER and
+ * nothing else, so `requestFor` omitting an absent key buys a round trip that
+ * can only come back `400 VALIDATION_ERROR`. `evaluateAll` already refuses an
+ * empty key locally for the same reason; evaluate is the last
+ * `idempotency: "required"` route that let the edge do the rejecting.
+ *
+ * The type makes this field required, so only a JavaScript caller (or one
+ * casting through `any`) reaches here. `typeof` rather than `=== undefined`
+ * because that caller can pass null or a number, which the type never admits.
+ *
+ * Checked BEFORE the seen-set so the verdict does not depend on cache state: a
+ * replayed hit never calls the transport, so the same malformed call would
+ * otherwise resolve on a hit and fail on a miss.
+ *
+ * This returns the Default Variant with `reason: ERROR` rather than throwing.
+ * Evaluate's contract is that the host app always renders something, and the
+ * only difference from the edge's own rejection is that the failure is named
+ * `SDK_CONTEXT_INVALID` and costs no network call.
+ */
+function missingIdempotencyKey(
+  deps: EvaluateDeps,
+  flagKey: string,
+  targetingKey: string,
+  context: EvaluationContext,
+  defaultValue: VariantValue,
+): SdkResolutionDetails | null {
+  const key: unknown = context.idempotencyKey;
+  if (typeof key === "string" && key.length > 0) return null;
+  const details = synthesizeDetails(
+    {
+      status: null,
+      errorCode: "SDK_CONTEXT_INVALID",
+      errorMessage:
+        "evaluate requires a non-empty `idempotencyKey` on the Evaluation Context: it is the caller-owned id that lets a retry replay one Exposure instead of recording a second",
+      variant: null,
+      variantName: null,
+      runId: null,
+    },
+    defaultValue,
+  );
+  logEvaluateError(deps, flagKey, targetingKey, details, null);
+  return details;
+}
+
 export async function runEvaluate(
   deps: EvaluateDeps,
   flagKey: string,
@@ -247,6 +293,9 @@ export async function runEvaluate(
   const idType = context.idType ?? DEFAULT_ID_TYPE;
   const defaultValue = context.defaultValue ?? FALLBACK_DEFAULT_VALUE;
   const attributes = context.attributes ?? {};
+
+  const missingKey = missingIdempotencyKey(deps, flagKey, targetingKey, context, defaultValue);
+  if (missingKey !== null) return missingKey;
 
   const lookup = deps.seenSet.get(flagKey, idType, targetingKey, attributes, deps.now());
   if (lookup.kind === "hit") {

@@ -21,7 +21,7 @@ function clientWith(transport: FakeTransport) {
   return { client, reported };
 }
 
-const CONTEXT = { targetingKey: "user-1", defaultValue: false };
+const CONTEXT = { targetingKey: "user-1", defaultValue: false, idempotencyKey: "eval-1" };
 
 describe("SplitchClientOptions.onResolution", () => {
   it("reports the resolution evaluate() returned", async () => {

@@ -10,7 +10,11 @@ export const sdkClientErrorCodes = [
   "SDK_IDEMPOTENCY_KEY_UNAVAILABLE",
   /** Browser client read before `init()` resolved (and no bootstrap). */
   "SDK_NOT_INITIALIZED",
-  /** Browser client constructed with an invalid Evaluation Context. */
+  /**
+   * Evaluation Context the SDK refuses before the transport: the browser
+   * client constructed with an invalid one, or `evaluate` called without the
+   * `idempotencyKey` its route requires.
+   */
   "SDK_CONTEXT_INVALID",
   /** Browser bootstrap was evaluated for a different Evaluation Context. */
   "SDK_BOOTSTRAP_CONTEXT_MISMATCH",
