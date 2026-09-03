@@ -119,6 +119,9 @@ async function signAccessJwt(
 }
 
 function base64UrlToBytes(input: string): Uint8Array {
+  if (!/^[A-Za-z0-9_-]+$/.test(input) || input.length % 4 === 1) {
+    throw new Error("invalid base64url");
+  }
   const padded = input
     .replace(/-/g, "+")
     .replace(/_/g, "/")

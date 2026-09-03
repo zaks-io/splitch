@@ -86,7 +86,7 @@ export function sentryResolutionReporter(
       "@splitch/sdk/sentry: a non-boolean resolution with no Variant cannot be sent to Sentry",
       {
         remediation:
-          "Sentry stores booleans only; a Flag serving a non-boolean Default Variant has no arm name to encode",
+          "Sentry stores booleans only; a Flag serving a non-boolean Default Variant has no Variant name to encode",
         flagKey,
         reason: details.reason,
       },

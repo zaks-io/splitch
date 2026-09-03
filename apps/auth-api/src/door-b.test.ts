@@ -196,6 +196,22 @@ describe("Door B register: Turnstile-before-write, provisional Org+App+Environme
     );
   });
 
+  it("returns invalid_grant for padded identity assertion signature encoding", async () => {
+    const assertion = await signer.mintIdentityAssertion(
+      "user_anon_padding",
+      [],
+      "anonymous",
+      NOW_MS / 1000,
+    );
+
+    await expect(
+      signer.exchangeForAccessToken(`${assertion}=`, NOW_MS / 1000),
+    ).rejects.toMatchObject({
+      code: "invalid_grant",
+      status: 400,
+    });
+  });
+
   it("a MISSING Turnstile token creates ZERO rows (invalid_request, fail-loud)", async () => {
     const { app } = build();
     const res = await app.request("/agent/identity", {
