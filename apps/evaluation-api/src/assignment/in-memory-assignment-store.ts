@@ -1,4 +1,4 @@
-import { assignmentKey } from "@splitch/contracts";
+import { assignmentKey, assignmentWriterName } from "@splitch/contracts";
 import type { SaltStore } from "@splitch/privacy";
 import {
   type AssignmentPutInput,
@@ -6,7 +6,6 @@ import {
   type AssignmentStoreEntry,
   type AssignmentStorePutResult,
   assignmentValueToMap,
-  assignmentWriterName,
   type HashedAssignmentPutInput,
   hashedAssignmentIdentity,
   mergeAssignmentValue,

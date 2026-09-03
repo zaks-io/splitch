@@ -15,6 +15,7 @@ export {
   runConfigKey,
   TERMINAL_CREDENTIAL_REVOCATION_MARKER,
 } from "../storage-keys-kv";
+export { assignmentWriterName } from "../storage-keys-durable-objects";
 export type {
   ActivationBindingKV,
   ActivationConfigKV,

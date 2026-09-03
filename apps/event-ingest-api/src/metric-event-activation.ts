@@ -2,9 +2,11 @@ import {
   type ActivationBindingKV,
   ActivationConfigKVSchema,
   type AssignmentStoreEntry,
+  type AssignmentStoreValue,
   AssignmentStoreValueSchema,
   activationConfigKey,
   assignmentKey,
+  assignmentWriterName,
   kvEnvelope,
   type MetricEventTrackRequest,
 } from "@splitch/contracts";
@@ -87,7 +89,6 @@ export async function activationRows(
     );
   }
 
-  const assignments = await loadAssignments(env, credential.appId, event.idType, identity);
   /**
    * Attribution is by the Run the Entity was first exposed under, not by the
    * live Run (ADR-0006). A holdover keeps its prior Variant and its rows stay
@@ -97,10 +98,21 @@ export async function activationRows(
    * would produce a row nothing can ever join.
    */
   const bindingByRun = new Map(bindings.map((binding) => [binding.runId, binding]));
-  const exposedBindings = Object.entries(assignments).flatMap(([experimentId, located]) => {
-    const binding = bindingByRun.get(located.assignment.runId);
-    return binding?.experimentId === experimentId ? [{ binding, ...located }] : [];
-  });
+  const exposedIn = (located: Record<string, LocatedAssignment>) =>
+    Object.entries(located).flatMap(([experimentId, entry]) => {
+      const binding = bindingByRun.get(entry.assignment.runId);
+      return binding?.experimentId === experimentId ? [{ binding, ...entry }] : [];
+    });
+
+  const mirrored = await assignmentsFromMirror(env, credential.appId, event.idType, identity);
+  let assignments = mergeRetained(mirrored);
+  let exposedBindings = exposedIn(assignments);
+  if (exposedBindings.length === 0) {
+    assignments = mergeRetained(
+      await withCurrentEpochFromInstance(env, credential.appId, event.idType, identity, mirrored),
+    );
+    exposedBindings = exposedIn(assignments);
+  }
   if (exposedBindings.length === 0) {
     throw new ActivationResolutionError(
       "No Experiment Run using this Event Definition has an Exposure for this Entity",
@@ -136,17 +148,24 @@ function distinct(bindings: readonly ActivationBindingKV[], field: keyof Activat
   return [...new Set(bindings.map((binding) => binding[field]))];
 }
 
-async function loadAssignments(
+/**
+ * Every retained identity epoch's KV blob for this Entity. An Entity minted
+ * today carries three retained epochs but Assignments are only ever written
+ * under the current one, so the historical keys miss permanently and a miss
+ * here is evidence of nothing — which is why the whole pass runs before the
+ * instance is consulted at all.
+ */
+async function assignmentsFromMirror(
   env: Env,
   appId: string,
   idType: string,
   identity: { targetingKeyHashes: readonly string[] },
-): Promise<Record<string, LocatedAssignment>> {
+): Promise<readonly RetainedAssignments[]> {
   const assignmentsKv = env.ASSIGNMENTS_KV;
   if (!assignmentsKv) {
     throw new ActivationResolutionError("Assignment store is unavailable", "transient");
   }
-  const values = await Promise.all(
+  return Promise.all(
     identity.targetingKeyHashes.map(async (targetingKeyHash) => {
       const raw = await assignmentsKv.get(assignmentKey(appId, idType, targetingKeyHash), "text");
       return {
@@ -155,6 +174,80 @@ async function loadAssignments(
       };
     }),
   );
+}
+
+/**
+ * The mirror can be stale in both directions: a blob that does not exist yet,
+ * and a blob that exists for an earlier Experiment and has not picked up the
+ * Assignment this Activation needs. KV propagates globally rather than
+ * read-your-writes, and it caches negative lookups per region for `cacheTtl`
+ * (60s by default), so a region that took the miss keeps serving its own miss
+ * for up to a minute while another region already has the value.
+ *
+ * The instance that owns the Entity is the authority, so a mirror that answers
+ * with no matching bound Run is worth exactly one cross-script hop before the
+ * Entity is called unexposed. Assignments are written under the current
+ * identity epoch only, so that is the one address worth asking; a historical
+ * epoch names an instance that can never hold anything.
+ *
+ * @see https://developers.cloudflare.com/kv/api/read-key-value-pairs/#cachettl-parameter
+ */
+async function withCurrentEpochFromInstance(
+  env: Env,
+  appId: string,
+  idType: string,
+  identity: { targetingKeyHash: string },
+  mirrored: readonly RetainedAssignments[],
+): Promise<readonly RetainedAssignments[]> {
+  const writers = env.ASSIGNMENT_STORE_WRITER;
+  if (!writers) {
+    throw new ActivationResolutionError("Assignment store is unavailable", "transient");
+  }
+  const targetingKeyHash = identity.targetingKeyHash;
+  const name = assignmentWriterName({ appId, idType, targetingKeyHash });
+  const response = await writers
+    .get(writers.idFromName(name))
+    .fetch(new Request("https://assignment-store.local/export"));
+  if (!response.ok) {
+    throw new ActivationResolutionError("Assignment store is unavailable", "transient", {
+      status: response.status,
+    });
+  }
+  const authoritative = exportedAssignments(await response.json());
+  return mirrored.map((value) =>
+    value.targetingKeyHash === targetingKeyHash
+      ? // The instance wins per Experiment because it commits before the blob it
+        // writes through; entries it does not mention are kept rather than
+        // dropped, so a disagreement still surfaces in the failure detail.
+        { targetingKeyHash, assignments: { ...value.assignments, ...authoritative } }
+      : value,
+  );
+}
+
+/**
+ * `/export` crosses a Worker boundary, so its body is input, not a type. An
+ * absent or misshapen `assignments` field means the callee's contract moved,
+ * and defaulting it would report every Entity unexposed — a permanent, silent
+ * wrong answer where ADR-0036 requires a loud one. Only `assignments` is
+ * validated: the rest of the envelope is the callee's business.
+ */
+function exportedAssignments(body: unknown): AssignmentStoreValue {
+  const assignments =
+    typeof body === "object" && body !== null
+      ? (body as { assignments?: unknown }).assignments
+      : undefined;
+  const parsed = AssignmentStoreValueSchema.safeParse(assignments);
+  if (!parsed.success) {
+    throw new ActivationResolutionError(
+      "Assignment store returned an unreadable export",
+      "transient",
+      { issues: parsed.error.issues.map((issue) => issue.path.join(".") || "assignments") },
+    );
+  }
+  return parsed.data;
+}
+
+function mergeRetained(values: readonly RetainedAssignments[]): Record<string, LocatedAssignment> {
   const merged: Record<string, LocatedAssignment> = {};
   for (const value of values) {
     for (const [experimentId, assignment] of Object.entries(value.assignments)) {
@@ -174,6 +267,11 @@ async function loadAssignments(
     }
   }
   return merged;
+}
+
+interface RetainedAssignments {
+  readonly assignments: AssignmentStoreValue;
+  readonly targetingKeyHash: string;
 }
 
 interface LocatedAssignment {

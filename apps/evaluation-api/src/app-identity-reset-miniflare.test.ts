@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { Miniflare } from "miniflare";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { completeAppIdentityReset, purgeAppIdentityAssignments } from "./app-identity-reset";
-import { assignmentWriterName } from "./assignment/assignment-store";
+import { assignmentWriterName } from "@splitch/contracts";
 import type { HoldoverWriteAppInventoryNamespace } from "./assignment/holdover-write-app-inventory";
 import { DurableHoldoverWriteAppInventoryClient } from "./assignment/holdover-write-app-inventory-client";
 import { bundleHoldoverWriteInventoryAndOutboxWorker } from "./assignment/holdover-write-miniflare-bundle";

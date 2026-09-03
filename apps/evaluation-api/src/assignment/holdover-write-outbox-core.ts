@@ -1,5 +1,6 @@
+import { assignmentWriterName } from "@splitch/contracts";
 import { extendAppIdentityResetFence } from "./app-identity-reset-fence";
-import { assignmentWriterName, type HashedAssignmentPutInput } from "./assignment-store";
+import type { HashedAssignmentPutInput } from "./assignment-store";
 
 /** Max put attempts after durable ownership (including the first). */
 export const HOLDOVER_WRITE_MAX_ATTEMPTS = 8;

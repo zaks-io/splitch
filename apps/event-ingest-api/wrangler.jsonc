@@ -109,6 +109,11 @@
         "script_name": "splitch-control-plane-api"
       },
       {
+        "name": "ASSIGNMENT_STORE_WRITER",
+        "class_name": "AssignmentStoreDurableObjectV2",
+        "script_name": "splitch-evaluation-api"
+      },
+      {
         "name": "EVALUATION_USAGE_REPLAY_WINDOW",
         "class_name": "EvaluationUsageReplayWindowDurableObject"
       },
@@ -269,6 +274,11 @@
             "script_name": "splitch-control-plane-api-shared-preview"
           },
           {
+            "name": "ASSIGNMENT_STORE_WRITER",
+            "class_name": "AssignmentStoreDurableObjectV2",
+            "script_name": "splitch-evaluation-api-shared-preview"
+          },
+          {
             "name": "EVALUATION_USAGE_REPLAY_WINDOW",
             "class_name": "EvaluationUsageReplayWindowDurableObject"
           },
@@ -424,6 +434,11 @@
             "name": "CONFIG_STORE_WRITER",
             "class_name": "ConfigStoreDurableObject",
             "script_name": "splitch-control-plane-api"
+          },
+          {
+            "name": "ASSIGNMENT_STORE_WRITER",
+            "class_name": "AssignmentStoreDurableObjectV2",
+            "script_name": "splitch-evaluation-api"
           },
           {
             "name": "EVALUATION_USAGE_REPLAY_WINDOW",

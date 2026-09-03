@@ -10,6 +10,10 @@ import { EvaluationEntrypoint } from "./index";
 import { TestExecutionContext } from "./test-execution-context";
 import { type AdmissionCharge, type AdmissionOption, admissionBinding } from "./test-fixtures";
 import type { Env } from "./types";
+import {
+  assignmentWriterStub,
+  type WriterRequest,
+} from "./metric-event-assignment-store.test-fixture";
 
 export const METRIC_APP_ID = "app_shop";
 export const METRIC_ENVIRONMENT_ID = "env_prod";
@@ -29,6 +33,10 @@ export interface MetricEventFixture {
   readonly env: Env;
   readonly config: Map<string, string>;
   readonly assignments: Map<string, string>;
+  /** The Assignment Store instance's own storage, keyed by instance name. */
+  readonly writerAssignments: Map<string, string>;
+  /** Every request the activation path sent to an Assignment Store instance. */
+  readonly writerRequests: WriterRequest[];
   readonly claims: Map<string, Claim>;
   readonly admissionCharges: AdmissionCharge[];
   readonly hash: string;
@@ -55,6 +63,8 @@ export async function makeMetricEventFixture(
   ]);
   const claims = new Map<string, Claim>();
   const assignments = new Map<string, string>();
+  const writerAssignments = new Map<string, string>();
+  const writerRequests: WriterRequest[] = [];
   const admissionCharges: AdmissionCharge[] = [];
   const env = {
     SPLITCH_PLATFORM_TARGET: "local",
@@ -63,10 +73,22 @@ export async function makeMetricEventFixture(
     CONFIG_STORE: mergedConfigStore(base.CONFIG_STORE, config),
     CONFIG_STORE_WRITER: base.CONFIG_STORE_WRITER ?? appIdentityWriter(config),
     ASSIGNMENTS_KV: base.ASSIGNMENTS_KV ?? kv(assignments),
+    ASSIGNMENT_STORE_WRITER:
+      base.ASSIGNMENT_STORE_WRITER ?? assignmentWriterStub(writerAssignments, writerRequests),
     METRIC_EVENT_OUTBOX: outboxStub(claims),
     ...admissionBinding(options.admission, admissionCharges),
   } as unknown as Env;
-  return { env, config, assignments, claims, admissionCharges, hash, credentialKind };
+  return {
+    env,
+    config,
+    assignments,
+    writerAssignments,
+    writerRequests,
+    claims,
+    admissionCharges,
+    hash,
+    credentialKind,
+  };
 }
 
 function appIdentityWriter(values: Map<string, string>): NonNullable<Env["CONFIG_STORE_WRITER"]> {

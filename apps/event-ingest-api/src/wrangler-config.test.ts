@@ -48,6 +48,24 @@ describe("Event Ingest Worker Wrangler runtime config", () => {
     });
   });
 
+  /**
+   * Activation reads the Assignment Store instance when the KV mirror has no
+   * bound Run for the Entity. A missing binding is not a compile error: it
+   * degrades to a 503 on every Activation that takes that path, with nothing
+   * red until the deploy is live.
+   */
+  it.each([
+    ["local", config, "splitch-evaluation-api"],
+    ["shared-preview", config.env?.["shared-preview"], "splitch-evaluation-api-shared-preview"],
+    ["production", config.env?.production, "splitch-evaluation-api"],
+  ])("binds the Assignment Store instance on Evaluation for %s", (_target, target, scriptName) => {
+    expect(target?.durable_objects?.bindings).toContainEqual({
+      name: "ASSIGNMENT_STORE_WRITER",
+      class_name: "AssignmentStoreDurableObjectV2",
+      script_name: scriptName,
+    });
+  });
+
   it.each([
     ["local", config],
     ["shared-preview", config.env?.["shared-preview"]],

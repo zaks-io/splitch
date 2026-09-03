@@ -16,9 +16,16 @@ const EVENT_INGEST = "@splitch/event-ingest-api";
  * Ingest. Deploying a caller first binds it to an entrypoint the live callee
  * does not export yet.
  *
+ * Cross-script Durable Object bindings do not constrain this order and are not
+ * part of it: they resolve to a namespace the defining Worker already owns, so
+ * Event Ingest can deploy first while binding classes on Evaluation and Control
+ * Plane, which both deploy later. Only the first deploy that introduces a brand
+ * new class has to land before a Worker binds it.
+ *
  * deploy-worker-order.test.mjs derives the required edges from every app's
  * wrangler.jsonc and proves this order satisfies them, so a new binding fails
- * there rather than mid-cutover in production.
+ * there rather than mid-cutover in production. It separately proves every
+ * cross-script Durable Object binding names a class the fleet actually defines.
  */
 const ORDERED_PREREQUISITES = [
   [EVENT_INGEST, "event-ingest"],
