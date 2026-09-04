@@ -1,7 +1,6 @@
 import type { MutationCtx } from "./_generated/server";
-import { isCanonicalCallbackUrl } from "./integration_remote";
-
-const CURRENT_KEY = "current" as const;
+import { isCanonicalCallbackUrl } from "./callback_url";
+import { CURRENT_KEY } from "./integration_state";
 
 interface InitializeArgs {
   installationId: string;

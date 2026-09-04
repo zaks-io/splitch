@@ -5,6 +5,7 @@ import {
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import { action, env, internalAction, internalMutation, internalQuery } from "./_generated/server";
+import { canonicalCallbackUrl } from "./callback_url";
 import { randomSecret } from "./crypto";
 import { purgeBatchHandler, revokeLocalHandler, uninstallHandler } from "./integration_cleanup";
 import { initializeHandler } from "./integration_initialize";
@@ -16,19 +17,17 @@ import {
   scheduleSyncRecovery,
 } from "./integration_recovery";
 import {
-  canonicalCallbackUrl,
   installRejected,
   normalizedEndpoint,
   requestHeaders,
   responseJson,
   syncHandler,
 } from "./integration_remote";
-import { requiredIntegration } from "./integration_state";
+import { CURRENT_KEY, requiredIntegration } from "./integration_state";
 import { ensureRetentionScheduled } from "./retention";
 import schema from "./schema";
 import { installationResultValidator } from "./validators";
 
-const CURRENT_KEY = "current" as const;
 const DEFAULT_ENDPOINT = "https://edge.splitch.dev";
 
 export const get = internalQuery({

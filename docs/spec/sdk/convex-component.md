@@ -27,7 +27,23 @@ The component declares one required secret environment value, `SPLITCH_API_KEY`.
 mounted callback URL from both Convex automatic URLs: the canonical `CONVEX_CLOUD_URL` supplies the
 Convex-owned deployment name and `CONVEX_SITE_URL` supplies the component mount path. It converts
 only the canonical `*.convex.cloud` origin to `*.convex.site`. Custom HTTP Action domains therefore
-never widen the Control Plane callback allowlist. `install()` generates
+never widen the Control Plane callback allowlist.
+
+Convex implements a custom domain for the Convex API by overriding `CONVEX_CLOUD_URL`
+([Convex custom domains](https://docs.convex.dev/production/custom-domains)), which leaves the
+component with no source for the deployment name. `install()` refuses that deployment with an error
+naming the override and the deployment setting that clears it. The component never relaxes the
+`*.convex.cloud` check and never accepts a caller-supplied origin, because either would put a
+non-`*.convex.site` origin on the path to the Control Plane allowlist. Supporting a deployment that
+custom-domains both surfaces needs an explicit deployment-name input, which this spec does not
+define.
+
+The component's `isCanonicalCallbackUrl` duplicates the Control Plane's allowlist predicate because
+the published package cannot depend on `@splitch/contracts`. The private
+`apps/control-plane-api/src/convex-callback-allowlist-pin.test.ts` drives both copies with one
+adversarial table and fails when they disagree.
+
+`install()` generates
 and privately stores the installation ID and webhook secret, registers them through the API-Key-only
 [Convex integration API](./convex-integration-api.md), and performs the first full sync. Missing or
 malformed credentials fail before any integration or config row is written. That Key needs only

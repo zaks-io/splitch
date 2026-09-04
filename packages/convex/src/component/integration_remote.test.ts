@@ -1,54 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  canonicalCallbackUrl,
-  installRejected,
-  isCanonicalCallbackUrl,
-} from "./integration_remote";
-
-describe("canonicalCallbackUrl", () => {
-  it("preserves the component mount path on the canonical Convex site origin", () => {
-    expect(
-      canonicalCallbackUrl(
-        "https://third-cat-295.convex.cloud",
-        "https://api.mainstay.club/integrations/splitch",
-      ),
-    ).toBe("https://third-cat-295.convex.site/integrations/splitch/configuration");
-  });
-
-  it.each([
-    "https://api.mainstay.club/integrations/splitch",
-    "http://third-cat-295.convex.cloud/integrations/splitch",
-    "https://third-cat-295.convex.cloud:8443/integrations/splitch",
-    "https://third-cat-295.convex.cloud/integrations/splitch?target=other",
-  ])("rejects a non-canonical automatic cloud URL: %s", (cloudUrl) => {
-    expect(() =>
-      canonicalCallbackUrl(cloudUrl, "https://api.mainstay.club/integrations/splitch"),
-    ).toThrow("CONVEX_CLOUD_URL must be a canonical HTTPS *.convex.cloud URL");
-  });
-
-  it("rejects malformed automatic site URLs", () => {
-    expect(() =>
-      canonicalCallbackUrl(
-        "https://third-cat-295.convex.cloud",
-        "http://api.mainstay.club/integrations/splitch",
-      ),
-    ).toThrow("CONVEX_SITE_URL must be an HTTPS URL containing the component mount path");
-  });
-});
-
-describe("isCanonicalCallbackUrl", () => {
-  it("accepts only the canonical Convex configuration endpoint", () => {
-    expect(
-      isCanonicalCallbackUrl(
-        "https://third-cat-295.convex.site/integrations/splitch/configuration",
-      ),
-    ).toBe(true);
-    expect(
-      isCanonicalCallbackUrl("https://api.mainstay.club/integrations/splitch/configuration"),
-    ).toBe(false);
-    expect(isCanonicalCallbackUrl("not a URL")).toBe(false);
-  });
-});
+import { installRejected } from "./integration_remote";
 
 describe("installRejected", () => {
   it("reports the response verbatim for a refusal that is not a scope refusal", () => {

@@ -38,10 +38,18 @@ Keep the API Key in [Convex environment variables](https://docs.convex.dev/produ
 It stays in the deployment environment and must never reach browser code. The configuration callback
 is served at `/integrations/splitch/configuration`.
 
-The component combines the canonical deployment origin from `CONVEX_CLOUD_URL` with the mounted
-path from `CONVEX_SITE_URL`. It therefore registers on `*.convex.site` even when the deployment uses
-a custom HTTP Action domain. It also accepts an optional `SPLITCH_ENDPOINT` to point at a
-non-production splitch edge; it defaults to `https://edge.splitch.dev`.
+The component builds the callback it registers from both Convex automatic URLs: the deployment name
+from `CONVEX_CLOUD_URL` and the mounted path from `CONVEX_SITE_URL`. A
+[custom domain](https://docs.convex.dev/production/custom-domains) on HTTP Actions needs no change,
+because the callback still resolves to the `*.convex.site` origin Splitch accepts.
+
+Convex implements a custom domain for the Convex API by overriding `CONVEX_CLOUD_URL`, which removes
+the deployment name the component reads. `install()` throws there rather than registering a callback
+Splitch would reject, so a deployment that overrides `CONVEX_CLOUD_URL` cannot install
+`@splitch/convex`. Overriding `CONVEX_SITE_URL` is fine.
+
+The component also accepts an optional `SPLITCH_ENDPOINT` to point at a non-production splitch edge;
+it defaults to `https://edge.splitch.dev`.
 
 ## Install from an Action
 

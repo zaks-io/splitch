@@ -228,9 +228,11 @@ function principalScope(principal: HandlerArgs<unknown>["principal"], requestId:
   return envScope(principal.appId, principal.environmentId);
 }
 
-function validateCallbackUrl(value: string, requestId: string): Response | null {
+// The published `@splitch/convex` component keeps its own copy of this rule because it cannot
+// depend on the private tree. `convex-callback-allowlist-pin.test.ts` fails if the two drift.
+export function isConvexCallbackUrl(value: string): boolean {
   const url = new URL(value);
-  const valid =
+  return (
     url.protocol === "https:" &&
     url.hostname.endsWith(".convex.site") &&
     !url.username &&
@@ -238,8 +240,12 @@ function validateCallbackUrl(value: string, requestId: string): Response | null 
     !url.port &&
     !url.search &&
     !url.hash &&
-    url.pathname.endsWith("/configuration");
-  return valid
+    url.pathname.endsWith("/configuration")
+  );
+}
+
+function validateCallbackUrl(value: string, requestId: string): Response | null {
+  return isConvexCallbackUrl(value)
     ? null
     : renderError(
         {
