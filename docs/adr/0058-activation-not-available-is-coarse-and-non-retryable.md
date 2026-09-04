@@ -66,6 +66,10 @@ and identifiers on both disclosure tiers.
   predicate failed.
 - The new code is limited to `sdk_activate`; ordinary `track()` and Exposure redemption retry
   semantics do not change.
+- `apps/event-ingest-api/src/ingest-phase-timing.ts` buckets by HTTP status, so an API Key's missing
+  Exposure moves from the `rejected` bucket to `fault` — and this fires on the first Activation of
+  every Entity's life, so the ingest fault rate rises on ordinary traffic. Nothing alerts on this
+  bucket today; it is structured-log-only, so the rise is noise, not a broken monitor.
 
 ## Sources
 
