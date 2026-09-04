@@ -228,13 +228,21 @@ function principalScope(principal: HandlerArgs<unknown>["principal"], requestId:
   return envScope(principal.appId, principal.environmentId);
 }
 
+// `".convex.site".endsWith(".convex.site")` is true, so a bare suffix check admits hosts whose
+// deployment label is empty. Those never resolve, but they read as canonical.
+function hasDeploymentLabel(hostname: string, suffix: string): boolean {
+  if (!hostname.endsWith(suffix)) return false;
+  const label = hostname.slice(0, -suffix.length);
+  return label.length > 0 && !label.endsWith(".");
+}
+
 // The published `@splitch/convex` component keeps its own copy of this rule because it cannot
 // depend on the private tree. `convex-callback-allowlist-pin.test.ts` fails if the two drift.
 export function isConvexCallbackUrl(value: string): boolean {
   const url = new URL(value);
   return (
     url.protocol === "https:" &&
-    url.hostname.endsWith(".convex.site") &&
+    hasDeploymentLabel(url.hostname, ".convex.site") &&
     !url.username &&
     !url.password &&
     !url.port &&

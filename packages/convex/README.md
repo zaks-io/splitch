@@ -46,7 +46,9 @@ because the callback still resolves to the `*.convex.site` origin Splitch accept
 Convex implements a custom domain for the Convex API by overriding `CONVEX_CLOUD_URL`, which removes
 the deployment name the component reads. `install()` throws there rather than registering a callback
 Splitch would reject, so a deployment that overrides `CONVEX_CLOUD_URL` cannot install
-`@splitch/convex`. Overriding `CONVEX_SITE_URL` is fine.
+`@splitch/convex`. Overriding `CONVEX_SITE_URL` is fine. Because `install()` is also the upgrade
+entrypoint, a deployment that adds the override after installing meets this on its next upgrade
+rather than on a first install.
 
 The component also accepts an optional `SPLITCH_ENDPOINT` to point at a non-production splitch edge;
 it defaults to `https://edge.splitch.dev`.

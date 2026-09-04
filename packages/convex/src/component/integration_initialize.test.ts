@@ -3,7 +3,7 @@ import type { MutationCtx } from "./_generated/server";
 import { initializeHandler } from "./integration_initialize";
 
 const canonical = "https://third-cat-295.convex.site/integrations/splitch/configuration";
-const customDomain = "https://api.mainstay.club/integrations/splitch/configuration";
+const customDomain = "https://hooks.mainstay.club/integrations/splitch/configuration";
 
 describe("initializeHandler", () => {
   it("repairs a pending callback left on a custom domain", async () => {
