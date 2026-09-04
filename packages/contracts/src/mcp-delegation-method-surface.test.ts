@@ -131,25 +131,28 @@ describe("MCP delegated credential method binding", () => {
   it.each([
     ["experiment_results_get", "GET", "POST"],
     ["experiment_results_post", "POST", "GET"],
-  ] as const)("rejects %s credentials replayed from %s as %s", async (operationId, minted, replayed) => {
-    const request = resultsRequest(minted);
-    const credential = await createMcpDelegationHeader({
-      operationId,
-      actor: { subject: "user_one", scopes: ["app:app_one:admin"], authDoor: "id_jag" },
-      request,
-      secret: SECRET,
-      nowSeconds: 100,
-      jti: `delegation-method-${minted.toLowerCase()}-${replayed.toLowerCase()}`,
-    });
-
-    await expect(
-      parseMcpDelegation({
-        request: withCredential(resultsRequest(replayed), credential),
-        surface: "control-plane-api",
+  ] as const)(
+    "rejects %s credentials replayed from %s as %s",
+    async (operationId, minted, replayed) => {
+      const request = resultsRequest(minted);
+      const credential = await createMcpDelegationHeader({
+        operationId,
+        actor: { subject: "user_one", scopes: ["app:app_one:admin"], authDoor: "id_jag" },
+        request,
         secret: SECRET,
-        replayGuard: memoryReplayGuard(),
         nowSeconds: 100,
-      }),
-    ).resolves.toBeNull();
-  });
+        jti: `delegation-method-${minted.toLowerCase()}-${replayed.toLowerCase()}`,
+      });
+
+      await expect(
+        parseMcpDelegation({
+          request: withCredential(resultsRequest(replayed), credential),
+          surface: "control-plane-api",
+          secret: SECRET,
+          replayGuard: memoryReplayGuard(),
+          nowSeconds: 100,
+        }),
+      ).resolves.toBeNull();
+    },
+  );
 });

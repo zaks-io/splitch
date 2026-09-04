@@ -79,25 +79,24 @@ describe("control-panel WorkOS access token refresh", () => {
     expect(loaded).toEqual({ ok: true, session: created.session, tokenHash: created.tokenHash });
   });
 
-  it.each([
-    "invalid_grant",
-    "mfa_enrollment",
-    "sso_required",
-  ])("ends the session without touching KV when WorkOS answers %s", async (error) => {
-    const kv = new MemoryKv();
-    const created = await refreshableSession(kv, NOW_SECONDS - 1);
-    const storedBefore = kv.store.get(sessionKey(created.tokenHash));
-    const refresh = vi.fn<AuthKitClient["authenticateWithRefreshToken"]>(async () => {
-      throw oauthException(error);
-    });
+  it.each(["invalid_grant", "mfa_enrollment", "sso_required"])(
+    "ends the session without touching KV when WorkOS answers %s",
+    async (error) => {
+      const kv = new MemoryKv();
+      const created = await refreshableSession(kv, NOW_SECONDS - 1);
+      const storedBefore = kv.store.get(sessionKey(created.tokenHash));
+      const refresh = vi.fn<AuthKitClient["authenticateWithRefreshToken"]>(async () => {
+        throw oauthException(error);
+      });
 
-    const loaded = await loadSessionFromRequest(bindings(kv), request(created.cookie), NOW, {
-      authKit: fakeAuthKit(refresh),
-    });
+      const loaded = await loadSessionFromRequest(bindings(kv), request(created.cookie), NOW, {
+        authKit: fakeAuthKit(refresh),
+      });
 
-    expect(loaded).toEqual({ ok: false, reason: "expired" });
-    expect(kv.store.get(sessionKey(created.tokenHash))).toBe(storedBefore);
-  });
+      expect(loaded).toEqual({ ok: false, reason: "expired" });
+      expect(kv.store.get(sessionKey(created.tokenHash))).toBe(storedBefore);
+    },
+  );
 
   it("rethrows an OAuth error that is not a session ending, so misconfiguration fails loud", async () => {
     const kv = new MemoryKv();

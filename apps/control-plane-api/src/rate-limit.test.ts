@@ -43,17 +43,17 @@ describe("rateLimiterForTarget", () => {
     );
   });
 
-  it.each([
-    "api-key",
-    "client-key",
-  ] as const)("inherits the surface Worker's %s class instead of throwing (SPL-449)", async (rateLimitClass) => {
-    const limit = vi.fn(async () => ({ success: true }));
+  it.each(["api-key", "client-key"] as const)(
+    "inherits the surface Worker's %s class instead of throwing (SPL-449)",
+    async (rateLimitClass) => {
+      const limit = vi.fn(async () => ({ success: true }));
 
-    await expect(
-      rateLimiterForTarget("production", { limit })(input({ class: rateLimitClass })),
-    ).resolves.toEqual({ limited: false });
-    expect(limit).not.toHaveBeenCalled();
-  });
+      await expect(
+        rateLimiterForTarget("production", { limit })(input({ class: rateLimitClass })),
+      ).resolves.toEqual({ limited: false });
+      expect(limit).not.toHaveBeenCalled();
+    },
+  );
 
   it("still fails closed on an unknown guarded class", async () => {
     await expect(

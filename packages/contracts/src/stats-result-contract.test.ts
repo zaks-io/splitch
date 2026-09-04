@@ -245,25 +245,26 @@ describe("declared /results response contract", () => {
     return route.output;
   }
 
-  it.each([
-    "experiment_results_get",
-    "experiment_results_post",
-  ] as const)("%s declares the envelope, not a bare StatsOutput", (operationId) => {
-    const response = declaredResponse(operationId);
+  it.each(["experiment_results_get", "experiment_results_post"] as const)(
+    "%s declares the envelope, not a bare StatsOutput",
+    (operationId) => {
+      const response = declaredResponse(operationId);
 
-    expect(response.safeParse(envelope).success).toBe(true);
-    expect(response.safeParse(statsOutput).success).toBe(false);
-  });
+      expect(response.safeParse(envelope).success).toBe(true);
+      expect(response.safeParse(statsOutput).success).toBe(false);
+    },
+  );
 
-  it.each([
-    "run_id",
-    "control_variant",
-    "state",
-  ] as const)("%s is required on the envelope", (field) => {
-    const { [field]: _dropped, ...withoutField } = envelope;
+  it.each(["run_id", "control_variant", "state"] as const)(
+    "%s is required on the envelope",
+    (field) => {
+      const { [field]: _dropped, ...withoutField } = envelope;
 
-    expect(declaredResponse("experiment_results_get").safeParse(withoutField).success).toBe(false);
-  });
+      expect(declaredResponse("experiment_results_get").safeParse(withoutField).success).toBe(
+        false,
+      );
+    },
+  );
 
   it("accepts decision evidence only as a complete pair", () => {
     const { data_watermark: _watermark, ...withoutWatermark } = envelope;

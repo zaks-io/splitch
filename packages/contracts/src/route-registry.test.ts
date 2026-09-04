@@ -21,13 +21,6 @@ import {
   routesSurfacedBy,
 } from "./route-registry";
 
-const SELECTOR_ERROR_BY_SEGMENT = [
-  [":appId", ["APP_NOT_FOUND", "SELECTOR_AMBIGUOUS"]],
-  [":environmentId", ["APP_NOT_FOUND", "SELECTOR_AMBIGUOUS"]],
-  [":targetEnvironmentId", ["APP_NOT_FOUND", "SELECTOR_AMBIGUOUS"]],
-  [":flagId", ["FLAG_NOT_FOUND"]],
-] as const;
-
 /**
  * The registry is cross-cutting: every Worker mounts it, the SDK infers from it,
  * MCP derives tools from it. These assertions are the contract that keeps all
@@ -251,9 +244,12 @@ describe("route registry: per-route invariants", () => {
     }
   });
 
-  it.each(
-    SELECTOR_ERROR_BY_SEGMENT,
-  )("authenticated Control Plane paths with %s document %s", (segment, errors) => {
+  it.each([
+    [":appId", ["APP_NOT_FOUND", "SELECTOR_AMBIGUOUS"]],
+    [":environmentId", ["APP_NOT_FOUND", "SELECTOR_AMBIGUOUS"]],
+    [":targetEnvironmentId", ["APP_NOT_FOUND", "SELECTOR_AMBIGUOUS"]],
+    [":flagId", ["FLAG_NOT_FOUND"]],
+  ] as const)("authenticated Control Plane paths with %s document %s", (segment, errors) => {
     const matchingRoutes = routeRegistry.filter(
       (route) => route.auth === "control-plane-token" && route.path.includes(segment),
     );

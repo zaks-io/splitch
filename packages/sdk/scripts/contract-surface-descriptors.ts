@@ -31,6 +31,8 @@ import {
 
 export type UnknownKeysPolicy = "strict" | "strip" | "passthrough";
 
+type JsonPrimitiveTypeName = "boolean" | "string" | "number";
+
 export type JsonTypeNode =
   | { type: "boolean" }
   | { type: "string" }
@@ -43,7 +45,10 @@ export type JsonTypeNode =
     }
   | { type: "array"; items?: unknown }
   | { anyOf: JsonTypeNode[] }
-  | { type: "string"; enum: readonly string[] };
+  | { type: "string"; enum: readonly string[] }
+  // zod 4.5.1's z.toJSONSchema() compacts a nullable primitive (string, number,
+  // boolean) into this two-element `type` array instead of an `anyOf` pair.
+  | { type: readonly [JsonPrimitiveTypeName, "null"] };
 
 export interface ObjectShapeDescriptor {
   readonly properties: Readonly<Record<string, JsonTypeNode>>;
@@ -80,8 +85,15 @@ const nullableVariantValue: JsonTypeNode = {
   anyOf: [variantValueDescriptor, { type: "null" }],
 };
 
+// zod 4.5.1's z.toJSONSchema() merges a plain-primitive `.nullable()` (string,
+// number, boolean) into the compact JSON Schema `type: [T, "null"]` array form
+// instead of `anyOf` (verified against the installed zod: `z.toJSONSchema(z.
+// object({ s: z.string().nullable() }))` -> `{ type: ["string", "null"] }`).
+// A `.nullable()` enum or union still renders as `anyOf` (their inner node
+// carries extra keywords like `enum` that can't merge into a bare `type`
+// array), so only this primitive-string case changes shape.
 const nullableString: JsonTypeNode = {
-  anyOf: [{ type: "string" }, { type: "null" }],
+  type: ["string", "null"],
 };
 
 const errorCodeEnum: JsonTypeNode = { type: "string", enum: errorCodes };

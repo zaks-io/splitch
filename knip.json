@@ -5,12 +5,7 @@
   "stryker": {
     "config": ["stryker.base.mjs", "packages/*/stryker.config.mjs"]
   },
-  "ignore": [
-    ".agents/**",
-    ".claude/**",
-    "fixtures/convex-sdk-consumer/**",
-    "fixtures/ssr-sdk-consumer/**"
-  ],
+  "ignore": [".agents/**", "fixtures/convex-sdk-consumer/**", "fixtures/ssr-sdk-consumer/**"],
   "workspaces": {
     ".": {
       "entry": [
@@ -21,14 +16,11 @@
       ]
     },
     "apps/control-panel": {
-      "entry": ["src/client.tsx"],
       "vite": false,
       "ignore": ["vite.config.ts"],
       "ignoreDependencies": ["@cloudflare/vite-plugin", "@tailwindcss/vite", "@vitejs/plugin-react"]
     },
-    "apps/marketing": {
-      "entry": ["src/client.tsx"]
-    },
+    "apps/marketing": {},
     "packages/stats": {
       "vitest": {
         "config": ["vitest.config.ts", "vitest.*.config.ts"]
@@ -40,12 +32,9 @@
     "packages/sdk": {
       "entry": ["src/contract-surface-assignability.ts"],
       "ignoreDependencies": [
-        "@hono/zod-openapi",
         "@splitch/contracts",
         "@splitch/control-plane-sdk",
-        "@splitch/evaluation-core",
-        "hono",
-        "zod"
+        "@splitch/evaluation-core"
       ]
     },
     "packages/convex": {

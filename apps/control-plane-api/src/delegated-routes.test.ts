@@ -82,29 +82,30 @@ describe("delegated control-plane routes", () => {
     expect(environmentScoped.length).toBeGreaterThan(1);
   });
 
-  it.each(
-    environmentScoped.map((route) => [route.operationId, route] as const),
-  )("refuses %s before the hop when the path's Environment belongs to another App", async (_operationId, route) => {
-    const forwarded: Request[] = [];
-    const stub = binding(forwarded, Response.json({ stats: [] }));
+  it.each(environmentScoped.map((route) => [route.operationId, route] as const))(
+    "refuses %s before the hop when the path's Environment belongs to another App",
+    async (_operationId, route) => {
+      const forwarded: Request[] = [];
+      const stub = binding(forwarded, Response.json({ stats: [] }));
 
-    // The caller is a legitimate app_1 operator and passes app_1 in the path, so
-    // every co-scope check the generic guard chain can make passes. Only reading
-    // the Environment under app_1's scope catches that env_9 is app_2's.
-    const response = await createApp(
-      deps({ bindings: { "analysis-api": stub, "evaluation-api": stub } }),
-    ).request(foreignEnvironmentPath(route), {
-      method: route.method,
-      headers: { authorization: "Bearer stub", "content-type": "application/json" },
-      ...(route.method === "POST"
-        ? { body: JSON.stringify(REQUEST_BODIES[route.operationId]) }
-        : {}),
-    });
+      // The caller is a legitimate app_1 operator and passes app_1 in the path, so
+      // every co-scope check the generic guard chain can make passes. Only reading
+      // the Environment under app_1's scope catches that env_9 is app_2's.
+      const response = await createApp(
+        deps({ bindings: { "analysis-api": stub, "evaluation-api": stub } }),
+      ).request(foreignEnvironmentPath(route), {
+        method: route.method,
+        headers: { authorization: "Bearer stub", "content-type": "application/json" },
+        ...(route.method === "POST"
+          ? { body: JSON.stringify(REQUEST_BODIES[route.operationId]) }
+          : {}),
+      });
 
-    expect(response.status).toBe(404);
-    expect(((await response.json()) as { code: string }).code).toBe("APP_NOT_FOUND");
-    expect(forwarded).toHaveLength(0);
-  });
+      expect(response.status).toBe(404);
+      expect(((await response.json()) as { code: string }).code).toBe("APP_NOT_FOUND");
+      expect(forwarded).toHaveLength(0);
+    },
+  );
 
   it("fails loud without naming the owner, and logs the owner for operators", async () => {
     // Default stub has a Run, so the hop is required and unbound Analysis stays

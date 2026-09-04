@@ -195,37 +195,38 @@ describe("data-plane reason parity", () => {
     expect(harness.exposureSink.writes).toHaveLength(1);
   });
 
-  it.each(
-    testEvalParityCases,
-  )("gives test-eval and API-Key verify the same flat reason for $name", async (testCase) => {
-    const harness = await makeSdkRouteHarness({
-      door: "binding",
-      authResolver: controlPlaneAuthResolver,
-      flagOverrides: testCase.flagOverrides,
-    });
-    const context = {
-      targetingKey: "reason-parity-entity",
-      attributes: testCase.attributes,
-    };
+  it.each(testEvalParityCases)(
+    "gives test-eval and API-Key verify the same flat reason for $name",
+    async (testCase) => {
+      const harness = await makeSdkRouteHarness({
+        door: "binding",
+        authResolver: controlPlaneAuthResolver,
+        flagOverrides: testCase.flagOverrides,
+      });
+      const context = {
+        targetingKey: "reason-parity-entity",
+        attributes: testCase.attributes,
+      };
 
-    const testEval = await harness.app.request(TEST_EVAL_PATH, {
-      method: "POST",
-      headers: {
-        authorization: `Bearer ${CONTROL_PLANE_TOKEN}`,
-        "content-type": "application/json",
-      },
-      body: JSON.stringify({ evaluationContext: { ...context, idType: "user" } }),
-    });
-    const verify = await harness.app.request(VERIFY_PATH, sdkRouteInit(API_KEY, {}, context));
+      const testEval = await harness.app.request(TEST_EVAL_PATH, {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${CONTROL_PLANE_TOKEN}`,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({ evaluationContext: { ...context, idType: "user" } }),
+      });
+      const verify = await harness.app.request(VERIFY_PATH, sdkRouteInit(API_KEY, {}, context));
 
-    expect(testEval.status).toBe(200);
-    expect(verify.status).toBe(200);
-    const testEvalBody = (await testEval.json()) as TestEvaluationResponse;
-    const verifyBody = (await verify.json()) as ResolutionDetails;
-    expect(testEvalBody.resolutionReason).toBe(testCase.expectedReason);
-    expect(testEvalBody.reason.type).toBe(testCase.expectedDetail);
-    expect(verifyBody.reason).toBe(testCase.expectedReason);
-  });
+      expect(testEval.status).toBe(200);
+      expect(verify.status).toBe(200);
+      const testEvalBody = (await testEval.json()) as TestEvaluationResponse;
+      const verifyBody = (await verify.json()) as ResolutionDetails;
+      expect(testEvalBody.resolutionReason).toBe(testCase.expectedReason);
+      expect(testEvalBody.reason.type).toBe(testCase.expectedDetail);
+      expect(verifyBody.reason).toBe(testCase.expectedReason);
+    },
+  );
 });
 
 async function sdkClientFor(app: Awaited<ReturnType<typeof makeSdkRouteHarness>>["app"]) {

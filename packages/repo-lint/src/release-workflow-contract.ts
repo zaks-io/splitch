@@ -168,15 +168,16 @@ describe("GitHub latest release policy", () => {
 });
 
 describe("release target argument validation", () => {
-  it.each([{ args: [] }, { args: ["unknown"] }])("fails loudly for target args $args", ({
-    args,
-  }) => {
-    expect(() =>
-      execFileSync("node", ["scripts/release/resolve-version.mjs", ...args], {
-        cwd: repoRoot,
-        encoding: "utf8",
-        stdio: "pipe",
-      }),
-    ).toThrow(/release target is required|unknown release target/);
-  });
+  it.each([{ args: [] }, { args: ["unknown"] }])(
+    "fails loudly for target args $args",
+    ({ args }) => {
+      expect(() =>
+        execFileSync("node", ["scripts/release/resolve-version.mjs", ...args], {
+          cwd: repoRoot,
+          encoding: "utf8",
+          stdio: "pipe",
+        }),
+      ).toThrow(/release target is required|unknown release target/);
+    },
+  );
 });

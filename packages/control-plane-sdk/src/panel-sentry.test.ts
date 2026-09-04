@@ -110,7 +110,8 @@ describe("panel Sentry client", () => {
 
     const result = await client.revoke({ ...SCOPE, installationId: INSTALLATION_ID });
 
-    expect((fetch.mock.calls[0]?.[1] as RequestInit).method).toBe("DELETE");
+    const [, init] = fetch.mock.calls[0] ?? [];
+    expect((init as RequestInit | undefined)?.method).toBe("DELETE");
     expect(result).toEqual({ ok: true, data: { revoked: true }, status: 204 });
   });
 

@@ -120,8 +120,9 @@ describe("golden-leak canary", () => {
       .values[0];
     const exc = (scrubbed.exception as { values: Array<{ value: string }> }).values[0];
 
+    const crumbData = crumb?.data as { targeting: unknown } | undefined;
     expect((crumb?.message ?? "").includes(CANARY_TARGETING_KEY)).toBe(false);
-    expect((crumb?.data as { targeting: unknown }).targeting).toBe("[Redacted]");
+    expect(crumbData?.targeting).toBe("[Redacted]");
     expect((exc?.value ?? "").includes(CANARY_TARGETING_KEY)).toBe(false);
     expect((exc?.value ?? "").includes(CANARY_EMAIL)).toBe(false);
     expect(String(scrubbed.message).includes(CANARY_EMAIL)).toBe(false);

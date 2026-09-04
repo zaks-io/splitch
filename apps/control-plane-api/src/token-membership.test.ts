@@ -241,16 +241,16 @@ describe("resolveMcpMembershipScopes", () => {
     expect(resolve).toHaveBeenCalledWith(USER);
   });
 
-  it.each([
-    "",
-    "x".repeat(257),
-  ])("rejects invalid user id %j before membership lookup", async (userId) => {
-    const resolve = vi.fn();
-    await expect(resolveMcpMembershipScopes(fakeAccess({ resolve }), userId)).rejects.toThrow(
-      "control-plane-api: invalid MCP user id",
-    );
-    expect(resolve).not.toHaveBeenCalled();
-  });
+  it.each(["", "x".repeat(257)])(
+    "rejects invalid user id %j before membership lookup",
+    async (userId) => {
+      const resolve = vi.fn();
+      await expect(resolveMcpMembershipScopes(fakeAccess({ resolve }), userId)).rejects.toThrow(
+        "control-plane-api: invalid MCP user id",
+      );
+      expect(resolve).not.toHaveBeenCalled();
+    },
+  );
 });
 
 function fakeAccess(

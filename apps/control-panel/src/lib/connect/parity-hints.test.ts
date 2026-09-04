@@ -94,13 +94,14 @@ function commandLiterals(text: string): string[] {
 }
 
 describe("no hand-typed CLI commands in rendered output", () => {
-  it.each(
-    panelSources().map(({ file, text }) => [file, text] as const),
-  )("%s derives every command it renders", (file, text) => {
-    const literals = commandLiterals(text);
+  it.each(panelSources().map(({ file, text }) => [file, text] as const))(
+    "%s derives every command it renders",
+    (file, text) => {
+      const literals = commandLiterals(text);
 
-    expect(KNOWN_HARDCODED_COMMANDS.has(file) ? [] : literals).toEqual([]);
-  });
+      expect(KNOWN_HARDCODED_COMMANDS.has(file) ? [] : literals).toEqual([]);
+    },
+  );
 
   it("still flags a command literal when one is present", () => {
     expect(commandLiterals("<p>Run <code>splitch client-key get</code></p>")).toHaveLength(1);

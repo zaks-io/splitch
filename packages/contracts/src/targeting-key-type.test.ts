@@ -21,16 +21,12 @@ const validCreateExperiment = {
 };
 
 describe("TargetingKeyTypeSchema shape", () => {
-  it.each([
-    "user",
-    "session",
-    "workspace",
-    "account",
-    "restaurant",
-    "service_account",
-  ])("accepts open-vocabulary type %s", (targetingKeyType) => {
-    expect(TargetingKeyTypeSchema.parse(targetingKeyType)).toBe(targetingKeyType);
-  });
+  it.each(["user", "session", "workspace", "account", "restaurant", "service_account"])(
+    "accepts open-vocabulary type %s",
+    (targetingKeyType) => {
+      expect(TargetingKeyTypeSchema.parse(targetingKeyType)).toBe(targetingKeyType);
+    },
+  );
 
   it.each([
     ["empty", ""],

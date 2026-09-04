@@ -194,7 +194,8 @@ describe("ExposureQueue: retain-on-failure (R4)", () => {
     expect(rateLimited?.message).toMatch(/dropped 10/);
     expect(rateLimited?.message).toMatch(/retained 25/);
     expect(rateLimited?.detail).toMatchObject({ droppedCount: 10, retainedCount: 25 });
-    expect((rateLimited?.detail as { exposureIds: string[] }).exposureIds).toHaveLength(10);
+    const detail = rateLimited?.detail as { exposureIds: string[] } | undefined;
+    expect(detail?.exposureIds).toHaveLength(10);
   });
 });
 

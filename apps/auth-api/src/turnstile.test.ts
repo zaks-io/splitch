@@ -17,33 +17,33 @@ describe("runtime Turnstile verifier selection", () => {
     await expect(verifier.assertValid(FIXTURE_TURNSTILE_TOKEN, undefined)).resolves.toBe(undefined);
   });
 
-  it.each([
-    "shared-preview",
-    "production",
-  ])("requires TURNSTILE_SECRET for %s", (platformTarget) => {
-    expect(() =>
-      makeRuntimeTurnstile({
-        fixture: makeFixtureTurnstile(),
-        platformTarget,
-        secret: undefined,
-      }),
-    ).toThrow("auth-api: TURNSTILE_SECRET is required outside local/test targets");
-  });
+  it.each(["shared-preview", "production"])(
+    "requires TURNSTILE_SECRET for %s",
+    (platformTarget) => {
+      expect(() =>
+        makeRuntimeTurnstile({
+          fixture: makeFixtureTurnstile(),
+          platformTarget,
+          secret: undefined,
+        }),
+      ).toThrow("auth-api: TURNSTILE_SECRET is required outside local/test targets");
+    },
+  );
 
-  it.each([
-    undefined,
-    "staging",
-  ])("fails closed for missing or unknown targets (%s)", (platformTarget) => {
-    expect(() =>
-      makeRuntimeTurnstile({
-        fixture: makeFixtureTurnstile(),
-        platformTarget,
-        secret: "turnstile-secret",
-      }),
-    ).toThrow(
-      `auth-api: unsupported SPLITCH_PLATFORM_TARGET for Turnstile verifier: ${platformTarget}`,
-    );
-  });
+  it.each([undefined, "staging"])(
+    "fails closed for missing or unknown targets (%s)",
+    (platformTarget) => {
+      expect(() =>
+        makeRuntimeTurnstile({
+          fixture: makeFixtureTurnstile(),
+          platformTarget,
+          secret: "turnstile-secret",
+        }),
+      ).toThrow(
+        `auth-api: unsupported SPLITCH_PLATFORM_TARGET for Turnstile verifier: ${platformTarget}`,
+      );
+    },
+  );
 
   it("routes hosted fixture-prefixed tokens through siteverify, not the fixture verifier", async () => {
     const fetcher = vi.fn(async () =>

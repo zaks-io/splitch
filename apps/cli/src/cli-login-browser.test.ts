@@ -123,31 +123,34 @@ describe("login device URL origin binding", () => {
       "downgrade URI",
       { verification_uri: "http://auth.splitch.dev/device", verification_uri_complete: undefined },
     ],
-  ])("rejects an unsafe verification URI before opening or polling: %s", async (_case, override) => {
-    const { credentialPath } = await makeTempHome();
-    const transport = new FakeCliTransport([
-      {
-        match: (request) => request.url.endsWith("/oauth2/device_authorization"),
-        status: 200,
-        body: { ...deviceAuthorizationResponse(), ...override },
-      },
-    ]);
-    const stderrSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+  ])(
+    "rejects an unsafe verification URI before opening or polling: %s",
+    async (_case, override) => {
+      const { credentialPath } = await makeTempHome();
+      const transport = new FakeCliTransport([
+        {
+          match: (request) => request.url.endsWith("/oauth2/device_authorization"),
+          status: 200,
+          body: { ...deviceAuthorizationResponse(), ...override },
+        },
+      ]);
+      const stderrSpy = vi.spyOn(console, "error").mockImplementation(() => {});
 
-    expect(
-      await runCli(["login", "--json"], {
-        credentialPath,
-        fetch: transport.fetch,
-        platformTarget: "production",
-      }),
-    ).not.toBe(EXIT_OK);
+      expect(
+        await runCli(["login", "--json"], {
+          credentialPath,
+          fetch: transport.fetch,
+          platformTarget: "production",
+        }),
+      ).not.toBe(EXIT_OK);
 
-    expect(open).not.toHaveBeenCalled();
-    expect(transport.requests).toHaveLength(1);
-    expect(stderrSpy.mock.calls.join(" ")).toContain("CLI_DEVICE_AUTHORIZATION_FAILED");
-    expect(stderrSpy.mock.calls.join(" ")).not.toContain("user:pass");
-    await expect(access(credentialPath, constants.F_OK)).rejects.toThrow();
-  });
+      expect(open).not.toHaveBeenCalled();
+      expect(transport.requests).toHaveLength(1);
+      expect(stderrSpy.mock.calls.join(" ")).toContain("CLI_DEVICE_AUTHORIZATION_FAILED");
+      expect(stderrSpy.mock.calls.join(" ")).not.toContain("user:pass");
+      await expect(access(credentialPath, constants.F_OK)).rejects.toThrow();
+    },
+  );
 
   it("opens a valid URL on an overridden configured Auth origin", async () => {
     const { credentialPath } = await makeTempHome();

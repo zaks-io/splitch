@@ -116,16 +116,16 @@ describe("Evaluation Worker service bindings", () => {
    * recognises each delegated operation is answered at runtime, by the registry
    * sweep in `apps/event-ingest-api/src/evaluation-entrypoint.test.ts`.
    */
-  it.each([
-    "shared-preview",
-    "production",
-  ] as const)("requires EVALUATION_PRIVACY_SALT on %s and not as a committed local var", (targetName) => {
-    const target =
-      targetName === "shared-preview" ? config.env?.["shared-preview"] : config.env?.production;
-    expect(target?.secrets?.required).toContain("EVALUATION_PRIVACY_SALT");
-    expect(config.secrets?.required).not.toContain("EVALUATION_PRIVACY_SALT");
-    expect(config.vars?.SPLITCH_PLATFORM_TARGET).toBe("local");
-  });
+  it.each(["shared-preview", "production"] as const)(
+    "requires EVALUATION_PRIVACY_SALT on %s and not as a committed local var",
+    (targetName) => {
+      const target =
+        targetName === "shared-preview" ? config.env?.["shared-preview"] : config.env?.production;
+      expect(target?.secrets?.required).toContain("EVALUATION_PRIVACY_SALT");
+      expect(config.secrets?.required).not.toContain("EVALUATION_PRIVACY_SALT");
+      expect(config.vars?.SPLITCH_PLATFORM_TARGET).toBe("local");
+    },
+  );
 
   it("routes every internal sink the Evaluation Worker addresses", () => {
     const routed = routedInternalPaths();

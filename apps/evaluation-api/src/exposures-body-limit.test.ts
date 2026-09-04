@@ -12,6 +12,23 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
+// zod 4.5.1 installs instance methods (e.g. `safeParse`) as a lazy prototype
+// getter that materializes into an own bound method on first read (zod's
+// util.js `defineBound`/`own`, comment: "Members live on the prototype and
+// materialize per instance on first read"). vitest's `vi.spyOn` has an "SSR"
+// fallback for get-only descriptors that calls the getter with no receiver
+// (`@vitest/spy`'s `spyOn`: `originalImplementation = ssr && original ? original() : original`),
+// so it invokes zod's getter with `this` undefined and crashes with
+// "Object.defineProperty called on non-object" (verified directly: the same
+// crash reproduces by calling the raw prototype getter unbound). Touching the
+// method once first — exactly what a real caller's `schema.safeParse(x)` does
+// — makes zod materialize it as a normal own data property, so vi.spyOn takes
+// its ordinary (non-SSR) path.
+function spyOnSafeParse(schema: ReturnType<typeof evaluationRoute>["input"]) {
+  void schema.safeParse;
+  return vi.spyOn(schema, "safeParse");
+}
+
 describe("POST /api/sdk/exposures: raw-body byte limit", () => {
   it("rejects an over-cap Content-Length before body read, JSON, Zod, auth, or side effects", async () => {
     const { app, assignmentStore, credentialKv, exposureSink, logger } = await makeSdkRouteHarness({
@@ -20,7 +37,7 @@ describe("POST /api/sdk/exposures: raw-body byte limit", () => {
     credentialKv.getCalls.length = 0;
     const body = controlledBody(["not read"]);
     const jsonParse = vi.spyOn(JSON, "parse");
-    const schemaParse = vi.spyOn(evaluationRoute("sdk_exposures").input, "safeParse");
+    const schemaParse = spyOnSafeParse(evaluationRoute("sdk_exposures").input);
 
     const response = await app.request(
       requestWithBody(body.stream, {
@@ -62,7 +79,7 @@ describe("POST /api/sdk/exposures: raw-body byte limit", () => {
     const rejectedMarker = "must-never-be-read-or-logged";
     const body = controlledBody(["x".repeat(EXPOSURE_BATCH_MAX_BODY_BYTES), "y", rejectedMarker]);
     const jsonParse = vi.spyOn(JSON, "parse");
-    const schemaParse = vi.spyOn(evaluationRoute("sdk_exposures").input, "safeParse");
+    const schemaParse = spyOnSafeParse(evaluationRoute("sdk_exposures").input);
 
     const response = await app.request(
       requestWithBody(body.stream, {
