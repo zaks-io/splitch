@@ -79,7 +79,7 @@ The root `package.json` exposes these scripts:
 | `secrets:range`        | scan only the change's commit range (CI/pre-push)                  |
 | `secrets:git`          | `gitleaks git --redact --no-banner .` (full history)               |
 | `verify:commit`        | commit hook entrypoint                                             |
-| `verify:push`          | pre-push and local CI-parity entrypoint                            |
+| `verify:push`          | lean pre-push validation entrypoint                                |
 | `verify:ci`            | CI entrypoint                                                      |
 
 Root scripts own repository-wide static analysis commands that do not belong to one runtime package.
@@ -102,7 +102,7 @@ an explicit command described in [agent-verification.md](./agent-verification.md
 - Prefer affected/scoped Turbo execution where it is sound. Fall back to the full task when the base
   commit is unavailable or the change touches shared config.
 
-`pre-push` mirrors CI without smoke tests:
+`pre-push` runs the lean `verify:push` graph; the required CI handoff runs `verify:ci`:
 
 - **Build-fast phase:** `verify:push` runs the lean static set (format check, lint, typecheck, Knip,
   Gitleaks) plus `tinybird:local`, `d1:migrate:local` (SPL-9), and `d1:migrate:populated`. The fuller
@@ -117,7 +117,8 @@ an explicit command described in [agent-verification.md](./agent-verification.md
   local cache is still valid when those values are absent.
 
 Agents should treat a CI failure as a local reproduction task first. Pull the failing check name,
-run the matching root script locally, fix the failure, and rerun `verify:push` before handing work back.
+run the matching root script locally, fix the failure, and rerun `verify:push` before handing work
+back. `verify:push` is not a substitute for the required `verify:ci` graph in hosted CI.
 
 ## CI policy
 
