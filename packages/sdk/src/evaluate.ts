@@ -217,29 +217,6 @@ async function resolveContextMiss(
 }
 
 /**
- * The single evaluate path shared by `evaluate` and `evaluateDetails`. Ordering
- * follows docs/spec/sdk/exposure-accessor.md and seen-set.md:
- *
- *   1. Default idType to 'user'; resolve the Default Variant value, then throw
- *      SDK_CONTEXT_INVALID if the caller supplied no `idempotencyKey`.
- *   2. Seen-set value hit: a FRESH (within-TTL) entry for this
- *      (flagKey, idType, targetingKey, attributes) replays as CACHED with NO
- *      transport call and NO second Exposure. Bounded optimistic suppression —
- *      past the revalidation window the entry is treated as a MISS so a Run
- *      boundary is detected within the TTL (see seen-set.md), never suppressed
- *      forever.
- *   3. Seen-set context-miss: Exposure identity is still fresh but attributes
- *      differ → re-resolve via `verify` (no Exposure) and cache the new value
- *      under its attribute fingerprint. Never replay another context's Variant.
- *   4. Miss -> call the transport ONCE (the server fires the Exposure as a side
- *      effect). NEVER retried — a retry is a fresh resolution, not a replay.
- *   5. ERROR -> return Default Variant + reason:ERROR + errorCode, emit a LOUD
- *      log, do NOT cache (never cache an error), fire NO Exposure.
- *   6. Success -> record (flagKey, runId, targetingKey, attributes, storedAt) ->
- *      value. A later call past the TTL that returns a NEW runId stores a new
- *      Exposure slot, so a Run boundary fires a fresh Exposure.
- */
-/**
  * `sdk_evaluate` declares `idempotency: "required"`, and
  * `worker-runtime/steps/idempotency.ts` reads the `Idempotency-Key` HEADER and
  * nothing else, so `requestFor` omitting an absent key buys a round trip that
@@ -293,6 +270,29 @@ function requireIdempotencyKey(
   throw error;
 }
 
+/**
+ * The single evaluate path shared by `evaluate` and `evaluateDetails`. Ordering
+ * follows docs/spec/sdk/exposure-accessor.md and seen-set.md:
+ *
+ *   1. Default idType to 'user'; resolve the Default Variant value, then throw
+ *      SDK_CONTEXT_INVALID if the caller supplied no `idempotencyKey`.
+ *   2. Seen-set value hit: a FRESH (within-TTL) entry for this
+ *      (flagKey, idType, targetingKey, attributes) replays as CACHED with NO
+ *      transport call and NO second Exposure. Bounded optimistic suppression —
+ *      past the revalidation window the entry is treated as a MISS so a Run
+ *      boundary is detected within the TTL (see seen-set.md), never suppressed
+ *      forever.
+ *   3. Seen-set context-miss: Exposure identity is still fresh but attributes
+ *      differ → re-resolve via `verify` (no Exposure) and cache the new value
+ *      under its attribute fingerprint. Never replay another context's Variant.
+ *   4. Miss -> call the transport ONCE (the server fires the Exposure as a side
+ *      effect). NEVER retried — a retry is a fresh resolution, not a replay.
+ *   5. ERROR -> return Default Variant + reason:ERROR + errorCode, emit a LOUD
+ *      log, do NOT cache (never cache an error), fire NO Exposure.
+ *   6. Success -> record (flagKey, runId, targetingKey, attributes, storedAt) ->
+ *      value. A later call past the TTL that returns a NEW runId stores a new
+ *      Exposure slot, so a Run boundary fires a fresh Exposure.
+ */
 export async function runEvaluate(
   deps: EvaluateDeps,
   flagKey: string,
