@@ -3,6 +3,7 @@ import { z } from "zod";
 import { ErrorResponseSchema } from "./errors";
 import { KILL_SWITCH_OFF_EXEMPTION } from "./kill-switch-off-exemption";
 import { deriveMcpTools, isMcpToolRoute } from "./mcp-tools";
+import { jsonMediaTypeSchema } from "./openapi-route";
 import { getRoute, routeRegistry } from "./route-registry";
 
 /**
@@ -154,7 +155,7 @@ describe("mcp tools: 1:1 parity with control-plane routes", () => {
     const usage = tools.find((tool) => tool.name === "organization_usage_get");
     const route = getRoute("organization_usage_get");
     const ok = route?.openapi.responses[200];
-    const schema = ok && "content" in ok ? ok.content?.["application/json"]?.schema : undefined;
+    const schema = ok && "content" in ok ? jsonMediaTypeSchema(ok.content) : undefined;
 
     expect(usage).toBeDefined();
     expect(objectShape(usage?.inputSchema)).toHaveProperty("orgId");
@@ -331,7 +332,7 @@ describe("mcp tools: derived input and output schemas", () => {
   it("tool output = the route 200 response schema", () => {
     const get = tools.find((tool) => tool.name === "flags_get");
     const ok = getRoute("flags_get")?.openapi.responses[200];
-    const schema = ok && "content" in ok ? ok.content?.["application/json"]?.schema : undefined;
+    const schema = ok && "content" in ok ? jsonMediaTypeSchema(ok.content) : undefined;
     expect(get?.outputSchema).toBe(schema);
   });
 

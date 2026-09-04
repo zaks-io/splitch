@@ -1,4 +1,4 @@
-import { getRoute } from "@splitch/contracts";
+import { getRoute, jsonMediaTypeSchema } from "@splitch/contracts";
 import { describe, expect, it } from "vitest";
 import { createMcpOperationAdapter } from "./mcp-operation-adapter";
 
@@ -152,8 +152,7 @@ describe("mcp operation adapter body path stripping (SPL-296)", () => {
 });
 
 function routeBodySchema(operationId: string) {
-  const schema =
-    getRoute(operationId)?.openapi.request?.body?.content?.["application/json"]?.schema;
+  const schema = jsonMediaTypeSchema(getRoute(operationId)?.openapi.request?.body?.content);
   expect(schema && typeof (schema as { safeParse?: unknown }).safeParse === "function").toBe(true);
   return schema as {
     safeParse(

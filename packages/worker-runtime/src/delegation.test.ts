@@ -136,19 +136,19 @@ describe("delegated identity check", () => {
    * binding and the surface Worker reports a 500 for a request it should simply
    * not have recognized.
    */
-  it.each([
-    "%E0%A4%A",
-    "%",
-  ])("returns null rather than throwing on the malformed escape %s", (bad) => {
-    const request = delegatedRequest(results, identity, { params, body: {} });
-    const malformed = new Request(
-      `https://delegated.splitch.internal/apps/${bad}/envs/env_1/experiments/exp_1/results`,
-      { method: "POST", headers: request.headers },
-    );
+  it.each(["%E0%A4%A", "%"])(
+    "returns null rather than throwing on the malformed escape %s",
+    (bad) => {
+      const request = delegatedRequest(results, identity, { params, body: {} });
+      const malformed = new Request(
+        `https://delegated.splitch.internal/apps/${bad}/envs/env_1/experiments/exp_1/results`,
+        { method: "POST", headers: request.headers },
+      );
 
-    expect(() => delegatedIdentityFor(malformed, allowed)).not.toThrow();
-    expect(delegatedIdentityFor(malformed, allowed)).toBeNull();
-  });
+      expect(() => delegatedIdentityFor(malformed, allowed)).not.toThrow();
+      expect(delegatedIdentityFor(malformed, allowed)).toBeNull();
+    },
+  );
 });
 
 /**

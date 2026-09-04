@@ -92,22 +92,24 @@ async function exchangeAssertion(
 }
 
 describe("hosted committed-secret assertion forgery fails closed", () => {
-  it.each(
-    committedAssertionSigningSecrets,
-  )("fails closed when hosted inherits committed secret %s", async (secret) => {
-    const result = await exchangeAssertion(await forgeAssertion(secret), {
-      ...hostedEnv,
-      ASSERTION_SIGNING_SECRET: secret,
-    });
-    expect(result).toEqual({ assertionAccepted: false, accessMinted: false });
-  });
+  it.each(committedAssertionSigningSecrets)(
+    "fails closed when hosted inherits committed secret %s",
+    async (secret) => {
+      const result = await exchangeAssertion(await forgeAssertion(secret), {
+        ...hostedEnv,
+        ASSERTION_SIGNING_SECRET: secret,
+      });
+      expect(result).toEqual({ assertionAccepted: false, accessMinted: false });
+    },
+  );
 
-  it.each(
-    committedAssertionSigningSecrets,
-  )("rejects a %s-signed forgery on a uniquely keyed hosted target", async (secret) => {
-    const result = await exchangeAssertion(await forgeAssertion(secret), hostedEnv);
-    expect(result).toEqual({ assertionAccepted: false, accessMinted: false });
-  });
+  it.each(committedAssertionSigningSecrets)(
+    "rejects a %s-signed forgery on a uniquely keyed hosted target",
+    async (secret) => {
+      const result = await exchangeAssertion(await forgeAssertion(secret), hostedEnv);
+      expect(result).toEqual({ assertionAccepted: false, accessMinted: false });
+    },
+  );
 
   it("still mints when the assertion is signed by the unique hosted secret", async () => {
     const result = await exchangeAssertion(

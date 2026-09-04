@@ -140,10 +140,11 @@ describe("ExposureQueue: batch caps and overflow", () => {
       droppedCount: expect.any(Number),
       retainedCount: expect.any(Number),
     });
-    expect((rateLimited?.detail as { droppedCount: number }).droppedCount).toBeGreaterThan(0);
-    expect((rateLimited?.detail as { retainedCount: number }).retainedCount).toBe(
-      EXPOSURE_BATCH_MAX_ITEMS,
-    );
+    const detail = rateLimited?.detail as
+      | { droppedCount: number; retainedCount: number }
+      | undefined;
+    expect(detail?.droppedCount).toBeGreaterThan(0);
+    expect(detail?.retainedCount).toBe(EXPOSURE_BATCH_MAX_ITEMS);
   });
 });
 

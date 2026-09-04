@@ -5,16 +5,14 @@ const HEADER = "eyJhbGciOiJSUzI1NiJ9";
 const PAYLOAD = "e30";
 
 describe("decodeJwt", () => {
-  it.each([
-    "a+b",
-    "a/b",
-    "a b",
-    "a",
-  ])("returns invalid_token for malformed signature encoding %j", (signature) => {
-    expect(() => decodeJwt(`${HEADER}.${PAYLOAD}.${signature}`)).toThrowError(
-      expect.objectContaining({ code: "invalid_token", status: 401 }),
-    );
-  });
+  it.each(["a+b", "a/b", "a b", "a"])(
+    "returns invalid_token for malformed signature encoding %j",
+    (signature) => {
+      expect(() => decodeJwt(`${HEADER}.${PAYLOAD}.${signature}`)).toThrowError(
+        expect.objectContaining({ code: "invalid_token", status: 401 }),
+      );
+    },
+  );
 
   it.each(["bnVsbA", "W10"])("returns invalid_token for non-object JSON %j", (segment) => {
     expect.assertions(1);

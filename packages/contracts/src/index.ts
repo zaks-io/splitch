@@ -215,7 +215,7 @@ export {
   scopeSatisfiesMembershipGate,
 } from "./mcp-tool-membership-gates";
 export type { ApiRouteContract, ApiRouteRequest, DefineApiRouteInput } from "./openapi-route";
-export { defineApiRoute } from "./openapi-route";
+export { defineApiRoute, jsonMediaTypeSchema } from "./openapi-route";
 export { type ControlPlaneRpcApp, controlPlaneRpcApp } from "./openapi-rpc";
 export {
   deriveOrganizationSlug,

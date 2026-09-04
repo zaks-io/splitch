@@ -54,7 +54,8 @@ describe("panel Convex client", () => {
     expect(String(fetch.mock.calls[0]?.[0])).toBe(
       `https://control-plane.internal/apps/app_1/envs/env_prod/integrations/convex/installations/${INSTALLATION_ID}`,
     );
-    expect((fetch.mock.calls[0]?.[1] as RequestInit).method).toBe("DELETE");
+    const [, init] = fetch.mock.calls[0] ?? [];
+    expect((init as RequestInit | undefined)?.method).toBe("DELETE");
     expect(result).toEqual({ ok: true, data: { revoked: true }, status: 204 });
   });
 

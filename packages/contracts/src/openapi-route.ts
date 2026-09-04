@@ -90,6 +90,27 @@ export interface ApiRouteContract<
 }
 
 /**
+ * The Zod schema behind a route's JSON media-type entry (request body or
+ * response), narrowing out the `ReferenceObject` (`$ref`) variant that
+ * `@asteasolutions/zod-to-openapi` 9.x's `ZodContentObject` allows alongside
+ * `ZodMediaTypeObject` (openapi-registry.d.ts: `ZodContentObject = Partial<
+ * Record<ZodMediaType, ZodMediaTypeObject | ReferenceObject>>` — a `$ref`
+ * media-type entry is an OAS 3.2 addition; see the `@asteasolutions/zod-to-openapi`
+ * changelog). Every splitch route always authors a live Zod schema, never a
+ * `$ref` media type, so this narrows structurally on the `"schema"` key rather
+ * than casting the union away.
+ */
+export function jsonMediaTypeSchema(
+  content: Partial<Record<string, { schema?: unknown } | { $ref: string }>> | undefined,
+): z.ZodTypeAny | undefined {
+  const entry = content?.[JSON_CONTENT];
+  if (!entry || !("schema" in entry)) {
+    return undefined;
+  }
+  return entry.schema as z.ZodTypeAny | undefined;
+}
+
+/**
  * Build the runtime `input` schema the registrar parses: a `.strict()`-free
  * object keyed by the request parts present, matching parseInput's RawInput
  * (`{ params, query, headers, body }`). Absent parts are simply omitted so the

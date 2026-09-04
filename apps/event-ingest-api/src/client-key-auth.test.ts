@@ -17,40 +17,41 @@ afterEach(() => {
 });
 
 describe("delegated Metric Event credential authorization", () => {
-  it.each([
-    "client_key",
-    "api_key",
-  ] satisfies CredentialKind[])("refuses a %s without data-plane:write", async (kind) => {
-    const result = await authenticateDelegatedDataPlaneCredential(
-      identity(kind),
-      envWithCredential(kind, { scopes: ["data-plane:evaluate"] }),
-    );
+  it.each(["client_key", "api_key"] satisfies CredentialKind[])(
+    "refuses a %s without data-plane:write",
+    async (kind) => {
+      const result = await authenticateDelegatedDataPlaneCredential(
+        identity(kind),
+        envWithCredential(kind, { scopes: ["data-plane:evaluate"] }),
+      );
 
-    expect(result).toMatchObject({
-      ok: false,
-      error: {
-        code: "INSUFFICIENT_SCOPES",
-        details: { requiredScopes: ["data-plane:write"] },
-      },
-    });
-  });
+      expect(result).toMatchObject({
+        ok: false,
+        error: {
+          code: "INSUFFICIENT_SCOPES",
+          details: { requiredScopes: ["data-plane:write"] },
+        },
+      });
+    },
+  );
 
   it.each([
     ["client_key", "App", { appId: "app_attacker" }],
     ["client_key", "Environment", { environmentId: "env_attacker" }],
     ["api_key", "App", { appId: "app_attacker" }],
     ["api_key", "Environment", { environmentId: "env_attacker" }],
-  ] satisfies Array<
-    [CredentialKind, string, Partial<ReturnType<typeof identity>>]
-  >)("refuses a %s delegated with a different %s", async (kind, _scope, patch) => {
-    vi.spyOn(console, "error").mockImplementation(() => undefined);
-    const result = await authenticateDelegatedDataPlaneCredential(
-      { ...identity(kind), ...patch },
-      envWithCredential(kind),
-    );
+  ] satisfies Array<[CredentialKind, string, Partial<ReturnType<typeof identity>>]>)(
+    "refuses a %s delegated with a different %s",
+    async (kind, _scope, patch) => {
+      vi.spyOn(console, "error").mockImplementation(() => undefined);
+      const result = await authenticateDelegatedDataPlaneCredential(
+        { ...identity(kind), ...patch },
+        envWithCredential(kind),
+      );
 
-    expect(result).toMatchObject({ ok: false, error: { code: "INTERNAL_SERVER_ERROR" } });
-  });
+      expect(result).toMatchObject({ ok: false, error: { code: "INTERNAL_SERVER_ERROR" } });
+    },
+  );
 
   it("logs complete scope mismatch evidence without returning it to the caller", async () => {
     const kind = "client_key";
@@ -90,23 +91,24 @@ describe("delegated Metric Event credential identity", () => {
   it.each([
     ["client_key", "api_key"],
     ["api_key", "client_key"],
-  ] satisfies Array<
-    [CredentialKind, CredentialKind]
-  >)("refuses delegated %s material backed by a %s record", async (delegatedKind, storedKind) => {
-    const result = await authenticateDelegatedDataPlaneCredential(
-      identity(delegatedKind),
-      envWithCredential(delegatedKind, { kind: storedKind }),
-    );
+  ] satisfies Array<[CredentialKind, CredentialKind]>)(
+    "refuses delegated %s material backed by a %s record",
+    async (delegatedKind, storedKind) => {
+      const result = await authenticateDelegatedDataPlaneCredential(
+        identity(delegatedKind),
+        envWithCredential(delegatedKind, { kind: storedKind }),
+      );
 
-    expect(result).toEqual({
-      ok: false,
-      error: {
-        code: "UNAUTHORIZED",
-        message: `${credentialLabel(delegatedKind)} is unknown`,
-        details: {},
-      },
-    });
-  });
+      expect(result).toEqual({
+        ok: false,
+        error: {
+          code: "UNAUTHORIZED",
+          message: `${credentialLabel(delegatedKind)} is unknown`,
+          details: {},
+        },
+      });
+    },
+  );
 
   it("rejects malformed delegated hash material before reading credential storage", async () => {
     const malformedHash = "c".repeat(63);

@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { ErrorResponseSchema } from "./errors";
 import { KILL_SWITCH_OFF_EXEMPTION } from "./kill-switch-off-exemption";
-import type { ApiRouteContract } from "./openapi-route";
+import { type ApiRouteContract, jsonMediaTypeSchema } from "./openapi-route";
 import { IdempotencyKeySchema } from "./persisted-field-limits";
 import { routeRegistry } from "./route-registry";
 
@@ -85,9 +85,8 @@ function requestParts(route: ApiRouteContract): {
   query?: z.ZodTypeAny;
 } {
   const request = route.openapi.request ?? {};
-  const json = request.body?.content?.["application/json"];
   return {
-    body: json?.schema as z.ZodTypeAny | undefined,
+    body: jsonMediaTypeSchema(request.body?.content),
     params: request.params as z.ZodTypeAny | undefined,
     query: request.query as z.ZodTypeAny | undefined,
   };
@@ -170,10 +169,7 @@ function unwrapOptionalObject(schema: z.ZodTypeAny | undefined): z.ZodObject | u
 /** The 200 response schema from the route's openapi config. */
 function deriveOutputSchema(route: ApiRouteContract): z.ZodTypeAny {
   const ok = route.openapi.responses[200];
-  const schema =
-    ok && "content" in ok
-      ? (ok.content?.["application/json"]?.schema as z.ZodTypeAny | undefined)
-      : undefined;
+  const schema = ok && "content" in ok ? jsonMediaTypeSchema(ok.content) : undefined;
   if (!schema) {
     throw new Error(`mcp-tools: route "${route.operationId}" has no 200 response schema`);
   }

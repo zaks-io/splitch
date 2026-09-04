@@ -80,15 +80,16 @@ function unitVersion(fields: EventDefinitionVersion["fields"]): EventDefinitionV
 }
 
 describe("metric event own-property unit validation", () => {
-  it.each(
-    PROTOTYPE_NAMES,
-  )("absent required root %s is missing, not an inherited boolean mismatch", (name) => {
-    const issues = validateMetricEvent(
-      UNIT_EVENT,
-      unitVersion([{ name, type: "boolean", required: true }]),
-    );
-    expect(issues).toEqual([{ path: ["fields", name], message: "required value is missing" }]);
-  });
+  it.each(PROTOTYPE_NAMES)(
+    "absent required root %s is missing, not an inherited boolean mismatch",
+    (name) => {
+      const issues = validateMetricEvent(
+        UNIT_EVENT,
+        unitVersion([{ name, type: "boolean", required: true }]),
+      );
+      expect(issues).toEqual([{ path: ["fields", name], message: "required value is missing" }]);
+    },
+  );
 
   it.each(PROTOTYPE_NAMES)("absent required nested %s is missing, not inherited", (name) => {
     const issues = validateMetricEvent(
@@ -107,41 +108,43 @@ describe("metric event own-property unit validation", () => {
     ]);
   });
 
-  it.each(
-    PROTOTYPE_NAMES,
-  )("own nested {%s: true} is rejected by a closed empty JSON schema", (name) => {
-    const issues = validateMetricEvent(
-      { ...UNIT_EVENT, fields: { profile: ownJson(name, true) } },
-      unitVersion([
-        {
-          name: "profile",
-          type: "json",
-          required: true,
-          jsonSchema: { type: "object", properties: {}, additionalProperties: false },
-        },
-      ]),
-    );
-    expect(issues).toEqual([
-      { path: ["fields", "profile", name], message: "JSON key is not declared" },
-    ]);
-  });
+  it.each(PROTOTYPE_NAMES)(
+    "own nested {%s: true} is rejected by a closed empty JSON schema",
+    (name) => {
+      const issues = validateMetricEvent(
+        { ...UNIT_EVENT, fields: { profile: ownJson(name, true) } },
+        unitVersion([
+          {
+            name: "profile",
+            type: "json",
+            required: true,
+            jsonSchema: { type: "object", properties: {}, additionalProperties: false },
+          },
+        ]),
+      );
+      expect(issues).toEqual([
+        { path: ["fields", "profile", name], message: "JSON key is not declared" },
+      ]);
+    },
+  );
 });
 
 describe("metric event own-property HTTP validation", () => {
-  it.each(
-    PROTOTYPE_NAMES,
-  )("HTTP trusted: absent root %s is missing, not expected boolean", async (name) => {
-    const { response, parsed } = await ingestPrototypeMetricEvent(rootRequired(name), {
-      fields: {},
-      dimensions: {},
-    });
-    expect(response.status).not.toBe(202);
-    expect(mismatchIssues(parsed)).toContainEqual({
-      path: ["fields", name],
-      message: "required value is missing",
-    });
-    expect(JSON.stringify(parsed)).not.toContain("expected boolean");
-  });
+  it.each(PROTOTYPE_NAMES)(
+    "HTTP trusted: absent root %s is missing, not expected boolean",
+    async (name) => {
+      const { response, parsed } = await ingestPrototypeMetricEvent(rootRequired(name), {
+        fields: {},
+        dimensions: {},
+      });
+      expect(response.status).not.toBe(202);
+      expect(mismatchIssues(parsed)).toContainEqual({
+        path: ["fields", name],
+        message: "required value is missing",
+      });
+      expect(JSON.stringify(parsed)).not.toContain("expected boolean");
+    },
+  );
 
   it.each(PROTOTYPE_NAMES)("HTTP trusted: absent nested %s is missing", async (name) => {
     const { response, parsed } = await ingestPrototypeMetricEvent(nestedRequired(name), {
@@ -164,69 +167,72 @@ describe("metric event own-property HTTP validation", () => {
     expect(JSON.stringify(parsed)).not.toContain("expected boolean");
   });
 
-  it.each(
-    PROTOTYPE_NAMES,
-  )("HTTP trusted: own nested %s is not admitted against properties: {}", async (name) => {
-    const { response, parsed } = await ingestPrototypeMetricEvent(CLOSED_EMPTY_OBJECT, {
-      fields: { profile: ownJson(name, true) },
-      dimensions: {},
-    });
-    expect(response.status).not.toBe(202);
-    if (name === "__proto__") {
-      expect(parsed.code).toBe("VALIDATION_ERROR");
-      return;
-    }
-    expect(mismatchIssues(parsed)).toContainEqual({
-      path: ["fields", "profile", name],
-      message: "JSON key is not declared",
-    });
-  });
+  it.each(PROTOTYPE_NAMES)(
+    "HTTP trusted: own nested %s is not admitted against properties: {}",
+    async (name) => {
+      const { response, parsed } = await ingestPrototypeMetricEvent(CLOSED_EMPTY_OBJECT, {
+        fields: { profile: ownJson(name, true) },
+        dimensions: {},
+      });
+      expect(response.status).not.toBe(202);
+      if (name === "__proto__") {
+        expect(parsed.code).toBe("VALIDATION_ERROR");
+        return;
+      }
+      expect(mismatchIssues(parsed)).toContainEqual({
+        path: ["fields", "profile", name],
+        message: "JSON key is not declared",
+      });
+    },
+  );
 
-  it.each(
-    PROTOTYPE_NAMES,
-  )("Client Key does not leak an absent configured %s name or type", async (name) => {
-    const { response, parsed } = await ingestPrototypeMetricEvent(
-      rootRequired(name),
-      { fields: {}, dimensions: {} },
-      "client_key",
-    );
-    expect(response.status).toBe(400);
-    expect(parsed).toEqual({
-      code: "EVENT_SCHEMA_MISMATCH",
-      message: "Metric Event does not match the Event Definition Version",
-      details: {
-        eventName: METRIC_EVENT_NAME,
-        issues: [{ path: ["fields"], message: "invalid value" }],
-      },
-    });
-    expect(JSON.stringify(parsed)).not.toContain(name);
-    expect(JSON.stringify(parsed)).not.toContain("expected ");
-    expectNoDefinitionIds(parsed);
-  });
-
-  it.each(
-    PROTOTYPE_NAMES,
-  )("Client Key rejects own nested %s against a closed schema without IDs", async (name) => {
-    const { response, parsed } = await ingestPrototypeMetricEvent(
-      CLOSED_EMPTY_OBJECT,
-      { fields: { profile: ownJson(name, true) }, dimensions: {} },
-      "client_key",
-    );
-    expect(response.status).toBe(400);
-    expect(response.status).not.toBe(202);
-    if (name === "__proto__") {
-      expect(parsed.code).toBe("VALIDATION_ERROR");
+  it.each(PROTOTYPE_NAMES)(
+    "Client Key does not leak an absent configured %s name or type",
+    async (name) => {
+      const { response, parsed } = await ingestPrototypeMetricEvent(
+        rootRequired(name),
+        { fields: {}, dimensions: {} },
+        "client_key",
+      );
+      expect(response.status).toBe(400);
+      expect(parsed).toEqual({
+        code: "EVENT_SCHEMA_MISMATCH",
+        message: "Metric Event does not match the Event Definition Version",
+        details: {
+          eventName: METRIC_EVENT_NAME,
+          issues: [{ path: ["fields"], message: "invalid value" }],
+        },
+      });
+      expect(JSON.stringify(parsed)).not.toContain(name);
+      expect(JSON.stringify(parsed)).not.toContain("expected ");
       expectNoDefinitionIds(parsed);
-      return;
-    }
-    expect(parsed).toEqual({
-      code: "EVENT_SCHEMA_MISMATCH",
-      message: "Metric Event does not match the Event Definition Version",
-      details: {
-        eventName: METRIC_EVENT_NAME,
-        issues: [{ path: ["fields", "profile", name], message: "JSON key is not declared" }],
-      },
-    });
-    expectNoDefinitionIds(parsed);
-  });
+    },
+  );
+
+  it.each(PROTOTYPE_NAMES)(
+    "Client Key rejects own nested %s against a closed schema without IDs",
+    async (name) => {
+      const { response, parsed } = await ingestPrototypeMetricEvent(
+        CLOSED_EMPTY_OBJECT,
+        { fields: { profile: ownJson(name, true) }, dimensions: {} },
+        "client_key",
+      );
+      expect(response.status).toBe(400);
+      expect(response.status).not.toBe(202);
+      if (name === "__proto__") {
+        expect(parsed.code).toBe("VALIDATION_ERROR");
+        expectNoDefinitionIds(parsed);
+        return;
+      }
+      expect(parsed).toEqual({
+        code: "EVENT_SCHEMA_MISMATCH",
+        message: "Metric Event does not match the Event Definition Version",
+        details: {
+          eventName: METRIC_EVENT_NAME,
+          issues: [{ path: ["fields", "profile", name], message: "JSON key is not declared" }],
+        },
+      });
+      expectNoDefinitionIds(parsed);
+    },
+  );
 });

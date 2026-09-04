@@ -50,23 +50,21 @@ describe("CLI/MCP JSON envelopes agree per verb class (SPL-451)", () => {
       write: "flag_variants_update",
       sideChannels: ["approvalRequest"],
     },
-  ] as const)("$get and $write agree on the location of every shared field", ({
-    get,
-    write,
-    sideChannels,
-  }) => {
-    const getKeys = objectKeys(getRoute(get)?.output);
-    const writeKeys = resourceKeys(getRoute(write)?.output, sideChannels);
-    expect(getKeys.length).toBeGreaterThan(0);
-    expect(writeKeys).toEqual(getKeys);
-  });
+  ] as const)(
+    "$get and $write agree on the location of every shared field",
+    ({ get, write, sideChannels }) => {
+      const getKeys = objectKeys(getRoute(get)?.output);
+      const writeKeys = resourceKeys(getRoute(write)?.output, sideChannels);
+      expect(getKeys.length).toBeGreaterThan(0);
+      expect(writeKeys).toEqual(getKeys);
+    },
+  );
 
-  it.each([
-    "flags_list",
-    "api_keys_list",
-    "approval_requests_list",
-  ] as const)("%s returns {items, readLimit, readTruncated}", (operationId) => {
-    const keys = objectKeys(getRoute(operationId)?.output);
-    expect(keys).toEqual(expect.arrayContaining(["items", "readLimit", "readTruncated"]));
-  });
+  it.each(["flags_list", "api_keys_list", "approval_requests_list"] as const)(
+    "%s returns {items, readLimit, readTruncated}",
+    (operationId) => {
+      const keys = objectKeys(getRoute(operationId)?.output);
+      expect(keys).toEqual(expect.arrayContaining(["items", "readLimit", "readTruncated"]));
+    },
+  );
 });

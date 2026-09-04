@@ -105,23 +105,23 @@ describe("Metric Event ingest", () => {
     expect(fixture.admissionCharges).toHaveLength(1);
   });
 
-  it.each([
-    false,
-    "throw",
-  ] as const)("fails closed when the Admission Gate is %s", async (admission) => {
-    const fixture = await makeMetricEventFixture({}, "client_key", { admission });
+  it.each([false, "throw"] as const)(
+    "fails closed when the Admission Gate is %s",
+    async (admission) => {
+      const fixture = await makeMetricEventFixture({}, "client_key", { admission });
 
-    const response = await sendMetricEvent(fixture, metricEventBody());
+      const response = await sendMetricEvent(fixture, metricEventBody());
 
-    expect(response.status).toBe(429);
-    expect(response.headers.get("retry-after")).toBe("1");
-    expect(await response.json()).toMatchObject({
-      code: "RATE_LIMITED",
-      message: "Ingest Admission Gate is unavailable",
-      details: { retryAfterMs: 1000 },
-    });
-    expect(fixture.claims.size).toBe(0);
-  });
+      expect(response.status).toBe(429);
+      expect(response.headers.get("retry-after")).toBe("1");
+      expect(await response.json()).toMatchObject({
+        code: "RATE_LIMITED",
+        message: "Ingest Admission Gate is unavailable",
+        details: { retryAfterMs: 1000 },
+      });
+      expect(fixture.claims.size).toBe(0);
+    },
+  );
 
   it("does not charge an exact retry and returns the original Version", async () => {
     const fixture = await makeMetricEventFixture();

@@ -142,35 +142,35 @@ describe("Experiment Start Run Snapshot delivery", () => {
     ).resolves.toHaveLength(1);
   });
 
-  it.each([
-    "direct",
-    "approval",
-  ])("treats missing %s delivery config as a loud miss", async (door) => {
-    const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
-    const ctx = await harness(null);
-    const fx = await experimentFixture(ctx, door === "approval" ? "prod" : "dev");
-    const experiment = await createExperimentDraft(ctx, fx, {
-      key: `snapshot-missing-${door}`,
-      allocation: { control: 50, treatment: 50 },
-    });
+  it.each(["direct", "approval"])(
+    "treats missing %s delivery config as a loud miss",
+    async (door) => {
+      const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
+      const ctx = await harness(null);
+      const fx = await experimentFixture(ctx, door === "approval" ? "prod" : "dev");
+      const experiment = await createExperimentDraft(ctx, fx, {
+        key: `snapshot-missing-${door}`,
+        allocation: { control: 50, treatment: 50 },
+      });
 
-    const response = await startExperiment(
-      ctx,
-      fx,
-      experiment.id,
-      door === "approval" ? { review: { action: "approve_and_apply" } } : {},
-    );
-    expect(response.status).toBe(200);
-    if (door === "direct") {
-      expect(await response.json()).toMatchObject({ runSnapshotShipped: false });
-    } else {
-      expect(await response.json()).toMatchObject({ approvalRequest: { status: "applied" } });
-    }
-    expect(error).toHaveBeenCalledWith(
-      expect.stringMatching(/^run-snapshot:/u),
-      expect.objectContaining({ runId: expect.any(String), fault: expect.any(String) }),
-    );
-  });
+      const response = await startExperiment(
+        ctx,
+        fx,
+        experiment.id,
+        door === "approval" ? { review: { action: "approve_and_apply" } } : {},
+      );
+      expect(response.status).toBe(200);
+      if (door === "direct") {
+        expect(await response.json()).toMatchObject({ runSnapshotShipped: false });
+      } else {
+        expect(await response.json()).toMatchObject({ approvalRequest: { status: "applied" } });
+      }
+      expect(error).toHaveBeenCalledWith(
+        expect.stringMatching(/^run-snapshot:/u),
+        expect.objectContaining({ runId: expect.any(String), fault: expect.any(String) }),
+      );
+    },
+  );
 });
 
 function capturingDelivery(): RunSnapshotDelivery {

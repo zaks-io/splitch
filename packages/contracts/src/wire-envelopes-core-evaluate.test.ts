@@ -49,23 +49,21 @@ describe("DataPlaneEvaluateRequestSchema", () => {
     ).toBe(false);
   });
 
-  it.each([
-    "appId",
-    "flagKey",
-    "targetingKey",
-    "idType",
-  ] as const)("rejects an empty %s", (field) => {
-    const request = {
-      appId: "app_123",
-      flagKey: "feature-x",
-      targetingKey: "user-1",
-      idType: "user",
-      attributes: {},
-      [field]: "",
-    };
+  it.each(["appId", "flagKey", "targetingKey", "idType"] as const)(
+    "rejects an empty %s",
+    (field) => {
+      const request = {
+        appId: "app_123",
+        flagKey: "feature-x",
+        targetingKey: "user-1",
+        idType: "user",
+        attributes: {},
+        [field]: "",
+      };
 
-    expect(DataPlaneEvaluateRequestSchema.safeParse(request).success).toBe(false);
-  });
+      expect(DataPlaneEvaluateRequestSchema.safeParse(request).success).toBe(false);
+    },
+  );
 
   it("rejects a nested object attribute value", () => {
     expect(

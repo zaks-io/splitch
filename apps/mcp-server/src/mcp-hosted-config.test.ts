@@ -31,24 +31,24 @@ describe("MCP hosted configuration", () => {
     ).rejects.toThrow("SPLITCH_PLATFORM_TARGET is required");
   });
 
-  it.each([
-    "local",
-    "pr-ci",
-  ] as const)("uses the local Auth origin for %s when AUTH_API_ORIGIN is unset", async (platformTarget) => {
-    const response = await handleMcpServerRequest({
-      request: new Request("https://mcp.test/.well-known/oauth-protected-resource"),
-      service,
-      platformTarget,
-      tokenVerifier: staticMcpTokenVerifier(),
-      revocations: allowMcpRevocations(),
-    });
-    expect(response.status).toBe(200);
-    expect(await response.json()).toEqual({
-      resource: "https://mcp.test",
-      authorization_servers: ["http://localhost:8791"],
-      bearer_methods_supported: ["header"],
-    });
-  });
+  it.each(["local", "pr-ci"] as const)(
+    "uses the local Auth origin for %s when AUTH_API_ORIGIN is unset",
+    async (platformTarget) => {
+      const response = await handleMcpServerRequest({
+        request: new Request("https://mcp.test/.well-known/oauth-protected-resource"),
+        service,
+        platformTarget,
+        tokenVerifier: staticMcpTokenVerifier(),
+        revocations: allowMcpRevocations(),
+      });
+      expect(response.status).toBe(200);
+      expect(await response.json()).toEqual({
+        resource: "https://mcp.test",
+        authorization_servers: ["http://localhost:8791"],
+        bearer_methods_supported: ["header"],
+      });
+    },
+  );
 
   it("requires AUTH_API_ORIGIN on hosted targets", async () => {
     await expect(
@@ -70,17 +70,17 @@ describe("MCP hosted configuration", () => {
     expect(() => sdk()).toThrow("SPLITCH_PLATFORM_TARGET is required");
   });
 
-  it.each([
-    "local",
-    "pr-ci",
-  ] as const)("keeps the local Control Plane origin for %s", (platformTarget) => {
-    const sdk = createControlPlaneOperationSdk({
-      platformTarget,
-      controlPlaneFetch: async () => new Response(null, { status: 204 }),
-      controlPlaneDelegationSecret: TEST_MCP_DELEGATION_SECRET,
-    });
-    expect(sdk()).toBeTruthy();
-  });
+  it.each(["local", "pr-ci"] as const)(
+    "keeps the local Control Plane origin for %s",
+    (platformTarget) => {
+      const sdk = createControlPlaneOperationSdk({
+        platformTarget,
+        controlPlaneFetch: async () => new Response(null, { status: 204 }),
+        controlPlaneDelegationSecret: TEST_MCP_DELEGATION_SECRET,
+      });
+      expect(sdk()).toBeTruthy();
+    },
+  );
 
   it("requires CONTROL_PLANE_API_ORIGIN on hosted targets", () => {
     const sdk = createControlPlaneOperationSdk({
@@ -100,44 +100,44 @@ describe("MCP hosted configuration", () => {
       platformTarget: "staging",
       message: 'SPLITCH_PLATFORM_TARGET "staging" is not a platform target',
     },
-  ] as const)("does not use configured hosted origins when the platform target is $label", async ({
-    platformTarget,
-    message,
-  }) => {
-    const hostedOrigins = {
-      authBaseUrl: "https://auth.splitch.test",
-      controlPlaneBaseUrl: "https://control-plane.splitch.test",
-    };
+  ] as const)(
+    "does not use configured hosted origins when the platform target is $label",
+    async ({ platformTarget, message }) => {
+      const hostedOrigins = {
+        authBaseUrl: "https://auth.splitch.test",
+        controlPlaneBaseUrl: "https://control-plane.splitch.test",
+      };
 
-    const target = platformTarget === undefined ? {} : { platformTarget };
+      const target = platformTarget === undefined ? {} : { platformTarget };
 
-    await expect(
-      handleMcpServerRequest({
-        request: new Request("https://mcp.test/.well-known/oauth-protected-resource"),
-        service,
+      await expect(
+        handleMcpServerRequest({
+          request: new Request("https://mcp.test/.well-known/oauth-protected-resource"),
+          service,
+          ...hostedOrigins,
+          ...target,
+          tokenVerifier: staticMcpTokenVerifier(),
+          revocations: allowMcpRevocations(),
+        }),
+      ).rejects.toThrow(message);
+
+      await expect(
+        handleMcpServerRequest({
+          request: new Request("https://mcp.test/mcp", { method: "POST" }),
+          service,
+          ...hostedOrigins,
+          ...target,
+          revocations: allowMcpRevocations(),
+        }),
+      ).rejects.toThrow(message);
+
+      const sdk = createControlPlaneOperationSdk({
         ...hostedOrigins,
         ...target,
-        tokenVerifier: staticMcpTokenVerifier(),
-        revocations: allowMcpRevocations(),
-      }),
-    ).rejects.toThrow(message);
-
-    await expect(
-      handleMcpServerRequest({
-        request: new Request("https://mcp.test/mcp", { method: "POST" }),
-        service,
-        ...hostedOrigins,
-        ...target,
-        revocations: allowMcpRevocations(),
-      }),
-    ).rejects.toThrow(message);
-
-    const sdk = createControlPlaneOperationSdk({
-      ...hostedOrigins,
-      ...target,
-      controlPlaneFetch: async () => new Response(null, { status: 204 }),
-      controlPlaneDelegationSecret: TEST_MCP_DELEGATION_SECRET,
-    });
-    expect(() => sdk()).toThrow(message);
-  });
+        controlPlaneFetch: async () => new Response(null, { status: 204 }),
+        controlPlaneDelegationSecret: TEST_MCP_DELEGATION_SECRET,
+      });
+      expect(() => sdk()).toThrow(message);
+    },
+  );
 });

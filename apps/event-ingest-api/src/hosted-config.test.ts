@@ -24,79 +24,79 @@ describe("Event Ingest hosted configuration", () => {
       platformTarget: "staging",
       message: 'SPLITCH_PLATFORM_TARGET "staging" is not a platform target',
     },
-  ] as const)("refuses HTTP, delegated, queue delivery, and health when the platform target is $label", async ({
-    platformTarget,
-    message,
-  }) => {
-    const fetch = mockTinybirdFetch();
-    const env = hostedBindings(platformTarget);
-    const ctx = new TestExecutionContext();
+  ] as const)(
+    "refuses HTTP, delegated, queue delivery, and health when the platform target is $label",
+    async ({ platformTarget, message }) => {
+      const fetch = mockTinybirdFetch();
+      const env = hostedBindings(platformTarget);
+      const ctx = new TestExecutionContext();
 
-    await expect(
-      worker.fetch(workerRequest("https://event-ingest.test/health"), env, ctx),
-    ).rejects.toThrow(message);
+      await expect(
+        worker.fetch(workerRequest("https://event-ingest.test/health"), env, ctx),
+      ).rejects.toThrow(message);
 
-    await expect(
-      worker.fetch(
-        workerRequest("https://event-ingest.test/api/internal/exposures", {
-          method: "POST",
-          headers: {
-            authorization: "Bearer internal_ingest_secret",
-            "content-type": "application/json",
-            "x-splitch-app-id": appId,
-            "x-splitch-environment-id": environmentId,
+      await expect(
+        worker.fetch(
+          workerRequest("https://event-ingest.test/api/internal/exposures", {
+            method: "POST",
+            headers: {
+              authorization: "Bearer internal_ingest_secret",
+              "content-type": "application/json",
+              "x-splitch-app-id": appId,
+              "x-splitch-environment-id": environmentId,
+            },
+            body: JSON.stringify(baseExposure()),
+          }),
+          env,
+          ctx,
+        ),
+      ).rejects.toThrow(message);
+
+      await expect(
+        new EvaluationEntrypoint(ctx, env).fetch(
+          workerRequest("https://splitch-event-ingest.internal/api/internal/exposures", {
+            method: "POST",
+            headers: {
+              authorization: "Bearer internal_ingest_secret",
+              "content-type": "application/json",
+              "x-splitch-app-id": appId,
+              "x-splitch-environment-id": environmentId,
+            },
+            body: JSON.stringify(baseExposure()),
+          }),
+        ),
+      ).rejects.toThrow(message);
+
+      const queued = {
+        id: "message-hosted-config",
+        timestamp: new Date("2026-08-07T00:00:00.000Z"),
+        body: { event_id: "event-hosted-config" },
+        attempts: 1,
+        ack: vi.fn(),
+        retry: vi.fn(),
+      };
+      if (!worker.queue) {
+        throw new Error("Event ingest queue handler is not configured");
+      }
+      await expect(
+        worker.queue(
+          {
+            messages: [queued],
+            queue: "splitch-metric-events-local",
+            metadata: { metrics: { backlogCount: 1, backlogBytes: 64 } },
+            ackAll: vi.fn(),
+            retryAll: vi.fn(),
           },
-          body: JSON.stringify(baseExposure()),
-        }),
-        env,
-        ctx,
-      ),
-    ).rejects.toThrow(message);
-
-    await expect(
-      new EvaluationEntrypoint(ctx, env).fetch(
-        workerRequest("https://splitch-event-ingest.internal/api/internal/exposures", {
-          method: "POST",
-          headers: {
-            authorization: "Bearer internal_ingest_secret",
-            "content-type": "application/json",
-            "x-splitch-app-id": appId,
-            "x-splitch-environment-id": environmentId,
-          },
-          body: JSON.stringify(baseExposure()),
-        }),
-      ),
-    ).rejects.toThrow(message);
-
-    const queued = {
-      id: "message-hosted-config",
-      timestamp: new Date("2026-08-07T00:00:00.000Z"),
-      body: { event_id: "event-hosted-config" },
-      attempts: 1,
-      ack: vi.fn(),
-      retry: vi.fn(),
-    };
-    if (!worker.queue) {
-      throw new Error("Event ingest queue handler is not configured");
-    }
-    await expect(
-      worker.queue(
-        {
-          messages: [queued],
-          queue: "splitch-metric-events-local",
-          metadata: { metrics: { backlogCount: 1, backlogBytes: 64 } },
-          ackAll: vi.fn(),
-          retryAll: vi.fn(),
-        },
-        env,
-        ctx,
-      ),
-    ).rejects.toThrow(message);
-    expect(queued.ack).not.toHaveBeenCalled();
-    expect(queued.retry).not.toHaveBeenCalled();
-    expect(fetch).not.toHaveBeenCalled();
-    expect(fetch.mock.calls.map(([url]) => String(url)).join()).not.toContain("api.tinybird.co");
-  });
+          env,
+          ctx,
+        ),
+      ).rejects.toThrow(message);
+      expect(queued.ack).not.toHaveBeenCalled();
+      expect(queued.retry).not.toHaveBeenCalled();
+      expect(fetch).not.toHaveBeenCalled();
+      expect(fetch.mock.calls.map(([url]) => String(url)).join()).not.toContain("api.tinybird.co");
+    },
+  );
 });
 
 describe("Event Ingest hosted privacy salt", () => {

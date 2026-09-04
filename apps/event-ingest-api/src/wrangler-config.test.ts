@@ -40,13 +40,16 @@ describe("Event Ingest Worker Wrangler runtime config", () => {
     ["local", config, "splitch-control-plane-api"],
     ["shared-preview", config.env?.["shared-preview"], "splitch-control-plane-api-shared-preview"],
     ["production", config.env?.production, "splitch-control-plane-api"],
-  ])("subscribes to the Config Store identity coordinator for %s", (_target, target, scriptName) => {
-    expect(target?.durable_objects?.bindings).toContainEqual({
-      name: "CONFIG_STORE_WRITER",
-      class_name: "ConfigStoreDurableObject",
-      script_name: scriptName,
-    });
-  });
+  ])(
+    "subscribes to the Config Store identity coordinator for %s",
+    (_target, target, scriptName) => {
+      expect(target?.durable_objects?.bindings).toContainEqual({
+        name: "CONFIG_STORE_WRITER",
+        class_name: "ConfigStoreDurableObject",
+        script_name: scriptName,
+      });
+    },
+  );
 
   /**
    * Activation reads the Assignment Store instance when the KV mirror has no

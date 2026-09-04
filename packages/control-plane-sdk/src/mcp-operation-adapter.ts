@@ -9,6 +9,7 @@ import type { ApiRouteContract, ErrorResponse, McpDelegationActor } from "@split
 import {
   createMcpDelegationHeader,
   getRoute,
+  jsonMediaTypeSchema,
   MCP_DELEGATION_HEADER,
   userRoles,
 } from "@splitch/contracts";
@@ -195,7 +196,7 @@ function appendQuery(url: URL, route: ApiRouteContract, input: unknown): void {
 }
 
 function bodyForRoute(route: ApiRouteContract, input: unknown): unknown {
-  const rawBodySchema = route.openapi.request?.body?.content?.["application/json"]?.schema;
+  const rawBodySchema = jsonMediaTypeSchema(route.openapi.request?.body?.content);
   const bodySchema = safeParseSchema(rawBodySchema);
   if (!bodySchema) {
     return undefined;

@@ -72,16 +72,17 @@ describe("--json stdout is one JSON document per command", () => {
   });
 
   for (const outcome of ["ok", "error"] as const) {
-    it.each(
-      COMMANDS.map((command) => [command.path.join(" "), command] as const),
-    )(`%s (${outcome}) writes stdout jq can parse`, async (_name, command) => {
-      const stdout = await stdoutOf(command, outcome);
+    it.each(COMMANDS.map((command) => [command.path.join(" "), command] as const))(
+      `%s (${outcome}) writes stdout jq can parse`,
+      async (_name, command) => {
+        const stdout = await stdoutOf(command, outcome);
 
-      // `jq` reads the whole stream, so trailing prose or a second object is
-      // as broken as malformed JSON. Parsing the join proves neither happened.
-      expect(stdout).not.toBe("");
-      expect(() => JSON.parse(stdout)).not.toThrow();
-    });
+        // `jq` reads the whole stream, so trailing prose or a second object is
+        // as broken as malformed JSON. Parsing the join proves neither happened.
+        expect(stdout).not.toBe("");
+        expect(() => JSON.parse(stdout)).not.toThrow();
+      },
+    );
   }
 
   // The usage block appended after the failure object is what `jq` choked on.
