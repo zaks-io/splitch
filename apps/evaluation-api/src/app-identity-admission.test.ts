@@ -23,21 +23,24 @@ describe("Evaluation request identity admission", () => {
     ["Peek", "/api/sdk/peek", () => sdkRouteInit(API_KEY), 3],
     ["Verify", "/api/sdk/verify", () => sdkRouteInit(CLIENT_KEY), 3],
     ["cached telemetry", "/api/sdk/evaluation-telemetry", cachedTelemetryInit, 2],
-  ])("rejects paused %s work resumed under a replacement generation", async (_, path, init, pauseOn) => {
-    const saltStore = new PausingSaltStore(pauseOn);
-    const harness = await makeSdkRouteHarness({ saltStore });
+  ])(
+    "rejects paused %s work resumed under a replacement generation",
+    async (_, path, init, pauseOn) => {
+      const saltStore = new PausingSaltStore(pauseOn);
+      const harness = await makeSdkRouteHarness({ saltStore });
 
-    const response = harness.app.request(path, init());
-    await saltStore.paused;
-    saltStore.replaceIdentity();
+      const response = harness.app.request(path, init());
+      await saltStore.paused;
+      saltStore.replaceIdentity();
 
-    const completed = await response;
-    expect(completed.status).toBe(503);
-    expect(((await completed.json()) as ErrorResponse).code).toBe("SERVICE_UNAVAILABLE");
-    expect(harness.exposureSink.writes).toEqual([]);
-    expect(harness.evaluationUsageSink.writes).toEqual([]);
-    expect(harness.assignmentStore.putCalls).toEqual([]);
-  });
+      const completed = await response;
+      expect(completed.status).toBe(503);
+      expect(((await completed.json()) as ErrorResponse).code).toBe("SERVICE_UNAVAILABLE");
+      expect(harness.exposureSink.writes).toEqual([]);
+      expect(harness.evaluationUsageSink.writes).toEqual([]);
+      expect(harness.assignmentStore.putCalls).toEqual([]);
+    },
+  );
 
   it("pins a paused Assignment write to admission and rejects it before the store", async () => {
     const saltStore = new PausingSaltStore(2);

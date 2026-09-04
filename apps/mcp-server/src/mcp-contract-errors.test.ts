@@ -28,18 +28,19 @@ describe("MCP contract errors", () => {
     });
   });
 
-  it.each(
-    unavailableControlPlaneOperationIds,
-  )("does not advertise or dispatch %s", async (name) => {
-    let forwarded = false;
-    const result = await callTool(name, async () => {
-      forwarded = true;
-      return Response.json({});
-    });
+  it.each(unavailableControlPlaneOperationIds)(
+    "does not advertise or dispatch %s",
+    async (name) => {
+      let forwarded = false;
+      const result = await callTool(name, async () => {
+        forwarded = true;
+        return Response.json({});
+      });
 
-    expect(forwarded).toBe(false);
-    expect(result.error).toMatchObject({ code: -32601, message: "Method not found" });
-  });
+      expect(forwarded).toBe(false);
+      expect(result.error).toMatchObject({ code: -32601, message: "Method not found" });
+    },
+  );
 });
 
 async function callTool(

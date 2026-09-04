@@ -240,13 +240,14 @@ describe("ErrorResponse contract", () => {
     ).toBe(true);
   });
 
-  it.each(
-    conclusionErrorResponses,
-  )("registers $code in the enum, status map, and response union", (response) => {
-    expect(ErrorCodeSchema.safeParse(response.code).success).toBe(true);
-    expect((errorStatusByCode as Record<string, number | undefined>)[response.code]).toBe(409);
-    expect(ErrorResponseSchema.safeParse(response).success).toBe(true);
-  });
+  it.each(conclusionErrorResponses)(
+    "registers $code in the enum, status map, and response union",
+    (response) => {
+      expect(ErrorCodeSchema.safeParse(response.code).success).toBe(true);
+      expect((errorStatusByCode as Record<string, number | undefined>)[response.code]).toBe(409);
+      expect(ErrorResponseSchema.safeParse(response).success).toBe(true);
+    },
+  );
 });
 
 describe("SERVICE_UNAVAILABLE mutation state", () => {

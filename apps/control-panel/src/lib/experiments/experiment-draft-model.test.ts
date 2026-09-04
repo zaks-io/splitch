@@ -65,29 +65,23 @@ describe("targetingKeyTypeIssue", () => {
     expect(targetingKeyTypeIssue("  ")).toMatch(/Entity type is required/);
   });
 
-  it.each([
-    "User",
-    "delivery-driver",
-    "user.type",
-    "_user",
-    "user__type",
-  ])("rejects typo-shaped value %j and names the shape rule", (value) => {
-    expect(targetingKeyTypeIssue(value)).toMatch(/single underscores between segments/);
-  });
+  it.each(["User", "delivery-driver", "user.type", "_user", "user__type"])(
+    "rejects typo-shaped value %j and names the shape rule",
+    (value) => {
+      expect(targetingKeyTypeIssue(value)).toMatch(/single underscores between segments/);
+    },
+  );
 
   it("names the length cap when the value is already lowercase alphanumerics", () => {
     expect(targetingKeyTypeIssue("a".repeat(64))).toMatch(/63 characters/);
   });
 
-  it.each([
-    "user",
-    "account",
-    "restaurant",
-    "delivery_driver",
-    "service_account",
-  ])("accepts open-vocabulary value %j", (value) => {
-    expect(targetingKeyTypeIssue(value)).toBeNull();
-  });
+  it.each(["user", "account", "restaurant", "delivery_driver", "service_account"])(
+    "accepts open-vocabulary value %j",
+    (value) => {
+      expect(targetingKeyTypeIssue(value)).toBeNull();
+    },
+  );
 });
 
 describe("buildCreateExperimentInput", () => {

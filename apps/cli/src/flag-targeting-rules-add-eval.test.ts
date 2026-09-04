@@ -81,8 +81,8 @@ async function addRule(when: string): Promise<TargetingRule> {
   const replace = transport.requests.find(
     (request) => request.method === "PUT" && request.url.includes("/targeting-rules"),
   );
-  const rules = (replace?.body as { targetingRules?: TargetingRule[] }).targetingRules;
-  const rule = rules?.[0];
+  const body = replace?.body as { targetingRules?: TargetingRule[] } | undefined;
+  const rule = body?.targetingRules?.[0];
   if (!rule) throw new Error("add did not write a Targeting Rule");
   return rule;
 }

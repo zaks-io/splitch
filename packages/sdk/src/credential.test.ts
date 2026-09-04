@@ -18,16 +18,19 @@ describe("createSplitchClient: credential prefixes", () => {
     ["clientKey", { clientKey: "invalid" }, "pk_", "invalid"],
     ["apiKey", { apiKey: "pk_public" }, "sk_", "pk_public"],
     ["apiKey", { apiKey: "invalid" }, "sk_", "invalid"],
-  ])("rejects the wrong prefix for %s without echoing it", (_option, options, expectedPrefix, credential) => {
-    let thrown: unknown;
-    try {
-      createSplitchClient({ ...options, transport: new FakeTransport([]) });
-    } catch (error) {
-      thrown = error;
-    }
+  ])(
+    "rejects the wrong prefix for %s without echoing it",
+    (_option, options, expectedPrefix, credential) => {
+      let thrown: unknown;
+      try {
+        createSplitchClient({ ...options, transport: new FakeTransport([]) });
+      } catch (error) {
+        thrown = error;
+      }
 
-    expect(thrown).toMatchObject({ code: "SDK_CREDENTIAL_CONFIGURATION_INVALID" });
-    expect((thrown as Error).message).toContain(expectedPrefix);
-    expect((thrown as Error).message).not.toContain(credential);
-  });
+      expect(thrown).toMatchObject({ code: "SDK_CREDENTIAL_CONFIGURATION_INVALID" });
+      expect((thrown as Error).message).toContain(expectedPrefix);
+      expect((thrown as Error).message).not.toContain(credential);
+    },
+  );
 });

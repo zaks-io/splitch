@@ -47,39 +47,42 @@ describe("evaluatePath condition validation", () => {
   it.each([
     ["missing", {}],
     ["null", { plan: null as never }],
-  ] as const)("%s Targeting Rule attribute is a non-match and continues (no ERROR)", async (_caseName, attributes) => {
-    const rule = targetingRule({
-      id: "rule-null-attribute",
-      conditions: [{ attribute: "plan", operator: "eq", value: "enterprise" }],
-    });
-    const store = new RecordingAssignmentStore();
-    const provider = new RecordingProvider({
-      experiment: experimentConfig({ liveRun: runConfig({ targetingRules: [rule] }) }),
-    });
-    const logger = new RecordingLogger();
+  ] as const)(
+    "%s Targeting Rule attribute is a non-match and continues (no ERROR)",
+    async (_caseName, attributes) => {
+      const rule = targetingRule({
+        id: "rule-null-attribute",
+        conditions: [{ attribute: "plan", operator: "eq", value: "enterprise" }],
+      });
+      const store = new RecordingAssignmentStore();
+      const provider = new RecordingProvider({
+        experiment: experimentConfig({ liveRun: runConfig({ targetingRules: [rule] }) }),
+      });
+      const logger = new RecordingLogger();
 
-    const result = await evaluatePath(
-      baseInput({
-        evaluationContext: { targetingKey: "user-1", idType: "user", attributes },
-      }),
-      { assignmentStore: store, provider, logger },
-    );
+      const result = await evaluatePath(
+        baseInput({
+          evaluationContext: { targetingKey: "user-1", idType: "user", attributes },
+        }),
+        { assignmentStore: store, provider, logger },
+      );
 
-    expect(result).toMatchObject({
-      kind: "no_match_default",
-      variant: "control",
-      reason: { type: "no_match_default" },
-      experimentId: EXPERIMENT_ID,
-      liveRunId: LIVE_RUN_ID,
-      exposure: { variant: "control", liveRunId: LIVE_RUN_ID },
-    });
-    expect(logger.warnings).toHaveLength(1);
-    expect(logger.warnings[0]).toMatchObject({
-      message: "condition_attribute_absent",
-      detail: { attribute: "plan", operator: "eq", ruleId: "rule-null-attribute" },
-    });
-    expect(logger.errors).toHaveLength(0);
-  });
+      expect(result).toMatchObject({
+        kind: "no_match_default",
+        variant: "control",
+        reason: { type: "no_match_default" },
+        experimentId: EXPERIMENT_ID,
+        liveRunId: LIVE_RUN_ID,
+        exposure: { variant: "control", liveRunId: LIVE_RUN_ID },
+      });
+      expect(logger.warnings).toHaveLength(1);
+      expect(logger.warnings[0]).toMatchObject({
+        message: "condition_attribute_absent",
+        detail: { attribute: "plan", operator: "eq", ruleId: "rule-null-attribute" },
+      });
+      expect(logger.errors).toHaveLength(0);
+    },
+  );
 });
 
 describe("evaluatePath live Run paths", () => {

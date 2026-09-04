@@ -15,34 +15,34 @@ describe("flags get missing server-side selectors", () => {
     { selector: "missing-banner", by: undefined },
     { selector: "flag_past_ceiling", by: "id" },
     { selector: "flag_missing_key", by: "key" },
-  ])("returns the server's FLAG_NOT_FOUND for $selector in one request", async ({
-    selector,
-    by,
-  }) => {
-    const { credentialPath } = await makeTempHome();
-    await writeFile(credentialPath, `${JSON.stringify(storedCredential())}\n`);
-    const transport = new FakeCliTransport([
-      {
-        match: (request) => {
-          const url = new URL(request.url);
-          return (
-            url.pathname === `/apps/app_1/flags/${selector}` &&
-            url.searchParams.get("include") === "config" &&
-            url.searchParams.get("by") === (by ?? null)
-          );
+  ])(
+    "returns the server's FLAG_NOT_FOUND for $selector in one request",
+    async ({ selector, by }) => {
+      const { credentialPath } = await makeTempHome();
+      await writeFile(credentialPath, `${JSON.stringify(storedCredential())}\n`);
+      const transport = new FakeCliTransport([
+        {
+          match: (request) => {
+            const url = new URL(request.url);
+            return (
+              url.pathname === `/apps/app_1/flags/${selector}` &&
+              url.searchParams.get("include") === "config" &&
+              url.searchParams.get("by") === (by ?? null)
+            );
+          },
+          status: 404,
+          body: jsonError("FLAG_NOT_FOUND", "flag not found"),
         },
-        status: 404,
-        body: jsonError("FLAG_NOT_FOUND", "flag not found"),
-      },
-    ]);
-    const error = vi.spyOn(console, "error").mockImplementation(() => {});
-    const args = ["flags", "get", "--json", "--app", "app_1", selector];
-    if (by) args.push("--by", by);
+      ]);
+      const error = vi.spyOn(console, "error").mockImplementation(() => {});
+      const args = ["flags", "get", "--json", "--app", "app_1", selector];
+      if (by) args.push("--by", by);
 
-    const code = await runCli(args, { credentialPath, fetch: transport.fetch });
+      const code = await runCli(args, { credentialPath, fetch: transport.fetch });
 
-    expect(code).toBe(EXIT_API);
-    expect(error.mock.calls.join(" ")).toContain("FLAG_NOT_FOUND");
-    expect(transport.requests).toHaveLength(1);
-  });
+      expect(code).toBe(EXIT_API);
+      expect(error.mock.calls.join(" ")).toContain("FLAG_NOT_FOUND");
+      expect(transport.requests).toHaveLength(1);
+    },
+  );
 });

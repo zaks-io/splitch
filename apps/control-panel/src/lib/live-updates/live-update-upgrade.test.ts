@@ -84,18 +84,19 @@ describe("same-origin live update upgrade", () => {
     expect(connect).not.toHaveBeenCalled();
   });
 
-  it.each([
-    401, 403, 404,
-  ] as const)("rejects a %i session or scope before DO attachment", async (status) => {
-    const connect = vi.fn();
-    const response = await handleLiveUpdateUpgrade(
-      request("https://panel.test/acme/checkout/dev/live"),
-      deps({ authorize: async () => ({ ok: false, status }), connect }),
-    );
+  it.each([401, 403, 404] as const)(
+    "rejects a %i session or scope before DO attachment",
+    async (status) => {
+      const connect = vi.fn();
+      const response = await handleLiveUpdateUpgrade(
+        request("https://panel.test/acme/checkout/dev/live"),
+        deps({ authorize: async () => ({ ok: false, status }), connect }),
+      );
 
-    expect(response?.status).toBe(status);
-    expect(connect).not.toHaveBeenCalled();
-  });
+      expect(response?.status).toBe(status);
+      expect(connect).not.toHaveBeenCalled();
+    },
+  );
 
   it("requires HTTPS for hosted WebSocket upgrades", async () => {
     const authorize = vi.fn();

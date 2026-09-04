@@ -162,69 +162,75 @@ describe("raw event queue privacy permits", () => {
   it.each([
     ["Exposure", "splitch-raw-events", "raw_events"],
     ["Evaluation", "splitch-raw-evaluations", "raw_evaluations"],
-  ])("blocks an App reset until an admitted %s queue append completes", async (_, queue, source) => {
-    let releaseAppend!: () => void;
-    const appendGate = new Promise<void>((resolve) => {
-      releaseAppend = resolve;
-    });
-    const append = vi.fn(async () => {
-      await appendGate;
-      return Response.json({ successful_rows: 1, quarantined_rows: 0 });
-    });
-    vi.stubGlobal("fetch", append);
-    const privacy = privacyNamespace();
-    const queued = message("permit-race", source);
-    const delivery = deliver(queue, [queued], {
-      SPLITCH_PLATFORM_TARGET: "production",
-      ENTITY_METRIC_PRIVACY: privacy.namespace,
-    });
-    await vi.waitFor(() => expect(append).toHaveBeenCalledOnce());
+  ])(
+    "blocks an App reset until an admitted %s queue append completes",
+    async (_, queue, source) => {
+      let releaseAppend!: () => void;
+      const appendGate = new Promise<void>((resolve) => {
+        releaseAppend = resolve;
+      });
+      const append = vi.fn(async () => {
+        await appendGate;
+        return Response.json({ successful_rows: 1, quarantined_rows: 0 });
+      });
+      vi.stubGlobal("fetch", append);
+      const privacy = privacyNamespace();
+      const queued = message("permit-race", source);
+      const delivery = deliver(queue, [queued], {
+        SPLITCH_PLATFORM_TARGET: "production",
+        ENTITY_METRIC_PRIVACY: privacy.namespace,
+      });
+      await vi.waitFor(() => expect(append).toHaveBeenCalledOnce());
 
-    const resetWhilePending = await privacy.fetch("app_1:app-identity-inventory", "/reset-app", {
-      appId: "app_1",
-      resetId: "reset_queue_race",
-      currentVersion: "app-v1",
-    });
-    expect(resetWhilePending.status).toBe(409);
-    expect(queued.ack).not.toHaveBeenCalled();
+      const resetWhilePending = await privacy.fetch("app_1:app-identity-inventory", "/reset-app", {
+        appId: "app_1",
+        resetId: "reset_queue_race",
+        currentVersion: "app-v1",
+      });
+      expect(resetWhilePending.status).toBe(409);
+      expect(queued.ack).not.toHaveBeenCalled();
 
-    releaseAppend();
-    await delivery;
-    expect(queued.ack).toHaveBeenCalledOnce();
-    const resetAfterDelivery = await privacy.fetch("app_1:app-identity-inventory", "/reset-app", {
-      appId: "app_1",
-      resetId: "reset_queue_race",
-      currentVersion: "app-v1",
-    });
-    expect(resetAfterDelivery.status).toBe(200);
-  });
+      releaseAppend();
+      await delivery;
+      expect(queued.ack).toHaveBeenCalledOnce();
+      const resetAfterDelivery = await privacy.fetch("app_1:app-identity-inventory", "/reset-app", {
+        appId: "app_1",
+        resetId: "reset_queue_race",
+        currentVersion: "app-v1",
+      });
+      expect(resetAfterDelivery.status).toBe(200);
+    },
+  );
 
   it.each([
     ["Exposure", "splitch-raw-events", "raw_events", "/admit-entity-row"],
     ["Evaluation", "splitch-raw-evaluations", "raw_evaluations", "/admit-app-row"],
-  ])("clears stale %s permits after every lost admission response", async (_, queue, source, lostPath) => {
-    const append = vi.fn();
-    vi.stubGlobal("fetch", append);
-    const privacy = privacyNamespace(lostPath, 8);
-    const queued = message("lost-admission", source);
-    const overrides = {
-      SPLITCH_PLATFORM_TARGET: "production" as const,
-      ENTITY_METRIC_PRIVACY: privacy.namespace,
-    };
+  ])(
+    "clears stale %s permits after every lost admission response",
+    async (_, queue, source, lostPath) => {
+      const append = vi.fn();
+      vi.stubGlobal("fetch", append);
+      const privacy = privacyNamespace(lostPath, 8);
+      const queued = message("lost-admission", source);
+      const overrides = {
+        SPLITCH_PLATFORM_TARGET: "production" as const,
+        ENTITY_METRIC_PRIVACY: privacy.namespace,
+      };
 
-    for (let attempt = 1; attempt <= 8; attempt += 1) {
-      queued.attempts = attempt;
-      await deliver(queue, [queued], overrides);
-    }
-    expect(queued.retry).toHaveBeenCalledTimes(8);
-    expect(append).not.toHaveBeenCalled();
-    const reset = await privacy.fetch("app_1:app-identity-inventory", "/reset-app", {
-      appId: "app_1",
-      resetId: "reset_lost_admission",
-      currentVersion: "app-v1",
-    });
-    expect(reset.status).toBe(200);
-  });
+      for (let attempt = 1; attempt <= 8; attempt += 1) {
+        queued.attempts = attempt;
+        await deliver(queue, [queued], overrides);
+      }
+      expect(queued.retry).toHaveBeenCalledTimes(8);
+      expect(append).not.toHaveBeenCalled();
+      const reset = await privacy.fetch("app_1:app-identity-inventory", "/reset-app", {
+        appId: "app_1",
+        resetId: "reset_lost_admission",
+        currentVersion: "app-v1",
+      });
+      expect(reset.status).toBe(200);
+    },
+  );
 
   it("rolls back the App and Entity permits when nested admission fails", async () => {
     vi.stubGlobal("fetch", vi.fn());

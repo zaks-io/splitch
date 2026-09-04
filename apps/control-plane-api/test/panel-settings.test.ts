@@ -136,20 +136,19 @@ describe("SignedControlPanelEntrypoint Environment settings", () => {
 });
 
 describe("SignedControlPanelEntrypoint Environment settings security", () => {
-  it.each([
-    "null",
-    "*",
-    "not a URL",
-  ] as const)("refuses invalid Client Key origin %s", async (origin) => {
-    const refused = await panelRequest(
-      "PATCH",
-      `/apps/${APP_ID}/envs/${ENVIRONMENT_ID}/client-key`,
-      { originAllowlist: [origin] },
-    );
+  it.each(["null", "*", "not a URL"] as const)(
+    "refuses invalid Client Key origin %s",
+    async (origin) => {
+      const refused = await panelRequest(
+        "PATCH",
+        `/apps/${APP_ID}/envs/${ENVIRONMENT_ID}/client-key`,
+        { originAllowlist: [origin] },
+      );
 
-    expect(refused.status).toBe(400);
-    expect(await refused.json()).toMatchObject({ code: "VALIDATION_ERROR" });
-  });
+      expect(refused.status).toBe(400);
+      expect(await refused.json()).toMatchObject({ code: "VALIDATION_ERROR" });
+    },
+  );
 
   it("rechecks live membership and binds revoke to the exact API Key", async () => {
     await env.DB.prepare("DELETE FROM app_memberships WHERE app_id = ? AND user_id = ?")

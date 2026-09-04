@@ -18,23 +18,22 @@ describe("MCP transport authenticator requirement", () => {
     expect(await response?.json()).toMatchObject({ service });
   });
 
-  it.each([
-    "GET",
-    "POST",
-    "DELETE",
-  ] as const)("fails closed on protected %s when authenticateBearer is missing", async (method) => {
-    await expect(
-      routeTransportRequest({
-        request: new Request("https://mcp.test/mcp", {
-          method,
-          headers: { authorization: "Bearer local-test-token" },
+  it.each(["GET", "POST", "DELETE"] as const)(
+    "fails closed on protected %s when authenticateBearer is missing",
+    async (method) => {
+      await expect(
+        routeTransportRequest({
+          request: new Request("https://mcp.test/mcp", {
+            method,
+            headers: { authorization: "Bearer local-test-token" },
+          }),
+          service,
+          platformTarget: "local",
+          sessionStore: memorySessionStore(),
         }),
-        service,
-        platformTarget: "local",
-        sessionStore: memorySessionStore(),
-      }),
-    ).rejects.toThrow("mcp-server: authenticateBearer is required");
-  });
+      ).rejects.toThrow("mcp-server: authenticateBearer is required");
+    },
+  );
 });
 
 describe("MCP session DELETE", () => {

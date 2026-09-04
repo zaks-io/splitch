@@ -129,18 +129,17 @@ describe("published CLI help", () => {
     expect(envPolicySet).toContain(KILL_SWITCH_OFF_EXEMPTION);
   });
 
-  it.each([
-    ["--help"],
-    ["-h"],
-    ["flags", "verify", "--help"],
-  ])("prints help to stdout and exits successfully for %j", async (...args: string[]) => {
-    const log = vi.spyOn(console, "log").mockImplementation(() => {});
-    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+  it.each([["--help"], ["-h"], ["flags", "verify", "--help"]])(
+    "prints help to stdout and exits successfully for %j",
+    async (...args: string[]) => {
+      const log = vi.spyOn(console, "log").mockImplementation(() => {});
+      const error = vi.spyOn(console, "error").mockImplementation(() => {});
 
-    await expect(runCli(args)).resolves.toBe(0);
-    expect(log).toHaveBeenCalledOnce();
-    expect(error).not.toHaveBeenCalled();
-  });
+      await expect(runCli(args)).resolves.toBe(0);
+      expect(log).toHaveBeenCalledOnce();
+      expect(error).not.toHaveBeenCalled();
+    },
+  );
 
   it("returns identical stderr for unmatched --help and -h command paths", async () => {
     const longHelpStderr = await unmatchedHelpStderr("--help");

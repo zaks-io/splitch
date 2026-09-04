@@ -159,43 +159,46 @@ describe("Convex server Exposure confirmation failures", () => {
     ["completed", "SERVICE_UNAVAILABLE", true],
     ["poisoned", "INTERNAL_SERVER_ERROR", false],
     ["suppressed", "CONVEX_INSTALLATION_NOT_FOUND", false],
-  ] as const)("surfaces %s holdover status when claim confirmation fails", async (holdoverStatus, code, retryable) => {
-    const holdoverEnsure = vi.fn(async () => ({ status: holdoverStatus }));
-    const handler = makeConvexExposuresHandler({
-      provider: provider(),
-      assignmentStore: readOnlyAssignments(),
-      convexConfigurationResolver: resolver(),
-      exposureIngestSink: new RecordingExposureIngestSink(),
-      exposureRedemptionClaims: {
-        async claim() {
-          return { status: "acquired" as const };
+  ] as const)(
+    "surfaces %s holdover status when claim confirmation fails",
+    async (holdoverStatus, code, retryable) => {
+      const holdoverEnsure = vi.fn(async () => ({ status: holdoverStatus }));
+      const handler = makeConvexExposuresHandler({
+        provider: provider(),
+        assignmentStore: readOnlyAssignments(),
+        convexConfigurationResolver: resolver(),
+        exposureIngestSink: new RecordingExposureIngestSink(),
+        exposureRedemptionClaims: {
+          async claim() {
+            return { status: "acquired" as const };
+          },
+          async release() {},
+          async markSealed() {
+            throw new Error("claim confirmation failed");
+          },
+          async acknowledge() {
+            return { status: "accepted" as const };
+          },
         },
-        async release() {},
-        async markSealed() {
-          throw new Error("claim confirmation failed");
-        },
-        async acknowledge() {
-          return { status: "accepted" as const };
-        },
-      },
-      holdoverWrite: { ensure: holdoverEnsure },
-      saltStore: saltStore(),
-      now: () => new Date("2026-08-25T12:00:01.000Z"),
-    });
+        holdoverWrite: { ensure: holdoverEnsure },
+        saltStore: saltStore(),
+        now: () => new Date("2026-08-25T12:00:01.000Z"),
+      });
 
-    const response = await handler(requestArgs());
+      const response = await handler(requestArgs());
 
-    expect(await response.json()).toEqual({
-      results: [
-        {
-          exposureId: EXPOSURE_ID,
-          status: "rejected",
-          code,
-          message: code,
-          retryable,
-        },
-      ],
-    });
-    expect(holdoverEnsure).toHaveBeenCalledOnce();
-  });
+      expect(await response.json()).toEqual({
+        results: [
+          {
+            exposureId: EXPOSURE_ID,
+            status: "rejected",
+            code,
+            message: code,
+            retryable,
+          },
+        ],
+      });
+      expect(holdoverEnsure).toHaveBeenCalledOnce();
+    },
+  );
 });

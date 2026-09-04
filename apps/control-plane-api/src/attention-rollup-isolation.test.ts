@@ -210,27 +210,30 @@ describe("Analysis results boundary", { timeout: ATTENTION_TEST_TIMEOUT }, () =>
     });
   });
 
-  it.each([
-    "EXPERIMENT_NOT_FOUND",
-    "RUN_NOT_FOUND",
-  ] as const)("maps a typed %s result to null without fabricating attention", async (code) => {
-    const reader = createAnalysisResultsReader({
-      fetch: async () =>
-        Response.json({ code, message: "analysis result not found", details: {} }, { status: 404 }),
-    });
+  it.each(["EXPERIMENT_NOT_FOUND", "RUN_NOT_FOUND"] as const)(
+    "maps a typed %s result to null without fabricating attention",
+    async (code) => {
+      const reader = createAnalysisResultsReader({
+        fetch: async () =>
+          Response.json(
+            { code, message: "analysis result not found", details: {} },
+            { status: 404 },
+          ),
+      });
 
-    await expect(
-      reader.read(
-        {
-          appId: ids.appId,
-          environmentId: ids.environmentId,
-          experimentId: ids.experimentId,
-          runId: ids.liveRunId,
-        },
-        USER_ID,
-      ),
-    ).resolves.toBeNull();
-  });
+      await expect(
+        reader.read(
+          {
+            appId: ids.appId,
+            environmentId: ids.environmentId,
+            experimentId: ids.experimentId,
+            runId: ids.liveRunId,
+          },
+          USER_ID,
+        ),
+      ).resolves.toBeNull();
+    },
+  );
 
   it("fails loud for an untyped upstream 404", async () => {
     const reader = createAnalysisResultsReader({

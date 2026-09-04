@@ -12,14 +12,14 @@ function scopeKeys(operation: ControlPanelOperation): string[] {
 }
 
 describe("control-panel operation wiring", () => {
-  it.each(COVERAGE)("%s has a parser that yields exactly its claim", (_id, {
-    route,
-    operation,
-  }) => {
-    expect(
-      parseControlPanelOperation(route.method, route.pathname, route.environmentId, route.search),
-    ).toEqual(operation);
-  });
+  it.each(COVERAGE)(
+    "%s has a parser that yields exactly its claim",
+    (_id, { route, operation }) => {
+      expect(
+        parseControlPanelOperation(route.method, route.pathname, route.environmentId, route.search),
+      ).toEqual(operation);
+    },
+  );
 
   it.each(COVERAGE)("%s has a predicate that accepts its claim", (_id, { operation }) => {
     expect(isControlPanelOperation(operation)).toBe(true);

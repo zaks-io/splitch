@@ -67,46 +67,43 @@ describe("index.ts: widened MCP routes cross the service-binding boundary", () =
       },
       owner: "evaluation" as const,
     },
-  ])("accepts own-tenant $operationId through the real MCP door and refuses another tenant", async ({
-    operationId,
-    ownArguments,
-    foreignArguments,
-    expected,
-    owner,
-  }) => {
-    const analysisRequests: Request[] = [];
-    const evaluationRequests: Request[] = [];
-    const envWithOrigins = {
-      ...testEnv,
-      ANALYSIS_API: recordingBinding(analysisRequests, {
-        state: "no_data",
-        run_id: TENANT_A.runId,
-        control_variant: "alpha-control",
-        missing: "metric_events",
-      }),
-      EVALUATION_API: recordingBinding(evaluationRequests, {
-        variantName: "alpha-treatment",
-        value: true,
-        resolutionReason: "DEFAULT",
-        reason: { type: "no_match_default" },
-        liveRunId: null,
-      }),
-    } as ControlPlaneApiEnv;
+  ])(
+    "accepts own-tenant $operationId through the real MCP door and refuses another tenant",
+    async ({ operationId, ownArguments, foreignArguments, expected, owner }) => {
+      const analysisRequests: Request[] = [];
+      const evaluationRequests: Request[] = [];
+      const envWithOrigins = {
+        ...testEnv,
+        ANALYSIS_API: recordingBinding(analysisRequests, {
+          state: "no_data",
+          run_id: TENANT_A.runId,
+          control_variant: "alpha-control",
+          missing: "metric_events",
+        }),
+        EVALUATION_API: recordingBinding(evaluationRequests, {
+          variantName: "alpha-treatment",
+          value: true,
+          resolutionReason: "DEFAULT",
+          reason: { type: "no_match_default" },
+          liveRunId: null,
+        }),
+      } as ControlPlaneApiEnv;
 
-    const own = await callMcpTool(envWithOrigins, operationId, ownArguments);
-    expect(own).toMatchObject({ result: { structuredContent: expected } });
-    expect(owner === "analysis" ? analysisRequests : evaluationRequests).toHaveLength(1);
+      const own = await callMcpTool(envWithOrigins, operationId, ownArguments);
+      expect(own).toMatchObject({ result: { structuredContent: expected } });
+      expect(owner === "analysis" ? analysisRequests : evaluationRequests).toHaveLength(1);
 
-    analysisRequests.length = 0;
-    evaluationRequests.length = 0;
-    const foreign = await callMcpTool(envWithOrigins, operationId, foreignArguments);
-    expect(foreign).toMatchObject({
-      result: {
-        isError: true,
-        structuredContent: { code: "FORBIDDEN" },
-      },
-    });
-    expect(analysisRequests).toHaveLength(0);
-    expect(evaluationRequests).toHaveLength(0);
-  });
+      analysisRequests.length = 0;
+      evaluationRequests.length = 0;
+      const foreign = await callMcpTool(envWithOrigins, operationId, foreignArguments);
+      expect(foreign).toMatchObject({
+        result: {
+          isError: true,
+          structuredContent: { code: "FORBIDDEN" },
+        },
+      });
+      expect(analysisRequests).toHaveLength(0);
+      expect(evaluationRequests).toHaveLength(0);
+    },
+  );
 });

@@ -1,4 +1,5 @@
 import type { z } from "zod";
+import { jsonMediaTypeSchema } from "./openapi-route";
 import { exampleForObject } from "./request-body-help-example";
 import {
   describeObjectFields,
@@ -25,8 +26,7 @@ export interface RequestBodyHelp {
 
 /** OpenAPI JSON body schema for a registered operation, when the route has one. */
 export function requestBodySchemaForOperation(operationId: string): z.ZodTypeAny | undefined {
-  const schema =
-    getRoute(operationId)?.openapi.request?.body?.content?.["application/json"]?.schema;
+  const schema = jsonMediaTypeSchema(getRoute(operationId)?.openapi.request?.body?.content);
   return isZodType(schema) ? schema : undefined;
 }
 

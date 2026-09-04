@@ -60,8 +60,9 @@ describe("scrubValue", () => {
     const descriptor = Object.getOwnPropertyDescriptor(out, "__proto__");
 
     expect(Object.getPrototypeOf(out)).toBe(Object.prototype);
+    const descriptorValue = descriptor?.value as Record<string, unknown> | undefined;
     expect(descriptor?.enumerable).toBe(true);
-    expect((descriptor?.value as Record<string, unknown>).email).toBe(REDACTED);
+    expect(descriptorValue?.email).toBe(REDACTED);
     expect(JSON.stringify(out).includes("proto@example.com")).toBe(false);
   });
 

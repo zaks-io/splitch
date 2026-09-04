@@ -135,31 +135,30 @@ describe("config store purge target isolation", () => {
     ).resolves.toMatchObject({ ok: true, experimentIds: [ids.experimentId] });
   });
 
-  it.each([
-    "draft",
-    "ended",
-    "archived",
-  ] as const)("captures an Experiment with %s status from D1", async (status) => {
-    await h.d1
-      .prepare("UPDATE experiments SET status = ?, live_run_id = NULL WHERE id = ?")
-      .bind(status, ids.experimentId)
-      .run();
-    const store = makeConfigStore({
-      repo: h.repo,
-      kv: h.kv,
-      broadcaster: { broadcast: (nudge) => void h.nudges.push(nudge) },
-      nextSnapshotRevision: makeSnapshotRevisionCounter(),
-      now: () => new Date(NOW_MS),
-    });
+  it.each(["draft", "ended", "archived"] as const)(
+    "captures an Experiment with %s status from D1",
+    async (status) => {
+      await h.d1
+        .prepare("UPDATE experiments SET status = ?, live_run_id = NULL WHERE id = ?")
+        .bind(status, ids.experimentId)
+        .run();
+      const store = makeConfigStore({
+        repo: h.repo,
+        kv: h.kv,
+        broadcaster: { broadcast: (nudge) => void h.nudges.push(nudge) },
+        nextSnapshotRevision: makeSnapshotRevisionCounter(),
+        now: () => new Date(NOW_MS),
+      });
 
-    await expect(
-      store.readFlagConfigPurgeTarget({
-        appId: ids.appId,
-        environmentId: ids.environmentId,
-        flagId: ids.flagId,
-      }),
-    ).resolves.toMatchObject({ ok: true, experimentIds: [ids.experimentId] });
-  });
+      await expect(
+        store.readFlagConfigPurgeTarget({
+          appId: ids.appId,
+          environmentId: ids.environmentId,
+          flagId: ids.flagId,
+        }),
+      ).resolves.toMatchObject({ ok: true, experimentIds: [ids.experimentId] });
+    },
+  );
 
   it("does not capture another Flag's Experiment snapshots for deletion", async () => {
     const otherFlagId = "flag_unrelated_experiment";

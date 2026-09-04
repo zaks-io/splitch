@@ -28,33 +28,34 @@ afterEach(() => {
 });
 
 describe("internal ingest authority", () => {
-  it.each(
-    INTERNAL_PATHS,
-  )("returns not found on the public hostname for %s before reading Organization, App, and Environment scope headers", async (path) => {
-    const fetch = mockTinybirdFetch();
-    const ctx = new TestExecutionContext();
+  it.each(INTERNAL_PATHS)(
+    "returns not found on the public hostname for %s before reading Organization, App, and Environment scope headers",
+    async (path) => {
+      const fetch = mockTinybirdFetch();
+      const ctx = new TestExecutionContext();
 
-    const response = await worker.fetch(
-      workerRequest(`${PUBLIC_ORIGIN}${path}`, {
-        method: "POST",
-        headers: {
-          authorization: "Bearer internal_ingest_secret",
-          "content-type": "application/json",
-          "x-splitch-app-id": "app_attacker",
-          "x-splitch-environment-id": "env_attacker",
-          "x-splitch-organization-id": "org_attacker",
-        },
-        body: "{",
-      }),
-      makeEnv(),
-      ctx,
-    );
+      const response = await worker.fetch(
+        workerRequest(`${PUBLIC_ORIGIN}${path}`, {
+          method: "POST",
+          headers: {
+            authorization: "Bearer internal_ingest_secret",
+            "content-type": "application/json",
+            "x-splitch-app-id": "app_attacker",
+            "x-splitch-environment-id": "env_attacker",
+            "x-splitch-organization-id": "org_attacker",
+          },
+          body: "{",
+        }),
+        makeEnv(),
+        ctx,
+      );
 
-    expect(response.status).toBe(404);
-    expect(await response.text()).toBe("not found");
-    expect(fetch).not.toHaveBeenCalled();
-    expect(ctx.waits).toHaveLength(0);
-  });
+      expect(response.status).toBe(404);
+      expect(await response.text()).toBe("not found");
+      expect(fetch).not.toHaveBeenCalled();
+      expect(ctx.waits).toHaveLength(0);
+    },
+  );
 
   it("does not let public headers select another App or Environment write scope", async () => {
     const fetch = mockTinybirdFetch();

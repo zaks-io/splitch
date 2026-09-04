@@ -189,47 +189,45 @@ describe("credential cache backfill concurrency", () => {
    * test can control (SPL-178 covers a sibling test with the same disease). The
    * assertion is deliberately identical for both orders: that is the property.
    */
-  it.each([
-    { first: "backfill" as const },
-    { first: "restriction" as const },
-  ])("never reopens a restricted Client Key allowlist when the $first write lands first", async ({
-    first,
-  }) => {
-    const writes = new Map<string, string>();
-    const writer = new OrderedWriter(writes, first);
-    const row = {
-      keyId: "ck_race",
-      appId: "app_a",
-      environmentId: "env_a",
-      keyMaterial: "pk_race_allowlist",
-      originAllowlist: null,
-      rateLimitRps: null,
-      organizationId: "org_a",
-      revokedAt: null,
-    };
+  it.each([{ first: "backfill" as const }, { first: "restriction" as const }])(
+    "never reopens a restricted Client Key allowlist when the $first write lands first",
+    async ({ first }) => {
+      const writes = new Map<string, string>();
+      const writer = new OrderedWriter(writes, first);
+      const row = {
+        keyId: "ck_race",
+        appId: "app_a",
+        environmentId: "env_a",
+        keyMaterial: "pk_race_allowlist",
+        originAllowlist: null,
+        rateLimitRps: null,
+        organizationId: "org_a",
+        revokedAt: null,
+      };
 
-    const settled = await Promise.allSettled([
-      backfillCredentialCaches(
-        { credentialCacheWriter: writerAccess(writer) },
-        { clientKeys: [row], apiKeys: [] },
-      ),
-      writeClientKeyCache(
-        { credentialCacheWriter: writerAccess(writer) },
-        { ...row, originAllowlist: '["https://app.example"]' },
-        false,
-        "org_a",
-        true,
-      ),
-    ]);
+      const settled = await Promise.allSettled([
+        backfillCredentialCaches(
+          { credentialCacheWriter: writerAccess(writer) },
+          { clientKeys: [row], apiKeys: [] },
+        ),
+        writeClientKeyCache(
+          { credentialCacheWriter: writerAccess(writer) },
+          { ...row, originAllowlist: '["https://app.example"]' },
+          false,
+          "org_a",
+          true,
+        ),
+      ]);
 
-    // The restriction always lands; the backfill may be refused as stale, and
-    // which of those happens is exactly what must not matter to the outcome.
-    expect(settled[1]?.status).toBe("fulfilled");
-    const raw = writes.get(clientKeyCacheKey(await sha256Hex(row.keyMaterial)));
-    expect(cacheEnvelope.parse(JSON.parse(raw as string)).data.originAllowlist).toEqual([
-      "https://app.example",
-    ]);
-  });
+      // The restriction always lands; the backfill may be refused as stale, and
+      // which of those happens is exactly what must not matter to the outcome.
+      expect(settled[1]?.status).toBe("fulfilled");
+      const raw = writes.get(clientKeyCacheKey(await sha256Hex(row.keyMaterial)));
+      expect(cacheEnvelope.parse(JSON.parse(raw as string)).data.originAllowlist).toEqual([
+        "https://app.example",
+      ]);
+    },
+  );
 });
 
 describe("credential cache backfill authoritative ordering", () => {
