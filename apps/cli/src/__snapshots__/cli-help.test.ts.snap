@@ -241,7 +241,7 @@ Example:
     "apps list": "List the Apps in an organization.
 
 Usage:
-  splitch apps list <org-id> [flags]
+  splitch apps list --org <organization> [flags]
 
 Flags:
   --org <organization>  [type: string; default: none] Organization ID.
@@ -1312,7 +1312,7 @@ Example:
     "organization-members add": "Add a member to an organization.
 
 Usage:
-  splitch organization-members add <org-id> [flags]
+  splitch organization-members add --org <organization> [flags]
 
 Flags:
   --org <organization>  [type: string; default: none] Organization ID.
@@ -1327,11 +1327,11 @@ Request body (--body-json):
     {"userId":"user_1","role":"owner"}
 
 Example:
-  splitch organization-members add <org-id> --body-json '{"userId":"user_1","role":"owner"}' --json",
+  splitch organization-members add --org <organization> --body-json '{"userId":"user_1","role":"owner"}' --json",
     "organization-members list": "List organization members.
 
 Usage:
-  splitch organization-members list <org-id> [flags]
+  splitch organization-members list --org <organization> [flags]
 
 Flags:
   --org <organization>  [type: string; default: none] Organization ID.
@@ -1339,11 +1339,11 @@ Flags:
   -h, --help            [type: boolean; default: false] Show help and exit.
 
 Example:
-  splitch organization-members list <org-id> --json",
+  splitch organization-members list --org <organization> --json",
     "organization-members remove": "Remove a member (rejected if removing the last owner).
 
 Usage:
-  splitch organization-members remove <org-id> <user-id> [flags]
+  splitch organization-members remove --org <organization> <user-id> [flags]
 
 Flags:
   --org <organization>  [type: string; default: none] Organization ID.
@@ -1351,11 +1351,11 @@ Flags:
   -h, --help            [type: boolean; default: false] Show help and exit.
 
 Example:
-  splitch organization-members remove <org-id> <user-id> --json",
+  splitch organization-members remove --org <organization> <user-id> --json",
     "organization-members update": "Change a member's role.
 
 Usage:
-  splitch organization-members update <org-id> <user-id> [flags]
+  splitch organization-members update --org <organization> <user-id> [flags]
 
 Flags:
   --org <organization>  [type: string; default: none] Organization ID.
@@ -1369,11 +1369,11 @@ Request body (--body-json):
     {"role":"owner"}
 
 Example:
-  splitch organization-members update <org-id> <user-id> --body-json '{"role":"owner"}' --json",
+  splitch organization-members update --org <organization> <user-id> --body-json '{"role":"owner"}' --json",
     "organization-usage get": "Get an Organization's current-month Evaluation usage breakdown.
 
 Usage:
-  splitch organization-usage get <org-id> [flags]
+  splitch organization-usage get --org <organization> [flags]
 
 Flags:
   --org <organization>  [type: string; default: none] Organization ID.
@@ -1381,7 +1381,7 @@ Flags:
   -h, --help            [type: boolean; default: false] Show help and exit.
 
 Example:
-  splitch organization-usage get <org-id> --json",
+  splitch organization-usage get --org <organization> --json",
     "orgs create": "Create an organization; the calling principal becomes its owner.
 
 Usage:
@@ -1404,7 +1404,7 @@ Example:
     "orgs get": "Get one organization.
 
 Usage:
-  splitch orgs get <org-id> [flags]
+  splitch orgs get --org <organization> [flags]
 
 Flags:
   --org <organization>  [type: string; default: none] Organization ID.
@@ -1412,7 +1412,7 @@ Flags:
   -h, --help            [type: boolean; default: false] Show help and exit.
 
 Example:
-  splitch orgs get <org-id> --json",
+  splitch orgs get --org <organization> --json",
     "orgs list": "List organizations the token can reach (agent cold-start entry).
 
 Usage:
@@ -1427,7 +1427,7 @@ Example:
     "orgs update": "Rename an organization or change its plan.
 
 Usage:
-  splitch orgs update <org-id> [flags]
+  splitch orgs update --org <organization> [flags]
 
 Flags:
   --org <organization>  [type: string; default: none] Organization ID.
@@ -1443,7 +1443,7 @@ Request body (--body-json):
     {"plan":"free"}
 
 Example:
-  splitch orgs update <org-id> --body-json '{"plan":"free"}' --json",
+  splitch orgs update --org <organization> --body-json '{"plan":"free"}' --json",
     "runs end": "End a running Run.
 
 Usage:
@@ -1579,7 +1579,7 @@ Example:
     "sentry-installations create": "Send this Organization's Flag changes to a Sentry organization.
 
 Usage:
-  splitch sentry-installations create <org-id> [flags]
+  splitch sentry-installations create --org <organization> [flags]
 
 Flags:
   --org <organization>  [type: string; default: none] Organization ID.
@@ -1595,11 +1595,11 @@ Request body (--body-json):
     {"installationId":"018f2b7c-3c9a-7b3e-9a52-0c1d2e3f4a5b","webhookUrl":"https://app.example.com"}
 
 Example:
-  splitch sentry-installations create <org-id> --body-json '{"installationId":"018f2b7c-3c9a-7b3e-9a52-0c1d2e3f4a5b","webhookUrl":"https://app.example.com"}' --json",
+  splitch sentry-installations create --org <organization> --body-json '{"installationId":"018f2b7c-3c9a-7b3e-9a52-0c1d2e3f4a5b","webhookUrl":"https://app.example.com"}' --json",
     "sentry-installations delete": "Revoke a Sentry integration and stop change delivery.
 
 Usage:
-  splitch sentry-installations delete <org-id> <installation-id> [flags]
+  splitch sentry-installations delete --org <organization> <installation-id> [flags]
 
 Flags:
   --org <organization>  [type: string; default: none] Organization ID.
@@ -1607,11 +1607,11 @@ Flags:
   -h, --help            [type: boolean; default: false] Show help and exit.
 
 Example:
-  splitch sentry-installations delete <org-id> <installation-id> --json",
+  splitch sentry-installations delete --org <organization> <installation-id> --json",
     "sentry-installations get": "Read Sentry change-tracking delivery health without secrets.
 
 Usage:
-  splitch sentry-installations get <org-id> <installation-id> [flags]
+  splitch sentry-installations get --org <organization> <installation-id> [flags]
 
 Flags:
   --org <organization>  [type: string; default: none] Organization ID.
@@ -1619,11 +1619,11 @@ Flags:
   -h, --help            [type: boolean; default: false] Show help and exit.
 
 Example:
-  splitch sentry-installations get <org-id> <installation-id> --json",
+  splitch sentry-installations get --org <organization> <installation-id> --json",
     "sentry-installations list": "List Sentry change-tracking installations and their delivery health.
 
 Usage:
-  splitch sentry-installations list <org-id> [flags]
+  splitch sentry-installations list --org <organization> [flags]
 
 Flags:
   --org <organization>  [type: string; default: none] Organization ID.
@@ -1631,11 +1631,11 @@ Flags:
   -h, --help            [type: boolean; default: false] Show help and exit.
 
 Example:
-  splitch sentry-installations list <org-id> --json",
+  splitch sentry-installations list --org <organization> --json",
     "sentry-secret-rotations create": "Rotate the Sentry webhook signing secret.
 
 Usage:
-  splitch sentry-secret-rotations create <org-id> <installation-id> [flags]
+  splitch sentry-secret-rotations create --org <organization> <installation-id> [flags]
 
 Flags:
   --org <organization>  [type: string; default: none] Organization ID.
@@ -1650,7 +1650,7 @@ Request body (--body-json):
     {"rotationId":"018f2b7c-3c9a-7b3e-9a52-0c1d2e3f4a5b"}
 
 Example:
-  splitch sentry-secret-rotations create <org-id> <installation-id> --body-json '{"rotationId":"018f2b7c-3c9a-7b3e-9a52-0c1d2e3f4a5b"}' --json",
+  splitch sentry-secret-rotations create --org <organization> <installation-id> --body-json '{"rotationId":"018f2b7c-3c9a-7b3e-9a52-0c1d2e3f4a5b"}' --json",
   },
   "groups": {
     "api-keys": "Manage api-keys resources.

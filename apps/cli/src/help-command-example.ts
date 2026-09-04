@@ -1,5 +1,5 @@
 import type { CliCommandDefinition } from "./command-registry.js";
-import { requiredPositionals } from "./command-positionals.js";
+import { commandHelpArguments } from "./command-positionals.js";
 import { bodyJsonExampleFlag } from "./help-body-json.js";
 
 export function commandExample(command: CliCommandDefinition): string {
@@ -7,11 +7,7 @@ export function commandExample(command: CliCommandDefinition): string {
   if (simpleExample) return simpleExample;
   if (command.kind === "flags_verify")
     return "splitch flags verify checkout --targeting-key workspace-123 --id-type workspace --json";
-  const parts = [
-    "splitch",
-    ...command.path,
-    ...requiredPositionals(command).map((name) => `<${name}>`),
-  ];
+  const parts = ["splitch", ...command.path, ...commandHelpArguments(command)];
   if (command.operationId === "flags_test_eval") {
     parts.push("--targeting-key", "workspace-123", "--id-type", "workspace");
   } else {
