@@ -203,9 +203,15 @@ Account-closure privacy deletion is the only exception; see
 Environments are children of an App. Each has a key (URL segment), its own credentials, Flag
 Configurations, experiment data, and **Environment Policy**.
 
+The Environment response is
+`{ id, appId, key, name, policy, createdAt, updatedAt }`. The Client Key response nested by
+Environment creation is
+`{ keyId, appId, environmentId, keyMaterial, originAllowlist?, isOriginOpen, rateLimitRps, revokedAt?, createdAt }`.
+
 ### `GET /apps/{app_id}/envs`
 
-Returns: list of Environments `{ environment_id, app_id, key, name, created_at }`.
+Returns: `{ items: Environment[], readLimit, readTruncated, cursor }`, where `cursor` is
+`string | null`.
 Auth: App member.
 
 ### `POST /apps/{app_id}/envs`
@@ -213,16 +219,15 @@ Auth: App member.
 Body: `{ key: string, name?: string, policy?: EnvironmentPolicy }` (key unique within App). New keys
 are 2–63 lowercase alphanumerics separated by single hyphens; `_` is not accepted. Existing rows may
 retain older key shapes so selector resolution remains backward-compatible.
-Returns: the new Environment, with its default Policy if none supplied (dev-style all-`allow`), plus
-the public Client Key auto-provisioned for it under `clientKey` (same shape as
-`GET /apps/{app_id}/envs/{environment_id}/client-key`), so a caller can point an SDK at the
-Environment without a second call. Provisioning failure rolls the Environment back; there is no
-success response without the key. No API Key material rides this response.
+Returns: `{ ...Environment, clientKey: ClientKey }`, with the default Policy if none was supplied
+(dev-style all-`allow`) and the public Client Key auto-provisioned for it. A caller can point an SDK
+at the Environment without a second call. Provisioning failure rolls the Environment back; there is
+no success response without `clientKey`. No API Key material rides this response.
 Auth: App `owner` or `admin`.
 
 ### `GET /apps/{app_id}/envs/{environment_id}`
 
-Returns: `{ environment_id, app_id, key, name, policy, created_at }`.
+Returns: `Environment`.
 
 ### `PATCH /apps/{app_id}/envs/{environment_id}`
 
@@ -239,6 +244,7 @@ Auth: App `owner` or `admin`.
 Blocked if any Experiment is `running` in this Environment, if it is the last Environment, or if
 non-credential child resources remain (non-archived Experiments count; archived Experiments and
 their Runs are hard-purged on teardown).
+Returns: `{ deleted: true }`.
 Auth: App `owner`.
 
 ## Sources
