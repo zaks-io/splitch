@@ -39,8 +39,16 @@ const probes: Record<string, (client: SplitchClient) => Promise<unknown>> = {
 
 type SplitchClient = ReturnType<typeof createSplitchClient>;
 
+/**
+ * "Data-plane route this SDK drives" is the `/api/sdk/` address space, which is
+ * exactly what `routes-data-plane.ts` defines. Not `owner`, in either direction:
+ * `sdk_track` and `sdk_activate` are SDK calls owned by `event-ingest-api`, and
+ * `evaluation-api` also owns `/api/integrations/{cloudflare,convex}/exposures`,
+ * which those platforms drive and this SDK never calls. Filtering on owner
+ * therefore both under- and over-selects.
+ */
 const requiredDataPlaneOperations = routeRegistry
-  .filter((route) => route.idempotency === "required" && route.owner === "evaluation-api")
+  .filter((route) => route.idempotency === "required" && route.path.startsWith("/api/sdk/"))
   .map((route) => route.operationId);
 
 const pathByOperation = new Map(routeRegistry.map((route) => [route.operationId, route.path]));

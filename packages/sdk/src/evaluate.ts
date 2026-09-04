@@ -220,7 +220,8 @@ async function resolveContextMiss(
  * The single evaluate path shared by `evaluate` and `evaluateDetails`. Ordering
  * follows docs/spec/sdk/exposure-accessor.md and seen-set.md:
  *
- *   1. Default idType to 'user'; resolve the Default Variant value.
+ *   1. Default idType to 'user'; resolve the Default Variant value, then throw
+ *      SDK_CONTEXT_INVALID if the caller supplied no `idempotencyKey`.
  *   2. Seen-set value hit: a FRESH (within-TTL) entry for this
  *      (flagKey, idType, targetingKey, attributes) replays as CACHED with NO
  *      transport call and NO second Exposure. Bounded optimistic suppression —
@@ -242,9 +243,14 @@ async function resolveContextMiss(
  * `sdk_evaluate` declares `idempotency: "required"`, and
  * `worker-runtime/steps/idempotency.ts` reads the `Idempotency-Key` HEADER and
  * nothing else, so `requestFor` omitting an absent key buys a round trip that
- * can only come back `400 VALIDATION_ERROR`. `evaluateAll` already refuses an
- * empty key locally for the same reason; evaluate is the last
- * `idempotency: "required"` route that let the edge do the rejecting.
+ * can only come back `400 VALIDATION_ERROR`.
+ *
+ * `evaluateAll` mints a key instead of refusing, and the two are not meant to
+ * converge: its key is a per-fetch BILLING identity the SDK can own, because a
+ * non-exposing bulk read has nothing to deduplicate. Evaluate's key is the
+ * caller-owned Exposure identity — mint it here and every retry would seal a
+ * second Exposure for one logical Evaluation, which is the double-count the key
+ * exists to prevent. Only the caller knows which calls are the same Evaluation.
  *
  * The type makes this field required, so only a JavaScript caller (or one
  * casting through `any`) reaches here. `typeof` rather than `=== undefined`
@@ -254,34 +260,37 @@ async function resolveContextMiss(
  * replayed hit never calls the transport, so the same malformed call would
  * otherwise resolve on a hit and fail on a miss.
  *
- * This returns the Default Variant with `reason: ERROR` rather than throwing.
- * Evaluate's contract is that the host app always renders something, and the
- * only difference from the edge's own rejection is that the failure is named
- * `SDK_CONTEXT_INVALID` and costs no network call.
+ * THROWS rather than resolving to the Default Variant, which is what every
+ * other local guard in this SDK does (`resolveContext`, `resolveBrowserClientKey`,
+ * the `retries` check, `mintIdempotencyKey`). The Default-Variant degrade is for
+ * a failing PLATFORM, where rendering something is better than rendering
+ * nothing; this is the caller's own code calling the function wrong, it fails
+ * identically on every call until they change it, and `evaluate()` — the method
+ * the quickstart teaches — unwraps to the value and drops the details that
+ * would have named the cause. Degrading there returns a plausible Default
+ * Variant and silently stops measuring the Experiment.
  */
-function missingIdempotencyKey(
+function requireIdempotencyKey(
   deps: EvaluateDeps,
   flagKey: string,
-  targetingKey: string,
   context: EvaluationContext,
-  defaultValue: VariantValue,
-): SdkResolutionDetails | null {
+): void {
   const key: unknown = context.idempotencyKey;
-  if (typeof key === "string" && key.length > 0) return null;
-  const details = synthesizeDetails(
-    {
-      status: null,
-      errorCode: "SDK_CONTEXT_INVALID",
-      errorMessage:
-        "evaluate requires a non-empty `idempotencyKey` on the Evaluation Context: it is the caller-owned id that lets a retry replay one Exposure instead of recording a second",
-      variant: null,
-      variantName: null,
-      runId: null,
-    },
-    defaultValue,
-  );
-  logEvaluateError(deps, flagKey, targetingKey, details, null);
-  return details;
+  if (typeof key === "string" && key.length > 0) return;
+  const error = new SplitchSdkError({
+    code: "SDK_CONTEXT_INVALID",
+    causeSummary:
+      "evaluate was called without a non-empty `idempotencyKey` on its Evaluation Context",
+    remediation:
+      "Pass idempotencyKey on the context: a caller-owned id for one logical Evaluation, reused on every retry so a retry replays one Exposure instead of recording a second",
+  });
+  deps.logger.error(error.message, {
+    flagKey,
+    targetingKey: context.targetingKey,
+    status: error.status,
+    errorCode: error.code,
+  });
+  throw error;
 }
 
 export async function runEvaluate(
@@ -294,8 +303,7 @@ export async function runEvaluate(
   const defaultValue = context.defaultValue ?? FALLBACK_DEFAULT_VALUE;
   const attributes = context.attributes ?? {};
 
-  const missingKey = missingIdempotencyKey(deps, flagKey, targetingKey, context, defaultValue);
-  if (missingKey !== null) return missingKey;
+  requireIdempotencyKey(deps, flagKey, context);
 
   const lookup = deps.seenSet.get(flagKey, idType, targetingKey, attributes, deps.now());
   if (lookup.kind === "hit") {
