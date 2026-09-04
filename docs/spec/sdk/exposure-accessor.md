@@ -46,7 +46,7 @@ branch on `reason` / `errorCode` (e.g. surface a banner on `STALE`, throw in you
 
 **What happens inside:**
 
-1. Validates context (targetingKey and the caller-owned idempotencyKey are required; idType defaults to 'user' if omitted).
+1. Validates context (targetingKey and the caller-owned idempotencyKey are required; idType defaults to 'user' if omitted). A missing or empty `idempotencyKey` throws `SDK_CONTEXT_INVALID` before any request rather than degrading: it is a wiring bug that fails identically on every call, not a resolution failure, and `evaluate` unwraps to the value so a degrade would hand back a Default Variant with nothing naming the cause.
 2. Checks SDK seen-set for `(flagKey, runId, targetingKey)`. If present, returns the cached
    Variant without a second Exposure (`reason: CACHED`) and asynchronously sends only the Flag Key,
    caller-owned idempotency key, and SDK/runtime to non-billable cache telemetry. That telemetry never

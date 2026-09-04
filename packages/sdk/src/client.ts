@@ -83,9 +83,12 @@ export interface SplitchClient {
    * (the event experiment analysis counts), deduplicated locally per Flag and
    * targeting key within the revalidation window.
    *
-   * Never throws and never retries: on any failure it returns
+   * Never throws on a platform failure and never retries: it returns
    * `context.defaultValue` (or `false`) and logs loudly. Use
    * {@link SplitchClient.evaluateDetails} to branch on `reason: "ERROR"`.
+   * Throws `SplitchSdkError` if the context omits a required
+   * `idempotencyKey` — that is caller misconfiguration, not a platform
+   * failure.
    *
    * @example
    * const variant = await splitch.evaluate("new-checkout", {
@@ -96,7 +99,13 @@ export interface SplitchClient {
    * });
    */
   evaluate(flagKey: string, context: EvaluationContext): Promise<VariantValue>;
-  /** Resolve a Flag and return the full OpenFeature ResolutionDetails. Fires an Exposure. */
+  /**
+   * Resolve a Flag and return the full OpenFeature ResolutionDetails. Fires
+   * an Exposure. Never throws on a platform failure; reads `reason: "ERROR"`
+   * instead. Throws `SplitchSdkError` if the context omits a required
+   * `idempotencyKey` — that is caller misconfiguration, not a platform
+   * failure.
+   */
   evaluateDetails(flagKey: string, context: EvaluationContext): Promise<SdkResolutionDetails>;
   /**
    * Resolve a Flag without firing an Exposure, for inspecting a resolution

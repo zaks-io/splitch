@@ -41,7 +41,6 @@
       "entry": ["src/contract-surface-assignability.ts"],
       "ignoreDependencies": [
         "@hono/zod-openapi",
-        "@splitch/contracts",
         "@splitch/control-plane-sdk",
         "@splitch/evaluation-core",
         "hono",
