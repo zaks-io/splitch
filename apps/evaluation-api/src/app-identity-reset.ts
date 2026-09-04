@@ -1,5 +1,5 @@
 import { requireDestroyedIdentityVersions } from "./assignment/app-identity-reset-fence";
-import { assignmentWriterName } from "./assignment/assignment-store";
+import { assignmentWriterName } from "@splitch/contracts";
 import type { HoldoverWriteAppInventoryStatus } from "./assignment/holdover-write-app-inventory";
 import { DurableHoldoverWriteAppInventoryClient } from "./assignment/holdover-write-app-inventory-client";
 import { holdoverWriteOutboxName } from "./assignment/holdover-write-outbox-core";

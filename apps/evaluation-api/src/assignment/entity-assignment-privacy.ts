@@ -1,11 +1,11 @@
-import { assignmentKey } from "@splitch/contracts";
+import { assignmentKey, assignmentWriterName } from "@splitch/contracts";
 import {
   type EntityPrivacyIdentity,
   resolveEntityPrivacyIdentity,
   type SaltStore,
 } from "@splitch/privacy";
 import type { AssignmentKv, AssignmentStoreLogger, AssignmentStoreValue } from "./assignment-store";
-import { assignmentWriterName, readAssignmentValue } from "./assignment-store";
+import { readAssignmentValue } from "./assignment-store";
 import {
   type EntityHoldoverWriteSuppression,
   type HoldoverWriteJob,

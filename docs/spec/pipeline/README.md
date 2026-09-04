@@ -21,7 +21,7 @@ for sticky experience, while the raw log is the authority for analysis.
 | [edge-ingest-contract.md](./edge-ingest-contract.md)                     | Five-runtime ingest contract; current direct-write debt; target admission, durable acceptance/outbox, datasource queues, fixed Tinybird drain governor, DLQ isolation, and failure modes    |
 | [physical-datasources.md](./physical-datasources.md)                     | Tinybird raw, Exposure snapshot, Activation/Metric/Web aggregate-state schemas, sorting/partition keys, and matching retention                                                              |
 | [physical-dedup-pipes.md](./physical-dedup-pipes.md)                     | Exposure snapshot+tail; Activation and Metric/Web aggregate states; replace-mode Exposure rollups; Tinybird performance and repair gates                                                    |
-| [holdover-write-contract.md](./holdover-write-contract.md)               | Pipeline → Assignment Store DO write; `putIfAbsent` semantics; KV write-through; timing (non-blocking in `ctx.waitUntil`); failure contract; port seam definition                           |
+| [holdover-write-contract.md](./holdover-write-contract.md)               | Pipeline → Assignment Store DO write; `putIfAbsent` semantics; KV write-through awaited after the commit; failure contract; port seam definition                                            |
 
 ## Key invariants
 

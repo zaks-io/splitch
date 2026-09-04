@@ -134,16 +134,6 @@ export function mergeRetainedAssignmentValues(
   return merged;
 }
 
-export function assignmentWriterName(
-  input: Pick<HashedAssignmentPutInput, "appId" | "idType" | "targetingKeyHash">,
-): string {
-  // One DO per ENTITY (not per entity+experiment): the entity-level KV blob is
-  // read-merge-written by the writer, so every write for an entity must pass
-  // through the same serialization point — per-experiment DOs racing on the
-  // shared blob would clobber each other's first-touch entries.
-  return `${input.appId}:${input.idType}:${input.targetingKeyHash}`;
-}
-
 export function assignmentValueToMap(
   value: AssignmentStoreValue,
 ): Map<string, AssignmentStoreEntry> {

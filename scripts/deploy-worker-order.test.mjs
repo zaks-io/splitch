@@ -24,9 +24,7 @@ function serviceEdges() {
   const workerToPackage = new Map();
   const bindings = new Map();
 
-  for (const entry of readdirSync(join(repoRoot, "apps"), { withFileTypes: true })) {
-    const worker = readWorker(entry);
-    if (worker === null) continue;
+  for (const worker of workers()) {
     // Every env alias of the same Worker maps back to the one package that ships it.
     for (const name of workerNames(worker.config)) workerToPackage.set(name, worker.packageName);
     bindings.set(worker.packageName, collectServices(worker.config));
@@ -63,6 +61,85 @@ function workerNames(config) {
     if (target?.name) names.add(target.name);
   }
   return names;
+}
+
+/**
+ * A cross-script Durable Object binding (`script_name` on a `durable_objects`
+ * binding) is deliberately NOT collected as an ordering edge. It resolves to a
+ * namespace the defining Worker owns, and that namespace exists from the first
+ * deploy that declared the class onward -- unlike a `services` binding, which
+ * the caller re-resolves against the live callee on every deploy and which
+ * fails outright when a named entrypoint is not exported yet. Event Ingest has
+ * shipped a binding on Control Plane's `ConfigStoreDurableObject` while
+ * deploying first and Control Plane last on the same run.
+ *
+ * That is also why Event Ingest binding Evaluation's Assignment Store class,
+ * while Evaluation binds Event Ingest as a service, is not a deploy cycle: the
+ * two edges are resolved at different times and only the `services` one
+ * constrains order.
+ *
+ * What is load-bearing, and invisible to every other check, is that the script
+ * and class named exist in the fleet at all -- in the SAME environment as the
+ * target that names them. Every Worker here ships one script name per
+ * environment, so a shared-preview binding left pointing at the production
+ * script deploys clean and then reads production's Durable Objects from
+ * preview. The edge therefore carries the env key it was declared under, and
+ * `undefined` for the top-level target.
+ */
+function durableObjectEdges() {
+  return workers().flatMap(({ config, packageName }) =>
+    namedTargets(config).flatMap(([env, target]) =>
+      (target?.durable_objects?.bindings ?? [])
+        .filter((binding) => binding?.script_name)
+        .map((binding) => ({
+          caller: packageName,
+          className: binding.class_name,
+          env,
+          script: binding.script_name,
+        })),
+    ),
+  );
+}
+
+/** Each deployable target of a config, paired with the env key that selects it. */
+function namedTargets(config) {
+  return [[undefined, config], ...Object.entries(config.env ?? {})];
+}
+
+/** The script name a config deploys under one env key, or nothing if it has none. */
+function targetName(config, env) {
+  return env === undefined ? config.name : config.env?.[env]?.name;
+}
+
+/** Every Durable Object class a Worker declares, however it declares it. */
+function definedClasses(config) {
+  const defined = new Set();
+  for (const target of targets(config)) {
+    for (const migration of target?.migrations ?? []) {
+      for (const name of migration?.new_classes ?? []) defined.add(name);
+      for (const name of migration?.new_sqlite_classes ?? []) defined.add(name);
+      for (const name of migration?.deleted_classes ?? []) defined.delete(name);
+    }
+    for (const [name, entry] of Object.entries(target?.exports ?? {})) {
+      if (entry?.type === "durable-object") defined.add(name);
+    }
+    for (const binding of target?.durable_objects?.bindings ?? []) {
+      if (!binding?.script_name && binding?.class_name) defined.add(binding.class_name);
+    }
+  }
+  return defined;
+}
+
+function targets(config) {
+  return namedTargets(config).map(([, target]) => target);
+}
+
+let cachedWorkers;
+function workers() {
+  cachedWorkers ??= readdirSync(join(repoRoot, "apps"), { withFileTypes: true })
+    .map(readWorker)
+    .filter((worker) => worker !== null);
+  return cachedWorkers;
 }
 
 function collectServices(config) {
@@ -160,3 +237,21 @@ for (const environment of ["production", "shared-preview"]) {
     }
   });
 }
+
+test("every cross-script Durable Object binding names a class its Worker defines there", () => {
+  const edges = durableObjectEdges();
+
+  assert.ok(edges.length > 0, "no cross-script Durable Object bindings were found to check");
+  for (const { caller, className, env, script } of edges) {
+    const where = env ? `its "${env}" environment` : "its top-level target";
+    const definer = workers().find((worker) => targetName(worker.config, env) === script);
+    assert.ok(
+      definer,
+      `${caller} binds ${className} on "${script}" in ${where}, which no Worker in apps/ ships under that environment`,
+    );
+    assert.ok(
+      definedClasses(definer.config).has(className),
+      `${caller} binds ${className} on "${script}" in ${where}, which declares no such Durable Object class`,
+    );
+  }
+});

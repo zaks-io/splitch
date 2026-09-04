@@ -1,4 +1,4 @@
-import { assignmentKey, CURRENT_KV_SCHEMA_VERSION } from "@splitch/contracts";
+import { assignmentKey, assignmentWriterName, CURRENT_KV_SCHEMA_VERSION } from "@splitch/contracts";
 import {
   METRIC_APP_ID,
   METRIC_ENVIRONMENT_ID,
@@ -14,6 +14,12 @@ export async function seedMetricEventAssignment(
     runId: string;
     variant: string;
     identityEpoch?: "current" | "oldest";
+    /**
+     * Commit to the Assignment Store instance but leave the KV mirror empty:
+     * what a reader sees while the write-through is still propagating, and what
+     * a region holding a cached negative lookup keeps seeing after it has.
+     */
+    kvMirrorLags?: true;
   },
 ): Promise<string> {
   const event = metricEventBody();
@@ -33,14 +39,20 @@ export async function seedMetricEventAssignment(
       ? identity.identity.targetingKeyHashes[0]
       : identity.targetingKeyHash;
   if (!targetingKeyHash) throw new Error("Metric Event identity has no retained hash");
-  fixture.assignments.set(
-    assignmentKey(METRIC_APP_ID, event.idType, targetingKeyHash),
-    JSON.stringify({
-      schemaVersion: CURRENT_KV_SCHEMA_VERSION,
-      data: {
-        [input.experimentId]: { runId: input.runId, variant: input.variant },
-      },
+  const value = { [input.experimentId]: { runId: input.runId, variant: input.variant } };
+  fixture.writerAssignments.set(
+    assignmentWriterName({
+      appId: METRIC_APP_ID,
+      idType: event.idType,
+      targetingKeyHash,
     }),
+    JSON.stringify(value),
   );
+  if (input.kvMirrorLags !== true) {
+    fixture.assignments.set(
+      assignmentKey(METRIC_APP_ID, event.idType, targetingKeyHash),
+      JSON.stringify({ schemaVersion: CURRENT_KV_SCHEMA_VERSION, data: value }),
+    );
+  }
   return targetingKeyHash;
 }

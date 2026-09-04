@@ -15,6 +15,17 @@ import type { MetricEventRateLimitNamespace } from "./metric-event-rate-limit";
 
 interface WorkerProtocolBindings {
   ASSIGNMENTS_KV?: KVNamespace;
+  /**
+   * The Assignment Store instance that owns an Entity's Assignments. It commits
+   * to its own storage and only then writes `ASSIGNMENTS_KV`, so the mirror is
+   * never ahead of it; KV's own global propagation and per-region negative
+   * caching are what leave it behind. Cross-script binding onto
+   * `splitch-evaluation-api`.
+   */
+  ASSIGNMENT_STORE_WRITER?: {
+    idFromName(name: string): DurableObjectId;
+    get(id: DurableObjectId): { fetch(request: Request): Promise<Response> };
+  };
   CONFIG_STORE?: KVNamespace;
   CONFIG_STORE_WRITER?: {
     getByName(name: string): {

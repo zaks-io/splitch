@@ -1,5 +1,5 @@
+import { assignmentWriterName } from "@splitch/contracts";
 import { keyVersionOf } from "@splitch/privacy";
-import { assignmentWriterName } from "./assignment-store";
 import { parseHashedAssignmentPut } from "./assignment-store-input";
 import {
   admitAppInventoryAssignment,
