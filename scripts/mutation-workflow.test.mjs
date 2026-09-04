@@ -31,10 +31,10 @@ test("each package has an independent budget, baseline cache, and complete artif
   assert.match(workflow, /name: Mutation \(\$\{\{ matrix\.name \}\}\)/);
   assert.match(workflow, /timeout-minutes: 20/);
   assert.match(workflow, /fail-fast: false/);
-  assert.match(
-    workflow,
-    /uses: actions\/cache@cdf6c1fa76f9f475f3d7449005a359c84ca0f306 # v5\.0\.3/,
-  );
+  // The exact commit/version is Dependabot-owned and rotates on its schedule;
+  // what this test must keep proving is that the pin is a full SHA, not a
+  // floating tag.
+  assert.match(workflow, /uses: actions\/cache@[0-9a-f]{40}\b/);
   assert.match(workflow, /path: \$\{\{ matrix\.report_dir \}\}\/stryker-incremental\.json/);
   assert.match(workflow, /timeout-minutes: 18/);
   assert.match(workflow, /pnpm --filter "\$\{\{ matrix\.workspace \}\}" test:mutation 2>&1 \| tee/);
