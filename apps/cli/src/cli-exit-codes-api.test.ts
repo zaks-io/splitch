@@ -23,7 +23,7 @@ afterEach(async () => {
 });
 
 describe("api command exit codes", () => {
-  it("apps create returns 0 on success", async () => {
+  it("runs the apps create help example successfully", async () => {
     const { credentialPath } = await makeTempHome();
     await writeFile(credentialPath, `${JSON.stringify(storedCredential())}\n`);
     const transport = new FakeCliTransport([
@@ -35,7 +35,7 @@ describe("api command exit codes", () => {
       },
     ]);
 
-    const code = await runCli(["apps", "create", "--json", "--org", "org_1", "--name", "New App"], {
+    const code = await runCli(["apps", "create", "--org", "org_1", "--name", "My App", "--json"], {
       credentialPath,
       fetch: transport.fetch,
     });
@@ -43,6 +43,7 @@ describe("api command exit codes", () => {
     // apps_create rebinds to the target Org, so the API call carries the
     // freshly minted org-bound token, not the stored default.
     expect(transport.requests.at(-1)?.authorization).toBe("Bearer refreshed-access-token");
+    expect(transport.requests.at(-1)?.body).toMatchObject({ name: "My App" });
   });
 
   it("rejects --by before apps create can put it in the request body", async () => {
