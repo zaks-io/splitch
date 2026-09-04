@@ -19,7 +19,7 @@ test("shared preview is maintainer-dispatched, never pull-request-triggered", ()
   const triggers = workflow.slice(0, workflow.indexOf("\npermissions:\n"));
 
   assert.match(triggers, /workflow_dispatch:/);
-  assert.doesNotMatch(triggers, /pull_request(?:_target)?:/);
+  assert.doesNotMatch(triggers, /^[ \t]*["']?pull_request(?:_target)?["']?[ \t]*:/m);
 });
 
 test("accepts one exact deployed commit across the exercised Worker fleet", () => {
