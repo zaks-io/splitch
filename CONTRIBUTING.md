@@ -57,6 +57,9 @@ Two house rules that reviewers will hold you to:
 - `pnpm verify:push` must pass locally, and CI must be green. Do not bypass a failing gate:
   no `--no-verify`, no ad-hoc flags to coax a command into passing. If a hook fails on code
   you did not touch, check whether your branch has drifted from `main`.
+- Pull requests from forks run the same required `Verify` check on GitHub-hosted compute without
+  repository secrets or hosted infrastructure access. A maintainer may deploy a reviewed ref to the
+  single shared preview separately; opening or updating a pull request never deploys it.
 - Add tests for behavior you change. A test that would still pass with the fix reverted is
   not a test.
 - Commit messages follow [Conventional Commits](https://www.conventionalcommits.org/)

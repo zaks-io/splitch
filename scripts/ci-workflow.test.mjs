@@ -35,10 +35,21 @@ test("new main pushes cannot cancel or coalesce an in-flight production call", (
   assert.match(workflow, /cancel-in-progress: \$\{\{ github\.ref != 'refs\/heads\/main' \}\}/);
 });
 
-test("Verify keeps its stable check name on the measured 8 vCPU runner", () => {
+test("Verify keeps its stable check name and gives forks public compute", () => {
   assert.ok(verifyJob);
   assert.match(verifyJob, /name: Verify/);
-  assert.match(verifyJob, /runs-on: blacksmith-8vcpu-ubuntu-2404/);
+  assert.match(
+    verifyJob,
+    /runs-on: \$\{\{ github\.event_name == 'pull_request' && github\.event\.pull_request\.head\.repo\.full_name != github\.repository && 'ubuntu-24\.04' \|\| 'blacksmith-8vcpu-ubuntu-2404' \}\}/,
+  );
+});
+
+test("pull request verification never receives preview infrastructure authority", () => {
+  assert.ok(verifyJob);
+  assert.doesNotMatch(
+    verifyJob,
+    /environment: preview|CLOUDFLARE_API_TOKEN|TB_TOKEN|SENTRY_AUTH_TOKEN|deploy:shared-preview/,
+  );
 });
 
 test("main CI delegates production build selection to the production deploy planner", () => {

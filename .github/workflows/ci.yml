@@ -18,7 +18,10 @@ concurrency:
 jobs:
   verify:
     name: Verify
-    runs-on: blacksmith-8vcpu-ubuntu-2404
+    # Forks cannot rely on the repository's private runner integration. Keep
+    # their required check on GitHub-hosted compute; trusted branches retain
+    # the measured Blacksmith runner and signed remote cache.
+    runs-on: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository && 'ubuntu-24.04' || 'blacksmith-8vcpu-ubuntu-2404' }}
     # The validators run serially inside this job, so the ceiling covers a
     # worst-case run that triggers both on top of a large affected graph.
     timeout-minutes: 25

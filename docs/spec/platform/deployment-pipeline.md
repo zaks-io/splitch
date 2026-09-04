@@ -45,9 +45,13 @@ bindings, Cloudflare service bindings, Tinybird Cloud, routes, DNS, or GitHub en
 
 ## Runner policy
 
-- All GitHub Actions jobs use Blacksmith runner tags, starting with `blacksmith-2vcpu-ubuntu-2404`,
-  except the package publish workflows. npm trusted publishing supports GitHub-hosted runners, not
-  Blacksmith, so those workflows use `ubuntu-24.04` and must not receive an npm token.
+- Trusted GitHub Actions jobs use Blacksmith runner tags, starting with
+  `blacksmith-2vcpu-ubuntu-2404`. The required `Verify` job selects `ubuntu-24.04` for a pull request
+  whose head repository differs from the base repository, so an external contributor does not depend
+  on the private runner integration. Same-repository PRs and `main` retain the measured
+  `blacksmith-8vcpu-ubuntu-2404` path. Package publish workflows also use GitHub-hosted
+  `ubuntu-24.04` because npm trusted publishing does not support Blacksmith, and they must not receive
+  an npm token.
 - Use larger Blacksmith Linux runners only for measured bottlenecks, for example large build or test
   shards. The affected `ci` Verify job uses `blacksmith-8vcpu-ubuntu-2404`. The 4-vCPU trial was
   rejected after forced uncached runs exceeded the four-minute target and repeatedly tripped
