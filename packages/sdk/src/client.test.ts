@@ -294,7 +294,11 @@ describe("createFetchTransport (real wire adapter): stub fetch, no network", () 
       fetch: stubFetch(new Response("", { status: 503 })),
       logger,
     });
-    const details = await client.evaluateDetails("flag", { targetingKey: "u1", defaultValue: "x" });
+    const details = await client.evaluateDetails("flag", {
+      targetingKey: "u1",
+      defaultValue: "x",
+      idempotencyKey: "eval-1",
+    });
     expect(details.reason).toBe("ERROR");
     expect(details.errorCode).toBe("SERVICE_UNAVAILABLE");
     expect(details.value).toBe("x");

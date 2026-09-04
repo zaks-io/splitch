@@ -22,11 +22,11 @@ const AssignmentEnvelope = kvEnvelope(AssignmentStoreValueSchema);
  */
 export class ActivationResolutionError extends Error {
   readonly detail: Record<string, unknown>;
-  readonly resolution: "not_available" | "transient" | "unpublished";
+  readonly resolution: "not_available" | "not_exposed" | "transient" | "unpublished";
 
   constructor(
     message: string,
-    resolution: "not_available" | "transient" | "unpublished",
+    resolution: "not_available" | "not_exposed" | "transient" | "unpublished",
     detail: Record<string, unknown> = {},
   ) {
     super(message);
@@ -104,7 +104,7 @@ export async function activationRows(
   if (exposedBindings.length === 0) {
     throw new ActivationResolutionError(
       "No Experiment Run using this Event Definition has an Exposure for this Entity",
-      "not_available",
+      "not_exposed",
       {
         assignedRunIds: Object.values(assignments).map((located) => located.assignment.runId),
         boundRunIds: bindings.map((binding) => binding.runId),

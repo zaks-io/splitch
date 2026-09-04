@@ -113,7 +113,7 @@ export const failuresTopic: SdkTopic = {
   slug: "failures",
   title: "Failure behavior",
   summary:
-    "Server evaluation never throws and never hides. Peek throws, and so does a browser read before init().",
+    "Server evaluation never throws on a platform failure and never hides one. It does throw on caller misconfiguration, like a missing idempotencyKey. Peek throws, and so does a browser read before init().",
   section: "guide",
   blocks: [
     {
@@ -123,7 +123,7 @@ export const failuresTopic: SdkTopic = {
     { kind: "heading", text: "evaluate, evaluateDetails, verify" },
     {
       kind: "prose",
-      text: 'On the server client these never throw and never retry. On any failure (HTTP error, timeout, network error, unparseable body) they return your `defaultValue` (or `false` when you gave none), log loudly through `logger.error`, and report `reason: "ERROR"` plus an `errorCode` in `ResolutionDetails`.',
+      text: 'On the server client these never throw on a platform failure and never retry. On any such failure (HTTP error, timeout, network error, unparseable body) they return your `defaultValue` (or `false` when you gave none), log loudly through `logger.error`, and report `reason: "ERROR"` plus an `errorCode` in `ResolutionDetails`. `evaluate` and `evaluateDetails` also throw `SplitchSdkError` if the context omits a required `idempotencyKey` — that is caller misconfiguration, not a platform failure.',
     },
     {
       kind: "prose",

@@ -3,11 +3,10 @@ import { internal } from "./_generated/api";
 import type { Doc } from "./_generated/dataModel";
 import { internalMutation, type MutationCtx } from "./_generated/server";
 import { ensureExposureDrainScheduled } from "./exposure_batch";
-import { requiredIntegration } from "./integration_state";
+import { CURRENT_KEY, requiredIntegration } from "./integration_state";
 import { scheduleMetricEventDeliveryWatch } from "./metric_event_delivery";
 import { ensureRetentionScheduled } from "./retention";
 
-const CURRENT_KEY = "current" as const;
 const ADOPTION_BATCH_SIZE = 25;
 export const RECOVERY_GENERATION = 2;
 export const SYNC_RECOVERY_DELAY_MS = 60_000;

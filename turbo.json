@@ -456,6 +456,11 @@
     "wrangler:types": {
       "cache": false
     },
+    "@splitch/control-plane-api#test": {
+      "dependsOn": ["^build"],
+      "inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/packages/convex/src/component/callback_url.ts"],
+      "outputs": []
+    },
     "@splitch/stats#test": {
       "dependsOn": ["^build"],
       "inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/package.json"],

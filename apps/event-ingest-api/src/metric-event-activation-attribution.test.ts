@@ -178,7 +178,14 @@ describe("Activation resolution failures", () => {
     );
   });
 
-  it("names a missing Exposure separately from a missing configuration", async () => {
+  /**
+   * The Assignment exists, but it is pinned to a Run that Activation binding
+   * no longer names (e.g. a retired Run) — a permanent mismatch, not a race.
+   * It hits the same "no Exposure for this Entity" branch as the in-flight
+   * case below, so the guard has to make it retryable on the wire too rather
+   * than only for the transient sub-case.
+   */
+  it("makes an Assignment pinned to a retired Run retryable for an API Key, unlike a misconfiguration", async () => {
     const fixture = await trustedFixture();
     fixture.config.set(
       activationConfigKey(METRIC_APP_ID, METRIC_ENVIRONMENT_ID),
@@ -192,13 +199,48 @@ describe("Activation resolution failures", () => {
 
     const response = await sendActivation(fixture, metricEventBody());
 
-    expect(response.status).toBe(409);
-    expect(response.headers.get("retry-after")).toBeNull();
-    expect(await errorMessage(response)).toBe(
-      "No Experiment Run using this Event Definition has an Exposure for this Entity",
-    );
+    expect(response.status).toBe(503);
+    expect(response.headers.get("retry-after")).toBe("1");
+    expect(await response.json()).toEqual({
+      code: "SERVICE_UNAVAILABLE",
+      message: "No Experiment Run using this Event Definition has an Exposure for this Entity",
+      details: { retryAfterMs: 1000 },
+    });
   });
 
+  /**
+   * The motivating case for this PR (ADR-0058): an SDK that drains Exposures
+   * asynchronously can land an Activation for an Entity whose own Exposure is
+   * still in flight, so its Assignment has not been written yet at all — not
+   * pinned to the wrong Run, simply absent. This is the one resolution
+   * failure a correct caller hits on a correctly configured Experiment, and
+   * it has to be retryable on the wire, not just in prose, or the caller
+   * cannot tell it from the two permanent misconfigurations above without
+   * parsing English.
+   */
+  it("makes an Entity with no Assignment yet retryable for an API Key, unlike a misconfiguration", async () => {
+    const fixture = await trustedFixture();
+    fixture.config.set(
+      activationConfigKey(METRIC_APP_ID, METRIC_ENVIRONMENT_ID),
+      activationConfig(),
+    );
+
+    const response = await sendActivation(fixture, metricEventBody());
+
+    expect(response.status).toBe(503);
+    expect(response.headers.get("retry-after")).toBe("1");
+    expect(await response.json()).toEqual({
+      code: "SERVICE_UNAVAILABLE",
+      message: "No Experiment Run using this Event Definition has an Exposure for this Entity",
+      details: { retryAfterMs: 1000 },
+    });
+  });
+
+  /**
+   * The API-Key 503 above must not reach here: a status that fires exactly when
+   * THIS Entity has no Exposure would answer "is this Entity enrolled?" one
+   * request at a time (ADR-0018).
+   */
   it("tells a Client Key nothing that distinguishes an unexposed Entity", async () => {
     const unexposed = await makeMetricEventFixture();
     unexposed.config.set(

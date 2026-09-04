@@ -180,8 +180,10 @@ never returns the raw Targeting Key or its hash.
 cannot activate a matching Experiment Run. Under a Client Key, unpublished Activation configuration,
 no binding for the Event Definition, an incompatible Entity type, and no Exposure-backed Assignment
 all use the same message and empty details so the response cannot identify an Entity's enrollment.
-An API Key receives the same code with a message naming the permanent failed condition. Infrastructure
-and integrity failures remain `503 SERVICE_UNAVAILABLE` with `Retry-After`.
+An API Key receives the same code with a message naming the permanent failed condition, except for
+a missing Exposure-backed Assignment: that one races an SDK's asynchronous Exposure drain, so an
+API Key receives `503 SERVICE_UNAVAILABLE` with `retryAfterMs` naming the condition (ADR-0058).
+Infrastructure and integrity failures remain `503 SERVICE_UNAVAILABLE` with `Retry-After`.
 
 ## Accepted row
 

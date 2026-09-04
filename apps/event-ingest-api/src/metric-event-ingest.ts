@@ -182,12 +182,26 @@ function activationFailure(
   return renderError(activationResolutionError(resolution, disclosure));
 }
 
+/**
+ * `not_exposed` is the one cause that splits on disclosure rather than just
+ * losing its prose. The Exposure for a first-generation Entity can still be in
+ * flight when its Activation arrives, so an API Key needs a machine-readable
+ * "try again" and gets 503 + `retryAfterMs`, not a 409 it can only tell apart
+ * from a permanent misconfiguration by reading English. A Client Key keeps the
+ * 409 the two permanent causes render: `transient` is public-safe because those
+ * causes are infrastructure-wide, but a 503 that fires exactly when THIS Entity
+ * has no Exposure is an enrollment oracle (ADR-0018), one request at a time.
+ */
 function activationResolutionError(
   resolution: ActivationResolutionError | null,
   disclosure: "trusted" | "public",
 ) {
+  if (disclosure === "trusted" && resolution?.resolution === "not_exposed") {
+    return serviceUnavailable(resolution.message);
+  }
   if (
     resolution?.resolution === "not_available" ||
+    resolution?.resolution === "not_exposed" ||
     (disclosure === "public" && resolution?.resolution === "unpublished")
   ) {
     return activationNotAvailable(

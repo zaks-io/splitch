@@ -44,9 +44,9 @@ export const sdkErrorDocs = {
   },
   SDK_CONTEXT_INVALID: {
     cause:
-      "`createSplitchBrowserClient` was given an Evaluation Context without a non-empty `targetingKey`.",
-    fix: "Pass `context: { targetingKey: … }` at construction. The browser client is static-context: that key is fixed for the client's lifetime and is not a credential.",
-    related: ["SDK_CREDENTIAL_CONFIGURATION_INVALID", "SDK_NOT_INITIALIZED"],
+      "An Evaluation Context was missing a field the call cannot run without: `createSplitchBrowserClient` was given one without a non-empty `targetingKey`, or `evaluate` / `evaluateDetails` was called without a non-empty `idempotencyKey`.",
+    fix: "For the browser client, pass `context: { targetingKey: … }` at construction. It is static-context: that key is fixed for the client's lifetime and is not a credential. For `evaluate` / `evaluateDetails`, pass `idempotencyKey` on every call — a caller-owned id for one logical Evaluation, reused when you retry, so a retry replays one Exposure instead of recording a second. The SDK cannot mint that one for you: only your code knows which two calls are the same Evaluation. It is refused before the request because `/api/sdk/evaluate` requires the header and would answer `VALIDATION_ERROR`.",
+    related: ["SDK_CREDENTIAL_CONFIGURATION_INVALID", "SDK_NOT_INITIALIZED", "VALIDATION_ERROR"],
   },
   SDK_BOOTSTRAP_CONTEXT_MISMATCH: {
     cause:

@@ -33,6 +33,14 @@ export default app;`,
       kind: "prose",
       text: "Keep the API Key in [Convex environment variables](https://docs.convex.dev/production/environment-variables). It stays in the deployment environment and must never reach browser code. The configuration callback is served at `/integrations/splitch/configuration`.",
     },
+    {
+      kind: "prose",
+      text: "The component builds the callback it registers from both Convex automatic URLs: the deployment name from `CONVEX_CLOUD_URL` and the mounted path from `CONVEX_SITE_URL`. A [custom domain](https://docs.convex.dev/production/custom-domains) on HTTP Actions needs no change, because the callback still resolves to the `*.convex.site` origin Splitch accepts.",
+    },
+    {
+      kind: "prose",
+      text: "Convex implements a custom domain for the Convex API by overriding `CONVEX_CLOUD_URL`, which removes the deployment name the component reads. `install()` throws there rather than registering a callback Splitch would reject, so a deployment that overrides `CONVEX_CLOUD_URL` cannot install `@splitch/convex`. Overriding `CONVEX_SITE_URL` is fine.",
+    },
     { kind: "heading", text: "Evaluate" },
     {
       kind: "prose",

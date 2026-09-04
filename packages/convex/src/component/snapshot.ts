@@ -1,8 +1,8 @@
 import {
-  configSnapshotProvider,
   type ConvexConfigSnapshot,
-  parseConfigSnapshot,
+  configSnapshotProvider,
   type Provider,
+  parseConfigSnapshot,
 } from "@splitch/sdk/local-evaluation";
 
 export function parseSnapshot(payload: string): ConvexConfigSnapshot {

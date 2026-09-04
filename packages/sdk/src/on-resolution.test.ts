@@ -21,7 +21,7 @@ function clientWith(transport: FakeTransport) {
   return { client, reported };
 }
 
-const CONTEXT = { targetingKey: "user-1", defaultValue: false };
+const CONTEXT = { targetingKey: "user-1", defaultValue: false, idempotencyKey: "eval-1" };
 
 describe("SplitchClientOptions.onResolution", () => {
   it("reports the resolution evaluate() returned", async () => {
@@ -37,6 +37,7 @@ describe("SplitchClientOptions.onResolution", () => {
     const details = await client.evaluateDetails("theme", {
       targetingKey: "user-1",
       defaultValue: "red",
+      idempotencyKey: "eval-theme-1",
     });
     // Identity, not equality: a reporter that saw a different object than the
     // caller did would be reporting a story the app never lived.
