@@ -22,7 +22,8 @@ import {
   schemaMismatch,
 } from "./metric-event-admission";
 import { parseMetricEventRequest } from "./metric-event-body";
-import { resolveMetricEventIdentityMaterial } from "./metric-event-identity";
+import { metricEventDedupKey, resolveMetricEventIdentityMaterial } from "./metric-event-identity";
+import { lookupMetricEvent } from "./metric-event-outbox-client";
 import { checkMetricEventRateLimit } from "./metric-event-rate-limit";
 import type { Env } from "./types";
 
@@ -48,24 +49,57 @@ export async function handleAuthorizedMetricEvent(
   );
   if (limited) return timedMetricResponse(timing, limited, serializedBytes);
 
-  const identityMaterial = await timing.measure("identity", () =>
+  const identityPromise = timing.measure("identity", () =>
     resolveMetricEventIdentityMaterial(env, credential, parsed),
   );
-  const { identity, targetingKeyHash, fingerprint, retainedFingerprints, dedupKey } =
-    identityMaterial;
   const disclosure = credential.credentialKind === "api_key" ? "trusted" : "public";
-  const replay = await timing.measure("replay", () =>
-    replayExistingMetricEvent(
-      env,
-      parsed.eventId,
+  const lookupPromise = metricEventDedupKey(
+    credential.appId,
+    credential.environmentId,
+    parsed.eventId,
+  ).then(async (dedupKey) => {
+    try {
+      return {
+        ok: true as const,
+        dedupKey,
+        existing: await lookupMetricEvent(env.METRIC_EVENT_OUTBOX, dedupKey),
+      };
+    } catch {
+      return { ok: false as const, dedupKey };
+    }
+  });
+  void lookupPromise.catch(() => undefined);
+  const replayPhase = await timing.measure("replay", async () => {
+    const identityMaterial = await identityPromise;
+    const lookup = await lookupPromise;
+    const { dedupKey } = lookup;
+    if (!lookup.ok) {
+      return {
+        dedupKey,
+        identityMaterial,
+        replay: renderError(serviceUnavailable("Metric Event outbox is unavailable")),
+      };
+    }
+    const { fingerprint, retainedFingerprints } = identityMaterial;
+    return {
       dedupKey,
-      fingerprint,
-      retainedFingerprints,
-      disclosure,
-      activate,
-    ),
-  );
+      identityMaterial,
+      replay: await replayExistingMetricEvent(
+        env,
+        parsed.eventId,
+        dedupKey,
+        lookup.existing,
+        fingerprint,
+        retainedFingerprints,
+        disclosure,
+        activate,
+      ),
+    };
+  });
+  const { dedupKey, identityMaterial, replay } = replayPhase;
   if (replay) return timedMetricResponse(timing, replay, serializedBytes);
+
+  const { identity, targetingKeyHash, fingerprint } = identityMaterial;
 
   const hot = await timing.measure("config", () =>
     loadDefinition(env, credential, parsed, disclosure),

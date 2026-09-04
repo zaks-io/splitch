@@ -19,6 +19,7 @@ import {
   tryAdmitAppIdentity,
 } from "./app-identity-traffic";
 import type { HoldoverWriteCoordinator } from "./assignment/holdover-write-outbox";
+import { confirmConvexExposureClaim } from "./convex-exposure-confirmation";
 import {
   EMPTY_CONVEX_ASSIGNMENTS,
   frozenConvexRunProvider,
@@ -86,6 +87,11 @@ async function handleBatch(
       { status: 503 },
     );
   }
+  const body = ConvexServerExposureRequestSchema.parse(inputBody(input));
+  // Configuration is a read, so it can start beside identity admission. Its
+  // rejection is observed immediately while admission retains fail-fast precedence.
+  const resolved = resolver.resolveBatch(principal, body.exposures, requestId);
+  void resolved.catch(() => undefined);
   const admitted = await tryAdmitAppIdentity(deps.saltStore, principal.appId);
   if (!admitted.ok) return Response.json(admitted.error, { status: 503 });
   const requestDeps: AdmittedConvexExposureDeps = {
@@ -93,9 +99,12 @@ async function handleBatch(
     saltStore: admitted.admission.saltStore,
     identityAdmission: admitted.admission,
   };
-  const body = ConvexServerExposureRequestSchema.parse(inputBody(input));
-  const verifications = await resolver.resolveBatch(principal, body.exposures, requestId);
-  const results = await settleVerifiedBatch(sourceKind, body.exposures, verifications, requestDeps);
+  const results = await settleVerifiedBatch(
+    sourceKind,
+    body.exposures,
+    await resolved,
+    requestDeps,
+  );
   return Response.json(ConvexServerExposureResponseSchema.parse({ results }), { status: 202 });
 }
 
@@ -231,23 +240,16 @@ async function ingestAcquiredClaim(
     return rejected(item.exposureId, "SERVICE_UNAVAILABLE", true);
   }
 
-  try {
-    const staleBeforeConfirm = await staleIntegration(item.exposureId, deps.identityAdmission);
-    if (staleBeforeConfirm !== null) return staleBeforeConfirm;
-    await deps.exposureRedemptionClaims.markSealed(claimInput);
-    await deps.exposureRedemptionClaims.acknowledge(claimInput);
-  } catch (cause) {
-    // Event Ingest already committed. Keep the claim so an exact retry resumes
-    // acknowledgment instead of appending the Exposure a second time.
-    deps.logger?.error("convex_exposure_confirm_failed", {
-      exposureId: item.exposureId,
-      cause: errorCauseChain(cause),
-    });
-    return rejected(item.exposureId, "SERVICE_UNAVAILABLE", true);
-  }
-
-  const holdoverFault = await ensureConvexHoldover(item, exposure.targetingKeyHash, config, deps);
+  const staleBeforeConfirm = await staleIntegration(item.exposureId, deps.identityAdmission);
+  if (staleBeforeConfirm !== null) return staleBeforeConfirm;
+  // Once Event Ingest commits, claim confirmation and holdover persistence are
+  // independent durable obligations. Both still finish before success returns.
+  const [confirmationFault, holdoverFault] = await Promise.all([
+    confirmConvexExposureClaim(claimInput, item, deps),
+    ensureConvexHoldover(item, exposure.targetingKeyHash, config, deps),
+  ]);
   if (holdoverFault) return holdoverFault;
+  if (confirmationFault) return confirmationFault;
   const staleBeforeSuccess = await staleIntegration(item.exposureId, deps.identityAdmission);
   if (staleBeforeSuccess !== null) return staleBeforeSuccess;
   return { exposureId: item.exposureId, status: "accepted" };
