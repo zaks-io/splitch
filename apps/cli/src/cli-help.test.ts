@@ -2,6 +2,7 @@ import { KILL_SWITCH_OFF_EXEMPTION } from "@splitch/sdk/control-plane";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { runCli } from "./cli.js";
 import { CLI_COMMANDS, META_COMMANDS } from "./command-registry.js";
+import { requiredPositionalSpecs } from "./command-positionals.js";
 import { EXIT_USAGE } from "./exit-codes.js";
 import { renderCommandHelp, renderHelp, renderMetaHelp, renderRootHelp } from "./help.js";
 
@@ -77,6 +78,24 @@ describe("published CLI help", () => {
       "Send 0-100% of fall-through traffic to the one non-Default available Variant; the rest serves the Default Variant. Use none to clear the rollout.",
     );
     expect(health).toContain("splitch health --json");
+  });
+
+  it("documents Organization selectors consistently as --org", () => {
+    const organizationCommands = CLI_COMMANDS.filter((command) =>
+      requiredPositionalSpecs(command).some((spec) => spec.param === "orgId"),
+    );
+
+    expect(organizationCommands.some((command) => command.path[0] !== "apps")).toBe(true);
+    for (const command of organizationCommands) {
+      const help = renderCommandHelp(command);
+      expect(help).toMatch(
+        /^ {2}--org <organization>\s+\[type: string; default: none\] Organization ID\.$/m,
+      );
+      const usageAndExample = help.split("\n").filter((line) => line.startsWith("  splitch "));
+      expect(usageAndExample).toHaveLength(2);
+      expect(usageAndExample.every((line) => line.includes("--org <organization>"))).toBe(true);
+      expect(usageAndExample.every((line) => !line.includes("<org-id>"))).toBe(true);
+    }
   });
 
   it("documents the project config format and nearest-parent behavior", () => {
