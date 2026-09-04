@@ -143,8 +143,9 @@ export function makeAuthedApp(
 export async function patchFlagConfig(
   h: Harness,
   body: Record<string, unknown>,
+  idempotencyKey = TEST_IDEMPOTENCY_KEY,
 ): Promise<Response> {
-  return authedPatch(h.app, h.signer, body);
+  return authedPatch(h.app, h.signer, body, idempotencyKey);
 }
 
 export async function replaceTargetingRules(
@@ -191,22 +192,30 @@ export async function setProdPolicy(h: Harness, policy: EnvironmentPolicy): Prom
   });
 }
 
-export async function authedPatch(app: Hono, signer: FixtureSigner, body: Record<string, unknown>) {
+export async function authedPatch(
+  app: Hono,
+  signer: FixtureSigner,
+  body: Record<string, unknown>,
+  idempotencyKey = TEST_IDEMPOTENCY_KEY,
+) {
   const jwt = await token(signer);
-  const requestBody = approvalMutationBody(body);
+  const requestBody = approvalMutationBody(body, idempotencyKey);
   return app.request(`/apps/${ids.appId}/envs/${ids.environmentId}/flags/${ids.flagId}/config`, {
     method: "PATCH",
     headers: {
       authorization: `Bearer ${jwt}`,
       "content-type": "application/json",
-      "idempotency-key": TEST_IDEMPOTENCY_KEY,
+      "idempotency-key": idempotencyKey,
     },
     body: JSON.stringify(requestBody),
   });
 }
 
-function approvalMutationBody(body: Record<string, unknown>): Record<string, unknown> {
-  return { idempotency_key: TEST_IDEMPOTENCY_KEY, ...body };
+function approvalMutationBody(
+  body: Record<string, unknown>,
+  idempotencyKey = TEST_IDEMPOTENCY_KEY,
+): Record<string, unknown> {
+  return { ...body, idempotency_key: idempotencyKey };
 }
 
 export function token(signer: FixtureSigner, scopes = [appAdminScope(ids.appId)]): Promise<string> {

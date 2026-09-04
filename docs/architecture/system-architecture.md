@@ -13,10 +13,9 @@ Do not collapse MCP, Evaluation, Event Ingest, Analysis, Auth API, or Control Pl
 generic `api` or `edge` Worker. Shared code moves into `packages/` only when it passes the deletion
 test. Worker-specific bindings and orchestration stay inside the owning Worker.
 
-The diagram shows the accepted target architecture. In the current checkout, Event Ingest still
-writes implemented `raw_events` and `raw_evaluations` rows directly to Tinybird one row per request
-and has no Queue or Ingest Admission Gate Durable Object binding. Metric Event and Web Event intake
-are not implemented. ADR-0043 owns the pending ingest refactor.
+The diagram shows the accepted architecture. Queue-backed admission and delivery are implemented for
+`raw_events`, `raw_evaluations`, and Metric Events. Web Event intake remains the unimplemented part of
+the target.
 
 ```mermaid
 flowchart LR
@@ -90,8 +89,8 @@ flowchart LR
    `@splitch/control-plane-sdk`; the CLI consumes the bundled public interface at
    `@splitch/sdk/control-plane`. No consumer receives Tinybird credentials or a direct query surface.
 
-The queue steps above are the ADR-0043 target. Until that refactor lands, the implemented
-`raw_events` and `raw_evaluations` paths use the known non-scalable direct transport.
+The queue and Admission Gate steps above are implemented for the current Exposure, Evaluation, and
+Metric Event paths. Web Event intake remains pending.
 
 ### Control-plane flow
 

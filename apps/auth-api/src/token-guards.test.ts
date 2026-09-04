@@ -11,6 +11,7 @@ import { makeTokenSigner } from "./token-exchange";
  */
 
 const ACCESS_SECRET = "guard-access-secret";
+const ASSERTION_SECRET = "guard-assertion-secret";
 const ISSUER = "https://auth.splitch.test";
 const CP_AUDIENCE = "https://cp.splitch.test";
 const NOW = 1_780_000_000;
@@ -25,7 +26,7 @@ function seg(value: unknown): string {
   return b64url(new TextEncoder().encode(JSON.stringify(value)));
 }
 
-async function sign(claims: Record<string, unknown>, secret: string): Promise<string> {
+async function sign(claims: unknown, secret: string): Promise<string> {
   const key = await crypto.subtle.importKey(
     "raw",
     new TextEncoder().encode(secret) as unknown as BufferSource,
@@ -41,6 +42,27 @@ async function sign(claims: Record<string, unknown>, secret: string): Promise<st
   );
   return `${input}.${b64url(new Uint8Array(sig))}`;
 }
+
+describe("identity assertion guards", () => {
+  it("rejects a signed null payload as invalid_grant", async () => {
+    const signer = makeTokenSigner({
+      assertionSecret: ASSERTION_SECRET,
+      accessSecret: ACCESS_SECRET,
+      issuer: ISSUER,
+      controlPlaneAudience: CP_AUDIENCE,
+    });
+    const assertion = await sign(null, ASSERTION_SECRET);
+
+    await expect(signer.exchangeForAccessToken(assertion, NOW)).rejects.toMatchObject({
+      code: "invalid_grant",
+      status: 400,
+    });
+    await expect(signer.verifyIdentityAssertion(assertion, NOW)).rejects.toMatchObject({
+      code: "invalid_grant",
+      status: 400,
+    });
+  });
+});
 
 async function privateRsaJwkSecret(): Promise<string> {
   const pair = await crypto.subtle.generateKey(

@@ -21,6 +21,7 @@ import {
 import { entryFor } from "./evaluate-all-entry";
 import { etagMaterial, ifNoneMatchMatches, strongEtag } from "./evaluate-all-exposure-identity";
 import { sdkRuntime } from "./evaluate-response";
+import { evaluateAllRouteInput } from "./evaluation-route-input";
 import type { EvaluationCommitSink } from "./evaluation-commit-sink";
 import { EvaluationCommitSinkError } from "./evaluation-commit-sink";
 import { errorResponse } from "./evaluation-error-response";
@@ -48,7 +49,7 @@ export function makeEvaluateAllHandler(deps: EvaluateAllRouteDeps) {
     requestId,
     request,
   }: HandlerArgs<unknown>): Promise<Response> => {
-    const parsed = evaluateAllInput(input);
+    const parsed = evaluateAllRouteInput(input);
     const checked = await checkedEvaluationScope(
       principal,
       parsed.body.appId,
@@ -226,19 +227,6 @@ function appAssertionError(appId: string | undefined, scopedAppId: string): Erro
     : null;
 }
 
-function evaluateAllInput(input: unknown): { body: EvaluateAllRequest } {
-  const root = record(input);
-  const body = record(root.body);
-  return {
-    body: {
-      appId: optionalStringField(body, "appId"),
-      targetingKey: stringField(body, "targetingKey"),
-      idType: stringField(body, "idType"),
-      attributes: record(body.attributes ?? {}) as EvaluateAllRequest["attributes"],
-    },
-  };
-}
-
 async function writeBatchUsage(
   body: ReturnType<typeof EvaluateAllResponseSchema.parse>,
   scope: CredentialScope,
@@ -300,28 +288,4 @@ function admittedEvaluateAllDeps(
     assignmentStore: admittedAssignmentStore(deps.assignmentStore, admission),
     exposureTicket: { ...deps.exposureTicket, saltStore: admission.saltStore },
   };
-}
-
-function record(value: unknown): Record<string, unknown> {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    throw new Error("evaluation-api: expected parsed object input");
-  }
-  return value as Record<string, unknown>;
-}
-
-function stringField(value: Record<string, unknown>, key: string): string {
-  const field = value[key];
-  if (typeof field !== "string" || field.length === 0) {
-    throw new Error(`evaluation-api: missing ${key}`);
-  }
-  return field;
-}
-
-function optionalStringField(value: Record<string, unknown>, key: string): string | undefined {
-  const field = value[key];
-  if (field === undefined) return undefined;
-  if (typeof field !== "string" || field.length === 0) {
-    throw new Error(`evaluation-api: invalid ${key}`);
-  }
-  return field;
 }

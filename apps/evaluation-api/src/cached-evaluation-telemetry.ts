@@ -4,6 +4,7 @@ import { renderError } from "@splitch/worker-runtime";
 import { appIdentityAdmissionValidationError, tryAdmitAppIdentity } from "./app-identity-traffic";
 import type { ExposureAssemblyDeps } from "./evaluate/exposure-assembly";
 import { errorResponse } from "./evaluation-error-response";
+import { cachedEvaluationTelemetryRouteInput } from "./evaluation-route-input";
 import { type EvaluationUsageScope, writeEvaluationUsage } from "./evaluation-usage";
 import type { EvaluationUsageSink } from "./evaluation-usage-sink";
 
@@ -27,7 +28,7 @@ async function handleCachedTelemetry(
   if (!scope.ok) return renderError(scope.error, { requestId });
   const admitted = await tryAdmitAppIdentity(deps.exposureAssembly.saltStore, scope.value.appId);
   if (!admitted.ok) return renderError(admitted.error, { requestId });
-  const body = telemetryBody(input);
+  const body = cachedEvaluationTelemetryRouteInput(input).body;
   const idempotencyKey = request.headers.get("idempotency-key");
   if (idempotencyKey === null || body.idempotencyKey !== idempotencyKey) {
     return renderError(
@@ -76,30 +77,7 @@ function credentialScope(
   };
 }
 
-function telemetryBody(input: unknown): { flagKey: string; idempotencyKey: string } {
-  const body = record(record(input).body);
-  return {
-    flagKey: stringField(body, "flagKey"),
-    idempotencyKey: stringField(body, "idempotencyKey"),
-  };
-}
-
 function sdkRuntime(request: Request): string {
   const value = request.headers.get("x-splitch-sdk-runtime");
   return value && value.length <= 64 ? value : "unknown";
-}
-
-function record(value: unknown): Record<string, unknown> {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    throw new Error("evaluation-api: expected parsed object input");
-  }
-  return value as Record<string, unknown>;
-}
-
-function stringField(value: Record<string, unknown>, key: string): string {
-  const field = value[key];
-  if (typeof field !== "string" || field.length === 0) {
-    throw new Error(`evaluation-api: missing ${key}`);
-  }
-  return field;
 }

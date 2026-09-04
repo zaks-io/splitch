@@ -12,20 +12,16 @@ import {
   tryAdmitAppIdentity,
 } from "./app-identity-traffic";
 import { evaluatePath } from "./evaluate/evaluate-path";
-import type { EvaluatePathDeps, EvaluatePathInput } from "./evaluate/evaluate-path-types";
+import type { EvaluatePathDeps } from "./evaluate/evaluate-path-types";
 import type { ExposureAssemblyDeps } from "./evaluate/exposure-assembly";
-import type { FlagConfig, Provider } from "./provider/provider";
-
-type TestEvaluationInput = {
-  params: { appId: string; environmentId: string; flagKey: string };
-  body: { evaluationContext: EvaluatePathInput["evaluationContext"] };
-};
+import { testEvaluationRouteInput } from "./evaluation-route-input";
+import { CapturingProvider } from "./provider/capturing-provider";
 
 export function makeTestEvaluationHandler(
   deps: EvaluatePathDeps & { exposureAssembly: ExposureAssemblyDeps },
 ) {
   return async ({ input, requestId }: HandlerArgs<unknown>): Promise<Response> => {
-    const parsed = testEvaluationInput(input);
+    const parsed = testEvaluationRouteInput(input);
     const admitted = await tryAdmitAppIdentity(
       deps.exposureAssembly.saltStore,
       parsed.params.appId,
@@ -75,60 +71,6 @@ export function makeTestEvaluationHandler(
       }),
     );
   };
-}
-
-function testEvaluationInput(input: unknown): TestEvaluationInput {
-  const root = record(input);
-  const params = record(root.params);
-  const body = record(root.body);
-  const evaluationContext = body.evaluationContext;
-  if (typeof evaluationContext !== "object" || evaluationContext === null) {
-    throw new Error("evaluation-api: missing evaluationContext");
-  }
-  return {
-    params: {
-      appId: stringField(params, "appId"),
-      environmentId: stringField(params, "environmentId"),
-      flagKey: stringField(params, "flagKey"),
-    },
-    body: {
-      evaluationContext: evaluationContext as TestEvaluationInput["body"]["evaluationContext"],
-    },
-  };
-}
-
-function record(value: unknown): Record<string, unknown> {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    throw new Error("evaluation-api: expected parsed object input");
-  }
-  return value as Record<string, unknown>;
-}
-
-function stringField(value: Record<string, unknown>, key: string): string {
-  const field = value[key];
-  if (typeof field !== "string" || field.length === 0) {
-    throw new Error(`evaluation-api: missing ${key}`);
-  }
-  return field;
-}
-
-class CapturingProvider implements Provider {
-  flag: FlagConfig | null = null;
-
-  constructor(private readonly inner: Provider) {}
-
-  async getFlag(appId: string, environmentId: string, flagKey: string) {
-    this.flag = await this.inner.getFlag(appId, environmentId, flagKey);
-    return this.flag;
-  }
-
-  getExperiment(...args: Parameters<Provider["getExperiment"]>) {
-    return this.inner.getExperiment(...args);
-  }
-
-  getFlags(...args: Parameters<Provider["getFlags"]>) {
-    return this.inner.getFlags(...args);
-  }
 }
 
 function valueForVariant(

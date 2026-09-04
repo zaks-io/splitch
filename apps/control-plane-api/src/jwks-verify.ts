@@ -97,6 +97,9 @@ export function makeCachedJwksVerifier(options: {
 }
 
 function base64UrlToBytes(input: string): Uint8Array {
+  if (!/^[A-Za-z0-9_-]+$/.test(input) || input.length % 4 === 1) {
+    throw new Error("invalid base64url");
+  }
   const padded = input
     .replace(/-/g, "+")
     .replace(/_/g, "/")
@@ -110,14 +113,18 @@ function base64UrlToBytes(input: string): Uint8Array {
 }
 
 function decodeSegment(segment: string): Record<string, unknown> {
-  return JSON.parse(new TextDecoder().decode(base64UrlToBytes(segment))) as Record<string, unknown>;
+  const value: unknown = JSON.parse(new TextDecoder().decode(base64UrlToBytes(segment)));
+  if (value === null || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("JWT segment is not a JSON object");
+  }
+  return value as Record<string, unknown>;
 }
 
 interface ParsedJwt {
   header: JwtHeader;
   payload: Record<string, unknown>;
   signingInput: string;
-  signature: string;
+  signature: Uint8Array;
 }
 
 /** Split + decode a compact JWS. Returns null for any malformed input. */
@@ -132,7 +139,7 @@ function parseJwt(token: string): ParsedJwt | null {
       header: decodeSegment(headerSeg) as unknown as JwtHeader,
       payload: decodeSegment(payloadSeg),
       signingInput: `${headerSeg}.${payloadSeg}`,
-      signature: sigSeg,
+      signature: base64UrlToBytes(sigSeg),
     };
   } catch {
     return null;
@@ -170,7 +177,7 @@ async function signatureValid(parsed: ParsedJwt, fetchJwks: JwksFetcher): Promis
   return crypto.subtle.verify(
     "RSASSA-PKCS1-v1_5",
     await importRsaKey(jwk),
-    base64UrlToBytes(parsed.signature) as unknown as BufferSource,
+    parsed.signature as unknown as BufferSource,
     new TextEncoder().encode(parsed.signingInput) as unknown as BufferSource,
   );
 }

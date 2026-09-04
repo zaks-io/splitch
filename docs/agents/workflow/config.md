@@ -1,11 +1,11 @@
 # Agent Config
 
-Last updated: 2026-08-03
+Last updated: 2026-09-03
 
-Scaffold is in place. The repo is now a pnpm/Turborepo workspace with
+The repo is a pnpm/Turborepo workspace with
 package scripts, Lefthook local gates, Blacksmith-backed GitHub Actions config,
 and Worker-shaped deploy units. The code host now exists: `main` is pushed to
-`github.com/zaks-io/splitch` (private) and the `ci` workflow (secret scanning
+`github.com/zaks-io/splitch` (public) and the `ci` workflow (secret scanning
 included) runs on every push. Shared-preview and production deploy workflows are wired through
 Tinybird, D1 migrations, and Turborepo Worker deploy tasks. Cloudflare D1/KV backing resources are
 provisioned and their Wrangler binding IDs are committed. The Linear repo-route label
@@ -41,16 +41,16 @@ in this config; refresh them from Linear during each workflow run.
   it is signal-only and never blocks deploys. Secret scanning is
   a step inside `Verify`; the standalone `gitleaks` workflow was removed. See
   `Pull Requests`.
-- Critical unknowns: friction-intake fields remain unverified. Branch protection
-  is absent on `main`. The GitHub `production` environment currently has no
-  required-reviewer rule. Production smoke and rollback scripts remain unwired.
-  See `Unknowns`.
+- Critical unknowns: friction-intake fields remain unverified. The active default-branch ruleset
+  requires `Verify` but requires zero approvals and permits repository-role pull-request bypasses.
+  The GitHub `production` environment currently has no required-reviewer rule and permits admin
+  bypass. Production smoke and rollback scripts remain unwired. See `Unknowns`.
 
 ## Repo
 
-- Name: `splitch-monorepo` (workspace packages use `@splitch/*`; package-specific publish
-  workflows are the token-free trusted-publish paths for `@splitch/sdk`, `@splitch/cli`, and
-  `@splitch/convex`)
+- Name: `splitch` (workspace packages use `@splitch/*`; package-specific publish workflows are the
+  token-free trusted-publish paths for `@splitch/sdk`, `@splitch/cli`, `@splitch/convex`, and
+  `@splitch/cloudflare`)
 - Default branch: `main`
 - Branch prefix: `codex/` for Codex-created branches unless the user asks for
   another prefix
@@ -83,9 +83,11 @@ in this config; refresh them from Linear during each workflow run.
 - Build: `pnpm build`
 - Test: `pnpm test`
 - Lint / format / typecheck / Knip / Gitleaks: wired through root scripts,
-  Turborepo, Lefthook, and GitHub Actions. Duplicate-code, SAST, audit,
-  CodeQL, OSV, Trivy, Scorecard, and pnpm install quarantine are parked until
-  lockdown unless run manually. See `docs/spec/platform/local-quality-gates.md`.
+  Turborepo, Lefthook, and GitHub Actions. Semgrep, OSV-Scanner, Trivy, and
+  Scorecard run daily, upload SARIF, and remain non-gating; an operational scan
+  failure opens a tracking issue. Duplicate-code and dependency-audit checks are
+  manual, CodeQL is dispatch-only, and pull-request enforcement plus pnpm install
+  quarantine are parked until lockdown. See `docs/spec/platform/local-quality-gates.md`.
 - Generated artifacts: package-local `dist/**`, `.output/**`, `build/**`,
   coverage, `.turbo/`, and `.wrangler/` are ignored.
 - PR CI: `.github/workflows/ci.yml` on Blacksmith, running `pnpm verify:ci` plus
@@ -132,29 +134,30 @@ Apps are graph entrypoints and deployable or executable surfaces. Packages are l
 workspaces; they can be internal-only or publishable. App-owned code stays local unless there is a
 real package API boundary.
 
-| Path                         | Name                         | Status                                      |
-| ---------------------------- | ---------------------------- | ------------------------------------------- |
-| `apps/cli`                   | `@splitch/cli`               | public ESM CLI package, `bin: splitch`      |
-| `apps/control-panel`         | `@splitch/control-panel`     | Control Panel Worker-shaped scaffold        |
-| `apps/marketing`             | `@splitch/marketing`         | Marketing Worker-shaped scaffold            |
-| `apps/control-plane-api`     | `@splitch/control-plane-api` | Control Plane API Worker scaffold           |
-| `apps/mcp-server`            | `@splitch/mcp-server`        | MCP Worker scaffold                         |
-| `apps/evaluation-api`        | `@splitch/evaluation-api`    | Evaluation Worker scaffold                  |
-| `apps/event-ingest-api`      | `@splitch/event-ingest-api`  | Event Ingest Worker scaffold                |
-| `apps/analysis-api`          | `@splitch/analysis-api`      | Analysis Worker scaffold                    |
-| `apps/auth-api`              | `@splitch/auth-api`          | Auth API Worker scaffold                    |
-| `packages/bounded-body`      | `@splitch/bounded-body`      | shared raw-body byte/content-type gate      |
-| `packages/contracts`         | `@splitch/contracts`         | shared Zod/platform contracts scaffold      |
-| `packages/control-plane-sdk` | `@splitch/control-plane-sdk` | shared Control Plane SDK transport scaffold |
-| `packages/convex`            | `@splitch/convex`            | public Convex Component package             |
-| `packages/repo-lint`         | `@splitch/repo-lint`         | private workspace publishing policy gates   |
-| `packages/sdk`               | `@splitch/sdk`               | public JS/TS data-plane SDK scaffold        |
-| `packages/ui`                | `@splitch/ui`                | shared UI primitive scaffold                |
-| `infra/tinybird`             | (not a pnpm workspace)       | Tinybird analytics project files            |
+| Path                         | Name                         | Status                                    |
+| ---------------------------- | ---------------------------- | ----------------------------------------- |
+| `apps/cli`                   | `@splitch/cli`               | public ESM CLI package, `bin: splitch`    |
+| `apps/control-panel`         | `@splitch/control-panel`     | Control Panel Worker                      |
+| `apps/marketing`             | `@splitch/marketing`         | Marketing Worker                          |
+| `apps/control-plane-api`     | `@splitch/control-plane-api` | Control Plane API Worker                  |
+| `apps/mcp-server`            | `@splitch/mcp-server`        | MCP Worker                                |
+| `apps/evaluation-api`        | `@splitch/evaluation-api`    | Evaluation Worker                         |
+| `apps/event-ingest-api`      | `@splitch/event-ingest-api`  | Event Ingest Worker                       |
+| `apps/analysis-api`          | `@splitch/analysis-api`      | Analysis Worker                           |
+| `apps/auth-api`              | `@splitch/auth-api`          | Auth API Worker                           |
+| `packages/bounded-body`      | `@splitch/bounded-body`      | shared raw-body byte/content-type gate    |
+| `packages/contracts`         | `@splitch/contracts`         | shared Zod/platform contracts             |
+| `packages/control-plane-sdk` | `@splitch/control-plane-sdk` | shared Control Plane SDK transport        |
+| `packages/cloudflare`        | `@splitch/cloudflare`        | public customer-owned Cloudflare Worker   |
+| `packages/convex`            | `@splitch/convex`            | public Convex Component package           |
+| `packages/repo-lint`         | `@splitch/repo-lint`         | private workspace publishing policy gates |
+| `packages/sdk`               | `@splitch/sdk`               | public JS/TS data-plane SDK               |
+| `packages/ui`                | `@splitch/ui`                | shared UI primitives                      |
+| `infra/tinybird`             | (not a pnpm workspace)       | Tinybird analytics project files          |
 
-- Internal workspace packages remain `version: 0.0.0`; `@splitch/sdk`, `@splitch/cli`, and
-  `@splitch/convex` are independently versioned public packages.
-- Other Apps and internal packages are private. All three public packages set
+- Internal workspace packages remain `version: 0.0.0`; `@splitch/sdk`, `@splitch/cli`,
+  `@splitch/convex`, and `@splitch/cloudflare` are independently versioned public packages.
+- Other Apps and internal packages are private. All four public packages set
   `publishConfig.access = public` and use package-specific OIDC publish workflows.
 
 ## Issue Tracker
@@ -242,10 +245,11 @@ real package API boundary.
   agent handoff; does not mean unblocked/startable; remove on Done.
 - Worker environment label policy: `remote-cursor` = approved to run in the
   remote Cursor environment; not a dependency/status/scheduling signal.
-- Review evidence policy: `code-review-passed` = latest linked PR head SHA passed
-  the code review gate; apply only with PR URL + reviewed head SHA; remove when
-  PR head changes, blocking findings appear, linked PR changes, or evidence is
-  missing.
+- Review evidence policy: `code-review-passed` records a clean independent review
+  of the linked PR. Apply it with the PR URL and reviewed head SHA for provenance.
+  A later commit does not invalidate the evidence by itself; remove it when a
+  blocking finding appears, the linked PR changes, or the reviewed behavior is
+  materially changed.
 - Human-review policy: use `ready-for-human` only when the next step is real
   human judgment or approval: the PR is in the high-risk set below, a reviewer
   reports blocking findings, deploy/provider credentials are needed, production
@@ -282,9 +286,9 @@ real package API boundary.
   Linear state, and local refs. Do not use merge commits.
 - Required-check enforcement: require the hosted `Verify` check from the `ci`
   workflow to pass on the current PR head (the Tinybird and D1 validators are
-  steps inside it). Also require any package-specific
-  checks named in the issue handoff and a clean exact-head `ziw-code-review`
-  verdict recorded as `code-review-passed`.
+  steps inside it). Also require any package-specific checks named in the issue
+  handoff. Independent review is advisory unless the user or issue explicitly
+  requires it.
 - Active PR/preview cap defaults to 3. Friction-intake fields remain unverified.
 
 ## Agent Access
@@ -338,18 +342,14 @@ real package API boundary.
   PR that otherwise passes the automation merge gate.
 - Automation merge gate for low/normal-risk PRs:
   1. PR is open, non-draft, mergeable/clean, and based on current `origin/main`.
-  2. Current PR head matches the reviewed head SHA recorded in Linear.
-  3. Hosted `Verify` and every applicable package-specific check pass on the
+  2. Hosted `Verify` and every applicable package-specific check pass on the
      current PR head.
-  4. Worker-required local checks passed and are recorded in the handoff.
-  5. Exact-head `ziw-code-review` is clean and `code-review-passed` is applied
-     with PR URL plus reviewed head SHA.
-  6. Cursor, GitHub, or other hosted review has no blocking findings on the
-     current PR head.
-  7. No unresolved blocking review threads remain.
-  8. PR does not touch the high-risk set below.
+  3. Worker-required local checks passed and are recorded in the handoff.
+  4. Cursor, GitHub, or other hosted review has no unresolved blocking findings.
+  5. No unresolved blocking review threads remain.
+  6. PR does not touch the high-risk set below.
 
-  When all eight hold, Orchestrator may merge with
+  When all six hold, Orchestrator may merge with
   `gh pr merge --squash --match-head-commit <sha>`, then fast-forward local
   `main`, run the configured post-merge verification, move the issue to `Done`,
   and remove stale readiness labels. Branch cleanup is handled by the code host.
@@ -416,7 +416,7 @@ real package API boundary.
 - [x] Repo-route label configured: `zaks-io/splitch`
       `84bd2d20-ae8d-48aa-8dab-dea8138debc7`.
 - [x] Linear issue key prefix verified as `SPL-`.
-- [x] Code host configured: `github.com/zaks-io/splitch` (private), `main` pushed,
+- [x] Code host configured: `github.com/zaks-io/splitch` (public), `main` pushed,
       the `ci` workflow (secret scanning included) runs on push (confirmed 2026-06-24).
       Low/normal-risk automation merge authority, squash merge method, hosted
       required-check enforcement, and CodeRabbit-on-demand behavior are now set
@@ -428,16 +428,14 @@ real package API boundary.
       See `Pull Requests`.
 - [x] Tinybird datasource project files exist under `infra/tinybird`.
       `pnpm tinybird:local` validates datasource contracts and builds against
-      Tinybird Local. Pipes, fixtures, and endpoint tests remain future work.
+      Tinybird Local. Datasources, Pipes, fixtures, and endpoint tests are committed.
 - [x] Real D1 migrations exist (`@splitch/db`, SPL-9). `pnpm d1:migrate:local`
       runs a real `wrangler d1 migrations apply --local` and is wired into
       `verify:push`; a malformed/duplicate-column migration fails the gate
       non-zero.
-- [ ] CLI npm bootstrap and provider setup are unverified. The OIDC `cli-publish` workflow is wired
-      as a GitHub-hosted workflow, but a human must bootstrap only
-      `@splitch/cli@0.1.0-bootstrap.0`, configure the trusted publisher for `cli-publish.yml`,
-      remove temporary bootstrap publishing access, and verify the provider before the
-      provenance-bearing `0.1.0` release. Do not add a long-lived npm token to close this gap.
+- [ ] npm trusted-publisher provider settings were not re-read in this refresh. All four public
+      packages are published, and their GitHub-hosted OIDC publish workflows remain the checked-in
+      release path. Do not add a long-lived npm token to close an unverified provider setting.
 - [x] Shared-preview deploy/reset and production deploy workflows are wired, Cloudflare
       D1/KV resource IDs are provisioned and committed, Worker secret sync is wired, hosted
       shared-preview smoke verifies deployed revision evidence, and the `shared_preview` Tinybird

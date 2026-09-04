@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import worker from "./index";
+import { TestExecutionContext } from "./test-execution-context";
 import {
   appId,
   clientAppId,
@@ -15,7 +16,6 @@ import {
   postEvaluationAt,
   postExposure,
   priorRunId,
-  TestExecutionContext,
   workerRequest,
 } from "./test-fixtures";
 

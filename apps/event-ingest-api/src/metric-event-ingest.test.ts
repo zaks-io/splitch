@@ -16,7 +16,7 @@ import {
 import { metricEventDedupKey, metricEventPayloadFingerprint } from "./metric-event-identity";
 import { handleAuthorizedMetricEvent } from "./metric-event-ingest";
 import { makeMetricEventSaltStore } from "./metric-event-salt-store";
-import { TestExecutionContext } from "./test-fixtures";
+import { TestExecutionContext } from "./test-execution-context";
 
 describe("Metric Event ingest", () => {
   it("accepts the Evaluation-authorized caller only through the binding entrypoint", async () => {

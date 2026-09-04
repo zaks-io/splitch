@@ -10,6 +10,7 @@ import { canonicalizeAnalysisRows } from "@splitch/privacy";
 import { StatsEngine as DefaultStatsEngine } from "@splitch/stats";
 import { type HandlerArgs, renderError } from "@splitch/worker-runtime";
 import { readInitialResultsRows, readResultsExposureRows } from "./results-bootstrap";
+import { readDownstreamAnalysisRows } from "./results-downstream-rows";
 import {
   AnalysisIsolationError,
   AnalysisProvenanceError,
@@ -18,11 +19,7 @@ import {
   ResultsInsufficientDataError,
   ResultsNotFoundError,
 } from "./results-errors";
-import {
-  assertMetricQueryCoverage,
-  readMetricRows,
-  readPrePeriodRows,
-} from "./results-metric-query";
+import { assertMetricQueryCoverage } from "./results-metric-query";
 import {
   booleanField,
   jsonField,
@@ -43,8 +40,6 @@ import {
   type TinybirdReadTransport,
   tinybirdDateTime64,
 } from "./tinybird";
-
-const ACTIVATION_PIPE = "analysis_activation_rows";
 
 interface ResultsDeps {
   tinybird: TinybirdReadTransport;
@@ -137,13 +132,15 @@ export async function readStatsInputFromTinybird(
   const startedAt = stringField(rowObject(runInput), "started_at");
   const activationGated = optionalString(rowObject(runInput).activation_metric_id) !== undefined;
   const toTs = tinybirdDateTime64(new Date().toISOString());
-  const [metricRows, prePeriodRows, activationRows] = hasAnalyzedMetrics
-    ? await Promise.all([
-        readMetricRows(tinybird, params, metricQueryConfig, startedAt, toTs, activationGated),
-        readPrePeriodRows(tinybird, params, metricQueryConfig, startedAt, toTs),
-        pipeRows(tinybird, ACTIVATION_PIPE, params),
-      ])
-    : [[], [], await pipeRows(tinybird, ACTIVATION_PIPE, params)];
+  const { metricRows, prePeriodRows, activationRows } = await readDownstreamAnalysisRows({
+    tinybird,
+    params,
+    metricQueryConfig,
+    startedAt,
+    toTs,
+    activationGated,
+    hasAnalyzedMetrics,
+  });
   const metric_values = canonicalizeAnalysisRows(metricRows.map(materializeMetricRow));
   assertAnalysisInputsPresent({
     run_id: run.run_id,
@@ -178,14 +175,6 @@ function gatedActivationRows(
   activationRows: readonly unknown[],
 ): readonly unknown[] | undefined {
   return activationGated ? activationRows : undefined;
-}
-
-async function pipeRows(
-  tinybird: TinybirdReadTransport,
-  pipeName: string,
-  params: Record<string, string>,
-): Promise<readonly unknown[]> {
-  return tinybird.readPipe(pipeName, params);
 }
 
 function materializeExposure(row: unknown, scope: ResultsScope): Record<string, unknown> {

@@ -17,7 +17,7 @@ CONSUMER="$(mktemp -d)"
 cp -R fixtures/external-dark-launch-product/. "$CONSUMER/"
 npm install --prefix "$CONSUMER" "$PACK_DIR/$TARBALL"
 
-SPLITCH_CLIENT_KEY=ck_... \
+SPLITCH_CLIENT_KEY=pk_... \
 SPLITCH_ENDPOINT=https://edge.preview.splitch.dev \
   node "$CONSUMER/resolve.mjs" verify \
     --flag dark-launch-demo \
@@ -25,4 +25,5 @@ SPLITCH_ENDPOINT=https://edge.preview.splitch.dev \
     --attribute cohort=launch
 ```
 
+Use the `keyMaterial` value returned by `splitch client-key get`, not its `ck_...` key ID.
 Synthetic Targeting Keys only. Never commit credentials.

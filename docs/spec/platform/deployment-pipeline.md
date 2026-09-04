@@ -9,14 +9,14 @@ splitch product **Environment** under an App.
 
 ## Decision
 
-Use GitHub Actions on Blacksmith runners as the orchestrator, except `sdk-publish`, which must run on
-GitHub-hosted infrastructure for npm trusted publishing. Use Turborepo as the monorepo task graph
+Use GitHub Actions on Blacksmith runners as the orchestrator, except the four package publish
+workflows, which must run on GitHub-hosted infrastructure for npm trusted publishing. Use Turborepo as the monorepo task graph
 and task-output cache, Wrangler as the Cloudflare source of truth, and Tinybird CLI deployments for
 analytics resources. Every non-doc PR gets local validation against disposable CI services. Hosted
 preview is a single shared target updated on demand. Production releases are queued, approval-gated
 GitHub deployments that run migrations as part of the release, not as a side manual step.
 
-The scaffold has the `ci` workflow (with a range-scoped Gitleaks secret-scan step), the
+The repository has the `ci` workflow (with a range-scoped Gitleaks secret-scan step), the
 `deploy-shared-preview` workflow, the `deploy-production` workflow, Turborepo task graph, package
 scripts, Lefthook hooks, and Wrangler configs. The deploy workflows do not synthesize Cloudflare
 resources at deploy time; D1 databases and shared KV namespaces are provisioned and committed as
@@ -38,16 +38,16 @@ files, and GitHub environment settings are the release contract.
 PRs do not get hosted previews by default. The shared preview target is intentionally mutable and
 single-tenant: when a maintainer deploys a branch or PR there, it replaces the previous preview.
 
-Local and `pr-ci` both run the local API Worker smoke from
-[agent-verification.md](./agent-verification.md). That proves Workers boot and route contracts pass
-against local bindings. It does not prove hosted bindings, Cloudflare service bindings, Tinybird Cloud,
-routes, DNS, or GitHub environment configuration.
+Local API Worker smoke is an explicit handoff check described in
+[agent-verification.md](./agent-verification.md); it is not part of `verify:push` or `verify:ci`.
+It proves Workers boot and route contracts pass against local bindings. It does not prove hosted
+bindings, Cloudflare service bindings, Tinybird Cloud, routes, DNS, or GitHub environment configuration.
 
 ## Runner policy
 
 - All GitHub Actions jobs use Blacksmith runner tags, starting with `blacksmith-2vcpu-ubuntu-2404`,
-  except `sdk-publish`. npm trusted publishing supports GitHub-hosted runners, not Blacksmith, so that
-  release-published workflow uses `ubuntu-24.04` and must not receive an npm token.
+  except the package publish workflows. npm trusted publishing supports GitHub-hosted runners, not
+  Blacksmith, so those workflows use `ubuntu-24.04` and must not receive an npm token.
 - Use larger Blacksmith Linux runners only for measured bottlenecks, for example large build or test
   shards. The affected `ci` Verify job uses `blacksmith-8vcpu-ubuntu-2404`. The 4-vCPU trial was
   rejected after forced uncached runs exceeded the four-minute target and repeatedly tripped
@@ -60,7 +60,7 @@ routes, DNS, or GitHub environment configuration.
 
 ## Turborepo cache policy
 
-Root scripts call `turbo`, not `pnpm -r`, once the package scaffold lands. CI uses two cache layers:
+Root scripts call `turbo`, not `pnpm -r`. CI uses two cache layers:
 pnpm package-store caching through standard GitHub cache actions on Blacksmith, and Turborepo remote
 caching for task outputs.
 
@@ -99,7 +99,7 @@ false`. Anything that mutates Cloudflare, Tinybird, GitHub deployments, or secre
 
 | Workflow                | Trigger                                                       | Concurrency                      | Required result                                                                                                                                                                                                                 |
 | ----------------------- | ------------------------------------------------------------- | -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `ci`                    | PR and push to main                                           | cancel in-progress per branch/PR | wired: affected `verify:ci`, format, lint, typecheck, test, build, dependency-cruiser, jscpd, Knip, Gitleaks, conditional local D1/Tinybird checks, and an exact-SHA reusable production call                                   |
+| `ci`                    | PR and push to main                                           | cancel in-progress per branch/PR | wired: affected `verify:ci`, format, lint, typecheck, test, build, dependency-cruiser, Knip, Gitleaks, conditional local D1/Tinybird checks, and an exact-SHA reusable production call                                          |
 | `e2e`                   | weekly schedule, manual dispatch                              | `e2e-main`, queued               | wired: full-stack Control Panel Playwright harness against `main`; signal-only while SPL-181 remains open, never blocks deploys                                                                                                 |
 | `deploy-shared-preview` | manual dispatch                                               | `shared-preview-deploy`, queued  | wired: deploy selected ref to the one hosted preview target through Tinybird Branch build, D1 migrations, Turborepo Worker deploy tasks, and hosted smoke                                                                       |
 | `reset-shared-preview`  | manual dispatch                                               | `shared-preview-deploy`, queued  | wired: rebuild the Tinybird Branch, migrate and clear preview-only D1/KV state, reseed fixtures, run Copy Pipe on demand, and verify hosted smoke                                                                               |
@@ -109,6 +109,10 @@ false`. Anything that mutates Cloudflare, Tinybird, GitHub deployments, or secre
 | `sdk-publish`           | published GitHub Release                                      | `sdk-publish`, queued            | wired: validate fresh public repository/release/remote-tag SHA evidence immediately before GitHub-hosted npm trusted publishing with provenance, or skip an existing version                                                    |
 | `cli-release`           | manual dispatch                                               | `cli-release`, queued            | wired: validate `@splitch/cli`, prepare release artifacts, create or update draft GitHub Release for `cli-v<version>`; does not publish to npm                                                                                  |
 | `cli-publish`           | published GitHub Release                                      | `cli-publish`, queued            | wired: validate fresh public repository/release/remote-tag SHA evidence immediately before GitHub-hosted npm trusted publishing with provenance, or skip an existing version                                                    |
+| `convex-release`        | manual dispatch                                               | `convex-release`, queued         | wired: validate `@splitch/convex`, prepare release artifacts, create or update draft GitHub Release for `convex-v<version>`; does not publish to npm                                                                            |
+| `convex-publish`        | published GitHub Release                                      | `convex-publish`, queued         | wired: validate fresh public repository/release/remote-tag SHA evidence immediately before GitHub-hosted npm trusted publishing with provenance, or skip an existing version                                                    |
+| `cloudflare-release`    | manual dispatch                                               | `cloudflare-release`, queued     | wired: validate `@splitch/cloudflare`, prepare release artifacts, create or update draft GitHub Release for `cloudflare-v<version>`; does not publish to npm                                                                    |
+| `cloudflare-publish`    | published GitHub Release                                      | `cloudflare-publish`, queued     | wired: validate fresh public repository/release/remote-tag SHA evidence immediately before GitHub-hosted npm trusted publishing with provenance, or skip an existing version                                                    |
 
 External fork PRs run CI only. Deploying any branch to shared preview requires a maintainer-triggered
 workflow that runs trusted workflow code with repository secrets.
@@ -281,8 +285,7 @@ or any Durable Object migration.
 
 ### D1 migrations
 
-- D1 migrations are committed SQL generated from the schema toolchain, expected to be Drizzle when the
-  package scaffold lands.
+- D1 migrations are committed SQL generated from the Drizzle schema toolchain.
 - CI runs migrations locally before tests.
 - Shared preview applies migrations remotely to the shared-preview D1 database before Worker deployment.
 - Production applies migrations remotely as part of `deploy-production`, after approval and before code

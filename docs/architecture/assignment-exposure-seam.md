@@ -1,6 +1,6 @@
 # The Assignment / Exposure seam
 
-Status: designed (no code yet). Output of an upfront architecture grill on 2026-06-20.
+Status: reference design. Output of an upfront architecture grill on 2026-06-20.
 Vocabulary: domain terms per [CONTEXT.md](../../CONTEXT.md); architecture terms (module, seam,
 adapter, depth, locality) per the deepening discipline.
 

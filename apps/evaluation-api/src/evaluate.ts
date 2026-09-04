@@ -19,12 +19,9 @@ import type { EvaluationCommitSink } from "./evaluation-commit-sink";
 import { EvaluationCommitSinkError } from "./evaluation-commit-sink";
 import { errorResponse } from "./evaluation-error-response";
 import type { EvaluationUsageScope } from "./evaluation-usage";
-import type { FlagConfig, Provider } from "./provider/provider";
+import { evaluationRouteInput } from "./evaluation-route-input";
+import { CapturingProvider } from "./provider/capturing-provider";
 import { reasonForResolution } from "./resolution-reason";
-
-type EvaluateInput = {
-  body: DataPlaneEvaluateRequest;
-};
 
 interface EvaluateRouteDeps extends EvaluatePathDeps {
   readonly exposureAssembly: ExposureAssemblyDeps;
@@ -41,7 +38,7 @@ export function makeEvaluateHandler(deps: EvaluateRouteDeps) {
     requestId,
     request,
   }: HandlerArgs<unknown>): Promise<Response> => {
-    const parsed = evaluateInput(input);
+    const parsed = evaluationRouteInput(input);
     const scope = credentialScope(principal);
     if (!scope.ok) return renderError(scope.error, { requestId });
 
@@ -270,61 +267,4 @@ function admittedEvaluateDeps(
     assignmentStore: admittedAssignmentStore(deps.assignmentStore, admission),
     exposureAssembly: { ...deps.exposureAssembly, saltStore: admission.saltStore },
   };
-}
-
-function evaluateInput(input: unknown): EvaluateInput {
-  const root = record(input);
-  const body = record(root.body);
-  return {
-    body: {
-      appId: optionalStringField(body, "appId"),
-      flagKey: stringField(body, "flagKey"),
-      targetingKey: stringField(body, "targetingKey"),
-      idType: stringField(body, "idType"),
-      attributes: record(body.attributes) as EvaluatePathInput["evaluationContext"]["attributes"],
-    },
-  };
-}
-
-function record(value: unknown): Record<string, unknown> {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    throw new Error("evaluation-api: expected parsed object input");
-  }
-  return value as Record<string, unknown>;
-}
-
-function stringField(value: Record<string, unknown>, key: string): string {
-  const field = value[key];
-  if (typeof field !== "string" || field.length === 0) {
-    throw new Error(`evaluation-api: missing ${key}`);
-  }
-  return field;
-}
-
-function optionalStringField(value: Record<string, unknown>, key: string): string | undefined {
-  const field = value[key];
-  if (field === undefined) return undefined;
-  if (typeof field !== "string" || field.length === 0) {
-    throw new Error(`evaluation-api: invalid ${key}`);
-  }
-  return field;
-}
-
-class CapturingProvider implements Provider {
-  flag: FlagConfig | null = null;
-
-  constructor(private readonly inner: Provider) {}
-
-  async getFlag(appId: string, environmentId: string, flagKey: string) {
-    this.flag = await this.inner.getFlag(appId, environmentId, flagKey);
-    return this.flag;
-  }
-
-  getExperiment(...args: Parameters<Provider["getExperiment"]>) {
-    return this.inner.getExperiment(...args);
-  }
-
-  getFlags(...args: Parameters<Provider["getFlags"]>) {
-    return this.inner.getFlags(...args);
-  }
 }

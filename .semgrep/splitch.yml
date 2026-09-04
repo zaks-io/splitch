@@ -3,8 +3,6 @@
 # generic SAST cannot know about. See docs/spec/platform/security-model.md and
 # CONTEXT.md for the terms (App, API Key, Client Key, app_id scoping).
 #
-# Forward-looking: the apps are scaffolds today, so these guard PRs as real
-# code lands rather than fixing existing violations.
 rules:
   - id: splitch-no-secret-in-logs
     languages: [typescript, javascript]
@@ -80,3 +78,14 @@ rules:
           metavariable: $SQL
           regex: "\"?(?i)(select|update|delete).*where"
       - pattern-not-regex: "(?i)app_id"
+    paths:
+      exclude:
+        # Raw SQL in tests and their shared harness manipulates isolated fixtures,
+        # not application data reached by an untrusted caller.
+        - "**/*.test.ts"
+        - "**/*.test.js"
+        - "/apps/auth-api/src/claim-harness.ts"
+        # Durable Object SQLite is isolated per object instance. These stores are
+        # already keyed by App/Environment before their SQL can run.
+        - "/apps/event-ingest-api/src/ingest-admission-gate.ts"
+        - "/packages/cloudflare/src/state-storage.ts"

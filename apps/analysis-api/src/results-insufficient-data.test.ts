@@ -79,10 +79,7 @@ describe("GET experiment results insufficient-data typing (SPL-302)", () => {
       control_variant: "control",
       stats: { health: { deduped_counts: { control: 2, treatment: 2 } } },
     });
-    expect(tinybird.calls.map((call) => call.pipeName)).toEqual([
-      "analysis_run_bootstrap",
-      "analysis_activation_rows",
-    ]);
+    expect(tinybird.calls.map((call) => call.pipeName)).toEqual(["analysis_run_bootstrap"]);
   });
 });
 

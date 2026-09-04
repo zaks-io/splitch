@@ -1,6 +1,6 @@
 # Frontend architecture
 
-Status: designed (no code yet). Output of an upfront architecture grill on 2026-06-20.
+Status: reference design. Output of an upfront architecture grill on 2026-06-20.
 Vocabulary: domain terms per [CONTEXT.md](../../CONTEXT.md). Builds directly on
 [ADR-0017](../adr/0017-all-cloudflare-stack-workers-serving-and-control-tinybird-analytics.md)
 (stack), [ADR-0018](../adr/0018-identity-and-operational-state-in-d1-hot-validation-in-kv-audit-in-tinybird.md)

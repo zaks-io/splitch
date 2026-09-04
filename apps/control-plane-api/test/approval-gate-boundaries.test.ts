@@ -83,6 +83,29 @@ describe("a failed apply on the targeting-rule path rolls back completely", () =
   });
 });
 
+describe("Approval idempotency outranks a changed Policy", () => {
+  it("rejects a changed proposal before a later allow-policy write", async () => {
+    const proposed = await patchConfig(h, "idem_allow_mismatch", {
+      availableVariantNames: ["control"],
+    });
+    expect(proposed.status).toBe(409);
+    expect(proposed.code).toBe("APPROVAL_REVIEW_REQUIRED");
+
+    await setProdPolicy(h, allowPolicy);
+    const conflict = await patchConfig(h, "idem_allow_mismatch", {
+      availableVariantNames: ["treatment"],
+    });
+    expect(conflict.status).toBe(409);
+    expect(conflict.code).toBe("IDEMPOTENCY_KEY_CONFLICT");
+
+    const config = await h.repo.flags.getFlagConfig(
+      envScope(ids.appId, ids.environmentId),
+      ids.flagId,
+    );
+    expect(config?.availableVariantNames).toBe(JSON.stringify(["control", "treatment"]));
+  });
+});
+
 describe("ungated writes create no Approval rows", () => {
   it("an allow-policy config change records no Approval Request or Review", async () => {
     await setProdPolicy(h, allowPolicy);

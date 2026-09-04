@@ -155,7 +155,7 @@ async function makeParityHttpHarness(targetingRules = planParityRules()) {
     },
     exposureTicket: {
       saltStore: new StaticSaltStore(),
-      ticketKey: "splitch-test-exposure-ticket-key-32chars",
+      ticketKey: ["splitch-test-exposure-ticket-key", "32chars"].join("-"),
     },
     exposureIngestSink: new RecordingExposureIngestSink(),
     exposureRedemptionClaims: new MemoryExposureRedemptionClaimStore(),

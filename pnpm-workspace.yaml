@@ -2,6 +2,11 @@ packages:
   - "apps/*"
   - "examples/*"
   - "packages/*"
+overrides:
+  "brace-expansion@>=3.0.0 <5.0.9": "5.0.9"
+  "fast-uri@>=3.0.0 <3.1.6": "3.1.6"
+  "js-yaml@>=4.0.0 <4.3.1": "4.3.1"
+  "undici@>=7.0.0 <7.29.0": "7.29.0"
 # Supply-chain install gates PARKED until the dep tree is final (move-fast phase).
 # These reject installs on things unrelated to the work in flight — a freshly
 # published transitive (<3d old) or any non-registry subdep — so an agent ends up

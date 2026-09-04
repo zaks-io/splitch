@@ -3,7 +3,6 @@ import { envScope, type Repository } from "@splitch/db";
 import type { HandlerArgs } from "@splitch/worker-runtime";
 import { requireAppAdmin } from "./app-authz";
 import { canonicalHash } from "./approval-canonical";
-import { createApproval, replayApprovalIfExists } from "./approval-service";
 import { environmentPolicyContexts, requiresReview } from "./approval-target";
 import type { ConfigStoreAccess } from "./config-store-access";
 import { configStoreUnavailable } from "./experiment-errors";
@@ -18,6 +17,7 @@ import {
 import { flagConfigPatchGates, readEnvironmentPolicy } from "./flag-config-policy";
 import { makePromotionHandlers } from "./flag-config-promotion-handler";
 import { flagConfigFreezeRefusal, targetingFreezeRefusal } from "./flag-config-run-freeze";
+import { flagConfigApprovalFlow } from "./flag-config-approval-flow";
 import { objectBody, pathParam } from "./handler-input";
 import { type MemberProfileResolver, makeOrgHandlers } from "./org-handlers";
 
@@ -72,7 +72,8 @@ export function makeHandlers(deps: HandlerDeps) {
       principal,
       requestId,
     }: HandlerArgs<unknown>): Promise<Response> {
-      if (!deps.configStore) return configStoreUnavailable(requestId);
+      const configStore = deps.configStore;
+      if (!configStore) return configStoreUnavailable(requestId);
 
       const appId = pathParam(input, "appId");
       const environmentId = pathParam(input, "environmentId");
@@ -83,32 +84,25 @@ export function makeHandlers(deps: HandlerDeps) {
       const body = objectBody(input);
       const configRow = await deps.repo.flags.getFlagConfig(envScope(appId, environmentId), flagId);
       if (!configRow) return flagConfigNotFound(requestId);
-      const replay = await replayApprovalIfExists(
-        { ...deps, configStore: deps.configStore },
+      const proposalInput = flagConfigProposalInput(body);
+      const approval = flagConfigApprovalFlow(
+        { ...deps, configStore },
         {
           appId,
+          environmentId,
+          flagId,
           operation: "flag_config_update",
           target: { type: "flag_configuration", id: configRow.id },
-          proposalInput: flagConfigProposalInput(body),
+          proposalInput,
           principal,
           idempotencyKey: body.idempotency_key as string,
           inlineReview: body.review !== undefined,
           requestId,
+          responseKind: "configuration",
         },
-        { ignoreMismatch: true },
       );
-      if (replay) {
-        if (!replay.ok) return replay.response;
-        const applied = await deps.configStore
-          .writerFor(appId, environmentId)
-          .readFlagConfig({ appId, environmentId, flagId });
-        return applied.ok
-          ? Response.json({
-              ...applied.config,
-              approvalRequest: replay.approvalRequest,
-            })
-          : renderFlagConfigReadFailure(applied, requestId);
-      }
+      const replay = await approval.replay();
+      if (replay) return replay;
       // Ahead of the Policy gate on purpose: a write a live Run forbids must never
       // become a pending Approval Request. Gating it first would manufacture a
       // proposal for a change that can never legitimately be applied, and leave it
@@ -139,44 +133,14 @@ export function makeHandlers(deps: HandlerDeps) {
             })
           ).slice("sha256:".length, "sha256:".length + 16);
         }
-        const current = await deps.configStore
-          .writerFor(appId, environmentId)
-          .readFlagConfig({ appId, environmentId, flagId });
-        const preview = await deps.configStore
-          .writerFor(appId, environmentId)
-          .previewFlagConfig(mutationInput);
-        if (!current.ok) return renderFlagConfigReadFailure(current, requestId);
-        if (!preview.ok) {
-          return renderFlagConfigWriteResult(preview, flagId, environmentId, requestId, null);
-        }
-        const approval = await createApproval(
-          { ...deps, configStore: deps.configStore },
-          {
-            appId,
-            operation: "flag_config_update",
-            target: { type: "flag_configuration", id: configRow.id },
-            policyContexts: contexts,
-            current: current.config as unknown as Record<string, unknown>,
-            proposed: preview.config as unknown as Record<string, unknown>,
-            proposalInput: flagConfigProposalInput(body),
-            principal,
-            idempotencyKey: body.idempotency_key as string,
-            inlineReview: body.review !== undefined,
-            requestId,
-          },
-        );
-        if (!approval.ok) return approval.response;
-        const applied = await deps.configStore
-          .writerFor(appId, environmentId)
-          .readFlagConfig({ appId, environmentId, flagId });
-        if (!applied.ok) return renderFlagConfigReadFailure(applied, requestId);
-        return Response.json({
-          ...applied.config,
-          approvalRequest: approval.approvalRequest,
+        return approval.request({
+          policyContexts: contexts,
+          preview: () =>
+            configStore.writerFor(appId, environmentId).previewFlagConfig(mutationInput),
         });
       }
 
-      const result = await deps.configStore
+      const result = await configStore
         .writerFor(appId, environmentId)
         .writeFlagConfig(mutationInput);
       return renderFlagConfigWriteResult(result, flagId, environmentId, requestId, null);
@@ -188,7 +152,8 @@ export function makeHandlers(deps: HandlerDeps) {
       principal,
       requestId,
     }: HandlerArgs<unknown>): Promise<Response> {
-      if (!deps.configStore) return configStoreUnavailable(requestId);
+      const configStore = deps.configStore;
+      if (!configStore) return configStoreUnavailable(requestId);
 
       const appId = pathParam(input, "appId");
       const environmentId = pathParam(input, "environmentId");
@@ -199,32 +164,25 @@ export function makeHandlers(deps: HandlerDeps) {
       const body = objectBody(input);
       const configRow = await deps.repo.flags.getFlagConfig(envScope(appId, environmentId), flagId);
       if (!configRow) return flagConfigNotFound(requestId);
-      const replay = await replayApprovalIfExists(
-        { ...deps, configStore: deps.configStore },
+      const proposalInput = { targetingRules: body.targetingRules };
+      const approval = flagConfigApprovalFlow(
+        { ...deps, configStore },
         {
           appId,
+          environmentId,
+          flagId,
           operation: "flag_targeting_rules_replace",
           target: { type: "flag_configuration", id: configRow.id },
-          proposalInput: { targetingRules: body.targetingRules },
+          proposalInput,
           principal,
           idempotencyKey: body.idempotency_key as string,
           inlineReview: body.review !== undefined,
           requestId,
+          responseKind: "configuration",
         },
-        { ignoreMismatch: true },
       );
-      if (replay) {
-        if (!replay.ok) return replay.response;
-        const applied = await deps.configStore
-          .writerFor(appId, environmentId)
-          .readFlagConfig({ appId, environmentId, flagId });
-        return applied.ok
-          ? Response.json({
-              ...applied.config,
-              approvalRequest: replay.approvalRequest,
-            })
-          : renderFlagConfigReadFailure(applied, requestId);
-      }
+      const replay = await approval.replay();
+      if (replay) return replay;
       // Same ordering as the Configuration PATCH, and for the same reason: the Run
       // refusal outranks the Policy gate.
       const frozen = await targetingFreezeRefusal(
@@ -248,41 +206,14 @@ export function makeHandlers(deps: HandlerDeps) {
         "targeting_rollout_value",
       ]);
       if (requiresReview(contexts)) {
-        const writer = deps.configStore.writerFor(appId, environmentId);
-        const [current, preview] = await Promise.all([
-          writer.readFlagConfig({ appId, environmentId, flagId }),
-          writer.previewTargetingRules(mutationInput),
-        ]);
-        if (!current.ok) return renderFlagConfigReadFailure(current, requestId);
-        if (!preview.ok) {
-          return renderFlagConfigWriteResult(preview, flagId, environmentId, requestId, null);
-        }
-        const approval = await createApproval(
-          { ...deps, configStore: deps.configStore },
-          {
-            appId,
-            operation: "flag_targeting_rules_replace",
-            target: { type: "flag_configuration", id: configRow.id },
-            policyContexts: contexts,
-            current: current.config as unknown as Record<string, unknown>,
-            proposed: preview.config as unknown as Record<string, unknown>,
-            proposalInput: { targetingRules: mutationInput.targetingRules },
-            principal,
-            idempotencyKey: body.idempotency_key as string,
-            inlineReview: body.review !== undefined,
-            requestId,
-          },
-        );
-        if (!approval.ok) return approval.response;
-        const applied = await writer.readFlagConfig({ appId, environmentId, flagId });
-        if (!applied.ok) return renderFlagConfigReadFailure(applied, requestId);
-        return Response.json({
-          ...applied.config,
-          approvalRequest: approval.approvalRequest,
+        return approval.request({
+          policyContexts: contexts,
+          preview: () =>
+            configStore.writerFor(appId, environmentId).previewTargetingRules(mutationInput),
         });
       }
 
-      const result = await deps.configStore
+      const result = await configStore
         .writerFor(appId, environmentId)
         .replaceTargetingRules(mutationInput);
       return renderFlagConfigWriteResult(result, flagId, environmentId, requestId, null);

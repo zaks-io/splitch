@@ -1,4 +1,9 @@
-import { type ErrorResponse, PeekEvaluateResponseSchema, type Variant } from "@splitch/contracts";
+import {
+  type DataPlaneEvaluateRequest,
+  type ErrorResponse,
+  PeekEvaluateResponseSchema,
+  type Variant,
+} from "@splitch/contracts";
 import { type HandlerArgs, type Principal, renderError } from "@splitch/worker-runtime";
 import {
   admittedEvaluatePathDeps,
@@ -7,26 +12,17 @@ import {
 } from "./app-identity-traffic";
 import { peekVariant } from "./evaluate/accessor-paths";
 import type { EvaluateResult } from "./evaluate/evaluate-path";
-import type { EvaluatePathDeps, EvaluatePathInput } from "./evaluate/evaluate-path-types";
+import type { EvaluatePathDeps } from "./evaluate/evaluate-path-types";
 import type { ExposureAssemblyDeps } from "./evaluate/exposure-assembly";
 import { errorResponse } from "./evaluation-error-response";
-import type { FlagConfig, Provider } from "./provider/provider";
+import { evaluationRouteInput } from "./evaluation-route-input";
+import { CapturingProvider } from "./provider/capturing-provider";
 
 type ResolvedEvaluateResult = Exclude<EvaluateResult, { kind: "error" }>;
 type PeekDefaultFallbackKind = Extract<
   ResolvedEvaluateResult["kind"],
   "disabled" | "no_live_run" | "null_experiment" | "no_match_default"
 >;
-
-type PeekInput = {
-  body: {
-    appId?: string;
-    flagKey: string;
-    targetingKey: string;
-    idType: string;
-    attributes: EvaluatePathInput["evaluationContext"]["attributes"];
-  };
-};
 
 interface CredentialScope {
   readonly appId: string;
@@ -37,7 +33,7 @@ export function makePeekHandler(
   deps: EvaluatePathDeps & { exposureAssembly: ExposureAssemblyDeps },
 ) {
   return async ({ input, principal, requestId }: HandlerArgs<unknown>): Promise<Response> => {
-    const parsed = peekInput(input);
+    const parsed = evaluationRouteInput(input);
     const scope = credentialScope(principal, parsed.body.appId);
     if (!scope.ok) return renderError(scope.error, { requestId });
     const admitted = await tryAdmitAppIdentity(deps.exposureAssembly.saltStore, scope.value.appId);
@@ -73,7 +69,7 @@ function credentialScope(
 }
 
 async function peekWithCapture(
-  body: PeekInput["body"],
+  body: DataPlaneEvaluateRequest,
   scope: CredentialScope,
   deps: EvaluatePathDeps,
 ) {
@@ -164,64 +160,6 @@ function isPeekDefaultFallback(
     result.kind === "null_experiment" ||
     result.kind === "no_match_default"
   );
-}
-
-function peekInput(input: unknown): PeekInput {
-  const root = record(input);
-  const body = record(root.body);
-  const attributes = body.attributes;
-  return {
-    body: {
-      appId: optionalStringField(body, "appId"),
-      flagKey: stringField(body, "flagKey"),
-      targetingKey: stringField(body, "targetingKey"),
-      idType: stringField(body, "idType"),
-      attributes: record(attributes) as PeekInput["body"]["attributes"],
-    },
-  };
-}
-
-function record(value: unknown): Record<string, unknown> {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    throw new Error("evaluation-api: expected parsed object input");
-  }
-  return value as Record<string, unknown>;
-}
-
-function stringField(value: Record<string, unknown>, key: string): string {
-  const field = value[key];
-  if (typeof field !== "string" || field.length === 0) {
-    throw new Error(`evaluation-api: missing ${key}`);
-  }
-  return field;
-}
-
-function optionalStringField(value: Record<string, unknown>, key: string): string | undefined {
-  const field = value[key];
-  if (field === undefined) return undefined;
-  if (typeof field !== "string" || field.length === 0) {
-    throw new Error(`evaluation-api: invalid ${key}`);
-  }
-  return field;
-}
-
-class CapturingProvider implements Provider {
-  flag: FlagConfig | null = null;
-
-  constructor(private readonly inner: Provider) {}
-
-  async getFlag(appId: string, environmentId: string, flagKey: string) {
-    this.flag = await this.inner.getFlag(appId, environmentId, flagKey);
-    return this.flag;
-  }
-
-  getExperiment(...args: Parameters<Provider["getExperiment"]>) {
-    return this.inner.getExperiment(...args);
-  }
-
-  getFlags(...args: Parameters<Provider["getFlags"]>) {
-    return this.inner.getFlags(...args);
-  }
 }
 
 function valueForVariant(

@@ -151,21 +151,21 @@ Depending on `@splitch/sdk` never pulls Sentry in.
 
 ### Mapping
 
-| Resolution                       | Sent to Sentry                            |
-| -------------------------------- | ----------------------------------------- |
-| boolean value                    | `addFeatureFlag(flagKey, value)`          |
-| non-boolean with a resolved arm  | `addFeatureFlag("flagKey:variant", true)` |
-| `reason: "ERROR"`                | nothing                                   |
-| non-boolean with no resolved arm | nothing, reported once per Flag           |
+| Resolution                           | Sent to Sentry                            |
+| ------------------------------------ | ----------------------------------------- |
+| boolean value                        | `addFeatureFlag(flagKey, value)`          |
+| non-boolean with a resolved Variant  | `addFeatureFlag("flagKey:variant", true)` |
+| `reason: "ERROR"`                    | nothing                                   |
+| non-boolean with no resolved Variant | nothing, reported once per Flag           |
 
-A multivariate Flag becomes one boolean per served arm: `checkout-flow:treatment = true`. Two arms of
-the same Flag never collide because the arm is part of the name.
+A multivariate Flag becomes one boolean per served Variant: `checkout-flow:treatment = true`. Two
+Variants of the same Flag never collide because the Variant is part of the name.
 
 An `ERROR` resolution served the caller's Default Value because evaluation failed. Recording it would
 claim a resolution that never happened (the disguised default ADR-0036 forbids), and the exception
 Sentry is capturing already carries the real story.
 
-A non-boolean resolution with `variantName: null` has no arm name to encode and no boolean to send.
+A non-boolean resolution with `variantName: null` has no Variant name to encode and no boolean to send.
 It is not recorded, and it is not silent: the reporter logs it once per Flag key through the injected
 `Logger` (default `console`).
 

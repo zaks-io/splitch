@@ -1,5 +1,15 @@
 import { inverseNormalCdf, normalCdf, normalSurvival } from "./normal-distribution";
-import type { CIAdapter, CIError, CIParams, CIResult, CISource, CIWarning } from "./sequential-ci";
+import {
+  type CIAdapter,
+  type CIError,
+  type CIParams,
+  type CIResult,
+  type CISource,
+  type CIWarning,
+  infiniteCIResult,
+  isStableCIResult,
+  validateCIParams,
+} from "./confidence-interval";
 
 export const FIXED_HORIZON_CI_SOURCE: CISource = {
   family: "fixed-horizon-two-sample-z-test",
@@ -61,7 +71,7 @@ export class FixedHorizonCI implements CIAdapter {
     const ciUpper = params.estimate + boundary;
     const pValue = fixedHorizonPValue(params.estimate, standardError);
 
-    if (!isStableResult(ciLower, ciUpper, pValue, params.estimate, boundary)) {
+    if (!isStableCIResult(ciLower, ciUpper, pValue, params.estimate, boundary)) {
       return errorResult(params, {
         code: "NUMERICAL_OVERFLOW",
         message: "FixedHorizonCI produced a numerically unstable interval or p-value.",
@@ -102,18 +112,8 @@ export function fixedHorizonPValue(estimate: number, standardError: number): num
 }
 
 function validateParams(params: CIParams): CIError | undefined {
-  if (!Number.isFinite(params.estimate)) {
-    return { code: "INVALID_INPUT", message: "estimate must be finite." };
-  }
-  if (!Number.isFinite(params.sampling_var) || params.sampling_var < 0) {
-    return { code: "INVALID_INPUT", message: "sampling_var must be finite and non-negative." };
-  }
-  if (!isCount(params.n_t) || !isCount(params.n_c)) {
-    return { code: "INVALID_INPUT", message: "n_t and n_c must be non-negative safe integers." };
-  }
-  if (!Number.isFinite(params.alpha) || params.alpha <= 0 || params.alpha >= 1) {
-    return { code: "INVALID_INPUT", message: "alpha must be finite and in (0, 1)." };
-  }
+  const commonError = validateCIParams(params);
+  if (commonError) return commonError;
   if (
     params.sample_size_locked !== undefined &&
     (!Number.isSafeInteger(params.sample_size_locked) || params.sample_size_locked <= 0)
@@ -127,48 +127,21 @@ function validateParams(params: CIParams): CIError | undefined {
   return undefined;
 }
 
-function isCount(value: number): boolean {
-  return Number.isSafeInteger(value) && value >= 0;
-}
-
-function isStableResult(
-  ciLower: number,
-  ciUpper: number,
-  pValue: number,
-  estimate: number,
-  boundary: number,
-): boolean {
-  return (
-    Number.isFinite(ciLower) &&
-    Number.isFinite(ciUpper) &&
-    (boundary === 0 ? ciLower <= estimate : ciLower < estimate) &&
-    (boundary === 0 ? estimate <= ciUpper : estimate < ciUpper) &&
-    Number.isFinite(pValue) &&
-    pValue >= 0 &&
-    pValue <= 1
-  );
-}
-
 function infiniteResult(
   params: CIParams,
   status: "warning" | "error",
   warnings: readonly CIWarning[] = [],
   error?: CIError,
 ): CIResult {
-  return {
-    ci_lower: Number.NEGATIVE_INFINITY,
-    ci_upper: Number.POSITIVE_INFINITY,
-    p_value: 1,
-    mode: "fixed",
-    status,
-    source: FIXED_HORIZON_CI_SOURCE,
-    n: params.n_t + params.n_c,
-    peeking_allowed: false,
-    sample_size_locked: params.sample_size_locked,
-    boundary: Number.POSITIVE_INFINITY,
-    warnings,
-    error,
-  };
+  return infiniteCIResult(
+    params,
+    {
+      mode: "fixed",
+      source: FIXED_HORIZON_CI_SOURCE,
+      sampleSizeLocked: params.sample_size_locked,
+    },
+    { status, warnings, error },
+  );
 }
 
 function errorResult(params: CIParams, error: CIError): CIResult {

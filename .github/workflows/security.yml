@@ -1,15 +1,15 @@
 name: security
 
-# Runs daily and reports; it does not gate merges. The `alert` job turns a
-# failed scan into a single deduped GitHub issue, which the GitHub<->Linear sync
-# mirrors into the Splitch team.
+# Runs daily and reports; it does not gate merges. Findings are uploaded as
+# SARIF. The `alert` job turns an operational scan failure into one deduped
+# GitHub issue, which the GitHub<->Linear sync mirrors into the Splitch team.
 #
 # The pull_request + push triggers stay off deliberately. Every job here already
-# branches on the event, so adding them arms the merge gates (`pnpm audit`,
-# Semgrep `--error`) — and a transitive dev-dep advisory that has nothing to do
-# with the branch would then block an unrelated PR. Turn them on in the
-# dependency lockdown pass, once the tree is settled enough that a finding is
-# signal about the change in flight.
+# branches on the event, so adding them arms the `pnpm audit` merge gate. A
+# transitive dev-dependency advisory unrelated to the branch would then block
+# that PR. Semgrep findings remain non-gating; only scanner execution failures
+# fail its job. Turn the triggers on in the dependency lockdown pass, once the
+# tree is settled enough that a finding is signal about the change in flight.
 on:
   schedule:
     - cron: "23 8 * * *"
@@ -26,7 +26,7 @@ jobs:
   # ---------------------------------------------------------------------------
   # Dependency vulnerabilities (OSV.dev, pnpm-lock-aware) + native pnpm audit.
   # On PR/push: fails the job so branch protection blocks the merge.
-  # On schedule: uploads SARIF and lets the alert job open an issue.
+  # On schedule: uploads SARIF; an operational job failure opens an issue.
   # ---------------------------------------------------------------------------
   deps:
     name: Dependency scan
@@ -47,20 +47,53 @@ jobs:
           persist-credentials: false
 
       - name: OSV scan (SARIF)
-        uses: google/osv-scanner-action@9a498708959aeaef5ef730655706c5a1df1edbc2 # v2.3.8
-        continue-on-error: true
-        with:
-          scan-args: |-
-            --output=osv.sarif
-            --format=sarif
-            --recursive
+        id: osv
+        run: |
+          mkdir -p "${RUNNER_TEMP}/osv-scanner"
+          set +e
+          docker run --rm \
+            --entrypoint osv-scanner \
+            --volume "${GITHUB_WORKSPACE}:/src:ro" \
+            --volume "${RUNNER_TEMP}/osv-scanner:/out" \
+            --workdir /src \
+            ghcr.io/google/osv-scanner-action@sha256:48406c58197201fe55e56615ad9d414f85063da320e204d0b0ed460fb3908dba \
+            --output-file=/out/osv.sarif \
+            --format=sarif \
+            --recursive \
             ./
+          scan_status=$?
+          set -e
+          echo "status=${scan_status}" >> "$GITHUB_OUTPUT"
+          if [ -f "${RUNNER_TEMP}/osv-scanner/osv.sarif" ]; then
+            echo "sarif=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "sarif=false" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Upload OSV SARIF
+        if: always() && steps.osv.outputs.sarif == 'true'
         uses: github/codeql-action/upload-sarif@e4fba868fa4b1b91e1fdab776edc8cfbe6e9fb81 # v4.37.3
         with:
-          sarif_file: osv.sarif
+          sarif_file: ${{ runner.temp }}/osv-scanner/osv.sarif
           category: osv-scanner
+
+      # Exit 0 and 1 are normal scan results. Every other status is an execution
+      # failure, which must reach the scheduled alert job.
+      - name: Fail on OSV operational error
+        if: always()
+        env:
+          OSV_STATUS: ${{ steps.osv.outputs.status }}
+        run: |
+          case "$OSV_STATUS" in
+            ""|*[!0-9]*)
+              echo "OSV-Scanner did not report a valid exit status."
+              exit 1
+              ;;
+          esac
+          if [ "$OSV_STATUS" -ne 0 ] && [ "$OSV_STATUS" -ne 1 ]; then
+            echo "OSV-Scanner failed to execute (exit ${OSV_STATUS})."
+            exit 1
+          fi
 
       - name: Setup pnpm
         run: |
@@ -77,8 +110,8 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       # Gate merges: on PR/push a high/critical advisory fails the job. On the
-      # scheduled run we don't gate (nothing to merge); the SARIF + alert job
-      # carry the signal instead.
+      # scheduled run we don't gate (nothing to merge); SARIF carries findings
+      # and the alert job carries operational failures.
       - name: pnpm audit (gate on PR/push)
         if: github.event_name == 'pull_request' || github.event_name == 'push'
         run: pnpm audit --audit-level=high
@@ -102,20 +135,32 @@ jobs:
           persist-credentials: false
 
       - name: Semgrep scan (SARIF)
+        id: semgrep
         run: |
+          set +e
           semgrep scan \
             --config p/default \
             --config .semgrep/ \
             --sarif --output semgrep.sarif \
             --error
-        continue-on-error: ${{ github.event_name == 'schedule' }}
+          scan_status=$?
+          set -e
+          echo "status=${scan_status}" >> "$GITHUB_OUTPUT"
 
       - name: Upload Semgrep SARIF
-        if: always()
+        if: always() && hashFiles('semgrep.sarif') != ''
         uses: github/codeql-action/upload-sarif@e4fba868fa4b1b91e1fdab776edc8cfbe6e9fb81 # v4.37.3
         with:
           sarif_file: semgrep.sarif
           category: semgrep
+
+      - name: Fail on Semgrep operational error
+        if: always() && steps.semgrep.outputs.status != '0' && steps.semgrep.outputs.status != '1'
+        env:
+          SEMGREP_STATUS: ${{ steps.semgrep.outputs.status }}
+        run: |
+          echo "Semgrep failed to execute (exit ${SEMGREP_STATUS:-unknown})."
+          exit 1
 
   # ---------------------------------------------------------------------------
   # Filesystem CVE scan. trivy-action pinned to the pre-compromise safe SHA
@@ -191,7 +236,7 @@ jobs:
           category: scorecard
 
   # ---------------------------------------------------------------------------
-  # Scheduled-only: if any scan job failed/flagged, open or update a single
+  # Scheduled-only: if any scan job failed to execute, open or update a single
   # deduped GitHub issue. The GitHub<->Linear sync mirrors it into the Splitch
   # team automatically. Body comes from a repo-controlled file, never from
   # untrusted github.event.* input -> no workflow-injection surface.
@@ -226,7 +271,7 @@ jobs:
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           {
-            echo "The daily security scan flagged one or more findings."
+            echo "One or more daily security scan jobs failed to execute."
             echo ""
             echo "| Job | Result |"
             echo "| --- | --- |"
@@ -242,6 +287,6 @@ jobs:
         if: needs.deps.result == 'failure' || needs.sast.result == 'failure' || needs.trivy.result == 'failure' || needs.scorecard.result == 'failure'
         uses: peter-evans/create-issue-from-file@fca9117c27cdc29c6c4db3b86c48e4115a786710 # v6.0.0
         with:
-          title: "Daily security scan: findings detected"
+          title: "Daily security scan: operational failure"
           content-filepath: security-alert.md
           labels: security, automated

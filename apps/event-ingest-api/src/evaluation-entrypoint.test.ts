@@ -8,6 +8,7 @@ import {
   metricEventBody,
   sendMetricEvent,
 } from "./metric-event.test-fixture";
+import { TestExecutionContext } from "./test-execution-context";
 import {
   appId,
   baseExposure,
@@ -18,7 +19,6 @@ import {
   makeEnv,
   mockTinybirdFetch,
   organizationId,
-  TestExecutionContext,
 } from "./test-fixtures";
 import type { Env } from "./types";
 

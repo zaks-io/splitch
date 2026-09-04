@@ -72,9 +72,9 @@ export function sentryResolutionReporter(
       return;
     }
 
-    // A multivariate Flag becomes one boolean per served arm: `checkout:treatment
-    // = true`. Sentry then reads it as an ordinary flag, and two arms of the same
-    // Flag never collide because the arm is part of the name.
+    // A multivariate Flag becomes one boolean per served Variant: `checkout:treatment
+    // = true`. Sentry then reads it as an ordinary flag, and two Variants of the
+    // same Flag never collide because the Variant is part of the name.
     if (details.variantName !== null) {
       integration.addFeatureFlag(`${flagKey}:${details.variantName}`, true);
       return;
@@ -86,7 +86,7 @@ export function sentryResolutionReporter(
       "@splitch/sdk/sentry: a non-boolean resolution with no Variant cannot be sent to Sentry",
       {
         remediation:
-          "Sentry stores booleans only; a Flag serving a non-boolean Default Variant has no arm name to encode",
+          "Sentry stores booleans only; a Flag serving a non-boolean Default Variant has no Variant name to encode",
         flagKey,
         reason: details.reason,
       },

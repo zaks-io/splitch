@@ -119,7 +119,7 @@ describe("flag configuration and promotion routes", () => {
     });
     expect(enable.status).toBe(200);
 
-    const disable = await patchFlagConfig(h, { enabled: false });
+    const disable = await patchFlagConfig(h, { enabled: false }, "idem_kill_switch_disable");
 
     expect(disable.status).toBe(200);
     expect(await disable.json()).toMatchObject({
@@ -181,5 +181,29 @@ describe("flag configuration and promotion routes", () => {
       },
     });
     expect(h.nudges).toHaveLength(nudgeCount);
+  });
+});
+
+describe("config store route harness", () => {
+  it("keeps the explicit helper idempotency key in the request body", async () => {
+    await setProdPolicy(h, confirmPolicy);
+    const idempotencyKey = "idem_explicit_config_update";
+
+    const first = await patchFlagConfig(
+      h,
+      { availableVariantNames: ["control"], idempotency_key: "ignored_first" },
+      idempotencyKey,
+    );
+    const replay = await patchFlagConfig(
+      h,
+      { availableVariantNames: ["control"], idempotency_key: "ignored_second" },
+      idempotencyKey,
+    );
+
+    expect(first.status).toBe(409);
+    expect(replay.status).toBe(409);
+    const firstBody = (await first.json()) as { details: { approvalRequestId: string } };
+    const replayBody = (await replay.json()) as { details: { approvalRequestId: string } };
+    expect(replayBody.details.approvalRequestId).toBe(firstBody.details.approvalRequestId);
   });
 });

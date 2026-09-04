@@ -3,8 +3,8 @@
 ELT, not ETL. The raw Exposure log is the system of record. Dedup is a re-runnable windowed query
 at analysis time — never a collapse at ingest.
 
-**Implementation status:** the ADR-0043 queue-backed transport below is accepted but pending. The
-current Event Ingest Worker posts one implemented row per Tinybird request.
+**Implementation status:** the ADR-0043 Queue and Ingest Admission Gate transport below is
+implemented for the current Exposure, Evaluation, and Metric Event paths.
 
 ## Delivery contract
 

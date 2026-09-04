@@ -42,6 +42,9 @@ export interface Jwks {
 export type JwksFetcher = (jwksUri: string) => Promise<Jwks>;
 
 function base64UrlToBytes(input: string): Uint8Array {
+  if (!/^[A-Za-z0-9_-]+$/.test(input) || input.length % 4 === 1) {
+    throw new Error("invalid base64url");
+  }
   const padded = input
     .replace(/-/g, "+")
     .replace(/_/g, "/")
@@ -56,7 +59,11 @@ function base64UrlToBytes(input: string): Uint8Array {
 
 function decodeJsonSegment(segment: string): Record<string, unknown> {
   const text = new TextDecoder().decode(base64UrlToBytes(segment));
-  return JSON.parse(text) as Record<string, unknown>;
+  const value: unknown = JSON.parse(text);
+  if (value === null || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("JWT segment is not a JSON object");
+  }
+  return value as Record<string, unknown>;
 }
 
 /** Decode a compact JWS without verifying — header/payload only. */
@@ -68,17 +75,19 @@ export function decodeJwt(token: string): DecodedJwt {
   const [headerSeg, payloadSeg, sigSeg] = parts as [string, string, string];
   let header: JwtHeader;
   let payload: Record<string, unknown>;
+  let signature: Uint8Array;
   try {
     header = decodeJsonSegment(headerSeg) as unknown as JwtHeader;
     payload = decodeJsonSegment(payloadSeg);
+    signature = base64UrlToBytes(sigSeg);
   } catch {
-    throw new OAuthError("invalid_token", "JWT header/payload is not valid base64url JSON");
+    throw new OAuthError("invalid_token", "JWT segments are not valid base64url data");
   }
   return {
     header,
     payload,
     signingInput: `${headerSeg}.${payloadSeg}`,
-    signature: base64UrlToBytes(sigSeg),
+    signature,
   };
 }
 

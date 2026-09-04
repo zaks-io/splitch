@@ -1,6 +1,6 @@
 # The Activation gate seam
 
-Status: designed (no code yet). Output of an upfront architecture grill on 2026-06-20.
+Status: reference design. Output of an upfront architecture grill on 2026-06-20.
 Every decision here is on the final data model; the explicit guarantee is **no rewrite** to reach the
 complete counterfactual gate. Vocabulary: domain terms per [CONTEXT.md](../../CONTEXT.md); architecture
 terms per the deepening discipline. Builds directly on the

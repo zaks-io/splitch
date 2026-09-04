@@ -1,6 +1,6 @@
 # Local quality gates: commit hooks, pre-push, CI parity
 
-Status: wired for the scaffold.
+Status: implemented; build-fast exceptions are listed below.
 Vocabulary follows [CONTEXT.md](../../../CONTEXT.md).
 
 > **Build-fast phase — what is actually enforcing right now.** The full gate set below is the
@@ -16,15 +16,15 @@ Vocabulary follows [CONTEXT.md](../../../CONTEXT.md).
 >
 > **Parked until lockdown:**
 >
-> | Parked gate                                                         | Where it was               | How to restore                                   |
-> | ------------------------------------------------------------------- | -------------------------- | ------------------------------------------------ |
-> | `pnpm audit` (dep CVEs)                                             | `verify:*`                 | add back to `verify:ci`                          |
-> | Semgrep SAST (`sast`)                                               | `verify:*`, `security.yml` | add to `verify:ci`; flip `security.yml` triggers |
-> | `pinact -check` (`pins:check`)                                      | `verify:*`, `ci.yml`       | add to `verify:ci`; restore CI install step      |
-> | CodeQL                                                              | `codeql.yml`               | flip triggers to `pull_request`/`push`           |
-> | OSV-Scanner / Trivy / Scorecard                                     | `security.yml`             | flip `security.yml` triggers                     |
-> | pnpm install quarantine (`minimumReleaseAge`, `blockExoticSubdeps`) | `pnpm-workspace.yaml`      | uncomment the four keys                          |
-> | smoke / depcruise / jscpd / tinybird in pre-push                    | `verify:push`              | restore once apps/project files exist            |
+> | Parked gate                                                         | Where it was             | How to restore                                 |
+> | ------------------------------------------------------------------- | ------------------------ | ---------------------------------------------- |
+> | `pnpm audit` (dep CVEs)                                             | `verify:*`               | add back to `verify:ci`                        |
+> | Semgrep SAST (`sast`)                                               | `verify:*`               | add to `verify:ci`                             |
+> | `pinact -check` (`pins:check`)                                      | `verify:*`, `ci.yml`     | add to `verify:ci`; restore CI install step    |
+> | CodeQL                                                              | `codeql.yml`             | flip triggers to `pull_request`/`push`         |
+> | OSV-Scanner / Trivy / Scorecard merge gates                         | pull requests and pushes | add PR/push triggers after dependency lockdown |
+> | pnpm install quarantine (`minimumReleaseAge`, `blockExoticSubdeps`) | `pnpm-workspace.yaml`    | uncomment the four keys                        |
+> | smoke / depcruise / jscpd in pre-push                               | `verify:push`            | restore at the lockdown milestone              |
 >
 > The `security:full` script still runs the SAST + pin + audit + secret battery on demand. The rest of
 > this file describes the **target** gates; treat the table above as the current reality where they differ.
@@ -79,21 +79,18 @@ The root `package.json` exposes these scripts:
 | `secrets:range`        | scan only the change's commit range (CI/pre-push)                  |
 | `secrets:git`          | `gitleaks git --redact --no-banner .` (full history)               |
 | `verify:commit`        | commit hook entrypoint                                             |
-| `verify:push`          | pre-push and local CI-parity entrypoint                            |
+| `verify:push`          | lean pre-push validation entrypoint                                |
 | `verify:ci`            | CI entrypoint                                                      |
 
 Root scripts own repository-wide static analysis commands that do not belong to one runtime package.
 Biome formats code/config. Prettier formats Markdown only.
 
-`verify:ci` and `verify:push` must stay aligned on their shared Turbo graph. `verify:push` additionally
-runs Tinybird and D1 validation unconditionally, while the required CI workflow runs those validators
-only when its change planner selects their inputs. `verify:push` does not run hosted smoke tests or any
-command that mutates Cloudflare, Tinybird, GitHub deployments, or secrets. Hosted smoke runs after
-trusted deploy workflows update the matching target.
-
-`verify:push` runs `smoke:local:api` after build. This starts each API/MCP Worker locally with
-Wrangler and fails if the Worker cannot boot or its health response has the wrong service or platform
-target. See [agent-verification.md](./agent-verification.md).
+`verify:push` is the lean local graph: format, lint, typecheck, Knip, the exact commit-range secret
+scan, and the local Tinybird and D1 validators. `verify:ci` owns the full test, build, documentation,
+contract, statistics, and dependency-cruiser graph. The required CI workflow selects the local
+Tinybird and D1 validators from its changed-path plan. Neither command runs hosted smoke tests or
+mutates hosted Cloudflare, Tinybird, GitHub deployment, or secret state. Local Worker smoke remains
+an explicit command described in [agent-verification.md](./agent-verification.md).
 
 ## Hook policy
 
@@ -105,11 +102,11 @@ target. See [agent-verification.md](./agent-verification.md).
 - Prefer affected/scoped Turbo execution where it is sound. Fall back to the full task when the base
   commit is unavailable or the change touches shared config.
 
-`pre-push` mirrors CI without smoke tests:
+`pre-push` runs the lean `verify:push` graph; the required CI handoff runs `verify:ci`:
 
 - **Build-fast phase:** `verify:push` runs the lean static set (format check, lint, typecheck, Knip,
-  Gitleaks) plus the real local D1 migration gate (`d1:migrate:local`, SPL-9). The fuller sequence
-  below is the target once the app exists.
+  Gitleaks) plus `tinybird:local`, `d1:migrate:local` (SPL-9), and `d1:migrate:populated`. The fuller
+  sequence below is the target once the app exists.
 - **Target sequence** (restored at lockdown / as apps and migrations land): format check, lint,
   typecheck, tests, build, local API Worker smoke, dependency-cruiser, jscpd, Knip, Gitleaks, local D1
   migrations, and Tinybird Local validation.
@@ -120,7 +117,8 @@ target. See [agent-verification.md](./agent-verification.md).
   local cache is still valid when those values are absent.
 
 Agents should treat a CI failure as a local reproduction task first. Pull the failing check name,
-run the matching root script locally, fix the failure, and rerun `verify:push` before handing work back.
+run the matching root script locally, fix the failure, and rerun `verify:push` before handing work
+back. `verify:push` is not a substitute for the required `verify:ci` graph in hosted CI.
 
 ## CI policy
 
@@ -131,7 +129,7 @@ missing comparison evidence fails closed to all three validators and the full, s
 graph (only `nightly-verify` runs uncached). Hosted
 smoke checks run in trusted deploy workflows where the target has just been updated.
 
-Gitleaks runs as a dedicated step in the `ci` workflow (`secrets:range`), after `verify:ci`, scoped
+Gitleaks runs as a dedicated step in the `ci` workflow (`secrets:range`), before `verify:ci`, scoped
 to the change's commit range rather than the whole tree. It is a separate step (not folded into
 `verify:ci`) so a secret-scan failure is attributable on its own and the CI runner installs the
 `gitleaks` binary that `verify:ci` does not require.
@@ -149,7 +147,8 @@ Knip is required in commit, pre-push, and CI gates.
 
 ## Duplicate-code policy
 
-jscpd is required in pre-push and CI gates.
+jscpd is available through `pnpm duplicates`. It is not part of pre-push or CI during the
+build-fast phase; the lockdown milestone restores it as a required gate.
 
 - Scan source-bearing paths only: `apps`, `packages`, and `scripts`.
 - Keep docs out of the duplicate-code gate. Specification files intentionally repeat canonical terms
@@ -164,9 +163,10 @@ Gitleaks is required in commit, pre-push, and CI gates.
 
 - Commit-time scanning blocks newly introduced secrets before the commit is written.
 - Pre-push scanning catches committed secrets before they leave the workstation.
-- CI runs a full git scan and uploads redacted output only.
-- False positives go in `.gitleaks.toml` allowlists with a short reason. Do not hide findings with an
-  unexplained ignore file.
+- CI scans the exact commit range and emits redacted output only. `pnpm secrets:git` is the explicit
+  full-history audit.
+- False positives use exact fingerprints in `.gitleaksignore`, grouped under a short reason. Do not
+  add unexplained or path-wide exclusions.
 - The repo should use `gitleaks git` and `gitleaks dir`; older hidden `detect` and `protect` commands
   are not the documented interface.
 
@@ -215,8 +215,8 @@ health smoke.
 - [x] Add package-level `lint`, `typecheck`, `test`, and `build` scripts.
 - [x] Add stable local dev ports for Worker packages and `dev:api`.
 - [x] Add root `verify:commit`, `verify:push`, and `verify:ci` scripts.
-- [x] Wire local API Worker smoke into `verify:push` and `verify:ci`.
-- [x] Wire jscpd duplicate-code detection into `verify:push` and `verify:ci`.
+- [ ] Wire local API Worker smoke into `verify:push` and `verify:ci` at the lockdown milestone.
+- [ ] Wire jscpd duplicate-code detection into `verify:push` and `verify:ci` at the lockdown milestone.
 - [x] Install Lefthook during setup through `prepare`.
 - [x] Wire CI to call `pnpm verify:ci` and the pre-push hook to call `pnpm verify:push`.
 - [x] Keep remote-mutating smoke/deploy steps outside commit and pre-push hooks.

@@ -1,6 +1,6 @@
 # Agent verification: local, remote Cursor, and slice Done contracts
 
-Status: scaffold baseline wired; route-level smokes expand slice by slice.
+Status: local verification baseline implemented; route-level smokes expand slice by slice.
 Vocabulary follows [CONTEXT.md](../../../CONTEXT.md).
 
 ## Decision
@@ -22,6 +22,8 @@ Each `kind-slice` body should end with a `Done` section containing:
 4. **Negative proof** — at least one failure case for auth, validation, idempotency, no-write, or
    isolation when the slice touches those contracts.
 5. **Not proven** — any hosted, production, scale, or provider behavior the local proof cannot cover.
+6. **Hosted handoff** — for PR work, the `ci` workflow's `Verify` check passes on the current PR head;
+   its verification plan uses `PR_HEAD_SHA` and runs `verify:ci`.
 
 If a slice cannot meet this shape, it is not ready for agent implementation.
 
@@ -32,18 +34,16 @@ If a slice cannot meet this shape, it is not ready for agent implementation.
 | Static gate          | Any code/config/docs change                   | `pnpm verify:commit`                                                            |
 | Full local gate      | Before push or PR handoff                     | `pnpm verify:push`                                                              |
 | API Worker smoke     | Any API Worker, SDK, runtime, or contract hit | `pnpm smoke:local:api` or `pnpm smoke:local -- <worker>`                        |
-| Local D1 migration   | Any D1 schema/data-access slice               | `pnpm d1:migrate:local` must fail on bad migrations once migrations exist       |
-| Tinybird Local       | Any pipeline/stats/analytics slice            | `pnpm tinybird:local` must fail on bad project files under `infra/tinybird`     |
+| Local D1 migration   | Any D1 schema/data-access slice               | `pnpm d1:migrate:local` must fail on invalid migrations and schema regressions  |
+| Tinybird Local       | Any pipeline/stats/analytics slice            | `pnpm tinybird:local` must fail on invalid project files under `infra/tinybird` |
 | Route contract smoke | Any new HTTP route                            | Slice adds fixture plus a local Worker smoke or integration test for that route |
 | CLI/MCP parity       | Any control-plane operation                   | Same operation proven through SDK contract plus CLI/MCP schema derivation test  |
 | Shared-preview smoke | Hosted integration, real bindings, URLs       | Maintainer-triggered `deploy-shared-preview` workflow, never default PR CI      |
 | Production smoke     | Production release                            | GitHub `production` environment approval plus deployment summary evidence       |
 
-`smoke:local:api` is a **separate explicit step**, not part of `verify:push` (which mirrors
-`verify:commit`: format, lint, typecheck, Knip, secrets — no Worker boot). Run `pnpm smoke:local:api`
-before a PR handoff whenever a slice touches an API Worker, SDK, runtime, or contract; the smoke is
-not wired into the push hook today to keep pre-push fast. (Folding it into push — or into CI once a
-hosted baseline exists — is a deliberate later call, not an oversight.)
+`smoke:local:api` is a **separate explicit step**, not part of `verify:push`. Run
+`pnpm smoke:local:api` before a PR handoff whenever a slice touches an API Worker, SDK, runtime, or
+contract. The smoke is not wired into the push hook today to keep pre-push fast.
 
 ## Local API smoke
 
@@ -112,12 +112,8 @@ and the `splitch` repo-route label from [../../agents/workflow/config.md](../../
 
 ## Current gaps
 
-- `pnpm d1:migrate:local` and `pnpm tinybird:local` intentionally skip until migrations and Tinybird
-  files exist. The slice that adds those files must convert the skip to a failing validator.
 - Shared-preview deploy, reset, and smoke are wired with deployed-revision evidence. Production smoke
   and rollback scripts are still not wired.
-- Real provider credentials, real Cloudflare bindings, Tinybird Cloud, code host remote, and repo-route
-  tracker wiring are not provisioned.
 
 ## Sources
 

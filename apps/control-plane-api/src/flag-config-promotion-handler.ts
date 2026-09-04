@@ -2,19 +2,14 @@ import { envScope, type Repository } from "@splitch/db";
 import type { HandlerArgs } from "@splitch/worker-runtime";
 import { requireAppAdmin } from "./app-authz";
 import { canonicalHash } from "./approval-canonical";
-import { createApproval, replayApprovalIfExists } from "./approval-service";
 import { environmentPolicyContexts, requiresReview } from "./approval-target";
 import type { ConfigStoreWriter } from "./config-store";
 import type { ConfigStoreAccess } from "./config-store-access";
 import { configStoreUnavailable } from "./experiment-errors";
 import { flagConfigNotFound } from "./flag-config-errors";
-import {
-  actorOf,
-  type PromotionSelect,
-  renderFlagConfigReadFailure,
-  renderPromotionResult,
-} from "./flag-config-handler-render";
+import { actorOf, type PromotionSelect, renderPromotionResult } from "./flag-config-handler-render";
 import { promotionGates, readEnvironmentPolicy } from "./flag-config-policy";
+import { flagConfigApprovalFlow } from "./flag-config-approval-flow";
 import { pathParam } from "./handler-input";
 import { validatePromotionSource } from "./promotion-source-validation";
 
@@ -39,7 +34,8 @@ export function makePromotionHandlers(deps: PromotionHandlerDeps) {
       principal,
       requestId,
     }: HandlerArgs<unknown>): Promise<Response> {
-      if (!deps.configStore) return configStoreUnavailable(requestId);
+      const configStore = deps.configStore;
+      if (!configStore) return configStoreUnavailable(requestId);
 
       const appId = pathParam(input, "appId");
       const adminError = await requireAppAdmin(deps, appId, principal, requestId);
@@ -57,10 +53,12 @@ export function makePromotionHandlers(deps: PromotionHandlerDeps) {
         fromEnvironmentId,
         select: body.select as PromotionSelect,
       };
-      const replay = await replayApprovalIfExists(
-        { ...deps, configStore: deps.configStore },
+      const approval = flagConfigApprovalFlow(
+        { ...deps, configStore },
         {
           appId,
+          environmentId: targetEnvironmentId,
+          flagId,
           operation: "flags_promote",
           target: { type: "flag_configuration", id: configRow.id },
           proposalInput,
@@ -68,24 +66,11 @@ export function makePromotionHandlers(deps: PromotionHandlerDeps) {
           idempotencyKey: body.idempotency_key as string,
           inlineReview: body.review !== undefined,
           requestId,
+          responseKind: "promotion",
         },
-        { ignoreMismatch: true },
       );
-      if (replay) {
-        if (!replay.ok) return replay.response;
-        const applied = await deps.configStore
-          .writerFor(appId, targetEnvironmentId)
-          .readFlagConfig({ appId, environmentId: targetEnvironmentId, flagId });
-        if (!applied.ok) return renderFlagConfigReadFailure(applied, requestId);
-        return Response.json({
-          ...applied.config,
-          diff: {
-            before: replay.approvalRequest.diff.current,
-            after: replay.approvalRequest.diff.proposed,
-          },
-          approvalRequest: replay.approvalRequest,
-        });
-      }
+      const replay = await approval.replay();
+      if (replay) return replay;
       const policy = await readEnvironmentPolicy(deps.repo, appId, targetEnvironmentId);
       if (!policy) return flagConfigNotFound(requestId);
 
@@ -118,54 +103,14 @@ export function makePromotionHandlers(deps: PromotionHandlerDeps) {
             })
           ).slice("sha256:".length, "sha256:".length + 16);
         }
-        const writer = deps.configStore.writerFor(appId, targetEnvironmentId);
-        const [current, preview] = await Promise.all([
-          writer.readFlagConfig({
-            appId,
-            environmentId: targetEnvironmentId,
-            flagId,
-          }),
-          writer.previewPromotion(mutationInput),
-        ]);
-        if (!current.ok) return renderFlagConfigReadFailure(current, requestId);
-        if (!preview.ok) {
-          return renderPromotionResult(preview, flagId, targetEnvironmentId, requestId, null);
-        }
-        const approval = await createApproval(
-          { ...deps, configStore: deps.configStore },
-          {
-            appId,
-            operation: "flags_promote",
-            target: { type: "flag_configuration", id: configRow.id },
-            policyContexts: contexts,
-            current: current.config as unknown as Record<string, unknown>,
-            proposed: preview.config as unknown as Record<string, unknown>,
-            proposalInput,
-            principal,
-            idempotencyKey: body.idempotency_key as string,
-            inlineReview: body.review !== undefined,
-            requestId,
-          },
-        );
-        if (!approval.ok) return approval.response;
-        const applied = await writer.readFlagConfig({
-          appId,
-          environmentId: targetEnvironmentId,
-          flagId,
-        });
-        if (!applied.ok) return renderFlagConfigReadFailure(applied, requestId);
-        const approvalDiff = approval.approvalRequest.diff;
-        return Response.json({
-          ...applied.config,
-          diff: {
-            before: approvalDiff.current,
-            after: approvalDiff.proposed,
-          },
-          approvalRequest: approval.approvalRequest,
+        return approval.request({
+          policyContexts: contexts,
+          preview: () =>
+            configStore.writerFor(appId, targetEnvironmentId).previewPromotion(mutationInput),
         });
       }
 
-      const result = await deps.configStore
+      const result = await configStore
         .writerFor(appId, targetEnvironmentId)
         .promoteFlagConfig(mutationInput);
       return renderPromotionResult(result, flagId, targetEnvironmentId, requestId, null);

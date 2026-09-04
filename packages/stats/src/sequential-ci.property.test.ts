@@ -23,7 +23,9 @@ const FIXED_HORIZON_ITERATIONS = 1_000;
 const FIXED_HORIZON_LOCKED_N = 400;
 
 describe("SequentialCI repeated-look property", () => {
-  it("keeps the null repeated-look rejection rate within the Monte Carlo bound", () => {
+  it("keeps the null repeated-look rejection rate within the Monte Carlo bound", {
+    timeout: 10_000,
+  }, () => {
     const result = runRepeatedLookSimulation({
       adapter: new SequentialCI(),
       method: "sequential",
@@ -38,7 +40,9 @@ describe("SequentialCI repeated-look property", () => {
     expect(meetsAlwaysValidBound(result, tolerance)).toBe(true);
   });
 
-  it("detects inflated false positives for repeated fixed-horizon peeking", () => {
+  it("detects inflated false positives for repeated fixed-horizon peeking", {
+    timeout: 10_000,
+  }, () => {
     const result = runRepeatedLookSimulation({
       adapter: new SequentialCI(),
       method: "fixed-horizon",

@@ -35,7 +35,7 @@ Include where practical:
 ## Scope
 
 In scope: code in this repository — the Workers under `apps/`, the published
-packages (`@splitch/sdk`, `@splitch/cli`, `@splitch/convex`), the MCP server,
+packages (`@splitch/sdk`, `@splitch/cli`, `@splitch/convex`, `@splitch/cloudflare`), the MCP server,
 the control panel, and shared packages, plus the CI/CD and supply-chain
 configuration in `.github/` and the repo root. The hosted service at
 `splitch.dev`, `api.splitch.dev`, `edge.splitch.dev`, `auth.splitch.dev`,
@@ -62,8 +62,9 @@ Security is an enforced product contract here, not an afterthought. See
 [`docs/spec/platform/security-model.md`](docs/spec/platform/security-model.md)
 for the trust boundaries and threat model.
 
-> **Enforcement status.** The dependency, CVE, and SAST battery now runs **daily and reports**: a
-> finding opens a deduped tracking issue rather than blocking a merge. Making those same scans
+> **Enforcement status.** The dependency, CVE, and SAST battery now runs **daily and reports**:
+> findings upload to code scanning, while an operational job failure opens a deduped tracking issue.
+> Making those same scans
 > _gate_ a pull request is still one explicit lockdown milestone and a launch prerequisite, pending
 > a one-time audit of the final dependency set
 > ([ADR-0035](docs/adr/0035-security-automation-and-supply-chain-integrity-are-an-enforced-ci-contract.md)).
@@ -75,20 +76,22 @@ for the trust boundaries and threat model.
 
 - **Secret scanning** — gitleaks over the exact commit range (`pnpm secrets:range`), plus a staged
   scan on every local commit via Lefthook.
-- **Hardened CI** — StepSecurity Harden-Runner egress auditing on every job, checkout with
-  `persist-credentials: false`, and every GitHub Action pinned to a full commit SHA.
+- **Hardened CI** — StepSecurity Harden-Runner egress auditing on each host-run security job,
+  a digest-pinned container for Semgrep, checkout with `persist-credentials: false`, and every
+  GitHub Action pinned to a full commit SHA.
 - **Contract and correctness gates** — lint, typecheck, tests, build, dead-code (knip), formatting,
   spec lint, CLI/MCP parity, and D1 migration + Tinybird datafile validation.
-- **Dependency alerts** — GitHub Dependabot alerts are on, with monthly grouped version-update pull
-  requests for npm and GitHub Actions.
+- **Dependency updates** — Dependabot is configured for monthly grouped npm and GitHub Actions
+  version-update pull requests. GitHub Dependabot alerts are not currently enabled.
 - **Private disclosure** — GitHub Private Vulnerability Reporting is enabled on this repository.
 
 ### Scanned daily, reported but not gating
 
 `.github/workflows/security.yml` runs at 08:23 UTC every day. Results upload to the
-[Security tab](../../security/code-scanning) as SARIF, and any failure opens or updates a single
-deduped GitHub issue that the GitHub↔Linear sync mirrors into the Splitch team. None of these block
-a merge; the same jobs already carry the gating branches for when the lockdown milestone lands.
+[Security tab](../../security/code-scanning) as SARIF. If a scanner job cannot execute, the workflow
+opens or updates one deduped GitHub issue that the GitHub↔Linear sync mirrors into the Splitch team.
+Findings do not fail the scheduled jobs or block a merge; the same jobs already carry the gating
+branches for when the lockdown milestone lands.
 
 - **SAST** — Semgrep with the OSS default ruleset plus repo-local rules for splitch-specific
   invariants in `.semgrep/`.
@@ -117,11 +120,12 @@ splitch is pre-1.0. Only the latest `main` and the most recently published versi
 receive security fixes until a stable release line exists. Fixes ship as a new release; we do not
 backport to older versions.
 
-| Artifact                                                           | Supported                |
-| ------------------------------------------------------------------ | ------------------------ |
-| `main` (latest commit)                                             | Yes                      |
-| The hosted service (`splitch.dev` and its subdomains)              | Yes                      |
-| [`@splitch/sdk`](https://www.npmjs.com/package/@splitch/sdk)       | Latest published version |
-| [`@splitch/cli`](https://www.npmjs.com/package/@splitch/cli)       | Latest published version |
-| [`@splitch/convex`](https://www.npmjs.com/package/@splitch/convex) | Latest published version |
-| Older commits and older published versions                         | No                       |
+| Artifact                                                                   | Supported                |
+| -------------------------------------------------------------------------- | ------------------------ |
+| `main` (latest commit)                                                     | Yes                      |
+| The hosted service (`splitch.dev` and its subdomains)                      | Yes                      |
+| [`@splitch/sdk`](https://www.npmjs.com/package/@splitch/sdk)               | Latest published version |
+| [`@splitch/cli`](https://www.npmjs.com/package/@splitch/cli)               | Latest published version |
+| [`@splitch/convex`](https://www.npmjs.com/package/@splitch/convex)         | Latest published version |
+| [`@splitch/cloudflare`](https://www.npmjs.com/package/@splitch/cloudflare) | Latest published version |
+| Older commits and older published versions                                 | No                       |

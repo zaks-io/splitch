@@ -64,13 +64,13 @@ until the exact checked-in SDK version is available.
 These are human-owned provider actions. Retain evidence with the release record, but never commit
 credentials, tokens, signed URLs, or private logs.
 
-1. Make `zaks-io/splitch` public. Both publish workflows fail closed unless the live repository is
+1. Keep `zaks-io/splitch` public. The publish workflows fail closed unless the live repository is
    public.
 2. Enable immutable releases. A publish workflow requires a published, non-prerelease, immutable
    GitHub Release tied to one matching tag, target commit, checked-out commit, and `GITHUB_SHA`.
 3. Maintain separate tag rulesets for `sdk-v*`, `cli-v*`, `convex-v*`, and `cloudflare-v*`. Each ruleset restricts
    tag creation, update, and deletion. The dedicated release GitHub App is the sole bypass actor for
-   all three. It
+   all four. It
    uses repository variable `SDK_RELEASE_APP_ID` and secret `SDK_RELEASE_APP_PRIVATE_KEY`, has only
    repository `contents: write`, and is installed on `zaks-io/splitch` alone.
 4. Confirm the `@splitch` npm scope and all four packages are controlled by the intended organization.
