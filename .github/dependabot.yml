@@ -11,6 +11,14 @@ updates:
       default-days: 7
     open-pull-requests-limit: 2
     rebase-strategy: disabled
+    ignore:
+      # TypeScript 7.0 ships no Compiler API at all; 7.1 will ship a new one.
+      # tsup's bundled rollup-plugin-dts reads ts.sys and crashes every dts
+      # build (egoist/tsup#1409 is unmerged), and Stryker 10 cannot start
+      # (stryker-mutator/stryker-js#6110). Lift this when both ship: SPL-623.
+      - dependency-name: typescript
+        update-types:
+          - version-update:semver-major
     groups:
       routine-minor-patch:
         patterns:
