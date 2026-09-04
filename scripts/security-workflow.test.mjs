@@ -67,6 +67,7 @@ test("scheduled scanner execution failures reach the alert job", () => {
   assert.ok(alertJob);
   assert.match(alertJob, /if: always\(\) && github\.event_name == 'schedule'/);
   assert.match(alertJob, /needs: \[deps, sast, trivy, scorecard\]/);
+  assert.match(alertJob, /permissions:\n {6}contents: read\n {6}issues: write/);
   assert.match(alertJob, /needs\.deps\.result == 'failure'/);
   assert.match(alertJob, /needs\.sast\.result == 'failure'/);
   assert.match(alertJob, /needs\.trivy\.result == 'failure'/);

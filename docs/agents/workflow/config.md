@@ -1,6 +1,6 @@
 # Agent Config
 
-Last updated: 2026-09-03
+Last updated: 2026-09-04
 
 The repo is a pnpm/Turborepo workspace with
 package scripts, Lefthook local gates, Blacksmith-backed GitHub Actions config,
@@ -33,6 +33,12 @@ in this config; refresh them from Linear during each workflow run.
   scale `0`, `1`, `2`, `4`, `8`, `16`.
 - GitHub read-only checks: `gh repo view`, `gh workflow list`, `gh pr list`,
   `gh pr checks`, `gh run list`, and environment/branch-protection API reads.
+- Public-contribution settings refreshed live on 2026-09-04: the repository is public with Issues
+  enabled, no repository interaction limit is active, fork workflows require approval for all
+  external contributors, and the default `GITHUB_TOKEN` permission is read-only. CodeRabbit's
+  external GitHub App posted a PR comment on #581, proving its comment permission. The repository's
+  scheduled security-alert writer declares job-local `issues: write`; public PR code never receives
+  that authority.
 - Configured hosted PR check name: `Verify`, the single job in the `ci`
   workflow. The Tinybird and D1 validators are conditional steps inside it and
   no-op unless their inputs changed (`Verify`'s affected `verify:ci`
@@ -90,8 +96,9 @@ in this config; refresh them from Linear during each workflow run.
   quarantine are parked until lockdown. See `docs/spec/platform/local-quality-gates.md`.
 - Generated artifacts: package-local `dist/**`, `.output/**`, `build/**`,
   coverage, `.turbo/`, and `.wrangler/` are ignored.
-- PR CI: `.github/workflows/ci.yml` on Blacksmith, running `pnpm verify:ci` plus
-  a range-scoped Gitleaks secret scan.
+- PR CI: `.github/workflows/ci.yml`, running `pnpm verify:ci` plus a range-scoped Gitleaks secret
+  scan. Same-repository PRs use Blacksmith; fork PRs use GitHub-hosted `ubuntu-24.04` without
+  repository secrets or hosted infrastructure access.
 - npm package publish: the OIDC `.github/workflows/sdk-publish.yml`,
   `.github/workflows/cli-publish.yml`, `.github/workflows/cloudflare-publish.yml`, and
   `.github/workflows/convex-publish.yml` workflows are
@@ -376,10 +383,12 @@ real package API boundary.
 - Local: self-contained. `pnpm install` then `pnpm verify:push`.
 - Git hooks: wired with Lefthook. `pre-commit` runs `pnpm verify:commit`;
   `pre-push` runs `pnpm verify:push`.
-- PR CI: wired in `.github/workflows/ci.yml`, running affected `pnpm verify:ci` on
-  Blacksmith; `spec:lint` runs inside its graph, while Tinybird Local and D1 local validators run
-  conditionally from the same exact changed-path plan. `Control Panel E2E` runs weekly in the `e2e`
-  workflow and on manual dispatch as a signal-only check while SPL-181 is open.
+- PR CI: wired in `.github/workflows/ci.yml`, running affected `pnpm verify:ci` on Blacksmith for
+  same-repository PRs and GitHub-hosted `ubuntu-24.04` for fork PRs; `spec:lint` runs inside its
+  graph, while Tinybird Local and D1 local validators run conditionally from the same exact
+  changed-path plan. Fork runs receive no repository secrets and never deploy shared preview.
+  `Control Panel E2E` runs weekly in the `e2e` workflow and on manual dispatch as a signal-only
+  check while SPL-181 is open.
 - Shared Preview / Production: workflows are wired. Shared Preview is one
   maintainer-triggered hosted target backed by non-production Cloudflare
   resources plus one Tinybird Branch. Production starts automatically after
