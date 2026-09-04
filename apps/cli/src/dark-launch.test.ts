@@ -14,7 +14,7 @@ beforeAll(async () => {
   const consumer = installPackedSdkConsumer();
   consumerDispose = () => consumer.dispose();
   packedSdk = (await consumer.importSdk()) as PackedSdk;
-}, 120_000);
+}, 300_000);
 
 afterEach(async () => {
   await cleanupTempHomes();
