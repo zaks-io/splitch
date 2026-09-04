@@ -218,13 +218,13 @@ request so the platform can deduplicate the Exposure.
 ## Failure behavior
 
 - `evaluate` / `evaluateDetails` / `verify` on the server client never throw on
-  a runtime failure and never retry. On any platform failure (HTTP error,
+  a platform failure and never retry. On any such failure (HTTP error,
   timeout, network error, unparseable body) they return your `defaultValue`
   (or `false` when you gave none), log loudly through `logger.error`, and
   report `reason: "ERROR"` plus an `errorCode` in `ResolutionDetails`. Branch
   on `reason` when you need to react. Two exceptions: `evaluate` and
   `evaluateDetails` throw `SplitchSdkError` if the context omits a required
-  `idempotencyKey` (caller misconfiguration, not a runtime failure), and your
+  `idempotencyKey` (caller misconfiguration, not a platform failure), and your
   own `onResolution` reporter is called synchronously with its exception
   uncaught, so it propagates out of the evaluate call. Both are deliberate,
   and `onResolution` is covered below.

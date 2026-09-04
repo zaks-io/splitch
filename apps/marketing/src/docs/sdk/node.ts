@@ -52,7 +52,7 @@ app.get("/checkout", async (req, res) => {
     },
     {
       kind: "prose",
-      text: 'This call never throws on a runtime failure and never retries. On any platform failure it returns your `defaultValue`, logs through `logger.error`, and reports `reason: "ERROR"` in `evaluateDetails`. Your handler keeps serving; the loud log is what stops that from becoming a silent outage. It does throw if the context omits a required `idempotencyKey` — that is a caller bug, not a runtime failure. See [Failure behavior](/docs/sdk/failures).',
+      text: 'This call never throws on a platform failure and never retries. On any such failure it returns your `defaultValue`, logs through `logger.error`, and reports `reason: "ERROR"` in `evaluateDetails`. Your handler keeps serving; the loud log is what stops that from becoming a silent outage. It does throw if the context omits a required `idempotencyKey` — that is a caller bug, not a platform failure. See [Failure behavior](/docs/sdk/failures).',
     },
     { kind: "heading", text: "Rendering a page in one round trip" },
     {
