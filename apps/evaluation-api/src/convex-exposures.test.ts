@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { makeConvexExposuresHandler } from "./convex-exposures";
 import {
   completedHoldover,
   EXPOSURE_ID,
@@ -9,7 +10,6 @@ import {
   resolver,
   saltStore,
 } from "./convex-exposures-test-fixture";
-import { makeConvexExposuresHandler } from "./convex-exposures";
 import { RecordingExposureIngestSink } from "./exposure-redemption";
 import { MemoryExposureRedemptionClaimStore } from "./exposure-redemption-claim";
 

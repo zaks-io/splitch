@@ -23,12 +23,11 @@ export async function resolveMetricEventIdentityMaterial(
     fields: event.fields,
     dimensions: event.dimensions,
   };
-  const [fingerprint, retainedFingerprints, dedupKey] = await Promise.all([
+  const [fingerprint, retainedFingerprints] = await Promise.all([
     metricEventPayloadFingerprint(fingerprintInput),
     retainedMetricEventFingerprints(identity.targetingKeyHashes, fingerprintInput),
-    metricEventDedupKey(credential.appId, credential.environmentId, event.eventId),
   ]);
-  return { identity, targetingKeyHash, fingerprint, retainedFingerprints, dedupKey };
+  return { identity, targetingKeyHash, fingerprint, retainedFingerprints };
 }
 
 export async function metricEventDedupKey(

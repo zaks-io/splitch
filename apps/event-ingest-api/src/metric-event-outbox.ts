@@ -128,14 +128,14 @@ export class MetricEventOutboxDurableObject {
   }
 
   private async read(path: string): Promise<Response> {
-    if (path !== "/lookup" && path !== "/export" && path !== "/delivery") {
+    if (path === "/lookup") return this.lookup();
+    if (path !== "/export" && path !== "/delivery") {
       return new Response("not found", { status: 404 });
     }
     const stored = await this.ctx.storage.get<MetricEventClaimState>(STATE_KEY);
     const existing = stored === undefined ? undefined : await this.retain(stored);
     if (existing === undefined) return new Response("not found", { status: 404 });
     await this.schedulePublication(existing);
-    if (path === "/lookup") return Response.json(asMetricEventLookup(existing));
     if (path === "/delivery") {
       return existing.delivery === undefined
         ? new Response("not found", { status: 404 })
@@ -146,6 +146,13 @@ export class MetricEventOutboxDurableObject {
       row: existing.row ?? null,
       activationRows: existing.activationRows ?? [],
     });
+  }
+
+  private async lookup(): Promise<Response> {
+    const stored = await this.ctx.storage.get<MetricEventClaimState>(STATE_KEY);
+    return stored === undefined
+      ? new Response("not found", { status: 404 })
+      : Response.json(asMetricEventLookup(stored));
   }
 
   private async write(path: string, request: Request): Promise<Response> {

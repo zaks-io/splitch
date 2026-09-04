@@ -7,7 +7,7 @@ import {
   recordEventDefinitionMismatch,
 } from "./event-definition-mismatch-diagnostics";
 import { rejectIngestAdmission } from "./ingest-admission";
-import { claimMetricEvent, lookupMetricEvent } from "./metric-event-outbox-client";
+import { claimMetricEvent, type MetricEventLookup } from "./metric-event-outbox-client";
 import { validateMetricEvent } from "./metric-event-validation";
 import { publicValidationIssues } from "./public-schema-mismatch";
 import type { Env } from "./types";
@@ -16,14 +16,14 @@ export async function replayExistingMetricEvent(
   env: Env,
   eventId: string,
   dedupKey: string,
+  existing: MetricEventLookup | null,
   fingerprint: string,
   retainedFingerprints: readonly string[] = [],
   disclosure: "public" | "trusted" = "public",
   includeActivatedRuns = false,
 ): Promise<Response | null> {
+  if (existing === null) return null;
   try {
-    const existing = await lookupMetricEvent(env.METRIC_EVENT_OUTBOX, dedupKey);
-    if (existing === null) return null;
     const matched =
       existing.fingerprint === fingerprint || retainedFingerprints.includes(existing.fingerprint);
     if (!matched) return eventIdConflict(eventId);

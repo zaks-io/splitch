@@ -85,9 +85,9 @@ describe("Metric Event outbox Durable Object", () => {
     expect(outbox.send).not.toHaveBeenCalled();
   });
 
-  it("looks up an existing claim without publishing", async () => {
+  it("looks up an existing claim without mutating delivery state", async () => {
     const outbox = makeOutbox();
-    outbox.seed({ ...row("entity-7"), queued: true });
+    outbox.seed({ ...row("entity-7"), queued: false });
 
     const lookup = await outbox.lookup();
 
@@ -99,6 +99,8 @@ describe("Metric Event outbox Durable Object", () => {
       activatedRuns: 0,
     });
     expect(outbox.send).not.toHaveBeenCalled();
+    expect(outbox.alarmTime()).toBeNull();
+    expect(outbox.stored()).not.toHaveProperty("expiresAt");
   });
 
   it("returns 404 when no claim exists yet", async () => {

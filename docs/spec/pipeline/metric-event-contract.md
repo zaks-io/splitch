@@ -85,7 +85,7 @@ The Evaluation and Event Ingest Workers perform these steps in order:
    key-encryption rotation does not change the derived hash. The fingerprint intentionally excludes
    `event_definition_version_id` so retries survive a later publish.
 8. The Event Ingest Worker looks up any existing `(metric, app_id, environment_id, event_id)` idempotency claim:
-   - Exact fingerprint match returns `202 { duplicate: true }` and writes nothing further. A
+   - Exact fingerprint match returns `202 { duplicate: true }` and creates no new claim or Event. A
      trusted API Key response includes the originally accepted `eventDefinitionId` /
      `eventDefinitionVersionId`. A Client Key response omits those internal IDs. Current published
      version validation is not re-applied.
@@ -109,6 +109,10 @@ The Evaluation and Event Ingest Workers perform these steps in order:
 14. The outbox publishes the row to the `metric_events` queue until successful. The request handler
     never posts the row directly to Tinybird; the queue consumer includes it in a
     datasource-specific NDJSON microbatch.
+
+The step 8 claim read may run concurrently with step 7 identity derivation. That read is
+side-effect-free, its result is not used until identity derivation succeeds, and an exact replay
+still rearms durable queue publication through the existing claim before returning success.
 
 Within Event Ingest, steps 4 and 5 are side-effect free. Step 6 may increment only the
 per-credential Durable Object rate-limit counter, and step 12 may update only aggregate Admission
