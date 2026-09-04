@@ -5,8 +5,10 @@ import {
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import { action, env, internalAction, internalMutation, internalQuery } from "./_generated/server";
+import { canonicalCallbackUrl } from "./callback_url";
 import { randomSecret } from "./crypto";
 import { purgeBatchHandler, revokeLocalHandler, uninstallHandler } from "./integration_cleanup";
+import { initializeHandler } from "./integration_initialize";
 import {
   activateHandler,
   cancelPendingSyncRecovery,
@@ -15,19 +17,17 @@ import {
   scheduleSyncRecovery,
 } from "./integration_recovery";
 import {
-  ensureTrailingSlash,
   installRejected,
   normalizedEndpoint,
   requestHeaders,
   responseJson,
   syncHandler,
 } from "./integration_remote";
-import { requiredIntegration } from "./integration_state";
+import { CURRENT_KEY, requiredIntegration } from "./integration_state";
 import { ensureRetentionScheduled } from "./retention";
 import schema from "./schema";
 import { installationResultValidator } from "./validators";
 
-const CURRENT_KEY = "current" as const;
 const DEFAULT_ENDPOINT = "https://edge.splitch.dev";
 
 export const get = internalQuery({
@@ -49,23 +49,7 @@ export const initialize = internalMutation({
     endpoint: v.string(),
   },
   returns: v.union(schema.doc("integrations"), v.null()),
-  handler: async (ctx, args) => {
-    const existing = await ctx.db
-      .query("integrations")
-      .withIndex("by_key", (q) => q.eq("key", CURRENT_KEY))
-      .unique();
-    if (existing) return existing;
-    await ctx.db.insert("integrations", {
-      key: CURRENT_KEY,
-      ...args,
-      announcedVersion: 0,
-      state: "pending",
-    });
-    return await ctx.db
-      .query("integrations")
-      .withIndex("by_key", (q) => q.eq("key", CURRENT_KEY))
-      .unique();
-  },
+  handler: (ctx, args) => initializeHandler(ctx, args),
 });
 
 export const activate = internalMutation({
@@ -86,11 +70,13 @@ export const install = action({
     environmentVersion: number;
     status: "active" | "revoked";
   }> => {
+    const cloudUrl = process.env.CONVEX_CLOUD_URL;
+    if (!cloudUrl) throw new Error("CONVEX_CLOUD_URL is required to install @splitch/convex");
     const siteUrl = process.env.CONVEX_SITE_URL;
     if (!siteUrl) throw new Error("CONVEX_SITE_URL is required to install @splitch/convex");
     const endpoint = normalizedEndpoint(env.SPLITCH_ENDPOINT ?? DEFAULT_ENDPOINT);
     const headers = requestHeaders();
-    const callbackUrl = new URL("configuration", ensureTrailingSlash(siteUrl)).toString();
+    const callbackUrl = canonicalCallbackUrl(cloudUrl, siteUrl);
     const initialized = await ctx.runMutation(internal.integration.initialize, {
       installationId: crypto.randomUUID(),
       webhookSecret: randomSecret(),

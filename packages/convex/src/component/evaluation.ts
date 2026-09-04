@@ -10,6 +10,12 @@ import { v } from "convex/values";
 import { internalAction, internalMutation, mutation, query } from "./_generated/server";
 import { canonicalJson, sha256Hex } from "./crypto";
 import {
+  localTargetingKeyHash,
+  persistExposure,
+  purgeEntityBatch,
+  runtimeState,
+} from "./evaluation_state";
+import {
   claimExposureBatchHandler,
   drainExposuresHandler,
   finishExposureBatchHandler,
@@ -20,12 +26,6 @@ import {
   finishDeliveryHandler,
   watchDeliveryHandler,
 } from "./exposure_delivery";
-import {
-  localTargetingKeyHash,
-  persistExposure,
-  purgeEntityBatch,
-  runtimeState,
-} from "./evaluation_state";
 import { ensureRetentionScheduled } from "./retention";
 import { snapshotProvider } from "./snapshot";
 import {

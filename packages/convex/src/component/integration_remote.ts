@@ -42,10 +42,6 @@ export function normalizedEndpoint(value: string): string {
   return url.toString().replace(/\/$/, "");
 }
 
-export function ensureTrailingSlash(value: string): string {
-  return value.endsWith("/") ? value : `${value}/`;
-}
-
 export function installRejected(status: number, body: string): Error {
   return new Error(`install Convex integration failed with HTTP ${status}: ${body}`);
 }
