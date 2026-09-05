@@ -24,15 +24,15 @@ describe("renderConnectSnippet", () => {
   // a ReferenceError on paste, not a placeholder.
   it("leaves no free variable behind", () => {
     expect(snippet).toContain('const userId = "user-1";');
-    for (const identifier of snippet.matchAll(/^\s*(?:targetingKey|idempotencyKey): (\w+),$/gm)) {
+    for (const identifier of snippet.matchAll(/^\s*targetingKey: (\w+),$/gm)) {
       expect(snippet).toContain(`const ${identifier[1]} =`);
     }
     expect(renderServerConnectSnippet({ flagKey: "f" })).toContain('const userId = "user-1";');
   });
 
-  it("carries a stable idempotency input for the logical Evaluation", () => {
-    expect(snippet).toContain("const evaluationId = crypto.randomUUID();");
-    expect(snippet).toContain("idempotencyKey: evaluationId,");
+  it("lets the SDK generate the Evaluation identity", () => {
+    expect(snippet).not.toContain("idempotencyKey");
+    expect(renderServerConnectSnippet({ flagKey: "f" })).not.toContain("idempotencyKey");
   });
 
   it("does not pass appId, which the shipped client does not accept", () => {

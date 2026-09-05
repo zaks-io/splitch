@@ -8,7 +8,7 @@
  * can rescue a broken snippet), write exactly what the panel renders, and run
  * `tsc` against the packed public declarations.
  *
- * A negative control follows: strip `idempotencyKey` from the same snippet and
+ * A negative control follows: strip `targetingKey` from the same snippet and
  * require `tsc` to reject it. Without that, a guard that silently stopped
  * type-checking would still report green.
  *
@@ -62,7 +62,7 @@ try {
   writeTsconfig(consumerRoot, ["connect-snippet.ts", "server-snippet.ts"]);
   execFileSync("npx", ["tsc", "-p", "tsconfig.json"], { cwd: consumerRoot, stdio: "inherit" });
 
-  assertRejected(consumerRoot, clientSnippet.replace(/\n\s*idempotencyKey: evaluationId,/, ""));
+  assertRejected(consumerRoot, clientSnippet.replace(/\n\s*targetingKey: userId,/, ""));
 
   if (checkRegistry) {
     const resolved = execFileSync("npm", ["view", "@splitch/sdk", "name"], {
@@ -149,7 +149,7 @@ function assertRejected(cwd, staleSnippet) {
       }
       throw error;
     }
-    throw new Error("snippet drift guard: tsc accepted a snippet missing idempotencyKey");
+    throw new Error("snippet drift guard: tsc accepted a snippet missing targetingKey");
   } finally {
     rmSync(staleRoot, { recursive: true, force: true });
   }
