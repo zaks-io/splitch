@@ -14,11 +14,11 @@ export function CtaSection() {
       <div className="mx-auto grid w-full max-w-6xl gap-8 px-4 py-16 sm:px-6 sm:py-20">
         <div className="grid gap-4">
           <h2 className="max-w-3xl text-balance font-bold font-display text-3xl text-foreground tracking-tight sm:text-4xl">
-            Your next feature can ship behind a flag today
+            Put your next change behind a Flag
             <span className="text-arm-treatment">.</span>
           </h2>
           <p className="max-w-2xl text-muted-foreground leading-relaxed">
-            About a minute with the CLI, or hand it to your agent.
+            Start with a feature toggle. Add an Experiment when you want to measure its effect.
           </p>
         </div>
 
@@ -28,9 +28,9 @@ export function CtaSection() {
           </Button>
           <a
             className="font-medium text-muted-foreground text-sm underline underline-offset-4 hover:text-foreground"
-            href="#agents"
+            href="/docs/cli"
           >
-            Connect your agent
+            Read the CLI guide
           </a>
         </div>
 

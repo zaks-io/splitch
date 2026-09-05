@@ -1,18 +1,14 @@
-/* The first screen has to answer "what does this thing do" without a glossary,
-   so the figure states the outcome in plain words. Confidence intervals,
-   p-values, and SRM live in the rigor section, where there is room to say what
-   they mean. The rates are consistent: 4.8% lifted 4.2% is 5.0%. */
 const arms = [
   {
     role: "Control",
-    name: "Old checkout",
-    rate: "4.8%",
+    name: "Current model",
+    detail: "The model you use today",
     dotClass: "bg-arm-control",
   },
   {
     role: "Treatment",
-    name: "New checkout",
-    rate: "5.0%",
+    name: "Candidate model",
+    detail: "A cheaper model to try",
     dotClass: "bg-arm-treatment",
   },
 ] as const;
@@ -20,14 +16,14 @@ const arms = [
 export function SplitVisual() {
   return (
     <figure
-      aria-label="A Flag called new-checkout splits traffic evenly. 4.8% of users on the old checkout purchased, against 5.0% on the new one, so the new checkout wins by 4.2%."
+      aria-label="Example experiment comparing user feedback on a current model and a cheaper candidate model. No results are shown."
       className="grid min-w-0 gap-5 rounded-xl border border-border bg-card p-5 shadow-md sm:p-6"
     >
       <div className="flex items-center justify-between gap-3 font-mono text-xs">
-        <span className="text-foreground">new-checkout</span>
+        <span className="text-foreground">Model comparison</span>
         <span className="flex items-center gap-1.5 text-muted-foreground">
-          <span aria-hidden="true" className="size-1.5 rounded-full bg-success" />
-          Live · 12,449 users
+          <span aria-hidden="true" className="size-1.5 rounded-full bg-arm-treatment" />
+          Example experiment
         </span>
       </div>
 
@@ -72,15 +68,18 @@ export function SplitVisual() {
               {arm.role}
             </p>
             <p className="mt-2 font-medium text-foreground text-sm">{arm.name}</p>
-            <p className="mt-2 font-display font-semibold text-2xl text-foreground">{arm.rate}</p>
-            <p className="text-muted-foreground text-xs">purchased</p>
+            <p className="mt-2 text-muted-foreground text-sm">{arm.detail}</p>
           </div>
         ))}
       </div>
 
       <figcaption className="rounded-lg bg-muted px-4 py-3 text-sm leading-relaxed">
-        <span className="font-medium text-arm-treatment-foreground">New checkout wins.</span>{" "}
-        <span className="text-muted-foreground">4.2% more purchases.</span>
+        <span className="font-medium text-arm-treatment-foreground">
+          Can a cheaper model compete?
+        </span>{" "}
+        <span className="text-muted-foreground">
+          Collect user feedback and compare the results before deciding.
+        </span>
       </figcaption>
     </figure>
   );

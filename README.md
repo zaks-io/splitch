@@ -2,8 +2,12 @@
 
 # splitch
 
-**Unified feature flags and A/B experimentation on Cloudflare's edge — agent-first,
-built to scale to millions of events.**
+**Control what ships. Learn what works.**
+
+Turn features on or off without redeploying your app. Run A/B experiments to measure how
+changes affect your users, like comparing feedback on a cheaper model against the one you
+use today. Built for agents: once authenticated and set up, your coding agent can manage
+Flags and Experiments through the CLI.
 
 [splitch.dev](https://splitch.dev) · [Quickstart](https://splitch.dev/quickstart) · [Docs](https://splitch.dev/docs) · [Control panel](https://app.splitch.dev) · [llms.txt](https://splitch.dev/llms.txt)
 

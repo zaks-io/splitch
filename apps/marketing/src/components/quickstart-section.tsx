@@ -18,11 +18,12 @@ export function QuickstartSection() {
         <div className="grid max-w-3xl gap-4">
           <SectionEyebrow>Quickstart</SectionEyebrow>
           <h2 className="max-w-2xl text-balance font-bold font-display text-3xl text-foreground tracking-tight sm:text-4xl">
-            Four steps, and the third one is proof
+            From setup to your first Flag
             <span className="text-arm-control">.</span>
           </h2>
           <p className="text-muted-foreground leading-relaxed">
-            You confirm the setup works before writing any application code.
+            Install the CLI and authenticate, then create and verify a Flag before connecting it to
+            your application.
           </p>
         </div>
 
