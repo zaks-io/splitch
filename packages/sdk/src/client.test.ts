@@ -166,6 +166,24 @@ describe("fail-loud: every error row returns Default Variant + reason ERROR + no
 });
 
 describe("createFetchTransport (real wire adapter): stub fetch, no network", () => {
+  it("generates wire keys for both public accessors when omitted", async () => {
+    const keys: (string | null)[] = [];
+    const client = createSplitchClient({
+      clientKey: "pk_test",
+      fetch: (async (_url, init) => {
+        keys.push(new Headers(init?.headers).get("idempotency-key"));
+        return new Response(JSON.stringify({ variant: true }), { status: 200 });
+      }) as typeof fetch,
+    });
+    expect(await client.evaluate("checkout", { targetingKey: "u1" })).toBe(true);
+    expect(await client.evaluateDetails("checkout", { targetingKey: "u1" })).toMatchObject({
+      value: true,
+    });
+    expect(keys).toHaveLength(2);
+    for (const key of keys) expect(key).toMatch(/^[0-9a-f-]{36}$/);
+    expect(keys[0]).not.toBe(keys[1]);
+  });
+
   it("forwards a caller's stable idempotency key on the wire", async () => {
     let seenHeaders: Headers | undefined;
     const t = fetchTransport(((url: URL | RequestInfo, init?: RequestInit) => {

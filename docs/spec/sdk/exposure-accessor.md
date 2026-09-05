@@ -16,18 +16,20 @@ EvaluationContext {
   targetingKey: string         -- required; the Entity identifier (CONTEXT.md: Targeting Key)
   idType?:      string         -- optional in the SDK; defaults to 'user'. Required on the wire,
                                -- so the SDK fills the default before sending (ADR-0036).
-  idempotencyKey: string       -- required for evaluate; caller-owned logical Evaluation identity
+  idempotencyKey?: string      -- optional in the SDK; caller-owned retry identity when supplied
   [key: string]: unknown       -- arbitrary attributes for Targeting Rule Conditions
 }
 ```
 
-The caller must create one stable `idempotencyKey` for each logical Evaluation and reuse it when
-retrying an uncertain request. The server cannot determine automatically whether two requests are
-retries. A missing key is rejected before evaluation, so it cannot create unscoped billing usage.
+When `idempotencyKey` is omitted, the SDK calls `crypto.randomUUID()` once for that Evaluation and
+sends the generated UUID on the required wire header. The SDK preserves an explicit non-empty key,
+which lets an application reuse one logical Evaluation identity when retrying an uncertain request.
+The SDK does not retry Exposure-bearing Evaluations automatically. An empty or non-string explicit
+key throws `SDK_CONTEXT_INVALID`; an omitted key throws `SDK_IDEMPOTENCY_KEY_UNAVAILABLE` when
+`crypto.randomUUID` is unavailable. Both failures happen before evaluation.
 
-The hello-world call is therefore `sdk.evaluate(flagKey, { targetingKey, idempotencyKey })`. Override the
-bucketing unit with `{ targetingKey, idType: 'workspace' }` when bucketing on something other
-than a user.
+The hello-world call is `sdk.evaluate(flagKey, { targetingKey })`. Override the bucketing unit with
+`{ targetingKey, idType: 'workspace' }` when bucketing on something other than a user.
 
 ## The evaluate accessor (fires Exposure)
 
@@ -46,16 +48,20 @@ branch on `reason` / `errorCode` (e.g. surface a banner on `STALE`, throw in you
 
 **What happens inside:**
 
-1. Validates context (targetingKey and the caller-owned idempotencyKey are required; idType defaults to 'user' if omitted). A missing or empty `idempotencyKey` throws `SDK_CONTEXT_INVALID` before any request rather than degrading: it is a wiring bug that fails identically on every call, not a resolution failure, and `evaluate` unwraps to the value so a degrade would hand back a Default Variant with nothing naming the cause.
+1. Validates context and resolves the Evaluation identity. `targetingKey` is required and `idType`
+   defaults to `'user'`. A supplied `idempotencyKey` must be a non-empty string or the call throws
+   `SDK_CONTEXT_INVALID`. When the key is omitted, the SDK generates one with
+   `crypto.randomUUID()` or throws `SDK_IDEMPOTENCY_KEY_UNAVAILABLE` if that API is unavailable.
+   These local failures happen before any request rather than degrading to a Default Variant.
 2. Checks SDK seen-set for `(flagKey, runId, targetingKey)`. If present, returns the cached
    Variant without a second Exposure (`reason: CACHED`) and asynchronously sends only the Flag Key,
-   caller-owned idempotency key, and SDK/runtime to non-billable cache telemetry. That telemetry never
+   resolved idempotency key, and SDK/runtime to non-billable cache telemetry. That telemetry never
    carries a Targeting Key; a telemetry failure is logged loudly but cannot change the cached result.
 3. On seen-set miss: calls `POST /api/sdk/evaluate` (see [public-evaluate-endpoint.md](./public-evaluate-endpoint.md)).
 4. When the result carries a live Run, the Worker seals the retry-stable Exposure in the Event Ingest
    `raw_events` outbox before returning success; the client does not send a separate track call. Seal
-   failure returns `reason: ERROR`, records no holdover, and can be retried with the same caller-owned
-   idempotency key. A disabled, no-Experiment, or no-live-Run result records none.
+   failure returns `reason: ERROR` and records no holdover. An application-managed retry can reuse an
+   explicit idempotency key. A disabled, no-Experiment, or no-live-Run result records none.
 5. SDK updates seen-set with `(flagKey, runId, targetingKey) -> VariantValue`.
 6. Returns resolved Variant (or full details).
 7. **On failure (network, 503, 404): returns Default Variant with `reason: ERROR` + an

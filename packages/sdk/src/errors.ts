@@ -12,8 +12,8 @@ export const sdkClientErrorCodes = [
   "SDK_NOT_INITIALIZED",
   /**
    * Evaluation Context the SDK refuses before the transport: the browser
-   * client constructed with an invalid one, or `evaluate` called without the
-   * `idempotencyKey` its route requires.
+   * client constructed with an invalid one, or `evaluate` called with an
+   * invalid explicit `idempotencyKey`.
    */
   "SDK_CONTEXT_INVALID",
   /** Browser bootstrap was evaluated for a different Evaluation Context. */

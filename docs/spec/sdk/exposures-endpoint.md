@@ -73,8 +73,8 @@ ExposureBatchRequest {
   `exposureId`; an invalid item does not block valid siblings.
 - Retry identity is per item: the SDK reuses `exposureId` when re-flushing an unacknowledged item;
   reusing an `exposureId` with a different ticket is `EVENT_ID_CONFLICT`. Application code never
-  manages these IDs (unlike `evaluate`'s caller-owned `idempotencyKey` — the SDK owns the queue, so
-  the SDK owns retry identity, same as Web Track).
+  manages these IDs. For an application-managed `evaluate` retry, the application instead supplies
+  and reuses an `idempotencyKey`.
 
 ### Response
 

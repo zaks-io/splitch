@@ -33,8 +33,8 @@ export const sdkErrorDocs = {
   },
   SDK_IDEMPOTENCY_KEY_UNAVAILABLE: {
     cause:
-      "`evaluateAll` was called without an `idempotencyKey` in a runtime where `crypto.randomUUID` does not exist. It is secure-context-only, so a page served over plain `http://` reaches this.",
-    fix: "Pass your own `idempotencyKey` on the context, or serve the page from a secure context (`https://` or `localhost`). The SDK refuses to substitute a weaker random source: this key is the batch's billing replay identity, and a colliding one would let a repeated fetch be charged twice.",
+      "`evaluate`, `evaluateDetails`, or `evaluateAll` was called without an `idempotencyKey` in a runtime where `crypto.randomUUID` does not exist. It is secure-context-only, so a page served over plain `http://` reaches this.",
+    fix: "Pass your own non-empty `idempotencyKey` on the context, or serve the page from a secure context (`https://` or `localhost`). The SDK refuses to substitute a weaker random source because this key identifies billing replay.",
     related: ["SDK_RETRIES_INVALID"],
   },
   SDK_NOT_INITIALIZED: {
@@ -44,8 +44,8 @@ export const sdkErrorDocs = {
   },
   SDK_CONTEXT_INVALID: {
     cause:
-      "An Evaluation Context was missing a field the call cannot run without: `createSplitchBrowserClient` was given one without a non-empty `targetingKey`, or `evaluate` / `evaluateDetails` was called without a non-empty `idempotencyKey`.",
-    fix: "For the browser client, pass `context: { targetingKey: … }` at construction. It is static-context: that key is fixed for the client's lifetime and is not a credential. For `evaluate` / `evaluateDetails`, pass `idempotencyKey` on every call — a caller-owned id for one logical Evaluation, reused when you retry, so a retry replays one Exposure instead of recording a second. The SDK cannot mint that one for you: only your code knows which two calls are the same Evaluation. It is refused before the request because `/api/sdk/evaluate` requires the header and would answer `VALIDATION_ERROR`.",
+      "An Evaluation Context contains an invalid field: `createSplitchBrowserClient` was given one without a non-empty `targetingKey`, or `evaluate` / `evaluateDetails` received an empty or non-string explicit `idempotencyKey`.",
+    fix: "For the browser client, pass `context: { targetingKey: … }` at construction. For `evaluate` / `evaluateDetails`, omit `idempotencyKey` so the SDK generates one, or pass a non-empty string and reuse it for every attempt of an application-managed retry.",
     related: ["SDK_CREDENTIAL_CONFIGURATION_INVALID", "SDK_NOT_INITIALIZED", "VALIDATION_ERROR"],
   },
   SDK_BOOTSTRAP_CONTEXT_MISMATCH: {

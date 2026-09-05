@@ -41,12 +41,13 @@ The **Environment is resolved from the Client Key**, not a request field: a Clie
 `(app_id, environment_id)` (ADR-0027), and the edge reads `environment_id` from the key's validation
 cache value to select which Environment's Flag Configuration and live Experiment Runs to serve.
 
-The Exposure-bearing route requires an `Idempotency-Key` header. The SDK's `idempotencyKey` is the
-caller-owned logical Evaluation identity and must be reused for a retry of that Evaluation. The
-server cannot infer retries automatically; a new key is a new Evaluation for billing purposes. The
-pipeline hashes this caller value with its authenticated Organization/App/Environment scope and a UTC
-24-hour replay window before storing it. A replay only deduplicates within that scope and window; the
-raw caller value never reaches Tinybird.
+The Exposure-bearing route requires an `Idempotency-Key` header. The SDK generates a UUID for each
+call when its optional `idempotencyKey` is omitted. An application that retries an uncertain request
+supplies one non-empty key and reuses it for every attempt of that logical Evaluation. The SDK does
+not retry automatically. The server cannot infer retries; a new key is a new Evaluation for billing
+purposes. The pipeline hashes this value with its authenticated Organization/App/Environment scope
+and a UTC 24-hour replay window before storing it. A replay only deduplicates within that scope and
+window; the raw value never reaches Tinybird.
 
 For a successful fresh live-Run resolution, Event Ingest atomically seals that scoped Evaluation claim,
 the resolved-result fingerprint, the retry-stable Exposure `event_id`, and the canonical `raw_events`
@@ -245,12 +246,13 @@ branch is a single check on `details.reason === 'ERROR'`.
 So a hello-world is genuinely copy-paste, the SDK ships sane defaults; each is overridable at
 construction:
 
-| Setting     | Default                                                                                  | Notes                                                                                                                                                                      |
-| ----------- | ---------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `endpoint`  | `https://edge.splitch.dev` (the public Evaluation Worker, ADR-0038)                      | Override for self-hosted / preview Workers.                                                                                                                                |
-| `timeoutMs` | `5000`                                                                                   | Sized for a cold call, not a warm one: a first evaluation against healthy production measures ~2s. On timeout the SDK fails loud to the Default Variant (`reason: ERROR`). |
-| `retries`   | `0` automatic retries on Exposure-bearing `evaluate`; peek/verify may retry idempotently | An explicit caller retry reuses the same logical Evaluation idempotency key.                                                                                               |
-| `idType`    | `'user'`                                                                                 | Overridable per call.                                                                                                                                                      |
+| Setting          | Default                                                                                  | Notes                                                                                                                                                                      |
+| ---------------- | ---------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `endpoint`       | `https://edge.splitch.dev` (the public Evaluation Worker, ADR-0038)                      | Override for self-hosted / preview Workers.                                                                                                                                |
+| `timeoutMs`      | `5000`                                                                                   | Sized for a cold call, not a warm one: a first evaluation against healthy production measures ~2s. On timeout the SDK fails loud to the Default Variant (`reason: ERROR`). |
+| `retries`        | `0` automatic retries on Exposure-bearing `evaluate`; peek/verify may retry idempotently | An application-managed retry supplies and reuses the same logical Evaluation idempotency key.                                                                              |
+| `idType`         | `'user'`                                                                                 | Overridable per call.                                                                                                                                                      |
+| `idempotencyKey` | a UUID generated with `crypto.randomUUID()` for each call                                | Supply a non-empty key when the application manages retries. The wire header remains required.                                                                             |
 
 ```ts
 import { createSplitchClient } from "@splitch/sdk";
@@ -259,16 +261,13 @@ import { createSplitchClient } from "@splitch/sdk";
 const splitch = createSplitchClient({ clientKey: "pk_..." });
 
 // Hello-world resolution (idType defaults to 'user'):
-const evaluationId = crypto.randomUUID(); // retain this value if the call must be retried
 const variant = await splitch.evaluate("new-checkout", {
   targetingKey: userId,
-  idempotencyKey: evaluationId,
 });
 
 // Branch with details (fail-loud is one check):
 const d = await splitch.evaluateDetails("new-checkout", {
   targetingKey: userId,
-  idempotencyKey: evaluationId,
 });
 if (d.reason === "ERROR") renderFallback(d.errorCode);
 else render(d.value);
@@ -286,10 +285,11 @@ else render(d.value);
   logged loudly — never a silent default. The Exposure outbox seal precedes the Assignment Store
   write; Queue/Tinybird and the later DO write are not one distributed transaction (ADR-0006).
 - **Logical Evaluation identity:** `Idempotency-Key` is required on this Exposure-bearing route.
-  The caller owns its value and must reuse the same value for a retry of the same logical Evaluation.
-  The pipeline deduplicates usage rows by a scoped hash of that key for one UTC 24-hour replay window.
-  The server does not infer retries from
-  `requestId`, Targeting Key, or request shape; a new key is a new billable Evaluation.
+  The SDK generates its value when the caller omits `idempotencyKey`. Applications that retry an
+  uncertain request supply and reuse the same value for every attempt of the same logical
+  Evaluation. The pipeline deduplicates usage rows by a scoped hash of that key for one UTC 24-hour
+  replay window. The server does not infer retries from `requestId`, Targeting Key, or request shape;
+  a new key is a new billable Evaluation.
 
 ## Sources
 

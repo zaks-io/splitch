@@ -47,7 +47,6 @@ export const methodsTopic: SdkTopic = {
       lang: "ts",
       code: `const details = await splitch.evaluateDetails("new-checkout", {
   targetingKey: user.id,
-  idempotencyKey: crypto.randomUUID(),
   defaultValue: false,
 });
 
@@ -84,20 +83,20 @@ result.duplicate; // true when this eventId was already appended`,
 export const idempotencyTopic: SdkTopic = {
   slug: "idempotency",
   title: "idempotencyKey",
-  summary: "One key per logical evaluation. Reuse it to retry safely.",
+  summary: "The SDK generates a key per call. Supply one when your application manages retries.",
   section: "guide",
   blocks: [
     {
       kind: "prose",
-      text: "`evaluate` and `evaluateDetails` require `idempotencyKey`: a caller-owned id for one logical evaluation. Generate it once per evaluation with `crypto.randomUUID()`.",
+      text: "`idempotencyKey` is optional on `evaluate` and `evaluateDetails`. When you omit it, the SDK calls `crypto.randomUUID()` once for that call and sends the UUID on the required wire header.",
     },
     {
       kind: "prose",
-      text: "If a request's outcome is uncertain (a timeout, a dropped connection), resend it with the same key. The platform deduplicates the Exposure, so the subject is counted once. This is why the SDK refuses `retries`: an automatic retry with a fresh key is a second Exposure for one logical evaluation, and it double-counts the subject in every experiment reading that Flag.",
+      text: "If your application may resend a request after an uncertain outcome, such as a timeout or dropped connection, supply one non-empty key and reuse it for every attempt. The platform deduplicates the Exposure, so the subject is counted once. The SDK refuses `retries` and never retries an Exposure-bearing Evaluation automatically.",
     },
     {
       kind: "prose",
-      text: "The key is yours, not ours. Deriving it from something stable in your own request context (a request id, a job id) makes retries idempotent by construction.",
+      text: "For application-managed retries, derive the key from something stable in your request context, such as a request ID or job ID. The SDK preserves that explicit key. An empty or non-string explicit key throws `SDK_CONTEXT_INVALID`; an omitted key throws `SDK_IDEMPOTENCY_KEY_UNAVAILABLE` when `crypto.randomUUID` is unavailable.",
     },
     {
       kind: "list",
@@ -113,7 +112,7 @@ export const failuresTopic: SdkTopic = {
   slug: "failures",
   title: "Failure behavior",
   summary:
-    "Server evaluation never throws on a platform failure and never hides one. It does throw on caller misconfiguration, like a missing idempotencyKey. Peek throws, and so does a browser read before init().",
+    "Server evaluation never throws on a platform failure and never hides one. Empty or non-string explicit idempotency keys throw, as does UUID generation when the runtime cannot provide it. Peek throws, and so does a browser read before init().",
   section: "guide",
   blocks: [
     {
@@ -123,7 +122,7 @@ export const failuresTopic: SdkTopic = {
     { kind: "heading", text: "evaluate, evaluateDetails, verify" },
     {
       kind: "prose",
-      text: 'On the server client these never throw on a platform failure and never retry. On any such failure (HTTP error, timeout, network error, unparseable body) they return your `defaultValue` (or `false` when you gave none), log loudly through `logger.error`, and report `reason: "ERROR"` plus an `errorCode` in `ResolutionDetails`. `evaluate` and `evaluateDetails` also throw `SplitchSdkError` if the context omits a required `idempotencyKey` — that is caller misconfiguration, not a platform failure.',
+      text: 'On the server client these never throw on a platform failure and never retry. On any such failure (HTTP error, timeout, network error, unparseable body) they return your `defaultValue` (or `false` when you gave none), log loudly through `logger.error`, and report `reason: "ERROR"` plus an `errorCode` in `ResolutionDetails`. For `evaluate` and `evaluateDetails`, an empty or non-string explicit `idempotencyKey` throws `SDK_CONTEXT_INVALID`. If the key is omitted and `crypto.randomUUID` is unavailable, the call throws `SDK_IDEMPOTENCY_KEY_UNAVAILABLE`.',
     },
     {
       kind: "prose",
