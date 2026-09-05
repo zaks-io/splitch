@@ -2,20 +2,12 @@ import { SectionEyebrow } from "./section-eyebrow";
 
 const features = [
   {
-    title: "Flip features without a deploy",
-    body: "Roll a Flag out to 10% or 100%, or kill it, and the change hits the edge in seconds. Configured per Environment, so dev and prod never share a switch.",
+    title: "Turn features on and off",
+    body: "Put a feature behind a Flag, then change its rollout without redeploying your app. Each Environment has its own configuration, so you can test in dev before enabling it in prod.",
   },
   {
-    title: "The same flag becomes the A/B test",
-    body: "Attach an Experiment to a Flag you already shipped. splitch records which Variant each user saw and joins it to your Metrics. No second tool.",
-  },
-  {
-    title: "Metrics you actually run on",
-    body: "Conversion, revenue, counts, ratios. Mark the ones that must not get worse as Guardrails. Results come back as a lift with a confidence interval.",
-  },
-  {
-    title: "One call, wherever your code runs",
-    body: "evaluate() returns the Variant and records the Exposure in the same round trip. Node, browsers, React, plus Convex and Sentry integrations.",
+    title: "Compare alternatives with an Experiment",
+    body: "Test a new model, prompt, or product change against what you use today. Connect user feedback to a Metric and compare the Variants with a confidence interval.",
   },
 ] as const;
 
@@ -29,12 +21,12 @@ export function FeatureSection() {
         <div className="grid content-start gap-4">
           <SectionEyebrow>Flags + Experiments</SectionEyebrow>
           <h2 className="max-w-xl text-balance font-bold font-display text-3xl text-foreground tracking-tight sm:text-4xl">
-            Control what ships, then find out if it worked
+            Two reasons to use splitch
             <span className="text-arm-control">.</span>
           </h2>
           <p className="max-w-md text-muted-foreground leading-relaxed">
-            Most teams buy one tool to flip features and another to measure them. Here it is one
-            Flag and one number.
+            Use Flags when you need a switch. Add an Experiment when you have a question to answer,
+            like whether users prefer the responses from a different model.
           </p>
         </div>
 

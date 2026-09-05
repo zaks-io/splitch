@@ -1,9 +1,6 @@
 import { CodeSnippet } from "./code-snippet";
 import { SectionEyebrow } from "./section-eyebrow";
 
-/* The MCP server is a tool the agent calls, never a page a person opens. Any
-   mention of the hostname has to carry that or people paste it into a browser,
-   find nothing, and leave. */
 const canDo = [
   "Create an App, Environments, and keys",
   "Create Flags, enable them, set the rollout",
@@ -17,20 +14,27 @@ export function AgentSection() {
     <section className="border-border border-t bg-muted px-4 py-16 sm:px-6 sm:py-20" id="agents">
       <div className="mx-auto grid w-full max-w-6xl gap-10 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] lg:items-start">
         <div className="grid content-start gap-5">
-          <SectionEyebrow>Works inside your coding agent</SectionEyebrow>
+          <SectionEyebrow>Agent first</SectionEyebrow>
           <h2 className="max-w-xl text-balance font-bold font-display text-3xl text-foreground tracking-tight sm:text-4xl">
-            Ask your agent for a flag<span className="text-arm-control">.</span>
+            Let your agent operate splitch<span className="text-arm-control">.</span>
           </h2>
           <p className="max-w-xl text-muted-foreground leading-relaxed">
-            One command adds splitch to Claude Code, Cursor, or any MCP client. Then you ask in
-            plain language and it does the setup.
+            Install the CLI, authenticate, and select your App and Environment. Your coding agent
+            can then configure Flags, set up Experiments, and read results from your terminal.
           </p>
 
-          <CodeSnippet code="claude mcp add --transport http splitch https://mcp.splitch.dev" />
+          <CodeSnippet
+            code={`splitch context --json
+splitch flags list --json`}
+          />
 
           <p className="max-w-xl text-muted-foreground text-sm leading-relaxed">
-            Your agent calls that endpoint and signs in on its first tool call, so there is no key
-            to copy.
+            Every command supports JSON output. Errors include a code and a suggested next step, so
+            your agent can act on the response. See the{" "}
+            <a className="underline underline-offset-4 hover:text-foreground" href="/docs/cli">
+              CLI guide
+            </a>{" "}
+            for setup and commands.
           </p>
         </div>
 
@@ -50,8 +54,15 @@ export function AgentSection() {
             ))}
           </ul>
           <p className="border-border border-t pt-4 text-muted-foreground text-sm leading-relaxed">
-            Every panel button is also a tool here and a CLI command. Agents get the whole product,
-            not a subset.
+            Prefer MCP? Connect your agent to the splitch MCP server. You can also manage Flags and
+            Experiments in the control panel. Read the{" "}
+            <a
+              className="underline underline-offset-4 hover:text-foreground"
+              href="/docs/code-agents"
+            >
+              agent setup guide
+            </a>
+            .
           </p>
         </div>
       </div>

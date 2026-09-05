@@ -31,11 +31,11 @@ export const Route = createRootRoute({
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "splitch · feature flags and A/B experiments in one tool" },
+      { title: "splitch · feature flags and experiments, built for agents" },
       {
         name: "description",
         content:
-          "Ship features behind a flag, then measure what they did to conversion and revenue. Open source, and your coding agent can run the whole thing over MCP.",
+          "Toggle features without redeploying your app. Compare models and product changes using user feedback. Manage Flags and Experiments through the CLI or MCP.",
       },
       ...openGraphMeta,
     ],
