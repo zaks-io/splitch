@@ -51,8 +51,6 @@ ${snippet}
 /**
  * @param {string} snippet
  */
-export function stripIdempotencyKeyFromSnippet(snippet) {
-  return snippet
-    .replace(/\nconst evaluationId = crypto\.randomUUID\(\);[^\n]*\n/, "\n")
-    .replace(/,?\n\s*idempotencyKey:\s*evaluationId/g, "");
+export function stripTargetingKeyFromSnippet(snippet) {
+  return snippet.replace(/,?\n\s*targetingKey:\s*userId/g, "");
 }

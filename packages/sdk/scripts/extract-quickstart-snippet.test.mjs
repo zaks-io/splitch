@@ -5,7 +5,7 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 import {
   extractQuickstartSdkSnippet,
-  stripIdempotencyKeyFromSnippet,
+  stripTargetingKeyFromSnippet,
   wrapQuickstartSnippetForTypecheck,
 } from "./extract-quickstart-snippet.mjs";
 
@@ -18,7 +18,8 @@ test("extractQuickstartSdkSnippet returns the SDK section fenced block verbatim"
 
   assert.match(snippet, /^import \{ createSplitchClient \} from "@splitch\/sdk";/);
   assert.match(snippet, /clientKey: "pk_\.\.\."/);
-  assert.match(snippet, /idempotencyKey: evaluationId/);
+  assert.match(snippet, /targetingKey: userId/);
+  assert.doesNotMatch(snippet, /idempotencyKey/);
   assert.match(snippet, /await splitch\.evaluate\(/);
   assert.match(snippet, /await splitch\.evaluateDetails\(/);
   assert.doesNotMatch(snippet, /ck_live_/);
@@ -38,9 +39,10 @@ test("wrapQuickstartSnippetForTypecheck preserves the extracted snippet body", (
   assert.ok(wrapped.includes(snippet));
 });
 
-test("stripIdempotencyKeyFromSnippet removes required idempotency inputs", () => {
+test("stripTargetingKeyFromSnippet removes required Targeting Key inputs", () => {
   const snippet = extractQuickstartSdkSnippet(readFileSync(quickstartPath, "utf8"));
-  const stale = stripIdempotencyKeyFromSnippet(snippet);
-  assert.doesNotMatch(stale, /idempotencyKey/);
-  assert.doesNotMatch(stale, /evaluationId/);
+  const stale = stripTargetingKeyFromSnippet(snippet);
+  assert.notEqual(stale, snippet);
+  assert.doesNotMatch(stale, /targetingKey/);
+  assert.match(stale, /await splitch\.evaluateDetails\(/);
 });

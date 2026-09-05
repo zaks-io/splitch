@@ -14,7 +14,7 @@ import { verifyBuildStamp } from "../../../scripts/release/build-stamp.mjs";
 import { runConvexConsumerSmoke } from "./convex-consumer-smoke.mjs";
 import {
   extractQuickstartSdkSnippet,
-  stripIdempotencyKeyFromSnippet,
+  stripTargetingKeyFromSnippet,
   wrapQuickstartSnippetForTypecheck,
 } from "./extract-quickstart-snippet.mjs";
 import { assertReleaseBundleJs } from "./pack-staging.mjs";
@@ -177,7 +177,7 @@ void evaluatePath;
     run("npm", ["install", tarballPath, "typescript@6.0.3"], { cwd: staleRoot });
     writeFileSync(
       join(staleRoot, "stale-quickstart-snippet.ts"),
-      wrapQuickstartSnippetForTypecheck(stripIdempotencyKeyFromSnippet(quickstartSnippet)),
+      wrapQuickstartSnippetForTypecheck(stripTargetingKeyFromSnippet(quickstartSnippet)),
     );
     writeConsumerTsconfig(["stale-quickstart-snippet.ts"], staleRoot);
     expectTypecheckFailure(staleRoot, "quickstart drift guard");
