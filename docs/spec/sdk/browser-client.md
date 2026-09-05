@@ -194,8 +194,11 @@ is, byte-for-byte, the browser client's `bootstrap` input — one schema, no cop
   unchanged by this doc. When the browser Web Analytics surface ships, it belongs on this client
   (Web Session is a browser-session concern, matching the static-context lifetime); that move is
   deliberate future work, not scaffolded here.
-- **Root client in a browser**: still works (SPL-321's contract), but every read is a network call
-  and requires caller-managed `idempotencyKey`s. Docs steer browser consumers here.
+- **Root client in a browser**: still works (SPL-321's contract). Fresh matching seen-set entries
+  return the cached Variant locally and send asynchronous cache telemetry; cache misses use the
+  evaluation transport. It generates an idempotency key for each call unless the application
+  supplies one for a retry.
+  Docs steer browser consumers here.
 
 ## Sources
 

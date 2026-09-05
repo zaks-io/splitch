@@ -123,7 +123,7 @@ sequencing:
 
 The durable Exposure seal is the analysis acceptance boundary and is on the response path; Queue and
 Tinybird delivery remain asynchronous. If the seal fails, evaluation fails loud, no Assignment Store
-write begins, and a client retry reuses the same Evaluation idempotency key. The DO write remains
+write begins, and an application retry reuses the same explicit Evaluation idempotency key. The DO write remains
 non-blocking after acceptance: it executes with a short timeout (~100ms) and does not delay the
 response. A DO write failure is a holdover miss only for the KV propagation window; `assign()` remains
 deterministic on retry.
@@ -132,7 +132,7 @@ deterministic on retry.
 
 | Failure                                                  | Effect                                                        | Recovery                                                                       |
 | -------------------------------------------------------- | ------------------------------------------------------------- | ------------------------------------------------------------------------------ |
-| Durable Exposure outbox seal fails before response       | Evaluation fails loud; no Assignment Store write begins       | Retry the same Evaluation idempotency key                                      |
+| Durable Exposure outbox seal fails before response       | Evaluation fails loud; no Assignment Store write begins       | Application retries with the same explicit Evaluation idempotency key          |
 | Queue handoff fails after durable outbox seal            | Accepted rows remain unavailable to analysis until handoff    | Durable outbox retries Queue handoff                                           |
 | Retryable Tinybird `429`/`500`/`503` after queue handoff | Accepted rows remain unavailable to analysis until redelivery | Bounded queue retry with stable per-row dedup keys                             |
 | Tinybird timeout or other no-response outcome            | Commit status is indeterminate                                | Durable reconciliation or datasource DLQ transfer; no ordinary retry           |

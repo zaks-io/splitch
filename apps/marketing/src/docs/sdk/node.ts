@@ -30,7 +30,7 @@ export const splitch = createSplitchClient({ clientKey });`,
     { kind: "heading", text: "On the request path" },
     {
       kind: "prose",
-      text: "A Client Key is what a server uses to evaluate. It is public by design and safe on a server; the secret API Key cannot call `evaluate` at all. Mint one `idempotencyKey` per logical evaluation and derive it from something stable in the request when you can.",
+      text: "A Client Key is what a server uses to evaluate. It is public by design and safe on a server; the secret API Key cannot call `evaluate` at all. The SDK generates an idempotency key for each call. Supply a stable key when your application may retry an uncertain request.",
     },
     {
       kind: "code",
@@ -43,7 +43,6 @@ const app = express();
 app.get("/checkout", async (req, res) => {
   const enabled = await splitch.evaluate("new-checkout", {
     targetingKey: req.user.id,
-    idempotencyKey: req.id,
     defaultValue: false,
   });
 
@@ -52,7 +51,7 @@ app.get("/checkout", async (req, res) => {
     },
     {
       kind: "prose",
-      text: 'This call never throws on a platform failure and never retries. On any such failure it returns your `defaultValue`, logs through `logger.error`, and reports `reason: "ERROR"` in `evaluateDetails`. Your handler keeps serving; the loud log is what stops that from becoming a silent outage. It does throw if the context omits a required `idempotencyKey` — that is a caller bug, not a platform failure. See [Failure behavior](/docs/sdk/failures).',
+      text: 'This call never throws on a platform failure and never retries. On any such failure it returns your `defaultValue`, logs through `logger.error`, and reports `reason: "ERROR"` in `evaluateDetails`. Your handler keeps serving; the loud log is what stops that from becoming a silent outage. Local key failures still throw: `SDK_CONTEXT_INVALID` for an invalid explicit key, or `SDK_IDEMPOTENCY_KEY_UNAVAILABLE` when an omitted key cannot be generated. See [Failure behavior](/docs/sdk/failures).',
     },
     { kind: "heading", text: "Rendering a page in one round trip" },
     {

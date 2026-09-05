@@ -86,15 +86,12 @@ export interface SplitchClient {
    * Never throws on a platform failure and never retries: it returns
    * `context.defaultValue` (or `false`) and logs loudly. Use
    * {@link SplitchClient.evaluateDetails} to branch on `reason: "ERROR"`.
-   * Throws `SplitchSdkError` if the context omits a required
-   * `idempotencyKey` — that is caller misconfiguration, not a platform
-   * failure.
+   * Throws `SplitchSdkError` for an empty or non-string explicit `idempotencyKey` or
+   * when the runtime cannot generate an omitted key.
    *
    * @example
    * const variant = await splitch.evaluate("new-checkout", {
    *   targetingKey: user.id,
-   *   // Stable per logical evaluation; reuse it when retrying an uncertain request.
-   *   idempotencyKey: crypto.randomUUID(),
    *   defaultValue: false,
    * });
    */
@@ -102,9 +99,8 @@ export interface SplitchClient {
   /**
    * Resolve a Flag and return the full OpenFeature ResolutionDetails. Fires
    * an Exposure. Never throws on a platform failure; reads `reason: "ERROR"`
-   * instead. Throws `SplitchSdkError` if the context omits a required
-   * `idempotencyKey` — that is caller misconfiguration, not a platform
-   * failure.
+   * instead. Throws `SplitchSdkError` for an empty or non-string explicit `idempotencyKey` or
+   * when the runtime cannot generate an omitted key.
    */
   evaluateDetails(flagKey: string, context: EvaluationContext): Promise<SdkResolutionDetails>;
   /**
@@ -168,7 +164,6 @@ const DEFAULT_RETRIES = 0;
  * const splitch = createSplitchClient({ clientKey: "pk_..." });
  * const variant = await splitch.evaluate("new-checkout", {
  *   targetingKey: user.id,
- *   idempotencyKey: crypto.randomUUID(),
  * });
  *
  * @see https://splitch.dev/quickstart

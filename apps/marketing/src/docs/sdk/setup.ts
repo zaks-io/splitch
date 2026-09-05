@@ -55,7 +55,6 @@ const splitch = createSplitchClient({ clientKey: "pk_..." });
 
 const variant = await splitch.evaluate("new-checkout", {
   targetingKey: user.id,
-  idempotencyKey: crypto.randomUUID(),
   defaultValue: false,
 });`,
     },

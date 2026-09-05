@@ -46,7 +46,7 @@ export const codeAgentsDoc = {
       kind: "list",
       items: [
         "Evaluate the exact Flag key at the point the Entity encounters the behavior. `evaluate` and `evaluateDetails` fire an Exposure; health checks, admin previews, and CI use `verify` or `peekVariant` instead.",
-        "Use the application's stable Targeting Key and one caller-owned `idempotencyKey` per logical Evaluation. Reuse that key when retrying the same Evaluation.",
+        "Use the application's stable Targeting Key. The SDK generates an idempotency key for a normal call. When the application manages retries, supply one non-empty key and reuse it for every attempt of the same logical Evaluation.",
         "Implement every configured Variant deliberately. Preserve the existing behavior for the control/default path and keep `reason: ERROR` observable when a fallback value could look real.",
       ],
     },

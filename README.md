@@ -89,7 +89,6 @@ const splitch = createSplitchClient({ clientKey: "pk_..." });
 
 const enabled = await splitch.evaluate("new-checkout", {
   targetingKey: user.id,
-  idempotencyKey: crypto.randomUUID(),
   defaultValue: false,
 });
 ```
@@ -114,7 +113,6 @@ Other packages and apps in the workspace are internal to the platform and not pu
 // Server: one call per evaluation, fires an Exposure.
 const enabled = await splitch.evaluate("new-checkout", {
   targetingKey: user.id,
-  idempotencyKey: crypto.randomUUID(),
   defaultValue: false,
 });
 

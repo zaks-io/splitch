@@ -525,13 +525,8 @@ Each step names the CLI/MCP parity it mirrors. No step is panel-only.
    // Whoever you are deciding for. Swap in your own user id.
    const userId = "user-1";
 
-   // One stable id per logical Evaluation. Reuse it when you retry that call,
-   // so a retry is not counted as a second Evaluation.
-   const evaluationId = crypto.randomUUID();
-
    const value = await splitch.evaluate("your-flag-key", {
      targetingKey: userId,
-     idempotencyKey: evaluationId,
    });
    ```
 

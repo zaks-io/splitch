@@ -73,7 +73,8 @@ The SDK caller of `evaluate` waits for durable Exposure ownership, not Queue pub
 Tinybird. The outbox retries Queue publication until it succeeds. On the evaluate path the
 Assignment Store write starts only after the durable Exposure seal succeeds and is fail-closed for
 the Evaluation response. Evaluate does **not** enqueue a separate durable holdover-write retry;
-the SDK retries the Evaluation when the required commit fails. Exposures-ticket redemption is the
+the application may retry the Evaluation with the same explicit key when the required commit fails.
+Exposures-ticket redemption is the
 path that seals holdover-write outbox ownership and schedules DO alarm retries. This ordering
 prevents a successful holdover write from suppressing the only retry of an unaccepted Exposure.
 
@@ -81,20 +82,20 @@ prevents a successful holdover write from suppressing the only retry of an unacc
 
 | Failure                                          | Effect on experience                      | Effect on analysis                         | Recovery                                                                      |
 | ------------------------------------------------ | ----------------------------------------- | ------------------------------------------ | ----------------------------------------------------------------------------- |
-| DO/KV write fails on evaluate                    | Evaluation fails before success           | Durable Exposure remains retry-stable      | SDK retries the same Evaluation idempotency key                               |
+| DO/KV write fails on evaluate                    | Evaluation fails before success           | Durable Exposure remains retry-stable      | Application retries with the same explicit Evaluation idempotency key         |
 | DO/KV write fails after exposures ownership seal | SDK may still see `accepted` once owned   | None                                       | Holdover-write outbox Durable Object alarms retry until KV-complete or poison |
 | Exposures ownership seal fails                   | Item `rejected` (`SERVICE_UNAVAILABLE`)   | Exposure row may already be sealed         | SDK retries same `exposureId`                                                 |
 | Exposures retries exhausted (poisoned)           | Item `rejected` (`INTERNAL_SERVER_ERROR`) | None                                       | Fail loud; no silent ack                                                      |
 | Entity/App deletion cutoff                       | Item `suppressed` (not success)           | Stale Assignment Store writes stopped      | Post-`delete_before_ts` ensures remain allowed                                |
 | KV write-through fails (after DO write succeeds) | KV miss for ~60s                          | None                                       | Self-healing on evaluate; exposures outbox retries until complete             |
-| Durable Exposure outbox seal fails               | Evaluation fails; no holdover is written  | No accepted Exposure                       | Retry the same Evaluation idempotency key                                     |
+| Durable Exposure outbox seal fails               | Evaluation fails; no holdover is written  | No accepted Exposure                       | Application retries with the same explicit Evaluation idempotency key         |
 | Queue publication fails after outbox seal        | Experience unaffected                     | Analysis availability is delayed           | Durable outbox retries Queue publication                                      |
 | Tinybird `429`/`500`/`503` after queue handoff   | Experience unaffected                     | Analysis availability is delayed           | Bounded queue retry with the same row and stable dedup key                    |
 | Tinybird `422` after queue handoff               | Experience unaffected                     | Raw/derived commit is indeterminate        | Durable scoped reconciliation; no ordinary retry                              |
 | Permanent Tinybird failure or quarantine         | Experience unaffected                     | Analysis unavailable until operator repair | Durable DLQ transfer, alert, and manual replay only                           |
 
 There is no distributed transaction across Tinybird and Assignment Store. Evaluate-path DO/KV
-propagation failures fail the Evaluation and are retried by the SDK with the same idempotency key.
+propagation failures fail the Evaluation. An application retry uses the same explicit idempotency key.
 Durable holdover-write alarm retry applies to exposures-ticket redemption, not to `evaluate`.
 Exposures-ticket acks require ownership first. Tinybird retry,
 reconciliation, and DLQ states are visible operational failures and are not described as

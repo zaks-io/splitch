@@ -57,9 +57,6 @@ const splitch = createSplitchClient({ clientKey: "pk_..." });
 
 const d = await splitch.evaluateDetails("new-checkout", {
   targetingKey: userId,
-  // One id per logical evaluation; reuse it on a retry so the retry replays
-  // the same Exposure instead of recording a second.
-  idempotencyKey: requestId,
 });
 if (d.reason === "ERROR") renderFallback(d.errorCode);
 else render(d.value);`,

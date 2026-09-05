@@ -165,9 +165,11 @@ Opt-in browser instrumentation that emits only explicitly configured Web Events.
 - The exposure queue follows the Web Event queue rules: memory-only, batch caps, flush on
   timer/cap/page-hidden/pagehide, authenticated `fetch` with `keepalive`, no listeners while empty,
   and loud, never-silent failure handling.
-- Exposure-bearing `evaluate` and `evaluateDetails` require a caller-owned `idempotencyKey`, reused
-  for retries of the same logical Evaluation. The server cannot infer retries automatically; a new
-  key is a new billable Evaluation. `peek` and `verify` are non-billing and do not require one.
+- Exposure-bearing `evaluate` and `evaluateDetails` accept an optional `idempotencyKey`. The SDK
+  generates a UUID for that call when it is omitted. Applications that retry an uncertain request
+  supply and reuse one non-empty key for the same logical Evaluation. The SDK does not retry these
+  calls automatically, and the wire header remains required. `peek` and `verify` are non-billing
+  and do not require a key.
 - SDK caches may cache evaluated results. They must not cache or expose rule logic.
 - The SDK seen-set is a hot-path optimization only. Pipeline dedup is authoritative.
 - Reading through the exposing accessor fires Exposure.

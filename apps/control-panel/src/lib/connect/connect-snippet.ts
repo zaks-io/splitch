@@ -36,11 +36,6 @@ export interface ConnectSnippetInput {
   readonly flagKey: string;
 }
 
-/**
- * The Exposure-bearing call. `idempotencyKey` is required by the SDK and is the
- * caller-owned identity of one logical Evaluation, so the snippet has to mint a
- * stable one rather than leave a hole the reader fills in wrongly (ADR-0036).
- */
 export function renderConnectSnippet({ clientKey, flagKey }: ConnectSnippetInput): string {
   return [
     `import { createSplitchClient } from "${SDK_PACKAGE_NAME}";`,
@@ -50,13 +45,8 @@ export function renderConnectSnippet({ clientKey, flagKey }: ConnectSnippetInput
     "// Whoever you are deciding for. Swap in your own user id.",
     `const userId = ${JSON.stringify(EXAMPLE_TARGETING_KEY)};`,
     "",
-    "// One stable id per logical Evaluation. Reuse it when you retry that call,",
-    "// so a retry is not counted as a second Evaluation.",
-    "const evaluationId = crypto.randomUUID();",
-    "",
     `const value = await splitch.evaluate(${JSON.stringify(flagKey)}, {`,
     "  targetingKey: userId,",
-    "  idempotencyKey: evaluationId,",
     "});",
   ].join("\n");
 }
@@ -74,10 +64,8 @@ export function renderServerConnectSnippet({ flagKey }: { readonly flagKey: stri
     "const splitch = createSplitchClient({ apiKey: process.env.SPLITCH_API_KEY });",
     "",
     `const userId = ${JSON.stringify(EXAMPLE_TARGETING_KEY)};`,
-    "const evaluationId = crypto.randomUUID();",
     `const value = await splitch.evaluate(${JSON.stringify(flagKey)}, {`,
     "  targetingKey: userId,",
-    "  idempotencyKey: evaluationId,",
     "});",
   ].join("\n");
 }

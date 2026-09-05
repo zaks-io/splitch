@@ -53,7 +53,6 @@ const splitch = createSplitchClient({ clientKey: "pk_..." });
 
 const variant = await splitch.evaluate("new-checkout", {
   targetingKey: user.id,
-  idempotencyKey: crypto.randomUUID(),
   defaultValue: false,
 });
 ```
@@ -210,10 +209,17 @@ Unlike `evaluate`, it has no Default Variant to fall back to, so it throws a
 
 ## idempotencyKey
 
-`evaluate` and `evaluateDetails` require `idempotencyKey`: a caller-owned id for
-one logical evaluation. Generate it once per evaluation
-(`crypto.randomUUID()`), and reuse the same key if you retry an uncertain
-request so the platform can deduplicate the Exposure.
+`idempotencyKey` is optional on `evaluate` and `evaluateDetails`. When you omit
+it, the SDK calls `crypto.randomUUID()` once for that call and sends the result
+on the required wire header. Pass a non-empty key when your application may
+retry an uncertain request. Reuse that key for every attempt of the same
+logical Evaluation so the platform can deduplicate the Exposure.
+
+The SDK preserves an explicit non-empty key. An empty or non-string explicit
+key throws `SDK_CONTEXT_INVALID` before any request. If you omit the key in a
+runtime without `crypto.randomUUID`, the call throws
+`SDK_IDEMPOTENCY_KEY_UNAVAILABLE`. The SDK does not automatically retry an
+Exposure-bearing Evaluation.
 
 ## Failure behavior
 
@@ -222,12 +228,12 @@ request so the platform can deduplicate the Exposure.
   timeout, network error, unparseable body) they return your `defaultValue`
   (or `false` when you gave none), log loudly through `logger.error`, and
   report `reason: "ERROR"` plus an `errorCode` in `ResolutionDetails`. Branch
-  on `reason` when you need to react. Two exceptions: `evaluate` and
-  `evaluateDetails` throw `SplitchSdkError` if the context omits a required
-  `idempotencyKey` (caller misconfiguration, not a platform failure), and your
-  own `onResolution` reporter is called synchronously with its exception
-  uncaught, so it propagates out of the evaluate call. Both are deliberate,
-  and `onResolution` is covered below.
+  on `reason` when you need to react. Local idempotency errors are exceptions:
+  an invalid explicit key throws `SDK_CONTEXT_INVALID`, while an omitted key
+  throws `SDK_IDEMPOTENCY_KEY_UNAVAILABLE` if `crypto.randomUUID` is
+  unavailable. Your own `onResolution` reporter is also called synchronously
+  with its exception uncaught, so it propagates out of the evaluate call.
+  These cases are deliberate, and `onResolution` is covered below.
 - The browser client has one throw: it resolves from the payload `init()`
   fetched, so `evaluate`, `evaluateDetails`, and the `useFlag` /
   `useFlagDetails` hooks throw `SDK_NOT_INITIALIZED` when read before `init()`
