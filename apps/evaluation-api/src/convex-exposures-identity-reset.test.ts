@@ -5,63 +5,64 @@ import { RecordingExposureIngestSink } from "./exposure-redemption";
 import { MemoryExposureRedemptionClaimStore } from "./exposure-redemption-claim";
 
 describe("Convex server Exposure identity admission", () => {
-  it("rejects integration work paused across an App identity replacement", async () => {
-    const sink = new RecordingExposureIngestSink();
-    const identity = pausingSaltStore();
-    const handler = makeConvexExposuresHandler({
-      provider: provider(),
-      assignmentStore: readOnlyAssignments(),
-      convexConfigurationResolver: resolver(),
-      exposureIngestSink: sink,
-      exposureRedemptionClaims: new MemoryExposureRedemptionClaimStore(),
-      holdoverWrite: { ensure: async () => ({ status: "completed" as const }) },
-      saltStore: identity.store,
-      now: () => new Date("2026-08-25T12:00:01.000Z"),
-    });
+  it.each([1, 6])(
+    "rejects %i items paused across an App identity replacement",
+    async (itemCount) => {
+      const sink = new RecordingExposureIngestSink();
+      const identity = pausingSaltStore();
+      const handler = makeConvexExposuresHandler({
+        provider: provider(),
+        assignmentStore: readOnlyAssignments(),
+        convexConfigurationResolver: resolver(),
+        exposureIngestSink: sink,
+        exposureRedemptionClaims: new MemoryExposureRedemptionClaimStore(),
+        holdoverWrite: { ensure: async () => ({ status: "completed" as const }) },
+        saltStore: identity.store,
+        now: () => new Date("2026-08-25T12:00:01.000Z"),
+      });
 
-    const response = handler(requestArgs());
-    await identity.paused;
-    identity.replace();
+      const response = handler(requestArgs(itemCount));
+      await identity.paused;
+      identity.replace();
 
-    expect(await (await response).json()).toEqual({
-      results: [
-        {
-          exposureId: EXPOSURE_ID,
+      expect(await (await response).json()).toEqual({
+        results: Array.from({ length: itemCount }, (_, index) => ({
+          exposureId: exposureId(index),
           status: "rejected",
           code: "SERVICE_UNAVAILABLE",
           message: "SERVICE_UNAVAILABLE",
           retryable: true,
-        },
-      ],
-    });
-    expect(sink.writes).toEqual([]);
-  });
+        })),
+      });
+      expect(sink.writes).toEqual([]);
+    },
+  );
 });
 
-const EXPOSURE_ID = "00000000-0000-4000-8000-000000000001";
+function exposureId(index: number): string {
+  return `00000000-0000-4000-8000-${String(index + 1).padStart(12, "0")}`;
+}
 const INSTALLATION_ID = "00000000-0000-4000-8000-000000000002";
 
-function requestArgs(): HandlerArgs<unknown> {
+function requestArgs(itemCount: number): HandlerArgs<unknown> {
   return {
     input: {
       body: {
-        exposures: [
-          {
-            exposureId: EXPOSURE_ID,
-            installationId: INSTALLATION_ID,
-            flagKey: "checkout",
-            experimentId: "exp_1",
-            runId: "run_1",
-            runConfigHash: "sha256:run-1",
-            evaluationContext: {
-              targetingKey: "user@example.com",
-              idType: "user",
-              attributes: {},
-            },
-            variantName: "treatment",
-            exposureAt: "2026-08-25T12:00:00.000Z",
+        exposures: Array.from({ length: itemCount }, (_, index) => ({
+          exposureId: exposureId(index),
+          installationId: INSTALLATION_ID,
+          flagKey: "checkout",
+          experimentId: "exp_1",
+          runId: "run_1",
+          runConfigHash: "sha256:run-1",
+          evaluationContext: {
+            targetingKey: `user-${String(index)}@example.com`,
+            idType: "user",
+            attributes: {},
           },
-        ],
+          variantName: "treatment",
+          exposureAt: "2026-08-25T12:00:00.000Z",
+        })),
       },
     },
     principal: {

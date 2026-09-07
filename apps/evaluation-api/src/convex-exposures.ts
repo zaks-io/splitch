@@ -15,6 +15,7 @@ import type { SaltStore } from "@splitch/privacy";
 import type { HandlerArgs, Principal } from "@splitch/worker-runtime";
 import {
   type AppIdentityAdmission,
+  AppIdentityAdmissionError,
   admittedEvaluatePathDeps,
   appIdentityAdmissionValidationError,
   tryAdmitAppIdentity,
@@ -22,7 +23,6 @@ import {
 import type { HoldoverWriteCoordinator } from "./assignment/holdover-write-outbox";
 import { settleVerifiedIntegrationExposureBatch } from "./convex-exposure-batch";
 import { confirmConvexExposureClaim } from "./convex-exposure-confirmation";
-import { ensureConvexHoldover } from "./convex-exposure-holdover";
 import {
   EMPTY_CONVEX_ASSIGNMENTS,
   frozenConvexRunProvider,
@@ -31,6 +31,7 @@ import {
   matchesConvexExposure,
   sha256Hex,
 } from "./convex-exposure-evaluation";
+import { ensureConvexHoldover } from "./convex-exposure-holdover";
 import type { ExposureIngestSink } from "./exposure-redemption";
 import type {
   ExposureRedemptionClaimInput,
@@ -133,7 +134,12 @@ async function verifyAndIngest(
   if (verification.config.appId !== deps.identityAdmission.appId) {
     return rejected(item.exposureId, "STALE_CONFIGURATION", false);
   }
-  return ingestOne(item, verification.config, deps);
+  try {
+    return await ingestOne(item, verification.config, deps);
+  } catch (cause) {
+    if (!(cause instanceof AppIdentityAdmissionError)) throw cause;
+    return rejected(item.exposureId, "SERVICE_UNAVAILABLE", true);
+  }
 }
 
 async function ingestOne(
