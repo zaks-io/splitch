@@ -53,7 +53,7 @@ export const Route = createFileRoute("/$orgSlug/$appSlug/")({
     };
   },
   head: ({ params }) => ({ meta: [{ title: documentTitle("Flags", params.appSlug) }] }),
-  onError: ({ error }) => {
+  onError: (error: unknown) => {
     reportRouteError("section", error, "/$orgSlug/$appSlug/");
   },
   errorComponent: ({ error }) => {

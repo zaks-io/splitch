@@ -52,7 +52,7 @@ export const Route = createFileRoute("/$orgSlug/$appSlug/$env/flags/$flagKey")({
       },
     ],
   }),
-  onError: ({ error }) => {
+  onError: (error: unknown) => {
     reportRouteError("section", error, "/$orgSlug/$appSlug/$env/flags/$flagKey");
   },
   errorComponent: () => <SectionUnavailable title="Flag unavailable" />,

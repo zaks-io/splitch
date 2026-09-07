@@ -9,7 +9,7 @@ import { environmentSettingsQuery } from "#lib/settings/settings-query";
 const appScopeRoute = getRouteApi("/$orgSlug/$appSlug/$env");
 
 export const Route = createFileRoute("/$orgSlug/$appSlug/$env/settings/environment")({
-  onError: ({ error }) => {
+  onError: (error: unknown) => {
     reportRouteError("section", error, "/$orgSlug/$appSlug/$env/settings/environment");
   },
   // The settings layout above owns the body inset, so these render bare.

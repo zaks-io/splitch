@@ -14,7 +14,7 @@ export const Route = createFileRoute("/$orgSlug/$appSlug/$env/settings/")({
     const { appId, environmentId } = context.scoped.scope;
     await prefetchAppSettingsPage(context.queryClient, { appId, environmentId });
   },
-  onError: ({ error }) => {
+  onError: (error: unknown) => {
     reportRouteError("section", error, "/$orgSlug/$appSlug/$env/settings/");
   },
   // The settings layout above owns the body inset, so these render bare.

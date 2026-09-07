@@ -1,5 +1,13 @@
-import { isNotFound, isRedirect } from "@tanstack/react-router";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  createMemoryHistory,
+  createRootRoute,
+  createRoute,
+  createRouter,
+  isNotFound,
+  isRedirect,
+} from "@tanstack/react-router";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { setControlPanelSentryClientForTests } from "#lib/observability/panel-observability";
 import { AccessDeniedError } from "#lib/shared/loader-context";
 
 const loadAppScopedSessionMock = vi.fn();
@@ -36,6 +44,8 @@ function runLoader() {
 }
 
 describe("$orgSlug/$appSlug loader", () => {
+  afterEach(() => setControlPanelSentryClientForTests(undefined));
+
   beforeEach(() => {
     loadAppScopedSessionMock.mockReset();
     loadControlPanelFlagsMatrixMock.mockReset();
@@ -46,6 +56,41 @@ describe("$orgSlug/$appSlug loader", () => {
     await expect(runLoader()).rejects.toSatisfy(isRedirect);
     expect(loadControlPanelFlagsMatrixMock).not.toHaveBeenCalled();
   });
+
+  it.each([new Error("matrix failed"), new AccessDeniedError()])(
+    "preserves %s through the router error callback",
+    async (error) => {
+      const captureException = vi.fn();
+      const addBreadcrumb = vi.fn();
+      setControlPanelSentryClientForTests({ captureException, addBreadcrumb });
+      loadAppScopedSessionMock.mockRejectedValue(error);
+      const root = createRootRoute();
+      const route = createRoute({
+        getParentRoute: () => root,
+        path: "/$orgSlug/$appSlug/",
+        loader: runLoader,
+        onError: Route.options.onError,
+      });
+      const router = createRouter({
+        routeTree: root.addChildren([route]),
+        history: createMemoryHistory({ initialEntries: ["/acme-labs/checkout-api"] }),
+      });
+
+      await router.load();
+
+      if (error instanceof AccessDeniedError) {
+        expect(captureException).not.toHaveBeenCalled();
+        expect(addBreadcrumb).toHaveBeenCalledWith(
+          expect.objectContaining({ level: "info", message: "403 /$orgSlug/$appSlug/" }),
+        );
+      } else {
+        expect(captureException).toHaveBeenCalledWith(
+          error,
+          expect.objectContaining({ tags: { boundary: "section", route: "/$orgSlug/$appSlug/" } }),
+        );
+      }
+    },
+  );
 
   it("maps forbidden requests to AccessDeniedError", async () => {
     loadAppScopedSessionMock.mockResolvedValue({ kind: "forbidden" });
