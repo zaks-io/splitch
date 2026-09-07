@@ -137,7 +137,12 @@ async function verifyAndIngest(
   try {
     return await ingestOne(item, verification.config, deps);
   } catch (cause) {
-    if (!(cause instanceof AppIdentityAdmissionError)) throw cause;
+    if (
+      !(cause instanceof AppIdentityAdmissionError) &&
+      (await appIdentityAdmissionValidationError(deps.identityAdmission)) === null
+    ) {
+      throw cause;
+    }
     return rejected(item.exposureId, "SERVICE_UNAVAILABLE", true);
   }
 }
