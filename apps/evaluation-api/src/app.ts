@@ -1,3 +1,4 @@
+import type { PerformanceSpanRecorder } from "@splitch/observability/performance-spans";
 import type { AuthResolver, RateLimiter, RegistrarDeps } from "@splitch/worker-runtime";
 import { createRegistrar } from "@splitch/worker-runtime";
 import { Hono } from "hono";
@@ -69,6 +70,7 @@ export interface AppDeps extends EvaluatePathDeps {
   delegationBindings?: DelegationBindings;
   defaultHeaders?: Record<string, string>;
   observability?: RegistrarDeps["observability"];
+  spans?: PerformanceSpanRecorder;
   /** `ctx.waitUntil` seam for the fire-and-forget Assignment Store write on evaluate. */
   waitUntil?: (promise: Promise<unknown>) => void;
   convexConfigurationResolver?: ConvexExposureConfigurationResolver;

@@ -11,6 +11,7 @@ import {
   type RunConfigKV,
   runConfigKey,
 } from "@splitch/contracts";
+import type { PerformanceSpanRecorder } from "@splitch/observability/performance-spans";
 import type { SaltStore } from "@splitch/privacy";
 import type { AuthResolver, RateLimiter } from "@splitch/worker-runtime";
 import { createApp, type EvaluationDoor } from "./app";
@@ -73,6 +74,7 @@ interface SdkRouteHarnessOptions {
   readonly saltStore?: SaltStore;
   readonly assignmentStore?: RecordingAssignmentStore;
   readonly exposureSourceId?: () => string;
+  readonly spans?: PerformanceSpanRecorder;
 }
 
 function routeExposureSourceId(options: SdkRouteHarnessOptions): () => string {
@@ -241,6 +243,7 @@ export async function makeSdkRouteHarness(options: SdkRouteHarnessOptions = {}) 
     exposureRedemptionClaims,
     evaluationCommitSink,
     evaluationUsageSink,
+    spans: options.spans,
   });
   return {
     app,

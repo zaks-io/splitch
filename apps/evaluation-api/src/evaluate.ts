@@ -3,6 +3,10 @@ import {
   DataPlaneEvaluateResponseSchema,
   type ErrorResponse,
 } from "@splitch/contracts";
+import {
+  noopPerformanceSpanRecorder,
+  type PerformanceSpanRecorder,
+} from "@splitch/observability/performance-spans";
 import { type HandlerArgs, type Principal, renderError } from "@splitch/worker-runtime";
 import {
   type AppIdentityAdmission,
@@ -26,6 +30,7 @@ import { reasonForResolution } from "./resolution-reason";
 interface EvaluateRouteDeps extends EvaluatePathDeps {
   readonly exposureAssembly: ExposureAssemblyDeps;
   readonly evaluationCommitSink: EvaluationCommitSink;
+  readonly spans?: PerformanceSpanRecorder;
   readonly waitUntil?: (promise: Promise<unknown>) => void;
 }
 
@@ -44,11 +49,16 @@ export function makeEvaluateHandler(deps: EvaluateRouteDeps) {
 
     const assertionError = appAssertionError(parsed.body.appId, scope.value.appId);
     if (assertionError !== null) return renderError(assertionError, { requestId });
-    const admitted = await tryAdmitAppIdentity(deps.exposureAssembly.saltStore, scope.value.appId);
+    const spans = deps.spans ?? noopPerformanceSpanRecorder;
+    const admitted = await spans.record({ name: "Evaluate identity admission", op: "auth" }, () =>
+      tryAdmitAppIdentity(deps.exposureAssembly.saltStore, scope.value.appId),
+    );
     if (!admitted.ok) return renderError(admitted.error, { requestId });
 
     const requestDeps = admittedEvaluateDeps(deps, admitted.admission);
-    const evaluated = await evaluateWithCapture(parsed.body, scope.value, requestDeps);
+    const evaluated = await spans.record({ name: "Evaluate resolution", op: "function" }, () =>
+      evaluateWithCapture(parsed.body, scope.value, requestDeps),
+    );
     const stale = await appIdentityAdmissionValidationError(admitted.admission);
     if (stale !== null) return renderError(stale, { requestId });
     return evaluateResponse(evaluated, requestDeps, admitted.admission, requestId, request);
@@ -216,22 +226,26 @@ async function writeEvaluationCommit(
   const stale = await appIdentityAdmissionValidationError(admission);
   if (stale !== null) return { ok: false, error: stale };
   try {
-    await deps.evaluationCommitSink.write({
-      usage: {
-        idempotencyKey,
-        organizationId: scope.organizationId,
-        appId: scope.appId,
-        identityVersion: admission.identityVersion,
-        environmentId: scope.environmentId,
-        flagKey: dimensions.flagKey,
-        sdkRuntime: dimensions.sdkRuntime,
-        evaluationCount: 1,
-        isBatch: false,
-        isCached: false,
-        hasExposure: exposures.length > 0,
-      },
-      exposures,
-    });
+    await (deps.spans ?? noopPerformanceSpanRecorder).record(
+      { name: "Evaluate commit", op: "http.client" },
+      () =>
+        deps.evaluationCommitSink.write({
+          usage: {
+            idempotencyKey,
+            organizationId: scope.organizationId,
+            appId: scope.appId,
+            identityVersion: admission.identityVersion,
+            environmentId: scope.environmentId,
+            flagKey: dimensions.flagKey,
+            sdkRuntime: dimensions.sdkRuntime,
+            evaluationCount: 1,
+            isBatch: false,
+            isCached: false,
+            hasExposure: exposures.length > 0,
+          },
+          exposures,
+        }),
+    );
     return { ok: true };
   } catch (cause) {
     if (!(cause instanceof EvaluationCommitSinkError)) {

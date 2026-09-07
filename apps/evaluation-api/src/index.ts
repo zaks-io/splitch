@@ -6,6 +6,7 @@ import {
   requirePlatformTarget,
   routesDelegatedTo,
 } from "@splitch/contracts";
+import { createPerformanceSpanRecorder } from "@splitch/observability/performance-spans";
 import {
   createWorkerFaultReporter,
   createWorkerObservability,
@@ -219,6 +220,7 @@ async function handleRequest(
       env,
       workerObservabilityWithWaitUntil("evaluation-api", ctx),
     ),
+    spans: createPerformanceSpanRecorder(env),
   });
   return app.fetch(request, env);
 }

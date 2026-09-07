@@ -10,6 +10,7 @@ import {
   ConvexServerExposureResponseSchema,
 } from "@splitch/contracts";
 import { type EvaluatePathDeps, evaluatePath } from "@splitch/evaluation-core";
+import type { PerformanceSpanRecorder } from "@splitch/observability/performance-spans";
 import type { SaltStore } from "@splitch/privacy";
 import type { HandlerArgs, Principal } from "@splitch/worker-runtime";
 import {
@@ -19,7 +20,9 @@ import {
   tryAdmitAppIdentity,
 } from "./app-identity-traffic";
 import type { HoldoverWriteCoordinator } from "./assignment/holdover-write-outbox";
+import { settleVerifiedIntegrationExposureBatch } from "./convex-exposure-batch";
 import { confirmConvexExposureClaim } from "./convex-exposure-confirmation";
+import { ensureConvexHoldover } from "./convex-exposure-holdover";
 import {
   EMPTY_CONVEX_ASSIGNMENTS,
   frozenConvexRunProvider,
@@ -28,13 +31,13 @@ import {
   matchesConvexExposure,
   sha256Hex,
 } from "./convex-exposure-evaluation";
-import { errorCauseChain } from "./error-cause-chain";
 import type { ExposureIngestSink } from "./exposure-redemption";
 import type {
   ExposureRedemptionClaimInput,
   ExposureRedemptionClaimOutcome,
   ExposureRedemptionClaimStore,
 } from "./exposure-redemption-claim-core";
+import { recordIntegrationExposureStage } from "./integration-exposure-performance";
 
 export interface ConvexExposureConfigurationResolver {
   resolveBatch(
@@ -52,6 +55,7 @@ interface ConvexExposureDeps extends EvaluatePathDeps {
   exposureRedemptionClaims: ExposureRedemptionClaimStore;
   holdoverWrite: HoldoverWriteCoordinator;
   saltStore: SaltStore;
+  spans?: PerformanceSpanRecorder;
   now?: () => Date;
 }
 
@@ -73,6 +77,7 @@ async function handleBatch(
       { status: 503 },
     );
   }
+  const appId = principal.appId;
   const sourceKind = deps.integrationKind ?? "convex";
   const resolver =
     deps.configurationResolver ??
@@ -90,45 +95,29 @@ async function handleBatch(
   const body = ConvexServerExposureRequestSchema.parse(inputBody(input));
   // Configuration is a read, so it can start beside identity admission. Its
   // rejection is observed immediately while admission retains fail-fast precedence.
-  const resolved = resolver.resolveBatch(principal, body.exposures, requestId);
+  const resolved = recordIntegrationExposureStage(deps.spans, sourceKind, "configuration", () =>
+    resolver.resolveBatch(principal, body.exposures, requestId),
+  );
   void resolved.catch(() => undefined);
-  const admitted = await tryAdmitAppIdentity(deps.saltStore, principal.appId);
+  const admitted = await recordIntegrationExposureStage(
+    deps.spans,
+    sourceKind,
+    "identity admission",
+    () => tryAdmitAppIdentity(deps.saltStore, appId),
+  );
   if (!admitted.ok) return Response.json(admitted.error, { status: 503 });
   const requestDeps: AdmittedConvexExposureDeps = {
     ...admittedEvaluatePathDeps(deps, admitted.admission),
     saltStore: admitted.admission.saltStore,
     identityAdmission: admitted.admission,
   };
-  const results = await settleVerifiedBatch(
+  const results = await settleVerifiedIntegrationExposureBatch(
     sourceKind,
     body.exposures,
     await resolved,
-    requestDeps,
+    (verification, item) => verifyAndIngest(verification, sourceKind, item, requestDeps),
   );
   return Response.json(ConvexServerExposureResponseSchema.parse({ results }), { status: 202 });
-}
-
-async function settleVerifiedBatch(
-  sourceKind: "convex" | "cloudflare",
-  exposures: readonly ConvexServerExposureItem[],
-  verifications: readonly ConvexExposureVerificationResult[],
-  deps: AdmittedConvexExposureDeps,
-): Promise<ConvexServerExposureResponse["results"]> {
-  if (verifications.length !== exposures.length) {
-    throw new Error(
-      `evaluation-api: ${sourceKind} Exposure verification returned ${String(verifications.length)} results for ${String(exposures.length)} items`,
-    );
-  }
-  const results: ConvexServerExposureResponse["results"] = [];
-  for (let index = 0; index < exposures.length; index += 1) {
-    const item = exposures[index];
-    const verification = verifications[index];
-    if (!item || !verification) {
-      throw new Error(`evaluation-api: missing ${sourceKind} verification at index ${index}`);
-    }
-    results.push(await verifyAndIngest(verification, sourceKind, item, deps));
-  }
-  return results;
 }
 
 async function verifyAndIngest(
@@ -188,7 +177,12 @@ async function ingestOne(
   };
   const staleBeforeClaim = await staleIntegration(item.exposureId, deps.identityAdmission);
   if (staleBeforeClaim !== null) return staleBeforeClaim;
-  const claim = await deps.exposureRedemptionClaims.claim(claimInput);
+  const claim = await recordIntegrationExposureStage(
+    deps.spans,
+    deps.integrationKind ?? "convex",
+    "claim",
+    () => deps.exposureRedemptionClaims.claim(claimInput),
+  );
   if (claim.status !== "acquired") {
     return completeExistingClaim(claim, claimInput, item, exposure.targetingKeyHash, config, deps);
   }
@@ -209,7 +203,12 @@ async function completeExistingClaim(
 
   const acknowledged =
     claim.status === "resume_ack"
-      ? await deps.exposureRedemptionClaims.acknowledge(claimInput)
+      ? await recordIntegrationExposureStage(
+          deps.spans,
+          deps.integrationKind ?? "convex",
+          "confirmation",
+          () => deps.exposureRedemptionClaims.acknowledge(claimInput),
+        )
       : null;
   const stale = await staleIntegration(item.exposureId, deps.identityAdmission);
   if (stale !== null) return stale;
@@ -233,7 +232,12 @@ async function ingestAcquiredClaim(
   const stale = await staleIntegration(item.exposureId, deps.identityAdmission);
   if (stale !== null) return stale;
   try {
-    await deps.exposureIngestSink.write(exposure);
+    await recordIntegrationExposureStage(
+      deps.spans,
+      deps.integrationKind ?? "convex",
+      "ingest",
+      () => deps.exposureIngestSink.write(exposure),
+    );
   } catch (cause) {
     await deps.exposureRedemptionClaims.release(claimInput);
     deps.logger?.error("convex_exposure_ingest_failed", { exposureId: item.exposureId, cause });
@@ -245,7 +249,12 @@ async function ingestAcquiredClaim(
   // Once Event Ingest commits, claim confirmation and holdover persistence are
   // independent durable obligations. Both still finish before success returns.
   const [confirmationFault, holdoverFault] = await Promise.all([
-    confirmConvexExposureClaim(claimInput, item, deps),
+    recordIntegrationExposureStage(
+      deps.spans,
+      deps.integrationKind ?? "convex",
+      "confirmation",
+      () => confirmConvexExposureClaim(claimInput, item, deps),
+    ),
     ensureConvexHoldover(item, exposure.targetingKeyHash, config, deps),
   ]);
   if (holdoverFault) return holdoverFault;
@@ -253,48 +262,6 @@ async function ingestAcquiredClaim(
   const staleBeforeSuccess = await staleIntegration(item.exposureId, deps.identityAdmission);
   if (staleBeforeSuccess !== null) return staleBeforeSuccess;
   return { exposureId: item.exposureId, status: "accepted" };
-}
-
-async function ensureConvexHoldover(
-  item: ConvexServerExposureItem,
-  targetingKeyHash: string,
-  config: ConvexExposureVerificationConfig,
-  deps: Pick<
-    AdmittedConvexExposureDeps,
-    "holdoverWrite" | "logger" | "integrationKind" | "identityAdmission"
-  >,
-): Promise<ConvexServerExposureResponse["results"][number] | null> {
-  try {
-    const result = await deps.holdoverWrite.ensure(
-      {
-        appId: config.appId,
-        experimentId: item.experimentId,
-        idType: item.evaluationContext.idType,
-        targetingKeyHash,
-        identityVersion: deps.identityAdmission.identityVersion,
-        runId: item.runId,
-        variant: item.variantName,
-      },
-      { sourceCreatedAtMs: Date.parse(item.exposureAt) },
-    );
-    if (result.status === "poisoned") {
-      return rejected(item.exposureId, "INTERNAL_SERVER_ERROR", false);
-    }
-    if (result.status === "suppressed") {
-      return rejected(
-        item.exposureId,
-        installationNotFoundCode(deps.integrationKind ?? "convex"),
-        false,
-      );
-    }
-    return null;
-  } catch (cause) {
-    deps.logger?.error("convex_holdover_write_ensure_failed", {
-      exposureId: item.exposureId,
-      cause: errorCauseChain(cause),
-    });
-    return rejected(item.exposureId, "SERVICE_UNAVAILABLE", true);
-  }
 }
 
 function inputBody(input: unknown): unknown {
