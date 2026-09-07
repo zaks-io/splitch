@@ -1,4 +1,8 @@
 import { createScrubbedEmitter, secretsFromEnv } from "@splitch/observability";
+import {
+  createPerformanceSpanRecorder,
+  type PerformanceSpanRecorder,
+} from "@splitch/observability/performance-spans";
 
 type IngestTimingOutcome = "accepted" | "rejected" | "fault";
 
@@ -7,8 +11,29 @@ interface IngestTimingFields extends Record<string, unknown> {
   readonly itemCount?: number;
 }
 
+type IngestPhase =
+  | "activationConfig"
+  | "admission"
+  | "admissionQueue"
+  | "auth"
+  | "config"
+  | "delivery"
+  | "event"
+  | "identity"
+  | "parse"
+  | "queue"
+  | "rateLimit"
+  | "replay"
+  | "row";
+
+type IngestTimingRoute =
+  | "internal_evaluation_usage"
+  | "internal_exposure"
+  | "raw_queue_settlement"
+  | "sdk_metric_event";
+
 export interface IngestPhaseTiming {
-  measure<T>(phase: string, run: () => T | Promise<T>): Promise<T>;
+  measure<T>(phase: IngestPhase, run: () => T | Promise<T>): Promise<Awaited<T>>;
   emit(outcome: IngestTimingOutcome, fields: IngestTimingFields): void;
 }
 
@@ -19,8 +44,9 @@ export function ingestTimingOutcomeFor(response: Response): IngestTimingOutcome 
 
 export function createIngestPhaseTiming(
   env: { SENTRY_DSN?: string; SPLITCH_PLATFORM_TARGET?: string },
-  context: { route: string; stream: string },
+  context: { route: IngestTimingRoute; stream: string },
   now: () => number = () => performance.now(),
+  spans: PerformanceSpanRecorder = createPerformanceSpanRecorder(env),
 ): IngestPhaseTiming {
   const startedAt = now();
   const phaseDurations: Record<string, number> = {};
@@ -32,10 +58,16 @@ export function createIngestPhaseTiming(
     },
   });
   return {
-    async measure(phase, run) {
+    async measure<T>(phase: IngestPhase, run: () => T | Promise<T>): Promise<Awaited<T>> {
       const phaseStartedAt = now();
       try {
-        return await run();
+        return await spans.record<Awaited<T>>(
+          {
+            name: `Event ingest ${context.route} ${phase}`,
+            op: "event.ingest.phase",
+          },
+          () => Promise.resolve(run()),
+        );
       } finally {
         phaseDurations[`${phase}Ms`] = milliseconds(now() - phaseStartedAt);
       }

@@ -1,4 +1,8 @@
 import type { ErrorResponse } from "@splitch/contracts";
+import {
+  createPerformanceSpanRecorder,
+  type PerformanceSpanRecorder,
+} from "@splitch/observability/performance-spans";
 import { emptyError, renderError, serviceUnavailable, validationError } from "./errors";
 import { evaluationCommitOutbox } from "./evaluation-commit-outbox-client";
 import {
@@ -32,8 +36,12 @@ const EVALUATION_COMMIT_USAGE_BYTE_COST_EVENT_ID = `sha256:${"0".repeat(64)}`;
  * Seals a remote Evaluation's usage row and any Exposure rows before delivery.
  * Retries replay the same pair and stable dedup keys, never a half-new result.
  */
-export async function handleEvaluationCommit(request: Request, env: Env): Promise<Response> {
-  const prepared = await prepareEvaluationCommit(request, env);
+export async function handleEvaluationCommit(
+  request: Request,
+  env: Env,
+  spans: PerformanceSpanRecorder = createPerformanceSpanRecorder(env),
+): Promise<Response> {
+  const prepared = await prepareEvaluationCommit(request, env, spans);
   if (!prepared.ok) return renderError(prepared.error);
   return Response.json({ ok: true, eventId: prepared.value.eventId }, { status: 202 });
 }
@@ -45,8 +53,11 @@ interface PreparedEvaluationCommit {
 async function prepareEvaluationCommit(
   request: Request,
   env: Env,
+  spans: PerformanceSpanRecorder,
 ): Promise<Outcome<PreparedEvaluationCommit>> {
-  const input = await evaluationCommitInput(request, env);
+  const input = await recordEvaluationCommitStage(spans, "scope/input", () =>
+    evaluationCommitInput(request, env),
+  );
   if (!input.ok) return input;
 
   const outbox = evaluationCommitOutbox(env.EVALUATION_COMMIT_OUTBOX);
@@ -61,32 +72,69 @@ async function prepareEvaluationCommit(
   );
 
   try {
-    const existing = await outbox.lookup(identity);
+    const existing = await recordEvaluationCommitStage(spans, "lookup", () =>
+      outbox.lookup(identity),
+    );
     if (existing !== null) {
       if (!isEvaluationCommitPayload(existing.payload)) return preparedCommit(existing);
+      const existingPayload = existing.payload;
       if (!existing.ready) {
-        await confirmEvaluationCommitInventory(
-          { identity, outbox, payload: existing.payload },
-          env,
+        await recordEvaluationCommitStage(spans, "privacy confirmation", () =>
+          confirmEvaluationCommitInventory({ identity, outbox, payload: existingPayload }, env),
         );
-        return preparedCommit(await outbox.activate(identity));
+        return preparedCommit(
+          await recordEvaluationCommitStage(spans, "activate", () => outbox.activate(identity)),
+        );
       }
       return preparedCommit(existing);
     }
 
-    const denied = await chargeNewEvaluationCommit(env, scope, payload);
+    const denied = await recordEvaluationCommitStage(spans, "admission", () =>
+      chargeNewEvaluationCommit(env, scope, payload),
+    );
     if (denied) return { ok: false, error: denied };
 
     const inventory = { identity, outbox, payload };
-    if (await inventoryEvaluationCommit(inventory, env)) {
+    if (
+      await recordEvaluationCommitStage(spans, "inventory", () =>
+        inventoryEvaluationCommit(inventory, env),
+      )
+    ) {
       throw new Error("Evaluation commit is suppressed by App identity reset");
     }
-    await outbox.commit(identity, payload);
-    await confirmEvaluationCommitInventory(inventory, env);
-    return preparedCommit(await outbox.activate(identity));
+    await recordEvaluationCommitStage(spans, "seal", () => outbox.commit(identity, payload));
+    await recordEvaluationCommitStage(spans, "privacy confirmation", () =>
+      confirmEvaluationCommitInventory(inventory, env),
+    );
+    return preparedCommit(
+      await recordEvaluationCommitStage(spans, "activate", () => outbox.activate(identity)),
+    );
   } catch {
     return { ok: false, error: serviceUnavailable("Evaluation commit outbox is unavailable") };
   }
+}
+
+type EvaluationCommitStage =
+  | "scope/input"
+  | "lookup"
+  | "admission"
+  | "inventory"
+  | "seal"
+  | "privacy confirmation"
+  | "activate";
+
+function recordEvaluationCommitStage<T>(
+  spans: PerformanceSpanRecorder,
+  stage: EvaluationCommitStage,
+  run: () => Promise<T>,
+): Promise<T> {
+  return spans.record(
+    {
+      name: `Evaluation commit ${stage}`,
+      op: "event.ingest.evaluation_commit",
+    },
+    run,
+  );
 }
 
 function preparedCommit(sealed: {

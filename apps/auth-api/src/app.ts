@@ -1,4 +1,5 @@
 import type { Repository } from "@splitch/db";
+import type { PerformanceSpanRecorder } from "@splitch/observability/performance-spans";
 import { Hono } from "hono";
 import { type VerifiedActor, verifyAccessToken } from "./access-token";
 import { type ClaimDeps, initiateClaim, verifyClaim } from "./claim";
@@ -33,6 +34,7 @@ import type { WorkOsAccessTokenVerifier } from "./workos-access-token";
  */
 
 export interface AppDeps {
+  spans?: PerformanceSpanRecorder;
   idJag: Parameters<typeof verifyIdJag>[0];
   tokenSigner: TokenSigner;
   repo: Repository;

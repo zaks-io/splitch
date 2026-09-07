@@ -1,3 +1,4 @@
+import type { PerformanceSpanDescriptor } from "@splitch/observability/performance-spans";
 import { describe, expect, it } from "vitest";
 import type { DeviceFlowPort } from "./device-flow";
 import type { DeviceRefreshSession } from "./device-session-store";
@@ -80,9 +81,21 @@ describe("OAuth membership-wide read refresh", () => {
 
 describe("OAuth refresh token authority", () => {
   it("rotates refresh authority and mints only after live membership reintersection", async () => {
+    const recorded: PerformanceSpanDescriptor[] = [];
+    const completed: string[] = [];
     const rotations: Array<{ previous: string; next: string; selector: string | null }> = [];
     const minted: string[][] = [];
     const app = routeApp({
+      spans: {
+        async record(descriptor, run) {
+          recorded.push(descriptor);
+          try {
+            return await run({ setAttribute() {}, setAttributes() {} });
+          } finally {
+            completed.push(descriptor.name);
+          }
+        },
+      },
       tokenSigner: {
         ...tokenSigner,
         mintAccessToken: async (_userId, scopes) => {
@@ -110,13 +123,25 @@ describe("OAuth refresh token authority", () => {
       refresh_token: "refresh_rotated",
       app_id: "app_selected",
     });
+    expect(recorded).toEqual([
+      { name: "OAuth refresh session lookup", op: "auth" },
+      { name: "OAuth refresh scope resolution", op: "auth" },
+      { name: "OAuth provider refresh", op: "auth" },
+      { name: "OAuth refresh email verification", op: "auth" },
+      { name: "OAuth member profile persistence", op: "cache.put" },
+      { name: "OAuth access token signing", op: "auth" },
+      { name: "OAuth refresh session rotation", op: "auth" },
+    ]);
+    expect(completed).toEqual(recorded.map((span) => span.name));
     // The live role (member) wins over anything the session ever held.
     expect(minted).toEqual([["app:app_selected:member"]]);
     expect(rotations).toEqual([
       { previous: "refresh_original", next: "refresh_rotated", selector: "app_selected" },
     ]);
   });
+});
 
+describe("OAuth refresh token scope", () => {
   it("mints an unbound token for a cold-start session with no selected App", async () => {
     const minted: string[][] = [];
     const app = routeApp({

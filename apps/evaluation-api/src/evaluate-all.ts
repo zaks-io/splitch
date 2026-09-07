@@ -4,6 +4,10 @@ import {
   type EvaluateAllRequest,
   EvaluateAllResponseSchema,
 } from "@splitch/contracts";
+import {
+  noopPerformanceSpanRecorder,
+  type PerformanceSpanRecorder,
+} from "@splitch/observability/performance-spans";
 import { type HandlerArgs, type Principal, renderError } from "@splitch/worker-runtime";
 import {
   type AppIdentityAdmission,
@@ -38,6 +42,7 @@ const BATCH_USAGE_FLAG_KEY = "*";
 interface EvaluateAllRouteDeps extends EvaluatePathDeps {
   readonly evaluationCommitSink: EvaluationCommitSink;
   readonly exposureTicket: MintExposureTicketDeps;
+  readonly spans?: PerformanceSpanRecorder;
 }
 
 type CredentialScope = EvaluationUsageScope;
@@ -50,11 +55,16 @@ export function makeEvaluateAllHandler(deps: EvaluateAllRouteDeps) {
     request,
   }: HandlerArgs<unknown>): Promise<Response> => {
     const parsed = evaluateAllRouteInput(input);
-    const checked = await checkedEvaluationScope(
-      principal,
-      parsed.body.appId,
-      deps.exposureTicket.saltStore,
-      requestId,
+    const spans = deps.spans ?? noopPerformanceSpanRecorder;
+    const checked = await spans.record(
+      { name: "Evaluate-all identity admission", op: "auth" },
+      () =>
+        checkedEvaluationScope(
+          principal,
+          parsed.body.appId,
+          deps.exposureTicket.saltStore,
+          requestId,
+        ),
     );
     if (!checked.ok) return checked.response;
     const { scope, admission } = checked;
@@ -71,7 +81,10 @@ async function completeEvaluateAll(
   deps: EvaluateAllRouteDeps,
   admission: AppIdentityAdmission,
 ): Promise<Response> {
-  const payload = await resolveAll(requestBody, scope, deps);
+  const payload = await (deps.spans ?? noopPerformanceSpanRecorder).record(
+    { name: "Evaluate-all resolution", op: "function" },
+    () => resolveAll(requestBody, scope, deps),
+  );
   if (!payload.ok) return renderError(payload.error, { requestId });
 
   const body = EvaluateAllResponseSchema.parse({ evaluations: payload.evaluations });
@@ -249,22 +262,26 @@ async function writeBatchUsage(
   if (stale !== null) return { ok: false, error: stale };
 
   try {
-    await deps.evaluationCommitSink.write({
-      usage: {
-        idempotencyKey,
-        organizationId: scope.organizationId,
-        appId: scope.appId,
-        identityVersion: admission.identityVersion,
-        environmentId: scope.environmentId,
-        flagKey: BATCH_USAGE_FLAG_KEY,
-        sdkRuntime: sdkRuntime(request),
-        evaluationCount: flagCount,
-        isBatch: true,
-        isCached: false,
-        hasExposure: false,
-      },
-      exposures: [],
-    });
+    await (deps.spans ?? noopPerformanceSpanRecorder).record(
+      { name: "Evaluate-all usage commit", op: "http.client" },
+      () =>
+        deps.evaluationCommitSink.write({
+          usage: {
+            idempotencyKey,
+            organizationId: scope.organizationId,
+            appId: scope.appId,
+            identityVersion: admission.identityVersion,
+            environmentId: scope.environmentId,
+            flagKey: BATCH_USAGE_FLAG_KEY,
+            sdkRuntime: sdkRuntime(request),
+            evaluationCount: flagCount,
+            isBatch: true,
+            isCached: false,
+            hasExposure: false,
+          },
+          exposures: [],
+        }),
+    );
     return { ok: true };
   } catch (cause) {
     if (!(cause instanceof EvaluationCommitSinkError)) throw cause;

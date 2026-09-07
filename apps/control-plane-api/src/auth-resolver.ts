@@ -3,6 +3,10 @@ import {
   CONTROL_PANEL_DELEGATION_HEADER,
   verifyControlPanelDelegation,
 } from "@splitch/control-plane-sdk/control-panel-identity";
+import {
+  noopPerformanceSpanRecorder,
+  type PerformanceSpanRecorder,
+} from "@splitch/observability/performance-spans";
 import type { AuthResolver } from "@splitch/worker-runtime";
 import { parseControlPanelBindingOperation } from "./control-panel-operation";
 import type { JwksVerifier } from "./jwks-verify";
@@ -85,6 +89,7 @@ export interface ControlPlaneAuthDeps {
 }
 
 export interface ControlPlaneAuthOptions {
+  spans?: PerformanceSpanRecorder;
   /** Only the named Control Panel Worker entrypoint may redeem panel delegations. */
   allowPanelDelegation?: boolean;
   panelDelegationSecret?: string;
@@ -117,6 +122,7 @@ export function makeControlPlaneAuthResolver(
       const panelPrincipal = await resolvePanelPrincipal(
         request,
         nowSeconds(),
+        options.spans ?? noopPerformanceSpanRecorder,
         options.boundedPanelSessions,
         options.panelDelegationSecret,
         options.panelAccess,
@@ -196,6 +202,7 @@ async function resolveBearerPrincipal(
 async function resolvePanelPrincipal(
   request: Request,
   nowSeconds: number,
+  spans: PerformanceSpanRecorder,
   boundedPanelSessions?: PanelSessionStore,
   delegationSecret?: string,
   panelAccess?: PanelSessionAccess,
@@ -216,22 +223,29 @@ async function resolvePanelPrincipal(
   }
 
   const delegation = delegationSecret
-    ? await verifyControlPanelDelegation(
-        request.headers.get(CONTROL_PANEL_DELEGATION_HEADER),
-        request,
-        operation,
-        delegationSecret,
-        nowSeconds,
+    ? await spans.record({ name: "Panel delegation verification", op: "auth" }, async () =>
+        verifyControlPanelDelegation(
+          request.headers.get(CONTROL_PANEL_DELEGATION_HEADER),
+          request,
+          operation,
+          delegationSecret,
+          nowSeconds,
+        ),
       )
     : null;
   if (
     !delegation ||
     !replay ||
-    !(await replay.consume(delegation.nonce, delegation.expiresAt, nowSeconds))
+    !(await spans.record(
+      { name: "Panel delegation replay redemption", op: "rpc.client" },
+      async () => replay.consume(delegation.nonce, delegation.expiresAt, nowSeconds),
+    ))
   ) {
     return null;
   }
-  return resolveDelegatedPrincipal(operation, delegation.actorId, panelAccess);
+  return spans.record({ name: "Panel delegation authority", op: "auth" }, async () =>
+    resolveDelegatedPrincipal(operation, delegation.actorId, panelAccess),
+  );
 }
 
 /** Authority for a verified delegation, by what the operation names. */
