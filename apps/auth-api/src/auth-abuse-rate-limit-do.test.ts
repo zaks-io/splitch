@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { OAuthError } from "./oauth-errors";
 import { makeDurableRateLimiter, type RateLimitDurableObjectNamespace } from "./rate-limit";
 
-const T0 = 1_780_000_000_000;
+const T0 = Date.now();
 const LATER_WINDOW = T0 + 2 * 60 * 60 * 1000;
 
 function namespace(): RateLimitDurableObjectNamespace {
