@@ -101,7 +101,7 @@ export const Route = createFileRoute("/$orgSlug/$appSlug/$env/flags/$flagKey_/pr
       },
     ],
   }),
-  onError: ({ error }) => {
+  onError: (error: unknown) => {
     reportRouteError("section", error, "/$orgSlug/$appSlug/$env/flags/$flagKey/promote");
   },
   errorComponent: () => <SectionUnavailable title="Promotion unavailable" />,

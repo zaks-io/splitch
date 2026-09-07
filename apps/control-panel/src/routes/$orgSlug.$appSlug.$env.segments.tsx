@@ -23,7 +23,7 @@ export const Route = createFileRoute("/$orgSlug/$appSlug/$env/segments")({
   head: ({ params }) => ({
     meta: [{ title: documentTitle("Segments", params.appSlug, params.env) }],
   }),
-  onError: ({ error }) => {
+  onError: (error: unknown) => {
     reportRouteError("section", error, "/$orgSlug/$appSlug/$env/segments");
   },
   errorComponent: () => <SectionUnavailable title="Segments unavailable" />,

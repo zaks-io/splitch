@@ -33,7 +33,7 @@ export const Route = createRootRouteWithContext<ControlPanelRouterContext>()({
     }),
   }),
   errorComponent: () => <AppErrorPage />,
-  onError: ({ error }) => {
+  onError: (error: unknown) => {
     reportRouteError("app", error, "__root__");
   },
   pendingComponent: PanelSkeleton,

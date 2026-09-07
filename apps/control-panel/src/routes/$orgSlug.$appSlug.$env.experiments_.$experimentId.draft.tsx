@@ -53,7 +53,7 @@ export const Route = createFileRoute("/$orgSlug/$appSlug/$env/experiments_/$expe
       },
     ],
   }),
-  onError: ({ error }) => {
+  onError: (error: unknown) => {
     reportRouteError("section", error, "/$orgSlug/$appSlug/$env/experiments/$experimentId/draft");
   },
   errorComponent: () => <SectionUnavailable title="Experiment draft unavailable" />,
