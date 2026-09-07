@@ -1,4 +1,5 @@
 import type { createRepository } from "@splitch/db";
+import { createPerformanceSpanRecorder } from "@splitch/observability/performance-spans";
 import type { ControlPlaneAuthOptions } from "./auth-resolver";
 import type { ControlPlaneApiEnv } from "./env";
 import { makePanelDelegationReplayStore } from "./panel-identity-replay";
@@ -29,6 +30,7 @@ export function controlPanelAuthOptions(
   if (protocol === "none") return {};
   if (protocol === "signed") {
     return {
+      spans: createPerformanceSpanRecorder(env),
       allowPanelDelegation: true,
       panelDelegationSecret: requiredPanelDelegationSecret(env),
       panelAccess: makePanelSessionAccess(repo),

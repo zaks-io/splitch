@@ -5,6 +5,7 @@ import {
   parsePlatformTarget,
 } from "@splitch/contracts";
 import { createRepository } from "@splitch/db";
+import { createPerformanceSpanRecorder } from "@splitch/observability/performance-spans";
 import {
   createWorkerObservability,
   workerObservabilityWithWaitUntil,
@@ -124,6 +125,7 @@ const handler = {
     });
 
     const app = createApp({
+      spans: createPerformanceSpanRecorder(env),
       repo,
       accessSecret,
       issuer: origin,

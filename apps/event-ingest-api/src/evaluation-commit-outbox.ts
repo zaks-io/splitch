@@ -3,6 +3,7 @@ import {
   parseSealedEvaluationCommitPayload,
 } from "./evaluation-commit-delivery";
 import type { EvaluationCommit } from "./evaluation-commit-outbox-contract";
+import { matchingExposureRows, withoutExposureRows } from "./evaluation-commit-privacy-payload";
 import { queueRetryDelaySeconds } from "./queue-retry";
 import type { Env } from "./types";
 
@@ -155,8 +156,14 @@ export class EvaluationCommitOutboxDurableObject {
     if (payload === undefined) return new Response("invalid commit payload", { status: 400 });
 
     const now = Date.now();
+    // Finish crypto first so storage input gates protect the tombstone snapshot through the write.
     const eventId = `sha256:${await sha256Hex(`${identity}\u001f${now}`)}`;
-    const existing = await this.ctx.storage.get<OutboxState>(STATE_KEY);
+    const stored = await this.ctx.storage.get([
+      STATE_KEY,
+      PRIVACY_DELETED_KEY,
+      REDACTED_EVENT_IDS_KEY,
+    ]);
+    const existing = stored.get(STATE_KEY) as OutboxState | undefined;
     if (existing !== undefined && isCurrent(existing)) {
       if (isPublishable(existing) && !isDelivered(existing)) {
         await this.schedulePublication(existing);
@@ -164,8 +171,8 @@ export class EvaluationCommitOutboxDurableObject {
       return Response.json(asResponse(existing));
     }
 
-    const privacyDeleted = Boolean(await this.ctx.storage.get(PRIVACY_DELETED_KEY));
-    const redactedEventIds = (await this.ctx.storage.get<string[]>(REDACTED_EVENT_IDS_KEY)) ?? [];
+    const privacyDeleted = Boolean(stored.get(PRIVACY_DELETED_KEY));
+    const redactedEventIds = (stored.get(REDACTED_EVENT_IDS_KEY) as string[] | undefined) ?? [];
     const state: OutboxState = {
       eventId,
       payload: privacyDeleted
@@ -296,40 +303,6 @@ async function requestEventIds(request: Request): Promise<readonly string[] | nu
   } catch {
     return null;
   }
-}
-
-function matchingExposureRows(
-  payload: unknown,
-  eventIds: readonly string[],
-): readonly Record<string, unknown>[] {
-  const rows = exposureRows(payload);
-  const selected = new Set(eventIds);
-  return rows.filter((row) => typeof row.event_id === "string" && selected.has(row.event_id));
-}
-
-function withoutExposureRows(payload: unknown, eventIds: readonly string[]): unknown {
-  if (!isRecord(payload)) throw new Error("Evaluation commit payload is invalid");
-  const selected = new Set(eventIds);
-  return {
-    ...payload,
-    exposureRows: exposureRows(payload).filter(
-      (row) => typeof row.event_id !== "string" || !selected.has(row.event_id),
-    ),
-  };
-}
-
-function exposureRows(payload: unknown): readonly Record<string, unknown>[] {
-  if (!isRecord(payload) || !Array.isArray(payload.exposureRows)) {
-    throw new Error("Evaluation commit Exposure rows are invalid");
-  }
-  if (payload.exposureRows.some((row) => !isRecord(row))) {
-    throw new Error("Evaluation commit Exposure row is invalid");
-  }
-  return payload.exposureRows as Record<string, unknown>[];
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 async function sha256Hex(value: string): Promise<string> {

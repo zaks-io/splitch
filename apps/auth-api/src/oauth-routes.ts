@@ -1,16 +1,13 @@
 import type { AccessTokenAuthorization } from "@splitch/contracts";
+import type { PerformanceSpanRecorder } from "@splitch/observability/performance-spans";
 import { JWKS_SHARED_CACHE_TTL_SECONDS, timingSafeEqualString } from "@splitch/worker-runtime";
 import type { Hono } from "hono";
 import { verifyAccessToken } from "./access-token";
 import { accessTokenJwks } from "./access-token-key";
 import { authMarkdown } from "./auth-markdown";
 import { DEVICE_CODE_GRANT, type DeviceFlowPort, REFRESH_TOKEN_GRANT } from "./device-flow";
-import {
-  authorizeDevice,
-  exchangeDeviceCode,
-  exchangeRefreshToken,
-  requireFirstPartyClient,
-} from "./device-oauth";
+import { authorizeDevice, exchangeDeviceCode, requireFirstPartyClient } from "./device-oauth";
+import { exchangeRefreshToken } from "./device-refresh";
 import type { DeviceRefreshSessionStore } from "./device-session-store";
 import type { MembershipAuthorityRepo } from "./membership-authority";
 import { OAuthError, renderDoorFault, renderOAuthError } from "./oauth-errors";
@@ -34,6 +31,7 @@ export interface SmokeClientCredentials {
 }
 
 export interface OAuthRouteDeps {
+  spans?: PerformanceSpanRecorder;
   tokenSigner: TokenSigner;
   deviceFlow: DeviceFlowPort;
   deviceRefreshSessions: DeviceRefreshSessionStore;

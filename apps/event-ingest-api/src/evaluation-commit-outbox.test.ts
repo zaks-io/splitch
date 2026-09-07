@@ -1,8 +1,33 @@
 import { describe, expect, it, vi } from "vitest";
 import { EvaluationCommitOutboxDurableObject } from "./evaluation-commit-outbox";
+import { durableState } from "./evaluation-commit-outbox.test-fixture";
 import type { Env } from "./types";
 
 const IDENTITY = "a".repeat(64);
+
+describe("Evaluation commit privacy during hashing", () => {
+  it("observes an App reset that completes while hashing the new event ID", async () => {
+    const object = new EvaluationCommitOutboxDurableObject(durableState().ctx);
+    const digest = crypto.subtle.digest.bind(crypto.subtle);
+    const hashing = vi.spyOn(crypto.subtle, "digest").mockImplementationOnce(async (...args) => {
+      await post(object, "/privacy-delete-all", { identity: IDENTITY });
+      return digest(...args);
+    });
+    try {
+      const committed = await post(object, "/commit", {
+        identity: IDENTITY,
+        payload: { usage: { idempotencyKey: "reset-during-hash" }, exposureRows: [] },
+      });
+      expect(hashing).toHaveBeenCalledOnce();
+      expect(committed).toMatchObject({
+        delivered: true,
+        payload: { usage: { privacyDeleted: true }, exposureRows: [] },
+      });
+    } finally {
+      hashing.mockRestore();
+    }
+  });
+});
 
 describe("Evaluation commit outbox privacy", () => {
   it("keeps a sealed commit unpublishable until inventory confirmation activates it", async () => {
@@ -88,7 +113,8 @@ describe("Evaluation commit outbox privacy", () => {
 
   it("persists an App reset tombstone before a zero-Exposure commit can seal", async () => {
     vi.spyOn(Date, "now").mockReturnValue(Date.parse("2026-08-28T00:00:00.000Z"));
-    const object = new EvaluationCommitOutboxDurableObject(durableState().ctx);
+    const state = durableState();
+    const object = new EvaluationCommitOutboxDurableObject(state.ctx);
 
     await post(object, "/privacy-delete-all", { identity: IDENTITY });
     const committed = await post(object, "/commit", {
@@ -100,6 +126,11 @@ describe("Evaluation commit outbox privacy", () => {
       delivered: true,
       payload: { usage: { privacyDeleted: true }, exposureRows: [] },
     });
+    expect(state.lastReadKeys()).toEqual([
+      "evaluation-commit-outbox",
+      "evaluation-commit-privacy-deleted",
+      "evaluation-commit-redacted-event-ids",
+    ]);
   });
 
   it("fails reset deletion loud while asynchronous Queue publication is unresolved", async () => {
@@ -249,38 +280,4 @@ function request(
 
 function queueResult() {
   return { metadata: { metrics: { backlogCount: 0, backlogBytes: 0 } } };
-}
-
-function durableState(): {
-  ctx: DurableObjectState;
-  alarmTime(): number | null;
-  stored(): { publicationAttempts?: number } | undefined;
-} {
-  const storage = new Map<string, unknown>();
-  let alarmTime: number | null = null;
-  const ctx = {
-    storage: {
-      async get<T>(key: string) {
-        return storage.has(key) ? (structuredClone(storage.get(key)) as T) : undefined;
-      },
-      async put(key: string, value: unknown) {
-        storage.set(key, structuredClone(value));
-      },
-      async delete(key: string | string[]) {
-        if (Array.isArray(key)) {
-          return key.reduce((count, item) => count + Number(storage.delete(item)), 0);
-        }
-        return storage.delete(key);
-      },
-      async setAlarm(time: number | Date) {
-        alarmTime = typeof time === "number" ? time : time.getTime();
-      },
-    },
-  } as unknown as DurableObjectState;
-  return {
-    ctx,
-    alarmTime: () => alarmTime,
-    stored: () =>
-      storage.get("evaluation-commit-outbox") as { publicationAttempts?: number } | undefined,
-  };
 }
