@@ -1,6 +1,7 @@
 import { defineTestFileManifest } from "../../scripts/vitest-test-manifest";
 
 export const D1_TEST_FILES = defineTestFileManifest(import.meta.url, [
+  "src/auth-abuse-rate-limit-do.test.ts",
   "src/app-delete-grant-issuance.test.ts",
   "src/auth-api-origin-runtime.test.ts",
   "src/claim-lifetime-security.test.ts",

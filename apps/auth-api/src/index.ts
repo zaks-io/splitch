@@ -11,21 +11,22 @@ import {
   workerObservabilityWithWaitUntil,
   wrapWorkerHandler,
 } from "@splitch/observability/worker";
-import { remoteJwksSignatureVerifier } from "@splitch/worker-runtime";
 import {
   assertAccessTokenSecretCanSign,
   makeEphemeralAccessTokenPrivateJwk,
 } from "./access-token-key";
 import { createApp } from "./app";
+import { AuthAbuseRateLimitDurableObject } from "./auth-abuse-rate-limit-do";
 import { makeFixtureDeviceFlow, makeWorkOsDeviceFlow } from "./device-flow";
 import { makeD1DeviceRefreshSessionStore } from "./device-session-store";
 import type { AuthApiEnv } from "./env";
 import { makeJtiCache } from "./jti-cache";
-import { fetchTrustedJwks } from "./jwks-fetch";
 import type { SmokeClientCredentials } from "./oauth-routes";
 import { makeFixtureOtp, makeIdempotencyStore } from "./otp";
-import { makeRateLimiter } from "./rate-limit";
+import { makeDurableRateLimiter, makeRateLimiter } from "./rate-limit";
+import { verifyRemoteIdentitySignature, verifySecurityEventSignature } from "./remote-signatures";
 import { makeKvRevocationStore } from "./revocation";
+import { makeSecurityEventReceiptStore } from "./security-event-receipts";
 import { makeTokenSigner } from "./token-exchange";
 import { makeFixtureTurnstile, makeRuntimeTurnstile } from "./turnstile";
 import { makeFixtureWorkOs, makeHostedWorkOs } from "./workos";
@@ -48,7 +49,8 @@ export const committedAssertionSigningSecrets = [
 const fixtureWorkos = makeFixtureWorkOs();
 const otp = makeFixtureOtp();
 const fixtureTurnstile = makeFixtureTurnstile();
-const rateLimiter = makeRateLimiter();
+const localAnonymousRateLimiter = makeRateLimiter();
+const localDeviceAuthorizationRateLimiter = makeRateLimiter();
 const idempotency = makeIdempotencyStore();
 let localAccessTokenSecret: Promise<string> | undefined;
 let signableAccessTokenSecret: string | undefined;
@@ -114,6 +116,12 @@ const handler = {
     const assertionSecret = assertionSigningSecret(env);
     const consentBaseUrl = env.CONTROL_PANEL_ORIGIN ?? "http://localhost:8787";
     const now = () => Date.now();
+    const rateLimiter = isLocalPlatformTarget(env.SPLITCH_PLATFORM_TARGET)
+      ? localAnonymousRateLimiter
+      : makeDurableRateLimiter(env.AUTH_ABUSE_RATE_LIMIT, "anonymous-create");
+    const deviceAuthorizationRateLimiter = isLocalPlatformTarget(env.SPLITCH_PLATFORM_TARGET)
+      ? localDeviceAuthorizationRateLimiter
+      : makeDurableRateLimiter(env.AUTH_ABUSE_RATE_LIMIT, "device-authorization");
     const workos = hostedWorkOs(env);
     const deviceFlow = makeDeviceFlow(env);
     const tokenSigner = makeTokenSigner({
@@ -137,8 +145,7 @@ const handler = {
         repo,
         jtiCache: makeJtiCache(env.JTI_CACHE),
         workos,
-        verifyRemoteSignature: (jwksUri, compactJws) =>
-          remoteJwksSignatureVerifier(jwksUri, { fetch: fetchTrustedJwks }).verify(compactJws),
+        verifyRemoteSignature: verifyRemoteIdentitySignature,
         authApiOrigin: origin,
       },
       register: { repo, turnstile, rateLimiter, workos, tokenSigner, now },
@@ -162,6 +169,14 @@ const handler = {
       }),
       sessionStore: env.SESSION_STORE,
       revocations: makeKvRevocationStore(env.SESSION_STORE),
+      deviceAuthorizationRateLimiter,
+      securityEvents: {
+        repo,
+        receiptStore: makeSecurityEventReceiptStore(env.JTI_CACHE),
+        authApiOrigin: origin,
+        now,
+        verifyRemoteSignature: verifySecurityEventSignature,
+      },
       smokeClientCredentials: sharedPreviewSmokeClient(env),
     });
 
@@ -175,6 +190,8 @@ const handler = {
 } satisfies ExportedHandler<AuthApiEnv>;
 
 export default wrapWorkerHandler(handler, { surface: "auth-api" });
+
+export { AuthAbuseRateLimitDurableObject };
 
 function sharedPreviewSmokeClient(env: AuthApiEnv): SmokeClientCredentials | undefined {
   if (env.SPLITCH_PLATFORM_TARGET !== "shared-preview" || !env.SPLITCH_SMOKE_CLIENT_SECRET) {

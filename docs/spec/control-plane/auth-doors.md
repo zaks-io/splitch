@@ -68,7 +68,8 @@ token on the ID-JAG path. Every runtime target uses the RS256/JWKS trust contrac
    rotation. Verify the Cloudflare Turnstile token server-side (siteverify; single-use; 300s expiry)
    before step 2. Reject on failure — no rows created.
 1. Rate-limit per source IP **and a global ceiling** in app (default: 10 provisional creates per IP per
-   hour, plus a coarse per-isolate cap of 10,000 provisional creates/hour). Cloudflare Free also applies
+   hour, plus 10,000 provisional creates/hour). A SQLite Durable Object serializes both counters across
+   every Worker isolate. Cloudflare Free also applies
    the verified short-window source-IP rule on exact path `/agent/identity`. It is not the authoritative
    one-hour cross-IP/global ceiling: host/method scoping and that global WAF control remain deferred until
    traffic justifies the paid plan (ADR-0034).
@@ -175,6 +176,9 @@ endpoints. The caller's `client_id` must name a registered first-party public cl
 client. An App selector at login is **optional**: cold start is the first-class path
 (quickstart.md step 1 — authenticate, then create the Org and App), and a login with no App mints
 an unbound session token, which is exactly the authority `orgs list` / `orgs create` need.
+Before creating a WorkOS device authorization, the Worker applies an independent Durable Object
+ceiling of 10 requests per source IP per hour and 10,000 requests globally per hour. Rejected
+requests never reach WorkOS.
 
 **One approval, many rebinds.** The single human approval mints a durable provider session. Each
 access-token mint binds to at most one resource, resolved against live D1 membership keyed by the

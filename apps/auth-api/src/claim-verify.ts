@@ -107,7 +107,7 @@ export async function verifyClaim(deps: ClaimDeps, input: VerifyInput): Promise<
         })
       : null;
   if (collision && !approvedConsent) {
-    deps.rateLimiter.assertUnderCeiling(input.remoteIp ?? "unknown", now);
+    await deps.rateLimiter.assertUnderCeiling(input.remoteIp ?? "unknown", now);
     const consentId = await createConsent(
       deps,
       verification.id,
@@ -162,7 +162,7 @@ export async function verifyClaim(deps: ClaimDeps, input: VerifyInput): Promise<
   let providerConfirmationStarted = false;
   let providerConfirmationRejected = false;
   try {
-    deps.rateLimiter.assertUnderCeiling(input.remoteIp ?? "unknown", now);
+    await deps.rateLimiter.assertUnderCeiling(input.remoteIp ?? "unknown", now);
     if (!verification.verifiedAt) {
       if (collision) {
         if (

@@ -124,4 +124,10 @@ describe("formatPayload", () => {
   it("passes a string payload through untouched", () => {
     expect(formatPayload("already prose")).toBe("already prose");
   });
+
+  it("renders terminal and bidi controls as visible code points", () => {
+    expect(formatPayload({ name: "safe\u001b]52;c;owned\u0007\nnext\u202egol" })).toBe(
+      "Name: safe\\u001b]52;c;owned\\u0007\\u000anext\\u202egol",
+    );
+  });
 });

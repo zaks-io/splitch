@@ -7,7 +7,7 @@ import {
   HydratedPrincipalFlagListResponseSchema,
 } from "@splitch/sdk/control-plane";
 import { SplitchCliError } from "./errors.js";
-import { cellValue, formatTable, truncationNotice } from "./format-payload.js";
+import { cellValue, formatTable, terminalText, truncationNotice } from "./format-payload.js";
 
 export function formatFlagRead(operationId: string, payload: unknown, summary: boolean): string {
   if (summary) {
@@ -102,14 +102,14 @@ function formatFlagSummaryList(flags: readonly SummaryFlag[]): string {
 
 function formatHydratedFlag(flag: HydratedFlagResponse): string {
   const definition = [
-    `Flag: ${flag.name}`,
+    `Flag: ${terminalText(flag.name)}`,
     `ID: ${flag.id}`,
     `App: ${flag.appId}`,
     `Key: ${flag.key}`,
-    ...(flag.description === undefined ? [] : [`Description: ${flag.description}`]),
+    ...(flag.description === undefined ? [] : [`Description: ${terminalText(flag.description)}`]),
     // The Flag schema is a JSON Schema document, so its compact JSON is the
     // value rather than a stand-in for one.
-    `Schema: ${flag.schema === null ? "(none)" : JSON.stringify(flag.schema)}`,
+    `Schema: ${flag.schema === null ? "(none)" : terminalText(JSON.stringify(flag.schema))}`,
     `Default Variant ID: ${flag.defaultVariantId}`,
     `Created: ${flag.createdAt}`,
     `Updated: ${flag.updatedAt}`,
@@ -166,7 +166,7 @@ function formatTargetingRules(
 }
 
 function nameList(names: readonly string[]): string {
-  return names.length === 0 ? "(none)" : names.join(", ");
+  return names.length === 0 ? "(none)" : names.map(terminalText).join(", ");
 }
 
 function formatRollout(rollout: { percentage: number; salt: string } | null): string {

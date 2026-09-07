@@ -69,7 +69,7 @@ export async function registerAnonymous(
   // (1) + (2): challenge + ceiling, BEFORE any write. Either throws → zero rows.
   const nowMs = deps.now();
   await deps.turnstile.assertValid(input.turnstileToken, input.remoteIp);
-  deps.rateLimiter.assertUnderCeiling(input.remoteIp ?? "unknown", nowMs);
+  await deps.rateLimiter.assertUnderCeiling(input.remoteIp ?? "unknown", nowMs);
 
   const nowIso = new Date(nowMs).toISOString();
   const demoExpiresAt = new Date(nowMs + DEMO_TTL_MS).toISOString();

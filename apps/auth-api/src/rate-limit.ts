@@ -4,18 +4,12 @@ import { OAuthError } from "./oauth-errors";
  * Anonymous-register + claim rate ceiling (ADR-0034 §4, auth-doors.md Door B).
  *
  * Two ceilings: a per-IP cap (default 10 / IP / hour) AND a global cap across all
- * IPs (placeholder 10,000 / hour). Fail-loud: a hit throws `too_many_requests`
+ * IPs (default 10,000 / hour). Fail-loud: a hit throws `too_many_requests`
  * (429); the ceiling is checked BEFORE any write.
  *
- * HONEST SCOPE (H1): the maps below are PER-ISOLATE. A Workers deployment runs
- * many isolates, so this in-Worker counter is NOT a true global ceiling and the
- * per-IP cap is only as global as the isolate that happened to serve the request.
- * The Cloudflare Free rule is also source-IP scoped and only provides a short
- * burst block for `/agent/identity`; it is not an authoritative global bound.
- * The paid cross-IP/global WAF ceiling remains explicit debt in ADR-0034. A
- * precise in-app global ceiling would need a shared atomic counter (a Durable
- * Object or D1). This layer is therefore a coarse per-isolate backstop, not a
- * global guarantee. The window is a fixed counter reset on roll-over.
+ * The deployed adapter sends every decision in a scope to one SQLite Durable
+ * Object, so all isolates share the same atomic per-IP and global counters. The
+ * in-memory adapter below is retained for deterministic unit tests.
  */
 
 const HOUR_MS = 60 * 60 * 1000;
@@ -32,8 +26,71 @@ const DEFAULT_RATE_LIMITS: RateLimitConfig = {
 };
 
 export interface RateLimiter {
-  /** Count one anon-create attempt from `ip`; throw `too_many_requests` if over a ceiling. */
-  assertUnderCeiling(ip: string, nowMs: number): void;
+  /** Count one attempt from `ip`; throw `too_many_requests` if over a ceiling. */
+  assertUnderCeiling(ip: string, nowMs: number): void | Promise<void>;
+}
+
+export interface RateLimitDurableObjectNamespace {
+  idFromName(name: string): DurableObjectId;
+  get(id: DurableObjectId): {
+    fetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response>;
+  };
+}
+
+export type RateLimitScope = "anonymous-create" | "device-authorization";
+
+/** All deployed callers in one scope converge on the same authoritative object. */
+export function makeDurableRateLimiter(
+  namespace: RateLimitDurableObjectNamespace | undefined,
+  scope: RateLimitScope,
+  config: RateLimitConfig = DEFAULT_RATE_LIMITS,
+): RateLimiter {
+  return {
+    async assertUnderCeiling(ip, nowMs) {
+      if (!namespace) throw new Error("AUTH_ABUSE_RATE_LIMIT binding is unavailable");
+      const ipDigest = await sha256Hex(ip);
+      const stub = namespace.get(namespace.idFromName(scope));
+      const response = await stub.fetch("https://auth-abuse-rate-limit.internal/admit", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ ipDigest, nowMs, config }),
+      });
+      if (!response.ok) {
+        throw new Error(`Auth abuse rate limiter returned HTTP ${response.status}`);
+      }
+      const decision = parseDecision(await response.json());
+      if (decision.allowed) return;
+      const label = scope === "anonymous-create" ? "anonymous-create" : "device-authorization";
+      throw new OAuthError(
+        "too_many_requests",
+        `${decision.reason === "global" ? "global" : "per-IP"} ${label} ceiling reached`,
+      );
+    },
+  };
+}
+
+type RateLimitDecision =
+  | { readonly allowed: true }
+  | { readonly allowed: false; readonly reason: "global" | "per_ip" };
+
+function parseDecision(value: unknown): RateLimitDecision {
+  if (typeof value !== "object" || value === null || !("allowed" in value)) {
+    throw new Error("Auth abuse rate limiter returned an invalid decision");
+  }
+  if (value.allowed === true) return { allowed: true };
+  if (
+    value.allowed === false &&
+    "reason" in value &&
+    (value.reason === "global" || value.reason === "per_ip")
+  ) {
+    return { allowed: false, reason: value.reason };
+  }
+  throw new Error("Auth abuse rate limiter returned an invalid decision");
+}
+
+async function sha256Hex(value: string): Promise<string> {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));
+  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
 interface Window {

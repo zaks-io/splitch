@@ -222,10 +222,18 @@ function hostedEnvWith(overrides: Partial<AuthApiEnv>): AuthApiEnv {
     WORKOS_CLIENT_ID: "test-workos-client-id",
     WORKOS_JWKS_URI: "https://api.workos.test/jwks",
     WORKOS_ISSUER: "https://api.workos.test",
+    AUTH_ABUSE_RATE_LIMIT: allowingRateLimitNamespace(),
     TURNSTILE_SECRET: "test-turnstile-secret",
     ASSERTION_SIGNING_SECRET: hostedAssertionSigningSecret,
     ...overrides,
   };
+}
+
+function allowingRateLimitNamespace(): DurableObjectNamespace {
+  return {
+    idFromName: () => ({}) as DurableObjectId,
+    get: () => ({ fetch: async () => Response.json({ allowed: true }) }),
+  } as unknown as DurableObjectNamespace;
 }
 
 /**

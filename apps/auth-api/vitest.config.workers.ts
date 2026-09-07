@@ -12,11 +12,18 @@ export default defineConfig(async () => {
   return {
     plugins: [
       cloudflareTest({
+        main: "./src/index.ts",
         miniflare: {
           compatibilityDate: "2026-06-21",
           compatibilityFlags: ["nodejs_compat"],
           d1Databases: { DB: "splitch-auth-api-test" },
           kvNamespaces: { JTI_CACHE: "jti", SESSION_STORE: "sessions" },
+          durableObjects: {
+            AUTH_ABUSE_RATE_LIMIT: {
+              className: "AuthAbuseRateLimitDurableObject",
+              useSQLite: true,
+            },
+          },
           bindings: { TEST_MIGRATIONS: migrations },
         },
       }),

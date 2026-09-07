@@ -4,12 +4,14 @@ import { Hono } from "hono";
 import { type VerifiedActor, verifyAccessToken } from "./access-token";
 import { type ClaimDeps, initiateClaim, verifyClaim } from "./claim";
 import { handleConsent } from "./claim-consent-route";
+import { clientIp } from "./client-ip";
 import type { DeviceFlowPort } from "./device-flow";
 import type { DeviceRefreshSessionStore } from "./device-session-store";
 import type { verifyIdJag } from "./idjag-verify";
 import { OAuthError, renderDoorFault, renderOAuthError } from "./oauth-errors";
 import { audienceForResource, mountOAuthRoutes, type SmokeClientCredentials } from "./oauth-routes";
 import { readJsonRequestBody, renderAuthBodyError } from "./read-request-body";
+import type { RateLimiter } from "./rate-limit";
 import { type RegisterDeps, registerAnonymous } from "./register";
 import type { RevocationStore } from "./revocation";
 import {
@@ -18,6 +20,8 @@ import {
   CreateTrustedIdpRequestSchema,
 } from "./schemas";
 import type { TokenSigner } from "./token-exchange";
+import { mountSecurityEventRoute } from "./security-event-route";
+import type { SecurityEventDeps } from "./security-event-token";
 import { makeTrustedIdpCrud } from "./trusted-idp-crud";
 import type { WorkOsAccessTokenVerifier } from "./workos-access-token";
 
@@ -59,8 +63,12 @@ export interface AppDeps {
   sessionStore: KVNamespace;
   /** Shared revocation marker writer/reader for control-plane access tokens. */
   revocations: RevocationStore;
+  /** Dedicated authoritative ceiling before outbound device-authorization calls. */
+  deviceAuthorizationRateLimiter?: RateLimiter;
   /** Shared-preview-only smoke OAuth client credentials. */
   smokeClientCredentials?: SmokeClientCredentials;
+  /** Provider-signed auth.md SET verification and replay receipts. */
+  securityEvents?: SecurityEventDeps;
   now: () => number;
 }
 
@@ -69,7 +77,12 @@ export function createApp(deps: AppDeps): Hono {
   const crud = makeTrustedIdpCrud(deps.repo, deps.now);
   const nowSeconds = () => Math.floor(deps.now() / 1000);
 
-  mountOAuthRoutes(app, deps);
+  mountOAuthRoutes(app, {
+    ...deps,
+    deviceAuthorizationRateLimiter:
+      deps.deviceAuthorizationRateLimiter ?? unavailableDeviceAuthorizationRateLimiter,
+  });
+  mountSecurityEventRoute(app, deps.securityEvents);
 
   // --- Door B + paused Door A: /agent/identity -------------------------------
   app.post("/agent/identity", async (c) => {
@@ -140,6 +153,12 @@ export function createApp(deps: AppDeps): Hono {
   return app;
 }
 
+const unavailableDeviceAuthorizationRateLimiter: RateLimiter = {
+  assertUnderCeiling() {
+    throw new Error("device authorization rate limiter is not configured");
+  },
+};
+
 /** A /agent/identity body is the anonymous (Door B) flow iff it has no `id_jag`. */
 function isAnonymousBody(body: unknown): boolean {
   return typeof body === "object" && body !== null && !("id_jag" in body);
@@ -147,11 +166,6 @@ function isAnonymousBody(body: unknown): boolean {
 
 function hasIdJag(body: unknown): boolean {
   return typeof body === "object" && body !== null && "id_jag" in body;
-}
-
-/** Client IP at the Cloudflare edge; the rate ceiling keys on it (ADR-0034). */
-function clientIp(request: Request): string | undefined {
-  return request.headers.get("cf-connecting-ip") ?? undefined;
 }
 
 /** Door B register: validate the anon body, run the ceremony, map faults to OAuth. */

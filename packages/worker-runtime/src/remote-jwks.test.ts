@@ -1,4 +1,4 @@
-import type { FetchImplementation } from "jose";
+import { CompactSign, exportJWK, type FetchImplementation, generateKeyPair } from "jose";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   fetchSharedJwks,
@@ -12,6 +12,26 @@ afterEach(() => {
 });
 
 describe("remote JWKS signature verification", () => {
+  it("accepts ES256 only when the caller's profile explicitly allows it", async () => {
+    const { privateKey, publicKey } = await generateKeyPair("ES256");
+    const kid = "ec-provider-key";
+    const publicJwk = await exportJWK(publicKey);
+    const fetchJwks = vi.fn(async () => Response.json({ keys: [{ ...publicJwk, kid }] }));
+    const token = await new CompactSign(new TextEncoder().encode('{"sub":"provider-user"}'))
+      .setProtectedHeader({ alg: "ES256", kid, typ: "secevent+jwt" })
+      .sign(privateKey);
+
+    await expect(
+      remoteJwksSignatureVerifier(uniqueJwksUri(), {
+        fetch: fetchJwks,
+        algorithms: ["ES256", "RS256"],
+      }).verify(token),
+    ).resolves.toBe(true);
+    await expect(
+      remoteJwksSignatureVerifier(uniqueJwksUri(), { fetch: fetchJwks }).verify(token),
+    ).resolves.toBe(false);
+  });
+
   it("reuses the fetched key set and refreshes after a rotated kid", async () => {
     const first = await keypair("first");
     const second = await keypair("second");

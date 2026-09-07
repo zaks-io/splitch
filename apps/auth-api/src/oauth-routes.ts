@@ -5,6 +5,7 @@ import type { Hono } from "hono";
 import { verifyAccessToken } from "./access-token";
 import { accessTokenJwks } from "./access-token-key";
 import { authMarkdown } from "./auth-markdown";
+import { clientIp } from "./client-ip";
 import { DEVICE_CODE_GRANT, type DeviceFlowPort, REFRESH_TOKEN_GRANT } from "./device-flow";
 import { authorizeDevice, exchangeDeviceCode, requireFirstPartyClient } from "./device-oauth";
 import { exchangeRefreshToken } from "./device-refresh";
@@ -13,6 +14,7 @@ import type { MembershipAuthorityRepo } from "./membership-authority";
 import { OAuthError, renderDoorFault, renderOAuthError } from "./oauth-errors";
 import { readOAuthRequestBody, renderAuthBodyError } from "./read-request-body";
 import type { RevocationStore } from "./revocation";
+import type { RateLimiter } from "./rate-limit";
 import {
   ClientCredentialsRequestSchema,
   RevokeTokenRequestSchema,
@@ -45,6 +47,7 @@ export interface OAuthRouteDeps {
   smokeClientCredentials?: SmokeClientCredentials;
   now: () => number;
   repo: MembershipAuthorityRepo;
+  deviceAuthorizationRateLimiter: RateLimiter;
 }
 
 export function mountOAuthRoutes(app: Hono, deps: OAuthRouteDeps): void {
@@ -79,6 +82,10 @@ export function mountOAuthRoutes(app: Hono, deps: OAuthRouteDeps): void {
         skill: `${deps.issuer}/auth.md`,
         identity_endpoint: `${deps.issuer}/agent/identity`,
         claim_endpoint: `${deps.issuer}/agent/identity/claim`,
+        events_endpoint: `${deps.issuer}/agent/event/notify`,
+        events_supported: [
+          "https://schemas.workos.com/events/agent/auth/identity/assertion/revoked",
+        ],
         identity_types_supported: ["anonymous", "device_flow"],
       },
     });
@@ -103,7 +110,7 @@ export function mountOAuthRoutes(app: Hono, deps: OAuthRouteDeps): void {
   app.post("/oauth2/device_authorization", async (c) => {
     const body = await readOAuthRequestBody(c.req.raw);
     if (!body.ok) return renderAuthBodyError(body.reason);
-    return authorizeDevice(deps, body.value);
+    return authorizeDevice(deps, body.value, clientIp(c.req.raw));
   });
 
   app.post("/oauth2/token", async (c) => {
