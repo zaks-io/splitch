@@ -20,7 +20,7 @@ import {
   RevokeTokenRequestSchema,
   TokenExchangeRequestSchema,
 } from "./schemas";
-import type { TokenSigner } from "./token-exchange";
+import { ACCESS_TOKEN_TTL_SECONDS, type TokenSigner } from "./token-exchange";
 
 const ACCESS_TOKEN_GRANT = "urn:ietf:params:oauth:grant-type:token-exchange";
 const CLIENT_CREDENTIALS_GRANT = "client_credentials";
@@ -152,6 +152,7 @@ async function revokeToken(
         token: parsed.data.token,
         sessionId: session.providerSessionId,
       });
+      await deps.revocations.revoke(session.userId, ACCESS_TOKEN_TTL_SECONDS);
       await deps.deviceRefreshSessions.forget(parsed.data.token);
     }
   } catch (cause) {

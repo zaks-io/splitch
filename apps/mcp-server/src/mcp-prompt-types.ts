@@ -146,6 +146,7 @@ export const RECOVERY_OPERATION_IDS: Readonly<Record<RecommendedAction, readonly
   // The caller already has every candidate; retrying with the chosen canonical
   // ID is the remediation, so no intermediate read is required.
   USE_CANONICAL_ID: [],
+  REDUCE_OWNED_ORGANIZATIONS: ["organizations_list"],
   // The App-wide read is over budget and no retry fixes that, so the caller drops
   // to a per-Environment enumeration (experiments_list carries Experiment
   // records, not health) followed by a per-running-Experiment results fetch,

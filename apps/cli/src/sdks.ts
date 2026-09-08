@@ -18,10 +18,21 @@ const defaultAuthBaseUrl = "http://127.0.0.1:8789";
 // fixed by ADR-0038's subdomain map -- the CLI reads that table, it does not
 // invent hostnames.
 const defaultPlatformTarget: PlatformTarget = "production";
-const productionOrigins: Readonly<Record<string, string>> = {
-  CONTROL_PLANE_API_ORIGIN: "https://api.splitch.dev",
-  AUTH_API_ORIGIN: "https://auth.splitch.dev",
-  EVALUATION_API_ORIGIN: "https://edge.splitch.dev",
+type ApiOriginEnvName = "CONTROL_PLANE_API_ORIGIN" | "AUTH_API_ORIGIN" | "EVALUATION_API_ORIGIN";
+
+const hostedOrigins: Readonly<
+  Record<"production" | "shared-preview", Record<ApiOriginEnvName, string>>
+> = {
+  production: {
+    CONTROL_PLANE_API_ORIGIN: "https://api.splitch.dev",
+    AUTH_API_ORIGIN: "https://auth.splitch.dev",
+    EVALUATION_API_ORIGIN: "https://edge.splitch.dev",
+  },
+  "shared-preview": {
+    CONTROL_PLANE_API_ORIGIN: "https://api.preview.splitch.dev",
+    AUTH_API_ORIGIN: "https://auth.preview.splitch.dev",
+    EVALUATION_API_ORIGIN: "https://edge.preview.splitch.dev",
+  },
 };
 
 export type OperationSdk = ReturnType<typeof createMcpOperationAdapter>;
@@ -51,6 +62,53 @@ function requirePlatformTarget(value: string | undefined): PlatformTarget {
     });
   }
   return parsed.data;
+}
+
+export function validateAmbientApiOrigin(
+  envName: ApiOriginEnvName,
+  value: string,
+  platformTargetValue: string | undefined,
+): string {
+  const platformTarget = requirePlatformTarget(platformTargetValue);
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    throw invalidOriginError(envName, platformTarget);
+  }
+  if (
+    !["http:", "https:"].includes(url.protocol) ||
+    url.username ||
+    url.password ||
+    url.pathname !== "/" ||
+    url.search ||
+    url.hash
+  ) {
+    throw invalidOriginError(envName, platformTarget);
+  }
+  if (platformTarget === "local" || platformTarget === "pr-ci") {
+    if (url.hostname !== "127.0.0.1") throw invalidOriginError(envName, platformTarget);
+    return url.origin;
+  }
+  const expected = hostedOrigins[platformTarget][envName];
+  if (url.protocol !== "https:" || url.origin !== expected) {
+    throw invalidOriginError(envName, platformTarget);
+  }
+  return expected;
+}
+
+function invalidOriginError(
+  envName: ApiOriginEnvName,
+  platformTarget: PlatformTarget,
+): SplitchCliError {
+  return new SplitchCliError({
+    code: "CLI_VALIDATION_ERROR",
+    causeSummary: `${envName} is not an allowed origin for ${platformTarget}`,
+    remediation:
+      platformTarget === "local" || platformTarget === "pr-ci"
+        ? `Set ${envName} to a 127.0.0.1 origin`
+        : `Use the fixed ${platformTarget} Splitch origin`,
+  });
 }
 
 // Origins resolve lazily per public surface so a command only demands the
@@ -150,8 +208,8 @@ function apiBaseUrl(
   if (platformTarget === "local" || platformTarget === "pr-ci") {
     return localDefault;
   }
-  if (platformTarget === "production" && productionOrigins[envName]) {
-    return productionOrigins[envName];
+  if (platformTarget === "production" || platformTarget === "shared-preview") {
+    return hostedOrigins[platformTarget][envName as ApiOriginEnvName];
   }
   throw new SplitchCliError({
     code: "CLI_API_ORIGIN_MISSING",

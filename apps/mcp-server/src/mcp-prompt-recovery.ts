@@ -163,6 +163,14 @@ function recoverySteps(
         ),
       ];
     }
+    case "REDUCE_OWNED_ORGANIZATIONS":
+      return [
+        toolMessage("organizations_list", "List the Organizations the current User can access."),
+        message(
+          "assistant",
+          "Transfer ownership or delete one owned Organization through the supported UI or CLI, then retry the create.",
+        ),
+      ];
     case "READ_PER_ENVIRONMENT": {
       const environments =
         typeof details.environments === "number" ? details.environments : "<environments>";

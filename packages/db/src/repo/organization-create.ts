@@ -24,11 +24,13 @@ export type CreateOrganizationInput = {
   organization: typeof organizations.$inferInsert;
   ownerUserId: string;
   createdAt: string;
+  ownerOrganizationLimit?: number;
 };
 
 export type CreateOrganizationResult =
   | { ok: true; organization: typeof organizations.$inferSelect }
-  | { ok: false; reason: "slug_conflict" };
+  | { ok: false; reason: "slug_conflict" }
+  | { ok: false; reason: "creation_limit_exceeded"; currentCount: number };
 
 export function makeCreateOrganization(db: Db, d1: D1Database) {
   return async function createOrganization(
@@ -37,11 +39,10 @@ export function makeCreateOrganization(db: Db, d1: D1Database) {
     const results = await runCreateBatch(d1, input).catch(rethrowUnlessSlugConflict);
     if (results === SLUG_CONFLICT) return { ok: false, reason: "slug_conflict" };
 
-    const [orgRows, membershipRows] = results;
-    if (orgRows.length !== 1 || membershipRows.length !== 1) {
-      // The batch is transactional, so a partial result means the statements
-      // disagree about what they wrote. Never hand back a half-built tenant.
-      throw new Error("createOrganization: guarded D1 batch produced an inconsistent result");
+    const [countRows, orgRows, membershipRows] = results;
+    const currentCount = ownedOrganizationCount(countRows);
+    if (!createdBothRows(orgRows, membershipRows)) {
+      return quotaRefusal(input.ownerOrganizationLimit, currentCount);
     }
 
     const created = await db
@@ -57,15 +58,52 @@ export function makeCreateOrganization(db: Db, d1: D1Database) {
   };
 }
 
+function ownedOrganizationCount(rows: unknown[]): number {
+  const currentCount = Number((rows[0] as { owned_count?: unknown } | undefined)?.owned_count);
+  if (!Number.isInteger(currentCount) || currentCount < 0) {
+    throw new Error("createOrganization: owned Organization count returned no row");
+  }
+  return currentCount;
+}
+
+function createdBothRows(orgRows: unknown[], membershipRows: unknown[]): boolean {
+  if (orgRows.length === 0 && membershipRows.length === 0) return false;
+  if (orgRows.length === 1 && membershipRows.length === 1) return true;
+  throw new Error("createOrganization: guarded D1 batch produced an inconsistent result");
+}
+
+function quotaRefusal(
+  ownerOrganizationLimit: number | undefined,
+  currentCount: number,
+): CreateOrganizationResult {
+  if (ownerOrganizationLimit !== undefined && currentCount >= ownerOrganizationLimit) {
+    return { ok: false, reason: "creation_limit_exceeded", currentCount };
+  }
+  throw new Error("createOrganization: guarded Organization insert returned no row");
+}
+
 const SLUG_CONFLICT = Symbol("slug_conflict");
 
 async function runCreateBatch(d1: D1Database, input: CreateOrganizationInput) {
   const org = input.organization;
+  const ownerLimit = input.ownerOrganizationLimit ?? Number.MAX_SAFE_INTEGER;
   const batch = await d1.batch([
     d1
       .prepare(
+        `SELECT COUNT(*) AS owned_count
+         FROM org_memberships AS membership
+         INNER JOIN organizations AS organization ON organization.id = membership.org_id
+         WHERE membership.user_id = ? AND membership.role = 'owner' AND organization.is_provisional = 0`,
+      )
+      .bind(input.ownerUserId),
+    d1
+      .prepare(
         `INSERT INTO organizations (id, name, slug, plan, is_provisional, demo_expires_at, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+         SELECT ?, ?, ?, ?, ?, ?, ?, ?
+         WHERE (SELECT COUNT(*)
+                FROM org_memberships AS membership
+                INNER JOIN organizations AS organization ON organization.id = membership.org_id
+                WHERE membership.user_id = ? AND membership.role = 'owner' AND organization.is_provisional = 0) < ?
          RETURNING id`,
       )
       .bind(
@@ -77,16 +115,18 @@ async function runCreateBatch(d1: D1Database, input: CreateOrganizationInput) {
         org.demoExpiresAt ?? null,
         org.createdAt ?? input.createdAt,
         org.updatedAt ?? input.createdAt,
+        input.ownerUserId,
+        ownerLimit,
       ),
     d1
       .prepare(
         `INSERT INTO org_memberships (org_id, user_id, role, created_at)
-         VALUES (?, ?, 'owner', ?)
+         SELECT ?, ?, 'owner', ? WHERE changes() = 1
          RETURNING org_id`,
       )
       .bind(org.id, input.ownerUserId, input.createdAt),
   ]);
-  return [batch[0]?.results ?? [], batch[1]?.results ?? []] as const;
+  return [batch[0]?.results ?? [], batch[1]?.results ?? [], batch[2]?.results ?? []] as const;
 }
 
 /**

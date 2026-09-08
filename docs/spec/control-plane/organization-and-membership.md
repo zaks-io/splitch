@@ -35,6 +35,7 @@ authenticated principal can touch lives here, not in WorkOS org claims.
 - `slug` is unique by index (`organizations_slug_unique`), never by a preceding read: a read-then-write
   check is racy, so the index is the arbiter and its violation is what surfaces as `SLUG_CONFLICT`
 - Every Organization has at least one `owner` membership from the instant it exists
+- A User owns at most 50 non-provisional Organizations, the same bound a session can materialize
 
 ### Creating an Organization
 

@@ -42,6 +42,7 @@ describe("OAuth revoke route", () => {
 
   it("passes the refresh token's provider session id to the provider revoke path", async () => {
     const providerRevokes: Array<{ token: string; sessionId: string }> = [];
+    const revoked: Array<{ subject: string; ttlSeconds: number }> = [];
     const refreshToken = "provider-refresh-token";
     const app = routeApp({
       deviceFlow: unusedDeviceFlow((params) => providerRevokes.push(params)),
@@ -59,6 +60,12 @@ describe("OAuth revoke route", () => {
         rotate: async () => {},
         forget: async () => {},
       },
+      revocations: {
+        revoke: async (subject, ttlSeconds) => {
+          revoked.push({ subject, ttlSeconds });
+        },
+        isRevoked: async () => false,
+      },
     });
 
     const res = await app.request("/oauth2/revoke", {
@@ -73,6 +80,7 @@ describe("OAuth revoke route", () => {
 
     expect(res.status).toBe(200);
     expect(providerRevokes).toEqual([{ token: refreshToken, sessionId: "session_workos" }]);
+    expect(revoked).toEqual([{ subject: "user_workos", ttlSeconds: 3600 }]);
   });
 
   it("returns the provider refresh token and immediately revokes it through D1 on KV stale miss", async () => {

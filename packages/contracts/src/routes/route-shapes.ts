@@ -257,7 +257,6 @@ export const PatchClientKeyRequestSchema = z
 export const CreateApiKeyRequestSchema = z
   .object({
     scopes: persistedArray(ApiKeyScopeSchema),
-    idempotency_key: IdempotencyKeySchema.optional(),
   })
   .strict();
 

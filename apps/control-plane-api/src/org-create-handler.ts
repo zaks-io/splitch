@@ -2,6 +2,7 @@ import {
   deriveOrganizationSlug,
   isProvisionalAuthDoor,
   OrganizationSlugSchema,
+  USER_OWNED_ORGANIZATION_LIMIT,
 } from "@splitch/contracts";
 import type { Repository } from "@splitch/db";
 import type { HandlerArgs, Principal } from "@splitch/worker-runtime";
@@ -62,11 +63,32 @@ export function makeCreateOrganizationHandler(deps: OrgCreateDeps) {
       },
       ownerUserId: principal.id,
       createdAt: now,
+      ownerOrganizationLimit: USER_OWNED_ORGANIZATION_LIMIT,
     });
 
-    if (!created.ok) return slugConflict(slug, requestId);
+    if (!created.ok) {
+      return created.reason === "slug_conflict"
+        ? slugConflict(slug, requestId)
+        : quotaExceeded(created.currentCount, requestId);
+    }
     return Response.json(organizationResponse(created.organization), { status: 201 });
   };
+}
+
+function quotaExceeded(currentCount: number, requestId: string): Response {
+  return renderError(
+    {
+      code: "QUOTA_EXCEEDED",
+      message: `Organization ownership is limited to ${USER_OWNED_ORGANIZATION_LIMIT} per User`,
+      details: {
+        resourceType: "organization",
+        currentCount,
+        ceiling: USER_OWNED_ORGANIZATION_LIMIT,
+        recommendedAction: "REDUCE_OWNED_ORGANIZATIONS",
+      },
+    },
+    { requestId },
+  );
 }
 
 /**

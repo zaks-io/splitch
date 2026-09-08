@@ -1,7 +1,11 @@
 import { randomUUID } from "node:crypto";
 import type { EvaluateContext } from "@splitch/sdk";
 import { deriveMcpTools, getRoute, TargetingKeyTypeSchema } from "@splitch/sdk/control-plane";
-import { excessPositionalError, requiredPositionalSpecs } from "./command-positionals.js";
+import {
+  excessPositionalError,
+  parseBodyJsonRecord,
+  requiredPositionalSpecs,
+} from "./command-positionals.js";
 import type { CliCommandDefinition } from "./command-registry.js";
 import type { ResolvedContext } from "./context.js";
 import { SplitchCliError } from "./errors.js";
@@ -30,7 +34,8 @@ export function buildOperationInput(
   context: ResolvedContext,
 ): Record<string, unknown> {
   const input: Record<string, unknown> = {};
-  applyBodyJson(invocation.flags, input);
+  const body = applyBodyJson(invocation.flags, input);
+  assertReviewConfirmation(command, invocation.flags, body);
   applyContextFields(command, context, input);
   applyOrgFlag(invocation.flags, input);
   applyPositionalFields(command, invocation, input);
@@ -53,9 +58,26 @@ function applyExplicitIdempotencyKey(
   }
 }
 
-function applyBodyJson(flags: ParsedGlobalFlags, input: Record<string, unknown>): void {
-  if (flags.bodyJson) {
-    Object.assign(input, JSON.parse(flags.bodyJson) as Record<string, unknown>);
+function applyBodyJson(
+  flags: ParsedGlobalFlags,
+  input: Record<string, unknown>,
+): Record<string, unknown> | undefined {
+  const body = parseBodyJsonRecord(flags.bodyJson);
+  if (body) Object.assign(input, body);
+  return body;
+}
+
+function assertReviewConfirmation(
+  command: CliCommandDefinition,
+  flags: ParsedGlobalFlags,
+  body: Record<string, unknown> | undefined,
+): void {
+  if (command.supportsConfirm && body && Object.hasOwn(body, "review") && !flags.confirm) {
+    throw new SplitchCliError({
+      code: "CLI_USAGE_INVALID",
+      causeSummary: `review in --body-json requires --confirm for splitch ${command.path.join(" ")}`,
+      remediation: "Add --confirm to explicitly approve and apply the Policy-gated change",
+    });
   }
 }
 

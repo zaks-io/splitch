@@ -10,6 +10,7 @@ import { EXIT_AUTH, EXIT_OK, EXIT_SCOPE, EXIT_USAGE } from "./exit-codes.js";
 import { renderHelp, renderRootHelp } from "./help.js";
 import type { ParsedInvocation } from "./parse-args.js";
 import { longestMatchingCommandPath, parseInvocation } from "./parse-args.js";
+import { validateAmbientApiOrigin } from "./sdks.js";
 
 const cliObservability = initCliObservability();
 
@@ -30,13 +31,28 @@ export interface RunCliOptions {
 // selects the platform target and overrides individual API origins.
 function withEnvOrigins(options: RunCliOptions): RunCliOptions {
   const env = options.env ?? process.env;
+  const platformTarget = options.platformTarget ?? env.SPLITCH_PLATFORM_TARGET;
   return {
     ...options,
-    platformTarget: options.platformTarget ?? env.SPLITCH_PLATFORM_TARGET,
-    controlPlaneBaseUrl: options.controlPlaneBaseUrl ?? env.CONTROL_PLANE_API_ORIGIN,
-    evaluationBaseUrl: options.evaluationBaseUrl ?? env.EVALUATION_API_ORIGIN,
-    authBaseUrl: options.authBaseUrl ?? env.AUTH_API_ORIGIN,
+    platformTarget,
+    controlPlaneBaseUrl:
+      options.controlPlaneBaseUrl ??
+      validatedEnvOrigin("CONTROL_PLANE_API_ORIGIN", env.CONTROL_PLANE_API_ORIGIN, platformTarget),
+    evaluationBaseUrl:
+      options.evaluationBaseUrl ??
+      validatedEnvOrigin("EVALUATION_API_ORIGIN", env.EVALUATION_API_ORIGIN, platformTarget),
+    authBaseUrl:
+      options.authBaseUrl ??
+      validatedEnvOrigin("AUTH_API_ORIGIN", env.AUTH_API_ORIGIN, platformTarget),
   };
+}
+
+function validatedEnvOrigin(
+  name: Parameters<typeof validateAmbientApiOrigin>[0],
+  value: string | undefined,
+  platformTarget: string | undefined,
+): string | undefined {
+  return value === undefined ? undefined : validateAmbientApiOrigin(name, value, platformTarget);
 }
 
 const COMMAND_LOOKUP_KEYS = new Set(CLI_COMMANDS.map((command) => command.path.join("\0")));
@@ -45,7 +61,6 @@ export async function runCli(
   args: readonly string[] = process.argv.slice(2),
   runOptions: RunCliOptions = {},
 ): Promise<number> {
-  const options = withEnvOrigins(runOptions);
   // `--json` is a bare boolean flag, so raw argv answers it before the parse
   // that these first three error sites can themselves fail.
   const io = withJsonMode(consoleIo(), args.includes("--json"));
@@ -68,20 +83,17 @@ export async function runCli(
     return EXIT_USAGE;
   }
 
-  let invocation: ParsedInvocation;
+  const invocation = parseCliInvocation(args, io);
+  if (!invocation) return EXIT_USAGE;
+  const options = resolveRunOptions(runOptions, io);
+  if (!options) return EXIT_USAGE;
+  return executeParsedInvocation(invocation, options);
+}
+
+function parseCliInvocation(args: readonly string[], io: CliIo): ParsedInvocation | null {
   try {
     const parsed = parseInvocation(args);
-    if (!parsed.metaCommand && parsed.commandPath.length > 0) {
-      const matched = longestMatchingCommandPath(parsed.commandPath, COMMAND_LOOKUP_KEYS);
-      const remainder = parsed.commandPath.slice(matched.length);
-      invocation = {
-        ...parsed,
-        commandPath: matched,
-        positionals: [...remainder, ...parsed.positionals],
-      };
-    } else {
-      invocation = parsed;
-    }
+    const invocation = normalizeCommandPath(parsed);
     if (
       !invocation.metaCommand &&
       invocation.commandPath.length > 0 &&
@@ -93,14 +105,33 @@ export async function runCli(
         remediation: "Choose a command from the usage output",
       });
       printUsageUnlessJson(io);
-      return EXIT_USAGE;
+      return null;
     }
+    return invocation;
   } catch (error) {
     writeCliError(io, normalizeCliError(error));
-    return EXIT_USAGE;
+    return null;
   }
+}
 
-  return executeParsedInvocation(invocation, options);
+function normalizeCommandPath(parsed: ParsedInvocation): ParsedInvocation {
+  if (parsed.metaCommand || parsed.commandPath.length === 0) return parsed;
+  const matched = longestMatchingCommandPath(parsed.commandPath, COMMAND_LOOKUP_KEYS);
+  const remainder = parsed.commandPath.slice(matched.length);
+  return {
+    ...parsed,
+    commandPath: matched,
+    positionals: [...remainder, ...parsed.positionals],
+  };
+}
+
+function resolveRunOptions(options: RunCliOptions, io: CliIo): RunCliOptions | null {
+  try {
+    return withEnvOrigins(options);
+  } catch (error) {
+    writeCliError(io, normalizeCliError(error));
+    return null;
+  }
 }
 
 async function executeParsedInvocation(

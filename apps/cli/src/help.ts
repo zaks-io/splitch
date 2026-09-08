@@ -39,7 +39,7 @@ export function renderRootHelp(): string {
     "",
     "Credential semantics:",
     "  Client Key  Public data-plane key for browsers, mobile apps, and other untrusted clients.",
-    "  API Key     Secret data-plane key for trusted servers; a newly created value is shown once.",
+    "  API Key     Secret data-plane key for trusted servers; creation requires a protected output file.",
     "",
     "Start here:",
     "  splitch login",
@@ -134,7 +134,7 @@ function credentialNotes(command: CliCommandDefinition): string[] {
   }
   if (group === "api-keys") {
     return [
-      "API Key is secret and server-side only; a newly created value is shown once and cannot be read back.",
+      "API Key is secret and server-side only; creation writes it once to --output-file and it cannot be read back.",
     ];
   }
   return [];

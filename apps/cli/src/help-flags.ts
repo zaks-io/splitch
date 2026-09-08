@@ -1,10 +1,10 @@
-import { API_KEY_CREATE_OPERATION_ID } from "./api-key-output.js";
 import type { CliCommandDefinition, META_COMMANDS } from "./command-registry.js";
 import { commandHasBodyJson } from "./help-body-json.js";
 import { toolByOperation } from "./help-command-description.js";
 import { deleteModeHelpFlags } from "./help-delete-flags.js";
+import { oneTimeSecretDescriptor } from "./one-time-secret-output.js";
 
-interface HelpFlag {
+export interface HelpFlag {
   readonly syntax: string;
   readonly type: string;
   readonly defaultValue: string;
@@ -30,13 +30,13 @@ export function commandFlags(command: CliCommandDefinition): HelpFlag[] {
       flag("--idempotency-key <key>", "string", "generated", "Stable retry key for this mutation."),
     );
   }
-  if (command.operationId === API_KEY_CREATE_OPERATION_ID) {
+  if (oneTimeSecretDescriptor(command.operationId)) {
     flags.push(
       flag(
         "--output-file <path>",
         "string",
-        "none",
-        "Write the once-only secret to a new 0600 file instead of stdout; the payload reports valueWrittenTo.",
+        "required",
+        "Write the once-only secret to a new 0600 file; it is never printed.",
       ),
     );
   }
@@ -214,6 +214,10 @@ export function metaFlags(command: (typeof META_COMMANDS)[number]): HelpFlag[] {
   flags.push(flag("--json", "boolean", "false", "Write machine-readable JSON to stdout."));
   flags.push(helpFlag());
   return flags;
+}
+
+export function advertisedLongFlags(flags: readonly HelpFlag[]): ReadonlySet<string> {
+  return new Set(flags.flatMap((item) => item.syntax.match(/--[a-z][a-z0-9-]*/g) ?? []));
 }
 
 function metaScopeDefault(command: (typeof META_COMMANDS)[number], scope: "app" | "env"): string {

@@ -153,7 +153,9 @@ function pathParamAlreadyFilled(
  * Throws CLI_USAGE_INVALID on malformed JSON — the positional gate runs before
  * `applyBodyJson`, so a swallowed parse here would mis-name a missing argument.
  */
-function parseBodyJsonRecord(bodyJson: string | undefined): Record<string, unknown> | undefined {
+export function parseBodyJsonRecord(
+  bodyJson: string | undefined,
+): Record<string, unknown> | undefined {
   if (!bodyJson) {
     return undefined;
   }
@@ -165,6 +167,13 @@ function parseBodyJsonRecord(bodyJson: string | undefined): Record<string, unkno
   }
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
     throw malformedBodyJsonError();
+  }
+  if (Object.hasOwn(parsed, "__proto__")) {
+    throw new SplitchCliError({
+      code: "CLI_USAGE_INVALID",
+      causeSummary: "--body-json contains the reserved __proto__ field",
+      remediation: "Remove the top-level __proto__ field from --body-json",
+    });
   }
   return parsed as Record<string, unknown>;
 }

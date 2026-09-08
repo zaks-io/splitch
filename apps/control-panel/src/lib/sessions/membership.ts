@@ -1,5 +1,5 @@
 import { appScope, type Repository } from "@splitch/db";
-import { EnvironmentPolicySchema } from "@splitch/contracts";
+import { EnvironmentPolicySchema, USER_OWNED_ORGANIZATION_LIMIT } from "@splitch/contracts";
 import type { EnvironmentResolver } from "#lib/shared/loader-context";
 import {
   type AppMembership,
@@ -26,7 +26,7 @@ export interface SessionPrincipalInput {
  * Exceeding the cap is reported, never hidden: `orgsTruncated` rides along and
  * the chooser says so out loud.
  */
-export const SESSION_ORG_LIMIT = 50;
+export const SESSION_ORG_LIMIT = USER_OWNED_ORGANIZATION_LIMIT;
 
 /**
  * Materializes the session snapshot in a FLAT number of D1 queries: one for the

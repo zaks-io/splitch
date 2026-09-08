@@ -1,4 +1,13 @@
-import { access, appendFile, chmod, mkdir, readFile, writeFile } from "node:fs/promises";
+import {
+  access,
+  appendFile,
+  chmod,
+  lstat,
+  mkdir,
+  readFile,
+  realpath,
+  writeFile,
+} from "node:fs/promises";
 import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
 import { applyEdits, modify, type ParseError, parse } from "jsonc-parser";
@@ -120,6 +129,18 @@ export async function removeServiceBinding(state: CloudflareState): Promise<void
   await writeJsoncEdit(state.appConfigPath, raw, state.appBindingPath, next);
 }
 
+export async function assertServiceBindingRemovable(state: CloudflareState): Promise<void> {
+  const { services } = await serviceBindingState(state);
+  const existing = services.find((entry) => isRecord(entry) && entry.binding === SERVICE_BINDING) as
+    | Record<string, unknown>
+    | undefined;
+  if (existing && existing.service !== state.workerName) {
+    throw cloudflareUsage(
+      `${SERVICE_BINDING} no longer points to ${state.workerName}; refusing to remove it`,
+    );
+  }
+}
+
 export async function serviceBindingPath(
   configPath: string,
   environment: string,
@@ -135,16 +156,28 @@ export async function serviceBindingPath(
 }
 
 export async function findApplicationConfig(cwd: string): Promise<string> {
+  const projectRoot = await realpath(cwd);
   for (const name of ["wrangler.jsonc", "wrangler.json"]) {
-    const path = join(cwd, name);
+    const path = join(projectRoot, name);
     try {
-      await access(path);
-      return path;
+      return await canonicalApplicationConfig(path, projectRoot);
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
     }
   }
-  throw cloudflareUsage(`No wrangler.jsonc or wrangler.json exists in ${cwd}`);
+  throw cloudflareUsage(`No wrangler.jsonc or wrangler.json exists in ${projectRoot}`);
+}
+
+async function canonicalApplicationConfig(path: string, projectRoot: string): Promise<string> {
+  const info = await lstat(path);
+  if (!info.isFile() || info.isSymbolicLink()) {
+    throw cloudflareUsage(`Application config ${path} must be a regular file, not a link`);
+  }
+  const canonicalPath = await realpath(path);
+  if (dirname(canonicalPath) !== projectRoot) {
+    throw cloudflareUsage(`Application config ${path} resolves outside the current App`);
+  }
+  return canonicalPath;
 }
 
 export async function assertGeneratedTargetsAvailable(
@@ -172,7 +205,37 @@ export async function requireState(cwd: string, environment: string): Promise<Cl
   const state = await readState(generatedPaths(cwd, environment).statePath);
   if (!state) throw cloudflareUsage(`No Cloudflare integration is installed for ${environment}`);
   assertStateEnvironment(state, environment);
-  return state;
+  return assertStateProject(cwd, environment, state);
+}
+
+export async function assertStateProject(
+  cwd: string,
+  environment: string,
+  state: CloudflareState,
+): Promise<CloudflareState> {
+  if (state.environment !== environment) {
+    throw cloudflareUsage(`Cloudflare state belongs to ${state.environment}, not ${environment}`);
+  }
+  const expectedWorkerName = workerName(environment);
+  if (state.workerName !== expectedWorkerName) {
+    throw cloudflareUsage(`Cloudflare state names an unexpected Worker; refusing to continue`);
+  }
+  const expectedConfigPath = await findApplicationConfig(cwd);
+  const projectRoot = await realpath(cwd);
+  const actualConfigPath = await canonicalApplicationConfig(state.appConfigPath, projectRoot);
+  if (actualConfigPath !== expectedConfigPath) {
+    throw cloudflareUsage(`Cloudflare state points outside the current App configuration`);
+  }
+  const expectedBindingPath = await serviceBindingPath(expectedConfigPath, environment);
+  if (
+    state.appBindingPath.length !== expectedBindingPath.length ||
+    state.appBindingPath.some((part, index) => part !== expectedBindingPath[index])
+  ) {
+    throw cloudflareUsage(`Cloudflare state points at an unexpected service binding`);
+  }
+  return state.appConfigPath === actualConfigPath
+    ? state
+    : { ...state, appConfigPath: actualConfigPath };
 }
 
 export async function readState(path: string): Promise<CloudflareState | null> {

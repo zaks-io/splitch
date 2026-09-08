@@ -219,11 +219,12 @@ describe("CLI --body-json schema help details (SPL-309)", () => {
         ),
       ),
     ).join("\n");
-    for (const field of fromSchema.fields) {
+    for (const field of fromSchema.fields.filter((field) => field.name !== "review")) {
       expect(fieldRows(bodySection).some((row) => row.trimStart().startsWith(field.name))).toBe(
         true,
       );
     }
+    expect(bodySection).not.toContain("review");
   });
 
   it("requires an explicit body-schema policy for every non-api command kind", () => {

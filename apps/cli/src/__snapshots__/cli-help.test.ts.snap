@@ -9,26 +9,24 @@ Usage:
   splitch api-keys create [flags]
 
 Flags:
-  --app <app>              [type: string; default: SPLITCH_APP or config] App ID or slug.
-  --env <environment>      [type: string; default: SPLITCH_ENV or config] Environment ID or key.
-  --by <mode>              [type: string; default: automatic] Allowed: id. Resolve a canonical-looking selector explicitly.
-  --body-json <json>       [type: JSON object; default: none] Request body fields; see Request body below.
-  --idempotency-key <key>  [type: string; default: generated] Stable retry key for this mutation.
-  --output-file <path>     [type: string; default: none] Write the once-only secret to a new 0600 file instead of stdout; the payload reports valueWrittenTo.
-  --json                   [type: boolean; default: false] Write machine-readable JSON to stdout.
-  -h, --help               [type: boolean; default: false] Show help and exit.
+  --app <app>           [type: string; default: SPLITCH_APP or config] App ID or slug.
+  --env <environment>   [type: string; default: SPLITCH_ENV or config] Environment ID or key.
+  --by <mode>           [type: string; default: automatic] Allowed: id. Resolve a canonical-looking selector explicitly.
+  --body-json <json>    [type: JSON object; default: none] Request body fields; see Request body below.
+  --output-file <path>  [type: string; default: required] Write the once-only secret to a new 0600 file; it is never printed.
+  --json                [type: boolean; default: false] Write machine-readable JSON to stdout.
+  -h, --help            [type: boolean; default: false] Show help and exit.
 
 Request body (--body-json):
-  scopes           required  string ("data-plane:evaluate" | "data-plane:write")[]
-  idempotency_key  optional  string
+  scopes  required  string ("data-plane:evaluate" | "data-plane:write")[]
   Example:
     {"scopes":[]}
 
 Credential semantics:
-  API Key is secret and server-side only; a newly created value is shown once and cannot be read back.
+  API Key is secret and server-side only; creation writes it once to --output-file and it cannot be read back.
 
 Example:
-  splitch api-keys create --body-json '{"scopes":[]}' --json",
+  splitch api-keys create --body-json '{"scopes":[]}' --output-file <secret-file> --json",
     "api-keys list": "List API Key metadata (no secrets; bounded; reports its own truncation).
 
 Usage:
@@ -42,7 +40,7 @@ Flags:
   -h, --help           [type: boolean; default: false] Show help and exit.
 
 Credential semantics:
-  API Key is secret and server-side only; a newly created value is shown once and cannot be read back.
+  API Key is secret and server-side only; creation writes it once to --output-file and it cannot be read back.
 
 Example:
   splitch api-keys list --json",
@@ -65,7 +63,7 @@ Request body (--body-json):
     {}
 
 Credential semantics:
-  API Key is secret and server-side only; a newly created value is shown once and cannot be read back.
+  API Key is secret and server-side only; creation writes it once to --output-file and it cannot be read back.
 
 Example:
   splitch api-keys revoke <key-id> --body-json '{}' --json",
@@ -811,7 +809,6 @@ Flags:
   -h, --help               [type: boolean; default: false] Show help and exit.
 
 Request body (--body-json):
-  review            optional  { action: "approve_and_apply" }
   reason            optional  string
   horizon           optional  string ("sequential" | "fixed")
   sampleSizeLocked  optional  number | null
@@ -906,7 +903,6 @@ Request body (--body-json):
   enabled                optional  boolean
   availableVariantNames  optional  string[]
   rollout                optional  { percentage: number } | null
-  review                 optional  { action: "approve_and_apply" }
   idempotency_key        required  string
   Example:
     {"enabled":true,"availableVariantNames":[],"idempotency_key":"idem-1"}
@@ -955,7 +951,6 @@ Flags:
 
 Request body (--body-json):
   targetingRules   required  { id: string; flagId: string; priority: number; conditions: { attribute: string; operator: string ("eq" | "neq" | "gt" | "lt" | "gte" | "lte" | "in" | "not_in" | "matches" | "not_matches"); value: boolean | string | number | (boolean | string | number)[] }[]; variantId: string; segmentId?: string; percentageRollout?: { percentage: number; salt?: string } | null }[]
-  review           optional  { action: "approve_and_apply" }
   idempotency_key  required  string
   Example:
     {"targetingRules":[{"id":"id_1","flagId":"flag_1","priority":0,"conditions":[{"attribute":"attribute","operator":"eq","value":true}],"variantId":"variant_1"}],"idempotency_key":"idem-1"}
@@ -989,7 +984,6 @@ Request body (--body-json):
   value            required  boolean | string | number | Record<string, unknown>
   isDefault        optional  boolean
   description      optional  string
-  review           optional  { action: "approve_and_apply" }
   idempotency_key  required  string
   Example:
     {"appId":"app_1","flagId":"flag_1","name":"name","value":true,"idempotency_key":"idem-1"}
@@ -1033,7 +1027,6 @@ Request body (--body-json):
   name             optional  string
   value            optional  boolean | string | number | Record<string, unknown>
   description      optional  string
-  review           optional  { action: "approve_and_apply" }
   idempotency_key  required  string
   Example:
     {"value":true,"idempotency_key":"idem-1"}
@@ -1135,7 +1128,6 @@ Flags:
 Request body (--body-json):
   fromEnvironmentId  required  string
   select             required  { availability?: string[]; targeting?: true; rollout?: true; enabled?: true }
-  review             optional  { action: "approve_and_apply" }
   idempotency_key    required  string
   Example:
     {"fromEnvironmentId":"fromEnvironment_1","select":{"availability":[],"targeting":true,"rollout":true,"enabled":true},"idempotency_key":"idem-1"}
@@ -1569,7 +1561,6 @@ Request body (--body-json):
   name             optional  string
   description      optional  string
   conditions       optional  { attribute: string; operator: string ("eq" | "neq" | "gt" | "lt" | "gte" | "lte" | "in" | "not_in" | "matches" | "not_matches"); value: boolean | string | number | (boolean | string | number)[] }[]
-  review           optional  { action: "approve_and_apply" }
   idempotency_key  optional  string
   Example:
     {"name":"name"}
@@ -1584,18 +1575,18 @@ Usage:
 Flags:
   --org <organization>  [type: string; default: none] Organization ID.
   --body-json <json>    [type: JSON object; default: none] Request body fields; see Request body below.
+  --output-file <path>  [type: string; default: required] Write the once-only secret to a new 0600 file; it is never printed.
   --json                [type: boolean; default: false] Write machine-readable JSON to stdout.
   -h, --help            [type: boolean; default: false] Show help and exit.
 
 Request body (--body-json):
   installationId  required  string
   webhookUrl      required  string
-  webhookSecret   optional  string
   Example:
     {"installationId":"018f2b7c-3c9a-7b3e-9a52-0c1d2e3f4a5b","webhookUrl":"https://app.example.com"}
 
 Example:
-  splitch sentry-installations create --org <organization> --body-json '{"installationId":"018f2b7c-3c9a-7b3e-9a52-0c1d2e3f4a5b","webhookUrl":"https://app.example.com"}' --json",
+  splitch sentry-installations create --org <organization> --body-json '{"installationId":"018f2b7c-3c9a-7b3e-9a52-0c1d2e3f4a5b","webhookUrl":"https://app.example.com"}' --output-file <secret-file> --json",
     "sentry-installations delete": "Revoke a Sentry integration and stop change delivery.
 
 Usage:
@@ -1640,17 +1631,17 @@ Usage:
 Flags:
   --org <organization>  [type: string; default: none] Organization ID.
   --body-json <json>    [type: JSON object; default: none] Request body fields; see Request body below.
+  --output-file <path>  [type: string; default: required] Write the once-only secret to a new 0600 file; it is never printed.
   --json                [type: boolean; default: false] Write machine-readable JSON to stdout.
   -h, --help            [type: boolean; default: false] Show help and exit.
 
 Request body (--body-json):
-  rotationId     required  string
-  webhookSecret  optional  string
+  rotationId  required  string
   Example:
     {"rotationId":"018f2b7c-3c9a-7b3e-9a52-0c1d2e3f4a5b"}
 
 Example:
-  splitch sentry-secret-rotations create --org <organization> <installation-id> --body-json '{"rotationId":"018f2b7c-3c9a-7b3e-9a52-0c1d2e3f4a5b"}' --json",
+  splitch sentry-secret-rotations create --org <organization> <installation-id> --body-json '{"rotationId":"018f2b7c-3c9a-7b3e-9a52-0c1d2e3f4a5b"}' --output-file <secret-file> --json",
   },
   "groups": {
     "api-keys": "Manage api-keys resources.
@@ -2211,7 +2202,7 @@ Flags:
 
 Credential semantics:
   Client Key  Public data-plane key for browsers, mobile apps, and other untrusted clients.
-  API Key     Secret data-plane key for trusted servers; a newly created value is shown once.
+  API Key     Secret data-plane key for trusted servers; creation requires a protected output file.
 
 Start here:
   splitch login
