@@ -20,7 +20,7 @@ import {
   type EntityPrivacyLedgerInput,
   type EntityPrivacyLedgerRecord,
   recordConfigStoreEntityDeletionSuppression,
-  recordConfigStoreEntityPrivacyCompletion,
+  recordConfigStoreEntityPrivacyRequest,
 } from "./config-store-app-identity-ledger";
 import {
   isPanelSessionContext,
@@ -227,18 +227,12 @@ export class ConfigStoreDurableObject
     );
   }
 
-  async recordEntityPrivacyCompletion(
+  async recordEntityPrivacyRequest(
     appId: string,
     expectedVersion: string,
     input: EntityPrivacyLedgerInput,
   ): Promise<EntityPrivacyLedgerRecord> {
-    return recordConfigStoreEntityPrivacyCompletion(
-      this.ctx,
-      this.env,
-      appId,
-      expectedVersion,
-      input,
-    );
+    return recordConfigStoreEntityPrivacyRequest(this.ctx, this.env, appId, expectedVersion, input);
   }
 
   private store(): ConfigStoreWriter {

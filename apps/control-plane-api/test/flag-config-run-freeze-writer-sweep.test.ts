@@ -142,7 +142,7 @@ const DURABLE_OBJECT_ONLY: Record<string, string> = {
   assertAppIdentityTrafficAllowed: "reads the App identity lifecycle; no D1 write",
   beginEntityPrivacy: "serializes Entity privacy against App identity reset",
   recordEntityDeletionSuppression: "serializes Entity suppression ledger writes against reset",
-  recordEntityPrivacyCompletion: "serializes Entity privacy evidence writes against reset",
+  recordEntityPrivacyRequest: "serializes Entity privacy intake writes against reset",
   identityStore: "constructs the App identity DO store; writes no Flag Configuration row",
   store: "constructs the guarded store; the guard it returns is the boundary",
   broadcast: "sends a delta nudge over open sockets",

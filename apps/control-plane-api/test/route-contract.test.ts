@@ -286,8 +286,7 @@ async function expectPrivacyStatus(jwt: string): Promise<void> {
   expect(response.status).toBe(200);
   expect(await response.json()).toMatchObject({
     request: { requestId: PRIVACY_REQUEST_ID, status: "received" },
-    job: { requestId: PRIVACY_REQUEST_ID, status: "running" },
-    artifact: null,
+    job: null,
   });
 }
 
@@ -310,6 +309,7 @@ function request(method: string, path: string, jwt: string, body?: Record<string
     headers: {
       authorization: `Bearer ${jwt}`,
       ...(body ? { "content-type": "application/json" } : {}),
+      ...(path.includes("/privacy/entities/") ? { "idempotency-key": "route-contract" } : {}),
     },
     body: body ? JSON.stringify(body) : undefined,
   });

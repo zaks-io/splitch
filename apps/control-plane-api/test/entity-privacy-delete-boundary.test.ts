@@ -45,9 +45,10 @@ describe("entity privacy delete route availability", () => {
 
   afterEach(async () => bindings.dispose());
 
-  it("exports and deletes every retained-epoch hash without echoing the Targeting Key", async () => {
+  it("records and checkpoints an idempotent delete before destructive effects", async () => {
     const hashes = ["local-v1:abc", "app-v1:def"] as const;
     const repo = createRepository(bindings.d1);
+    const operations: string[] = [];
     const app = createApp({
       authResolver: makeControlPlaneAuthResolver({
         verifier: makeJwksVerifier({
@@ -66,10 +67,11 @@ describe("entity privacy delete route availability", () => {
       }),
       rateLimiter: allowLimiter,
       repo,
-      configStore: identityCoordinator(repo),
+      configStore: identityCoordinator(repo, operations),
       nowIso: () => NOW_ISO,
       entityPrivacy: {
         async exportEntity() {
+          operations.push("identity");
           const assignmentRecords = [
             {
               targetingKeyHash: hashes[0],
@@ -112,21 +114,47 @@ describe("entity privacy delete route availability", () => {
             },
           };
         },
-        async suppressEntity() {},
-        async deleteEntity() {
-          return {
-            appId: PRIMARY.appId,
-            idType: "user",
-            targetingKeyHashes: hashes,
-            entityFamilyHash: hashes[0],
-            deletedKeyCount: hashes.length,
-            deletedWriterCount: hashes.length,
-            deletedOutboxCount: hashes.length,
-            proofs: hashes.map((hash) => `${hash}:assignment-do-tombstone-v1`),
-          };
+        async suppressAnalysis() {
+          operations.push("analysis-suppression");
+          return identityResult();
+        },
+        async suppressEvents() {
+          operations.push("event-ingest-suppression");
+          return identityResult();
+        },
+        async deleteAssignments() {
+          operations.push("assignments");
+          return deletedResult();
+        },
+        async deleteAnalysis() {
+          operations.push("analysis");
+          return identityResult();
+        },
+        async deleteEvents() {
+          operations.push("event-ingest");
+          return identityResult();
         },
       },
     });
+
+    function identityResult() {
+      return {
+        appId: PRIMARY.appId,
+        idType: "user",
+        targetingKeyHashes: hashes,
+        entityFamilyHash: hashes[0],
+        proofs: ["proof"],
+      };
+    }
+
+    function deletedResult() {
+      return {
+        ...identityResult(),
+        deletedKeyCount: hashes.length,
+        deletedWriterCount: hashes.length,
+        deletedOutboxCount: hashes.length,
+      };
+    }
 
     const jwt = await signer.sign({
       sub: APP_ADMIN,
@@ -136,50 +164,68 @@ describe("entity privacy delete route availability", () => {
       exp: Math.floor(NOW_MS / 1000) + 3600,
       scopes: [appAdminScope(PRIMARY.appId)],
     });
-    const exported = await app.request(`/apps/${PRIMARY.appId}/privacy/entities/export`, {
-      method: "POST",
-      headers: {
-        authorization: `Bearer ${jwt}`,
-        "content-type": "application/json",
-      },
-      body: JSON.stringify({ idType: "user", targetingKey: "subject_entity_privacy" }),
-    });
-    const deleted = await app.request(`/apps/${PRIMARY.appId}/privacy/entities/delete`, {
-      method: "POST",
-      headers: {
-        authorization: `Bearer ${jwt}`,
-        "content-type": "application/json",
-      },
-      body: JSON.stringify({ idType: "user", targetingKey: "subject_entity_privacy" }),
-    });
+    const deleteRequest = () =>
+      app.request(`/apps/${PRIMARY.appId}/privacy/entities/delete`, {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${jwt}`,
+          "content-type": "application/json",
+          "idempotency-key": "entity-delete-1",
+        },
+        body: JSON.stringify({ idType: "user", targetingKey: "subject_entity_privacy" }),
+      });
+    const deleted = await deleteRequest();
 
-    expect(exported.status).toBe(200);
     expect(deleted.status).toBe(200);
-    const exportBody = await exported.json();
     const deleteBody = await deleted.json();
-    expect(exportBody).toMatchObject({
-      request: { requestType: "export", subjectType: "entity", status: "completed" },
-      job: { kind: "export", status: "completed" },
-      artifact: {
-        schemaVersion: "entity-privacy-export-v1",
-        stores: [
-          { name: "assignments", records: [{ holdoverWrites: [{ experimentId: "exp-old" }] }] },
-          { name: "analysis", records: [{ event_name: "purchase" }] },
-          { name: "event-ingest", records: [{ deliveryId: "delivery-1" }] },
-        ],
-      },
-    });
     expect(deleteBody).toMatchObject({
       request: { requestType: "delete", subjectType: "entity", status: "completed" },
-      job: { kind: "delete", status: "completed" },
+      job: {
+        kind: "delete",
+        status: "completed",
+        storeStatus: {
+          "analysis-suppression": "done",
+          "event-ingest-suppression": "done",
+          "d1-tombstone": "done",
+          assignments: "done",
+          analysis: "done",
+          "event-ingest": "done",
+        },
+      },
     });
-    expect(JSON.stringify({ exportBody, deleteBody })).not.toContain("subject_entity_privacy");
+    expect(JSON.stringify(deleteBody)).not.toContain("subject_entity_privacy");
+    expect(operations).toEqual([
+      "identity",
+      "intake",
+      "analysis-suppression",
+      "event-ingest-suppression",
+      "d1-tombstone",
+      "assignments",
+      "analysis",
+      "event-ingest",
+    ]);
 
-    const status = await app.request(`/privacy/requests/${exportBody.request.requestId}`, {
+    const replayed = await deleteRequest();
+    expect(replayed.status).toBe(200);
+    expect((await replayed.json()).request.requestId).toBe(deleteBody.request.requestId);
+    expect(operations).toEqual([
+      "identity",
+      "intake",
+      "analysis-suppression",
+      "event-ingest-suppression",
+      "d1-tombstone",
+      "assignments",
+      "analysis",
+      "event-ingest",
+      "identity",
+      "intake",
+    ]);
+
+    const status = await app.request(`/privacy/requests/${deleteBody.request.requestId}`, {
       headers: { authorization: `Bearer ${jwt}` },
     });
     expect(status.status).toBe(200);
-    expect(await status.json()).toMatchObject({ artifact: exportBody.artifact });
+    expect(await status.json()).toMatchObject({ job: { status: "completed" } });
 
     const outsiderJwt = await signer.sign({
       sub: "user_other_tenant",
@@ -189,14 +235,14 @@ describe("entity privacy delete route availability", () => {
       exp: Math.floor(NOW_MS / 1000) + 3600,
       scopes: [appAdminScope(PRIMARY.appId)],
     });
-    const forbidden = await app.request(`/privacy/requests/${exportBody.request.requestId}`, {
+    const forbidden = await app.request(`/privacy/requests/${deleteBody.request.requestId}`, {
       headers: { authorization: `Bearer ${outsiderJwt}` },
     });
     expect(forbidden.status).toBe(403);
   });
 });
 
-function identityCoordinator(repo: ReturnType<typeof createRepository>) {
+function identityCoordinator(repo: ReturnType<typeof createRepository>, operations: string[]) {
   return {
     writerFor: () => {
       throw new Error("not used");
@@ -205,16 +251,16 @@ function identityCoordinator(repo: ReturnType<typeof createRepository>) {
       throw new Error("not used");
     },
     beginEntityPrivacy: async () => "app-v1",
-    recordEntityDeletionSuppression: async () => undefined,
-    recordEntityPrivacyCompletion: async (
+    recordEntityDeletionSuppression: async () => {
+      operations.push("d1-tombstone");
+    },
+    recordEntityPrivacyRequest: async (
       _appId: string,
       _version: string,
       input: EntityPrivacyLedgerInput,
-    ) =>
-      repo.privacy.createPrivacyRequest({
-        ...input,
-        subjectType: "entity",
-        status: "completed",
-      }),
+    ) => {
+      operations.push("intake");
+      return repo.privacy.beginEntityPrivacyJob(input);
+    },
   };
 }

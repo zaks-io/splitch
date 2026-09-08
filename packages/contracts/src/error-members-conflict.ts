@@ -38,6 +38,8 @@ export const conflictErrorMembers = [
         "cloudflare_installation",
         "sentry_installation",
         "sentry_secret_rotation",
+        "entity_privacy_delete",
+        "entity_privacy_export",
       ]),
       idempotencyKey: z.string().min(1),
     }),

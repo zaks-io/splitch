@@ -37,34 +37,17 @@ const PrivacyJobSchema = z.object({
   requestId: z.string(),
   kind: z.enum(["export", "delete"]),
   status: z.enum(["queued", "running", "completed", "failed"]),
+  storeStatus: z.record(z.string(), z.enum(["pending", "done", "failed", "skipped"])),
+  downloadUrl: z.string().url().optional(),
+  expiresAt: z.string().optional(),
 });
-const PrivacyExportArtifactSchema = z
-  .object({
-    schemaVersion: z.literal("entity-privacy-export-v1"),
-    appId: z.string(),
-    idType: z.string(),
-    targetingKeyHashes: z.array(z.string()),
-    entityFamilyHash: z.string(),
-    stores: z.array(
-      z
-        .object({
-          name: z.enum(["assignments", "analysis", "event-ingest"]),
-          records: z.array(z.unknown()),
-          proofs: z.array(z.string().min(1)),
-        })
-        .strict(),
-    ),
-  })
-  .strict();
 const PrivacyResponseSchema = z.object({
   request: PrivacyRequestSchema,
   job: PrivacyJobSchema,
-  artifact: PrivacyExportArtifactSchema.nullable(),
 });
 const PrivacyStatusResponseSchema = z.object({
   request: PrivacyRequestSchema,
   job: PrivacyJobSchema.nullable(),
-  artifact: PrivacyExportArtifactSchema.nullable(),
 });
 
 // Entity export/delete carry the raw Targeting Key; the Worker hashes it server-side.
@@ -136,8 +119,14 @@ export const privacyRoutes = [
     response: PrivacyResponseSchema,
     auth: AUTH,
     rateLimit: RATE,
-    idempotency: "none",
-    errors: ["APP_NOT_FOUND", "FORBIDDEN", "VALIDATION_ERROR", "SERVICE_UNAVAILABLE"],
+    idempotency: "required",
+    errors: [
+      "APP_NOT_FOUND",
+      "FORBIDDEN",
+      "VALIDATION_ERROR",
+      "IDEMPOTENCY_KEY_CONFLICT",
+      "SERVICE_UNAVAILABLE",
+    ],
   }),
   defineApiRoute({
     operationId: "entity_privacy_delete",
@@ -149,8 +138,14 @@ export const privacyRoutes = [
     response: PrivacyResponseSchema,
     auth: AUTH,
     rateLimit: RATE,
-    idempotency: "none",
-    errors: ["APP_NOT_FOUND", "FORBIDDEN", "VALIDATION_ERROR", "SERVICE_UNAVAILABLE"],
+    idempotency: "required",
+    errors: [
+      "APP_NOT_FOUND",
+      "FORBIDDEN",
+      "VALIDATION_ERROR",
+      "IDEMPOTENCY_KEY_CONFLICT",
+      "SERVICE_UNAVAILABLE",
+    ],
   }),
   defineApiRoute({
     operationId: "privacy_requests_get",

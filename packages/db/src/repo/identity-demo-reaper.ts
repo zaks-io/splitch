@@ -126,6 +126,7 @@ const REAP_PLAN: readonly ReapStep[] = [
     { table: "environments", returning: "id" },
     { table: "app_memberships", returning: "app_id" },
   ]),
+  ["privacy_jobs", deletePrivacyJobsForOrg],
   ["privacy_requests", deletePrivacyRequestsForOrg],
   // Written by triggers on every statement above, so it is cleared after them
   // and before the Apps whose history it is.
@@ -137,6 +138,16 @@ const REAP_PLAN: readonly ReapStep[] = [
   ["trusted_idps", deleteTrustedIdpsForOrg],
   ["organizations", deleteExpiredOrgRoot],
 ];
+
+function deletePrivacyJobsForOrg(d1: D1Database, orgId: string): D1PreparedStatement {
+  return d1
+    .prepare(
+      `DELETE FROM privacy_jobs
+       WHERE request_id IN (SELECT request_id FROM privacy_requests WHERE org_id = ?)
+       RETURNING job_id`,
+    )
+    .bind(orgId);
+}
 
 export const DEMO_REAP_DELETE_ORDER: readonly string[] = REAP_PLAN.map(([table]) => table);
 

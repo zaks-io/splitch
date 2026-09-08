@@ -39,7 +39,7 @@ export function createRepository(d1: D1Database) {
     flagChangeEvents: makeFlagChangeEventRepo(d1),
     claim: makeClaimStateRepo(d1),
     identity: makeIdentityRepo(db, d1),
-    privacy: makePrivacyRepo(db),
+    privacy: makePrivacyRepo(db, d1),
     approvals: makeApprovalRepo(db, d1),
   };
 }

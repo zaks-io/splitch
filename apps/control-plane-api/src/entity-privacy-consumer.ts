@@ -9,12 +9,26 @@ import {
 
 export interface EntityPrivacyConsumer {
   exportEntity(input: EntityPrivacyConsumerInput): Promise<EntityPrivacyStoreResult>;
-  suppressEntity(
+  suppressAnalysis(
     input: EntityPrivacyConsumerInput,
     identity: EntityPrivacyStoreResult,
     deleteBeforeTs: string,
-  ): Promise<void>;
-  deleteEntity(
+  ): Promise<EntityPrivacyStoreResult>;
+  suppressEvents(
+    input: EntityPrivacyConsumerInput,
+    identity: EntityPrivacyStoreResult,
+    deleteBeforeTs: string,
+  ): Promise<EntityPrivacyStoreResult>;
+  deleteAssignments(
+    input: EntityPrivacyConsumerInput,
+    deleteBeforeTs: string,
+  ): Promise<EntityPrivacyStoreResult>;
+  deleteAnalysis(
+    input: EntityPrivacyConsumerInput,
+    identity: EntityPrivacyStoreResult,
+    deleteBeforeTs: string,
+  ): Promise<EntityPrivacyStoreResult>;
+  deleteEvents(
     input: EntityPrivacyConsumerInput,
     identity: EntityPrivacyStoreResult,
     deleteBeforeTs: string,
@@ -57,60 +71,57 @@ export function createEntityPrivacyConsumer(
         },
       };
     },
-    async suppressEntity(input, identity, deleteBeforeTs) {
-      const [analytics, events] = await Promise.all([
-        callStorePrivacy(
-          analysis,
-          "entity_analysis_privacy_suppress",
-          input,
-          identity,
-          deleteBeforeTs,
-        ),
-        callStorePrivacy(
-          eventIngest,
-          "entity_event_privacy_suppress",
-          input,
-          identity,
-          deleteBeforeTs,
-        ),
-      ]);
+    async suppressAnalysis(input, identity, deleteBeforeTs) {
+      const analytics = await callStorePrivacy(
+        analysis,
+        "entity_analysis_privacy_suppress",
+        input,
+        identity,
+        deleteBeforeTs,
+      );
       assertStoreIdentity(identity, analytics, "analysis suppression");
-      assertStoreIdentity(identity, events, "Event suppression");
+      return analytics;
     },
-    async deleteEntity(input, identity, deleteBeforeTs) {
-      const [assignments, analytics, events] = await Promise.all([
-        callAssignmentPrivacy(
-          evaluation,
-          "entity_assignment_privacy_delete",
-          input,
-          deleteBeforeTs,
-        ),
-        callStorePrivacy(
-          analysis,
-          "entity_analysis_privacy_delete",
-          input,
-          identity,
-          deleteBeforeTs,
-        ),
-        callStorePrivacy(
-          eventIngest,
-          "entity_event_privacy_delete",
-          input,
-          identity,
-          deleteBeforeTs,
-        ),
-      ]);
-      assertStoreIdentity(identity, assignments, "Assignment deletion");
+    async suppressEvents(input, identity, deleteBeforeTs) {
+      const events = await callStorePrivacy(
+        eventIngest,
+        "entity_event_privacy_suppress",
+        input,
+        identity,
+        deleteBeforeTs,
+      );
+      assertStoreIdentity(identity, events, "Event suppression");
+      return events;
+    },
+    async deleteAssignments(input, deleteBeforeTs) {
+      return callAssignmentPrivacy(
+        evaluation,
+        "entity_assignment_privacy_delete",
+        input,
+        deleteBeforeTs,
+      );
+    },
+    async deleteAnalysis(input, identity, deleteBeforeTs) {
+      const analytics = await callStorePrivacy(
+        analysis,
+        "entity_analysis_privacy_delete",
+        input,
+        identity,
+        deleteBeforeTs,
+      );
       assertStoreIdentity(identity, analytics, "analysis deletion");
+      return analytics;
+    },
+    async deleteEvents(input, identity, deleteBeforeTs) {
+      const events = await callStorePrivacy(
+        eventIngest,
+        "entity_event_privacy_delete",
+        input,
+        identity,
+        deleteBeforeTs,
+      );
       assertStoreIdentity(identity, events, "Event deletion");
-      return {
-        ...assignments,
-        proofs: [
-          ...(assignments.proofs ?? []),
-          ...(analytics.proofs ?? []),
-          ...(events.proofs ?? []),
-        ],
-      };
+      return events;
     },
   };
 }
