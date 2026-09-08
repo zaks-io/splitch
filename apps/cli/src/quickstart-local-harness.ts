@@ -30,8 +30,8 @@ import {
   RecordingExposureSink,
 } from "../../evaluation-api/src/sdk-route-test-fixtures.js";
 
-const CONTROL_PLANE_ORIGIN = "http://control-plane.local";
-const EVALUATION_ORIGIN = "http://evaluation.local";
+const CONTROL_PLANE_ORIGIN = "http://127.0.0.1:8787";
+const EVALUATION_ORIGIN = "http://127.0.0.1:8788";
 const FOREIGN_ORG_ID = "org_quickstart_foreign_live";
 const allowLimiter: RateLimiter = () => ({ limited: false });
 

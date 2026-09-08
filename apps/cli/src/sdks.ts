@@ -115,7 +115,11 @@ function invalidOriginError(
 // origin it actually routes to.
 export function createOperationSdks(options: SdkFactoryOptions = {}): OperationSdks {
   const platformTarget = requirePlatformTarget(options.platformTarget);
-  const adapter = (envName: string, configured: string | undefined, localDefault: string) =>
+  const adapter = (
+    envName: ApiOriginEnvName,
+    configured: string | undefined,
+    localDefault: string,
+  ) =>
     createMcpOperationAdapter({
       baseUrl: apiBaseUrl(envName, configured, localDefault, platformTarget),
       fetch: options.fetch,
@@ -197,19 +201,19 @@ export function resolveDataPlaneBaseUrl(options: SdkFactoryOptions = {}): string
 }
 
 function apiBaseUrl(
-  envName: string,
+  envName: ApiOriginEnvName,
   configured: string | undefined,
   localDefault: string,
-  platformTarget: string,
+  platformTarget: PlatformTarget,
 ): string {
   if (configured) {
-    return configured;
+    return validateAmbientApiOrigin(envName, configured, platformTarget);
   }
   if (platformTarget === "local" || platformTarget === "pr-ci") {
     return localDefault;
   }
   if (platformTarget === "production" || platformTarget === "shared-preview") {
-    return hostedOrigins[platformTarget][envName as ApiOriginEnvName];
+    return hostedOrigins[platformTarget][envName];
   }
   throw new SplitchCliError({
     code: "CLI_API_ORIGIN_MISSING",

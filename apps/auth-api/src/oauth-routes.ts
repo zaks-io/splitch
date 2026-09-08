@@ -148,11 +148,11 @@ async function revokeToken(
       if (!session) {
         throw new OAuthError("invalid_grant", "refresh token session is unknown");
       }
+      await deps.revocations.revoke(session.userId, ACCESS_TOKEN_TTL_SECONDS);
       await deps.deviceFlow.revokeProviderToken({
         token: parsed.data.token,
         sessionId: session.providerSessionId,
       });
-      await deps.revocations.revoke(session.userId, ACCESS_TOKEN_TTL_SECONDS);
       await deps.deviceRefreshSessions.forget(parsed.data.token);
     }
   } catch (cause) {

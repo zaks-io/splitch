@@ -83,6 +83,46 @@ describe("OAuth revoke route", () => {
     expect(revoked).toEqual([{ subject: "user_workos", ttlSeconds: 3600 }]);
   });
 
+  it("revokes local bearer access when provider revocation fails", async () => {
+    const revoked: Array<{ subject: string; ttlSeconds: number }> = [];
+    const refreshToken = "provider-refresh-token";
+    const app = routeApp({
+      deviceFlow: unusedDeviceFlow(() => {
+        throw new Error("provider unavailable");
+      }),
+      deviceRefreshSessions: {
+        remember: async () => {},
+        lookup: async () => ({
+          providerSessionId: "session_workos",
+          userId: "user_workos",
+          providerOrganizationId: "org_selected",
+          selectedAppSelector: "app_selected",
+        }),
+        rotate: async () => {},
+        forget: async () => {},
+      },
+      revocations: {
+        revoke: async (subject, ttlSeconds) => {
+          revoked.push({ subject, ttlSeconds });
+        },
+        isRevoked: async () => false,
+      },
+    });
+
+    const res = await app.request("/oauth2/revoke", {
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+      body: form({
+        client_id: "splitch-cli",
+        token: refreshToken,
+        token_type_hint: "refresh_token",
+      }),
+    });
+
+    expect(res.status).toBe(500);
+    expect(revoked).toEqual([{ subject: "user_workos", ttlSeconds: 3600 }]);
+  });
+
   it("returns the provider refresh token and immediately revokes it through D1 on KV stale miss", async () => {
     const local = await makePoolBindings();
     try {

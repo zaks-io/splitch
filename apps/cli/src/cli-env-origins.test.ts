@@ -146,15 +146,32 @@ describe("ambient API origin overrides", () => {
     const code = await runCli([...createArgs], {
       credentialPath,
       fetch: transport.fetch,
-      controlPlaneBaseUrl: "https://option.example",
+      controlPlaneBaseUrl: "https://api.splitch.dev",
       env: { CONTROL_PLANE_API_ORIGIN: "https://env.example" },
     });
     expect(code).toBe(EXIT_OK);
     expect(
       transport.requests
         .find((request) => request.url.includes("/flags") && request.method === "POST")
-        ?.url.startsWith("https://option.example/"),
+        ?.url.startsWith("https://api.splitch.dev/"),
     ).toBe(true);
+  });
+
+  it("rejects an arbitrary programmatic origin before any request", async () => {
+    const { credentialPath } = await makeTempHome();
+    await writeFile(credentialPath, `${JSON.stringify(storedCredential())}\n`);
+    const transport = controlPlaneTransport();
+    vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const code = await runCli([...createArgs], {
+      credentialPath,
+      fetch: transport.fetch,
+      controlPlaneBaseUrl: "https://option.example",
+      env: {},
+    });
+
+    expect(code).not.toBe(EXIT_OK);
+    expect(transport.requests).toHaveLength(0);
   });
 
   it("rejects an invalid SPLITCH_PLATFORM_TARGET instead of falling back to local", async () => {

@@ -33,7 +33,7 @@ export const lookupErrorDocs = {
   QUOTA_EXCEEDED: {
     remediation: "Transfer or delete an owned Organization, then retry the create",
     cause:
-      "The User already owns the maximum number of non-provisional Organizations allowed in one complete session snapshot.",
+      "The User already owns the maximum number of non-provisional Organizations allowed by the ownership ceiling.",
     fix: "List the User's Organizations, then transfer ownership or delete one before retrying the create. Member and admin memberships do not count toward this ceiling.",
     details:
       '{ resourceType: "organization", currentCount: number, ceiling: number, recommendedAction: "REDUCE_OWNED_ORGANIZATIONS" }',

@@ -258,6 +258,7 @@ RecommendedAction =
   | 'CHOOSE_DIFFERENT_KEY'   // Experiment key still held by an archived Experiment; resend create with a different key
   | 'USE_CANONICAL_ID'       // select one ambiguity candidate and retry with its canonical ID
   | 'READ_PER_ENVIRONMENT'   // App-wide attention rollup exceeded its fan-out budget; read attention per Environment instead
+  | 'REDUCE_OWNED_ORGANIZATIONS' // transfer or delete an owned Organization before retrying create
 ```
 
 Per-code mapping (the action is deterministic per code, but lives in `details` so the agent reads

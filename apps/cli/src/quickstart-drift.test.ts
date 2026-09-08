@@ -143,6 +143,7 @@ describe("quickstart local control-plane lifecycle", { timeout: 60_000 }, () => 
     const cliOptions = {
       credentialPath,
       fetch: harness.routingFetch,
+      platformTarget: "local" as const,
       controlPlaneBaseUrl: quickstartOrigins.controlPlaneBaseUrl,
       evaluationBaseUrl: quickstartOrigins.evaluationBaseUrl,
     };
@@ -213,6 +214,7 @@ describe("quickstart local control-plane lifecycle", { timeout: 60_000 }, () => 
     const cliOptions = {
       credentialPath,
       fetch: harness.routingFetch,
+      platformTarget: "local" as const,
       controlPlaneBaseUrl: quickstartOrigins.controlPlaneBaseUrl,
       evaluationBaseUrl: quickstartOrigins.evaluationBaseUrl,
     };

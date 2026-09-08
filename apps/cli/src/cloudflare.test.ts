@@ -55,7 +55,8 @@ describe("cloudflare setup", () => {
         cwd,
         env: { SPLITCH_API_KEY: "api-key" },
         fetch: fetcher,
-        evaluationBaseUrl: "https://edge.example.test",
+        platformTarget: "local",
+        evaluationBaseUrl: "http://127.0.0.1:8788",
         commandRunner: runner,
         sleep: async () => {},
         io: { log: (line) => output.push(line), error: (line) => output.push(line) },
@@ -65,7 +66,7 @@ describe("cloudflare setup", () => {
     expect(result.exitCode).toBe(0);
     expect(requests.map(({ method }) => method)).toEqual(["GET", "POST", "GET"]);
     expect(requests[1]?.url).toBe(
-      "https://edge.example.test/api/integrations/cloudflare/installations",
+      "http://127.0.0.1:8788/api/integrations/cloudflare/installations",
     );
     const applicationConfig = await readFile(join(cwd, "wrangler.jsonc"), "utf8");
     expect(applicationConfig).toContain("// customer configuration");
@@ -124,7 +125,8 @@ describe("cloudflare setup", () => {
       executeInvocation(parseInvocation(["cloudflare", "setup", "--env", "production"]), {
         cwd,
         env: { SPLITCH_API_KEY: "invalid-api-key" },
-        evaluationBaseUrl: "https://edge.example.test",
+        platformTarget: "local",
+        evaluationBaseUrl: "http://127.0.0.1:8788",
         fetch: async () => Response.json({}, { status: 401 }),
         commandRunner: runner,
         io: { log: () => {}, error: () => {} },
@@ -147,7 +149,8 @@ describe("cloudflare wrangler resolution", () => {
     await executeInvocation(parseInvocation(["cloudflare", "setup", "--env", "production"]), {
       cwd,
       env: { SPLITCH_API_KEY: "api-key" },
-      evaluationBaseUrl: "https://edge.example.test",
+      platformTarget: "local",
+      evaluationBaseUrl: "http://127.0.0.1:8788",
       fetch: cloudflareInstallationFetch(),
       commandRunner: runner,
       sleep: async () => {},
@@ -171,7 +174,8 @@ describe("cloudflare wrangler resolution", () => {
     await executeInvocation(parseInvocation(["cloudflare", "setup", "--env", "production"]), {
       cwd,
       env: { SPLITCH_API_KEY: "api-key" },
-      evaluationBaseUrl: "https://edge.example.test",
+      platformTarget: "local",
+      evaluationBaseUrl: "http://127.0.0.1:8788",
       fetch: cloudflareInstallationFetch(),
       commandRunner: runner,
       sleep: async () => {},
@@ -193,7 +197,8 @@ describe("cloudflare wrangler resolution", () => {
     await executeInvocation(parseInvocation(["cloudflare", "setup", "--env", "production"]), {
       cwd,
       env: { SPLITCH_API_KEY: "api-key" },
-      evaluationBaseUrl: "https://edge.example.test",
+      platformTarget: "local",
+      evaluationBaseUrl: "http://127.0.0.1:8788",
       fetch: cloudflareInstallationFetch(),
       commandRunner: runner,
       sleep: async () => {},
@@ -271,7 +276,8 @@ describe("cloudflare setup preflight", () => {
       executeInvocation(parseInvocation(["cloudflare", "setup", "--env", "production"]), {
         cwd,
         env: { SPLITCH_API_KEY: "api-key" },
-        evaluationBaseUrl: "https://wrong.example.test",
+        platformTarget: "local",
+        evaluationBaseUrl: "http://127.0.0.1:9999",
         fetch: async () => Response.json({}, { status: 404 }),
         commandRunner: runner,
         io: { log: () => {}, error: () => {} },

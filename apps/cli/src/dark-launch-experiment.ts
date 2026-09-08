@@ -14,6 +14,7 @@ const COHORT_VALUE = "launch";
 export type DarkLaunchCliOptions = {
   credentialPath: string;
   fetch: typeof fetch;
+  platformTarget: "local";
   controlPlaneBaseUrl: string;
   evaluationBaseUrl: string;
 };
