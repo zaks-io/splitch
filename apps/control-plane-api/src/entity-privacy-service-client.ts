@@ -15,20 +15,7 @@ export interface EntityPrivacyStoreResult {
   deletedWriterCount?: number;
   deletedOutboxCount?: number;
   proofs?: readonly string[];
-  exportArtifact?: EntityPrivacyExportArtifact;
-}
-
-export interface EntityPrivacyExportArtifact {
-  schemaVersion: "entity-privacy-export-v1";
-  appId: string;
-  idType: string;
-  targetingKeyHashes: readonly string[];
-  entityFamilyHash: string;
-  stores: readonly {
-    name: "assignments" | "analysis" | "event-ingest";
-    records: readonly unknown[];
-    proofs: readonly string[];
-  }[];
+  nextCursor?: string | null;
 }
 
 export interface EntityPrivacyConsumerInput {
@@ -38,6 +25,11 @@ export interface EntityPrivacyConsumerInput {
   actorId: string;
   orgId: string | null;
   requestId: string;
+}
+
+export interface EntityPrivacyPageInput {
+  limit: number;
+  cursor: string | null;
 }
 
 export class EntityPrivacyConsumerError extends Error {
@@ -98,17 +90,31 @@ export async function callAssignmentPrivacy(
   return body;
 }
 
-export function exportedStore(
-  name: EntityPrivacyExportArtifact["stores"][number]["name"],
-  result: EntityPrivacyStoreResult,
-): EntityPrivacyExportArtifact["stores"][number] {
-  if (!Array.isArray(result.records) || !Array.isArray(result.proofs)) {
-    throw new EntityPrivacyConsumerError(`control-plane-api: ${name} export omitted records`);
-  }
-  return { name, records: result.records, proofs: result.proofs };
+export async function callStorePrivacyPage(
+  service: Fetcher,
+  operationId: "entity_analysis_privacy_export" | "entity_event_privacy_export",
+  input: EntityPrivacyConsumerInput,
+  identity: EntityPrivacyStoreResult,
+  page: EntityPrivacyPageInput,
+): Promise<EntityPrivacyStoreResult> {
+  return callStorePrivacyOperation(service, operationId, input, identity, page);
 }
 
 export async function callStorePrivacy(
+  service: Fetcher,
+  operationId:
+    | "entity_analysis_privacy_suppress"
+    | "entity_analysis_privacy_delete"
+    | "entity_event_privacy_suppress"
+    | "entity_event_privacy_delete",
+  input: EntityPrivacyConsumerInput,
+  identity: EntityPrivacyStoreResult,
+  deleteBeforeTs: string,
+): Promise<EntityPrivacyStoreResult> {
+  return callStorePrivacyOperation(service, operationId, input, identity, { deleteBeforeTs });
+}
+
+async function callStorePrivacyOperation(
   service: Fetcher,
   operationId:
     | "entity_analysis_privacy_export"
@@ -119,7 +125,11 @@ export async function callStorePrivacy(
     | "entity_event_privacy_delete",
   input: EntityPrivacyConsumerInput,
   identity: EntityPrivacyStoreResult,
-  deleteBeforeTs?: string,
+  operation:
+    | EntityPrivacyPageInput
+    | {
+        deleteBeforeTs: string;
+      },
 ): Promise<EntityPrivacyStoreResult> {
   const route = getRoute(operationId);
   if (!route)
@@ -140,7 +150,7 @@ export async function callStorePrivacy(
           idType: input.idType,
           targetingKeyHashes: identity.targetingKeyHashes,
           entityFamilyHash: identity.entityFamilyHash,
-          ...(deleteBeforeTs ? { deleteBeforeTs } : {}),
+          ...operation,
         },
         requestId: input.requestId,
       },
@@ -165,6 +175,15 @@ export async function callStorePrivacy(
   }
   if (operationId === "entity_event_privacy_export") {
     assertEventExportCardinality(body);
+  }
+  if (
+    operationId.endsWith("_export") &&
+    (!Array.isArray(body.records) ||
+      (body.nextCursor !== null && typeof body.nextCursor !== "string"))
+  ) {
+    throw new EntityPrivacyConsumerError(
+      `control-plane-api: ${operationId} returned an invalid page`,
+    );
   }
   return body;
 }

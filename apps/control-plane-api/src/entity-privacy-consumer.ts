@@ -2,13 +2,24 @@ import {
   assertStoreIdentity,
   callAssignmentPrivacy,
   callStorePrivacy,
+  callStorePrivacyPage,
   type EntityPrivacyConsumerInput,
+  type EntityPrivacyPageInput,
   type EntityPrivacyStoreResult,
-  exportedStore,
 } from "./entity-privacy-service-client";
 
 export interface EntityPrivacyConsumer {
   exportEntity(input: EntityPrivacyConsumerInput): Promise<EntityPrivacyStoreResult>;
+  exportAnalysisPage(
+    input: EntityPrivacyConsumerInput,
+    identity: EntityPrivacyStoreResult,
+    page: EntityPrivacyPageInput,
+  ): Promise<EntityPrivacyStoreResult>;
+  exportEventsPage(
+    input: EntityPrivacyConsumerInput,
+    identity: EntityPrivacyStoreResult,
+    page: EntityPrivacyPageInput,
+  ): Promise<EntityPrivacyStoreResult>;
   suppressAnalysis(
     input: EntityPrivacyConsumerInput,
     identity: EntityPrivacyStoreResult,
@@ -43,33 +54,29 @@ export function createEntityPrivacyConsumer(
   if (!evaluation || !analysis || !eventIngest) return undefined;
   return {
     async exportEntity(input) {
-      const assignments = await callAssignmentPrivacy(
-        evaluation,
-        "entity_assignment_privacy_export",
+      return callAssignmentPrivacy(evaluation, "entity_assignment_privacy_export", input);
+    },
+    async exportAnalysisPage(input, identity, page) {
+      const analytics = await callStorePrivacyPage(
+        analysis,
+        "entity_analysis_privacy_export",
         input,
+        identity,
+        page,
       );
-      const [analytics, events] = await Promise.all([
-        callStorePrivacy(analysis, "entity_analysis_privacy_export", input, assignments),
-        callStorePrivacy(eventIngest, "entity_event_privacy_export", input, assignments),
-      ]);
-      assertStoreIdentity(assignments, analytics, "export");
-      assertStoreIdentity(assignments, events, "Event export");
-      return {
-        ...assignments,
-        proofs: [...(analytics.proofs ?? []), ...(events.proofs ?? [])],
-        exportArtifact: {
-          schemaVersion: "entity-privacy-export-v1",
-          appId: assignments.appId,
-          idType: assignments.idType,
-          targetingKeyHashes: assignments.targetingKeyHashes,
-          entityFamilyHash: assignments.entityFamilyHash,
-          stores: [
-            exportedStore("assignments", assignments),
-            exportedStore("analysis", analytics),
-            exportedStore("event-ingest", events),
-          ],
-        },
-      };
+      assertStoreIdentity(identity, analytics, "analysis export");
+      return analytics;
+    },
+    async exportEventsPage(input, identity, page) {
+      const events = await callStorePrivacyPage(
+        eventIngest,
+        "entity_event_privacy_export",
+        input,
+        identity,
+        page,
+      );
+      assertStoreIdentity(identity, events, "Event export");
+      return events;
     },
     async suppressAnalysis(input, identity, deleteBeforeTs) {
       const analytics = await callStorePrivacy(

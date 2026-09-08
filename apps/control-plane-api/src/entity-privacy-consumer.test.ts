@@ -10,14 +10,17 @@ const IDENTITY = {
   entityFamilyHash: FAMILY,
 };
 
-function service(result: (path: string) => unknown): Fetcher {
+function service(result: (path: string, body: Record<string, unknown>) => unknown): Fetcher {
   return {
-    fetch: async (request: Request) => Response.json(result(new URL(request.url).pathname)),
+    fetch: async (request: Request) =>
+      Response.json(
+        result(new URL(request.url).pathname, (await request.json()) as Record<string, unknown>),
+      ),
   } as unknown as Fetcher;
 }
 
 describe("createEntityPrivacyConsumer export", () => {
-  it("returns a durable artifact containing every store's records and proofs", async () => {
+  it("resolves identity once and exposes bounded Analysis and Event Ingest page calls", async () => {
     const assignments = [
       {
         targetingKeyHash: HASH,
@@ -39,19 +42,21 @@ describe("createEntityPrivacyConsumer export", () => {
           `${HASH}:assignment-and-holdover-exported-v1`,
         ],
       })),
-      service(() => ({
+      service((_path, body) => ({
         ...IDENTITY,
         records: analytics,
+        nextCursor: body.cursor === null ? "analysis-next" : null,
         proofs: [
-          `tinybird:raw_events:${HASH}`,
-          `tinybird:metric_events:${HASH}`,
-          `tinybird:deduped_exposures:${HASH}`,
-          `tinybird:deduped_metric_events_state:${HASH}`,
+          "tinybird:raw_events:rows=0",
+          "tinybird:metric_events:rows=1",
+          "tinybird:deduped_exposures:rows=0",
+          "tinybird:deduped_metric_events_state:rows=0",
         ],
       })),
-      service(() => ({
+      service((_path, body) => ({
         ...IDENTITY,
         records: events,
+        nextCursor: body.cursor === null ? "events-next" : null,
         proofs: [
           "metric-event-outbox-inventory:rows=1",
           "evaluation-commit-outbox-inventory:rows=0",
@@ -59,47 +64,37 @@ describe("createEntityPrivacyConsumer export", () => {
       })),
     );
 
-    const result = await consumer?.exportEntity({
+    const input = {
       appId: IDENTITY.appId,
       idType: IDENTITY.idType,
       targetingKey: "raw-key-never-in-artifact",
       actorId: "user_admin",
       orgId: "org_privacy",
       requestId: "request_privacy",
+    };
+    const identity = await consumer?.exportEntity(input);
+    if (!identity) throw new Error("consumer is unavailable");
+    const analysisPage = await consumer?.exportAnalysisPage(input, identity, {
+      limit: 100,
+      cursor: null,
+    });
+    const eventPage = await consumer?.exportEventsPage(input, identity, {
+      limit: 100,
+      cursor: null,
     });
 
-    expect(result?.exportArtifact).toEqual({
-      schemaVersion: "entity-privacy-export-v1",
+    expect(identity).toEqual({
       ...IDENTITY,
-      stores: [
-        {
-          name: "assignments",
-          records: assignments,
-          proofs: [
-            `${HASH}:assignment-do-winners-exported-v1`,
-            `${HASH}:assignment-and-holdover-exported-v1`,
-          ],
-        },
-        {
-          name: "analysis",
-          records: analytics,
-          proofs: [
-            `tinybird:raw_events:${HASH}`,
-            `tinybird:metric_events:${HASH}`,
-            `tinybird:deduped_exposures:${HASH}`,
-            `tinybird:deduped_metric_events_state:${HASH}`,
-          ],
-        },
-        {
-          name: "event-ingest",
-          records: events,
-          proofs: [
-            "metric-event-outbox-inventory:rows=1",
-            "evaluation-commit-outbox-inventory:rows=0",
-          ],
-        },
+      records: assignments,
+      proofs: [
+        `${HASH}:assignment-do-winners-exported-v1`,
+        `${HASH}:assignment-and-holdover-exported-v1`,
       ],
     });
-    expect(JSON.stringify(result)).not.toContain("raw-key-never-in-artifact");
+    expect(analysisPage).toMatchObject({ records: analytics, nextCursor: "analysis-next" });
+    expect(eventPage).toMatchObject({ records: events, nextCursor: "events-next" });
+    expect(JSON.stringify({ identity, analysisPage, eventPage })).not.toContain(
+      "raw-key-never-in-artifact",
+    );
   });
 });

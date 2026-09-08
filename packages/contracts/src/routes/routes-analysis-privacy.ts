@@ -1,5 +1,7 @@
 import { z } from "@hono/zod-openapi";
 
+const ENTITY_PRIVACY_PAGE_MAX_LIMIT = 100;
+
 export const EntityAssignmentPrivacyRequestSchema = z
   .object({
     idType: z.string().min(1),
@@ -55,6 +57,16 @@ export const EntityStorePrivacyRequestSchema = z
   })
   .strict();
 
+export const EntityStorePrivacyExportRequestSchema = z
+  .object({
+    idType: z.string().min(1),
+    targetingKeyHashes: z.array(z.string().min(1)).min(1),
+    entityFamilyHash: z.string().min(1),
+    limit: z.number().int().min(1).max(ENTITY_PRIVACY_PAGE_MAX_LIMIT),
+    cursor: z.string().min(1).nullable(),
+  })
+  .strict();
+
 export const EntityStorePrivacyExportSchema = z
   .object({
     appId: z.string(),
@@ -62,6 +74,7 @@ export const EntityStorePrivacyExportSchema = z
     targetingKeyHashes: z.array(z.string()),
     entityFamilyHash: z.string(),
     records: z.array(z.record(z.string(), z.unknown())),
+    nextCursor: z.string().min(1).nullable(),
     proofs: z.array(z.string().min(1)),
   })
   .strict();

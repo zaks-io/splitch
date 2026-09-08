@@ -20,12 +20,15 @@ export const EVALUATION_ENTRY = {
 export function makeEntityMetricPrivacyStoreFixture() {
   const storage = new Map<string, unknown>();
   let blockedGet: { key: string; started: () => void; wait: Promise<void> } | undefined;
-  const outboxFetch = vi.fn(async (input: RequestInfo | URL) => {
+  const outboxFetch = vi.fn(async (input: RequestInfo | URL, _init?: RequestInit, id?: string) => {
     const path = new URL(String(input)).pathname;
     if (path === "/export") {
       return Response.json({
         deleted: false,
-        row: { event_id: "event-1", targeting_key_hash: ENTRY.targetingKeyHash },
+        row: {
+          event_id: id?.replace(/^sha256:/u, "") ?? "event-1",
+          targeting_key_hash: ENTRY.targetingKeyHash,
+        },
       });
     }
     if (path === "/suppress") {
@@ -52,9 +55,9 @@ export function makeEntityMetricPrivacyStoreFixture() {
       throw new Error("not used");
     }),
     acknowledge: vi.fn(async () => undefined),
-    privacyExport: vi.fn(async () => [
-      { event_id: EVALUATION_ENTRY.eventId, source: "evaluation-commit" },
-    ]),
+    privacyExport: vi.fn(async (_identity: string, eventIds: readonly string[]) =>
+      eventIds.map((eventId) => ({ event_id: eventId, source: "evaluation-commit" })),
+    ),
     privacyDelete: vi.fn(async () => 1),
     privacyDeleteAll: vi.fn(async () => "evaluation-commit-outbox-purged-v1" as const),
   };
@@ -63,8 +66,11 @@ export function makeEntityMetricPrivacyStoreFixture() {
     TINYBIRD_API_URL: "https://tinybird.test",
     TINYBIRD_INGEST_TOKEN: "test-token",
     METRIC_EVENT_OUTBOX: {
-      idFromName: () => ({}) as DurableObjectId,
-      get: () => ({ fetch: outboxFetch }),
+      idFromName: (name: string) => name as unknown as DurableObjectId,
+      get: (id: DurableObjectId) => ({
+        fetch: (input: RequestInfo | URL, init?: RequestInit) =>
+          outboxFetch(input, init, id as unknown as string),
+      }),
     },
     EVALUATION_COMMIT_OUTBOX: evaluationOutbox,
   } as Env;
@@ -72,6 +78,9 @@ export function makeEntityMetricPrivacyStoreFixture() {
   return {
     outboxFetch,
     evaluationOutbox,
+    persistedState() {
+      return structuredClone([...storage.entries()]);
+    },
     pauseNextGet(key: string) {
       let release!: () => void;
       let started!: () => void;
@@ -128,10 +137,21 @@ function memoryDurableObjectState(
       async put(key: string, value: unknown) {
         storage.set(key, structuredClone(value));
       },
-      async list<T>({ prefix }: { prefix: string }) {
+      async list<T>({
+        prefix,
+        startAfter,
+        limit,
+      }: {
+        prefix: string;
+        startAfter?: string;
+        limit?: number;
+      }) {
         return new Map(
           [...storage.entries()]
             .filter(([key]) => key.startsWith(prefix))
+            .filter(([key]) => startAfter === undefined || key > startAfter)
+            .sort(([left], [right]) => left.localeCompare(right))
+            .slice(0, limit)
             .map(([key, value]) => [key, structuredClone(value) as T]),
         );
       },

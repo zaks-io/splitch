@@ -40,6 +40,12 @@ const SUPPRESSION_KEY = "privacy:suppression";
 const EVENT_PREFIX = "event:";
 const EVALUATION_COMMIT_PREFIX = "evaluation-commit:";
 
+interface InventoryPage {
+  metricEntries: EntityMetricInventoryEntry[];
+  evaluationEntries: EntityEvaluationInventoryEntry[];
+  nextAfter: string | null;
+}
+
 interface SuppressionState {
   deleteBeforeTs: string;
 }
@@ -70,7 +76,7 @@ export class EntityMetricPrivacyDurableObject {
   private route(request: Request): Route | undefined {
     const path = new URL(request.url).pathname;
     if (request.method === "GET") {
-      return path === "/export" ? alone(() => this.exportRecords()) : undefined;
+      return path === "/export" ? alone(() => this.exportRecords(request)) : undefined;
     }
     if (request.method !== "POST") return undefined;
     const routes: Record<string, Route> = {
@@ -191,14 +197,14 @@ export class EntityMetricPrivacyDurableObject {
     });
   }
 
-  private async exportRecords(): Promise<Response> {
-    const metricRecords = await exportMetricRecords(this.env, await this.metricEntries());
-    const evaluationRecords = await exportEvaluationRecords(
-      this.env,
-      await this.evaluationEntries(),
-    );
+  private async exportRecords(request: Request): Promise<Response> {
+    const page = exportPageRequest(request);
+    const inventory = await this.inventoryPage(page);
+    const metricRecords = await exportMetricRecords(this.env, inventory.metricEntries);
+    const evaluationRecords = await exportEvaluationRecords(this.env, inventory.evaluationEntries);
     return Response.json({
       records: [...metricRecords, ...evaluationRecords],
+      nextAfter: inventory.nextAfter,
       proofs: [
         `metric-event-outbox-inventory:rows=${String(metricRecords.length)}`,
         `evaluation-commit-outbox-inventory:rows=${String(evaluationRecords.length)}`,
@@ -235,6 +241,54 @@ export class EntityMetricPrivacyDurableObject {
     ];
   }
 
+  private async inventoryPage(page: {
+    limit: number;
+    after: string | null;
+  }): Promise<InventoryPage> {
+    if (page.after?.startsWith(EVALUATION_COMMIT_PREFIX)) {
+      return this.evaluationInventoryPage(page.limit, page.after, []);
+    }
+    const metricPage = await this.ctx.storage.list<EntityMetricInventoryEntry>({
+      prefix: EVENT_PREFIX,
+      ...(page.after ? { startAfter: page.after } : {}),
+      limit: page.limit + 1,
+    });
+    const selected = [...metricPage].slice(0, page.limit);
+    const metricEntries = selected.map(([, value]) => value);
+    if (metricPage.size > page.limit) {
+      return {
+        metricEntries,
+        evaluationEntries: [],
+        nextAfter: selected.at(-1)?.[0] ?? null,
+      };
+    }
+    return this.evaluationInventoryPage(
+      page.limit - metricEntries.length,
+      null,
+      metricEntries,
+      selected.at(-1)?.[0] ?? page.after,
+    );
+  }
+
+  private async evaluationInventoryPage(
+    limit: number,
+    after: string | null,
+    metricEntries: EntityMetricInventoryEntry[],
+    nextAfterFallback: string | null = after,
+  ): Promise<InventoryPage> {
+    const evaluationPage = await this.ctx.storage.list<EntityEvaluationInventoryEntry>({
+      prefix: EVALUATION_COMMIT_PREFIX,
+      ...(after ? { startAfter: after } : {}),
+      limit: limit + 1,
+    });
+    const selected = [...evaluationPage].slice(0, limit);
+    return {
+      metricEntries,
+      evaluationEntries: selected.map(([, value]) => value),
+      nextAfter: evaluationPage.size > limit ? (selected.at(-1)?.[0] ?? nextAfterFallback) : null,
+    };
+  }
+
   private async evaluationEntries(): Promise<EntityEvaluationInventoryEntry[]> {
     return [
       ...(
@@ -244,6 +298,23 @@ export class EntityMetricPrivacyDurableObject {
       ).values(),
     ];
   }
+}
+
+function exportPageRequest(request: Request): { limit: number; after: string | null } {
+  const url = new URL(request.url);
+  const limit = Number(url.searchParams.get("limit"));
+  if (!Number.isInteger(limit) || limit < 1 || limit > 100) {
+    throw new Error("Entity Metric privacy page limit must be an integer in 1..100");
+  }
+  const after = url.searchParams.get("after");
+  if (
+    after !== null &&
+    !after.startsWith(EVENT_PREFIX) &&
+    !after.startsWith(EVALUATION_COMMIT_PREFIX)
+  ) {
+    throw new Error("Entity Metric privacy page cursor is invalid");
+  }
+  return { limit, after };
 }
 
 interface Route {
