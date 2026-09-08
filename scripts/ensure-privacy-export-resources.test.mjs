@@ -19,6 +19,7 @@ test("leaves existing privacy export resources unchanged", async () => {
       ],
       calls,
     ),
+    waitImpl: noWait,
   });
 
   assert.deepEqual(result, { created: [] });
@@ -42,6 +43,7 @@ test("checks every queue list page", async () => {
       queueList(["privacy-jobs"], 2),
       queueList(["privacy-jobs-dlq"], 2),
     ]),
+    waitImpl: noWait,
   });
 
   assert.deepEqual(result, { created: [] });
@@ -66,6 +68,7 @@ test("creates and verifies each missing resource", async () => {
       ],
       calls,
     ),
+    waitImpl: noWait,
   });
 
   assert.deepEqual(result, {
@@ -81,7 +84,31 @@ test("creates and verifies each missing resource", async () => {
   );
 });
 
+test("retries queue verification while Cloudflare list results converge", async () => {
+  const waits = [];
+  const result = await ensurePrivacyExportResources({
+    accountId: "account",
+    apiToken: "token",
+    bucketName: "privacy-exports",
+    queueNames: ["privacy-jobs", "privacy-jobs-dlq"],
+    fetchImpl: fakeFetch([
+      response({ success: true, result: { name: "privacy-exports" } }),
+      response({ success: true, result: { name: "privacy-exports" } }),
+      queueList([]),
+      response({ success: true, result: { queue_name: "privacy-jobs" } }),
+      response({ success: true, result: { queue_name: "privacy-jobs-dlq" } }),
+      queueList(["privacy-jobs"]),
+      queueList(["privacy-jobs", "privacy-jobs-dlq"]),
+    ]),
+    waitImpl: async (milliseconds) => waits.push(milliseconds),
+  });
+
+  assert.deepEqual(result.created, ["privacy-jobs", "privacy-jobs-dlq"]);
+  assert.deepEqual(waits, [1_000]);
+});
+
 test("fails when a created queue is absent from verification", async () => {
+  const waits = [];
   await assert.rejects(
     ensurePrivacyExportResources({
       accountId: "account",
@@ -93,10 +120,15 @@ test("fails when a created queue is absent from verification", async () => {
         response({ success: true, result: { name: "privacy-exports" } }),
         queueList(["privacy-jobs"]),
         response({ success: true, result: { queue_name: "privacy-jobs-dlq" } }),
-        queueList(["privacy-jobs"]),
+        ...Array.from({ length: 10 }, () => queueList(["privacy-jobs"])),
       ]),
+      waitImpl: async (milliseconds) => waits.push(milliseconds),
     }),
     /did not persist queues: privacy-jobs-dlq/u,
+  );
+  assert.deepEqual(
+    waits,
+    Array.from({ length: 9 }, () => 1_000),
   );
 });
 
@@ -117,6 +149,8 @@ function queueList(names, totalPages = 1) {
     result_info: { total_pages: totalPages },
   });
 }
+
+async function noWait() {}
 
 function response(payload, status = 200) {
   return new Response(JSON.stringify(payload), {

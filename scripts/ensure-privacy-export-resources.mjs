@@ -9,6 +9,7 @@ export async function ensurePrivacyExportResources({
   bucketName,
   queueNames,
   fetchImpl = fetch,
+  waitImpl = wait,
 }) {
   const headers = {
     Authorization: `Bearer ${apiToken}`,
@@ -28,7 +29,7 @@ export async function ensurePrivacyExportResources({
   }
   await cloudflareRequest(fetchImpl, bucketUrl, headers);
 
-  let queues = await listQueues(fetchImpl, `${accountUrl}/queues`, headers);
+  const queues = await listQueues(fetchImpl, `${accountUrl}/queues`, headers);
   for (const queueName of queueNames) {
     if (queues.has(queueName)) continue;
     await cloudflareRequest(fetchImpl, `${accountUrl}/queues`, headers, {
@@ -38,13 +39,33 @@ export async function ensurePrivacyExportResources({
     created.push(queueName);
   }
 
-  queues = await listQueues(fetchImpl, `${accountUrl}/queues`, headers);
-  const missingQueues = queueNames.filter((queueName) => !queues.has(queueName));
+  const missingQueues = await waitForQueues({
+    fetchImpl,
+    headers,
+    queueNames,
+    url: `${accountUrl}/queues`,
+    waitImpl,
+  });
   if (missingQueues.length > 0) {
     throw new Error(`Cloudflare did not persist queues: ${missingQueues.join(", ")}`);
   }
 
   return { created };
+}
+
+async function waitForQueues({ fetchImpl, headers, queueNames, url, waitImpl }) {
+  const maxAttempts = 10;
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    const queues = await listQueues(fetchImpl, url, headers);
+    const missing = queueNames.filter((queueName) => !queues.has(queueName));
+    if (missing.length === 0 || attempt === maxAttempts) return missing;
+    await waitImpl(1_000);
+  }
+  throw new Error("unreachable queue verification state");
+}
+
+function wait(milliseconds) {
+  return new Promise((resolve) => setTimeout(resolve, milliseconds));
 }
 
 async function listQueues(fetchImpl, url, headers) {
