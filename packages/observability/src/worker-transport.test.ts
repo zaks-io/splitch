@@ -50,6 +50,25 @@ describe("hosted Worker transport policy", () => {
     expect(response.headers.get("strict-transport-security")).toBe("max-age=31536000");
   });
 
+  it.each(["http://localhost/", "http://127.0.0.1:8794/", "http://[::1]:8794/"])(
+    "preserves a loopback prerender request in a production build at %s",
+    async (url) => {
+      const innerFetch = vi.fn(async () => new Response("prerendered"));
+      const wrapped = wrapWorkerHandler({ fetch: innerFetch }, { surface: "marketing" });
+
+      const response = await wrapped.fetch(
+        workerFetchRequest(url),
+        { SPLITCH_PLATFORM_TARGET: "production" },
+        {} as ExecutionContext,
+      );
+
+      expect(response.status).toBe(200);
+      expect(response.headers.get("location")).toBeNull();
+      expect(response.headers.get("strict-transport-security")).toBeNull();
+      expect(innerFetch).toHaveBeenCalledOnce();
+    },
+  );
+
   it.each([
     ["local", "http://localhost:8787/health"],
     ["shared-preview", "http://api.preview.splitch.dev/health"],
