@@ -1,6 +1,6 @@
 import { createRepository } from "@splitch/db";
 import type { RateLimiter } from "@splitch/worker-runtime";
-import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { createApp } from "../src/app";
 import { makeControlPlaneAuthResolver } from "../src/auth-resolver";
 import type { EntityPrivacyLedgerInput } from "../src/config-store-app-identity-ledger";
@@ -23,8 +23,10 @@ const PRIMARY = {
   appKey: "entity-privacy-holdover",
 };
 const APP_ADMIN = "user_entity_privacy_admin";
+const RAW_TARGETING_KEY = "subject_entity_privacy";
 const allowLimiter: RateLimiter = () => ({ limited: false });
 
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: One pooled Worker fixture proves the complete intake and tenant boundary.
 describe("entity privacy delete route availability", () => {
   let bindings: LocalBindings;
   let signer: FixtureSigner;
@@ -43,12 +45,18 @@ describe("entity privacy delete route availability", () => {
     signer = await makeFixtureSigner();
   });
 
-  afterEach(async () => bindings.dispose());
+  afterEach(async () => {
+    vi.restoreAllMocks();
+    await bindings.dispose();
+  });
 
-  it("records and checkpoints an idempotent delete before destructive effects", async () => {
+  // biome-ignore lint/complexity/noExcessiveLinesPerFunction: One request chain proves persistence, replay, export intake, and authorization together.
+  it("records and queues an idempotent delete before destructive effects", async () => {
     const hashes = ["local-v1:abc", "app-v1:def"] as const;
     const repo = createRepository(bindings.d1);
     const operations: string[] = [];
+    const queued: unknown[] = [];
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
     const app = createApp({
       authResolver: makeControlPlaneAuthResolver({
         verifier: makeJwksVerifier({
@@ -70,7 +78,7 @@ describe("entity privacy delete route availability", () => {
       configStore: identityCoordinator(repo, operations),
       nowIso: () => NOW_ISO,
       entityPrivacy: {
-        async exportEntity() {
+        async resolveIdentity() {
           operations.push("identity");
           const assignmentRecords = [
             {
@@ -114,6 +122,18 @@ describe("entity privacy delete route availability", () => {
             },
           };
         },
+        async exportAssignmentsPage() {
+          throw new Error("not used");
+        },
+        async exportAnalysisPage() {
+          throw new Error("not used");
+        },
+        async exportEventsPage() {
+          throw new Error("not used");
+        },
+        async exportEntity() {
+          throw new Error("not used");
+        },
         async suppressAnalysis() {
           operations.push("analysis-suppression");
           return identityResult();
@@ -135,6 +155,12 @@ describe("entity privacy delete route availability", () => {
           return identityResult();
         },
       },
+      privacyJobs: {
+        send: async (message: unknown) => {
+          operations.push("queue");
+          queued.push(message);
+        },
+      } as unknown as Queue<{ requestId: string }>,
     });
 
     function identityResult() {
@@ -172,60 +198,73 @@ describe("entity privacy delete route availability", () => {
           "content-type": "application/json",
           "idempotency-key": "entity-delete-1",
         },
-        body: JSON.stringify({ idType: "user", targetingKey: "subject_entity_privacy" }),
+        body: JSON.stringify({ idType: "user", targetingKey: RAW_TARGETING_KEY }),
       });
     const deleted = await deleteRequest();
 
     expect(deleted.status).toBe(200);
     const deleteBody = await deleted.json();
     expect(deleteBody).toMatchObject({
-      request: { requestType: "delete", subjectType: "entity", status: "completed" },
+      request: { requestType: "delete", subjectType: "entity", status: "processing" },
       job: {
         kind: "delete",
-        status: "completed",
+        status: "queued",
         storeStatus: {
-          "analysis-suppression": "done",
-          "event-ingest-suppression": "done",
-          "d1-tombstone": "done",
-          assignments: "done",
-          analysis: "done",
-          "event-ingest": "done",
+          "analysis-suppression": "pending",
+          "event-ingest-suppression": "pending",
+          "d1-tombstone": "pending",
+          assignments: "pending",
+          analysis: "pending",
+          "event-ingest": "pending",
         },
       },
     });
-    expect(JSON.stringify(deleteBody)).not.toContain("subject_entity_privacy");
-    expect(operations).toEqual([
-      "identity",
-      "intake",
-      "analysis-suppression",
-      "event-ingest-suppression",
-      "d1-tombstone",
-      "assignments",
-      "analysis",
-      "event-ingest",
-    ]);
+    expect(JSON.stringify(deleteBody)).not.toContain(RAW_TARGETING_KEY);
+    expect(operations).toEqual(["identity", "intake", "queue"]);
 
     const replayed = await deleteRequest();
     expect(replayed.status).toBe(200);
     expect((await replayed.json()).request.requestId).toBe(deleteBody.request.requestId);
-    expect(operations).toEqual([
-      "identity",
-      "intake",
-      "analysis-suppression",
-      "event-ingest-suppression",
-      "d1-tombstone",
-      "assignments",
-      "analysis",
-      "event-ingest",
-      "identity",
-      "intake",
-    ]);
+    expect(operations).toEqual(["identity", "intake", "queue", "identity", "intake", "queue"]);
 
     const status = await app.request(`/privacy/requests/${deleteBody.request.requestId}`, {
       headers: { authorization: `Bearer ${jwt}` },
     });
     expect(status.status).toBe(200);
-    expect(await status.json()).toMatchObject({ job: { status: "completed" } });
+    expect(await status.json()).toMatchObject({ job: { status: "queued" } });
+
+    const exported = await app.request(`/apps/${PRIMARY.appId}/privacy/entities/export`, {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${jwt}`,
+        "content-type": "application/json",
+        "idempotency-key": "entity-export-1",
+      },
+      body: JSON.stringify({ idType: "user", targetingKey: RAW_TARGETING_KEY }),
+    });
+    expect(exported.status).toBe(200);
+    const exportBody = await exported.json();
+    expect(exportBody).toMatchObject({
+      request: { requestType: "export", status: "processing" },
+      job: { kind: "export", status: "queued" },
+    });
+    expect(exportBody.job.downloadUrl).toBeUndefined();
+    expect(JSON.stringify(exportBody)).not.toContain(RAW_TARGETING_KEY);
+    const exportRequestRow = await bindings.d1
+      .prepare("SELECT result_json FROM privacy_requests WHERE request_id = ?")
+      .bind(exportBody.request.requestId)
+      .first<{ result_json: string | null }>();
+    expect(exportRequestRow?.result_json).toBeNull();
+    expect(JSON.stringify(queued)).not.toContain(RAW_TARGETING_KEY);
+    const storedPrivacyData = await bindings.d1
+      .prepare(
+        `SELECT request_id, subject_ref, request_hash, result_json FROM privacy_requests
+         UNION ALL
+         SELECT request_id, store_status_json, artifact_key, artifact_sha256 FROM privacy_jobs`,
+      )
+      .all();
+    expect(JSON.stringify(storedPrivacyData.results)).not.toContain(RAW_TARGETING_KEY);
+    expect(JSON.stringify(consoleError.mock.calls)).not.toContain(RAW_TARGETING_KEY);
 
     const outsiderJwt = await signer.sign({
       sub: "user_other_tenant",

@@ -1,37 +1,21 @@
-import { assignmentKey, assignmentWriterName } from "@splitch/contracts";
+import { assignmentWriterName } from "@splitch/contracts";
 import {
   type EntityPrivacyIdentity,
   resolveEntityPrivacyIdentity,
   type SaltStore,
 } from "@splitch/privacy";
-import type { AssignmentKv, AssignmentStoreLogger, AssignmentStoreValue } from "./assignment-store";
-import { readAssignmentValue } from "./assignment-store";
+import type { AssignmentKv, AssignmentStoreLogger } from "./assignment-store";
 import {
-  type EntityHoldoverWriteSuppression,
-  type HoldoverWriteJob,
-  holdoverWriteOutboxName,
-} from "./holdover-write-outbox-core";
+  type EntityAssignmentExport,
+  exportResolvedEntityAssignments,
+} from "./entity-assignment-export";
+import { holdoverWriteOutboxName } from "./holdover-write-outbox-core";
 
 export interface AssignmentWriterNamespace {
   idFromName(name: string): DurableObjectId;
   get(id: DurableObjectId): {
     fetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response>;
   };
-}
-
-export interface EntityAssignmentExport {
-  appId: string;
-  idType: string;
-  targetingKeyHashes: readonly string[];
-  entityFamilyHash: string;
-  records: readonly {
-    targetingKeyHash: string;
-    assignments: AssignmentStoreValue;
-    assignmentWriterAssignments: AssignmentStoreValue;
-    holdoverWrites: readonly HoldoverWriteJob[];
-    holdoverSuppression: EntityHoldoverWriteSuppression | null;
-  }[];
-  proofs: readonly string[];
 }
 
 export interface EntityAssignmentDeleteResult {
@@ -51,48 +35,10 @@ export async function exportEntityAssignments(
   outboxes: AssignmentWriterNamespace,
   saltStore: SaltStore,
   input: { appId: string; idType: string; targetingKey: string },
-  logger?: AssignmentStoreLogger,
+  _logger?: AssignmentStoreLogger,
 ): Promise<EntityAssignmentExport> {
   const identity = await resolveEntityPrivacyIdentity(saltStore, input);
-  const records = [];
-  const proofs = [];
-  for (const targetingKeyHash of identity.targetingKeyHashes) {
-    const assignments = await readAssignmentValue(
-      kv,
-      assignmentKey(input.appId, input.idType, targetingKeyHash),
-      logger,
-    );
-    const writerExport = await exportAssignmentWriter(writers, input, targetingKeyHash);
-    const outbox = outboxes.get(
-      outboxes.idFromName(
-        holdoverWriteOutboxName({ appId: input.appId, idType: input.idType, targetingKeyHash }),
-      ),
-    );
-    const outboxResponse = await outbox.fetch("https://holdover-write-outbox.internal/export");
-    if (!outboxResponse.ok) {
-      throw new Error(`Holdover write outbox export failed with HTTP ${outboxResponse.status}`);
-    }
-    const holdover = parseHoldoverExport(await outboxResponse.json());
-    proofs.push(
-      `${targetingKeyHash}:${writerExport.proof}`,
-      `${targetingKeyHash}:assignment-and-holdover-exported-v1`,
-    );
-    if (
-      Object.keys(assignments).length > 0 ||
-      Object.keys(writerExport.assignments).length > 0 ||
-      holdover.jobs.length > 0 ||
-      holdover.suppression
-    ) {
-      records.push({
-        targetingKeyHash,
-        assignments,
-        assignmentWriterAssignments: writerExport.assignments,
-        holdoverWrites: holdover.jobs,
-        holdoverSuppression: holdover.suppression,
-      });
-    }
-  }
-  return { ...exportedIdentity(identity, records), proofs };
+  return exportResolvedEntityAssignments(kv, writers, outboxes, identity);
 }
 
 export async function deleteEntityAssignments(
@@ -103,11 +49,20 @@ export async function deleteEntityAssignments(
   deleteBeforeTs: string,
 ): Promise<EntityAssignmentDeleteResult> {
   const identity = await resolveEntityPrivacyIdentity(saltStore, input);
+  return deleteResolvedEntityAssignments(writers, outboxes, identity, deleteBeforeTs);
+}
+
+export async function deleteResolvedEntityAssignments(
+  writers: AssignmentWriterNamespace,
+  outboxes: AssignmentWriterNamespace,
+  identity: EntityPrivacyIdentity,
+  deleteBeforeTs: string,
+): Promise<EntityAssignmentDeleteResult> {
   const proofs = [];
   for (const targetingKeyHash of identity.targetingKeyHashes) {
     proofs.push(
-      await deleteAssignmentWriter(writers, input, targetingKeyHash, deleteBeforeTs),
-      await deleteHoldoverOutbox(outboxes, input, targetingKeyHash, deleteBeforeTs),
+      await deleteAssignmentWriter(writers, identity, targetingKeyHash, deleteBeforeTs),
+      await deleteHoldoverOutbox(outboxes, identity, targetingKeyHash, deleteBeforeTs),
     );
   }
   const deletedStoreCount = identity.targetingKeyHashes.length;
@@ -155,48 +110,6 @@ async function deleteHoldoverOutbox(
   return `${targetingKeyHash}:holdover-write-outbox-suppressed-and-purged-v1`;
 }
 
-async function exportAssignmentWriter(
-  writers: AssignmentWriterNamespace,
-  input: { appId: string; idType: string },
-  targetingKeyHash: string,
-): Promise<{
-  assignments: AssignmentStoreValue;
-  proof: "assignment-do-winners-exported-v1";
-}> {
-  const name = assignmentWriterName({ ...input, targetingKeyHash });
-  const response = await writers
-    .get(writers.idFromName(name))
-    .fetch("https://assignment-store.internal/export");
-  if (!response.ok) {
-    throw new Error(`Assignment writer export failed with HTTP ${response.status}`);
-  }
-  const body = (await response.json()) as {
-    assignments?: unknown;
-    tombstoned?: unknown;
-    proof?: unknown;
-  };
-  if (
-    !isAssignmentStoreValue(body.assignments) ||
-    typeof body.tombstoned !== "boolean" ||
-    body.proof !== "assignment-do-winners-exported-v1"
-  ) {
-    throw new Error("Assignment writer export returned an invalid proof");
-  }
-  return { assignments: body.assignments, proof: body.proof };
-}
-
-function isAssignmentStoreValue(value: unknown): value is AssignmentStoreValue {
-  if (!isRecord(value)) return false;
-  return Object.values(value).every(
-    (entry) =>
-      isRecord(entry) &&
-      typeof entry.runId === "string" &&
-      entry.runId.length > 0 &&
-      typeof entry.variant === "string" &&
-      entry.variant.length > 0,
-  );
-}
-
 async function deleteAssignmentWriter(
   writers: AssignmentWriterNamespace,
   input: { appId: string; idType: string },
@@ -227,49 +140,4 @@ async function deleteAssignmentWriter(
     throw new Error("Assignment writer delete returned an invalid proof");
   }
   return `${targetingKeyHash}:${result.proof}`;
-}
-
-function parseHoldoverExport(value: unknown): {
-  jobs: HoldoverWriteJob[];
-  suppression: EntityHoldoverWriteSuppression | null;
-} {
-  if (typeof value !== "object" || value === null) {
-    throw new Error("Holdover write outbox export returned an invalid body");
-  }
-  const body = value as { jobs?: unknown; suppression?: unknown };
-  if (
-    !Array.isArray(body.jobs) ||
-    !(body.suppression === null || isSuppression(body.suppression))
-  ) {
-    throw new Error("Holdover write outbox export returned an invalid body");
-  }
-  return {
-    jobs: body.jobs as HoldoverWriteJob[],
-    suppression: body.suppression,
-  };
-}
-
-function isSuppression(value: unknown): value is EntityHoldoverWriteSuppression {
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    typeof (value as { deleteBeforeTsMs?: unknown }).deleteBeforeTsMs === "number"
-  );
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function exportedIdentity(
-  identity: EntityPrivacyIdentity,
-  records: EntityAssignmentExport["records"],
-): Omit<EntityAssignmentExport, "proofs"> {
-  return {
-    appId: identity.appId,
-    idType: identity.idType,
-    targetingKeyHashes: identity.targetingKeyHashes,
-    entityFamilyHash: identity.entityFamilyHash,
-    records,
-  };
 }

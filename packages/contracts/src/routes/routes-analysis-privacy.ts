@@ -5,10 +5,27 @@ const ENTITY_PRIVACY_PAGE_MAX_LIMIT = 100;
 export const EntityAssignmentPrivacyRequestSchema = z
   .object({
     idType: z.string().min(1),
-    targetingKey: z.string().min(1),
+    targetingKey: z.string().min(1).optional(),
+    targetingKeyHashes: z.array(z.string().min(1)).min(1).optional(),
+    entityFamilyHash: z.string().min(1).optional(),
     deleteBeforeTs: z.string().datetime({ offset: true }).optional(),
+    cursor: z.string().nullable().optional(),
+    limit: z.number().int().min(1).max(100).optional(),
   })
-  .strict();
+  .strict()
+  .superRefine((value, ctx) => {
+    const raw = value.targetingKey !== undefined;
+    const resolved = value.targetingKeyHashes !== undefined && value.entityFamilyHash !== undefined;
+    if (raw === resolved) {
+      ctx.addIssue({
+        code: "custom",
+        message: "provide either targetingKey or resolved Entity identity",
+      });
+    }
+    if ((value.cursor === undefined) !== (value.limit === undefined)) {
+      ctx.addIssue({ code: "custom", message: "cursor and limit must be provided together" });
+    }
+  });
 
 export const EntityAssignmentPrivacyExportSchema = z
   .object({
@@ -32,6 +49,7 @@ export const EntityAssignmentPrivacyExportSchema = z
       }),
     ),
     proofs: z.array(z.string().min(1)),
+    nextCursor: z.string().nullable().optional(),
   })
   .strict();
 

@@ -4,43 +4,49 @@ import {
   callStorePrivacy,
   callStorePrivacyPage,
   type EntityPrivacyConsumerInput,
-  type EntityPrivacyPageInput,
+  type EntityPrivacyExportPage,
   type EntityPrivacyStoreResult,
+  type ResolvedEntityPrivacyInput,
 } from "./entity-privacy-service-client";
 
 export interface EntityPrivacyConsumer {
-  exportEntity(input: EntityPrivacyConsumerInput): Promise<EntityPrivacyStoreResult>;
+  resolveIdentity(input: EntityPrivacyConsumerInput): Promise<EntityPrivacyStoreResult>;
+  exportAssignmentsPage(
+    input: ResolvedEntityPrivacyInput,
+    cursor: string | null,
+    limit: number,
+  ): Promise<EntityPrivacyExportPage>;
   exportAnalysisPage(
-    input: EntityPrivacyConsumerInput,
-    identity: EntityPrivacyStoreResult,
-    page: EntityPrivacyPageInput,
-  ): Promise<EntityPrivacyStoreResult>;
+    input: ResolvedEntityPrivacyInput,
+    cursor: string | null,
+    limit: number,
+  ): Promise<EntityPrivacyExportPage>;
   exportEventsPage(
-    input: EntityPrivacyConsumerInput,
-    identity: EntityPrivacyStoreResult,
-    page: EntityPrivacyPageInput,
-  ): Promise<EntityPrivacyStoreResult>;
+    input: ResolvedEntityPrivacyInput,
+    cursor: string | null,
+    limit: number,
+  ): Promise<EntityPrivacyExportPage>;
   suppressAnalysis(
-    input: EntityPrivacyConsumerInput,
+    input: EntityPrivacyConsumerInput | ResolvedEntityPrivacyInput,
     identity: EntityPrivacyStoreResult,
     deleteBeforeTs: string,
   ): Promise<EntityPrivacyStoreResult>;
   suppressEvents(
-    input: EntityPrivacyConsumerInput,
+    input: EntityPrivacyConsumerInput | ResolvedEntityPrivacyInput,
     identity: EntityPrivacyStoreResult,
     deleteBeforeTs: string,
   ): Promise<EntityPrivacyStoreResult>;
   deleteAssignments(
-    input: EntityPrivacyConsumerInput,
+    input: EntityPrivacyConsumerInput | ResolvedEntityPrivacyInput,
     deleteBeforeTs: string,
   ): Promise<EntityPrivacyStoreResult>;
   deleteAnalysis(
-    input: EntityPrivacyConsumerInput,
+    input: EntityPrivacyConsumerInput | ResolvedEntityPrivacyInput,
     identity: EntityPrivacyStoreResult,
     deleteBeforeTs: string,
   ): Promise<EntityPrivacyStoreResult>;
   deleteEvents(
-    input: EntityPrivacyConsumerInput,
+    input: EntityPrivacyConsumerInput | ResolvedEntityPrivacyInput,
     identity: EntityPrivacyStoreResult,
     deleteBeforeTs: string,
   ): Promise<EntityPrivacyStoreResult>;
@@ -53,30 +59,54 @@ export function createEntityPrivacyConsumer(
 ): EntityPrivacyConsumer | undefined {
   if (!evaluation || !analysis || !eventIngest) return undefined;
   return {
-    async exportEntity(input) {
-      return callAssignmentPrivacy(evaluation, "entity_assignment_privacy_export", input);
+    async resolveIdentity(input) {
+      const page = await callAssignmentPrivacy(
+        evaluation,
+        "entity_assignment_privacy_export",
+        input,
+        undefined,
+        { cursor: null, limit: 1 },
+      );
+      return {
+        appId: page.appId,
+        idType: page.idType,
+        targetingKeyHashes: page.targetingKeyHashes,
+        entityFamilyHash: page.entityFamilyHash,
+      };
     },
-    async exportAnalysisPage(input, identity, page) {
+    async exportAssignmentsPage(input, cursor, limit) {
+      return exportPage(
+        await callAssignmentPrivacy(
+          evaluation,
+          "entity_assignment_privacy_export",
+          input,
+          undefined,
+          { cursor, limit },
+        ),
+        "Assignment export",
+      );
+    },
+    async exportAnalysisPage(input, cursor, limit) {
       const analytics = await callStorePrivacyPage(
         analysis,
         "entity_analysis_privacy_export",
         input,
-        identity,
-        page,
+        input,
+        { cursor, limit },
       );
-      assertStoreIdentity(identity, analytics, "analysis export");
-      return analytics;
+      assertStoreIdentity(input, analytics, "analysis export");
+      return exportPage(analytics, "Analysis export");
     },
-    async exportEventsPage(input, identity, page) {
+    async exportEventsPage(input, cursor, limit) {
       const events = await callStorePrivacyPage(
         eventIngest,
         "entity_event_privacy_export",
         input,
-        identity,
-        page,
+        input,
+        { cursor, limit },
       );
-      assertStoreIdentity(identity, events, "Event export");
-      return events;
+      assertStoreIdentity(input, events, "Event export");
+      return exportPage(events, "Event export");
     },
     async suppressAnalysis(input, identity, deleteBeforeTs) {
       const analytics = await callStorePrivacy(
@@ -130,5 +160,21 @@ export function createEntityPrivacyConsumer(
       assertStoreIdentity(identity, events, "Event deletion");
       return events;
     },
+  };
+}
+
+function exportPage(result: EntityPrivacyStoreResult, operation: string): EntityPrivacyExportPage {
+  if (
+    !Array.isArray(result.records) ||
+    !Array.isArray(result.proofs) ||
+    !(result.nextCursor === null || typeof result.nextCursor === "string")
+  ) {
+    throw new Error(`control-plane-api: ${operation} returned an invalid page`);
+  }
+  return {
+    ...result,
+    records: result.records,
+    proofs: result.proofs,
+    nextCursor: result.nextCursor,
   };
 }

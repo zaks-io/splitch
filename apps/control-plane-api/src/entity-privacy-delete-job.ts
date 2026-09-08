@@ -3,11 +3,10 @@ import type { EntityPrivacyConsumer } from "./entity-privacy-consumer";
 import {
   assertStoreIdentity,
   EntityPrivacyConsumerError,
-  type EntityPrivacyConsumerInput,
   type EntityPrivacyStoreResult,
+  type ResolvedEntityPrivacyInput,
 } from "./entity-privacy-service-client";
 
-const LEASE_MS = 5 * 60 * 1000;
 const DELETE_STORES = [
   "analysis-suppression",
   "event-ingest-suppression",
@@ -37,28 +36,20 @@ export async function runEntityDeleteJob(input: {
     ): Promise<void>;
   };
   consumer: EntityPrivacyConsumer;
-  input: EntityPrivacyConsumerInput;
+  input: ResolvedEntityPrivacyInput;
   identity: EntityPrivacyStoreResult;
   requestId: string;
   job: {
-    status: "queued" | "running" | "completed" | "failed";
+    status: "running";
     storeStatusJson: string;
     deleteBeforeTs: string | null;
     identityVersion: string;
   };
-  nowIso?: () => string;
+  renewLease: () => Promise<void>;
 }): Promise<void> {
-  if (input.job.status === "completed") return;
-  const now = input.nowIso?.() ?? new Date().toISOString();
-  const claimed = await input.repo.privacy.claimPrivacyJob(
-    input.requestId,
-    now,
-    new Date(Date.parse(now) + LEASE_MS).toISOString(),
-  );
-  if (!claimed) return;
-  const deleteBeforeTs = claimed.deleteBeforeTs;
+  const deleteBeforeTs = input.job.deleteBeforeTs;
   if (!deleteBeforeTs) throw new Error("Entity privacy delete job has no deletion cutoff");
-  const states = parseDeleteStoreStatus(claimed.storeStatusJson);
+  const states = parseDeleteStoreStatus(input.job.storeStatusJson);
 
   await step(input, states, "analysis-suppression", () =>
     input.consumer.suppressAnalysis(input.input, input.identity, deleteBeforeTs),
@@ -67,11 +58,15 @@ export async function runEntityDeleteJob(input: {
     input.consumer.suppressEvents(input.input, input.identity, deleteBeforeTs),
   );
   await step(input, states, "d1-tombstone", () =>
-    input.coordinator.recordEntityDeletionSuppression(input.input.appId, claimed.identityVersion, {
-      idType: input.input.idType,
-      targetingKeyHashes: input.identity.targetingKeyHashes,
-      deleteBeforeTs,
-    }),
+    input.coordinator.recordEntityDeletionSuppression(
+      input.input.appId,
+      input.job.identityVersion,
+      {
+        idType: input.input.idType,
+        targetingKeyHashes: input.identity.targetingKeyHashes,
+        deleteBeforeTs,
+      },
+    ),
   );
   await step(input, states, "assignments", async () => {
     const result = await input.consumer.deleteAssignments(input.input, deleteBeforeTs);
@@ -87,7 +82,7 @@ export async function runEntityDeleteJob(input: {
     requestId: input.requestId,
     status: "completed",
     storeStatusJson: JSON.stringify(states),
-    updatedAt: input.nowIso?.() ?? new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
   });
 }
 
@@ -98,28 +93,30 @@ async function step(
   operation: () => Promise<unknown>,
 ): Promise<void> {
   if (states[store] === "done") return;
+  await input.renewLease();
   try {
     await operation();
-    states[store] = "done";
-    await input.repo.privacy.updatePrivacyJob({
-      requestId: input.requestId,
-      status: "running",
-      storeStatusJson: JSON.stringify(states),
-      updatedAt: input.nowIso?.() ?? new Date().toISOString(),
-    });
   } catch (cause) {
     states[store] = "failed";
     await input.repo.privacy.updatePrivacyJob({
       requestId: input.requestId,
       status: "failed",
       storeStatusJson: JSON.stringify(states),
-      updatedAt: input.nowIso?.() ?? new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
       errorCode: "PRIVACY_STORE_FAILED",
     });
     throw cause instanceof EntityPrivacyConsumerError
       ? cause
       : new EntityPrivacyConsumerError(`control-plane-api: ${store} failed`);
   }
+  await input.renewLease();
+  states[store] = "done";
+  await input.repo.privacy.updatePrivacyJob({
+    requestId: input.requestId,
+    status: "running",
+    storeStatusJson: JSON.stringify(states),
+    updatedAt: new Date().toISOString(),
+  });
 }
 
 function parseDeleteStoreStatus(value: string): EntityDeleteStoreStatus {

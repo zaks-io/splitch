@@ -1,5 +1,11 @@
 import { getRoute } from "@splitch/contracts";
 import { delegatedRequest } from "@splitch/worker-runtime";
+import {
+  type EntityPrivacyPageInput,
+  hasRawTargetingKey,
+  isPrivacyRecord,
+  privacyStoreProofPrefixes,
+} from "./entity-privacy-store-proofs";
 
 export interface EntityPrivacyStoreResult {
   appId: string;
@@ -27,9 +33,16 @@ export interface EntityPrivacyConsumerInput {
   requestId: string;
 }
 
-export interface EntityPrivacyPageInput {
-  limit: number;
-  cursor: string | null;
+export interface ResolvedEntityPrivacyInput
+  extends Omit<EntityPrivacyConsumerInput, "targetingKey"> {
+  targetingKeyHashes: readonly string[];
+  entityFamilyHash: string;
+}
+
+export interface EntityPrivacyExportPage extends Omit<EntityPrivacyStoreResult, "records"> {
+  records: readonly unknown[];
+  proofs: readonly string[];
+  nextCursor: string | null;
 }
 
 export class EntityPrivacyConsumerError extends Error {
@@ -39,11 +52,13 @@ export class EntityPrivacyConsumerError extends Error {
   }
 }
 
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: One adapter validates both raw intake and resolved Queue calls against the same store identity contract.
 export async function callAssignmentPrivacy(
   evaluation: Fetcher,
   operationId: "entity_assignment_privacy_export" | "entity_assignment_privacy_delete",
-  input: EntityPrivacyConsumerInput,
+  input: EntityPrivacyConsumerInput | ResolvedEntityPrivacyInput,
   deleteBeforeTs?: string,
+  page?: { cursor: string | null; limit: number },
 ): Promise<EntityPrivacyStoreResult> {
   const route = getRoute(operationId);
   if (!route) {
@@ -63,8 +78,14 @@ export async function callAssignmentPrivacy(
         params: { appId: input.appId },
         body: {
           idType: input.idType,
-          targetingKey: input.targetingKey,
+          ...(hasRawTargetingKey(input)
+            ? { targetingKey: input.targetingKey }
+            : {
+                targetingKeyHashes: input.targetingKeyHashes,
+                entityFamilyHash: input.entityFamilyHash,
+              }),
           ...(deleteBeforeTs ? { deleteBeforeTs } : {}),
+          ...(page ? { cursor: page.cursor, limit: page.limit } : {}),
         },
         requestId: input.requestId,
       },
@@ -86,14 +107,30 @@ export async function callAssignmentPrivacy(
       `control-plane-api: ${operationId} omitted Entity family identity`,
     );
   }
-  assertAssignmentPrivacyProof(operationId, body);
+  if (operationId === "entity_assignment_privacy_export" && page) {
+    assertExportPage(body, operationId);
+  } else {
+    assertAssignmentPrivacyProof(operationId, body);
+  }
   return body;
+}
+
+function assertExportPage(body: EntityPrivacyStoreResult, operationId: string): void {
+  if (
+    !Array.isArray(body.records) ||
+    !Array.isArray(body.proofs) ||
+    !(body.nextCursor === null || typeof body.nextCursor === "string")
+  ) {
+    throw new EntityPrivacyConsumerError(
+      `control-plane-api: ${operationId} returned an invalid export page`,
+    );
+  }
 }
 
 export async function callStorePrivacyPage(
   service: Fetcher,
   operationId: "entity_analysis_privacy_export" | "entity_event_privacy_export",
-  input: EntityPrivacyConsumerInput,
+  input: EntityPrivacyConsumerInput | ResolvedEntityPrivacyInput,
   identity: EntityPrivacyStoreResult,
   page: EntityPrivacyPageInput,
 ): Promise<EntityPrivacyStoreResult> {
@@ -107,7 +144,7 @@ export async function callStorePrivacy(
     | "entity_analysis_privacy_delete"
     | "entity_event_privacy_suppress"
     | "entity_event_privacy_delete",
-  input: EntityPrivacyConsumerInput,
+  input: EntityPrivacyConsumerInput | ResolvedEntityPrivacyInput,
   identity: EntityPrivacyStoreResult,
   deleteBeforeTs: string,
 ): Promise<EntityPrivacyStoreResult> {
@@ -123,7 +160,7 @@ async function callStorePrivacyOperation(
     | "entity_event_privacy_export"
     | "entity_event_privacy_suppress"
     | "entity_event_privacy_delete",
-  input: EntityPrivacyConsumerInput,
+  input: EntityPrivacyConsumerInput | ResolvedEntityPrivacyInput,
   identity: EntityPrivacyStoreResult,
   operation:
     | EntityPrivacyPageInput
@@ -162,12 +199,31 @@ async function callStorePrivacyOperation(
     );
   }
   const body = (await response.json()) as EntityPrivacyStoreResult;
+  validateStorePrivacyBody(operationId, body);
+  return body;
+}
+
+function validateStorePrivacyBody(
+  operationId:
+    | "entity_analysis_privacy_export"
+    | "entity_analysis_privacy_suppress"
+    | "entity_analysis_privacy_delete"
+    | "entity_event_privacy_export"
+    | "entity_event_privacy_suppress"
+    | "entity_event_privacy_delete",
+  body: EntityPrivacyStoreResult,
+): void {
   if (!Array.isArray(body.targetingKeyHashes) || !Array.isArray(body.proofs)) {
     throw new EntityPrivacyConsumerError(
       `control-plane-api: ${operationId} returned an invalid body`,
     );
   }
-  const requiredProofs = requiredStoreProofs(operationId);
+  const requiredProofs = privacyStoreProofPrefixes(operationId);
+  if (!requiredProofs) {
+    throw new EntityPrivacyConsumerError(
+      `control-plane-api: unknown store operation ${operationId}`,
+    );
+  }
   if (requiredProofs.some((prefix) => !body.proofs?.some((proof) => proof.startsWith(prefix)))) {
     throw new EntityPrivacyConsumerError(
       `control-plane-api: ${operationId} returned incomplete store proof`,
@@ -185,7 +241,6 @@ async function callStorePrivacyOperation(
       `control-plane-api: ${operationId} returned an invalid page`,
     );
   }
-  return body;
 }
 
 function assertEventExportCardinality(body: EntityPrivacyStoreResult): void {
@@ -233,7 +288,9 @@ function assertAssignmentPrivacyProof(
       !Array.isArray(body.proofs) ||
       body.proofs.length !== body.targetingKeyHashes.length * 2 ||
       body.records.some(
-        (record) => !isRecord(record.assignments) || !isRecord(record.assignmentWriterAssignments),
+        (record) =>
+          !isPrivacyRecord(record.assignments) ||
+          !isPrivacyRecord(record.assignmentWriterAssignments),
       )
     ) {
       throw new EntityPrivacyConsumerError(
@@ -253,38 +310,5 @@ function assertAssignmentPrivacyProof(
     throw new EntityPrivacyConsumerError(
       "control-plane-api: entity_assignment_privacy_delete returned incomplete store proof",
     );
-  }
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function requiredStoreProofs(operationId: string): readonly string[] {
-  switch (operationId) {
-    case "entity_analysis_privacy_suppress":
-      return ["entity_deletions:"];
-    case "entity_analysis_privacy_export":
-    case "entity_analysis_privacy_delete":
-      return [
-        "tinybird:raw_events:",
-        "tinybird:metric_events:",
-        "tinybird:deduped_exposures:",
-        "tinybird:deduped_metric_events_state:",
-      ];
-    case "entity_event_privacy_export":
-      return ["metric-event-outbox-inventory:", "evaluation-commit-outbox-inventory:"];
-    case "entity_event_privacy_suppress":
-      return ["metric-event-queue-suppression:"];
-    case "entity_event_privacy_delete":
-      return [
-        "metric-event-outbox-redaction:",
-        "evaluation-commit-outbox-redaction:",
-        "metric-event-queue:",
-      ];
-    default:
-      throw new EntityPrivacyConsumerError(
-        `control-plane-api: unknown store operation ${operationId}`,
-      );
   }
 }

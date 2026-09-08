@@ -9,7 +9,12 @@ import {
 import { describe, expect, it } from "vitest";
 import { serializeAssignmentValue } from "./assignment-store";
 import { basePut, RAW_TARGETING_KEY, RecordingKv } from "./assignment-store-test-fixtures";
-import { deleteEntityAssignments, exportEntityAssignments } from "./entity-assignment-privacy";
+import { exportEntityAssignmentsPage } from "./entity-assignment-export";
+import {
+  deleteEntityAssignments,
+  deleteResolvedEntityAssignments,
+  exportEntityAssignments,
+} from "./entity-assignment-privacy";
 
 const ROOT = "test-root-secret-do-not-use";
 
@@ -69,11 +74,38 @@ describe("entity assignment privacy consumers", () => {
     ]);
     expect(JSON.stringify(exported)).not.toContain(RAW_TARGETING_KEY);
 
-    const deleted = await deleteEntityAssignments(
+    const resolvedIdentity = {
+      appId: exported.appId,
+      idType: exported.idType,
+      targetingKeyHashes: exported.targetingKeyHashes,
+      entityFamilyHash: exported.entityFamilyHash,
+    };
+    const firstPage = await exportEntityAssignmentsPage(
+      kv,
       writers,
       outboxes,
-      saltStore,
-      identity,
+      resolvedIdentity,
+      null,
+      1,
+    );
+    const secondPage = await exportEntityAssignmentsPage(
+      kv,
+      writers,
+      outboxes,
+      resolvedIdentity,
+      firstPage.nextCursor,
+      1,
+    );
+    expect(firstPage.records).toHaveLength(1);
+    expect(firstPage.nextCursor).toBe("1");
+    expect(secondPage.records).toHaveLength(1);
+    expect(secondPage.nextCursor).toBeNull();
+    expect(JSON.stringify([firstPage, secondPage])).not.toContain(RAW_TARGETING_KEY);
+
+    const deleted = await deleteResolvedEntityAssignments(
+      writers,
+      outboxes,
+      resolvedIdentity,
       "2026-07-18T12:00:00.000Z",
     );
     expect(deleted.deletedKeyCount).toBe(deleted.targetingKeyHashes.length);

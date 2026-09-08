@@ -54,6 +54,8 @@ export const privacyJobs = sqliteTable("privacy_jobs", {
   storeStatusJson: text("store_status_json").notNull(),
   deleteBeforeTs: text("delete_before_ts"),
   identityVersion: text("identity_version").notNull(),
+  idType: text("id_type"),
+  entityFamilyHash: text("entity_family_hash"),
   leaseExpiresAt: text("lease_expires_at"),
   artifactKey: text("artifact_key"),
   artifactSha256: text("artifact_sha256"),

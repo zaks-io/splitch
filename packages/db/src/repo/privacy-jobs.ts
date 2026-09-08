@@ -1,23 +1,12 @@
 import type { privacyRequests } from "../schema/index";
+import {
+  type PrivacyJobDbRow,
+  type PrivacyJobRow,
+  type PrivacyJobStatus,
+  privacyJobRow,
+} from "./privacy-job-row";
 
-export type PrivacyJobStatus = "queued" | "running" | "completed" | "failed";
-
-export interface PrivacyJobRow {
-  readonly jobId: string;
-  readonly requestId: string;
-  readonly kind: "export" | "delete";
-  readonly status: PrivacyJobStatus;
-  readonly storeStatusJson: string;
-  readonly deleteBeforeTs: string | null;
-  readonly identityVersion: string;
-  readonly leaseExpiresAt: string | null;
-  readonly artifactKey: string | null;
-  readonly artifactSha256: string | null;
-  readonly artifactExpiresAt: string | null;
-  readonly errorCode: string | null;
-  readonly createdAt: string;
-  readonly updatedAt: string;
-}
+export type { PrivacyJobRow, PrivacyJobStatus } from "./privacy-job-row";
 
 export interface BeginEntityPrivacyJobInput {
   readonly requestId: string;
@@ -35,6 +24,8 @@ export interface BeginEntityPrivacyJobInput {
   readonly storeStatusJson: string;
   readonly deleteBeforeTs: string | null;
   readonly identityVersion: string;
+  readonly idType: string;
+  readonly entityFamilyHash: string;
 }
 
 type PrivacyRequestRow = typeof privacyRequests.$inferSelect;
@@ -47,7 +38,7 @@ export function makePrivacyJobRepo(
     const row = await d1
       .prepare(
         `SELECT job_id, request_id, kind, status, store_status_json, delete_before_ts,
-           identity_version, lease_expires_at, artifact_key, artifact_sha256,
+           identity_version, id_type, entity_family_hash, lease_expires_at, artifact_key, artifact_sha256,
            artifact_expires_at, error_code, created_at, updated_at
          FROM privacy_jobs WHERE request_id = ?`,
       )
@@ -80,12 +71,28 @@ export function makePrivacyJobRepo(
            WHERE request_id = ? AND status != 'completed'
              AND (lease_expires_at IS NULL OR lease_expires_at <= ?)
            RETURNING job_id, request_id, kind, status, store_status_json, delete_before_ts,
-             identity_version, lease_expires_at, artifact_key, artifact_sha256,
+             identity_version, id_type, entity_family_hash, lease_expires_at, artifact_key, artifact_sha256,
              artifact_expires_at, error_code, created_at, updated_at`,
         )
         .bind(leaseExpiresAt, now, requestId, now)
         .first<PrivacyJobDbRow>();
       return row ? privacyJobRow(row) : null;
+    },
+    async renewPrivacyJobLease(input: {
+      requestId: string;
+      expectedLeaseExpiresAt: string;
+      leaseExpiresAt: string;
+      updatedAt: string;
+    }): Promise<string | null> {
+      const row = await d1
+        .prepare(
+          `UPDATE privacy_jobs SET lease_expires_at = ?, updated_at = ?
+           WHERE request_id = ? AND status = 'running' AND lease_expires_at = ?
+           RETURNING lease_expires_at`,
+        )
+        .bind(input.leaseExpiresAt, input.updatedAt, input.requestId, input.expectedLeaseExpiresAt)
+        .first<{ lease_expires_at: string }>();
+      return row?.lease_expires_at ?? null;
     },
     async updatePrivacyJob(input: {
       requestId: string;
@@ -98,6 +105,86 @@ export function makePrivacyJobRepo(
       const job = await getPrivacyJobByRequestId(input.requestId);
       if (!job) throw new Error("updatePrivacyJob: updated job disappeared");
       return job;
+    },
+    async completePrivacyExport(input: {
+      requestId: string;
+      storeStatusJson: string;
+      artifactKey: string;
+      artifactSha256: string;
+      artifactExpiresAt: string;
+      updatedAt: string;
+    }): Promise<PrivacyJobRow> {
+      const [jobResult] = await d1.batch([
+        d1
+          .prepare(
+            `UPDATE privacy_jobs SET status = 'completed', store_status_json = ?,
+               lease_expires_at = NULL, artifact_key = ?, artifact_sha256 = ?,
+               artifact_expires_at = ?, error_code = NULL, updated_at = ?
+             WHERE request_id = ?`,
+          )
+          .bind(
+            input.storeStatusJson,
+            input.artifactKey,
+            input.artifactSha256,
+            input.artifactExpiresAt,
+            input.updatedAt,
+            input.requestId,
+          ),
+        d1
+          .prepare(
+            `UPDATE privacy_requests SET status = 'completed', completed_at = ?, result_json = NULL
+             WHERE request_id = ?`,
+          )
+          .bind(input.updatedAt, input.requestId),
+      ]);
+      if (jobResult?.meta.changes !== 1) throw new Error("completePrivacyExport: job not found");
+      const job = await getPrivacyJobByRequestId(input.requestId);
+      if (!job) throw new Error("completePrivacyExport: updated job disappeared");
+      return job;
+    },
+    async listPrivacyJobsForReconciliation(input: {
+      now: string;
+      updatedBefore: string;
+      limit: number;
+    }): Promise<PrivacyJobRow[]> {
+      const result = await d1
+        .prepare(
+          `SELECT job_id, request_id, kind, status, store_status_json, delete_before_ts,
+             identity_version, id_type, entity_family_hash, lease_expires_at, artifact_key,
+             artifact_sha256, artifact_expires_at, error_code, created_at, updated_at
+           FROM privacy_jobs
+           WHERE ((status IN ('queued', 'failed') AND updated_at <= ?)
+             OR (status = 'running' AND lease_expires_at <= ?))
+           ORDER BY updated_at, job_id LIMIT ?`,
+        )
+        .bind(input.updatedBefore, input.now, input.limit)
+        .all<PrivacyJobDbRow>();
+      return result.results.map(privacyJobRow);
+    },
+    async listExpiredPrivacyArtifacts(now: string, limit: number): Promise<PrivacyJobRow[]> {
+      const result = await d1
+        .prepare(
+          `SELECT job_id, request_id, kind, status, store_status_json, delete_before_ts,
+             identity_version, id_type, entity_family_hash, lease_expires_at, artifact_key,
+             artifact_sha256, artifact_expires_at, error_code, created_at, updated_at
+           FROM privacy_jobs
+           WHERE artifact_key IS NOT NULL AND artifact_expires_at <= ?
+           ORDER BY artifact_expires_at, job_id LIMIT ?`,
+        )
+        .bind(now, limit)
+        .all<PrivacyJobDbRow>();
+      return result.results.map(privacyJobRow);
+    },
+    async clearPrivacyArtifact(requestId: string, artifactKey: string, updatedAt: string) {
+      const result = await d1
+        .prepare(
+          `UPDATE privacy_jobs SET artifact_key = NULL, artifact_sha256 = NULL,
+             artifact_expires_at = NULL, updated_at = ?
+           WHERE request_id = ? AND artifact_key = ?`,
+        )
+        .bind(updatedAt, requestId, artifactKey)
+        .run();
+      if (result.meta.changes !== 1) throw new Error("clearPrivacyArtifact: artifact not found");
     },
   };
 }
@@ -130,8 +217,8 @@ async function insertPrivacyJob(d1: D1Database, input: BeginEntityPrivacyJobInpu
       .prepare(
         `INSERT INTO privacy_jobs (
            job_id, request_id, kind, status, store_status_json, delete_before_ts,
-           identity_version, created_at, updated_at
-         ) VALUES (?, ?, ?, 'queued', ?, ?, ?, ?, ?)
+           identity_version, id_type, entity_family_hash, created_at, updated_at
+         ) VALUES (?, ?, ?, 'queued', ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT (request_id) DO NOTHING`,
       )
       .bind(
@@ -141,6 +228,8 @@ async function insertPrivacyJob(d1: D1Database, input: BeginEntityPrivacyJobInpu
         input.storeStatusJson,
         input.deleteBeforeTs,
         input.identityVersion,
+        input.idType,
+        input.entityFamilyHash,
         input.receivedAt,
         input.receivedAt,
       ),
@@ -183,47 +272,4 @@ async function updatePrivacyJob(
       ),
   ]);
   if (jobResult?.meta.changes !== 1) throw new Error("updatePrivacyJob: job not found");
-}
-
-interface PrivacyJobDbRow {
-  readonly job_id: string;
-  readonly request_id: string;
-  readonly kind: string;
-  readonly status: string;
-  readonly store_status_json: string;
-  readonly delete_before_ts: string | null;
-  readonly identity_version: string;
-  readonly lease_expires_at: string | null;
-  readonly artifact_key: string | null;
-  readonly artifact_sha256: string | null;
-  readonly artifact_expires_at: string | null;
-  readonly error_code: string | null;
-  readonly created_at: string;
-  readonly updated_at: string;
-}
-
-function privacyJobRow(row: PrivacyJobDbRow): PrivacyJobRow {
-  if ((row.kind !== "export" && row.kind !== "delete") || !isPrivacyJobStatus(row.status)) {
-    throw new Error("privacy job row has an invalid kind or status");
-  }
-  return {
-    jobId: row.job_id,
-    requestId: row.request_id,
-    kind: row.kind,
-    status: row.status,
-    storeStatusJson: row.store_status_json,
-    deleteBeforeTs: row.delete_before_ts,
-    identityVersion: row.identity_version,
-    leaseExpiresAt: row.lease_expires_at,
-    artifactKey: row.artifact_key,
-    artifactSha256: row.artifact_sha256,
-    artifactExpiresAt: row.artifact_expires_at,
-    errorCode: row.error_code,
-    createdAt: row.created_at,
-    updatedAt: row.updated_at,
-  };
-}
-
-function isPrivacyJobStatus(value: string): value is PrivacyJobStatus {
-  return value === "queued" || value === "running" || value === "completed" || value === "failed";
 }

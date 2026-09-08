@@ -40,6 +40,18 @@
       "entrypoint": "ControlPlaneEntrypoint"
     }
   ],
+  "queues": {
+    "producers": [{ "binding": "PRIVACY_JOBS_QUEUE", "queue": "splitch-privacy-jobs-local" }],
+    "consumers": [
+      {
+        "queue": "splitch-privacy-jobs-local",
+        "max_batch_size": 1,
+        "max_retries": 7,
+        "dead_letter_queue": "splitch-privacy-jobs-dlq-local"
+      }
+    ]
+  },
+  "r2_buckets": [{ "binding": "PRIVACY_EXPORTS", "bucket_name": "splitch-privacy-exports-local" }],
   "d1_databases": [
     {
       "binding": "DB",
@@ -98,7 +110,8 @@
     "INTEGRATION_SECRET_KEK": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
     "INTEGRATION_SECRET_KEY_VERSION": "v1",
     "CONTROL_PANEL_LEGACY_SESSION_EXPIRES_AT": "0",
-    "CONTROL_PANEL_LEGACY_SESSION_MODE": "disabled"
+    "CONTROL_PANEL_LEGACY_SESSION_MODE": "disabled",
+    "PRIVACY_EXPORT_URL_SECRET": "local-privacy-export-url-secret"
   },
   "env": {
     "shared-preview": {
@@ -136,6 +149,28 @@
           "entrypoint": "ControlPlaneEntrypoint"
         }
       ],
+      "queues": {
+        "producers": [
+          {
+            "binding": "PRIVACY_JOBS_QUEUE",
+            "queue": "splitch-privacy-jobs-shared-preview"
+          }
+        ],
+        "consumers": [
+          {
+            "queue": "splitch-privacy-jobs-shared-preview",
+            "max_batch_size": 1,
+            "max_retries": 7,
+            "dead_letter_queue": "splitch-privacy-jobs-dlq-shared-preview"
+          }
+        ]
+      },
+      "r2_buckets": [
+        {
+          "binding": "PRIVACY_EXPORTS",
+          "bucket_name": "splitch-privacy-exports-shared-preview"
+        }
+      ],
       "secrets": {
         "required": [
           "SENTRY_DSN",
@@ -147,7 +182,8 @@
           "MCP_CONTROL_PLANE_DELEGATION_SECRET",
           "CONVEX_WEBHOOK_KEK",
           "INTEGRATION_SECRET_KEK",
-          "EVALUATION_PRIVACY_SALT"
+          "EVALUATION_PRIVACY_SALT",
+          "PRIVACY_EXPORT_URL_SECRET"
         ]
       },
       "vars": {
@@ -223,6 +259,18 @@
           "entrypoint": "ControlPlaneEntrypoint"
         }
       ],
+      "queues": {
+        "producers": [{ "binding": "PRIVACY_JOBS_QUEUE", "queue": "splitch-privacy-jobs" }],
+        "consumers": [
+          {
+            "queue": "splitch-privacy-jobs",
+            "max_batch_size": 1,
+            "max_retries": 7,
+            "dead_letter_queue": "splitch-privacy-jobs-dlq"
+          }
+        ]
+      },
+      "r2_buckets": [{ "binding": "PRIVACY_EXPORTS", "bucket_name": "splitch-privacy-exports" }],
       "secrets": {
         "required": [
           "SENTRY_DSN",
@@ -234,7 +282,8 @@
           "MCP_CONTROL_PLANE_DELEGATION_SECRET",
           "CONVEX_WEBHOOK_KEK",
           "INTEGRATION_SECRET_KEK",
-          "EVALUATION_PRIVACY_SALT"
+          "EVALUATION_PRIVACY_SALT",
+          "PRIVACY_EXPORT_URL_SECRET"
         ]
       },
       "vars": {

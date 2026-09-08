@@ -177,6 +177,19 @@ in the ledger, audit details, logs, or reset evidence.
 ## Export contracts
 
 Exports are asynchronous jobs with a signed, expiring download URL. Raw secrets are never exported.
+Entity export artifacts live in the private `PRIVACY_EXPORTS` object-store binding for 24 hours.
+The D1 ledger retains only the artifact object key, SHA-256 digest, and expiry. It never retains the
+artifact body or a download URL. An authenticated status read mints a new application-signed URL
+valid for 15 minutes, capped by the artifact expiry. The application download route verifies that
+signature and streams the private object with `Cache-Control: private, no-store`.
+
+Entity export and deletion intake durably commits the request and job before publishing a
+request-ID-only message to `PRIVACY_JOBS_QUEUE`. A minute reconciliation pass republishes queued,
+failed, or lease-expired jobs, so caller loss after intake cannot strand work. The raw Targeting Key
+is discarded after identity resolution and is never placed in D1, Queue, R2 metadata, or logs.
+Export consumers read at most 100 records and 1,000,000 serialized bytes per page, renew the D1 job
+lease between pages, and stream each page into R2 instead of assembling the complete artifact in
+Worker memory.
 
 | Export              | Included                                                                                                                                   | Excluded                                       |
 | ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------- |

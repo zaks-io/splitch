@@ -19,6 +19,8 @@ export interface EntityPrivacyLedgerInput {
   storeStatusJson: string;
   deleteBeforeTs: string | null;
   identityVersion: string;
+  idType: string;
+  entityFamilyHash: string;
 }
 
 export interface EntityPrivacyLedgerRecord {
@@ -40,6 +42,8 @@ export interface EntityPrivacyLedgerRecord {
     storeStatusJson: string;
     deleteBeforeTs: string | null;
     identityVersion: string;
+    idType: string | null;
+    entityFamilyHash: string | null;
   };
 }
 

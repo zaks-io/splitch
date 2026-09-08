@@ -5,9 +5,14 @@ import { requireAppWrite } from "./app-authz";
 import { canonicalHash } from "./approval-canonical";
 import type { ConfigStoreAccess } from "./config-store-access";
 import type { EntityPrivacyConsumer } from "./entity-privacy-consumer";
-import { initialEntityDeleteStoreStatus, runEntityDeleteJob } from "./entity-privacy-delete-job";
+import { initialEntityDeleteStoreStatus } from "./entity-privacy-delete-job";
+import { initialEntityExportStoreStatus, type PrivacyJobMessage } from "./entity-privacy-jobs";
 import { EntityPrivacyConsumerError } from "./entity-privacy-service-client";
 import { objectBody, pathParam } from "./handler-input";
+import {
+  handlePrivacyExportDownload,
+  privacyExportDownloadFields,
+} from "./privacy-export-download";
 import { controlPlaneRoute } from "./routes";
 import { authorizePrivacyRequestStatus } from "./unavailable-handler";
 
@@ -18,6 +23,10 @@ type EntityPrivacyDeps = {
   repo: Repository;
   entityPrivacy?: EntityPrivacyConsumer;
   configStore?: ConfigStoreAccess;
+  privacyJobs?: Queue<PrivacyJobMessage>;
+  privacyExports?: R2Bucket;
+  privacyExportUrlSecret?: string;
+  controlPlaneOrigin?: string;
   nowIso?: () => string;
 };
 
@@ -37,6 +46,17 @@ export function mountEntityPrivacyRoutes(
     entityPrivacyHandler(deps, "delete"),
   );
   registrar.mount(app, controlPlaneRoute("privacy_requests_get"), privacyStatusHandler(deps));
+  app.get("/privacy/requests/:requestId/download", async (c) => {
+    if (!deps.privacyExports) return unavailable("privacy-download");
+    return handlePrivacyExportDownload({
+      repo: deps.repo,
+      bucket: deps.privacyExports,
+      request: c.req.raw,
+      requestId: c.req.param("requestId"),
+      secret: deps.privacyExportUrlSecret,
+      now: deps.nowIso ? new Date(deps.nowIso()) : undefined,
+    });
+  });
 }
 
 function entityPrivacyHandler(deps: EntityPrivacyDeps, kind: "export" | "delete") {
@@ -45,22 +65,24 @@ function entityPrivacyHandler(deps: EntityPrivacyDeps, kind: "export" | "delete"
     const authorizationError = await requireAppWrite(deps, appId, args.principal, args.requestId);
     if (authorizationError) return authorizationError;
     if (!deps.entityPrivacy) return unavailable(args.requestId);
-    if (kind === "export") return exportUnavailable(args.requestId);
-    return deleteEntity(deps, deps.entityPrivacy, args, appId);
+    if (!deps.privacyJobs) return unavailable(args.requestId);
+    return intakeEntity(deps, deps.entityPrivacy, args, appId, kind);
   };
 }
 
-async function deleteEntity(
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: Intake keeps authorization, identity resolution, idempotency, and durable queue publication in one auditable transaction boundary.
+async function intakeEntity(
   deps: EntityPrivacyDeps,
   consumer: EntityPrivacyConsumer,
   args: HandlerArgs<unknown>,
   appId: string,
+  kind: "export" | "delete",
 ): Promise<Response> {
   const body = objectBody(args.input);
   const idType = stringField(body, "idType");
   const targetingKey = stringField(body, "targetingKey");
   const idempotencyKey = args.request.headers.get("idempotency-key");
-  if (!idempotencyKey) throw new Error("entity privacy delete requires Idempotency-Key");
+  if (!idempotencyKey) throw new Error(`entity privacy ${kind} requires Idempotency-Key`);
   const app = await deps.repo.identity.getApp(appId);
   if (!app) return appNotFound(args.requestId);
 
@@ -75,18 +97,18 @@ async function deleteEntity(
       orgId: args.principal.orgId,
       requestId: args.requestId,
     };
-    const identity = await consumer.exportEntity(storeInput);
+    const identity = await consumer.resolveIdentity(storeInput);
     const requestHash = await canonicalHash({
       appId,
       idType,
       targetingKeyHashes: identity.targetingKeyHashes,
-      kind: "delete",
+      kind,
     });
     const stableId = (
       await canonicalHash({
         appId,
         requestedBy: args.principal.id,
-        kind: "delete",
+        kind,
         idempotencyKey,
       })
     ).slice("sha256:".length);
@@ -97,7 +119,7 @@ async function deleteEntity(
       jobId: `job_${stableId}`,
       orgId: app.organizationId,
       appId,
-      requestType: "delete",
+      requestType: kind,
       subjectRef: JSON.stringify(identity.targetingKeyHashes),
       requestedBy: args.principal.id,
       receivedAt,
@@ -105,29 +127,28 @@ async function deleteEntity(
       responseDueAt: new Date(receivedMs + RESPONSE_MS).toISOString(),
       idempotencyKey,
       requestHash,
-      storeStatusJson: JSON.stringify(initialEntityDeleteStoreStatus()),
-      deleteBeforeTs: receivedAt,
+      storeStatusJson: JSON.stringify(
+        kind === "delete" ? initialEntityDeleteStoreStatus() : initialEntityExportStoreStatus(),
+      ),
+      deleteBeforeTs: kind === "delete" ? receivedAt : null,
       identityVersion,
+      idType,
+      entityFamilyHash: identity.entityFamilyHash,
     });
     if (intake.request.requestHash !== requestHash) {
-      return idempotencyConflict(idempotencyKey, args.requestId);
+      return idempotencyConflict(kind, idempotencyKey, args.requestId);
     }
     if (intake.job.identityVersion !== identityVersion) {
       throw new EntityPrivacyConsumerError(
         "control-plane-api: App identity changed after Entity privacy intake",
       );
     }
-    await runEntityDeleteJob({
-      repo: deps.repo,
-      coordinator,
-      consumer,
-      input: storeInput,
-      identity,
-      requestId: intake.request.requestId,
-      job: intake.job,
-      nowIso: deps.nowIso,
-    });
-    return Response.json(await privacyStatusResponse(deps.repo, intake.request.requestId));
+    if (intake.job.status !== "completed") {
+      await deps.privacyJobs?.send({ requestId: intake.request.requestId });
+    }
+    return Response.json(
+      await privacyStatusResponse(deps, intake.request.requestId, args.request.url),
+    );
   } catch (cause) {
     if (cause instanceof EntityPrivacyConsumerError)
       return consumerUnavailable(cause, args.requestId);
@@ -140,17 +161,30 @@ function privacyStatusHandler(deps: { repo: Repository }) {
     const authorizationError = await authorizePrivacyRequestStatus(deps, args);
     if (authorizationError) return authorizationError;
     return Response.json(
-      await privacyStatusResponse(deps.repo, pathParam(args.input, "requestId")),
+      await privacyStatusResponse(deps, pathParam(args.input, "requestId"), args.request.url),
     );
   };
 }
 
-async function privacyStatusResponse(repo: Repository, requestId: string) {
+async function privacyStatusResponse(
+  deps: EntityPrivacyDeps,
+  requestId: string,
+  requestUrl: string,
+) {
+  const repo = deps.repo;
   const [request, job] = await Promise.all([
     repo.privacy.getPrivacyRequestById(requestId),
     repo.privacy.getPrivacyJobByRequestId(requestId),
   ]);
   if (!request) throw new Error("authorized privacy request disappeared");
+  const download = await privacyExportDownloadFields({
+    repo,
+    requestId,
+    requestUrl,
+    origin: deps.controlPlaneOrigin,
+    secret: deps.privacyExportUrlSecret,
+    now: deps.nowIso ? new Date(deps.nowIso()) : undefined,
+  });
   return {
     request: {
       requestId: request.requestId,
@@ -168,6 +202,7 @@ async function privacyStatusResponse(repo: Repository, requestId: string) {
           kind: job.kind,
           status: job.status,
           storeStatus: JSON.parse(job.storeStatusJson) as Record<string, string>,
+          ...download,
         }
       : null,
   };
@@ -197,12 +232,16 @@ function appNotFound(requestId: string): Response {
   );
 }
 
-function idempotencyConflict(idempotencyKey: string, requestId: string): Response {
+function idempotencyConflict(
+  kind: "export" | "delete",
+  idempotencyKey: string,
+  requestId: string,
+): Response {
   return renderError(
     {
       code: "IDEMPOTENCY_KEY_CONFLICT",
       message: "idempotency key was already used for a different Entity privacy request",
-      details: { scope: "entity_privacy_delete", idempotencyKey },
+      details: { scope: `entity_privacy_${kind}` as const, idempotencyKey },
     },
     { requestId },
   );
@@ -211,17 +250,6 @@ function idempotencyConflict(idempotencyKey: string, requestId: string): Respons
 function consumerUnavailable(cause: EntityPrivacyConsumerError, requestId: string): Response {
   return renderError(
     { code: "SERVICE_UNAVAILABLE", message: cause.message, details: { retryAfterMs: 1000 } },
-    { requestId },
-  );
-}
-
-function exportUnavailable(requestId: string): Response {
-  return renderError(
-    {
-      code: "SERVICE_UNAVAILABLE",
-      message: "Entity export requires the private artifact job store",
-      details: { retryAfterMs: 60_000 },
-    },
     { requestId },
   );
 }
