@@ -2,7 +2,9 @@ import { Hono } from "hono";
 import { describe, expect, it } from "vitest";
 import type { DeviceFlowPort } from "./device-flow";
 import type { MembershipAuthorityRepo } from "./membership-authority";
+import { unusedRefreshStore } from "./oauth-route-test-harness";
 import { mountOAuthRoutes } from "./oauth-routes";
+import { makeRateLimiter } from "./rate-limit";
 import type { TokenSigner } from "./token-exchange";
 
 const tokenSigner = {
@@ -75,12 +77,7 @@ function routeApp(params: {
   mountOAuthRoutes(app, {
     tokenSigner: params.tokenSigner ?? tokenSigner,
     deviceFlow: unusedDeviceFlow(),
-    deviceRefreshSessions: {
-      remember: async () => {},
-      lookup: async () => null,
-      rotate: async () => {},
-      forget: async () => {},
-    },
+    deviceRefreshSessions: unusedRefreshStore,
     sessionStore: {
       get: async () => null,
       put: async () => {},
@@ -96,6 +93,7 @@ function routeApp(params: {
     smokeClientCredentials: params.smokeClientCredentials,
     now: () => 1_780_000_000_000,
     repo: emptyMembershipRepo,
+    deviceAuthorizationRateLimiter: makeRateLimiter(),
   });
   return app;
 }

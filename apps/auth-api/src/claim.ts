@@ -57,7 +57,7 @@ export async function initiateClaim(
   input: InitiateInput,
 ): Promise<{ otp_required: true; verification_id: string; user_id: string; org_id: string }> {
   const now = deps.now();
-  deps.rateLimiter.assertUnderCeiling(input.remoteIp ?? "unknown", now);
+  await deps.rateLimiter.assertUnderCeiling(input.remoteIp ?? "unknown", now);
   const claimant = await resolveIdentity(deps, input.identityAssertion, input.email, now);
   await assertClaimMemberships(deps, claimant);
   await assertStillProvisional(deps, claimant.orgId);

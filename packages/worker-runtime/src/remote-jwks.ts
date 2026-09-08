@@ -22,6 +22,8 @@ export interface RemoteJwksSignatureVerifier {
 
 export interface RemoteJwksSignatureVerifierOptions {
   fetch?: FetchImplementation;
+  /** JOSE algorithms the caller's credential profile permits. Defaults to RS256. */
+  algorithms?: readonly string[];
 }
 
 /**
@@ -64,10 +66,12 @@ export function remoteJwksSignatureVerifier(
   options?: RemoteJwksSignatureVerifierOptions,
 ): RemoteJwksSignatureVerifier {
   const resolver = remoteResolver(jwksUri, options?.fetch);
+  const algorithms = options?.algorithms ?? ["RS256"];
+  if (algorithms.length === 0) throw new Error("remote JWKS verifier requires an algorithm");
   return {
     async verify(compactJws) {
       try {
-        await compactVerify(compactJws, resolver, { algorithms: ["RS256"] });
+        await compactVerify(compactJws, resolver, { algorithms: [...algorithms] });
         return true;
       } catch (cause) {
         if (cause instanceof errors.JOSEError && rejectedCredentialCodes.has(cause.code)) {

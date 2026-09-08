@@ -67,17 +67,45 @@ describe("Auth Worker Wrangler runtime config", () => {
     expect(target?.vars?.AUTH_API_ORIGIN).toBe(origin);
     expect(new URL(origin).origin).toBe(origin);
   });
+
+  it.each([
+    ["local", config],
+    ["shared-preview", config.env?.["shared-preview"]],
+    ["production", config.env?.production],
+  ])("binds the authoritative abuse limiter and SQLite migration for %s", (_target, target) => {
+    expect(target?.durable_objects?.bindings).toContainEqual({
+      name: "AUTH_ABUSE_RATE_LIMIT",
+      class_name: "AuthAbuseRateLimitDurableObject",
+    });
+    expect(target?.migrations).toContainEqual({
+      tag: "v1_auth_abuse_rate_limit",
+      new_sqlite_classes: ["AuthAbuseRateLimitDurableObject"],
+    });
+  });
 });
 
 interface WranglerConfig {
   compatibility_flags?: string[];
   env?: Record<string, WranglerTarget | undefined>;
   vars?: Record<string, unknown>;
+  durable_objects?: WranglerDurableObjects;
+  migrations?: WranglerMigration[];
 }
 
 interface WranglerTarget {
   secrets?: { required?: string[] };
   vars?: Record<string, unknown>;
+  durable_objects?: WranglerDurableObjects;
+  migrations?: WranglerMigration[];
+}
+
+interface WranglerDurableObjects {
+  bindings?: Array<{ name: string; class_name: string }>;
+}
+
+interface WranglerMigration {
+  tag: string;
+  new_sqlite_classes?: string[];
 }
 
 function readWranglerConfig(): WranglerConfig {

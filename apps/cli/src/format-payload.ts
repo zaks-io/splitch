@@ -47,6 +47,30 @@ export function humanizeLabel(key: string): string {
 
 const SCALAR_TYPES = new Set(["string", "number", "boolean"]);
 
+/** Render untrusted text without letting terminal or bidi controls change the display. */
+export function terminalText(value: string): string {
+  return Array.from(value, (character) => {
+    const codePoint = character.codePointAt(0);
+    if (codePoint === undefined)
+      throw new Error("terminalText: matched character has no code point");
+    return isTerminalControl(codePoint)
+      ? `\\u${codePoint.toString(16).padStart(4, "0")}`
+      : character;
+  }).join("");
+}
+
+function isTerminalControl(codePoint: number): boolean {
+  return (
+    codePoint <= 0x1f ||
+    (codePoint >= 0x7f && codePoint <= 0x9f) ||
+    codePoint === 0x061c ||
+    codePoint === 0x200e ||
+    codePoint === 0x200f ||
+    (codePoint >= 0x202a && codePoint <= 0x202e) ||
+    (codePoint >= 0x2066 && codePoint <= 0x2069)
+  );
+}
+
 /**
  * A comma-joined line only reads as a list while the items are single tokens
  * (Variant names, change types). Once an item is a phrase or a whole command
@@ -86,25 +110,26 @@ export function isListEnvelope(value: unknown): value is ListEnvelope {
 function fieldValue(value: string | number | boolean | null): string {
   if (value === null) return "(none)";
   if (value === "") return "(empty)";
-  return String(value);
+  return typeof value === "string" ? terminalText(value) : String(value);
 }
 
 /** Table cells stay sparse: a column of `(none)` reads as noise, not as data. */
 export function cellValue(value: unknown): string {
   if (value === null || value === undefined) return "";
-  if (typeof value === "string") return value;
+  if (typeof value === "string") return terminalText(value);
   if (SCALAR_TYPES.has(typeof value)) return String(value);
-  return JSON.stringify(value);
+  return terminalText(JSON.stringify(value));
 }
 
 export function formatTable(
   headers: readonly string[],
   rows: readonly (readonly string[])[],
 ): string {
+  const safeRows = rows.map((row) => row.map(terminalText));
   const widths = headers.map((header, index) =>
-    Math.max(header.length, ...rows.map((row) => row[index]?.length ?? 0)),
+    Math.max(header.length, ...safeRows.map((row) => row[index]?.length ?? 0)),
   );
-  return [headers, ...rows]
+  return [headers, ...safeRows]
     .map((row) =>
       row
         .map((cell, index) => cell.padEnd(widths[index] ?? 0))
@@ -244,10 +269,10 @@ function formatRecord(record: Record<string, unknown>): string {
  */
 export function formatPayload(payload: unknown, noun = "Results"): string {
   if (payload === undefined) return "";
-  if (typeof payload === "string") return payload;
+  if (typeof payload === "string") return terminalText(payload);
   if (isScalar(payload)) return fieldValue(payload);
   if (Array.isArray(payload)) return formatCollection(payload, noun);
   if (isListEnvelope(payload)) return formatListEnvelope(payload, noun);
   if (isRecord(payload)) return formatRecord(payload);
-  return JSON.stringify(payload);
+  return terminalText(JSON.stringify(payload));
 }

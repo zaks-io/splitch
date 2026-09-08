@@ -3,7 +3,13 @@ import {
   PERSISTED_JSON_MAX_INCOMING_DEPTH,
 } from "./persisted-field-limits";
 
-type IncomingJsonFrame = { node: unknown; path: string[]; depth: number };
+type JsonChild = { key: string; node: unknown };
+
+type IncomingJsonFrame = {
+  children: Iterator<JsonChild>;
+  path: string[];
+  depth: number;
+};
 
 export function persistedJsonDepth(value: unknown): number {
   let maxDepth = 1;
@@ -42,23 +48,31 @@ export function incomingJsonBoundVisited(value: unknown, rootPath: readonly stri
 }
 
 function walkIncomingJsonBound(value: unknown, rootPath: readonly string[]): IncomingJsonBoundWalk {
-  const queue: IncomingJsonFrame[] = [{ node: value, path: [...rootPath], depth: 1 }];
-  // Incrementing cursor: Array.shift() is O(queue length) per pop, so a wide
-  // shallow body would be quadratic on this pre-auth walk.
-  let cursor = 0;
-  let visited = 0;
-  while (cursor < queue.length) {
-    const frame = queue[cursor];
-    cursor += 1;
-    if (frame === undefined) break;
+  let visited = 1;
+  const stack: IncomingJsonFrame[] = [
+    { children: jsonChildIterator(value), path: [...rootPath], depth: 1 },
+  ];
+  while (stack.length > 0) {
+    const parent = stack.at(-1);
+    if (parent === undefined) break;
+    const next = parent.children.next();
+    if (next.done) {
+      stack.pop();
+      continue;
+    }
+
     visited += 1;
-    if (frame.depth > PERSISTED_JSON_MAX_INCOMING_DEPTH) {
+    const depth = parent.depth + 1;
+    const path = [...parent.path, next.value.key];
+    if (depth > PERSISTED_JSON_MAX_INCOMING_DEPTH) {
       return {
-        issue: { path: frame.path, message: PERSISTED_JSON_INCOMING_DEPTH_MESSAGE },
+        issue: { path, message: PERSISTED_JSON_INCOMING_DEPTH_MESSAGE },
         visited,
       };
     }
-    enqueueJsonChildren(queue, frame);
+    if (hasJsonChildren(next.value.node)) {
+      stack.push({ children: jsonChildIterator(next.value.node), path, depth });
+    }
   }
   return { issue: null, visited };
 }
@@ -73,18 +87,22 @@ function pushJsonChildren(
   }
 }
 
-function enqueueJsonChildren(queue: IncomingJsonFrame[], frame: IncomingJsonFrame): void {
-  if (frame.node === null || typeof frame.node !== "object") {
-    return;
-  }
-  if (Array.isArray(frame.node)) {
-    for (const [index, child] of frame.node.entries()) {
-      queue.push({ node: child, path: [...frame.path, String(index)], depth: frame.depth + 1 });
+function hasJsonChildren(node: unknown): node is object {
+  return node !== null && typeof node === "object";
+}
+
+function* jsonChildIterator(node: unknown): Generator<JsonChild> {
+  if (!hasJsonChildren(node)) return;
+  if (Array.isArray(node)) {
+    for (let index = 0; index < node.length; index += 1) {
+      yield { key: String(index), node: node[index] };
     }
     return;
   }
-  for (const [key, child] of Object.entries(frame.node)) {
-    queue.push({ node: child, path: [...frame.path, key], depth: frame.depth + 1 });
+  for (const key in node) {
+    if (Object.hasOwn(node, key)) {
+      yield { key, node: (node as Record<string, unknown>)[key] };
+    }
   }
 }
 

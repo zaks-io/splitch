@@ -39,6 +39,17 @@
       "id": "00000000000000000000000000000000"
     }
   ],
+  "durable_objects": {
+    "bindings": [
+      { "name": "AUTH_ABUSE_RATE_LIMIT", "class_name": "AuthAbuseRateLimitDurableObject" }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1_auth_abuse_rate_limit",
+      "new_sqlite_classes": ["AuthAbuseRateLimitDurableObject"]
+    }
+  ],
   "secrets": {
     "required": ["SENTRY_DSN"]
   },
@@ -102,6 +113,17 @@
       "kv_namespaces": [
         { "binding": "JTI_CACHE", "id": "04607132d6614c96bb44e7f67f873598" },
         { "binding": "SESSION_STORE", "id": "673d17e768eb45f5bfc5275fbd0e9320" }
+      ],
+      "durable_objects": {
+        "bindings": [
+          { "name": "AUTH_ABUSE_RATE_LIMIT", "class_name": "AuthAbuseRateLimitDurableObject" }
+        ]
+      },
+      "migrations": [
+        {
+          "tag": "v1_auth_abuse_rate_limit",
+          "new_sqlite_classes": ["AuthAbuseRateLimitDurableObject"]
+        }
       ]
     },
     "production": {
@@ -152,6 +174,17 @@
       "kv_namespaces": [
         { "binding": "JTI_CACHE", "id": "499e8d49082f43a48371c6784495a2ad" },
         { "binding": "SESSION_STORE", "id": "bdfa1197123d4eef945c5a703d63a572" }
+      ],
+      "durable_objects": {
+        "bindings": [
+          { "name": "AUTH_ABUSE_RATE_LIMIT", "class_name": "AuthAbuseRateLimitDurableObject" }
+        ]
+      },
+      "migrations": [
+        {
+          "tag": "v1_auth_abuse_rate_limit",
+          "new_sqlite_classes": ["AuthAbuseRateLimitDurableObject"]
+        }
       ]
     }
   }

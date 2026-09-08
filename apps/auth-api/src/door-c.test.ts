@@ -42,7 +42,12 @@ describe("Door C discovery and device flow", () => {
     );
     expect(authorizationServer.status).toBe(200);
     const serverMetadata = (await authorizationServer.json()) as {
-      agent_auth: { skill: string; identity_types_supported: string[] };
+      agent_auth: {
+        skill: string;
+        identity_types_supported: string[];
+        events_endpoint: string;
+        events_supported: string[];
+      };
     };
     expect(serverMetadata).toMatchObject({
       issuer: ORIGIN,
@@ -52,6 +57,10 @@ describe("Door C discovery and device flow", () => {
       agent_auth: {
         identity_endpoint: `${ORIGIN}/agent/identity`,
         claim_endpoint: `${ORIGIN}/agent/identity/claim`,
+        events_endpoint: `${ORIGIN}/agent/event/notify`,
+        events_supported: [
+          "https://schemas.workos.com/events/agent/auth/identity/assertion/revoked",
+        ],
         identity_types_supported: ["anonymous", "device_flow"],
       },
     });

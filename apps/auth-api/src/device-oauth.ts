@@ -10,6 +10,7 @@ import {
   resolveAppSelectionForUser,
 } from "./membership-authority";
 import { OAuthError, renderDoorFault, renderOAuthError } from "./oauth-errors";
+import type { RateLimiter } from "./rate-limit";
 import { DeviceAuthorizationRequestSchema, DeviceTokenRequestSchema } from "./schemas";
 import type { TokenSigner } from "./token-exchange";
 
@@ -32,6 +33,7 @@ export interface DeviceOAuthDeps {
   accessSecret: string;
   now: () => number;
   repo: MembershipAuthorityRepo;
+  deviceAuthorizationRateLimiter: RateLimiter;
 }
 
 export interface ResourceBinding {
@@ -53,7 +55,11 @@ export function requireFirstPartyClient(clientId: string | undefined): void {
   }
 }
 
-export async function authorizeDevice(deps: DeviceOAuthDeps, body: unknown): Promise<Response> {
+export async function authorizeDevice(
+  deps: DeviceOAuthDeps,
+  body: unknown,
+  remoteIp: string,
+): Promise<Response> {
   const parsed = DeviceAuthorizationRequestSchema.safeParse(body);
   if (!parsed.success) {
     return renderOAuthError(
@@ -62,6 +68,7 @@ export async function authorizeDevice(deps: DeviceOAuthDeps, body: unknown): Pro
   }
   try {
     requireFirstPartyClient(parsed.data.client_id);
+    await deps.deviceAuthorizationRateLimiter.assertUnderCeiling(remoteIp, deps.now());
     // An App selector at login remains supported, but a cold-start login has
     // no App to name — the grant then mints an unbound session (quickstart
     // step 1: authenticate first, create the Org and App after).

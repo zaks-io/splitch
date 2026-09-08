@@ -5,6 +5,7 @@ import { DEVICE_CODE_GRANT, makeFixtureDeviceFlow } from "./device-flow";
 import { makeD1DeviceRefreshSessionStore } from "./device-session-store";
 import { makeJtiCache } from "./jti-cache";
 import { makeKvRevocationStore } from "./revocation";
+import { makeRateLimiter } from "./rate-limit";
 import { makePoolBindings } from "./test-bindings-pool";
 import { type LocalBindings, makeDoorBDeps, makeFixtureKeypair } from "./test-fixtures";
 import { makeTokenSigner, type TokenSigner } from "./token-exchange";
@@ -72,6 +73,7 @@ export function setupDoorCHarness() {
       }),
       sessionStore: local.sessionKv,
       revocations: makeKvRevocationStore(local.sessionKv),
+      deviceAuthorizationRateLimiter: makeRateLimiter(),
     });
   }
 

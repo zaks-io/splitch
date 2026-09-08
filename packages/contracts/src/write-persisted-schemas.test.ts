@@ -264,14 +264,14 @@ describe("incoming JSON structure bound", () => {
     });
   });
 
-  it("visits each node of a wide shallow array without shifting the queue", () => {
+  it("visits each node of a wide shallow array without retaining a wide queue", () => {
     const wide = Array.from({ length: 250_000 }, () => 0);
-    const largeShifts = countLargeArrayShifts(() => {
+    const largePushes = countLargeArrayPushes(() => {
       expect(incomingJsonBoundIssue(wide)).toBeNull();
       expect(incomingJsonBoundVisited(wide)).toBe(250_001);
       expect(incomingJsonBoundVisited(wide.slice(0, 125_000))).toBe(125_001);
     });
-    expect(largeShifts).toBe(0);
+    expect(largePushes).toBe(0);
   });
 });
 
@@ -281,36 +281,36 @@ describe("write name bound stays absolute", () => {
   });
 });
 
-/** Queues this wide are the shift() footgun; incidental tiny helper arrays are ignored. */
+/** Queues this wide exhaust an isolate; incidental tiny helper arrays are ignored. */
 const LARGE_QUEUE_MIN = 32;
 
-let originalArrayShift: typeof Array.prototype.shift | undefined;
+let originalArrayPush: typeof Array.prototype.push | undefined;
 
 afterEach(() => {
-  restoreArrayShift();
+  restoreArrayPush();
 });
 
-function countLargeArrayShifts(run: () => void): number {
-  const previousShift = Array.prototype.shift;
-  originalArrayShift = previousShift;
-  let largeShifts = 0;
-  Array.prototype.shift = function largeArrayShift(this: unknown[]) {
+function countLargeArrayPushes(run: () => void): number {
+  const previousPush = Array.prototype.push;
+  originalArrayPush = previousPush;
+  let largePushes = 0;
+  Array.prototype.push = function boundedArrayPush(this: unknown[], ...items: unknown[]) {
     if (this.length >= LARGE_QUEUE_MIN) {
-      largeShifts += 1;
+      largePushes += 1;
     }
-    return previousShift.call(this);
+    return previousPush.apply(this, items);
   };
   try {
     run();
-    return largeShifts;
+    return largePushes;
   } finally {
-    restoreArrayShift();
+    restoreArrayPush();
   }
 }
 
-function restoreArrayShift(): void {
-  if (originalArrayShift !== undefined) {
-    Array.prototype.shift = originalArrayShift;
-    originalArrayShift = undefined;
+function restoreArrayPush(): void {
+  if (originalArrayPush !== undefined) {
+    Array.prototype.push = originalArrayPush;
+    originalArrayPush = undefined;
   }
 }

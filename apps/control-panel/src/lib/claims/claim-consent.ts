@@ -1,7 +1,12 @@
 import type { ControlPanelBindings } from "#lib/shared/bindings";
+import { DEFAULT_MUTATING_JSON_BODY_MAX_BYTES } from "@splitch/contracts";
+import { readBoundedRequestBody } from "@splitch/worker-runtime";
 import { rejectCrossOriginWrite } from "#lib/auth/panel-csrf";
 import { documentTitle } from "#lib/shell/document-title";
 import { loadSessionFromRequest } from "#lib/sessions/session-refresh";
+
+export const CLAIM_CONSENT_MAX_BODY_BYTES = DEFAULT_MUTATING_JSON_BODY_MAX_BYTES;
+const FORM_MEDIA_TYPES = ["application/x-www-form-urlencoded", "multipart/form-data"];
 
 /** Browser sends only its opaque cookie. The WorkOS JWT stays in the KV record. */
 export async function forwardClaimConsent(
@@ -15,8 +20,10 @@ export async function forwardClaimConsent(
   const loaded = await loadSessionFromRequest(bindings, request);
   if (!loaded.ok || !loaded.session.workosAccessToken)
     return new Response("Unauthorized", { status: 401 });
-  const decision = await consentDecision(request);
-  if (!decision) return new Response("Invalid consent decision", { status: 400 });
+  const parsed = await consentDecision(request);
+  if (!parsed.ok) {
+    return new Response("Invalid consent decision", { status: 400 });
+  }
   const response = await fetch(
     `${bindings.AUTH_API_ORIGIN}/claim/consent/${encodeURIComponent(attemptId)}`,
     {
@@ -25,7 +32,7 @@ export async function forwardClaimConsent(
         authorization: `Bearer ${loaded.session.workosAccessToken}`,
         "content-type": "application/json",
       },
-      body: JSON.stringify({ decision }),
+      body: JSON.stringify({ decision: parsed.decision }),
     },
   );
   const body = response.status === 204 ? null : await response.text();
@@ -65,15 +72,24 @@ export function renderConsentPage(attemptId: string): Response {
   );
 }
 
-async function consentDecision(request: Request): Promise<"approve" | "deny" | null> {
+type ConsentDecisionResult = { ok: true; decision: "approve" | "deny" } | { ok: false };
+
+async function consentDecision(request: Request): Promise<ConsentDecisionResult> {
+  const bounded = await readBoundedRequestBody(request, {
+    maxBytes: CLAIM_CONSENT_MAX_BODY_BYTES,
+    allowedMediaTypes: FORM_MEDIA_TYPES,
+  });
+  if (!bounded.ok) return { ok: false };
+  let decision: FormDataEntryValue | null;
   try {
-    const form = await request.clone().formData();
-    const decision = form.get("decision");
-    if (decision === "approve" || decision === "deny") return decision;
+    const form = await new Response(Uint8Array.from(bounded.bytes).buffer, {
+      headers: { "content-type": request.headers.get("content-type") ?? "" },
+    }).formData();
+    decision = form.get("decision");
   } catch {
-    // Treat malformed form data as an invalid decision.
+    return { ok: false };
   }
-  return null;
+  return decision === "approve" || decision === "deny" ? { ok: true, decision } : { ok: false };
 }
 
 function escapeHtml(value: string): string {

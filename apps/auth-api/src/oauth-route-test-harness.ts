@@ -5,6 +5,8 @@ import { sealDeviceGrant } from "./device-grant";
 import type { DeviceRefreshSessionStore } from "./device-session-store";
 import type { MembershipAuthorityRepo } from "./membership-authority";
 import { mountOAuthRoutes } from "./oauth-routes";
+import { makeRateLimiter } from "./rate-limit";
+import type { RateLimiter } from "./rate-limit";
 import { memoryKvNamespace } from "./test-kv";
 import type { TokenSigner } from "./token-exchange";
 
@@ -57,6 +59,7 @@ export function routeApp(params: {
   sessionStore?: KVNamespace;
   repo?: MembershipAuthorityRepo;
   tokenSigner?: TokenSigner;
+  deviceAuthorizationRateLimiter?: RateLimiter;
 }): Hono {
   const app = new Hono();
   mountOAuthRoutes(app, {
@@ -71,6 +74,7 @@ export function routeApp(params: {
     controlPlaneAudience: "https://cp.splitch.test",
     now: () => 1_780_000_000_000,
     repo: params.repo ?? emptyMembershipRepo,
+    deviceAuthorizationRateLimiter: params.deviceAuthorizationRateLimiter ?? makeRateLimiter(),
   });
   return app;
 }

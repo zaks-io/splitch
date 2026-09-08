@@ -16,7 +16,8 @@ limiting as its abuse bound) and ADR-0022 (which rate-limited anonymous registra
 ## Decision
 
 All four controls below remain mandatory product requirements. The current launch posture stages their
-implementation: Turnstile and the in-app per-IP/global limiter remain required, while the complete paid
+implementation: Turnstile and the authoritative Durable Object per-IP/global limiter remain required,
+while the complete paid
 WAF posture is security debt that will be completed when real production traffic justifies the plan
 cost. Traffic, not a calendar date or an invented request threshold, is the upgrade trigger.
 
@@ -83,8 +84,11 @@ Revocation is the one credential operation that must never be fire-and-forget. O
 
 Anonymous provisional Org+App creation (ADR-0022, Door B) is a public, unauthenticated **write** surface
 that mints WorkOS users and D1 rows. Per-IP rate limiting alone is trivially defeated by IP rotation.
-At launch it is gated by **Cloudflare Turnstile** (challenge before any row is created), the in-app
-per-IP/global limiter, and the partial source-IP WAF rule documented above. Turnstile tokens are verified
+At launch it is gated by **Cloudflare Turnstile** (challenge before any row is created), a SQLite
+Durable Object that atomically enforces the per-IP and cross-IP/global one-hour ceilings across every
+Worker isolate, and the partial source-IP WAF rule documented above. The unauthenticated device
+authorization route has a separate Durable Object scope with the same default ceilings, checked before
+the outbound WorkOS request. Turnstile tokens are verified
 server-side (siteverify), are single-use, and expire in 300s. The complete target posture adds the
 deferred cross-IP/global WAF ceiling. The public evaluate target remains progressive WAF rate-limit rules
 (challenge before block) plus per-credential counters keyed on the SDK key; those paid WAF controls are
@@ -124,7 +128,7 @@ not part of the current Free-plan launch posture.
   no longer best-effort.
 - Anonymous registration depends on Turnstile being configured; the control is a launch blocker for that
   surface, consistent with treating these as an enforced contract.
-- Launch remains on Cloudflare Free with the documented partial WAF rule and required in-app backstops.
+- Launch remains on Cloudflare Free with the documented partial WAF rule and required Durable Object backstops.
   Host/method scoping, the one-hour cross-IP/global ceiling, progressive challenge-before-block, and
   per-credential header counters remain explicit security debt until traffic justifies the paid plan.
 - The target origin/referrer allow-list, per-credential rate-limit counters, global rate limits, and

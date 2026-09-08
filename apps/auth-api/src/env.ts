@@ -11,6 +11,8 @@ export interface AuthApiEnv {
   JTI_CACHE: KVNamespace;
   /** KV namespace shared with control-plane and MCP token revocation (`revoked:{sub}`). */
   SESSION_STORE: KVNamespace;
+  /** Atomic global and per-IP admission authority for unauthenticated auth flows. */
+  AUTH_ABUSE_RATE_LIMIT?: DurableObjectNamespace;
   /** This auth-api origin; every accepted ID-JAG `aud` must point here. */
   AUTH_API_ORIGIN?: string;
   /** Control-plane protected-resource origin stamped as the access token `aud`. */

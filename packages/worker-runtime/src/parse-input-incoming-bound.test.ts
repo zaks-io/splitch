@@ -23,13 +23,13 @@ const wideShallowBodySchema = z.object({
   body: z.unknown(),
 });
 
-/** Queues this wide are the shift() footgun; incidental tiny helper arrays are ignored. */
+/** Queues this wide exhaust an isolate; incidental tiny helper arrays are ignored. */
 const LARGE_QUEUE_MIN = 32;
 
-let originalArrayShift: typeof Array.prototype.shift | undefined;
+let originalArrayPush: typeof Array.prototype.push | undefined;
 
 afterEach(() => {
-  restoreArrayShift();
+  restoreArrayPush();
 });
 
 describe("parseInput incoming JSON bound", () => {
@@ -50,14 +50,14 @@ describe("parseInput incoming JSON bound", () => {
     expect(parsed.error.details.issues[0]?.message).toMatch(/incoming depth/);
   });
 
-  it("walks a 250k-element body at the pre-auth seam without shifting the queue", async () => {
+  it("walks a 250k-element body at the pre-auth seam without retaining a wide queue", async () => {
     const body = Array.from({ length: 250_000 }, () => 0);
     const payload = JSON.stringify(body);
     expect(payload.length).toBe(500_001);
     expect(payload.length).toBeLessThan(DEFAULT_CONTROL_PLANE_JSON_BODY_MAX_BYTES);
     expect(incomingJsonBoundVisited(body)).toBe(250_001);
 
-    const largeShifts = await countLargeArrayShifts(async () => {
+    const largePushes = await countLargeArrayPushes(async () => {
       const parsed = await parseInput(
         wideShallowBodySchema,
         new Request("http://worker.test/event-definitions", {
@@ -76,7 +76,7 @@ describe("parseInput incoming JSON bound", () => {
       expect(Array.isArray(parsed.value.body)).toBe(true);
       expect((parsed.value.body as unknown[]).length).toBe(250_000);
     });
-    expect(largeShifts).toBe(0);
+    expect(largePushes).toBeLessThan(body.length / 100);
   });
 
   it("finds a depth overflow after a wide shallow prefix", async () => {
@@ -117,27 +117,27 @@ function nestClosedJsonProperties(
   return node;
 }
 
-async function countLargeArrayShifts(run: () => Promise<void>): Promise<number> {
-  const previousShift = Array.prototype.shift;
-  originalArrayShift = previousShift;
-  let largeShifts = 0;
-  Array.prototype.shift = function largeArrayShift(this: unknown[]) {
+async function countLargeArrayPushes(run: () => Promise<void>): Promise<number> {
+  const previousPush = Array.prototype.push;
+  originalArrayPush = previousPush;
+  let largePushes = 0;
+  Array.prototype.push = function boundedArrayPush(this: unknown[], ...items: unknown[]) {
     if (this.length >= LARGE_QUEUE_MIN) {
-      largeShifts += 1;
+      largePushes += 1;
     }
-    return previousShift.call(this);
+    return previousPush.apply(this, items);
   };
   try {
     await run();
-    return largeShifts;
+    return largePushes;
   } finally {
-    restoreArrayShift();
+    restoreArrayPush();
   }
 }
 
-function restoreArrayShift(): void {
-  if (originalArrayShift !== undefined) {
-    Array.prototype.shift = originalArrayShift;
-    originalArrayShift = undefined;
+function restoreArrayPush(): void {
+  if (originalArrayPush !== undefined) {
+    Array.prototype.push = originalArrayPush;
+    originalArrayPush = undefined;
   }
 }
