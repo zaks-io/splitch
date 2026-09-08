@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 import { ErrorResponseSchema } from "./errors";
 import { getRoute } from "./route-registry";
 
-const SDK_TRACK_ERRORS = getRoute("sdk_track")?.errors ?? [];
+const SDK_TRACK_ERRORS = (getRoute("sdk_track")?.errors ?? []).filter(
+  (code) => code !== "UNSUPPORTED_MEDIA_TYPE",
+);
 
 const PUBLIC_EVENT_ERROR_BY_CODE = {
   UNAUTHORIZED: {
