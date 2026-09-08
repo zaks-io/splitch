@@ -68,6 +68,14 @@ const PUBLIC_EVALUATION_ERROR_BY_CODE: Record<string, ErrorResponse> = {
     "INTERNAL_SERVER_ERROR",
     'Invalid regex condition "(unclosed"',
   ),
+  UNSUPPORTED_MEDIA_TYPE: {
+    code: "UNSUPPORTED_MEDIA_TYPE",
+    message: "request body must use application/json",
+    details: {
+      receivedMediaType: "text/plain",
+      supportedMediaTypes: ["application/json"],
+    },
+  },
 };
 
 const PUBLIC_VALIDATION_VARIANTS: readonly ErrorResponse[] = [
@@ -176,6 +184,16 @@ describe("evaluation-error-response public disclosure", () => {
           "code": "UNAUTHORIZED",
           "details": {},
           "message": "Client Key or API Key required",
+        },
+        {
+          "code": "UNSUPPORTED_MEDIA_TYPE",
+          "details": {
+            "receivedMediaType": "text/plain",
+            "supportedMediaTypes": [
+              "application/json",
+            ],
+          },
+          "message": "request body must use application/json",
         },
         {
           "code": "UNSUPPORTED_OBJECT_KEY",

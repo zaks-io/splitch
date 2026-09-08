@@ -1,10 +1,10 @@
 import type { Repository } from "@splitch/db";
+import { createPerformanceSpanRecorder } from "@splitch/observability/performance-spans";
 import {
   createWorkerFaultReporter,
   createWorkerObservability,
   workerObservabilityWithWaitUntil,
 } from "@splitch/observability/worker";
-import { createPerformanceSpanRecorder } from "@splitch/observability/performance-spans";
 import type { AuthResolver } from "@splitch/worker-runtime";
 import { apiDocumentVersion } from "./api-document-version";
 import { createApp } from "./app";
@@ -75,6 +75,10 @@ export async function handleControlPlaneAppRequest(input: {
       env.ANALYSIS_API,
       env.EVENT_INGEST_API,
     ),
+    privacyJobs: env.PRIVACY_JOBS_QUEUE,
+    privacyExports: env.PRIVACY_EXPORTS,
+    privacyExportUrlSecret: env.PRIVACY_EXPORT_URL_SECRET,
+    controlPlaneOrigin: env.CONTROL_PLANE_ORIGIN,
     sentry: {
       secretKek: env.INTEGRATION_SECRET_KEK,
       secretKeyVersion: env.INTEGRATION_SECRET_KEY_VERSION,

@@ -88,6 +88,15 @@ export function makeDeleteAppCascade(d1: D1Database) {
       d1.prepare(`DELETE FROM entity_deletions WHERE app_id = ?`).bind(appId),
       d1
         .prepare(
+          `DELETE FROM privacy_jobs
+           WHERE request_id IN (
+             SELECT request_id FROM privacy_requests
+             WHERE app_id = ? AND org_id = (SELECT organization_id FROM apps WHERE id = ?)
+           )`,
+        )
+        .bind(appId, appId),
+      d1
+        .prepare(
           `DELETE FROM privacy_requests
            WHERE app_id = ?
              AND org_id = (SELECT organization_id FROM apps WHERE id = ?)`,

@@ -7,6 +7,7 @@ import { credentialRoutes } from "./routes/routes-credentials";
 import { eventDefinitionRoutes } from "./routes/routes-event-definitions";
 import { experimentRoutes } from "./routes/routes-experiments";
 import { flagRoutes } from "./routes/routes-flags";
+import { privacyRoutes } from "./routes/routes-privacy";
 
 /**
  * Emit-only OpenAPIHono apps built from THE route registry so `hc<AppType>()`
@@ -96,6 +97,7 @@ const credentialsSdkRoutes = [
 
 const approvalsSdkRoutes = [approvalRoutes[0], approvalRoutes[1], approvalRoutes[2]] as const;
 const eventDefinitionsSdkRoutes = eventDefinitionRoutes;
+const privacySdkRoutes = [privacyRoutes[4], privacyRoutes[5]] as const;
 
 const flagsControlPlaneClientApp = new OpenAPIHono().openapiRoutes([
   { route: flagsSdkRoutes[0].openapi, handler: emitOnlyHandler(flagsSdkRoutes[0]) },
@@ -193,6 +195,11 @@ const eventDefinitionsControlPlaneClientApp = new OpenAPIHono().openapiRoutes([
   },
 ] as const);
 
+const privacyControlPlaneClientApp = new OpenAPIHono().openapiRoutes([
+  { route: privacySdkRoutes[0].openapi, handler: emitOnlyHandler(privacySdkRoutes[0]) },
+  { route: privacySdkRoutes[1].openapi, handler: emitOnlyHandler(privacySdkRoutes[1]) },
+] as const);
+
 /** `hc<FlagsControlPlaneClientApp>()` — flag route group client type. */
 export type FlagsControlPlaneClientApp = typeof flagsControlPlaneClientApp;
 
@@ -212,6 +219,7 @@ export type EnvironmentsControlPlaneClientApp = typeof environmentsControlPlaneC
 export type CredentialsControlPlaneClientApp = typeof credentialsControlPlaneClientApp;
 export type ApprovalsControlPlaneClientApp = typeof approvalsControlPlaneClientApp;
 export type EventDefinitionsControlPlaneClientApp = typeof eventDefinitionsControlPlaneClientApp;
+export type PrivacyControlPlaneClientApp = typeof privacyControlPlaneClientApp;
 
 /** Union of SDK emit-only apps; prefer domain-specific types for `hc`. */
 export type ControlPlaneClientApp =
@@ -222,7 +230,8 @@ export type ControlPlaneClientApp =
   | EnvironmentsControlPlaneClientApp
   | CredentialsControlPlaneClientApp
   | ApprovalsControlPlaneClientApp
-  | EventDefinitionsControlPlaneClientApp;
+  | EventDefinitionsControlPlaneClientApp
+  | PrivacyControlPlaneClientApp;
 
 export function createFlagsControlPlaneClientApp(): FlagsControlPlaneClientApp {
   return flagsControlPlaneClientApp;
@@ -250,6 +259,10 @@ export function createApprovalsControlPlaneClientApp(): ApprovalsControlPlaneCli
 
 export function createEventDefinitionsControlPlaneClientApp(): EventDefinitionsControlPlaneClientApp {
   return eventDefinitionsControlPlaneClientApp;
+}
+
+export function createPrivacyControlPlaneClientApp(): PrivacyControlPlaneClientApp {
+  return privacyControlPlaneClientApp;
 }
 
 /** @deprecated Use {@link createFlagsControlPlaneClientApp} or {@link createExperimentsControlPlaneClientApp}. */

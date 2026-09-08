@@ -26,6 +26,7 @@ import { makeCredentialHandlers } from "./credential-handlers";
 import { type DelegationBindings, mountDelegatedRoutes } from "./delegated-routes";
 import type { EntityPrivacyConsumer } from "./entity-privacy-consumer";
 import { mountEntityPrivacyRoutes } from "./entity-privacy-handlers";
+import type { PrivacyJobMessage } from "./entity-privacy-jobs";
 import type { EnvironmentExposureStatusCleanup } from "./environment-exposure-status-cleanup";
 import { registerEventDefinitionRoutes } from "./event-definition-handlers";
 import { makeExperimentHandlers } from "./experiment-handlers";
@@ -94,6 +95,10 @@ export interface AppDeps {
   exposureStatusCleanup?: EnvironmentExposureStatusCleanup;
   holdoverWriteOutboxCleanup?: HoldoverWriteOutboxCleanup;
   entityPrivacy?: EntityPrivacyConsumer;
+  privacyJobs?: Queue<PrivacyJobMessage>;
+  privacyExports?: R2Bucket;
+  privacyExportUrlSecret?: string;
+  controlPlaneOrigin?: string;
   convex?: Omit<ConvexHandlerDeps, "repo">;
   cloudflare?: Omit<CloudflareHandlerDeps, "repo">;
   sentry?: Omit<SentryHandlerDeps, "repo">;
@@ -282,6 +287,10 @@ export function createApp(deps: AppDeps): Hono {
   mountEntityPrivacyRoutes(app, registrar, {
     repo: deps.repo,
     entityPrivacy: deps.entityPrivacy,
+    privacyJobs: deps.privacyJobs,
+    privacyExports: deps.privacyExports,
+    privacyExportUrlSecret: deps.privacyExportUrlSecret,
+    controlPlaneOrigin: deps.controlPlaneOrigin,
     configStore: deps.configStore,
     nowIso: deps.nowIso,
   });

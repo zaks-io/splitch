@@ -82,6 +82,16 @@ const probes: Record<string, (sdk: ControlPlaneSdk) => Promise<unknown>> = {
       reason: "probe",
       idempotency_key: KEY,
     }),
+  entity_privacy_export: (sdk) =>
+    sdk.privacy.exportEntity(
+      { appId: SCOPE.appId, idType: "user", targetingKey: "user-123" },
+      { idempotencyKey: KEY },
+    ),
+  entity_privacy_delete: (sdk) =>
+    sdk.privacy.deleteEntity(
+      { appId: SCOPE.appId, idType: "user", targetingKey: "user-123" },
+      { idempotencyKey: KEY },
+    ),
 };
 
 /** Routes this SDK is the client for. Data-plane routes belong to `@splitch/sdk`. */

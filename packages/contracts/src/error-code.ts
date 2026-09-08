@@ -12,6 +12,7 @@ export const errorCodes = [
   "EXPOSURE_TICKET_INVALID",
   "EXPOSURE_TICKET_EXPIRED",
   "UNSUPPORTED_OBJECT_KEY",
+  "UNSUPPORTED_MEDIA_TYPE",
 
   // Run / Experiment invariants
   "RUN_FROZEN",

@@ -9,13 +9,15 @@ import {
   sendMetricEvent,
 } from "./metric-event.test-fixture";
 
-const SDK_TRACK_ERRORS = [...(getRoute("sdk_track")?.errors ?? [])];
+const ROUTE_ERRORS = [...(getRoute("sdk_track")?.errors ?? [])];
+const SDK_TRACK_ERRORS = ROUTE_ERRORS.filter((code) => code !== "UNSUPPORTED_MEDIA_TYPE");
 const INGEST_OWNED_ERRORS = SDK_TRACK_ERRORS.filter((code) => code !== "ORIGIN_NOT_ALLOWED");
 
 describe("sdk_track public Client Key response shapes", () => {
   it("HTTP-produces every route-contract error plus first/replay success and schema probes", async () => {
     const produced = await producePublicSdkTrackShapes();
     expect(SDK_TRACK_ERRORS).toHaveLength(12);
+    expect(ROUTE_ERRORS).toContain("UNSUPPORTED_MEDIA_TYPE");
     expect(SDK_TRACK_ERRORS).toContain("ORIGIN_NOT_ALLOWED");
     expect(Object.keys(produced.errors).sort()).toEqual([...INGEST_OWNED_ERRORS].sort());
 

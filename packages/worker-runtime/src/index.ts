@@ -42,6 +42,7 @@ export { timingSafeEqualString } from "./secret-compare";
 export {
   applyResponseHeaders,
   CONTROL_PANEL_SECURITY_HEADERS,
+  HOSTED_PRODUCTION_SECURITY_HEADERS,
   mergeHeaderRecords,
   WORKER_BASELINE_SECURITY_HEADERS,
   wrapWorkerHandler,

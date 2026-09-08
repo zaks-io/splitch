@@ -6,7 +6,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "clean": "rm -rf dist coverage",
-    "deploy": "node ../../scripts/deploy-worker-with-sentry.mjs",
+    "deploy": "node ../../scripts/ensure-privacy-export-lifecycle.mjs $CLOUDFLARE_ENV && node ../../scripts/deploy-worker-with-sentry.mjs",
     "deploy:dry-run": "node ../../scripts/deploy-worker-with-sentry.mjs --dry-run",
     "dev": "wrangler dev --local --port 8787 --test-scheduled --show-interactive-dev-session=false",
     "lint": "biome lint src",
@@ -15,6 +15,7 @@
     "wrangler:types": "wrangler types src/worker-configuration.d.ts"
   },
   "dependencies": {
+    "@noble/hashes": "2.4.0",
     "@splitch/contracts": "workspace:*",
     "@splitch/control-plane-sdk": "workspace:*",
     "@splitch/db": "workspace:*",

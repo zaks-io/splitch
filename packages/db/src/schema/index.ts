@@ -32,4 +32,4 @@ export {
   orgMemberships,
   trustedIdps,
 } from "./identity";
-export { entityDeletions, privacyRequests } from "./privacy";
+export { entityDeletions, privacyJobs, privacyRequests } from "./privacy";

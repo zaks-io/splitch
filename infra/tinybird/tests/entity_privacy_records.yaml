@@ -1,45 +1,74 @@
 - name: retained_epoch_entity_records
   description: Export raw and derived records by canonical Entity family without crossing App or Entity type.
-  parameters: app_id=app_epoch&id_type=user&entity_family_hash=v1%3Aaaaaaaaa-legacy
+  parameters: app_id=app_epoch&id_type=user&entity_family_hash=v1%3Aaaaaaaaa-legacy&limit=100
   expected_http_status: 200
   expected_result: |
-    {"store":"deduped_metric_events_state","record_id":"epoch-family-metric","targeting_key_hash":"v1:aaaaaaaa-legacy","entity_family_hash":"v1:aaaaaaaa-legacy","server_received_at":"2026-07-03 00:00:00.000","record":"{\"environment_id\":\"env_prod\",\"event_definition_id\":\"event_definition_epoch\"}"}
-    {"store":"deduped_metric_events_state","record_id":"epoch-family-pre-period","targeting_key_hash":"v1:aaaaaaaa-legacy","entity_family_hash":"v1:aaaaaaaa-legacy","server_received_at":"2026-07-01 12:00:00.000","record":"{\"environment_id\":\"env_prod\",\"event_definition_id\":\"event_definition_epoch\"}"}
-    {"store":"metric_events","record_id":"epoch-family-metric","targeting_key_hash":"v1:aaaaaaaa-legacy","entity_family_hash":"v1:aaaaaaaa-legacy","server_received_at":"2026-07-03 00:00:00.000","record":"{\"environment_id\":\"env_prod\",\"event_definition_id\":\"event_definition_epoch\",\"event_definition_version_id\":\"event_definition_epoch_v1\",\"event_name\":\"epoch_metric\",\"fields\":\"{\\\"count\\\":2,\\\"denom\\\":4}\",\"dimensions\":\"{}\"}"}
-    {"store":"metric_events","record_id":"epoch-family-pre-period","targeting_key_hash":"v1:aaaaaaaa-legacy","entity_family_hash":"v1:aaaaaaaa-legacy","server_received_at":"2026-07-01 12:00:00.000","record":"{\"environment_id\":\"env_prod\",\"event_definition_id\":\"event_definition_epoch\",\"event_definition_version_id\":\"event_definition_epoch_v1\",\"event_name\":\"epoch_metric\",\"fields\":\"{\\\"count\\\":1,\\\"denom\\\":1}\",\"dimensions\":\"{}\"}"}
-    {"store":"raw_events","record_id":"epoch-family-exposure","targeting_key_hash":"app-v2:aaaaaaaa-new","entity_family_hash":"v1:aaaaaaaa-legacy","server_received_at":"2026-07-02 00:00:00.000","record":"{\"environment_id\":\"env_prod\",\"experiment_id\":\"exp_epoch\",\"run_id\":\"run_epoch\",\"type\":\"exposure\",\"event_id\":\"ev-epoch-family\",\"variant\":\"control\"}"}
+    {"store":"deduped_metric_events_state","record_id":"epoch-family-metric","targeting_key_hash":"v1:aaaaaaaa-legacy","entity_family_hash":"v1:aaaaaaaa-legacy","server_received_at":"2026-07-03 00:00:00.000","record":"{\"environment_id\":\"env_prod\",\"event_definition_id\":\"event_definition_epoch\"}","record_hash":"974117fce93b13964ecddeeb669f491d3cb43b44188036f704f814c9a6c4e00f","has_more":0}
+    {"store":"deduped_metric_events_state","record_id":"epoch-family-pre-period","targeting_key_hash":"v1:aaaaaaaa-legacy","entity_family_hash":"v1:aaaaaaaa-legacy","server_received_at":"2026-07-01 12:00:00.000","record":"{\"environment_id\":\"env_prod\",\"event_definition_id\":\"event_definition_epoch\"}","record_hash":"974117fce93b13964ecddeeb669f491d3cb43b44188036f704f814c9a6c4e00f","has_more":0}
+    {"store":"metric_events","record_id":"epoch-family-metric","targeting_key_hash":"v1:aaaaaaaa-legacy","entity_family_hash":"v1:aaaaaaaa-legacy","server_received_at":"2026-07-03 00:00:00.000","record":"{\"environment_id\":\"env_prod\",\"event_definition_id\":\"event_definition_epoch\",\"event_definition_version_id\":\"event_definition_epoch_v1\",\"event_name\":\"epoch_metric\",\"fields\":\"{\\\"count\\\":2,\\\"denom\\\":4}\",\"dimensions\":\"{}\"}","record_hash":"97aa64f87c03162f32bf19ea3a73c38ddf873b379c83a2fb5a2c41bf666da547","has_more":0}
+    {"store":"metric_events","record_id":"epoch-family-pre-period","targeting_key_hash":"v1:aaaaaaaa-legacy","entity_family_hash":"v1:aaaaaaaa-legacy","server_received_at":"2026-07-01 12:00:00.000","record":"{\"environment_id\":\"env_prod\",\"event_definition_id\":\"event_definition_epoch\",\"event_definition_version_id\":\"event_definition_epoch_v1\",\"event_name\":\"epoch_metric\",\"fields\":\"{\\\"count\\\":1,\\\"denom\\\":1}\",\"dimensions\":\"{}\"}","record_hash":"453e6165b986c0764d68482317eb30c1f164932e334d9e47fa9c788d25470bb2","has_more":0}
+    {"store":"raw_events","record_id":"epoch-family-exposure","targeting_key_hash":"app-v2:aaaaaaaa-new","entity_family_hash":"v1:aaaaaaaa-legacy","server_received_at":"2026-07-02 00:00:00.000","record":"{\"environment_id\":\"env_prod\",\"experiment_id\":\"exp_epoch\",\"run_id\":\"run_epoch\",\"type\":\"exposure\",\"event_id\":\"ev-epoch-family\",\"variant\":\"control\"}","record_hash":"e96c9febf5577436dd33591894dd7eb88f14d4d4a22c309ecb4940a2660ed2c3","has_more":0}
 
 - name: deletion_cutoff_hides_every_export_arm
   description: A permanent Entity cutoff hides late materialization of pre-delete raw and derived rows while post-cutoff collection remains visible.
-  parameters: app_id=app_privacy&id_type=user&entity_family_hash=v1%3Abbbb
+  parameters: app_id=app_privacy&id_type=user&entity_family_hash=v1%3Abbbb&limit=100
   expected_http_status: 200
   expected_result: |
-    {"store":"deduped_exposures","record_id":"env_prod:exp_privacy:run_privacy:app-v1:bbbb-new","targeting_key_hash":"app-v1:bbbb-new","entity_family_hash":"v1:bbbb","server_received_at":"2026-07-03 00:00:00.000","record":"{\"environment_id\":\"env_prod\",\"experiment_id\":\"exp_privacy\",\"run_id\":\"run_privacy\",\"variant\":\"control\"}"}
-    {"store":"deduped_metric_events_state","record_id":"privacy-new-metric","targeting_key_hash":"app-v1:bbbb-new","entity_family_hash":"v1:bbbb","server_received_at":"2026-07-03 00:00:00.000","record":"{\"environment_id\":\"env_prod\",\"event_definition_id\":\"event_definition_privacy\"}"}
-    {"store":"metric_events","record_id":"privacy-new-metric","targeting_key_hash":"app-v1:bbbb-new","entity_family_hash":"v1:bbbb","server_received_at":"2026-07-03 00:00:00.000","record":"{\"environment_id\":\"env_prod\",\"event_definition_id\":\"event_definition_privacy\",\"event_definition_version_id\":\"event_definition_privacy_v1\",\"event_name\":\"privacy_metric\",\"fields\":\"{}\",\"dimensions\":\"{}\"}"}
-    {"store":"raw_events","record_id":"privacy-new-exposure","targeting_key_hash":"app-v1:bbbb-new","entity_family_hash":"v1:bbbb","server_received_at":"2026-07-03 00:00:00.000","record":"{\"environment_id\":\"env_prod\",\"experiment_id\":\"exp_privacy\",\"run_id\":\"run_privacy\",\"type\":\"exposure\",\"event_id\":\"privacy-new-exposure\",\"variant\":\"control\"}"}
+    {"store":"deduped_exposures","record_id":"env_prod:exp_privacy:run_privacy:app-v1:bbbb-new","targeting_key_hash":"app-v1:bbbb-new","entity_family_hash":"v1:bbbb","server_received_at":"2026-07-03 00:00:00.000","record":"{\"environment_id\":\"env_prod\",\"experiment_id\":\"exp_privacy\",\"run_id\":\"run_privacy\",\"variant\":\"control\"}","record_hash":"8818b78a202d23d0d88f7ce99159926abdc77fb88e8181f8acb591f1c940584e","has_more":0}
+    {"store":"deduped_metric_events_state","record_id":"privacy-new-metric","targeting_key_hash":"app-v1:bbbb-new","entity_family_hash":"v1:bbbb","server_received_at":"2026-07-03 00:00:00.000","record":"{\"environment_id\":\"env_prod\",\"event_definition_id\":\"event_definition_privacy\"}","record_hash":"869364cb4cd41b50cacaa6e284c6a4e3d9161e22064067c79f90dd50b0e08faa","has_more":0}
+    {"store":"metric_events","record_id":"privacy-new-metric","targeting_key_hash":"app-v1:bbbb-new","entity_family_hash":"v1:bbbb","server_received_at":"2026-07-03 00:00:00.000","record":"{\"environment_id\":\"env_prod\",\"event_definition_id\":\"event_definition_privacy\",\"event_definition_version_id\":\"event_definition_privacy_v1\",\"event_name\":\"privacy_metric\",\"fields\":\"{}\",\"dimensions\":\"{}\"}","record_hash":"f2c1b32fb5a27fe015a73419220946e3bc84b8de752ebcfb4e7c5f25b70e7046","has_more":0}
+    {"store":"raw_events","record_id":"privacy-new-exposure","targeting_key_hash":"app-v1:bbbb-new","entity_family_hash":"v1:bbbb","server_received_at":"2026-07-03 00:00:00.000","record":"{\"environment_id\":\"env_prod\",\"experiment_id\":\"exp_privacy\",\"run_id\":\"run_privacy\",\"type\":\"exposure\",\"event_id\":\"privacy-new-exposure\",\"variant\":\"control\"}","record_hash":"d14084bc1d77c74f455f9e2a488d29f4b3dace32a0e3453d449c54d1f0d21eee","has_more":0}
 
 - name: late_local_v1_copy_is_hidden_after_reset
   description: A late historical local-v1 snapshot stays invisible to Entity export.
-  parameters: app_id=app_reset_generation&id_type=user&entity_family_hash=v1%3Alate-local-copy
+  parameters: app_id=app_reset_generation&id_type=user&entity_family_hash=v1%3Alate-local-copy&limit=100
   expected_http_status: 200
   expected_result: ""
 
 - name: late_v1_copy_is_hidden_after_reset
   description: A late historical v1 snapshot stays invisible to Entity export.
-  parameters: app_id=app_reset_generation&id_type=user&entity_family_hash=v1%3Alate-v1-copy
+  parameters: app_id=app_reset_generation&id_type=user&entity_family_hash=v1%3Alate-v1-copy&limit=100
   expected_http_status: 200
   expected_result: ""
 
 - name: late_app_v1_copy_is_hidden_after_reset
   description: A late destroyed App epoch snapshot stays invisible to Entity export.
-  parameters: app_id=app_reset_generation&id_type=user&entity_family_hash=app-v1%3Alate-old-copy
+  parameters: app_id=app_reset_generation&id_type=user&entity_family_hash=app-v1%3Alate-old-copy&limit=100
   expected_http_status: 200
   expected_result: ""
 
 - name: replacement_generation_remains_exportable
   description: The replacement App generation remains visible after historical tombstones.
-  parameters: app_id=app_reset_generation&id_type=user&entity_family_hash=app-v2%3Areplacement
+  parameters: app_id=app_reset_generation&id_type=user&entity_family_hash=app-v2%3Areplacement&limit=100
   expected_http_status: 200
   expected_result: |
-    {"store":"deduped_exposures","record_id":"env_prod:exp_reset:run_reset:app-v2:replacement","targeting_key_hash":"app-v2:replacement","entity_family_hash":"app-v2:replacement","server_received_at":"2026-07-12 00:00:00.000","record":"{\"environment_id\":\"env_prod\",\"experiment_id\":\"exp_reset\",\"run_id\":\"run_reset\",\"variant\":\"treatment\"}"}
+    {"store":"deduped_exposures","record_id":"env_prod:exp_reset:run_reset:app-v2:replacement","targeting_key_hash":"app-v2:replacement","entity_family_hash":"app-v2:replacement","server_received_at":"2026-07-12 00:00:00.000","record":"{\"environment_id\":\"env_prod\",\"experiment_id\":\"exp_reset\",\"run_id\":\"run_reset\",\"variant\":\"treatment\"}","record_hash":"a8c11e586cacdc205ca8660e454d80ce06d4054c3ed3f9dea743695af7096421","has_more":0}
+
+- name: first_entity_page_is_bounded
+  description: The first page returns the requested number of rows and proves a continuation exists.
+  parameters: app_id=app_epoch&id_type=user&entity_family_hash=v1%3Aaaaaaaaa-legacy&limit=2
+  expected_http_status: 200
+  expected_result: |
+    {"store":"deduped_metric_events_state","record_id":"epoch-family-metric","targeting_key_hash":"v1:aaaaaaaa-legacy","entity_family_hash":"v1:aaaaaaaa-legacy","server_received_at":"2026-07-03 00:00:00.000","record":"{\"environment_id\":\"env_prod\",\"event_definition_id\":\"event_definition_epoch\"}","record_hash":"974117fce93b13964ecddeeb669f491d3cb43b44188036f704f814c9a6c4e00f","has_more":1}
+    {"store":"deduped_metric_events_state","record_id":"epoch-family-pre-period","targeting_key_hash":"v1:aaaaaaaa-legacy","entity_family_hash":"v1:aaaaaaaa-legacy","server_received_at":"2026-07-01 12:00:00.000","record":"{\"environment_id\":\"env_prod\",\"event_definition_id\":\"event_definition_epoch\"}","record_hash":"974117fce93b13964ecddeeb669f491d3cb43b44188036f704f814c9a6c4e00f","has_more":1}
+
+- name: middle_entity_page_advances_the_full_keyset
+  description: The second page begins strictly after the last row from the first page.
+  parameters: app_id=app_epoch&id_type=user&entity_family_hash=v1%3Aaaaaaaaa-legacy&limit=2&after_store=deduped_metric_events_state&after_record_id=epoch-family-pre-period&after_server_received_at=2026-07-01%2012%3A00%3A00.000&after_targeting_key_hash=v1%3Aaaaaaaaa-legacy&after_record_hash=974117fce93b13964ecddeeb669f491d3cb43b44188036f704f814c9a6c4e00f
+  expected_http_status: 200
+  expected_result: |
+    {"store":"metric_events","record_id":"epoch-family-metric","targeting_key_hash":"v1:aaaaaaaa-legacy","entity_family_hash":"v1:aaaaaaaa-legacy","server_received_at":"2026-07-03 00:00:00.000","record":"{\"environment_id\":\"env_prod\",\"event_definition_id\":\"event_definition_epoch\",\"event_definition_version_id\":\"event_definition_epoch_v1\",\"event_name\":\"epoch_metric\",\"fields\":\"{\\\"count\\\":2,\\\"denom\\\":4}\",\"dimensions\":\"{}\"}","record_hash":"97aa64f87c03162f32bf19ea3a73c38ddf873b379c83a2fb5a2c41bf666da547","has_more":1}
+    {"store":"metric_events","record_id":"epoch-family-pre-period","targeting_key_hash":"v1:aaaaaaaa-legacy","entity_family_hash":"v1:aaaaaaaa-legacy","server_received_at":"2026-07-01 12:00:00.000","record":"{\"environment_id\":\"env_prod\",\"event_definition_id\":\"event_definition_epoch\",\"event_definition_version_id\":\"event_definition_epoch_v1\",\"event_name\":\"epoch_metric\",\"fields\":\"{\\\"count\\\":1,\\\"denom\\\":1}\",\"dimensions\":\"{}\"}","record_hash":"453e6165b986c0764d68482317eb30c1f164932e334d9e47fa9c788d25470bb2","has_more":1}
+
+- name: final_entity_page_has_no_continuation
+  description: The final page contains the remaining row and no continuation marker.
+  parameters: app_id=app_epoch&id_type=user&entity_family_hash=v1%3Aaaaaaaaa-legacy&limit=2&after_store=metric_events&after_record_id=epoch-family-pre-period&after_server_received_at=2026-07-01%2012%3A00%3A00.000&after_targeting_key_hash=v1%3Aaaaaaaaa-legacy&after_record_hash=453e6165b986c0764d68482317eb30c1f164932e334d9e47fa9c788d25470bb2
+  expected_http_status: 200
+  expected_result: |
+    {"store":"raw_events","record_id":"epoch-family-exposure","targeting_key_hash":"app-v2:aaaaaaaa-new","entity_family_hash":"v1:aaaaaaaa-legacy","server_received_at":"2026-07-02 00:00:00.000","record":"{\"environment_id\":\"env_prod\",\"experiment_id\":\"exp_epoch\",\"run_id\":\"run_epoch\",\"type\":\"exposure\",\"event_id\":\"ev-epoch-family\",\"variant\":\"control\"}","record_hash":"e96c9febf5577436dd33591894dd7eb88f14d4d4a22c309ecb4940a2660ed2c3","has_more":0}
+
+- name: entity_page_limit_is_required
+  description: The pipe refuses an unbounded Entity export read.
+  parameters: app_id=app_epoch&id_type=user&entity_family_hash=v1%3Aaaaaaaaa-legacy
+  expected_http_status: 400
+  expected_result: "limit is required"

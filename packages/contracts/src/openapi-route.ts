@@ -209,7 +209,7 @@ function buildOpenApiErrorResponses(codes: readonly ErrorCode[]) {
 }
 
 export function defineApiRoute<const Input extends DefineApiRouteInput>(input: Input) {
-  const errors = selectorAwareErrors(input);
+  const errors = derivedErrors(input);
   const request = selectorAwareRequest(input);
   const contract = defineRoute({
     id: input.operationId,
@@ -286,12 +286,14 @@ function selectorAwareRequest(input: DefineApiRouteInput): ApiRouteRequest | und
 }
 
 /** Resolver errors are derived from App and nested selector axes exposed by the route. */
-function selectorAwareErrors(input: DefineApiRouteInput): readonly ErrorCode[] {
-  if (input.auth !== "control-plane-token" || !input.path.includes(":appId")) return input.errors;
+function derivedErrors(input: DefineApiRouteInput): readonly ErrorCode[] {
   const errors = new Set(input.errors);
-  errors.add("APP_NOT_FOUND");
-  errors.add("SELECTOR_AMBIGUOUS");
-  if (input.path.includes(":flagId")) errors.add("FLAG_NOT_FOUND");
+  if (input.method !== "GET") errors.add("UNSUPPORTED_MEDIA_TYPE");
+  if (input.auth === "control-plane-token" && input.path.includes(":appId")) {
+    errors.add("APP_NOT_FOUND");
+    errors.add("SELECTOR_AMBIGUOUS");
+    if (input.path.includes(":flagId")) errors.add("FLAG_NOT_FOUND");
+  }
   return [...errors];
 }
 

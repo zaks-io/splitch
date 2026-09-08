@@ -92,7 +92,7 @@ describe("Entity Metric privacy Durable Object", () => {
     await fixture.post("/register", ENTRY);
     await fixture.post("/register-evaluation", EVALUATION_ENTRY);
 
-    const exported = await fixture.get("/export");
+    const exported = await fixture.get("/export?limit=100");
     const deleted = await fixture.post("/delete", {});
     const repeated = await fixture.post("/delete", {});
 
@@ -101,6 +101,7 @@ describe("Entity Metric privacy Durable Object", () => {
         { event_id: "event-1", targeting_key_hash: ENTRY.targetingKeyHash },
         { event_id: EVALUATION_ENTRY.eventId, source: "evaluation-commit" },
       ],
+      nextAfter: null,
       proofs: ["metric-event-outbox-inventory:rows=1", "evaluation-commit-outbox-inventory:rows=1"],
     });
     expect(deleted).toEqual({
@@ -120,7 +121,80 @@ describe("Entity Metric privacy Durable Object", () => {
     expect(fixture.outboxFetch).toHaveBeenCalledWith(
       "https://metric-event-outbox.local/suppress",
       expect.objectContaining({ method: "POST" }),
+      "sha256:event-1",
     );
+  });
+});
+
+describe("Entity Metric privacy inventory pagination", () => {
+  it("pages the two inventory prefixes in stable key order without duplicates or omissions", async () => {
+    const fixture = makeEntityMetricPrivacyStoreFixture();
+    for (const suffix of ["c", "a", "b"]) {
+      await fixture.post("/register", {
+        ...ENTRY,
+        dedupKey: `sha256:event-${suffix}`,
+      });
+    }
+    for (const eventId of ["event-exposure-2", "event-exposure-1"]) {
+      await fixture.post("/register-evaluation", { ...EVALUATION_ENTRY, eventId });
+    }
+
+    const pages: Array<{ records: Array<{ event_id: string }>; nextAfter: string | null }> = [];
+    let after: string | null = null;
+    do {
+      const query = new URLSearchParams({ limit: "2" });
+      if (after !== null) query.set("after", after);
+      const page = (await fixture.get(`/export?${query.toString()}`)) as (typeof pages)[number];
+      pages.push(page);
+      after = page.nextAfter;
+    } while (after !== null);
+
+    expect(pages).toHaveLength(3);
+    expect(pages.map((page) => page.records.map((record) => record.event_id))).toEqual([
+      ["event-a", "event-b"],
+      ["event-c", "event-exposure-1"],
+      ["event-exposure-2"],
+    ]);
+    const allIds = pages.flatMap((page) => page.records.map((record) => record.event_id));
+    expect(new Set(allIds).size).toBe(allIds.length);
+  });
+
+  it("continues into Evaluation commits when Events exactly fill a page", async () => {
+    const fixture = makeEntityMetricPrivacyStoreFixture();
+    for (const suffix of ["a", "b"]) {
+      await fixture.post("/register", {
+        ...ENTRY,
+        dedupKey: `sha256:event-${suffix}`,
+      });
+    }
+    await fixture.post("/register-evaluation", EVALUATION_ENTRY);
+
+    const first = (await fixture.get("/export?limit=2")) as {
+      records: Array<{ event_id: string }>;
+      nextAfter: string | null;
+    };
+    expect(first.records.map((record) => record.event_id)).toEqual(["event-a", "event-b"]);
+    expect(first.nextAfter).toBe("event:sha256:event-b");
+    if (first.nextAfter === null) throw new Error("expected a continuation key");
+
+    const second = (await fixture.get(
+      `/export?limit=2&after=${encodeURIComponent(first.nextAfter)}`,
+    )) as typeof first;
+    expect(second.records.map((record) => record.event_id)).toEqual(["event-exposure-1"]);
+    expect(second.nextAfter).toBeNull();
+  });
+
+  it("rejects out-of-range page limits and never persists a raw Targeting Key", async () => {
+    const fixture = makeEntityMetricPrivacyStoreFixture();
+    const rawTargetingKey = "raw-targeting-key-must-not-persist";
+    await fixture.post("/register", { ...ENTRY, targetingKey: rawTargetingKey });
+
+    for (const limit of ["0", "101", "1.5"]) {
+      await expect(fixture.get(`/export?limit=${limit}`)).rejects.toThrow(
+        "page limit must be an integer in 1..100",
+      );
+    }
+    expect(JSON.stringify(fixture.persistedState())).not.toContain(rawTargetingKey);
   });
 });
 

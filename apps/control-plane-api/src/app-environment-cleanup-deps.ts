@@ -12,9 +12,11 @@ export function appEnvironmentCleanupDeps(deps: {
   readonly exposureStatusCleanup?: EnvironmentExposureStatusCleanup;
   readonly holdoverWriteOutboxCleanup?: HoldoverWriteOutboxCleanup;
   readonly delegationBindings?: DelegationBindings;
+  readonly privacyExports?: R2Bucket;
 }): {
   exposureStatusCleanup: EnvironmentExposureStatusCleanup;
   holdoverWriteOutboxCleanup: HoldoverWriteOutboxCleanup;
+  privacyExports: R2Bucket | undefined;
 } {
   return {
     exposureStatusCleanup:
@@ -23,5 +25,6 @@ export function appEnvironmentCleanupDeps(deps: {
     holdoverWriteOutboxCleanup:
       deps.holdoverWriteOutboxCleanup ??
       createHoldoverWriteOutboxCleanup(deps.delegationBindings?.["evaluation-api"]),
+    privacyExports: deps.privacyExports,
   };
 }

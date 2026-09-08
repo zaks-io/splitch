@@ -1,4 +1,5 @@
-import { type RouteContract, rawBodyByteLimitFor } from "@splitch/contracts";
+import { mediaTypeOf } from "@splitch/bounded-body";
+import { type ErrorResponse, type RouteContract, rawBodyByteLimitFor } from "@splitch/contracts";
 import type { Context, Hono } from "hono";
 import type { z } from "zod";
 import { containObservability } from "./contained-observability";
@@ -90,7 +91,13 @@ async function runGuard<Input extends z.ZodTypeAny, Output extends z.ZodTypeAny>
   };
 
   try {
-    // Step 2: bound raw body bytes, then parse params/query/headers/body.
+    // Step 2: reject non-JSON representations before reading any body bytes.
+    const mediaTypeError = mutatingJsonMediaTypeError(contract, request);
+    if (mediaTypeError) {
+      return fail(mediaTypeError);
+    }
+
+    // Step 3: bound raw body bytes, then parse params/query/headers/body.
     // Mutating JSON routes always receive a limit (route-declared or the
     // registrar default). GET never buffers a body.
     const parsed = await parseInput(
@@ -104,20 +111,20 @@ async function runGuard<Input extends z.ZodTypeAny, Output extends z.ZodTypeAny>
     }
     request = parsed.request;
 
-    // Step 3: resolve the principal through the Worker-provided resolver.
+    // Step 4: resolve the principal through the Worker-provided resolver.
     const principalResult = await resolvePrincipal(contract, deps, request);
     if (!principalResult.ok) {
       return fail(principalResult.error);
     }
     const principal = principalResult.principal;
 
-    // Step 4: rate-limit class (before scopes; fails closed on missing/throwing binding).
+    // Step 5: rate-limit class (before scopes; fails closed on missing/throwing binding).
     const rateLimited = await applyRateLimit(contract, deps, request, principal);
     if (rateLimited) {
       return fail(rateLimited);
     }
 
-    // Step 5: resolve authenticated path selectors, then enforce scopes against
+    // Step 6: resolve authenticated path selectors, then enforce scopes against
     // the canonical params. A resolver must reject a canonical App co-scope
     // mismatch before its first repository read; a human App selector may perform
     // one membership-bounded lookup before enforcing the resolved co-scope.
@@ -139,13 +146,13 @@ async function runGuard<Input extends z.ZodTypeAny, Output extends z.ZodTypeAny>
       return fail(scopeError);
     }
 
-    // Step 6: idempotency header validation for mutating routes.
+    // Step 7: idempotency header validation for mutating routes.
     const idempotencyError = checkIdempotency(contract, request);
     if (idempotencyError) {
       return fail(idempotencyError);
     }
 
-    // Step 7: hand parsed input + principal to the route handler.
+    // Step 8: hand parsed input + principal to the route handler.
     const response = await handler({
       input: resolved.input as z.infer<Input>,
       principal: resolved.principal,
@@ -155,7 +162,7 @@ async function runGuard<Input extends z.ZodTypeAny, Output extends z.ZodTypeAny>
 
     return withDefaults(response, requestId, deps.defaultHeaders);
   } catch (cause) {
-    // Step 8 (fault path): any unexpected throw is a loud 500, never a leak. The
+    // Step 9 (fault path): any unexpected throw is a loud 500, never a leak. The
     // body stays generic so nothing internal reaches the caller, which makes the
     // observability hop the only route the thrown value has to an operator --
     // dropping it here is what turns every fault into the same blank 500.
@@ -170,6 +177,31 @@ async function runGuard<Input extends z.ZodTypeAny, Output extends z.ZodTypeAny>
       defaultHeaders: deps.defaultHeaders,
     });
   }
+}
+
+const JSON_MEDIA_TYPE = "application/json";
+
+function mutatingJsonMediaTypeError(
+  contract: Pick<RouteContract, "method">,
+  request: Request,
+): ErrorResponse | null {
+  if (contract.method === "GET" || request.body === null) {
+    return null;
+  }
+
+  const receivedMediaType = mediaTypeOf(request.headers.get("content-type"));
+  if (receivedMediaType === JSON_MEDIA_TYPE) {
+    return null;
+  }
+
+  return {
+    code: "UNSUPPORTED_MEDIA_TYPE",
+    message: "request body must use application/json",
+    details: {
+      receivedMediaType,
+      supportedMediaTypes: [JSON_MEDIA_TYPE],
+    },
+  };
 }
 
 /** Merge the request id + default headers onto a handler-produced success Response. */

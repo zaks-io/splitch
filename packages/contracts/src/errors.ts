@@ -22,6 +22,7 @@ import {
 import { LastOwnerRequiredDetailsSchema } from "./last-owner-error-details";
 import { ApprovalPolicyLevelSchema } from "./leaf-schemas-runtime";
 import { ResourceDeleteBlockerSchema } from "./resource-delete-tree";
+import { UnsupportedMediaTypeDetailsSchema } from "./request-error-details";
 import { SegmentDependenciesSchema } from "./segment-error-details";
 import { SelectorAmbiguousDetailsSchema } from "./selector-error-details";
 
@@ -114,6 +115,7 @@ const errorMembers = [
       })
       .strict(),
   ),
+  member("UNSUPPORTED_MEDIA_TYPE", UnsupportedMediaTypeDetailsSchema),
 
   member(
     "RUN_FROZEN",

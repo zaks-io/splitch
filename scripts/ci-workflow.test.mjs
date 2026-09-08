@@ -112,6 +112,16 @@ test("the plan step gates affected verification and runs before Verify", () => {
   assert.match(verifyJob, /pnpm verify:ci --output-logs=new-only/);
 });
 
+test("the required Verify check gates merges on high and critical dependency advisories", () => {
+  const manifest = JSON.parse(readFileSync("package.json", "utf8"));
+  const verifyCi = manifest.scripts?.["verify:ci"];
+
+  assert.equal(typeof verifyCi, "string");
+  assert.match(verifyCi, /^pnpm audit --audit-level=high && turbo run /);
+  assert.match(verifyJob, /pnpm verify:ci --affected --output-logs=new-only/);
+  assert.match(verifyJob, /pnpm verify:ci --output-logs=new-only/);
+});
+
 test("the validators are conditional steps inside Verify, not sibling jobs", () => {
   assert.ok(verifyJob);
   // A sibling job bills a full runner spin-up even when its steps skip. Most

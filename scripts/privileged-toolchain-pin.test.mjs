@@ -25,7 +25,7 @@ const actions = readdirSync(".github/actions", { withFileTypes: true })
     source: readFileSync(`.github/actions/${entry.name}/action.yml`, "utf8"),
   }));
 const workflows = readdirSync(".github/workflows")
-  .filter((name) => name.endsWith(".yml"))
+  .filter((name) => name.endsWith(".yml") || name.endsWith(".yaml"))
   .map((name) => ({
     name: `.github/workflows/${name}`,
     source: readFileSync(`.github/workflows/${name}`, "utf8"),
@@ -45,6 +45,23 @@ test("every third-party action pin is a full commit SHA with a version comment",
       assert.match(`${line}${rest}`, /# v?\d/, `${name} uses ${ref} without a version comment`);
     }
   }
+});
+
+test("the action pin guard is part of the required CI script tests", () => {
+  const manifest = JSON.parse(readFileSync("package.json", "utf8"));
+  const verifyCi = manifest.scripts?.["verify:ci"] ?? "";
+
+  assert.match(verifyCi, /\/\/#test:scripts/);
+});
+
+test("pnpm supply-chain quarantine stays strict without release-age exclusions", () => {
+  const workspace = readFileSync("pnpm-workspace.yaml", "utf8");
+
+  assert.match(workspace, /^minimumReleaseAge: 4320$/m);
+  assert.match(workspace, /^minimumReleaseAgeStrict: true$/m);
+  assert.match(workspace, /^minimumReleaseAgeIgnoreMissingTime: false$/m);
+  assert.match(workspace, /^blockExoticSubdeps: true$/m);
+  assert.doesNotMatch(workspace, /^minimumReleaseAgeExclude:/m);
 });
 
 test("the Tinybird composite pins exact Python and uv, then verifies both", () => {

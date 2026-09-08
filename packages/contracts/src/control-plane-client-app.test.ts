@@ -6,6 +6,7 @@ import { attentionRoutes } from "./routes/routes-attention";
 import { credentialRoutes } from "./routes/routes-credentials";
 import { experimentRoutes } from "./routes/routes-experiments";
 import { flagRoutes } from "./routes/routes-flags";
+import { privacyRoutes } from "./routes/routes-privacy";
 
 /**
  * The emit-only SDK apps select routes by INDEX (hc needs the statically-typed
@@ -44,6 +45,7 @@ const ATTENTION_SDK_INDICES = sdkIndices("appsSdkRoutes", "attention");
 const ENVIRONMENTS_SDK_INDICES = sdkIndices("environmentsSdkRoutes");
 const CREDENTIALS_SDK_INDICES = sdkIndices("credentialsSdkRoutes");
 const APPROVALS_SDK_INDICES = sdkIndices("approvalsSdkRoutes");
+const PRIVACY_SDK_INDICES = sdkIndices("privacySdkRoutes");
 
 function operationIdsAt(
   routes: readonly { operationId: string }[],
@@ -128,6 +130,13 @@ describe("control plane SDK route selection", () => {
     ]);
   });
 
+  it("selects exactly the privacy operations the SDK exposes", () => {
+    expect(operationIdsAt(privacyRoutes, PRIVACY_SDK_INDICES)).toEqual([
+      "entity_privacy_export",
+      "entity_privacy_delete",
+    ]);
+  });
+
   it("reads the indices the SDK app actually selects", () => {
     // Proves the coupling: these come from the source, so dropping a route from
     // the SDK app changes them here and fails the by-name assertions above.
@@ -138,6 +147,7 @@ describe("control plane SDK route selection", () => {
     expect(ENVIRONMENTS_SDK_INDICES).toEqual([15, 16, 17, 18, 19]);
     expect(CREDENTIALS_SDK_INDICES).toEqual([0, 1, 2, 3, 4, 5]);
     expect(APPROVALS_SDK_INDICES).toEqual([0, 1, 2]);
+    expect(PRIVACY_SDK_INDICES).toEqual([4, 5]);
   });
 
   it("fails loudly when the SDK app tuple cannot be found", () => {

@@ -134,8 +134,53 @@ SQL >
 
 NODE entity_records
 SQL >
-    SELECT *
-    FROM entity_records_union
-    ORDER BY store, record_id
+    %
+    {% if not defined(limit) %}
+    {{error('limit is required')}}
+    {% end %}
+    {% if defined(after_store) and (not defined(after_record_id) or not defined(after_server_received_at) or not defined(after_targeting_key_hash) or not defined(after_record_hash)) %}
+    {{error('every Entity privacy cursor field is required')}}
+    {% end %}
+    {% if not defined(after_store) and (defined(after_record_id) or defined(after_server_received_at) or defined(after_targeting_key_hash) or defined(after_record_hash)) %}
+    {{error('after_store is required with an Entity privacy cursor')}}
+    {% end %}
+    WITH page_candidates AS (
+        SELECT DISTINCT
+            store,
+            record_id,
+            targeting_key_hash,
+            entity_family_hash,
+            server_received_at,
+            record,
+            lower(hex(SHA256(record))) AS record_hash
+        FROM entity_records_union
+        WHERE throwIf(
+            {{Int32(limit)}} < 1 OR {{Int32(limit)}} > 100,
+            'limit must be an integer in 1..100'
+        ) = 0
+            {% if defined(after_store) %}
+            AND (store, record_id, server_received_at, targeting_key_hash, record_hash) > (
+                {{String(after_store)}},
+                {{String(after_record_id)}},
+                {{DateTime64(after_server_received_at, 3)}},
+                {{String(after_targeting_key_hash)}},
+                {{String(after_record_hash)}}
+            )
+            {% end %}
+        ORDER BY store, record_id, server_received_at, targeting_key_hash, record_hash
+        LIMIT {{Int32(limit)}} + 1
+    )
+    SELECT
+        store,
+        record_id,
+        targeting_key_hash,
+        entity_family_hash,
+        server_received_at,
+        record,
+        record_hash,
+        count() OVER () > {{Int32(limit)}} AS has_more
+    FROM page_candidates
+    ORDER BY store, record_id, server_received_at, targeting_key_hash, record_hash
+    LIMIT {{Int32(limit)}}
 
 TYPE ENDPOINT

@@ -1,6 +1,7 @@
 import { and, eq, isNull } from "drizzle-orm";
 import { entityDeletions, privacyRequests, trustedIdps } from "../schema/index";
 import type { Db } from "./client";
+import { makePrivacyJobRepo } from "./privacy-jobs";
 import type { TenantScope } from "./scope";
 import { scopedTable } from "./scoped-table";
 
@@ -22,14 +23,37 @@ import { scopedTable } from "./scoped-table";
  *    method comment) so a tenant-registered issuer can never be honored for a
  *    victim in another tenant (access-control-matrix.md:53-55).
  */
-export function makePrivacyRepo(db: Db) {
+export function makePrivacyRepo(db: Db, d1: D1Database) {
   const entityDeletionsTable = scopedTable(db, entityDeletions);
+  const getPrivacyRequestById = async (requestId: string) => {
+    const rows = await db
+      .select()
+      .from(privacyRequests)
+      .where(eq(privacyRequests.requestId, requestId))
+      .limit(1);
+    return rows[0] ?? null;
+  };
 
   return {
+    ...makePrivacyJobRepo(d1, getPrivacyRequestById),
     entityDeletions: entityDeletionsTable,
 
     listEntityDeletions(scope: TenantScope) {
       return entityDeletionsTable.findMany(scope);
+    },
+
+    findEntityDeletion(
+      scope: TenantScope,
+      input: { idType: string; targetingKeyHash: string; deleteBeforeTs: string },
+    ) {
+      return entityDeletionsTable.findOne(
+        scope,
+        and(
+          eq(entityDeletions.idType, input.idType),
+          eq(entityDeletions.targetingKeyHash, input.targetingKeyHash),
+          eq(entityDeletions.deleteBeforeTs, input.deleteBeforeTs),
+        ),
+      );
     },
 
     // --- Org-scoped privacy ledger (NOT app-scoped) ----------------------------
@@ -84,16 +108,7 @@ export function makePrivacyRepo(db: Db) {
       return rows[0] ?? null;
     },
 
-    async getPrivacyRequestById(
-      requestId: string,
-    ): Promise<typeof privacyRequests.$inferSelect | null> {
-      const rows = await db
-        .select()
-        .from(privacyRequests)
-        .where(eq(privacyRequests.requestId, requestId))
-        .limit(1);
-      return rows[0] ?? null;
-    },
+    getPrivacyRequestById,
 
     async createPrivacyRequest(
       values: typeof privacyRequests.$inferInsert,

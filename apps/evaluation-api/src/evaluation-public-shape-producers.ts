@@ -229,6 +229,9 @@ async function commonAuthOriginRateLimit(
   });
   return {
     UNAUTHORIZED: await jsonOf(await app.request(path, init())),
+    UNSUPPORTED_MEDIA_TYPE: await jsonOf(
+      await app.request(path, init(CLIENT_KEY, { "content-type": "text/plain" })),
+    ),
     CREDENTIAL_REVOKED: await jsonOf(await app.request(path, init(REVOKED_CLIENT_KEY))),
     ORIGIN_NOT_ALLOWED: await jsonOf(
       await app.request(path, init(LOCKED_CLIENT_KEY, { origin: "https://denied.example" })),

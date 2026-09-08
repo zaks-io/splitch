@@ -108,8 +108,7 @@ describe("membership-wide privacy-request scope", () => {
         organizationId: OWNED.orgId,
         status: "received",
       },
-      job: { requestId: "prq_owned", kind: "export", status: "running" },
-      artifact: null,
+      job: null,
     });
   });
 });

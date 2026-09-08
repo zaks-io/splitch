@@ -17,7 +17,7 @@ export interface ConfigStoreAppIdentityDurableObjectStub {
     expectedVersion: string,
     input: { idType: string; targetingKeyHashes: readonly string[]; deleteBeforeTs: string },
   ): Promise<void>;
-  recordEntityPrivacyCompletion(
+  recordEntityPrivacyRequest(
     appId: string,
     expectedVersion: string,
     input: EntityPrivacyLedgerInput,
@@ -36,7 +36,7 @@ export interface ConfigStoreAppIdentityAccess {
     expectedVersion: string,
     input: { idType: string; targetingKeyHashes: readonly string[]; deleteBeforeTs: string },
   ): Promise<void>;
-  recordEntityPrivacyCompletion?(
+  recordEntityPrivacyRequest?(
     appId: string,
     expectedVersion: string,
     input: EntityPrivacyLedgerInput,
@@ -74,8 +74,8 @@ export function durableConfigStoreAppIdentityAccess(
         input,
       );
     },
-    recordEntityPrivacyCompletion(appId, expectedVersion, input) {
-      return identityStub(namespace, appId).recordEntityPrivacyCompletion(
+    recordEntityPrivacyRequest(appId, expectedVersion, input) {
+      return identityStub(namespace, appId).recordEntityPrivacyRequest(
         appId,
         expectedVersion,
         input,

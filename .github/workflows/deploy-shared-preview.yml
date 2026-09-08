@@ -2,11 +2,6 @@ name: deploy-shared-preview
 
 on:
   workflow_dispatch:
-    inputs:
-      ref:
-        description: "Git ref to deploy to shared preview"
-        required: true
-        default: main
 
 permissions:
   contents: read
@@ -22,8 +17,27 @@ env:
   SPLITCH_PLATFORM_TARGET: shared-preview
 
 jobs:
+  authorize:
+    name: Authorize Shared Preview Ref
+    runs-on: blacksmith-2vcpu-ubuntu-2404
+    timeout-minutes: 5
+    steps:
+      - name: Require the default branch
+        env:
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          DEPLOY_REF: ${{ github.ref }}
+          DEPLOY_REF_PROTECTED: ${{ github.ref_protected }}
+        run: |
+          set -euo pipefail
+          expected_ref="refs/heads/$DEFAULT_BRANCH"
+          if [ "$DEPLOY_REF" != "$expected_ref" ] || [ "$DEPLOY_REF_PROTECTED" != "true" ]; then
+            echo "::error::shared preview deploys must run from protected ref $expected_ref; received $DEPLOY_REF (protected=$DEPLOY_REF_PROTECTED)"
+            exit 1
+          fi
+
   deploy:
     name: Deploy Shared Preview
+    needs: authorize
     runs-on: blacksmith-2vcpu-ubuntu-2404
     timeout-minutes: 30
     environment: preview
@@ -40,6 +54,7 @@ jobs:
       CONTROL_PANEL_DELEGATION_SECRET: ${{ secrets.CONTROL_PANEL_DELEGATION_SECRET }}
       CONVEX_WEBHOOK_KEK: ${{ secrets.CONVEX_WEBHOOK_KEK }}
       INTEGRATION_SECRET_KEK: ${{ secrets.INTEGRATION_SECRET_KEK }}
+      PRIVACY_EXPORT_URL_SECRET: ${{ secrets.PRIVACY_EXPORT_URL_SECRET }}
       SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
       SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
       SENTRY_ORG: ${{ vars.SENTRY_ORG || secrets.SENTRY_ORG }}
@@ -72,7 +87,6 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
-          ref: ${{ inputs.ref }}
           persist-credentials: false
 
       - name: Resolve immutable deploy revision
@@ -103,7 +117,7 @@ jobs:
       - name: Check deploy credentials
         run: |
           set -euo pipefail
-          for name in CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID TB_TOKEN TB_HOST ACCESS_TOKEN_SECRET ASSERTION_SIGNING_SECRET CONTROL_PANEL_DELEGATION_SECRET CONVEX_WEBHOOK_KEK INTEGRATION_SECRET_KEK SENTRY_DSN SENTRY_AUTH_TOKEN SENTRY_ORG SENTRY_PROJECT EVALUATION_PRIVACY_SALT EXPOSURE_TICKET_KEY SPLITCH_EVENT_INGEST_TOKEN SPLITCH_DEPLOY_GATE_TOKEN TINYBIRD_COPY_TOKEN TINYBIRD_DELETE_TOKEN TINYBIRD_INGEST_TOKEN TINYBIRD_RUN_SNAPSHOT_TOKEN TINYBIRD_APPROVAL_ARCHIVE_WRITE_TOKEN TINYBIRD_APPROVAL_ARCHIVE_READ_TOKEN TINYBIRD_READ_TOKEN TURNSTILE_SECRET WORKOS_CLIENT_ID WORKOS_API_KEY WORKOS_ISSUER WORKOS_JWKS_URI SPLITCH_SMOKE_CLIENT_SECRET; do
+          for name in CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID TB_TOKEN TB_HOST ACCESS_TOKEN_SECRET ASSERTION_SIGNING_SECRET CONTROL_PANEL_DELEGATION_SECRET CONVEX_WEBHOOK_KEK INTEGRATION_SECRET_KEK PRIVACY_EXPORT_URL_SECRET SENTRY_DSN SENTRY_AUTH_TOKEN SENTRY_ORG SENTRY_PROJECT EVALUATION_PRIVACY_SALT EXPOSURE_TICKET_KEY SPLITCH_EVENT_INGEST_TOKEN SPLITCH_DEPLOY_GATE_TOKEN TINYBIRD_COPY_TOKEN TINYBIRD_DELETE_TOKEN TINYBIRD_INGEST_TOKEN TINYBIRD_RUN_SNAPSHOT_TOKEN TINYBIRD_APPROVAL_ARCHIVE_WRITE_TOKEN TINYBIRD_APPROVAL_ARCHIVE_READ_TOKEN TINYBIRD_READ_TOKEN TURNSTILE_SECRET WORKOS_CLIENT_ID WORKOS_API_KEY WORKOS_ISSUER WORKOS_JWKS_URI SPLITCH_SMOKE_CLIENT_SECRET; do
             if [ -z "${!name}" ]; then
               echo "::error::$name is required for shared-preview deploys"
               exit 1

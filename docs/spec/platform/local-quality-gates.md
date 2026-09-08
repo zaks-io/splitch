@@ -1,6 +1,6 @@
 # Local quality gates: commit hooks, pre-push, CI parity
 
-Status: implemented; build-fast exceptions are listed below.
+Status: implemented; remaining build-fast exceptions are listed below.
 Vocabulary follows [CONTEXT.md](../../../CONTEXT.md).
 
 > **Build-fast phase — what is actually enforcing right now.** The full gate set below is the
@@ -16,16 +16,14 @@ Vocabulary follows [CONTEXT.md](../../../CONTEXT.md).
 >
 > **Parked until lockdown:**
 >
-> | Parked gate                                                         | Where it was             | How to restore                                 |
-> | ------------------------------------------------------------------- | ------------------------ | ---------------------------------------------- |
-> | `pnpm audit` (dep CVEs)                                             | `verify:*`               | add back to `verify:ci`                        |
-> | Semgrep SAST (`sast`)                                               | `verify:*`               | add to `verify:ci`                             |
-> | `pinact -check` (`pins:check`)                                      | `verify:*`, `ci.yml`     | add to `verify:ci`; restore CI install step    |
-> | CodeQL                                                              | `codeql.yml`             | flip triggers to `pull_request`/`push`         |
-> | OSV-Scanner / Trivy / Scorecard merge gates                         | pull requests and pushes | add PR/push triggers after dependency lockdown |
-> | pnpm install quarantine (`minimumReleaseAge`, `blockExoticSubdeps`) | `pnpm-workspace.yaml`    | uncomment the four keys                        |
-> | smoke / depcruise / jscpd in pre-push                               | `verify:push`            | restore at the lockdown milestone              |
+> | Parked gate                                 | Where it was             | How to restore                                 |
+> | ------------------------------------------- | ------------------------ | ---------------------------------------------- |
+> | Semgrep SAST (`sast`)                       | `verify:*`               | add to `verify:ci`                             |
+> | CodeQL                                      | `codeql.yml`             | flip triggers to `pull_request`/`push`         |
+> | OSV-Scanner / Trivy / Scorecard merge gates | pull requests and pushes | add PR/push triggers after dependency lockdown |
+> | smoke / depcruise / jscpd in pre-push       | `verify:push`            | restore at the lockdown milestone              |
 >
+> `pnpm audit`, the action SHA guard, and pnpm install quarantine now run in the required CI path.
 > The `security:full` script still runs the SAST + pin + audit + secret battery on demand. The rest of
 > this file describes the **target** gates; treat the table above as the current reality where they differ.
 > Dependency-cruiser is enforced in CI; its pre-push invocation remains parked with the other
@@ -43,9 +41,7 @@ catch ordinary failures before pushing.
 
 ## pnpm supply-chain policy
 
-**Parked in the build-fast phase** (commented out in `pnpm-workspace.yaml`): these reject `pnpm
-install` on a freshly published or non-registry transitive — dependency churn unrelated to the work
-in flight. The lockdown milestone uncomments all four keys. The target policy:
+The repository enforces these controls from `pnpm-workspace.yaml`:
 
 - `minimumReleaseAge: 4320` requires package versions to be at least 3 days old before install.
 - `minimumReleaseAgeStrict: true` fails resolution instead of falling back to immature versions.
@@ -54,7 +50,8 @@ in flight. The lockdown milestone uncomments all four keys. The target policy:
   git URLs or direct tarball URLs.
 
 Do not add `minimumReleaseAgeExclude` entries as a convenience path. Security fixes can use a narrowly
-reviewed exception, but normal tool upgrades wait until the package version satisfies the 3-day policy.
+reviewed, exact-version exception, but normal tool upgrades wait until the package version satisfies
+the 3-day policy.
 
 ## Required scripts
 
@@ -122,8 +119,9 @@ back. `verify:push` is not a substitute for the required `verify:ci` graph in ho
 
 ## CI policy
 
-The required CI check runs on Blacksmith and executes the affected `verify:ci` graph, including
-dependency-cruiser over the repository's app and package sources. The workflow
+The required CI check runs on Blacksmith and executes `pnpm audit --audit-level=high` before the
+affected `verify:ci` graph, including dependency-cruiser over the repository's app and package
+sources. The workflow
 adds `tinybird:local`, `d1:migrate:local`, and `d1:migrate:populated` when their inputs change;
 missing comparison evidence fails closed to all three validators and the full, still cache-first,
 graph (only `nightly-verify` runs uncached). Hosted

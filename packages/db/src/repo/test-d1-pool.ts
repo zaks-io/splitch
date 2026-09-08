@@ -13,6 +13,7 @@ export const RESET_TABLES = [
   "claim_idempotency",
   "claim_consent_attempts",
   "runs",
+  "privacy_jobs",
   "privacy_requests",
   "entity_deletions",
   "api_keys",

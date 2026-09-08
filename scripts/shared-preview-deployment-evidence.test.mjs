@@ -22,6 +22,21 @@ test("shared preview is maintainer-dispatched, never pull-request-triggered", ()
   assert.doesNotMatch(triggers, /^[ \t]*["']?pull_request(?:_target)?["']?[ \t]*:/m);
 });
 
+test("shared preview rejects non-default and unprotected refs before secrets are available", () => {
+  const workflow = readFileSync(".github/workflows/deploy-shared-preview.yml", "utf8");
+  const authorize = workflow.split("  authorize:")[1]?.split("  deploy:")[0] ?? "";
+  const deploy = workflow.split("  deploy:")[1] ?? "";
+
+  assert.match(authorize, /github\.event\.repository\.default_branch/);
+  assert.match(authorize, /github\.ref_protected/);
+  assert.match(authorize, /expected_ref="refs\/heads\/\$DEFAULT_BRANCH"/);
+  assert.match(authorize, /\[ "\$DEPLOY_REF_PROTECTED" != "true" \]/);
+  assert.doesNotMatch(authorize, /secrets\.|environment: preview|actions\/checkout/);
+  assert.match(deploy, /needs: authorize/);
+  assert.match(deploy, /environment: preview/);
+  assert.doesNotMatch(workflow, /inputs\.ref/);
+});
+
 test("accepts one exact deployed commit across the exercised Worker fleet", () => {
   const evidence = createFleetEvidence({
     expectedCommitSha: sha,
@@ -116,7 +131,8 @@ test("shared-preview deploy keeps every post-deploy smoke phase non-blocking", (
   assert.ok(deployJob);
   assert.match(workflow, /deployed_sha="\$\(git rev-parse HEAD\)"/);
   assert.match(workflow, /SPLITCH_DEPLOYED_COMMIT_SHA=\$deployed_sha/);
-  assert.doesNotMatch(jobs, /\n {2}(?!deploy:)[a-z0-9_-]+:\n/);
+  assert.match(jobs, /\n {2}authorize:\n/);
+  assert.doesNotMatch(jobs, /\n {2}(?!authorize:|deploy:)[a-z0-9_-]+:\n/);
   assert.match(
     deployJob,
     /name: Seed shared preview smoke data\n\s+id: seed\n\s+continue-on-error: true/,

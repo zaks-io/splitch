@@ -5,6 +5,7 @@ import type { ControlPlaneApiEnv } from "./env";
 
 export interface EntityPrivacyLedgerInput {
   requestId: string;
+  jobId: string;
   orgId: string;
   appId: string;
   requestType: "export" | "delete";
@@ -13,18 +14,37 @@ export interface EntityPrivacyLedgerInput {
   receivedAt: string;
   ackDueAt: string;
   responseDueAt: string;
-  completedAt: string;
-  resultJson: string | null;
+  idempotencyKey: string;
+  requestHash: string;
+  storeStatusJson: string;
+  deleteBeforeTs: string | null;
+  identityVersion: string;
+  idType: string;
+  entityFamilyHash: string;
 }
 
 export interface EntityPrivacyLedgerRecord {
-  requestId: string;
-  orgId: string;
-  appId: string | null;
-  requestType: string;
-  subjectType: string;
-  status: string;
-  receivedAt: string;
+  request: {
+    requestId: string;
+    orgId: string;
+    appId: string | null;
+    requestType: string;
+    subjectType: string;
+    status: string;
+    receivedAt: string;
+    requestHash: string | null;
+  };
+  job: {
+    jobId: string;
+    requestId: string;
+    kind: "export" | "delete";
+    status: "queued" | "running" | "completed" | "failed";
+    storeStatusJson: string;
+    deleteBeforeTs: string | null;
+    identityVersion: string;
+    idType: string | null;
+    entityFamilyHash: string | null;
+  };
 }
 
 export function beginConfigStoreEntityPrivacy(
@@ -49,6 +69,12 @@ export function recordConfigStoreEntityDeletionSuppression(
     await requireExpectedVersion(ctx, env, appId, expectedVersion);
     const repo = createRepository(env.DB);
     for (const targetingKeyHash of input.targetingKeyHashes) {
+      const existing = await repo.privacy.findEntityDeletion(appScope(appId), {
+        idType: input.idType,
+        targetingKeyHash,
+        deleteBeforeTs: input.deleteBeforeTs,
+      });
+      if (existing) continue;
       await repo.privacy.entityDeletions.insert(appScope(appId), {
         appId,
         idType: input.idType,
@@ -60,7 +86,7 @@ export function recordConfigStoreEntityDeletionSuppression(
   });
 }
 
-export function recordConfigStoreEntityPrivacyCompletion(
+export function recordConfigStoreEntityPrivacyRequest(
   ctx: DurableObjectState,
   env: ControlPlaneApiEnv,
   appId: string,
@@ -69,11 +95,7 @@ export function recordConfigStoreEntityPrivacyCompletion(
 ): Promise<EntityPrivacyLedgerRecord> {
   return ctx.blockConcurrencyWhile(async () => {
     await requireExpectedVersion(ctx, env, appId, expectedVersion);
-    return createRepository(env.DB).privacy.createPrivacyRequest({
-      ...input,
-      subjectType: "entity",
-      status: "completed",
-    });
+    return createRepository(env.DB).privacy.beginEntityPrivacyJob(input);
   });
 }
 

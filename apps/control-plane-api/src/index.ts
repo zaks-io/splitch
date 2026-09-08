@@ -29,6 +29,7 @@ import {
 } from "./control-plane-runtime-config";
 import { CredentialCacheBackfillDurableObject } from "./credential-cache-backfill-do";
 import { CredentialCacheWriterDurableObject } from "./credential-cache-writer-do";
+import { handlePrivacyJobQueue, type PrivacyJobMessage } from "./entity-privacy-jobs";
 import type { ControlPlaneApiEnv } from "./env";
 import {
   loadCloudflareExposureVerificationConfigFromEnv,
@@ -62,7 +63,10 @@ const handler = {
   scheduled(event, env, ctx): void {
     runControlPlaneScheduled(event, env, ctx);
   },
-} satisfies ExportedHandler<ControlPlaneApiEnv>;
+  queue(batch, env, ctx): Promise<void> {
+    return handlePrivacyJobQueue(batch, env, ctx);
+  },
+} satisfies ExportedHandler<ControlPlaneApiEnv, PrivacyJobMessage>;
 
 export default wrapWorkerHandler(handler, { surface: "control-plane-api" });
 

@@ -22,6 +22,7 @@ export interface AppEnvironmentDeps {
   configStore?: ConfigStoreAccess;
   exposureStatusCleanup?: EnvironmentExposureStatusCleanup;
   holdoverWriteOutboxCleanup?: HoldoverWriteOutboxCleanup;
+  privacyExports?: R2Bucket;
   nowIso?: () => string;
 }
 

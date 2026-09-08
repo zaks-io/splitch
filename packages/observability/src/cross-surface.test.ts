@@ -81,13 +81,15 @@ describe("cross-surface observability wiring", () => {
     });
   }
 
-  it("applies the shared Worker baseline from wrapWorkerHandler so a new Worker cannot omit it", () => {
+  it("applies shared security and production transport policy from wrapWorkerHandler", () => {
     const wrapperSource = readFileSync(
       join(repoRoot, "packages/observability/src/worker.ts"),
       "utf8",
     );
     expect(wrapperSource).toContain("applyResponseHeaders");
     expect(wrapperSource).toContain("WORKER_BASELINE_SECURITY_HEADERS");
-    expect(wrapperSource).toContain("applyWorkerBaselineHeaders");
+    expect(wrapperSource).toContain("HOSTED_PRODUCTION_SECURITY_HEADERS");
+    expect(wrapperSource).toContain("productionHttpsRedirect");
+    expect(wrapperSource).toContain("applyWorkerSecurityHeaders");
   });
 });

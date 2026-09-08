@@ -16,7 +16,7 @@ import {
 import { durableAppIdentityResetAccess } from "../src/config-store-app-identity-access.js";
 import {
   beginConfigStoreEntityPrivacy,
-  recordConfigStoreEntityPrivacyCompletion,
+  recordConfigStoreEntityPrivacyRequest,
 } from "../src/config-store-app-identity-ledger.js";
 
 describe("Config Store App identity traffic", () => {
@@ -165,8 +165,9 @@ describe("durableAppIdentityResetAccess", () => {
     );
 
     await expect(
-      recordConfigStoreEntityPrivacyCompletion(ctx, env, appId, expectedVersion, {
+      recordConfigStoreEntityPrivacyRequest(ctx, env, appId, expectedVersion, {
         requestId: "prv_late",
+        jobId: "job_late",
         orgId: "org_1",
         appId,
         requestType: "export",
@@ -175,8 +176,11 @@ describe("durableAppIdentityResetAccess", () => {
         receivedAt: "2026-08-28T00:00:00.000Z",
         ackDueAt: "2026-09-01T00:00:00.000Z",
         responseDueAt: "2026-10-01T00:00:00.000Z",
-        completedAt: "2026-08-28T00:00:00.000Z",
-        resultJson: '{"old":"artifact"}',
+        idempotencyKey: "late",
+        requestHash: "sha256:late",
+        storeStatusJson: '{"assignments":"pending"}',
+        deleteBeforeTs: null,
+        identityVersion: expectedVersion,
       }),
     ).rejects.toThrow(/identity changed/iu);
     expect(dbPrepare).not.toHaveBeenCalled();

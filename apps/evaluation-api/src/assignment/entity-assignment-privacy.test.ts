@@ -9,7 +9,12 @@ import {
 import { describe, expect, it } from "vitest";
 import { serializeAssignmentValue } from "./assignment-store";
 import { basePut, RAW_TARGETING_KEY, RecordingKv } from "./assignment-store-test-fixtures";
-import { deleteEntityAssignments, exportEntityAssignments } from "./entity-assignment-privacy";
+import { exportEntityAssignmentsPage } from "./entity-assignment-export";
+import {
+  deleteEntityAssignments,
+  deleteResolvedEntityAssignments,
+  exportEntityAssignments,
+} from "./entity-assignment-privacy";
 
 const ROOT = "test-root-secret-do-not-use";
 
@@ -69,11 +74,34 @@ describe("entity assignment privacy consumers", () => {
     ]);
     expect(JSON.stringify(exported)).not.toContain(RAW_TARGETING_KEY);
 
-    const deleted = await deleteEntityAssignments(
+    const resolvedIdentity = {
+      appId: exported.appId,
+      idType: exported.idType,
+      targetingKeyHashes: exported.targetingKeyHashes,
+      entityFamilyHash: exported.entityFamilyHash,
+    };
+    const pages = [];
+    let cursor: string | null = null;
+    do {
+      const page = await exportEntityAssignmentsPage(
+        kv,
+        writers,
+        outboxes,
+        resolvedIdentity,
+        cursor,
+        1,
+      );
+      pages.push(page);
+      cursor = page.nextCursor;
+    } while (cursor !== null);
+    expect(pages).toHaveLength(resolvedIdentity.targetingKeyHashes.length);
+    expect(pages.flatMap((page) => page.records)).toEqual(exported.records);
+    expect(JSON.stringify(pages)).not.toContain(RAW_TARGETING_KEY);
+
+    const deleted = await deleteResolvedEntityAssignments(
       writers,
       outboxes,
-      saltStore,
-      identity,
+      resolvedIdentity,
       "2026-07-18T12:00:00.000Z",
     );
     expect(deleted.deletedKeyCount).toBe(deleted.targetingKeyHashes.length);

@@ -70,6 +70,11 @@ function scheduledEnv(): ControlPlaneApiEnv {
     EVENT_INGEST_API: {
       adoptMetricEventClaimRetention: () => Promise.resolve(),
     },
+    PRIVACY_JOBS_QUEUE: { send: () => Promise.resolve() },
+    PRIVACY_EXPORTS: {
+      delete: () => Promise.resolve(),
+      list: () => Promise.resolve({ objects: [], truncated: false, delimitedPrefixes: [] }),
+    },
     SPLITCH_PLATFORM_TARGET: "local",
     TINYBIRD_API_URL: "https://api.tinybird.test",
     TINYBIRD_APPROVAL_ARCHIVE_WRITE_TOKEN: "write-token",

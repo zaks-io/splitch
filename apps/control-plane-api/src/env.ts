@@ -63,6 +63,12 @@ export interface ControlPlaneApiEnv {
   EVALUATION_API: EvaluationControlPlaneBinding;
   /** Binding-only ControlPlaneEntrypoint on Event Ingest for Entity suppression and outbox purge. */
   EVENT_INGEST_API: EventIngestControlPlaneBinding;
+  /** Durable Entity privacy export/delete work. Messages contain request IDs only. */
+  PRIVACY_JOBS_QUEUE: Queue<{ requestId: string }>;
+  /** Private 24-hour Entity export artifacts. No public bucket hostname is configured. */
+  PRIVACY_EXPORTS: R2Bucket;
+  /** HMAC key for 15-minute application download URLs. */
+  PRIVACY_EXPORT_URL_SECRET?: string;
   /** CI-only bearer token for the hosted credential-cache rollout gate. */
   SPLITCH_DEPLOY_GATE_TOKEN?: string;
   /** This control-plane protected-resource origin; the token `aud` must equal it. */

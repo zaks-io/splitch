@@ -46,13 +46,23 @@ test("daily OSV findings report without masking scanner failures", () => {
 test("daily Semgrep findings report without masking scanner failures", () => {
   assert.ok(semgrepJob);
   assert.match(semgrepJob, /id: semgrep/);
+  assert.doesNotMatch(semgrepJob, /\n {4}container:/);
+  assert.match(semgrepJob, /name: Harden runner/);
   assert.match(
     semgrepJob,
-    /set \+e\n[\s\S]*?--sarif --output semgrep\.sarif \\\n {12}--error\n {10}scan_status=\$\?\n {10}set -e/,
+    /docker run --rm[\s\S]*?--volume "\$\{GITHUB_WORKSPACE\}:\/src:ro"[\s\S]*?--volume "\$\{RUNNER_TEMP\}\/semgrep:\/out"[\s\S]*?semgrep\/semgrep@sha256:c180f0c93a17b420c0af5006214a29d3c747c5459c732b740191adf657dd0068/,
+  );
+  assert.doesNotMatch(semgrepJob, /^\s+(?:--env(?:-file)?|-e)\b/m);
+  assert.match(
+    semgrepJob,
+    /set \+e\n[\s\S]*?--sarif --output \/out\/semgrep\.sarif \\\n {12}--error\n {10}scan_status=\$\?\n {10}set -e/,
   );
   assert.match(semgrepJob, /status=\$\{scan_status\}/);
   assert.doesNotMatch(semgrepJob, /continue-on-error/);
-  assert.match(semgrepJob, /hashFiles\('semgrep\.sarif'\) != ''/);
+  assert.match(semgrepJob, /echo "sarif=true" >> "\$GITHUB_OUTPUT"/);
+  assert.match(semgrepJob, /echo "sarif=false" >> "\$GITHUB_OUTPUT"/);
+  assert.match(semgrepJob, /steps\.semgrep\.outputs\.sarif == 'true'/);
+  assert.match(semgrepJob, /sarif_file: \$\{\{ runner\.temp \}\}\/semgrep\/semgrep\.sarif/);
   assert.match(
     semgrepJob,
     /steps\.semgrep\.outputs\.status != '0' && steps\.semgrep\.outputs\.status != '1'/,

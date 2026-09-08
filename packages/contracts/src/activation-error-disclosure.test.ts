@@ -6,11 +6,13 @@ describe("Activation error disclosure contract", () => {
   it("adds one coarse non-retryable outcome without changing track", () => {
     const trackErrors = getRoute("sdk_track")?.errors ?? [];
     const activationErrors = getRoute("sdk_activate")?.errors ?? [];
+    const trackSpecificErrors = trackErrors.filter((code) => code !== "UNSUPPORTED_MEDIA_TYPE");
 
     expect(activationErrors).toEqual([
-      ...trackErrors.slice(0, -2),
+      ...trackSpecificErrors.slice(0, -2),
       "ACTIVATION_NOT_AVAILABLE",
-      ...trackErrors.slice(-2),
+      ...trackSpecificErrors.slice(-2),
+      "UNSUPPORTED_MEDIA_TYPE",
     ]);
     expect(
       ErrorResponseSchema.parse({

@@ -65,7 +65,12 @@ createRegistrar(deps).mount(contract, handler);
 The guard order is fixed for every mounted route:
 
 1. Attach request ID and observability context.
-2. Enforce a raw-body byte limit before buffering or parsing JSON. Mutating
+2. Reject a body-bearing mutating request with `UNSUPPORTED_MEDIA_TYPE` (415)
+   unless its normalized media type is `application/json`. Media-type parameters,
+   such as `charset=utf-8`, are accepted. This check runs before body buffering,
+   parsing, validation, authentication, or rate limiting. Body-less mutations and
+   GET/HEAD requests remain unaffected.
+3. Enforce a raw-body byte limit before buffering or parsing JSON. Mutating
    routes use the contract's `rawBodyByteLimit` when present (including a
    smaller or larger explicit cap). Otherwise the registrar applies 32 KiB for
    untrusted/public/data-plane writes and 1 MiB for `control-plane-token`
@@ -74,13 +79,13 @@ The guard order is fixed for every mounted route:
    reading the body; an oversized chunked body stops during the stream. GET
    routes do not buffer a body. No mutating registrar route silently opts into
    an unbounded buffer.
-3. Parse params, query, headers, and body with the route contract's Zod schemas.
-4. Resolve the principal through the Worker-provided auth resolver.
-5. Apply the route's rate-limit class. Missing or throwing rate-limit bindings fail closed for guarded routes.
-6. Enforce scopes and `app_id` / `environment_id` co-scope where the contract requires them.
-7. Validate idempotency headers for mutating routes. Durable idempotency claims remain in the owning data-access layer.
-8. Call the route handler with parsed input and the resolved principal.
-9. Render guard failures through the shared `ErrorResponse` shape and status map.
+4. Parse params, query, headers, and body with the route contract's Zod schemas.
+5. Resolve the principal through the Worker-provided auth resolver.
+6. Apply the route's rate-limit class. Missing or throwing rate-limit bindings fail closed for guarded routes.
+7. Enforce scopes and `app_id` / `environment_id` co-scope where the contract requires them.
+8. Validate idempotency headers for mutating routes. Durable idempotency claims remain in the owning data-access layer.
+9. Call the route handler with parsed input and the resolved principal.
+10. Render guard failures through the shared `ErrorResponse` shape and status map.
 
 Rate limits run before scope checks so floods of unauthorized-but-authenticated requests are still
 throttled. Route handlers do not render ad hoc guard errors and do not choose HTTP statuses for
@@ -125,6 +130,14 @@ not move queue or Tinybird ownership into `@splitch/worker-runtime`.
   same-origin, cross-origin, and downgrade requests; incomparable policies preserve the
   existing route choice. Duplicate `frame-ancestors` directives in one policy are
   collapsed to the strongest value. Unrelated CSP directives are preserved.
+- Hosted production fetches enforce HTTPS in that same wrapper before Sentry or
+  the app handler can inspect credentials or request bodies. Plaintext requests
+  receive a method-preserving 308 redirect to the same URL over HTTPS. HTTPS
+  responses receive `Strict-Transport-Security: max-age=31536000`. The HSTS
+  policy is per hostname: it does not opt the whole zone into `includeSubDomains`
+  or browser preload. Local, PR CI, and shared-preview behavior does not change.
+  Cloudflare's zone-level Always Use HTTPS control remains the primary edge
+  redirect and must be enabled separately in production.
 
 ## What the runtime does not own
 
@@ -184,6 +197,7 @@ rate-limit bindings:
 
 - missing auth resolver fails at boot for a mounted route
 - malformed input returns `VALIDATION_ERROR`
+- an unsupported body media type returns `UNSUPPORTED_MEDIA_TYPE` before body parsing or authentication
 - missing or throwing rate-limit binding fails closed for guarded routes
 - insufficient scope returns the canonical error body and status
 - idempotency header states match the route contract
@@ -207,3 +221,5 @@ not duplicate the full guard matrix per route.
 - [../../architecture/system-architecture.md](../../architecture/system-architecture.md)
 - [../../adr/0017-all-cloudflare-stack-workers-serving-and-control-tinybird-analytics.md](../../adr/0017-all-cloudflare-stack-workers-serving-and-control-tinybird-analytics.md)
 - [../../adr/0025-zod-first-contract-hono-openapi-hc-client-derived-everywhere.md](../../adr/0025-zod-first-contract-hono-openapi-hc-client-derived-everywhere.md)
+- [Cloudflare Always Use HTTPS](https://developers.cloudflare.com/ssl/edge-certificates/additional-options/always-use-https/)
+- [Cloudflare HTTP Strict Transport Security](https://developers.cloudflare.com/ssl/edge-certificates/additional-options/http-strict-transport-security/)

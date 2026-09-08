@@ -191,7 +191,7 @@ describe("openapi document: full route coverage", () => {
     );
   });
 
-  it("emits only the error codes declared by each route", () => {
+  it("emits only route-specific and shared derived error codes", () => {
     const operation = doc.paths?.["/apps/{appId}/attention-rollup"]?.get as {
       responses?: Record<string, unknown>;
     };
@@ -201,6 +201,17 @@ describe("openapi document: full route coverage", () => {
     expect(conflictResponse).toContain("message");
     expect(conflictResponse).toContain("details");
     expect(conflictResponse).not.toContain("RUN_FROZEN");
+  });
+
+  it("advertises the registrar media-type rejection on every mutating route", () => {
+    for (const route of publicRoutes) {
+      if (route.method === "GET") continue;
+      expect(route.errors, route.operationId).toContain("UNSUPPORTED_MEDIA_TYPE");
+      const operation = doc.paths?.[route.openapi.path]?.[
+        route.openapi.method as keyof (typeof doc.paths)[string]
+      ] as { responses?: Record<string, unknown> } | undefined;
+      expect(operation?.responses?.["415"], route.operationId).toBeDefined();
+    }
   });
 
   it("emits one operationId per publicly surfaced route, no more no less", () => {

@@ -38,6 +38,19 @@ export function registerReleaseWorkflowContract(options: ReleaseContractOptions)
       expect(workflow).not.toMatch(/NPM_TOKEN|NODE_AUTH_TOKEN|npm publish/);
     });
 
+    it("rejects every ref except the protected repository default branch before validation", () => {
+      const workflowPermissions = workflow.split("jobs:")[0] ?? "";
+      const authorize = workflow.split("  authorize:")[1]?.split("  validate:")[0] ?? "";
+
+      expect(workflowPermissions).toContain("contents: read");
+      expect(workflowPermissions).not.toContain("contents: write");
+      expect(authorize).toContain("github.event.repository.default_branch");
+      expect(authorize).toContain("github.ref_protected");
+      expect(authorize).toContain('expected_ref="refs/heads/$DEFAULT_BRANCH"');
+      expect(authorize).toContain('[ "$RELEASE_REF_PROTECTED" != "true" ]');
+      expect(workflow).toMatch(/ {2}validate:\n[\s\S]*? {4}needs: authorize/);
+    });
+
     it("uses Blacksmith runners for all jobs", () => {
       const runners = workflow.split("\n").filter((line) => line.trim().startsWith("runs-on:"));
       expect(runners.length).toBeGreaterThanOrEqual(3);

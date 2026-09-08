@@ -30,3 +30,8 @@ for (const task of [
     );
   });
 }
+
+test("hosted deploys pass the resolved Cloudflare environment through strict Turbo tasks", async () => {
+  const { tasks } = JSON.parse(await readFile(turboJson, "utf8"));
+  assert.ok(tasks.deploy.passThroughEnv.includes("CLOUDFLARE_ENV"));
+});

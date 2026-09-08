@@ -62,6 +62,13 @@ export const validationErrorDocs = {
     details: "{ key: string, path: string[] }",
     related: ["VALIDATION_ERROR"],
   },
+  UNSUPPORTED_MEDIA_TYPE: {
+    remediation: "Send the request body with Content-Type application/json",
+    cause: "A mutating API request carried a body without the application/json media type.",
+    fix: "Set `Content-Type: application/json` before resending. Media-type parameters such as `charset=utf-8` are accepted.",
+    details: "{ receivedMediaType: string | null, supportedMediaTypes: string[] }",
+    related: ["VALIDATION_ERROR"],
+  },
   EVENT_ID_CONFLICT: {
     remediation:
       "Keep the event id stable across retries of one logical event, and mint a new id for a new one",

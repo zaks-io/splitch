@@ -128,6 +128,11 @@ source/category/purpose metadata.
 
 Returns: `{ request: PrivacyRequest, job: PrivacyJob }`
 
+The response reports a queued job. Processing reads each backing store in bounded pages and streams
+the artifact into private object storage. Completed status responses include a newly minted
+15-minute `download_url`; the raw artifact expires after 24 hours. D1 stores only its object key,
+SHA-256 digest, and expiry.
+
 ### `POST /apps/{app_id}/privacy/entities/delete`
 
 Body:
@@ -151,6 +156,10 @@ tombstone commits. New events after `delete_before_ts` are newly collected data.
 
 Returns: `{ request: PrivacyRequest, job: PrivacyJob }`
 
+The request row and per-store job checkpoints are committed before a request-ID-only Queue message
+is published. Queue retry and scheduled reconciliation resume from the durable checkpoints; neither
+path persists the raw Targeting Key.
+
 ## Request status
 
 ### `GET /privacy/requests/{request_id}`
@@ -158,6 +167,13 @@ Returns: `{ request: PrivacyRequest, job: PrivacyJob }`
 Auth: requester, Org `owner`, or App `owner/admin` when the request is App-scoped.
 
 Returns: `{ request: PrivacyRequest, job?: PrivacyJob }`
+
+For a completed, unexpired export, this read mints a fresh 15-minute
+`/privacy/requests/{request_id}/download` URL. The signed download does not require a bearer token,
+does not reveal the R2 object key, and is never written back to the ledger. This application-signed
+capability URL is intentionally outside the bearer-authenticated route inventory: its HMAC binds the
+request ID, private artifact key, artifact hash, and expiry, and the handler rechecks the D1 ledger
+before reading R2.
 
 ## Error codes
 
