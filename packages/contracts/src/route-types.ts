@@ -36,6 +36,7 @@ import type {
   PrincipalFlagListReadResponseSchema,
 } from "./resource-envelopes-flag";
 import type * as EnvironmentRoutes from "./route-types-environment";
+import type { EntityPrivacyRequestSchema, PrivacyResponseSchema } from "./routes/routes-privacy";
 import type {
   AddAppMemberRequestSchema,
   AppMemberParams,
@@ -89,6 +90,10 @@ export type EventDefinitionVersionsListOutput = z.infer<
 >;
 export type EventDefinitionVersionsGetInput = EventDefinitionVersionPath;
 export type EventDefinitionVersionsGetOutput = z.infer<typeof EventDefinitionVersionSchema>;
+
+export type EntityPrivacyInput = z.infer<typeof AppParams> &
+  z.infer<typeof EntityPrivacyRequestSchema>;
+export type EntityPrivacyOutput = z.infer<typeof PrivacyResponseSchema>;
 
 export type FlagsListInput = z.infer<typeof AppParams> & z.infer<typeof FlagListQuerySchema>;
 export type FlagsListOutput = z.infer<typeof FlagListReadResponseSchema>;
@@ -303,6 +308,8 @@ export interface RouteTypeMap {
     input: EnvironmentRoutes.ExperimentsDeleteInput;
     output: EnvironmentRoutes.ExperimentsDeleteOutput;
   };
+  entity_privacy_export: { input: EntityPrivacyInput; output: EntityPrivacyOutput };
+  entity_privacy_delete: { input: EntityPrivacyInput; output: EntityPrivacyOutput };
 }
 
 export type OperationId = keyof RouteTypeMap;

@@ -41,7 +41,7 @@ const PrivacyJobSchema = z.object({
   downloadUrl: z.string().url().optional(),
   expiresAt: z.string().optional(),
 });
-const PrivacyResponseSchema = z.object({
+export const PrivacyResponseSchema = z.object({
   request: PrivacyRequestSchema,
   job: PrivacyJobSchema,
 });
@@ -51,7 +51,7 @@ const PrivacyStatusResponseSchema = z.object({
 });
 
 // Entity export/delete carry the raw Targeting Key; the Worker hashes it server-side.
-const EntityPrivacyRequestSchema = z
+export const EntityPrivacyRequestSchema = z
   .object({
     idType: PersistedIdentifierSchema,
     targetingKey: PersistedIdentifierSchema,

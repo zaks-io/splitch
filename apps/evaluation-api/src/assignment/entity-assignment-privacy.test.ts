@@ -80,27 +80,23 @@ describe("entity assignment privacy consumers", () => {
       targetingKeyHashes: exported.targetingKeyHashes,
       entityFamilyHash: exported.entityFamilyHash,
     };
-    const firstPage = await exportEntityAssignmentsPage(
-      kv,
-      writers,
-      outboxes,
-      resolvedIdentity,
-      null,
-      1,
-    );
-    const secondPage = await exportEntityAssignmentsPage(
-      kv,
-      writers,
-      outboxes,
-      resolvedIdentity,
-      firstPage.nextCursor,
-      1,
-    );
-    expect(firstPage.records).toHaveLength(1);
-    expect(firstPage.nextCursor).toBe("1");
-    expect(secondPage.records).toHaveLength(1);
-    expect(secondPage.nextCursor).toBeNull();
-    expect(JSON.stringify([firstPage, secondPage])).not.toContain(RAW_TARGETING_KEY);
+    const pages = [];
+    let cursor: string | null = null;
+    do {
+      const page = await exportEntityAssignmentsPage(
+        kv,
+        writers,
+        outboxes,
+        resolvedIdentity,
+        cursor,
+        1,
+      );
+      pages.push(page);
+      cursor = page.nextCursor;
+    } while (cursor !== null);
+    expect(pages).toHaveLength(resolvedIdentity.targetingKeyHashes.length);
+    expect(pages.flatMap((page) => page.records)).toEqual(exported.records);
+    expect(JSON.stringify(pages)).not.toContain(RAW_TARGETING_KEY);
 
     const deleted = await deleteResolvedEntityAssignments(
       writers,

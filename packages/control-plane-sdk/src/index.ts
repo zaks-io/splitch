@@ -21,9 +21,11 @@ import {
   createExperimentsHcClient,
   createFlagsHcClient,
   createOrganizationsHcClient,
+  createPrivacyHcClient,
   resolveControlPlaneUrl,
 } from "./hc-client";
 import { createOrganizationsClient, type OrganizationsClient } from "./organizations-client";
+import { createPrivacyClient, type PrivacyClient } from "./privacy-client";
 
 export interface ControlPlaneSdkOptions {
   readonly baseUrl: string;
@@ -46,6 +48,7 @@ export interface ControlPlaneSdk {
   readonly experiments: ExperimentsClient;
   readonly eventDefinitions: EventDefinitionsClient;
   readonly approvals: ApprovalsClient;
+  readonly privacy: PrivacyClient;
 }
 
 export function createControlPlaneSdk(options: ControlPlaneSdkOptions): ControlPlaneSdk {
@@ -63,6 +66,7 @@ export function createControlPlaneSdk(options: ControlPlaneSdkOptions): ControlP
   const credentialsHcClient = createCredentialsHcClient(hcOptions);
   const organizationsHcClient = createOrganizationsHcClient(hcOptions);
   const approvalsHcClient = createApprovalsHcClient(hcOptions);
+  const privacyHcClient = createPrivacyHcClient(hcOptions);
 
   return {
     async health() {
@@ -82,6 +86,7 @@ export function createControlPlaneSdk(options: ControlPlaneSdkOptions): ControlP
     experiments: createExperimentsClient(hcOptions, experimentsHcClient),
     eventDefinitions: createEventDefinitionsClient(hcOptions, eventDefinitionsHcClient),
     approvals: createApprovalsClient(hcOptions, approvalsHcClient),
+    privacy: createPrivacyClient(hcOptions, privacyHcClient),
   };
 }
 
@@ -113,6 +118,7 @@ export type {
   ControlPlaneOperationResult,
 } from "./operation-result";
 export type { OrganizationsClient } from "./organizations-client";
+export type { PrivacyClient } from "./privacy-client";
 // biome-ignore lint/performance/noBarrelFile: the package root is the only supported Panel import path for this client.
 export {
   createPanelSegmentsClient,

@@ -41,6 +41,7 @@ describe("createEntityPrivacyConsumer export", () => {
           `${HASH}:assignment-do-winners-exported-v1`,
           `${HASH}:assignment-and-holdover-exported-v1`,
         ],
+        nextCursor: null,
       })),
       service((_path, body) => ({
         ...IDENTITY,
@@ -72,19 +73,16 @@ describe("createEntityPrivacyConsumer export", () => {
       orgId: "org_privacy",
       requestId: "request_privacy",
     };
-    const identity = await consumer?.exportEntity(input);
+    const identity = await consumer?.resolveIdentity(input);
     if (!identity) throw new Error("consumer is unavailable");
-    const analysisPage = await consumer?.exportAnalysisPage(input, identity, {
-      limit: 100,
-      cursor: null,
-    });
-    const eventPage = await consumer?.exportEventsPage(input, identity, {
-      limit: 100,
-      cursor: null,
-    });
+    const { targetingKey: _targetingKey, ...durableInput } = input;
+    const resolved = { ...durableInput, ...identity };
+    const assignmentsPage = await consumer?.exportAssignmentsPage(resolved, null, 100);
+    const analysisPage = await consumer?.exportAnalysisPage(resolved, null, 100);
+    const eventPage = await consumer?.exportEventsPage(resolved, null, 100);
 
-    expect(identity).toEqual({
-      ...IDENTITY,
+    expect(identity).toEqual(IDENTITY);
+    expect(assignmentsPage).toMatchObject({
       records: assignments,
       proofs: [
         `${HASH}:assignment-do-winners-exported-v1`,
@@ -93,7 +91,7 @@ describe("createEntityPrivacyConsumer export", () => {
     });
     expect(analysisPage).toMatchObject({ records: analytics, nextCursor: "analysis-next" });
     expect(eventPage).toMatchObject({ records: events, nextCursor: "events-next" });
-    expect(JSON.stringify({ identity, analysisPage, eventPage })).not.toContain(
+    expect(JSON.stringify({ identity, assignmentsPage, analysisPage, eventPage })).not.toContain(
       "raw-key-never-in-artifact",
     );
   });

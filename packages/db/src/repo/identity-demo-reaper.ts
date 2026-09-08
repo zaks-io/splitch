@@ -139,14 +139,19 @@ const REAP_PLAN: readonly ReapStep[] = [
   ["organizations", deleteExpiredOrgRoot],
 ];
 
-function deletePrivacyJobsForOrg(d1: D1Database, orgId: string): D1PreparedStatement {
+function deletePrivacyJobsForOrg(
+  d1: D1Database,
+  orgId: string,
+  nowIso: string,
+): D1PreparedStatement {
   return d1
     .prepare(
       `DELETE FROM privacy_jobs
        WHERE request_id IN (SELECT request_id FROM privacy_requests WHERE org_id = ?)
+         AND EXISTS (${EXPIRED_ORG_EXISTS_SQL})
        RETURNING job_id`,
     )
-    .bind(orgId);
+    .bind(orgId, orgId, nowIso);
 }
 
 export const DEMO_REAP_DELETE_ORDER: readonly string[] = REAP_PLAN.map(([table]) => table);

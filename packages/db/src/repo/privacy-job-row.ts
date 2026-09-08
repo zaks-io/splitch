@@ -11,6 +11,7 @@ export interface PrivacyJobRow {
   readonly idType: string | null;
   readonly entityFamilyHash: string | null;
   readonly leaseExpiresAt: string | null;
+  readonly claimToken: string | null;
   readonly artifactKey: string | null;
   readonly artifactSha256: string | null;
   readonly artifactExpiresAt: string | null;
@@ -30,6 +31,7 @@ export interface PrivacyJobDbRow {
   readonly id_type: string | null;
   readonly entity_family_hash: string | null;
   readonly lease_expires_at: string | null;
+  readonly claim_token: string | null;
   readonly artifact_key: string | null;
   readonly artifact_sha256: string | null;
   readonly artifact_expires_at: string | null;
@@ -53,6 +55,7 @@ export function privacyJobRow(row: PrivacyJobDbRow): PrivacyJobRow {
     idType: row.id_type,
     entityFamilyHash: row.entity_family_hash,
     leaseExpiresAt: row.lease_expires_at,
+    claimToken: row.claim_token,
     artifactKey: row.artifact_key,
     artifactSha256: row.artifact_sha256,
     artifactExpiresAt: row.artifact_expires_at,

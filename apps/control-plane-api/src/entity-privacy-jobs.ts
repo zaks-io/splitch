@@ -92,13 +92,19 @@ async function runPrivacyJob(
   if (!request || !existing) throw new Error("privacy job has no durable intake record");
   if (existing.status === "completed") return;
   const now = new Date();
+  const claimToken = crypto.randomUUID();
   const claimed = await repo.privacy.claimPrivacyJob(
     requestId,
     now.toISOString(),
     new Date(now.getTime() + PRIVACY_JOB_LEASE_MS).toISOString(),
+    claimToken,
   );
   if (!claimed) return;
-  if (claimed.status !== "running" || !claimed.leaseExpiresAt) {
+  if (
+    claimed.status !== "running" ||
+    !claimed.leaseExpiresAt ||
+    claimed.claimToken !== claimToken
+  ) {
     throw new Error("privacy job claim did not establish a lease");
   }
   const entity = entityInput(request, claimed);
@@ -108,25 +114,37 @@ async function runPrivacyJob(
     env.EVENT_INGEST_API,
   );
   if (!consumer) throw new Error("Entity privacy consumers are unavailable");
-  const renewLease = privacyLeaseRenewer(repo, requestId, claimed.leaseExpiresAt);
+  const renewLease = privacyLeaseRenewer(repo, requestId, claimToken);
+  const artifactKey =
+    claimed.kind === "export" ? privacyExportArtifactKey(entity, crypto.randomUUID()) : undefined;
   try {
     if (claimed.kind === "export") {
-      await runPrivacyExport(repo, env.PRIVACY_EXPORTS, consumer, entity, renewLease);
+      if (claimed.artifactKey) await env.PRIVACY_EXPORTS.delete(claimed.artifactKey);
+      await runPrivacyExport(
+        repo,
+        env.PRIVACY_EXPORTS,
+        consumer,
+        entity,
+        artifactKey as string,
+        claimToken,
+        renewLease,
+      );
       return;
     }
     await runPrivacyDelete(repo, env, ctx, consumer, entity, claimed, renewLease);
   } catch (cause) {
     if (claimed.kind === "export") {
-      await env.PRIVACY_EXPORTS.delete(privacyExportArtifactKey(entity)).catch(() => undefined);
+      if (artifactKey) await env.PRIVACY_EXPORTS.delete(artifactKey).catch(() => undefined);
     }
     const current = await repo.privacy.getPrivacyJobByRequestId(requestId);
-    if (current?.status === "running") {
+    if (current?.status === "running" && current.claimToken === claimToken) {
       await repo.privacy.updatePrivacyJob({
         requestId,
         status: "failed",
         storeStatusJson: current.storeStatusJson,
         updatedAt: new Date().toISOString(),
         errorCode: "PRIVACY_JOB_FAILED",
+        claimToken,
       });
     }
     throw cause;
@@ -138,14 +156,24 @@ async function runPrivacyExport(
   bucket: R2Bucket,
   consumer: EntityPrivacyConsumer,
   entity: ResolvedEntityPrivacyInput,
+  artifactKey: string,
+  claimToken: string,
   renewLease: () => Promise<void>,
 ): Promise<void> {
   const expiresAt = new Date(Date.now() + PRIVACY_EXPORT_RETENTION_MS).toISOString();
+  await repo.privacy.stagePrivacyExportArtifact({
+    requestId: entity.requestId,
+    artifactKey,
+    artifactExpiresAt: expiresAt,
+    updatedAt: new Date().toISOString(),
+    claimToken,
+  });
   const artifact = await writeEntityPrivacyExport({
     bucket,
     consumer,
     entity,
     requestId: entity.requestId,
+    artifactKey,
     expiresAt,
     renewLease,
   });
@@ -160,6 +188,7 @@ async function runPrivacyExport(
     ...artifact,
     artifactExpiresAt: expiresAt,
     updatedAt: new Date().toISOString(),
+    claimToken,
   });
 }
 
@@ -185,13 +214,13 @@ async function runPrivacyDelete(
     input: entity,
     identity: entity,
     requestId: entity.requestId,
-    job: { ...claimed, status: "running" },
+    job: { ...claimed, status: "running", claimToken: claimed.claimToken as string },
     renewLease,
   });
 }
 
-function privacyExportArtifactKey(entity: ResolvedEntityPrivacyInput): string {
-  return `privacy-exports/${entity.appId}/${entity.requestId}.json`;
+function privacyExportArtifactKey(entity: ResolvedEntityPrivacyInput, attemptId: string): string {
+  return `privacy-exports/${entity.appId}/${entity.requestId}/${attemptId}.json`;
 }
 
 function entityInput(
@@ -223,19 +252,17 @@ function entityInput(
 function privacyLeaseRenewer(
   repo: Repository,
   requestId: string,
-  initialLeaseExpiresAt: string,
+  claimToken: string,
 ): () => Promise<void> {
-  let expectedLeaseExpiresAt = initialLeaseExpiresAt;
   return async () => {
     const now = new Date();
     const renewed = await repo.privacy.renewPrivacyJobLease({
       requestId,
-      expectedLeaseExpiresAt,
+      claimToken,
       leaseExpiresAt: new Date(now.getTime() + PRIVACY_JOB_LEASE_MS).toISOString(),
       updatedAt: now.toISOString(),
     });
     if (!renewed) throw new Error("privacy job lease was lost");
-    expectedLeaseExpiresAt = renewed;
   };
 }
 

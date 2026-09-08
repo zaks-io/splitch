@@ -7,6 +7,7 @@ import {
 import { revokeEnvironmentCredentialsForAppDelete } from "./app-environment-credentials";
 import { durableCredentialCacheWriterAccess } from "./credential-cache-writer-do";
 import type { ControlPlaneApiEnv } from "./env";
+import { deleteAppPrivacyExports } from "./privacy-export-cleanup";
 
 export function productionAppIdentityResetPurgers(
   env: ControlPlaneApiEnv,
@@ -91,12 +92,29 @@ export function productionAppIdentityResetPurgers(
     }),
     privacy_subject_refs: scoped(async (appId) => {
       const redactedAt = new Date().toISOString();
-      const result = await env.DB.prepare(
-        "UPDATE privacy_requests SET subject_ref = ?, subject_ref_redacted_at = ?, result_json = NULL WHERE app_id = ? AND subject_type = 'entity' AND (subject_ref != ? OR result_json IS NOT NULL)",
-      )
-        .bind(APP_IDENTITY_RESET_SUBJECT_REF, redactedAt, appId, APP_IDENTITY_RESET_SUBJECT_REF)
-        .run();
-      return `d1-privacy-subject-refs:${String(result.meta.changes ?? 0)}`;
+      const [jobs, requests] = await env.DB.batch([
+        env.DB.prepare(
+          `UPDATE privacy_jobs SET status = 'completed', lease_expires_at = NULL,
+             claim_token = NULL, artifact_key = NULL, artifact_sha256 = NULL,
+             artifact_expires_at = NULL, entity_family_hash = NULL,
+             error_code = 'APP_IDENTITY_RESET', updated_at = ?
+           WHERE request_id IN (SELECT request_id FROM privacy_requests WHERE app_id = ?)`,
+        ).bind(redactedAt, appId),
+        env.DB.prepare(
+          `UPDATE privacy_requests SET subject_ref = ?, subject_ref_redacted_at = ?,
+             result_json = NULL, status = 'completed', completed_at = ?
+           WHERE app_id = ? AND subject_type = 'entity'
+             AND (subject_ref != ? OR result_json IS NOT NULL OR status != 'completed')`,
+        ).bind(
+          APP_IDENTITY_RESET_SUBJECT_REF,
+          redactedAt,
+          redactedAt,
+          appId,
+          APP_IDENTITY_RESET_SUBJECT_REF,
+        ),
+      ]);
+      const artifacts = await deleteAppPrivacyExports(env.PRIVACY_EXPORTS, appId);
+      return `d1-privacy-subject-refs:${String(requests?.meta.changes ?? 0)};jobs=${String(jobs?.meta.changes ?? 0)};artifacts=${String(artifacts)}`;
     }),
   };
 }

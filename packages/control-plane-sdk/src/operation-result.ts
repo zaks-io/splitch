@@ -5,18 +5,15 @@ export interface ControlPlaneOperationOptions {
   readonly authorization?: string | null;
   /**
    * Idempotency key for a route whose contract declares one but gives it no
-   * request body to travel in — the DELETE mutations. Body-carrying routes take
-   * the key from `idempotency_key` on the input instead, so there is exactly one
-   * key per call either way.
+   * request body field to travel in. Body schemas carrying `idempotency_key`
+   * take the key from the input instead, so there is exactly one key per call.
    */
   readonly idempotencyKey?: string;
 }
 
 /**
- * Options for a body-less `idempotency: "required"` route. Every other required
- * route gets a compile error from a non-optional `idempotency_key` schema field;
- * these two carry the key out-of-band, so the type has to carry the requirement
- * (SPL-266).
+ * Options for an `idempotency: "required"` route whose body schema has no
+ * `idempotency_key` field. The type carries that requirement out-of-band.
  *
  * Every method taking this type reads the key as `callOptions?.idempotencyKey`
  * despite the parameter being non-optional. That is deliberate: an untyped or JS

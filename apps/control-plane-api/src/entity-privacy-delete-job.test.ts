@@ -35,6 +35,7 @@ describe("Entity privacy delete job", () => {
         storeStatusJson: JSON.stringify(initialEntityDeleteStoreStatus()),
         deleteBeforeTs: "2026-07-18T12:00:00.000Z",
         identityVersion: "app-v1",
+        claimToken: "claim-delete",
       },
       renewLease,
     });
@@ -76,6 +77,7 @@ describe("Entity privacy delete job", () => {
           storeStatusJson: JSON.stringify(initialEntityDeleteStoreStatus()),
           deleteBeforeTs: "2026-07-18T12:00:00.000Z",
           identityVersion: "app-v1",
+          claimToken: "claim-delete",
         },
         renewLease,
       }),

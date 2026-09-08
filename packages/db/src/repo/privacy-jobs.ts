@@ -1,5 +1,9 @@
 import type { privacyRequests } from "../schema/index";
 import {
+  stagePrivacyExportArtifact,
+  type StagePrivacyExportArtifactInput,
+} from "./privacy-job-artifacts";
+import {
   type PrivacyJobDbRow,
   type PrivacyJobRow,
   type PrivacyJobStatus,
@@ -38,7 +42,7 @@ export function makePrivacyJobRepo(
     const row = await d1
       .prepare(
         `SELECT job_id, request_id, kind, status, store_status_json, delete_before_ts,
-           identity_version, id_type, entity_family_hash, lease_expires_at, artifact_key, artifact_sha256,
+           identity_version, id_type, entity_family_hash, lease_expires_at, claim_token, artifact_key, artifact_sha256,
            artifact_expires_at, error_code, created_at, updated_at
          FROM privacy_jobs WHERE request_id = ?`,
       )
@@ -63,34 +67,35 @@ export function makePrivacyJobRepo(
       requestId: string,
       now: string,
       leaseExpiresAt: string,
+      claimToken: string,
     ): Promise<PrivacyJobRow | null> {
       const row = await d1
         .prepare(
           `UPDATE privacy_jobs
-           SET status = 'running', lease_expires_at = ?, error_code = NULL, updated_at = ?
+           SET status = 'running', lease_expires_at = ?, claim_token = ?, error_code = NULL, updated_at = ?
            WHERE request_id = ? AND status != 'completed'
              AND (lease_expires_at IS NULL OR lease_expires_at <= ?)
            RETURNING job_id, request_id, kind, status, store_status_json, delete_before_ts,
-             identity_version, id_type, entity_family_hash, lease_expires_at, artifact_key, artifact_sha256,
+             identity_version, id_type, entity_family_hash, lease_expires_at, claim_token, artifact_key, artifact_sha256,
              artifact_expires_at, error_code, created_at, updated_at`,
         )
-        .bind(leaseExpiresAt, now, requestId, now)
+        .bind(leaseExpiresAt, claimToken, now, requestId, now)
         .first<PrivacyJobDbRow>();
       return row ? privacyJobRow(row) : null;
     },
     async renewPrivacyJobLease(input: {
       requestId: string;
-      expectedLeaseExpiresAt: string;
+      claimToken: string;
       leaseExpiresAt: string;
       updatedAt: string;
     }): Promise<string | null> {
       const row = await d1
         .prepare(
           `UPDATE privacy_jobs SET lease_expires_at = ?, updated_at = ?
-           WHERE request_id = ? AND status = 'running' AND lease_expires_at = ?
+           WHERE request_id = ? AND status = 'running' AND claim_token = ?
            RETURNING lease_expires_at`,
         )
-        .bind(input.leaseExpiresAt, input.updatedAt, input.requestId, input.expectedLeaseExpiresAt)
+        .bind(input.leaseExpiresAt, input.updatedAt, input.requestId, input.claimToken)
         .first<{ lease_expires_at: string }>();
       return row?.lease_expires_at ?? null;
     },
@@ -100,6 +105,7 @@ export function makePrivacyJobRepo(
       storeStatusJson: string;
       updatedAt: string;
       errorCode?: string | null;
+      claimToken: string;
     }): Promise<PrivacyJobRow> {
       await updatePrivacyJob(d1, input);
       const job = await getPrivacyJobByRequestId(input.requestId);
@@ -113,14 +119,15 @@ export function makePrivacyJobRepo(
       artifactSha256: string;
       artifactExpiresAt: string;
       updatedAt: string;
+      claimToken: string;
     }): Promise<PrivacyJobRow> {
       const [jobResult] = await d1.batch([
         d1
           .prepare(
             `UPDATE privacy_jobs SET status = 'completed', store_status_json = ?,
-               lease_expires_at = NULL, artifact_key = ?, artifact_sha256 = ?,
+               lease_expires_at = NULL, claim_token = NULL, artifact_key = ?, artifact_sha256 = ?,
                artifact_expires_at = ?, error_code = NULL, updated_at = ?
-             WHERE request_id = ?`,
+             WHERE request_id = ? AND status = 'running' AND claim_token = ?`,
           )
           .bind(
             input.storeStatusJson,
@@ -129,7 +136,9 @@ export function makePrivacyJobRepo(
             input.artifactExpiresAt,
             input.updatedAt,
             input.requestId,
+            input.claimToken,
           ),
+        d1.prepare("SELECT CASE WHEN changes() = 1 THEN 1 ELSE json('') END"),
         d1
           .prepare(
             `UPDATE privacy_requests SET status = 'completed', completed_at = ?, result_json = NULL
@@ -142,6 +151,8 @@ export function makePrivacyJobRepo(
       if (!job) throw new Error("completePrivacyExport: updated job disappeared");
       return job;
     },
+    stagePrivacyExportArtifact: (input: StagePrivacyExportArtifactInput) =>
+      stagePrivacyExportArtifact(d1, input),
     async listPrivacyJobsForReconciliation(input: {
       now: string;
       updatedBefore: string;
@@ -150,7 +161,7 @@ export function makePrivacyJobRepo(
       const result = await d1
         .prepare(
           `SELECT job_id, request_id, kind, status, store_status_json, delete_before_ts,
-             identity_version, id_type, entity_family_hash, lease_expires_at, artifact_key,
+             identity_version, id_type, entity_family_hash, lease_expires_at, claim_token, artifact_key,
              artifact_sha256, artifact_expires_at, error_code, created_at, updated_at
            FROM privacy_jobs
            WHERE ((status IN ('queued', 'failed') AND updated_at <= ?)
@@ -165,7 +176,7 @@ export function makePrivacyJobRepo(
       const result = await d1
         .prepare(
           `SELECT job_id, request_id, kind, status, store_status_json, delete_before_ts,
-             identity_version, id_type, entity_family_hash, lease_expires_at, artifact_key,
+             identity_version, id_type, entity_family_hash, lease_expires_at, claim_token, artifact_key,
              artifact_sha256, artifact_expires_at, error_code, created_at, updated_at
            FROM privacy_jobs
            WHERE artifact_key IS NOT NULL AND artifact_expires_at <= ?
@@ -244,6 +255,7 @@ async function updatePrivacyJob(
     storeStatusJson: string;
     updatedAt: string;
     errorCode?: string | null;
+    claimToken: string;
   },
 ): Promise<void> {
   const completedAt = input.status === "completed" ? input.updatedAt : null;
@@ -253,16 +265,21 @@ async function updatePrivacyJob(
         `UPDATE privacy_jobs
          SET status = ?, store_status_json = ?,
            lease_expires_at = CASE WHEN ? = 'running' THEN lease_expires_at ELSE NULL END,
-           error_code = ?, updated_at = ? WHERE request_id = ?`,
+           claim_token = CASE WHEN ? = 'running' THEN claim_token ELSE NULL END,
+           error_code = ?, updated_at = ?
+         WHERE request_id = ? AND status = 'running' AND claim_token = ?`,
       )
       .bind(
         input.status,
         input.storeStatusJson,
         input.status,
+        input.status,
         input.errorCode ?? null,
         input.updatedAt,
         input.requestId,
+        input.claimToken,
       ),
+    d1.prepare("SELECT CASE WHEN changes() = 1 THEN 1 ELSE json('') END"),
     d1
       .prepare(`UPDATE privacy_requests SET status = ?, completed_at = ? WHERE request_id = ?`)
       .bind(

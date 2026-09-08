@@ -50,6 +50,13 @@ describe("privacy job reconciliation", () => {
   it("deletes expired R2 artifacts and clears only artifact metadata", async () => {
     const repo = createRepository(bindings.d1);
     await beginExport(repo);
+    const claimToken = "claim-reconcile";
+    await repo.privacy.claimPrivacyJob(
+      "prv_reconcile",
+      "2026-07-18T12:00:30.000Z",
+      "2026-07-18T12:15:30.000Z",
+      claimToken,
+    );
     await repo.privacy.completePrivacyExport({
       requestId: "prv_reconcile",
       storeStatusJson: JSON.stringify({ assignments: "done" }),
@@ -57,6 +64,7 @@ describe("privacy job reconciliation", () => {
       artifactSha256: `sha256:${"a".repeat(64)}`,
       artifactExpiresAt: "2026-07-19T12:00:00.000Z",
       updatedAt: "2026-07-18T12:01:00.000Z",
+      claimToken,
     });
     const deleted: string[] = [];
     const env = environment(bindings, { send: async () => undefined });
@@ -75,12 +83,46 @@ describe("privacy job reconciliation", () => {
       artifactExpiresAt: null,
     });
   });
+
+  it("fences stale workers from a replacement claim", async () => {
+    const repo = createRepository(bindings.d1);
+    const requestId = "prv_reconcile_fence";
+    await beginExport(repo, requestId);
+    await repo.privacy.claimPrivacyJob(
+      requestId,
+      "2026-07-18T12:00:00.000Z",
+      "2026-07-18T12:01:00.000Z",
+      "claim-stale",
+    );
+    await repo.privacy.claimPrivacyJob(
+      requestId,
+      "2026-07-18T12:02:00.000Z",
+      "2026-07-18T12:17:00.000Z",
+      "claim-current",
+    );
+
+    await expect(
+      repo.privacy.updatePrivacyJob({
+        requestId,
+        status: "failed",
+        storeStatusJson: JSON.stringify({ assignments: "failed" }),
+        updatedAt: "2026-07-18T12:02:01.000Z",
+        errorCode: "STALE_WORKER",
+        claimToken: "claim-stale",
+      }),
+    ).rejects.toThrow();
+    expect(await repo.privacy.getPrivacyJobByRequestId(requestId)).toMatchObject({
+      status: "running",
+      claimToken: "claim-current",
+      errorCode: null,
+    });
+  });
 });
 
-async function beginExport(repo: ReturnType<typeof createRepository>) {
+async function beginExport(repo: ReturnType<typeof createRepository>, requestId = "prv_reconcile") {
   return repo.privacy.beginEntityPrivacyJob({
-    requestId: "prv_reconcile",
-    jobId: "job_reconcile",
+    requestId,
+    jobId: `job_${requestId}`,
     orgId: target.orgId,
     appId: target.appId,
     requestType: "export",
@@ -89,7 +131,7 @@ async function beginExport(repo: ReturnType<typeof createRepository>) {
     receivedAt,
     ackDueAt: "2026-07-28T12:00:00.000Z",
     responseDueAt: "2026-09-01T12:00:00.000Z",
-    idempotencyKey: "reconcile-1",
+    idempotencyKey: `reconcile-${requestId}`,
     requestHash: `sha256:${"b".repeat(64)}`,
     storeStatusJson: JSON.stringify({ assignments: "pending" }),
     deleteBeforeTs: null,

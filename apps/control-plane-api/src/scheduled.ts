@@ -11,6 +11,7 @@ import { dispatchConvexWebhooks } from "./convex-webhook-dispatch";
 import { purgeExpiredPrivacyArtifacts, reconcilePrivacyJobs } from "./entity-privacy-jobs";
 import type { ControlPlaneApiEnv } from "./env";
 import { runCredentialCacheBackfill } from "./internal-routes";
+import { deleteOrphanedPrivacyExports } from "./privacy-export-cleanup";
 import { dispatchSentryWebhooks } from "./sentry-webhook-dispatch";
 
 const service = "splitch-control-plane-api";
@@ -160,6 +161,7 @@ async function runDemoReaper(
   const now = new Date(event.scheduledTime).toISOString();
   const repo = createRepository(env.DB);
   const result = await repo.identity.reapExpiredProvisionalOrganizations(now);
+  const privacyExportArtifacts = await deleteOrphanedPrivacyExports(env.PRIVACY_EXPORTS, repo);
   const claimArtifacts = await repo.claim.purgeExpiredClaimArtifacts({ now, limit: 100 });
   workerEmitter(env, workerObservabilityWithWaitUntil("control-plane-api", ctx)).log(
     "info",
@@ -171,6 +173,7 @@ async function runDemoReaper(
       candidates: result.candidates,
       reaped: result.reaped,
       claimArtifacts,
+      privacyExportArtifacts,
     },
   );
 }

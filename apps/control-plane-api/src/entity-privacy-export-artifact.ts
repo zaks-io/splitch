@@ -1,3 +1,4 @@
+import { sha256 } from "@noble/hashes/sha2.js";
 import type { EntityPrivacyConsumer } from "./entity-privacy-consumer";
 import type {
   EntityPrivacyExportPage,
@@ -6,9 +7,10 @@ import type {
 
 export const PRIVACY_EXPORT_PAGE_SIZE = 100;
 export const PRIVACY_EXPORT_PAGE_MAX_BYTES = 1_000_000;
-export const PRIVACY_EXPORT_PROOF_MAX = 1_000;
 export const PRIVACY_EXPORT_RETENTION_MS = 24 * 60 * 60 * 1000;
 export const PRIVACY_EXPORT_DOWNLOAD_TTL_MS = 15 * 60 * 1000;
+const PRIVACY_EXPORT_MULTIPART_PART_BYTES = 5 * 1024 * 1024;
+const PRIVACY_EXPORT_MULTIPART_MAX_PARTS = 10_000;
 
 const encoder = new TextEncoder();
 const stores = [
@@ -23,21 +25,17 @@ export async function writeEntityPrivacyExport(input: {
   entity: ResolvedEntityPrivacyInput;
   requestId: string;
   expiresAt: string;
+  artifactKey: string;
   renewLease: () => Promise<void>;
 }): Promise<{ artifactKey: string; artifactSha256: string }> {
-  const artifactKey = `privacy-exports/${input.entity.appId}/${input.requestId}.json`;
-  const stream = new TransformStream<Uint8Array, Uint8Array>();
-  const [objectBody, digestBody] = stream.readable.tee();
-  const digest = new DigestStream("SHA-256");
-  const digestPromise = digestBody.pipeTo(digest).then(() => digest.digest);
-  const putPromise = input.bucket.put(artifactKey, objectBody, {
+  const upload = await input.bucket.createMultipartUpload(input.artifactKey, {
     httpMetadata: {
       contentType: "application/json",
       contentDisposition: `attachment; filename="${input.requestId}.json"`,
     },
     customMetadata: { requestId: input.requestId, expiresAt: input.expiresAt },
   });
-  const writer = stream.writable.getWriter();
+  const writer = new MultipartArtifactWriter(upload);
 
   try {
     await writeJson(writer, artifactHeader(input.entity));
@@ -52,12 +50,13 @@ export async function writeEntityPrivacyExport(input: {
       );
     }
     await writeJson(writer, "]}");
-    await writer.close();
-    const [, digestBytes] = await Promise.all([putPromise, digestPromise]);
-    return { artifactKey, artifactSha256: `sha256:${toHex(digestBytes)}` };
+    const digestBytes = await writer.close();
+    return {
+      artifactKey: input.artifactKey,
+      artifactSha256: `sha256:${toHex(digestBytes)}`,
+    };
   } catch (cause) {
     await writer.abort(cause).catch(() => undefined);
-    await Promise.all([putPromise.catch(() => undefined), digestPromise.catch(() => undefined)]);
     throw cause;
   }
 }
@@ -73,44 +72,27 @@ function artifactHeader(entity: ResolvedEntityPrivacyInput): string {
 }
 
 async function writeStore(
-  writer: WritableStreamDefaultWriter<Uint8Array>,
+  writer: MultipartArtifactWriter,
   name: (typeof stores)[number][0],
   readPage: (cursor: string | null) => Promise<EntityPrivacyExportPage>,
   renewLease: () => Promise<void>,
 ): Promise<void> {
-  await writeJson(writer, `{"name":${JSON.stringify(name)},"records":[`);
+  await writeJson(writer, `{"name":${JSON.stringify(name)},"pages":[`);
   let cursor: string | null = null;
-  let firstRecord = true;
-  const proofs: string[] = [];
+  let firstPage = true;
   do {
     await renewLease();
     const page = await readPage(cursor);
     assertPageBound(page);
-    firstRecord = await writePageRecords(writer, page.records, firstRecord);
-    if (proofs.length + page.proofs.length > PRIVACY_EXPORT_PROOF_MAX) {
-      throw new Error(`Entity privacy ${name} export exceeded the proof limit`);
-    }
-    proofs.push(...page.proofs);
+    if (!firstPage) await writeJson(writer, ",");
+    await writeJson(writer, JSON.stringify({ records: page.records, proofs: page.proofs }));
+    firstPage = false;
     if (page.nextCursor !== null && page.nextCursor === cursor) {
       throw new Error(`Entity privacy ${name} export cursor did not advance`);
     }
     cursor = page.nextCursor;
   } while (cursor !== null);
-  await writeJson(writer, `],"proofs":${JSON.stringify(proofs)}}`);
-}
-
-async function writePageRecords(
-  writer: WritableStreamDefaultWriter<Uint8Array>,
-  records: readonly unknown[],
-  firstRecord: boolean,
-): Promise<boolean> {
-  let isFirst = firstRecord;
-  for (const record of records) {
-    if (!isFirst) await writeJson(writer, ",");
-    await writeJson(writer, JSON.stringify(record));
-    isFirst = false;
-  }
-  return isFirst;
+  await writeJson(writer, "]}");
 }
 
 export function assertPageBound(page: EntityPrivacyExportPage): void {
@@ -123,10 +105,63 @@ export function assertPageBound(page: EntityPrivacyExportPage): void {
   }
 }
 
-function writeJson(writer: WritableStreamDefaultWriter<Uint8Array>, value: string): Promise<void> {
+function writeJson(writer: MultipartArtifactWriter, value: string): Promise<void> {
   return writer.write(encoder.encode(value));
 }
 
-function toHex(value: ArrayBuffer): string {
-  return [...new Uint8Array(value)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+class MultipartArtifactWriter {
+  private readonly digest = sha256.create();
+  private readonly pending: Uint8Array[] = [];
+  private pendingBytes = 0;
+  private readonly uploadedParts: R2UploadedPart[] = [];
+
+  constructor(private readonly upload: R2MultipartUpload) {}
+
+  async write(value: Uint8Array): Promise<void> {
+    this.digest.update(value);
+    this.pending.push(value);
+    this.pendingBytes += value.byteLength;
+    while (this.pendingBytes >= PRIVACY_EXPORT_MULTIPART_PART_BYTES) {
+      await this.flush(PRIVACY_EXPORT_MULTIPART_PART_BYTES);
+    }
+  }
+
+  async close(): Promise<Uint8Array> {
+    if (this.pendingBytes > 0) await this.flush(this.pendingBytes);
+    await this.upload.complete(this.uploadedParts);
+    return this.digest.digest();
+  }
+
+  async abort(_cause: unknown): Promise<void> {
+    await this.upload.abort();
+  }
+
+  private async flush(size: number): Promise<void> {
+    if (this.uploadedParts.length >= PRIVACY_EXPORT_MULTIPART_MAX_PARTS) {
+      throw new Error("Entity privacy export exceeded the multipart part limit");
+    }
+    const bytes = this.take(size);
+    const partNumber = this.uploadedParts.length + 1;
+    this.uploadedParts.push(await this.upload.uploadPart(partNumber, bytes));
+  }
+
+  private take(size: number): Uint8Array {
+    const result = new Uint8Array(size);
+    let offset = 0;
+    while (offset < size) {
+      const chunk = this.pending.shift();
+      if (!chunk) throw new Error("Entity privacy multipart buffer underflow");
+      const remaining = size - offset;
+      const consumed = Math.min(remaining, chunk.byteLength);
+      result.set(chunk.subarray(0, consumed), offset);
+      offset += consumed;
+      if (consumed < chunk.byteLength) this.pending.unshift(chunk.subarray(consumed));
+    }
+    this.pendingBytes -= size;
+    return result;
+  }
+}
+
+function toHex(value: Uint8Array): string {
+  return [...value].map((byte) => byte.toString(16).padStart(2, "0")).join("");
 }

@@ -57,6 +57,7 @@ export const privacyJobs = sqliteTable("privacy_jobs", {
   idType: text("id_type"),
   entityFamilyHash: text("entity_family_hash"),
   leaseExpiresAt: text("lease_expires_at"),
+  claimToken: text("claim_token"),
   artifactKey: text("artifact_key"),
   artifactSha256: text("artifact_sha256"),
   artifactExpiresAt: text("artifact_expires_at"),

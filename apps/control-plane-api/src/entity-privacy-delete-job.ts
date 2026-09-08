@@ -44,6 +44,7 @@ export async function runEntityDeleteJob(input: {
     storeStatusJson: string;
     deleteBeforeTs: string | null;
     identityVersion: string;
+    claimToken: string;
   };
   renewLease: () => Promise<void>;
 }): Promise<void> {
@@ -83,6 +84,7 @@ export async function runEntityDeleteJob(input: {
     status: "completed",
     storeStatusJson: JSON.stringify(states),
     updatedAt: new Date().toISOString(),
+    claimToken: input.job.claimToken,
   });
 }
 
@@ -104,6 +106,7 @@ async function step(
       storeStatusJson: JSON.stringify(states),
       updatedAt: new Date().toISOString(),
       errorCode: "PRIVACY_STORE_FAILED",
+      claimToken: input.job.claimToken,
     });
     throw cause instanceof EntityPrivacyConsumerError
       ? cause
@@ -116,6 +119,7 @@ async function step(
     status: "running",
     storeStatusJson: JSON.stringify(states),
     updatedAt: new Date().toISOString(),
+    claimToken: input.job.claimToken,
   });
 }
 

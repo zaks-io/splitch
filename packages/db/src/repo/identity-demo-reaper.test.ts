@@ -33,6 +33,35 @@ describe("demo reaper", () => {
     await expectRefs(future, 1);
     await expectRefs(claimed, 1);
   }, 15_000);
+
+  it("preserves privacy jobs when an expired Organization is claimed after selection", async () => {
+    const claimed = await seedDemoGraph(local.d1, "raced_claim", true, EXPIRED);
+    const realD1 = local.d1;
+    let intercepted = false;
+    const racingD1 = new Proxy(realD1, {
+      get(target, property) {
+        if (property === "batch") {
+          return async (statements: D1PreparedStatement[]) => {
+            if (!intercepted) {
+              intercepted = true;
+              await target
+                .prepare("UPDATE organizations SET is_provisional = 0 WHERE id = ?")
+                .bind(demoIds("raced_claim").orgId)
+                .run();
+            }
+            return target.batch(statements);
+          };
+        }
+        const value = Reflect.get(target, property);
+        return typeof value === "function" ? value.bind(target) : value;
+      },
+    });
+
+    await expect(
+      createRepository(racingD1).identity.reapExpiredProvisionalOrganizations(NOW),
+    ).resolves.toEqual({ candidates: 1, reaped: 0 });
+    await expectRefs(claimed, 1);
+  });
 });
 
 async function seedDemoGraph(
@@ -62,6 +91,7 @@ function demoIds(suffix: string): DemoIds {
     apiKeyId: id("api_key"),
     clientKeyId: id("client_key"),
     privacyRequestId: id("privacy_request"),
+    privacyJobId: id("privacy_job"),
     apiHash: id("api_hash"),
     clientMaterial: id("client_material"),
   };
@@ -161,6 +191,13 @@ function flagCredentialRows(ids: DemoIds): SqlRow[] {
       NOW,
       NOW,
     ],
+    [
+      "INSERT INTO privacy_jobs (job_id, request_id, kind, status, store_status_json, identity_version, id_type, entity_family_hash, created_at, updated_at) VALUES (?, ?, 'delete', 'queued', '{}', 'identity-v1', 'user', 'family-hash', ?, ?)",
+      ids.privacyJobId,
+      ids.privacyRequestId,
+      NOW,
+      NOW,
+    ],
   ];
 }
 
@@ -177,6 +214,7 @@ function rowRefs(ids: DemoIds): RowRef[] {
     { table: "api_keys", column: "key_id", value: ids.apiKeyId },
     { table: "client_keys", column: "key_id", value: ids.clientKeyId },
     { table: "privacy_requests", column: "request_id", value: ids.privacyRequestId },
+    { table: "privacy_jobs", column: "job_id", value: ids.privacyJobId },
   ];
 }
 
@@ -218,6 +256,7 @@ interface DemoIds {
   apiKeyId: string;
   clientKeyId: string;
   privacyRequestId: string;
+  privacyJobId: string;
   apiHash: string;
   clientMaterial: string;
 }
@@ -240,5 +279,6 @@ type TableName =
   | "flags"
   | "organizations"
   | "org_memberships"
+  | "privacy_jobs"
   | "privacy_requests"
   | "variants";

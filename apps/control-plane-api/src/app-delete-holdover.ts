@@ -18,6 +18,7 @@ import {
   type HoldoverWriteOutboxCleanup,
   HoldoverWriteOutboxCleanupError,
 } from "./holdover-write-outbox-cleanup";
+import { deleteAppPrivacyExports } from "./privacy-export-cleanup";
 
 export function renderAppDeleteCleanupError(
   cause: unknown,
@@ -55,6 +56,7 @@ export async function deleteAppRowsWithHoldoverSaga(
   actorId: string,
   requestId: string,
 ): Promise<void> {
+  const privacyExports = deps.privacyExports;
   const holdoverCleanup = deps.holdoverWriteOutboxCleanup;
   if (!holdoverCleanup) throw new Error("App delete requires holdover write outbox cleanup");
   const now = nowIso(deps);
@@ -83,6 +85,7 @@ export async function deleteAppRowsWithHoldoverSaga(
     holdoverCleanup,
     holdoverInput,
   );
+  await deletePrivacyExportsIfBound(privacyExports, appId);
   await holdoverCleanup.markD1Deleted(holdoverInput);
   await holdoverCleanup.finalize(holdoverInput);
   const cleanup = deps.exposureStatusCleanup;
@@ -222,6 +225,7 @@ export async function resumeHoldoverFinalizeAfterAppGone(
     );
   }
   if (saga.phase === "complete") {
+    await deletePrivacyExportsIfBound(deps.privacyExports, appId);
     await deps.repo.identity.completeAppDeletionSaga({
       appId,
       generationId: saga.generationId,
@@ -230,6 +234,7 @@ export async function resumeHoldoverFinalizeAfterAppGone(
     return Response.json({ deleted: true });
   }
   const activeSaga = requireActiveSaga(saga);
+  const privacyExports = deps.privacyExports;
 
   const holdoverCleanup = deps.holdoverWriteOutboxCleanup;
   if (!holdoverCleanup) throw new Error("App delete requires holdover write outbox cleanup");
@@ -242,6 +247,7 @@ export async function resumeHoldoverFinalizeAfterAppGone(
   };
   await holdoverCleanup.markD1Deleted(holdoverInput);
   await holdoverCleanup.finalize(holdoverInput);
+  await deletePrivacyExportsIfBound(privacyExports, appId);
   const cleanup = deps.exposureStatusCleanup;
   if (!cleanup) throw new Error("App delete requires Exposure status cleanup");
   await cleanup.delete(holdoverInput);
@@ -251,6 +257,13 @@ export async function resumeHoldoverFinalizeAfterAppGone(
     updatedAt: nowIso(deps),
   });
   return Response.json({ deleted: true });
+}
+
+async function deletePrivacyExportsIfBound(
+  bucket: R2Bucket | undefined,
+  appId: string,
+): Promise<void> {
+  if (bucket) await deleteAppPrivacyExports(bucket, appId);
 }
 
 function requireActiveSaga(saga: {

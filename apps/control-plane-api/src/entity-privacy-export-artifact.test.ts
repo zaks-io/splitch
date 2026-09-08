@@ -1,10 +1,9 @@
-import { beforeAll, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { EntityPrivacyConsumer } from "./entity-privacy-consumer";
 import {
   assertPageBound,
   PRIVACY_EXPORT_PAGE_MAX_BYTES,
   PRIVACY_EXPORT_PAGE_SIZE,
-  PRIVACY_EXPORT_PROOF_MAX,
   writeEntityPrivacyExport,
 } from "./entity-privacy-export-artifact";
 import type { EntityPrivacyExportPage } from "./entity-privacy-service-client";
@@ -19,11 +18,6 @@ const entity = {
   requestId: "prv_export",
 };
 
-beforeAll(() => {
-  if (typeof DigestStream !== "undefined") return;
-  Object.defineProperty(globalThis, "DigestStream", { value: TestDigestStream });
-});
-
 describe("Entity privacy export artifact", () => {
   it("streams bounded pages into private R2 and hashes the exact artifact", async () => {
     const calls: Array<{ store: string; cursor: string | null; limit: number }> = [];
@@ -31,29 +25,27 @@ describe("Entity privacy export artifact", () => {
     const consumer = consumerWithPages(calls);
     const renewLease = vi.fn(async () => undefined);
     const result = await writeEntityPrivacyExport({
-      bucket: {
-        async put(key: string, value: ReadableStream) {
-          stored.key = key;
-          stored.body = new Uint8Array(await new Response(value).arrayBuffer());
-          return {} as R2Object;
-        },
-      } as R2Bucket,
+      bucket: multipartBucket(stored),
       consumer,
       entity,
       requestId: entity.requestId,
+      artifactKey: `privacy-exports/${entity.appId}/${entity.requestId}/attempt.json`,
       expiresAt: "2026-07-19T12:00:00.000Z",
       renewLease,
     });
 
-    expect(stored.key).toBe(`privacy-exports/${entity.appId}/${entity.requestId}.json`);
+    expect(stored.key).toBe(`privacy-exports/${entity.appId}/${entity.requestId}/attempt.json`);
     const artifact = JSON.parse(new TextDecoder().decode(stored.body));
     expect(artifact).toMatchObject({
       schemaVersion: "entity-privacy-export-v1",
       appId: entity.appId,
       stores: [
-        { name: "assignments", records: [{ page: 1 }, { page: 2 }] },
-        { name: "analysis", records: [{ store: "analysis" }] },
-        { name: "event-ingest", records: [] },
+        {
+          name: "assignments",
+          pages: [{ records: [{ page: 1 }] }, { records: [{ page: 2 }] }],
+        },
+        { name: "analysis", pages: [{ records: [{ store: "analysis" }] }] },
+        { name: "event-ingest", pages: [{ records: [] }] },
       ],
     });
     expect(calls).toEqual([
@@ -79,27 +71,59 @@ describe("Entity privacy export artifact", () => {
     ).toThrow("byte limit");
   });
 
-  it("rejects unbounded proof accumulation", async () => {
+  it("streams proofs without imposing a total record ceiling", async () => {
+    const stored: { key?: string; body?: Uint8Array } = {};
     const consumer = consumerWithPages([]);
-    consumer.exportAssignmentsPage = async () =>
-      page([], null, Array(PRIVACY_EXPORT_PROOF_MAX + 1).fill("proof"));
-    await expect(
-      writeEntityPrivacyExport({
-        bucket: {
-          async put(_key: string, value: ReadableStream) {
-            await value.cancel();
-            return {} as R2Object;
-          },
-        } as R2Bucket,
-        consumer,
-        entity,
-        requestId: entity.requestId,
-        expiresAt: "2026-07-19T12:00:00.000Z",
-        renewLease: async () => undefined,
-      }),
-    ).rejects.toThrow("proof limit");
+    consumer.exportAssignmentsPage = async () => page([], null, Array(1_001).fill("proof"));
+    await writeEntityPrivacyExport({
+      bucket: multipartBucket(stored),
+      consumer,
+      entity,
+      requestId: entity.requestId,
+      artifactKey: `privacy-exports/${entity.appId}/${entity.requestId}/proofs.json`,
+      expiresAt: "2026-07-19T12:00:00.000Z",
+      renewLease: async () => undefined,
+    });
+    const artifact = JSON.parse(new TextDecoder().decode(stored.body));
+    expect(artifact.stores[0].pages[0].proofs).toHaveLength(1_001);
   });
 });
+
+function multipartBucket(stored: { key?: string; body?: Uint8Array }): R2Bucket {
+  return {
+    async createMultipartUpload(key: string) {
+      stored.key = key;
+      const parts = new Map<number, Uint8Array>();
+      return {
+        key,
+        uploadId: "test-upload",
+        async uploadPart(partNumber: number, value: ArrayBufferView) {
+          parts.set(
+            partNumber,
+            new Uint8Array(value.buffer, value.byteOffset, value.byteLength).slice(),
+          );
+          return { partNumber, etag: `part-${String(partNumber)}` };
+        },
+        async complete(uploaded: R2UploadedPart[]) {
+          const bytes = uploaded.map((part) => parts.get(part.partNumber) as Uint8Array);
+          stored.body = concat(bytes);
+          return {} as R2Object;
+        },
+        async abort() {},
+      } as R2MultipartUpload;
+    },
+  } as R2Bucket;
+}
+
+function concat(parts: Uint8Array[]): Uint8Array {
+  const result = new Uint8Array(parts.reduce((sum, part) => sum + part.byteLength, 0));
+  let offset = 0;
+  for (const part of parts) {
+    result.set(part, offset);
+    offset += part.byteLength;
+  }
+  return result;
+}
 
 function consumerWithPages(
   calls: Array<{ store: string; cursor: string | null; limit: number }>,
@@ -153,31 +177,4 @@ function page(
 
 function toHex(value: ArrayBuffer): string {
   return [...new Uint8Array(value)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
-}
-
-class TestDigestStream extends WritableStream<Uint8Array> {
-  readonly digest: Promise<ArrayBuffer>;
-  constructor() {
-    const chunks: Uint8Array[] = [];
-    let resolveDigest: (value: ArrayBuffer) => void = () => undefined;
-    const digest = new Promise<ArrayBuffer>((resolve) => {
-      resolveDigest = resolve;
-    });
-    super({
-      write: (chunk) => {
-        chunks.push(chunk.slice());
-      },
-      close: async () => {
-        const length = chunks.reduce((sum, chunk) => sum + chunk.byteLength, 0);
-        const bytes = new Uint8Array(length);
-        let offset = 0;
-        for (const chunk of chunks) {
-          bytes.set(chunk, offset);
-          offset += chunk.byteLength;
-        }
-        resolveDigest(await crypto.subtle.digest("SHA-256", bytes));
-      },
-    });
-    this.digest = digest;
-  }
 }
