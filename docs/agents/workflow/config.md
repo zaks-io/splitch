@@ -61,9 +61,10 @@ in this config; refresh them from Linear during each workflow run.
 - Branch prefix: `codex/` for Codex-created branches unless the user asks for
   another prefix
 - Package manager: pnpm@11.8.0 (`packageManager` in root `package.json`)
-- pnpm supply-chain install gates: parked in `pnpm-workspace.yaml` for the
-  build-fast phase. `allowBuilds` is active for `@sentry/cli`, `esbuild`,
-  `lefthook`, `sharp`, and `workerd`.
+- pnpm supply-chain install gates: `minimumReleaseAge: 4320`, strict age
+  enforcement, missing publish-time rejection, and `blockExoticSubdeps` are
+  active. `allowBuilds` is active for `@sentry/cli`, `esbuild`, `lefthook`,
+  `sharp`, and `workerd`.
 - Install: `pnpm install`
 - Lockfile: `pnpm-lock.yaml`
 - Full local pre-push gate: `pnpm verify:push` (one parallel Turbo graph:
@@ -91,9 +92,10 @@ in this config; refresh them from Linear during each workflow run.
 - Lint / format / typecheck / Knip / Gitleaks: wired through root scripts,
   Turborepo, Lefthook, and GitHub Actions. Semgrep, OSV-Scanner, Trivy, and
   Scorecard run daily, upload SARIF, and remain non-gating; an operational scan
-  failure opens a tracking issue. Duplicate-code and dependency-audit checks are
-  manual, CodeQL is dispatch-only, and pull-request enforcement plus pnpm install
-  quarantine are parked until lockdown. See `docs/spec/platform/local-quality-gates.md`.
+  failure opens a tracking issue. The required Verify job gates merges on high
+  and critical `pnpm audit` findings and full action SHA pins. pnpm install
+  quarantine is active. Duplicate-code remains manual, and CodeQL is dispatch-only.
+  See `docs/spec/platform/local-quality-gates.md`.
 - Generated artifacts: package-local `dist/**`, `.output/**`, `build/**`,
   coverage, `.turbo/`, and `.wrangler/` are ignored.
 - PR CI: `.github/workflows/ci.yml`, running `pnpm verify:ci` plus a range-scoped Gitleaks secret

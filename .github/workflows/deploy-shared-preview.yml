@@ -2,11 +2,6 @@ name: deploy-shared-preview
 
 on:
   workflow_dispatch:
-    inputs:
-      ref:
-        description: "Git ref to deploy to shared preview"
-        required: true
-        default: main
 
 permissions:
   contents: read
@@ -22,8 +17,27 @@ env:
   SPLITCH_PLATFORM_TARGET: shared-preview
 
 jobs:
+  authorize:
+    name: Authorize Shared Preview Ref
+    runs-on: blacksmith-2vcpu-ubuntu-2404
+    timeout-minutes: 5
+    steps:
+      - name: Require the default branch
+        env:
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          DEPLOY_REF: ${{ github.ref }}
+          DEPLOY_REF_PROTECTED: ${{ github.ref_protected }}
+        run: |
+          set -euo pipefail
+          expected_ref="refs/heads/$DEFAULT_BRANCH"
+          if [ "$DEPLOY_REF" != "$expected_ref" ] || [ "$DEPLOY_REF_PROTECTED" != "true" ]; then
+            echo "::error::shared preview deploys must run from protected ref $expected_ref; received $DEPLOY_REF (protected=$DEPLOY_REF_PROTECTED)"
+            exit 1
+          fi
+
   deploy:
     name: Deploy Shared Preview
+    needs: authorize
     runs-on: blacksmith-2vcpu-ubuntu-2404
     timeout-minutes: 30
     environment: preview
@@ -72,7 +86,6 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
-          ref: ${{ inputs.ref }}
           persist-credentials: false
 
       - name: Resolve immutable deploy revision

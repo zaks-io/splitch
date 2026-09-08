@@ -1,8 +1,8 @@
 # Security model
 
 > **Build-fast phase:** the trust boundaries and threat model below are the target contract. The
-> automated CI/local **scanning gates** that enforce them (CodeQL, Semgrep, OSV-Scanner, Trivy,
-> `pnpm audit`, pinact, the pnpm install quarantine) are **parked** until the dependency tree is
+> automated CI/local **scanning gates** that enforce them (CodeQL, Semgrep, OSV-Scanner, and Trivy)
+> are **parked** until the dependency tree is
 > final, so they don't block build work on dependency noise — see the parked-gate table in
 > [local-quality-gates.md](./local-quality-gates.md) and [ADR-0035](../../adr/0035-security-automation-and-supply-chain-integrity-are-an-enforced-ci-contract.md).
 > gitleaks secret scanning and the in-code boundary enforcement stay on.
@@ -80,15 +80,18 @@ The build is a trust boundary too. The 2025 tj-actions/reviewdog and 2026
 trivy-action compromises were tag-repointing attacks defeated by SHA pinning.
 
 - pnpm install quarantine controls (`minimumReleaseAge`, `minimumReleaseAgeStrict`,
-  `blockExoticSubdeps`) are declared but parked until the launch-lockdown pass (see
+  `minimumReleaseAgeIgnoreMissingTime`, `blockExoticSubdeps`) are enforced (see
   [`monorepo-and-toolchain`](./monorepo-and-toolchain.md)).
 - Every GitHub Action is pinned to a full commit SHA with a version comment.
   Harden-Runner monitors egress on each host-run security job; Semgrep runs in a
-  container pinned by digest instead. Pin correctness is currently maintained by
-  convention, Dependabot, and the manually run `pnpm pins:check`; CI enforcement is parked.
+  step-scoped container pinned by digest without inheriting the host environment. Repo tests reject
+  action refs that are not full SHAs, and GitHub's repository policy rejects unpinned actions at run
+  time.
 - Gitleaks scans every pull request and push range. A non-gating daily workflow runs
   Semgrep, OSV-Scanner, Trivy, and OpenSSF Scorecard against `main` and uploads findings
   as SARIF. It opens a tracked issue only when a scanner job fails to execute.
+- The required Verify job runs `pnpm audit --audit-level=high`, so high and critical advisories
+  block merges.
 - CodeQL is configured as a dispatch-only workflow until the launch-lockdown pass.
 - Disclosure and the full CI control list: [`SECURITY.md`](../../../SECURITY.md).
 
@@ -101,8 +104,8 @@ trivy-action compromises were tag-repointing attacks defeated by SHA pinning.
 | Edge abuse (scraping, flooding)    | 1        | Configured origin allow-lists; Turnstile; quotas        |
 | Privilege escalation across doors  | 4        | Access-control matrix                                   |
 | Secret in source / logs            | 3        | gitleaks + Semgrep `no-secret-in-logs`                  |
-| Known dependency vulnerability     | supply   | Daily OSV/Trivy detection and SARIF reporting           |
-| Newly malicious dependency release | supply   | No automated prevention; quarantine is parked           |
+| Known dependency vulnerability     | supply   | Required pnpm audit plus daily OSV/Trivy reporting      |
+| Newly malicious dependency release | supply   | pnpm age and transitive-source quarantine               |
 | Repointed GitHub Action tag        | supply   | Full action SHA pins; Harden-Runner                     |
 | PII over-retention / leak          | privacy  | Privacy data-lifecycle contract                         |
 

@@ -1,15 +1,9 @@
 name: security
 
-# Runs daily and reports; it does not gate merges. Findings are uploaded as
-# SARIF. The `alert` job turns an operational scan failure into one deduped
-# GitHub issue, which the GitHub<->Linear sync mirrors into the Splitch team.
-#
-# The pull_request + push triggers stay off deliberately. Every job here already
-# branches on the event, so adding them arms the `pnpm audit` merge gate. A
-# transitive dev-dependency advisory unrelated to the branch would then block
-# that PR. Semgrep findings remain non-gating; only scanner execution failures
-# fail its job. Turn the triggers on in the dependency lockdown pass, once the
-# tree is settled enough that a finding is signal about the change in flight.
+# Runs daily and reports. Findings are uploaded as SARIF. The `alert` job turns
+# an operational scan failure into one deduped GitHub issue, which the
+# GitHub<->Linear sync mirrors into the Splitch team. The required Verify job
+# owns the per-change dependency audit merge gate.
 on:
   schedule:
     - cron: "23 8 * * *"
@@ -123,12 +117,15 @@ jobs:
     name: Semgrep SAST
     runs-on: blacksmith-2vcpu-ubuntu-2404
     timeout-minutes: 15
-    container:
-      image: semgrep/semgrep@sha256:c180f0c93a17b420c0af5006214a29d3c747c5459c732b740191adf657dd0068 # latest
     permissions:
       contents: read
       security-events: write
     steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        with:
+          egress-policy: audit
+
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -137,21 +134,32 @@ jobs:
       - name: Semgrep scan (SARIF)
         id: semgrep
         run: |
+          mkdir -p "${RUNNER_TEMP}/semgrep"
           set +e
-          semgrep scan \
+          docker run --rm \
+            --volume "${GITHUB_WORKSPACE}:/src:ro" \
+            --volume "${RUNNER_TEMP}/semgrep:/out" \
+            --workdir /src \
+            semgrep/semgrep@sha256:c180f0c93a17b420c0af5006214a29d3c747c5459c732b740191adf657dd0068 \
+            semgrep scan \
             --config p/default \
             --config .semgrep/ \
-            --sarif --output semgrep.sarif \
+            --sarif --output /out/semgrep.sarif \
             --error
           scan_status=$?
           set -e
           echo "status=${scan_status}" >> "$GITHUB_OUTPUT"
+          if [ -f "${RUNNER_TEMP}/semgrep/semgrep.sarif" ]; then
+            echo "sarif=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "sarif=false" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Upload Semgrep SARIF
-        if: always() && hashFiles('semgrep.sarif') != ''
+        if: always() && steps.semgrep.outputs.sarif == 'true'
         uses: github/codeql-action/upload-sarif@cdf488f595d80d6e07e03d4674febd5ab45fa938 # v4.37.9
         with:
-          sarif_file: semgrep.sarif
+          sarif_file: ${{ runner.temp }}/semgrep/semgrep.sarif
           category: semgrep
 
       - name: Fail on Semgrep operational error
