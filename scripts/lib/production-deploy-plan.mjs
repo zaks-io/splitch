@@ -68,6 +68,9 @@ export function readWorkspacePackages(repoRoot) {
 
 function classifyPath(path, workspacePackages) {
   if (isEmbeddedMcpResource(path)) return workerClassification(["@splitch/mcp-server"]);
+  if (isControlPlaneDeployHelper(path)) {
+    return workerClassification(["@splitch/control-plane-api"]);
+  }
   if (isNonDeployableChange(path)) return classification();
   if (isTinybirdChange(path)) return classification(["tinybird"]);
   if (isD1Change(path)) return classification(["d1"]);
@@ -83,6 +86,13 @@ function classifyPath(path, workspacePackages) {
   }
 
   return undefined;
+}
+
+function isControlPlaneDeployHelper(path) {
+  return [
+    "scripts/ensure-privacy-export-lifecycle.mjs",
+    "scripts/ensure-privacy-export-resources.mjs",
+  ].includes(path);
 }
 
 function affectedWorkers(changedPackageName, workspacePackages) {

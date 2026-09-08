@@ -81,7 +81,7 @@ test("every hosted Control Plane deploy enforces the lifecycle before deploying"
   );
   assert.equal(
     packageJson.scripts.deploy,
-    "node ../../scripts/ensure-privacy-export-lifecycle.mjs $CLOUDFLARE_ENV && node ../../scripts/deploy-worker-with-sentry.mjs",
+    "node ../../scripts/ensure-privacy-export-resources.mjs $CLOUDFLARE_ENV && node ../../scripts/ensure-privacy-export-lifecycle.mjs $CLOUDFLARE_ENV && node ../../scripts/deploy-worker-with-sentry.mjs",
   );
 });
 

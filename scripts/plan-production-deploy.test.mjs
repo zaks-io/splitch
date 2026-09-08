@@ -147,6 +147,23 @@ test("selects only the directly affected application Worker", () => {
   assert.deepEqual(plan.workerPackages, ["@splitch/evaluation-api"]);
 });
 
+test("privacy export deploy helpers select only the Control Plane Worker", () => {
+  const plan = classifyProductionChanges([
+    "apps/control-plane-api/package.json",
+    "scripts/ensure-privacy-export-lifecycle.mjs",
+    "scripts/ensure-privacy-export-lifecycle.test.mjs",
+    "scripts/ensure-privacy-export-resources.mjs",
+    "scripts/ensure-privacy-export-resources.test.mjs",
+  ]);
+
+  assert.equal(plan.shouldDeploy, true);
+  assert.equal(plan.tinybird, false);
+  assert.equal(plan.d1, false);
+  assert.equal(plan.workers, true);
+  assert.deepEqual(plan.workerPackages, ["@splitch/control-plane-api"]);
+  assert.deepEqual(plan.unknownPaths, []);
+});
+
 test("follows workspace dependencies to affected Workers", () => {
   const plan = classifyProductionChanges(["packages/stats/src/index.ts"]);
 
