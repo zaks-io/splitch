@@ -108,6 +108,7 @@ test("retries queue verification while Cloudflare list results converge", async 
 });
 
 test("fails when a created queue is absent from verification", async () => {
+  const waits = [];
   await assert.rejects(
     ensurePrivacyExportResources({
       accountId: "account",
@@ -121,9 +122,13 @@ test("fails when a created queue is absent from verification", async () => {
         response({ success: true, result: { queue_name: "privacy-jobs-dlq" } }),
         ...Array.from({ length: 10 }, () => queueList(["privacy-jobs"])),
       ]),
-      waitImpl: noWait,
+      waitImpl: async (milliseconds) => waits.push(milliseconds),
     }),
     /did not persist queues: privacy-jobs-dlq/u,
+  );
+  assert.deepEqual(
+    waits,
+    Array.from({ length: 9 }, () => 1_000),
   );
 });
 
