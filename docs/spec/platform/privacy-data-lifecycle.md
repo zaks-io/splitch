@@ -178,6 +178,8 @@ in the ledger, audit details, logs, or reset evidence.
 
 Exports are asynchronous jobs with a signed, expiring download URL. Raw secrets are never exported.
 Entity export artifacts live in the private `PRIVACY_EXPORTS` object-store binding for 24 hours.
+Every hosted Control Plane deploy verifies a bucket lifecycle rule that aborts incomplete multipart
+uploads after one day, including uploads abandoned by Worker termination before application cleanup.
 The D1 ledger retains only the artifact object key, SHA-256 digest, and expiry. It never retains the
 artifact body or a download URL. An authenticated status read mints a new application-signed URL
 valid for 15 minutes, capped by the artifact expiry. The application download route verifies that
