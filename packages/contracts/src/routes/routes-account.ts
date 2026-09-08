@@ -84,7 +84,7 @@ const organizationRoutes = [
     // would answer SLUG_CONFLICT instead of replaying the original success:
     // a guarantee advertised but not kept.
     idempotency: "none",
-    errors: ["VALIDATION_ERROR", "FORBIDDEN", "SLUG_CONFLICT"],
+    errors: ["VALIDATION_ERROR", "FORBIDDEN", "SLUG_CONFLICT", "QUOTA_EXCEEDED"],
   }),
   defineApiRoute({
     operationId: "organizations_get",

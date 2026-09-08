@@ -23,9 +23,13 @@ other Org route authorizes through live membership.
 `slug` is derived from `name` when omitted. It is unique across all Organizations; a collision returns
 `409 SLUG_CONFLICT` with `details.recommendedAction: "CHOOSE_DIFFERENT_SLUG"`.
 
+A User may own at most 50 non-provisional Organizations, matching the complete session snapshot
+bound. Creation at the ceiling returns `409 QUOTA_EXCEEDED` with the current count, ceiling, and
+`details.recommendedAction: "REDUCE_OWNED_ORGANIZATIONS"`. Member and admin memberships do not count.
+
 A **provisional** (anonymous, unclaimed) principal is rejected with `403 FORBIDDEN`. It reached the
-control plane through an unauthenticated `POST /register`, so allowing it here would make unbounded
-Organization creation an unauthenticated operation. Its one demo Organization is the limit until the
+control plane through an unauthenticated `POST /register`, so allowing it here would make Organization
+creation an unauthenticated operation. Its one demo Organization is the limit until the
 claim ceremony (`POST /api/auth/claim/start`) yields an identified principal.
 
 ### `GET /orgs/{org_id}`

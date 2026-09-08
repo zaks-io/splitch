@@ -137,7 +137,7 @@ describe("required positionals (SPL-306)", () => {
     expect(code).toBe(EXIT_USAGE);
     const errorLine = stderr.join("\n");
     expect(errorLine).toContain("CLI_USAGE_INVALID");
-    expect(errorLine).toContain("Missing required argument <experiment-id>");
+    expect(errorLine).toContain("--body-json is not accepted by splitch runs list");
     expect(errorLine).not.toContain("Usage:");
     expect(errorLine).not.toContain("CLI_UNEXPECTED_ERROR");
     expect(errorLine).not.toContain("control-plane-sdk");
@@ -433,7 +433,7 @@ describe("malformed --body-json in the positional gate (SPL-306)", () => {
 
     expect(code).toBe(EXIT_USAGE);
     const errorLine = stderr.join("\n");
-    expect(errorLine).toContain("Missing required argument <flag-key>");
+    expect(errorLine).toContain("--body-json is not accepted by splitch flags verify");
     expect(errorLine).not.toContain("CLI_UNEXPECTED_ERROR");
   });
 });

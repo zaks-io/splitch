@@ -55,7 +55,7 @@ describe("published CLI help", () => {
     expect(verify).toContain("Client Key is public");
     expect(clientKey).toContain("Client Key is public");
     expect(apiKey).toContain("API Key is secret and server-side only");
-    expect(apiKey).toContain("shown once and cannot be read back");
+    expect(apiKey).toContain("writes it once to --output-file and it cannot be read back");
   });
 
   it("leads a first-time user through the simple flag surface before body JSON", () => {

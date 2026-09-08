@@ -10,6 +10,8 @@ import {
   assertCloudflarePackage,
   assertGeneratedTargetsAvailable,
   assertServiceBindingAvailable,
+  assertServiceBindingRemovable,
+  assertStateProject,
   assertStateEnvironment,
   type CloudflareState,
   ensureCloudflareStateIgnored,
@@ -74,7 +76,8 @@ async function setup(
   const apiKey = requireApiKey(deps);
   const runner = deps.commandRunner ?? systemCommandRunner;
   const generated = generatedPaths(cwd, environment);
-  const existing = await readState(generated.statePath);
+  const stored = await readState(generated.statePath);
+  const existing = stored ? await assertStateProject(cwd, environment, stored) : null;
   if (!existing) await assertGeneratedTargetsAvailable(generated);
   await assertCloudflarePackage(cwd);
   const appConfigPath = existing?.appConfigPath ?? (await findApplicationConfig(cwd));
@@ -152,6 +155,7 @@ async function remove(
 ): Promise<CliResult> {
   const cwd = resolve(deps.cwd ?? process.cwd());
   const state = await requireState(cwd, environment);
+  await assertServiceBindingRemovable(state);
   await integrationRequest(state, requireApiKey(deps), deps, { method: "DELETE" });
   await removeServiceBinding(state);
   const runner = deps.commandRunner ?? systemCommandRunner;

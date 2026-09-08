@@ -21,8 +21,8 @@ import {
 
 const APP_ID = "app_1";
 const ENVIRONMENT_ID = "env_1";
-const CONTROL_PLANE_ORIGIN = "http://control-plane.parity.test";
-const AUTH_ORIGIN = "http://auth.parity.test";
+const CONTROL_PLANE_ORIGIN = "http://127.0.0.1:8787";
+const AUTH_ORIGIN = "http://127.0.0.1:8789";
 const OPERATION_ID = "experiment_results_get";
 
 interface ControlPlaneReply {

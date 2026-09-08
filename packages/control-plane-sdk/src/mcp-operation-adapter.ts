@@ -163,7 +163,7 @@ function buildRequest(
  * shipping a request the Worker can only reject (ADR-0036, SPL-266).
  */
 function applyIdempotencyHeader(route: ApiRouteContract, headers: Headers, input: unknown): void {
-  const key = inputRecord(input).idempotency_key;
+  const key = ownValue(inputRecord(input), "idempotency_key");
   const lifted = withIdempotencyHeader(
     route.operationId,
     {},
@@ -177,7 +177,7 @@ function applyIdempotencyHeader(route: ApiRouteContract, headers: Headers, input
 function buildPath(route: ApiRouteContract, input: unknown): string {
   const record = inputRecord(input);
   return route.path.replace(/:([A-Za-z0-9_]+)/g, (_match, key: string) => {
-    const value = record[key];
+    const value = ownValue(record, key);
     if (typeof value !== "string") {
       throw new McpOperationInvalidParamsError(key);
     }
@@ -188,11 +188,15 @@ function buildPath(route: ApiRouteContract, input: unknown): string {
 function appendQuery(url: URL, route: ApiRouteContract, input: unknown): void {
   const record = inputRecord(input);
   for (const key of objectSchemaKeys(route.openapi.request?.query)) {
-    const value = record[key];
+    const value = ownValue(record, key);
     if (value !== undefined && value !== null) {
       url.searchParams.set(key, String(value));
     }
   }
+}
+
+function ownValue(record: Record<string, unknown>, key: string): unknown {
+  return Object.hasOwn(record, key) ? record[key] : undefined;
 }
 
 function bodyForRoute(route: ApiRouteContract, input: unknown): unknown {

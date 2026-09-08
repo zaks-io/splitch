@@ -1,6 +1,7 @@
 import type { CliCommandDefinition } from "./command-registry.js";
 import { commandHelpArguments } from "./command-positionals.js";
 import { bodyJsonExampleFlag } from "./help-body-json.js";
+import { oneTimeSecretDescriptor } from "./one-time-secret-output.js";
 
 export function commandExample(command: CliCommandDefinition): string {
   const simpleExample = simpleCommandExample(command);
@@ -13,6 +14,9 @@ export function commandExample(command: CliCommandDefinition): string {
   } else {
     const bodyExample = bodyJsonExampleFlag(command);
     if (bodyExample) parts.push("--body-json", `'${bodyExample}'`);
+  }
+  if (oneTimeSecretDescriptor(command.operationId)) {
+    parts.push("--output-file", "<secret-file>");
   }
   parts.push("--json");
   return parts.join(" ");

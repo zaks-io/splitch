@@ -44,6 +44,7 @@ describe("quickstart enable+rollout verify (SPL-324)", { timeout: 60_000 }, () =
     const cliOptions = {
       credentialPath,
       fetch: harness.routingFetch,
+      platformTarget: "local" as const,
       controlPlaneBaseUrl: quickstartOrigins.controlPlaneBaseUrl,
       evaluationBaseUrl: quickstartOrigins.evaluationBaseUrl,
     };

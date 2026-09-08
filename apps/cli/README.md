@@ -29,9 +29,9 @@ By default the CLI targets hosted splitch (`https://api.splitch.dev`, `https://a
 export SPLITCH_PLATFORM_TARGET=local
 ```
 
-Individual origins can be overridden with `CONTROL_PLANE_API_ORIGIN`, `AUTH_API_ORIGIN`, and
-`EVALUATION_API_ORIGIN`. A command fails loudly with `CLI_API_ORIGIN_MISSING` when the origin it
-routes to has no default for the selected target.
+`CONTROL_PLANE_API_ORIGIN`, `AUTH_API_ORIGIN`, and `EVALUATION_API_ORIGIN` may assert the fixed
+origin for a hosted target, or select a `127.0.0.1` port for `local` and `pr-ci`. Hosted credentials
+are never sent to an arbitrary origin.
 
 There are only these three. Which origin a command uses follows the credential it presents, not
 which Worker implements it: everything you authenticate for with `splitch login` goes to
@@ -68,10 +68,10 @@ exists. The file contains canonical scope IDs and is safe to commit:
 
 The CLI login is separate from the credentials used by your application at runtime:
 
-| Credential | Use                                          | Handling                                                                                          |
-| ---------- | -------------------------------------------- | ------------------------------------------------------------------------------------------------- |
-| Client Key | Browser, mobile, and other untrusted clients | Public; safe to ship. Fetch with `splitch client-key get`.                                        |
-| API Key    | Trusted servers and edge functions           | Secret; create with `splitch api-keys create` and store the value shown once in a secret manager. |
+| Credential | Use                                          | Handling                                                                                                    |
+| ---------- | -------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| Client Key | Browser, mobile, and other untrusted clients | Public; safe to ship. Fetch with `splitch client-key get`.                                                  |
+| API Key    | Trusted servers and edge functions           | Secret; create with `splitch api-keys create --output-file <path>` and move the file into a secret manager. |
 
 Both credentials belong to one App and one Environment. Do not use an API Key in client-side code.
 New Client Keys start open to all origins so they work immediately. Lock the Client Key to your
@@ -80,6 +80,7 @@ App's origins with `splitch client-key update` before production.
 `splitch api-keys create --output-file <path>` writes the secret straight to a file at mode `0600`
 instead of putting it in your terminal scrollback and your shell history. It refuses an existing path
 before the key is minted, and the JSON it prints carries `valueWrittenTo` with a null `value`.
+Sentry installation and secret-rotation commands use the same required output-file contract.
 
 The CLI's `flags verify` command fetches the selected Environment's Client Key and uses it for a
 non-exposing data-plane check; it does not use either SDK credential to log in to the control plane.

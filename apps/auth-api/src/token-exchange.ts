@@ -24,7 +24,7 @@ import { OAuthError } from "./oauth-errors";
  */
 
 const ASSERTION_TTL_SECONDS = 15 * 60; // aligns with the Door B claim ceremony
-const ACCESS_TOKEN_TTL_SECONDS = 3600; // control-plane token default 1h
+export const ACCESS_TOKEN_TTL_SECONDS = 3600; // control-plane token default 1h
 
 interface AssertionClaims {
   typ: "identity_assertion";

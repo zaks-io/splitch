@@ -15,6 +15,25 @@ const app = {
 };
 
 describe("mcp operation adapter caller boundaries", () => {
+  it("does not read inherited path, query, or idempotency fields", async () => {
+    let forwarded: Request | undefined;
+    const adapter = createMcpOperationAdapter({
+      baseUrl: "https://control-plane.test",
+      fetch: async (request) => {
+        forwarded = request instanceof Request ? request : new Request(request);
+        return Response.json({ deleted: true });
+      },
+    });
+    const input = Object.assign(Object.create({ force: true, idempotency_key: "inherited" }), {
+      appId: "app_local",
+    }) as Record<string, unknown>;
+
+    await adapter.callOperationById("apps_delete", input);
+
+    expect(forwarded?.url).toBe("https://control-plane.test/apps/app_local");
+    expect(forwarded?.headers.get("idempotency-key")).toBeNull();
+  });
+
   it("names a missing required path argument without transport vocabulary", async () => {
     const adapter = createMcpOperationAdapter({ baseUrl: "https://control-plane.test" });
 

@@ -50,6 +50,7 @@ export { CREDENTIAL_CACHE_BACKFILL_CHECKPOINT_VERSION } from "./credential-cache
 export type { DeltaNudge, DeltaNudgeEntity } from "./delta-nudge";
 export { DeltaNudgeEntitySchema, DeltaNudgeSchema, deltaNudgeEntities } from "./delta-nudge";
 export { errorStatusByCode, httpStatusForError } from "./error-status";
+export { USER_OWNED_ORGANIZATION_LIMIT } from "./organization-limits";
 export type { ErrorCode, ErrorResponse, PolicyChangeType, RecommendedAction } from "./errors";
 export {
   ErrorCodeSchema,

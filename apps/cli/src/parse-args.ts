@@ -75,12 +75,8 @@ const REPEATABLE_FLAGS = new Set(["when"]);
 type ParsedFlagValue = string | boolean | string[];
 
 export function parseInvocation(args: readonly string[]): ParsedInvocation {
-  const flags: Record<string, ParsedFlagValue> = {
-    confirm: false,
-    json: false,
-    dryRun: false,
-    force: false,
-  };
+  const flags: Record<string, ParsedFlagValue> = {};
+  const seenFlags = new Set<string>();
   const positionals: string[] = [];
   const commandTokens: string[] = [];
 
@@ -90,7 +86,7 @@ export function parseInvocation(args: readonly string[]): ParsedInvocation {
       continue;
     }
     if (token.startsWith("--")) {
-      index = parseFlagToken(token, args, index, flags);
+      index = parseFlagToken(token, args, index, flags, seenFlags);
       continue;
     }
     if (commandTokens.length < 3 && !positionals.length && isCommandToken(token, commandTokens)) {
@@ -124,6 +120,7 @@ function parseFlagToken(
   args: readonly string[],
   index: number,
   flags: Record<string, ParsedFlagValue>,
+  seenFlags: Set<string>,
 ): number {
   const name = toCamel(key);
   if (!KNOWN_FLAGS.has(name)) {
@@ -133,6 +130,14 @@ function parseFlagToken(
       remediation: `Remove ${key} or run the command with --help to list the flags it accepts`,
     });
   }
+  if (seenFlags.has(name) && !REPEATABLE_FLAGS.has(name)) {
+    throw new SplitchCliError({
+      code: "CLI_USAGE_INVALID",
+      causeSummary: `${key} was supplied more than once`,
+      remediation: `Pass ${key} only once`,
+    });
+  }
+  seenFlags.add(name);
   if (BOOLEAN_FLAGS.has(name)) {
     flags[name] = true;
     return index;

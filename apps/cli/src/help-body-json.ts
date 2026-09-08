@@ -5,6 +5,7 @@ import {
   requestBodySchemaForOperation,
 } from "@splitch/sdk/control-plane";
 import type { CliCommandDefinition } from "./command-registry.js";
+import { oneTimeSecretDescriptor } from "./one-time-secret-output.js";
 
 /**
  * Schema-derived `--body-json` help. Bound to the route body (or the bare
@@ -35,7 +36,25 @@ export function commandBodySchemaHelp(command: CliCommandDefinition): RequestBod
       `CLI command ${command.path.join(" ")} advertises --body-json without a request body schema`,
     );
   }
-  return describeRequestBody(schema);
+  const help = describeRequestBody(schema);
+  const hiddenFields = new Set<string>();
+  if (command.supportsConfirm) hiddenFields.add("review");
+  if (oneTimeSecretDescriptor(command.operationId)?.secretField === "webhookSecret") {
+    hiddenFields.add("webhookSecret");
+  }
+  if (hiddenFields.size === 0) return help;
+  const example =
+    help.example && typeof help.example === "object" && !Array.isArray(help.example)
+      ? Object.fromEntries(
+          Object.entries(help.example as Record<string, unknown>).filter(
+            ([name]) => !hiddenFields.has(name),
+          ),
+        )
+      : help.example;
+  return {
+    fields: help.fields.filter((field) => !hiddenFields.has(field.name)),
+    example,
+  };
 }
 
 /** Help lines for the Request body section (excluding the section header). */

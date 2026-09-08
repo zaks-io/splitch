@@ -19,6 +19,7 @@ export const recommendedActions = [
   "CHOOSE_DIFFERENT_SLUG",
   "CHOOSE_DIFFERENT_KEY",
   "READ_PER_ENVIRONMENT",
+  "REDUCE_OWNED_ORGANIZATIONS",
 ] as const;
 
 export const RecommendedActionSchema = z.enum(recommendedActions);

@@ -75,4 +75,26 @@ describe("SPL-455 --confirm on body approval operations", () => {
     expect(fetch).not.toHaveBeenCalled();
     expect(stderr.join("\n")).toContain("--confirm is not accepted by splitch flags delete");
   });
+
+  it("rejects an inline approval without --confirm before any request", async () => {
+    const fetch = vi.fn<typeof globalThis.fetch>();
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.spyOn(console, "log").mockImplementation(() => {});
+
+    const exitCode = await runCli(
+      [
+        "experiments",
+        "start",
+        "experiment_1",
+        "--app",
+        "app_cli",
+        "--body-json",
+        '{"review":{"action":"approve_and_apply"}}',
+      ],
+      { fetch },
+    );
+
+    expect(exitCode).toBe(EXIT_USAGE);
+    expect(fetch).not.toHaveBeenCalled();
+  });
 });

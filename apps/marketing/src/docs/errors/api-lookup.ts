@@ -30,6 +30,16 @@ export const lookupErrorDocs = {
     recommendedAction: "CHOOSE_DIFFERENT_SLUG",
     related: ["ORGANIZATION_NOT_FOUND", "VALIDATION_ERROR"],
   },
+  QUOTA_EXCEEDED: {
+    remediation: "Transfer or delete an owned Organization, then retry the create",
+    cause:
+      "The User already owns the maximum number of non-provisional Organizations allowed by the ownership ceiling.",
+    fix: "List the User's Organizations, then transfer ownership or delete one before retrying the create. Member and admin memberships do not count toward this ceiling.",
+    details:
+      '{ resourceType: "organization", currentCount: number, ceiling: number, recommendedAction: "REDUCE_OWNED_ORGANIZATIONS" }',
+    recommendedAction: "REDUCE_OWNED_ORGANIZATIONS",
+    related: ["ORGANIZATION_NOT_FOUND"],
+  },
   MEMBERSHIP_CONFLICT: {
     remediation: "Update the existing membership instead of adding it again",
     cause: "The User is already a member of the Organization.",

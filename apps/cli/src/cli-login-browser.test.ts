@@ -156,8 +156,8 @@ describe("login device URL origin binding", () => {
     const { credentialPath } = await makeTempHome();
     const transport = loginTransport({
       ...deviceAuthorizationResponse(),
-      verification_uri: "https://auth.example.dev/device",
-      verification_uri_complete: "https://auth.example.dev/device?user_code=ABCD-1234",
+      verification_uri: "https://auth.splitch.dev/device",
+      verification_uri_complete: "https://auth.splitch.dev/device?user_code=ABCD-1234",
     });
 
     expect(
@@ -165,11 +165,11 @@ describe("login device URL origin binding", () => {
         credentialPath,
         fetch: transport.fetch,
         platformTarget: "production",
-        authBaseUrl: "https://auth.example.dev",
+        authBaseUrl: "https://auth.splitch.dev",
       }),
     ).toBe(EXIT_OK);
 
-    expect(open).toHaveBeenCalledWith("https://auth.example.dev/device?user_code=ABCD-1234");
+    expect(open).toHaveBeenCalledWith("https://auth.splitch.dev/device?user_code=ABCD-1234");
   });
 
   it("opens a local HTTP device URL only on the explicit local target", async () => {

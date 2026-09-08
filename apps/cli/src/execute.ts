@@ -1,8 +1,3 @@
-import {
-  API_KEY_CREATE_OPERATION_ID,
-  apiKeyOutputPathError,
-  writeApiKeySecret,
-} from "./api-key-output.js";
 import { executeCloudflareCommand } from "./cloudflare.js";
 import {
   assertPathParamsPresent,
@@ -14,6 +9,7 @@ import {
 } from "./command-positionals.js";
 import type { CliCommandDefinition } from "./command-registry.js";
 import { findCommand } from "./command-registry.js";
+import { validateAdvertisedFlags, validateSpecializedUsage } from "./command-usage.js";
 import { type ResolvedContext, resolveContext } from "./context.js";
 import { SplitchCliError, writeCliError } from "./errors.js";
 import { executeEnvPolicyGet, executeEnvPolicySet } from "./execute-env-policy.js";
@@ -23,16 +19,16 @@ import {
   executeFlagsVerify,
   handleExecutionError,
   validateCommandScope,
-  validateFlagsVerifyUsage,
 } from "./execute-operations.js";
 import type { CliDeps, CliIo, CliResult } from "./execute-types.js";
 import { EXIT_OK, EXIT_USAGE } from "./exit-codes.js";
 import { CliInputError } from "./flag-create-input.js";
 import { validateFlagReadUsage } from "./flag-read-usage.js";
 import { executeFlagTargetingRulesAdd } from "./flag-targeting-rules-add.js";
-import { validateFlagTargetingRulesAddUsage } from "./flag-targeting-rules-add-input.js";
+import { commandFlags, metaFlags } from "./help-flags.js";
 import { buildOperationInput } from "./operation-input.js";
 import type { ParsedInvocation } from "./parse-args.js";
+import { oneTimeSecretDescriptor, writeOneTimeSecret } from "./one-time-secret-output.js";
 
 export type { CliDeps, CliResult } from "./execute-types.js";
 
@@ -42,6 +38,12 @@ export async function executeInvocation(
 ): Promise<CliResult> {
   const io = withJsonMode(deps.io ?? consoleIo(), invocation.flags.json);
   if (invocation.metaCommand) {
+    const flagError = validateAdvertisedFlags(
+      invocation,
+      metaFlags(invocation.metaCommand as Parameters<typeof metaFlags>[0]),
+      io,
+    );
+    if (flagError) return flagError;
     const usageError = validateFlagReadUsage(
       { operationId: null, path: [invocation.metaCommand] },
       invocation,
@@ -59,6 +61,8 @@ export async function executeInvocation(
     });
     return { exitCode: EXIT_USAGE };
   }
+  const flagError = validateAdvertisedFlags(invocation, commandFlags(command), io);
+  if (flagError) return flagError;
   const usageError = validateFlagReadUsage(command, invocation, io);
   if (usageError) return usageError;
   return executeCommand(command, invocation, deps, io);
@@ -171,13 +175,16 @@ async function executeCommand(
     return handleInputError(error, io);
   }
   const outputFile = invocation.flags.outputFile;
+  const descriptor = oneTimeSecretDescriptor(scopedCommand.operationId);
   return executeApiOperation(
     scopedCommand.operationId,
     input,
     invocation,
     deps,
     io,
-    outputFile ? (data) => writeApiKeySecret(data, outputFile) : undefined,
+    outputFile && descriptor
+      ? (data) => writeOneTimeSecret(data, outputFile, descriptor)
+      : undefined,
   );
 }
 
@@ -199,45 +206,6 @@ function executeSpecializedCommand(
   }
   if (command.kind === "flag_targeting_rules_add") {
     return executeFlagTargetingRulesAdd(command, invocation, deps, io, context);
-  }
-  return null;
-}
-
-function validateSpecializedUsage(
-  command: CliCommandDefinition,
-  invocation: ParsedInvocation,
-  io: CliIo,
-): CliResult | null {
-  if (invocation.flags.confirm && !command.supportsConfirm) {
-    writeCliError(io, {
-      code: "CLI_USAGE_INVALID",
-      causeSummary: `--confirm is not accepted by splitch ${command.path.join(" ")}`,
-      remediation: `Drop --confirm, or run splitch ${command.path.join(" ")} --help to list the accepted flags`,
-    });
-    return { exitCode: EXIT_USAGE };
-  }
-  // Accepting --output-file on a command that returns no secret would write
-  // nothing and still exit 0, which reads as "the credential is in the file".
-  if (invocation.flags.outputFile) {
-    if (command.operationId !== API_KEY_CREATE_OPERATION_ID) {
-      writeCliError(io, {
-        code: "CLI_USAGE_INVALID",
-        causeSummary: `--output-file is only accepted by splitch api-keys create, not ${command.path.join(" ")}`,
-        remediation: "Drop --output-file, or run splitch api-keys create to mint a secret",
-      });
-      return { exitCode: EXIT_USAGE };
-    }
-    const pathError = apiKeyOutputPathError(invocation.flags.outputFile);
-    if (pathError) {
-      writeCliError(io, pathError);
-      return { exitCode: EXIT_USAGE };
-    }
-  }
-  if (command.kind === "flags_verify") {
-    return validateFlagsVerifyUsage(invocation, io);
-  }
-  if (command.kind === "flag_targeting_rules_add") {
-    return validateFlagTargetingRulesAddUsage(invocation, io);
   }
   return null;
 }

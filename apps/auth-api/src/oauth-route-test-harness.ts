@@ -7,6 +7,7 @@ import type { MembershipAuthorityRepo } from "./membership-authority";
 import { mountOAuthRoutes } from "./oauth-routes";
 import { makeRateLimiter } from "./rate-limit";
 import type { RateLimiter } from "./rate-limit";
+import type { RevocationStore } from "./revocation";
 import { memoryKvNamespace } from "./test-kv";
 import type { TokenSigner } from "./token-exchange";
 
@@ -60,6 +61,7 @@ export function routeApp(params: {
   repo?: MembershipAuthorityRepo;
   tokenSigner?: TokenSigner;
   deviceAuthorizationRateLimiter?: RateLimiter;
+  revocations?: RevocationStore;
 }): Hono {
   const app = new Hono();
   mountOAuthRoutes(app, {
@@ -68,7 +70,7 @@ export function routeApp(params: {
     deviceFlow: params.deviceFlow,
     deviceRefreshSessions: params.deviceRefreshSessions,
     sessionStore: params.sessionStore ?? memoryKvNamespace(),
-    revocations,
+    revocations: params.revocations ?? revocations,
     accessSecret: "test-access-secret",
     issuer: "http://localhost",
     controlPlaneAudience: "https://cp.splitch.test",

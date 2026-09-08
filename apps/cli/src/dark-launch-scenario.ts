@@ -69,6 +69,7 @@ async function openCli(harness: QuickstartHarness): Promise<DarkLaunchCliOptions
   return {
     credentialPath,
     fetch: harness.routingFetch,
+    platformTarget: "local",
     controlPlaneBaseUrl: quickstartOrigins.controlPlaneBaseUrl,
     evaluationBaseUrl: quickstartOrigins.evaluationBaseUrl,
   };

@@ -88,7 +88,9 @@ export const credentialRoutes = [
     response: CreateCredentialResponseSchema,
     auth: AUTH,
     rateLimit: RATE,
-    idempotency: "optional",
+    // A once-only raw secret cannot be replayed without retaining recoverable
+    // secret material. Do not advertise idempotency the handler cannot honor.
+    idempotency: "none",
     errors: ["APP_NOT_FOUND", "FORBIDDEN", "VALIDATION_ERROR"],
   }),
   defineApiRoute({

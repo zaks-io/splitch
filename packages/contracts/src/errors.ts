@@ -2,6 +2,7 @@ import { z } from "zod";
 import { ApprovalRequestIdSchema, ApprovalReviewIdSchema } from "./approval-identifiers";
 import { CanonicalJsonSha256Schema } from "./canonical-hash";
 import { type ErrorCode, ErrorCodeSchema, errorCodes } from "./error-code";
+import { capacityErrorMembers } from "./error-members-capacity";
 import { conflictErrorMembers } from "./error-members-conflict";
 import { integrationErrorMembers } from "./error-members-integration";
 import { notFoundErrorMembers } from "./error-members-not-found";
@@ -227,6 +228,7 @@ const errorMembers = [
 
   ...notFoundErrorMembers,
   ...integrationErrorMembers,
+  ...capacityErrorMembers,
 
   member("UNAUTHORIZED", EmptyDetails),
   member("CREDENTIAL_REVOKED", EmptyDetails),
@@ -317,14 +319,6 @@ const errorMembers = [
   ),
   member("ACTIVATION_NOT_AVAILABLE", EmptyDetails),
 
-  member("RATE_LIMITED", z.object({ retryAfterMs: z.number() })),
-  member(
-    "SERVICE_UNAVAILABLE",
-    z.object({
-      retryAfterMs: z.number(),
-      mutationCommitted: z.literal(true).optional(),
-    }),
-  ),
   member(
     "PRIVACY_JOB_FAILED",
     z.object({ requestId: z.string(), failedStores: z.array(z.string()) }),

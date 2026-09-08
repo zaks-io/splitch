@@ -1,7 +1,7 @@
-import { MCP_DELEGATION_HEADER } from "@splitch/contracts";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import type { AuthApiEnv } from "./env";
 import worker from "./index";
+import { decodeDelegationScopes, decodeJwtHeader } from "./mcp-local-token-test-helpers";
 import { makeKvRevocationStore } from "./revocation";
 import { makePoolBindings } from "./test-bindings-pool";
 import type { LocalBindings } from "./test-fixtures";
@@ -86,7 +86,11 @@ describe("local Auth-to-MCP integration", () => {
       }),
     );
     expect(tokenResponse.status).toBe(200);
-    const accessToken = ((await tokenResponse.json()) as { access_token: string }).access_token;
+    const tokenBody = (await tokenResponse.json()) as {
+      access_token: string;
+      refresh_token: string;
+    };
+    const accessToken = tokenBody.access_token;
     expect(decodeJwtHeader(accessToken)).toMatchObject({ alg: "RS256" });
 
     const verifier = accessTokenModule.makeHttpMcpAccessTokenVerifier({
@@ -159,29 +163,49 @@ describe("local Auth-to-MCP integration", () => {
     });
     expect(victimDelegations).toEqual([[]]);
 
-    const revoked = await authFetch(
-      new Request("https://auth.splitch.test/oauth2/revoke", {
-        method: "POST",
-        headers: { "content-type": "application/x-www-form-urlencoded" },
-        body: new URLSearchParams({ client_id: "splitch-cli", token: accessToken }),
-      }),
-    );
-    expect(revoked.status).toBe(200);
-
-    const downstream = vi.fn(async () => Response.json({ items: [] }));
-    const rejected = await mcpRequest(
+    await expectRefreshLogoutToRevokeAccess(
       handlerModule.handleMcpServerRequest,
       accessToken,
+      tokenBody.refresh_token,
       verifier,
       revocations,
-      "tools/call",
-      { name: "flags_list", arguments: { appId: "app_selected" } },
-      downstream,
     );
-    expect(rejected.status).toBe(401);
-    expect(downstream).not.toHaveBeenCalled();
   });
 });
+
+async function expectRefreshLogoutToRevokeAccess(
+  handleMcpServerRequest: McpHandlerModule["handleMcpServerRequest"],
+  accessToken: string,
+  refreshToken: string,
+  verifier: McpAccessTokenVerifier,
+  revocations: ReturnType<typeof makeKvRevocationStore>,
+): Promise<void> {
+  const revoked = await authFetch(
+    new Request("https://auth.splitch.test/oauth2/revoke", {
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        client_id: "splitch-cli",
+        token: refreshToken,
+        token_type_hint: "refresh_token",
+      }),
+    }),
+  );
+  expect(revoked.status).toBe(200);
+
+  const downstream = vi.fn(async () => Response.json({ items: [] }));
+  const rejected = await mcpRequest(
+    handleMcpServerRequest,
+    accessToken,
+    verifier,
+    revocations,
+    "tools/call",
+    { name: "flags_list", arguments: { appId: "app_selected" } },
+    downstream,
+  );
+  expect(rejected.status).toBe(401);
+  expect(downstream).not.toHaveBeenCalled();
+}
 
 function authFetch(request: Request): Promise<Response> {
   return Promise.resolve(
@@ -281,28 +305,4 @@ interface McpHandlerModule {
     evaluationDelegationSecret: string;
     analysisDelegationSecret: string;
   }): Promise<Response>;
-}
-
-function decodeJwtHeader(token: string): Record<string, unknown> {
-  const [header] = token.split(".");
-  if (!header) throw new Error("missing JWT header");
-  const padded = header
-    .replace(/-/g, "+")
-    .replace(/_/g, "/")
-    .padEnd(Math.ceil(header.length / 4) * 4, "=");
-  return JSON.parse(atob(padded)) as Record<string, unknown>;
-}
-
-function decodeDelegationScopes(request: Request): string[] {
-  const delegation = request.headers.get(MCP_DELEGATION_HEADER);
-  if (!delegation) return [];
-  const payload = delegation.split(".")[0];
-  if (!payload) throw new Error("missing MCP delegation payload");
-  const padded = payload
-    .replace(/-/g, "+")
-    .replace(/_/g, "/")
-    .padEnd(Math.ceil(payload.length / 4) * 4, "=");
-  const claims = JSON.parse(atob(padded)) as { scopes?: unknown };
-  if (!Array.isArray(claims.scopes)) throw new Error("missing MCP delegation scopes");
-  return claims.scopes as string[];
 }

@@ -22,7 +22,6 @@ Use the same names as the Control Plane API and contracts.
 - The CLI may display and copy Client Keys.
 - The CLI may create, revoke, and list API Key records.
 - The CLI must not read back or paste an existing API Key value.
-- A newly created API Key may be shown once.
 
 ## Avoid
 

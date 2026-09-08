@@ -290,13 +290,16 @@ known id or key, or stop. Do not invent parameters the route does not accept. Ca
 ## Idempotency on retried creates
 
 Retryable control-plane creates (`apps_create`, `event_definitions_create`,
-`event_definition_versions_create`, `experiments_create`, `metrics_create`, `segments_create`, and
-`api_keys_create`) accept an optional `idempotency_key` (caller-supplied, derived from the route body
+`event_definition_versions_create`, `experiments_create`, `metrics_create`, and `segments_create`)
+accept an optional `idempotency_key` (caller-supplied, derived from the route body
 schema). The Worker records the key and returns the **same** resource on an exact retry, so an agent
 retrying after a network timeout never double-creates. Omitting the key preserves
 at-most-once-per-call semantics only; agents that retry should always supply one. `segments_update`
 also accepts an optional key because a Policy-gated Conditions edit may create an Approval Request.
 (Mirrors the auth-claim idempotency key, auth-doors.md.)
+
+`api_keys_create` is deliberately not replayable: the raw value is returned once and never stored.
+After an uncertain response, list key metadata and revoke any ambiguous Key before creating another.
 
 Approval-controlled mutations (`experiments_start`, `flag_config_update`,
 `flag_targeting_rules_replace`, `flags_promote`, and App-level Variant creates and updates) require

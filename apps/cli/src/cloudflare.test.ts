@@ -1,10 +1,11 @@
-import { mkdir, mkdtemp, readFile, realpath, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, realpath, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { executeInvocation } from "./execute";
 import type { CliCommandRunner } from "./execute-types";
 import { parseInvocation } from "./parse-args";
+import { type CloudflareState, generatedPaths, writeState } from "./cloudflare-files";
 
 describe("cloudflare setup", () => {
   it("deploys, registers, waits for push, and installs the service binding", async () => {
@@ -54,7 +55,8 @@ describe("cloudflare setup", () => {
         cwd,
         env: { SPLITCH_API_KEY: "api-key" },
         fetch: fetcher,
-        evaluationBaseUrl: "https://edge.example.test",
+        platformTarget: "local",
+        evaluationBaseUrl: "http://127.0.0.1:8788",
         commandRunner: runner,
         sleep: async () => {},
         io: { log: (line) => output.push(line), error: (line) => output.push(line) },
@@ -64,7 +66,7 @@ describe("cloudflare setup", () => {
     expect(result.exitCode).toBe(0);
     expect(requests.map(({ method }) => method)).toEqual(["GET", "POST", "GET"]);
     expect(requests[1]?.url).toBe(
-      "https://edge.example.test/api/integrations/cloudflare/installations",
+      "http://127.0.0.1:8788/api/integrations/cloudflare/installations",
     );
     const applicationConfig = await readFile(join(cwd, "wrangler.jsonc"), "utf8");
     expect(applicationConfig).toContain("// customer configuration");
@@ -123,7 +125,8 @@ describe("cloudflare setup", () => {
       executeInvocation(parseInvocation(["cloudflare", "setup", "--env", "production"]), {
         cwd,
         env: { SPLITCH_API_KEY: "invalid-api-key" },
-        evaluationBaseUrl: "https://edge.example.test",
+        platformTarget: "local",
+        evaluationBaseUrl: "http://127.0.0.1:8788",
         fetch: async () => Response.json({}, { status: 401 }),
         commandRunner: runner,
         io: { log: () => {}, error: () => {} },
@@ -146,7 +149,8 @@ describe("cloudflare wrangler resolution", () => {
     await executeInvocation(parseInvocation(["cloudflare", "setup", "--env", "production"]), {
       cwd,
       env: { SPLITCH_API_KEY: "api-key" },
-      evaluationBaseUrl: "https://edge.example.test",
+      platformTarget: "local",
+      evaluationBaseUrl: "http://127.0.0.1:8788",
       fetch: cloudflareInstallationFetch(),
       commandRunner: runner,
       sleep: async () => {},
@@ -170,7 +174,8 @@ describe("cloudflare wrangler resolution", () => {
     await executeInvocation(parseInvocation(["cloudflare", "setup", "--env", "production"]), {
       cwd,
       env: { SPLITCH_API_KEY: "api-key" },
-      evaluationBaseUrl: "https://edge.example.test",
+      platformTarget: "local",
+      evaluationBaseUrl: "http://127.0.0.1:8788",
       fetch: cloudflareInstallationFetch(),
       commandRunner: runner,
       sleep: async () => {},
@@ -192,7 +197,8 @@ describe("cloudflare wrangler resolution", () => {
     await executeInvocation(parseInvocation(["cloudflare", "setup", "--env", "production"]), {
       cwd,
       env: { SPLITCH_API_KEY: "api-key" },
-      evaluationBaseUrl: "https://edge.example.test",
+      platformTarget: "local",
+      evaluationBaseUrl: "http://127.0.0.1:8788",
       fetch: cloudflareInstallationFetch(),
       commandRunner: runner,
       sleep: async () => {},
@@ -270,7 +276,8 @@ describe("cloudflare setup preflight", () => {
       executeInvocation(parseInvocation(["cloudflare", "setup", "--env", "production"]), {
         cwd,
         env: { SPLITCH_API_KEY: "api-key" },
-        evaluationBaseUrl: "https://wrong.example.test",
+        platformTarget: "local",
+        evaluationBaseUrl: "http://127.0.0.1:9999",
         fetch: async () => Response.json({}, { status: 404 }),
         commandRunner: runner,
         io: { log: () => {}, error: () => {} },
@@ -302,6 +309,124 @@ describe("cloudflare setup preflight", () => {
     expect(runner.calls.some((call) => call.args.includes("deploy"))).toBe(false);
   });
 });
+
+describe("cloudflare remove preflight", () => {
+  it("rejects a linked App config before touching its external target", async () => {
+    const root = await mkdtemp(join(tmpdir(), "splitch-cloudflare-remove-link-"));
+    const cwd = join(root, "app");
+    await mkdir(cwd);
+    const externalConfig = join(root, "external.jsonc");
+    const original = JSON.stringify({
+      name: "external-app",
+      services: [{ binding: "SPLITCH", service: "splitch-config-production" }],
+    });
+    await writeFile(externalConfig, original);
+    await symlink(externalConfig, join(cwd, "wrangler.jsonc"));
+    await writeState(generatedPaths(cwd, "production").statePath, cloudflareState(cwd));
+    const requests: string[] = [];
+    const runner = new RecordingRunner();
+
+    await expect(
+      executeInvocation(parseInvocation(["cloudflare", "remove", "--env", "production"]), {
+        cwd,
+        env: { SPLITCH_API_KEY: "api-key" },
+        fetch: async (request) => {
+          requests.push(String(request));
+          return Response.json(null);
+        },
+        commandRunner: runner,
+        io: { log: () => {}, error: () => {} },
+      }),
+    ).rejects.toThrow(/regular file, not a link/);
+
+    expect(requests).toEqual([]);
+    expect(runner.calls).toEqual([]);
+    expect(await readFile(externalConfig, "utf8")).toBe(original);
+  });
+
+  it.each([
+    {
+      name: "Worker name",
+      mutate: (state: CloudflareState) => ({ ...state, workerName: "customer-worker" }),
+    },
+    {
+      name: "App config path",
+      mutate: (state: CloudflareState) => ({
+        ...state,
+        appConfigPath: "/tmp/other/wrangler.jsonc",
+      }),
+    },
+    {
+      name: "service binding path",
+      mutate: (state: CloudflareState) => ({ ...state, appBindingPath: ["unsafe", "services"] }),
+    },
+  ])("rejects a forged $name before any mutation", async ({ mutate }) => {
+    const cwd = await mkdtemp(join(tmpdir(), "splitch-cloudflare-remove-state-"));
+    await writeFile(join(cwd, "wrangler.jsonc"), JSON.stringify({ name: "customer-app" }));
+    const state = mutate(cloudflareState(cwd));
+    await writeState(generatedPaths(cwd, "production").statePath, state);
+    const requests: string[] = [];
+    const runner = new RecordingRunner();
+
+    await expect(
+      executeInvocation(parseInvocation(["cloudflare", "remove", "--env", "production"]), {
+        cwd,
+        env: { SPLITCH_API_KEY: "api-key" },
+        fetch: async (request) => {
+          requests.push(String(request));
+          return Response.json(null);
+        },
+        commandRunner: runner,
+        io: { log: () => {}, error: () => {} },
+      }),
+    ).rejects.toThrow();
+
+    expect(requests).toEqual([]);
+    expect(runner.calls).toEqual([]);
+  });
+
+  it("refuses a reassigned SPLITCH binding before deleting the remote installation", async () => {
+    const cwd = await mkdtemp(join(tmpdir(), "splitch-cloudflare-remove-binding-"));
+    await writeFile(
+      join(cwd, "wrangler.jsonc"),
+      JSON.stringify({
+        name: "customer-app",
+        services: [{ binding: "SPLITCH", service: "customer-worker" }],
+      }),
+    );
+    await writeState(generatedPaths(cwd, "production").statePath, cloudflareState(cwd));
+    const requests: string[] = [];
+
+    await expect(
+      executeInvocation(parseInvocation(["cloudflare", "remove", "--env", "production"]), {
+        cwd,
+        env: { SPLITCH_API_KEY: "api-key" },
+        fetch: async (request) => {
+          requests.push(String(request));
+          return Response.json(null);
+        },
+        commandRunner: new RecordingRunner(),
+        io: { log: () => {}, error: () => {} },
+      }),
+    ).rejects.toThrow(/no longer points/);
+
+    expect(requests).toEqual([]);
+  });
+});
+
+function cloudflareState(cwd: string): CloudflareState {
+  return {
+    version: 1,
+    environment: "production",
+    workerName: "splitch-config-production",
+    installationId: "00000000-0000-4000-8000-000000000000",
+    pushSecret: "p".repeat(43),
+    endpoint:
+      "https://splitch-config-production.example.workers.dev/integrations/splitch/configuration",
+    appConfigPath: join(cwd, "wrangler.jsonc"),
+    appBindingPath: ["services"],
+  };
+}
 
 function cloudflareInstallationFetch(): typeof fetch {
   let reads = 0;

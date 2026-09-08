@@ -1,4 +1,8 @@
-import type { ErrorResponse, OrganizationResponse } from "@splitch/contracts";
+import {
+  type ErrorResponse,
+  type OrganizationResponse,
+  USER_OWNED_ORGANIZATION_LIMIT,
+} from "@splitch/contracts";
 import { createRepository } from "@splitch/db";
 import type { RateLimiter } from "@splitch/worker-runtime";
 import type { Hono } from "hono";
@@ -312,5 +316,51 @@ describe("organizations_create", () => {
       .bind(ALICE.userId)
       .first<{ n: number }>();
     expect(memberships?.n).toBe(1);
+  });
+
+  it("refuses creation once the User owns the session-safe Organization ceiling", async () => {
+    const statements: D1PreparedStatement[] = [];
+    for (let index = 1; index < USER_OWNED_ORGANIZATION_LIMIT; index += 1) {
+      const orgId = `org_quota_${index}`;
+      statements.push(
+        h.bindings.d1
+          .prepare(
+            "INSERT INTO organizations (id, name, slug, plan, is_provisional, created_at, updated_at) VALUES (?, ?, ?, 'free', 0, ?, ?)",
+          )
+          .bind(
+            orgId,
+            `Quota ${index}`,
+            `quota-${index}`,
+            new Date(NOW_MS).toISOString(),
+            new Date(NOW_MS).toISOString(),
+          ),
+        h.bindings.d1
+          .prepare(
+            "INSERT INTO org_memberships (org_id, user_id, role, created_at) VALUES (?, ?, 'owner', ?)",
+          )
+          .bind(orgId, ALICE.userId, new Date(NOW_MS).toISOString()),
+      );
+    }
+    await h.bindings.d1.batch(statements);
+
+    const response = await request("/orgs", await ownerToken(ALICE), {
+      method: "POST",
+      body: JSON.stringify({ name: "One Too Many", slug: "one-too-many" }),
+    });
+
+    expect(response.status).toBe(409);
+    expect((await response.json()) as ErrorResponse).toMatchObject({
+      code: "QUOTA_EXCEEDED",
+      details: {
+        resourceType: "organization",
+        currentCount: USER_OWNED_ORGANIZATION_LIMIT,
+        ceiling: USER_OWNED_ORGANIZATION_LIMIT,
+        recommendedAction: "REDUCE_OWNED_ORGANIZATIONS",
+      },
+    });
+    const absent = await h.bindings.d1
+      .prepare("SELECT id FROM organizations WHERE slug = 'one-too-many'")
+      .first();
+    expect(absent).toBeNull();
   });
 });

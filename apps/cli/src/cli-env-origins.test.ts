@@ -119,23 +119,23 @@ describe("platform target and API origins", () => {
         ?.url.startsWith("http://127.0.0.1:8787/"),
     ).toBe(true);
   });
+});
 
-  it("CONTROL_PLANE_API_ORIGIN overrides the baked default", async () => {
+describe("ambient API origin overrides", () => {
+  it("rejects an arbitrary production origin before any request", async () => {
     const { credentialPath } = await makeTempHome();
     await writeFile(credentialPath, `${JSON.stringify(storedCredential())}\n`);
     const transport = controlPlaneTransport();
 
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
     const code = await runCli([...createArgs], {
       credentialPath,
       fetch: transport.fetch,
       env: { CONTROL_PLANE_API_ORIGIN: "https://env.example" },
     });
-    expect(code).toBe(EXIT_OK);
-    expect(
-      transport.requests
-        .find((request) => request.url.includes("/flags") && request.method === "POST")
-        ?.url.startsWith("https://env.example/"),
-    ).toBe(true);
+    expect(code).not.toBe(EXIT_OK);
+    expect(transport.requests).toHaveLength(0);
+    expect(errorSpy.mock.calls.flat().join("\n")).toContain("CLI_VALIDATION_ERROR");
   });
 
   it("explicit options win over environment origins", async () => {
@@ -146,15 +146,32 @@ describe("platform target and API origins", () => {
     const code = await runCli([...createArgs], {
       credentialPath,
       fetch: transport.fetch,
-      controlPlaneBaseUrl: "https://option.example",
+      controlPlaneBaseUrl: "https://api.splitch.dev",
       env: { CONTROL_PLANE_API_ORIGIN: "https://env.example" },
     });
     expect(code).toBe(EXIT_OK);
     expect(
       transport.requests
         .find((request) => request.url.includes("/flags") && request.method === "POST")
-        ?.url.startsWith("https://option.example/"),
+        ?.url.startsWith("https://api.splitch.dev/"),
     ).toBe(true);
+  });
+
+  it("rejects an arbitrary programmatic origin before any request", async () => {
+    const { credentialPath } = await makeTempHome();
+    await writeFile(credentialPath, `${JSON.stringify(storedCredential())}\n`);
+    const transport = controlPlaneTransport();
+    vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const code = await runCli([...createArgs], {
+      credentialPath,
+      fetch: transport.fetch,
+      controlPlaneBaseUrl: "https://option.example",
+      env: {},
+    });
+
+    expect(code).not.toBe(EXIT_OK);
+    expect(transport.requests).toHaveLength(0);
   });
 
   it("rejects an invalid SPLITCH_PLATFORM_TARGET instead of falling back to local", async () => {
@@ -178,26 +195,77 @@ describe("platform target and API origins", () => {
       errorSpy.mockRestore();
     }
   });
+});
 
-  it("fails loud when the selected target has no origin for the route", async () => {
+describe("platform origin boundaries", () => {
+  it("uses the fixed shared-preview origin without an override", async () => {
     const { credentialPath } = await makeTempHome();
     await writeFile(credentialPath, `${JSON.stringify(storedCredential())}\n`);
-    const transport = new FakeCliTransport([]);
-    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const transport = controlPlaneTransport();
+    const code = await runCli([...createArgs], {
+      credentialPath,
+      fetch: transport.fetch,
+      env: { SPLITCH_PLATFORM_TARGET: "shared-preview" },
+    });
+    expect(code).toBe(EXIT_OK);
+    expect(
+      transport.requests.some((request) =>
+        request.url.startsWith("https://api.preview.splitch.dev/"),
+      ),
+    ).toBe(true);
+  });
 
-    try {
-      const code = await runCli([...createArgs], {
+  it.each([
+    "http://api.splitch.dev",
+    "https://user:password@api.splitch.dev",
+    "https://api.splitch.dev/path",
+    "https://unrelated.example",
+  ])("rejects unsafe hosted origin %s", async (origin) => {
+    const { credentialPath } = await makeTempHome();
+    await writeFile(credentialPath, `${JSON.stringify(storedCredential())}\n`);
+    const transport = controlPlaneTransport();
+    vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const code = await runCli([...createArgs], {
+      credentialPath,
+      fetch: transport.fetch,
+      env: { CONTROL_PLANE_API_ORIGIN: origin },
+    });
+
+    expect(code).not.toBe(EXIT_OK);
+    expect(transport.requests).toHaveLength(0);
+  });
+
+  it("allows local loopback ports and rejects a non-loopback host", async () => {
+    const { credentialPath } = await makeTempHome();
+    await writeFile(credentialPath, `${JSON.stringify(storedCredential())}\n`);
+    const allowed = controlPlaneTransport();
+    expect(
+      await runCli([...createArgs], {
         credentialPath,
-        fetch: transport.fetch,
-        env: { SPLITCH_PLATFORM_TARGET: "shared-preview" },
-      });
-      expect(code).not.toBe(EXIT_OK);
-      expect(transport.requests).toHaveLength(0);
-      const output = errorSpy.mock.calls.flat().join("\n");
-      expect(output).toContain("CLI_API_ORIGIN_MISSING");
-      expect(output).toContain("CONTROL_PLANE_API_ORIGIN");
-    } finally {
-      errorSpy.mockRestore();
-    }
+        fetch: allowed.fetch,
+        env: {
+          SPLITCH_PLATFORM_TARGET: "local",
+          CONTROL_PLANE_API_ORIGIN: "http://127.0.0.1:9999",
+        },
+      }),
+    ).toBe(EXIT_OK);
+    expect(
+      allowed.requests.some((request) => request.url.startsWith("http://127.0.0.1:9999/")),
+    ).toBe(true);
+
+    const rejected = controlPlaneTransport();
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    expect(
+      await runCli([...createArgs], {
+        credentialPath,
+        fetch: rejected.fetch,
+        env: {
+          SPLITCH_PLATFORM_TARGET: "local",
+          CONTROL_PLANE_API_ORIGIN: "http://attacker.invalid:9999",
+        },
+      }),
+    ).not.toBe(EXIT_OK);
+    expect(rejected.requests).toHaveLength(0);
   });
 });
