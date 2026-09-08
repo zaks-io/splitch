@@ -9,16 +9,10 @@
 export { approvalRequests, approvalReviews } from "./approvals";
 export { apiKeys, clientKeys } from "./credentials";
 export { eventDefinitions, eventDefinitionVersions } from "./event-definitions";
+export { conclusionApprovalRequests, experimentConclusions } from "./experiment-conclusions";
 export { experiments, metrics, runs } from "./experiments";
 export { flagChangeEvents } from "./flag-change-events";
 export { flagConfigs, flags, segments, targetingRules, variants } from "./flags";
-export {
-  cloudflareConfigDeliveries,
-  cloudflareInstallations,
-  configWebhookDeliveries,
-  convexInstallations,
-  sentryInstallations,
-} from "./integrations";
 export {
   appDeletionSagas,
   appMemberships,
@@ -32,4 +26,11 @@ export {
   orgMemberships,
   trustedIdps,
 } from "./identity";
+export {
+  cloudflareConfigDeliveries,
+  cloudflareInstallations,
+  configWebhookDeliveries,
+  convexInstallations,
+  sentryInstallations,
+} from "./integrations";
 export { entityDeletions, privacyJobs, privacyRequests } from "./privacy";

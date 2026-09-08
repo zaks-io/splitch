@@ -1,5 +1,5 @@
-import { and, asc, desc, eq, inArray, isNotNull, lte, sql } from "drizzle-orm";
-import { approvalRequests, approvalReviews } from "../schema/index";
+import { and, asc, desc, eq, inArray, isNotNull, lte, notExists, sql } from "drizzle-orm";
+import { approvalRequests, approvalReviews, conclusionApprovalRequests } from "../schema/index";
 import { appliedReviewQueries, approvalPendingCondition } from "./approval-atomic";
 import { dispositionQueries, failureInsert } from "./approval-dispositions";
 import { type ApprovalArchiveFinalization, finalizeApprovalArchive } from "./approval-finalization";
@@ -71,6 +71,17 @@ function approvalArchiveQueries(db: Db, d1: D1Database) {
             inArray(approvalRequests.status, ["applied", "declined", "stale"]),
             isNotNull(approvalRequests.resolvedAt),
             lte(approvalRequests.resolvedAt, resolvedBefore),
+            notExists(
+              db
+                .select({ one: sql<number>`1` })
+                .from(conclusionApprovalRequests)
+                .where(
+                  and(
+                    eq(conclusionApprovalRequests.appId, approvalRequests.appId),
+                    eq(conclusionApprovalRequests.approvalRequestId, approvalRequests.id),
+                  ),
+                ),
+            ),
           ),
         )
         .orderBy(asc(approvalRequests.resolvedAt), asc(approvalRequests.id))

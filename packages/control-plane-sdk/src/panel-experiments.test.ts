@@ -171,6 +171,52 @@ describe("panel experiments binding transport", () => {
   });
 });
 
+describe("panel experiment conclusion transport", () => {
+  it("exposes Conclude through the Panel client with its caller-owned key", async () => {
+    const request = await capturedRequest((client) =>
+      client.conclude({
+        appId: "app_1",
+        environmentId: "env_1",
+        experimentId: "exp_1",
+        runId: "run_1",
+        selectedVariant: "treatment",
+        expectedResultToken: `sha256:${"a".repeat(64)}`,
+        dataWatermark: "2026-09-08T12:00:00.000Z",
+        target: {
+          environmentId: "env_1",
+          flagId: "flag_1",
+          expectedConfigVersion: 2,
+          proposedConfig: {
+            enabled: true,
+            availableVariantNames: ["control", "treatment"],
+            targetingRules: [],
+            rollout: { percentage: 100 },
+          },
+        },
+        idempotencyKey: "conclude-run-1",
+      }),
+    );
+
+    expect(request.headers.get("idempotency-key")).toBe("conclude-run-1");
+  });
+
+  it("exposes stale Promotion replacement through the Panel client", async () => {
+    const request = await capturedRequest((client) =>
+      client.createConclusionPromotionRequest({
+        appId: "app_1",
+        environmentId: "env_1",
+        experimentId: "exp_1",
+        runId: "run_1",
+        conclusionId: "conclusion_1",
+        expectedConfigVersion: 3,
+        idempotencyKey: "replace-promotion-1",
+      }),
+    );
+
+    expect(request.headers.get("idempotency-key")).toBe("replace-promotion-1");
+  });
+});
+
 async function capturedRequest(
   call: (client: ReturnType<typeof createPanelExperimentsClient>) => Promise<unknown>,
 ): Promise<Request> {

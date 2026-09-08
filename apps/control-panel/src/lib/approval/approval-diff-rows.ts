@@ -74,7 +74,8 @@ function groupRank(group: string): number {
 }
 
 function toRow(entry: ApprovalDiffEntry, labels: ApprovalDiffLabels): ApprovalDiffRow {
-  const mapping = FIELD_MAPPINGS.find(([pattern]) => pattern.test(entry.path))?.[1] ?? {
+  const fieldPath = entry.path.replace(/^\/flagConfiguration\//, "/");
+  const mapping = FIELD_MAPPINGS.find(([pattern]) => pattern.test(fieldPath))?.[1] ?? {
     group: "Other",
     field: entry.path,
   };
@@ -85,10 +86,10 @@ function toRow(entry: ApprovalDiffEntry, labels: ApprovalDiffLabels): ApprovalDi
     group: mapping.group,
     field: mapping.field,
     before: hasBefore
-      ? renderValue(entry.path, (entry as { current: unknown }).current, labels)
+      ? renderValue(fieldPath, (entry as { current: unknown }).current, labels)
       : [],
     after: hasAfter
-      ? renderValue(entry.path, (entry as { proposed: unknown }).proposed, labels)
+      ? renderValue(fieldPath, (entry as { proposed: unknown }).proposed, labels)
       : [],
     hasBefore,
     hasAfter,

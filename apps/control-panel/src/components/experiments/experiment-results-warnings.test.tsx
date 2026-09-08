@@ -15,6 +15,8 @@ describe("ExperimentResults warning states", () => {
   it("keeps every Guardrail breach visible while its station is collapsed", () => {
     const html = renderToStaticMarkup(
       <ExperimentResults
+        canConclude={true}
+        onConclude={() => {}}
         metrics={metricsFixture()}
         run={runFixture()}
         results={resultsFixture(breachedGuardrailStats())}
@@ -33,6 +35,8 @@ describe("ExperimentResults warning states", () => {
   it("never hides the numbers behind a firing SRM warning", () => {
     const html = renderToStaticMarkup(
       <ExperimentResults
+        canConclude={true}
+        onConclude={() => {}}
         metrics={metricsFixture()}
         run={runFixture()}
         results={resultsFixture(srmFiringStats())}
@@ -56,6 +60,8 @@ describe("ExperimentResults warning states", () => {
   it("shows the gate's failing check without expanding a station", () => {
     const html = renderToStaticMarkup(
       <ExperimentResults
+        canConclude={true}
+        onConclude={() => {}}
         metrics={metricsFixture()}
         run={runFixture()}
         results={resultsFixture(srmFiringStats())}
@@ -72,6 +78,8 @@ describe("ExperimentResults warning states", () => {
   it("blocks the ship action naming the underpowered Metric, numbers still shown", () => {
     const html = renderToStaticMarkup(
       <ExperimentResults
+        canConclude={true}
+        onConclude={() => {}}
         metrics={metricsFixture()}
         run={runFixture()}
         results={resultsFixture(underpoweredStats())}
@@ -88,6 +96,8 @@ describe("ExperimentResults warning states", () => {
   it("names the Worker as the source of the refusal", () => {
     const html = renderToStaticMarkup(
       <ExperimentResults
+        canConclude={true}
+        onConclude={() => {}}
         metrics={metricsFixture()}
         run={runFixture()}
         results={resultsFixture(srmFiringStats())}
@@ -123,34 +133,37 @@ describe("ExperimentResults warning states", () => {
       },
     });
     const html = renderToStaticMarkup(
-      <ExperimentResults metrics={metricsFixture()} run={runFixture()} results={results} />,
+      <ExperimentResults
+        canConclude={true}
+        onConclude={() => {}}
+        metrics={metricsFixture()}
+        run={runFixture()}
+        results={results}
+      />,
     );
 
     expect(html).toContain("No blocking check");
     expect(html).toContain("1 of 2 readiness checks passed");
     expect(html).not.toContain('data-testid="ship-blocked"');
   });
+});
 
-  /**
-   * The conclude/promote mutation does not exist yet (SPL-158). An enabled
-   * primary action that silently does nothing is a lie about what the Panel
-   * can do, so the control stays disabled and says why.
-   */
-  it("never offers a live conclude action while the mutation is unbuilt", () => {
-    for (const stats of [statsFixture(), srmFiringStats(), breachedGuardrailStats()]) {
-      const html = renderToStaticMarkup(
-        <ExperimentResults
-          metrics={metricsFixture()}
-          run={runFixture()}
-          results={resultsFixture(stats)}
-        />,
-      );
-      const buttons = html.match(/<button[\s\S]*?<\/button>/g) ?? [];
-      const conclude = buttons.filter((button) => button.includes("Conclude Run"));
-
-      expect(conclude).toHaveLength(1);
-      expect(conclude[0]).toMatch(/\sdisabled=""/);
-      expect(html).toContain("SPL-158");
-    }
+describe("Conclusion evidence", () => {
+  it("requires decision evidence before offering Conclude", () => {
+    const html = renderToStaticMarkup(
+      <ExperimentResults
+        canConclude={true}
+        onConclude={() => {}}
+        metrics={metricsFixture()}
+        run={runFixture()}
+        results={resultsFixture(statsFixture())}
+      />,
+    );
+    const button = (html.match(/<button[\s\S]*?<\/button>/g) ?? []).find((button) =>
+      button.includes("Conclude Run"),
+    );
+    expect(button).toMatch(/\sdisabled=""/);
+    expect(html).not.toContain("SPL-158");
+    expect(html).toContain("Refresh Results to load the evidence");
   });
 });

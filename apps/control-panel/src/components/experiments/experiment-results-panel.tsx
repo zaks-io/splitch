@@ -1,12 +1,21 @@
+import { Spinner } from "@splitch/ui/components/spinner";
+import { lazy, Suspense, useState } from "react";
+
+const ExperimentConclusionDialog = lazy(() =>
+  import("./experiment-conclusion-dialog").then((module) => ({
+    default: module.ExperimentConclusionDialog,
+  })),
+);
+
 import type { Metric } from "@splitch/contracts";
 import type { PanelExperimentRun } from "@splitch/control-plane-sdk/panel-experiments";
 import { useSuspenseQuery } from "@tanstack/react-query";
-import { experimentResultsQuery } from "#lib/experiments/experiments-query";
 import {
   ExperimentResults,
   ExperimentResultsEmpty,
   ExperimentResultsWaiting,
 } from "#components/experiments/experiment-results";
+import { experimentResultsQuery } from "#lib/experiments/experiments-query";
 
 /**
  * Route-facing wrapper: resolves the Run to read, then renders it.
@@ -20,12 +29,18 @@ import {
  */
 export function ExperimentResultsPanel({
   appId,
+  canConclude,
+  environments,
+  flagId,
   environmentId,
   experimentId,
   metrics,
   run,
 }: {
   appId: string;
+  canConclude: boolean;
+  environments: readonly { environmentId: string; env: string }[];
+  flagId: string;
   environmentId: string;
   experimentId: string;
   metrics: readonly Pick<Metric, "id" | "name">[];
@@ -35,6 +50,9 @@ export function ExperimentResultsPanel({
   return (
     <ExperimentResultsForRun
       appId={appId}
+      canConclude={canConclude}
+      environments={environments}
+      flagId={flagId}
       environmentId={environmentId}
       experimentId={experimentId}
       metrics={metrics}
@@ -45,17 +63,24 @@ export function ExperimentResultsPanel({
 
 function ExperimentResultsForRun({
   appId,
+  canConclude,
+  environments,
+  flagId,
   environmentId,
   experimentId,
   metrics,
   run,
 }: {
   appId: string;
+  canConclude: boolean;
+  environments: readonly { environmentId: string; env: string }[];
+  flagId: string;
   environmentId: string;
   experimentId: string;
   metrics: readonly Pick<Metric, "id" | "name">[];
   run: PanelExperimentRun;
 }) {
+  const [concluding, setConcluding] = useState(false);
   const { data } = useSuspenseQuery(
     experimentResultsQuery({ appId, environmentId, experimentId, runId: run.id }),
   );
@@ -72,5 +97,27 @@ function ExperimentResultsForRun({
       />
     );
   }
-  return <ExperimentResults metrics={metrics} results={data} run={run} />;
+  return (
+    <>
+      <ExperimentResults
+        canConclude={canConclude}
+        onConclude={() => setConcluding(true)}
+        metrics={metrics}
+        results={data}
+        run={run}
+      />
+      {concluding && data.resultToken && data.dataWatermark ? (
+        <Suspense fallback={<Spinner aria-label="Loading conclusion" />}>
+          <ExperimentConclusionDialog
+            scope={{ appId, environmentId, experimentId, flagId, runId: run.id }}
+            environments={environments}
+            variants={Object.keys(run.allocation)}
+            expectedResultToken={data.resultToken}
+            dataWatermark={data.dataWatermark}
+            onClose={() => setConcluding(false)}
+          />
+        </Suspense>
+      ) : null}
+    </>
+  );
 }

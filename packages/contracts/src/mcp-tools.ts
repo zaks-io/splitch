@@ -153,7 +153,7 @@ function needsFlatShape(route: ApiRouteContract, shape: z.ZodRawShape): boolean 
  * reachable remedy (ADR-0036, SPL-266).
  */
 function withIdempotencyKeyField(route: ApiRouteContract, shape: z.ZodRawShape): z.ZodRawShape {
-  if (route.idempotency !== "required" || shape.idempotency_key) {
+  if (route.idempotency !== "required" || shape.idempotency_key || shape.idempotencyKey) {
     return shape;
   }
   return { ...shape, idempotency_key: IdempotencyKeySchema };

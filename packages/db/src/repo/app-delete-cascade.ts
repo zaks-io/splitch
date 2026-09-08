@@ -72,6 +72,8 @@ export function makeDeleteAppCascade(d1: D1Database) {
       : [];
     const statements = [
       ...boundaryStatements,
+      d1.prepare(`DELETE FROM conclusion_approval_requests WHERE app_id = ?`).bind(appId),
+      d1.prepare(`DELETE FROM experiment_conclusions WHERE app_id = ?`).bind(appId),
       d1
         .prepare(
           `DELETE FROM runs

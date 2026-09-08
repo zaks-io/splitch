@@ -7,6 +7,8 @@ export {
 export { accessTokenRevocationKey, accessTokenRevocationTtl } from "./access-token-revocation";
 export type { ApprovalRequestId, ApprovalReviewId } from "./approval-identifiers";
 export { ApprovalRequestIdSchema, ApprovalReviewIdSchema } from "./approval-identifiers";
+// biome-ignore lint/performance/noReExportAll: package entry point exposes the grouped conclusion contract
+export * from "./barrels/experiment-conclusion";
 // biome-ignore lint/performance/noReExportAll: package entry point intentionally exposes the grouped CLI/MCP parity-skin API
 export * from "./barrels/parity-skins";
 // biome-ignore lint/performance/noReExportAll: package entry point intentionally exposes the grouped route registry API
@@ -18,6 +20,7 @@ export * from "./barrels/storage-contracts";
 // biome-ignore lint/performance/noReExportAll: curated wire envelopes live in barrels/wire-envelopes.ts
 export * from "./barrels/wire-envelopes";
 export { type CanonicalJsonSha256, CanonicalJsonSha256Schema } from "./canonical-hash";
+export { canonicalHash, canonicalJson } from "./canonical-json";
 export {
   CachedClientKeyRateLimitRpsFieldSchema,
   CLIENT_KEY_RATE_LIMIT_RPS_MESSAGE,
@@ -50,7 +53,6 @@ export { CREDENTIAL_CACHE_BACKFILL_CHECKPOINT_VERSION } from "./credential-cache
 export type { DeltaNudge, DeltaNudgeEntity } from "./delta-nudge";
 export { DeltaNudgeEntitySchema, DeltaNudgeSchema, deltaNudgeEntities } from "./delta-nudge";
 export { errorStatusByCode, httpStatusForError } from "./error-status";
-export { USER_OWNED_ORGANIZATION_LIMIT } from "./organization-limits";
 export type { ErrorCode, ErrorResponse, PolicyChangeType, RecommendedAction } from "./errors";
 export {
   ErrorCodeSchema,
@@ -64,15 +66,6 @@ export {
 } from "./errors";
 // biome-ignore lint/performance/noReExportAll: Event Definition and Metric Event exports are grouped by domain
 export * from "./events";
-export type { DecisionFailure } from "./experiment-conclusion-errors";
-export {
-  DecisionBlockedDetailsSchema,
-  DecisionFailureSchema,
-  DecisionResultStaleDetailsSchema,
-  DecisionResultUnavailableDetailsSchema,
-  decisionFailureCodeByCheckId,
-  TargetConfigurationStaleDetailsSchema,
-} from "./experiment-conclusion-errors";
 // biome-ignore lint/performance/noReExportAll: package entry point intentionally exposes the grouped rigor API
 export * from "./experiment-rigor";
 export type { HealthResponse, PlatformTarget } from "./health-response";
@@ -218,6 +211,7 @@ export {
 export type { ApiRouteContract, ApiRouteRequest, DefineApiRouteInput } from "./openapi-route";
 export { defineApiRoute, jsonMediaTypeSchema } from "./openapi-route";
 export { type ControlPlaneRpcApp, controlPlaneRpcApp } from "./openapi-rpc";
+export { USER_OWNED_ORGANIZATION_LIMIT } from "./organization-limits";
 export {
   deriveOrganizationSlug,
   isReservedOrganizationSlug,
@@ -254,6 +248,7 @@ export * from "./resource-envelopes";
 export {
   type CreateSegmentRequest,
   CreateSegmentRequestSchema,
+  FlagConfigResponseSchema,
   type PatchSegmentRequest,
   PatchSegmentRequestSchema,
   TARGETING_RULE_ID_DUPLICATE_MESSAGE,

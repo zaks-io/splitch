@@ -1,5 +1,5 @@
-import { type UserRole, userRoles } from "./leaf-schemas-runtime";
 import { MEMBERSHIP_WIDE_READ_AUTHORIZATION } from "./access-token-authorization";
+import { type UserRole, userRoles } from "./leaf-schemas-runtime";
 import { isMcpToolRoute } from "./mcp-tools";
 import type { ApiRouteContract } from "./openapi-route";
 import { routeRegistry } from "./route-registry";
@@ -95,6 +95,8 @@ const MCP_TOOL_MEMBERSHIP_GATES = {
   runs_list: APP_MEMBER,
   runs_get: APP_MEMBER,
   runs_end: APP_ADMIN,
+  runs_conclude: APP_ADMIN,
+  conclusion_promotion_requests_create: APP_ADMIN,
   metrics_list: APP_MEMBER,
   metrics_create: APP_ADMIN,
   metrics_get: APP_MEMBER,

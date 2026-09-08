@@ -2,11 +2,11 @@ import {
   type ApprovalPolicyContext,
   ApprovalPolicyContextSchema,
   type ApprovalTarget,
+  canonicalHash,
   type EnvironmentPolicy,
   type PolicyChangeType,
 } from "@splitch/contracts";
 import { appScope, envScope, type Repository } from "@splitch/db";
-import { canonicalHash } from "./approval-canonical";
 import { experimentTargetProjection } from "./approval-target-experiment";
 import { policyLevel, readEnvironmentPolicy } from "./flag-config-policy";
 

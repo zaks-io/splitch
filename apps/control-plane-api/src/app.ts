@@ -90,6 +90,7 @@ export interface AppDeps {
   observability?: RegistrarDeps["observability"];
   logger?: Pick<Console, "warn">;
   analysisResults?: AnalysisResultsReader;
+  analysis?: Fetcher;
   delegationBindings?: DelegationBindings;
   approvalArchiveStore?: import("./approval-archive").ApprovalArchiveStore;
   exposureStatusCleanup?: EnvironmentExposureStatusCleanup;
@@ -154,6 +155,7 @@ export function createApp(deps: AppDeps): Hono {
   const experimentHandlers = diagnosableHandlers(
     makeExperimentHandlers({
       repo: deps.repo,
+      analysis: deps.analysis,
       configStore: deps.configStore,
       runSnapshotDelivery: deps.runSnapshotDelivery,
       nowIso: deps.nowIso,

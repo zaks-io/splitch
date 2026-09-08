@@ -365,7 +365,7 @@ trustworthy-experiments literature) and then adds splitch's enforcement seam.
 - Significance is **FDR-controlled** across the goal-metric × Variant family (ADR-0014); the view
   labels which Metrics are in the corrected family vs exploratory.
 
-**CLI/MCP parity (ADR-0023).** The decision gate is a Worker invariant: `splitch experiment
+**CLI/MCP parity (ADR-0023).** The decision gate is a Worker invariant: `splitch runs
 conclude` fails with the same cited `control_identity`, `engine_status`, `decision_valid_result`,
 `underpowered`, `exposure_srm`, `activated_srm`, or `activation_balance` check on every skin. Reading
 Results and diagnostics remains available on all three skins; only the rendering differs. Under

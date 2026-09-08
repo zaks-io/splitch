@@ -4,18 +4,14 @@ import {
   type ApprovalPolicyContext,
   ApprovalPolicyContextSchema,
   type ApprovalTarget,
+  canonicalHash,
+  canonicalJson,
   ErrorDetailsSchema,
 } from "@splitch/contracts";
 import { appScope } from "@splitch/db";
 import type { Principal } from "@splitch/worker-runtime";
 import { requireAppAdmin } from "./app-authz";
-import {
-  approvalDiff,
-  approvalRequestId,
-  approvalReviewId,
-  canonicalHash,
-  canonicalJson,
-} from "./approval-canonical";
+import { approvalDiff, approvalRequestId, approvalReviewId } from "./approval-canonical";
 import { approvalRequestProjection } from "./approval-model";
 import { resultingVersionFor } from "./approval-resulting-version";
 import { prepareAndApplyApproval } from "./approval-review-application";
@@ -257,7 +253,19 @@ export async function reviewApproval(
     return materializeStale(deps, row, input, requestHash, currentVersion);
   }
 
-  return prepareAndApplyApproval(deps, row, input, requestHash, now, contexts);
+  const policyGuards = approvalPolicyGuards(row, contexts);
+  return prepareAndApplyApproval(deps, row, input, requestHash, now, contexts, policyGuards);
+}
+
+function approvalPolicyGuards(
+  row: ApprovalRequestRow,
+  contexts: ApprovalPolicyContext[],
+): ApprovalPolicyContext[] {
+  if (row.operation !== "experiment_winner_promote") return contexts;
+  if (!row.policyGuardContexts) {
+    throw new Error("winner Promotion Approval Request is missing raw Policy guards");
+  }
+  return ApprovalPolicyContextSchema.array().parse(JSON.parse(row.policyGuardContexts));
 }
 
 async function canRetrySegmentRepublish(

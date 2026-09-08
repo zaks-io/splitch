@@ -194,6 +194,20 @@ describe("panel Experiment Results payload and decision gate", () => {
     expect(parsePanelExperimentResultsOutput(await response.json()).success).toBe(true);
   });
 
+  it("maps the Analysis evidence pair to the Panel response", async () => {
+    const response = await results(
+      analysisReturning(statsOutput(), {
+        data_watermark: "2026-09-08T18:00:00.000Z",
+        result_token: `sha256:${"a".repeat(64)}`,
+      }),
+    );
+
+    expect(await response.json()).toMatchObject({
+      dataWatermark: "2026-09-08T18:00:00.000Z",
+      resultToken: `sha256:${"a".repeat(64)}`,
+    });
+  });
+
   it("passes through Analysis no_data without inventing zeroed stats", async () => {
     const analysis = vi.fn(async (request: Request) => {
       const { runId } = (await request.clone().json()) as { runId: string };

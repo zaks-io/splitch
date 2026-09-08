@@ -49,6 +49,9 @@ SQL >
         AND exposures.environment_id = {{String(environment_id)}}
         AND exposures.experiment_id = {{String(experiment_id)}}
         AND exposures.run_id = {{String(run_id)}}
+        {% if defined(ingest_watermark_ts) %}
+        AND exposures.watermark_ts <= {{DateTime64(ingest_watermark_ts)}}
+        {% end %}
         AND generation_tombstones.app_id = ''
         AND (deletions.delete_before_ts IS NULL OR exposures.first_exposure_ts > deletions.delete_before_ts)
 
@@ -96,7 +99,16 @@ SQL >
             FROM deduped_exposures
             WHERE app_id = {{String(app_id)}}
                 AND environment_id = {{String(environment_id)}}
+                {% if defined(ingest_watermark_ts) %}
+                AND watermark_ts <= {{DateTime64(ingest_watermark_ts)}}
+                {% end %}
         )
+        {% if defined(ingest_watermark_ts) %}
+        -- The Copy Pipe includes the boundary row. Re-analysis must use the
+        -- same inclusive edge or a result can change without its evidence
+        -- watermark changing.
+        AND events.ingest_ts <= {{DateTime64(ingest_watermark_ts)}}
+        {% end %}
     GROUP BY
         events.app_id,
         events.environment_id,

@@ -21,6 +21,7 @@ import {
   reviewForbidden,
 } from "./approval-review-outcomes";
 import { rowTargetVersion } from "./approval-row-target";
+import { flagConfigurationApplication } from "./approval-flag-configuration-proposal";
 import type {
   ApplicationOutcome,
   ApplicationTargetState,
@@ -30,7 +31,6 @@ import type {
   ReviewApprovalInput,
 } from "./approval-service-types";
 import { currentPolicyProjection } from "./approval-target";
-import type { FlagConfigResult } from "./config-store-types";
 import { mapApprovedFlagConfigFailure } from "./map-approved-flag-config-failure";
 
 export async function prepareAndApplyApproval(
@@ -40,6 +40,7 @@ export async function prepareAndApplyApproval(
   requestHash: string,
   now: string,
   contexts: ApprovalPolicyContext[],
+  policyGuards: ApprovalPolicyContext[],
 ): Promise<ApprovalResult> {
   const operation = ApprovalOperationSchema.parse(row.operation);
   const resource = resultingResource(row, operation);
@@ -66,7 +67,7 @@ export async function prepareAndApplyApproval(
     resultingTargetVersion: resultingVersion,
     resultingResourceType: resource.type,
     resultingResourceId: resource.id,
-    policyContexts: contexts,
+    policyContexts: policyGuards,
   };
   return applyAndProject(deps, row, commit, input);
 }
@@ -207,7 +208,7 @@ async function applyFlagConfiguration(
     };
   }
   const environmentId = request.policyContexts[0]?.environmentId;
-  const proposed = request.diff.proposed as unknown as FlagConfigResult;
+  const { proposed, diffEntries } = flagConfigurationApplication(request);
   if (!environmentId) {
     return {
       ok: false as const,
@@ -225,11 +226,11 @@ async function applyFlagConfiguration(
       environmentId,
       flagId: proposed.flagId,
       proposed,
-      diffEntries: request.diff.entries,
+      diffEntries,
       approval: commit,
     });
   if (result.ok) return { ok: true as const };
-  return mapApprovedFlagConfigFailure(result, proposed.flagId, environmentId);
+  return mapApprovedFlagConfigFailure(result, proposed.flagId, environmentId, request.operation);
 }
 
 function resultingResource(

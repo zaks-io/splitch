@@ -36,7 +36,6 @@ import type {
   PrincipalFlagListReadResponseSchema,
 } from "./resource-envelopes-flag";
 import type * as EnvironmentRoutes from "./route-types-environment";
-import type { EntityPrivacyRequestSchema, PrivacyResponseSchema } from "./routes/routes-privacy";
 import type {
   AddAppMemberRequestSchema,
   AppMemberParams,
@@ -50,6 +49,7 @@ import type {
   PrincipalFlagListQuerySchema,
   UpdateAppMemberRequestSchema,
 } from "./routes/route-shapes";
+import type { EntityPrivacyRequestSchema, PrivacyResponseSchema } from "./routes/routes-privacy";
 
 export type * from "./route-types-environment";
 
@@ -307,6 +307,14 @@ export interface RouteTypeMap {
   experiments_delete: {
     input: EnvironmentRoutes.ExperimentsDeleteInput;
     output: EnvironmentRoutes.ExperimentsDeleteOutput;
+  };
+  runs_conclude: {
+    input: EnvironmentRoutes.RunsConcludeInput;
+    output: EnvironmentRoutes.RunsConcludeOutput;
+  };
+  conclusion_promotion_requests_create: {
+    input: EnvironmentRoutes.ConclusionPromotionRequestsCreateInput;
+    output: EnvironmentRoutes.ConclusionPromotionRequestsCreateOutput;
   };
   entity_privacy_export: { input: EntityPrivacyInput; output: EntityPrivacyOutput };
   entity_privacy_delete: { input: EntityPrivacyInput; output: EntityPrivacyOutput };

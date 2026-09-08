@@ -25,7 +25,7 @@ export function commandFlags(command: CliCommandDefinition): HelpFlag[] {
       ),
     );
   }
-  if (fields.has("idempotency_key")) {
+  if (fields.has("idempotency_key") || fields.has("idempotencyKey")) {
     flags.push(
       flag("--idempotency-key <key>", "string", "generated", "Stable retry key for this mutation."),
     );

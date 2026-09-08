@@ -19,6 +19,8 @@ describe("ExperimentResults", () => {
   it("renders the lift plot, the numbers and an allowed decision on a clean Run", () => {
     const html = renderToStaticMarkup(
       <ExperimentResults
+        canConclude={true}
+        onConclude={() => {}}
         metrics={metricsFixture()}
         run={runFixture()}
         results={resultsFixture(statsFixture())}
@@ -38,7 +40,13 @@ describe("ExperimentResults", () => {
     const results = resultsFixture(statsFixture());
     const passed = results.gate.checks.filter((check) => check.status === "pass").length;
     const html = renderToStaticMarkup(
-      <ExperimentResults metrics={metricsFixture()} run={runFixture()} results={results} />,
+      <ExperimentResults
+        canConclude={true}
+        onConclude={() => {}}
+        metrics={metricsFixture()}
+        run={runFixture()}
+        results={results}
+      />,
     );
 
     expect(passed).toBeLessThan(results.gate.checks.length);
@@ -49,6 +57,8 @@ describe("ExperimentResults", () => {
   it("renders a realistic single-digit lift without collapsing its interval", () => {
     const html = renderToStaticMarkup(
       <ExperimentResults
+        canConclude={true}
+        onConclude={() => {}}
         metrics={metricsFixture()}
         run={runFixture()}
         results={resultsFixture(modestLiftStats())}
@@ -69,6 +79,8 @@ describe("ExperimentResults", () => {
     const render = (pValue: number) =>
       renderToStaticMarkup(
         <ExperimentResults
+          canConclude={true}
+          onConclude={() => {}}
           metrics={metricsFixture()}
           run={runFixture()}
           results={resultsFixture({ ...base, arm_results: [{ ...arm, p_value: pValue }] })}
@@ -87,6 +99,8 @@ describe("ExperimentResults", () => {
     if (!arm) throw new Error("fixture must produce an arm");
     const html = renderToStaticMarkup(
       <ExperimentResults
+        canConclude={true}
+        onConclude={() => {}}
         metrics={metricsFixture()}
         run={runFixture()}
         results={resultsFixture({
@@ -105,7 +119,13 @@ describe("ExperimentResults", () => {
   it("names a breached Guardrail in the ship decision without blocking on it", () => {
     const results = resultsFixture(breachedGuardrailStats());
     const html = renderToStaticMarkup(
-      <ExperimentResults metrics={metricsFixture()} run={runFixture()} results={results} />,
+      <ExperimentResults
+        canConclude={true}
+        onConclude={() => {}}
+        metrics={metricsFixture()}
+        run={runFixture()}
+        results={results}
+      />,
     );
 
     expect(results.gate.shipAllowed).toBe(true);
@@ -132,6 +152,8 @@ describe("ExperimentResults baseline legend", () => {
 
     const html = renderToStaticMarkup(
       <ExperimentResults
+        canConclude={true}
+        onConclude={() => {}}
         metrics={metricsFixture()}
         run={runFixture()}
         results={resultsFixture(stats)}
@@ -148,6 +170,8 @@ describe("ExperimentResults baseline legend", () => {
   it("fails loud when a frozen Control name matches no drawn arm", () => {
     const html = renderToStaticMarkup(
       <ExperimentResults
+        canConclude={true}
+        onConclude={() => {}}
         metrics={metricsFixture()}
         run={runFixture()}
         results={resultsFixture(statsFixture(), {
@@ -173,6 +197,8 @@ describe("ExperimentResults baseline legend", () => {
     if (!treatment) throw new Error("fixture must produce a treatment arm");
     const html = renderToStaticMarkup(
       <ExperimentResults
+        canConclude={true}
+        onConclude={() => {}}
         metrics={metricsFixture()}
         run={runFixture()}
         results={resultsFixture({

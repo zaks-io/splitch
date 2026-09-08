@@ -16,6 +16,7 @@ import {
 } from "../resource-envelopes-experiment";
 import { listResponse } from "../wire-envelopes-core";
 import { EndRunRequestSchema } from "../write-persisted-schemas";
+import { APPROVAL_WRITE_ERRORS } from "./approval-write-errors";
 import {
   AppParams,
   EnvParams,
@@ -24,6 +25,7 @@ import {
   RunEndParams,
   RunParams,
 } from "./route-shapes";
+import { conclusionRoutes } from "./routes-experiment-conclusions";
 
 /**
  * Experiment draft/start lifecycle, Experiment Run reads + end, and Metric CRUD.
@@ -39,15 +41,6 @@ const ExperimentListResponse = listResponse(ExperimentResponseSchema);
 const RunListResponse = listResponse(RunResponseSchema);
 const MetricListResponse = listResponse(MetricResponseSchema);
 const DeletedResponse = z.object({ deleted: z.literal(true) });
-
-const APPROVAL_WRITE_ERRORS = [
-  "APPROVAL_REVIEW_REQUIRED",
-  "APPROVAL_REVIEW_FORBIDDEN",
-  "APPROVAL_REQUEST_STALE",
-  "APPROVAL_REQUEST_RESOLVED",
-  "APPROVAL_APPLICATION_FAILED",
-  "IDEMPOTENCY_KEY_CONFLICT",
-] as const;
 
 export const experimentRoutes = [
   defineApiRoute({
@@ -192,6 +185,7 @@ export const experimentRoutes = [
     idempotency: "none",
     errors: ["RUN_NOT_FOUND", "FORBIDDEN", "RUN_NOT_RUNNING"],
   }),
+  ...conclusionRoutes,
   defineApiRoute({
     operationId: "metrics_list",
     owner: OWNER,

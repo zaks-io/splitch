@@ -43,7 +43,9 @@ function supportsConfirm(operationId: string): boolean {
     operationId === "flag_variants_update" ||
     operationId === "flag_variants_create" ||
     operationId === "segments_update" ||
-    operationId === "experiments_start"
+    operationId === "experiments_start" ||
+    operationId === "runs_conclude" ||
+    operationId === "conclusion_promotion_requests_create"
   );
 }
 

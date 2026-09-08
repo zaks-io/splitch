@@ -51,7 +51,10 @@ describe("GET experiment results insufficient-data typing (SPL-302)", () => {
       control_variant: "control",
       missing: "exposures",
     });
-    expect(tinybird.calls.map((call) => call.pipeName)).toEqual(["analysis_run_bootstrap"]);
+    expect(tinybird.calls.map((call) => call.pipeName)).toEqual([
+      "analysis_run_inputs",
+      "analysis_deduped_exposures",
+    ]);
   });
 
   it("returns Exposure health without querying per-Metric pipes for a Run with no Metrics", async () => {
@@ -79,7 +82,10 @@ describe("GET experiment results insufficient-data typing (SPL-302)", () => {
       control_variant: "control",
       stats: { health: { deduped_counts: { control: 2, treatment: 2 } } },
     });
-    expect(tinybird.calls.map((call) => call.pipeName)).toEqual(["analysis_run_bootstrap"]);
+    expect(tinybird.calls.map((call) => call.pipeName)).toEqual([
+      "analysis_run_inputs",
+      "analysis_deduped_exposures",
+    ]);
   });
 });
 

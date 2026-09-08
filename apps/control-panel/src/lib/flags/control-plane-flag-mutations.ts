@@ -1,24 +1,19 @@
-import type {
-  ApprovalRequest,
-  ErrorResponse,
-  TargetingRule,
-  TargetingRuleInput,
-} from "@splitch/contracts";
+import type { ApprovalRequest, ErrorResponse } from "@splitch/contracts";
 import { createServerFn } from "@tanstack/react-start";
 import type { z } from "zod";
 import { type ApprovalGateRecord, approvalGateRecord } from "#lib/approval/approval-gate-record";
+import {
+  authorizedApprovalsClient,
+  authorizedFlagsClient,
+} from "#lib/auth/panel-authorized-clients";
+import { applyTargetingEdit } from "#lib/flags/apply-targeting-edit";
 import {
   ApprovalRequestInputSchema,
   PromoteInputSchema,
   ReviewInputSchema,
   TargetingEditInputSchema,
-  type TargetingEditSchema,
   UpdateConfigInputSchema,
 } from "#lib/flags/flag-mutation-input";
-import {
-  authorizedApprovalsClient,
-  authorizedFlagsClient,
-} from "#lib/auth/panel-authorized-clients";
 
 /**
  * The Flag Configuration write path, and the Approval Request pair that a gated
@@ -190,27 +185,6 @@ export const reviewControlPanelApprovalRequest = createServerFn({ method: "POST"
  * Existing rules are passed through untouched. A new percentage rollout carries
  * only the operator-authored percentage; the Worker owns the salt.
  */
-function applyTargetingEdit(
-  rules: readonly TargetingRule[],
-  edit: z.infer<typeof TargetingEditSchema>,
-  flagId: string,
-): TargetingRuleInput[] {
-  if (edit.kind === "remove") return rules.filter((rule) => rule.id !== edit.ruleId);
-  const priority = rules.reduce((highest, rule) => Math.max(highest, rule.priority), -1) + 1;
-  return [
-    ...rules,
-    {
-      id: edit.ruleId,
-      flagId,
-      priority,
-      conditions: edit.condition ? [edit.condition] : [],
-      ...(edit.segmentId ? { segmentId: edit.segmentId } : {}),
-      variantId: edit.variantId,
-      percentageRollout: edit.percentage === undefined ? null : { percentage: edit.percentage },
-    },
-  ];
-}
-
 function writeResult(
   result:
     | { ok: true; status: number; data: { approvalRequest: ApprovalRequest | null } }

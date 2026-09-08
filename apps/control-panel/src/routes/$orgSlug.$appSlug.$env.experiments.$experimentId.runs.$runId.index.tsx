@@ -19,6 +19,9 @@ function AdaptivePinnedRunTab() {
   }
   return (
     <ExperimentResultsPanel
+      canConclude={route.scope.appRole === "owner" || route.scope.appRole === "admin"}
+      environments={route.environments}
+      flagId={route.data.experiment.flagId}
       appId={route.scope.appId}
       environmentId={route.scope.environmentId}
       experimentId={route.data.experiment.id}

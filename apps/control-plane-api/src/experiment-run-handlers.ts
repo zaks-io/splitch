@@ -17,12 +17,17 @@ import {
 } from "./experiment-handler-shared";
 import { jsonArrayOrNull, runResponse } from "./experiment-model";
 import { pathParam } from "./handler-input";
+import { concludeRun } from "./experiment-conclusion-handler";
+import { createConclusionPromotionRequest } from "./experiment-conclusion-replacement";
 
 export function makeRunHandlers(deps: ExperimentDeps) {
   return {
     listRuns: (args: HandlerArgs<unknown>) => listRuns(deps, args),
     getRun: (args: HandlerArgs<unknown>) => getRun(deps, args),
     endRun: (args: HandlerArgs<unknown>) => endRun(deps, args),
+    concludeRun: (args: HandlerArgs<unknown>) => concludeRun(deps, args),
+    createConclusionPromotionRequest: (args: HandlerArgs<unknown>) =>
+      createConclusionPromotionRequest(deps, args),
   };
 }
 

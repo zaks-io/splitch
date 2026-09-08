@@ -1,5 +1,5 @@
-import { describe, expect, it } from "vitest";
 import type { MetricQueryConfig } from "@splitch/contracts";
+import { describe, expect, it } from "vitest";
 import { readMetricRows, readPrePeriodRows } from "./results-metric-query";
 import { makeResultsHarness, RESULTS_PATH, resultsAuthInit } from "./results-test-harness";
 import { FakeTinybird, RUN_ID, rowsByPipe } from "./results-test-support";
@@ -20,6 +20,7 @@ describe("GET experiment results Metric query contract", () => {
       experiment_id: "exp_checkout_banner",
       run_id: RUN_ID,
       from_ts: "2026-07-01 00:00:00.000",
+      ingest_watermark_ts: "2026-07-05 00:00:00.000",
       activation_gated: "0",
     });
     expect(JSON.parse(metricCall?.params.metric_query_config ?? "null")).toEqual([

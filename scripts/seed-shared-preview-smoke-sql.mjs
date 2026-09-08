@@ -46,6 +46,8 @@ const TRANSIENT_APP_SCOPED_TABLES = [
   "cloudflare_installations",
   "config_webhook_deliveries",
   "convex_installations",
+  "conclusion_approval_requests",
+  "experiment_conclusions",
   "approval_reviews",
   "approval_requests",
   "runs",

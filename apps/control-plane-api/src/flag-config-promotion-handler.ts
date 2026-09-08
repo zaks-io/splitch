@@ -1,7 +1,7 @@
+import { canonicalHash } from "@splitch/contracts";
 import { envScope, type Repository } from "@splitch/db";
 import type { HandlerArgs } from "@splitch/worker-runtime";
 import { requireAppAdmin } from "./app-authz";
-import { canonicalHash } from "./approval-canonical";
 import { environmentPolicyContexts, requiresReview } from "./approval-target";
 import type { ConfigStoreWriter } from "./config-store";
 import type { ConfigStoreAccess } from "./config-store-access";

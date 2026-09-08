@@ -163,7 +163,14 @@ function buildRequest(
  * shipping a request the Worker can only reject (ADR-0036, SPL-266).
  */
 function applyIdempotencyHeader(route: ApiRouteContract, headers: Headers, input: unknown): void {
-  const key = ownValue(inputRecord(input), "idempotency_key");
+  const record = inputRecord(input);
+  const bodyFields = new Set(
+    objectSchemaKeys(jsonMediaTypeSchema(route.openapi.request?.body?.content)),
+  );
+  const key = ownValue(
+    record,
+    bodyFields.has("idempotencyKey") ? "idempotencyKey" : "idempotency_key",
+  );
   const lifted = withIdempotencyHeader(
     route.operationId,
     {},

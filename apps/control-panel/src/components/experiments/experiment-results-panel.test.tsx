@@ -148,6 +148,9 @@ describe("Experiment Results route no_data waiting state", () => {
 function renderPanel(run: PanelExperimentRun = runningRun()): string {
   return renderToStaticMarkup(
     <ExperimentResultsPanel
+      canConclude={true}
+      environments={[{ environmentId: "env_1", env: "dev" }]}
+      flagId="flag_1"
       appId="app_1"
       environmentId="env_1"
       experimentId="exp_1"

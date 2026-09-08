@@ -20,6 +20,7 @@ export const approvalRequests = sqliteTable(
     targetId: text("target_id").notNull(),
     targetVersion: text("target_version").notNull(),
     policyContexts: text("policy_contexts").notNull(),
+    policyGuardContexts: text("policy_guard_contexts"),
     diff: text("diff").notNull(),
     status: text("status").notNull(),
     proposedBy: text("proposed_by").notNull(),

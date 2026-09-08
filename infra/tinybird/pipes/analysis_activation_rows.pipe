@@ -32,6 +32,9 @@ SQL >
         AND experiment_id = {{String(experiment_id)}}
         AND run_id = {{String(run_id)}}
         AND generation_tombstones.app_id = ''
+        {% if defined(ingest_watermark_ts) %}
+        AND ingest_ts <= {{DateTime64(ingest_watermark_ts)}}
+        {% end %}
         -- Counterfactual Activations record what a Control Entity WOULD have done.
         -- The Stats Engine's activated-denominator filter reads only run_id and
         -- `activated` (packages/stats/src/exposure-denominator.ts), so a

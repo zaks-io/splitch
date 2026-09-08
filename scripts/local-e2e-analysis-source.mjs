@@ -13,10 +13,19 @@ const { privateKey, publicKey } = generateKeyPairSync("rsa", { modulusLength: 20
 const publicJwk = { ...publicKey.export({ format: "jwk" }), alg: "RS256", kid: keyId, use: "sig" };
 
 export function createAnalysisSourceServer(runId = "local-e2e") {
-  return createServer((request, response) => handleRequest(request, response, runId));
+  return createServer((request, response) => {
+    handleRequest(request, response, runId).catch((cause) => {
+      const error = cause instanceof Error ? cause : new Error(String(cause));
+      if (!response.headersSent) {
+        json(response, 500, { error: error.message }, runId);
+      } else {
+        response.destroy(error);
+      }
+    });
+  });
 }
 
-function handleRequest(request, response, runId) {
+async function handleRequest(request, response, runId) {
   const url = new URL(request.url ?? "/", origin);
   if (servePublicRoute(url.pathname, response, runId)) return;
   if (request.headers.authorization !== `Bearer ${readToken}`) {
@@ -32,7 +41,8 @@ function handleRequest(request, response, runId) {
     response.writeHead(404).end("not found");
     return;
   }
-  json(response, 200, { data: pipeRows(pipeName, url.searchParams) }, runId);
+  const params = await requestParams(request, url);
+  json(response, 200, { data: pipeRows(pipeName, params) }, runId);
 }
 
 function servePublicRoute(pathname, response, runId) {
@@ -78,21 +88,36 @@ function pipeRows(pipeName, params) {
         metric_query_config: JSON.stringify(fixture.metricQueryConfig),
         started_at: "2026-07-18T00:00:00.000Z",
         dimensions: "[]",
+        config_hash: fixture.configHash,
+        data_watermark: fixture.dataWatermark,
       },
     ];
   }
   if (pipeName === "analysis_deduped_exposures" && params.get("run_id") === fixture.runId) {
     return fixture.exposures;
   }
-  if (pipeName === "analysis_metric_values" && params.get("run_id") === fixture.runId) {
-    // The Analysis Worker issues one read per metric_query_config entry, so a
-    // multi-Metric Run would double every row if this returned the whole set.
+  if (
+    (pipeName === "analysis_metric_values" || pipeName === "analysis_metric_values_batch") &&
+    params.get("run_id") === fixture.runId
+  ) {
+    // The legacy single-Metric endpoint supplies metric_id. The batch endpoint
+    // omits it and receives the Run's full frozen Metric set.
     const metricId = params.get("metric_id");
     return metricId === null
       ? fixture.metricValues
       : fixture.metricValues.filter((row) => row.metric_id === metricId);
   }
   return [];
+}
+
+async function requestParams(request, url) {
+  const params = new URLSearchParams(url.searchParams);
+  if (request.method !== "POST") return params;
+  const chunks = [];
+  for await (const chunk of request) chunks.push(Buffer.from(chunk));
+  const body = new URLSearchParams(Buffer.concat(chunks).toString("utf8"));
+  for (const [key, value] of body) params.set(key, value);
+  return params;
 }
 
 function analysisAccessToken() {

@@ -136,6 +136,7 @@ export const RunParams = z.object({
   experimentId: z.string(),
   runId: z.string(),
 });
+export const ConclusionParams = RunParams.extend({ conclusionId: z.string() });
 export const RunEndParams = z.object({
   appId: AppSelectorSchema,
   environmentId: EnvironmentSelectorSchema,

@@ -1,9 +1,9 @@
 import { z } from "@hono/zod-openapi";
 import { EnvironmentExposureStatusResponseSchema } from "../environment-exposure-status";
-import { TestEvaluationRequestSchema, TestEvaluationResponseSchema } from "../wire-envelopes-core";
+import { type ApiRouteContract, defineApiRoute } from "../openapi-route";
 import { OrganizationUsageResponseSchema } from "../resource-envelopes-usage";
 import { AnalysisResultsEnvelopeSchema } from "../stats-result-contract";
-import { type ApiRouteContract, defineApiRoute } from "../openapi-route";
+import { TestEvaluationRequestSchema, TestEvaluationResponseSchema } from "../wire-envelopes-core";
 import {
   AppParams,
   EnvFlagKeyParams,
@@ -34,7 +34,10 @@ const AUTH = "control-plane-token" as const;
 const RATE = "control-plane-actor" as const;
 
 const ResultsSelectorSchema = z.object({ runId: z.string().optional() }).strict();
-const OptionalResultsSelectorSchema = ResultsSelectorSchema.default({});
+const ConclusionResultsSelectorSchema = ResultsSelectorSchema.extend({
+  dataWatermark: z.string().datetime({ offset: true }).optional(),
+}).strict();
+const OptionalResultsSelectorSchema = ConclusionResultsSelectorSchema.default({});
 const ExposureStatusDeleteQuerySchema = z
   .object({ environmentId: z.string().min(1).optional() })
   .strict();

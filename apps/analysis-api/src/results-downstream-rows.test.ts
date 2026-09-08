@@ -62,7 +62,8 @@ describe("GET experiment results activation health", () => {
       stats: { health: { activation_rates: { control: 0.5, treatment: 0 } } },
     });
     expect(tinybird.calls.map((call) => call.pipeName)).toEqual([
-      "analysis_run_bootstrap",
+      "analysis_run_inputs",
+      "analysis_deduped_exposures",
       "analysis_activation_rows",
     ]);
   });

@@ -95,6 +95,8 @@ export type {
   AppAttentionRollupGetOutput,
   AppsCreateInput,
   AppsCreateOutput,
+  ConclusionPromotionRequestsCreateInput,
+  ConclusionPromotionRequestsCreateOutput,
   FlagConfigGetInput,
   FlagConfigGetOutput,
   FlagConfigUpdateInput,
@@ -104,6 +106,8 @@ export type {
   RouteFlatInput,
   RouteInput,
   RouteOutput,
+  RunsConcludeInput,
+  RunsConcludeOutput,
 } from "@splitch/contracts/route-types";
 export type { ApprovalsClient } from "./approvals-client";
 export type { AppsClient } from "./apps-client";
@@ -118,10 +122,10 @@ export type {
   ControlPlaneOperationResult,
 } from "./operation-result";
 export type { OrganizationsClient } from "./organizations-client";
-export type { PrivacyClient } from "./privacy-client";
 // biome-ignore lint/performance/noBarrelFile: the package root is the only supported Panel import path for this client.
 export {
   createPanelSegmentsClient,
   type PanelSegmentsClient,
   type PanelSegmentsListOutput,
 } from "./panel-segments";
+export type { PrivacyClient } from "./privacy-client";

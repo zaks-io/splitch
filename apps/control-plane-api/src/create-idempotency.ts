@@ -1,5 +1,5 @@
+import { canonicalHash } from "@splitch/contracts";
 import { renderError } from "@splitch/worker-runtime";
-import { canonicalHash } from "./approval-canonical";
 
 export function createRequestHash(value: unknown): Promise<`sha256:${string}`> {
   return canonicalHash(value);

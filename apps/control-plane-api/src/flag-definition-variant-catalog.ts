@@ -1,8 +1,7 @@
-import type { ApprovalPolicyContext } from "@splitch/contracts";
+import { type ApprovalPolicyContext, canonicalHash } from "@splitch/contracts";
 import type { HandlerArgs } from "@splitch/worker-runtime";
 import { nowIso } from "./app-environment-model";
 import { makeOtherApprovalApplication } from "./approval-application";
-import { canonicalHash } from "./approval-canonical";
 import { createApproval, replayApprovalIfExists } from "./approval-service";
 import { requiresReview } from "./approval-target";
 import { flagNotFound, variantDeleteRefusal, variantNotFound } from "./flag-definition-errors";

@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import type { EvaluateContext } from "@splitch/sdk";
 import { deriveMcpTools, getRoute, TargetingKeyTypeSchema } from "@splitch/sdk/control-plane";
 import {
@@ -13,6 +12,7 @@ import {
   applyFlagsCreateConvenienceFields,
   assertContractValidFlagsCreateInput,
 } from "./flag-create-input.js";
+import { applyOperationIdempotencyInput } from "./operation-idempotency-input.js";
 import type { ParsedGlobalFlags, ParsedInvocation } from "./parse-args.js";
 
 const TOOL_BY_OPERATION = new Map(deriveMcpTools().map((tool) => [tool.name, tool]));
@@ -42,20 +42,10 @@ export function buildOperationInput(
   applyNamedFlags(command, invocation.flags, input);
   // The Idempotency Key is minted before the command-specific step because that
   // step validates the assembled input against the contract.
-  applyExplicitIdempotencyKey(invocation.flags, input);
-  applyDefaultIdempotencyKey(command, input);
+  applyOperationIdempotencyInput(command.operationId, invocation.flags.idempotencyKey, input);
   applyCommandSpecificFields(command, invocation, input);
   applyFlagReadFields(command, invocation, context, input);
   return input;
-}
-
-function applyExplicitIdempotencyKey(
-  flags: ParsedGlobalFlags,
-  input: Record<string, unknown>,
-): void {
-  if (flags.idempotencyKey !== undefined) {
-    input.idempotency_key = flags.idempotencyKey;
-  }
 }
 
 function applyBodyJson(
@@ -196,16 +186,6 @@ function supportsDeleteMode(operationId: string): boolean {
   // organizations_delete adopts the same query shape when implemented; until
   // then only apps_delete accepts dryRun/force (SPL-326).
   return operationId === "apps_delete";
-}
-
-function applyDefaultIdempotencyKey(
-  command: CliCommandDefinition,
-  input: Record<string, unknown>,
-): void {
-  const route = getRoute(command.operationId);
-  if (route && route.idempotency !== "none" && !Object.hasOwn(input, "idempotency_key")) {
-    input.idempotency_key = `cli_${randomUUID()}`;
-  }
 }
 
 function applyCommandSpecificFields(

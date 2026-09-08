@@ -43,6 +43,28 @@ describe("mapApprovedFlagConfigFailure", () => {
     });
   });
 
+  it("keeps a winner Promotion pending when a Run starts before application", () => {
+    const outcome = mapApprovedFlagConfigFailure(
+      {
+        ok: false,
+        reason: "RUN_FROZEN",
+        frozenFields: ["flagConfig.rollout"],
+        currentRunId: "run_live",
+        attemptedChange: "APPLY_APPROVED_FLAG_CONFIG",
+      },
+      "flag_1",
+      "env_1",
+      "experiment_winner_promote",
+    );
+
+    expect(outcome).toMatchObject({
+      ok: false,
+      targetState: "rolled_back",
+      error: { code: "RUN_FROZEN" },
+    });
+    expect(outcome).not.toHaveProperty("unapplicable");
+  });
+
   it("maps a Targeting Rule id conflict to VALIDATION_ERROR, not 500", () => {
     expect(
       mapApprovedFlagConfigFailure(

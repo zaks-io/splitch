@@ -1,4 +1,4 @@
-import { targetingRuleDuplicateIdIssues } from "@splitch/contracts";
+import { type ApprovalOperation, targetingRuleDuplicateIdIssues } from "@splitch/contracts";
 import type { ApplicationOutcome } from "./approval-service-types";
 import type { FlagConfigWriteResult } from "./config-store-types";
 import { runFrozenError } from "./flag-config-run-freeze";
@@ -12,6 +12,7 @@ export function mapApprovedFlagConfigFailure(
   result: Extract<FlagConfigWriteResult, { ok: false }>,
   flagId: string,
   environmentId: string,
+  operation?: ApprovalOperation,
 ): ApplicationOutcome {
   if (result.reason === "APPROVAL_NOT_APPLIED") {
     return { ok: false as const, notApplied: true as const };
@@ -20,6 +21,13 @@ export function mapApprovedFlagConfigFailure(
   // legal way to move the field, so the Request is resolved rather than parked.
   if (result.reason === "RUN_FROZEN") {
     const { message, details } = runFrozenError(result);
+    if (operation === "experiment_winner_promote") {
+      return {
+        ok: false as const,
+        targetState: "rolled_back" as const,
+        error: { code: "RUN_FROZEN" as const, details },
+      };
+    }
     return { ok: false as const, unapplicable: { code: "RUN_FROZEN", message, details } };
   }
   // A proposal whose changed-field set cannot be read must not apply. Resolve

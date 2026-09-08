@@ -6,12 +6,12 @@ import type {
 } from "@splitch/contracts";
 import { Button } from "@splitch/ui/components/button";
 import { armColor } from "#lib/experiments/arm-colors";
-import { RAIL_NODE_TOP, railOffset } from "./experiment-results-arms";
 import {
   type MetricNames,
   metricDisplayName,
   withMetricNames,
 } from "#lib/experiments/metric-names";
+import { RAIL_NODE_TOP, railOffset } from "./experiment-results-arms";
 
 /**
  * The ship-decision gate, rendered exactly as the Worker computed it.
@@ -25,6 +25,9 @@ import {
 
 export function ExperimentResultsDecision({
   baseline,
+  canConclude,
+  evidenceAvailable,
+  onConclude,
   control,
   gate,
   guardrails,
@@ -33,6 +36,9 @@ export function ExperimentResultsDecision({
   variantOrder,
 }: {
   baseline: string;
+  canConclude: boolean;
+  evidenceAvailable: boolean;
+  onConclude: () => void;
   control: FrozenControlIdentity;
   gate: ExperimentDecisionGate;
   guardrails: readonly GuardrailResult[];
@@ -69,7 +75,13 @@ export function ExperimentResultsDecision({
             </p>
             <GateSummary gate={gate} />
           </div>
-          <ConcludeAction shipAllowed={gate.shipAllowed} />
+          <ConcludeAction
+            canConclude={canConclude}
+            evidenceAvailable={evidenceAvailable}
+            onConclude={onConclude}
+            runStatus={runStatus}
+            shipAllowed={gate.shipAllowed}
+          />
         </div>
 
         <GuardrailAdvisory guardrails={guardrails} metricNames={metricNames} />
@@ -216,22 +228,30 @@ function GateSummary({ gate }: { gate: ExperimentDecisionGate }) {
   );
 }
 
-/**
- * Always disabled. The conclude/promote mutation does not exist yet (SPL-158),
- * and an enabled control that silently does nothing is a lie about what the
- * Panel can do (ADR-0036).
- */
-function ConcludeAction({ shipAllowed }: { shipAllowed: boolean }) {
+function ConcludeAction({
+  canConclude,
+  evidenceAvailable,
+  onConclude,
+  runStatus,
+  shipAllowed,
+}: {
+  canConclude: boolean;
+  evidenceAvailable: boolean;
+  onConclude: () => void;
+  runStatus: "running" | "ended";
+  shipAllowed: boolean;
+}) {
+  let reason: string | null = null;
+  if (runStatus === "ended") reason = "This Run has ended.";
+  else if (!canConclude) reason = "An App owner or admin can Conclude this Run.";
+  else if (!shipAllowed) reason = "Resolve the failing checks below before concluding this Run.";
+  else if (!evidenceAvailable) reason = "Refresh Results to load the evidence for this decision.";
   return (
     <div className="grid justify-items-end gap-1">
-      <Button disabled type="button">
+      <Button disabled={reason !== null} onClick={onConclude} type="button">
         Conclude Run
       </Button>
-      <p className="text-muted-foreground text-xs">
-        {shipAllowed
-          ? "Not wired up yet: concluding a Run ships in SPL-158."
-          : "Blocked by the checks below, and not wired up yet (SPL-158)."}
-      </p>
+      {reason ? <p className="text-muted-foreground text-xs">{reason}</p> : null}
     </div>
   );
 }

@@ -81,7 +81,11 @@ export function analysisResultsNoRunEnvelope(): AnalysisResultsEnvelope {
  * route is App-scoped: its path has no `:orgId` segment for the receiving
  * cross-check to compare against.
  */
-export function analysisResultsRequest(scope: AnalysisResultsScope, actorId: string): Request {
+export function analysisResultsRequest(
+  scope: AnalysisResultsScope,
+  actorId: string,
+  options: { dataWatermark?: string } = {},
+): Request {
   const route = controlPlaneRoute("experiment_results_post");
   return delegatedRequest(
     route,
@@ -98,7 +102,7 @@ export function analysisResultsRequest(scope: AnalysisResultsScope, actorId: str
         environmentId: scope.environmentId,
         experimentId: scope.experimentId,
       },
-      body: { runId: scope.runId },
+      body: { runId: scope.runId, ...options },
     },
   );
 }

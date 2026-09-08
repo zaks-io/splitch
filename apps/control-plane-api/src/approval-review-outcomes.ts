@@ -239,7 +239,7 @@ export function reviewForbidden(
 }
 
 export function idempotencyConflict(
-  scope: "approval_request" | "review",
+  scope: "approval_request" | "review" | "conclusion",
   idempotencyKey: string,
   requestId: string,
 ) {

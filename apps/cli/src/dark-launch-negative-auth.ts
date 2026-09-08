@@ -140,7 +140,7 @@ export async function proveLocalNegativeAuth(
         await deleteFlagThroughApproval(harness, probe.id, probe.flagId, token);
       }
       const deleted = await controlPlaneDelete(harness, `/apps/${probe.id}`, token);
-      expect(deleted.ok).toBe(true);
+      expect(deleted.ok, await deleted.text()).toBe(true);
     }
   }
 
