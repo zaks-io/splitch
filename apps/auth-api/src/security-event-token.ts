@@ -87,7 +87,7 @@ function validateSecurityEventClaims(
 ): { jti: string; events: Record<string, unknown> } {
   requiredString(payload, "sub");
   const jti = requiredString(payload, "jti");
-  if (payload.aud !== authApiOrigin) {
+  if (!includesAudience(payload.aud, authApiOrigin)) {
     throw new SecurityEventError("invalid_request", "SET audience does not match this service");
   }
   const issuedAt = requiredInteger(payload, "iat");
@@ -97,11 +97,25 @@ function validateSecurityEventClaims(
       "SET issued-at time is outside the accepted window",
     );
   }
+  const expiresAt = optionalNumericDate(payload, "exp");
+  if (expiresAt !== undefined && expiresAt <= now) {
+    throw new SecurityEventError("invalid_request", "SET has expired");
+  }
   const events = payload.events;
   if (!isNonEmptyRecord(events)) {
     throw new SecurityEventError("invalid_request", "SET events claim must be an object");
   }
   return { jti, events };
+}
+
+function includesAudience(value: unknown, expected: string): boolean {
+  if (typeof value === "string") return value === expected;
+  return (
+    Array.isArray(value) &&
+    value.length > 0 &&
+    value.every((audience) => typeof audience === "string") &&
+    value.includes(expected)
+  );
 }
 
 function isNonEmptyRecord(value: unknown): value is Record<string, unknown> {
@@ -125,6 +139,15 @@ function requiredInteger(payload: Record<string, unknown>, key: string): number 
   const value = payload[key];
   if (typeof value !== "number" || !Number.isSafeInteger(value)) {
     throw new SecurityEventError("invalid_request", `SET is missing the integer ${key} claim`);
+  }
+  return value;
+}
+
+function optionalNumericDate(payload: Record<string, unknown>, key: string): number | undefined {
+  const value = payload[key];
+  if (value === undefined) return undefined;
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    throw new SecurityEventError("invalid_request", `SET ${key} claim must be a NumericDate`);
   }
   return value;
 }

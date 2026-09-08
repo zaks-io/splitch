@@ -35,12 +35,24 @@ describe("processSecurityEventToken", () => {
     ).resolves.toEqual({ duplicate: true, recognized: false });
   });
 
+  it("accepts the service origin in a multi-audience SET", async () => {
+    await expect(
+      processSecurityEventToken(
+        deps(),
+        setToken({ payload: { aud: ["https://other.example", ORIGIN] } }),
+      ),
+    ).resolves.toEqual({ duplicate: false, recognized: true });
+  });
+
   it.each([
     ["wrong type", { header: { typ: "JWT" } }],
     ["missing kid", { header: { kid: undefined } }],
     ["algorithm confusion", { header: { alg: "HS256" } }],
     ["wrong audience", { payload: { aud: "https://attacker.example" } }],
+    ["malformed audience array", { payload: { aud: [ORIGIN, 42] } }],
     ["future issued-at", { payload: { iat: Math.floor(NOW_MS / 1000) + 61 } }],
+    ["expired token", { payload: { exp: Math.floor(NOW_MS / 1000) } }],
+    ["malformed expiry", { payload: { exp: "tomorrow" } }],
     ["empty events", { payload: { events: {} } }],
   ])("rejects %s", async (_label, overrides) => {
     await expect(processSecurityEventToken(deps(), setToken(overrides))).rejects.toBeInstanceOf(

@@ -103,16 +103,16 @@ function formatFlagSummaryList(flags: readonly SummaryFlag[]): string {
 function formatHydratedFlag(flag: HydratedFlagResponse): string {
   const definition = [
     `Flag: ${terminalText(flag.name)}`,
-    `ID: ${flag.id}`,
-    `App: ${flag.appId}`,
-    `Key: ${flag.key}`,
+    `ID: ${terminalText(flag.id)}`,
+    `App: ${terminalText(flag.appId)}`,
+    `Key: ${terminalText(flag.key)}`,
     ...(flag.description === undefined ? [] : [`Description: ${terminalText(flag.description)}`]),
     // The Flag schema is a JSON Schema document, so its compact JSON is the
     // value rather than a stand-in for one.
     `Schema: ${flag.schema === null ? "(none)" : terminalText(JSON.stringify(flag.schema))}`,
-    `Default Variant ID: ${flag.defaultVariantId}`,
-    `Created: ${flag.createdAt}`,
-    `Updated: ${flag.updatedAt}`,
+    `Default Variant ID: ${terminalText(flag.defaultVariantId)}`,
+    `Created: ${terminalText(flag.createdAt)}`,
+    `Updated: ${terminalText(flag.updatedAt)}`,
   ];
   const variants = formatTable(
     ["VARIANT ID", "NAME", "VALUE", "DESCRIPTION"],
@@ -131,7 +131,7 @@ function formatConfiguration(
   configuration: HydratedFlagResponse["configurations"][number],
 ): string {
   return [
-    `Environment: ${configuration.environmentId}`,
+    `Environment: ${terminalText(configuration.environmentId)}`,
     `Enabled: ${configuration.enabled}`,
     `Available Variants: ${nameList(configuration.availableVariantNames)}`,
     `Rollout: ${formatRollout(configuration.rollout)}`,
@@ -170,11 +170,15 @@ function nameList(names: readonly string[]): string {
 }
 
 function formatRollout(rollout: { percentage: number; salt: string } | null): string {
-  return rollout === null ? "(none)" : `${rollout.percentage}% (salt ${rollout.salt})`;
+  return rollout === null
+    ? "(none)"
+    : `${rollout.percentage}% (salt ${terminalText(rollout.salt)})`;
 }
 
 function formatExperimentRef(experiment: { id: string; key: string } | null): string {
-  return experiment === null ? "(none)" : `${experiment.key} (${experiment.id})`;
+  return experiment === null
+    ? "(none)"
+    : `${terminalText(experiment.key)} (${terminalText(experiment.id)})`;
 }
 
 interface SummaryFlag {
