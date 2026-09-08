@@ -211,7 +211,14 @@ export function wrapWorkerHandler<E extends WorkerEnv, QueueMessage = unknown>(
 
 function productionHttpsRedirect(request: Request, env: WorkerEnv): Response | null {
   const url = new URL(request.url);
-  if (env.SPLITCH_PLATFORM_TARGET !== "production" || url.protocol !== "http:") return null;
+  // Build adapters prerender the built Worker through a plain-HTTP loopback server.
+  if (
+    env.SPLITCH_PLATFORM_TARGET !== "production" ||
+    url.protocol !== "http:" ||
+    ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname)
+  ) {
+    return null;
+  }
   url.protocol = "https:";
   return applyResponseHeaders(
     new Response(null, { status: 308, headers: { location: url.toString() } }),
