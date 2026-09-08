@@ -91,7 +91,11 @@ describe("registrar default mutating JSON body limit", () => {
     createRegistrar(deps()).mount(app, route({ input: schema }), handler);
 
     const response = await app.request(
-      new Request("http://worker.test/things", { method: "POST", body: raw }),
+      new Request("http://worker.test/things", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: raw,
+      }),
     );
 
     expect(parsedRequestBodies(parse, raw)).toEqual([raw]);
@@ -115,7 +119,7 @@ describe("registrar default mutating JSON body limit", () => {
 
     const response = await app.request("/things", {
       method: "POST",
-      headers: { "content-length": "9" },
+      headers: { "content-length": "9", "content-type": "application/json" },
       body: "x".repeat(9),
     });
 
@@ -165,7 +169,11 @@ describe("registrar control-plane JSON body limit", () => {
     ).mount(app, route({ auth: "control-plane-token", input: schema }), handler);
 
     const response = await app.request(
-      new Request("http://worker.test/things", { method: "POST", body: raw }),
+      new Request("http://worker.test/things", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: raw,
+      }),
     );
 
     expect(validate).toHaveBeenCalledTimes(1);
@@ -244,7 +252,7 @@ function requestWithBody(
 ): Request {
   return new Request("http://worker.test/things", {
     method: "POST",
-    headers,
+    headers: { "content-type": "application/json", ...headers },
     body,
     duplex: "half",
   } as RequestInit & { duplex: "half" });

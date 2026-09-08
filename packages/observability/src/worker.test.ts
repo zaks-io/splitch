@@ -27,8 +27,8 @@ async function flushSentryHooks(): Promise<void> {
 
 type WorkerFetchRequest = Parameters<NonNullable<ExportedHandler["fetch"]>>[0];
 
-function workerFetchRequest(url: string): WorkerFetchRequest {
-  return new Request(url) as WorkerFetchRequest;
+function workerFetchRequest(url: string, init?: RequestInit): WorkerFetchRequest {
+  return new Request(url, init) as WorkerFetchRequest;
 }
 
 describe("createWorkerObservability onError", () => {

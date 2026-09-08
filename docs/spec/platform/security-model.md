@@ -36,6 +36,10 @@ The Evaluation and Event Ingest Workers are reachable by untrusted clients holdi
   extra under a Client Key (ADR-0037); anon registration is gated by Turnstile; revoke is
   **fail-loud**.
 - Canonical contract: **ADR-0034** + [`edge-abuse-controls`](../pipeline/edge-ingest-contract.md).
+- Every production Worker custom hostname redirects HTTP before request
+  credentials or bodies reach application code. Production HTTPS responses set
+  one-year, per-host HSTS. `includeSubDomains` and preload stay disabled until the
+  complete zone has a separately reviewed HTTPS inventory and rollout.
 
 ### 2. Tenant isolation
 
@@ -108,6 +112,7 @@ trivy-action compromises were tag-repointing attacks defeated by SHA pinning.
 | Newly malicious dependency release | supply   | pnpm age and transitive-source quarantine               |
 | Repointed GitHub Action tag        | supply   | Full action SHA pins; Harden-Runner                     |
 | PII over-retention / leak          | privacy  | Privacy data-lifecycle contract                         |
+| Plaintext credential transport     | 1, 3     | Edge HTTPS redirect plus per-host HSTS                  |
 
 ## Sources
 

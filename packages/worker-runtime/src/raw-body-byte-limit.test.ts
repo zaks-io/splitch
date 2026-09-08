@@ -138,7 +138,11 @@ describe("registrar raw-body byte limit", () => {
     );
 
     const response = await app.request(
-      new Request("http://worker.test/things", { method: "POST", body: raw }),
+      new Request("http://worker.test/things", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: raw,
+      }),
     );
 
     expect(parsedRequestBodies(parse, raw)).toEqual([raw]);
@@ -174,7 +178,7 @@ function requestWithBody(
 ): Request {
   return new Request("http://worker.test/things", {
     method: "POST",
-    headers,
+    headers: { "content-type": "application/json", ...headers },
     body,
     duplex: "half",
   } as RequestInit & { duplex: "half" });

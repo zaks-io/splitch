@@ -14,6 +14,16 @@ export const WORKER_BASELINE_SECURITY_HEADERS = {
 } as const satisfies Record<string, string>;
 
 /**
+ * Per-host HSTS for Splitch's production custom hostnames. Subdomains and
+ * preload stay off until the whole zone has an independently verified HTTPS
+ * inventory and an explicit preload rollout.
+ */
+export const HOSTED_PRODUCTION_SECURITY_HEADERS = {
+  ...WORKER_BASELINE_SECURITY_HEADERS,
+  "strict-transport-security": "max-age=31536000",
+} as const satisfies Record<string, string>;
+
+/**
  * Baseline plus clickjacking controls and a crawler opt-out. Applied at the
  * Control Panel boundary: every page there is private and authenticated, so no
  * response belongs in a search index.
@@ -139,6 +149,9 @@ function mergeHeaderValue(name: string, current: string, extra: string): string 
   if (key === "referrer-policy") {
     return strongerReferrerPolicy(current, extra);
   }
+  if (key === "strict-transport-security") {
+    return strongerStrictTransportSecurity(current, extra);
+  }
   if (key === "x-robots-tag") {
     // Whole-value check. Per-crawler groups (`googlebot: noindex, bingbot: all`)
     // would score as already-noindex and keep the weaker group, which is fine
@@ -148,6 +161,44 @@ function mergeHeaderValue(name: string, current: string, extra: string): string 
     );
   }
   return current;
+}
+
+function strongerStrictTransportSecurity(current: string, extra: string): string {
+  const currentPolicy = parseStrictTransportSecurity(current);
+  const extraPolicy = parseStrictTransportSecurity(extra);
+  if (extraPolicy.maxAge === null) return current;
+  if (currentPolicy.maxAge === null) return extra;
+
+  const directives = [`max-age=${Math.max(currentPolicy.maxAge, extraPolicy.maxAge)}`];
+  if (currentPolicy.includeSubDomains || extraPolicy.includeSubDomains) {
+    directives.push("includeSubDomains");
+  }
+  if (currentPolicy.preload || extraPolicy.preload) {
+    directives.push("preload");
+  }
+  return directives.join("; ");
+}
+
+function parseStrictTransportSecurity(value: string): {
+  maxAge: number | null;
+  includeSubDomains: boolean;
+  preload: boolean;
+} {
+  let maxAge: number | null = null;
+  let includeSubDomains = false;
+  let preload = false;
+  for (const rawDirective of value.split(";")) {
+    const directive = rawDirective.trim();
+    const maxAgeMatch = /^max-age\s*=\s*(\d+)$/i.exec(directive);
+    if (maxAgeMatch?.[1] !== undefined) {
+      const parsed = Number(maxAgeMatch[1]);
+      if (Number.isSafeInteger(parsed)) maxAge = parsed;
+      continue;
+    }
+    if (directive.toLowerCase() === "includesubdomains") includeSubDomains = true;
+    if (directive.toLowerCase() === "preload") preload = true;
+  }
+  return { maxAge, includeSubDomains, preload };
 }
 
 function strongerToken(

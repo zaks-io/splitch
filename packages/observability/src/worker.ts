@@ -1,6 +1,7 @@
 import type { SentryEventLike } from "@splitch/privacy";
 import {
   applyResponseHeaders,
+  HOSTED_PRODUCTION_SECURITY_HEADERS,
   type Observability,
   WORKER_BASELINE_SECURITY_HEADERS,
 } from "@splitch/worker-runtime";
@@ -162,15 +163,17 @@ export function wrapWorkerHandler<E extends WorkerEnv, QueueMessage = unknown>(
       env: E,
       ctx: ExecutionContext,
     ) {
+      const transportRedirect = productionHttpsRedirect(request, env);
+      if (transportRedirect) return transportRedirect;
       if (!env.SENTRY_DSN) {
-        return applyWorkerBaselineHeaders(await innerFetch(request, env, ctx));
+        return applyWorkerSecurityHeaders(await innerFetch(request, env, ctx), request, env);
       }
       const Sentry = await loadSentry();
       const sentryFetch = getSentryWrappedHandler(handler, options, Sentry).fetch;
       if (!sentryFetch) {
         throw new Error("observability: Sentry-wrapped handler is missing fetch");
       }
-      return applyWorkerBaselineHeaders(await sentryFetch(request, env, ctx));
+      return applyWorkerSecurityHeaders(await sentryFetch(request, env, ctx), request, env);
     },
   };
 
@@ -206,9 +209,28 @@ export function wrapWorkerHandler<E extends WorkerEnv, QueueMessage = unknown>(
   return wrapped;
 }
 
-/** Stamp the shared baseline on every Worker fetch response, including health and faults. */
-function applyWorkerBaselineHeaders(response: Response): Response {
-  return applyResponseHeaders(response, WORKER_BASELINE_SECURITY_HEADERS);
+function productionHttpsRedirect(request: Request, env: WorkerEnv): Response | null {
+  const url = new URL(request.url);
+  if (env.SPLITCH_PLATFORM_TARGET !== "production" || url.protocol !== "http:") return null;
+  url.protocol = "https:";
+  return applyResponseHeaders(
+    new Response(null, { status: 308, headers: { location: url.toString() } }),
+    WORKER_BASELINE_SECURITY_HEADERS,
+  );
+}
+
+/** Stamp the shared baseline everywhere and HSTS only on production HTTPS. */
+function applyWorkerSecurityHeaders(
+  response: Response,
+  request: Request,
+  env: WorkerEnv,
+): Response {
+  const isProductionHttps =
+    env.SPLITCH_PLATFORM_TARGET === "production" && new URL(request.url).protocol === "https:";
+  return applyResponseHeaders(
+    response,
+    isProductionHttps ? HOSTED_PRODUCTION_SECURITY_HEADERS : WORKER_BASELINE_SECURITY_HEADERS,
+  );
 }
 
 /**

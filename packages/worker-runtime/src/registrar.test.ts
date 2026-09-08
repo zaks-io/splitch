@@ -63,6 +63,7 @@ describe("guard: input validation", () => {
 
     const res = await app.request("/things", {
       method: "POST",
+      headers: { "content-type": "application/json" },
       body: "}{not json",
     });
 
@@ -97,6 +98,7 @@ describe("guard: input validation", () => {
 
     const res = await app.request("/things", {
       method: "POST",
+      headers: { "content-type": "application/json" },
       body: JSON.stringify({ name: "ok" }),
     });
 
@@ -273,6 +275,7 @@ describe("fault path: an unexpected throw", () => {
 
     const res = await app.request("/things", {
       method: "POST",
+      headers: { "content-type": "application/json" },
       body: JSON.stringify({ wrong: "field" }),
     });
 

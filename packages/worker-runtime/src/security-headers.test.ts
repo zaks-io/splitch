@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   applyResponseHeaders,
   CONTROL_PANEL_SECURITY_HEADERS,
+  HOSTED_PRODUCTION_SECURITY_HEADERS,
   mergeHeaderRecords,
   WORKER_BASELINE_SECURITY_HEADERS,
 } from "./security-headers";
@@ -26,6 +27,18 @@ describe("baseline security header policy", () => {
     );
     expect(CONTROL_PANEL_SECURITY_HEADERS["x-frame-options"]).toBe("DENY");
     expect(CONTROL_PANEL_SECURITY_HEADERS["x-robots-tag"]).toBe("noindex, nofollow");
+  });
+
+  it("keeps production HSTS host-scoped and out of preload", () => {
+    expect(HOSTED_PRODUCTION_SECURITY_HEADERS["strict-transport-security"]).toBe(
+      "max-age=31536000",
+    );
+    expect(HOSTED_PRODUCTION_SECURITY_HEADERS["strict-transport-security"]).not.toContain(
+      "includeSubDomains",
+    );
+    expect(HOSTED_PRODUCTION_SECURITY_HEADERS["strict-transport-security"]).not.toContain(
+      "preload",
+    );
   });
 
   it("keeps noindex when a route response advertises itself as indexable", () => {
@@ -231,5 +244,20 @@ describe("applyResponseHeaders", () => {
     expect(applied).toBe(upgrade);
     expect(applied.webSocket).toBe(socket);
     expect(applied.headers.get("x-content-type-options")).toBeNull();
+  });
+});
+
+describe("HSTS response-header policy", () => {
+  it("upgrades weak HSTS without dropping stronger scope directives", () => {
+    const response = applyResponseHeaders(
+      new Response("ok", {
+        headers: { "strict-transport-security": "max-age=0; includeSubDomains; preload" },
+      }),
+      { "strict-transport-security": "max-age=31536000" },
+    );
+
+    expect(response.headers.get("strict-transport-security")).toBe(
+      "max-age=31536000; includeSubDomains; preload",
+    );
   });
 });
