@@ -147,7 +147,7 @@ test("production deploy does not run unsupported per-job Harden Runner installat
 test("phase-specific setup and credentials stay conditional", () => {
   assert.match(
     workflow,
-    /name: Setup Node[\s\S]*if: needs\.validate\.outputs\.d1 == 'true' \|\| needs\.validate\.outputs\.workers == 'true'/,
+    /name: Setup Node[\s\S]*if: needs\.validate\.outputs\.tinybird == 'true' \|\| needs\.validate\.outputs\.d1 == 'true' \|\| needs\.validate\.outputs\.workers == 'true'/,
   );
   assert.match(
     workflow,
