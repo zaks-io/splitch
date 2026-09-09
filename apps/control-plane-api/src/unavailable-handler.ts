@@ -74,7 +74,9 @@ export async function authorizePrivacyRequestStatus(
       { requestId: args.requestId },
     );
   }
-  if (privacyRequest.requestedBy === args.principal.id) return null;
+  if (privacyRequest.subjectType === "user" && privacyRequest.requestedBy === args.principal.id) {
+    return null;
+  }
 
   const orgAuthorization = await requireScopedOrgOwner(deps, args, privacyRequest);
   if (orgAuthorization === null) return null;
