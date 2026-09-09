@@ -5,6 +5,8 @@ export const OTHER_APP_ID = "app_other";
 export const ENVIRONMENT_ID = "env_prod";
 export const EXPERIMENT_ID = "exp_checkout_banner";
 export const RUN_ID = "run_checkout_banner_1";
+export const DATA_WATERMARK = "2026-07-05T00:00:00.000Z";
+export const RUN_CONFIG_HASH = `sha256:${"a".repeat(64)}`;
 
 export type RowsByPipe = Record<string, readonly unknown[]>;
 
@@ -83,6 +85,8 @@ export function rowsByPipe(): RowsByPipe {
     analysis_run_inputs: [
       {
         run_id: RUN_ID,
+        config_hash: RUN_CONFIG_HASH,
+        data_watermark: DATA_WATERMARK,
         confidence_level: 0.95,
         horizon: "sequential",
         allocation: JSON.stringify({ control: 50, treatment: 50 }),

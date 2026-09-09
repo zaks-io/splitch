@@ -48,7 +48,7 @@ export const UpdateConfigInputSchema = FlagScopeSchema.extend({
   variantLabels: VariantLabelsSchema,
 });
 
-export const TargetingEditSchema = z.discriminatedUnion("kind", [
+const TargetingEditSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("remove"), ruleId: z.string().min(1) }).strict(),
   z
     .object({

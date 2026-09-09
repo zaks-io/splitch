@@ -15,6 +15,8 @@
  * not a query handle.
  */
 
+// biome-ignore lint/performance/noBarrelFile: package public-API entry (exports "." → index.js); the seam + schema surface is intentionally aggregated here
+export { appDeletionRetryActorHash } from "./repo/app-deletion-sagas";
 export type {
   CloudflareInstallationRow,
   CloudflareInstallationWrite,
@@ -24,6 +26,7 @@ export type {
   ConvexInstallationWrite,
 } from "./repo/convex-integrations";
 export type { FlagChangeEventRow } from "./repo/flag-change-events";
+export type { ReplaceTargetingRulesResult } from "./repo/flag-config-ops";
 export type { UpdateVariantResult } from "./repo/flag-variant-approval";
 export type {
   RemoveVariantResult,
@@ -33,7 +36,6 @@ export type {
   VariantFrozenChange,
   VariantRunFreeze,
 } from "./repo/flag-variant-run-freeze";
-export type { ReplaceTargetingRulesResult } from "./repo/flag-config-ops";
 export type { CreateFlagResult } from "./repo/flags";
 export type {
   ApprovalCommit,
@@ -45,9 +47,7 @@ export type {
 // The tenant-isolation seam: the only public way to reach D1. The scope
 // constructors come straight from the internal scope module (this root barrel
 // is INSIDE packages/db, so reaching repo/* is allowed; outside code cannot).
-// biome-ignore lint/performance/noBarrelFile: package public-API entry (exports "." → index.js); the seam + schema surface is intentionally aggregated here
 export { createRepository } from "./repo/index";
-export { appDeletionRetryActorHash } from "./repo/app-deletion-sagas";
 export type { EnvScope, MultiAppScope, TenantScope } from "./repo/scope";
 export { appScope, envScope, multiAppScope } from "./repo/scope";
 export type { ScopedTable } from "./repo/scoped-table";
@@ -66,6 +66,7 @@ export {
   clientKeys,
   cloudflareConfigDeliveries,
   cloudflareInstallations,
+  conclusionApprovalRequests,
   configWebhookDeliveries,
   convexInstallations,
   deviceRefreshSessions,
@@ -73,6 +74,7 @@ export {
   environments,
   eventDefinitions,
   eventDefinitionVersions,
+  experimentConclusions,
   experiments,
   flagConfigs,
   flags,

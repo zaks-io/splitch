@@ -1,4 +1,5 @@
 import type { ApprovalDiff, ApprovalDiffEntry } from "@splitch/contracts";
+import { canonicalJson } from "@splitch/contracts";
 
 const CROCKFORD = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
 let lastUlidTime = -1;
@@ -12,35 +13,8 @@ export function approvalReviewId(now = Date.now()): string {
   return `rev_${ulid(now)}`;
 }
 
-export async function canonicalHash(value: unknown): Promise<`sha256:${string}`> {
-  const bytes = new TextEncoder().encode(canonicalJson(value));
-  const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", bytes));
-  return `sha256:${[...digest].map((byte) => byte.toString(16).padStart(2, "0")).join("")}`;
-}
-
-export function canonicalJson(value: unknown): string {
-  if (value === null || typeof value === "boolean" || typeof value === "string") {
-    return JSON.stringify(value);
-  }
-  if (typeof value === "number") {
-    if (!Number.isFinite(value)) throw new TypeError("canonical JSON requires finite numbers");
-    return JSON.stringify(value);
-  }
-  if (Array.isArray(value)) {
-    return `[${value.map(canonicalJson).join(",")}]`;
-  }
-  if (typeof value === "object") {
-    const record = value as Record<string, unknown>;
-    // RFC 8785 has no `undefined`, and neither does JSON: an explicitly
-    // undefined property is omitted exactly as `JSON.stringify` omits it,
-    // rather than throwing mid-request on a patch object built in JS.
-    return `{${Object.keys(record)
-      .filter((key) => record[key] !== undefined)
-      .sort()
-      .map((key) => `${JSON.stringify(key)}:${canonicalJson(record[key])}`)
-      .join(",")}}`;
-  }
-  throw new TypeError(`canonical JSON does not support ${typeof value}`);
+export function experimentConclusionId(now = Date.now()): string {
+  return `con_${ulid(now)}`;
 }
 
 export function approvalDiff(

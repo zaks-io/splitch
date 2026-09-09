@@ -28,26 +28,43 @@ const PanelResultsMissingInputSchema = z.enum(["exposures", "metric_events"]);
  * cannot carry `runId` / `runStatus` without inventing a placeholder, so it is
  * a separate union member and names Start as the next step.
  */
-export const PanelExperimentResultsOutputSchema = z.discriminatedUnion("state", [
+const readyFields = {
+  state: z.literal("ready"),
+  runId: z.string().min(1),
+  runNumber: z.number().int().min(1),
+  runStatus: z.enum(["running", "ended"]),
+  /**
+   * The frozen Run Control identity and its integrity against the Run Snapshot.
+   * `unresolvable` means no baseline can be identified; `disagreement` keeps
+   * the frozen Control identity visible beside the arm the Analysis measured against.
+   */
+  control: FrozenControlIdentitySchema,
+  stats: StatsOutputSchema,
+  srm: ExperimentSrmDiagnosticsSchema,
+  gate: ExperimentDecisionGateSchema,
+  /** Per-arm significance claim, keyed by `metric_id/variant`. */
+  significance: ExperimentSignificanceDisplaysSchema,
+} as const;
+
+const PanelExperimentResultsReadySchema = z.union([
   z
     .object({
-      state: z.literal("ready"),
-      runId: z.string().min(1),
-      runNumber: z.number().int().min(1),
-      runStatus: z.enum(["running", "ended"]),
-      /**
-       * The frozen Run Control identity and its integrity against the Run Snapshot.
-       * `unresolvable` means no baseline can be identified; `disagreement` keeps
-       * the frozen Control identity visible beside the arm the Analysis measured against.
-       */
-      control: FrozenControlIdentitySchema,
-      stats: StatsOutputSchema,
-      srm: ExperimentSrmDiagnosticsSchema,
-      gate: ExperimentDecisionGateSchema,
-      /** Per-arm significance claim, keyed by `metric_id/variant`. */
-      significance: ExperimentSignificanceDisplaysSchema,
+      ...readyFields,
+      dataWatermark: z.string().datetime({ offset: true }),
+      resultToken: z.string().regex(/^sha256:[0-9a-f]{64}$/),
     })
     .strict(),
+  z
+    .object({
+      ...readyFields,
+      dataWatermark: z.never().optional(),
+      resultToken: z.never().optional(),
+    })
+    .strict(),
+]);
+
+export const PanelExperimentResultsOutputSchema = z.union([
+  PanelExperimentResultsReadySchema,
   z
     .object({
       state: z.literal("no_data"),

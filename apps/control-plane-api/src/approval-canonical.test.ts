@@ -1,5 +1,6 @@
+import { canonicalHash, canonicalJson } from "@splitch/contracts";
 import { describe, expect, it } from "vitest";
-import { approvalDiff, canonicalHash, canonicalJson } from "./approval-canonical";
+import { approvalDiff } from "./approval-canonical";
 
 describe("approval canonicalization", () => {
   it("sorts object keys recursively without reordering arrays", () => {

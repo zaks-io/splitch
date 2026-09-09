@@ -130,6 +130,9 @@ SQL >
         AND raw_events.run_id = {{ String(run_id) }}
         AND raw_events.counterfactual = 0
         AND generation_tombstones.app_id = ''
+        {% if defined(ingest_watermark_ts) %}
+        AND raw_events.ingest_ts <= {{DateTime64(ingest_watermark_ts)}}
+        {% end %}
     GROUP BY
         raw_events.app_id,
         raw_events.environment_id,

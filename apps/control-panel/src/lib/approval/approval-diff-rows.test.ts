@@ -106,3 +106,23 @@ describe("Approval diff rows", () => {
     expect(approvalDiffGroups(rows)).toEqual(["Serving", "Baseline rollout"]);
   });
 });
+
+it("renders conclusion configuration with the existing Flag field labels", () => {
+  const [row] = approvalDiffRows(
+    diff([
+      {
+        path: "/flagConfiguration/rollout",
+        operation: "replace",
+        current: null,
+        proposed: { percentage: 25, salt: "server-minted-salt" },
+      },
+    ]),
+  );
+  expect(row).toMatchObject({
+    path: "/flagConfiguration/rollout",
+    group: "Baseline rollout",
+    field: "Baseline percentage",
+    before: ["No baseline rollout"],
+    after: ["25% of traffic"],
+  });
+});

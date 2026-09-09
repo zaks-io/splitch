@@ -151,6 +151,73 @@ describe("mcp operation adapter body path stripping (SPL-296)", () => {
   });
 });
 
+describe("mcp operation adapter header-only idempotency bodies", () => {
+  it("keeps a header-only idempotency key out of a strict request body", async () => {
+    let forwardedRequest: Request | undefined;
+    const adapter = createMcpOperationAdapter({
+      baseUrl: "https://control-plane.test",
+      fetch: async (request) => {
+        forwardedRequest = request instanceof Request ? request : new Request(request);
+        return validationErrorResponse();
+      },
+    });
+
+    await adapter.callOperationById("entity_privacy_export", {
+      appId: "app_local",
+      idType: "user",
+      targetingKey: "entity-1",
+      idempotency_key: "privacy-export-1",
+    });
+
+    expect(forwardedRequest?.headers.get("idempotency-key")).toBe("privacy-export-1");
+    await expect(forwardedRequest?.json()).resolves.toEqual({
+      idType: "user",
+      targetingKey: "entity-1",
+    });
+  });
+
+  it("retains invalid body fields after stripping a header-only idempotency key", async () => {
+    let forwardedRequest: Request | undefined;
+    const adapter = createMcpOperationAdapter({
+      baseUrl: "https://control-plane.test",
+      fetch: async (request) => {
+        forwardedRequest = request instanceof Request ? request : new Request(request);
+        return validationErrorResponse();
+      },
+    });
+
+    await adapter.callOperationById("entity_privacy_delete", {
+      appId: "app_local",
+      idType: "user",
+      targetingKey: "entity-1",
+      unexpected: true,
+      idempotency_key: "privacy-delete-1",
+    });
+
+    const outboundBody = await forwardedRequest?.json();
+    expect(forwardedRequest?.headers.get("idempotency-key")).toBe("privacy-delete-1");
+    expect(outboundBody).toEqual({ idType: "user", targetingKey: "entity-1", unexpected: true });
+
+    const parsed = routeBodySchema("entity_privacy_delete").safeParse(outboundBody);
+    expect(parsed.success).toBe(false);
+    if (parsed.success) throw new Error("expected the strict privacy schema to reject the body");
+    expect(parsed.error.issues.map((issue) => issue.message).join("\n")).toMatch(
+      /Unrecognized key/i,
+    );
+  });
+});
+
+function validationErrorResponse(): Response {
+  return Response.json(
+    {
+      code: "VALIDATION_ERROR",
+      message: "request failed schema validation",
+      details: { issues: [] },
+    },
+    { status: 400 },
+  );
+}
+
 function routeBodySchema(operationId: string) {
   const schema = jsonMediaTypeSchema(getRoute(operationId)?.openapi.request?.body?.content);
   expect(schema && typeof (schema as { safeParse?: unknown }).safeParse === "function").toBe(true);

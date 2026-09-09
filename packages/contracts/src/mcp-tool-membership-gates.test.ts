@@ -74,6 +74,8 @@ const EXPECTED_GATES: Record<string, string> = {
   runs_list: "app:member",
   runs_get: "app:member",
   runs_end: "app:admin",
+  runs_conclude: "app:admin",
+  conclusion_promotion_requests_create: "app:admin",
   metrics_list: "app:member",
   metrics_create: "app:admin",
   metrics_get: "app:member",

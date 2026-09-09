@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { ApprovalRequestIdSchema } from "./approval-identifiers";
 import type { ErrorCode } from "./error-code";
 
 export const capacityErrorMembers = [
@@ -17,6 +18,8 @@ export const capacityErrorMembers = [
     z.object({
       retryAfterMs: z.number(),
       mutationCommitted: z.literal(true).optional(),
+      conclusionId: z.string().optional(),
+      approvalRequestId: ApprovalRequestIdSchema.optional(),
     }),
   ),
 ] as const;

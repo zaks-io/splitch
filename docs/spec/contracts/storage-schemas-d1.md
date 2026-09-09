@@ -108,6 +108,7 @@ differ only in who may Review it.
 | `target_id`                | text        | not null                                                                   |
 | `target_version`           | text        | not null; RFC 8785 JCS SHA-256 token for the complete target projection    |
 | `policy_contexts`          | text        | not null; immutable JSON `ApprovalPolicyContext[]`                         |
+| `policy_guard_contexts`    | text        | nullable immutable raw Policy contexts for an effective Review floor       |
 | `diff`                     | text        | not null; immutable canonical JSON `ApprovalDiff`                          |
 | `status`                   | text        | not null; `pending \| applied \| declined \| stale`                        |
 | `proposed_by`              | text        | not null; resolved WorkOS user ID or deleted-user tombstone                |

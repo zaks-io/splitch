@@ -1,10 +1,11 @@
 import { makeApprovalRepo } from "./approvals";
 import { makeClaimStateRepo } from "./claim-state";
-import { makeCloudflareIntegrationRepo } from "./cloudflare-integrations";
 import { createDb } from "./client";
+import { makeCloudflareIntegrationRepo } from "./cloudflare-integrations";
 import { makeConvexIntegrationRepo } from "./convex-integrations";
 import { makeCredentialRepo } from "./credentials";
 import { makeEventDefinitionRepo } from "./event-definitions";
+import { makeExperimentConclusionRepo } from "./experiment-conclusions";
 import { makeExperimentRepo } from "./experiments";
 import { makeFlagChangeEventRepo } from "./flag-change-events";
 import { makeFlagRepo } from "./flags";
@@ -31,6 +32,7 @@ export function createRepository(d1: D1Database) {
   return {
     flags: makeFlagRepo(db),
     experiments: makeExperimentRepo(db, d1),
+    experimentConclusions: makeExperimentConclusionRepo(db, d1),
     eventDefinitions: makeEventDefinitionRepo(db, d1),
     credentials: makeCredentialRepo(db),
     convex: makeConvexIntegrationRepo(d1),

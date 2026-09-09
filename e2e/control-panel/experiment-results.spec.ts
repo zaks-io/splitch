@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { expect, test } from "@playwright/test";
 import { LOCAL_E2E_SESSION_TOKEN } from "../../scripts/local-e2e-fixtures.mjs";
+import { waitForHydration } from "./hydration";
 import { captureThemeScreenshots } from "./screenshot";
 
 const origin = "http://127.0.0.1:18793";
@@ -27,6 +28,7 @@ test.describe("Experiment Results tab", () => {
     await page.goto(
       "/acme-labs/checkout-api/dev/experiments/experiment_checkout_significance_e2e/results",
     );
+    await waitForHydration(page);
 
     await page.getByRole("button", { name: /Decision metrics/ }).click();
     await expect(page.getByRole("heading", { name: "Decision metrics" })).toBeVisible();
@@ -34,12 +36,14 @@ test.describe("Experiment Results tab", () => {
     await page.getByRole("button", { name: /Run health/ }).click();
     const srm = page.locator('[data-srm-tier="clean"]');
     await expect(srm.getByText("Balanced").first()).toBeVisible();
-    // The gate allows the decision, and the control is still disabled: the
-    // conclude mutation ships in SPL-158, and a live-looking dead button would
-    // be a lie about what the Panel can do.
-    await expect(page.getByText(/No blocking check/)).toBeVisible();
-    await expect(page.getByRole("button", { name: "Conclude Run" })).toBeDisabled();
-    await expect(page.getByText(/SPL-158/)).toBeVisible();
+    await expect(
+      page
+        .getByLabel("Ship decision gate")
+        .getByText(/No blocking check/)
+        .first(),
+    ).toBeVisible();
+    await expect(page.getByRole("button", { name: "Conclude Run" })).toBeEnabled();
+    await expect(page.getByText(/SPL-158/)).toHaveCount(0);
     await expect(page.getByText(/Enforced by control-plane-api/)).toBeVisible();
 
     await captureThemeScreenshots(page, testInfo, "experiment-results-clean");
@@ -50,6 +54,7 @@ test.describe("Experiment Results tab", () => {
   }, testInfo) => {
     await page.setViewportSize({ width: 1440, height: 1100 });
     await page.goto("/acme-labs/checkout-api/prod/experiments/experiment_checkout_srm_e2e/results");
+    await waitForHydration(page);
 
     await page.getByRole("button", { name: /Run health/ }).click();
     const srm = page.locator('[data-srm-tier="confirmed"]');
@@ -79,6 +84,7 @@ test.describe("Experiment Results tab", () => {
   }, testInfo) => {
     await page.setViewportSize({ width: 1440, height: 1100 });
     await page.goto("/acme-labs/checkout-api/dev/experiments/experiment_checkout_dev_e2e/results");
+    await waitForHydration(page);
 
     const blocked = page.getByTestId("ship-blocked");
     await expect(blocked).toContainText("Result is underpowered");
@@ -104,6 +110,7 @@ test.describe("Experiment Results tab", () => {
     await page.goto(
       "/acme-labs/checkout-api/integrity/experiments/experiment_checkout_integrity_e2e/results",
     );
+    await waitForHydration(page);
 
     const integrity = page
       .getByRole("alert")
@@ -148,13 +155,14 @@ test.describe("Experiment Results tab", () => {
     await page.goto(
       "/acme-labs/checkout-api/dev/experiments/experiment_checkout_guardrail_e2e/results",
     );
+    await waitForHydration(page);
 
     await expect(page.getByTestId("ship-blocked")).toHaveCount(0);
     const advisory = page.getByTestId("ship-guardrail-advisory");
-    await expect(advisory).toContainText("checkout-reliability");
+    await expect(advisory).toContainText("Checkout reliability");
     await expect(advisory).toContainText("would ship a known regression");
     const guardrails = page.getByRole("button", { name: /Guardrails/ });
-    await expect(guardrails).toContainText("checkout-reliability");
+    await expect(guardrails).toContainText("Checkout reliability");
     await expect(guardrails).toContainText("Concluding now ships a known regression");
 
     await captureThemeScreenshots(page, testInfo, "experiment-results-guardrail-breach");
@@ -164,25 +172,26 @@ test.describe("Experiment Results tab", () => {
     await page.goto(
       "/acme-labs/checkout-api/dev/experiments/experiment_checkout_draft_e2e/results",
     );
+    await waitForHydration(page);
 
     await expect(page.getByText(/no Run yet/)).toBeVisible();
   });
+});
 
-  test("ships no way around the gate", () => {
-    const sources = [
-      "apps/control-panel/src/components/experiments/experiment-results.tsx",
-      "apps/control-panel/src/components/experiments/experiment-results-arms.tsx",
-      "apps/control-panel/src/components/experiments/experiment-results-decision.tsx",
-      "apps/control-panel/src/components/experiments/experiment-results-hero.tsx",
-      "apps/control-panel/src/components/experiments/experiment-results-panel.tsx",
-      "apps/control-panel/src/components/experiments/experiment-results-srm.tsx",
-      "apps/control-panel/src/components/experiments/experiment-results-station.tsx",
-      "apps/control-panel/src/components/experiments/experiment-results-guardrails.tsx",
-      "apps/control-panel/src/components/experiments/experiment-results-stations.tsx",
-    ].map((path) => readFileSync(resolve(repoRoot, path), "utf8").toLowerCase());
+test("ships no way around the gate", () => {
+  const sources = [
+    "apps/control-panel/src/components/experiments/experiment-results.tsx",
+    "apps/control-panel/src/components/experiments/experiment-results-arms.tsx",
+    "apps/control-panel/src/components/experiments/experiment-results-decision.tsx",
+    "apps/control-panel/src/components/experiments/experiment-results-hero.tsx",
+    "apps/control-panel/src/components/experiments/experiment-results-panel.tsx",
+    "apps/control-panel/src/components/experiments/experiment-results-srm.tsx",
+    "apps/control-panel/src/components/experiments/experiment-results-station.tsx",
+    "apps/control-panel/src/components/experiments/experiment-results-guardrails.tsx",
+    "apps/control-panel/src/components/experiments/experiment-results-stations.tsx",
+  ].map((path) => readFileSync(resolve(repoRoot, path), "utf8").toLowerCase());
 
-    for (const source of sources) {
-      expect(source).not.toMatch(/ship anyway|force ship|proceed anyway|bypass the gate/);
-    }
-  });
+  for (const source of sources) {
+    expect(source).not.toMatch(/ship anyway|force ship|proceed anyway|bypass the gate/);
+  }
 });

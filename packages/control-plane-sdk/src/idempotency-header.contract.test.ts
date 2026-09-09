@@ -74,6 +74,38 @@ const probes: Record<string, (sdk: ControlPlaneSdk) => Promise<unknown>> = {
       experimentId: "exp_probe",
       idempotency_key: KEY,
     }),
+  runs_conclude: (sdk) =>
+    sdk.experiments.conclude({
+      appId: SCOPE.appId,
+      environmentId: SCOPE.environmentId,
+      experimentId: "exp_probe",
+      runId: "run_probe",
+      selectedVariant: "treatment",
+      expectedResultToken: `sha256:${"a".repeat(64)}`,
+      dataWatermark: "2026-09-08T12:00:00.000Z",
+      target: {
+        environmentId: SCOPE.environmentId,
+        flagId: SCOPE.flagId,
+        expectedConfigVersion: 1,
+        proposedConfig: {
+          enabled: true,
+          availableVariantNames: ["control", "treatment"],
+          targetingRules: [],
+          rollout: { percentage: 100 },
+        },
+      },
+      idempotencyKey: KEY,
+    }),
+  conclusion_promotion_requests_create: (sdk) =>
+    sdk.experiments.createConclusionPromotionRequest({
+      appId: SCOPE.appId,
+      environmentId: SCOPE.environmentId,
+      experimentId: "exp_probe",
+      runId: "run_probe",
+      conclusionId: "conclusion_probe",
+      expectedConfigVersion: 2,
+      idempotencyKey: KEY,
+    }),
   approval_request_reviews_create: (sdk) =>
     sdk.approvals.review({
       appId: SCOPE.appId,

@@ -22,8 +22,8 @@ import {
 } from "./internal-error-details";
 import { LastOwnerRequiredDetailsSchema } from "./last-owner-error-details";
 import { ApprovalPolicyLevelSchema } from "./leaf-schemas-runtime";
-import { ResourceDeleteBlockerSchema } from "./resource-delete-tree";
 import { UnsupportedMediaTypeDetailsSchema } from "./request-error-details";
+import { ResourceDeleteBlockerSchema } from "./resource-delete-tree";
 import { SegmentDependenciesSchema } from "./segment-error-details";
 import { SelectorAmbiguousDetailsSchema } from "./selector-error-details";
 

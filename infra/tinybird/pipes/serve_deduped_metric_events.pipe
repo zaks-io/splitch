@@ -13,7 +13,7 @@ SQL >
     WHERE app_id = {{String(app_id)}}
     GROUP BY app_id, id_type, entity_family_hash
 
-NODE deduped_metric_events
+NODE canonical_metric_events
 SQL >
     %
     {% if not defined(app_id) %}
@@ -41,7 +41,8 @@ SQL >
         tupleElement(argMinMerge(events.canonical_state), 3) AS event_name,
         tupleElement(argMinMerge(events.canonical_state), 4) AS fields,
         tupleElement(argMinMerge(events.canonical_state), 5) AS dimensions,
-        tupleElement(argMinMerge(events.canonical_state), 6) AS accepted_at
+        tupleElement(argMinMerge(events.canonical_state), 6) AS accepted_at,
+        tupleElement(argMinMerge(events.canonical_state), 7) AS ingest_ts
     FROM deduped_metric_events_state AS events
     LEFT JOIN entity_deletion_cutoffs AS deletions
         ON deletions.app_id = events.app_id
@@ -59,5 +60,27 @@ SQL >
         AND generation_tombstones.app_id = ''
         AND (deletions.delete_before_ts IS NULL OR events.server_received_at > deletions.delete_before_ts)
     GROUP BY events.app_id, events.environment_id, events.event_definition_id, events.id_type, events.targeting_key_hash, events.entity_family_hash, events.dedup_key
+
+NODE deduped_metric_events
+SQL >
+    %
+    SELECT
+        app_id,
+        environment_id,
+        event_definition_id,
+        id_type,
+        targeting_key_hash,
+        entity_family_hash,
+        dedup_key,
+        event_id,
+        event_definition_version_id,
+        event_name,
+        fields,
+        dimensions,
+        accepted_at
+    FROM canonical_metric_events
+    {% if defined(ingest_watermark_ts) %}
+    WHERE ingest_ts <= {{DateTime64(ingest_watermark_ts)}}
+    {% end %}
 
 TYPE ENDPOINT

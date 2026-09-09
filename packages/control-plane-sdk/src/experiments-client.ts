@@ -1,4 +1,6 @@
 import type {
+  ConclusionPromotionRequestsCreateInput,
+  ConclusionPromotionRequestsCreateOutput,
   ExperimentsCreateInput,
   ExperimentsCreateOutput,
   ExperimentsDeleteInput,
@@ -11,6 +13,8 @@ import type {
   ExperimentsStartOutput,
   ExperimentsUpdateInput,
   ExperimentsUpdateOutput,
+  RunsConcludeInput,
+  RunsConcludeOutput,
 } from "@splitch/contracts/route-types";
 import { environmentSelectorQuery } from "./environment-selector-query";
 import {
@@ -45,6 +49,14 @@ export interface ExperimentsClient {
     input: ExperimentsStartInput,
     options?: ControlPlaneOperationOptions,
   ): Promise<ControlPlaneOperationResult<ExperimentsStartOutput>>;
+  conclude(
+    input: RunsConcludeInput,
+    options?: ControlPlaneOperationOptions,
+  ): Promise<ControlPlaneOperationResult<RunsConcludeOutput>>;
+  createConclusionPromotionRequest(
+    input: ConclusionPromotionRequestsCreateInput,
+    options?: ControlPlaneOperationOptions,
+  ): Promise<ControlPlaneOperationResult<ConclusionPromotionRequestsCreateOutput>>;
   delete(
     input: ExperimentsDeleteInput,
     options?: ControlPlaneOperationOptions,
@@ -127,6 +139,46 @@ export function createExperimentsClient(
             body.idempotency_key,
           ),
         ),
+      );
+    },
+    conclude: (input, callOptions) => {
+      const { appId, environmentId, experimentId, runId, by, ...body } = input;
+      return invokeHcRoute<RunsConcludeOutput>("runs_conclude", () =>
+        hcClient.apps[":appId"].envs[":environmentId"].experiments[":experimentId"].runs[
+          ":runId"
+        ].conclusions.$post(
+          {
+            param: { appId, environmentId, experimentId, runId },
+            ...environmentSelectorQuery({ by }),
+            json: body,
+          } as never,
+          withIdempotencyHeader(
+            "runs_conclude",
+            hcRequestOptions(withAuthorization(hcOptions, callOptions)),
+            body.idempotencyKey,
+          ),
+        ),
+      );
+    },
+    createConclusionPromotionRequest: (input, callOptions) => {
+      const { appId, environmentId, experimentId, runId, conclusionId, by, ...body } = input;
+      return invokeHcRoute<ConclusionPromotionRequestsCreateOutput>(
+        "conclusion_promotion_requests_create",
+        () =>
+          hcClient.apps[":appId"].envs[":environmentId"].experiments[":experimentId"].runs[
+            ":runId"
+          ].conclusions[":conclusionId"]["promotion-requests"].$post(
+            {
+              param: { appId, environmentId, experimentId, runId, conclusionId },
+              ...environmentSelectorQuery({ by }),
+              json: body,
+            } as never,
+            withIdempotencyHeader(
+              "conclusion_promotion_requests_create",
+              hcRequestOptions(withAuthorization(hcOptions, callOptions)),
+              body.idempotencyKey,
+            ),
+          ),
       );
     },
     delete: (input, callOptions) =>

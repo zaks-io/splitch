@@ -20,8 +20,13 @@ export function useExperimentDetailRouteData() {
     }),
   );
   const pathname = useRouterState({ select: (state) => state.location.pathname });
+  const app = context.navigation.orgs
+    .flatMap((org) => org.apps)
+    .find((item) => item.appId === context.scope.appId);
+  if (!app) throw new Error("Experiment App is missing from navigation");
   return {
     data,
+    environments: app.environments,
     guarded: resolved.guarded,
     scope: context.scope,
     selectedRunId: typeof params.runId === "string" ? params.runId : undefined,

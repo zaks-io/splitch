@@ -74,6 +74,36 @@ const probes: Record<string, Record<string, unknown>> = {
     experimentId: "exp_probe",
     idempotency_key: KEY,
   },
+  runs_conclude: {
+    appId: APP,
+    environmentId: ENV,
+    experimentId: "exp_probe",
+    runId: "run_probe",
+    selectedVariant: "treatment",
+    expectedResultToken: `sha256:${"a".repeat(64)}`,
+    dataWatermark: "2026-09-08T12:00:00.000Z",
+    target: {
+      environmentId: ENV,
+      flagId: FLAG,
+      expectedConfigVersion: 1,
+      proposedConfig: {
+        enabled: true,
+        availableVariantNames: ["control", "treatment"],
+        targetingRules: [],
+        rollout: { percentage: 100 },
+      },
+    },
+    idempotencyKey: KEY,
+  },
+  conclusion_promotion_requests_create: {
+    appId: APP,
+    environmentId: ENV,
+    experimentId: "exp_probe",
+    runId: "run_probe",
+    conclusionId: "conclusion_probe",
+    expectedConfigVersion: 2,
+    idempotencyKey: KEY,
+  },
   approval_request_reviews_create: {
     appId: APP,
     id: `apr_${"0".repeat(26)}`,
@@ -105,10 +135,12 @@ describe("mcp adapter idempotency header contract", () => {
     ).toEqual([]);
   });
 
-  it.each(requiredMcpOperations)("%s advertises idempotency_key as a required field", (id) => {
+  it.each(requiredMcpOperations)("%s advertises its idempotency key as a required field", (id) => {
     const schema = toolSchemas.get(id);
-    expect(Object.keys(schema?.properties ?? {})).toContain("idempotency_key");
-    expect(schema?.required ?? []).toContain("idempotency_key");
+    const properties = Object.keys(schema?.properties ?? {});
+    const field = properties.includes("idempotencyKey") ? "idempotencyKey" : "idempotency_key";
+    expect(properties).toContain(field);
+    expect(schema?.required ?? []).toContain(field);
   });
 
   it.each(requiredMcpOperations)("%s sends the Idempotency-Key header", async (id) => {
@@ -117,7 +149,11 @@ describe("mcp adapter idempotency header contract", () => {
   });
 
   it.each(requiredMcpOperations)("%s fails loud when the key is missing", async (id) => {
-    const { idempotency_key: _omitted, ...withoutKey } = requiredProbe(id);
+    const {
+      idempotency_key: _snakeOmitted,
+      idempotencyKey: _camelOmitted,
+      ...withoutKey
+    } = requiredProbe(id);
     await expect(captureRequest(id, withoutKey)).rejects.toThrow(
       `control-plane-sdk: ${id} requires an idempotency key`,
     );

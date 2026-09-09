@@ -23,10 +23,14 @@ import { ExperimentResultsStations } from "./experiment-results-stations";
  */
 
 export function ExperimentResults({
+  canConclude,
+  onConclude,
   metrics,
   results,
   run,
 }: {
+  canConclude: boolean;
+  onConclude: () => void;
   metrics: readonly Pick<Metric, "id" | "name">[];
   results: PanelExperimentResultsReady;
   run: PanelExperimentRun;
@@ -64,6 +68,11 @@ export function ExperimentResults({
           variantOrder={variantOrder}
         />
         <ExperimentResultsDecision
+          canConclude={canConclude}
+          onConclude={onConclude}
+          evidenceAvailable={
+            results.resultToken !== undefined && results.dataWatermark !== undefined
+          }
           baseline={measurementAnchor}
           control={results.control}
           gate={results.gate}

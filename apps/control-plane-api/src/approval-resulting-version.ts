@@ -144,6 +144,7 @@ export function isFlagConfigurationOperation(operation: ApprovalOperation): bool
   return (
     operation === "flag_config_update" ||
     operation === "flag_targeting_rules_replace" ||
-    operation === "flags_promote"
+    operation === "flags_promote" ||
+    operation === "experiment_winner_promote"
   );
 }

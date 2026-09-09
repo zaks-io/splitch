@@ -67,7 +67,8 @@ describe("GET/POST experiment results", () => {
       ]),
     );
     expect(tinybird.calls.map((call) => call.pipeName)).toEqual([
-      "analysis_run_bootstrap",
+      "analysis_run_inputs",
+      "analysis_deduped_exposures",
       "analysis_metric_values_batch",
       "analysis_pre_period_covariates_batch",
     ]);
@@ -175,9 +176,7 @@ describe("GET/POST experiment results isolation", () => {
     expect(((await pinned.json()) as ErrorResponse).code).toBe("RUN_NOT_FOUND");
     expect(live.status).toBe(404);
     expect(((await live.json()) as ErrorResponse).code).toBe("RUN_NOT_FOUND");
-    expect(withRunId.tinybird.calls.map((call) => call.pipeName)).toEqual([
-      "analysis_run_bootstrap",
-    ]);
+    expect(withRunId.tinybird.calls.map((call) => call.pipeName)).toEqual(["analysis_run_inputs"]);
     expect(liveSelector.tinybird.calls.map((call) => call.pipeName)).toEqual([
       "analysis_run_inputs",
     ]);
@@ -289,7 +288,7 @@ describe("GET/POST experiment results isolation", () => {
         runId: RUN_ID,
       }),
     ).rejects.toThrow(/returned Run run_some_other_run for requested Run/);
-    expect(tinybird.calls.map((call) => call.pipeName)).toEqual(["analysis_run_bootstrap"]);
+    expect(tinybird.calls.map((call) => call.pipeName)).toEqual(["analysis_run_inputs"]);
   });
 
   // A mislabelled Run is a permanent integrity fault. Emitted as a retryable

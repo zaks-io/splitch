@@ -57,7 +57,7 @@ const APP_IDS_FOR_ORG_SQL = "SELECT id FROM apps WHERE organization_id = ?";
 
 interface AppScopedDeleteSpec {
   table: AppScopedTable;
-  returning: "id" | "key_id" | "app_id" | "installation_id" | "delivery_id";
+  returning: "id" | "key_id" | "app_id" | "installation_id" | "delivery_id" | "approval_request_id";
 }
 
 type AppScopedTable =
@@ -67,6 +67,8 @@ type AppScopedTable =
   | "convex_installations"
   | "event_definition_versions"
   | "event_definitions"
+  | "conclusion_approval_requests"
+  | "experiment_conclusions"
   | "approval_reviews"
   | "approval_requests"
   | "runs"
@@ -93,6 +95,8 @@ const APP_CHILD_DELETE_ORDER: readonly AppScopedDeleteSpec[] = [
   { table: "convex_installations", returning: "installation_id" },
   { table: "event_definition_versions", returning: "id" },
   { table: "event_definitions", returning: "id" },
+  { table: "conclusion_approval_requests", returning: "approval_request_id" },
+  { table: "experiment_conclusions", returning: "id" },
   { table: "approval_reviews", returning: "id" },
   { table: "approval_requests", returning: "id" },
   { table: "runs", returning: "id" },

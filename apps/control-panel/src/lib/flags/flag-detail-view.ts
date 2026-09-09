@@ -1,4 +1,4 @@
-import type { Condition, Segment, Variant } from "@splitch/contracts";
+import type { Condition, Segment, TargetingRuleInput, Variant } from "@splitch/contracts";
 import type { PanelSegmentsListOutput } from "@splitch/control-plane-sdk";
 import type { FlagDetailData } from "#lib/flags/flag-detail-data";
 import { formatConditionSummary } from "#lib/segments/segment-form-model";
@@ -29,7 +29,7 @@ export type CatalogVariantView = {
   availability: VariantAvailability;
 };
 
-type TargetingRuleView = {
+export type TargetingRuleView = {
   id: string;
   priority: number;
   /** Catalog name of the served Variant, or the raw id if it left the catalog. */
@@ -115,24 +115,7 @@ export function flagDetailView(
     availableVariantNames: available,
     availabilityNarrowed: narrowed,
     defaultVariantName: variantName(catalog, data.definition.defaultVariantId),
-    targetingRules: (config?.targetingRules ?? [])
-      .slice()
-      .sort((a, b) => a.priority - b.priority)
-      .map((rule) => {
-        const segment = rule.segmentId
-          ? referencedSegment(segmentList.items, rule.segmentId)
-          : null;
-        return {
-          id: rule.id,
-          priority: rule.priority,
-          variantName: variantName(catalog, rule.variantId),
-          conditions: displayConditions(rule.conditions),
-          segmentConditions: displayConditions(segment?.conditions ?? []),
-          rolloutPercentage: rule.percentageRollout?.percentage ?? null,
-          segmentId: rule.segmentId ?? null,
-          segmentName: segment?.name ?? null,
-        };
-      }),
+    targetingRules: targetingRuleViews(config?.targetingRules ?? [], catalog, segmentList.items),
     segments: segmentList.items.map((segment) => ({
       id: segment.id,
       name: segment.name,
@@ -151,12 +134,38 @@ function affectedEnvironments(list: PanelSegmentsListOutput, segmentId: string):
   return environmentIds;
 }
 
-function referencedSegment(segments: Segment[], segmentId: string): Segment {
+function referencedSegment(
+  segments: readonly Pick<Segment, "id" | "name" | "conditions">[],
+  segmentId: string,
+): Pick<Segment, "id" | "name" | "conditions"> {
   const segment = segments.find((candidate) => candidate.id === segmentId);
   if (!segment) {
     throw new Error(`Flag Configuration references an unavailable Segment: ${segmentId}`);
   }
   return segment;
+}
+
+export function targetingRuleViews(
+  rules: readonly TargetingRuleInput[],
+  catalog: readonly Pick<Variant, "id" | "name">[],
+  segments: readonly Pick<Segment, "id" | "name" | "conditions">[],
+): TargetingRuleView[] {
+  return rules
+    .slice()
+    .sort((a, b) => a.priority - b.priority)
+    .map((rule) => {
+      const segment = rule.segmentId ? referencedSegment(segments, rule.segmentId) : null;
+      return {
+        id: rule.id,
+        priority: rule.priority,
+        variantName: variantName(catalog, rule.variantId),
+        conditions: displayConditions(rule.conditions),
+        segmentConditions: displayConditions(segment?.conditions ?? []),
+        rolloutPercentage: rule.percentageRollout?.percentage ?? null,
+        segmentId: rule.segmentId ?? null,
+        segmentName: segment?.name ?? null,
+      };
+    });
 }
 
 function displayConditions(conditions: Segment["conditions"]) {
@@ -221,6 +230,6 @@ function availabilityOf(
   return available.includes(variant.name) ? "available" : "unavailable";
 }
 
-function variantName(catalog: Variant[], variantId: string): string {
+function variantName(catalog: readonly Pick<Variant, "id" | "name">[], variantId: string): string {
   return catalog.find((variant) => variant.id === variantId)?.name ?? variantId;
 }

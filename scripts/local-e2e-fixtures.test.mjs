@@ -13,6 +13,7 @@ import {
   localE2eSession,
   memberProfileKey,
 } from "./local-e2e-fixtures.mjs";
+import { LOCAL_E2E_RUN_CONFIG } from "./local-e2e-run-config.mjs";
 
 const expiresAt = 2_000_000_000;
 
@@ -112,7 +113,7 @@ test("fixture App has explicit Environments and Run-scoped Experiment health sta
   // Keyed by Run, not by Experiment: an Experiment can carry several frozen Runs
   // and each one is its own analysis window.
   const inputByRun = new Map(LOCAL_E2E_ANALYSIS_INPUTS.map((fixture) => [fixture.runId, fixture]));
-  assert.equal(inputByRun.size, 7);
+  assert.equal(inputByRun.size, 8);
   assert.deepEqual(inputByRun.get("run_checkout_dev_e2e")?.counts, {
     control: 10,
     treatment: 10,
@@ -124,6 +125,10 @@ test("fixture App has explicit Environments and Run-scoped Experiment health sta
   assert.deepEqual(inputByRun.get("run_checkout_significance_e2e")?.decisionFamily, [
     { metric_id: "checkout-conversion", variant: "treatment" },
   ]);
+  assert.equal(
+    inputByRun.get("run_checkout_conclusion_e2e")?.configHash,
+    LOCAL_E2E_RUN_CONFIG.hash.conclusion,
+  );
   assert.deepEqual(inputByRun.get("run_checkout_srm_e2e")?.counts, {
     control: 140,
     treatment: 60,

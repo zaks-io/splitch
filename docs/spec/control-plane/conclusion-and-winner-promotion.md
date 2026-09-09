@@ -35,7 +35,7 @@ type ConcludeRunRequest = {
     proposedConfig: {
       enabled: boolean;
       availableVariantNames: string[];
-      targetingRules: TargetingRule[];
+      targetingRules: TargetingRuleInput[];
       rollout: { percentage: number } | null;
     };
   };
@@ -48,7 +48,9 @@ type ConcludeRunRequest = {
 `flagId` must be the Flag controlled by the Experiment. The target Environment belongs to the same
 App and may be the Run's own Environment. `selectedVariant` must belong to the Run's frozen Variant
 set and be available in the complete proposed target Configuration. The caller sends the complete
-proposed write projection. The server never guesses a rollout, silently adds a Variant, or derives a
+proposed write projection. `TargetingRuleInput` follows the existing replace-rules authoring
+contract: the server preserves the salt of a matching persisted percentage rule and mints the salt
+of a new percentage rule. The server never guesses a rollout, silently adds a Variant, or derives a
 Configuration from the selected Variant's name. Empty or invalid diffs fail with `VALIDATION_ERROR`
 before End.
 
@@ -115,6 +117,9 @@ that floor and the target Environment Policy levels for every changed field. Thi
 classification guarantees the required Approval Request even when the ordinary field change would be
 `allow`; it does not add an Approval Request status or Review action. Under `confirm`, an inline
 `review` lets the proposer self-Review. Future `approve` requires a distinct authorized principal.
+The Approval Request stores that effective context for Review behavior and separately stores the raw
+Policy context used by the atomic application guard. The guard therefore compares the Environment's
+exact proposal-time Policy level even when the winner floor raises `allow` to `confirm`.
 
 ## Result identity and decision gate
 
@@ -216,7 +221,9 @@ The D1 shape and immutability rules live in
 The complete server-owned Stats output, every decision check and its inputs, selected Variant, exact
 proposed target Configuration, result token, data watermark, actor, reason, and Approval Request links
 are retained without truncation. Only parent App deletion may remove this history under the existing
-privacy lifecycle. Tinybird audit projection is additive evidence, never the mutation authority.
+privacy lifecycle. Approval Requests linked to conclusions and their Reviews remain in D1 and are
+excluded from ordinary Approval archive deletion. Tinybird audit projection is additive evidence,
+never the mutation authority.
 
 ## Sources
 

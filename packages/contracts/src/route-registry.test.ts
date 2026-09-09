@@ -98,6 +98,8 @@ const CANONICAL_OPERATION_IDS = [
   "runs_list",
   "runs_get",
   "runs_end",
+  "runs_conclude",
+  "conclusion_promotion_requests_create",
   // Metrics
   "metrics_list",
   "metrics_create",

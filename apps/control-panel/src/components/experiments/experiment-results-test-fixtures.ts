@@ -217,18 +217,23 @@ export function resultsFixture(
   stats: StatsOutput,
   overrides: Partial<PanelExperimentResultsReady> = {},
 ): PanelExperimentResultsReady {
-  return {
-    state: "ready",
+  const { dataWatermark, resultToken, ...fields } = overrides;
+  const result = {
+    state: "ready" as const,
     runId: "run_2",
     runNumber: 2,
-    runStatus: "running",
+    runStatus: "running" as const,
     control: frozenControl(),
     stats,
     srm: experimentSrmDiagnostics(stats),
     gate: evaluateExperimentDecisionGate(stats, overrides.control ?? frozenControl()),
     significance: experimentSignificanceDisplays(stats),
-    ...overrides,
+    ...fields,
   };
+  if (dataWatermark === undefined && resultToken === undefined) return result;
+  if (dataWatermark === undefined || resultToken === undefined)
+    throw new Error("Incomplete fixture evidence");
+  return { ...result, dataWatermark, resultToken };
 }
 
 export function resultsNoDataFixture(

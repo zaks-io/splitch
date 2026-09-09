@@ -20,12 +20,11 @@ type FlagConfigChange = {
 /**
  * A Targeting change is expressed as an operation, not as a rule list.
  *
- * The replace endpoint takes the whole list, but the list is assembled from the
- * Worker's own current Configuration inside the server function. The browser never
- * holds raw rules, so it can neither round-trip a stale list nor restate a
- * bucketing salt it has no business knowing.
+ * The replace endpoint takes the whole list, but the normal Flag write assembles
+ * that list from the Worker's own current Configuration inside the server function.
+ * Editors submit an operation, so they cannot restate a bucketing salt.
  */
-type TargetingEdit =
+export type TargetingEdit =
   | { readonly kind: "remove"; readonly ruleId: string }
   | {
       readonly kind: "add";
@@ -39,6 +38,8 @@ type TargetingEdit =
       readonly variantId: string;
       readonly percentage?: number;
     };
+
+export type TargetingRuleEditIntent = Extract<FlagEditIntent, { kind: "targeting" }>;
 
 export function killSwitchIntent(enabled: boolean): FlagEditIntent {
   return {
@@ -82,7 +83,7 @@ export function availabilityIntent(
   };
 }
 
-export function removeTargetingRuleIntent(ruleId: string): FlagEditIntent {
+export function removeTargetingRuleIntent(ruleId: string): TargetingRuleEditIntent {
   return {
     kind: "targeting",
     summary: "Remove a Targeting Rule",
@@ -103,7 +104,7 @@ export function addTargetingRuleIntent(
     percentage?: number;
   },
   ruleId: string,
-): FlagEditIntent {
+): TargetingRuleEditIntent {
   return {
     kind: "targeting",
     summary: "Add a Targeting Rule",

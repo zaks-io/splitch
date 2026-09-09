@@ -11,6 +11,7 @@ import type { RunSnapshotDelivery } from "./run-snapshot";
 
 export interface ExperimentDeps {
   repo: Repository;
+  analysis?: Fetcher;
   configStore?: ConfigStoreAccess;
   runSnapshotDelivery?: RunSnapshotDelivery;
   nowIso?: () => string;

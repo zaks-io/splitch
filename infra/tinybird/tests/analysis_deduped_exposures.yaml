@@ -17,6 +17,16 @@
   expected_result: |
     {"app_id":"app_1","environment_id":"env_prod","id_type":"user","run_id":"run_2","targeting_key_hash":"tk_other_run","variant":"control","first_exposure_ts":"2026-07-01 00:04:00.000","window_anchor":"2026-07-01 00:04:00.000"}
     {"app_id":"app_1","environment_id":"env_prod","id_type":"user","run_id":"run_2","targeting_key_hash":"tk_other_run_tail","variant":"control","first_exposure_ts":"2026-07-05 05:00:00.000","window_anchor":"2026-07-05 05:00:00.000"}
+- name: caller_watermark_is_inclusive_and_excludes_the_later_tail
+  description: Re-analysis includes an Exposure ingested exactly at the caller's Copy Pipe watermark and excludes every physical row after it.
+  parameters: "app_id=app_1&environment_id=env_prod&experiment_id=exp_1&run_id=run_1&ingest_watermark_ts=2026-07-05%2000%3A00%3A00.000"
+  expected_http_status: 200
+  expected_result: |
+    {"app_id":"app_1","environment_id":"env_prod","id_type":"user","run_id":"run_1","targeting_key_hash":"tk_conflict","variant":"__multiple__","first_exposure_ts":"2026-07-01 00:02:00.000","window_anchor":"2026-07-01 00:02:00.000"}
+    {"app_id":"app_1","environment_id":"env_prod","id_type":"user","run_id":"run_1","targeting_key_hash":"tk_control_snapshot","variant":"control","first_exposure_ts":"2026-07-01 00:00:00.000","window_anchor":"2026-07-01 00:00:00.000"}
+    {"app_id":"app_1","environment_id":"env_prod","id_type":"user","run_id":"run_1","targeting_key_hash":"tk_edge","variant":"control","first_exposure_ts":"2026-07-05 00:00:00.000","window_anchor":"2026-07-05 00:00:00.000"}
+    {"app_id":"app_1","environment_id":"env_prod","id_type":"user","run_id":"run_1","targeting_key_hash":"tk_straddle","variant":"control","first_exposure_ts":"2026-07-01 00:03:00.000","window_anchor":"2026-07-01 00:03:00.000"}
+    {"app_id":"app_1","environment_id":"env_prod","id_type":"user","run_id":"run_1","targeting_key_hash":"tk_treatment_snapshot","variant":"treatment","first_exposure_ts":"2026-07-01 00:01:00.000","window_anchor":"2026-07-01 00:01:00.000"}
 - name: delayed_convex_commit_time_wins_first_touch
   description: A delayed trusted-adapter Exposure with an earlier encounter time beats a remote Exposure received first, and the Stats input carries that same anchor.
   parameters: "app_id=app_delayed&environment_id=env_prod&experiment_id=exp_delayed&run_id=run_delayed"
@@ -41,7 +51,7 @@
   description: A required scope parameter is never defaulted; the request fails loudly rather than widening to every Run.
   parameters: "app_id=app_1&environment_id=env_prod&experiment_id=exp_1"
   expected_http_status: 400
-  expected_result: "Template Syntax Error: Required parameter is not defined. Check the parameters app_id, environment_id, experiment_id and run_id. Please provide a value or set a default value in the pipe code."
+  expected_result: "Template Syntax Error: Required parameter is not defined. Check the parameters app_id, environment_id, experiment_id, run_id and ingest_watermark_ts. Please provide a value or set a default value in the pipe code."
 - name: entity_deletion_cutoff_excludes_old_exposure
   description: The durable Entity tombstone gates retained reads before physical purge while later collection remains visible.
   parameters: "app_id=app_privacy&environment_id=env_prod&experiment_id=exp_privacy&run_id=run_privacy"

@@ -10,8 +10,22 @@ import {
 } from "@splitch/ui/components/table";
 import { useState } from "react";
 import { type FlagDetailView, targetingRuleConditionsText } from "#lib/flags/flag-detail-view";
-import { addTargetingRuleIntent, removeTargetingRuleIntent } from "#lib/flags/flag-edit-intent";
-import type { FlagEditing } from "#lib/flags/use-flag-editing";
+import {
+  addTargetingRuleIntent,
+  removeTargetingRuleIntent,
+  type TargetingRuleEditIntent,
+} from "#lib/flags/flag-edit-intent";
+
+export type TargetingRulesEditing = {
+  busy: boolean;
+  submit(intent: TargetingRuleEditIntent): Promise<void>;
+};
+
+type TargetingRulesEditorView = {
+  catalog: readonly Pick<FlagDetailView["catalog"][number], "id" | "name">[];
+  targetingRules: readonly FlagDetailView["targetingRules"][number][];
+  segments: readonly Pick<FlagDetailView["segments"][number], "id" | "name">[];
+};
 
 /**
  * The Targeting Rules of ONE Environment, editable as a whole list.
@@ -20,16 +34,16 @@ import type { FlagEditing } from "#lib/flags/use-flag-editing";
  * operator-authored; the bucketing salt remains server-owned and never renders.
  * Existing rules go back verbatim so their persisted salts remain stable.
  *
- * This component is rendered only when the field group is unlocked. An Experiment
- * that owns targeting makes it structurally absent, not disabled — a frozen
- * control that can still fire is a control that will fire.
+ * On the Flag detail screen this is rendered only when the field group is unlocked.
+ * An Experiment that owns targeting makes it structurally absent there because a
+ * frozen control that can still fire is a control that will fire.
  */
 export function FlagTargetingRulesEditor({
   editing,
   view,
 }: {
-  editing: FlagEditing;
-  view: FlagDetailView;
+  editing: TargetingRulesEditing;
+  view: TargetingRulesEditorView;
 }) {
   const [attribute, setAttribute] = useState("");
   const [value, setValue] = useState("");

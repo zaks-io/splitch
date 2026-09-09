@@ -8,6 +8,8 @@ export const RESET_TABLES = [
   "sentry_installations",
   "event_definition_versions",
   "event_definitions",
+  "conclusion_approval_requests",
+  "experiment_conclusions",
   "approval_reviews",
   "approval_requests",
   "claim_idempotency",

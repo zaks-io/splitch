@@ -1,7 +1,6 @@
-import { ApprovalRequestSchema } from "@splitch/contracts";
+import { ApprovalRequestSchema, canonicalJson } from "@splitch/contracts";
 import { appScope, envScope } from "@splitch/db";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { canonicalJson } from "../src/approval-canonical";
 import {
   type Harness,
   ids,

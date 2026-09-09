@@ -1,3 +1,5 @@
+import { LOCAL_E2E_RUN_CONFIG } from "./local-e2e-run-config.mjs";
+
 /**
  * Tinybird-shaped inputs the local Analysis stub serves, one entry per seeded Run.
  *
@@ -6,20 +8,27 @@
  * matching shape.
  */
 export const LOCAL_E2E_ANALYSIS_INPUTS = Object.freeze([
-  analysisInput("env_checkout_dev_e2e", "experiment_checkout_dev_e2e", "run_checkout_dev_e2e", {
-    control: 10,
-    treatment: 10,
-  }),
-  analysisInput("env_checkout_prod_e2e", "experiment_checkout_prod_e2e", "run_checkout_prod_e2e", {
-    control: 19,
-    treatment: 1,
-  }),
+  analysisInput(
+    "env_checkout_dev_e2e",
+    "experiment_checkout_dev_e2e",
+    "run_checkout_dev_e2e",
+    { control: 10, treatment: 10 },
+    { configHash: LOCAL_E2E_RUN_CONFIG.hash.dev },
+  ),
+  analysisInput(
+    "env_checkout_prod_e2e",
+    "experiment_checkout_prod_e2e",
+    "run_checkout_prod_e2e",
+    { control: 19, treatment: 1 },
+    { configHash: LOCAL_E2E_RUN_CONFIG.hash.prod },
+  ),
   // The dev Experiment's frozen earlier Run.
   analysisInput(
     "env_checkout_dev_e2e",
     "experiment_checkout_dev_e2e",
     "run_checkout_dev_previous_e2e",
     { control: 6, treatment: 6 },
+    { configHash: LOCAL_E2E_RUN_CONFIG.hash.devPrevious },
   ),
   // #200 replaced this fixture's previously-obvious split (5/100 vs 80/100
   // conversions) with these "more realistic" counts, but 300/1500 vs
@@ -34,14 +43,33 @@ export const LOCAL_E2E_ANALYSIS_INPUTS = Object.freeze([
     "experiment_checkout_significance_e2e",
     "run_checkout_significance_e2e",
     { control: 1_500, treatment: 1_500 },
-    { decisionMetric: "checkout-conversion", conversions: { control: 300, treatment: 375 } },
+    {
+      configHash: LOCAL_E2E_RUN_CONFIG.hash.significance,
+      decisionMetric: "checkout-conversion",
+      conversions: { control: 300, treatment: 375 },
+    },
+  ),
+  analysisInput(
+    "env_checkout_dev_e2e",
+    "experiment_checkout_conclusion_e2e",
+    "run_checkout_conclusion_e2e",
+    { control: 1_500, treatment: 1_500 },
+    {
+      configHash: LOCAL_E2E_RUN_CONFIG.hash.conclusion,
+      decisionMetric: "checkout-conversion",
+      conversions: { control: 300, treatment: 375 },
+    },
   ),
   analysisInput(
     "env_checkout_prod_e2e",
     "experiment_checkout_srm_e2e",
     "run_checkout_srm_e2e",
     { control: 140, treatment: 60 },
-    { decisionMetric: "checkout-conversion", conversions: { control: 20, treatment: 12 } },
+    {
+      configHash: LOCAL_E2E_RUN_CONFIG.hash.srm,
+      decisionMetric: "checkout-conversion",
+      conversions: { control: 20, treatment: 12 },
+    },
   ),
   // SPL-189: the same 7:3 imbalance as the SRM fixture above (scaled 1.5x so the
   // counts stay distinct per this module's invariant), reused on a Run whose
@@ -53,7 +81,11 @@ export const LOCAL_E2E_ANALYSIS_INPUTS = Object.freeze([
     "experiment_checkout_integrity_e2e",
     "run_checkout_integrity_e2e",
     { control: 210, treatment: 90 },
-    { decisionMetric: "checkout-conversion", conversions: { control: 30, treatment: 18 } },
+    {
+      configHash: LOCAL_E2E_RUN_CONFIG.hash.integrity,
+      decisionMetric: "checkout-conversion",
+      conversions: { control: 30, treatment: 18 },
+    },
   ),
   // Clean and decidable on every gate check, with a Guardrail Metric breached.
   // Guardrails deliberately do not gate, so this is the state where the ship
@@ -64,6 +96,7 @@ export const LOCAL_E2E_ANALYSIS_INPUTS = Object.freeze([
     "run_checkout_guardrail_e2e",
     { control: 1_500, treatment: 1_500 },
     {
+      configHash: LOCAL_E2E_RUN_CONFIG.hash.guardrail,
       decisionMetric: "checkout-conversion",
       conversions: { control: 300, treatment: 318 },
       guardrailMetric: "checkout-reliability",
@@ -73,6 +106,9 @@ export const LOCAL_E2E_ANALYSIS_INPUTS = Object.freeze([
 ]);
 
 function analysisInput(environmentId, experimentId, runId, counts, options = {}) {
+  if (typeof options.configHash !== "string") {
+    throw new Error(`local-e2e analysis fixture ${runId} is missing its D1 Run config hash`);
+  }
   const decisionFamily = options.decisionMetric
     ? [{ metric_id: options.decisionMetric, variant: "treatment" }]
     : [];
@@ -96,6 +132,8 @@ function analysisInput(environmentId, experimentId, runId, counts, options = {})
     environmentId,
     experimentId,
     runId,
+    configHash: options.configHash,
+    dataWatermark: "2026-07-20T00:00:00.000Z",
     counts,
     decisionFamily,
     guardrailDecisions,

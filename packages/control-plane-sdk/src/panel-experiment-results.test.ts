@@ -100,6 +100,20 @@ function noDataEnvelope() {
 }
 
 describe("PanelExperimentResultsOutputSchema contract pins (SPL-305)", () => {
+  it("accepts decision evidence only as a complete camel-case pair", () => {
+    const withEvidence = {
+      ...readyEnvelope(),
+      dataWatermark: "2026-09-08T12:00:00.000Z",
+      resultToken: `sha256:${"a".repeat(64)}`,
+    };
+
+    expect(PanelExperimentResultsOutputSchema.safeParse(withEvidence).success).toBe(true);
+    const { dataWatermark: _watermark, ...withoutWatermark } = withEvidence;
+    const { resultToken: _token, ...withoutToken } = withEvidence;
+    expect(PanelExperimentResultsOutputSchema.safeParse(withoutWatermark).success).toBe(false);
+    expect(PanelExperimentResultsOutputSchema.safeParse(withoutToken).success).toBe(false);
+  });
+
   it("rejects a no_run envelope that omits recommendedAction", () => {
     expect(PanelExperimentResultsOutputSchema.safeParse({ state: "no_run" }).success).toBe(false);
     expect(

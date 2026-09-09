@@ -1,6 +1,5 @@
-import type { ApprovalRequest } from "@splitch/contracts";
+import { canonicalHash, canonicalJson, type ApprovalRequest } from "@splitch/contracts";
 import { appScope, type Repository } from "@splitch/db";
-import { canonicalHash, canonicalJson } from "./approval-canonical";
 import { type RequestRow, type ReviewRow, storedApprovalRequestProjection } from "./approval-model";
 
 export const APPROVAL_ARCHIVE_VERSION = 1;

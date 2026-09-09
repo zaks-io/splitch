@@ -147,6 +147,8 @@ export function createPanelExperimentsClient(options: { fetch: typeof fetch; bas
     create: mutations.create,
     update: mutations.update,
     start: mutations.start,
+    conclude: mutations.conclude,
+    createConclusionPromotionRequest: mutations.createConclusionPromotionRequest,
   };
 }
 

@@ -4,3 +4,11 @@
   expected_http_status: 200
   expected_result: |
     {"app_id":"app_privacy","environment_id":"env_prod","event_definition_id":"event_definition_privacy","id_type":"user","targeting_key_hash":"app-v1:bbbb-new","entity_family_hash":"v1:bbbb","dedup_key":"privacy-new-metric","event_id":"privacy-new-metric","event_definition_version_id":"event_definition_privacy_v1","event_name":"privacy_metric","fields":"{}","dimensions":"{}","accepted_at":"2026-07-03 00:00:00.000"}
+- name: caller_watermark_includes_the_exact_ingest_edge
+  description: The canonical retry first ingested exactly at the boundary remains visible while later canonical Metric Events are excluded.
+  parameters: app_id=app_1&environment_id=env_prod&from_ts=2026-07-02%2000%3A00%3A00.000&to_ts=2026-07-04%2000%3A00%3A00.000&ingest_watermark_ts=2026-07-02%2000%3A00%3A00.000001
+  expected_http_status: 200
+  expected_result: |
+    {"app_id":"app_1","environment_id":"env_prod","event_definition_id":"event_definition_signup","id_type":"user","targeting_key_hash":"tk_control_snapshot","entity_family_hash":"tk_control_snapshot","dedup_key":"metric-app-1-control","event_id":"event-app-1-control","event_definition_version_id":"event_definition_signup_v1","event_name":"signup_completed","fields":"{}","dimensions":"{}","accepted_at":"2026-07-02 00:00:00.000"}
+    {"app_id":"app_1","environment_id":"env_prod","event_definition_id":"event_definition_llm","id_type":"user","targeting_key_hash":"tk_control_snapshot","entity_family_hash":"tk_control_snapshot","dedup_key":"llm-control","event_id":"llm-control","event_definition_version_id":"event_definition_llm_v1","event_name":"llm_completed","fields":"{\"duration_ms\":1000,\"cost_usd\":0.01,\"error_count\":0,\"request_count\":1}","dimensions":"{}","accepted_at":"2026-07-02 00:00:00.000"}
+    {"app_id":"app_1","environment_id":"env_prod","event_definition_id":"event_definition_llm","id_type":"user","targeting_key_hash":"tk_treatment_snapshot","entity_family_hash":"tk_treatment_snapshot","dedup_key":"llm-treatment-1","event_id":"llm-treatment-1","event_definition_version_id":"event_definition_llm_v1","event_name":"llm_completed","fields":"{\"duration_ms\":1500,\"cost_usd\":0.02,\"error_count\":1,\"request_count\":1}","dimensions":"{}","accepted_at":"2026-07-02 00:00:00.000"}

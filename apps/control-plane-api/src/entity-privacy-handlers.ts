@@ -1,8 +1,8 @@
+import { canonicalHash } from "@splitch/contracts";
 import type { Repository } from "@splitch/db";
 import { type HandlerArgs, type Registrar, renderError } from "@splitch/worker-runtime";
 import type { Hono } from "hono";
 import { requireAppWrite } from "./app-authz";
-import { canonicalHash } from "./approval-canonical";
 import type { ConfigStoreAccess } from "./config-store-access";
 import type { EntityPrivacyConsumer } from "./entity-privacy-consumer";
 import { initialEntityDeleteStoreStatus } from "./entity-privacy-delete-job";

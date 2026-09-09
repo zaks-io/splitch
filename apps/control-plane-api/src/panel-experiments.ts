@@ -1,4 +1,5 @@
 import {
+  type AnalysisResultsEnvelope,
   evaluateExperimentDecisionGate,
   experimentSignificanceDisplays,
   experimentSrmDiagnostics,
@@ -273,19 +274,38 @@ export async function panelExperimentResults(
     };
     return Response.json(output);
   }
-  const stats = results.stats;
-  const output: PanelExperimentResultsOutput = {
+  return Response.json(
+    panelReadyResults(results, {
+      runId: run.id,
+      runNumber: run.runNumber,
+      runStatus,
+      control,
+    }),
+  );
+}
+
+function panelReadyResults(
+  results: Extract<AnalysisResultsEnvelope, { state: "ready" }>,
+  run: Pick<
+    Extract<PanelExperimentResultsOutput, { state: "ready" }>,
+    "runId" | "runNumber" | "runStatus" | "control"
+  >,
+): Extract<PanelExperimentResultsOutput, { state: "ready" }> {
+  const ready = {
     state: "ready",
-    runId: run.id,
-    runNumber: run.runNumber,
-    runStatus,
-    control,
-    stats,
-    srm: experimentSrmDiagnostics(stats),
-    gate: evaluateExperimentDecisionGate(stats, control),
-    significance: experimentSignificanceDisplays(stats),
-  };
-  return Response.json(output);
+    ...run,
+    stats: results.stats,
+    srm: experimentSrmDiagnostics(results.stats),
+    gate: evaluateExperimentDecisionGate(results.stats, run.control),
+    significance: experimentSignificanceDisplays(results.stats),
+  } as const;
+  return results.data_watermark && results.result_token
+    ? {
+        ...ready,
+        dataWatermark: results.data_watermark,
+        resultToken: results.result_token,
+      }
+    : ready;
 }
 
 /**

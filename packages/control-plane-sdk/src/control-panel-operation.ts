@@ -17,6 +17,10 @@
  */
 
 import { parseEventDefinitionOperation } from "./control-panel-event-definition-operation";
+import {
+  type ControlPanelExperimentOperation,
+  parseExperiments,
+} from "./control-panel-experiment-operation";
 import { parseEnvironmentExposureStatus } from "./control-panel-exposure-status-operation";
 import { parseFlags } from "./control-panel-operation-flags";
 import { parseAppScoped } from "./panel-app-settings-parse.js";
@@ -35,6 +39,7 @@ import { parseSentryIntegration } from "./panel-sentry-parse.js";
 export const CONTROL_PANEL_ENVIRONMENT_HEADER = "x-splitch-panel-environment";
 
 export type ControlPanelOperation =
+  | ControlPanelExperimentOperation
   | { id: "apps_create"; orgId: string }
   | { id: "organization_usage_get"; orgId: string }
   | { id: "environment_exposure_status_get"; appId: string; environmentId: string }
@@ -65,19 +70,9 @@ export type ControlPanelOperation =
       appId: string;
     }
   | { id: "app_members_update" | "app_members_remove"; appId: string; userId: string }
-  | { id: "experiments_detail" }
-  | { id: "experiments_list" }
-  | { id: "experiments_results" }
-  | { id: "experiments_route_resolution" }
   | { id: "organizations_create" }
   | {
-      id: "experiments_update" | "experiments_start";
-      appId: string;
-      environmentId: string;
-      experimentId: string;
-    }
-  | {
-      id: "flags_list" | "flags_create" | "experiments_create";
+      id: "flags_list" | "flags_create";
       appId: string;
       environmentId: string;
     }
@@ -212,13 +207,6 @@ export type ControlPanelOperation =
 
 const APPS_PATH = /^\/orgs\/([^/]+)\/apps\/?$/;
 const APP_ATTENTION_PATH = /^\/apps\/([^/]+)\/attention-rollup\/?$/;
-const EXPERIMENT_DETAIL_PATH = "/control-panel/experiments/detail";
-const EXPERIMENT_RESULTS_PATH = "/control-panel/experiments/results";
-const EXPERIMENT_ROUTE_RESOLUTION_PATH = "/control-panel/experiments/resolve-route";
-const EXPERIMENTS_PATH = "/control-panel/experiments/list";
-const EXPERIMENT_MUTATION_PATH =
-  /^\/apps\/([^/]+)\/envs\/([^/]+)\/experiments\/([^/]+)(\/start)?\/?$/;
-const EXPERIMENTS_COLLECTION_PATH = /^\/apps\/([^/]+)\/envs\/([^/]+)\/experiments\/?$/;
 const FLAG_CONFIG_PATH = /^\/apps\/([^/]+)\/envs\/([^/]+)\/flags\/([^/]+)\/config\/?$/;
 const TARGETING_RULES_PATH = /^\/apps\/([^/]+)\/envs\/([^/]+)\/flags\/([^/]+)\/targeting-rules\/?$/;
 const FLAG_PROMOTE_PATH = /^\/apps\/([^/]+)\/envs\/([^/]+)\/flags\/([^/]+)\/promote\/?$/;
@@ -245,9 +233,7 @@ export function parseControlPanelOperation(
     parseAppScoped(method, pathname) ??
     parseOrganizationsCreate(method, pathname) ??
     parseOrgMembers(method, pathname) ??
-    parseExperimentsList(method, pathname) ??
-    parseExperimentMutation(method, pathname) ??
-    parseExperimentCreate(method, pathname) ??
+    parseExperiments(method, pathname) ??
     parseFlags(method, pathname, panelEnvironmentId, searchParams) ??
     parseConfig(method, pathname) ??
     parseApproval(method, pathname) ??
@@ -271,50 +257,6 @@ function parseAppAttention(method: string, pathname: string): ControlPanelOperat
   const match = pathname.match(APP_ATTENTION_PATH);
   const appId = match?.[1] ? decodeSegment(match[1]) : null;
   return method === "GET" && appId ? { id: "app_attention_rollup_get", appId } : null;
-}
-
-function parseExperimentsList(method: string, pathname: string): ControlPanelOperation | null {
-  if (method !== "POST") return null;
-  if (pathname === EXPERIMENTS_PATH) return { id: "experiments_list" };
-  if (pathname === EXPERIMENT_DETAIL_PATH) return { id: "experiments_detail" };
-  if (pathname === EXPERIMENT_RESULTS_PATH) return { id: "experiments_results" };
-  if (pathname === EXPERIMENT_ROUTE_RESOLUTION_PATH) return { id: "experiments_route_resolution" };
-  return null;
-}
-
-/**
- * `PATCH /apps/:appId/envs/:envId/experiments/:experimentId` and its `/start`
- * sibling. Unlike the `experiments_*` reads these DO name a resource, so the
- * resolver binds the delegation to that exact Experiment.
- */
-function parseExperimentMutation(method: string, pathname: string): ControlPanelOperation | null {
-  const match = pathname.match(EXPERIMENT_MUTATION_PATH);
-  if (!match?.[1] || !match[2] || !match[3]) return null;
-  const isStart = match[4] === "/start";
-  if (isStart ? method !== "POST" : method !== "PATCH") return null;
-  const [appId, environmentId, experimentId] = decodedSegments(match.slice(1, 4));
-  return appId && environmentId && experimentId
-    ? {
-        id: isStart ? "experiments_start" : "experiments_update",
-        appId,
-        environmentId,
-        experimentId,
-      }
-    : null;
-}
-
-/**
- * `POST /apps/:appId/envs/:envId/experiments`. Disjoint from
- * `EXPERIMENT_MUTATION_PATH` by construction: that pattern requires a third
- * segment naming an existing Experiment, and a create names none, so the Panel's
- * draft-creation call can never be confused with a mutation of an Experiment the
- * delegation was not bound to.
- */
-function parseExperimentCreate(method: string, pathname: string): ControlPanelOperation | null {
-  const match = pathname.match(EXPERIMENTS_COLLECTION_PATH);
-  if (method !== "POST" || !match?.[1] || !match[2]) return null;
-  const [appId, environmentId] = decodedSegments(match.slice(1, 3));
-  return appId && environmentId ? { id: "experiments_create", appId, environmentId } : null;
 }
 
 function parseAppsCreate(method: string, pathname: string): ControlPanelOperation | null {

@@ -151,7 +151,7 @@ describe("remaining applied D1 schema", () => {
     }
   });
 
-  it("contains the 34 named live D1 tables", async () => {
+  it("contains the 36 named live D1 tables", async () => {
     const local = await createLocalD1();
     try {
       const tables = await local.d1
@@ -173,6 +173,7 @@ describe("remaining applied D1 schema", () => {
         "client_keys",
         "cloudflare_config_deliveries",
         "cloudflare_installations",
+        "conclusion_approval_requests",
         "config_webhook_deliveries",
         "convex_installations",
         "device_refresh_sessions",
@@ -180,6 +181,7 @@ describe("remaining applied D1 schema", () => {
         "environments",
         "event_definition_versions",
         "event_definitions",
+        "experiment_conclusions",
         "experiments",
         "flag_change_events",
         "flag_configs",

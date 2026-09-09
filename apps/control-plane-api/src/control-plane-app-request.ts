@@ -64,6 +64,7 @@ export async function handleControlPlaneAppRequest(input: {
       configStore,
       createPerformanceSpanRecorder(env),
     ),
+    analysis: env.ANALYSIS_API,
     delegationBindings: {
       "analysis-api": env.ANALYSIS_API,
       "evaluation-api": env.EVALUATION_API,

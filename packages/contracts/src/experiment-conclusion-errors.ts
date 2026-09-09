@@ -18,7 +18,10 @@ export const DecisionFailureSchema = z.discriminatedUnion("code", [
         .object({
           controlVariantId: z.string(),
           frozenVariantNames: z.array(z.string()),
-          reason: UnresolvableControlReasonSchema,
+          reason: z.union([
+            UnresolvableControlReasonSchema,
+            z.literal("analysis_control_disagreement"),
+          ]),
         })
         .strict(),
     })

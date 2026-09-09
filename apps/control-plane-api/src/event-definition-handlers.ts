@@ -1,5 +1,6 @@
 import {
   boundListRead,
+  canonicalHash,
   CURRENT_KV_SCHEMA_VERSION,
   type EventDefinition,
   type EventDefinitionVersion,
@@ -11,7 +12,6 @@ import type { HandlerArgs, Registrar } from "@splitch/worker-runtime";
 import { renderError } from "@splitch/worker-runtime";
 import type { Hono } from "hono";
 import { appNotFound, nowIso } from "./app-environment-model";
-import { canonicalHash } from "./approval-canonical";
 import { randomHex } from "./credential-cache";
 import { commitEventDefinitionPublication } from "./event-definition-publication";
 import { validationError } from "./flag-definition-errors";

@@ -41,6 +41,8 @@ const UNBOUND_OPERATION_IDS = [
 
 const EXPERIMENT_MUTATION_OPERATION_IDS = ["experiments_update", "experiments_start"] as const;
 
+const RUN_CONCLUSION_OPERATION_IDS = ["runs_conclude"] as const;
+
 const FLAG_CONFIG_OPERATION_IDS = [
   "flag_config_get",
   "flag_config_update",
@@ -130,6 +132,8 @@ const CLAIM_GUARDS: ReadonlyMap<string, ClaimGuard> = new Map<string, ClaimGuard
   ["flag_get", isFlagGetOperation],
   ...family(UNBOUND_OPERATION_IDS, (value) => hasKeys(value, ["id"])),
   ...family(EXPERIMENT_MUTATION_OPERATION_IDS, isExperimentMutationOperation),
+  ...family(RUN_CONCLUSION_OPERATION_IDS, isRunConclusionOperation),
+  ["conclusion_promotion_requests_create", isConclusionPromotionRequestOperation],
   ...family(FLAG_CONFIG_OPERATION_IDS, isFlagConfigOperation),
   ...family(APPROVAL_OPERATION_IDS, isApprovalOperation),
   ...family(SCOPED_OPERATION_IDS, isAppCollectionOperation),
@@ -163,6 +167,25 @@ function isExperimentMutationOperation(value: Record<string, unknown>): boolean 
     hasKeys(value, ["id", "appId", "environmentId", "experimentId"]) &&
     hasAppEnvironment(value) &&
     isNonEmptyString(value.experimentId)
+  );
+}
+
+function isRunConclusionOperation(value: Record<string, unknown>): boolean {
+  return (
+    hasKeys(value, ["id", "appId", "environmentId", "experimentId", "runId"]) &&
+    hasAppEnvironment(value) &&
+    isNonEmptyString(value.experimentId) &&
+    isNonEmptyString(value.runId)
+  );
+}
+
+function isConclusionPromotionRequestOperation(value: Record<string, unknown>): boolean {
+  return (
+    hasKeys(value, ["id", "appId", "environmentId", "experimentId", "runId", "conclusionId"]) &&
+    hasAppEnvironment(value) &&
+    isNonEmptyString(value.experimentId) &&
+    isNonEmptyString(value.runId) &&
+    isNonEmptyString(value.conclusionId)
   );
 }
 

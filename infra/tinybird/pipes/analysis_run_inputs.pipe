@@ -25,7 +25,14 @@ SQL >
         metric_query_config,
         metric_variance_config,
         dimensions,
-        started_at
+        started_at,
+        config_hash,
+        (
+            SELECT formatDateTime(maxOrNull(watermark_ts), '%Y-%m-%dT%H:%i:%S.%fZ', 'UTC')
+            FROM deduped_exposures
+            WHERE app_id = {{String(app_id)}}
+                AND environment_id = {{String(environment_id)}}
+        ) AS data_watermark
     FROM run_snapshots
     WHERE app_id = {{String(app_id)}}
         AND environment_id = {{String(environment_id)}}

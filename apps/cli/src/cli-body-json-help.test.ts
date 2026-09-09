@@ -46,7 +46,15 @@ function assertBodyJsonExampleValid(command: CliCommandDefinition): void {
     parsed.success,
     `${command.path.join(" ")} example invalid: ${parsed.success ? "" : parsed.error.message}`,
   ).toBe(true);
-  expect(JSON.stringify(help.example)).not.toMatch(/secret|token|password|api[_-]?key/i);
+  expect(JSON.stringify(exampleValues(help.example))).not.toMatch(
+    /secret|token|password|api[_-]?key/i,
+  );
+}
+
+function exampleValues(value: unknown): unknown[] {
+  if (Array.isArray(value)) return value.flatMap(exampleValues);
+  if (value && typeof value === "object") return Object.values(value).flatMap(exampleValues);
+  return [value];
 }
 
 function assertHandWrittenKindPolicy(kind: CliCommandDefinition["kind"]): void {
@@ -97,7 +105,7 @@ describe("CLI --body-json schema help coverage (SPL-309)", () => {
   it("renders a Request body section for every MCP route with a JSON body", () => {
     const bodyRoutes = mcpRoutesWithJsonBody();
     // Exact current corpus size — leave no slack for a body route to drop out unnoticed.
-    expect(bodyRoutes.length).toBe(36);
+    expect(bodyRoutes.length).toBe(38);
     // Named anchors for ticket-critical commands (not the full invariant).
     expect(bodyRoutes.map((route) => route.operationId)).toEqual(
       expect.arrayContaining([
@@ -110,6 +118,8 @@ describe("CLI --body-json schema help coverage (SPL-309)", () => {
         "flags_promote",
         "app_members_add",
         "app_members_update",
+        "runs_conclude",
+        "conclusion_promotion_requests_create",
       ]),
     );
 

@@ -18,6 +18,12 @@ export function mountExperimentRoutes(
   registrar.mount(app, controlPlaneRoute("runs_list"), handlers.listRuns);
   registrar.mount(app, controlPlaneRoute("runs_get"), handlers.getRun);
   registrar.mount(app, controlPlaneRoute("runs_end"), handlers.endRun);
+  registrar.mount(app, controlPlaneRoute("runs_conclude"), handlers.concludeRun);
+  registrar.mount(
+    app,
+    controlPlaneRoute("conclusion_promotion_requests_create"),
+    handlers.createConclusionPromotionRequest,
+  );
 }
 
 export function mountMetricRoutes(

@@ -21,6 +21,7 @@ const checkoutExpandedAllocation = { control: 70, treatment: 30 };
 const variants = Object.freeze({
   checkout: variantPair("checkout"),
   significance: variantPair("significance"),
+  conclusion: variantPair("conclusion"),
   guardrail: variantPair("guardrail"),
   ended: variantPair("ended"),
   srm: variantPair("srm"),
@@ -33,6 +34,7 @@ const salt = Object.freeze({
   prod: "local-e2e-prod",
   setup: "local-e2e-setup",
   significance: "local-e2e-significance",
+  conclusion: "local-e2e-conclusion",
   guardrail: "local-e2e-guardrail",
   ended: "local-e2e-ended",
   srm: "local-e2e-srm",
@@ -53,6 +55,7 @@ export const LOCAL_E2E_RUN_CONFIG = Object.freeze({
     prod: runConfigHash(salt.prod, checkoutAllocation, variants.checkout),
     setup: runConfigHash(salt.setup, checkoutAllocation, variants.checkout),
     significance: runConfigHash(salt.significance, checkoutAllocation, variants.significance),
+    conclusion: runConfigHash(salt.conclusion, checkoutAllocation, variants.conclusion),
     guardrail: runConfigHash(salt.guardrail, checkoutAllocation, variants.guardrail),
     ended: runConfigHash(salt.ended, checkoutAllocation, variants.ended),
     srm: runConfigHash(salt.srm, checkoutAllocation, variants.srm),

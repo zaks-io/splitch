@@ -1,3 +1,4 @@
+import { EXPERIMENT_ROUTES } from "./control-panel-operation-coverage-experiments";
 import { INTEGRATION_ROUTES } from "./control-panel-operation-coverage-integrations";
 
 export type { Route } from "./control-panel-operation-coverage-types";
@@ -85,44 +86,7 @@ export const OPERATION_ROUTES: OperationCoverage = {
     route: { method: "DELETE", pathname: `/apps/${APP}/members/user_1` },
     operation: { id: "app_members_remove", appId: APP, userId: "user_1" },
   },
-  experiments_list: {
-    route: { method: "POST", pathname: "/control-panel/experiments/list" },
-    operation: { id: "experiments_list" },
-  },
-  experiments_detail: {
-    route: { method: "POST", pathname: "/control-panel/experiments/detail" },
-    operation: { id: "experiments_detail" },
-  },
-  experiments_results: {
-    route: { method: "POST", pathname: "/control-panel/experiments/results" },
-    operation: { id: "experiments_results" },
-  },
-  experiments_route_resolution: {
-    route: { method: "POST", pathname: "/control-panel/experiments/resolve-route" },
-    operation: { id: "experiments_route_resolution" },
-  },
-  experiments_create: {
-    route: { method: "POST", pathname: `/apps/${APP}/envs/${ENV}/experiments` },
-    operation: { id: "experiments_create", appId: APP, environmentId: ENV },
-  },
-  experiments_update: {
-    route: { method: "PATCH", pathname: `/apps/${APP}/envs/${ENV}/experiments/exp_1` },
-    operation: {
-      id: "experiments_update",
-      appId: APP,
-      environmentId: ENV,
-      experimentId: "exp_1",
-    },
-  },
-  experiments_start: {
-    route: { method: "POST", pathname: `/apps/${APP}/envs/${ENV}/experiments/exp_1/start` },
-    operation: {
-      id: "experiments_start",
-      appId: APP,
-      environmentId: ENV,
-      experimentId: "exp_1",
-    },
-  },
+  ...EXPERIMENT_ROUTES,
   flags_list: {
     route: { method: "GET", pathname: `/apps/${APP}/flags`, environmentId: ENV },
     operation: { id: "flags_list", appId: APP, environmentId: ENV },

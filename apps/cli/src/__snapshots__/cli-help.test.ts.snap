@@ -392,6 +392,29 @@ Flags:
 
 Example:
   splitch cloudflare-installations revoke <installation-id> --json",
+    "conclusion-promotion-requests create": "Replace a stale winner Promotion request from immutable conclusion evidence.
+
+Usage:
+  splitch conclusion-promotion-requests create <experiment-id> <run-id> <conclusion-id> [flags]
+
+Flags:
+  --app <app>              [type: string; default: SPLITCH_APP or config] App ID or slug.
+  --env <environment>      [type: string; default: SPLITCH_ENV or config] Environment ID or key.
+  --by <mode>              [type: string; default: automatic] Allowed: id. Resolve a canonical-looking selector explicitly.
+  --body-json <json>       [type: JSON object; default: none] Request body fields; see Request body below.
+  --idempotency-key <key>  [type: string; default: generated] Stable retry key for this mutation.
+  --confirm                [type: boolean; default: false] Approve and apply a Policy-gated change.
+  --json                   [type: boolean; default: false] Write machine-readable JSON to stdout.
+  -h, --help               [type: boolean; default: false] Show help and exit.
+
+Request body (--body-json):
+  expectedConfigVersion  required  number
+  idempotencyKey         required  string
+  Example:
+    {"expectedConfigVersion":0,"idempotencyKey":"idem-1"}
+
+Example:
+  splitch conclusion-promotion-requests create <experiment-id> <run-id> <conclusion-id> --body-json '{"expectedConfigVersion":0,"idempotencyKey":"idem-1"}' --json",
     "convex-installations list": "List Convex installations and their delivery health for this Environment.
 
 Usage:
@@ -703,7 +726,8 @@ Flags:
   -h, --help           [type: boolean; default: false] Show help and exit.
 
 Request body (--body-json):
-  runId  optional  string
+  runId          optional  string
+  dataWatermark  optional  string
   Example:
     {"runId":"run_1"}
 
@@ -1436,6 +1460,33 @@ Request body (--body-json):
 
 Example:
   splitch orgs update --org <organization> --body-json '{"plan":"free"}' --json",
+    "runs conclude": "End a Run, freeze its decision evidence, and request winner Promotion.
+
+Usage:
+  splitch runs conclude <experiment-id> <run-id> [flags]
+
+Flags:
+  --app <app>              [type: string; default: SPLITCH_APP or config] App ID or slug.
+  --env <environment>      [type: string; default: SPLITCH_ENV or config] Environment ID or key.
+  --by <mode>              [type: string; default: automatic] Allowed: id. Resolve a canonical-looking selector explicitly.
+  --body-json <json>       [type: JSON object; default: none] Request body fields; see Request body below.
+  --idempotency-key <key>  [type: string; default: generated] Stable retry key for this mutation.
+  --confirm                [type: boolean; default: false] Approve and apply a Policy-gated change.
+  --json                   [type: boolean; default: false] Write machine-readable JSON to stdout.
+  -h, --help               [type: boolean; default: false] Show help and exit.
+
+Request body (--body-json):
+  selectedVariant      required  string
+  expectedResultToken  required  string
+  dataWatermark        required  string
+  target               required  { environmentId: string; flagId: string; expectedConfigVersion: number; proposedConfig: { enabled: boolean; availableVariantNames: string[]; targetingRules: { id: string; flagId: string; priority: number; conditions: { attribute: string; operator: string ("eq" | "neq" | "gt" | "lt" | "gte" | "lte" | "in" | "not_in" | "matches" | "not_matches"); value: boolean | string | number | (boolean | string | number)[] }[]; variantId: string; segmentId?: string; percentageRollout?: { percentage: number; salt?: string } | null }[]; rollout: { percentage: number } | null } }
+  reason               optional  string
+  idempotencyKey       required  string
+  Example:
+    {"selectedVariant":"selectedVariant","expectedResultToken":"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","dataWatermark":"2026-01-01T00:00:00.000Z","target":{"environmentId":"environment_1","flagId":"flag_1","expectedConfigVersion":0,"proposedConfig":{"enabled":true,"availableVariantNames":[],"targetingRules":[{"id":"id_1","flagId":"flag_1","priority":0,"conditions":[{"attribute":"attribute","operator":"eq","value":true}],"variantId":"variant_1"}],"rollout":{"percentage":50}}},"idempotencyKey":"idem-1"}
+
+Example:
+  splitch runs conclude <experiment-id> <run-id> --body-json '{"selectedVariant":"selectedVariant","expectedResultToken":"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","dataWatermark":"2026-01-01T00:00:00.000Z","target":{"environmentId":"environment_1","flagId":"flag_1","expectedConfigVersion":0,"proposedConfig":{"enabled":true,"availableVariantNames":[],"targetingRules":[{"id":"id_1","flagId":"flag_1","priority":0,"conditions":[{"attribute":"attribute","operator":"eq","value":true}],"variantId":"variant_1"}],"rollout":{"percentage":50}}},"idempotencyKey":"idem-1"}' --json",
     "runs end": "End a running Run.
 
 Usage:
@@ -1776,6 +1827,19 @@ Flags:
 
 Example:
   splitch cloudflare-installations list --help",
+    "conclusion-promotion-requests": "Manage conclusion-promotion-requests resources.
+
+Usage:
+  splitch conclusion-promotion-requests <action> [arguments] [flags]
+
+Commands:
+  create          Replace a stale winner Promotion request from immutable conclusion evidence.
+
+Flags:
+  -h, --help  [type: boolean; default: false] Show help and exit.
+
+Example:
+  splitch conclusion-promotion-requests create --help",
     "convex-installations": "Manage convex-installations resources.
 
 Usage:
@@ -2031,6 +2095,7 @@ Commands:
   list            List an Experiment's Runs (newest first).
   get             Get a full Run (frozen assignment + measurement config + status).
   end             End a running Run.
+  conclude        End a Run, freeze its decision evidence, and request winner Promotion.
 
 Flags:
   -h, --help  [type: boolean; default: false] Show help and exit.
@@ -2175,6 +2240,7 @@ Resource groups:
   client-key
   cloudflare
   cloudflare-installations
+  conclusion-promotion-requests
   convex-installations
   env-policy
   environment-exposure-status

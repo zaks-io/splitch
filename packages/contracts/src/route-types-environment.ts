@@ -1,4 +1,10 @@
 import type { z } from "@hono/zod-openapi";
+import type {
+  ConcludeRunRequestSchema,
+  ConcludeRunResponseSchema,
+  CreateConclusionPromotionRequestSchema,
+  CreateConclusionPromotionResponseSchema,
+} from "./experiment-conclusion";
 import { type ClientKeySchema, EnvironmentSchema } from "./leaf-schemas-runtime";
 import type {
   CreateCredentialResponseSchema,
@@ -19,6 +25,7 @@ import type {
   AppParams,
   CanonicalEnvironmentSelectorQuerySchema,
   ClientKeyRotateResponseSchema,
+  ConclusionParams,
   CreateApiKeyRequestSchema,
   CreateEnvironmentRequestSchema,
   EnvFlagParams,
@@ -88,6 +95,16 @@ export type ExperimentsStartInput = InEnvironment<
 export type ExperimentsStartOutput = z.infer<typeof StartRunResponseSchema>;
 export type ExperimentsDeleteInput = InEnvironment<z.infer<typeof ExperimentParams>>;
 export type ExperimentsDeleteOutput = { deleted: true };
+export type RunsConcludeInput = InEnvironment<
+  z.infer<typeof ExperimentParams> & z.infer<typeof ConcludeRunRequestSchema> & { runId: string }
+>;
+export type RunsConcludeOutput = z.infer<typeof ConcludeRunResponseSchema>;
+export type ConclusionPromotionRequestsCreateInput = InEnvironment<
+  z.infer<typeof ConclusionParams> & z.infer<typeof CreateConclusionPromotionRequestSchema>
+>;
+export type ConclusionPromotionRequestsCreateOutput = z.infer<
+  typeof CreateConclusionPromotionResponseSchema
+>;
 
 export type ClientKeyGetInput = InEnvironment<z.infer<typeof EnvParams>>;
 export type ClientKeyGetOutput = z.infer<typeof ClientKeySchema>;

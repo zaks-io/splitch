@@ -126,6 +126,9 @@ function isConstrainedOptionalLabel(label: string): boolean {
 
 /** Fixtures only for open-vocabulary strings whose field name is not schema-valid. */
 const EXAMPLE_STRINGS: Readonly<Record<string, string>> = {
+  dataWatermark: "2026-01-01T00:00:00.000Z",
+  expectedResultToken: `sha256:${"a".repeat(64)}`,
+  idempotencyKey: "idem-1",
   idempotency_key: "idem-1",
   targetingKey: "userId",
   targetingKeyType: "user",
@@ -137,6 +140,8 @@ const EXAMPLE_STRINGS: Readonly<Record<string, string>> = {
  * shape the name heuristic produces fails the schema it is meant to illustrate.
  */
 const EXAMPLE_FORMATS: Readonly<Record<string, string>> = {
+  datetime: "2026-01-01T00:00:00.000Z",
+  iso_datetime: "2026-01-01T00:00:00.000Z",
   uuid: "018f2b7c-3c9a-7b3e-9a52-0c1d2e3f4a5b",
 };
 

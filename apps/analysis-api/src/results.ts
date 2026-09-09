@@ -1,6 +1,5 @@
 import {
   AnalysisResultsEnvelopeSchema,
-  type ErrorResponse,
   type StatsEngine,
   type StatsInput,
   StatsInputSchema,
@@ -9,8 +8,10 @@ import {
 import { canonicalizeAnalysisRows } from "@splitch/privacy";
 import { StatsEngine as DefaultStatsEngine } from "@splitch/stats";
 import { type HandlerArgs, renderError } from "@splitch/worker-runtime";
-import { readInitialResultsRows, readResultsExposureRows } from "./results-bootstrap";
+import { createResultToken } from "./result-token";
+import { readResultsExposureRows, readResultsRunRows } from "./results-bootstrap";
 import { readDownstreamAnalysisRows } from "./results-downstream-rows";
+import { resultsErrorResponse } from "./results-error-response";
 import {
   AnalysisIsolationError,
   AnalysisProvenanceError,
@@ -34,12 +35,7 @@ import {
   materializeMetricQueryConfig,
   materializeRunInput,
 } from "./results-run-input";
-import {
-  scopedPipeParams,
-  TinybirdReadError,
-  type TinybirdReadTransport,
-  tinybirdDateTime64,
-} from "./tinybird";
+import { scopedPipeParams, type TinybirdReadTransport, tinybirdDateTime64 } from "./tinybird";
 
 interface ResultsDeps {
   tinybird: TinybirdReadTransport;
@@ -51,6 +47,13 @@ interface ResultsScope {
   environmentId: string;
   experimentId: string;
   runId?: string;
+  dataWatermark?: string;
+}
+
+interface ResultsComputation {
+  statsInput: StatsInput;
+  runConfigHash: string;
+  dataWatermark?: string;
 }
 
 export function makeResultsHandler(deps: ResultsDeps) {
@@ -59,14 +62,32 @@ export function makeResultsHandler(deps: ResultsDeps) {
   return async ({ input, principal, requestId }: HandlerArgs<unknown>): Promise<Response> => {
     try {
       const scope = resultsScope(input, principal.appId, principal.environmentId);
-      const statsInput = await readStatsInputFromTinybird(deps.tinybird, scope);
+      const computation = await readResultsComputationFromTinybird(deps.tinybird, scope);
+      const { statsInput } = computation;
       const output = await statsEngine.analyze(statsInput);
+      // Stats permits infinite confidence bounds in memory. JSON carries those
+      // bounds as null, so hash the same parsed value the caller receives.
+      const stats = StatsOutputSchema.parse(JSON.parse(JSON.stringify(output)));
+      const evidence = computation.dataWatermark
+        ? {
+            data_watermark: computation.dataWatermark,
+            result_token: await createResultToken({
+              appId: scope.appId,
+              environmentId: scope.environmentId,
+              experimentId: scope.experimentId,
+              runId: statsInput.run_id,
+              runConfigHash: computation.runConfigHash,
+              stats,
+            }),
+          }
+        : {};
       return Response.json(
         AnalysisResultsEnvelopeSchema.parse({
           state: "ready",
           run_id: statsInput.run_id,
           control_variant: statsInput.control_variant,
-          stats: StatsOutputSchema.parse(output),
+          ...evidence,
+          stats,
         }),
       );
     } catch (cause) {
@@ -83,7 +104,7 @@ export function makeResultsHandler(deps: ResultsDeps) {
           }),
         );
       }
-      return renderError(errorFor(cause), { requestId });
+      return renderError(resultsErrorResponse(cause), { requestId });
     }
   };
 }
@@ -92,9 +113,21 @@ export async function readStatsInputFromTinybird(
   tinybird: TinybirdReadTransport,
   scope: ResultsScope,
 ): Promise<StatsInput> {
-  const baseParams = scopedPipeParams(scope);
-  const initialRows = await readInitialResultsRows(tinybird, scope.runId, baseParams);
-  const runInputs = initialRows.runInputs;
+  return (await readResultsComputationFromTinybird(tinybird, scope)).statsInput;
+}
+
+async function readResultsComputationFromTinybird(
+  tinybird: TinybirdReadTransport,
+  scope: ResultsScope,
+): Promise<ResultsComputation> {
+  const baseParams = {
+    ...scopedPipeParams(scope),
+    ...watermarkPipeParams(scope.dataWatermark),
+  };
+  const runInputs = await readResultsRunRows(tinybird, baseParams);
+  if (scope.runId !== undefined && runInputs.length > 1) {
+    throw new ResultsInputError("analysis_run_inputs returned multiple Run rows");
+  }
   const runInput = runInputs[0];
   if (runInput === undefined) {
     // Analysis only sees Tinybird. Empty run-input rows mean "no Run inputs
@@ -103,34 +136,33 @@ export async function readStatsInputFromTinybird(
     // from this pipe alone conflated drafts with missing ids.
     throw new ResultsNotFoundError("RUN_NOT_FOUND");
   }
-  const run = materializeRunInput(runInput);
+  const run = materializeProvenancedRun(runInput, scope.runId);
+  const runConfigHash = stringField(rowObject(runInput), "config_hash");
+  const dataWatermark =
+    scope.dataWatermark ??
+    normalizeDataWatermark(optionalString(rowObject(runInput).data_watermark));
   const metricQueryConfig = materializeMetricQueryConfig(runInput);
-  // Every downstream read is keyed on the Run the inputs pipe returned. If that
-  // is not the Run the caller asked for, the response would carry one Run's
-  // Exposures under another Run's identity, and no pooling guarantee upstream
-  // could detect it. Refuse instead of mislabelling.
-  if (scope.runId !== undefined && run.run_id !== scope.runId) {
-    throw new AnalysisProvenanceError(
-      `analysis_run_inputs returned Run ${run.run_id} for requested Run ${scope.runId}`,
-    );
-  }
-  const params = scopedPipeParams({ ...scope, runId: run.run_id });
+  const params = {
+    ...scopedPipeParams({ ...scope, runId: run.run_id }),
+    ...watermarkPipeParams(dataWatermark),
+  };
 
-  const exposureRows = await readResultsExposureRows(tinybird, params, initialRows.exposureRows);
+  const exposureRows = await readResultsExposureRows(tinybird, params);
   const exposures = canonicalizeAnalysisRows(
     exposureRows.map((row) => materializeExposure(row, scope)),
   );
   // An empty Exposure denominator is a healthy collecting state. Stop here so
   // a fresh Run does not query Metric pipes before any Entity can have a value.
-  if (exposures.length === 0) {
-    throw new ResultsInsufficientDataError("exposures", run.run_id, run.control_variant);
-  }
+  requireExposures(exposures, run.run_id, run.control_variant);
 
   const hasAnalyzedMetrics =
     run.decision_family.length > 0 || (run.guardrail_decisions?.length ?? 0) > 0;
   if (hasAnalyzedMetrics) assertMetricQueryCoverage(run, metricQueryConfig);
   const startedAt = stringField(rowObject(runInput), "started_at");
   const activationGated = optionalString(rowObject(runInput).activation_metric_id) !== undefined;
+  // accepted_at bounds the scan; ingest_watermark_ts freezes membership. Keep
+  // this after the watermark so a row accepted and ingested exactly on the
+  // inclusive evidence edge is not removed by the accepted_at < to_ts filter.
   const toTs = tinybirdDateTime64(new Date().toISOString());
   const { metricRows, prePeriodRows, activationRows } = await readDownstreamAnalysisRows({
     tinybird,
@@ -167,7 +199,44 @@ export async function readStatsInputFromTinybird(
       : {}),
   });
 
-  return input;
+  return { statsInput: input, runConfigHash, ...(dataWatermark ? { dataWatermark } : {}) };
+}
+
+function materializeProvenancedRun(runInput: unknown, requestedRunId: string | undefined) {
+  const run = materializeRunInput(runInput);
+  // Every downstream read is keyed on the Run the inputs pipe returned. Refuse
+  // a mismatch before any of that Run's rows can be relabelled for the caller.
+  if (requestedRunId !== undefined && run.run_id !== requestedRunId) {
+    throw new AnalysisProvenanceError(
+      `analysis_run_inputs returned Run ${run.run_id} for requested Run ${requestedRunId}`,
+    );
+  }
+  return run;
+}
+
+function requireExposures(
+  exposures: readonly unknown[],
+  runId: string,
+  controlVariant: string,
+): void {
+  if (exposures.length === 0) {
+    throw new ResultsInsufficientDataError("exposures", runId, controlVariant);
+  }
+}
+
+function watermarkPipeParams(dataWatermark: string | undefined): Record<string, string> {
+  return dataWatermark === undefined
+    ? {}
+    : { ingest_watermark_ts: tinybirdDateTime64(dataWatermark) };
+}
+
+function normalizeDataWatermark(value: string | undefined): string | undefined {
+  if (value === undefined) return undefined;
+  const iso = value.includes("T") ? value : `${value.replace(" ", "T")}Z`;
+  if (!Number.isFinite(Date.parse(iso))) {
+    throw new ResultsInputError("analysis_run_inputs.data_watermark is not a timestamp");
+  }
+  return iso;
 }
 
 function gatedActivationRows(
@@ -240,84 +309,8 @@ function resultsScope(
     environmentId,
     experimentId: stringField(params, "experimentId"),
     runId: optionalString(body.runId ?? query.runId),
+    dataWatermark: optionalString(body.dataWatermark),
   };
-}
-
-function errorFor(cause: unknown): ErrorResponse {
-  if (cause instanceof ResultsNotFoundError) {
-    return { code: cause.code, message: cause.message, details: {} };
-  }
-  if (cause instanceof ResultsForbiddenError) {
-    return { code: "FORBIDDEN", message: cause.message, details: {} };
-  }
-  if (cause instanceof ResultsInputError || isZodError(cause)) {
-    return {
-      code: "VALIDATION_ERROR",
-      message: "analysis inputs failed schema validation",
-      details: {
-        issues: zodOrInputIssues(cause),
-      },
-    };
-  }
-  if (cause instanceof TinybirdReadError) {
-    return {
-      code: "SERVICE_UNAVAILABLE",
-      message: "analysis data is unavailable",
-      details: { retryAfterMs: 30_000 },
-    };
-  }
-  // A Run-provenance mismatch is a permanent integrity failure, not a blip.
-  // Reporting it as retryable would invite a client to poll until a mislabelled
-  // answer looked like a transient hiccup that had cleared.
-  if (cause instanceof AnalysisProvenanceError) {
-    return {
-      code: "INTERNAL_SERVER_ERROR",
-      message: "analysis run provenance mismatch",
-      details: { fault: cause.message },
-    };
-  }
-  if (cause instanceof AnalysisIsolationError) {
-    return {
-      code: "INTERNAL_SERVER_ERROR",
-      message: "analysis isolation failure",
-      details: { fault: cause.message },
-    };
-  }
-  return {
-    code: "INTERNAL_SERVER_ERROR",
-    message: "analysis failed",
-    details: { fault: faultMessage(cause) },
-  };
-}
-
-function zodOrInputIssues(
-  cause: ResultsInputError | ZodLikeError,
-): Array<{ path: string[]; message: string }> {
-  if (cause instanceof ResultsInputError) {
-    return [{ path: ["analysis_run_inputs"], message: cause.message }];
-  }
-  return cause.issues.map((issue) => ({
-    path: issue.path.map(String),
-    message: issue.message,
-  }));
-}
-
-interface ZodLikeError {
-  issues: Array<{ path: PropertyKey[]; message: string }>;
-}
-
-function isZodError(cause: unknown): cause is ZodLikeError {
-  return (
-    typeof cause === "object" &&
-    cause !== null &&
-    (cause as { name?: unknown }).name === "ZodError" &&
-    Array.isArray((cause as { issues?: unknown }).issues)
-  );
-}
-
-function faultMessage(cause: unknown): string {
-  if (cause instanceof Error && cause.message.length > 0) return cause.message;
-  return "unexpected analysis failure";
 }
 
 export type { ResultsDeps, ResultsScope };
