@@ -164,7 +164,8 @@ path persists the raw Targeting Key.
 
 ### `GET /privacy/requests/{request_id}`
 
-Auth: requester, Org `owner`, or App `owner/admin` when the request is App-scoped.
+Auth: requester for User-scoped requests, current Org `owner`, or current App `owner/admin` when the
+request is App-scoped.
 
 Returns: `{ request: PrivacyRequest, job?: PrivacyJob }`
 

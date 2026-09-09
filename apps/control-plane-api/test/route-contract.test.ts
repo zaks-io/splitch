@@ -253,16 +253,16 @@ describe("control-plane route contract", () => {
     }
   });
 
-  it("limits privacy request status and artifacts to its requester, owner, or App admin", async () => {
+  it("requires current tenant authority for App privacy request status", async () => {
     const requesterJwt = await token([], REQUESTER);
     const ownerJwt = await token([`org:${PRIMARY.orgId}:owner`], ORG_OWNER);
     const adminJwt = await token([appAdminScope(PRIMARY.appId)], APP_ADMIN);
 
-    for (const jwt of [requesterJwt, ownerJwt, adminJwt]) {
+    for (const jwt of [ownerJwt, adminJwt]) {
       await expectPrivacyStatus(jwt);
     }
 
-    for (const jwt of [await token([]), await token([], OUTSIDER)]) {
+    for (const jwt of [requesterJwt, await token([]), await token([], OUTSIDER)]) {
       const response = await request("GET", `/privacy/requests/${PRIVACY_REQUEST_ID}`, jwt);
       expect(response.status).toBe(403);
       expect(((await response.json()) as ErrorResponse).code).toBe("FORBIDDEN");
