@@ -14,6 +14,7 @@ import { approvalTargetVersion, environmentPolicyContexts } from "./approval-tar
 import { idempotencyConflict, requiredAuthDoor } from "./approval-review-outcomes";
 import { buildSnapshotFromD1, responseFromSnapshot } from "./config-store-shared";
 import { targetConfigurationStale } from "./experiment-conclusion-errors";
+import { resolveReplacementGuardFailure } from "./experiment-conclusion-guard-errors";
 import { winnerChangedFields, winnerConfirmFloor } from "./experiment-conclusion-policy";
 import {
   conclusionPathIds,
@@ -237,26 +238,25 @@ async function commitReplacement(
     );
     if (!created) throw new Error("replacement Promotion Request lost its guarded D1 transaction");
   } catch (cause) {
-    return replacementRaceResult(deps, args, input, cause);
+    const resolved = await resolveReplacementGuardFailure(
+      deps,
+      args,
+      {
+        appId: input.conclusion.appId,
+        targetEnvironmentId: input.conclusion.targetEnvironmentId,
+        flagId: input.conclusion.targetFlagId,
+        expectedConfigVersion: input.body.expectedConfigVersion,
+        conclusionId: input.conclusion.id,
+        idempotencyKey: input.body.idempotencyKey,
+        requestHash: input.requestHash,
+      },
+      cause,
+    );
+    return resolved.kind === "replay"
+      ? finishReplacement(deps, args, input.body, input.conclusion, resolved.approval.id)
+      : resolved.response;
   }
   return finishReplacement(deps, args, input.body, input.conclusion, approvalId);
-}
-
-async function replacementRaceResult(
-  deps: ExperimentDeps,
-  args: HandlerArgs<unknown>,
-  input: Parameters<typeof commitReplacement>[2],
-  cause: unknown,
-) {
-  const replay = await deps.repo.approvals.getRequestByActorKey(
-    appScope(input.conclusion.appId),
-    args.principal.id,
-    input.body.idempotencyKey,
-  );
-  if (!replay) throw cause;
-  return replay.requestHash === input.requestHash
-    ? finishReplacement(deps, args, input.body, input.conclusion, replay.id)
-    : idempotencyConflict("approval_request", input.body.idempotencyKey, args.requestId);
 }
 
 function replacementRequiresStale(requestId: string) {

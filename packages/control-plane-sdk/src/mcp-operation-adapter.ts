@@ -167,10 +167,7 @@ function applyIdempotencyHeader(route: ApiRouteContract, headers: Headers, input
   const bodyFields = new Set(
     objectSchemaKeys(jsonMediaTypeSchema(route.openapi.request?.body?.content)),
   );
-  const key = ownValue(
-    record,
-    bodyFields.has("idempotencyKey") ? "idempotencyKey" : "idempotency_key",
-  );
+  const key = ownValue(record, idempotencyInputField(bodyFields));
   const lifted = withIdempotencyHeader(
     route.operationId,
     {},
@@ -213,15 +210,18 @@ function bodyForRoute(route: ApiRouteContract, input: unknown): unknown {
     return undefined;
   }
 
-  // Path/query keys that the body schema does not declare belong only on the URL.
-  // Always strip those — including when the remaining body fails schema validation —
-  // so VALIDATION_ERROR issues blame only caller-sent body keys, not CLI-/MCP-injected
-  // context ids (SPL-296). Keys declared on both path and body (e.g. CreateFlag's
-  // `appId`) stay in the JSON body.
+  // Path/query keys and a header-only idempotency key do not belong in JSON.
+  // Strip them even when the remaining body fails schema validation so the
+  // failure names only caller-sent body keys, not injected transport context.
+  // Fields declared in both places, such as CreateFlag's `appId`, stay in JSON.
   const bodyDeclared = new Set(objectSchemaKeys(rawBodySchema));
+  const idempotencyField = idempotencyInputField(bodyDeclared);
   const routeOnlyKeys = [
     ...pathParamNames(route.path),
     ...objectSchemaKeys(route.openapi.request?.query),
+    ...(route.idempotency !== "none" && !bodyDeclared.has(idempotencyField)
+      ? [idempotencyField]
+      : []),
   ].filter((key) => key.length > 0 && !bodyDeclared.has(key));
 
   const bodyCandidate = stripKeys(input, routeOnlyKeys);
@@ -257,6 +257,12 @@ function pathParamNames(path: string): string[] {
 function objectSchemaKeys(schema: unknown): string[] {
   const shape = (schema as { shape?: unknown } | undefined)?.shape;
   return shape && typeof shape === "object" ? Object.keys(shape) : [];
+}
+
+function idempotencyInputField(
+  bodyFields: ReadonlySet<string>,
+): "idempotencyKey" | "idempotency_key" {
+  return bodyFields.has("idempotencyKey") ? "idempotencyKey" : "idempotency_key";
 }
 
 function stripKeys(input: unknown, keys: readonly string[]): unknown {

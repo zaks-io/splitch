@@ -21,6 +21,24 @@ beforeEach(async () => {
 afterEach(async () => h.bindings.dispose());
 
 describe("flags_create idempotency", () => {
+  it("returns VALIDATION_ERROR when the mounted route cannot canonicalize request text", async () => {
+    const createdApp = await createDefaultApp(h);
+    const jwt = await appToken(h, createdApp.app.id);
+    const body = {
+      ...baseFlag(createdApp.app.id),
+      name: "\ud800",
+      idempotency_key: "idem_flag_create_invalid_unicode",
+    };
+
+    const response = await request(h, "POST", `/apps/${createdApp.app.id}/flags`, jwt, body);
+
+    expect(response.status).toBe(400);
+    expect(await errorBody(response)).toMatchObject({
+      code: "VALIDATION_ERROR",
+      details: { issues: [{ path: ["body"] }] },
+    });
+  });
+
   it("replays exactly and conflicts when the payload changes", async () => {
     const createdApp = await createDefaultApp(h);
     const jwt = await appToken(h, createdApp.app.id);

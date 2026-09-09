@@ -16,6 +16,7 @@ import {
   replayConclusion,
   winnerApprovalRow,
 } from "./experiment-conclusion-response";
+import { resolveConclusionGuardFailure } from "./experiment-conclusion-guard-errors";
 import type { ExperimentDeps } from "./experiment-handler-shared";
 
 interface ConclusionContext {
@@ -71,49 +72,77 @@ export async function commitConclusion(
   ) {
     return idempotencyConflict("conclusion", body.idempotencyKey, args.requestId);
   }
-  const committed = await deps.repo.experimentConclusions.commit(
-    envScope(ids.appId, ids.environmentId),
-    {
-      expectedLiveRunId: run.id,
-      expectedTargetConfigVersion: body.target.expectedConfigVersion,
-      conclusion: {
-        id: conclusionId,
+  let committed: Awaited<ReturnType<typeof deps.repo.experimentConclusions.commit>>;
+  try {
+    committed = await deps.repo.experimentConclusions.commit(
+      envScope(ids.appId, ids.environmentId),
+      {
+        expectedLiveRunId: run.id,
+        expectedTargetConfigVersion: body.target.expectedConfigVersion,
+        conclusion: {
+          id: conclusionId,
+          environmentId: ids.environmentId,
+          experimentId: experiment.id,
+          runId: run.id,
+          selectedVariant: body.selectedVariant,
+          configHash: run.configHash,
+          resultToken: evidence.resultToken,
+          dataWatermark: evidence.dataWatermark,
+          resultSnapshot: canonicalJson(evidence.stats),
+          decisionFailures: "[]",
+          decisionChecks: canonicalJson(evidence.gate.checks),
+          targetEnvironmentId: body.target.environmentId,
+          targetFlagId: body.target.flagId,
+          targetConfigVersion: body.target.expectedConfigVersion,
+          proposedFlagConfiguration: canonicalJson(prepared.proposed),
+          reason: body.reason ?? null,
+          concludedBy: args.principal.id,
+          concludedVia: requiredAuthDoor(args.principal),
+          concludedAt: now,
+          idempotencyKey: body.idempotencyKey,
+          requestHash: context.requestHash,
+        },
+        approval: winnerApprovalRow({
+          id: approvalId,
+          targetId: prepared.targetId,
+          targetVersion: prepared.targetVersion,
+          policyContexts: prepared.policyContexts,
+          policyGuardContexts: prepared.policyGuardContexts,
+          diff,
+          proposedBy: args.principal.id,
+          proposedVia: requiredAuthDoor(args.principal),
+          proposedAt: now,
+          idempotencyKey: body.idempotencyKey,
+          requestHash: approvalHash,
+        }),
+      },
+    );
+  } catch (cause) {
+    const resolved = await resolveConclusionGuardFailure(
+      deps,
+      args,
+      {
+        appId: ids.appId,
         environmentId: ids.environmentId,
-        experimentId: experiment.id,
-        runId: run.id,
-        selectedVariant: body.selectedVariant,
-        configHash: run.configHash,
-        resultToken: evidence.resultToken,
-        dataWatermark: evidence.dataWatermark,
-        resultSnapshot: canonicalJson(evidence.stats),
-        decisionFailures: "[]",
-        decisionChecks: canonicalJson(evidence.gate.checks),
+        experimentId: ids.experimentId,
+        runId: ids.runId,
         targetEnvironmentId: body.target.environmentId,
-        targetFlagId: body.target.flagId,
-        targetConfigVersion: body.target.expectedConfigVersion,
-        proposedFlagConfiguration: canonicalJson(prepared.proposed),
-        reason: body.reason ?? null,
-        concludedBy: args.principal.id,
-        concludedVia: requiredAuthDoor(args.principal),
-        concludedAt: now,
+        flagId: body.target.flagId,
+        expectedConfigVersion: body.target.expectedConfigVersion,
         idempotencyKey: body.idempotencyKey,
         requestHash: context.requestHash,
       },
-      approval: winnerApprovalRow({
-        id: approvalId,
-        targetId: prepared.targetId,
-        targetVersion: prepared.targetVersion,
-        policyContexts: prepared.policyContexts,
-        policyGuardContexts: prepared.policyGuardContexts,
-        diff,
-        proposedBy: args.principal.id,
-        proposedVia: requiredAuthDoor(args.principal),
-        proposedAt: now,
-        idempotencyKey: body.idempotencyKey,
-        requestHash: approvalHash,
-      }),
-    },
-  );
-  if (!committed.ok) return replayConclusion(deps, args, body, committed.replay);
+      cause,
+    );
+    return resolved.kind === "replay"
+      ? replayConclusion(deps, args, body, resolved.conclusion)
+      : resolved.response;
+  }
+  if (!committed.ok) {
+    if (committed.replay.requestHash !== context.requestHash) {
+      return idempotencyConflict("conclusion", body.idempotencyKey, args.requestId);
+    }
+    return replayConclusion(deps, args, body, committed.replay);
+  }
   return finishConclusion(deps, args, body, conclusionId, approvalId);
 }

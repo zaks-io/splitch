@@ -172,6 +172,54 @@ describe("Panel conclusion boundary", () => {
     });
   });
 
+  it.each([
+    { readTruncated: true, unparseable: [] },
+    { readTruncated: false, unparseable: [{ id: "segment_invalid" }] },
+  ])("refuses an incomplete Segment list: %j", async (segmentState) => {
+    mocks.getConfig.mockResolvedValue({ ok: true });
+    mocks.getFlag.mockResolvedValue({ ok: true });
+    mocks.listSegments.mockResolvedValue({
+      ok: true,
+      data: { items: [], ...segmentState },
+    });
+
+    await expect(
+      loadControlPanelConclusionTarget({
+        data: { appId: "app_1", environmentId: "env_2", flagId: "flag_1" },
+      }),
+    ).resolves.toMatchObject({
+      ok: false,
+      status: 400,
+      error: {
+        code: "VALIDATION_ERROR",
+        message: "The target Segment list is incomplete. Resolve it before concluding the Run.",
+      },
+    });
+    expect(mocks.replacement).not.toHaveBeenCalled();
+  });
+
+  it("refuses an Approval Request without a conclusion link", async () => {
+    const approval = approvalRequest();
+    mocks.getApproval.mockResolvedValue({
+      ok: true,
+      status: 200,
+      data: { ...approval, diff: { ...approval.diff, current: {} } },
+    });
+
+    await expect(
+      loadControlPanelConclusionApproval({
+        data: { appId: "app_1", approvalRequestId: "approval_1", variantLabels: {} },
+      }),
+    ).resolves.toMatchObject({
+      ok: false,
+      status: 400,
+      error: {
+        code: "VALIDATION_ERROR",
+        message: "The Approval Request is not linked to a Run conclusion.",
+      },
+    });
+  });
+
   it("replaces a stale request without sending a new winner or configuration", async () => {
     const input = {
       appId: "app_1",

@@ -1,3 +1,5 @@
+export class CanonicalJsonInputError extends TypeError {}
+
 /** RFC 8785 JSON Canonicalization Scheme for hash-stable control-plane evidence. */
 export function canonicalJson(value: unknown): string {
   if (value === null || typeof value === "boolean") return JSON.stringify(value);
@@ -6,7 +8,9 @@ export function canonicalJson(value: unknown): string {
     return JSON.stringify(value);
   }
   if (typeof value === "number") {
-    if (!Number.isFinite(value)) throw new TypeError("canonical JSON requires finite numbers");
+    if (!Number.isFinite(value)) {
+      throw new CanonicalJsonInputError("canonical JSON requires finite numbers");
+    }
     return JSON.stringify(value);
   }
   if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`;
@@ -21,7 +25,7 @@ export function canonicalJson(value: unknown): string {
       })
       .join(",")}}`;
   }
-  throw new TypeError(`canonical JSON does not support ${typeof value}`);
+  throw new CanonicalJsonInputError(`canonical JSON does not support ${typeof value}`);
 }
 
 export async function canonicalHash(value: unknown): Promise<`sha256:${string}`> {
@@ -41,6 +45,6 @@ function assertUnicodeScalarSequence(value: string): void {
         continue;
       }
     }
-    throw new TypeError("canonical JSON rejects lone Unicode surrogates");
+    throw new CanonicalJsonInputError("canonical JSON rejects lone Unicode surrogates");
   }
 }

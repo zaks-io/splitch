@@ -20,7 +20,7 @@ export * from "./barrels/storage-contracts";
 // biome-ignore lint/performance/noReExportAll: curated wire envelopes live in barrels/wire-envelopes.ts
 export * from "./barrels/wire-envelopes";
 export { type CanonicalJsonSha256, CanonicalJsonSha256Schema } from "./canonical-hash";
-export { canonicalHash, canonicalJson } from "./canonical-json";
+export { canonicalHash, CanonicalJsonInputError, canonicalJson } from "./canonical-json";
 export {
   CachedClientKeyRateLimitRpsFieldSchema,
   CLIENT_KEY_RATE_LIMIT_RPS_MESSAGE,

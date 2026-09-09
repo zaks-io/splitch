@@ -41,7 +41,9 @@ export async function createFlag(
   const idempotencyKey = createIdempotencyKey(body, request);
   if (!idempotencyKey) throw new Error("flags_create requires an idempotency key");
   const { idempotency_key: _idempotencyKey, ...createPayload } = body;
-  const requestHash = await createRequestHash(createPayload);
+  const hashed = await createRequestHash(createPayload, requestId);
+  if (!hashed.ok) return hashed.response;
+  const requestHash = hashed.hash;
   const replay = await replayCreatedFlag(
     deps,
     appId,

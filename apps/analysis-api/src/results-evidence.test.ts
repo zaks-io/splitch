@@ -56,4 +56,31 @@ describe("Experiment result evidence", () => {
     });
     expect(JSON.stringify(error)).not.toContain(RUN_CONFIG_HASH);
   });
+
+  it("fails loud when a pinned result read returns multiple Run rows", async () => {
+    const fixture = rowsByPipe();
+    const [runInput] = fixture.analysis_run_inputs as Record<string, unknown>[];
+    fixture.analysis_run_inputs = [
+      { ...runInput, config_hash: `sha256:${"b".repeat(64)}` },
+      runInput,
+    ];
+    const { app, tinybird } = makeResultsHarness(fixture);
+
+    const response = await app.request(`${RESULTS_PATH}?runId=${RUN_ID}`, resultsAuthInit("GET"));
+    const error = (await response.json()) as ErrorResponse;
+
+    expect(response.status).toBe(400);
+    expect(error).toMatchObject({
+      code: "VALIDATION_ERROR",
+      details: {
+        issues: [
+          {
+            path: ["analysis_run_inputs"],
+            message: "analysis_run_inputs returned multiple Run rows",
+          },
+        ],
+      },
+    });
+    expect(tinybird.calls.map((call) => call.pipeName)).toEqual(["analysis_run_inputs"]);
+  });
 });

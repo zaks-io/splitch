@@ -39,7 +39,7 @@ export const loadControlPanelConclusionTarget = createServerFn({ method: "GET" }
     if (!flag.ok) return flag;
     if (!segments.ok) return segments;
     if (segments.data.readTruncated || segments.data.unparseable.length > 0) {
-      throw new Error(
+      return malformed(
         "The target Segment list is incomplete. Resolve it before concluding the Run.",
       );
     }
@@ -112,13 +112,16 @@ export const loadControlPanelConclusionApproval = createServerFn({ method: "GET"
       id: parsed.data.approvalRequestId,
     });
     if (!result.ok) return result;
-    const link = ConclusionLinkSchema.parse(result.data.diff.current);
+    const link = ConclusionLinkSchema.safeParse(result.data.diff.current);
+    if (!link.success) {
+      return malformed("The Approval Request is not linked to a Run conclusion.");
+    }
     return {
       ok: true as const,
       status: result.status,
       data: {
         request: approvalGateRecord(result.data, parsed.data.variantLabels),
-        conclusionId: link.decision.conclusionId,
+        conclusionId: link.data.decision.conclusionId,
       },
     };
   });
@@ -149,14 +152,16 @@ export const replaceControlPanelConclusionPromotion = createServerFn({ method: "
     };
   });
 
-function malformed(): ControlPlaneOperationResult<never> {
+function malformed(
+  message = "The conclusion request is malformed.",
+): ControlPlaneOperationResult<never> {
   return {
     ok: false,
     status: 400,
     error: {
       code: "VALIDATION_ERROR",
-      message: "The conclusion request is malformed.",
-      details: { issues: [{ path: ["body"], message: "The conclusion request is malformed." }] },
+      message,
+      details: { issues: [{ path: ["body"], message }] },
     },
   };
 }

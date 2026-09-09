@@ -61,9 +61,11 @@ async function appCreateIntent(
   if (!key) return { ok: false, response: unusableAppKey(name, requestId) };
   const description = typeof body.description === "string" ? body.description : undefined;
   const idempotencyKey = createIdempotencyKey(body, request);
-  const requestHash = idempotencyKey
-    ? await createRequestHash({ name, key, ...(description ? { description } : {}) })
-    : undefined;
+  const hashed = idempotencyKey
+    ? await createRequestHash({ name, key, ...(description ? { description } : {}) }, requestId)
+    : null;
+  if (hashed && !hashed.ok) return hashed;
+  const requestHash = hashed?.hash;
   return {
     ok: true,
     value: { name, key, ...(description ? { description } : {}), idempotencyKey, requestHash },

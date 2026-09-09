@@ -1,11 +1,10 @@
-import { deriveMcpTools, getRoute } from "@splitch/contracts";
+import { canonicalHash, deriveMcpTools, getRoute } from "@splitch/contracts";
 import { appScope, createRepository, envScope } from "@splitch/db";
 import type { RateLimiter } from "@splitch/worker-runtime";
 import type { Hono } from "hono";
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { createApp } from "../src/app";
 import { makeControlPlaneAuthResolver } from "../src/auth-resolver";
-import { createRequestHash } from "../src/create-idempotency";
 import { type FixtureSigner, makeFixtureSigner } from "../src/fixture-signer";
 import { makeJwksVerifier } from "../src/jwks-verify";
 import { makeSessionStore } from "../src/session-store";
@@ -199,7 +198,7 @@ describe("control-plane App and Environment CRUD", () => {
       name: body.name,
       key: body.key,
       createIdempotencyKey: body.idempotency_key,
-      createRequestHash: await createRequestHash({ name: body.name, key: body.key }),
+      createRequestHash: await canonicalHash({ name: body.name, key: body.key }),
       createdAt: NOW_ISO,
       updatedAt: NOW_ISO,
       createdBy: OWNER,

@@ -1,8 +1,20 @@
-import { canonicalHash } from "@splitch/contracts";
+import { canonicalHash, CanonicalJsonInputError } from "@splitch/contracts";
 import { renderError } from "@splitch/worker-runtime";
+import { validationErrors } from "./flag-definition-errors";
 
-export function createRequestHash(value: unknown): Promise<`sha256:${string}`> {
-  return canonicalHash(value);
+export async function createRequestHash(
+  value: unknown,
+  requestId: string,
+): Promise<{ ok: true; hash: `sha256:${string}` } | { ok: false; response: Response }> {
+  try {
+    return { ok: true, hash: await canonicalHash(value) };
+  } catch (cause) {
+    if (!(cause instanceof CanonicalJsonInputError)) throw cause;
+    return {
+      ok: false,
+      response: validationErrors(requestId, [{ path: ["body"], message: cause.message }]),
+    };
+  }
 }
 
 export function createIdempotencyKey(

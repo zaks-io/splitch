@@ -125,6 +125,9 @@ async function readResultsComputationFromTinybird(
     ...watermarkPipeParams(scope.dataWatermark),
   };
   const runInputs = await readResultsRunRows(tinybird, baseParams);
+  if (scope.runId !== undefined && runInputs.length > 1) {
+    throw new ResultsInputError("analysis_run_inputs returned multiple Run rows");
+  }
   const runInput = runInputs[0];
   if (runInput === undefined) {
     // Analysis only sees Tinybird. Empty run-input rows mean "no Run inputs
