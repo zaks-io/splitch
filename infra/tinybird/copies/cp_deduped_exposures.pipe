@@ -7,7 +7,7 @@ SQL >
     {{error('copy_watermark_ts is required')}}
     {% end %}
     {{max_threads(1)}}
-    WITH {{DateTime64(copy_watermark_ts)}} AS copy_watermark
+    WITH toDateTime64({{DateTime64(copy_watermark_ts)}}, 3) AS copy_watermark
     SELECT
         app_id,
         environment_id,
