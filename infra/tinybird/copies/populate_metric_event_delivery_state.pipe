@@ -59,5 +59,3 @@ TYPE COPY
 TARGET_DATASOURCE deduped_metric_events_state
 COPY_SCHEDULE @on-demand
 COPY_MODE append
-
-TOKEN copy_jobs_read READ
