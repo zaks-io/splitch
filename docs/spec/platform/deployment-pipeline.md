@@ -13,7 +13,7 @@ Use GitHub Actions on Blacksmith runners as the orchestrator, except the four pa
 workflows, which must run on GitHub-hosted infrastructure for npm trusted publishing. Use Turborepo as the monorepo task graph
 and task-output cache, Wrangler as the Cloudflare source of truth, and Tinybird CLI deployments for
 analytics resources. Every non-doc PR gets local validation against disposable CI services. Hosted
-preview is a single shared target updated on demand. Production releases are queued, approval-gated
+preview is a single shared target updated nightly and on demand. Production releases are queued, approval-gated
 GitHub deployments that run migrations as part of the release, not as a side manual step.
 
 The repository has the `ci` workflow (with a range-scoped Gitleaks secret-scan step), the
@@ -32,7 +32,7 @@ files, and GitHub environment settings are the release contract.
 | ---------------- | --------------------------------------------- | ----------------------------------------------------------------------------------------- | ---------------------------------------- |
 | `local`          | Developer loop and CI unit/integration checks | Local Wrangler storage simulation, Tinybird Local, fixture data                           | none                                     |
 | `pr-ci`          | Required PR validation                        | Local Wrangler storage simulation, Tinybird Local, fixture data                           | none                                     |
-| `shared-preview` | One hosted preview to share on demand         | Persistent non-production Cloudflare resources plus one Tinybird Branch                   | maintainer-triggered                     |
+| `shared-preview` | One hosted preview, nightly or on demand      | Persistent non-production Cloudflare resources plus one Tinybird Branch                   | protected default branch                 |
 | `production`     | Customer-serving platform                     | Persistent Cloudflare resources, Tinybird Cloud main workspace, production routes/domains | GitHub `production` environment approval |
 
 PRs do not get hosted previews by default. The shared preview target is intentionally mutable and
@@ -105,7 +105,7 @@ false`. Anything that mutates Cloudflare, Tinybird, GitHub deployments, or secre
 | ----------------------- | ------------------------------------------------------------- | -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `ci`                    | PR and push to main                                           | cancel in-progress per branch/PR | wired: affected `verify:ci`, format, lint, typecheck, test, build, dependency-cruiser, Knip, Gitleaks, conditional local D1/Tinybird checks, and an exact-SHA reusable production call                                          |
 | `e2e`                   | weekly schedule, manual dispatch                              | `e2e-main`, queued               | wired: full-stack Control Panel Playwright harness against `main`; signal-only while SPL-181 remains open, never blocks deploys                                                                                                 |
-| `deploy-shared-preview` | manual dispatch from protected default branch                 | `shared-preview-deploy`, queued  | wired: deploy the protected default-branch ref to the one hosted preview target through Tinybird Branch build, D1 migrations, Turborepo Worker deploy tasks, and hosted smoke                                                   |
+| `deploy-shared-preview` | daily 00:17 `America/Los_Angeles`; manual from protected main | `shared-preview-deploy`, queued  | wired: deploy the protected default-branch ref to the one hosted preview target through Tinybird Branch build, D1 migrations, Turborepo Worker deploy tasks, and hosted smoke                                                   |
 | `reset-shared-preview`  | manual dispatch                                               | `shared-preview-deploy`, queued  | wired: rebuild the Tinybird Branch, migrate and clear preview-only D1/KV state, reseed fixtures, run Copy Pipe on demand, and verify hosted smoke                                                                               |
 | `deploy-production`     | reusable call from successful `ci` on `main`, manual dispatch | `production-deploy`, queued      | wired: current-main and exact-SHA validation, successful CI verification, affected-phase and Worker planning from the latest successful production deployment, conditional Tinybird/D1/Worker mutation, and Linear release sync |
 | `rollback-production`   | manual dispatch                                               | `production-deploy`, queued      | not wired: Worker rollback or roll-forward runbook execution                                                                                                                                                                    |
@@ -118,8 +118,8 @@ false`. Anything that mutates Cloudflare, Tinybird, GitHub deployments, or secre
 | `cloudflare-release`    | manual dispatch                                               | `cloudflare-release`, queued     | wired: validate `@splitch/cloudflare`, prepare release artifacts, create or update draft GitHub Release for `cloudflare-v<version>`; does not publish to npm                                                                    |
 | `cloudflare-publish`    | published GitHub Release                                      | `cloudflare-publish`, queued     | wired: validate fresh public repository/release/remote-tag SHA evidence immediately before GitHub-hosted npm trusted publishing with provenance, or skip an existing version                                                    |
 
-External fork PRs run CI only. Shared preview accepts only a maintainer-triggered run whose workflow
-ref is the protected repository default branch before the deploy job receives preview secrets.
+External fork PRs run CI only. Shared preview accepts scheduled or maintainer-triggered runs whose
+workflow ref is the protected repository default branch before the deploy job receives preview secrets.
 
 ### Package publish bootstrap prerequisite
 
@@ -210,7 +210,7 @@ Tinybird protection boundary.
 
 ### Shared Cloudflare preview
 
-Shared preview is provisioned once and updated on demand:
+Shared preview is provisioned once and updated nightly or on demand:
 
 1. Maintain one shared-preview D1 database, KV namespace set, Durable Object namespace set, Worker fleet,
    and Tinybird Branch.

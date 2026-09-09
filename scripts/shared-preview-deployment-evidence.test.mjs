@@ -14,10 +14,14 @@ const sha = "a".repeat(40);
 const staleSha = "b".repeat(40);
 const routes = [route("Auth", "splitch-auth-api"), route("MCP", "splitch-mcp-server")];
 
-test("shared preview is maintainer-dispatched, never pull-request-triggered", () => {
+test("shared preview runs nightly from main or by maintainer dispatch, never from pull requests", () => {
   const workflow = readFileSync(".github/workflows/deploy-shared-preview.yml", "utf8");
   const triggers = workflow.slice(0, workflow.indexOf("\npermissions:\n"));
 
+  assert.match(
+    triggers,
+    /schedule:\n\s+- cron: "17 0 \* \* \*"\n\s+timezone: America\/Los_Angeles/,
+  );
   assert.match(triggers, /workflow_dispatch:/);
   assert.doesNotMatch(triggers, /^[ \t]*["']?pull_request(?:_target)?["']?[ \t]*:/m);
 });

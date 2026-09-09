@@ -109,9 +109,10 @@ in this config; refresh them from Linear during each workflow run.
   carries no long-lived npm token. Package publish workflows do not create Linear Releases. CLI
   bootstrap, trusted-publisher configuration, and provider-side verification remain human-owned and
   unverified.
-- Shared preview deploy: workflow and hosted smoke wired, Cloudflare D1/KV resources are provisioned, the Tinybird
-  `shared_preview` Branch exists, and Worker secret sync is wired before deploy. Cloudflare Custom
-  Domain DNS/cert activation can lag after first deploy. See
+- Shared preview deploy: the workflow runs nightly at 00:17 `America/Los_Angeles` and accepts manual
+  dispatches from the protected default branch. Hosted smoke is wired, Cloudflare D1/KV resources are
+  provisioned, the Tinybird `shared_preview` Branch exists, and Worker secret sync is wired before deploy.
+  Cloudflare Custom Domain DNS/cert activation can lag after first deploy. See
   `docs/spec/platform/deployment-pipeline.md`.
 - Production deploy path: the successful `ci` job on `main` calls and waits for the reusable
   production workflow; main CI uses per-run concurrency so a newer push cannot cancel an active

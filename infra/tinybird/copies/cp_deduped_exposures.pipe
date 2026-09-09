@@ -43,3 +43,5 @@ TYPE COPY
 TARGET_DATASOURCE deduped_exposures
 COPY_SCHEDULE @on-demand
 COPY_MODE replace
+
+TOKEN copy_jobs_read READ
