@@ -18,7 +18,7 @@ import { AccessDeniedError, isAccessDeniedError } from "#lib/shared/loader-conte
 import { documentTitle } from "#lib/shell/document-title";
 
 export const Route = createFileRoute("/$orgSlug/$appSlug/")({
-  validateSearch: z.object({ created: z.string().optional() }).strict(),
+  validateSearch: z.object({ created: z.string().optional() }),
   loader: async ({ location, params }) => {
     const result = await loadAppScopedSession({
       data: { ...params, visitPath: location.pathname },
