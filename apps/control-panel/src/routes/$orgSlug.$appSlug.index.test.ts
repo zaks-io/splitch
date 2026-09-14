@@ -51,6 +51,43 @@ describe("$orgSlug/$appSlug loader", () => {
     loadControlPanelFlagsMatrixMock.mockReset();
   });
 
+  it.each(["?path=/flags", "?path=/flags&created=new-flag", "?utm_source=email"])(
+    "loads the route with unrelated search parameters: %s",
+    async (search) => {
+      const routeLoader = vi.fn(() => ({ loaded: true }));
+      const onError = vi.fn();
+      const root = createRootRoute();
+      const route = createRoute({
+        getParentRoute: () => root,
+        path: "/$orgSlug/$appSlug/",
+        validateSearch: Route.options.validateSearch,
+        loader: routeLoader,
+        onError,
+      });
+      const router = createRouter({
+        routeTree: root.addChildren([route]),
+        history: createMemoryHistory({ initialEntries: [`/acme-labs/checkout-api${search}`] }),
+      });
+
+      await router.load();
+
+      expect(routeLoader).toHaveBeenCalledOnce();
+      expect(onError).not.toHaveBeenCalled();
+      expect(router.state.matches.at(-1)).toMatchObject({
+        status: "success",
+        loaderData: { loaded: true },
+        search: search.includes("created=") ? { created: "new-flag" } : {},
+      });
+    },
+  );
+
+  it("keeps validation of the created Flag key", () => {
+    const schema = Route.options.validateSearch;
+    if (!schema || !("parse" in schema)) throw new Error("Expected a Zod search schema");
+    expect(schema.parse({ path: "/flags", created: "new-flag" })).toEqual({ created: "new-flag" });
+    expect(() => schema.parse({ created: 123 })).toThrow();
+  });
+
   it("redirects unauthenticated requests to login", async () => {
     loadAppScopedSessionMock.mockResolvedValue({ kind: "unauthenticated" });
     await expect(runLoader()).rejects.toSatisfy(isRedirect);
