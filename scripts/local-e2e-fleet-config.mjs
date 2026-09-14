@@ -1,6 +1,7 @@
 export const localBindings = {
   CONTROL_PANEL_DELEGATION_SECRET: "local-control-panel-delegation-secret",
   SENTRY_DSN: "",
+  SPLITCH_PLATFORM_TARGET: "local",
   SPLITCH_DEPLOY_GATE_TOKEN: "local-e2e-deploy-gate",
   TINYBIRD_APPROVAL_ARCHIVE_WRITE_TOKEN: "local-e2e-tinybird-read-token",
   TINYBIRD_APPROVAL_ARCHIVE_READ_TOKEN: "local-e2e-tinybird-read-token",

@@ -16,9 +16,7 @@
       ]
     },
     "apps/control-panel": {
-      "vite": false,
-      "ignore": ["vite.config.ts"],
-      "ignoreDependencies": ["@cloudflare/vite-plugin", "@tailwindcss/vite", "@vitejs/plugin-react"]
+      "vite": false
     },
     "apps/marketing": {},
     "packages/stats": {
