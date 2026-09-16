@@ -2,7 +2,7 @@ import { documentedErrorCodes } from "./errors";
 import { sdkTopics } from "./sdk";
 import { DOCS_ORIGIN, docsPath } from "./site";
 
-const staticPagePaths = [
+export const staticPagePaths = [
   "/",
   "/quickstart",
   docsPath.index(),

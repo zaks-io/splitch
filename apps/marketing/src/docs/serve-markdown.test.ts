@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   acceptsMarkdown,
   hasMarkdownMediaRange,
+  htmlPathForMarkdownUrl,
   markdownResponse,
   withVaryAccept,
 } from "./serve-markdown";
@@ -19,6 +20,15 @@ describe("acceptsMarkdown", () => {
       headers: { accept: "text/markdown; q=0, text/html" },
     });
     expect(acceptsMarkdown(request)).toBe(false);
+  });
+});
+
+describe("htmlPathForMarkdownUrl", () => {
+  it("strips a trailing .md suffix and keeps HTML paths unchanged", () => {
+    expect(htmlPathForMarkdownUrl("/quickstart.md")).toBe("/quickstart");
+    expect(htmlPathForMarkdownUrl("/quickstart")).toBe("/quickstart");
+    expect(htmlPathForMarkdownUrl("/.md")).toBe("/");
+    expect(htmlPathForMarkdownUrl("/docs/sdk/install.md")).toBe("/docs/sdk/install");
   });
 });
 
