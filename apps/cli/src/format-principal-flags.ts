@@ -1,51 +1,75 @@
-interface PrincipalFlagItem {
+import {
+  HydratedPrincipalFlagListResponseSchema,
+  PrincipalFlagListResponseSchema,
+} from "@splitch/sdk/control-plane";
+import {
+  EMPTY_FLAG_CATALOG,
+  flagReadContractError,
+  formatFlagSummaryList,
+  formatHydratedFlag,
+  withFlagListBound,
+} from "./format-flag-read.js";
+import { terminalText } from "./format-payload.js";
+
+interface PrincipalFlagScope {
   readonly org: { readonly slug: string };
   readonly app: { readonly id: string; readonly key: string };
-  readonly [field: string]: unknown;
 }
 
-/** Group a principal-wide Flag envelope without dropping any Flag fields. */
-export function formatPrincipalFlags(payload: unknown): string | null {
-  if (!isObject(payload) || !Array.isArray(payload.items)) return null;
-  const groups = new Map<
-    string,
-    { app: string; id: string; flags: Array<Record<string, unknown>> }
-  >();
-  for (const candidate of payload.items) {
-    if (!isPrincipalFlagItem(candidate)) return null;
-    const selector = `${candidate.org.slug}/${candidate.app.key}`;
-    const group = groups.get(candidate.app.id) ?? {
-      app: selector,
-      id: candidate.app.id,
-      flags: [],
+interface PrincipalFlagGroup<T extends PrincipalFlagScope> {
+  readonly selector: string;
+  readonly id: string;
+  readonly flags: T[];
+}
+
+/** Group a principal-wide Flag envelope with the App-scoped Flag-read renderer. */
+export function formatPrincipalFlags(payload: unknown, summary: boolean): string {
+  return summary ? formatPrincipalSummary(payload) : formatPrincipalHydrated(payload);
+}
+
+function formatPrincipalHydrated(payload: unknown): string {
+  const parsed = HydratedPrincipalFlagListResponseSchema.safeParse(payload);
+  if (!parsed.success) throw flagReadContractError("principal_flags_list", "hydrated");
+  if (parsed.data.items.length === 0) return withFlagListBound(EMPTY_FLAG_CATALOG, parsed.data);
+  return withFlagListBound(
+    groupPrincipalFlags(parsed.data.items)
+      .map((group) => formatAppGroup(group, group.flags.map(formatHydratedFlag).join("\n\n")))
+      .join("\n\n"),
+    parsed.data,
+  );
+}
+
+function formatPrincipalSummary(payload: unknown): string {
+  const parsed = PrincipalFlagListResponseSchema.safeParse(payload);
+  if (!parsed.success) throw flagReadContractError("principal_flags_list", "summary");
+  if (parsed.data.items.length === 0) return withFlagListBound(EMPTY_FLAG_CATALOG, parsed.data);
+  return withFlagListBound(
+    groupPrincipalFlags(parsed.data.items)
+      .map((group) => formatAppGroup(group, formatFlagSummaryList(group.flags)))
+      .join("\n\n"),
+    parsed.data,
+  );
+}
+
+function groupPrincipalFlags<T extends PrincipalFlagScope>(
+  items: readonly T[],
+): Array<PrincipalFlagGroup<T>> {
+  const groups = new Map<string, PrincipalFlagGroup<T>>();
+  for (const item of items) {
+    const group = groups.get(item.app.id) ?? {
+      selector: `${item.org.slug}/${item.app.key}`,
+      id: item.app.id,
+      flags: [] as T[],
     };
-    const { org: _org, app: _app, ...flag } = candidate;
-    group.flags.push(flag);
-    groups.set(candidate.app.id, group);
+    group.flags.push(item);
+    groups.set(item.app.id, group);
   }
-  return JSON.stringify(
-    {
-      apps: [...groups.values()],
-      readTruncated: payload.readTruncated,
-      readLimit: payload.readLimit,
-      cursor: payload.cursor,
-    },
-    null,
-    2,
-  );
+  return [...groups.values()];
 }
 
-function isPrincipalFlagItem(value: unknown): value is PrincipalFlagItem {
-  return (
-    isObject(value) &&
-    isObject(value.org) &&
-    typeof value.org.slug === "string" &&
-    isObject(value.app) &&
-    typeof value.app.id === "string" &&
-    typeof value.app.key === "string"
-  );
-}
-
-function isObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
+function formatAppGroup<T extends PrincipalFlagScope>(
+  group: PrincipalFlagGroup<T>,
+  body: string,
+): string {
+  return `App: ${terminalText(group.selector)} (${terminalText(group.id)})\n${body}`;
 }

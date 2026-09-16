@@ -16,8 +16,8 @@ export function formatFlagRead(operationId: string, payload: unknown, summary: b
   if (operationId === "flags_list") {
     const parsed = HydratedFlagListResponseSchema.safeParse(payload);
     if (!parsed.success) throw flagReadContractError(operationId, "hydrated");
-    if (parsed.data.items.length === 0) return withListBound(EMPTY_CATALOG, parsed.data);
-    return withListBound(parsed.data.items.map(formatHydratedFlag).join("\n\n"), parsed.data);
+    if (parsed.data.items.length === 0) return withFlagListBound(EMPTY_FLAG_CATALOG, parsed.data);
+    return withFlagListBound(parsed.data.items.map(formatHydratedFlag).join("\n\n"), parsed.data);
   }
   const parsed = HydratedFlagResponseSchema.safeParse(payload);
   if (!parsed.success) throw flagReadContractError(operationId, "hydrated");
@@ -31,14 +31,14 @@ function formatFlagSummary(operationId: string, payload: unknown): string {
       : FlagResponseSchema.safeParse(payload);
   if (!parsed.success) throw flagReadContractError(operationId, "summary");
   if (operationId !== "flags_list") return formatFlagSummaryList([parsed.data as SummaryFlag]);
-  const list = parsed.data as ListBound & { items: SummaryFlag[] };
-  if (list.items.length === 0) return withListBound(EMPTY_CATALOG, list);
-  return withListBound(formatFlagSummaryList(list.items), list);
+  const list = parsed.data as FlagListBound & { items: SummaryFlag[] };
+  if (list.items.length === 0) return withFlagListBound(EMPTY_FLAG_CATALOG, list);
+  return withFlagListBound(formatFlagSummaryList(list.items), list);
 }
 
-const EMPTY_CATALOG = "No Flags found.";
+export const EMPTY_FLAG_CATALOG = "No Flags found.";
 
-interface ListBound {
+export interface FlagListBound {
   readonly readLimit: number;
   readonly readTruncated: boolean;
 }
@@ -49,7 +49,7 @@ interface ListBound {
  * carries it in the envelope; human output has to say it out loud or an
  * operator reads a truncated list as complete.
  */
-function withListBound(rendered: string, list: ListBound): string {
+export function withFlagListBound(rendered: string, list: FlagListBound): string {
   if (!list.readTruncated) return rendered;
   return `${rendered}\n\n${truncationNotice(list.readLimit, "Flags")}`;
 }
@@ -68,7 +68,10 @@ export function assertHydratedPrincipalFlagRead(payload: unknown): void {
   if (!parsed.success) throw flagReadContractError("principal_flags_list", "hydrated");
 }
 
-function flagReadContractError(operationId: string, mode: "summary" | "hydrated"): SplitchCliError {
+export function flagReadContractError(
+  operationId: string,
+  mode: "summary" | "hydrated",
+): SplitchCliError {
   return new SplitchCliError({
     code: "INTERNAL_SERVER_ERROR",
     causeSummary:
@@ -80,7 +83,7 @@ function flagReadContractError(operationId: string, mode: "summary" | "hydrated"
   });
 }
 
-function formatFlagSummaryList(flags: readonly SummaryFlag[]): string {
+export function formatFlagSummaryList(flags: readonly SummaryFlag[]): string {
   if (!flags.some((flag) => flag.flagConfiguration !== undefined)) {
     return formatTable(
       ["ID", "KEY", "NAME"],
@@ -100,7 +103,7 @@ function formatFlagSummaryList(flags: readonly SummaryFlag[]): string {
   );
 }
 
-function formatHydratedFlag(flag: HydratedFlagResponse): string {
+export function formatHydratedFlag(flag: HydratedFlagResponse): string {
   const definition = [
     `Flag: ${terminalText(flag.name)}`,
     `ID: ${terminalText(flag.id)}`,
@@ -181,7 +184,7 @@ function formatExperimentRef(experiment: { id: string; key: string } | null): st
     : `${terminalText(experiment.key)} (${terminalText(experiment.id)})`;
 }
 
-interface SummaryFlag {
+export interface SummaryFlag {
   readonly id: string;
   readonly key: string;
   readonly name: string;
