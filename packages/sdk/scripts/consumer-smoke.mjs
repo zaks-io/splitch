@@ -13,6 +13,7 @@ import { fileURLToPath } from "node:url";
 import { verifyBuildStamp } from "../../../scripts/release/build-stamp.mjs";
 import { runConvexConsumerSmoke } from "./convex-consumer-smoke.mjs";
 import {
+  assertMissingTargetingKeyDiagnostic,
   extractQuickstartSdkSnippet,
   stripTargetingKeyFromSnippet,
   wrapQuickstartSnippetForTypecheck,
@@ -41,20 +42,22 @@ function runTypecheck(cwd = consumerRoot) {
   run("npx", ["tsc", "-p", "tsconfig.json"], { cwd });
 }
 
-function expectTypecheckFailure(cwd, label) {
+function expectMissingTargetingKeyTypecheck(cwd, label) {
   try {
     execFileSync("npx", ["tsc", "-p", "tsconfig.json"], {
       cwd,
       stdio: "pipe",
       encoding: "utf8",
     });
-    throw new Error(`${label}: expected TypeScript to reject the stale snippet`);
   } catch (error) {
     if (error instanceof Error && "status" in error && error.status === 2) {
+      const output = `${"stdout" in error ? error.stdout : ""}${"stderr" in error ? error.stderr : ""}`;
+      assertMissingTargetingKeyDiagnostic(output, label);
       return;
     }
     throw error;
   }
+  throw new Error(`${label}: expected TypeScript to reject the stale snippet`);
 }
 
 function writeConsumerTsconfig(include, cwd = consumerRoot) {
@@ -180,7 +183,7 @@ void evaluatePath;
       wrapQuickstartSnippetForTypecheck(stripTargetingKeyFromSnippet(quickstartSnippet)),
     );
     writeConsumerTsconfig(["stale-quickstart-snippet.ts"], staleRoot);
-    expectTypecheckFailure(staleRoot, "quickstart drift guard");
+    expectMissingTargetingKeyTypecheck(staleRoot, "quickstart drift guard");
   } finally {
     rmSync(staleRoot, { recursive: true, force: true });
   }
