@@ -151,6 +151,8 @@ export const metrics = sqliteTable(
     eventFieldName: text("event_field_name"),
     numeratorMetricId: text("numerator_metric_id"),
     denominatorMetricId: text("denominator_metric_id"),
+    // Which way a move is good; null means unstated and every surface reads it as neutral.
+    direction: text("direction", { enum: ["higher_is_better", "lower_is_better"] }),
     // Guardrail bound and variance-reduction knobs. Null means "engine default";
     // Run Start resolves and freezes them onto the Run.
     downsideThresholdPct: real("downside_threshold_pct"),

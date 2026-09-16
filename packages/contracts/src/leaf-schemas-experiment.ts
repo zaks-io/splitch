@@ -48,6 +48,21 @@ export const MetricKindSchema = z.enum(metricKinds);
 export type MetricKind = z.infer<typeof MetricKindSchema>;
 
 // ---------------------------------------------------------------------------
+// MetricDirection
+// ---------------------------------------------------------------------------
+
+/**
+ * Which way a move on this Metric is good. Null means the Metric has not said,
+ * so no surface may colour a move as a win or a loss (a negative lift on a
+ * lower-is-better Metric is a win). It is a display and reading concern only:
+ * the engine's Guardrail bound check does not read it.
+ */
+export const metricDirections = ["higher_is_better", "lower_is_better"] as const;
+
+export const MetricDirectionSchema = z.enum(metricDirections);
+export type MetricDirection = z.infer<typeof MetricDirectionSchema>;
+
+// ---------------------------------------------------------------------------
 // MetricRef
 // ---------------------------------------------------------------------------
 
@@ -83,6 +98,7 @@ const BaseMetricSchema = z.object({
   numerator: MetricRefSchema.nullable().optional(),
   denominator: MetricRefSchema.nullable().optional(),
   configurationStatus: z.enum(["ready", "needs_configuration"]).optional(),
+  direction: MetricDirectionSchema.nullable().optional(),
   downsideThresholdPct: z.number().nullable().optional(),
   winsorize: z.boolean().nullable().optional(),
   winsorizePct: z.number().gt(0).max(100).nullable().optional(),

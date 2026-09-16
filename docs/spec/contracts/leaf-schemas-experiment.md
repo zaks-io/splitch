@@ -93,28 +93,32 @@ a finished Run still reflects exactly the population it actually randomized. Thi
 
 ## Metric
 
-| Field                       | Type                | Required | Meaning                                                                                      |
-| --------------------------- | ------------------- | -------- | -------------------------------------------------------------------------------------------- |
-| `id`                        | `string`            | yes      | Stable UUID                                                                                  |
-| `appId`                     | `string`            | yes      | Owning App                                                                                   |
-| `key`                       | `string`            | yes      | Unique per App                                                                               |
-| `name`                      | `string`            | yes      | —                                                                                            |
-| `description`               | `string`            | no       | —                                                                                            |
-| `kind`                      | `MetricKind`        | yes      | Aggregation shape                                                                            |
-| `eventDefinitionId`         | `string \| null`    | cond.    | Required for non-Ratio Metrics; App-level Event Definition                                   |
-| `eventFieldName`            | `string \| null`    | cond.    | Declared top-level number field; required for count/revenue                                  |
-| `numerator`                 | `MetricRef \| null` | cond.    | Required for ratio; non-Ratio Metric in same App                                             |
-| `denominator`               | `MetricRef \| null` | cond.    | Required for ratio; non-Ratio Metric in same App                                             |
-| `conversionWindowMs`        | `number \| null`    | no       | Per-Metric override; null inherits Experiment default                                        |
-| `winsorize`                 | `boolean \| null`   | no       | Rejected on binomial; null means the engine default (true for additive Metrics)              |
-| `winsorizePct`              | `number \| null`    | no       | Percent, > 0 and <= 100; null means the engine default 99.9; ignored when winsorize is false |
-| `cuped`                     | `boolean \| null`   | no       | Null means the engine default (true); ignored on ratio, which the delta method estimates     |
-| `cupedCoverageThresholdPct` | `number \| null`    | no       | Percent, > 0 and <= 100; null means the engine default 70                                    |
-| `downsideThresholdPct`      | `number \| null`    | no       | Percent, same scale as `relativeLiftPct`. Set to make this a Guardrail Metric                |
-| `createdAt`                 | `string` (ISO 8601) | yes      | —                                                                                            |
-| `updatedAt`                 | `string` (ISO 8601) | yes      | —                                                                                            |
+| Field                       | Type                      | Required | Meaning                                                                                                  |
+| --------------------------- | ------------------------- | -------- | -------------------------------------------------------------------------------------------------------- |
+| `id`                        | `string`                  | yes      | Stable UUID                                                                                              |
+| `appId`                     | `string`                  | yes      | Owning App                                                                                               |
+| `key`                       | `string`                  | yes      | Unique per App                                                                                           |
+| `name`                      | `string`                  | yes      | —                                                                                                        |
+| `description`               | `string`                  | no       | —                                                                                                        |
+| `kind`                      | `MetricKind`              | yes      | Aggregation shape                                                                                        |
+| `eventDefinitionId`         | `string \| null`          | cond.    | Required for non-Ratio Metrics; App-level Event Definition                                               |
+| `eventFieldName`            | `string \| null`          | cond.    | Declared top-level number field; required for count/revenue                                              |
+| `numerator`                 | `MetricRef \| null`       | cond.    | Required for ratio; non-Ratio Metric in same App                                                         |
+| `denominator`               | `MetricRef \| null`       | cond.    | Required for ratio; non-Ratio Metric in same App                                                         |
+| `conversionWindowMs`        | `number \| null`          | no       | Per-Metric override; null inherits Experiment default                                                    |
+| `winsorize`                 | `boolean \| null`         | no       | Rejected on binomial; null means the engine default (true for additive Metrics)                          |
+| `winsorizePct`              | `number \| null`          | no       | Percent, > 0 and <= 100; null means the engine default 99.9; ignored when winsorize is false             |
+| `cuped`                     | `boolean \| null`         | no       | Null means the engine default (true); ignored on ratio, which the delta method estimates                 |
+| `cupedCoverageThresholdPct` | `number \| null`          | no       | Percent, > 0 and <= 100; null means the engine default 70                                                |
+| `downsideThresholdPct`      | `number \| null`          | no       | Percent, same scale as `relativeLiftPct`. Set to make this a Guardrail Metric                            |
+| `direction`                 | `MetricDirection \| null` | no       | Which way a move is good. Null means unstated: surfaces show the move without calling it a win or a loss |
+| `createdAt`                 | `string` (ISO 8601)       | yes      | —                                                                                                        |
+| `updatedAt`                 | `string` (ISO 8601)       | yes      | —                                                                                                        |
 
 `MetricKind` enum: `'binomial' | 'count' | 'revenue' | 'ratio'`
+
+`MetricDirection` enum: `'higher_is_better' | 'lower_is_better'`. Display-only: the engine's
+Guardrail bound check does not read it.
 
 - `binomial` — 1/0 per Entity with at least one matching Metric Event; no value field.
 - `count` — sum of the declared numeric `eventFieldName` per Entity.

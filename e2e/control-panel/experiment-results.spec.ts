@@ -32,7 +32,7 @@ test.describe("Experiment Results tab", () => {
 
     const comparison = page.getByRole("region", { name: "Metric comparison" });
     await expect(comparison).toBeVisible();
-    await expect(comparison.getByRole("columnheader", { name: /Difference/ })).toBeVisible();
+    await expect(comparison.getByRole("columnheader", { name: /vs control/ })).toBeVisible();
     await expect(comparison.getByText("Data freshness unavailable")).toHaveCount(0);
 
     await page.getByRole("button", { name: /Decision metrics/ }).click();

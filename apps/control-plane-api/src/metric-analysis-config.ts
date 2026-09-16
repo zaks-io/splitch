@@ -1,4 +1,4 @@
-import type { MetricKind } from "@splitch/contracts";
+import type { MetricDirection, MetricKind } from "@splitch/contracts";
 import type { MetricRow } from "./metric-segment-shared";
 
 /**
@@ -9,6 +9,7 @@ import type { MetricRow } from "./metric-segment-shared";
  * the Run, so editing a Metric mid-Run cannot move an already-decided result.
  */
 export interface MetricAnalysisConfig {
+  direction: MetricDirection | null;
   downsideThresholdPct: number | null;
   winsorize: boolean | null;
   winsorizePct: number | null;
@@ -17,6 +18,7 @@ export interface MetricAnalysisConfig {
 }
 
 const FIELDS = [
+  "direction",
   "downsideThresholdPct",
   "winsorize",
   "winsorizePct",
@@ -37,6 +39,7 @@ export function metricAnalysisConfig(
       ? (body[field] as MetricAnalysisConfig[K])
       : ((current?.[field] ?? null) as MetricAnalysisConfig[K]);
   return {
+    direction: resolve("direction"),
     downsideThresholdPct: resolve("downsideThresholdPct"),
     winsorize: resolve("winsorize"),
     winsorizePct: resolve("winsorizePct"),
