@@ -57,7 +57,7 @@
     "build": "pnpm run generate && npx tsup --config tsup.config.ts && npx tsup --config tsup.browser.config.ts && npx tsup --config tsup.sentry.config.ts && npx tsup --config tsup.platform.config.ts && node scripts/write-build-stamp.mjs",
     "clean": "rm -rf dist coverage src/generated/contract-surface.js src/generated/contract-surface.d.ts scripts/generated/contract-surface-members.ts",
     "lint": "biome lint src scripts",
-    "test": "vitest run --passWithNoTests && node --test scripts/size-check.test.mjs",
+    "test": "vitest run --passWithNoTests && node --test scripts/size-check.test.mjs scripts/extract-quickstart-snippet.test.mjs",
     "test:browser-smoke": "node scripts/browser-smoke.mjs",
     "test:browser-pagehide": "node scripts/browser-pagehide-smoke.mjs",
     "test:consumer-smoke": "node scripts/consumer-smoke.mjs && node ../../fixtures/ssr-sdk-consumer/run-packed.mjs",

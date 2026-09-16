@@ -49,8 +49,46 @@ ${snippet}
 }
 
 /**
+ * Remove `targetingKey: userId` from evaluate/evaluateDetails object literals
+ * while keeping the remaining object syntactically valid. Neighboring optional
+ * fields such as `idempotencyKey` are left untouched.
+ *
  * @param {string} snippet
  */
 export function stripTargetingKeyFromSnippet(snippet) {
-  return snippet.replace(/,?\n\s*targetingKey:\s*userId/g, "");
+  return snippet.replace(/(,\s*)?targetingKey:\s*userId\b(\s*,)?/g, replaceTargetingKeyProperty);
+}
+
+/**
+ * @param {string} _match
+ * @param {string | undefined} leadingComma
+ * @param {string | undefined} trailingComma
+ */
+function replaceTargetingKeyProperty(_match, leadingComma, trailingComma) {
+  return leadingComma && trailingComma ? "," : "";
+}
+
+const MISSING_TARGETING_KEY_DIAGNOSTIC = /Property ['"]targetingKey['"] is missing/;
+const OBJECT_LITERAL_SYNTAX_ERROR = /\berror TS(?:1005|1109|1135|1136):/;
+
+/**
+ * The packed-consumer negative control must fail because `targetingKey` is
+ * required, not because the stale snippet is a syntax error. Empty output
+ * (TypeScript succeeded) is the optional-`targetingKey` mutation: the guard
+ * must fail rather than treat success as a pass.
+ *
+ * @param {string} tscOutput
+ * @param {string} label
+ */
+export function assertMissingTargetingKeyDiagnostic(tscOutput, label) {
+  if (OBJECT_LITERAL_SYNTAX_ERROR.test(tscOutput)) {
+    throw new Error(
+      `${label}: TypeScript rejected the stale snippet as a syntax error, not a missing targetingKey:\n${tscOutput}`,
+    );
+  }
+  if (!MISSING_TARGETING_KEY_DIAGNOSTIC.test(tscOutput)) {
+    throw new Error(
+      `${label}: TypeScript did not report the required targetingKey as missing:\n${tscOutput || "(empty output)"}`,
+    );
+  }
 }
