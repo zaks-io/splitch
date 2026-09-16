@@ -142,4 +142,21 @@ describe("ExperimentResultsComparison", () => {
     );
     expect(text).toBe("Estimate unresolved: insufficient denominator");
   });
+  it("does not format estimates or differences without the Metric type", () => {
+    const arm = statsWithAnalysisControl().arm_results[0];
+    if (!arm) throw new Error("Missing fixture");
+    for (const difference of [false, true]) {
+      const text = visibleText(
+        renderToStaticMarkup(
+          <ExperimentResultsComparisonValue
+            arm={{ ...arm, point_estimate: 0.0577 }}
+            control={arm}
+            kind={undefined}
+            difference={difference}
+          />,
+        ),
+      );
+      expect(text).toBe("Estimate unavailable: Metric type missing");
+    }
+  });
 });

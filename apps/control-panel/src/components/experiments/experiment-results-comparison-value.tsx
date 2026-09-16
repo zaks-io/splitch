@@ -48,6 +48,7 @@ function unavailableReason(
   // The engine encodes a missing ratio estimate as zero, and its status also covers comparison failures.
   if (kind !== "binomial" && arm.status === "insufficient_denominator" && arm.point_estimate === 0)
     return "Estimate unresolved: insufficient denominator";
+  if (kind === undefined) return "Estimate unavailable: Metric type missing";
   return null;
 }
 
