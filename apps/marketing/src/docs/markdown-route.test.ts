@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { quickstartMarkdown } from "./markdown";
 import { markdownForPath, staticMarkdownPaths } from "./markdown-route";
+import { staticPagePaths } from "./sitemap";
 
 function markdownUrlForPage(path: string): string {
   if (path === "/") return "/.md";
@@ -32,6 +33,8 @@ describe("markdownForPath", () => {
   });
 
   it("serves the .md suffix for every static HTML page, including top-level ones", () => {
+    const topLevelHtmlPages = staticPagePaths.filter((path) => !path.startsWith("/docs"));
+    expect(topLevelHtmlPages).toEqual(["/", "/quickstart"]);
     expect(staticMarkdownPaths).toContain("/quickstart");
     expect(staticMarkdownPaths.filter((path) => !path.startsWith("/docs"))).toEqual([
       "/",
