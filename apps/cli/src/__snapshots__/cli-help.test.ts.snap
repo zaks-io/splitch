@@ -1246,6 +1246,7 @@ Request body (--body-json):
   numerator                  optional  { metricId: string }
   denominator                optional  { metricId: string }
   description                optional  string
+  direction                  optional  string ("higher_is_better" | "lower_is_better") | null
   downsideThresholdPct       optional  number | null
   winsorize                  optional  boolean | null
   winsorizePct               optional  number | null
@@ -1315,6 +1316,7 @@ Request body (--body-json):
   numerator                  optional  { metricId: string }
   denominator                optional  { metricId: string }
   description                optional  string
+  direction                  optional  string ("higher_is_better" | "lower_is_better") | null
   downsideThresholdPct       optional  number | null
   winsorize                  optional  boolean | null
   winsorizePct               optional  number | null
