@@ -30,6 +30,11 @@ test.describe("Experiment Results tab", () => {
     );
     await waitForHydration(page);
 
+    const comparison = page.getByRole("region", { name: "Metric comparison" });
+    await expect(comparison).toBeVisible();
+    await expect(comparison.getByRole("columnheader", { name: /Difference/ })).toBeVisible();
+    await expect(comparison.getByText("Data freshness unavailable")).toHaveCount(0);
+
     await page.getByRole("button", { name: /Decision metrics/ }).click();
     await expect(page.getByRole("heading", { name: "Decision metrics" })).toBeVisible();
     await expect(page.getByRole("img", { name: /Relative lift with confidence/ })).toBeVisible();
@@ -47,6 +52,11 @@ test.describe("Experiment Results tab", () => {
     await expect(page.getByText(/Enforced by control-plane-api/)).toBeVisible();
 
     await captureThemeScreenshots(page, testInfo, "experiment-results-clean");
+    await page.setViewportSize({ width: 390, height: 844 });
+    await expect(comparison).toBeVisible();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(390);
+    await comparison.scrollIntoViewIfNeeded();
+    await captureThemeScreenshots(page, testInfo, "experiment-results-mobile");
   });
 
   test("keeps every number visible while a Sample Ratio Mismatch is firing", async ({

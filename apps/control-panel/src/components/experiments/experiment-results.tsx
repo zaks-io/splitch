@@ -1,4 +1,4 @@
-import type { FrozenControlIdentity, Metric } from "@splitch/contracts";
+import type { FrozenControlIdentity } from "@splitch/contracts";
 import type {
   PanelExperimentResultsReady,
   PanelExperimentRun,
@@ -9,6 +9,10 @@ import {
   analysisControlVariant,
   ExperimentResultsControlIntegrity,
 } from "./experiment-results-control";
+import {
+  ExperimentResultsComparison,
+  type ComparisonMetric,
+} from "./experiment-results-comparison";
 import { ExperimentResultsDecision } from "./experiment-results-decision";
 import { ExperimentResultsHero } from "./experiment-results-hero";
 import { ExperimentResultsStations } from "./experiment-results-stations";
@@ -31,7 +35,7 @@ export function ExperimentResults({
 }: {
   canConclude: boolean;
   onConclude: () => void;
-  metrics: readonly Pick<Metric, "id" | "name">[];
+  metrics: readonly ComparisonMetric[];
   results: PanelExperimentResultsReady;
   run: PanelExperimentRun;
 }) {
@@ -59,6 +63,13 @@ export function ExperimentResults({
           allocation={run.allocation}
           baseline={measurementAnchor}
           dedupedCounts={results.stats.health.deduped_counts}
+          variantOrder={variantOrder}
+        />
+        <ExperimentResultsComparison
+          results={results}
+          run={run}
+          metrics={metrics}
+          baseline={measurementAnchor}
           variantOrder={variantOrder}
         />
         <ExperimentResultsStations
