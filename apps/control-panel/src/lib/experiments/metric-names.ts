@@ -24,6 +24,6 @@ export function metricDisplayName(metricId: string, names: MetricNames): string 
 /** Gate check details arrive as prose with raw Metric ids embedded; rewrite them. */
 export function withMetricNames(text: string, names: MetricNames): string {
   let renamed = text;
-  for (const [id, name] of names) renamed = renamed.replaceAll(id, name);
+  for (const [id, name] of names) renamed = renamed.replaceAll(id, () => name);
   return renamed;
 }
