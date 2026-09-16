@@ -168,6 +168,7 @@ automatic replacement.
 | `winsorize`                    | boolean     | nullable; null means the engine default                                                                  |
 | `winsorize_pct`                | real        | nullable; percent, null means the engine default                                                         |
 | `downside_threshold_pct`       | real        | nullable; percent, on the same scale as `relative_lift_pct`. Set to make this a Guardrail Metric         |
+| `direction`                    | text        | nullable; `higher_is_better` or `lower_is_better`. Null means unstated, read as neutral                  |
 | `cuped`                        | boolean     | nullable; null means the engine default                                                                  |
 | `cuped_coverage_threshold_pct` | real        | nullable; percent, null means the engine default                                                         |
 | `created_at`                   | timestamptz | not null                                                                                                 |

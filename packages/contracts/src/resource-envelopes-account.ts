@@ -50,6 +50,7 @@ import { WriteMetricRefSchema } from "./write-persisted-schemas";
 // ---------------------------------------------------------------------------
 
 const MetricAnalysisFields = {
+  direction: MetricSchema.shape.direction,
   downsideThresholdPct: MetricSchema.shape.downsideThresholdPct,
   winsorize: MetricSchema.shape.winsorize,
   winsorizePct: MetricSchema.shape.winsorizePct,

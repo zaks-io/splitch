@@ -47,6 +47,7 @@ export function metricResponse(row: MetricRow): Metric {
     // Analysis config is reported as an explicit null when unset, not omitted:
     // "no preference, engine default applies" is an answer a caller acts on, and
     // an absent key reads as "this build does not have the field".
+    direction: row.direction,
     downsideThresholdPct: row.downsideThresholdPct,
     winsorize: row.winsorize,
     winsorizePct: row.winsorizePct,

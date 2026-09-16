@@ -1,16 +1,24 @@
-import { type Metric, MetricVarianceConfigSchema } from "@splitch/contracts";
 import type {
   PanelExperimentResultsReady,
   PanelExperimentRun,
 } from "@splitch/control-plane-sdk/panel-experiments";
-import { Fragment } from "react";
 import { armColor } from "#lib/experiments/arm-colors";
-import { metricDisplayName, metricNamesById } from "#lib/experiments/metric-names";
+import {
+  type ComparisonMetric,
+  type MetricComparisonRole,
+  metricComparisonGroups,
+} from "#lib/experiments/metric-comparison-rows";
 import { ExperimentResultsRails, RESULTS_RAIL_GRID } from "./experiment-results-arms";
+import { ExperimentResultsLiftAxis } from "./experiment-results-comparison-lift-bar";
+import { ArmDot, ExperimentResultsComparisonRow } from "./experiment-results-comparison-row";
 
-import { ExperimentResultsComparisonValue } from "./experiment-results-comparison-value";
+export type { ComparisonMetric } from "#lib/experiments/metric-comparison-rows";
 
-export type ComparisonMetric = Pick<Metric, "id" | "name"> & Partial<Pick<Metric, "kind">>;
+const ROLE_TITLES: Record<MetricComparisonRole, string> = {
+  decision: "Decision metrics",
+  guardrail: "Guardrails",
+  exploratory: "Exploratory",
+};
 
 export function ExperimentResultsComparison({
   results,
@@ -25,19 +33,10 @@ export function ExperimentResultsComparison({
   baseline: string;
   variantOrder: readonly string[];
 }) {
-  const frozenMetrics = MetricVarianceConfigSchema.array().parse(
-    JSON.parse(run.metricVarianceConfigJson),
-  );
-  const metricIds = [
-    ...new Set([
-      ...frozenMetrics.map((metric) => metric.metric_id),
-      ...run.decisionMetricIds,
-      ...run.decisionGuardrailMetricIds,
-      ...results.stats.arm_results.map((result) => result.metric_id),
-    ]),
-  ];
-  const names = metricNamesById(metrics);
-  const variants = [baseline, ...variantOrder.filter((variant) => variant !== baseline)];
+  const groups = metricComparisonGroups({ results, run, metrics, baseline, variantOrder });
+  const treatments = variantOrder.filter((variant) => variant !== baseline);
+  const multi = treatments.length > 1;
+  const [soleTreatment] = treatments;
   return (
     <section aria-labelledby="metric-comparison-heading" className={RESULTS_RAIL_GRID}>
       <ExperimentResultsRails baseline={baseline} variantOrder={variantOrder} connect />
@@ -60,78 +59,79 @@ export function ExperimentResultsComparison({
           </p>
         </div>
         <div className="overflow-x-auto rounded-lg border border-border bg-card">
-          <table className="w-full text-sm">
+          <table className="w-full min-w-[46rem] table-fixed text-sm">
+            <colgroup>
+              <col className={multi ? "w-52" : "w-64"} />
+              {multi ? <col className="w-40" /> : null}
+              <col className={multi ? "w-24" : "w-56"} />
+              <col />
+              <col className="w-28" />
+            </colgroup>
             <caption className="sr-only">
-              Current estimates by Variant and absolute differences from {baseline}
+              Relative difference from {baseline} per Metric with its confidence interval, grouped
+              by the role each Metric plays in the decision
             </caption>
             <thead>
               <tr className="text-muted-foreground text-xs">
-                <th scope="col" className="px-4 py-3 text-left font-medium">
+                <th scope="col" className="px-4 py-2.5 text-left align-middle font-medium">
                   Metric
                 </th>
-                {variants.map((variant) => (
-                  <Fragment key={variant}>
-                    <th scope="col" className="min-w-36 px-4 py-3 text-right font-medium">
-                      <span className="inline-flex items-center gap-2">
-                        <span
-                          aria-hidden="true"
-                          className="size-2 shrink-0 rounded-full"
-                          style={{ backgroundColor: armColor({ baseline, variant, variantOrder }) }}
-                        />
-                        {variant}
-                      </span>
-                      {variant === baseline ? (
-                        <span className="block font-normal">Baseline</span>
-                      ) : null}
-                    </th>
-                    {variant !== baseline ? (
-                      <th scope="col" className="min-w-36 px-4 py-3 text-right font-medium">
-                        Difference<span className="block font-normal">vs {baseline}</span>
-                      </th>
-                    ) : null}
-                  </Fragment>
-                ))}
+                {multi ? (
+                  <th scope="col" className="px-2 py-2.5 text-left align-middle font-medium">
+                    Treatment
+                  </th>
+                ) : null}
+                <th
+                  scope="col"
+                  className="whitespace-nowrap px-2 py-2.5 text-right align-middle font-medium"
+                >
+                  {multi || soleTreatment === undefined ? null : (
+                    <span className="mr-1 inline-flex items-center gap-1.5 text-foreground">
+                      <ArmDot
+                        color={armColor({ baseline, variant: soleTreatment, variantOrder })}
+                      />
+                      {soleTreatment}
+                    </span>
+                  )}
+                  vs {baseline}
+                </th>
+                <th scope="col" className="px-4 py-2.5 align-middle font-medium">
+                  <ExperimentResultsLiftAxis />
+                </th>
+                <th scope="col" className="px-4 py-2.5 align-middle font-medium">
+                  <span className="sr-only">Verdict</span>
+                </th>
               </tr>
             </thead>
-            <tbody>
-              {metricIds.map((metricId) => {
-                const kind = metrics.find((metric) => metric.id === metricId)?.kind;
-                const arms = results.stats.arm_results.filter((arm) => arm.metric_id === metricId);
-                const control = arms.find((arm) => arm.variant === baseline);
-                return (
-                  <tr key={metricId} className="border-border border-t">
-                    <th
-                      scope="row"
-                      className="min-w-48 px-4 py-3 text-left font-medium text-foreground"
-                    >
-                      {metricDisplayName(metricId, names)}
-                    </th>
-                    {variants.map((variant) => {
-                      const arm = arms.find((candidate) => candidate.variant === variant);
-                      return (
-                        <Fragment key={variant}>
-                          <ExperimentResultsComparisonValue arm={arm} kind={kind} />
-                          {variant !== baseline ? (
-                            <ExperimentResultsComparisonValue
-                              arm={arm}
-                              kind={kind}
-                              control={control}
-                              difference
-                            />
-                          ) : null}
-                        </Fragment>
-                      );
-                    })}
-                  </tr>
-                );
-              })}
-            </tbody>
+            {groups.map((group) => (
+              <tbody key={group.role}>
+                <tr className="border-border border-t bg-muted/40">
+                  <th
+                    className="px-4 py-1.5 text-left font-medium text-muted-foreground text-xs"
+                    colSpan={multi ? 5 : 4}
+                    scope="colgroup"
+                  >
+                    {ROLE_TITLES[group.role]}
+                  </th>
+                </tr>
+                {group.rows.map((row) => (
+                  <ExperimentResultsComparisonRow
+                    baseline={baseline}
+                    key={row.metricId}
+                    row={row}
+                    variantOrder={variantOrder}
+                  />
+                ))}
+              </tbody>
+            ))}
           </table>
         </div>
         <p className="mt-3 text-muted-foreground text-xs">
-          Current analysis estimates, including inconclusive results. Differences are absolute, in
-          percentage points for percentages and recorded units otherwise. Confidence intervals and
-          relative lift are below.
+          Current estimates, including inconclusive results. The band is the confidence interval on
+          a fixed -100% to +100% axis, solid when significant, faded when not; an arrow head means
+          it runs past the axis. Hover a band for its bounds. Under each Metric, the recorded values
+          read baseline to treatment with the absolute difference, in percentage points for rates
+          and recorded units otherwise. Rows within a group are ordered by the size of the move.
         </p>
       </div>
     </section>

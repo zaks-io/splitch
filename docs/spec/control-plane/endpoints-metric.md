@@ -188,6 +188,7 @@ Body:
   cuped?: boolean | null;             // ignored on ratio: the delta method is never CUPED-adjusted
   cuped_coverage_threshold_pct?: number | null;  // > 0, <= 100
   downside_threshold_pct?: number | null;    // set to make this a Guardrail Metric
+  direction?: "higher_is_better" | "lower_is_better" | null;  // which way a move is good; null reads as neutral
 }
 ```
 
