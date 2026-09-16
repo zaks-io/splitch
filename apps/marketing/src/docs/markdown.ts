@@ -157,7 +157,7 @@ export function llmsTxt(): string {
     `Every code also resolves to a page of its own at ${DOCS_ORIGIN}/docs/error/{code}.md, which is the URL the API, SDK, and CLI print alongside the failure.`,
     "## Optional",
     [
-      `- [Quickstart](${DOCS_ORIGIN}/quickstart): zero to a resolving Flag with the CLI.`,
+      `- [Quickstart](${DOCS_ORIGIN}/quickstart.md): zero to a resolving Flag with the CLI.`,
       "- MCP server: add it to your agent with `claude mcp add --transport http splitch https://mcp.splitch.dev`. It is a tool endpoint, and the agent authenticates on its first tool call.",
       "- [Control Panel](https://app.splitch.dev)",
     ].join("\n"),

@@ -5,6 +5,13 @@ export function markdownSlug(param: string): string | null {
   return param.endsWith(MARKDOWN_SUFFIX) ? param.slice(0, -MARKDOWN_SUFFIX.length) : null;
 }
 
+/** `/quickstart.md` -> `/quickstart`; `/.md` -> `/`; `/docs` stays `/docs`. */
+export function htmlPathForMarkdownUrl(pathname: string): string {
+  if (!pathname.endsWith(MARKDOWN_SUFFIX)) return pathname;
+  const withoutSuffix = pathname.slice(0, -MARKDOWN_SUFFIX.length);
+  return withoutSuffix === "" ? "/" : withoutSuffix;
+}
+
 export function markdownResponse(body: string, method: "GET" | "HEAD" = "GET"): Response {
   return new Response(method === "HEAD" ? null : body, {
     headers: {

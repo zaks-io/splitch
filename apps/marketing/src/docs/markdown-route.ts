@@ -10,6 +10,7 @@ import {
   sdkTopicMarkdown,
 } from "./markdown";
 import { findSdkTopic } from "./sdk";
+import { htmlPathForMarkdownUrl } from "./serve-markdown";
 
 const staticMarkdown = new Map<string, () => string>([
   ["/", llmsTxt],
@@ -22,17 +23,20 @@ const staticMarkdown = new Map<string, () => string>([
   ["/docs/errors", errorIndexMarkdown],
 ]);
 
+export const staticMarkdownPaths = [...staticMarkdown.keys()] as const;
+
 export function markdownForPath(pathname: string): string | null {
-  const staticDocument = staticMarkdown.get(pathname);
+  const documentPath = htmlPathForMarkdownUrl(pathname);
+  const staticDocument = staticMarkdown.get(documentPath);
   if (staticDocument) return staticDocument();
 
-  const sdkSlug = routeSegment(pathname, "/docs/sdk/");
+  const sdkSlug = routeSegment(documentPath, "/docs/sdk/");
   if (sdkSlug !== null) {
     const topic = findSdkTopic(sdkSlug);
     return topic ? sdkTopicMarkdown(topic) : null;
   }
 
-  const errorCode = routeSegment(pathname, "/docs/error/");
+  const errorCode = routeSegment(documentPath, "/docs/error/");
   return errorCode !== null && isDocumentedErrorCode(errorCode) ? errorMarkdown(errorCode) : null;
 }
 

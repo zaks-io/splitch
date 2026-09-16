@@ -13,6 +13,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as HealthRouteImport } from './routes/health'
 import { Route as LlmsDottxtRouteImport } from './routes/llms[.]txt'
 import { Route as QuickstartRouteImport } from './routes/quickstart'
+import { Route as QuickstartDotmdRouteImport } from './routes/quickstart[.]md'
 import { Route as RobotsDottxtRouteImport } from './routes/robots[.]txt'
 import { Route as SitemapDotxmlRouteImport } from './routes/sitemap[.]xml'
 import { Route as DotwellKnownApiCatalogRouteImport } from './routes/[.]well-known.api-catalog'
@@ -46,6 +47,11 @@ const LlmsDottxtRoute = LlmsDottxtRouteImport.update({
 const QuickstartRoute = QuickstartRouteImport.update({
   id: '/quickstart',
   path: '/quickstart',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const QuickstartDotmdRoute = QuickstartDotmdRouteImport.update({
+  id: '/quickstart.md',
+  path: '/quickstart.md',
   getParentRoute: () => rootRouteImport,
 } as any)
 const RobotsDottxtRoute = RobotsDottxtRouteImport.update({
@@ -124,6 +130,7 @@ export interface FileRoutesByFullPath {
   '/health': typeof HealthRoute
   '/llms.txt': typeof LlmsDottxtRoute
   '/quickstart': typeof QuickstartRoute
+  '/quickstart.md': typeof QuickstartDotmdRoute
   '/robots.txt': typeof RobotsDottxtRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/.well-known/api-catalog': typeof DotwellKnownApiCatalogRoute
@@ -144,6 +151,7 @@ export interface FileRoutesByTo {
   '/health': typeof HealthRoute
   '/llms.txt': typeof LlmsDottxtRoute
   '/quickstart': typeof QuickstartRoute
+  '/quickstart.md': typeof QuickstartDotmdRoute
   '/robots.txt': typeof RobotsDottxtRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/.well-known/api-catalog': typeof DotwellKnownApiCatalogRoute
@@ -165,6 +173,7 @@ export interface FileRoutesById {
   '/health': typeof HealthRoute
   '/llms.txt': typeof LlmsDottxtRoute
   '/quickstart': typeof QuickstartRoute
+  '/quickstart.md': typeof QuickstartDotmdRoute
   '/robots.txt': typeof RobotsDottxtRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/.well-known/api-catalog': typeof DotwellKnownApiCatalogRoute
@@ -187,6 +196,7 @@ export interface FileRouteTypes {
     | '/health'
     | '/llms.txt'
     | '/quickstart'
+    | '/quickstart.md'
     | '/robots.txt'
     | '/sitemap.xml'
     | '/.well-known/api-catalog'
@@ -207,6 +217,7 @@ export interface FileRouteTypes {
     | '/health'
     | '/llms.txt'
     | '/quickstart'
+    | '/quickstart.md'
     | '/robots.txt'
     | '/sitemap.xml'
     | '/.well-known/api-catalog'
@@ -227,6 +238,7 @@ export interface FileRouteTypes {
     | '/health'
     | '/llms.txt'
     | '/quickstart'
+    | '/quickstart.md'
     | '/robots.txt'
     | '/sitemap.xml'
     | '/.well-known/api-catalog'
@@ -248,6 +260,7 @@ export interface RootRouteChildren {
   HealthRoute: typeof HealthRoute
   LlmsDottxtRoute: typeof LlmsDottxtRoute
   QuickstartRoute: typeof QuickstartRoute
+  QuickstartDotmdRoute: typeof QuickstartDotmdRoute
   RobotsDottxtRoute: typeof RobotsDottxtRoute
   SitemapDotxmlRoute: typeof SitemapDotxmlRoute
   DotwellKnownApiCatalogRoute: typeof DotwellKnownApiCatalogRoute
@@ -292,6 +305,13 @@ declare module '@tanstack/react-router' {
       path: '/quickstart'
       fullPath: '/quickstart'
       preLoaderRoute: typeof QuickstartRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/quickstart.md': {
+      id: '/quickstart.md'
+      path: '/quickstart.md'
+      fullPath: '/quickstart.md'
+      preLoaderRoute: typeof QuickstartDotmdRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/robots.txt': {
@@ -400,6 +420,7 @@ const rootRouteChildren: RootRouteChildren = {
   HealthRoute: HealthRoute,
   LlmsDottxtRoute: LlmsDottxtRoute,
   QuickstartRoute: QuickstartRoute,
+  QuickstartDotmdRoute: QuickstartDotmdRoute,
   RobotsDottxtRoute: RobotsDottxtRoute,
   SitemapDotxmlRoute: SitemapDotxmlRoute,
   DotwellKnownApiCatalogRoute: DotwellKnownApiCatalogRoute,
