@@ -69,22 +69,6 @@ describe("scope-free flags list", () => {
     ).toHaveLength(1);
   });
 
-  it("groups human output by App with selector and canonical id", async () => {
-    const scope = await unscopedSession();
-    const transport = transportFor(principalPage);
-    const log = vi.spyOn(console, "log").mockImplementation(() => {});
-
-    expect(
-      await runCli(["flags", "list"], { ...scope, cwd: scope.dir, fetch: transport.fetch }),
-    ).toBe(EXIT_OK);
-
-    const human = log.mock.calls.join("\n");
-    expect(human).toContain('"app": "alpha/checkout"');
-    expect(human).toContain('"id": "app_checkout"');
-    expect(human).toContain('"app": "beta/billing"');
-    expect(human).toContain('"key": "invoice"');
-  });
-
   it("requests hydration without inventing an App or Environment filter", async () => {
     const scope = await unscopedSession();
     const transport = transportFor(principalPage);
@@ -141,12 +125,70 @@ describe("scope-free flags list", () => {
   it("tells a human how to narrow an incomplete cross-App result", async () => {
     const scope = await unscopedSession();
     const transport = transportFor({ ...principalPage, readTruncated: true });
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
     const error = vi.spyOn(console, "error").mockImplementation(() => {});
 
     expect(
       await runCli(["flags", "list"], { ...scope, cwd: scope.dir, fetch: transport.fetch }),
     ).toBe(EXIT_OK);
+    expect(log.mock.calls.join("\n")).toContain(
+      "Truncated: more than 200 Flags exist; 200 are shown.",
+    );
     expect(error.mock.calls.join("\n")).toContain("Narrow it with --app <app>");
+  });
+});
+
+describe("scope-free flags list human output", () => {
+  it("groups human output by App with selector and canonical id", async () => {
+    const scope = await unscopedSession();
+    const transport = transportFor(principalPage);
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+
+    expect(
+      await runCli(["flags", "list"], { ...scope, cwd: scope.dir, fetch: transport.fetch }),
+    ).toBe(EXIT_OK);
+
+    const human = log.mock.calls.join("\n");
+    expect(human).toContain("App: alpha/checkout (app_checkout)");
+    expect(human).toContain("App: alpha/search (app_search)");
+    expect(human).toContain("App: beta/billing (app_billing)");
+    expect(human).toContain("Flag: invoice");
+    expect(human).toContain("VARIANT ID");
+    expect(human).not.toContain('"app":');
+    expect(human.trimStart().startsWith("{")).toBe(false);
+  });
+
+  it("prints compact human columns for --summary, grouped by App", async () => {
+    const scope = await unscopedSession();
+    const transport = transportFor(summaryPage);
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+
+    expect(
+      await runCli(["flags", "list", "--summary"], {
+        ...scope,
+        cwd: scope.dir,
+        fetch: transport.fetch,
+      }),
+    ).toBe(EXIT_OK);
+
+    const human = log.mock.calls.join("\n");
+    expect(human).toContain("App: alpha/checkout (app_checkout)");
+    expect(human).toContain("App: beta/billing (app_billing)");
+    expect(human).toMatch(/^ID\s+KEY\s+NAME$/m);
+    expect(human).toContain("flag_invoice");
+    expect(human).not.toContain("Configurations");
+    expect(human.trimStart().startsWith("{")).toBe(false);
+  });
+
+  it("names an empty catalog instead of printing a blank line", async () => {
+    const scope = await unscopedSession();
+    const transport = transportFor({ ...principalPage, items: [] });
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+
+    expect(
+      await runCli(["flags", "list"], { ...scope, cwd: scope.dir, fetch: transport.fetch }),
+    ).toBe(EXIT_OK);
+    expect(log.mock.calls.join("\n")).toBe("No Flags found.");
   });
 });
 

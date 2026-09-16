@@ -112,6 +112,7 @@ describe("published CLI help", () => {
     const getHelp = renderHelp(["flags", "get", "--help"]);
 
     expect(help).toContain("complete per-Environment Flag Configurations");
+    expect(help).toContain("Print compact human columns");
     expect(help).toContain("--summary");
     expect(help).not.toContain("--with-config");
     expect(help).toContain("splitch flags list --json");

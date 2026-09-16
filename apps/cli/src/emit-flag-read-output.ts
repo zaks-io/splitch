@@ -50,12 +50,10 @@ export function emitApiOutput(
 }
 
 function emitPrincipalFlagOutput(io: CliIo, payload: unknown, invocation: ParsedInvocation): void {
-  if (!invocation.flags.summary) assertHydratedPrincipalFlagRead(payload);
   if (invocation.flags.json) {
+    if (!invocation.flags.summary) assertHydratedPrincipalFlagRead(payload);
     emit(io, true, payload);
     return;
   }
-  const groupedFlags = formatPrincipalFlags(payload);
-  if (groupedFlags) io.log(groupedFlags);
-  else emit(io, false, payload, resourceNoun("principal_flags_list"));
+  io.log(formatPrincipalFlags(payload, invocation.flags.summary));
 }
