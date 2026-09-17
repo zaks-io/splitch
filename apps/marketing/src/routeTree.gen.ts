@@ -13,19 +13,14 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as HealthRouteImport } from './routes/health'
 import { Route as LlmsDottxtRouteImport } from './routes/llms[.]txt'
 import { Route as QuickstartRouteImport } from './routes/quickstart'
-import { Route as QuickstartDotmdRouteImport } from './routes/quickstart[.]md'
 import { Route as RobotsDottxtRouteImport } from './routes/robots[.]txt'
 import { Route as SitemapDotxmlRouteImport } from './routes/sitemap[.]xml'
 import { Route as DotwellKnownApiCatalogRouteImport } from './routes/[.]well-known.api-catalog'
 import { Route as DocsIndexRouteImport } from './routes/docs.index'
 import { Route as DocsCliRouteImport } from './routes/docs.cli'
-import { Route as DocsCliDotmdRouteImport } from './routes/docs.cli[.]md'
 import { Route as DocsCodeAgentsRouteImport } from './routes/docs.code-agents'
-import { Route as DocsCodeAgentsDotmdRouteImport } from './routes/docs.code-agents[.]md'
 import { Route as DocsErrorsRouteImport } from './routes/docs.errors'
-import { Route as DocsErrorsDotmdRouteImport } from './routes/docs.errors[.]md'
 import { Route as DocsFlagsRouteImport } from './routes/docs.flags'
-import { Route as DocsFlagsDotmdRouteImport } from './routes/docs.flags[.]md'
 import { Route as DocsErrorCodeRouteImport } from './routes/docs.error.$code'
 import { Route as DocsSdkTopicRouteImport } from './routes/docs.sdk.$topic'
 
@@ -47,11 +42,6 @@ const LlmsDottxtRoute = LlmsDottxtRouteImport.update({
 const QuickstartRoute = QuickstartRouteImport.update({
   id: '/quickstart',
   path: '/quickstart',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const QuickstartDotmdRoute = QuickstartDotmdRouteImport.update({
-  id: '/quickstart.md',
-  path: '/quickstart.md',
   getParentRoute: () => rootRouteImport,
 } as any)
 const RobotsDottxtRoute = RobotsDottxtRouteImport.update({
@@ -79,19 +69,9 @@ const DocsCliRoute = DocsCliRouteImport.update({
   path: '/docs/cli',
   getParentRoute: () => rootRouteImport,
 } as any)
-const DocsCliDotmdRoute = DocsCliDotmdRouteImport.update({
-  id: '/docs/cli.md',
-  path: '/docs/cli.md',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const DocsCodeAgentsRoute = DocsCodeAgentsRouteImport.update({
   id: '/docs/code-agents',
   path: '/docs/code-agents',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const DocsCodeAgentsDotmdRoute = DocsCodeAgentsDotmdRouteImport.update({
-  id: '/docs/code-agents.md',
-  path: '/docs/code-agents.md',
   getParentRoute: () => rootRouteImport,
 } as any)
 const DocsErrorsRoute = DocsErrorsRouteImport.update({
@@ -99,19 +79,9 @@ const DocsErrorsRoute = DocsErrorsRouteImport.update({
   path: '/docs/errors',
   getParentRoute: () => rootRouteImport,
 } as any)
-const DocsErrorsDotmdRoute = DocsErrorsDotmdRouteImport.update({
-  id: '/docs/errors.md',
-  path: '/docs/errors.md',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const DocsFlagsRoute = DocsFlagsRouteImport.update({
   id: '/docs/flags',
   path: '/docs/flags',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const DocsFlagsDotmdRoute = DocsFlagsDotmdRouteImport.update({
-  id: '/docs/flags.md',
-  path: '/docs/flags.md',
   getParentRoute: () => rootRouteImport,
 } as any)
 const DocsErrorCodeRoute = DocsErrorCodeRouteImport.update({
@@ -130,18 +100,13 @@ export interface FileRoutesByFullPath {
   '/health': typeof HealthRoute
   '/llms.txt': typeof LlmsDottxtRoute
   '/quickstart': typeof QuickstartRoute
-  '/quickstart.md': typeof QuickstartDotmdRoute
   '/robots.txt': typeof RobotsDottxtRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/.well-known/api-catalog': typeof DotwellKnownApiCatalogRoute
   '/docs/cli': typeof DocsCliRoute
-  '/docs/cli.md': typeof DocsCliDotmdRoute
   '/docs/code-agents': typeof DocsCodeAgentsRoute
-  '/docs/code-agents.md': typeof DocsCodeAgentsDotmdRoute
   '/docs/errors': typeof DocsErrorsRoute
-  '/docs/errors.md': typeof DocsErrorsDotmdRoute
   '/docs/flags': typeof DocsFlagsRoute
-  '/docs/flags.md': typeof DocsFlagsDotmdRoute
   '/docs/': typeof DocsIndexRoute
   '/docs/error/$code': typeof DocsErrorCodeRoute
   '/docs/sdk/$topic': typeof DocsSdkTopicRoute
@@ -151,18 +116,13 @@ export interface FileRoutesByTo {
   '/health': typeof HealthRoute
   '/llms.txt': typeof LlmsDottxtRoute
   '/quickstart': typeof QuickstartRoute
-  '/quickstart.md': typeof QuickstartDotmdRoute
   '/robots.txt': typeof RobotsDottxtRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/.well-known/api-catalog': typeof DotwellKnownApiCatalogRoute
   '/docs/cli': typeof DocsCliRoute
-  '/docs/cli.md': typeof DocsCliDotmdRoute
   '/docs/code-agents': typeof DocsCodeAgentsRoute
-  '/docs/code-agents.md': typeof DocsCodeAgentsDotmdRoute
   '/docs/errors': typeof DocsErrorsRoute
-  '/docs/errors.md': typeof DocsErrorsDotmdRoute
   '/docs/flags': typeof DocsFlagsRoute
-  '/docs/flags.md': typeof DocsFlagsDotmdRoute
   '/docs': typeof DocsIndexRoute
   '/docs/error/$code': typeof DocsErrorCodeRoute
   '/docs/sdk/$topic': typeof DocsSdkTopicRoute
@@ -173,18 +133,13 @@ export interface FileRoutesById {
   '/health': typeof HealthRoute
   '/llms.txt': typeof LlmsDottxtRoute
   '/quickstart': typeof QuickstartRoute
-  '/quickstart.md': typeof QuickstartDotmdRoute
   '/robots.txt': typeof RobotsDottxtRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/.well-known/api-catalog': typeof DotwellKnownApiCatalogRoute
   '/docs/cli': typeof DocsCliRoute
-  '/docs/cli.md': typeof DocsCliDotmdRoute
   '/docs/code-agents': typeof DocsCodeAgentsRoute
-  '/docs/code-agents.md': typeof DocsCodeAgentsDotmdRoute
   '/docs/errors': typeof DocsErrorsRoute
-  '/docs/errors.md': typeof DocsErrorsDotmdRoute
   '/docs/flags': typeof DocsFlagsRoute
-  '/docs/flags.md': typeof DocsFlagsDotmdRoute
   '/docs/': typeof DocsIndexRoute
   '/docs/error/$code': typeof DocsErrorCodeRoute
   '/docs/sdk/$topic': typeof DocsSdkTopicRoute
@@ -196,18 +151,13 @@ export interface FileRouteTypes {
     | '/health'
     | '/llms.txt'
     | '/quickstart'
-    | '/quickstart.md'
     | '/robots.txt'
     | '/sitemap.xml'
     | '/.well-known/api-catalog'
     | '/docs/cli'
-    | '/docs/cli.md'
     | '/docs/code-agents'
-    | '/docs/code-agents.md'
     | '/docs/errors'
-    | '/docs/errors.md'
     | '/docs/flags'
-    | '/docs/flags.md'
     | '/docs/'
     | '/docs/error/$code'
     | '/docs/sdk/$topic'
@@ -217,18 +167,13 @@ export interface FileRouteTypes {
     | '/health'
     | '/llms.txt'
     | '/quickstart'
-    | '/quickstart.md'
     | '/robots.txt'
     | '/sitemap.xml'
     | '/.well-known/api-catalog'
     | '/docs/cli'
-    | '/docs/cli.md'
     | '/docs/code-agents'
-    | '/docs/code-agents.md'
     | '/docs/errors'
-    | '/docs/errors.md'
     | '/docs/flags'
-    | '/docs/flags.md'
     | '/docs'
     | '/docs/error/$code'
     | '/docs/sdk/$topic'
@@ -238,18 +183,13 @@ export interface FileRouteTypes {
     | '/health'
     | '/llms.txt'
     | '/quickstart'
-    | '/quickstart.md'
     | '/robots.txt'
     | '/sitemap.xml'
     | '/.well-known/api-catalog'
     | '/docs/cli'
-    | '/docs/cli.md'
     | '/docs/code-agents'
-    | '/docs/code-agents.md'
     | '/docs/errors'
-    | '/docs/errors.md'
     | '/docs/flags'
-    | '/docs/flags.md'
     | '/docs/'
     | '/docs/error/$code'
     | '/docs/sdk/$topic'
@@ -260,18 +200,13 @@ export interface RootRouteChildren {
   HealthRoute: typeof HealthRoute
   LlmsDottxtRoute: typeof LlmsDottxtRoute
   QuickstartRoute: typeof QuickstartRoute
-  QuickstartDotmdRoute: typeof QuickstartDotmdRoute
   RobotsDottxtRoute: typeof RobotsDottxtRoute
   SitemapDotxmlRoute: typeof SitemapDotxmlRoute
   DotwellKnownApiCatalogRoute: typeof DotwellKnownApiCatalogRoute
   DocsCliRoute: typeof DocsCliRoute
-  DocsCliDotmdRoute: typeof DocsCliDotmdRoute
   DocsCodeAgentsRoute: typeof DocsCodeAgentsRoute
-  DocsCodeAgentsDotmdRoute: typeof DocsCodeAgentsDotmdRoute
   DocsErrorsRoute: typeof DocsErrorsRoute
-  DocsErrorsDotmdRoute: typeof DocsErrorsDotmdRoute
   DocsFlagsRoute: typeof DocsFlagsRoute
-  DocsFlagsDotmdRoute: typeof DocsFlagsDotmdRoute
   DocsIndexRoute: typeof DocsIndexRoute
   DocsErrorCodeRoute: typeof DocsErrorCodeRoute
   DocsSdkTopicRoute: typeof DocsSdkTopicRoute
@@ -305,13 +240,6 @@ declare module '@tanstack/react-router' {
       path: '/quickstart'
       fullPath: '/quickstart'
       preLoaderRoute: typeof QuickstartRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/quickstart.md': {
-      id: '/quickstart.md'
-      path: '/quickstart.md'
-      fullPath: '/quickstart.md'
-      preLoaderRoute: typeof QuickstartDotmdRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/robots.txt': {
@@ -349,25 +277,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DocsCliRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/docs/cli.md': {
-      id: '/docs/cli.md'
-      path: '/docs/cli.md'
-      fullPath: '/docs/cli.md'
-      preLoaderRoute: typeof DocsCliDotmdRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/docs/code-agents': {
       id: '/docs/code-agents'
       path: '/docs/code-agents'
       fullPath: '/docs/code-agents'
       preLoaderRoute: typeof DocsCodeAgentsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/docs/code-agents.md': {
-      id: '/docs/code-agents.md'
-      path: '/docs/code-agents.md'
-      fullPath: '/docs/code-agents.md'
-      preLoaderRoute: typeof DocsCodeAgentsDotmdRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/docs/errors': {
@@ -377,25 +291,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DocsErrorsRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/docs/errors.md': {
-      id: '/docs/errors.md'
-      path: '/docs/errors.md'
-      fullPath: '/docs/errors.md'
-      preLoaderRoute: typeof DocsErrorsDotmdRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/docs/flags': {
       id: '/docs/flags'
       path: '/docs/flags'
       fullPath: '/docs/flags'
       preLoaderRoute: typeof DocsFlagsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/docs/flags.md': {
-      id: '/docs/flags.md'
-      path: '/docs/flags.md'
-      fullPath: '/docs/flags.md'
-      preLoaderRoute: typeof DocsFlagsDotmdRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/docs/error/$code': {
@@ -420,18 +320,13 @@ const rootRouteChildren: RootRouteChildren = {
   HealthRoute: HealthRoute,
   LlmsDottxtRoute: LlmsDottxtRoute,
   QuickstartRoute: QuickstartRoute,
-  QuickstartDotmdRoute: QuickstartDotmdRoute,
   RobotsDottxtRoute: RobotsDottxtRoute,
   SitemapDotxmlRoute: SitemapDotxmlRoute,
   DotwellKnownApiCatalogRoute: DotwellKnownApiCatalogRoute,
   DocsCliRoute: DocsCliRoute,
-  DocsCliDotmdRoute: DocsCliDotmdRoute,
   DocsCodeAgentsRoute: DocsCodeAgentsRoute,
-  DocsCodeAgentsDotmdRoute: DocsCodeAgentsDotmdRoute,
   DocsErrorsRoute: DocsErrorsRoute,
-  DocsErrorsDotmdRoute: DocsErrorsDotmdRoute,
   DocsFlagsRoute: DocsFlagsRoute,
-  DocsFlagsDotmdRoute: DocsFlagsDotmdRoute,
   DocsIndexRoute: DocsIndexRoute,
   DocsErrorCodeRoute: DocsErrorCodeRoute,
   DocsSdkTopicRoute: DocsSdkTopicRoute,

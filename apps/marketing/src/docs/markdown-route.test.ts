@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { quickstartMarkdown } from "./markdown";
-import { markdownForPath, staticMarkdownPaths } from "./markdown-route";
-import { staticPagePaths } from "./sitemap";
+import { markdownForPath } from "./markdown-route";
+import { canonicalPageUrls, staticPagePaths } from "./sitemap";
 
 function markdownUrlForPage(path: string): string {
   if (path === "/") return "/.md";
@@ -32,16 +32,14 @@ describe("markdownForPath", () => {
     expect(markdown).toMatch(/^# Zero to a resolving Flag/m);
   });
 
-  it("serves the .md suffix for every static HTML page, including top-level ones", () => {
-    const topLevelHtmlPages = staticPagePaths.filter((path) => !path.startsWith("/docs"));
-    expect(topLevelHtmlPages).toEqual(["/", "/quickstart"]);
-    expect(staticMarkdownPaths).toContain("/quickstart");
-    expect(staticMarkdownPaths.filter((path) => !path.startsWith("/docs"))).toEqual([
-      "/",
-      "/quickstart",
-    ]);
+  it("serves the .md suffix for every canonical HTML page, including top-level ones", () => {
+    // The Worker answers `<page>.md` before the router runs, so this is the
+    // only guard that a new page ships with its markdown twin.
+    const pages = canonicalPageUrls.map((href) => new URL(href).pathname);
+    expect(pages.filter((path) => !path.startsWith("/docs"))).toEqual(["/", "/quickstart"]);
+    expect(pages.length).toBeGreaterThan(staticPagePaths.length);
 
-    for (const path of staticMarkdownPaths) {
+    for (const path of pages) {
       const markdown = markdownForPath(path);
       expect(markdown, path).not.toBeNull();
       expect(markdownForPath(markdownUrlForPage(path)), markdownUrlForPage(path)).toBe(markdown);

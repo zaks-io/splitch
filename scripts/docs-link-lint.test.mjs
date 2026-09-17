@@ -20,7 +20,6 @@ async function fixtureRoutes(t) {
       'createFileRoute("/docs/")({});\n<section id="errors" /><section id="sdk" />',
     ),
     writeFile(path.join(routes, "docs.errors.tsx"), 'createFileRoute("/docs/errors")({});'),
-    writeFile(path.join(routes, "docs.errors[.]md.ts"), 'createFileRoute("/docs/errors.md")({});'),
     writeFile(
       path.join(routes, "docs.error.$code.tsx"),
       'createFileRoute("/docs/error/$code")({});',
@@ -63,14 +62,14 @@ test("rejects a route-side mutation that removes a published target", async (t) 
   );
 });
 
-test("rejects markdown routes without an HTML twin", async (t) => {
+test("rejects a markdown URL whose HTML page is not a route", async (t) => {
   const routes = await fixtureRoutes(t);
   await rm(path.join(routes, "docs.errors.tsx"));
   const inventory = await buildRouteInventory(routes);
 
   assert.match(
     lintPublishedDocsText("README.md", `${origin}/docs/errors.md`, inventory)[0].message,
-    /has no HTML twin/,
+    /names no marketing route/,
   );
 });
 
