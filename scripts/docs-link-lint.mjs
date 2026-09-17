@@ -135,19 +135,19 @@ export function lintPublishedDocsText(filePath, text, inventory) {
 
 function violationForPublishedUrl(url, inventory) {
   const pathname = normalizePathname(decodeURIComponent(url.pathname));
-  const route = routeForPath(inventory, pathname);
+  // The Worker serves `<page>.md` for every page, so a markdown URL is valid
+  // exactly when its HTML page is a route. There are no markdown file routes.
+  const pagePath = pathname.endsWith(".md") ? pathname.slice(0, -3) : pathname;
+  const route = routeForPath(inventory, pagePath);
   if (!route) return `${url.href} names no marketing route.`;
-  if (pathname.endsWith(".md") && !routeForPath(inventory, pathname.slice(0, -3))) {
-    return `${url.href} has no HTML twin.`;
-  }
 
   const anchor = decodeURIComponent(url.hash.slice(1));
   if (!anchor) return undefined;
-  const routedAlternative = `${pathname === "/" ? "" : pathname}/${anchor}`;
+  const routedAlternative = `${pagePath === "/" ? "" : pagePath}/${anchor}`;
   if (hasStaticRoute(inventory, routedAlternative)) {
     return `${url.href} is stale; ${origin}${routedAlternative} is a route, not a section link.`;
   }
-  if (!route.anchors.has(anchor)) return `${url.href} names no section anchor on ${pathname}.`;
+  if (!route.anchors.has(anchor)) return `${url.href} names no section anchor on ${pagePath}.`;
   return undefined;
 }
 

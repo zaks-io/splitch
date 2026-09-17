@@ -23,8 +23,6 @@ const staticMarkdown = new Map<string, () => string>([
   ["/docs/errors", errorIndexMarkdown],
 ]);
 
-export const staticMarkdownPaths = [...staticMarkdown.keys()] as const;
-
 export function markdownForPath(pathname: string): string | null {
   const documentPath = htmlPathForMarkdownUrl(pathname);
   const staticDocument = staticMarkdown.get(documentPath);

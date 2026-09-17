@@ -9,6 +9,7 @@ import type {
   PanelExperimentResultsReady,
   PanelExperimentRun,
 } from "@splitch/control-plane-sdk/panel-experiments";
+import type { ComparisonMetric } from "#lib/experiments/metric-comparison-rows";
 
 /**
  * Panel fixtures built the way the Worker builds the payload: the gate is
@@ -251,10 +252,10 @@ export function resultsNoDataFixture(
 }
 
 /** Catalog rows for the Metric ids the stats fixtures use, as the detail read returns them. */
-export function metricsFixture(): { id: string; name: string }[] {
+export function metricsFixture(): ComparisonMetric[] {
   return [
-    { id: "checkout_conversion", name: "Checkout conversion" },
-    { id: "checkout_latency_p95", name: "Checkout latency p95" },
+    { id: "checkout_conversion", name: "Checkout conversion", kind: "binomial", direction: null },
+    { id: "checkout_latency_p95", name: "Checkout latency p95", kind: "count", direction: null },
   ];
 }
 
