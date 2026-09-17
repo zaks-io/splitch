@@ -83,4 +83,8 @@ test("rejects missing anchors and stale fragment collisions", async (t) => {
     /names no section anchor/,
   );
   assert.match(lintPublishedDocsText("README.md", movedCatalog, inventory)[0].message, /is stale/);
+  assert.match(
+    lintPublishedDocsText("README.md", `${origin}/docs.md#${"errors"}`, inventory)[0].message,
+    /is stale/,
+  );
 });

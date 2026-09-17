@@ -143,11 +143,11 @@ function violationForPublishedUrl(url, inventory) {
 
   const anchor = decodeURIComponent(url.hash.slice(1));
   if (!anchor) return undefined;
-  const routedAlternative = `${pathname === "/" ? "" : pathname}/${anchor}`;
+  const routedAlternative = `${pagePath === "/" ? "" : pagePath}/${anchor}`;
   if (hasStaticRoute(inventory, routedAlternative)) {
     return `${url.href} is stale; ${origin}${routedAlternative} is a route, not a section link.`;
   }
-  if (!route.anchors.has(anchor)) return `${url.href} names no section anchor on ${pathname}.`;
+  if (!route.anchors.has(anchor)) return `${url.href} names no section anchor on ${pagePath}.`;
   return undefined;
 }
 
