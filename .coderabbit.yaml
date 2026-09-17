@@ -18,6 +18,69 @@ reviews:
     - "!skills-lock.json"
     - "!packages/db/migrations/meta/*_snapshot.json"
     - "!packages/db/migrations/meta/_journal.json"
+  path_instructions:
+    - path: "**/*"
+      instructions: |
+        Start with docs/vision.md, then CONTEXT.md and the smallest matching domain
+        CONTEXT.md. Use docs/spec/README.md to find the relevant specification;
+        follow its Sources links into docs/adr/ and docs/architecture/ as needed.
+        Specs describe the intended final state. Verify implemented behavior in
+        source and tests before reporting a discrepancy as a regression.
+
+        This is a pnpm/Turborepo monorepo. pnpm-workspace.yaml lists workspaces;
+        each package.json defines its exports, dependencies, and check commands.
+        apps/ contains deployable services and user interfaces, packages/ contains
+        shared libraries, and examples/ contains integration consumers. Follow
+        workspace imports and package exports when tracing behavior across them.
+
+        Tests are colocated with source and also live in e2e/, tests/, fixtures/,
+        and package-specific test directories. scripts/ contains repository checks,
+        release/deployment tooling, and its own tests. Read package test configs
+        to distinguish Node, Workers, browser, and integration test environments.
+        Root package.json, turbo.json, and docs/agents/workflow/config.md describe
+        verification; .github/workflows/ contains the hosted CI and deployment jobs.
+        skills/ contains the public Splitch skill; .agents/skills/ contains shared
+        workflow skills, with Claude registrations under .claude/skills/.
+    - path: "apps/**/*"
+      instructions: |
+        apps/auth-api/ owns authentication; apps/control-plane-api/ implements the
+        control plane. Trace API contracts through packages/contracts/ and the
+        shared client in packages/control-plane-sdk/ to apps/cli/, apps/mcp-server/,
+        and apps/control-panel/ when reviewing changes to public operations.
+        apps/evaluation-api/ resolves flags using packages/evaluation-core/;
+        apps/event-ingest-api/ accepts events; apps/analysis-api/ computes results
+        using packages/stats/ and infra/tinybird/. Check the relevant consumer and
+        producer contracts across these boundaries.
+        apps/control-panel/ and apps/marketing/ contain the web interfaces;
+        packages/ui/ holds shared UI primitives. Follow existing component patterns.
+    - path: "packages/**/*"
+      instructions: |
+        packages/contracts/ defines shared schemas and route contracts;
+        packages/control-plane-sdk/ is the shared control-plane client.
+        packages/sdk/, packages/convex/, and packages/cloudflare/ are public
+        integrations. Check their exports, consumer examples under examples/,
+        and the relevant docs/spec/sdk/ and docs/spec/contracts/ specifications.
+        packages/evaluation-core/ owns shared evaluation logic; packages/stats/
+        owns statistical computation; packages/db/ holds D1 schema and migrations.
+        packages/bounded-body/, packages/privacy/, packages/observability/, and
+        packages/worker-runtime/ provide shared runtime functionality.
+        packages/ui/ contains shared UI components; packages/repo-lint/ enforces
+        workspace policy. Trace callers in apps/ and other packages before
+        assessing the impact of shared-library changes.
+    - path: "infra/tinybird/**/*"
+      instructions: |
+        Tinybird analytics definitions live here, outside the pnpm workspaces.
+        Trace datasources, pipes, materializations, and copies together with local
+        fixtures and tests. Follow ingestion in apps/event-ingest-api/ and query
+        consumers in apps/analysis-api/. Consult docs/spec/pipeline/ and
+        docs/spec/stats/ for the relevant data and measurement contracts.
+    - path: "docs/**/*"
+      instructions: |
+        docs/spec/ is the final-state specification, docs/adr/ records decisions,
+        and docs/architecture/ explains system design. docs/agents/workflow/ holds
+        repository workflow configuration. Check behavioral claims against the
+        relevant apps/, packages/, and infra/ implementation and distinguish
+        intended work from functionality that is already implemented.
   tools:
     github-checks:
       enabled: true
@@ -39,10 +102,14 @@ reviews:
 
 knowledge_base:
   code_guidelines:
+    enabled: true
     filePatterns:
       - "CONTEXT.md"
-      - "docs/vision.md"
-      - "docs/agents/workflow/config.md"
+      # Documentation-directory guidelines need explicit repository-wide scope.
+      - files: "docs/vision.md"
+        applyTo: "**/*"
+      - files: "docs/agents/workflow/config.md"
+        applyTo: "**/*"
       - "apps/**/CONTEXT.md"
       - "packages/**/CONTEXT.md"
   linear:
