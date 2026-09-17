@@ -7,7 +7,6 @@ const ExperimentConclusionDialog = lazy(() =>
   })),
 );
 
-import type { Metric } from "@splitch/contracts";
 import type { PanelExperimentRun } from "@splitch/control-plane-sdk/panel-experiments";
 import { useSuspenseQuery } from "@tanstack/react-query";
 import {
@@ -16,6 +15,7 @@ import {
   ExperimentResultsWaiting,
 } from "#components/experiments/experiment-results";
 import { experimentResultsQuery } from "#lib/experiments/experiments-query";
+import type { ComparisonMetric } from "#lib/experiments/metric-comparison-rows";
 
 /**
  * Route-facing wrapper: resolves the Run to read, then renders it.
@@ -43,7 +43,7 @@ export function ExperimentResultsPanel({
   flagId: string;
   environmentId: string;
   experimentId: string;
-  metrics: readonly Pick<Metric, "id" | "name">[];
+  metrics: readonly ComparisonMetric[];
   run: PanelExperimentRun | undefined;
 }) {
   if (!run) return <ExperimentResultsEmpty />;
@@ -77,7 +77,7 @@ function ExperimentResultsForRun({
   flagId: string;
   environmentId: string;
   experimentId: string;
-  metrics: readonly Pick<Metric, "id" | "name">[];
+  metrics: readonly ComparisonMetric[];
   run: PanelExperimentRun;
 }) {
   const [concluding, setConcluding] = useState(false);

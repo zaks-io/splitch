@@ -227,13 +227,13 @@ describe("ExperimentResultsComparison ordering and states", () => {
     expect(text).toContain("Confidence interval unavailable");
   });
 
-  it("does not format estimates or differences without the Metric type", () => {
+  it("does not format estimates or differences when the Metric is missing from the catalog", () => {
     const text = visibleText(
       renderToStaticMarkup(
         <ExperimentResultsComparison
           results={resultsFixture(statsWithAnalysisControl())}
           run={runFixture()}
-          metrics={[{ id: "checkout_conversion", name: "Checkout conversion" }]}
+          metrics={[]}
           baseline="control"
           variantOrder={["control", "treatment"]}
         />,

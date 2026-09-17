@@ -20,8 +20,7 @@ import { type MetricNames, metricDisplayName, metricNamesById } from "./metric-n
  * arrive computed.
  */
 
-export type ComparisonMetric = Pick<Metric, "id" | "name"> &
-  Partial<Pick<Metric, "kind" | "direction">>;
+export type ComparisonMetric = Pick<Metric, "id" | "name" | "kind" | "direction">;
 
 export type MetricComparisonRole = "decision" | "guardrail" | "exploratory";
 
