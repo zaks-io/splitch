@@ -22,6 +22,7 @@
   },
   "formatter": {
     "enabled": true,
+    "includes": ["**", "!.agents/skills/ziw-*/**"],
     "indentStyle": "space",
     "lineWidth": 100
   },
