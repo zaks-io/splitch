@@ -33,6 +33,10 @@ npx splitch cloudflare setup --env production`,
     },
     {
       kind: "prose",
+      text: "The binding goes into the Wrangler environment named like the splitch Environment key (`env.production.services` above), or into top-level `services` when the config declares no `env` block. When the names differ, pass `--wrangler-env`: `splitch cloudflare setup --env dev --wrangler-env preview` deploys `splitch-config-dev` and binds it in `env.preview`. A named Wrangler environment must exist; setup never falls back to top-level `services`. The state file records the binding, so `status`, `remove`, and reruns use it, and a rerun with a different `--wrangler-env` fails instead of moving the binding.",
+    },
+    {
+      kind: "prose",
       text: "The local state file is written mode `0600` and excluded through `.gitignore`. An exact rerun discovers and repairs the existing installation. Reusing the Environment name with a different API Key, Cloudflare account, endpoint, or secret fails [IDEMPOTENCY_KEY_CONFLICT](/docs/error/IDEMPOTENCY_KEY_CONFLICT) rather than quietly rebinding it.",
     },
     { kind: "heading", text: "Evaluate from your Worker" },

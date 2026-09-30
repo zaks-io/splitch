@@ -346,9 +346,10 @@ Usage:
   splitch cloudflare setup [flags]
 
 Flags:
-  --env <environment>  [type: string; default: SPLITCH_ENV or config] Environment ID or key.
-  --json               [type: boolean; default: false] Write machine-readable JSON to stdout.
-  -h, --help           [type: boolean; default: false] Show help and exit.
+  --env <environment>    [type: string; default: SPLITCH_ENV or config] Environment ID or key.
+  --wrangler-env <name>  [type: string; default: --env value] Application Wrangler environment that receives the SPLITCH binding; recorded for status, remove, and reruns.
+  --json                 [type: boolean; default: false] Write machine-readable JSON to stdout.
+  -h, --help             [type: boolean; default: false] Show help and exit.
 
 Example:
   splitch cloudflare setup --env production --json",

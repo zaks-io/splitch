@@ -10,7 +10,7 @@ import {
 } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
-import { applyEdits, modify, type ParseError, parse } from "jsonc-parser";
+import { assertRecordedBindingPath, isRecord } from "./cloudflare-binding.js";
 import { cloudflareUsage } from "./cloudflare-error.js";
 import type { CliDeps } from "./execute-types.js";
 import { resolveDataPlaneBaseUrl } from "./sdks.js";
@@ -27,7 +27,6 @@ export interface CloudflareState {
   readonly removedAt?: string;
 }
 
-export const SERVICE_BINDING = "SPLITCH";
 const COMPATIBILITY_DATE = "2026-08-22";
 const STATE_GITIGNORE_PATTERN = ".splitch/cloudflare/*/state.json";
 
@@ -80,79 +79,6 @@ export async function ensureCloudflareStateIgnored(cwd: string): Promise<void> {
   if (raw.split(/\r?\n/).includes(STATE_GITIGNORE_PATTERN)) return;
   const prefix = raw.length > 0 && !raw.endsWith("\n") ? "\n" : "";
   await appendFile(path, `${prefix}${STATE_GITIGNORE_PATTERN}\n`);
-}
-
-export async function installServiceBinding(state: CloudflareState): Promise<void> {
-  const { raw, services } = await serviceBindingState(state);
-  assertServiceBindingOwnership(state, services);
-  if (!services.some((entry) => isRecord(entry) && entry.binding === SERVICE_BINDING))
-    services.push({ binding: SERVICE_BINDING, service: state.workerName });
-  await writeJsoncEdit(state.appConfigPath, raw, state.appBindingPath, services);
-}
-
-export async function assertServiceBindingAvailable(state: CloudflareState): Promise<void> {
-  const { services } = await serviceBindingState(state);
-  assertServiceBindingOwnership(state, services);
-}
-
-async function serviceBindingState(state: CloudflareState) {
-  const raw = await readFile(state.appConfigPath, "utf8");
-  const document = parseJsonc(raw, state.appConfigPath) as Record<string, unknown>;
-  const current = valueAtPath(document, state.appBindingPath);
-  const services = Array.isArray(current) ? [...current] : [];
-  return { raw, services };
-}
-
-function assertServiceBindingOwnership(state: CloudflareState, services: unknown[]): void {
-  const existing = services.find((entry) => isRecord(entry) && entry.binding === SERVICE_BINDING) as
-    | Record<string, unknown>
-    | undefined;
-  if (existing && existing.service !== state.workerName)
-    throw cloudflareUsage(
-      `${SERVICE_BINDING} is already bound to ${JSON.stringify(existing.service)} in ${state.appConfigPath}`,
-    );
-}
-
-export async function removeServiceBinding(state: CloudflareState): Promise<void> {
-  const raw = await readFile(state.appConfigPath, "utf8");
-  const document = parseJsonc(raw, state.appConfigPath) as Record<string, unknown>;
-  const current = valueAtPath(document, state.appBindingPath);
-  if (!Array.isArray(current)) return;
-  const existing = current.find((entry) => isRecord(entry) && entry.binding === SERVICE_BINDING) as
-    | Record<string, unknown>
-    | undefined;
-  if (existing && existing.service !== state.workerName)
-    throw cloudflareUsage(
-      `${SERVICE_BINDING} no longer points to ${state.workerName}; refusing to remove it`,
-    );
-  const next = current.filter((entry) => !(isRecord(entry) && entry.binding === SERVICE_BINDING));
-  await writeJsoncEdit(state.appConfigPath, raw, state.appBindingPath, next);
-}
-
-export async function assertServiceBindingRemovable(state: CloudflareState): Promise<void> {
-  const { services } = await serviceBindingState(state);
-  const existing = services.find((entry) => isRecord(entry) && entry.binding === SERVICE_BINDING) as
-    | Record<string, unknown>
-    | undefined;
-  if (existing && existing.service !== state.workerName) {
-    throw cloudflareUsage(
-      `${SERVICE_BINDING} no longer points to ${state.workerName}; refusing to remove it`,
-    );
-  }
-}
-
-export async function serviceBindingPath(
-  configPath: string,
-  environment: string,
-): Promise<readonly string[]> {
-  const raw = await readFile(configPath, "utf8");
-  const document = parseJsonc(raw, configPath) as Record<string, unknown>;
-  const environments = isRecord(document.env) ? document.env : undefined;
-  if (!environments) return ["services"];
-  if (isRecord(environments[environment])) return ["env", environment, "services"];
-  throw cloudflareUsage(
-    `Wrangler Environment ${JSON.stringify(environment)} does not exist in ${configPath}`,
-  );
 }
 
 export async function findApplicationConfig(cwd: string): Promise<string> {
@@ -226,13 +152,8 @@ export async function assertStateProject(
   if (actualConfigPath !== expectedConfigPath) {
     throw cloudflareUsage(`Cloudflare state points outside the current App configuration`);
   }
-  const expectedBindingPath = await serviceBindingPath(expectedConfigPath, environment);
-  if (
-    state.appBindingPath.length !== expectedBindingPath.length ||
-    state.appBindingPath.some((part, index) => part !== expectedBindingPath[index])
-  ) {
-    throw cloudflareUsage(`Cloudflare state points at an unexpected service binding`);
-  }
+  // A removed installation no longer owns a binding, and setup derives a fresh path for it.
+  if (!state.removedAt) await assertRecordedBindingPath(expectedConfigPath, environment, state);
   return state.appConfigPath === actualConfigPath
     ? state
     : { ...state, appConfigPath: actualConfigPath };
@@ -273,18 +194,6 @@ export function workerName(environment: string): string {
   return name;
 }
 
-async function writeJsoncEdit(
-  path: string,
-  raw: string,
-  propertyPath: readonly string[],
-  value: unknown,
-): Promise<void> {
-  const edits = modify(raw, [...propertyPath], value, {
-    formattingOptions: { insertSpaces: true, tabSize: 2, eol: "\n" },
-  });
-  await writeFile(path, applyEdits(raw, edits));
-}
-
 function isCloudflareState(value: unknown): value is CloudflareState {
   return (
     isRecord(value) &&
@@ -306,25 +215,4 @@ function safeSegment(value: string): string {
       `Environment ${JSON.stringify(value)} cannot be used as a local integration path`,
     );
   return value;
-}
-
-function parseJsonc(raw: string, path: string): unknown {
-  const errors: ParseError[] = [];
-  const value = parse(raw, errors, { allowTrailingComma: true, disallowComments: false });
-  if (errors.length > 0)
-    throw cloudflareUsage(`${path} is invalid JSONC at offset ${errors[0]?.offset}`);
-  return value;
-}
-
-function valueAtPath(value: unknown, path: readonly string[]): unknown {
-  let current = value;
-  for (const part of path) {
-    if (!isRecord(current)) return undefined;
-    current = current[part];
-  }
-  return current;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }

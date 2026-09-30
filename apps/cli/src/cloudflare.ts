@@ -5,24 +5,27 @@ import {
   CloudflareInstallationStatusSchema,
   ErrorResponseSchema,
 } from "@splitch/sdk/control-plane";
+import {
+  assertServiceBindingAvailable,
+  assertServiceBindingRemovable,
+  installServiceBinding,
+  recordedWranglerEnvironment,
+  removeServiceBinding,
+  SERVICE_BINDING,
+  serviceBindingPath,
+} from "./cloudflare-binding.js";
 import { cloudflareUsage as usage } from "./cloudflare-error.js";
 import {
   assertCloudflarePackage,
   assertGeneratedTargetsAvailable,
-  assertServiceBindingAvailable,
-  assertServiceBindingRemovable,
-  assertStateProject,
   assertStateEnvironment,
+  assertStateProject,
   type CloudflareState,
   ensureCloudflareStateIgnored,
   findApplicationConfig,
   generatedPaths,
-  installServiceBinding,
   readState,
-  removeServiceBinding,
   requireState,
-  SERVICE_BINDING,
-  serviceBindingPath,
   workerName,
   writeIntegrationFiles,
   writeState,
@@ -78,6 +81,9 @@ async function setup(
   const generated = generatedPaths(cwd, environment);
   const stored = await readState(generated.statePath);
   const existing = stored ? await assertStateProject(cwd, environment, stored) : null;
+  const requestedWranglerEnvironment = invocation.flags.wranglerEnv;
+  if (existing && !existing.removedAt)
+    assertRecordedWranglerEnvironment(existing, requestedWranglerEnvironment);
   if (!existing) await assertGeneratedTargetsAvailable(generated);
   await assertCloudflarePackage(cwd);
   const appConfigPath = existing?.appConfigPath ?? (await findApplicationConfig(cwd));
@@ -93,7 +99,11 @@ async function setup(
           pushSecret: Buffer.from(randomBytes(32)).toString("base64url"),
           endpoint: "",
           appConfigPath,
-          appBindingPath: await serviceBindingPath(appConfigPath, environment),
+          appBindingPath: await serviceBindingPath(
+            appConfigPath,
+            environment,
+            requestedWranglerEnvironment,
+          ),
         };
   assertStateEnvironment(state, environment);
   await assertServiceBindingAvailable(state);
@@ -251,6 +261,15 @@ async function validateApiKey(apiKey: string, deps: CliDeps): Promise<void> {
   const error = ErrorResponseSchema.safeParse(await response.json().catch(() => null));
   if (!error.success || error.data.code !== "CLOUDFLARE_INSTALLATION_NOT_FOUND")
     throw usage("Cloudflare integration API did not return the expected authenticated contract");
+}
+
+// Moving the binding would orphan the one already in the application config,
+// so a different target requires an explicit remove first.
+function assertRecordedWranglerEnvironment(state: CloudflareState, requested?: string): void {
+  if (requested === undefined || requested === recordedWranglerEnvironment(state)) return;
+  throw usage(
+    `The ${state.environment} integration binds ${SERVICE_BINDING} at ${state.appBindingPath.join(".")}, not Wrangler Environment ${JSON.stringify(requested)}; rerun without --wrangler-env, or run splitch cloudflare remove first`,
+  );
 }
 
 function workersDevOrigin(...outputs: string[]): string {

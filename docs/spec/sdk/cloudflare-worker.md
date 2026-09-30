@@ -32,6 +32,19 @@ or Cloudflare account is unavailable. It then:
 7. adds `{ binding: "SPLITCH", service: "splitch-config-production" }` to the application's selected
    Wrangler environment and runs `wrangler types`.
 
+The binding goes into the Wrangler environment named like the Splitch Environment key
+(`env.production.services` above), or into top-level `services` when the config declares no `env`
+block. When the names differ, pass `--wrangler-env`:
+
+```bash
+npx splitch cloudflare setup --env dev --wrangler-env preview
+```
+
+That deploys `splitch-config-dev` and binds it in `env.preview`. A named Wrangler environment must
+exist; setup never falls back to top-level `services`. The state file records the binding, so
+`status`, `remove`, and reruns use it, and a rerun with a different `--wrangler-env` fails instead of
+moving the binding.
+
 An exact rerun discovers and repairs the existing installation. Reusing the Environment name for a
 different API Key, Cloudflare account, endpoint, or secret fails `IDEMPOTENCY_KEY_CONFLICT`.
 
