@@ -48,28 +48,61 @@ describe("registrar JSON media type", () => {
     },
   );
 
-  it("reports a missing Content-Type without reading the body", async () => {
-    const pull = vi.fn((controller: ReadableStreamDefaultController<Uint8Array>) => {
-      controller.enqueue(new TextEncoder().encode("{}"));
-      controller.close();
-    });
-    const app = new Hono();
-    createRegistrar(deps()).mount(app, route(), okHandler);
+  it.each([
+    ["no declared length", {}],
+    ["a Content-Length: 0 that understates the body", { "content-length": "0" }],
+  ] as const)(
+    "rejects a non-empty body with no Content-Type and %s before parsing or authenticating",
+    async (_label, headers) => {
+      const auth = vi.fn(() => ({ ok: true as const, principal: principal() }));
+      const handler = vi.fn(okHandler);
+      const parse = vi.spyOn(JSON, "parse");
+      const app = new Hono();
+      createRegistrar(deps({ authResolvers: { "control-plane-token": auth } })).mount(
+        app,
+        route({ auth: "control-plane-token" }),
+        handler,
+      );
 
-    const response = await app.request(
-      requestWithBody(new ReadableStream({ pull }, { highWaterMark: 0 })),
-    );
+      const response = await app.request(
+        requestWithBody(streamOf(["", '{"name":"unlabeled"}']), headers),
+      );
 
-    expect(response.status).toBe(415);
-    expect(await response.json()).toMatchObject({
-      code: "UNSUPPORTED_MEDIA_TYPE",
-      details: {
-        receivedMediaType: null,
-        supportedMediaTypes: ["application/json"],
-      },
-    });
-    expect(pull).not.toHaveBeenCalled();
-  });
+      expect(response.status).toBe(415);
+      expect(parsedRequestBodies(parse, '{"name":"unlabeled"}')).toEqual([]);
+      parse.mockRestore();
+      expect(ErrorResponseSchema.parse(await response.json())).toMatchObject({
+        code: "UNSUPPORTED_MEDIA_TYPE",
+        message: "request body must use application/json",
+        details: {
+          receivedMediaType: null,
+          supportedMediaTypes: ["application/json"],
+        },
+      });
+      expect(auth).not.toHaveBeenCalled();
+      expect(handler).not.toHaveBeenCalled();
+    },
+  );
+
+  // The Cloudflare edge delivers these as empty, non-null body streams.
+  it.each([
+    ["DELETE", "no declared length", {}],
+    ["DELETE", "Content-Length: 0", { "content-length": "0" }],
+    ["POST", "no declared length", {}],
+    ["POST", "Content-Length: 0", { "content-length": "0" }],
+  ] as const)(
+    "accepts a body-less %s with an empty stream and %s",
+    async (method, _label, headers) => {
+      const handler = vi.fn(okHandler);
+      const app = new Hono();
+      createRegistrar(deps()).mount(app, route({ method }), handler);
+
+      const response = await app.request(requestWithBody(streamOf([]), headers, method));
+
+      expect(response.status).toBe(200);
+      expect(handler).toHaveBeenCalledOnce();
+    },
+  );
 
   it.each(["application/json", "Application/JSON; charset=utf-8"])(
     "accepts %s and preserves the bounded body path",
@@ -112,9 +145,13 @@ describe("registrar JSON media type", () => {
   });
 });
 
-function requestWithBody(body: ReadableStream<Uint8Array>, headers?: HeadersInit): Request {
+function requestWithBody(
+  body: ReadableStream<Uint8Array>,
+  headers?: HeadersInit,
+  method = "POST",
+): Request {
   return new Request("http://worker.test/things", {
-    method: "POST",
+    method,
     headers,
     body,
     duplex: "half",
@@ -123,4 +160,13 @@ function requestWithBody(body: ReadableStream<Uint8Array>, headers?: HeadersInit
 
 function parsedRequestBodies(parse: { mock: { calls: unknown[][] } }, body: string): string[] {
   return parse.mock.calls.map((call) => call[0]).filter((value): value is string => value === body);
+}
+
+function streamOf(chunks: readonly string[]): ReadableStream<Uint8Array> {
+  return new ReadableStream({
+    start(controller) {
+      for (const chunk of chunks) controller.enqueue(new TextEncoder().encode(chunk));
+      controller.close();
+    },
+  });
 }

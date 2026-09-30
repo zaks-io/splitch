@@ -68,7 +68,11 @@ The guard order is fixed for every mounted route:
 2. Reject a body-bearing mutating request with `UNSUPPORTED_MEDIA_TYPE` (415)
    unless its normalized media type is `application/json`. Media-type parameters,
    such as `charset=utf-8`, are accepted. This check runs before body buffering,
-   parsing, validation, authentication, or rate limiting. Body-less mutations and
+   parsing, validation, authentication, or rate limiting. The Cloudflare edge
+   delivers a body-less DELETE or POST as an empty, non-null stream, so a
+   request with no `Content-Type` is instead rejected during step 3's bounded
+   read, once its body proves non-empty and before JSON parsing; an unlabeled
+   body over the byte limit gets the limit error first. Body-less mutations and
    GET/HEAD requests remain unaffected.
 3. Enforce a raw-body byte limit before buffering or parsing JSON. Mutating
    routes use the contract's `rawBodyByteLimit` when present (including a

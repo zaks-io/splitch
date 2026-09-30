@@ -25,15 +25,21 @@ export type ParseOutcome<T> =
 /**
  * Assemble RawInput from a Request + the path params Hono extracted, then parse
  * it with the route's input schema. Body is read as JSON only for methods that
- * carry one; a malformed JSON body is a VALIDATION_ERROR, not a 500.
+ * carry one; a malformed JSON body is a VALIDATION_ERROR, not a 500. When
+ * `nonEmptyBodyError` is set, a byte-limited body that carries any bytes fails with it
+ * before JSON parsing.
  */
 export async function parseInput<Schema extends z.ZodTypeAny>(
   schema: Schema,
   request: Request,
   params: Record<string, string>,
   rawBodyByteLimit?: RawBodyByteLimit,
+  nonEmptyBodyError?: ErrorResponse,
 ): Promise<ParseOutcome<z.infer<Schema>>> {
-  const body = await readBody(request, rawBodyByteLimit);
+  if (nonEmptyBodyError && rawBodyByteLimit === undefined) {
+    throw new Error("worker-runtime: nonEmptyBodyError requires a raw body byte limit");
+  }
+  const body = await readBody(request, rawBodyByteLimit, nonEmptyBodyError);
   if (!body.ok) {
     return { ok: false, error: body.error };
   }
@@ -169,6 +175,7 @@ type BodyReadOutcome =
 async function readBody(
   request: Request,
   rawBodyByteLimit: RawBodyByteLimit | undefined,
+  nonEmptyBodyError: ErrorResponse | undefined,
 ): Promise<BodyReadOutcome> {
   if (request.method === "GET" || request.method === "HEAD") {
     return { ok: true, value: undefined, request };
@@ -194,6 +201,9 @@ async function readBody(
   const bytes = await readBoundedRequestBytes(request.body, rawBodyByteLimit.maxBytes);
   if (bytes === null) {
     return { ok: false, error: rawBodyByteLimit.error };
+  }
+  if (nonEmptyBodyError && bytes.byteLength > 0) {
+    return { ok: false, error: nonEmptyBodyError };
   }
 
   return {

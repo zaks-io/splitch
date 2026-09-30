@@ -1,5 +1,4 @@
-import { mediaTypeOf } from "@splitch/bounded-body";
-import { type ErrorResponse, type RouteContract, rawBodyByteLimitFor } from "@splitch/contracts";
+import { type RouteContract, rawBodyByteLimitFor } from "@splitch/contracts";
 import type { Context, Hono } from "hono";
 import type { z } from "zod";
 import { containObservability } from "./contained-observability";
@@ -12,6 +11,7 @@ import { applyRateLimit } from "./steps/rate-limit-step";
 import { enforceScopes } from "./steps/scopes";
 import { emptyError, renderError } from "./respond";
 import { resolveRequestId } from "./request-id";
+import { mutatingJsonMediaTypeError, unlabeledBodyError } from "./request-media-type";
 import {
   applyResponseHeaders,
   mergeHeaderRecords,
@@ -91,7 +91,7 @@ async function runGuard<Input extends z.ZodTypeAny, Output extends z.ZodTypeAny>
   };
 
   try {
-    // Step 2: reject non-JSON representations before reading any body bytes.
+    // Step 2: reject declared non-JSON representations before reading any body bytes.
     const mediaTypeError = mutatingJsonMediaTypeError(contract, request);
     if (mediaTypeError) {
       return fail(mediaTypeError);
@@ -99,12 +99,14 @@ async function runGuard<Input extends z.ZodTypeAny, Output extends z.ZodTypeAny>
 
     // Step 3: bound raw body bytes, then parse params/query/headers/body.
     // Mutating JSON routes always receive a limit (route-declared or the
-    // registrar default). GET never buffers a body.
+    // registrar default). GET never buffers a body. A body with no
+    // Content-Type is a 415 once it proves non-empty.
     const parsed = await parseInput(
       contract.input,
       request,
       c.req.param(),
       rawBodyByteLimitFor(contract),
+      unlabeledBodyError(contract, request),
     );
     if (!parsed.ok) {
       return fail(parsed.error);
@@ -177,31 +179,6 @@ async function runGuard<Input extends z.ZodTypeAny, Output extends z.ZodTypeAny>
       defaultHeaders: deps.defaultHeaders,
     });
   }
-}
-
-const JSON_MEDIA_TYPE = "application/json";
-
-function mutatingJsonMediaTypeError(
-  contract: Pick<RouteContract, "method">,
-  request: Request,
-): ErrorResponse | null {
-  if (contract.method === "GET" || request.body === null) {
-    return null;
-  }
-
-  const receivedMediaType = mediaTypeOf(request.headers.get("content-type"));
-  if (receivedMediaType === JSON_MEDIA_TYPE) {
-    return null;
-  }
-
-  return {
-    code: "UNSUPPORTED_MEDIA_TYPE",
-    message: "request body must use application/json",
-    details: {
-      receivedMediaType,
-      supportedMediaTypes: [JSON_MEDIA_TYPE],
-    },
-  };
 }
 
 /** Merge the request id + default headers onto a handler-produced success Response. */
