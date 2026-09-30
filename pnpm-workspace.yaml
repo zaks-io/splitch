@@ -3,11 +3,12 @@ packages:
   - "examples/*"
   - "packages/*"
 overrides:
-  "brace-expansion@>=3.0.0 <5.0.9": "5.0.9"
-  "fast-uri@>=3.0.0 <3.1.6": "3.1.6"
+  "brace-expansion@>=3.0.0 <5.0.11": "5.0.11"
+  "fast-uri@>=3.0.0 <3.1.7": "3.1.7"
   "js-yaml@>=4.0.0 <4.3.2": "4.3.2"
   "sharp@<0.35.4": "0.35.4"
-  "undici@>=7.0.0 <7.29.0": "7.29.0"
+  "undici@>=6.7.0 <6.28.1": "6.28.1"
+  "undici@>=7.0.0 <7.29.1": "7.29.1"
 minimumReleaseAge: 4320
 minimumReleaseAgeStrict: true
 minimumReleaseAgeIgnoreMissingTime: false
