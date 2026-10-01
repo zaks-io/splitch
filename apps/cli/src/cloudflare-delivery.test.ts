@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   appWithConfig,
   INSTALLATION_STATUS,
@@ -121,5 +121,96 @@ describe("cloudflare setup delivery", () => {
 
     expect(result.exitCode).toBe(0);
     expect(calls.filter((call) => call === "status")).toHaveLength(2);
+  });
+
+  it("keeps waiting with progress while a 404 push is still pending inside the window", async () => {
+    const cwd = await appWithConfig({ name: "customer-app" });
+    const pending404 = (occurredAt: string) => ({
+      lastAppliedVersion: null,
+      pendingCount: 1,
+      latestDeliveryError: { kind: "http", code: "HTTP_STATUS", httpStatus: 404, occurredAt },
+    });
+    const { fetcher, calls } = scriptedFetch({
+      statuses: [
+        { lastAppliedVersion: null, pendingCount: 1 },
+        pending404("2026-10-01T21:02:48.000Z"),
+        pending404("2026-10-01T21:02:48.000Z"),
+        pending404("2026-10-01T21:03:48.000Z"),
+        ...Array.from({ length: 100 }, () => pending404("2026-10-01T21:04:48.000Z")),
+      ],
+    });
+    const stderr: string[] = [];
+
+    const result = await runCloudflare(cwd, new RecordingRunner(), SETUP, {
+      fetch: fetcher,
+      stderr,
+    });
+
+    expect(result.exitCode).toBe(0);
+    expect(calls.filter((call) => call === "status")).toHaveLength(105);
+    expect(stderr).toEqual([
+      "Waiting up to 12 minutes for the Cloudflare Worker to apply Environment version 7",
+      "Configuration push still pending; latest delivery error: http HTTP_STATUS HTTP 404 at 2026-10-01T21:02:48.000Z",
+      "Configuration push still pending; latest delivery error: http HTTP_STATUS HTTP 404 at 2026-10-01T21:03:48.000Z",
+      "Configuration push still pending; latest delivery error: http HTTP_STATUS HTTP 404 at 2026-10-01T21:04:48.000Z",
+    ]);
+  });
+
+  it("names the pending delivery error when the wait runs out", async () => {
+    const cwd = await appWithConfig({ name: "customer-app" });
+    const { fetcher, calls } = scriptedFetch({
+      statuses: Array.from({ length: 145 }, () => ({
+        lastAppliedVersion: null,
+        pendingCount: 1,
+        latestDeliveryError: {
+          kind: "http",
+          code: "HTTP_STATUS",
+          httpStatus: 404,
+          occurredAt: "2026-10-01T21:12:48.000Z",
+        },
+      })),
+    });
+
+    await expect(
+      runCloudflare(cwd, new RecordingRunner(), SETUP, { fetch: fetcher }),
+    ).rejects.toThrow(
+      "Cloudflare Worker did not apply Environment version 7 within 12 minutes; 1 delivery still pending, latest delivery error: http HTTP_STATUS HTTP 404 at 2026-10-01T21:12:48.000Z",
+    );
+    // One read per 5-second poll over 12 minutes, plus the first read.
+    expect(calls.filter((call) => call === "status")).toHaveLength(145);
+  });
+
+  it("fails at once when the installation has nothing pending and nothing terminal", async () => {
+    const cwd = await appWithConfig({ name: "customer-app" });
+    const { fetcher, calls } = scriptedFetch({
+      statuses: [{ status: "revoked", lastAppliedVersion: null }],
+    });
+
+    await expect(
+      runCloudflare(cwd, new RecordingRunner(), SETUP, { fetch: fetcher }),
+    ).rejects.toThrow(
+      "The Cloudflare installation is revoked with no delivery pending for Environment version 7; run splitch cloudflare status",
+    );
+    expect(calls.filter((call) => call === "status")).toHaveLength(1);
+  });
+
+  it("stops at the 12-minute deadline even when each status read is slow", async () => {
+    const cwd = await appWithConfig({ name: "customer-app" });
+    const { fetcher, calls } = scriptedFetch({
+      statuses: Array.from({ length: 20 }, () => ({ lastAppliedVersion: null, pendingCount: 1 })),
+    });
+    vi.useFakeTimers({ toFake: ["Date"] });
+    try {
+      // Each poll costs five minutes of wall clock, so the deadline lands on the fourth read.
+      const sleep = async () => {
+        vi.setSystemTime(Date.now() + 5 * 60_000);
+      };
+      await expect(
+        runCloudflare(cwd, new RecordingRunner(), SETUP, { fetch: fetcher, sleep }),
+      ).rejects.toThrow("did not apply Environment version 7 within 12 minutes");
+    } finally {
+      vi.useRealTimers();
+    }
+    expect(calls.filter((call) => call === "status")).toHaveLength(4);
   });
 });

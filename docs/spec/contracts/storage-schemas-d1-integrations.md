@@ -82,7 +82,9 @@ stored completely rather than truncated.
   healthy siblings still complete and acknowledge their responses.
 - Transient transport, `408`, `429`, and `5xx` failures retry after `5s`, `30s`, `2m`, `10m`, then
   `30m` with up to 20% jitter on every capped retry. A claim lease lasts 60 seconds. Other `4xx`
-  responses are terminal until the installation is repaired or replaced.
+  responses are terminal until the installation is repaired or replaced, except a Cloudflare
+  installation's first setup: until it first applies a version, and within 10 minutes of its
+  registration, a `404` retries and every retry runs on the next dispatcher tick.
 - A successful newer Environment version suppresses older pending rows for the same installation;
   an already leased older delivery may finish and is harmless because the component version-gates it.
 - Delivery never holds the config transaction open and never rolls back committed config.
