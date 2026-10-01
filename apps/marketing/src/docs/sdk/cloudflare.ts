@@ -37,6 +37,10 @@ npx splitch cloudflare setup --env production`,
     },
     {
       kind: "prose",
+      text: "Setup then regenerates your App's types without `--env`, passing the application config and every integration config it binds, relative to the App: `wrangler types --config wrangler.jsonc --config .splitch/cloudflare/production/wrangler.jsonc`. Every Wrangler environment keeps its interface, and a binding only some environments declare stays optional. Setup reports that exact command as `typesCommand`; put its `--config` arguments in your App's own types script, or the next plain `wrangler types` turns `SPLITCH` back into an untyped `Fetcher`. Commit `.splitch/cloudflare/<env>/wrangler.jsonc` and `worker.ts` so CI generates the same types; only `state.json` stays ignored. `remove` regenerates types only when it deleted a binding.",
+    },
+    {
+      kind: "prose",
       text: "The local state file is written mode `0600` and excluded through `.gitignore`. An exact rerun discovers and repairs the existing installation. Reusing the Environment name with a different API Key, Cloudflare account, endpoint, or secret fails [IDEMPOTENCY_KEY_CONFLICT](/docs/error/IDEMPOTENCY_KEY_CONFLICT) rather than quietly rebinding it.",
     },
     { kind: "heading", text: "Evaluate from your Worker" },

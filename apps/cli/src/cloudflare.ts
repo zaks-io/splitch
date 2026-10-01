@@ -19,6 +19,7 @@ import { cliSleep, waitForWorkerRoutable } from "./cloudflare-endpoint.js";
 import { cloudflareUsage as usage } from "./cloudflare-error.js";
 import {
   assertCloudflarePackage,
+  boundIntegrationConfigs,
   assertGeneratedTargetsAvailable,
   assertStateEnvironment,
   assertStateProject,
@@ -38,6 +39,7 @@ import {
   wrangler,
   wranglerSecret,
   wranglerTypes,
+  wranglerTypesOrRestore,
 } from "./cloudflare-wrangler.js";
 import type { CliCommandDefinition } from "./command-registry.js";
 import type { ResolvedContext } from "./context.js";
@@ -112,6 +114,8 @@ async function setup(
         };
   assertStateEnvironment(state, environment);
   await assertServiceBindingAvailable(state);
+  // The types run comes last, so its inputs are checked before anything is deployed.
+  await boundIntegrationConfigs(cwd, appConfigPath, environment);
   await validateApiKey(apiKey, deps);
   await ensureCloudflareStateIgnored(cwd);
   await writeIntegrationFiles(generated, state, deps);
@@ -134,13 +138,7 @@ async function setup(
   await registerInstallation(installed, apiKey, deps);
   const delivery = await waitForApplied(installed, apiKey, deps);
   await installServiceBinding(installed);
-  await wranglerTypes(
-    runner,
-    cwd,
-    installed.appConfigPath,
-    recordedWranglerEnvironment(installed),
-    generated.configPath,
-  );
+  const typesCommand = await wranglerTypes(runner, cwd, installed.appConfigPath);
   await writeState(generated.statePath, installed);
 
   const payload = {
@@ -151,6 +149,7 @@ async function setup(
     appliedEnvironmentVersion: delivery.lastAppliedVersion,
     status: delivery.status,
     serviceBinding: SERVICE_BINDING,
+    typesCommand,
   };
   emit(io, invocation.flags.json, payload);
   return { exitCode: EXIT_OK, payload };
@@ -178,10 +177,14 @@ async function remove(
 ): Promise<CliResult> {
   const cwd = resolve(deps.cwd ?? process.cwd());
   const state = await requireState(cwd, environment);
-  const recordedTargetExists = await assertServiceBindingsRemovable(state);
+  await assertServiceBindingsRemovable(state);
+  // Checked before the DELETE, so a missing generated config cannot strand remove halfway.
+  await boundIntegrationConfigs(cwd, state.appConfigPath);
   await integrationRequest(state, requireApiKey(deps), deps, { method: "DELETE" });
-  await removeServiceBinding(state);
   const runner = deps.commandRunner ?? systemCommandRunner;
+  // Without a removed binding nothing in the application config changed, so its types stay.
+  const replaced = await removeServiceBinding(state);
+  if (replaced !== null) await wranglerTypesOrRestore(runner, cwd, state.appConfigPath, replaced);
   await wrangler(runner, cwd, [
     "delete",
     "--config",
@@ -189,15 +192,6 @@ async function remove(
     "--name",
     state.workerName,
   ]);
-  // With its Wrangler environment gone nothing in the application config changed, so its types stay.
-  if (recordedTargetExists)
-    await wranglerTypes(
-      runner,
-      cwd,
-      state.appConfigPath,
-      recordedWranglerEnvironment(state),
-      generatedPaths(cwd, environment).configPath,
-    );
   await writeState(generatedPaths(cwd, environment).statePath, {
     ...state,
     removedAt: new Date().toISOString(),

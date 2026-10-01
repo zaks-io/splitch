@@ -1,6 +1,7 @@
 import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { expect } from "vitest";
 import { type CloudflareState, generatedPaths, readState } from "./cloudflare-files";
 import type { CredentialStore } from "./credentials";
 import { executeInvocation } from "./execute";
@@ -177,8 +178,10 @@ export async function recordedState(cwd: string, environment: string): Promise<C
   return recorded;
 }
 
-export function wranglerTypesEnv(runner: RecordingRunner): string | undefined {
-  const args = runner.calls.find((call) => call.args.includes("types"))?.args ?? [];
-  const index = args.indexOf("--env");
-  return index === -1 ? undefined : args[index + 1];
+/** The `--config` values of the types run, or undefined when setup or remove never ran it. */
+export function wranglerTypesConfigs(runner: RecordingRunner): readonly string[] | undefined {
+  const args = runner.calls.find((call) => call.args.includes("types"))?.args;
+  if (!args) return undefined;
+  expect(args).not.toContain("--env");
+  return args.filter((_argument, index) => args[index - 1] === "--config");
 }

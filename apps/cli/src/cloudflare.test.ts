@@ -11,6 +11,7 @@ import {
   installFakeWrangler,
   RecordingRunner,
   workerRejection,
+  wranglerTypesConfigs,
 } from "./cloudflare-test-fixtures";
 import { executeInvocation } from "./execute";
 import { parseInvocation } from "./parse-args";
@@ -94,13 +95,16 @@ describe("cloudflare setup", () => {
       "api-key\n",
       expect.stringMatching(/^[A-Za-z0-9_-]{43}\n$/),
     ]);
-    expect(runner.calls.some((call) => call.args.includes("types"))).toBe(true);
-    const types = runner.calls.find((call) => call.args.includes("types"));
-    expect(types?.args.filter((argument) => argument === "--config")).toHaveLength(2);
+    expect(wranglerTypesConfigs(runner)).toEqual([
+      "wrangler.jsonc",
+      ".splitch/cloudflare/production/wrangler.jsonc",
+    ]);
     expect(JSON.parse(output.at(-1) ?? "{}")).toMatchObject({
       workerName: "splitch-config-production",
       environmentVersion: 7,
       appliedEnvironmentVersion: 7,
+      typesCommand:
+        "wrangler types --config wrangler.jsonc --config .splitch/cloudflare/production/wrangler.jsonc",
     });
   });
 

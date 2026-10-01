@@ -11,10 +11,12 @@ import {
   recordedState,
   runCloudflare,
   setupCloudflare,
-  wranglerTypesEnv,
+  wranglerTypesConfigs,
 } from "./cloudflare-test-fixtures";
 import { executeInvocation } from "./execute";
 import { parseInvocation } from "./parse-args";
+
+const DEV_TYPES_CONFIGS = ["wrangler.jsonc", ".splitch/cloudflare/dev/wrangler.jsonc"];
 
 describe("cloudflare setup --wrangler-env", () => {
   it("binds the named Wrangler environment while serving the selected splitch Environment", async () => {
@@ -39,7 +41,7 @@ describe("cloudflare setup --wrangler-env", () => {
     expect(config).not.toHaveProperty("services");
     const deploy = runner.calls.find((call) => call.args.includes("deploy"));
     expect(deploy?.args).toContain(generatedPaths(cwd, "dev").configPath);
-    expect(wranglerTypesEnv(runner)).toBe("preview");
+    expect(wranglerTypesConfigs(runner)).toEqual(DEV_TYPES_CONFIGS);
     expect((await recordedState(cwd, "dev")).appBindingPath).toEqual([
       "env",
       "preview",
@@ -56,7 +58,10 @@ describe("cloudflare setup --wrangler-env", () => {
     expect((await appConfig(cwd)).env.preview.services).toEqual([
       { binding: "SPLITCH", service: "splitch-config-preview" },
     ]);
-    expect(wranglerTypesEnv(runner)).toBe("preview");
+    expect(wranglerTypesConfigs(runner)).toEqual([
+      "wrangler.jsonc",
+      ".splitch/cloudflare/preview/wrangler.jsonc",
+    ]);
   });
 
   it("fails before deploy when the named Wrangler environment is missing", async () => {
@@ -116,7 +121,7 @@ describe("cloudflare reruns against a recorded Wrangler environment", () => {
       appBindingPath: ["env", "preview", "services"],
     });
     expect((await appConfig(cwd)).env.preview.services).toHaveLength(1);
-    expect(wranglerTypesEnv(runner)).toBe("preview");
+    expect(wranglerTypesConfigs(runner)).toEqual(DEV_TYPES_CONFIGS);
   });
 
   it("fails loud instead of moving the binding to a different Wrangler environment", async () => {

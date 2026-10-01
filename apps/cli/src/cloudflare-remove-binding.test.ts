@@ -11,7 +11,7 @@ import {
   recordedState,
   runCloudflare,
   setupCloudflare,
-  wranglerTypesEnv,
+  wranglerTypesConfigs,
 } from "./cloudflare-test-fixtures";
 
 describe("cloudflare remove against a recorded Wrangler environment", () => {
@@ -22,7 +22,7 @@ describe("cloudflare remove against a recorded Wrangler environment", () => {
     await remove(cwd, runner);
 
     expect((await appConfig(cwd)).env.preview.services).toEqual([]);
-    expect(wranglerTypesEnv(runner)).toBe("preview");
+    expect(wranglerTypesConfigs(runner)).toEqual(["wrangler.jsonc"]);
     expect((await recordedState(cwd, "dev")).removedAt).toEqual(expect.any(String));
   });
 
@@ -36,7 +36,7 @@ describe("cloudflare remove against a recorded Wrangler environment", () => {
 
     expect(requests).toEqual(["DELETE"]);
     expect(runner.calls.some((call) => call.args.includes("delete"))).toBe(true);
-    expect(runner.calls.some((call) => call.args.includes("types"))).toBe(false);
+    expect(wranglerTypesConfigs(runner)).toBeUndefined();
     expect(await appConfig(cwd)).toEqual({ name: "customer-app", env: { production: {} } });
     expect((await recordedState(cwd, "dev")).removedAt).toEqual(expect.any(String));
   });
@@ -66,8 +66,23 @@ describe("cloudflare remove against a recorded Wrangler environment", () => {
     await remove(cwd, runner);
 
     expect((await appConfig(cwd)).services).toEqual([]);
-    expect(wranglerTypesEnv(runner)).toBeUndefined();
-    expect(runner.calls.some((call) => call.args.includes("types"))).toBe(true);
+    expect(wranglerTypesConfigs(runner)).toEqual(["wrangler.jsonc"]);
+  });
+
+  it("leaves the application config and its types alone when the binding is already gone", async () => {
+    const cwd = await installedInPreview();
+    const config = await appConfig(cwd);
+    config.env.preview.services = [];
+    await writeConfig(cwd, config);
+    const before = await readFile(join(cwd, "wrangler.jsonc"), "utf8");
+    const runner = new RecordingRunner();
+
+    await remove(cwd, runner);
+
+    expect(runner.calls.some((call) => call.args.includes("delete"))).toBe(true);
+    expect(wranglerTypesConfigs(runner)).toBeUndefined();
+    expect(await readFile(join(cwd, "wrangler.jsonc"), "utf8")).toBe(before);
+    expect((await recordedState(cwd, "dev")).removedAt).toEqual(expect.any(String));
   });
 });
 
