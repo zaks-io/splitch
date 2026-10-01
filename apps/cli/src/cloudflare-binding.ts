@@ -36,28 +36,31 @@ function assertServiceBindingOwnership(state: CloudflareState, services: unknown
     );
 }
 
-export async function removeServiceBinding(state: CloudflareState): Promise<void> {
+/** Resolves false when the recorded path held no binding, so the application config is untouched. */
+export async function removeServiceBinding(state: CloudflareState): Promise<boolean> {
   const raw = await readFile(state.appConfigPath, "utf8");
   const document = parseJsonc(raw, state.appConfigPath) as Record<string, unknown>;
   const current = valueAtPath(document, state.appBindingPath);
-  if (!Array.isArray(current)) return;
+  if (!Array.isArray(current)) return false;
   const existing = current.find((entry) => isRecord(entry) && entry.binding === SERVICE_BINDING) as
     | Record<string, unknown>
     | undefined;
-  if (existing && existing.service !== state.workerName)
+  if (!existing) return false;
+  if (existing.service !== state.workerName)
     throw cloudflareUsage(
       `${SERVICE_BINDING} no longer points to ${state.workerName}; refusing to remove it`,
     );
   const next = current.filter((entry) => !(isRecord(entry) && entry.binding === SERVICE_BINDING));
   await writeJsoncEdit(state.appConfigPath, raw, state.appBindingPath, next);
+  return true;
 }
 
 /**
  * remove has to work after the recorded Wrangler environment is renamed or deleted, so it checks
  * only the shape of the recorded path, then refuses while any other binding still points at the
- * Worker it deletes. Resolves false when the recorded Wrangler environment is gone.
+ * Worker it deletes.
  */
-export async function assertServiceBindingsRemovable(state: CloudflareState): Promise<boolean> {
+export async function assertServiceBindingsRemovable(state: CloudflareState): Promise<void> {
   const name = recordedWranglerEnvironment(state);
   if (name === undefined && !isTopLevelBinding(state))
     throw cloudflareUsage(`Cloudflare state points at an unexpected service binding`);
@@ -80,7 +83,18 @@ export async function assertServiceBindingsRemovable(state: CloudflareState): Pr
     throw cloudflareUsage(
       `${SERVICE_BINDING} no longer points to ${state.workerName}; refusing to remove it`,
     );
-  return name === undefined || hasWranglerEnvironment(document, name);
+}
+
+/** Every Worker a service binding points at, across the top level and each Wrangler environment. */
+export async function boundServices(configPath: string): Promise<Set<string>> {
+  const document = await readConfig(configPath);
+  return new Set(
+    serviceLists(document).flatMap(({ services }) =>
+      services.flatMap((entry) =>
+        isRecord(entry) && typeof entry.service === "string" ? [entry.service] : [],
+      ),
+    ),
+  );
 }
 
 function serviceLists(document: Record<string, unknown>) {

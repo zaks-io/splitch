@@ -1,8 +1,9 @@
 import { spawn } from "node:child_process";
-import { readFile } from "node:fs/promises";
+import { readFile, realpath } from "node:fs/promises";
 import { createRequire } from "node:module";
-import { dirname, join } from "node:path";
+import { dirname, join, posix, relative, sep } from "node:path";
 import { cloudflareUsage } from "./cloudflare-error.js";
+import { boundIntegrationConfigs } from "./cloudflare-files.js";
 import type { CliCommandRunner } from "./execute-types.js";
 
 export const systemCommandRunner: CliCommandRunner = {
@@ -95,14 +96,27 @@ export async function wranglerSecret(
   await wrangler(runner, cwd, ["secret", "put", name, "--config", configPath], `${value}\n`);
 }
 
+/**
+ * No `--env`: Wrangler then keeps every environment's interface and leaves bindings that only some
+ * environments declare optional on the base `Env`. Every bound integration config rides along so one
+ * Environment's setup never untypes another's `SPLITCH`. POSIX paths relative to the App keep the
+ * generated file identical across machines and let the returned command go in the App's types script.
+ */
 export async function wranglerTypes(
   runner: CliCommandRunner,
   cwd: string,
   appConfigPath: string,
-  wranglerEnvironment: string | undefined,
-  integrationConfigPath: string,
-): Promise<void> {
-  const args = ["types", "--config", appConfigPath, "--config", integrationConfigPath];
-  if (wranglerEnvironment !== undefined) args.push("--env", wranglerEnvironment);
+): Promise<string> {
+  const root = await realpath(cwd);
+  const configPaths = [appConfigPath, ...(await boundIntegrationConfigs(cwd, appConfigPath))];
+  const configs = await Promise.all(
+    configPaths.map(async (path) =>
+      relative(root, await realpath(path))
+        .split(sep)
+        .join(posix.sep),
+    ),
+  );
+  const args = ["types", ...configs.flatMap((config) => ["--config", config])];
   await wrangler(runner, cwd, args);
+  return ["wrangler", ...args].join(" ");
 }

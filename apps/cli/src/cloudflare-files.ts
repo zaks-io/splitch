@@ -4,6 +4,7 @@ import {
   chmod,
   lstat,
   mkdir,
+  readdir,
   readFile,
   realpath,
   writeFile,
@@ -11,7 +12,7 @@ import {
 import { findPackageJSON } from "node:module";
 import { dirname, join } from "node:path";
 import { pathToFileURL } from "node:url";
-import { isRecord } from "./cloudflare-binding.js";
+import { boundServices, isRecord } from "./cloudflare-binding.js";
 import { cloudflareUsage } from "./cloudflare-error.js";
 import type { CliDeps } from "./execute-types.js";
 import { resolveDataPlaneBaseUrl } from "./sdks.js";
@@ -29,6 +30,7 @@ export interface CloudflareState {
 }
 
 const COMPATIBILITY_DATE = "2026-08-22";
+const WORKER_PREFIX = "splitch-config-";
 const STATE_GITIGNORE_PATTERN = ".splitch/cloudflare/*/state.json";
 
 export function generatedPaths(cwd: string, environment: string) {
@@ -39,6 +41,66 @@ export function generatedPaths(cwd: string, environment: string) {
     entryPath: join(directory, "worker.ts"),
     statePath: join(directory, "state.json"),
   };
+}
+
+/**
+ * Integration configs the application config binds. The committed configs and bindings, not the
+ * ignored state files, decide this, so every clone generates the same types and a removed binding
+ * drops its integration. A bound integration Worker without exactly one generated config fails,
+ * because skipping it would silently retype its `SPLITCH` as an untyped `Fetcher`.
+ */
+export async function boundIntegrationConfigs(
+  cwd: string,
+  appConfigPath: string,
+): Promise<string[]> {
+  const generated = await generatedConfigsByWorker(cwd);
+  const configs: string[] = [];
+  for (const worker of await boundServices(appConfigPath)) {
+    if (!worker.startsWith(WORKER_PREFIX)) continue;
+    const [config, ...duplicates] = generated.get(worker) ?? [];
+    if (config === undefined)
+      throw cloudflareUsage(
+        `${appConfigPath} binds ${worker}, but no .splitch/cloudflare/<env>/wrangler.jsonc generates it; restore that directory from version control`,
+      );
+    if (duplicates.length > 0)
+      throw cloudflareUsage(
+        `${appConfigPath} binds ${worker}, which ${[config, ...duplicates].join(" and ")} all generate; delete the stale ones`,
+      );
+    configs.push(config);
+  }
+  return configs.sort();
+}
+
+async function generatedConfigsByWorker(cwd: string): Promise<Map<string, string[]>> {
+  const byWorker = new Map<string, string[]>();
+  for (const environment of await integrationDirectories(cwd)) {
+    const { configPath } = generatedPaths(cwd, environment);
+    if (!(await fileExists(configPath))) continue;
+    const worker = integrationWorkerName(environment);
+    byWorker.set(worker, [...(byWorker.get(worker) ?? []), configPath]);
+  }
+  return byWorker;
+}
+
+async function integrationDirectories(cwd: string): Promise<string[]> {
+  try {
+    const entries = await readdir(join(cwd, ".splitch", "cloudflare"));
+    return entries.filter(isSafeSegment);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return [];
+    throw error;
+  }
+}
+
+async function fileExists(path: string): Promise<boolean> {
+  try {
+    await access(path);
+    return true;
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code;
+    if (code === "ENOENT" || code === "ENOTDIR") return false;
+    throw error;
+  }
 }
 
 export async function writeIntegrationFiles(
@@ -195,13 +257,15 @@ export function assertStateEnvironment(state: CloudflareState, environment: stri
 }
 
 export function workerName(environment: string): string {
-  const suffix = safeSegment(environment)
-    .toLowerCase()
-    .replace(/[^a-z0-9-]/g, "-");
-  const name = `splitch-config-${suffix}`.replace(/-+/g, "-").replace(/-$/, "");
+  const name = integrationWorkerName(safeSegment(environment));
   if (name.length > 63)
     throw cloudflareUsage(`Environment ${environment} produces a Worker name over 63 characters`);
   return name;
+}
+
+function integrationWorkerName(segment: string): string {
+  const suffix = segment.toLowerCase().replace(/[^a-z0-9-]/g, "-");
+  return `${WORKER_PREFIX}${suffix}`.replace(/-+/g, "-").replace(/-$/, "");
 }
 
 function isCloudflareState(value: unknown): value is CloudflareState {
@@ -219,8 +283,12 @@ function isCloudflareState(value: unknown): value is CloudflareState {
   );
 }
 
+function isSafeSegment(value: string): boolean {
+  return /^[A-Za-z0-9._-]+$/.test(value) && value !== "." && value !== "..";
+}
+
 function safeSegment(value: string): string {
-  if (!/^[A-Za-z0-9._-]+$/.test(value) || value === "." || value === "..")
+  if (!isSafeSegment(value))
     throw cloudflareUsage(
       `Environment ${JSON.stringify(value)} cannot be used as a local integration path`,
     );

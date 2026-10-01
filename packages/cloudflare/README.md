@@ -49,6 +49,15 @@ Wrangler session, or the Cloudflare account is unavailable. Once past that gate 
 5. adds the `SPLITCH` service binding to your application's Wrangler environment and reruns
    `wrangler types`.
 
+Setup regenerates your App's types without `--env`, passing the application config and every
+integration config it binds, relative to the App:
+`wrangler types --config wrangler.jsonc --config .splitch/cloudflare/production/wrangler.jsonc`.
+Every Wrangler environment keeps its interface, and a binding only some environments declare stays
+optional. Setup reports that exact command as `typesCommand`; put its `--config` arguments in your
+App's own types script, or the next plain `wrangler types` turns `SPLITCH` back into an untyped
+`Fetcher`. Commit `.splitch/cloudflare/<env>/wrangler.jsonc` and `worker.ts` so CI generates the same
+types; only `state.json` stays ignored. `remove` regenerates types only when it deleted a binding.
+
 The binding goes into the Wrangler environment named like the splitch Environment key
 (`env.production.services` above), or into top-level `services` when the config declares no `env`
 block. When the names differ, pass `--wrangler-env`:
