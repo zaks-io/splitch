@@ -5,24 +5,28 @@ import {
   CloudflareInstallationStatusSchema,
   ErrorResponseSchema,
 } from "@splitch/sdk/control-plane";
+import {
+  assertRecordedBindingPath,
+  assertServiceBindingAvailable,
+  assertServiceBindingsRemovable,
+  installServiceBinding,
+  recordedWranglerEnvironment,
+  removeServiceBinding,
+  SERVICE_BINDING,
+  serviceBindingPath,
+} from "./cloudflare-binding.js";
 import { cloudflareUsage as usage } from "./cloudflare-error.js";
 import {
   assertCloudflarePackage,
   assertGeneratedTargetsAvailable,
-  assertServiceBindingAvailable,
-  assertServiceBindingRemovable,
-  assertStateProject,
   assertStateEnvironment,
+  assertStateProject,
   type CloudflareState,
   ensureCloudflareStateIgnored,
   findApplicationConfig,
   generatedPaths,
-  installServiceBinding,
   readState,
-  removeServiceBinding,
   requireState,
-  SERVICE_BINDING,
-  serviceBindingPath,
   workerName,
   writeIntegrationFiles,
   writeState,
@@ -78,6 +82,12 @@ async function setup(
   const generated = generatedPaths(cwd, environment);
   const stored = await readState(generated.statePath);
   const existing = stored ? await assertStateProject(cwd, environment, stored) : null;
+  const requestedWranglerEnvironment = invocation.flags.wranglerEnv;
+  // A removed installation no longer owns a binding, and setup derives a fresh path for it.
+  if (existing && !existing.removedAt) {
+    await assertRecordedBindingPath(existing);
+    assertRecordedWranglerEnvironment(existing, requestedWranglerEnvironment);
+  }
   if (!existing) await assertGeneratedTargetsAvailable(generated);
   await assertCloudflarePackage(cwd);
   const appConfigPath = existing?.appConfigPath ?? (await findApplicationConfig(cwd));
@@ -93,7 +103,11 @@ async function setup(
           pushSecret: Buffer.from(randomBytes(32)).toString("base64url"),
           endpoint: "",
           appConfigPath,
-          appBindingPath: await serviceBindingPath(appConfigPath, environment),
+          appBindingPath: await serviceBindingPath(
+            appConfigPath,
+            environment,
+            requestedWranglerEnvironment,
+          ),
         };
   assertStateEnvironment(state, environment);
   await assertServiceBindingAvailable(state);
@@ -118,7 +132,13 @@ async function setup(
   await registerInstallation(installed, apiKey, deps);
   const delivery = await waitForApplied(installed, apiKey, deps);
   await installServiceBinding(installed);
-  await wranglerTypes(runner, cwd, installed, generated.configPath);
+  await wranglerTypes(
+    runner,
+    cwd,
+    installed.appConfigPath,
+    recordedWranglerEnvironment(installed),
+    generated.configPath,
+  );
   await writeState(generated.statePath, installed);
 
   const payload = {
@@ -141,6 +161,7 @@ async function status(
   io: CliIo,
 ): Promise<CliResult> {
   const state = await requireState(resolve(deps.cwd ?? process.cwd()), environment);
+  await assertRecordedBindingPath(state);
   const delivery = await installationStatus(state, requireApiKey(deps), deps);
   const payload = { workerName: state.workerName, ...delivery };
   emit(io, invocation.flags.json, payload);
@@ -155,7 +176,7 @@ async function remove(
 ): Promise<CliResult> {
   const cwd = resolve(deps.cwd ?? process.cwd());
   const state = await requireState(cwd, environment);
-  await assertServiceBindingRemovable(state);
+  const recordedTargetExists = await assertServiceBindingsRemovable(state);
   await integrationRequest(state, requireApiKey(deps), deps, { method: "DELETE" });
   await removeServiceBinding(state);
   const runner = deps.commandRunner ?? systemCommandRunner;
@@ -166,7 +187,15 @@ async function remove(
     "--name",
     state.workerName,
   ]);
-  await wranglerTypes(runner, cwd, state, generatedPaths(cwd, environment).configPath);
+  // With its Wrangler environment gone nothing in the application config changed, so its types stay.
+  if (recordedTargetExists)
+    await wranglerTypes(
+      runner,
+      cwd,
+      state.appConfigPath,
+      recordedWranglerEnvironment(state),
+      generatedPaths(cwd, environment).configPath,
+    );
   await writeState(generatedPaths(cwd, environment).statePath, {
     ...state,
     removedAt: new Date().toISOString(),
@@ -251,6 +280,15 @@ async function validateApiKey(apiKey: string, deps: CliDeps): Promise<void> {
   const error = ErrorResponseSchema.safeParse(await response.json().catch(() => null));
   if (!error.success || error.data.code !== "CLOUDFLARE_INSTALLATION_NOT_FOUND")
     throw usage("Cloudflare integration API did not return the expected authenticated contract");
+}
+
+// Moving the binding would orphan the one already in the application config,
+// so a different target requires an explicit remove first.
+function assertRecordedWranglerEnvironment(state: CloudflareState, requested?: string): void {
+  if (requested === undefined || requested === recordedWranglerEnvironment(state)) return;
+  throw usage(
+    `The ${state.environment} integration binds ${SERVICE_BINDING} at ${state.appBindingPath.join(".")}, not Wrangler Environment ${JSON.stringify(requested)}; rerun without --wrangler-env, or run splitch cloudflare remove first`,
+  );
 }
 
 function workersDevOrigin(...outputs: string[]): string {

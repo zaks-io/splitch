@@ -118,6 +118,16 @@ function selectorFlags(
 }
 
 function operationFlags(command: CliCommandDefinition): HelpFlag[] {
+  if (command.kind === "cloudflare_setup") {
+    return [
+      flag(
+        "--wrangler-env <name>",
+        "string",
+        "--env value",
+        "Application Wrangler environment that receives the SPLITCH binding; recorded for status, remove, and reruns.",
+      ),
+    ];
+  }
   if (command.kind === "flag_targeting_rules_add") {
     return [
       flag(

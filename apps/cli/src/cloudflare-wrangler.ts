@@ -3,7 +3,6 @@ import { readFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
 import { cloudflareUsage } from "./cloudflare-error.js";
-import type { CloudflareState } from "./cloudflare-files.js";
 import type { CliCommandRunner } from "./execute-types.js";
 
 export const systemCommandRunner: CliCommandRunner = {
@@ -98,11 +97,11 @@ export async function wranglerSecret(
 export async function wranglerTypes(
   runner: CliCommandRunner,
   cwd: string,
-  state: Pick<CloudflareState, "appConfigPath" | "appBindingPath">,
+  appConfigPath: string,
+  wranglerEnvironment: string | undefined,
   integrationConfigPath: string,
 ): Promise<void> {
-  const args = ["types", "--config", state.appConfigPath, "--config", integrationConfigPath];
-  if (state.appBindingPath[0] === "env" && state.appBindingPath[1])
-    args.push("--env", state.appBindingPath[1]);
+  const args = ["types", "--config", appConfigPath, "--config", integrationConfigPath];
+  if (wranglerEnvironment !== undefined) args.push("--env", wranglerEnvironment);
   await wrangler(runner, cwd, args);
 }

@@ -25,6 +25,7 @@ export interface ParsedGlobalFlags {
   readonly outputFile?: string;
   readonly when: readonly string[];
   readonly serve?: string;
+  readonly wranglerEnv?: string;
 }
 
 export interface ParsedInvocation {
@@ -68,6 +69,7 @@ const KNOWN_FLAGS = new Set([
   "outputFile",
   "when",
   "serve",
+  "wranglerEnv",
 ]);
 
 const REPEATABLE_FLAGS = new Set(["when"]);
@@ -203,6 +205,7 @@ function toParsedFlags(flags: Record<string, ParsedFlagValue>): ParsedGlobalFlag
     outputFile: stringFlag(flags.outputFile),
     when: Array.isArray(flags.when) ? flags.when : [],
     serve: stringFlag(flags.serve),
+    wranglerEnv: stringFlag(flags.wranglerEnv),
   };
 }
 
