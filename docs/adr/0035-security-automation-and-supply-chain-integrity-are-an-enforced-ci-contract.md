@@ -1,14 +1,14 @@
 # Security automation and supply-chain integrity are an enforced CI contract
 
-**Status:** accepted — **enforcement deferred until the app is built (see Rollout phase below)**
+**Status:** accepted. **Scanner merge gates deferred until the app is built (see Rollout phase below)**
 
 > **Rollout phase (build-fast).** This ADR defines the target security posture, and the tooling is
-> in the repo, but during the pre-build phase the **dependency/CVE/SAST/supply-chain gates are
-> parked**, not enforcing. Pre-build they only fail builds on noise unrelated to the work in flight —
-> a transitive dev-dependency CVE, SAST over scaffolding, a freshly published or non-registry
-> transitive blocked at install — which makes agents detour to fix dependency churn instead of
-> shipping. The deterministic, your-code-only checks stay on (gitleaks secret scanning, linters,
-> typecheck, knip). The plan: build everything, audit the **final** dependency set once, fix, then
+> in the repo, but during the pre-build phase the **CVE and SAST scanner merge gates are parked**.
+> Pre-build they only fail builds on noise unrelated to the work in flight, such as a transitive
+> dev-dependency CVE or SAST over scaffolding, which makes agents detour to fix dependency churn
+> instead of shipping. Gitleaks secret scanning, linters, typecheck, knip, `pnpm audit`, the Action
+> SHA-pin check, and the pnpm install quarantine already gate every change, and the scanners run
+> daily in report-only mode. The plan: build everything, audit the **final** dependency set once, fix, then
 > turn every gate in this ADR back on and ratchet from there. **Re-enabling is a single, explicit
 > lockdown milestone — a launch prerequisite — not something done incrementally per-PR.** What is
 > currently parked and how to restore it is tracked in
@@ -45,9 +45,12 @@ blind spots by design.
 
 ### 3. Gate on change, alert on schedule
 
-_(Parked in the build-fast phase: `security.yml` and `codeql.yml` are `workflow_dispatch`-only, so
-nothing below gates a PR yet. The jobs are unchanged and ready; the lockdown milestone flips their
-triggers back to `pull_request`/`push`.)_
+_(Partly parked in the build-fast phase: `security.yml` runs only on its daily schedule and manual
+dispatch, and `codeql.yml` is dispatch-only, so the scanners do not gate a PR yet. The dependency
+audit already gates every change through `pnpm audit --audit-level=high` in the required Verify
+check. At the lockdown milestone the OSV-Scanner, Semgrep, and Trivy jobs need both
+`pull_request`/`push` triggers and steps that fail on findings; today they treat findings as a
+normal result.)_
 
 On pull_request/push, a high-or-critical finding fails the job so branch protection blocks the merge.
 A daily scheduled run re-runs the same scans against `main` — there is nothing to gate, so it uploads
@@ -61,10 +64,12 @@ forbidden and enforced in CI (`pinact -check`). StepSecurity Harden-Runner monit
 job. This composes with the pnpm install-time quarantine (`minimumReleaseAge`, `blockExoticSubdeps`).
 Dependabot keeps both the SHA and the comment current, so pinning costs no update automation.
 
-_(Parked in the build-fast phase: the `pinact -check` gate and the pnpm install quarantine are off so
-they don't fail builds/installs on actions or transitives unrelated to the work in flight. SHA-pinning
-the actions we keep is still good practice; the lockdown milestone re-enables the `pinact` gate and
-uncomments the pnpm quarantine.)_
+_(Enforced today by different means than written above: a script test in `verify:ci` rejects any
+third-party Action ref that is not a full SHA with a version comment, and the repository's Actions
+policy requires SHA pinning at run time; `pinact -check` runs only on demand via `pnpm pins:check`.
+The pnpm install quarantine is on, and the same script test fails if it is loosened. Harden-Runner
+covers every job that checks out code except the production deploy, whose Blacksmith runner path
+does not support the per-job agent; see `docs/spec/platform/deployment-pipeline.md`.)_
 
 ### 5. Local gates mirror CI
 
@@ -73,9 +78,10 @@ machine. Tools absent locally warn and skip so contributors are not forced to in
 toolchains; in CI the same checks are required and fail loud. Bad commits fail before they are pushed.
 
 _(Parked in the build-fast phase: the local Lefthook gate runs only the deterministic, your-code-only
-checks — format, lint, typecheck, knip, gitleaks. SAST, dependency-audit, and pin checks are out of
-the `verify:*` path; the `security:full` script still runs the whole battery on demand, and the
-lockdown milestone restores it to `verify:ci`.)_
+checks: format, lint, typecheck, knip, gitleaks. Local SAST, dependency-audit, and pin checks are
+out of the Lefthook path; the `security:full` script still runs the whole battery on demand. In CI,
+`verify:ci` already runs the dependency audit and the SHA-pin script test, and the lockdown milestone
+adds Semgrep.)_
 
 ## Considered options
 

@@ -10,9 +10,11 @@ Vocabulary follows [CONTEXT.md](../../../CONTEXT.md).
 > explicit lockdown milestone (a launch prerequisite, see [ADR-0035](../../adr/0035-security-automation-and-supply-chain-integrity-are-an-enforced-ci-contract.md)),
 > not per-PR work.
 >
-> **Enforcing now (deterministic, your-code-only):** `format:check`, `lint` (including
-> `@splitch/repo-lint` workspace publishing policy), `typecheck`, `knip`, `gitleaks` — locally
-> (commit + pre-push) and in CI. Plus `test` + `build` in CI.
+> **Enforcing now:** `format:check`, `lint` (including `@splitch/repo-lint` workspace publishing
+> policy), `typecheck`, `knip`, and `gitleaks`, locally (commit and pre-push) and in CI. CI also runs
+> `pnpm audit --audit-level=high`, dependency-cruiser, `spec:lint`, `docs:lint`, CLI/MCP parity, the
+> script tests (which include the Action SHA-pin guard and the pnpm quarantine guard), `test`, and
+> `build`. The pnpm install quarantine itself applies to every install, local and CI.
 >
 > **Parked until lockdown:**
 >
@@ -23,7 +25,6 @@ Vocabulary follows [CONTEXT.md](../../../CONTEXT.md).
 > | OSV-Scanner / Trivy / Scorecard merge gates | pull requests and pushes | add PR/push triggers after dependency lockdown |
 > | smoke / depcruise / jscpd in pre-push       | `verify:push`            | restore at the lockdown milestone              |
 >
-> `pnpm audit`, the action SHA guard, and pnpm install quarantine now run in the required CI path.
 > The `security:full` script still runs the SAST + pin + audit + secret battery on demand. The rest of
 > this file describes the **target** gates; treat the table above as the current reality where they differ.
 > Dependency-cruiser is enforced in CI; its pre-push invocation remains parked with the other
