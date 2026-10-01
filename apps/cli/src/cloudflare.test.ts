@@ -226,11 +226,11 @@ describe("cloudflare wrangler resolution", () => {
         cwd,
         env: { SPLITCH_API_KEY: "api-key" },
         commandRunner: {
-          run: async () => ({ exitCode: 0, stdout: "wrangler 3.114.0", stderr: "" }),
+          run: async () => ({ exitCode: 0, stdout: "3.114.17\n", stderr: "" }),
         },
         io: { log: () => {}, error: () => {} },
       }),
-    ).rejects.toThrow(/wrangler 3\.114\.0/);
+    ).rejects.toThrow(/3\.114\.17/);
   });
 
   it("propagates a non-ENOENT spawn failure instead of blaming a missing wrangler", async () => {
