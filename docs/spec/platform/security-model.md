@@ -1,11 +1,11 @@
 # Security model
 
 > **Build-fast phase:** the trust boundaries and threat model below are the target contract. The
-> automated CI/local **scanning gates** that enforce them (CodeQL, Semgrep, OSV-Scanner, and Trivy)
-> are **parked** until the dependency tree is
-> final, so they don't block build work on dependency noise — see the parked-gate table in
-> [local-quality-gates.md](./local-quality-gates.md) and [ADR-0035](../../adr/0035-security-automation-and-supply-chain-integrity-are-an-enforced-ci-contract.md).
-> gitleaks secret scanning and the in-code boundary enforcement stay on.
+> scanner **merge gates** (CodeQL, Semgrep, OSV-Scanner, and Trivy) are **parked** until the
+> dependency tree is final, so they don't block build work on dependency noise. See the parked-gate
+> table in [local-quality-gates.md](./local-quality-gates.md) and [ADR-0035](../../adr/0035-security-automation-and-supply-chain-integrity-are-an-enforced-ci-contract.md).
+> Gitleaks secret scanning, `pnpm audit`, the Action SHA-pin check, the pnpm install quarantine, and
+> the in-code boundary enforcement gate every change today.
 
 Security is an **enforced product contract** in splitch, on the same footing as
 statistical rigor (ADR-0030) and privacy (ADR-0032). This file is the one place
@@ -87,8 +87,9 @@ trivy-action compromises were tag-repointing attacks defeated by SHA pinning.
   `minimumReleaseAgeIgnoreMissingTime`, `blockExoticSubdeps`) are enforced (see
   [`monorepo-and-toolchain`](./monorepo-and-toolchain.md)).
 - Every GitHub Action is pinned to a full commit SHA with a version comment.
-  Harden-Runner monitors egress on each host-run security job; Semgrep runs in a
-  step-scoped container pinned by digest without inheriting the host environment. Repo tests reject
+  Harden-Runner audits egress in every job that checks out code except the production deploy,
+  whose runner path does not support the per-job agent. Semgrep and OSV-Scanner run in step-scoped containers pinned
+  by digest. Repo tests reject
   action refs that are not full SHAs, and GitHub's repository policy rejects unpinned actions at run
   time.
 - Gitleaks scans every pull request and push range. A non-gating daily workflow runs
