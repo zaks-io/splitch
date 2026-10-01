@@ -77,7 +77,7 @@
     "zod": "^4.5.1"
   },
   "devDependencies": {
-    "@sentry/core": "^10.72.0",
+    "@sentry/core": "^11.0.0",
     "@splitch/contracts": "workspace:*",
     "@splitch/control-plane-sdk": "workspace:*",
     "@splitch/evaluation-core": "workspace:*",

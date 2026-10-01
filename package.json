@@ -104,9 +104,9 @@
     "@cloudflare/workers-types": "5.20260828.1",
     "@playwright/test": "^1.62.1",
     "@sentry/cli": "^3.7.0",
-    "@stryker-mutator/core": "9.6.1",
-    "@stryker-mutator/typescript-checker": "9.6.1",
-    "@stryker-mutator/vitest-runner": "9.6.1",
+    "@stryker-mutator/core": "10.0.0",
+    "@stryker-mutator/typescript-checker": "10.0.0",
+    "@stryker-mutator/vitest-runner": "10.0.0",
     "@types/node": "^26.4.0",
     "dependency-cruiser": "^18.2.0",
     "esbuild": "^0.28.2",
@@ -118,7 +118,7 @@
     "tsup": "^8.5.0",
     "turbo": "^2.10.12",
     "typescript": "^6.0.3",
-    "vitest": "^4.1.11",
+    "vitest": "^5.0.1",
     "wrangler": "4.127.1"
   }
 }
