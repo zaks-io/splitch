@@ -62,10 +62,14 @@ snapshot suppresses obsolete pending versions for that installation.
 
 The dispatcher starts after successful mutation responses and a once-per-minute scheduled scanner
 recovers missed or failed attempts. It follows no redirects. Transport failure, `408`, `429`, and
-`5xx` retry with bounded exponential backoff. Other `4xx` responses are terminal, except that a `404`
-retries during the first three attempts for an installation that has never applied a version,
-because a just-created `workers.dev` hostname answers Cloudflare's own `404` until its route
-propagates.
+`5xx` retry with bounded exponential backoff. Other `4xx` responses are terminal, except during an
+installation's first setup: until it first applies a version, and within 10 minutes of its
+registration, a `404` retries and every retry runs on the next dispatcher run rather than on the
+backoff ladder. A just-created `workers.dev` hostname answers Cloudflare's own `404` until its route
+propagates, and the dispatcher's colo can keep answering a cached `404` for a Worker deleted moments
+before for minutes after setup's own colo sees the new route. The window is measured from the
+installation's creation, so re-registering an existing installation re-arms its terminal delivery
+without reopening the window.
 
 ## Exposure delivery
 

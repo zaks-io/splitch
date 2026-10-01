@@ -44,8 +44,8 @@ Wrangler session, or the Cloudflare account is unavailable. Once past that gate 
    `.splitch/cloudflare/*/state.json` to your `.gitignore`,
 2. deploys the integration Worker as `splitch-config-production`,
 3. stores `SPLITCH_API_KEY` and `SPLITCH_PUSH_SECRET` as Wrangler secrets on that Worker,
-4. registers the deployment with splitch and waits (up to 60 seconds) until the pushed configuration
-   version is applied,
+4. registers the deployment with splitch and waits (up to 12 minutes, printing progress) until the
+   pushed configuration version is applied,
 5. adds the `SPLITCH` service binding to your application's Wrangler environment and reruns
    `wrangler types`.
 

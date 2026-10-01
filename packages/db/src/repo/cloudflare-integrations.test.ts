@@ -222,6 +222,7 @@ describe("Cloudflare delivery retry on re-registration", () => {
         environmentVersion: current,
         attemptCount: 0,
         lastAppliedVersion: null,
+        registeredAt: NOW,
       }),
     ]);
   });

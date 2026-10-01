@@ -44,6 +44,7 @@ export interface CloudflareDeliveryRow {
   environmentVersion: number;
   attemptCount: number;
   lastAppliedVersion: number | null;
+  registeredAt: string;
 }
 
 export function makeCloudflareIntegrationRepo(d1: D1Database) {
@@ -210,7 +211,8 @@ export function makeCloudflareIntegrationRepo(d1: D1Database) {
           installation.secret_key_version AS secretKeyVersion,
           delivery.environment_version AS environmentVersion,
           delivery.attempt_count AS attemptCount,
-          installation.last_applied_version AS lastAppliedVersion
+          installation.last_applied_version AS lastAppliedVersion,
+          installation.created_at AS registeredAt
           FROM cloudflare_config_deliveries delivery
           JOIN cloudflare_installations installation
             ON installation.installation_id = delivery.installation_id

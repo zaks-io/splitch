@@ -153,8 +153,9 @@ export function runCloudflare(
   cwd: string,
   runner: RecordingRunner,
   args: readonly string[],
-  options: { readonly fetch: typeof fetch },
+  options: { readonly fetch: typeof fetch; readonly stderr?: string[] },
 ): Promise<CliResult> {
+  const stderr = options.stderr;
   return executeInvocation(parseInvocation(args), {
     cwd,
     env: { SPLITCH_API_KEY: "api-key" },
@@ -164,7 +165,7 @@ export function runCloudflare(
     fetch: options.fetch,
     commandRunner: runner,
     sleep: async () => {},
-    io: { log: () => {}, error: () => {} },
+    io: { log: () => {}, error: (line) => stderr?.push(line) },
   });
 }
 

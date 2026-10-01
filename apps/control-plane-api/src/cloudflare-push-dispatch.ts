@@ -6,7 +6,10 @@ import { postWebhook, retryDelayMs } from "./webhook-transport";
 
 const LEASE_MS = 30_000;
 const BATCH_SIZE = 25;
-const ROUTE_PROPAGATION_ATTEMPTS = 3;
+const FIRST_SETUP_WINDOW_MS = 10 * 60_000;
+// Shorter than the one-minute dispatcher tick, so first setup retries every tick
+// rather than climbing the backoff ladder past the CLI's wait.
+const FIRST_SETUP_RETRY_MS = 30_000;
 
 export interface CloudflarePushDispatchDeps {
   repo: Repository;
@@ -39,15 +42,18 @@ export async function dispatchCloudflarePushes(deps: CloudflarePushDispatchDeps)
   return deliveries.length;
 }
 
-type Delivery = Awaited<ReturnType<Repository["cloudflare"]["claimDueDeliveries"]>>[number];
+type ClaimedDelivery = Awaited<ReturnType<Repository["cloudflare"]["claimDueDeliveries"]>>[number];
+type Delivery = ClaimedDelivery & { firstSetup: boolean };
 
 async function deliverSafely(
   deps: CloudflarePushDispatchDeps,
-  delivery: Delivery,
+  claimed: ClaimedDelivery,
   leaseOwner: string,
   now: Date,
   snapshots: Map<string, ReturnType<typeof buildStableSnapshot>>,
 ): Promise<void> {
+  // Outside the try, so a malformed registration time fails the run before anything is sent.
+  const delivery = { ...claimed, firstSetup: inFirstSetupWindow(claimed, now) };
   try {
     await deliverOne(deps, delivery, leaseOwner, now, snapshots);
   } catch (cause) {
@@ -131,8 +137,8 @@ async function deliverOne(
     });
     return;
   }
-  const retryable = result.retryable || awaitingRoute(delivery, result.status);
-  await finishFailure(deps, delivery, leaseOwner, now, retryable, {
+  const awaitingRoute = result.status === 404 && delivery.firstSetup;
+  await finishFailure(deps, delivery, leaseOwner, now, result.retryable || awaitingRoute, {
     kind: "http",
     code: "HTTP_STATUS",
     httpStatus: result.status,
@@ -142,16 +148,20 @@ async function deliverOne(
 
 /**
  * A just-created workers.dev hostname answers Cloudflare's own 404 until its
- * route propagates, and Smart Placement can run this push in a colo that sees
- * the route later than the CLI did. Only an installation that never applied a
- * version, and only its first attempts, read a 404 as that lag.
+ * route propagates, and this push can run in a colo that still caches the 404
+ * of a Worker deleted moments before, minutes after the CLI's colo saw the new
+ * route. Until an installation first applies a version, and only within the
+ * window after its registration, a 404 reads as that lag and every retry runs
+ * on the next tick. The CLI waits out the same window.
  */
-function awaitingRoute(delivery: Delivery, status: number): boolean {
-  return (
-    status === 404 &&
-    delivery.lastAppliedVersion === null &&
-    delivery.attemptCount < ROUTE_PROPAGATION_ATTEMPTS
-  );
+function inFirstSetupWindow(delivery: ClaimedDelivery, now: Date): boolean {
+  if (delivery.lastAppliedVersion !== null) return false;
+  const registeredAt = Date.parse(delivery.registeredAt);
+  if (!Number.isFinite(registeredAt))
+    throw new Error(
+      `Cloudflare installation registeredAt is not a timestamp: ${delivery.registeredAt}`,
+    );
+  return now.getTime() - registeredAt < FIRST_SETUP_WINDOW_MS;
 }
 
 async function buildStableSnapshot(repo: Repository, scope: ReturnType<typeof envScope>) {
@@ -171,7 +181,7 @@ async function finishFailure(
   retryable: boolean,
   error: Record<string, unknown>,
 ): Promise<void> {
-  const delay = retryDelayMs(delivery.attemptCount);
+  const delay = delivery.firstSetup ? FIRST_SETUP_RETRY_MS : retryDelayMs(delivery.attemptCount);
   await deps.repo.cloudflare.finishDelivery(delivery.deliveryId, leaseOwner, {
     state: retryable ? "pending" : "terminal",
     now: now.toISOString(),

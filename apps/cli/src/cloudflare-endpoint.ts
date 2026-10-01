@@ -10,9 +10,9 @@ export function cliSleep(deps: CliDeps): (milliseconds: number) => Promise<void>
 
 /**
  * A just-deployed workers.dev hostname answers Cloudflare's own 404 until the
- * route propagates, and Splitch treats a 404 push as terminal. An unsigned POST
- * only earns the integration Worker's own 401 once the route is live, so the
- * first push cannot race the propagation.
+ * route propagates. An unsigned POST only earns the integration Worker's own 401
+ * once the route is live here, so the first push does not race the propagation
+ * this colo can see; the control plane's first-setup window covers its own.
  */
 export async function waitForWorkerRoutable(endpoint: string, deps: CliDeps): Promise<void> {
   const sleep = cliSleep(deps);

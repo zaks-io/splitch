@@ -123,16 +123,19 @@ describe("Cloudflare configuration push dispatch", () => {
       expect(finishes[0]).toMatchObject({ state });
     }
   });
+});
 
-  it("reads a 404 as workers.dev route propagation only before the first apply", async () => {
-    for (const [lastAppliedVersion, attemptCount, state] of [
-      [null, 0, "pending"],
-      [null, 2, "pending"],
-      [null, 3, "terminal"],
-      [1, 0, "terminal"],
+describe("Cloudflare first setup push window", () => {
+  it("reads a 404 as route propagation only before the first apply and within the window", async () => {
+    for (const [lastAppliedVersion, registeredAt, state] of [
+      [null, "2026-08-25T11:59:00.000Z", "pending"],
+      [null, "2026-08-25T11:50:00.001Z", "pending"],
+      [null, "2026-08-25T11:50:00.000Z", "terminal"],
+      [1, "2026-08-25T11:59:00.000Z", "terminal"],
     ] as const) {
       const { repo, finishes, deliveries } = await fixture();
-      Object.assign(deliveries[0] ?? {}, { lastAppliedVersion, attemptCount });
+      // A high attempt count would have exhausted the old count-based allowance.
+      Object.assign(deliveries[0] ?? {}, { lastAppliedVersion, registeredAt, attemptCount: 5 });
       await dispatchCloudflarePushes({
         repo,
         secretKek: KEY,
@@ -142,6 +145,37 @@ describe("Cloudflare configuration push dispatch", () => {
       expect(finishes[0]).toMatchObject({ state });
       expect(JSON.parse(String(finishes[0]?.errorJson))).toMatchObject({ httpStatus: 404 });
     }
+  });
+
+  it("retries first setup on the next dispatcher tick instead of climbing the backoff ladder", async () => {
+    for (const [status, lastAppliedVersion, registeredAt, nextAttemptAt] of [
+      [404, null, "2026-08-25T11:59:00.000Z", "2026-08-25T12:00:30.000Z"],
+      [503, null, "2026-08-25T11:59:00.000Z", "2026-08-25T12:00:30.000Z"],
+      [503, null, "2026-08-25T11:50:00.000Z", "2026-08-25T12:30:00.000Z"],
+      [503, 1, "2026-08-25T11:59:00.000Z", "2026-08-25T12:30:00.000Z"],
+    ] as const) {
+      const { repo, finishes, deliveries } = await fixture();
+      Object.assign(deliveries[0] ?? {}, { lastAppliedVersion, registeredAt, attemptCount: 6 });
+      await dispatchCloudflarePushes({
+        repo,
+        secretKek: KEY,
+        fetcher: async () => new Response(null, { status }),
+        now: () => NOW,
+      });
+      expect(finishes[0]).toMatchObject({ state: "pending", nextAttemptAt });
+    }
+  });
+
+  it("fails the run without pushing when the registration time is not a timestamp", async () => {
+    const { repo, finishes, deliveries } = await fixture();
+    Object.assign(deliveries[0] ?? {}, { registeredAt: "not-a-time" });
+    const fetcher = vi.fn(async () => new Response(null, { status: 404 }));
+
+    await expect(
+      dispatchCloudflarePushes({ repo, secretKek: KEY, fetcher, now: () => NOW }),
+    ).rejects.toThrow("1 Cloudflare delivery lease updates failed");
+    expect(fetcher).not.toHaveBeenCalled();
+    expect(finishes).toEqual([]);
   });
 });
 
@@ -160,6 +194,7 @@ async function fixture() {
       environmentVersion: 2,
       attemptCount: 0,
       lastAppliedVersion: null as number | null,
+      registeredAt: "2026-08-25T11:59:00.000Z",
     },
   ];
   const environmentVersion = vi.fn(async () => 2);

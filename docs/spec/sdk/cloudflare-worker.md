@@ -29,10 +29,13 @@ or Cloudflare account is unavailable. It then:
 4. writes `SPLITCH_API_KEY` and `SPLITCH_PUSH_SECRET` as Wrangler secrets through stdin;
 5. waits, for up to 60 seconds, until an unsigned POST to the configuration path earns the integration
    Worker's own `401`, because a just-created `workers.dev` hostname answers Cloudflare's `404` until
-   its route propagates and Splitch retries a `404` push only briefly;
+   its route propagates;
 6. registers the deployment URL and secret through the API-Key integration route;
-7. waits until `appliedEnvironmentVersion === environmentVersion`, failing with the latest delivery
-   error once no delivery is left pending;
+7. waits, for up to 12 minutes, until `appliedEnvironmentVersion === environmentVersion`, printing
+   each new delivery error while a delivery is pending, failing with the latest delivery error once
+   no delivery is left pending, and naming it if the wait runs out. The 12 minutes cover the
+   control plane's 10-minute `404` window plus its last dispatcher tick, because the push can run
+   from a colo that sees the route minutes later than setup's own check did;
 8. adds `{ binding: "SPLITCH", service: "splitch-config-production" }` to the application's selected
    Wrangler environment and runs `wrangler types`.
 
