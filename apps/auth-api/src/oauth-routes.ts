@@ -150,14 +150,17 @@ async function revokeToken(
       if (!session) {
         throw new OAuthError("invalid_grant", "refresh token session is unknown");
       }
-      await deps.revocations.revoke(session.userId, revokedAt, ACCESS_TOKEN_TTL_SECONDS);
-      await deps.deviceFlow.revokeProviderToken({
-        token: parsed.data.token,
-        sessionId: session.providerSessionId,
-      });
-      await deps.deviceRefreshSessions.forget(parsed.data.token);
-      // A refresh that raced the logout minted its token before this point; re-stamp to cover it.
-      await deps.revocations.revoke(session.userId, nowSeconds(), ACCESS_TOKEN_TTL_SECONDS);
+      try {
+        await deps.deviceFlow.revokeProviderToken({
+          token: parsed.data.token,
+          sessionId: session.providerSessionId,
+        });
+        await deps.deviceRefreshSessions.forget(parsed.data.token);
+      } finally {
+        // Stamped once, after the session is gone, so a refresh racing the logout is covered
+        // without a second write to the key (KV allows one write per key per second).
+        await deps.revocations.revoke(session.userId, nowSeconds(), ACCESS_TOKEN_TTL_SECONDS);
+      }
     }
   } catch (cause) {
     return renderDoorFault(cause);

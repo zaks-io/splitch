@@ -73,7 +73,6 @@ describe("OAuth revoke route", () => {
     expect(res.status).toBe(200);
     expect(providerRevokes).toEqual([{ token: refreshToken, sessionId: "session_workos" }]);
     expect(revoked).toEqual([
-      { subject: "user_workos", revokedAtSeconds: 1_780_000_000, ttlSeconds: 3600 },
       { subject: "user_workos", revokedAtSeconds: 1_780_000_005, ttlSeconds: 3600 },
     ]);
   });
