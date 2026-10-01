@@ -57,6 +57,16 @@ describe("Splitch Cloudflare Worker", () => {
     expectBaseline(unauthorized);
   });
 
+  // `splitch cloudflare setup` waits for exactly this answer before registering the installation.
+  it("answers an unsigned, bodiless configuration POST with its own 401", async () => {
+    const probe = await SELF.fetch("https://worker.test/integrations/splitch/configuration", {
+      method: "POST",
+    });
+
+    expect(probe.status).toBe(401);
+    await expect(probe.json()).resolves.toMatchObject({ code: "UNAUTHORIZED" });
+  });
+
   it("accepts signed monotonic snapshots and evaluates Flags and Experiments locally", async () => {
     await expect(push(baseSnapshot, "00000000-0000-4000-8000-000000000001")).resolves.toMatchObject(
       {

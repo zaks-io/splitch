@@ -20,9 +20,11 @@ nonstandard ports, IP literals, and non-Cloudflare hosts fail validation. Splitc
 from logs, encrypts `pushSecret` under the required integration key-encryption key, and never returns
 it.
 
-An exact retry returns the existing installation. Reusing `installationId` with different content
-fails `IDEMPOTENCY_KEY_CONFLICT`. Registration creates a delivery for the current Environment version
-before returning:
+An exact retry returns the existing installation and, when that installation is active and its
+delivery for the current Environment version is terminal, re-arms that delivery with a fresh retry
+ladder, so rerunning setup retries without waiting for a configuration change. Reusing
+`installationId` with different content fails `IDEMPOTENCY_KEY_CONFLICT`. Registration creates a
+delivery for the current Environment version before returning:
 
 ```text
 { installationId, appId, environmentId, environmentVersion, status: "active" }
@@ -60,7 +62,10 @@ snapshot suppresses obsolete pending versions for that installation.
 
 The dispatcher starts after successful mutation responses and a once-per-minute scheduled scanner
 recovers missed or failed attempts. It follows no redirects. Transport failure, `408`, `429`, and
-`5xx` retry with bounded exponential backoff. Other `4xx` responses are terminal.
+`5xx` retry with bounded exponential backoff. Other `4xx` responses are terminal, except that a `404`
+retries during the first three attempts for an installation that has never applied a version,
+because a just-created `workers.dev` hostname answers Cloudflare's own `404` until its route
+propagates.
 
 ## Exposure delivery
 

@@ -27,9 +27,13 @@ or Cloudflare account is unavailable. It then:
    the mode-`0600` local state file is excluded through `.gitignore`;
 3. deploys `@splitch/cloudflare/worker` as `splitch-config-production` through Wrangler;
 4. writes `SPLITCH_API_KEY` and `SPLITCH_PUSH_SECRET` as Wrangler secrets through stdin;
-5. registers the deployment URL and secret through the API-Key integration route;
-6. waits until `appliedEnvironmentVersion === environmentVersion`;
-7. adds `{ binding: "SPLITCH", service: "splitch-config-production" }` to the application's selected
+5. waits, for up to 60 seconds, until an unsigned POST to the configuration path earns the integration
+   Worker's own `401`, because a just-created `workers.dev` hostname answers Cloudflare's `404` until
+   its route propagates and Splitch retries a `404` push only briefly;
+6. registers the deployment URL and secret through the API-Key integration route;
+7. waits until `appliedEnvironmentVersion === environmentVersion`, failing with the latest delivery
+   error once no delivery is left pending;
+8. adds `{ binding: "SPLITCH", service: "splitch-config-production" }` to the application's selected
    Wrangler environment and runs `wrangler types`.
 
 The binding goes into the Wrangler environment named like the Splitch Environment key
@@ -50,7 +54,8 @@ It refuses, naming each location, while any other binding still points at the in
 When the recorded binding no longer matches the config, `setup` and `status` fail and tell you to
 run `remove` first.
 
-An exact rerun discovers and repairs the existing installation. Reusing the Environment name for a
+An exact rerun discovers and repairs the existing installation, including retrying a terminal
+delivery of the current Environment version. Reusing the Environment name for a
 different API Key, Cloudflare account, endpoint, or secret fails `IDEMPOTENCY_KEY_CONFLICT`.
 
 `splitch cloudflare status --env production` returns the Worker name, endpoint, installation state,

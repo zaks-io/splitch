@@ -12,6 +12,7 @@ const ENDPOINT =
   "https://splitch-config-production.customer.workers.dev/integrations/splitch/configuration";
 const SIBLING_ENVIRONMENT_ID = "env_a_sibling";
 const SIBLING_INSTALLATION_ID = "00000000-0000-4000-8000-000000000005";
+const REVOKED_INSTALLATION_ID = "00000000-0000-4000-8000-000000000006";
 
 let local: LocalD1;
 let repo: ReturnType<typeof createRepository>;
@@ -173,5 +174,55 @@ describe("Cloudflare integration repository", () => {
       envScope(seed.a.appId, seed.b.environmentId),
     );
     expect(mismatched).toEqual([]);
+  });
+});
+
+describe("Cloudflare delivery retry on re-registration", () => {
+  it("re-arms only the current version's terminal delivery of an active installation", async () => {
+    const scope = envScope(seed.a.appId, seed.a.environmentId);
+    await install("a", FIRST_INSTALLATION_ID);
+    await install("a", REVOKED_INSTALLATION_ID);
+    await repo.cloudflare.revokeInstallation(scope, REVOKED_INSTALLATION_ID, NOW);
+    const current = await repo.cloudflare.environmentVersion(scope);
+    await local.d1.batch([
+      local.d1
+        .prepare(
+          "UPDATE cloudflare_config_deliveries SET state = 'terminal', attempt_count = 1 WHERE installation_id IN (?, ?)",
+        )
+        .bind(FIRST_INSTALLATION_ID, REVOKED_INSTALLATION_ID),
+      local.d1
+        .prepare(`INSERT INTO cloudflare_config_deliveries (
+          delivery_id, installation_id, app_id, environment_id, environment_version,
+          state, attempt_count, next_attempt_at, created_at
+        ) VALUES (?, ?, ?, ?, ?, 'terminal', 6, ?, ?)`)
+        .bind(
+          "00000000-0000-4000-8000-000000000004",
+          FIRST_INSTALLATION_ID,
+          scope.appId,
+          scope.environmentId,
+          current - 1,
+          NOW,
+          NOW,
+        ),
+    ]);
+
+    await repo.cloudflare.retryTerminalDelivery(scope, FIRST_INSTALLATION_ID, LATER);
+    await repo.cloudflare.retryTerminalDelivery(scope, REVOKED_INSTALLATION_ID, LATER);
+
+    await expect(
+      repo.cloudflare.deliveryHealth(scope, FIRST_INSTALLATION_ID, Date.parse(LATER)),
+    ).resolves.toMatchObject({ pendingCount: 1, terminalCount: 1 });
+    await expect(
+      repo.cloudflare.deliveryHealth(scope, REVOKED_INSTALLATION_ID, Date.parse(LATER)),
+    ).resolves.toMatchObject({ pendingCount: 0, terminalCount: 1 });
+    const claimed = await repo.cloudflare.claimDueDeliveries(LATER, "owner", LATER, 25);
+    expect(claimed).toEqual([
+      expect.objectContaining({
+        installationId: FIRST_INSTALLATION_ID,
+        environmentVersion: current,
+        attemptCount: 0,
+        lastAppliedVersion: null,
+      }),
+    ]);
   });
 });

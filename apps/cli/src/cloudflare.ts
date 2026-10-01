@@ -15,6 +15,7 @@ import {
   SERVICE_BINDING,
   serviceBindingPath,
 } from "./cloudflare-binding.js";
+import { cliSleep, waitForWorkerRoutable } from "./cloudflare-endpoint.js";
 import { cloudflareUsage as usage } from "./cloudflare-error.js";
 import {
   assertCloudflarePackage,
@@ -129,6 +130,7 @@ async function setup(
     "SPLITCH_PUSH_SECRET",
     installed.pushSecret,
   );
+  await waitForWorkerRoutable(installed.endpoint, deps);
   await registerInstallation(installed, apiKey, deps);
   const delivery = await waitForApplied(installed, apiKey, deps);
   await installServiceBinding(installed);
@@ -230,16 +232,28 @@ async function installationStatus(state: CloudflareState, apiKey: string, deps: 
 }
 
 async function waitForApplied(state: CloudflareState, apiKey: string, deps: CliDeps) {
-  const sleep =
-    deps.sleep ?? ((milliseconds: number) => new Promise((done) => setTimeout(done, milliseconds)));
+  const sleep = cliSleep(deps);
   for (let attempt = 0; attempt < POLL_ATTEMPTS; attempt += 1) {
     const current = await installationStatus(state, apiKey, deps);
     if (current.lastAppliedVersion === current.environmentVersion) return current;
-    if (current.terminalCount > 0)
-      throw usage("Cloudflare configuration delivery entered a terminal state");
+    // An older version's terminal delivery stays counted; only nothing left pending is final.
+    if (current.pendingCount === 0 && current.terminalCount > 0)
+      throw usage(
+        `Cloudflare configuration delivery entered a terminal state: ${describeDeliveryError(current.latestDeliveryError)}`,
+      );
     await sleep(1_000);
   }
   throw usage("Cloudflare Worker did not apply the current Environment version within 60 seconds");
+}
+
+function describeDeliveryError(
+  error: Awaited<ReturnType<typeof installationStatus>>["latestDeliveryError"],
+): string {
+  // A delivered older version clears the installation's error even while a newer one is terminal.
+  if (!error) return "no delivery error is recorded; run splitch cloudflare status";
+  const status = error.httpStatus === undefined ? "" : ` HTTP ${error.httpStatus}`;
+  const cause = error.causeName === undefined ? "" : ` (${error.causeName})`;
+  return `${error.kind} ${error.code}${status}${cause} at ${error.occurredAt}`;
 }
 
 async function integrationRequest(

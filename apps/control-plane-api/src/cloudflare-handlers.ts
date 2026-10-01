@@ -1,5 +1,5 @@
 import { boundListRead, LIST_READ_LIMIT } from "@splitch/contracts";
-import type { Repository } from "@splitch/db";
+import type { CloudflareInstallationRow, Repository } from "@splitch/db";
 import { envScope } from "@splitch/db";
 import type { HandlerArgs, RouteHandler } from "@splitch/worker-runtime";
 import { renderError } from "@splitch/worker-runtime";
@@ -94,11 +94,7 @@ export function makeCloudflareHandlers(deps: CloudflareHandlerDeps) {
         "INTEGRATION_SECRET_KEK",
       );
       const existing = await deps.repo.cloudflare.getInstallation(scope, input.body.installationId);
-      if (
-        existing &&
-        (existing.endpoint !== input.body.endpoint ||
-          existing.secretFingerprint !== encrypted.fingerprint)
-      )
+      if (reusedWithDifferentContent(existing, input.body.endpoint, encrypted.fingerprint))
         return renderError(
           {
             code: "IDEMPOTENCY_KEY_CONFLICT",
@@ -109,6 +105,12 @@ export function makeCloudflareHandlers(deps: CloudflareHandlerDeps) {
             },
           },
           { requestId },
+        );
+      if (existing)
+        await deps.repo.cloudflare.retryTerminalDelivery(
+          scope,
+          existing.installationId,
+          now().toISOString(),
         );
       const row =
         existing ??
@@ -155,6 +157,15 @@ export function makeCloudflareHandlers(deps: CloudflareHandlerDeps) {
       return new Response(null, { status: 204 });
     }) satisfies RouteHandler<InstallationInput>,
   };
+}
+
+function reusedWithDifferentContent(
+  existing: CloudflareInstallationRow | null,
+  endpoint: string,
+  secretFingerprint: string,
+): boolean {
+  if (!existing) return false;
+  return existing.endpoint !== endpoint || existing.secretFingerprint !== secretFingerprint;
 }
 
 function principalScope(principal: HandlerArgs<unknown>["principal"], requestId: string) {

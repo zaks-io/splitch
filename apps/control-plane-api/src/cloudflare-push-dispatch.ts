@@ -6,6 +6,7 @@ import { postWebhook, retryDelayMs } from "./webhook-transport";
 
 const LEASE_MS = 30_000;
 const BATCH_SIZE = 25;
+const ROUTE_PROPAGATION_ATTEMPTS = 3;
 
 export interface CloudflarePushDispatchDeps {
   repo: Repository;
@@ -130,12 +131,27 @@ async function deliverOne(
     });
     return;
   }
-  await finishFailure(deps, delivery, leaseOwner, now, result.retryable, {
+  const retryable = result.retryable || awaitingRoute(delivery, result.status);
+  await finishFailure(deps, delivery, leaseOwner, now, retryable, {
     kind: "http",
     code: "HTTP_STATUS",
     httpStatus: result.status,
     occurredAt: now.toISOString(),
   });
+}
+
+/**
+ * A just-created workers.dev hostname answers Cloudflare's own 404 until its
+ * route propagates, and Smart Placement can run this push in a colo that sees
+ * the route later than the CLI did. Only an installation that never applied a
+ * version, and only its first attempts, read a 404 as that lag.
+ */
+function awaitingRoute(delivery: Delivery, status: number): boolean {
+  return (
+    status === 404 &&
+    delivery.lastAppliedVersion === null &&
+    delivery.attemptCount < ROUTE_PROPAGATION_ATTEMPTS
+  );
 }
 
 async function buildStableSnapshot(repo: Repository, scope: ReturnType<typeof envScope>) {
