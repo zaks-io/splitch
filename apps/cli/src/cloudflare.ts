@@ -56,6 +56,8 @@ type CloudflareCommandKind = Extract<
 >;
 
 const CONFIGURATION_PATH = "/integrations/splitch/configuration";
+// A status read that never settles would otherwise outlive setup's bounded wait.
+const STATUS_TIMEOUT_MS = 15_000;
 
 export async function executeCloudflareCommand(
   kind: CloudflareCommandKind,
@@ -225,7 +227,10 @@ async function registerInstallation(
 }
 
 async function installationStatus(state: CloudflareState, apiKey: string, deps: CliDeps) {
-  const response = await integrationRequest(state, apiKey, deps, { method: "GET" });
+  const response = await integrationRequest(state, apiKey, deps, {
+    method: "GET",
+    signal: AbortSignal.timeout(STATUS_TIMEOUT_MS),
+  });
   return CloudflareInstallationStatusSchema.parse(await response.json());
 }
 

@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   appWithConfig,
   INSTALLATION_STATUS,
@@ -192,5 +192,25 @@ describe("cloudflare setup delivery", () => {
       "The Cloudflare installation is revoked with no delivery pending for Environment version 7; run splitch cloudflare status",
     );
     expect(calls.filter((call) => call === "status")).toHaveLength(1);
+  });
+
+  it("stops at the 12-minute deadline even when each status read is slow", async () => {
+    const cwd = await appWithConfig({ name: "customer-app" });
+    const { fetcher, calls } = scriptedFetch({
+      statuses: Array.from({ length: 20 }, () => ({ lastAppliedVersion: null, pendingCount: 1 })),
+    });
+    vi.useFakeTimers({ toFake: ["Date"] });
+    try {
+      // Each poll costs five minutes of wall clock, so the deadline lands on the fourth read.
+      const sleep = async () => {
+        vi.setSystemTime(Date.now() + 5 * 60_000);
+      };
+      await expect(
+        runCloudflare(cwd, new RecordingRunner(), SETUP, { fetch: fetcher, sleep }),
+      ).rejects.toThrow("did not apply Environment version 7 within 12 minutes");
+    } finally {
+      vi.useRealTimers();
+    }
+    expect(calls.filter((call) => call === "status")).toHaveLength(4);
   });
 });

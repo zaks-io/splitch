@@ -11,8 +11,10 @@ import type { CliDeps, CliIo } from "./execute-types.js";
  * the CLI ships against the published SDK, not the control plane.
  */
 const WAIT_MINUTES = 12;
+const WAIT_MS = WAIT_MINUTES * 60_000;
 const POLL_MS = 5_000;
-const POLL_ATTEMPTS = (WAIT_MINUTES * 60_000) / POLL_MS;
+// Bounds the wait when sleep is injected and the clock does not move.
+const POLL_ATTEMPTS = WAIT_MS / POLL_MS;
 
 type DeliveryError = CloudflareInstallationStatus["latestDeliveryError"];
 
@@ -23,16 +25,17 @@ export async function waitForApplied(
 ): Promise<CloudflareInstallationStatus> {
   const sleep = cliSleep(deps);
   const report = progressReporter(io);
+  const deadline = Date.now() + WAIT_MS;
   for (let polls = 0; ; polls += 1) {
     const current = await readStatus();
     if (current.lastAppliedVersion === current.environmentVersion) return current;
-    assertStillPending(current, polls);
+    assertStillPending(current, polls >= POLL_ATTEMPTS || Date.now() >= deadline);
     report(current);
     await sleep(POLL_MS);
   }
 }
 
-function assertStillPending(current: CloudflareInstallationStatus, polls: number): void {
+function assertStillPending(current: CloudflareInstallationStatus, expired: boolean): void {
   // An older version's terminal delivery stays counted; only nothing left pending is final.
   if (current.pendingCount === 0 && current.terminalCount > 0)
     throw cloudflareUsage(
@@ -43,7 +46,7 @@ function assertStillPending(current: CloudflareInstallationStatus, polls: number
     throw cloudflareUsage(
       `The Cloudflare installation is ${current.status} with no delivery pending for Environment version ${current.environmentVersion}; run splitch cloudflare status`,
     );
-  if (polls >= POLL_ATTEMPTS)
+  if (expired)
     throw cloudflareUsage(
       `Cloudflare Worker did not apply Environment version ${current.environmentVersion} within ${WAIT_MINUTES} minutes; ${current.pendingCount} delivery still pending, latest delivery error: ${describeDeliveryError(current.latestDeliveryError)}`,
     );
