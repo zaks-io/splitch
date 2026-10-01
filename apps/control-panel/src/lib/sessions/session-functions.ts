@@ -199,7 +199,7 @@ const ScopedSessionInputSchema = z.object({
     .nullable(),
 });
 
-export type ScopedSessionInput = z.infer<typeof ScopedSessionInputSchema>;
+type ScopedSessionInput = z.infer<typeof ScopedSessionInputSchema>;
 
 export const loadScopedSession = createServerFn({ method: "GET" })
   .validator((data: unknown) => ScopedSessionInputSchema.parse(data))
@@ -258,7 +258,7 @@ const AppScopedSessionInputSchema = z.object({
     .nullable(),
 });
 
-export type AppScopedSessionInput = z.infer<typeof AppScopedSessionInputSchema>;
+type AppScopedSessionInput = z.infer<typeof AppScopedSessionInputSchema>;
 
 export const loadAppScopedSession = createServerFn({ method: "GET" })
   .validator((data: unknown) => AppScopedSessionInputSchema.parse(data))
