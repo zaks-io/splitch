@@ -1,13 +1,13 @@
-import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { proveAnalysisScopePredicates } from "./lib/tinybird-analysis-scope-proof.mjs";
+import { stageTinybirdProject } from "./lib/tinybird-fixture-clock.mjs";
 import { assertEnvironmentExposureStatusContract } from "./lib/tinybird-exposure-status-contract.mjs";
 import { assertPromotedForwardQueriesRemoved } from "./lib/tinybird-forward-query-cleanup-contract.mjs";
 import { assertMetricStubsRetiredWhenMetricEventsExist } from "./lib/tinybird-metric-stub-tripwire.mjs";
 import { output, quietExitCode, quietExitCodeWithInput, run } from "./lib/tinybird-process.mjs";
 import { acquireMachineLock } from "./machine-lock.mjs";
 
-const projectDir = ".";
 const projectConfigPath = "tinybird.config.json";
 const tinybirdRoot = "infra/tinybird";
 const testsDir = join(tinybirdRoot, "tests");
@@ -25,6 +25,17 @@ if (!existsSync(tinybirdRoot)) {
 }
 
 validateSplitchDatasourceContracts(tinybirdRoot);
+const staged = stageTinybirdProject({
+  configPath: projectConfigPath,
+  root: tinybirdRoot,
+  now: Date.now(),
+});
+const projectDir = staged.dir;
+// fail() exits the process mid-run, which skips any finally block.
+process.on("exit", () => rmSync(projectDir, { recursive: true, force: true }));
+console.log(
+  `tinybird:local: fixture and test dates shifted ${staged.offsetDays} days so ENGINE_TTL keeps every fixture row`,
+);
 await requireTinybirdCli(projectDir);
 
 // The tinybird-local container is a machine-global singleton; serialize
@@ -34,7 +45,7 @@ try {
   const tokens = await generateTinybirdLocalTokens(projectDir);
   await resetTinybirdLocal(projectDir, tokens);
   await run("tb", ["--no-version-warning", "build"], projectDir);
-  await proveExposureAtCompatibility(projectDir);
+  await proveExposureAtCompatibility(projectDir, staged.shiftMs);
   await proveAnalysisScopePredicates(
     tinybirdRoot,
     (sql) => output("tb", ["--no-version-warning", "--output", "json", "sql", sql], projectDir),
@@ -135,7 +146,7 @@ function validateSplitchDatasourceContracts(root) {
   assertMetricStubsRetiredWhenMetricEventsExist(root, fail);
 }
 
-async function proveExposureAtCompatibility(cwd) {
+async function proveExposureAtCompatibility(cwd, shiftMs) {
   const raw = await output(
     "tb",
     [
@@ -163,12 +174,12 @@ async function proveExposureAtCompatibility(cwd) {
   }
   const newRow = rows?.find((row) => row.dedup_key === "compat-new-exposure-at");
   const oldRow = rows?.find((row) => row.dedup_key === "compat-old-exposure-at");
-  if (newRow?.exposure_at_ms !== 1_783_641_540_000) {
+  if (newRow?.exposure_at_ms !== shiftMs(Date.parse("2026-07-09T23:59:00Z"))) {
     fail("raw_events did not preserve an explicit exposure_at");
   }
   if (
     oldRow?.exposure_at_ms !== oldRow?.server_received_at_ms ||
-    oldRow?.server_received_at_ms !== 1_783_641_600_000
+    oldRow?.server_received_at_ms !== shiftMs(Date.parse("2026-07-10T00:00:00Z"))
   ) {
     fail("raw_events did not project a retained row's exposure_at from server_received_at");
   }
