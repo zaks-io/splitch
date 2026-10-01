@@ -6,23 +6,32 @@
  * on one contract without importing across Worker app boundaries.
  */
 
-import { accessTokenRevocationKey, accessTokenRevocationTtl } from "@splitch/contracts";
+import {
+  accessTokenRevocationKey,
+  accessTokenRevocationMarker,
+  accessTokenRevocationTtl,
+  readAccessTokenRevocation,
+} from "@splitch/contracts";
 
 export interface RevocationStore {
-  revoke(subject: string, ttlSeconds: number): Promise<void>;
-  isRevoked(subject: string): Promise<boolean>;
+  revoke(subject: string, revokedAtSeconds: number, ttlSeconds: number): Promise<void>;
+  isRevoked(subject: string, issuedAtSeconds: number | undefined): Promise<boolean>;
 }
 
 export function makeKvRevocationStore(kv: KVNamespace): RevocationStore {
   return {
-    async revoke(subject, ttlSeconds) {
-      await kv.put(accessTokenRevocationKey(subject), "1", {
-        expirationTtl: accessTokenRevocationTtl(ttlSeconds),
-      });
+    async revoke(subject, revokedAtSeconds, ttlSeconds) {
+      await kv.put(
+        accessTokenRevocationKey(subject),
+        accessTokenRevocationMarker(revokedAtSeconds),
+        {
+          expirationTtl: accessTokenRevocationTtl(ttlSeconds),
+        },
+      );
     },
 
-    async isRevoked(subject) {
-      return (await kv.get(accessTokenRevocationKey(subject))) !== null;
+    async isRevoked(subject, issuedAtSeconds) {
+      return readAccessTokenRevocation(kv, subject, issuedAtSeconds);
     },
   };
 }

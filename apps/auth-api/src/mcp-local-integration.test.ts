@@ -48,43 +48,11 @@ describe("local Auth-to-MCP integration", () => {
     const handlerModule = (await import(
       new URL("../../mcp-server/src/mcp-handler.ts", import.meta.url).href
     )) as McpHandlerModule;
-    const authorization = await authFetch(
-      new Request("https://auth.splitch.test/oauth2/device_authorization", {
-        method: "POST",
-        headers: { "content-type": "application/x-www-form-urlencoded" },
-        body: new URLSearchParams({ client_id: "splitch-cli", scope: `app:${SELECTED_APP}:owner` }),
-      }),
-    );
-    expect(authorization.status).toBe(200);
-    const deviceCode = ((await authorization.json()) as { device_code: string }).device_code;
-    const widenedToken = await authFetch(
-      new Request("https://auth.splitch.test/oauth2/token", {
-        method: "POST",
-        headers: { "content-type": "application/x-www-form-urlencoded" },
-        body: new URLSearchParams({
-          grant_type: "urn:ietf:params:oauth:grant-type:device_code",
-          client_id: "splitch-cli",
-          device_code: deviceCode,
-          scope: `app:${VICTIM_APP}:owner`,
-          resource: "https://mcp.splitch.test/mcp",
-        }),
-      }),
-    );
+    const deviceCode = await authorizeDevice();
+    const widenedToken = await exchangeDeviceCode(deviceCode, VICTIM_APP);
     expect(widenedToken.status).toBe(400);
     expect(await widenedToken.json()).toMatchObject({ error: "invalid_grant" });
-    const tokenResponse = await authFetch(
-      new Request("https://auth.splitch.test/oauth2/token", {
-        method: "POST",
-        headers: { "content-type": "application/x-www-form-urlencoded" },
-        body: new URLSearchParams({
-          grant_type: "urn:ietf:params:oauth:grant-type:device_code",
-          client_id: "splitch-cli",
-          device_code: deviceCode,
-          scope: `app:${SELECTED_APP}:owner`,
-          resource: "https://mcp.splitch.test/mcp",
-        }),
-      }),
-    );
+    const tokenResponse = await exchangeDeviceCode(deviceCode, SELECTED_APP);
     expect(tokenResponse.status).toBe(200);
     const tokenBody = (await tokenResponse.json()) as {
       access_token: string;
@@ -116,6 +84,7 @@ describe("local Auth-to-MCP integration", () => {
       subject: DEVICE_USER,
       scopes: [`app:${SELECTED_APP}:admin`],
       authDoor: "device_flow",
+      issuedAt: expect.any(Number),
     });
     const accepted = await mcpRequest(
       handlerModule.handleMcpServerRequest,
@@ -205,6 +174,49 @@ async function expectRefreshLogoutToRevokeAccess(
   );
   expect(rejected.status).toBe(401);
   expect(downstream).not.toHaveBeenCalled();
+
+  // Logging back in must work at once, not after the revocation marker expires.
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(Date.now() + 2_000);
+  const relogin = await exchangeDeviceCode(await authorizeDevice(), SELECTED_APP);
+  expect(relogin.status).toBe(200);
+  const accepted = await mcpRequest(
+    handleMcpServerRequest,
+    ((await relogin.json()) as { access_token: string }).access_token,
+    verifier,
+    revocations,
+    "tools/list",
+  );
+  expect(accepted.status).toBe(200);
+  vi.useRealTimers();
+}
+
+async function authorizeDevice(): Promise<string> {
+  const authorization = await authFetch(
+    new Request("https://auth.splitch.test/oauth2/device_authorization", {
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({ client_id: "splitch-cli", scope: `app:${SELECTED_APP}:owner` }),
+    }),
+  );
+  expect(authorization.status).toBe(200);
+  return ((await authorization.json()) as { device_code: string }).device_code;
+}
+
+function exchangeDeviceCode(deviceCode: string, appId: string): Promise<Response> {
+  return authFetch(
+    new Request("https://auth.splitch.test/oauth2/token", {
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        grant_type: "urn:ietf:params:oauth:grant-type:device_code",
+        client_id: "splitch-cli",
+        device_code: deviceCode,
+        scope: `app:${appId}:owner`,
+        resource: "https://mcp.splitch.test/mcp",
+      }),
+    }),
+  );
 }
 
 function authFetch(request: Request): Promise<Response> {

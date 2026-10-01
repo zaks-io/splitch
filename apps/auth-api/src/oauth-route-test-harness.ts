@@ -62,6 +62,7 @@ export function routeApp(params: {
   tokenSigner?: TokenSigner;
   deviceAuthorizationRateLimiter?: RateLimiter;
   revocations?: RevocationStore;
+  now?: () => number;
 }): Hono {
   const app = new Hono();
   mountOAuthRoutes(app, {
@@ -74,7 +75,7 @@ export function routeApp(params: {
     accessSecret: "test-access-secret",
     issuer: "http://localhost",
     controlPlaneAudience: "https://cp.splitch.test",
-    now: () => 1_780_000_000_000,
+    now: params.now ?? (() => 1_780_000_000_000),
     repo: params.repo ?? emptyMembershipRepo,
     deviceAuthorizationRateLimiter: params.deviceAuthorizationRateLimiter ?? makeRateLimiter(),
   });

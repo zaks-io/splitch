@@ -1,5 +1,13 @@
 // biome-ignore lint/performance/noBarrelFile: keeps the public entry point below the repository size limit
 export {
+  accessTokenIssuedAt,
+  accessTokenRevocationKey,
+  accessTokenRevocationMarker,
+  accessTokenRevocationTtl,
+  isAccessTokenRevoked,
+  readAccessTokenRevocation,
+} from "../access-token-revocation";
+export {
   activationConfigKey,
   apiKeyCacheKey,
   appEntityIdentityKey,

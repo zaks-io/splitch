@@ -152,7 +152,7 @@ async function resolveBearerPrincipal(
 
   // Session-validation hot read keyed on the actor's session (`sub`). A
   // revoked session is rejected even though the signature/exp still pass.
-  if (await deps.sessions.isRevoked(verified.sub)) {
+  if (await deps.sessions.isRevoked(verified.sub, verified.issuedAt)) {
     return { ok: false as const, reason: "CREDENTIAL_REVOKED" as const };
   }
 

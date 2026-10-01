@@ -15,13 +15,14 @@
  * must equal the control-plane audience.
  */
 
-import { isCanonicalHeldScopes } from "@splitch/contracts";
+import { accessTokenIssuedAt, isCanonicalHeldScopes } from "@splitch/contracts";
 import { type AccessTokenPublicJwk, accessTokenPublicJwkFromSecret } from "./access-token-key";
 
 export interface VerifiedActor {
   userId: string;
   scopes: string[];
   expiresAt: number;
+  issuedAt?: number;
 }
 
 function base64UrlToBytes(input: string): Uint8Array {
@@ -152,6 +153,7 @@ function actorFromClaims(
     userId: claims.sub,
     scopes: claims.scopes as string[],
     expiresAt: claims.exp,
+    ...accessTokenIssuedAt(claims),
   };
 }
 

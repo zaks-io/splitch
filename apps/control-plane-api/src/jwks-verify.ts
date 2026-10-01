@@ -3,6 +3,7 @@ import {
   type AuthDoor,
   AuthDoorSchema,
   accessTokenAuthorizationFromClaim,
+  accessTokenIssuedAt,
 } from "@splitch/contracts";
 import { remoteJwksSignatureVerifier } from "@splitch/worker-runtime";
 
@@ -36,6 +37,8 @@ interface VerifiedToken {
   authDoor: AuthDoor;
   /** Structural read-only authority. Membership rows are never carried in the JWT. */
   authorization?: AccessTokenAuthorization;
+  /** `iat`, compared against the subject's revocation time. */
+  issuedAt?: number;
 }
 
 interface JwtHeader {
@@ -211,6 +214,7 @@ function actorFromClaims(
     scopes,
     authDoor: authDoorFromClaim(payload.auth_door),
     ...(authorization ? { authorization } : {}),
+    ...accessTokenIssuedAt(payload),
   };
 }
 
