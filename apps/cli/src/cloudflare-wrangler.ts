@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { readFile, realpath } from "node:fs/promises";
+import { readFile, realpath, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { dirname, join, posix, relative, sep } from "node:path";
 import { cloudflareUsage } from "./cloudflare-error.js";
@@ -119,4 +119,20 @@ export async function wranglerTypes(
   const args = ["types", ...configs.flatMap((config) => ["--config", config])];
   await wrangler(runner, cwd, args);
   return ["wrangler", ...args].join(" ");
+}
+
+// Types follow the edit before the Worker delete, and a failed types run puts the binding back, so
+// every rerun that removes the binding also regenerates the types.
+export async function wranglerTypesOrRestore(
+  runner: CliCommandRunner,
+  cwd: string,
+  appConfigPath: string,
+  replaced: string,
+): Promise<void> {
+  try {
+    await wranglerTypes(runner, cwd, appConfigPath);
+  } catch (error) {
+    await writeFile(appConfigPath, replaced);
+    throw error;
+  }
 }

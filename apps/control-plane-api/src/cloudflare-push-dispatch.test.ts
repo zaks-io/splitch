@@ -123,6 +123,26 @@ describe("Cloudflare configuration push dispatch", () => {
       expect(finishes[0]).toMatchObject({ state });
     }
   });
+
+  it("reads a 404 as workers.dev route propagation only before the first apply", async () => {
+    for (const [lastAppliedVersion, attemptCount, state] of [
+      [null, 0, "pending"],
+      [null, 2, "pending"],
+      [null, 3, "terminal"],
+      [1, 0, "terminal"],
+    ] as const) {
+      const { repo, finishes, deliveries } = await fixture();
+      Object.assign(deliveries[0] ?? {}, { lastAppliedVersion, attemptCount });
+      await dispatchCloudflarePushes({
+        repo,
+        secretKek: KEY,
+        fetcher: async () => new Response(null, { status: 404 }),
+        now: () => NOW,
+      });
+      expect(finishes[0]).toMatchObject({ state });
+      expect(JSON.parse(String(finishes[0]?.errorJson))).toMatchObject({ httpStatus: 404 });
+    }
+  });
 });
 
 async function fixture() {
@@ -139,6 +159,7 @@ async function fixture() {
       secretKeyVersion: encrypted.keyVersion,
       environmentVersion: 2,
       attemptCount: 0,
+      lastAppliedVersion: null as number | null,
     },
   ];
   const environmentVersion = vi.fn(async () => 2);

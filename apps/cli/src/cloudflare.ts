@@ -1,6 +1,5 @@
 import { Buffer } from "node:buffer";
 import { randomBytes, randomUUID } from "node:crypto";
-import { writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import {
   CloudflareInstallationStatusSchema,
@@ -16,6 +15,7 @@ import {
   SERVICE_BINDING,
   serviceBindingPath,
 } from "./cloudflare-binding.js";
+import { cliSleep, waitForWorkerRoutable } from "./cloudflare-endpoint.js";
 import { cloudflareUsage as usage } from "./cloudflare-error.js";
 import {
   assertCloudflarePackage,
@@ -39,11 +39,12 @@ import {
   wrangler,
   wranglerSecret,
   wranglerTypes,
+  wranglerTypesOrRestore,
 } from "./cloudflare-wrangler.js";
 import type { CliCommandDefinition } from "./command-registry.js";
 import type { ResolvedContext } from "./context.js";
 import { emit } from "./execute-io.js";
-import type { CliCommandRunner, CliDeps, CliIo, CliResult } from "./execute-types.js";
+import type { CliDeps, CliIo, CliResult } from "./execute-types.js";
 import { EXIT_OK } from "./exit-codes.js";
 import type { ParsedInvocation } from "./parse-args.js";
 import { resolveDataPlaneBaseUrl } from "./sdks.js";
@@ -133,6 +134,7 @@ async function setup(
     "SPLITCH_PUSH_SECRET",
     installed.pushSecret,
   );
+  await waitForWorkerRoutable(installed.endpoint, deps);
   await registerInstallation(installed, apiKey, deps);
   const delivery = await waitForApplied(installed, apiKey, deps);
   await installServiceBinding(installed);
@@ -182,7 +184,7 @@ async function remove(
   const runner = deps.commandRunner ?? systemCommandRunner;
   // Without a removed binding nothing in the application config changed, so its types stay.
   const replaced = await removeServiceBinding(state);
-  if (replaced !== null) await typesOrRestore(runner, cwd, state.appConfigPath, replaced);
+  if (replaced !== null) await wranglerTypesOrRestore(runner, cwd, state.appConfigPath, replaced);
   await wrangler(runner, cwd, [
     "delete",
     "--config",
@@ -201,22 +203,6 @@ async function remove(
   };
   emit(io, invocation.flags.json, payload);
   return { exitCode: EXIT_OK, payload };
-}
-
-// Types follow the edit before the Worker delete, and a failed types run puts the binding back, so
-// every rerun that removes the binding also regenerates the types.
-async function typesOrRestore(
-  runner: CliCommandRunner,
-  cwd: string,
-  appConfigPath: string,
-  replaced: string,
-): Promise<void> {
-  try {
-    await wranglerTypes(runner, cwd, appConfigPath);
-  } catch (error) {
-    await writeFile(appConfigPath, replaced);
-    throw error;
-  }
 }
 
 async function registerInstallation(
@@ -240,16 +226,28 @@ async function installationStatus(state: CloudflareState, apiKey: string, deps: 
 }
 
 async function waitForApplied(state: CloudflareState, apiKey: string, deps: CliDeps) {
-  const sleep =
-    deps.sleep ?? ((milliseconds: number) => new Promise((done) => setTimeout(done, milliseconds)));
+  const sleep = cliSleep(deps);
   for (let attempt = 0; attempt < POLL_ATTEMPTS; attempt += 1) {
     const current = await installationStatus(state, apiKey, deps);
     if (current.lastAppliedVersion === current.environmentVersion) return current;
-    if (current.terminalCount > 0)
-      throw usage("Cloudflare configuration delivery entered a terminal state");
+    // An older version's terminal delivery stays counted; only nothing left pending is final.
+    if (current.pendingCount === 0 && current.terminalCount > 0)
+      throw usage(
+        `Cloudflare configuration delivery entered a terminal state: ${describeDeliveryError(current.latestDeliveryError)}`,
+      );
     await sleep(1_000);
   }
   throw usage("Cloudflare Worker did not apply the current Environment version within 60 seconds");
+}
+
+function describeDeliveryError(
+  error: Awaited<ReturnType<typeof installationStatus>>["latestDeliveryError"],
+): string {
+  // A delivered older version clears the installation's error even while a newer one is terminal.
+  if (!error) return "no delivery error is recorded; run splitch cloudflare status";
+  const status = error.httpStatus === undefined ? "" : ` HTTP ${error.httpStatus}`;
+  const cause = error.causeName === undefined ? "" : ` (${error.causeName})`;
+  return `${error.kind} ${error.code}${status}${cause} at ${error.occurredAt}`;
 }
 
 async function integrationRequest(

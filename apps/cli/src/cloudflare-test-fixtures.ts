@@ -38,9 +38,18 @@ export const INSTALLATION_STATUS = {
   latestDeliveryError: null,
 };
 
+/** The integration Worker's answer to an unsigned push, which setup waits for before registering. */
+export function workerRejection(): Response {
+  return Response.json(
+    { code: "UNAUTHORIZED", message: "push signature is required" },
+    { status: 401 },
+  );
+}
+
 export function cloudflareInstallationFetch(): typeof fetch {
   let reads = 0;
-  return async (_input, init) => {
+  return async (input, init) => {
+    if (String(input).includes(".workers.dev/")) return workerRejection();
     if ((init?.method ?? "GET") === "POST") return Response.json({ registered: true });
     reads += 1;
     if (reads === 1)
