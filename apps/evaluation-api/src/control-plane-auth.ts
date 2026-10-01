@@ -1,4 +1,9 @@
-import { type AuthDoor, AuthDoorSchema } from "@splitch/contracts";
+import {
+  accessTokenIssuedAt,
+  type AuthDoor,
+  AuthDoorSchema,
+  readAccessTokenRevocation,
+} from "@splitch/contracts";
 import { type AuthResolver, remoteJwksSignatureVerifier } from "@splitch/worker-runtime";
 
 interface VerifiedToken {
@@ -6,6 +11,7 @@ interface VerifiedToken {
   scopes: string[];
   /** `auth_door`. An unrecognized/missing claim reads as the least-privileged door. */
   authDoor: AuthDoor;
+  issuedAt?: number;
 }
 
 interface JwksVerifier {
@@ -27,11 +33,10 @@ export function makeEvaluationControlPlaneJwksVerifier(options: {
 }
 
 interface SessionStore {
-  isRevoked(sessionId: string): Promise<boolean>;
+  isRevoked(sessionId: string, issuedAtSeconds: number | undefined): Promise<boolean>;
 }
 
 const BEARER_PREFIX = "Bearer ";
-const REVOKED_PREFIX = "revoked:";
 const APP_SCOPE = /^app:([^:]+):(owner|admin|member)$/;
 const ORG_SCOPE = /^org:([^:]+):(owner|admin|member)$/;
 
@@ -52,7 +57,7 @@ export function makeControlPlaneAuthResolver(deps: {
     if (verified === null) {
       return { ok: false, reason: "UNAUTHORIZED" };
     }
-    if (await deps.sessions.isRevoked(verified.sub)) {
+    if (await deps.sessions.isRevoked(verified.sub, verified.issuedAt)) {
       return { ok: false, reason: "CREDENTIAL_REVOKED" };
     }
 
@@ -73,8 +78,8 @@ export function makeControlPlaneAuthResolver(deps: {
 
 export function makeSessionStore(kv: KVNamespace): SessionStore {
   return {
-    async isRevoked(sessionId) {
-      return (await kv.get(`${REVOKED_PREFIX}${sessionId}`)) !== null;
+    async isRevoked(sessionId, issuedAtSeconds) {
+      return readAccessTokenRevocation(kv, sessionId, issuedAtSeconds);
     },
   };
 }
@@ -156,6 +161,7 @@ function evaluationActorFromClaims(
     sub: payload.sub,
     scopes: Array.isArray(payload.scopes) ? payload.scopes.filter(isString) : [],
     authDoor: AuthDoorSchema.safeParse(payload.auth_door).data ?? "anonymous",
+    ...accessTokenIssuedAt(payload),
   };
 }
 

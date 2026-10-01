@@ -1,4 +1,5 @@
 import {
+  accessTokenIssuedAt,
   type AuthDoor,
   AuthDoorSchema,
   isCanonicalHeldScopes,
@@ -18,6 +19,7 @@ export interface McpAccessTokenActor {
    */
   authDoor: AuthDoor;
   demoExpiresAt?: string;
+  issuedAt?: number;
 }
 
 interface Jwks {
@@ -86,6 +88,7 @@ async function verifyHttpToken(
     scopes: [],
     liveMembership: true,
     authDoor: "device_flow",
+    ...accessTokenIssuedAt(parsed.payload),
   };
 }
 
@@ -181,6 +184,7 @@ function actorFromClaims(
     subject: claims.sub,
     scopes: claims.scopes as string[],
     ...transport,
+    ...accessTokenIssuedAt(claims),
   };
 }
 

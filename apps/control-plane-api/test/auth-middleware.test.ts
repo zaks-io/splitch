@@ -279,6 +279,19 @@ describe("control-plane auth middleware: rejections", () => {
     expect((await bodyOf(res)).code).toBe("CREDENTIAL_REVOKED");
   });
 
+  it("rejects tokens issued up to the revocation time and admits a fresh login", async () => {
+    const jwt = await token(h.signer, ALICE, [appAdminScope(PAYMENTS.appId)]);
+
+    await h.bindings.kv.put(revocationKey(ALICE), String(nowSeconds()));
+    const revoked = await get(h.app, `/apps/${PAYMENTS.appId}`, jwt);
+    expect(revoked.status).toBe(403);
+    expect((await bodyOf(revoked)).code).toBe("CREDENTIAL_REVOKED");
+
+    await h.bindings.kv.put(revocationKey(ALICE), String(nowSeconds() - 1));
+    const relogin = await get(h.app, `/apps/${PAYMENTS.appId}`, jwt);
+    expect(relogin.status).toBe(200);
+  });
+
   it("revokes a membership-wide read token through the same session key", async () => {
     await h.bindings.kv.put(revocationKey(ALICE), "1");
     const jwt = await token(h.signer, ALICE, [], "membership-wide-read");

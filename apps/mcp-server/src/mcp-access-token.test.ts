@@ -34,6 +34,7 @@ describe("MCP access-token verifier", () => {
       sub: "user_workos",
       iss: "https://splitch.authkit.test",
       aud: AUDIENCE,
+      iat: NOW - 10,
       exp: NOW + 60,
       scope: "openid profile email offline_access",
     };
@@ -44,6 +45,7 @@ describe("MCP access-token verifier", () => {
       scopes: [],
       liveMembership: true,
       authDoor: "device_flow",
+      issuedAt: NOW - 10,
     });
 
     await expect(

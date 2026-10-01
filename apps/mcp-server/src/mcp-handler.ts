@@ -37,7 +37,7 @@ const RESOURCE_URIS: ReadonlySet<string> = new Set(MCP_RESOURCE_URIS);
 const PROMPT_NAMES: ReadonlySet<string> = new Set(PROMPT_DEFINITIONS.map((prompt) => prompt.name));
 
 export interface McpRevocationReader {
-  isRevoked(subject: string): Promise<boolean>;
+  isRevoked(subject: string, issuedAtSeconds: number | undefined): Promise<boolean>;
 }
 
 export interface McpServerRequestOptions {
@@ -72,7 +72,10 @@ export async function handleMcpServerRequest(options: McpServerRequestOptions): 
         audience,
         Math.floor((options.now?.() ?? Date.now()) / 1000),
       );
-      if (actor && (await requiredRevocations(options.revocations).isRevoked(actor.subject))) {
+      if (
+        actor &&
+        (await requiredRevocations(options.revocations).isRevoked(actor.subject, actor.issuedAt))
+      ) {
         actor = null;
       }
       return actor?.subject ?? null;

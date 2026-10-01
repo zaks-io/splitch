@@ -253,7 +253,7 @@ async function withActor(
   if (!actor) {
     return errorResponse(401, "UNAUTHORIZED");
   }
-  if (await deps.revocations.isRevoked(actor.userId)) {
+  if (await deps.revocations.isRevoked(actor.userId, actor.issuedAt)) {
     return errorResponse(401, "UNAUTHORIZED");
   }
   return run(actor);

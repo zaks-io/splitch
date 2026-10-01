@@ -1,4 +1,4 @@
-import { accessTokenRevocationKey } from "@splitch/contracts";
+import { readAccessTokenRevocation } from "@splitch/contracts";
 import { createMcpSpanRecorder } from "@splitch/observability/mcp-spans";
 import {
   activeTraceId,
@@ -91,8 +91,8 @@ function requiredSessionStore(store: KVNamespace | undefined): KVNamespace {
 
 function kvRevocations(store: KVNamespace) {
   return {
-    async isRevoked(subject: string) {
-      return (await store.get(accessTokenRevocationKey(subject))) !== null;
+    async isRevoked(subject: string, issuedAtSeconds: number | undefined) {
+      return readAccessTokenRevocation(store, subject, issuedAtSeconds);
     },
   };
 }

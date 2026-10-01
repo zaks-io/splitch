@@ -122,14 +122,14 @@ export function mountOAuthRoutes(app: Hono, deps: OAuthRouteDeps): void {
   app.post("/oauth2/revoke", async (c) => {
     const body = await readOAuthRequestBody(c.req.raw);
     if (!body.ok) return renderAuthBodyError(body.reason);
-    return revokeToken(deps, body.value, nowSeconds());
+    return revokeToken(deps, body.value, nowSeconds);
   });
 }
 
 async function revokeToken(
   deps: OAuthRouteDeps,
   body: unknown,
-  nowSeconds: number,
+  nowSeconds: () => number,
 ): Promise<Response> {
   const parsed = RevokeTokenRequestSchema.safeParse(body);
   if (!parsed.success) {
@@ -140,20 +140,24 @@ async function revokeToken(
     // Every other OAuth endpoint identifies its caller; revoke is the one
     // that destroys authority, so it holds the same first-party gate.
     requireFirstPartyClient(parsed.data.client_id);
-    const actor = await verifyRevocableAccessToken(deps, parsed.data.token, nowSeconds);
+    const revokedAt = nowSeconds();
+    const actor = await verifyRevocableAccessToken(deps, parsed.data.token, revokedAt);
+    // The marker must outlive every token issued before it, not just the presented one.
     if (actor) {
-      await deps.revocations.revoke(actor.userId, actor.expiresAt - nowSeconds);
+      await deps.revocations.revoke(actor.userId, revokedAt, ACCESS_TOKEN_TTL_SECONDS);
     } else {
       const session = await deps.deviceRefreshSessions.lookup(parsed.data.token);
       if (!session) {
         throw new OAuthError("invalid_grant", "refresh token session is unknown");
       }
-      await deps.revocations.revoke(session.userId, ACCESS_TOKEN_TTL_SECONDS);
+      await deps.revocations.revoke(session.userId, revokedAt, ACCESS_TOKEN_TTL_SECONDS);
       await deps.deviceFlow.revokeProviderToken({
         token: parsed.data.token,
         sessionId: session.providerSessionId,
       });
       await deps.deviceRefreshSessions.forget(parsed.data.token);
+      // A refresh that raced the logout minted its token before this point; re-stamp to cover it.
+      await deps.revocations.revoke(session.userId, nowSeconds(), ACCESS_TOKEN_TTL_SECONDS);
     }
   } catch (cause) {
     return renderDoorFault(cause);

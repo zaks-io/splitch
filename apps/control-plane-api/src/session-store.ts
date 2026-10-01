@@ -1,3 +1,5 @@
+import { accessTokenRevocationKey, readAccessTokenRevocation } from "@splitch/contracts";
+
 /**
  * Session-validation hot read (access-control-matrix.md "Revocation").
  *
@@ -7,12 +9,12 @@
  * revoked. Verifying signature/exp alone is not enough — a still-unexpired token
  * for a revoked session must be rejected.
  *
- * Fail-loud: a present marker → revoked (reject). Absent (`null`) → still valid.
+ * Fail-loud: a marker revokes tokens issued at or before its revocation time;
+ * tokens issued later (a fresh login) stay valid. Absent (`null`) → still valid.
  * A KV binding that THROWS is a genuine fault that propagates (the guard maps it
  * to 500); it is never swallowed into a silent allow.
  */
 
-const REVOKED_PREFIX = "revoked:";
 const PANEL_SESSION_PREFIX = "session:";
 
 interface PanelSessionActor {
@@ -20,8 +22,8 @@ interface PanelSessionActor {
 }
 
 export interface SessionStore {
-  /** True iff the session/token was revoked. Throws on a KV fault (never silent). */
-  isRevoked(sessionId: string): Promise<boolean>;
+  /** True iff the token was revoked. Throws on a KV fault (never silent). */
+  isRevoked(sessionId: string, issuedAtSeconds: number | undefined): Promise<boolean>;
 }
 
 export interface PanelSessionStore {
@@ -31,9 +33,8 @@ export interface PanelSessionStore {
 
 export function makeSessionStore(kv: KVNamespace): SessionStore {
   return {
-    async isRevoked(sessionId) {
-      const marker = await kv.get(`${REVOKED_PREFIX}${sessionId}`);
-      return marker !== null;
+    async isRevoked(sessionId, issuedAtSeconds) {
+      return readAccessTokenRevocation(kv, sessionId, issuedAtSeconds);
     },
   };
 }
@@ -51,7 +52,7 @@ export function makePanelSessionStore(kv: KVNamespace): PanelSessionStore {
 
 /** Build a revocation key for writers/tests (single authoring point for the shape). */
 export function revocationKey(sessionId: string): string {
-  return `${REVOKED_PREFIX}${sessionId}`;
+  return accessTokenRevocationKey(sessionId);
 }
 
 function parsePanelSessionActor(raw: string, nowSeconds: number): PanelSessionActor | null {

@@ -4,7 +4,6 @@ export {
   accessTokenAuthorizationFromClaim,
   MEMBERSHIP_WIDE_READ_AUTHORIZATION,
 } from "./access-token-authorization";
-export { accessTokenRevocationKey, accessTokenRevocationTtl } from "./access-token-revocation";
 export type { ApprovalRequestId, ApprovalReviewId } from "./approval-identifiers";
 export { ApprovalRequestIdSchema, ApprovalReviewIdSchema } from "./approval-identifiers";
 // biome-ignore lint/performance/noReExportAll: package entry point exposes the grouped conclusion contract

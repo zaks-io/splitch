@@ -212,6 +212,12 @@ deploying, and missing secrets or replay bindings fail closed.
 - `/oauth2/revoke` (RFC 7009): revokes a resource access token or refresh token. Requires a
   first-party `client_id`, like every other OAuth endpoint: revocation destroys authority, so
   it must not be the one door that accepts an unidentified caller
+- A revocation writes `revoked:{sub}` holding the revocation time (Unix seconds) for one access-token
+  lifetime. Every Bearer boundary (Auth API, Control Plane, Evaluation, MCP) rejects that subject's
+  tokens whose `iat` is at or before it, and tokens without `iat`. Tokens issued later, such as a
+  fresh `splitch login` or an MCP client's refreshed AuthKit token, are unaffected. The marker
+  outlives every token issued before it only while the AuthKit access-token duration stays at or
+  under one hour
 - `POST /agent/event/notify`: receives provider-signed SET (Security Event Token) for session revocation
 - Killing the WorkOS user session revokes agent reach (agent is that user)
 

@@ -1,9 +1,13 @@
 import { createRepository } from "@splitch/db";
 import { describe, expect, it } from "vitest";
 import type { DeviceFlowPort } from "./device-flow";
-import { makeD1DeviceRefreshSessionStore } from "./device-session-store";
+import {
+  type DeviceRefreshSessionStore,
+  makeD1DeviceRefreshSessionStore,
+} from "./device-session-store";
 import type { MembershipAuthorityRepo } from "./membership-authority";
 import { form, routeApp, selectedDeviceCode, unusedRefreshStore } from "./oauth-route-test-harness";
+import type { RevocationStore } from "./revocation";
 import { makePoolBindings } from "./test-bindings-pool";
 
 function staleMissCache(keys: string[] = []): KVNamespace {
@@ -42,30 +46,18 @@ describe("OAuth revoke route", () => {
 
   it("passes the refresh token's provider session id to the provider revoke path", async () => {
     const providerRevokes: Array<{ token: string; sessionId: string }> = [];
-    const revoked: Array<{ subject: string; ttlSeconds: number }> = [];
+    const revoked: RevokeCall[] = [];
     const refreshToken = "provider-refresh-token";
+    let nowMs = 1_780_000_000_000;
     const app = routeApp({
-      deviceFlow: unusedDeviceFlow((params) => providerRevokes.push(params)),
-      deviceRefreshSessions: {
-        remember: async () => {},
-        lookup: async (token) =>
-          token === refreshToken
-            ? {
-                providerSessionId: "session_workos",
-                userId: "user_workos",
-                providerOrganizationId: "org_selected",
-                selectedAppSelector: "app_selected",
-              }
-            : null,
-        rotate: async () => {},
-        forget: async () => {},
-      },
-      revocations: {
-        revoke: async (subject, ttlSeconds) => {
-          revoked.push({ subject, ttlSeconds });
-        },
-        isRevoked: async () => false,
-      },
+      now: () => nowMs,
+      deviceFlow: unusedDeviceFlow((params) => {
+        providerRevokes.push(params);
+        // A refresh can land while the provider revoke is in flight.
+        nowMs += 5_000;
+      }),
+      deviceRefreshSessions: workosRefreshSessions(refreshToken),
+      revocations: recordingRevocations(revoked),
     });
 
     const res = await app.request("/oauth2/revoke", {
@@ -80,33 +72,21 @@ describe("OAuth revoke route", () => {
 
     expect(res.status).toBe(200);
     expect(providerRevokes).toEqual([{ token: refreshToken, sessionId: "session_workos" }]);
-    expect(revoked).toEqual([{ subject: "user_workos", ttlSeconds: 3600 }]);
+    expect(revoked).toEqual([
+      { subject: "user_workos", revokedAtSeconds: 1_780_000_000, ttlSeconds: 3600 },
+      { subject: "user_workos", revokedAtSeconds: 1_780_000_005, ttlSeconds: 3600 },
+    ]);
   });
 
   it("revokes local bearer access when provider revocation fails", async () => {
-    const revoked: Array<{ subject: string; ttlSeconds: number }> = [];
+    const revoked: RevokeCall[] = [];
     const refreshToken = "provider-refresh-token";
     const app = routeApp({
       deviceFlow: unusedDeviceFlow(() => {
         throw new Error("provider unavailable");
       }),
-      deviceRefreshSessions: {
-        remember: async () => {},
-        lookup: async () => ({
-          providerSessionId: "session_workos",
-          userId: "user_workos",
-          providerOrganizationId: "org_selected",
-          selectedAppSelector: "app_selected",
-        }),
-        rotate: async () => {},
-        forget: async () => {},
-      },
-      revocations: {
-        revoke: async (subject, ttlSeconds) => {
-          revoked.push({ subject, ttlSeconds });
-        },
-        isRevoked: async () => false,
-      },
+      deviceRefreshSessions: workosRefreshSessions(refreshToken),
+      revocations: recordingRevocations(revoked),
     });
 
     const res = await app.request("/oauth2/revoke", {
@@ -120,7 +100,9 @@ describe("OAuth revoke route", () => {
     });
 
     expect(res.status).toBe(500);
-    expect(revoked).toEqual([{ subject: "user_workos", ttlSeconds: 3600 }]);
+    expect(revoked).toEqual([
+      { subject: "user_workos", revokedAtSeconds: 1_780_000_000, ttlSeconds: 3600 },
+    ]);
   });
 
   it("returns the provider refresh token and immediately revokes it through D1 on KV stale miss", async () => {
@@ -184,6 +166,34 @@ describe("OAuth revoke route", () => {
     }
   });
 });
+
+type RevokeCall = { subject: string; revokedAtSeconds: number; ttlSeconds: number };
+
+function recordingRevocations(revoked: RevokeCall[]): RevocationStore {
+  return {
+    revoke: async (subject, revokedAtSeconds, ttlSeconds) => {
+      revoked.push({ subject, revokedAtSeconds, ttlSeconds });
+    },
+    isRevoked: async () => false,
+  };
+}
+
+function workosRefreshSessions(refreshToken: string): DeviceRefreshSessionStore {
+  return {
+    remember: async () => {},
+    lookup: async (token) =>
+      token === refreshToken
+        ? {
+            providerSessionId: "session_workos",
+            userId: "user_workos",
+            providerOrganizationId: "org_selected",
+            selectedAppSelector: "app_selected",
+          }
+        : null,
+    rotate: async () => {},
+    forget: async () => {},
+  };
+}
 
 function unusedDeviceFlow(
   revoke: (params: { token: string; sessionId: string }) => void,
