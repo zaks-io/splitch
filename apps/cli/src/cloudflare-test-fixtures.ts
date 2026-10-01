@@ -62,7 +62,7 @@ export class RecordingRunner implements CliCommandRunner {
   async run(command: string, args: readonly string[], options: { cwd: string; input?: string }) {
     this.calls.push({ command, args });
     if (options.input) this.secretInputs.push(options.input);
-    if (args.includes("--version")) return { exitCode: 0, stdout: "wrangler 4.126.0", stderr: "" };
+    if (args.includes("--version")) return { exitCode: 0, stdout: "4.126.0\n", stderr: "" };
     if (args.includes("deploy"))
       return {
         exitCode: 0,

@@ -64,7 +64,8 @@ async function runWrangler(
 export async function requireWrangler4(runner: CliCommandRunner, cwd: string): Promise<void> {
   const result = await runWrangler(runner, cwd, ["--version"]);
   const reported = `${result.stdout}\n${result.stderr}`.trim();
-  const major = /wrangler\s+(\d+)\./i.exec(reported)?.[1];
+  // Piped wrangler prints a bare `4.146.0`; only a TTY gets the `wrangler 4.146.0` banner.
+  const major = /(\d+)\.\d+\.\d+\s*$/.exec(result.stdout)?.[1];
   if (result.exitCode !== 0 || major !== "4")
     throw cloudflareUsage(
       `Wrangler 4 is required, but \`wrangler --version\` exited ${result.exitCode} reporting: ${reported || "(no output)"}`,
