@@ -33,7 +33,7 @@ npx splitch cloudflare setup --env production`,
     },
     {
       kind: "prose",
-      text: "The binding goes into the Wrangler environment named like the splitch Environment key (`env.production.services` above), or into top-level `services` when the config declares no `env` block. When the names differ, pass `--wrangler-env`: `splitch cloudflare setup --env dev --wrangler-env preview` deploys `splitch-config-dev` and binds it in `env.preview`. A named Wrangler environment must exist; setup never falls back to top-level `services`. The state file records the binding, so `status`, `remove`, and reruns use it, and a rerun with a different `--wrangler-env` fails instead of moving the binding.",
+      text: "The binding goes into the Wrangler environment named like the splitch Environment key (`env.production.services` above), or into top-level `services` when the config declares no `env` block. When the names differ, pass `--wrangler-env`: `splitch cloudflare setup --env dev --wrangler-env preview` deploys `splitch-config-dev` and binds it in `env.preview`. A named Wrangler environment must exist; setup never falls back to top-level `services`. The state file records the binding, so `status`, `remove`, and reruns use it, and a rerun with a different `--wrangler-env` fails instead of moving the binding. `remove` still works after that Wrangler environment is deleted or the config gains an `env` block. It refuses, naming each location, while any other binding still points at the integration Worker. When the recorded binding no longer matches the config, `setup` and `status` fail and tell you to run `remove` first.",
     },
     {
       kind: "prose",

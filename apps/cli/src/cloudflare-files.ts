@@ -10,7 +10,7 @@ import {
 } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
-import { assertRecordedBindingPath, isRecord } from "./cloudflare-binding.js";
+import { isRecord } from "./cloudflare-binding.js";
 import { cloudflareUsage } from "./cloudflare-error.js";
 import type { CliDeps } from "./execute-types.js";
 import { resolveDataPlaneBaseUrl } from "./sdks.js";
@@ -152,8 +152,6 @@ export async function assertStateProject(
   if (actualConfigPath !== expectedConfigPath) {
     throw cloudflareUsage(`Cloudflare state points outside the current App configuration`);
   }
-  // A removed installation no longer owns a binding, and setup derives a fresh path for it.
-  if (!state.removedAt) await assertRecordedBindingPath(expectedConfigPath, environment, state);
   return state.appConfigPath === actualConfigPath
     ? state
     : { ...state, appConfigPath: actualConfigPath };

@@ -1,7 +1,11 @@
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { CloudflareState } from "./cloudflare-files";
-import type { CliCommandRunner } from "./execute-types";
+import { type CloudflareState, generatedPaths, readState } from "./cloudflare-files";
+import type { CredentialStore } from "./credentials";
+import { executeInvocation } from "./execute";
+import type { CliCommandRunner, CliResult } from "./execute-types";
+import { parseInvocation } from "./parse-args";
 
 export function cloudflareState(cwd: string): CloudflareState {
   return {
@@ -104,4 +108,64 @@ export async function installFakeCloudflarePackage(cwd: string): Promise<void> {
     }),
   );
   await writeFile(join(directory, "worker.js"), "export default {};\n");
+}
+
+export const WRANGLER_ENVIRONMENTS_CONFIG = {
+  name: "customer-app",
+  env: { preview: {}, production: {} },
+};
+
+export async function appWithConfig(config: object): Promise<string> {
+  const cwd = await mkdtemp(join(tmpdir(), "splitch-cloudflare-wrangler-env-"));
+  await installFakeAppPackages(cwd);
+  await writeFile(join(cwd, "wrangler.jsonc"), JSON.stringify(config));
+  return cwd;
+}
+
+export function setupCloudflare(cwd: string, runner: RecordingRunner, flags: readonly string[]) {
+  return runCloudflare(cwd, runner, ["cloudflare", "setup", ...flags, "--json"], {
+    fetch: cloudflareInstallationFetch(),
+  });
+}
+
+// Cloudflare commands authenticate with SPLITCH_API_KEY and never read stored credentials.
+const UNUSED_CREDENTIAL_STORE: CredentialStore = {
+  load: () => Promise.reject(new Error("Cloudflare commands must not read stored credentials")),
+  save: () => Promise.reject(new Error("Cloudflare commands must not write stored credentials")),
+  clear: () => Promise.reject(new Error("Cloudflare commands must not clear stored credentials")),
+};
+
+export function runCloudflare(
+  cwd: string,
+  runner: RecordingRunner,
+  args: readonly string[],
+  options: { readonly fetch: typeof fetch },
+): Promise<CliResult> {
+  return executeInvocation(parseInvocation(args), {
+    cwd,
+    env: { SPLITCH_API_KEY: "api-key" },
+    credentialStore: UNUSED_CREDENTIAL_STORE,
+    platformTarget: "local",
+    evaluationBaseUrl: "http://127.0.0.1:8788",
+    fetch: options.fetch,
+    commandRunner: runner,
+    sleep: async () => {},
+    io: { log: () => {}, error: () => {} },
+  });
+}
+
+export async function appConfig(cwd: string) {
+  return JSON.parse(await readFile(join(cwd, "wrangler.jsonc"), "utf8"));
+}
+
+export async function recordedState(cwd: string, environment: string): Promise<CloudflareState> {
+  const recorded = await readState(generatedPaths(cwd, environment).statePath);
+  if (!recorded) throw new Error(`No Cloudflare state for ${environment}`);
+  return recorded;
+}
+
+export function wranglerTypesEnv(runner: RecordingRunner): string | undefined {
+  const args = runner.calls.find((call) => call.args.includes("types"))?.args ?? [];
+  const index = args.indexOf("--env");
+  return index === -1 ? undefined : args[index + 1];
 }

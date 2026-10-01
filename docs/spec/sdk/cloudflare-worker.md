@@ -45,6 +45,11 @@ exist; setup never falls back to top-level `services`. The state file records th
 `status`, `remove`, and reruns use it, and a rerun with a different `--wrangler-env` fails instead of
 moving the binding.
 
+`remove` still works after that Wrangler environment is deleted or the config gains an `env` block.
+It refuses, naming each location, while any other binding still points at the integration Worker.
+When the recorded binding no longer matches the config, `setup` and `status` fail and tell you to
+run `remove` first.
+
 An exact rerun discovers and repairs the existing installation. Reusing the Environment name for a
 different API Key, Cloudflare account, endpoint, or secret fails `IDEMPOTENCY_KEY_CONFLICT`.
 
