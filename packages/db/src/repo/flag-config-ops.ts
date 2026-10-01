@@ -10,12 +10,12 @@ import {
 } from "./approval-atomic";
 import type { ApprovalCommit } from "./approval-types";
 import type { Db } from "./client";
+import { makeFlagConfigCrossEnvironmentReads } from "./flag-config-cross-environment-reads";
 import {
   missingReferencedVariants,
   referencedVariantMustExist,
   targetingRuleWriteFailure,
 } from "./flag-config-variant-refs";
-import { makeFlagConfigCrossEnvironmentReads } from "./flag-config-cross-environment-reads";
 import { idBatches } from "./id-batches";
 import type { EnvScope } from "./scope";
 import { assertMintedScope } from "./scope";

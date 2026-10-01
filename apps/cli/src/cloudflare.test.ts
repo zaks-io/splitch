@@ -10,6 +10,7 @@ import {
   installFakeCloudflarePackage,
   installFakeWrangler,
   RecordingRunner,
+  workerRejection,
 } from "./cloudflare-test-fixtures";
 import { executeInvocation } from "./execute";
 import { parseInvocation } from "./parse-args";
@@ -28,6 +29,7 @@ describe("cloudflare setup", () => {
       const url = String(input);
       const method = init?.method ?? "GET";
       requests.push({ url, method });
+      if (url.includes(".workers.dev/")) return workerRejection();
       if (method === "POST") return Response.json({ registered: true });
       if (requests.length === 1)
         return Response.json(
@@ -71,8 +73,11 @@ describe("cloudflare setup", () => {
     );
 
     expect(result.exitCode).toBe(0);
-    expect(requests.map(({ method }) => method)).toEqual(["GET", "POST", "GET"]);
+    expect(requests.map(({ method }) => method)).toEqual(["GET", "POST", "POST", "GET"]);
     expect(requests[1]?.url).toBe(
+      "https://splitch-config-production.customer.workers.dev/integrations/splitch/configuration",
+    );
+    expect(requests[2]?.url).toBe(
       "http://127.0.0.1:8788/api/integrations/cloudflare/installations",
     );
     const applicationConfig = await readFile(join(cwd, "wrangler.jsonc"), "utf8");

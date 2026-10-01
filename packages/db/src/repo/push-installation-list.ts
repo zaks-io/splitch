@@ -1,5 +1,5 @@
-import type { EnvScope } from "./scope";
 import { idBatches } from "./id-batches";
+import type { EnvScope } from "./scope";
 
 interface DeliveryHealthAggregateRow {
   installationId: string;
