@@ -1,7 +1,7 @@
 import type { privacyRequests } from "../schema/index";
 import {
-  type StagePrivacyExportArtifactInput,
   stagePrivacyExportArtifact,
+  type StagePrivacyExportArtifactInput,
 } from "./privacy-job-artifacts";
 import {
   type PrivacyJobDbRow,

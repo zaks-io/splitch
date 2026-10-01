@@ -1,4 +1,4 @@
-import { and, asc, eq, getTableColumns, inArray, type SQL, sql } from "drizzle-orm";
+import { and, asc, eq, getTableColumns, inArray, sql, type SQL } from "drizzle-orm";
 import {
   apps,
   environments,

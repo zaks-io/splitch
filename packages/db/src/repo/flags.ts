@@ -16,8 +16,8 @@ import {
 import type { ApprovalCommit } from "./approval-types";
 import type { Db } from "./client";
 import { makeFlagConfigOps, scopedFlagConfig, scopedTargetingRule } from "./flag-config-ops";
-import { makeFlagMultiAppReads } from "./flag-multi-app-reads";
 import { type FlagInScope, makeVariantOps } from "./flag-variant-ops";
+import { makeFlagMultiAppReads } from "./flag-multi-app-reads";
 import { idBatches } from "./id-batches";
 import { assertMintedScope, envScope, type TenantScope } from "./scope";
 import { type ReadOptions, scopedTable } from "./scoped-table";
