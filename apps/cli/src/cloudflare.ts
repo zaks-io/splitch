@@ -1,5 +1,6 @@
 import { Buffer } from "node:buffer";
 import { randomBytes, randomUUID } from "node:crypto";
+import { writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import {
   CloudflareInstallationStatusSchema,
@@ -42,7 +43,7 @@ import {
 import type { CliCommandDefinition } from "./command-registry.js";
 import type { ResolvedContext } from "./context.js";
 import { emit } from "./execute-io.js";
-import type { CliDeps, CliIo, CliResult } from "./execute-types.js";
+import type { CliCommandRunner, CliDeps, CliIo, CliResult } from "./execute-types.js";
 import { EXIT_OK } from "./exit-codes.js";
 import type { ParsedInvocation } from "./parse-args.js";
 import { resolveDataPlaneBaseUrl } from "./sdks.js";
@@ -113,7 +114,7 @@ async function setup(
   assertStateEnvironment(state, environment);
   await assertServiceBindingAvailable(state);
   // The types run comes last, so its inputs are checked before anything is deployed.
-  await boundIntegrationConfigs(cwd, appConfigPath);
+  await boundIntegrationConfigs(cwd, appConfigPath, environment);
   await validateApiKey(apiKey, deps);
   await ensureCloudflareStateIgnored(cwd);
   await writeIntegrationFiles(generated, state, deps);
@@ -179,9 +180,9 @@ async function remove(
   await boundIntegrationConfigs(cwd, state.appConfigPath);
   await integrationRequest(state, requireApiKey(deps), deps, { method: "DELETE" });
   const runner = deps.commandRunner ?? systemCommandRunner;
-  // Types follow the edit immediately, so a failed Worker delete cannot strand them on a rerun.
   // Without a removed binding nothing in the application config changed, so its types stay.
-  if (await removeServiceBinding(state)) await wranglerTypes(runner, cwd, state.appConfigPath);
+  const replaced = await removeServiceBinding(state);
+  if (replaced !== null) await typesOrRestore(runner, cwd, state.appConfigPath, replaced);
   await wrangler(runner, cwd, [
     "delete",
     "--config",
@@ -200,6 +201,22 @@ async function remove(
   };
   emit(io, invocation.flags.json, payload);
   return { exitCode: EXIT_OK, payload };
+}
+
+// Types follow the edit before the Worker delete, and a failed types run puts the binding back, so
+// every rerun that removes the binding also regenerates the types.
+async function typesOrRestore(
+  runner: CliCommandRunner,
+  cwd: string,
+  appConfigPath: string,
+  replaced: string,
+): Promise<void> {
+  try {
+    await wranglerTypes(runner, cwd, appConfigPath);
+  } catch (error) {
+    await writeFile(appConfigPath, replaced);
+    throw error;
+  }
 }
 
 async function registerInstallation(

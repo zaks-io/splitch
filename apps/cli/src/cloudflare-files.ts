@@ -47,28 +47,41 @@ export function generatedPaths(cwd: string, environment: string) {
  * Integration configs the application config binds. The committed configs and bindings, not the
  * ignored state files, decide this, so every clone generates the same types and a removed binding
  * drops its integration. A bound integration Worker without exactly one generated config fails,
- * because skipping it would silently retype its `SPLITCH` as an untyped `Fetcher`.
+ * because skipping it would silently retype its `SPLITCH` as an untyped `Fetcher`. Before setup
+ * writes its own config, `pendingEnvironment` counts that Worker as bound with its config in place,
+ * so a missing directory is not an error but another directory generating the same Worker is.
  */
 export async function boundIntegrationConfigs(
   cwd: string,
   appConfigPath: string,
+  pendingEnvironment?: string,
 ): Promise<string[]> {
   const generated = await generatedConfigsByWorker(cwd);
-  const configs: string[] = [];
-  for (const worker of await boundServices(appConfigPath)) {
-    if (!worker.startsWith(WORKER_PREFIX)) continue;
-    const [config, ...duplicates] = generated.get(worker) ?? [];
-    if (config === undefined)
-      throw cloudflareUsage(
-        `${appConfigPath} binds ${worker}, but no .splitch/cloudflare/<env>/wrangler.jsonc generates it; restore that directory from version control`,
-      );
-    if (duplicates.length > 0)
-      throw cloudflareUsage(
-        `${appConfigPath} binds ${worker}, which ${[config, ...duplicates].join(" and ")} all generate; delete the stale ones`,
-      );
-    configs.push(config);
+  const workers = await boundServices(appConfigPath);
+  if (pendingEnvironment !== undefined) {
+    const worker = workerName(pendingEnvironment);
+    const { configPath } = generatedPaths(cwd, pendingEnvironment);
+    const existing = generated.get(worker) ?? [];
+    if (!existing.includes(configPath)) generated.set(worker, [...existing, configPath]);
+    workers.add(worker);
   }
-  return configs.sort();
+  return [...workers]
+    .filter((worker) => worker.startsWith(WORKER_PREFIX))
+    .map((worker) => soleConfig(appConfigPath, worker, generated.get(worker) ?? []))
+    .sort();
+}
+
+function soleConfig(appConfigPath: string, worker: string, found: readonly string[]): string {
+  const [config, ...duplicates] = found;
+  if (config === undefined)
+    throw cloudflareUsage(
+      `${appConfigPath} binds ${worker}, but no .splitch/cloudflare/<env>/wrangler.jsonc generates it; restore that directory from version control`,
+    );
+  if (duplicates.length > 0)
+    throw cloudflareUsage(
+      `${appConfigPath} binds ${worker}, which ${found.join(" and ")} all generate; delete the stale ones`,
+    );
+  return config;
 }
 
 async function generatedConfigsByWorker(cwd: string): Promise<Map<string, string[]>> {

@@ -36,23 +36,26 @@ function assertServiceBindingOwnership(state: CloudflareState, services: unknown
     );
 }
 
-/** Resolves false when the recorded path held no binding, so the application config is untouched. */
-export async function removeServiceBinding(state: CloudflareState): Promise<boolean> {
+/**
+ * Resolves to the application config text it replaced, so a caller can restore it when a later
+ * step fails, or null when the recorded path held no binding and the config is untouched.
+ */
+export async function removeServiceBinding(state: CloudflareState): Promise<string | null> {
   const raw = await readFile(state.appConfigPath, "utf8");
   const document = parseJsonc(raw, state.appConfigPath) as Record<string, unknown>;
   const current = valueAtPath(document, state.appBindingPath);
-  if (!Array.isArray(current)) return false;
+  if (!Array.isArray(current)) return null;
   const existing = current.find((entry) => isRecord(entry) && entry.binding === SERVICE_BINDING) as
     | Record<string, unknown>
     | undefined;
-  if (!existing) return false;
+  if (!existing) return null;
   if (existing.service !== state.workerName)
     throw cloudflareUsage(
       `${SERVICE_BINDING} no longer points to ${state.workerName}; refusing to remove it`,
     );
   const next = current.filter((entry) => !(isRecord(entry) && entry.binding === SERVICE_BINDING));
   await writeJsoncEdit(state.appConfigPath, raw, state.appBindingPath, next);
-  return true;
+  return raw;
 }
 
 /**
