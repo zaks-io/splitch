@@ -22,7 +22,7 @@
     "@splitch/observability": "workspace:*",
     "@splitch/privacy": "workspace:*",
     "@splitch/worker-runtime": "workspace:*",
-    "hono": "^4.13.5"
+    "hono": "^4.13.9"
   },
   "devDependencies": {
     "@cloudflare/vitest-pool-workers": "0.22.0",

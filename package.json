@@ -100,25 +100,25 @@
     "verify:push": "turbo run //#knip //#format:check //#secrets:range //#tinybird:local //#d1:migrate:local //#d1:migrate:populated lint typecheck"
   },
   "devDependencies": {
-    "@biomejs/biome": "2.5.11",
-    "@cloudflare/workers-types": "5.20260828.1",
-    "@playwright/test": "^1.62.1",
-    "@sentry/cli": "^3.7.0",
+    "@biomejs/biome": "2.5.14",
+    "@cloudflare/workers-types": "5.20260924.1",
+    "@playwright/test": "^1.63.0",
+    "@sentry/cli": "^3.8.0",
     "@stryker-mutator/core": "9.6.1",
     "@stryker-mutator/typescript-checker": "9.6.1",
     "@stryker-mutator/vitest-runner": "9.6.1",
-    "@types/node": "^26.4.0",
-    "dependency-cruiser": "^18.2.0",
+    "@types/node": "^26.6.2",
+    "dependency-cruiser": "^18.4.0",
     "esbuild": "^0.28.2",
-    "jscpd": "^5.0.16",
-    "knip": "^6.33.0",
-    "lefthook": "^2.1.12",
-    "prettier": "^3.9.6",
-    "seroval": "^1.6.4",
+    "jscpd": "^5.3.2",
+    "knip": "^6.38.0",
+    "lefthook": "^2.1.14",
+    "prettier": "^3.9.9",
+    "seroval": "^1.6.7",
     "tsup": "^8.5.0",
-    "turbo": "^2.10.12",
+    "turbo": "^2.11.3",
     "typescript": "^6.0.3",
     "vitest": "^4.1.11",
-    "wrangler": "4.127.1"
+    "wrangler": "4.137.0"
   }
 }
