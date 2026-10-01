@@ -8,8 +8,9 @@ import {
   realpath,
   writeFile,
 } from "node:fs/promises";
-import { createRequire } from "node:module";
+import { findPackageJSON } from "node:module";
 import { dirname, join } from "node:path";
+import { pathToFileURL } from "node:url";
 import { isRecord } from "./cloudflare-binding.js";
 import { cloudflareUsage } from "./cloudflare-error.js";
 import type { CliDeps } from "./execute-types.js";
@@ -119,11 +120,22 @@ export async function assertGeneratedTargetsAvailable(
   }
 }
 
+// @splitch/cloudflare only exports `import` conditions, so CommonJS resolution
+// rejects it with ERR_PACKAGE_PATH_NOT_EXPORTED even when it is installed.
 export async function assertCloudflarePackage(cwd: string): Promise<void> {
+  const notInstalled = "@splitch/cloudflare is not installed in this App";
   try {
-    createRequire(join(cwd, "package.json")).resolve("@splitch/cloudflare/worker");
+    const manifest = findPackageJSON(
+      "@splitch/cloudflare",
+      pathToFileURL(join(cwd, "package.json")),
+    );
+    if (manifest === undefined) throw cloudflareUsage(notInstalled);
+    // findPackageJSON only locates the package directory; a half-installed one has no manifest.
+    await access(manifest);
   } catch (error) {
-    throw cloudflareUsage("@splitch/cloudflare is not installed in this App", error);
+    const code = (error as NodeJS.ErrnoException).code;
+    if (code !== "ERR_MODULE_NOT_FOUND" && code !== "ENOENT") throw error;
+    throw cloudflareUsage(notInstalled, error);
   }
 }
 
