@@ -104,10 +104,14 @@ export async function installFakeCloudflarePackage(cwd: string): Promise<void> {
     JSON.stringify({
       name: "@splitch/cloudflare",
       type: "module",
-      exports: { "./worker": "./worker.js" },
+      exports: {
+        ".": { types: "./dist/index.d.ts", import: "./dist/index.js" },
+        "./worker": { types: "./dist/worker.d.ts", import: "./dist/worker.js" },
+      },
     }),
   );
-  await writeFile(join(directory, "worker.js"), "export default {};\n");
+  await mkdir(join(directory, "dist"), { recursive: true });
+  await writeFile(join(directory, "dist", "worker.js"), "export default {};\n");
 }
 
 export const WRANGLER_ENVIRONMENTS_CONFIG = {
