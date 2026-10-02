@@ -60,6 +60,7 @@ test.describe("per-Environment Flags", () => {
     await dialog.getByLabel("Flag name").fill("Billing Refresh");
     await expect(dialog.getByLabel("Flag key")).toHaveValue("billing-refresh");
     await dialog.getByLabel("Flag key").fill(flagKey);
+    await dialog.getByLabel("Lifecycle class").selectOption("permission");
     await dialog.getByRole("button", { name: "Create Flag" }).click();
     await expect(dialog.getByRole("heading", { name: "Connect your code" })).toBeVisible();
     // Exact: the Connect card and the verify hint also substitute the Flag Key
@@ -79,6 +80,7 @@ test.describe("per-Environment Flags", () => {
     await page.getByRole("button", { name: "Create Flag" }).click();
     await page.getByRole("dialog").getByLabel("Flag name").fill("Billing Refresh");
     await page.getByRole("dialog").getByLabel("Flag key").fill(flagKey);
+    await page.getByRole("dialog").getByLabel("Lifecycle class").selectOption("permission");
     await page.getByRole("dialog").getByRole("button", { name: "Create Flag" }).click();
     await expect(page.getByText("flag key already exists in this App")).toBeVisible();
     await expect(page.getByLabel("Flag key")).toHaveAttribute("aria-invalid", "true");
@@ -94,6 +96,7 @@ test.describe("per-Environment Flags", () => {
 
     await dialog.getByLabel("Flag name").fill("Checkout Copy");
     await dialog.getByLabel("Flag key").fill(flagKey);
+    await dialog.getByLabel("Lifecycle class").selectOption("permission");
     // No confirm here: "false"/"true" are valid strings, so the switch preserves
     // them and the fills below just overwrite. Only a switch to number or object
     // discards values and prompts.
@@ -161,6 +164,7 @@ test.describe("App home", () => {
     const dialog = page.getByRole("dialog");
     await dialog.getByLabel("Flag name").fill("Billing App Home");
     await dialog.getByLabel("Flag key").fill(flagKey);
+    await dialog.getByLabel("Lifecycle class").selectOption("permission");
     await dialog.getByRole("button", { name: "Create Flag" }).click();
     await expect(dialog.getByRole("heading", { name: "Connect your code" })).toBeVisible();
     await dialog
@@ -271,6 +275,7 @@ test.describe("Flag detail", () => {
     const dialog = page.getByRole("dialog");
     await dialog.getByLabel("Flag name").fill("Detail Honest");
     await dialog.getByLabel("Flag key").fill(flagKey);
+    await dialog.getByLabel("Lifecycle class").selectOption("permission");
     await dialog.getByRole("button", { name: "Create Flag" }).click();
     await expect(dialog.getByRole("heading", { name: "Connect your code" })).toBeVisible();
     await dialog

@@ -77,6 +77,7 @@ export async function createFlag(
   const dialog = page.getByRole("dialog");
   await dialog.getByLabel("Flag name").fill("Panel Smoke Flag");
   await dialog.getByLabel("Flag key").fill(flagKey);
+  await dialog.getByLabel("Lifecycle class").selectOption("permission");
   const catalog = dialog.getByTestId("variant-catalog");
   await catalog.locator("#variant-name-0").fill("control");
   await catalog.locator("#variant-name-1").fill("treatment");

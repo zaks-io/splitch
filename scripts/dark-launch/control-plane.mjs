@@ -63,6 +63,10 @@ export async function createDarkLaunchFlag(deps, appId, flagKey) {
       { name: DEFAULT_VARIANT, value: false, isDefault: true },
     ],
     description: "Transient hosted onboarding proof Flag (SPL-148).",
+    // Transient proof Flag: a release that its own run deletes, due within a day.
+    lifecycleClass: "release",
+    owner: "dark-launch-journey",
+    expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
     idempotency_key: idempotencyKey,
   };
   return operation(deps, "flags_create", body, () =>
@@ -82,6 +86,10 @@ export async function createIsolationProbeFlag(deps, appId, flagKey, variantName
       { name: "journey-decoy", value: "journey-decoy", isDefault: false },
     ],
     description: "Flag proving Client Keys remain App-scoped.",
+    // Transient proof Flag: a release that its own run deletes, due within a day.
+    lifecycleClass: "release",
+    owner: "dark-launch-journey",
+    expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
     idempotency_key: idempotencyKey,
   };
   return operation(deps, "flags_create", body, () =>

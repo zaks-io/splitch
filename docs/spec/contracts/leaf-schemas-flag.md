@@ -39,6 +39,9 @@ per-Environment (ADR-0027) and lives in separate Flag Configuration schemas.
 | `schema`           | `JSONSchema \| null` | no       | Supported JSON Schema subset every Variant `value` must satisfy; `null` = unconstrained (DEFINITION) |
 | `variants`         | `Variant[]`          | yes      | Min 1; the App-level Variant catalog; each `value` validates against `schema` (DEFINITION)           |
 | `defaultVariantId` | `string`             | yes      | App-level Default Variant id                                                                         |
+| `lifecycleClass`   | `string`             | yes      | `release`, `experiment`, `ops`, `permission`, or `unclassified` (pre-D9 Flags only; never written)   |
+| `owner`            | `string \| null`     | yes      | Who removes the Flag; non-null for `release` and `experiment`                                        |
+| `expiresAt`        | `string \| null`     | yes      | ISO 8601 UTC removal date; non-null for `release` and `experiment`, `null` means no planned removal  |
 | `createdAt`        | `string` (ISO 8601)  | yes      | —                                                                                                    |
 | `updatedAt`        | `string` (ISO 8601)  | yes      | —                                                                                                    |
 

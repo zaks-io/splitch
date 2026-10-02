@@ -65,6 +65,7 @@ test.describe("shared-preview functional API workflow", () => {
           { name: "treatment", value: true, isDefault: false },
         ],
         description: "Created by shared-preview Playwright smoke.",
+        lifecycleClass: "permission",
         idempotency_key: smoke.uniqueKey("flags-create"),
       });
 
