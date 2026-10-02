@@ -16,9 +16,10 @@ import type { StatsOutput } from "./stats-result-contract";
 /**
  * The analysis implementation new Runs freeze. Bump it only for a deliberate
  * change in how locked evidence is computed: every Run started afterwards gets a
- * different result token for the same raw facts, which is the point.
+ * different result token for the same raw facts, which is the point. Never
+ * date-shaped: tooling that shifts fixture dates would rewrite it.
  */
-export const CURRENT_ANALYSIS_VERSION = "2026-10-02";
+export const CURRENT_ANALYSIS_VERSION = "analysis-v1";
 
 /**
  * The label a legacy Run is read under. Its compatibility implementation is the

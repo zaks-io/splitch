@@ -10,7 +10,7 @@ import { runRow, statsOutput } from "./panel-experiments-test-fixtures";
 describe("panel Experiment Results planned duration (ADR-0059)", () => {
   const committedRun = {
     ...runRow(ids, 2),
-    analysisVersion: "2026-10-02",
+    analysisVersion: "analysis-v1",
     plannedDurationDays: 7,
   };
 

@@ -20,15 +20,15 @@ const identity = {
 
 describe("result token analysis version (ADR-0059)", () => {
   it("is deterministic for the same evidence and version", async () => {
-    const first = await createResultToken({ ...identity, analysisVersion: "2026-10-02" });
-    const second = await createResultToken({ ...identity, analysisVersion: "2026-10-02" });
+    const first = await createResultToken({ ...identity, analysisVersion: "analysis-v1" });
+    const second = await createResultToken({ ...identity, analysisVersion: "analysis-v1" });
 
     expect(first).toBe(second);
   });
 
   it("changes on a deliberate version change with the raw evidence unchanged", async () => {
-    const before = await createResultToken({ ...identity, analysisVersion: "2026-10-02" });
-    const after = await createResultToken({ ...identity, analysisVersion: "2026-11-01" });
+    const before = await createResultToken({ ...identity, analysisVersion: "analysis-v1" });
+    const after = await createResultToken({ ...identity, analysisVersion: "analysis-v2" });
 
     expect(after).not.toBe(before);
   });

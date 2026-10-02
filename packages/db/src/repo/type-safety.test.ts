@@ -162,7 +162,7 @@ describe("scope is required by type (compile-time proof)", () => {
             decisionFamily: "[]",
             guardrailDecisions: "[]",
             metricVarianceConfig: "[]",
-            analysisVersion: "2026-10-02",
+            analysisVersion: "analysis-v1",
             plannedDurationDays: 7,
             configHash: "hash_forged_control",
             startedAt: "2026-07-30T00:00:00.000Z",

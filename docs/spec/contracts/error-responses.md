@@ -217,6 +217,17 @@ type DecisionFailure =
       };
     }
   | {
+      code: "DECISION_DURATION_INCOMPLETE";
+      checkIds: ["planned_duration"];
+      details: {
+        plannedDurationDays: number;
+        observedDays: number;
+        runStartedAt: string;
+        earliestDecisionWatermark: string;
+        overrideReason: string | null;
+      };
+    }
+  | {
       code: "DECISION_SRM_MISMATCH";
       checkIds: ["exposure_srm"] | ["activated_srm"] | ["exposure_srm", "activated_srm"];
       details: { pValues: Partial<Record<"exposure_srm" | "activated_srm", number | null>> };
@@ -230,7 +241,8 @@ type DecisionFailure =
 
 The mapping is closed and total over the shipped `decisionGateCheckIds`: `control_identity` maps to
 `DECISION_CONTROL_IDENTITY_INVALID`; `engine_status` and `decision_valid_result` map to
-`DECISION_RESULT_INVALID`; `underpowered` maps to `DECISION_UNDERPOWERED`; `exposure_srm` and
+`DECISION_RESULT_INVALID`; `underpowered` maps to `DECISION_UNDERPOWERED`; `planned_duration` maps
+to `DECISION_DURATION_INCOMPLETE`; `exposure_srm` and
 `activated_srm` map to `DECISION_SRM_MISMATCH`; and `activation_balance` maps to
 `DECISION_ACTIVATION_IMBALANCE`. `checkIds` contains exactly the failed gate checks represented by
 that failure. A new gate check cannot be assigned an existing failure implicitly; this contract must

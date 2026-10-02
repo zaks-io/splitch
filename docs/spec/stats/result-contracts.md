@@ -165,13 +165,29 @@ comes from the inclusive `deduped_exposures.watermark_ts` Copy Pipe boundary, so
 `ingest_ts` exactly equals the watermark are part of the result.
 `result_token` is `sha256:` plus 64 lowercase hexadecimal digits, computed as SHA-256 over RFC 8785
 canonical bytes of
-`{ appId, environmentId, experimentId, runId, runConfigHash, stats }`, where `stats` omits every
-arm result's `estimand` (`resultTokenStats`). The disclosure labels the decision-driving estimate
-and adds an uncapped view that no decision reads, so leaving it out keeps a Run's token
-byte-identical to the token issued before the disclosure existed. A change to any decision-bearing field still
-changes the token. It is evidence identity for
-Conclude, not caller authority. The `no_run` and `no_data` members have neither field because no
-decision-bearing result exists.
+`{ appId, environmentId, experimentId, runId, runConfigHash, analysisVersion, stats }`, where
+`stats` omits every arm result's `estimand` (`resultTokenStats`). The disclosure labels the
+decision-driving estimate and adds an uncapped view that no decision reads, so leaving it out keeps
+a Run's token byte-identical to the token issued before the disclosure existed. A change to any
+decision-bearing field still changes the token. A legacy Run omits `analysisVersion`, so its token
+is byte-identical to the token it had before versioning. It is evidence identity for Conclude, not
+caller authority. The `no_run` and `no_data` members have neither field because no decision-bearing
+result exists.
+
+A ready envelope also carries `run_commitments`, what the Run froze at Start
+([ADR-0059](../../adr/0059-runs-freeze-an-analysis-version-and-legacy-runs-read-under-a-labeled-one.md)):
+
+| Field                              | Versioned Run (`analysis_version_source: "frozen"`)   | Legacy Run (`"legacy"`) |
+| ---------------------------------- | ----------------------------------------------------- | ----------------------- |
+| `analysis_version`                 | The frozen version                                    | `legacy-unversioned`    |
+| `target_n`                         | Frozen target; null on a fixed horizon                | null                    |
+| `target_n_source`                  | `caller` or `default`; null on a fixed horizon        | null                    |
+| `planned_duration_days`            | Planned duration                                      | null                    |
+| `planned_duration_override_reason` | Label when the duration is not whole weeks, else null | null                    |
+
+A legacy Run never reports a target or duration it did not record. Analysis refuses a Run frozen
+under a version it does not implement with `VALIDATION_ERROR` instead of analyzing it under a
+different engine.
 
 ## Sources
 

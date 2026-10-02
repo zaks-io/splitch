@@ -48,7 +48,7 @@ describe("runSnapshotRow", () => {
       run({
         horizon: "sequential",
         sampleSizeLocked: null,
-        analysisVersion: "2026-10-02",
+        analysisVersion: "analysis-v1",
         targetN: 5000,
         targetNSource: "default",
         plannedDurationDays: 10,
@@ -59,7 +59,7 @@ describe("runSnapshotRow", () => {
       "now",
     );
     expect(row).toMatchObject({
-      analysis_version: "2026-10-02",
+      analysis_version: "analysis-v1",
       target_n: 5000,
       target_n_source: "default",
       planned_duration_days: 10,
