@@ -4,6 +4,7 @@ import {
   canonicalHash,
   createResultToken,
   type ErrorResponse,
+  resultTokenStats,
 } from "@splitch/contracts";
 import { describe, expect, it } from "vitest";
 import { makeResultsHarness, RESULTS_PATH, resultsAuthInit } from "./results-test-harness";
@@ -56,7 +57,8 @@ describe("analysis version and Run commitments (ADR-0059)", () => {
     const envelope = await readyEnvelope();
 
     expect(envelope.result_token).toBe(LEGACY_FIXTURE_TOKEN);
-    // The pre-versioning evidence identity, recomputed: no analysis version key.
+    // The pre-versioning evidence identity, recomputed: no analysis version key,
+    // and the estimand disclosure stripped exactly as every token strips it.
     expect(envelope.result_token).toBe(
       await canonicalHash({
         appId: APP_ID,
@@ -64,7 +66,7 @@ describe("analysis version and Run commitments (ADR-0059)", () => {
         experimentId: EXPERIMENT_ID,
         runId: RUN_ID,
         runConfigHash: RUN_CONFIG_HASH,
-        stats: envelope.stats,
+        stats: resultTokenStats(envelope.stats),
       }),
     );
     expect(envelope.run_commitments).toEqual({

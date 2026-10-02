@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { canonicalHash } from "./canonical-json";
-import { stats } from "./experiment-decision-gate-test-fixtures";
+import { armResult, stats } from "./experiment-decision-gate-test-fixtures";
 import {
   CURRENT_ANALYSIS_VERSION,
   createResultToken,
@@ -37,6 +37,36 @@ describe("result token analysis version (ADR-0059)", () => {
     expect(await createResultToken({ ...identity, analysisVersion: null })).toBe(
       await canonicalHash(identity),
     );
+  });
+
+  it("strips the estimand disclosure on a versioned Run as on a legacy one", async () => {
+    const disclosed = stats({
+      arm_results: [
+        armResult({
+          estimand: {
+            label: "capped_additive_mean",
+            decision_label: "capped_additive_mean",
+            capped_entity_count: 1,
+            uncapped: {
+              label: "uncapped_additive_mean",
+              point_estimate: 0.5,
+              relative_lift_pct: 8,
+              ci_lower: 0.1,
+              ci_upper: 12,
+              p_value: 0.02,
+              status: "ready",
+              cuped_applied: false,
+            },
+          },
+        }),
+      ],
+    });
+
+    for (const analysisVersion of [null, "analysis-v1"]) {
+      expect(await createResultToken({ ...identity, stats: disclosed, analysisVersion })).toBe(
+        await createResultToken({ ...identity, analysisVersion }),
+      );
+    }
   });
 
   it("supports the version new Runs freeze", () => {
