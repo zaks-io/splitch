@@ -7,17 +7,15 @@
 
 import {
   type ApiRouteContract,
+  type ErrorCode,
   getRoute,
-  HydratedFlagListResponseSchema,
-  HydratedFlagResponseSchema,
-  HydratedPrincipalFlagListResponseSchema,
+  presentErrorResponse,
   publicSurfaceFor,
 } from "@splitch/contracts";
 import { IdempotencyKeyRequiredError } from "@splitch/control-plane-sdk/idempotency-header";
 import { McpOperationInvalidParamsError } from "@splitch/control-plane-sdk/mcp-operation-adapter";
 import type { McpSpanHandle } from "@splitch/observability/mcp-spans";
 import {
-  JSON_RPC_INVALID_PARAMS,
   JSON_RPC_METHOD_NOT_FOUND,
   type JsonRpcId,
   type JsonRpcResponse,
@@ -26,7 +24,14 @@ import {
   jsonRpcResult,
 } from "./json-rpc";
 import { delegationActor, type McpAccessTokenActor } from "./mcp-access-token";
+import {
+  assertHydratedFlagResult,
+  McpFlagReadContractError,
+  McpFlagReadUsageError,
+  withFlagReadDefaults,
+} from "./mcp-flag-read";
 import type { McpFaultReporter } from "./mcp-fault";
+import { invalidToolArgumentsError } from "./mcp-local-errors";
 import type { OperationSdk, OperationSdkResolver } from "./mcp-operation-sdks";
 import {
   type McpSessionContextValidator,
@@ -63,22 +68,20 @@ export async function callTool(
       jsonRpcError(id, JSON_RPC_METHOD_NOT_FOUND, "Method not found"),
     );
   }
+  if (!isPlainObject(call.arguments)) {
+    return recordToolResult(fault.span, invalidArgumentsResult(id, call.name));
+  }
   if (call.name === "context_use") {
-    try {
-      return recordToolResult(
-        fault.span,
-        await contextUse(
-          id,
-          call.arguments,
-          sessionId,
-          sessionStore,
-          sessionContextValidator ?? controlPlaneContextValidator(controlPlane, actor),
-          actor.subject,
-        ),
-      );
-    } catch (error) {
-      return toolCallFailure(id, error, fault);
-    }
+    return dispatchContextUse(
+      id,
+      call.arguments,
+      controlPlane,
+      actor,
+      sessionId,
+      sessionStore,
+      sessionContextValidator,
+      fault,
+    );
   }
   const route = getRoute(call.name);
   if (!route) {
@@ -98,10 +101,7 @@ export async function callTool(
       actor.subject,
     );
     if (!input.ok) {
-      return recordToolResult(
-        fault.span,
-        jsonRpcResult(id, toolResult({ message: input.message }, { isError: true })),
-      );
+      return recordToolResult(fault.span, jsonRpcResult(id, errorToolResult(input.error)));
     }
     const operationInput = withFlagReadDefaults(call.name, input.value);
     const result = await sdk.callOperationById(call.name, operationInput, {
@@ -110,108 +110,10 @@ export async function callTool(
     assertHydratedFlagResult(call.name, operationInput, result);
     return recordToolResult(
       fault.span,
-      jsonRpcResult(
-        id,
-        result.ok ? toolResult(result.data) : toolResult(result.error, { isError: true }),
-      ),
+      jsonRpcResult(id, result.ok ? toolResult(result.data) : errorToolResult(result.error)),
     );
   } catch (error) {
     return toolCallFailure(id, error, fault);
-  }
-}
-
-function withFlagReadDefaults(
-  operationId: string,
-  input: Record<string, unknown>,
-): Record<string, unknown> {
-  if (
-    operationId !== "principal_flags_list" &&
-    operationId !== "flags_list" &&
-    operationId !== "flags_get"
-  ) {
-    return input;
-  }
-  const { summary, ...requestInput } = input;
-  if (summary === true) {
-    // `envs` is only accepted alongside `include=config`, so dropping `include`
-    // while keeping `envs` would hand the Worker a request it must reject. Both
-    // fields contradict `summary`; say so instead of silently picking a winner.
-    const conflict = ["include", "envs"].find((field) => requestInput[field] !== undefined);
-    if (conflict) throw new McpFlagReadUsageError(operationId, conflict);
-    return requestInput;
-  }
-  if (requestInput.include !== undefined) return requestInput;
-  if (
-    operationId === "flags_list" &&
-    typeof requestInput.environmentId === "string" &&
-    requestInput.envs === undefined
-  ) {
-    const { environmentId, ...hydratedInput } = requestInput;
-    return { ...hydratedInput, include: "config", envs: environmentId };
-  }
-  return { ...requestInput, include: "config" };
-}
-
-function assertHydratedFlagResult(
-  operationId: string,
-  input: Record<string, unknown>,
-  result: { ok: true; data: unknown } | { ok: false },
-): void {
-  if (!result.ok || input.include !== "config") return;
-  if (isHydratedFlagResult(operationId, result.data)) return;
-  throw new McpFlagReadContractError(operationId);
-}
-
-function isHydratedFlagResult(operationId: string, payload: unknown): boolean {
-  if (operationId === "principal_flags_list") {
-    return HydratedPrincipalFlagListResponseSchema.safeParse(payload).success;
-  }
-  if (operationId === "flags_list") {
-    return HydratedFlagListResponseSchema.safeParse(payload).success;
-  }
-  if (operationId === "flags_get") {
-    return HydratedFlagResponseSchema.safeParse(payload).success;
-  }
-  return true;
-}
-
-/**
- * `summary` is the compact-response opt-out, so pairing it with a hydration
- * field is a contradiction the caller controls. It reaches the agent as the
- * same typed `VALIDATION_ERROR` tool result the idempotency rule uses, naming
- * the field to drop (SPL-266, ADR-0036).
- */
-class McpFlagReadUsageError extends Error {
-  readonly errorResponse: Record<string, unknown>;
-
-  constructor(operationId: string, conflictingField: string) {
-    const detail = `${operationId} cannot combine summary with ${conflictingField}: drop ${conflictingField} for the compact response, or drop summary for complete Flag Configurations`;
-    super(detail);
-    this.name = "McpFlagReadUsageError";
-    this.errorResponse = {
-      code: "VALIDATION_ERROR",
-      message: detail,
-      details: { issues: [{ path: [conflictingField], message: "conflicts with summary" }] },
-    };
-  }
-}
-
-class McpFlagReadContractError extends Error {
-  readonly errorResponse: Record<string, unknown>;
-
-  constructor(operationId: string) {
-    const message = `${operationId} requested complete Flag Configurations but received an unhydrated response`;
-    super(message);
-    this.name = "McpFlagReadContractError";
-    this.errorResponse = {
-      code: "INTERNAL_SERVER_ERROR",
-      message,
-      remediation:
-        "Update the server to the SPL-529 Flag-read contract or report the response mismatch",
-      recommendedAction: "UPDATE_SERVER",
-      docsUrl: "https://splitch.dev/docs/error/INTERNAL_SERVER_ERROR",
-      details: { fault: "FLAG_READ_CONTRACT_MISMATCH" },
-    };
   }
 }
 
@@ -239,45 +141,55 @@ function recordToolResult(span: McpSpanHandle, response: JsonRpcResponse): JsonR
 }
 
 /**
- * A missing idempotency key is a caller-fixable precondition, so it reaches the
- * agent as a typed `VALIDATION_ERROR` tool result — the same code and envelope the
- * Worker uses for that rule — rather than a protocol fault. `Internal error` stays
- * the last resort for genuinely unexpected throws (SPL-266).
- *
- * The promise is scoped to this rule: other refusals on this path (scope
- * resolution) still return an untyped message with no `code`.
+ * Caller-fixable tool refusals (missing path args, missing idempotency keys,
+ * Flag-read contradictions) reach the agent as typed `isError` results, not
+ * JSON-RPC `-32602`. Unknown tool names stay protocol errors (SEP-1303).
  */
 function toolCallFailure(id: JsonRpcId, error: unknown, fault: McpToolCallFault): JsonRpcResponse {
-  if (error instanceof IdempotencyKeyRequiredError) {
-    return recordToolResult(
-      fault.span,
-      jsonRpcResult(id, toolResult(error.errorResponse, { isError: true })),
-    );
-  }
-  if (error instanceof McpOperationInvalidParamsError) {
-    return recordToolResult(
-      fault.span,
-      jsonRpcError(id, JSON_RPC_INVALID_PARAMS, "Invalid params", {
-        argument: error.argument,
-        message: error.message,
-      }),
-    );
-  }
-  if (error instanceof McpFlagReadUsageError) {
-    return recordToolResult(
-      fault.span,
-      jsonRpcResult(id, toolResult(error.errorResponse, { isError: true })),
-    );
-  }
-  if (error instanceof McpFlagReadContractError) {
-    return recordToolResult(
-      fault.span,
-      jsonRpcResult(id, toolResult(error.errorResponse, { isError: true })),
-    );
+  if (hasTypedErrorResponse(error)) {
+    return recordToolResult(fault.span, jsonRpcResult(id, errorToolResult(error.errorResponse)));
   }
   return recordToolResult(fault.span, jsonRpcInternalError(id, error, fault.reportFault));
 }
 
+async function dispatchContextUse(
+  id: JsonRpcId,
+  arguments_: Record<string, unknown>,
+  controlPlane: OperationSdkResolver,
+  actor: McpAccessTokenActor,
+  sessionId: string | null,
+  sessionStore: McpSessionStore,
+  sessionContextValidator: McpSessionContextValidator | undefined,
+  fault: McpToolCallFault,
+): Promise<JsonRpcResponse> {
+  try {
+    return recordToolResult(
+      fault.span,
+      await contextUse(
+        id,
+        arguments_,
+        sessionId,
+        sessionStore,
+        sessionContextValidator ?? controlPlaneContextValidator(controlPlane, actor),
+        actor.subject,
+      ),
+    );
+  } catch (error) {
+    return toolCallFailure(id, error, fault);
+  }
+}
+
+function invalidArgumentsResult(id: JsonRpcId, name: string): JsonRpcResponse {
+  return jsonRpcResult(
+    id,
+    errorToolResult(
+      invalidToolArgumentsError(
+        [{ path: [], message: "must be an object" }],
+        `${name} arguments must be an object`,
+      ),
+    ),
+  );
+}
 async function contextUse(
   id: JsonRpcId,
   arguments_: unknown,
@@ -287,12 +199,7 @@ async function contextUse(
   subject: string,
 ): Promise<JsonRpcResponse> {
   const result = await setSessionContext(arguments_, sessionId, sessionStore, validate, subject);
-  return jsonRpcResult(
-    id,
-    result.ok
-      ? toolResult(result.value)
-      : toolResult({ message: result.message }, { isError: true }),
-  );
+  return jsonRpcResult(id, result.ok ? toolResult(result.value) : errorToolResult(result.error));
 }
 
 /**
@@ -313,6 +220,23 @@ export function controlPlaneSdkForRoute(
     );
   }
   return controlPlane();
+}
+
+function hasTypedErrorResponse(error: unknown): error is { errorResponse: { code: ErrorCode } } {
+  return (
+    error instanceof IdempotencyKeyRequiredError ||
+    error instanceof McpOperationInvalidParamsError ||
+    error instanceof McpFlagReadUsageError ||
+    error instanceof McpFlagReadContractError
+  );
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function errorToolResult(error: { readonly code: ErrorCode }): Record<string, unknown> {
+  return toolResult(presentErrorResponse(error), { isError: true });
 }
 
 function toolResult(value: unknown, options: { isError?: boolean } = {}): Record<string, unknown> {

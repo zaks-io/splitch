@@ -7,12 +7,11 @@ import {
 } from "./mcp-test-verifier";
 
 /**
- * The `-32602` mapping. What the error may *say* is pinned by the vocabulary
- * sweep in `mcp-error-vocabulary.test.ts`, over the whole error surface rather
- * than one literal on one response.
+ * Missing or non-string path parameters used to be JSON-RPC `-32602`. SEP-1303
+ * routes that class of invalid arguments to a typed `isError` tool result.
  */
 describe("MCP invalid tool arguments", () => {
-  it("returns JSON-RPC Invalid params for a missing required path argument", async () => {
+  it("returns a typed VALIDATION_ERROR tool result for a missing required path argument", async () => {
     const seen: Request[] = [];
     const response = await handleMcpServerRequest({
       request: new Request("https://mcp.test/mcp", {
@@ -36,17 +35,17 @@ describe("MCP invalid tool arguments", () => {
       revocations: allowMcpRevocations(),
     });
     const body = (await response.json()) as {
-      error?: { code: number; message: string; data?: unknown };
-      result?: unknown;
+      error?: unknown;
+      result?: { isError?: boolean; structuredContent?: Record<string, unknown> };
     };
 
-    expect(body.result).toBeUndefined();
-    expect(body.error).toEqual({
-      code: -32602,
-      message: "Invalid params",
-      data: {
-        argument: "orgId",
-        message: 'Missing required argument "orgId".',
+    expect(body.error).toBeUndefined();
+    expect(body.result).toMatchObject({
+      isError: true,
+      structuredContent: {
+        code: "VALIDATION_ERROR",
+        outcome: "user_action_required",
+        details: { issues: [{ path: ["orgId"], message: "required" }] },
       },
     });
     expect(seen).toEqual([]);

@@ -45,6 +45,7 @@ describe("path selector authorization ordering", () => {
           code: "FORBIDDEN",
           message: "credential is not scoped to this app",
           details: {},
+          outcome: "user_action_required",
         }),
       ]),
     );
@@ -159,6 +160,7 @@ describe("path selector compatibility", () => {
           { environmentId: "env_selector_collision", environmentKey: "env_prod9" },
         ],
       },
+      outcome: "user_action_required",
     });
     expect(body.details.candidates).not.toContainEqual({
       environmentId: "env_selector_foreign_collision",

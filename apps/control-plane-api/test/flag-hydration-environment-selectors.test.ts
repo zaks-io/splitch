@@ -92,6 +92,7 @@ describe("hydrated Flag Environment selectors", () => {
           { environmentId: collisionId, environmentKey: prod.id },
         ]),
       },
+      outcome: "user_action_required",
     });
   });
 

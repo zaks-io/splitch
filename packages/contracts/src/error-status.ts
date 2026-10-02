@@ -81,6 +81,9 @@ export const errorStatusByCode: Record<ErrorCode, number> = {
 
   EXPOSURE_TICKET_EXPIRED: 410,
 
+  SCOPE_UNRESOLVED: 400,
+  CONTEXT_USE_INVALID: 400,
+
   UNSUPPORTED_MEDIA_TYPE: 415,
 
   RATE_LIMITED: 429,

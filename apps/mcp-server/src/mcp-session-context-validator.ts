@@ -27,7 +27,11 @@ export function controlPlaneContextValidator(
     // one. It is not redundant, so do not fold it into the call below.
     const app = await sdk.callOperationById("apps_get", { appId: context.appId }, callOptions);
     if (!app.ok) {
-      return { ok: false, message: `App "${context.appId}" did not resolve.` };
+      return {
+        ok: false,
+        message: `App "${context.appId}" did not resolve.`,
+        field: "appId",
+      };
     }
 
     const environment = await sdk.callOperationById("environments_get", context, callOptions);
@@ -36,6 +40,7 @@ export function controlPlaneContextValidator(
       : {
           ok: false,
           message: `Environment "${context.environmentId}" did not resolve in App "${context.appId}".`,
+          field: "environmentId",
         };
   };
 }

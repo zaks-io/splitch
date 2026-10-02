@@ -113,6 +113,7 @@ describe("granting App access", () => {
       code: "MEMBERSHIP_CONFLICT",
       message: "user is already an App member",
       details: { existingRole: "member" },
+      outcome: "user_action_required",
     });
     expect(await roleOf(ALPHA.appId, USER_MEMBER)).toBe("member");
   });

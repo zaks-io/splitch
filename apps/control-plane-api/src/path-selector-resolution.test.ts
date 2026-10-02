@@ -89,6 +89,7 @@ describe("authenticated control-plane path selectors", () => {
           { orgSlug: "beta", appId: APP_B, appSlug: "neuron" },
         ],
       },
+      outcome: "user_action_required",
     });
   });
 });
@@ -260,12 +261,10 @@ async function seedHalfReachableApp(
     appName: row.appKey,
     appKey: row.appKey,
   });
-  if (row.membership !== "app") {
+  if (row.membership !== "app")
     await seedOrgMember(d1, { orgId: row.orgId, userId: USER, role: "owner" });
-  }
-  if (row.membership !== "org") {
+  if (row.membership !== "org")
     await seedAppMember(d1, { appId: row.appId, userId: USER, role: "owner" });
-  }
 }
 
 async function seedFlag(d1: D1Database, appId: string, flagId: string, key: string) {

@@ -69,6 +69,22 @@ export const validationErrorDocs = {
     details: "{ receivedMediaType: string | null, supportedMediaTypes: string[] }",
     related: ["VALIDATION_ERROR"],
   },
+  SCOPE_UNRESOLVED: {
+    remediation: "Call context_use or pass the named App or Environment parameter",
+    cause:
+      "The tool needs an App or Environment and neither the call nor the session supplied one.",
+    fix: "Set session scope with `context_use`, or pass the parameter named in `details.parameter` on the next call. The refusal is local to the MCP session, not a missing row on the Control Plane.",
+    details: '{ parameter: string, resource: "App" | "Environment" }',
+    related: ["CONTEXT_USE_INVALID", "VALIDATION_ERROR"],
+  },
+  CONTEXT_USE_INVALID: {
+    remediation: "Supply a live MCP session plus non-empty appId and environmentId",
+    cause:
+      "context_use was called without a session, or with empty or unusable App and Environment arguments.",
+    fix: "Open or keep an MCP session, then resend `appId` and `environmentId` as non-empty strings. `details.issues` names the fields to correct.",
+    details: "{ issues: Array<{ path: string[], message: string }> }",
+    related: ["SCOPE_UNRESOLVED", "VALIDATION_ERROR"],
+  },
   EVENT_ID_CONFLICT: {
     remediation:
       "Keep the event id stable across retries of one logical event, and mint a new id for a new one",

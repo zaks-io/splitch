@@ -108,6 +108,7 @@ describe("POST /api/sdk/verify", () => {
         origin: "https://evil.example.test",
         hint: "add this origin to the Client Key allow-list or open the key",
       },
+      outcome: "user_action_required",
     });
     expect(blockedHarness.assignmentStore.getAllCalls).toEqual([]);
     expect(blockedHarness.assignmentStore.putCalls).toEqual([]);
@@ -183,6 +184,7 @@ describe("POST /api/sdk/verify: Client Key validation errors", () => {
       code: "VALIDATION_ERROR",
       message: "idType does not match the Experiment",
       details: { issues: [] },
+      outcome: "user_action_required",
     });
     expect(raw).not.toContain("workspace");
     expect(raw).not.toContain("targetingKeyType");

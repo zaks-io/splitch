@@ -173,7 +173,14 @@ describe("MCP context_use failure classes", () => {
     expect(body).toMatchObject({
       result: {
         isError: true,
-        structuredContent: { message: 'App "app_typo" did not resolve.' },
+        structuredContent: {
+          code: "CONTEXT_USE_INVALID",
+          message: 'App "app_typo" did not resolve.',
+          outcome: "user_action_required",
+          details: {
+            issues: [{ path: [], message: 'App "app_typo" did not resolve.' }],
+          },
+        },
       },
     });
   });
@@ -188,7 +195,11 @@ describe("MCP context_use failure classes", () => {
     expect(body).toMatchObject({
       result: {
         isError: true,
-        structuredContent: { message: "context_use requires non-empty appId and environmentId." },
+        structuredContent: {
+          code: "CONTEXT_USE_INVALID",
+          message: "context_use requires non-empty appId and environmentId.",
+          outcome: "user_action_required",
+        },
       },
     });
   });

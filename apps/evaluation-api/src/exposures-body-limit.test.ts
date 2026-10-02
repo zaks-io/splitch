@@ -68,6 +68,7 @@ describe("POST /api/sdk/exposures: raw-body byte limit", () => {
           },
         ],
       },
+      outcome: "user_action_required",
     });
   });
 

@@ -40,11 +40,23 @@ export interface McpOperationCallOptions extends ControlPlaneOperationOptions {
 
 export class McpOperationInvalidParamsError extends Error {
   readonly argument: string;
+  readonly errorResponse: ErrorResponse;
 
-  constructor(argument: string) {
-    super(`Missing required argument "${argument}".`);
+  constructor(argument: string, value: unknown) {
+    const missing = value === undefined;
+    const detail = missing
+      ? `Missing required argument "${argument}".`
+      : `Argument "${argument}" must be a string.`;
+    super(detail);
     this.name = "McpOperationInvalidParamsError";
     this.argument = argument;
+    this.errorResponse = {
+      code: "VALIDATION_ERROR",
+      message: detail,
+      details: {
+        issues: [{ path: [argument], message: missing ? "required" : "must be a string" }],
+      },
+    };
   }
 }
 
@@ -183,7 +195,7 @@ function buildPath(route: ApiRouteContract, input: unknown): string {
   return route.path.replace(/:([A-Za-z0-9_]+)/g, (_match, key: string) => {
     const value = ownValue(record, key);
     if (typeof value !== "string") {
-      throw new McpOperationInvalidParamsError(key);
+      throw new McpOperationInvalidParamsError(key, value);
     }
     return encodeURIComponent(value);
   });

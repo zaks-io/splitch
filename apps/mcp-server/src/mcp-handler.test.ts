@@ -103,6 +103,7 @@ describe("mcp server Streamable HTTP transport", () => {
       isError: true,
       structuredContent: {
         code: "INTERNAL_SERVER_ERROR",
+        outcome: "non_retryable",
         remediation: expect.stringContaining("Update the server"),
         recommendedAction: "UPDATE_SERVER",
         docsUrl: "https://splitch.dev/docs/error/INTERNAL_SERVER_ERROR",
@@ -228,7 +229,7 @@ describe("mcp server errors and config", () => {
 
     expect(seen[0]).toMatchObject({ method: "POST", path: "/apps/app_local/flags" });
     expect(body.result.isError).toBe(true);
-    expect(body.result.structuredContent).toEqual(validationError);
+    expect(body.result.structuredContent).toMatchObject(validationError);
   });
 
   it("keeps wrangler state limited to sessions and shared token revocation", async () => {

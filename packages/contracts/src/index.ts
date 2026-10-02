@@ -63,6 +63,8 @@ export {
   RecommendedActionSchema,
   recommendedActions,
 } from "./errors";
+// biome-ignore lint/performance/noReExportAll: outcome class lives beside the error envelope exports
+export * from "./error-outcome";
 // biome-ignore lint/performance/noReExportAll: Event Definition and Metric Event exports are grouped by domain
 export * from "./events";
 // biome-ignore lint/performance/noReExportAll: package entry point intentionally exposes the grouped rigor API

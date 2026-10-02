@@ -44,7 +44,7 @@ describe("registrar default mutating JSON body limit", () => {
     expect(handler).not.toHaveBeenCalled();
     parse.mockRestore();
     expect(response.status).toBe(400);
-    expect(await response.json()).toEqual(DEFAULT_MUTATING_JSON_BODY_LIMIT.error);
+    expect(await response.json()).toMatchObject(DEFAULT_MUTATING_JSON_BODY_LIMIT.error);
   });
 
   it("stops a default-capped chunked body at the first over-cap byte", async () => {
@@ -78,7 +78,7 @@ describe("registrar default mutating JSON body limit", () => {
     expect(JSON.stringify(errors)).not.toContain(rejectedMarker);
     parse.mockRestore();
     expect(response.status).toBe(400);
-    expect(await response.json()).toEqual(DEFAULT_MUTATING_JSON_BODY_LIMIT.error);
+    expect(await response.json()).toMatchObject(DEFAULT_MUTATING_JSON_BODY_LIMIT.error);
   });
 
   it("parses an exactly-at-default-cap body and still runs schema validation", async () => {
@@ -124,7 +124,7 @@ describe("registrar default mutating JSON body limit", () => {
     });
 
     expect(response.status).toBe(400);
-    expect(await response.json()).toEqual(LIMIT_ERROR);
+    expect(await response.json()).toMatchObject(LIMIT_ERROR);
     expect(handler).not.toHaveBeenCalled();
   });
 });
@@ -150,7 +150,7 @@ describe("registrar control-plane JSON body limit", () => {
 
     expect(body.pull).not.toHaveBeenCalled();
     expect(response.status).toBe(400);
-    expect(await response.json()).toEqual(DEFAULT_CONTROL_PLANE_JSON_BODY_LIMIT.error);
+    expect(await response.json()).toMatchObject(DEFAULT_CONTROL_PLANE_JSON_BODY_LIMIT.error);
     expect(handler).not.toHaveBeenCalled();
   });
 
@@ -210,7 +210,7 @@ describe("registrar control-plane JSON body limit", () => {
 
     expect(body.pull).not.toHaveBeenCalled();
     expect(response.status).toBe(400);
-    expect(await response.json()).toEqual(largerError);
+    expect(await response.json()).toMatchObject(largerError);
     expect(handler).not.toHaveBeenCalled();
   });
 });

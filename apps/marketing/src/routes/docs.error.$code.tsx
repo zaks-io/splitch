@@ -1,3 +1,5 @@
+import type { ErrorCode } from "@splitch/contracts";
+import { errorOutcomeByCode } from "@splitch/contracts";
 import { Badge } from "@splitch/ui/components/badge";
 import { createFileRoute, Link, notFound } from "@tanstack/react-router";
 import { DocInline } from "../components/doc-body";
@@ -91,6 +93,7 @@ function ErrorCodeRoute() {
 
         <dl className="grid gap-6 rounded-lg border border-border bg-muted/40 p-5 sm:grid-cols-2">
           {status !== null && <Fact label="HTTP status">{status}</Fact>}
+          {status !== null && <Fact label="Outcome">{errorOutcomeByCode[code as ErrorCode]}</Fact>}
           {doc.exitCode !== undefined && <Fact label="Exit code">{doc.exitCode}</Fact>}
           {doc.recommendedAction && <Fact label="Recommended action">{doc.recommendedAction}</Fact>}
           {doc.details && (
