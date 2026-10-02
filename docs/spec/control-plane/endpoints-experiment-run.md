@@ -142,7 +142,7 @@ Start also freezes the Run commitments
 ([ADR-0059](../../adr/0059-runs-freeze-an-analysis-version-and-legacy-runs-read-under-a-labeled-one.md)):
 the current `analysis_version`; `targetN`, which defaults to 5000 on a sequential Run and is recorded
 as defaulted (`target_n_source: "default"`), and is refused on a fixed horizon; and
-`plannedDurationDays`, which defaults to 7. A duration that is not whole weeks needs
+`plannedDurationDays`, which defaults to 7 and is at most 365 (one year; an unbounded day count can overflow the decision timestamp the gate computes). A duration that is not whole weeks needs
 `plannedDurationOverrideReason`, which is recorded as a labeled override; a reason on a whole-week
 duration is refused because it overrides nothing. The caller's values ride the Approval proposal and
 are part of what `idempotency_key` identifies; a proposal recorded before they existed resolves to

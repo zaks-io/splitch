@@ -37,6 +37,11 @@ export const DEFAULT_SEQUENTIAL_TARGET_N = 5_000;
 /** One full weekly cycle (Kohavi and Longbotham), the default planned duration. */
 export const DEFAULT_PLANNED_DURATION_DAYS = 7;
 export const PLANNED_DURATION_WEEK_DAYS = 7;
+/**
+ * A year. Past this a plan is not a decision schedule, and an unbounded day
+ * count can overflow the decision timestamp the gate has to compute.
+ */
+export const MAX_PLANNED_DURATION_DAYS = 365;
 
 export const TargetNSourceSchema = z.enum(["caller", "default"]);
 export type TargetNSource = z.infer<typeof TargetNSourceSchema>;
@@ -49,7 +54,7 @@ export const RunCommitmentsSchema = z.discriminatedUnion("analysis_version_sourc
       /** Null on a fixed-horizon Run, which has no sequential tuning target. */
       target_n: z.number().int().positive().nullable(),
       target_n_source: TargetNSourceSchema.nullable(),
-      planned_duration_days: z.number().int().positive(),
+      planned_duration_days: z.number().int().positive().max(MAX_PLANNED_DURATION_DAYS),
       /** Present only when the planned duration departs from whole weeks. */
       planned_duration_override_reason: z.string().min(1).nullable(),
     })

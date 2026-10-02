@@ -1,4 +1,5 @@
 import type { DecisionGateCheck } from "./experiment-decision-gate";
+import { MAX_PLANNED_DURATION_DAYS } from "./run-commitments";
 
 /**
  * The planned-duration readiness check (ADR-0059, plan decision D7).
@@ -35,8 +36,13 @@ export function earliestDecisionWatermark(runStartedAt: string, plannedDurationD
 
 export function plannedDurationCheck(evidence: PlannedDurationEvidence): DecisionGateCheck {
   const planned = evidence.plannedDurationDays;
-  if (planned !== null && !(Number.isInteger(planned) && planned > 0)) {
-    throw new Error(`planned duration ${String(planned)} is not a positive whole number of days`);
+  if (
+    planned !== null &&
+    !(Number.isInteger(planned) && planned > 0 && planned <= MAX_PLANNED_DURATION_DAYS)
+  ) {
+    throw new Error(
+      `planned duration ${String(planned)} is not a whole number of days from 1 to ${MAX_PLANNED_DURATION_DAYS}`,
+    );
   }
   if (planned === null) {
     return {

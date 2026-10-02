@@ -1,6 +1,7 @@
 import {
   DEFAULT_PLANNED_DURATION_DAYS,
   DEFAULT_SEQUENTIAL_TARGET_N,
+  MAX_PLANNED_DURATION_DAYS,
   PLANNED_DURATION_WEEK_DAYS,
   type TargetNSource,
 } from "@splitch/contracts";
@@ -71,8 +72,11 @@ function resolvePlannedDuration(rawDays: unknown, rawReason: unknown) {
   if (!overrideReason.ok) return overrideReason;
   const reason = overrideReason.value;
   const days = rawDays === undefined || rawDays === null ? DEFAULT_PLANNED_DURATION_DAYS : rawDays;
-  if (!isPositiveInteger(days)) {
-    return issue("plannedDurationDays", "plannedDurationDays must be a positive integer");
+  if (!isPositiveInteger(days) || days > MAX_PLANNED_DURATION_DAYS) {
+    return issue(
+      "plannedDurationDays",
+      `plannedDurationDays must be a whole number of days from 1 to ${MAX_PLANNED_DURATION_DAYS}`,
+    );
   }
   const wholeWeeks = days % PLANNED_DURATION_WEEK_DAYS === 0;
   if (!wholeWeeks && reason === null) {

@@ -8,6 +8,7 @@ import {
   RunCommitmentsSchema,
   SUPPORTED_ANALYSIS_VERSIONS,
 } from "./run-commitments";
+import { AnalysisResultsEnvelopeSchema } from "./stats-result-contract";
 
 const identity = {
   appId: "app_1",
@@ -74,7 +75,38 @@ describe("result token analysis version (ADR-0059)", () => {
   });
 });
 
+describe("ready results envelope compatibility", () => {
+  it("still parses a ready envelope from before run_commitments existed", () => {
+    const parsed = AnalysisResultsEnvelopeSchema.parse({
+      state: "ready",
+      run_id: "run_1",
+      control_variant: "control",
+      data_watermark: "2026-07-05T00:00:00.000Z",
+      result_token: `sha256:${"b".repeat(64)}`,
+      stats: stats(),
+    });
+
+    expect(parsed.state === "ready" && parsed.run_commitments).toBeUndefined();
+  });
+});
+
 describe("RunCommitmentsSchema", () => {
+  it("bounds a frozen planned duration at a year", () => {
+    const frozen = {
+      analysis_version_source: "frozen",
+      analysis_version: CURRENT_ANALYSIS_VERSION,
+      target_n: 5000,
+      target_n_source: "default",
+      planned_duration_override_reason: null,
+    };
+    expect(RunCommitmentsSchema.safeParse({ ...frozen, planned_duration_days: 365 }).success).toBe(
+      true,
+    );
+    expect(
+      RunCommitmentsSchema.safeParse({ ...frozen, planned_duration_days: 100_000_005 }).success,
+    ).toBe(false);
+  });
+
   it("never lets a legacy Run carry a target or duration commitment", () => {
     expect(RunCommitmentsSchema.parse(LEGACY_RUN_COMMITMENTS)).toEqual(LEGACY_RUN_COMMITMENTS);
     expect(

@@ -72,7 +72,7 @@ describe("planned_duration gate check", () => {
         undefined,
         reachedDuration({ plannedDurationDays: undefined as unknown as number }),
       ),
-    ).toThrow("is not a positive whole number of days");
+    ).toThrow("is not a whole number of days from 1 to 365");
   });
 
   it("is not applicable, and blocks nothing, on a legacy Run with no recorded plan", () => {

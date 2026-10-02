@@ -1,5 +1,6 @@
 // biome-ignore-all lint/performance/noBarrelFile: internal sub-barrel of ../index.ts, which stays the only supported import path for these symbols
 
+export { resultTokenStats } from "../result-token-stats";
 export type { ResultTokenInput, RunCommitments, TargetNSource } from "../run-commitments";
 export {
   CURRENT_ANALYSIS_VERSION,
@@ -8,6 +9,7 @@ export {
   DEFAULT_SEQUENTIAL_TARGET_N,
   LEGACY_ANALYSIS_VERSION,
   LEGACY_RUN_COMMITMENTS,
+  MAX_PLANNED_DURATION_DAYS,
   PLANNED_DURATION_WEEK_DAYS,
   RunCommitmentsSchema,
   SUPPORTED_ANALYSIS_VERSIONS,
@@ -91,4 +93,3 @@ export {
   VarianceTechniquesSchema,
   WinsorizeCapSchema,
 } from "../stats-result-contract";
-export { resultTokenStats } from "../result-token-stats";

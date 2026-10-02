@@ -19,6 +19,7 @@ import {
   ApprovalRequestSchema,
   InlineApproveAndApplyReviewSchema,
 } from "./routes/route-shapes-approval-request";
+import { MAX_PLANNED_DURATION_DAYS } from "./run-commitments";
 import { TargetingKeyTypeSchema } from "./targeting-key-type";
 import { TargetingRuleInputSchema, WriteMetricRefSchema } from "./write-persisted-schemas";
 
@@ -187,8 +188,8 @@ export const StartRunRequestSchema = z
     sampleSizeLocked: z.number().int().positive().nullable().optional(),
     /** Sequential tuning target; defaults to 5000 and is recorded as defaulted. */
     targetN: z.number().int().positive().optional(),
-    /** Whole weeks by policy (default 7); any other value needs an override reason. */
-    plannedDurationDays: z.number().int().positive().optional(),
+    /** Whole weeks by policy (default 7, at most 365); any other value needs an override reason. */
+    plannedDurationDays: z.number().int().positive().max(MAX_PLANNED_DURATION_DAYS).optional(),
     plannedDurationOverrideReason: PersistedDescriptionSchema.min(1).optional(),
     idempotency_key: IdempotencyKeySchema,
   })

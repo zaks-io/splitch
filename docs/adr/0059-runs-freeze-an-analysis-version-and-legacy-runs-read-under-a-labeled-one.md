@@ -19,7 +19,7 @@ Run Start freezes three commitments into the locked decision spec and the Run Sn
   the Run opens.
 - `target_n`: the caller's sequential tuning target, or the 5000 default recorded with
   `target_n_source: "default"`. A fixed-horizon Run has none.
-- `planned_duration_days`: seven days by default. The policy is whole weeks; any other value needs
+- `planned_duration_days`: seven days by default, at most 365. The policy is whole weeks; any other value needs
   a `plannedDurationOverrideReason`, which is recorded in the locked spec and shown in results.
 
 The result token adds `analysisVersion` to its canonical input for a versioned Run, so a deliberate

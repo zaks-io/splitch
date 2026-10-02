@@ -156,6 +156,17 @@ describe("Run commitments at Start (ADR-0059)", () => {
     expect(issue?.message).toMatch(/plannedDurationOverrideReason/);
   });
 
+  it("refuses a planned duration past a year, even in whole weeks, before anything is written", async () => {
+    const result = runDecisionSpecFromBody({ plannedDurationDays: 100_000_005 }, REQUEST_ID);
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    const issue = (await errorBody(result.response)).details.issues[0];
+    expect(issue?.path).toEqual(["body", "plannedDurationDays"]);
+    expect(issue?.message).toMatch(/from 1 to 365/);
+    expect(decisionSpecFromProposal({ plannedDurationDays: 100_000_005 })).toBeNull();
+  });
+
   it("records a labeled override in the locked spec", () => {
     expect(
       runDecisionSpecFromBody(
