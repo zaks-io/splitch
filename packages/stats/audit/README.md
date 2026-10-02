@@ -9,7 +9,7 @@ pnpm stats:audit
 
 ## CPU load
 
-This suite is not in `verify:ci` because of what it costs to run. Vitest runs the five files in
+This suite is not in `verify:ci` because of what it costs to run. Vitest runs the files in
 parallel worker processes and every one of them is a Monte Carlo loop, so the suite will use every
 core the machine has for its whole duration. Measured wall clock is roughly 2 minutes on an idle
 machine and closer to 3 under contention; the single any-time Type-I test accounts for about 90
