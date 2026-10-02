@@ -1,10 +1,14 @@
-import { type ApiRouteContract, defineApiRoute } from "../openapi-route";
+import { type ApiRouteContract, defineApiRoute, errorResponseSchemaFor, z } from "../openapi-route";
 import {
+  OfrepBulkEvaluationFailureSchema,
   OfrepBulkEvaluationRequestSchema,
   OfrepBulkEvaluationSuccessSchema,
+  OfrepEvaluationFailureSchema,
+  OfrepEvaluationRequestRuntimeSchema,
   OfrepEvaluationRequestSchema,
   OfrepEvaluationSuccessSchema,
   OfrepFlagKeyParamsSchema,
+  OfrepGeneralErrorSchema,
 } from "../wire-envelopes-core";
 
 /**
@@ -24,6 +28,18 @@ const OFREP_AUTH_ERRORS = [
   "SERVICE_UNAVAILABLE",
 ] as const;
 
+/** Body-limit VALIDATION_ERROR plus OFREP evaluation/request failures. */
+const OfrepSingleStatus400Schema = z.union([
+  errorResponseSchemaFor("VALIDATION_ERROR"),
+  OfrepEvaluationFailureSchema,
+]);
+
+const OfrepBulkStatus400Schema = z.union([
+  errorResponseSchemaFor("VALIDATION_ERROR"),
+  errorResponseSchemaFor("UNSUPPORTED_OBJECT_KEY"),
+  OfrepBulkEvaluationFailureSchema,
+]);
+
 export const ofrepRoutes = [
   defineApiRoute({
     operationId: "ofrep_evaluate",
@@ -31,7 +47,11 @@ export const ofrepRoutes = [
     method: "POST",
     path: "/ofrep/v1/evaluate/flags/:key",
     summary: "OFREP single-Flag evaluation (Exposure-bearing).",
-    request: { params: OfrepFlagKeyParamsSchema, body: OfrepEvaluationRequestSchema },
+    request: {
+      params: OfrepFlagKeyParamsSchema,
+      body: OfrepEvaluationRequestSchema,
+      runtimeBody: OfrepEvaluationRequestRuntimeSchema,
+    },
     response: OfrepEvaluationSuccessSchema,
     auth: "data-plane-key",
     scopes: ["data-plane:evaluate"],
@@ -39,6 +59,11 @@ export const ofrepRoutes = [
     // OFREP clients may omit this header; the handler mints a per-request key.
     idempotency: "optional",
     errors: [...OFREP_AUTH_ERRORS, "FLAG_NOT_FOUND"],
+    errorResponseSchemas: {
+      400: OfrepSingleStatus400Schema,
+      404: OfrepEvaluationFailureSchema,
+      500: OfrepGeneralErrorSchema,
+    },
   }),
   defineApiRoute({
     operationId: "ofrep_evaluate_bulk",
@@ -46,7 +71,10 @@ export const ofrepRoutes = [
     method: "POST",
     path: "/ofrep/v1/evaluate/flags",
     summary: "OFREP bulk Flag evaluation (non-exposing prefetch).",
-    request: { body: OfrepBulkEvaluationRequestSchema },
+    request: {
+      body: OfrepBulkEvaluationRequestSchema,
+      runtimeBody: OfrepEvaluationRequestRuntimeSchema,
+    },
     response: OfrepBulkEvaluationSuccessSchema,
     notModifiedResponse: true,
     auth: "data-plane-key",
@@ -54,5 +82,9 @@ export const ofrepRoutes = [
     rateLimit: "client-key",
     idempotency: "optional",
     errors: [...OFREP_AUTH_ERRORS, "UNSUPPORTED_OBJECT_KEY"],
+    errorResponseSchemas: {
+      400: OfrepBulkStatus400Schema,
+      500: OfrepGeneralErrorSchema,
+    },
   }),
 ] as const satisfies readonly ApiRouteContract[];

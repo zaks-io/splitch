@@ -16,7 +16,7 @@ export function resolutionEntry(
 } {
   if (result.kind === "error") {
     return {
-      variant: valueForVariantName(flag.variants, result.variant),
+      variant: null,
       variantName: result.variant,
       reason: "ERROR",
       errorCode: result.errorCode,
@@ -24,8 +24,19 @@ export function resolutionEntry(
       exposureTicket: null,
     };
   }
+  const value = valueForVariantName(flag.variants, result.variant);
+  if (!value.ok) {
+    return {
+      variant: null,
+      variantName: value.variantName,
+      reason: "ERROR",
+      errorCode: "INTERNAL_SERVER_ERROR",
+      exposureIdentity: null,
+      exposureTicket: null,
+    };
+  }
   return {
-    variant: valueForVariantName(flag.variants, result.variant),
+    variant: value.value,
     variantName: result.variant,
     reason: reasonForResolution(result),
     errorCode: null,
@@ -41,10 +52,22 @@ export async function entryFor(
 ): Promise<EvaluateAllEntry> {
   if (result.kind === "error") {
     return {
-      variant: valueForVariantName(flag.variants, result.variant),
+      variant: null,
       variantName: result.variant,
       reason: "ERROR",
       errorCode: result.errorCode,
+      exposureIdentity: null,
+      exposureTicket: null,
+    };
+  }
+
+  const value = valueForVariantName(flag.variants, result.variant);
+  if (!value.ok) {
+    return {
+      variant: null,
+      variantName: value.variantName,
+      reason: "ERROR",
+      errorCode: "INTERNAL_SERVER_ERROR",
       exposureIdentity: null,
       exposureTicket: null,
     };
@@ -57,7 +80,7 @@ export async function entryFor(
       : await mintExposureTicketWithIdentity(result.exposure, ticketDeps);
 
   return {
-    variant: valueForVariantName(flag.variants, result.variant),
+    variant: value.value,
     variantName: result.variant,
     reason,
     errorCode: null,
@@ -68,8 +91,8 @@ export async function entryFor(
 function valueForVariantName(
   variants: readonly Variant[],
   variantName: string | null,
-): Variant["value"] | null {
-  if (variantName === null) return null;
+): { ok: true; value: Variant["value"] | null } | { ok: false; variantName: string } {
+  if (variantName === null) return { ok: true, value: null };
   const variant = variants.find((item) => item.name === variantName);
-  return variant === undefined ? null : variant.value;
+  return variant === undefined ? { ok: false, variantName } : { ok: true, value: variant.value };
 }

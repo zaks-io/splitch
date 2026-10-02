@@ -83,14 +83,8 @@ async function completeOfrepEvaluate(
   if (provider.flag === null) {
     return ofrepServerError("flag config was not resolved");
   }
-  const mapped = mapEvaluateAllEntry(flagKey, resolutionEntry(output.result, provider.flag));
-  if ("errorCode" in mapped) {
-    return ofrepRequestFailure(
-      mapped.errorCode,
-      mapped.errorDetails ?? "flag evaluation failed",
-      flagKey,
-    );
-  }
+  const mapped = mapResolvedEntry(flagKey, output.result, provider.flag);
+  if (!mapped.ok) return mapped.response;
 
   const commit = await writeSingleUsage(
     output.exposures,
@@ -112,7 +106,34 @@ async function completeOfrepEvaluate(
       { requestId },
     );
   }
-  return Response.json(OfrepEvaluationSuccessSchema.parse(mapped));
+  return Response.json(OfrepEvaluationSuccessSchema.parse(mapped.body));
+}
+
+function mapResolvedEntry(
+  flagKey: string,
+  result: Awaited<ReturnType<typeof evaluate>>["result"],
+  flag: NonNullable<CapturingProvider["flag"]>,
+):
+  | { ok: true; body: ReturnType<typeof mapEvaluateAllEntry> & { reason: string } }
+  | { ok: false; response: Response } {
+  const entry = resolutionEntry(result, flag);
+  // A named Variant absent from the catalog is corrupt config: reject before
+  // billing, Exposure, or holdover, matching POST /api/sdk/evaluate.
+  if (entry.reason === "ERROR" && entry.errorCode === "INTERNAL_SERVER_ERROR") {
+    return { ok: false, response: ofrepServerError("evaluation failed") };
+  }
+  const mapped = mapEvaluateAllEntry(flagKey, entry);
+  if ("errorCode" in mapped) {
+    return {
+      ok: false,
+      response: ofrepRequestFailure(
+        mapped.errorCode,
+        mapped.errorDetails ?? "flag evaluation failed",
+        flagKey,
+      ),
+    };
+  }
+  return { ok: true, body: mapped };
 }
 
 async function writeHoldover(

@@ -29,6 +29,14 @@ export const OfrepBulkEvaluationRequestSchema = z
   .strict();
 export type OfrepBulkEvaluationRequest = z.infer<typeof OfrepBulkEvaluationRequestSchema>;
 
+/**
+ * Runtime body: any JSON value (including malformed-JSON sentinel). Body byte
+ * limits still apply in the registrar before this schema runs. OpenAPI still
+ * documents {@link OfrepEvaluationRequestSchema} /
+ * {@link OfrepBulkEvaluationRequestSchema}.
+ */
+export const OfrepEvaluationRequestRuntimeSchema = z.unknown();
+
 export const OfrepReasonSchema = z.enum([
   "STATIC",
   "TARGETING_MATCH",

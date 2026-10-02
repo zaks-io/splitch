@@ -86,4 +86,40 @@ describe("openapi route parity", () => {
       }),
     ).toThrow(/has no mapped HTTP status/);
   });
+
+  it("advertises route-specific error response schemas and runtime body", () => {
+    const OfrepFailure = z.object({
+      key: z.string(),
+      errorCode: z.string(),
+      errorDetails: z.string().optional(),
+    });
+    const route = defineApiRoute({
+      operationId: "ofrep_evaluate_sample",
+      owner: "evaluation-api",
+      method: "POST",
+      path: "/ofrep/v1/evaluate/flags/:key",
+      summary: "OFREP sample.",
+      request: {
+        params: z.object({ key: z.string() }),
+        body: z.object({ context: z.object({ targetingKey: z.string() }) }),
+        runtimeBody: z.unknown(),
+      },
+      response: z.object({ key: z.string(), reason: z.string() }),
+      auth: "data-plane-key",
+      rateLimit: "client-key",
+      idempotency: "optional",
+      errors: ["UNAUTHORIZED", "FLAG_NOT_FOUND", "VALIDATION_ERROR"],
+      errorResponseSchemas: {
+        404: OfrepFailure,
+      },
+    });
+
+    expect(route.input.safeParse({ params: { key: "f" }, body: {} }).success).toBe(true);
+    const responses = route.openapi.responses as Record<
+      number,
+      { content?: { "application/json"?: { schema?: unknown } } }
+    >;
+    expect(responses[404]?.content?.["application/json"]?.schema).toBe(OfrepFailure);
+    expect(responses[401]?.content?.["application/json"]?.schema).toBeDefined();
+  });
 });

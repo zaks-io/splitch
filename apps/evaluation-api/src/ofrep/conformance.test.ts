@@ -126,3 +126,68 @@ describe("OFREP Core request/response shapes", () => {
     expect(await again.text()).toBe("");
   });
 });
+
+describe("OFREP request validation maps to protocol errors", () => {
+  it("maps missing context, null context, and non-object JSON to OFREP errors", async () => {
+    const { app } = await makeSdkRouteHarness();
+    const headers = {
+      authorization: `Bearer ${CLIENT_KEY}`,
+      "content-type": "application/json",
+    };
+
+    const missing = await app.request(SINGLE, {
+      method: "POST",
+      headers,
+      body: "{}",
+    });
+    const nullContext = await app.request(SINGLE, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ context: null }),
+    });
+    const nonObject = await app.request(SINGLE, {
+      method: "POST",
+      headers,
+      body: "[]",
+    });
+    const malformed = await app.request(SINGLE, {
+      method: "POST",
+      headers,
+      body: "{",
+    });
+    const bulkMissing = await app.request(BULK, {
+      method: "POST",
+      headers,
+      body: "{}",
+    });
+
+    expect(missing.status).toBe(400);
+    expect(await missing.json()).toEqual({
+      key: FLAG_KEY,
+      errorCode: "INVALID_CONTEXT",
+      errorDetails: "context is required and must be an object",
+    });
+    expect(nullContext.status).toBe(400);
+    expect(await nullContext.json()).toMatchObject({
+      key: FLAG_KEY,
+      errorCode: "INVALID_CONTEXT",
+    });
+    expect(nonObject.status).toBe(400);
+    expect(await nonObject.json()).toEqual({
+      key: FLAG_KEY,
+      errorCode: "PARSE_ERROR",
+      errorDetails: "OFREP request body must be a JSON object",
+    });
+    expect(malformed.status).toBe(400);
+    expect(await malformed.json()).toEqual({
+      key: FLAG_KEY,
+      errorCode: "PARSE_ERROR",
+      errorDetails: "OFREP request body must be a JSON object",
+    });
+    expect(bulkMissing.status).toBe(400);
+    expect(await bulkMissing.json()).toEqual({
+      errorCode: "INVALID_CONTEXT",
+      errorDetails: "context is required and must be an object",
+    });
+  });
+});

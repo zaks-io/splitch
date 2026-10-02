@@ -1,4 +1,5 @@
 import type { ApiRouteContract } from "@splitch/contracts";
+import { errorStatusByCode, jsonMediaTypeSchema } from "@splitch/contracts";
 import { describe, expect, it } from "vitest";
 import {
   EVALUATION_CLIENT_KEY_ROUTES,
@@ -40,8 +41,39 @@ function assertProducedRouteShapes(
   for (const [code, body] of Object.entries(got.errors)) {
     expect(publicErrorCode(body)).toBe(code);
     assertPublicClientKeyBody(body, route);
+    assertOpenApiErrorBody(route, code, body);
   }
   assertPublicClientKeyBody(got.success, route);
+}
+
+function assertOpenApiErrorBody(route: ApiRouteContract, code: string, body: unknown): void {
+  // OFREP advertises protocol-shaped error bodies; enforce those contracts here.
+  // Other data-plane routes still declare ErrorResponseSchema for codes that the
+  // producer may surface inside a 200 batch envelope (e.g. sdk_exposures).
+  if (!route.operationId.startsWith("ofrep_")) return;
+  const status = errorStatusByCode[code as keyof typeof errorStatusByCode];
+  if (status === undefined) {
+    throw new Error(`produced error ${code} has no HTTP status mapping`);
+  }
+  const response = route.openapi.responses[status];
+  if (response === undefined || !("content" in response)) {
+    throw new Error(
+      `${route.operationId}: OpenAPI is missing a JSON error schema for HTTP ${String(status)} (${code})`,
+    );
+  }
+  const schema = jsonMediaTypeSchema(response.content);
+  if (schema === undefined) {
+    throw new Error(
+      `${route.operationId}: OpenAPI HTTP ${String(status)} has no application/json schema`,
+    );
+  }
+  const parsed = schema.safeParse(body);
+  if (!parsed.success) {
+    throw new Error(
+      `${route.operationId} ${code} (HTTP ${String(status)}) body failed OpenAPI schema: ${JSON.stringify(body)} :: ${parsed.error.message}`,
+    );
+  }
+  expect(parsed.data).toEqual(body);
 }
 
 function publicErrorCode(body: unknown): string {

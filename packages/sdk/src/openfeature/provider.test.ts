@@ -54,6 +54,75 @@ describe("SplitchOfrepProvider", () => {
     ).resolves.toMatchObject({ value: "light", reason: "STATIC" });
   });
 
+  it("fails loud on a malformed HTTP 200 success envelope", async () => {
+    const provider = new SplitchOfrepProvider({
+      baseUrl: "https://edge.example",
+      credential: "pk_test",
+      fetch: (async () => jsonResponse(200, {})) as typeof fetch,
+    });
+
+    await expect(
+      provider.resolveBooleanEvaluation("broken", false, { targetingKey: "user-1" }),
+    ).resolves.toEqual({
+      value: false,
+      reason: "ERROR",
+      errorCode: "PARSE_ERROR",
+      errorMessage: "OFREP success body is missing a non-empty key",
+    });
+  });
+
+  it("fails loud when a 200 body omits reason even if value is present", async () => {
+    const provider = new SplitchOfrepProvider({
+      baseUrl: "https://edge.example",
+      credential: "pk_test",
+      fetch: (async () => jsonResponse(200, { key: "flag", value: true })) as typeof fetch,
+    });
+
+    await expect(
+      provider.resolveBooleanEvaluation("flag", false, { targetingKey: "user-1" }),
+    ).resolves.toMatchObject({
+      value: false,
+      reason: "ERROR",
+      errorCode: "PARSE_ERROR",
+    });
+  });
+
+  it("aborts when the response body stalls past timeoutMs", async () => {
+    const provider = new SplitchOfrepProvider({
+      baseUrl: "https://edge.example",
+      credential: "pk_test",
+      timeoutMs: 20,
+      fetch: (async (_url, init) => {
+        const signal = init?.signal;
+        return {
+          status: 200,
+          async json() {
+            await new Promise<void>((resolve, reject) => {
+              const timer = setTimeout(resolve, 200);
+              signal?.addEventListener(
+                "abort",
+                () => {
+                  clearTimeout(timer);
+                  reject(new DOMException("The operation was aborted.", "AbortError"));
+                },
+                { once: true },
+              );
+            });
+            return { key: "late", value: true, reason: "SPLIT" };
+          },
+        } as Response;
+      }) as typeof fetch,
+    });
+
+    await expect(
+      provider.resolveBooleanEvaluation("late", false, { targetingKey: "user-1" }),
+    ).resolves.toMatchObject({
+      value: false,
+      reason: "ERROR",
+      errorCode: "TIMEOUT",
+    });
+  });
+
   it("maps FLAG_NOT_FOUND to an error ResolutionDetails with the default value", async () => {
     const provider = new SplitchOfrepProvider({
       baseUrl: "https://edge.example",

@@ -43,12 +43,15 @@ export async function produceOfrepEvaluate(): Promise<{
   errors.FLAG_NOT_FOUND = await (
     await app.request("/ofrep/v1/evaluate/flags/missing-flag", ofrepInit(CLIENT_KEY))
   ).json();
-  const empty = {
-    method: "POST",
-    headers: { authorization: `Bearer ${CLIENT_KEY}`, "content-type": "application/json" },
-    body: "{}",
-  } satisfies RequestInit;
-  errors.VALIDATION_ERROR = await (await app.request(path, empty)).json();
+  // Context shape failures are OFREP INVALID_CONTEXT / PARSE_ERROR. Body-byte-limit
+  // refusals still use the splitch VALIDATION_ERROR envelope.
+  errors.VALIDATION_ERROR = await (
+    await app.request(path, {
+      method: "POST",
+      headers: { authorization: `Bearer ${CLIENT_KEY}`, "content-type": "application/json" },
+      body: "x".repeat(33 * 1024),
+    })
+  ).json();
   const { app: legacy } = await makeSdkRouteHarness({ liveRun: true, legacyClientKey: true });
   errors.SERVICE_UNAVAILABLE = await (await legacy.request(path, ofrepInit(CLIENT_KEY))).json();
   return { success, errors };
@@ -67,7 +70,7 @@ export async function produceOfrepEvaluateBulk(): Promise<{
     await app.request(path, {
       method: "POST",
       headers: { authorization: `Bearer ${CLIENT_KEY}`, "content-type": "application/json" },
-      body: "{}",
+      body: "x".repeat(33 * 1024),
     })
   ).json();
   const proto = await makeSdkRouteHarness();
