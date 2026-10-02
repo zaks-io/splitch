@@ -17,6 +17,9 @@ export async function trackMetricEvent(
   if (typeof context.targetingKey !== "string" || context.targetingKey.length === 0) {
     throw new Error("OFREP track requires context.targetingKey");
   }
+  const eventId = eventIdFrom(details.eventId);
+  const fields = fieldsFrom(details);
+  const dimensions = dimensionsFrom(details);
   const result = await postMetricEvent(
     { credential: config.credential, fetchImpl: config.fetchImpl },
     new URL("/api/sdk/events", config.endpoint),
@@ -24,9 +27,9 @@ export async function trackMetricEvent(
       eventName: trackingEventName,
       targetingKey: context.targetingKey,
       idType: typeof context.idType === "string" ? context.idType : "user",
-      eventId: eventIdFrom(details.eventId),
-      fields: fieldsFrom(details),
-      dimensions: dimensionsFrom(details),
+      eventId,
+      fields,
+      dimensions,
     },
     new AbortController().signal,
     readFailure,
@@ -37,22 +40,40 @@ export async function trackMetricEvent(
 }
 
 function eventIdFrom(eventId: unknown): string {
-  return typeof eventId === "string" && EVENT_ID.test(eventId) ? eventId : crypto.randomUUID();
+  if (eventId === undefined) {
+    return crypto.randomUUID();
+  }
+  if (typeof eventId === "string" && EVENT_ID.test(eventId)) {
+    return eventId;
+  }
+  throw new Error("OFREP track details.eventId must be a UUID when provided");
 }
 
 function fieldsFrom(
   details: OfrepTrackingDetails,
 ): Record<string, boolean | string | number | null> {
-  return typeof details.value === "number" ? { value: details.value } : {};
+  if (details.value === undefined) {
+    return {};
+  }
+  if (typeof details.value !== "number" || !Number.isFinite(details.value)) {
+    throw new Error("OFREP track details.value must be a finite number when provided");
+  }
+  return { value: details.value };
 }
 
 function dimensionsFrom(details: OfrepTrackingDetails): Record<string, boolean | string | number> {
   const dimensions: Record<string, boolean | string | number> = {};
   for (const [name, value] of Object.entries(details)) {
     if (name === "value" || name === "eventId") continue;
-    if (typeof value === "boolean" || typeof value === "string" || typeof value === "number") {
+    if (
+      typeof value === "boolean" ||
+      typeof value === "string" ||
+      (typeof value === "number" && Number.isFinite(value))
+    ) {
       dimensions[name] = value;
+      continue;
     }
+    throw new Error(`OFREP track details.${name} must be a boolean, string, or finite number`);
   }
   return dimensions;
 }

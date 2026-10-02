@@ -28,7 +28,10 @@
       "entry": ["src/sdk-data-plane-surface.ts", "src/leaves/**/*.ts"]
     },
     "packages/sdk": {
-      "entry": ["src/contract-surface-assignability.ts"],
+      "entry": [
+        "src/contract-surface-assignability.ts",
+        "src/openfeature/provider-assignability.ts"
+      ],
       "ignoreDependencies": ["@splitch/control-plane-sdk", "@splitch/evaluation-core"]
     },
     "packages/convex": {

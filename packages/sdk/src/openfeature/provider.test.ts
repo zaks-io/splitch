@@ -119,7 +119,8 @@ describe("SplitchOfrepProvider", () => {
     ).resolves.toMatchObject({
       value: false,
       reason: "ERROR",
-      errorCode: "TIMEOUT",
+      errorCode: "GENERAL",
+      errorMessage: "OFREP evaluate timed out",
     });
   });
 

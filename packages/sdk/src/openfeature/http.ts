@@ -1,3 +1,4 @@
+import { toOfrepErrorCode } from "./error-code";
 import type { OfrepEvaluationContext, OfrepResolutionDetails } from "./types";
 
 const OFREP_REASONS = new Set(["STATIC", "TARGETING_MATCH", "SPLIT", "DISABLED", "UNKNOWN"]);
@@ -45,7 +46,7 @@ function ofrepSuccess(body: Record<string, unknown>): OfrepResolutionDetails<unk
     return {
       value: undefined,
       reason: "ERROR",
-      errorCode: "PARSE_ERROR",
+      errorCode: toOfrepErrorCode("PARSE_ERROR"),
       errorMessage: parsed.errorMessage,
     };
   }
@@ -94,12 +95,10 @@ function ofrepFailure(
   return {
     value: undefined,
     reason: "ERROR",
-    errorCode:
-      typeof body.errorCode === "string"
-        ? body.errorCode
-        : status === 404
-          ? "FLAG_NOT_FOUND"
-          : "GENERAL",
+    errorCode: toOfrepErrorCode(
+      body.errorCode,
+      status === 404 ? toOfrepErrorCode("FLAG_NOT_FOUND") : toOfrepErrorCode("GENERAL"),
+    ),
     errorMessage:
       typeof body.errorDetails === "string"
         ? body.errorDetails
@@ -112,7 +111,9 @@ function transportFailure(error: unknown): OfrepResolutionDetails<unknown> {
   return {
     value: undefined,
     reason: "ERROR",
-    errorCode: aborted ? "TIMEOUT" : "GENERAL",
+    // OpenFeature's ErrorCode enum has no TIMEOUT member; surface timeout via
+    // GENERAL + errorMessage so ResolutionDetails stays Provider-assignable.
+    errorCode: toOfrepErrorCode("GENERAL"),
     errorMessage: aborted
       ? "OFREP evaluate timed out"
       : error instanceof Error

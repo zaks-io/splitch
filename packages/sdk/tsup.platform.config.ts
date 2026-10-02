@@ -15,6 +15,6 @@ export default defineConfig({
   splitting: false,
   clean: false,
   sourcemap: false,
-  external: ["@hono/zod-openapi", "hono", /^hono\//, "zod", /^zod\//],
+  external: ["@hono/zod-openapi", "@openfeature/server-sdk", "hono", /^hono\//, "zod", /^zod\//],
   tsconfig: "tsconfig.platform.json",
 });

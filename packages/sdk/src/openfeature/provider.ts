@@ -1,7 +1,9 @@
+import { toOfrepErrorCode } from "./error-code";
 import { evaluateOfrepFlag, type OfrepHttpConfig } from "./http";
 import { trackMetricEvent } from "./track";
 import type {
   OfrepEvaluationContext,
+  OfrepJsonValue,
   OfrepLogger,
   OfrepResolutionDetails,
   OfrepTrackingDetails,
@@ -10,7 +12,8 @@ import type {
 
 /**
  * OpenFeature-shaped Provider that talks OFREP Core. Compatible with
- * `OpenFeature.setProvider()` without importing `@openfeature/server-sdk`.
+ * `OpenFeature.setProvider()` without importing `@openfeature/server-sdk` at
+ * runtime; types align with the official Provider contract.
  */
 export class SplitchOfrepProvider {
   readonly metadata = { name: "splitch-ofrep" };
@@ -59,11 +62,11 @@ export class SplitchOfrepProvider {
     return this.resolveTyped(flagKey, defaultValue, context, "number");
   }
 
-  resolveObjectEvaluation(
+  resolveObjectEvaluation<T extends OfrepJsonValue>(
     flagKey: string,
-    defaultValue: Record<string, unknown>,
+    defaultValue: T,
     context: OfrepEvaluationContext,
-  ): Promise<OfrepResolutionDetails<Record<string, unknown>>> {
+  ): Promise<OfrepResolutionDetails<T>> {
     return this.resolveTyped(flagKey, defaultValue, context, "object");
   }
 
@@ -103,7 +106,7 @@ export class SplitchOfrepProvider {
       return {
         value: defaultValue,
         reason: "ERROR",
-        errorCode: "TYPE_MISMATCH",
+        errorCode: toOfrepErrorCode("TYPE_MISMATCH"),
         errorMessage: `OFREP value for ${flagKey} is not a ${expected}`,
       };
     }
