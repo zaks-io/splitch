@@ -131,6 +131,42 @@ describe("CUPED missing, singular, low-sample, and no-covariate fallbacks", () =
     expect(result.attribute).toBeNull();
   });
 
+  it("selects the same covariate whatever its units", () => {
+    const ids = ["c0", "c1", "c2", "c3", "t0", "t1", "t2", "t3"];
+    const values = [0, 1, 2, 3, 0, 1, 2, 3];
+    const selected = (scale: number) =>
+      adjust({
+        controlValues: [10, 12, 14, 16],
+        treatmentValues: [11, 13, 15, 17],
+        covariates: attributeRows("scaled", ids, {
+          source: "declared",
+          covariateSource: "declared_attribute",
+          values: values.map((value) => value * scale),
+        }),
+      }).attribute;
+
+    expect(selected(1)).toBe("scaled");
+    expect(selected(1e-7)).toBe("scaled");
+  });
+
+  it("rejects an attribute whose rows disagree on provenance, in either row order", () => {
+    const declared = attributeRows("mixed", ["c0", "c1"], {
+      source: "declared",
+      covariateSource: "declared_attribute",
+      values: [1, 2],
+    });
+    const historical = attributeRows("mixed", ["t0", "t1"], {
+      source: "historical_selected",
+      covariateSource: "historical_attribute",
+      values: [3, 4],
+    });
+    const run = (covariates: readonly CupedCovariateRow[]) => () =>
+      adjust({ controlValues: [10, 12], treatmentValues: [11, 13], covariates });
+
+    expect(run([...declared, ...historical])).toThrow(/conflicting attribute_source/);
+    expect(run([...historical, ...declared])).toThrow(/conflicting attribute_source/);
+  });
+
   it("reports none when every arm has fewer than two covered Entities", () => {
     const result = adjust({
       controlValues: [10],

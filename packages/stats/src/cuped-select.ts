@@ -1,9 +1,6 @@
 import { type CupedAttributeSource, cupedAttributeSources } from "@splitch/contracts";
-import { finiteValue, sampleVariance } from "./variance-math";
+import { finiteValue } from "./variance-math";
 import type { CupedCovariateRow, EntityAggregate } from "./variance-estimator-types";
-
-/** Within-arm covariate variance below this is a singular design, not a slope. */
-const MIN_COVARIATE_VARIANCE = 1e-12;
 
 const ATTRIBUTE_SOURCE_RANK: Readonly<Record<CupedAttributeSource, number>> = {
   declared: 0,
@@ -82,7 +79,9 @@ export function isFitCapable(
         xs.push(value);
       }
     }
-    return xs.length >= 2 && sampleVariance(xs) > MIN_COVARIATE_VARIANCE;
+    // Exact variation, not a variance cutoff: an absolute threshold would make
+    // a covariate's eligibility depend on its units.
+    return xs.length >= 2 && xs.some((x) => x !== xs[0]);
   });
 }
 
@@ -131,6 +130,12 @@ function eligibleAttributeGroups(covariates: readonly CupedCovariateRow[]): Attr
 
     const source = attributeSourceFor(row);
     const group = groups.get(row.attribute) ?? { source, values: new Map<string, number>() };
+    if (group.source !== source) {
+      // Rank is by source, so mixed provenance would make the choice depend on row order.
+      throw new Error(
+        `CUPED attribute ${row.attribute} has conflicting attribute_source values (${group.source}, ${source}).`,
+      );
+    }
     group.values.set(row.targeting_key_hash, finiteValue(row.pre_period_value, "pre_period_value"));
     groups.set(row.attribute, group);
   }
