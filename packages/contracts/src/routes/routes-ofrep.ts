@@ -1,4 +1,5 @@
 import { type ApiRouteContract, defineApiRoute, errorResponseSchemaFor, z } from "../openapi-route";
+import { exposureWriteClosed, readOnlyClosed } from "../route-effects";
 import {
   OfrepBulkEvaluationFailureSchema,
   OfrepBulkEvaluationRequestSchema,
@@ -58,6 +59,7 @@ export const ofrepRoutes = [
     rateLimit: "client-key",
     // OFREP clients may omit this header; the handler mints a per-request key.
     idempotency: "optional",
+    effects: exposureWriteClosed,
     errors: [...OFREP_AUTH_ERRORS, "FLAG_NOT_FOUND"],
     errorResponseSchemas: {
       400: OfrepSingleStatus400Schema,
@@ -81,6 +83,7 @@ export const ofrepRoutes = [
     scopes: ["data-plane:evaluate"],
     rateLimit: "client-key",
     idempotency: "optional",
+    effects: readOnlyClosed,
     errors: [...OFREP_AUTH_ERRORS, "UNSUPPORTED_OBJECT_KEY"],
     errorResponseSchemas: {
       400: OfrepBulkStatus400Schema,

@@ -108,6 +108,7 @@ describe("openapi route parity", () => {
       auth: "data-plane-key",
       rateLimit: "client-key",
       idempotency: "optional",
+      effects: readOnlyClosed,
       errors: ["UNAUTHORIZED", "FLAG_NOT_FOUND", "VALIDATION_ERROR"],
       errorResponseSchemas: {
         404: OfrepFailure,
