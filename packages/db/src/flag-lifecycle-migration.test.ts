@@ -100,3 +100,34 @@ describe("listExpiredFlagPage", () => {
     ).resolves.toEqual([]);
   });
 });
+
+describe("updateFlag lifecycle compare-and-set", () => {
+  it("refuses a lifecycle write whose expected lifecycle no longer holds", async () => {
+    const d1 = await d1Through(LIFECYCLE_MIGRATION);
+    const repo = createRepository(d1);
+    const scope = appScope("app_lifecycle");
+    await repo.flags.flags.insert(scope, {
+      id: "flag_cas",
+      appId: "app_lifecycle",
+      key: "flag-cas",
+      name: "CAS",
+      lifecycleClass: "ops",
+      createdAt: NOW,
+      updatedAt: NOW,
+    });
+    const stale = { lifecycleClass: "ops" as const, owner: null, expiresAt: null };
+    await repo.flags.updateFlag(scope, "flag_cas", {
+      lifecycleClass: "release",
+      owner: "checkout-team",
+      expiresAt: "2026-09-01T00:00:00.000Z",
+    });
+
+    const lost = await repo.flags.updateFlag(scope, "flag_cas", { expiresAt: null }, stale);
+
+    expect(lost).toBeNull();
+    await expect(repo.flags.getFlag(scope, "flag_cas")).resolves.toMatchObject({
+      lifecycleClass: "release",
+      expiresAt: "2026-09-01T00:00:00.000Z",
+    });
+  });
+});

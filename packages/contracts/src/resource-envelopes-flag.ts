@@ -33,7 +33,7 @@ import { WriteFlagJsonSchemaSchema, WriteVariantValueSchema } from "./write-pers
  * cannot smuggle a frozen field past parse (fail loud).
  */
 
-const FlagOwnerSchema = PersistedNameSchema.describe(
+const FlagOwnerSchema = PersistedNameSchema.regex(/\S/, "owner must name someone").describe(
   "Person or team that answers for removing the Flag.",
 );
 const FlagExpiresAtSchema = z.iso

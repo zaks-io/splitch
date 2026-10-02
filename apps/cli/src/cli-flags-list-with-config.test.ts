@@ -87,6 +87,9 @@ describe("hydrated Flag reads", () => {
       Key: checkout
       Schema: (none)
       Default Variant ID: var_on
+      Lifecycle class: unclassified
+      Owner: (none)
+      Expires: (none)
       Created: 2026-07-03T00:00:00.000Z
       Updated: 2026-07-03T00:00:00.000Z
 

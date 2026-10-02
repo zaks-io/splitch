@@ -64,6 +64,26 @@ describe("Flag lifecycle class (D9)", () => {
     });
   });
 
+  it("does not count a blank owner as an owner", async () => {
+    const { appId, jwt } = await ownerSession();
+    const res = await request(
+      h,
+      "POST",
+      `/apps/${appId}/flags`,
+      jwt,
+      flagBody(appId, "release-blank-owner", {
+        lifecycleClass: "release",
+        owner: "   ",
+        expiresAt: "2026-12-31T00:00:00Z",
+      }),
+    );
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({
+      code: "VALIDATION_ERROR",
+      details: { issues: [{ path: ["body", "owner"] }] },
+    });
+  });
+
   it("refuses a Flag with no lifecycle class, naming the missing input", async () => {
     const { appId, jwt } = await ownerSession();
     const { lifecycleClass: _, ...unclassified } = baseFlag(appId);

@@ -182,7 +182,9 @@ Returns: updated Flag definition.
 or before the Worker's clock, and live while it still exists, because an existing Flag is still
 evaluable; deleting it is what takes it off this list. Items are bare Flag definitions, most overdue
 first (`expiresAt` ascending, then `id`), so each carries the `owner` who answers for removing it.
-Flags with no `expiresAt` (`ops`, `permission`, `unclassified`) never appear. The read is bounded like
+Flags with no `expiresAt` never appear. The list keys on the expiry, not the class: an `ops` or
+`permission` Flag that keeps a passed expiry after reclassification is still listed until its
+`expiresAt` is cleared. The read is bounded like
 `flags_list` and reports `readTruncated`, `readLimit`, and `cursor: null`. CLI:
 `splitch expired-flags list`. MCP: `expired_flags_list`.
 

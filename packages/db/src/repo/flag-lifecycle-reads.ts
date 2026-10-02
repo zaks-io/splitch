@@ -1,4 +1,4 @@
-import { and, asc, isNotNull, lte } from "drizzle-orm";
+import { and, asc, eq, isNotNull, isNull, lte, type SQL } from "drizzle-orm";
 import { flags } from "../schema/index";
 import type { TenantScope } from "./scope";
 import type { scopedTable } from "./scoped-table";
@@ -34,3 +34,26 @@ export type FlagDefinitionPatch = Partial<
     | "updatedBy"
   >
 >;
+
+export type FlagLifecycleColumns = Pick<
+  typeof flags.$inferSelect,
+  "lifecycleClass" | "owner" | "expiresAt"
+>;
+
+/**
+ * Compare-and-set guard for a lifecycle write. The D9 rule is checked against
+ * the row the caller read, so the write must land only on that same lifecycle;
+ * otherwise two concurrent patches that are each valid alone can combine into a
+ * release Flag with no expiry.
+ */
+export function lifecycleUnchanged(expected: FlagLifecycleColumns): SQL {
+  const nullable = (column: typeof flags.owner | typeof flags.expiresAt, value: string | null) =>
+    value === null ? isNull(column) : eq(column, value);
+  const guard = and(
+    eq(flags.lifecycleClass, expected.lifecycleClass),
+    nullable(flags.owner, expected.owner),
+    nullable(flags.expiresAt, expected.expiresAt),
+  );
+  if (!guard) throw new Error("lifecycleUnchanged: drizzle returned no condition");
+  return guard;
+}

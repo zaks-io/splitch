@@ -15,6 +15,9 @@ describe("formatPrincipalFlags", () => {
       Key: sales-tax
       Schema: (none)
       Default Variant ID: var_flag_tax
+      Lifecycle class: unclassified
+      Owner: (none)
+      Expires: (none)
       Created: 2026-08-28T00:00:00.000Z
       Updated: 2026-08-28T00:00:00.000Z
 
@@ -37,6 +40,9 @@ describe("formatPrincipalFlags", () => {
       Key: ranking
       Schema: (none)
       Default Variant ID: var_flag_rank
+      Lifecycle class: unclassified
+      Owner: (none)
+      Expires: (none)
       Created: 2026-08-28T00:00:00.000Z
       Updated: 2026-08-28T00:00:00.000Z
 
@@ -59,6 +65,9 @@ describe("formatPrincipalFlags", () => {
       Key: invoice
       Schema: (none)
       Default Variant ID: var_flag_invoice
+      Lifecycle class: unclassified
+      Owner: (none)
+      Expires: (none)
       Created: 2026-08-28T00:00:00.000Z
       Updated: 2026-08-28T00:00:00.000Z
 

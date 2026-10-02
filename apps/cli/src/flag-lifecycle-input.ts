@@ -31,6 +31,16 @@ export function applyFlagLifecycleFlags(
     });
   }
   const clearable = operationId === "flags_update";
+  if (
+    !clearable &&
+    present.some(([field, value]) => field !== "lifecycleClass" && value === "none")
+  ) {
+    throw new SplitchCliError({
+      code: "CLI_USAGE_INVALID",
+      causeSummary: "none clears an owner or expiry and only applies to flags update",
+      remediation: "Name the owner and expiry, or choose the ops or permission class",
+    });
+  }
   for (const [field, value] of present) {
     input[field] = clearable && field !== "lifecycleClass" && value === "none" ? null : value;
   }

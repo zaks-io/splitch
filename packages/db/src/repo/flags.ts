@@ -17,7 +17,12 @@ import type { ApprovalCommit } from "./approval-types";
 import type { Db } from "./client";
 import { makeFlagConfigOps, scopedFlagConfig, scopedTargetingRule } from "./flag-config-ops";
 import { type FlagInScope, makeVariantOps } from "./flag-variant-ops";
-import { type FlagDefinitionPatch, makeListExpiredFlagPage } from "./flag-lifecycle-reads";
+import {
+  type FlagDefinitionPatch,
+  type FlagLifecycleColumns,
+  lifecycleUnchanged,
+  makeListExpiredFlagPage,
+} from "./flag-lifecycle-reads";
 import { makeFlagMultiAppReads } from "./flag-multi-app-reads";
 import { idBatches } from "./id-batches";
 import { assertMintedScope, envScope, type TenantScope } from "./scope";
@@ -102,12 +107,21 @@ export function makeFlagRepo(db: Db) {
       }
     },
 
+    /**
+     * With `expectedLifecycle`, the write lands only if the lifecycle columns
+     * still hold those values; a miss returns null exactly like a missing Flag,
+     * and the caller re-reads to tell the two apart.
+     */
     updateFlag(
       scope: TenantScope,
       flagId: string,
       patch: FlagDefinitionPatch,
+      expectedLifecycle?: FlagLifecycleColumns,
     ): Promise<typeof flags.$inferSelect | null> {
-      return flagsTable.update(scope, patch, eq(flags.id, flagId)).then((rows) => rows[0] ?? null);
+      const where = expectedLifecycle
+        ? and(eq(flags.id, flagId), lifecycleUnchanged(expectedLifecycle))
+        : eq(flags.id, flagId);
+      return flagsTable.update(scope, patch, where).then((rows) => rows[0] ?? null);
     },
 
     async completeFlagCreate(
