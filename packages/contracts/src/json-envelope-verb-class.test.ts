@@ -60,7 +60,7 @@ describe("CLI/MCP JSON envelopes agree per verb class (SPL-451)", () => {
     },
   );
 
-  it.each(["flags_list", "api_keys_list", "approval_requests_list"] as const)(
+  it.each(["flags_list", "api_keys_list", "approval_requests_list", "flag_changes_list"] as const)(
     "%s returns {items, readLimit, readTruncated}",
     (operationId) => {
       const keys = objectKeys(getRoute(operationId)?.output);

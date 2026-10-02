@@ -53,6 +53,8 @@ const EXPECTED_GATES: Record<string, string> = {
   flag_config_update: "app:admin",
   flag_targeting_rules_replace: "app:admin",
   flags_promote: "app:admin",
+  flag_changes_list: "app:member",
+  flag_changes_export: "app:member",
   segments_list: "app:member",
   segments_create: "app:admin",
   segments_get: "app:member",

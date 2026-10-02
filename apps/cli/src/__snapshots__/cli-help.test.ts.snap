@@ -893,6 +893,32 @@ Behavior:
 
 Example:
   splitch experiments update <experiment-id> --body-json '{"tags":[],"allocation":{"control":1,"treatment":1},"segmentIds":[],"dimensions":[],"stageForNextRun":true}' --json",
+    "flag-changes export": "Export a Flag change-log time range, or the stored changes between two Environments, as JSON plus a unified text diff.
+
+Usage:
+  splitch flag-changes export [flags]
+
+Flags:
+  --app <app>          [type: string; default: SPLITCH_APP or config] App ID or slug.
+  --env <environment>  [type: string; default: none] Optional Environment ID or key filter (Policy context).
+  --json               [type: boolean; default: false] Write machine-readable JSON to stdout.
+  -h, --help           [type: boolean; default: false] Show help and exit.
+
+Example:
+  splitch flag-changes export --json",
+    "flag-changes list": "List Flag change-log entries with a structured before/after diff computed from stored records.
+
+Usage:
+  splitch flag-changes list [flags]
+
+Flags:
+  --app <app>          [type: string; default: SPLITCH_APP or config] App ID or slug.
+  --env <environment>  [type: string; default: none] Optional Environment ID or key filter (Policy context).
+  --json               [type: boolean; default: false] Write machine-readable JSON to stdout.
+  -h, --help           [type: boolean; default: false] Show help and exit.
+
+Example:
+  splitch flag-changes list --json",
     "flag-config get": "Get a Flag's per-Environment Configuration.
 
 Usage:
@@ -1964,6 +1990,20 @@ Flags:
 
 Example:
   splitch experiments list --help",
+    "flag-changes": "Manage flag-changes resources.
+
+Usage:
+  splitch flag-changes <action> [arguments] [flags]
+
+Commands:
+  list            List Flag change-log entries with a structured before/after diff computed from stored records.
+  export          Export a Flag change-log time range, or the stored changes between two Environments, as JSON plus a unified text diff.
+
+Flags:
+  -h, --help  [type: boolean; default: false] Show help and exit.
+
+Example:
+  splitch flag-changes list --help",
     "flag-config": "Manage flag-config resources.
 
 Usage:
@@ -2252,6 +2292,7 @@ Resource groups:
   event-definitions
   experiment-results
   experiments
+  flag-changes
   flag-config
   flag-targeting-rules
   flag-variants

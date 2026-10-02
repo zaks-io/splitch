@@ -5,12 +5,14 @@
  * what makes the log un-bypassable, so this module deliberately exposes no
  * insert.
  *
- * Both methods are SYSTEM reads driven by the cron, not tenant reads: they run
- * with no caller and no scope, exactly like `convex.claimDueDeliveries`. Every
- * row they return is bounded by the `org_id` the caller already holds from a
- * claimed installation row, so no scope is fabricated. When the read surface for
- * humans lands, it goes through the scoped seam instead.
+ * Integration cursor reads are SYSTEM reads driven by the cron: they run with
+ * no caller and no App scope, bounded by the `org_id` the caller already holds
+ * from a claimed installation. Tenant history goes through `listForApp` and a
+ * minted TenantScope.
  */
+
+import type { Db } from "./client";
+import { makeFlagChangeLogReads } from "./flag-change-log-reads";
 
 export interface FlagChangeEventRow {
   seq: number;
@@ -24,8 +26,9 @@ export interface FlagChangeEventRow {
   changedAt: string;
 }
 
-export function makeFlagChangeEventRepo(d1: D1Database) {
+export function makeFlagChangeEventRepo(d1: D1Database, db: Db) {
   return {
+    ...makeFlagChangeLogReads(db),
     /**
      * The next batch of changes an Organization-bound integration has not seen:
      * every App under the Organization, every Environment, in `seq` order.

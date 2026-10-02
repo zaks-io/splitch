@@ -52,6 +52,28 @@ export {
   TestEvaluationRequestSchema,
   TestEvaluationResponseSchema,
 } from "../wire-envelopes-core";
+export type {
+  FlagChangeAction,
+  FlagChangeDiff,
+  FlagChangeFieldDiff,
+  FlagChangeTargetType,
+} from "../flag-change-diff";
+export {
+  FlagChangeActionSchema,
+  FlagChangeDiffSchema,
+  FlagChangeFieldDiffSchema,
+  FlagChangeTargetTypeSchema,
+  parseFlagChangeDiff,
+  UNAVAILABLE_FLAG_CHANGE_DIFF,
+} from "../flag-change-diff";
+export { renderFlagChangeUnifiedDiff } from "../flag-change-unified-diff";
+export {
+  FlagChangeEntrySchema,
+  FlagChangeExportQuerySchema,
+  FlagChangeExportResponseSchema,
+  FlagChangeListQuerySchema,
+  FlagChangeListResponseSchema,
+} from "../routes/routes-flag-changes";
 export {
   RETRYABLE_EXPOSURE_REJECTION_CODE,
   RETRYABLE_EXPOSURE_REJECTION_CODES,

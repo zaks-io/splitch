@@ -12,6 +12,7 @@ import { credentialRoutes } from "./routes/routes-credentials";
 import { dataPlaneRoutes } from "./routes/routes-data-plane";
 import { eventDefinitionRoutes } from "./routes/routes-event-definitions";
 import { experimentRoutes } from "./routes/routes-experiments";
+import { flagChangeRoutes } from "./routes/routes-flag-changes";
 import { flagRoutes } from "./routes/routes-flags";
 import { privacyRoutes } from "./routes/routes-privacy";
 import { segmentRoutes } from "./routes/routes-segments";
@@ -80,6 +81,7 @@ export const routeRegistry = assertRegistry([
   ...approvalRoutes,
   ...attentionRoutes,
   ...flagRoutes,
+  ...flagChangeRoutes,
   ...segmentRoutes,
   ...eventDefinitionRoutes,
   ...experimentRoutes,

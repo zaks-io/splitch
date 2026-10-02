@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { createRepository } from "../index";
+import { appScope, createRepository } from "../index";
 import { createLocalD1, type LocalD1 } from "./test-d1-pool";
 import {
   changes,
@@ -98,4 +98,84 @@ describe("flagChangeEvents repo", () => {
     });
     expect(pruned).toBe(0);
   });
+
+  it("lists an App's stored rows under a minted TenantScope and never another tenant", async () => {
+    await insertConfig(local.d1, seed);
+    await toggleConfig(local.d1, seed);
+    const page = await repo.flagChangeEvents.listForApp(appScope(seed.a.appId), {
+      includeAppLevel: true,
+      order: "asc",
+      limit: 100,
+    });
+    expect(page.some((row) => row.diffJson !== null && row.appId === seed.a.appId)).toBe(true);
+    expect(page.every((row) => row.appId === seed.a.appId)).toBe(true);
+
+    const foreign = await repo.flagChangeEvents.listForApp(appScope(seed.b.appId), {
+      includeAppLevel: true,
+      order: "asc",
+      limit: 100,
+    });
+    expect(foreign.some((row) => row.appId === seed.a.appId)).toBe(false);
+  });
+
+  it("filters a promotion pair to those Environments plus App-level rows", async () => {
+    await insertSecondEnvironment(local.d1, seed);
+    await insertConfig(local.d1, seed);
+    await insertConfig(local.d1, seed, { id: "cfg_a2", environmentId: "env_a_two" });
+    await toggleConfig(local.d1, seed);
+    const page = await repo.flagChangeEvents.listForApp(appScope(seed.a.appId), {
+      environmentIds: [seed.a.environmentId, "env_a_two"],
+      includeAppLevel: true,
+      order: "asc",
+      limit: 100,
+    });
+    expect(page.some((row) => row.environmentId === seed.a.environmentId)).toBe(true);
+    expect(page.some((row) => row.environmentId === null)).toBe(true);
+  });
+
+  it("includes a stored UTC boundary when the lower bound omits milliseconds", async () => {
+    await insertChangeAt(local.d1, seed, "2026-08-25T00:00:00.000Z");
+    const page = await repo.flagChangeEvents.listForApp(appScope(seed.a.appId), {
+      from: "2026-08-25T00:00:00Z",
+      to: "2026-08-25T00:00:00Z",
+      includeAppLevel: true,
+      order: "asc",
+      limit: 100,
+    });
+    expect(page).toHaveLength(1);
+    expect(page[0]?.changedAt).toBe("2026-08-25T00:00:00.000Z");
+  });
+
+  it("applies offset bounds as UTC instants rather than string prefixes", async () => {
+    await insertChangeAt(local.d1, seed, "2026-08-25T01:00:00.000Z");
+    await insertChangeAt(local.d1, seed, "2026-08-25T03:00:00.000Z");
+
+    // from = 2026-08-25T02:00:00Z via -02:00 offset. The 01:00Z row is out of
+    // range by instant but would survive a naive string compare against the
+    // offset form.
+    const page = await repo.flagChangeEvents.listForApp(appScope(seed.a.appId), {
+      from: "2026-08-25T00:00:00-02:00",
+      to: "2026-08-25T04:00:00Z",
+      includeAppLevel: true,
+      order: "asc",
+      limit: 100,
+    });
+    expect(page.map((row) => row.changedAt)).toEqual(["2026-08-25T03:00:00.000Z"]);
+  });
 });
+
+async function insertChangeAt(
+  d1: D1Database,
+  seed: SeededTenants,
+  changedAt: string,
+): Promise<void> {
+  await d1
+    .prepare(
+      `INSERT INTO flag_change_events
+        (app_id, environment_id, flag_id, flag_key, action, target_type,
+         actor_ref, actor_via, changed_at, diff_json)
+       VALUES (?, NULL, ?, ?, 'updated', 'flag', NULL, NULL, ?, '{"key":["a","b"]}')`,
+    )
+    .bind(seed.a.appId, seed.a.flagId, seed.a.flagKey, changedAt)
+    .run();
+}

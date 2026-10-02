@@ -24,9 +24,21 @@ function _appScopeIsRequired(): void {
 
   // OK: an App scope satisfies an App-scoped read.
   void repo.flags.getFlag(appScope("app_1"), "flag_1");
+  void repo.flagChangeEvents.listForApp(appScope("app_1"), {
+    includeAppLevel: true,
+    order: "desc",
+    limit: 1,
+  });
 
   // @ts-expect-error — getFlag requires a TenantScope; a bare string is not one.
   void repo.flags.getFlag("app_1", "flag_1");
+
+  // @ts-expect-error — listForApp requires a minted TenantScope, not a string.
+  void repo.flagChangeEvents.listForApp("app_1", {
+    includeAppLevel: true,
+    order: "desc",
+    limit: 1,
+  });
 
   // @ts-expect-error — the scope argument is mandatory; it cannot be omitted.
   void repo.flags.getFlag();

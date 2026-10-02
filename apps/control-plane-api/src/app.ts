@@ -252,7 +252,7 @@ export function createApp(deps: AppDeps): Hono {
   registrar.mount(app, controlPlaneRoute("organization_members_add"), handlers.addMember);
   registrar.mount(app, controlPlaneRoute("organization_members_update"), handlers.updateMember);
   registrar.mount(app, controlPlaneRoute("organization_members_remove"), handlers.removeMember);
-  mountFlagDefinitionRoutes(app, registrar, flagDefinitionHandlers);
+  mountFlagDefinitionRoutes(app, registrar, flagDefinitionHandlers, deps.repo);
   registrar.mount(app, controlPlaneRoute("flag_config_get"), handlers.getFlagConfig);
   registrar.mount(app, controlPlaneRoute("flag_config_update"), handlers.updateFlagConfig);
   registrar.mount(

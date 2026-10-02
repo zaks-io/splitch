@@ -175,6 +175,18 @@ For `flags_list`, a caller-supplied `environmentId` without `summary` becomes th
 | `flag_targeting_rules_replace` | PUT    | `/apps/:appId/envs/:environmentId/flags/:flagId/targeting-rules` |
 | `flags_promote`                | POST   | `/apps/:appId/envs/:targetEnvironmentId/flags/:flagId/promote`   |
 
+### Flag change log
+
+| Tool                  | Method | Path                               |
+| --------------------- | ------ | ---------------------------------- |
+| `flag_changes_list`   | GET    | `/apps/:appId/flag-changes`        |
+| `flag_changes_export` | GET    | `/apps/:appId/flag-changes/export` |
+
+Each entry's `diff` is projected from the stored `flag_change_events.diff_json`. The export adds a
+unified text form of those same stored values for a time range, or for the stored rows that name
+two Environments (a promotion review). Deletion rows with `diff_json` NULL project
+`unavailable: true` rather than inventing a before/after.
+
 ### Targeting Rules (Flag sub-resource)
 
 Targeting Rules are full-replaced through `flag_targeting_rules_replace`. Individual

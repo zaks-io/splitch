@@ -95,10 +95,14 @@ Sentry's generic feature-flag provider hook forced the question: change tracking
 - `flag_configs` gains `updated_by`/`updated_via`, and every write path that builds a config patch
   must stamp them. A path that forgets produces an unattributed audit row, which is visible, not
   silent.
-- The read surface for the change log is deliberately absent: no history endpoint, no
-  `splitch flag history`, no panel view of the log itself. Having the data is the deliverable;
-  exposing it is a later slice. The Sentry installation is the exception the operator has to reach,
-  so it gets a Control Panel card and nothing else does.
+- The operator and agent read surface is `flag_changes_list` and `flag_changes_export`. Each
+  entry's structured diff is projected from the stored `diff_json`; a missing or unparseable
+  record fails the read rather than inventing values. Deletion triggers intentionally store
+  `diff_json` NULL; those rows project as `{ before: null, after: null, fields: [], unavailable: true }`
+  so the absence is explicit. The Control Panel does not render the log
+  itself: the overview card still reports `flag_configs.updated_at`, and there is no existing
+  detail pattern that can reuse the Approval diff table without a new visual treatment. The
+  Sentry installation remains the outbound consumer of the same log.
 - `sentry_installations` reuses the AES-GCM envelope custody in `integration-secret.ts` and the
   existing `INTEGRATION_SECRET_KEK`, the same key the Cloudflare integration already uses. No new
   KEK name, so no ops step: a missing KEK still throws rather than falling back.

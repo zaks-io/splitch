@@ -21,21 +21,13 @@ export type {
   CloudflareInstallationRow,
   CloudflareInstallationWrite,
 } from "./repo/cloudflare-integrations";
-export type {
-  ConvexInstallationRow,
-  ConvexInstallationWrite,
-} from "./repo/convex-integrations";
+export type { ConvexInstallationRow, ConvexInstallationWrite } from "./repo/convex-integrations";
 export type { FlagChangeEventRow } from "./repo/flag-change-events";
+export type { FlagChangeLogFilter, FlagChangeLogRow } from "./repo/flag-change-log-reads";
 export type { ReplaceTargetingRulesResult } from "./repo/flag-config-ops";
 export type { UpdateVariantResult } from "./repo/flag-variant-approval";
-export type {
-  RemoveVariantResult,
-  TargetingRuleVariantRef,
-} from "./repo/flag-variant-ops";
-export type {
-  VariantFrozenChange,
-  VariantRunFreeze,
-} from "./repo/flag-variant-run-freeze";
+export type { RemoveVariantResult, TargetingRuleVariantRef } from "./repo/flag-variant-ops";
+export type { VariantFrozenChange, VariantRunFreeze } from "./repo/flag-variant-run-freeze";
 export type { CreateFlagResult } from "./repo/flags";
 export type {
   ApprovalCommit,
@@ -51,10 +43,7 @@ export { createRepository } from "./repo/index";
 export type { EnvScope, MultiAppScope, TenantScope } from "./repo/scope";
 export { appScope, envScope, multiAppScope } from "./repo/scope";
 export type { ScopedTable } from "./repo/scoped-table";
-export type {
-  SentryInstallationRow,
-  SentryInstallationWrite,
-} from "./repo/sentry-integrations";
+export type { SentryInstallationRow, SentryInstallationWrite } from "./repo/sentry-integrations";
 
 export {
   apiKeys,
