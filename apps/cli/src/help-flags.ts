@@ -3,6 +3,7 @@ import { commandHasBodyJson } from "./help-body-json.js";
 import { toolByOperation } from "./help-command-description.js";
 import { deleteModeHelpFlags } from "./help-delete-flags.js";
 import { oneTimeSecretDescriptor } from "./one-time-secret-output.js";
+import { queryHelpFlags } from "./query-flags.js";
 
 export interface HelpFlag {
   readonly syntax: string;
@@ -15,6 +16,7 @@ export function commandFlags(command: CliCommandDefinition): HelpFlag[] {
   const fields = inputFields(command.operationId);
   const flags = scopeFlags(command, fields);
   flags.push(...operationFlags(command));
+  flags.push(...queryHelpFlags(command.operationId));
   if (commandHasBodyJson(command)) {
     flags.push(
       flag(
@@ -162,6 +164,16 @@ function operationFlags(command: CliCommandDefinition): HelpFlag[] {
       ];
     case "flags_promote":
       return [flag("--from-environment-id <id>", "string", "none", "Source Environment ID.")];
+    case "flag_changes_list":
+    case "flag_changes_export":
+      return [
+        flag(
+          "--from-environment-id <id>",
+          "string",
+          "none",
+          "Source Environment ID of a promotion; requires --to-environment-id.",
+        ),
+      ];
     case "flag_config_update":
       return [
         flag("--enabled <boolean>", "boolean", "current value", "Set the Flag enabled state."),

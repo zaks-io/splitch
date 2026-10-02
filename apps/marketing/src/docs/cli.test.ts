@@ -28,6 +28,9 @@ describe("CLI docs surface", () => {
     expect(markdown).toContain("CLI_SCOPE_UNRESOLVED");
     expect(markdown).toContain("--output-file");
     expect(markdown).toContain("valueWrittenTo");
+    expect(markdown).toContain("--cursor");
+    expect(markdown).toContain("--limit");
+    expect(markdown).toContain("reserved global flag");
     expect(markdown).toContain(`Source: ${DOCS_ORIGIN}${docsPath.cli()}`);
   });
 

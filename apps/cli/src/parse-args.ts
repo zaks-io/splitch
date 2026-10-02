@@ -26,6 +26,11 @@ export interface ParsedGlobalFlags {
   readonly when: readonly string[];
   readonly serve?: string;
   readonly wranglerEnv?: string;
+  /**
+   * Route query params as kebab-case flag names → raw string values.
+   * Validated against the command's OpenAPI query schema after resolution.
+   */
+  readonly queryFlags: Readonly<Record<string, string>>;
 }
 
 export interface ParsedInvocation {
@@ -78,6 +83,7 @@ type ParsedFlagValue = string | boolean | string[];
 
 export function parseInvocation(args: readonly string[]): ParsedInvocation {
   const flags: Record<string, ParsedFlagValue> = {};
+  const queryFlags: Record<string, string> = {};
   const seenFlags = new Set<string>();
   const positionals: string[] = [];
   const commandTokens: string[] = [];
@@ -88,7 +94,7 @@ export function parseInvocation(args: readonly string[]): ParsedInvocation {
       continue;
     }
     if (token.startsWith("--")) {
-      index = parseFlagToken(token, args, index, flags, seenFlags);
+      index = parseFlagToken(token, args, index, flags, queryFlags, seenFlags);
       continue;
     }
     if (commandTokens.length < 3 && !positionals.length && isCommandToken(token, commandTokens)) {
@@ -98,6 +104,7 @@ export function parseInvocation(args: readonly string[]): ParsedInvocation {
     positionals.push(token);
   }
 
+  const parsedFlags = toParsedFlags(flags, queryFlags);
   const meta = commandTokens[0];
   if (meta && META_COMMANDS.has(meta) && commandTokens.length === 1) {
     return {
@@ -105,7 +112,7 @@ export function parseInvocation(args: readonly string[]): ParsedInvocation {
       metaCommand: meta,
       commandPath: [],
       positionals,
-      flags: toParsedFlags(flags),
+      flags: parsedFlags,
     };
   }
 
@@ -113,7 +120,7 @@ export function parseInvocation(args: readonly string[]): ParsedInvocation {
     rawArgs: args,
     commandPath: commandTokens,
     positionals,
-    flags: toParsedFlags(flags),
+    flags: parsedFlags,
   };
 }
 
@@ -122,15 +129,15 @@ function parseFlagToken(
   args: readonly string[],
   index: number,
   flags: Record<string, ParsedFlagValue>,
+  queryFlags: Record<string, string>,
   seenFlags: Set<string>,
 ): number {
   const name = toCamel(key);
+  const kebab = key.slice(2);
   if (!KNOWN_FLAGS.has(name)) {
-    throw new SplitchCliError({
-      code: "CLI_USAGE_INVALID",
-      causeSummary: `unknown flag ${key}`,
-      remediation: `Remove ${key} or run the command with --help to list the flags it accepts`,
-    });
+    // Route query flags are command-specific; accept the raw kebab here and
+    // validate against the OpenAPI query schema once the command is known.
+    return parseQueryFlagToken(key, kebab, args, index, queryFlags, seenFlags);
   }
   if (seenFlags.has(name) && !REPEATABLE_FLAGS.has(name)) {
     throw new SplitchCliError({
@@ -161,6 +168,35 @@ function parseFlagToken(
   return index + 1;
 }
 
+function parseQueryFlagToken(
+  key: string,
+  kebab: string,
+  args: readonly string[],
+  index: number,
+  queryFlags: Record<string, string>,
+  seenFlags: Set<string>,
+): number {
+  const seenKey = `query:${kebab}`;
+  if (seenFlags.has(seenKey)) {
+    throw new SplitchCliError({
+      code: "CLI_USAGE_INVALID",
+      causeSummary: `${key} was supplied more than once`,
+      remediation: `Pass ${key} only once`,
+    });
+  }
+  const value = args[index + 1];
+  if (!value || value.startsWith("--")) {
+    throw new SplitchCliError({
+      code: "CLI_USAGE_INVALID",
+      causeSummary: `${key} requires a value`,
+      remediation: `Pass a value immediately after ${key}`,
+    });
+  }
+  seenFlags.add(seenKey);
+  queryFlags[kebab] = value;
+  return index + 1;
+}
+
 function isCommandToken(token: string, existing: readonly string[]): boolean {
   if (existing.length === 0) {
     return /^[a-z][a-z0-9-]*$/.test(token);
@@ -179,7 +215,10 @@ function toCamel(flag: string): string {
     .join("");
 }
 
-function toParsedFlags(flags: Record<string, ParsedFlagValue>): ParsedGlobalFlags {
+function toParsedFlags(
+  flags: Record<string, ParsedFlagValue>,
+  queryFlags: Readonly<Record<string, string>>,
+): ParsedGlobalFlags {
   return {
     json: Boolean(flags.json),
     confirm: Boolean(flags.confirm),
@@ -206,6 +245,7 @@ function toParsedFlags(flags: Record<string, ParsedFlagValue>): ParsedGlobalFlag
     when: Array.isArray(flags.when) ? flags.when : [],
     serve: stringFlag(flags.serve),
     wranglerEnv: stringFlag(flags.wranglerEnv),
+    queryFlags: { ...queryFlags },
   };
 }
 

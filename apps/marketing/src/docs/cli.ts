@@ -128,6 +128,16 @@ export const cliDoc = {
       kind: "prose",
       text: "The secret lands in one new `0600` file and the payload reports `value: null` with `valueWrittenTo` naming the path. The command refuses a path that already exists, before the Key is minted. A Client Key is public and needs none of this: read it any time with `splitch client-key get`.",
     },
+    { kind: "heading", text: "Query flags from the route schema" },
+    {
+      kind: "prose",
+      text: "List and other routes that declare OpenAPI query parameters expose them as kebab-case flags derived from the schema (`--cursor`, `--limit`, `--status`, `--run-id`, and so on). Required query fields fail loud when omitted; invalid typed values fail with `CLI_USAGE_INVALID`. Hand-mapped flags such as `--env`, `--by`, `--dry-run`, and `--from-environment-id` keep working. If a query field's kebab name collides with a reserved global flag, the reserved flag wins and the query field is not re-derived under that name.",
+    },
+    {
+      kind: "code",
+      lang: "bash",
+      code: "splitch approval-requests list --cursor page_2 --limit 25 --json",
+    },
     { kind: "heading", text: "Exit codes" },
     {
       kind: "table",
