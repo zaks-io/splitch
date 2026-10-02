@@ -171,22 +171,36 @@ function successStrippedKeysReferencedByFailure(
   successData: unknown,
   failure: { success: false; error?: unknown },
 ): boolean {
-  const strippedTopKeys = topLevelKeysPresentInInputMissingFromSuccess(input, successData);
-  if (strippedTopKeys.length === 0) return false;
+  const strippedPaths = strippedKeyPaths(input, successData, []);
+  if (strippedPaths.length === 0) return false;
   const issues = asParseFailure(failure).error?.issues;
   if (!Array.isArray(issues)) return false;
-  return issues.some((issue) => {
-    const head = issue.path[0];
-    return typeof head === "string" && strippedTopKeys.includes(head);
-  });
+  // Nested strips count too: a hydrated list whose `items[0].configurations`
+  // is malformed must not pass as a summary list by dropping `configurations`.
+  return issues.some((issue) => strippedPaths.some((path) => isPathPrefix(path, issue.path)));
 }
 
-function topLevelKeysPresentInInputMissingFromSuccess(
+/** Paths of keys present in `input` but absent from the parsed `successData`, at any depth. */
+function strippedKeyPaths(
   input: unknown,
   successData: unknown,
-): string[] {
+  base: readonly PropertyKey[],
+): PropertyKey[][] {
+  if (Array.isArray(input) && Array.isArray(successData)) {
+    return input.flatMap((item, index) =>
+      strippedKeyPaths(item, successData[index], [...base, index]),
+    );
+  }
   if (!isPlainRecord(input) || !isPlainRecord(successData)) return [];
-  return Object.keys(input).filter((key) => !(key in successData));
+  return Object.keys(input).flatMap((key) =>
+    key in successData
+      ? strippedKeyPaths(input[key], successData[key], [...base, key])
+      : [[...base, key]],
+  );
+}
+
+function isPathPrefix(prefix: readonly PropertyKey[], path: readonly PropertyKey[]): boolean {
+  return prefix.length <= path.length && prefix.every((segment, index) => segment === path[index]);
 }
 
 function isPlainRecord(value: unknown): value is Record<string, unknown> {
