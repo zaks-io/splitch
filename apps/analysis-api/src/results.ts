@@ -144,9 +144,10 @@ async function readResultsComputationFromTinybird(
   const run = materializeProvenancedRun(runInput, scope.runId);
   const commitments = materializeRunCommitments(runInput);
   const runConfigHash = stringField(rowObject(runInput), "config_hash");
-  const dataWatermark =
-    scope.dataWatermark ??
-    normalizeDataWatermark(optionalString(rowObject(runInput).data_watermark));
+  const dataWatermark = selectedDataWatermark(
+    scope.dataWatermark,
+    normalizeDataWatermark(optionalString(rowObject(runInput).data_watermark)),
+  );
   const metricQueryConfig = materializeMetricQueryConfig(runInput);
   const params = {
     ...scopedPipeParams({ ...scope, runId: run.run_id }),
@@ -244,6 +245,24 @@ function watermarkPipeParams(dataWatermark: string | undefined): Record<string, 
   return dataWatermark === undefined
     ? {}
     : { ingest_watermark_ts: tinybirdDateTime64(dataWatermark) };
+}
+
+/**
+ * A pinned watermark is an evidence boundary, and the planned-duration gate
+ * measures the Run's observation window up to it. One later than what has been
+ * ingested would claim days of evidence that do not exist yet, so it is refused.
+ */
+function selectedDataWatermark(
+  pinned: string | undefined,
+  ingested: string | undefined,
+): string | undefined {
+  if (pinned === undefined) return ingested;
+  if (ingested === undefined || Date.parse(pinned) > Date.parse(ingested)) {
+    throw new ResultsInputError(
+      `dataWatermark ${pinned} is later than the ingested evidence watermark ${ingested ?? "(none)"}`,
+    );
+  }
+  return pinned;
 }
 
 function normalizeDataWatermark(value: string | undefined): string | undefined {

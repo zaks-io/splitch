@@ -1,4 +1,4 @@
-import { CURRENT_ANALYSIS_VERSION } from "@splitch/contracts";
+import { CURRENT_ANALYSIS_VERSION, canonicalJson } from "@splitch/contracts";
 import { describe, expect, it } from "vitest";
 import {
   decisionSpecFromProposal,
@@ -187,12 +187,17 @@ describe("Run commitments at Start (ADR-0059)", () => {
     if (!spec.ok) throw new Error("expected a valid spec");
     const proposed = startProposalFields({ plannedDurationDays: 21 }, spec.value);
 
-    expect(proposed).toMatchObject({
-      targetN: null,
-      plannedDurationDays: 21,
-      plannedDurationOverrideReason: null,
-    });
+    expect(proposed).toMatchObject({ plannedDurationDays: 21 });
     expect(decisionSpecFromProposal(proposed)).toEqual(spec.value);
+  });
+
+  it("keeps a Start that names no commitment at its pre-ADR-0059 idempotency identity", () => {
+    const spec = runDecisionSpecFromBody({ reason: "launch" }, REQUEST_ID);
+    if (!spec.ok) throw new Error("expected a valid spec");
+
+    expect(canonicalJson(startProposalFields({ reason: "launch" }, spec.value))).toBe(
+      canonicalJson({ startReason: "launch", horizon: "sequential", sampleSizeLocked: null }),
+    );
   });
 
   it("replays a caller target and labeled override recorded on a pending proposal", () => {

@@ -35,6 +35,9 @@ export function earliestDecisionWatermark(runStartedAt: string, plannedDurationD
 
 export function plannedDurationCheck(evidence: PlannedDurationEvidence): DecisionGateCheck {
   const planned = evidence.plannedDurationDays;
+  if (planned !== null && !(Number.isInteger(planned) && planned > 0)) {
+    throw new Error(`planned duration ${String(planned)} is not a positive whole number of days`);
+  }
   if (planned === null) {
     return {
       id: "planned_duration",

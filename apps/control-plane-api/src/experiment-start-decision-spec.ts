@@ -109,10 +109,12 @@ export function startProposalFields(
     sampleSizeLocked: decisionSpec.sampleSizeLocked,
     // The caller's intent, not the resolved value: replay runs the same
     // resolver, so an omitted field is defaulted (and recorded as defaulted)
-    // identically on both Start doors (ADR-0059).
-    targetN: body.targetN ?? null,
-    plannedDurationDays: body.plannedDurationDays ?? null,
-    plannedDurationOverrideReason: body.plannedDurationOverrideReason ?? null,
+    // identically on both Start doors (ADR-0059). Omitted stays undefined so
+    // canonical hashing drops it and a pre-ADR-0059 request keeps its
+    // idempotency identity.
+    targetN: body.targetN,
+    plannedDurationDays: body.plannedDurationDays,
+    plannedDurationOverrideReason: body.plannedDurationOverrideReason,
   };
 }
 

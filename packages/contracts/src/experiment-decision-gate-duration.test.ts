@@ -65,6 +65,16 @@ describe("planned_duration gate check", () => {
     );
   });
 
+  it("fails loud on a malformed planned duration rather than passing it", () => {
+    expect(() =>
+      gateFor(
+        stats(),
+        undefined,
+        reachedDuration({ plannedDurationDays: undefined as unknown as number }),
+      ),
+    ).toThrow("is not a positive whole number of days");
+  });
+
   it("is not applicable, and blocks nothing, on a legacy Run with no recorded plan", () => {
     const gate = gateFor(
       stats(),

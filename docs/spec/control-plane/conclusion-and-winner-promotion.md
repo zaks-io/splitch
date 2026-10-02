@@ -175,7 +175,8 @@ A caution-band SRM whose mismatch boolean is false remains diagnostic and does n
 
 `planned_duration` measures the selected evidence's observation window, `dataWatermark` minus the
 Run's `started_at`, never the wall clock, so a Conclude on day seven that selects a day-one
-watermark is refused exactly as a day-one Conclude is. A Run started before planned durations were
+watermark is refused exactly as a day-one Conclude is. Analysis refuses a submitted watermark later
+than the ingested evidence watermark, so the window cannot be claimed before it is observed. A Run started before planned durations were
 recorded reports the check as `not_applicable`; no duration is invented for it. A labeled duration
 override is part of the locked spec, chosen at Start, not at Conclude.
 

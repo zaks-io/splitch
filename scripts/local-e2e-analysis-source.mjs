@@ -90,6 +90,12 @@ function pipeRows(pipeName, params) {
         dimensions: "[]",
         config_hash: fixture.configHash,
         data_watermark: fixture.dataWatermark,
+        // The seeded D1 Runs predate Run commitments, so they read as legacy (ADR-0059).
+        analysis_version: null,
+        target_n: null,
+        target_n_source: null,
+        planned_duration_days: null,
+        planned_duration_override_reason: null,
       },
     ];
   }

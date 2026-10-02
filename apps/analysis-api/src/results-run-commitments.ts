@@ -7,6 +7,14 @@ import {
 import { ResultsInputError } from "./results-errors";
 import { rowObject } from "./results-row-fields";
 
+const COMMITMENT_FIELDS = [
+  "analysis_version",
+  "target_n",
+  "target_n_source",
+  "planned_duration_days",
+  "planned_duration_override_reason",
+] as const;
+
 /**
  * Read what the Run committed to at Start from its Run Snapshot (ADR-0059).
  *
@@ -18,8 +26,15 @@ import { rowObject } from "./results-row-fields";
  */
 export function materializeRunCommitments(row: unknown): RunCommitments {
   const source = rowObject(row);
+  // An absent column means the pipe did not select it, which is not the same
+  // fact as a legacy Run's null. Reading it as legacy would drop the version
+  // from a versioned Run's token.
+  const missing = COMMITMENT_FIELDS.filter((field) => !(field in source));
+  if (missing.length > 0) {
+    throw new ResultsInputError(`analysis_run_inputs omitted ${missing.join(", ")}`);
+  }
   const version = source.analysis_version;
-  if (version === null || version === undefined) return LEGACY_RUN_COMMITMENTS;
+  if (version === null) return LEGACY_RUN_COMMITMENTS;
   if (typeof version !== "string" || !SUPPORTED_ANALYSIS_VERSIONS.includes(version)) {
     throw new ResultsInputError(
       `Run froze analysis_version ${String(version)}, which this Analysis deployment does not implement (supported: ${SUPPORTED_ANALYSIS_VERSIONS.join(", ")})`,
@@ -28,10 +43,10 @@ export function materializeRunCommitments(row: unknown): RunCommitments {
   const parsed = RunCommitmentsSchema.safeParse({
     analysis_version_source: "frozen",
     analysis_version: version,
-    target_n: source.target_n ?? null,
-    target_n_source: source.target_n_source ?? null,
+    target_n: source.target_n,
+    target_n_source: source.target_n_source,
     planned_duration_days: source.planned_duration_days,
-    planned_duration_override_reason: source.planned_duration_override_reason ?? null,
+    planned_duration_override_reason: source.planned_duration_override_reason,
   });
   if (!parsed.success) {
     throw new ResultsInputError(

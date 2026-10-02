@@ -131,6 +131,33 @@ describe("analysis version and Run commitments (ADR-0059)", () => {
     expect(JSON.stringify(error)).toContain("2099-01-01");
   });
 
+  it("refuses a pinned watermark later than the ingested evidence", async () => {
+    const { app } = makeResultsHarness();
+
+    const response = await app.request(
+      RESULTS_PATH,
+      resultsAuthInit("POST", { runId: RUN_ID, dataWatermark: "2026-07-12T00:00:00.000Z" }),
+    );
+
+    expect(response.status).toBe(400);
+    expect(JSON.stringify(await response.json())).toContain(
+      "later than the ingested evidence watermark",
+    );
+  });
+
+  it("refuses a Run input that omits a commitment column instead of reading it as legacy", async () => {
+    const rows = rowsByPipe();
+    const [run] = rows.analysis_run_inputs as Record<string, unknown>[];
+    const { analysis_version: _omitted, ...withoutVersion } = run ?? {};
+    rows.analysis_run_inputs = [withoutVersion];
+    const { app } = makeResultsHarness(rows);
+
+    const response = await app.request(`${RESULTS_PATH}?runId=${RUN_ID}`, resultsAuthInit("GET"));
+
+    expect(response.status).toBe(400);
+    expect(JSON.stringify(await response.json())).toContain("omitted analysis_version");
+  });
+
   it("refuses a versioned Run that recorded no planned duration", async () => {
     const { app } = makeResultsHarness(
       withRunFields({ ...committedFields, planned_duration_days: null }),

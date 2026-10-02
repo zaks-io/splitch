@@ -39,7 +39,10 @@ A Run started before these fields existed is a legacy Run. ADR-0047's no-backfil
 The decision gate gains a `planned_duration` check with its own id and failure code
 (`DECISION_DURATION_INCOMPLETE`). It measures the selected evidence's observation window, the
 watermark minus the Run start, never the wall clock. Day-one evidence cannot be concluded on day
-seven. This is a default policy with a labeled override (plan decision D7), separate from burn-in.
+seven. Analysis refuses a pinned watermark later than the ingested evidence watermark, so a caller
+cannot claim a window that has not been observed. The watermark is the Environment's ingestion
+boundary, so a Run that received no traffic for a week has still been observed for that week. This
+is a default policy with a labeled override (plan decision D7), separate from burn-in.
 
 Pending Approval proposals record the caller's intent (`targetN`, `plannedDurationDays`, the
 override reason), not resolved values, and replay resolves them with the same function the direct
