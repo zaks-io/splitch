@@ -64,6 +64,7 @@ function adjustmentForCandidate(
     attribute: candidate.attribute,
     attributeSource: candidate.attributeSource,
     coveragePct: candidate.coveragePct,
+    covariates: candidate.armValues,
   };
 }
 
@@ -115,6 +116,7 @@ function none(
     attribute: null,
     attributeSource: null,
     coveragePct,
+    covariates: null,
   };
 }
 

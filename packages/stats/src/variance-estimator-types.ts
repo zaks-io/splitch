@@ -72,6 +72,18 @@ export interface MetricComparisonsEstimateInput
 export interface MetricComparisonsEstimate {
   readonly control: MetricArmEstimate;
   readonly comparisons: readonly MetricComparisonEstimate[];
+  /** Present only when the pooled cap applied; null means the published estimate is uncapped. */
+  readonly winsorized: WinsorizedPass | null;
+}
+
+/** What the cap changed, computed in the same pass as the capped estimate. */
+export interface WinsorizedPass {
+  /** Entities per Variant with at least one value lowered by the cap. */
+  readonly capped_entity_counts: ReadonlyMap<string, number>;
+  readonly uncapped: {
+    readonly control: MetricArmEstimate;
+    readonly comparisons: readonly MetricComparisonEstimate[];
+  };
 }
 
 export interface MetricComparisonEstimate {
@@ -115,4 +127,10 @@ export interface CupedAdjustment {
   readonly attribute: string | null;
   readonly attributeSource: CupedAttributeSource | null;
   readonly coveragePct: number | null;
+  /**
+   * The selected covariate per arm, aligned with `arms`; null when no covariate
+   * was applied. Carried so the uncapped estimate reuses the same covariate
+   * instead of selecting again on different outcomes.
+   */
+  readonly covariates: readonly ReadonlyMap<string, number>[] | null;
 }

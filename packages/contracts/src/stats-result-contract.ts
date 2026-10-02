@@ -67,6 +67,53 @@ export const VarianceTechniquesSchema = z
   .strict();
 export type VarianceTechniques = z.infer<typeof VarianceTechniquesSchema>;
 
+/**
+ * What the published estimate measures, by Metric kind and applied technique.
+ * A Binomial Metric is never winsorized, so it has no capped label.
+ */
+export const estimandLabels = [
+  "uncapped_additive_mean",
+  "capped_additive_mean",
+  "binomial_mean",
+  "ratio_of_uncapped_means",
+  "ratio_of_capped_means",
+] as const;
+
+export const EstimandLabelSchema = z.enum(estimandLabels);
+export type EstimandLabel = z.infer<typeof EstimandLabelSchema>;
+
+/** The same arm and comparison computed in the same pass without the cap. Disclosure only. */
+export const UncappedEstimateSchema = z
+  .object({
+    label: EstimandLabelSchema,
+    point_estimate: z.number(),
+    relative_lift_pct: z.number().nullable(),
+    ci_lower: CiBoundSchema,
+    ci_upper: CiBoundSchema,
+    p_value: z.number(),
+    status: StatsResultStatusSchema,
+    cuped_applied: z.boolean(),
+  })
+  .strict();
+export type UncappedEstimate = z.infer<typeof UncappedEstimateSchema>;
+
+export const EstimandDisclosureSchema = z
+  .object({
+    label: EstimandLabelSchema,
+    decision_label: EstimandLabelSchema,
+    capped_entity_count: IntegerSchema.nullable(),
+    uncapped: UncappedEstimateSchema.nullable(),
+  })
+  .strict()
+  .superRefine((estimand, context) => {
+    if ((estimand.capped_entity_count === null) === (estimand.uncapped === null)) return;
+    context.addIssue({
+      code: "custom",
+      message: "capped_entity_count and uncapped must be present together",
+    });
+  });
+export type EstimandDisclosure = z.infer<typeof EstimandDisclosureSchema>;
+
 export const ArmResultSchema = z
   .object({
     variant: z.string(),
@@ -83,6 +130,9 @@ export const ArmResultSchema = z
     decision_valid: z.boolean(),
     status: StatsResultStatusSchema,
     variance_techniques: VarianceTechniquesSchema,
+    // Optional only so Stats recorded before the disclosure existed still
+    // parse; the engine always emits it.
+    estimand: EstimandDisclosureSchema.optional(),
   })
   .strict();
 export type ArmResult = z.infer<typeof ArmResultSchema>;
