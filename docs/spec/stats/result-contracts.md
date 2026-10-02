@@ -151,6 +151,25 @@ absolute decision interval (ADR-0015 rule 4). Breach evaluation is
 (`packages/stats/src/guardrail-bound-check.ts`). Time-uniform coverage of that inversion is
 unproven; the Fieller sequential-coverage audit is scheduled separately.
 
+## ROPE verdict (confidence-sequence helper)
+
+`classifyRopeVerdict` in `packages/stats/src/rope-verdict.ts` classifies a finite confidence-sequence
+interval against a Region Of Practical Equivalence (ROPE) on the same scale the decision gate uses
+(absolute or relative, as the caller states). Pre-registration will supply the ROPE per Metric; this
+slice exports the pure classifier only and does not yet attach a `ropeVerdict` field to `ArmResult`.
+
+Both the interval and the ROPE are closed. Because the interval is an always-valid confidence
+sequence, the verdict is valid at any look (Kruschke 2018).
+
+| Verdict     | Meaning                                                                                    |
+| ----------- | ------------------------------------------------------------------------------------------ |
+| `outside`   | Interval entirely outside the ROPE on one side (no shared points)                          |
+| `inside`    | Interval entirely within the ROPE, including equality on either ROPE bound                 |
+| `undecided` | Interval overlaps the ROPE without being contained (includes a shared boundary point only) |
+
+Non-finite bounds, an inverted interval (`lower > upper`), or a non-positive-width ROPE
+(`ropeLower >= ropeUpper`) throw. A point interval (`lower === upper`) is allowed.
+
 ## Analysis Results envelope
 
 The control-plane Results read uses the shipped `AnalysisResultsEnvelopeSchema` from
@@ -180,3 +199,5 @@ decision-bearing result exists.
 - [../../architecture/metric-analysis-seam.md](../../architecture/metric-analysis-seam.md)
 - [Wang and Ramdas, False discovery rate control with e-values](https://arxiv.org/abs/2009.02824)
   (super-uniform versus uniform p-values)
+- [Kruschke (2018), Rejecting or accepting parameter values in Bayesian estimation](https://doi.org/10.1177/2515245918771304)
+  (ROPE decision rule; applied here to an always-valid confidence sequence)

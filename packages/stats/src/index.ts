@@ -33,6 +33,7 @@ export {
   SEQUENTIAL_SRM_DEFAULT_CONCENTRATION,
   SEQUENTIAL_SRM_SOURCE,
 } from "./sequential-srm";
+export { classifyRopeVerdict, ROPE_VERDICTS } from "./rope-verdict";
 export type {
   ActivationRow,
   ArmResult,
@@ -84,3 +85,4 @@ export type {
   SequentialSrmObservations,
   SequentialSrmResult,
 } from "./sequential-srm";
+export type { RopeScale, RopeVerdict, RopeVerdictInput } from "./rope-verdict";
