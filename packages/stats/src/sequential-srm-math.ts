@@ -37,11 +37,35 @@ export function applySequentialSrmIncrements(
   }
 }
 
+/**
+ * Materialize numeric wealth from log space.
+ *
+ * Overflow contract: log evidence may grow beyond what `Math.exp` can represent.
+ * When that happens, refuse nonfinite numeric wealth rather than returning
+ * `Infinity` (which JSON serializes as `null`). Callers that still need the
+ * evidence must keep `logWealth`.
+ */
 export function wealthFromLog(logWealth: number): number {
   if (!Number.isFinite(logWealth)) {
     throw new Error("Sequential SRM wealth left the finite log domain.");
   }
-  return Math.exp(logWealth);
+  const wealth = Math.exp(logWealth);
+  if (!Number.isFinite(wealth)) {
+    throw new Error(
+      `Sequential SRM numeric wealth overflowed (log_wealth=${logWealth}). ` +
+        "Evidence remains in log space; refuse nonfinite wealth.",
+    );
+  }
+  return wealth;
+}
+
+/** Finite exp(logWealth), or null when the exponential overflows. */
+export function tryWealthFromLog(logWealth: number): number | null {
+  if (!Number.isFinite(logWealth)) {
+    throw new Error("Sequential SRM wealth left the finite log domain.");
+  }
+  const wealth = Math.exp(logWealth);
+  return Number.isFinite(wealth) ? wealth : null;
 }
 
 function applyArmIncrements(

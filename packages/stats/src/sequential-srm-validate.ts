@@ -53,7 +53,9 @@ export function countVectorFromRecord(
   counts: Readonly<Record<string, number>>,
   variants: readonly string[],
   label: string,
+  options: { readonly requireAllArms?: boolean } = {},
 ): number[] {
+  const requireAllArms = options.requireAllArms === true;
   const declared = new Set(variants);
   for (const variant of Object.keys(counts)) {
     if (!declared.has(variant)) {
@@ -61,13 +63,33 @@ export function countVectorFromRecord(
     }
   }
 
-  return variants.map((variant) => {
-    const value = counts[variant] ?? 0;
-    if (!Number.isSafeInteger(value) || value < 0) {
-      throw new Error(`Sequential SRM ${label} for ${variant} must be a nonnegative safe integer.`);
-    }
-    return value;
-  });
+  return variants.map((variant) => readArmCount(counts, variant, label, requireAllArms));
+}
+
+function readArmCount(
+  counts: Readonly<Record<string, number>>,
+  variant: string,
+  label: string,
+  requireAllArms: boolean,
+): number {
+  const hasArm = Object.hasOwn(counts, variant);
+  if (requireAllArms && !hasArm) {
+    throw new Error(`Sequential SRM ${label} is missing required arm ${variant}.`);
+  }
+  if (!hasArm) {
+    // Sparse increments omit arms with zero arrivals; cumulative snapshots may not.
+    return 0;
+  }
+  const value = (counts as Readonly<Record<string, number | null | undefined>>)[variant];
+  if (value === null || value === undefined) {
+    throw new Error(
+      `Sequential SRM ${label} for ${variant} must be a nonnegative safe integer, not ${String(value)}.`,
+    );
+  }
+  if (!Number.isSafeInteger(value) || value < 0) {
+    throw new Error(`Sequential SRM ${label} for ${variant} must be a nonnegative safe integer.`);
+  }
+  return value;
 }
 
 export function subtractCountVectors(

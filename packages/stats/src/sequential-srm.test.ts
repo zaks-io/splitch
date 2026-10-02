@@ -4,6 +4,7 @@ import {
   SEQUENTIAL_SRM_DEFAULT_ALPHA,
   SEQUENTIAL_SRM_SOURCE,
 } from "./sequential-srm";
+import { wealthFromLog } from "./sequential-srm-math";
 
 const EQUAL_ALLOCATION = { control: 50, treatment: 50 };
 
@@ -21,6 +22,7 @@ describe("computeSequentialSrm", () => {
 
     expect(result).toMatchObject({
       wealth: 1,
+      log_wealth: 0,
       anytime_p_value: 1,
       threshold_crossed: false,
       first_cross_n: null,
@@ -41,6 +43,7 @@ describe("computeSequentialSrm", () => {
     });
 
     expect(result.wealth).toBeCloseTo(102 / 101, 12);
+    expect(result.log_wealth).toBeCloseTo(Math.log(102 / 101), 12);
     expect(result.anytime_p_value).toBeCloseTo(101 / 102, 12);
     expect(result.total_n).toBe(2);
     expect(result.counts).toEqual({ control: 0, treatment: 2 });
@@ -65,7 +68,8 @@ describe("computeSequentialSrm", () => {
       },
     });
 
-    expect(cumulative.wealth).toBeCloseTo(increments.wealth, 12);
+    expect(cumulative.wealth).toBeCloseTo(increments.wealth ?? Number.NaN, 12);
+    expect(cumulative.log_wealth).toBeCloseTo(increments.log_wealth, 12);
     expect(cumulative.anytime_p_value).toBeCloseTo(increments.anytime_p_value, 12);
     expect(cumulative.counts).toEqual(increments.counts);
   });
@@ -86,10 +90,96 @@ describe("computeSequentialSrm", () => {
 
     expect(crossed.threshold_crossed).toBe(true);
     expect(crossed.first_cross_n).toBeGreaterThan(0);
-    expect(persisted.wealth).toBeLessThan(crossed.wealth);
+    expect(persisted.wealth).not.toBeNull();
+    expect(crossed.wealth).not.toBeNull();
+    expect(persisted.wealth as number).toBeLessThan(crossed.wealth as number);
     expect(persisted.threshold_crossed).toBe(true);
     expect(persisted.anytime_p_value).toBe(crossed.anytime_p_value);
     expect(persisted.first_cross_n).toBe(crossed.first_cross_n);
+  });
+});
+
+describe("computeSequentialSrm observation contracts", () => {
+  it("keeps sparse increments supported while requiring every cumulative arm", () => {
+    const sparse = computeSequentialSrm({
+      allocation: EQUAL_ALLOCATION,
+      observations: {
+        mode: "increments",
+        batches: [{ treatment: 1 }, { control: 1 }],
+      },
+      concentration: 100,
+    });
+
+    expect(sparse.counts).toEqual({ control: 1, treatment: 1 });
+    expect(sparse.total_n).toBe(2);
+    expect(sparse.wealth).not.toBeNull();
+    expect(Number.isFinite(sparse.wealth)).toBe(true);
+
+    expect(() =>
+      computeSequentialSrm({
+        allocation: EQUAL_ALLOCATION,
+        observations: {
+          mode: "cumulative",
+          snapshots: [{ control: 100 }],
+        },
+      }),
+    ).toThrow(/missing required arm treatment/);
+  });
+
+  it("rejects explicit null or undefined counts instead of coercing them to zero", () => {
+    const nullTreatment = {
+      control: 100,
+      treatment: null,
+    } as unknown as Readonly<Record<string, number>>;
+    const undefinedTreatment = {
+      control: 100,
+      treatment: undefined,
+    } as unknown as Readonly<Record<string, number>>;
+
+    expect(() =>
+      computeSequentialSrm({
+        allocation: EQUAL_ALLOCATION,
+        observations: { mode: "increments", batches: [nullTreatment] },
+      }),
+    ).toThrow(/treatment must be a nonnegative safe integer, not null/);
+
+    expect(() =>
+      computeSequentialSrm({
+        allocation: EQUAL_ALLOCATION,
+        observations: {
+          mode: "cumulative",
+          snapshots: [undefinedTreatment],
+        },
+      }),
+    ).toThrow(/treatment must be a nonnegative safe integer, not undefined/);
+  });
+
+  it("preserves overflowed wealth in log space and refuses nonfinite numeric wealth", () => {
+    const result = computeSequentialSrm({
+      allocation: EQUAL_ALLOCATION,
+      observations: {
+        mode: "increments",
+        batches: [{ treatment: 2000 }],
+      },
+      concentration: 100,
+      alpha: 0.05,
+    });
+
+    expect(Number.isFinite(result.log_wealth)).toBe(true);
+    expect(result.log_wealth).toBeGreaterThan(0);
+    expect(result.wealth).toBeNull();
+    expect(result.anytime_p_value).toBe(0);
+    expect(result.threshold_crossed).toBe(true);
+    expect(result.total_n).toBe(2000);
+    expect(() => wealthFromLog(result.log_wealth)).toThrow(/numeric wealth overflowed/);
+
+    const serialized = JSON.parse(JSON.stringify(result)) as {
+      wealth: unknown;
+      log_wealth: number;
+    };
+    expect(serialized.wealth).toBeNull();
+    expect(serialized.log_wealth).toBe(result.log_wealth);
+    expect(Object.hasOwn(serialized, "wealth")).toBe(true);
   });
 
   it("fails loud on invalid inputs and count revisions", () => {
@@ -148,6 +238,16 @@ describe("computeSequentialSrm", () => {
               { control: 10, treatment: 10 },
               { control: 9, treatment: 10 },
             ],
+          },
+        },
+      },
+      {
+        label: "missing cumulative arm",
+        input: {
+          allocation: EQUAL_ALLOCATION,
+          observations: {
+            mode: "cumulative",
+            snapshots: [{ control: 100 }],
           },
         },
       },
