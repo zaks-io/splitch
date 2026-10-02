@@ -71,8 +71,12 @@ function asAction(value: string): FlagChangeLogRow["action"] {
 
 function extraPredicate(filter: FlagChangeLogFilter): SQL {
   const parts: SQL[] = [];
-  if (filter.from !== undefined) parts.push(gte(flagChangeEvents.changedAt, filter.from));
-  if (filter.to !== undefined) parts.push(lte(flagChangeEvents.changedAt, filter.to));
+  if (filter.from !== undefined) {
+    parts.push(gte(flagChangeEvents.changedAt, toStoredUtcInstant(filter.from, "from")));
+  }
+  if (filter.to !== undefined) {
+    parts.push(lte(flagChangeEvents.changedAt, toStoredUtcInstant(filter.to, "to")));
+  }
   if (filter.flagId !== undefined) parts.push(eq(flagChangeEvents.flagId, filter.flagId));
   if (filter.afterSeq !== undefined) parts.push(gt(flagChangeEvents.seq, filter.afterSeq));
   if (filter.beforeSeq !== undefined) parts.push(lt(flagChangeEvents.seq, filter.beforeSeq));
@@ -84,6 +88,20 @@ function extraPredicate(filter: FlagChangeLogFilter): SQL {
     return gte(flagChangeEvents.seq, 0);
   }
   return and(...parts) as SQL;
+}
+
+/**
+ * Triggers store `changed_at` as fixed-width UTC (`YYYY-MM-DDTHH:MM:SS.sssZ`).
+ * Query bounds may arrive without milliseconds or with an offset; lexicographic
+ * comparison against those forms excludes equal instants or includes the wrong
+ * rows. Normalize to the stored form so TEXT ordering matches wall-clock order.
+ */
+function toStoredUtcInstant(value: string, field: "from" | "to"): string {
+  const ms = Date.parse(value);
+  if (!Number.isFinite(ms)) {
+    throw new Error(`flagChangeEvents.listForApp: ${field} must be a valid ISO-8601 instant`);
+  }
+  return new Date(ms).toISOString();
 }
 
 function environmentPredicate(filter: FlagChangeLogFilter): SQL | undefined {

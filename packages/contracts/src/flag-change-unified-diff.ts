@@ -20,12 +20,15 @@ export function renderFlagChangeUnifiedDiff(entries: readonly FlagChangeUnifiedS
 
 function renderEntry(entry: FlagChangeUnifiedSource): string {
   const path = entryPath(entry);
+  const body = entry.diff.unavailable
+    ? ["# unavailable: deletion rows store no diff_json"]
+    : fieldLines(entry.diff.fields);
   const lines = [
     `diff --git a/${path} b/${path}`,
     `--- a/${path}`,
     `+++ b/${path}`,
     `@@ ${entry.action} ${entry.targetType} ${entry.changedAt} @@`,
-    ...fieldLines(entry.diff.fields),
+    ...body,
   ];
   return `${lines.join("\n")}\n`;
 }

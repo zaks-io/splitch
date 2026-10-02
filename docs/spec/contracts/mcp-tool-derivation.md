@@ -184,7 +184,8 @@ For `flags_list`, a caller-supplied `environmentId` without `summary` becomes th
 
 Each entry's `diff` is projected from the stored `flag_change_events.diff_json`. The export adds a
 unified text form of those same stored values for a time range, or for the stored rows that name
-two Environments (a promotion review).
+two Environments (a promotion review). Deletion rows with `diff_json` NULL project
+`unavailable: true` rather than inventing a before/after.
 
 ### Targeting Rules (Flag sub-resource)
 

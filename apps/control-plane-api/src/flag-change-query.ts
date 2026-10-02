@@ -38,9 +38,15 @@ function assertTimeRange(query: FlagChangeQuery, requireRange: boolean): string 
     return "from and to are required for a change-log export";
   }
   if (hasFrom !== hasTo) return "from and to must be supplied together";
-  if (hasFrom && hasTo && (query.from as string) > (query.to as string)) {
-    return "to must be at or after from";
+  if (!hasFrom || !hasTo) return null;
+  const fromMs = Date.parse(query.from as string);
+  const toMs = Date.parse(query.to as string);
+  if (!Number.isFinite(fromMs) || !Number.isFinite(toMs)) {
+    return "from and to must be valid ISO-8601 instants";
   }
+  // Offset timestamps can invert under string order while remaining valid
+  // wall-clock windows (and the reverse). Compare parsed instants only.
+  if (fromMs > toMs) return "to must be at or after from";
   return null;
 }
 
@@ -87,5 +93,10 @@ export function parseChangeCursor(
 ): number | undefined | "invalid" {
   if (cursor === undefined || cursor === null || cursor === "") return undefined;
   if (!/^[1-9][0-9]*$/.test(cursor)) return "invalid";
-  return Number(cursor);
+  const seq = Number(cursor);
+  // Digit-only strings still overflow Number: a 309-digit cursor becomes
+  // Infinity, and values above MAX_SAFE_INTEGER round before the DB sees them.
+  // Require a positive safe integer whose decimal form matches the cursor.
+  if (!Number.isSafeInteger(seq) || seq < 1 || String(seq) !== cursor) return "invalid";
+  return seq;
 }

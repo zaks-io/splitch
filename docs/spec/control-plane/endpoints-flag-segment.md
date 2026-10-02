@@ -421,7 +421,9 @@ Query: `from?`, `to?` (ISO-8601 instants, supplied together), `environmentId?`,
 App-level definition rows), `flagId?`, plus the shared pagination query.
 
 Returns `ListResponse` of entries. Each entry includes `diff: { before, after, fields }` computed
-from that row's stored `diff_json`.
+from that row's stored `diff_json`. A missing or unparseable `diff_json` on a non-deletion row
+fails the read. Deletion rows that store `diff_json` NULL return
+`diff: { before: null, after: null, fields: [], unavailable: true }`.
 
 ### `GET /apps/{app_id}/flag-changes/export`
 

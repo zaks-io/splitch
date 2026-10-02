@@ -88,7 +88,21 @@ describe("parseFlagChangeDiff from stored records", () => {
 
   it("refuses invented JSON rather than substituting an empty diff", () => {
     expect(() => parseFlagChangeDiff("{", "updated")).toThrow(/not valid JSON/);
-    expect(() => parseFlagChangeDiff("[]", "updated")).toThrow(/JSON object or null/);
+    expect(() => parseFlagChangeDiff("[]", "updated")).toThrow(/JSON object/);
+  });
+
+  it("marks deletion rows with null diff_json as unavailable", () => {
+    expect(parseFlagChangeDiff(null, "deleted")).toEqual({
+      before: null,
+      after: null,
+      fields: [],
+      unavailable: true,
+    });
+  });
+
+  it("rejects unexpected null diff_json on non-deletion actions", () => {
+    expect(() => parseFlagChangeDiff(null, "updated")).toThrow(/required unless action is deleted/);
+    expect(() => parseFlagChangeDiff(null, "created")).toThrow(/required unless action is deleted/);
   });
 });
 
@@ -112,5 +126,21 @@ describe("renderFlagChangeUnifiedDiff", () => {
     expect(text).toContain("-enabled: 0");
     expect(text).toContain("+enabled: 1");
     expect(text).not.toContain("availableVariantNames");
+  });
+
+  it("labels unavailable deletion diffs instead of inventing field lines", () => {
+    const text = renderFlagChangeUnifiedDiff([
+      {
+        seq: 3,
+        flagKey: "checkout",
+        environmentId: null,
+        action: "deleted",
+        targetType: "flag",
+        changedAt: "2026-08-25T00:00:00.000Z",
+        diff: parseFlagChangeDiff(null, "deleted"),
+      },
+    ]);
+    expect(text).toContain("# unavailable: deletion rows store no diff_json");
+    expect(text).not.toMatch(/^[-+]\w/m);
   });
 });

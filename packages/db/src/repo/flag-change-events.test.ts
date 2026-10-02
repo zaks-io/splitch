@@ -132,4 +132,50 @@ describe("flagChangeEvents repo", () => {
     expect(page.some((row) => row.environmentId === seed.a.environmentId)).toBe(true);
     expect(page.some((row) => row.environmentId === null)).toBe(true);
   });
+
+  it("includes a stored UTC boundary when the lower bound omits milliseconds", async () => {
+    await insertChangeAt(local.d1, seed, "2026-08-25T00:00:00.000Z");
+    const page = await repo.flagChangeEvents.listForApp(appScope(seed.a.appId), {
+      from: "2026-08-25T00:00:00Z",
+      to: "2026-08-25T00:00:00Z",
+      includeAppLevel: true,
+      order: "asc",
+      limit: 100,
+    });
+    expect(page).toHaveLength(1);
+    expect(page[0]?.changedAt).toBe("2026-08-25T00:00:00.000Z");
+  });
+
+  it("applies offset bounds as UTC instants rather than string prefixes", async () => {
+    await insertChangeAt(local.d1, seed, "2026-08-25T01:00:00.000Z");
+    await insertChangeAt(local.d1, seed, "2026-08-25T03:00:00.000Z");
+
+    // from = 2026-08-25T02:00:00Z via -02:00 offset. The 01:00Z row is out of
+    // range by instant but would survive a naive string compare against the
+    // offset form.
+    const page = await repo.flagChangeEvents.listForApp(appScope(seed.a.appId), {
+      from: "2026-08-25T00:00:00-02:00",
+      to: "2026-08-25T04:00:00Z",
+      includeAppLevel: true,
+      order: "asc",
+      limit: 100,
+    });
+    expect(page.map((row) => row.changedAt)).toEqual(["2026-08-25T03:00:00.000Z"]);
+  });
 });
+
+async function insertChangeAt(
+  d1: D1Database,
+  seed: SeededTenants,
+  changedAt: string,
+): Promise<void> {
+  await d1
+    .prepare(
+      `INSERT INTO flag_change_events
+        (app_id, environment_id, flag_id, flag_key, action, target_type,
+         actor_ref, actor_via, changed_at, diff_json)
+       VALUES (?, NULL, ?, ?, 'updated', 'flag', NULL, NULL, ?, '{"key":["a","b"]}')`,
+    )
+    .bind(seed.a.appId, seed.a.flagId, seed.a.flagKey, changedAt)
+    .run();
+}

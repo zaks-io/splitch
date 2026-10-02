@@ -34,9 +34,26 @@ export const FlagChangeDiffSchema = z
     before: z.record(z.string(), z.unknown()).nullable(),
     after: z.record(z.string(), z.unknown()).nullable(),
     fields: z.array(FlagChangeFieldDiffSchema),
+    /**
+     * Set only for historical deletion rows whose triggers store `diff_json`
+     * NULL. Missing payloads on any other action fail the read.
+     */
+    unavailable: z.literal(true).optional(),
   })
   .strict();
 export type FlagChangeDiff = z.infer<typeof FlagChangeDiffSchema>;
+
+/**
+ * Deletion triggers write `diff_json` NULL (no before snapshot on delete). That
+ * is legitimate history, not a corrupt row: surface it as an explicit
+ * unavailable diff rather than inventing an empty transition.
+ */
+export const UNAVAILABLE_FLAG_CHANGE_DIFF = {
+  before: null,
+  after: null,
+  fields: [],
+  unavailable: true,
+} as const satisfies FlagChangeDiff;
 
 const PAIR_LENGTH = 2;
 
@@ -45,11 +62,12 @@ export function parseFlagChangeDiff(
   action: FlagChangeAction,
 ): FlagChangeDiff {
   if (diffJson === null) {
-    return { before: null, after: null, fields: [] };
+    if (action === "deleted") return { ...UNAVAILABLE_FLAG_CHANGE_DIFF };
+    throw new Error("flag-change-diff: stored diff_json is required unless action is deleted");
   }
   const parsed: unknown = parseStoredJson(diffJson);
   if (!isPlainObject(parsed)) {
-    throw new Error("flag-change-diff: stored diff_json must be a JSON object or null");
+    throw new Error("flag-change-diff: stored diff_json must be a JSON object");
   }
   if (parsed.change === "added") {
     return lifecycleDiff(parsed, "added");

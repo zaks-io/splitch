@@ -157,4 +157,13 @@ describe("flag change-log handlers", () => {
       "VALIDATION_ERROR",
     );
   });
+
+  it("rejects cursors that are not positive safe integers", async () => {
+    expect(await errorCode(await handlers.list(listArgs({ cursor: "9".repeat(309) })))).toBe(
+      "INVALID_PAGINATION",
+    );
+    expect(await errorCode(await handlers.list(listArgs({ cursor: "9007199254740993" })))).toBe(
+      "INVALID_PAGINATION",
+    );
+  });
 });

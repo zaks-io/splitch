@@ -64,6 +64,7 @@ export {
   FlagChangeFieldDiffSchema,
   FlagChangeTargetTypeSchema,
   parseFlagChangeDiff,
+  UNAVAILABLE_FLAG_CHANGE_DIFF,
 } from "../flag-change-diff";
 export { renderFlagChangeUnifiedDiff } from "../flag-change-unified-diff";
 export {
