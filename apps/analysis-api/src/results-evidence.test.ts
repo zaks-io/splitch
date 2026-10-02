@@ -1,7 +1,19 @@
-import { AnalysisResultsEnvelopeSchema, type ErrorResponse } from "@splitch/contracts";
+import {
+  AnalysisResultsEnvelopeSchema,
+  canonicalHash,
+  type ErrorResponse,
+} from "@splitch/contracts";
 import { describe, expect, it } from "vitest";
 import { makeResultsHarness, RESULTS_PATH, resultsAuthInit } from "./results-test-harness";
-import { DATA_WATERMARK, RUN_CONFIG_HASH, RUN_ID, rowsByPipe } from "./results-test-support";
+import {
+  APP_ID,
+  DATA_WATERMARK,
+  ENVIRONMENT_ID,
+  EXPERIMENT_ID,
+  RUN_CONFIG_HASH,
+  RUN_ID,
+  rowsByPipe,
+} from "./results-test-support";
 
 describe("Experiment result evidence", () => {
   it("returns a deterministic token and recomputes through the exact submitted watermark", async () => {
@@ -37,6 +49,30 @@ describe("Experiment result evidence", () => {
         (call) => call.params.ingest_watermark_ts === "2026-07-05 00:00:00.000",
       ),
     ).toBe(true);
+  });
+
+  it("leaves the estimand disclosure out of the token so pre-disclosure tokens still match", async () => {
+    const { app } = makeResultsHarness();
+    const response = await app.request(`${RESULTS_PATH}?runId=${RUN_ID}`, resultsAuthInit("GET"));
+    const envelope = AnalysisResultsEnvelopeSchema.parse(await response.json());
+    if (envelope.state !== "ready") throw new Error("expected ready result evidence");
+    expect(envelope.stats.arm_results.every((arm) => arm.estimand !== undefined)).toBe(true);
+
+    const legacyStats = {
+      ...envelope.stats,
+      arm_results: envelope.stats.arm_results.map(({ estimand: _estimand, ...arm }) => arm),
+    };
+    expect(envelope.stats.dimension_results).toBeUndefined();
+    expect(envelope.result_token).toBe(
+      await canonicalHash({
+        appId: APP_ID,
+        environmentId: ENVIRONMENT_ID,
+        experimentId: EXPERIMENT_ID,
+        runId: RUN_ID,
+        runConfigHash: RUN_CONFIG_HASH,
+        stats: legacyStats,
+      }),
+    );
   });
 
   it("fails loud instead of fabricating a token when the Run config hash is missing", async () => {

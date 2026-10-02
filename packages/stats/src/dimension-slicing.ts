@@ -255,5 +255,6 @@ function stripDimensionFields(result: DimensionArmResult): ArmResult {
     decision_valid: result.decision_valid,
     status: result.status,
     variance_techniques: result.variance_techniques,
+    ...(result.estimand === undefined ? {} : { estimand: result.estimand }),
   };
 }

@@ -5,6 +5,7 @@ import type {
   StatsInput,
   StatsResultStatus,
 } from "@splitch/contracts";
+import { type CappedArmEvidence, estimandDisclosure } from "./estimand-disclosure";
 import { FixedHorizonCI } from "./fixed-horizon-ci";
 import { metricTypesById } from "./metric-discovery";
 import { fiellerRelativeCi } from "./relative-ci";
@@ -14,6 +15,7 @@ import type {
   MetricArmEstimate,
   MetricComparisonEstimate,
   MetricComparisonsEstimate,
+  WinsorizedPass,
 } from "./variance-estimator-types";
 
 export interface ArmResultAdapters {
@@ -44,7 +46,7 @@ export function analyzeMetricArmResults(
     if (treatmentVariants.length === 0) {
       continue;
     }
-    const { control, comparisons } = comparisonsFor(
+    const { control, comparisons, winsorized } = comparisonsFor(
       input,
       metricId,
       metricType,
@@ -52,14 +54,59 @@ export function analyzeMetricArmResults(
       exposures,
     );
 
-    armResults.push(controlArmResult(control));
+    armResults.push({
+      ...controlArmResult(control),
+      estimand: estimandDisclosure(
+        metricType,
+        winsorized &&
+          cappedEvidence(
+            winsorized,
+            control.variant,
+            controlArmResult(winsorized.uncapped.control),
+          ),
+      ),
+    });
 
     for (const comparison of comparisons) {
-      armResults.push(treatmentArmResult(input, comparison, adapters));
+      const variant = comparison.treatment.variant;
+      armResults.push({
+        ...treatmentArmResult(input, comparison, adapters),
+        estimand: estimandDisclosure(
+          metricType,
+          winsorized &&
+            cappedEvidence(
+              winsorized,
+              variant,
+              treatmentArmResult(input, uncappedComparison(winsorized, variant), adapters),
+            ),
+        ),
+      });
     }
   }
 
   return armResults;
+}
+
+function cappedEvidence(
+  winsorized: WinsorizedPass,
+  variant: string,
+  uncapped: ArmResult,
+): CappedArmEvidence {
+  const count = winsorized.capped_entity_counts.get(variant);
+  if (count === undefined) {
+    throw new Error(`winsorization reported no capped-Entity count for Variant ${variant}.`);
+  }
+  return { capped_entity_count: count, uncapped };
+}
+
+function uncappedComparison(winsorized: WinsorizedPass, variant: string): MetricComparisonEstimate {
+  const comparison = winsorized.uncapped.comparisons.find(
+    (candidate) => candidate.treatment.variant === variant,
+  );
+  if (comparison === undefined) {
+    throw new Error(`uncapped pass is missing Treatment ${variant}.`);
+  }
+  return comparison;
 }
 
 function orderedVariants(

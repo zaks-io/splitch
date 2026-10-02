@@ -1,4 +1,4 @@
-import { canonicalHash, type StatsOutput } from "@splitch/contracts";
+import { canonicalHash, resultTokenStats, type StatsOutput } from "@splitch/contracts";
 
 interface ResultTokenInput {
   appId: string;
@@ -10,7 +10,7 @@ interface ResultTokenInput {
 }
 
 export async function createResultToken(input: ResultTokenInput): Promise<`sha256:${string}`> {
-  return canonicalHash(input);
+  return canonicalHash({ ...input, stats: resultTokenStats(input.stats) });
 }
 
 export type { ResultTokenInput };

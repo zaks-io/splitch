@@ -5,6 +5,7 @@ import {
   evaluateExperimentDecisionGate,
   resolveAnalysisControlIntegrity,
   resolveFrozenControlIdentity,
+  resultTokenStats,
 } from "@splitch/contracts";
 import { appScope, envScope } from "@splitch/db";
 import type { HandlerArgs } from "@splitch/worker-runtime";
@@ -196,7 +197,7 @@ async function assertEvidenceBinding(
     experimentId: ids.experimentId,
     runId: ids.runId,
     runConfigHash,
-    stats: envelope.stats,
+    stats: resultTokenStats(envelope.stats),
   });
   if (envelope.result_token !== boundToken) {
     throw new Error("Analysis result token is not bound to the selected Run configuration");

@@ -1,5 +1,5 @@
 import { mean } from "./variance-math";
-import type { EntityAggregate } from "./variance-estimator-types";
+import type { CupedAdjustment, EntityAggregate } from "./variance-estimator-types";
 
 interface CupedFit {
   readonly theta: number;
@@ -118,6 +118,36 @@ function adjustArm(
       cuped_adjusted: true,
     };
   });
+}
+
+/**
+ * Apply an already-selected CUPED covariate to a different outcome of the same
+ * Entities, refitting the slope on that outcome. Selection is not repeated, so
+ * the uncapped estimate adjusts on the covariate the capped estimate used.
+ */
+export function reapplyCupedCovariate(
+  adjustment: CupedAdjustment,
+  arms: readonly (readonly EntityAggregate[])[],
+): CupedAdjustment {
+  const covariates = adjustment.covariates;
+  if (covariates === null) {
+    return {
+      ...adjustment,
+      arms: arms.map((entities) => entities.map((entity) => ({ ...entity }))),
+    };
+  }
+  return {
+    ...adjustment,
+    arms: adjustCupedArms(
+      arms.map((entities, index) => {
+        const values = covariates[index];
+        if (values === undefined) {
+          throw new Error("CUPED covariate is missing values for an arm.");
+        }
+        return { entities, values };
+      }),
+    ),
+  };
 }
 
 function covariateValue(values: ReadonlyMap<string, number>, entityId: string): number {

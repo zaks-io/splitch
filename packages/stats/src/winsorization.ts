@@ -89,6 +89,27 @@ export function winsorizedEntities(
   }));
 }
 
+/** Entities with at least one value the cap lowered; a Ratio Entity counts once. */
+export function cappedEntityCount(
+  metricType: MetricKind,
+  entities: readonly EntityAggregate[],
+  winsorization: PooledWinsorization,
+): number {
+  const cap = winsorization.cap;
+  if (metricType === "ratio") {
+    if (typeof cap === "number") {
+      throw new Error("ratio winsorization requires numerator and denominator caps.");
+    }
+    return entities.filter(
+      (entity) => entity.num_value > cap.num_value || entity.denom_value > cap.denom_value,
+    ).length;
+  }
+  if (typeof cap !== "number") {
+    throw new Error(`${metricType} winsorization requires a scalar cap.`);
+  }
+  return entities.filter((entity) => entity.value > cap).length;
+}
+
 export function varianceTechniquesFor(
   metricType: MetricKind,
   winsorization: PooledWinsorization | null,
