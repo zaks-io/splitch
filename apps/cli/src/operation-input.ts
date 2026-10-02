@@ -1,5 +1,5 @@
 import type { EvaluateContext } from "@splitch/sdk";
-import { deriveMcpTools, getRoute, TargetingKeyTypeSchema } from "@splitch/sdk/control-plane";
+import { deriveMcpTools, TargetingKeyTypeSchema } from "@splitch/sdk/control-plane";
 import {
   excessPositionalError,
   parseBodyJsonRecord,
@@ -14,6 +14,7 @@ import {
 } from "./flag-create-input.js";
 import { applyOperationIdempotencyInput } from "./operation-idempotency-input.js";
 import type { ParsedGlobalFlags, ParsedInvocation } from "./parse-args.js";
+import { applyByFlag, applyRouteQueryFlags } from "./query-flags.js";
 
 const TOOL_BY_OPERATION = new Map(deriveMcpTools().map((tool) => [tool.name, tool]));
 
@@ -40,6 +41,7 @@ export function buildOperationInput(
   applyOrgFlag(invocation.flags, input);
   applyPositionalFields(command, invocation, input);
   applyNamedFlags(command, invocation.flags, input);
+  applyRouteQueryFlags(command.operationId, invocation.flags.queryFlags, input, command.path);
   // The Idempotency Key is minted before the command-specific step because that
   // step validates the assembled input against the contract.
   applyOperationIdempotencyInput(command.operationId, invocation.flags.idempotencyKey, input);
@@ -162,24 +164,6 @@ function applyNamedFlags(
     if (flags.dryRun) input.dryRun = true;
     if (flags.force) input.force = true;
   }
-}
-
-function applyByFlag(
-  command: CliCommandDefinition,
-  by: string | undefined,
-  input: Record<string, unknown>,
-): void {
-  if (!by) return;
-  const querySchema = getRoute(command.operationId)?.openapi.request?.query;
-  const queryShape = (querySchema as { shape?: unknown } | undefined)?.shape;
-  if (!queryShape || typeof queryShape !== "object" || !Object.hasOwn(queryShape, "by")) {
-    throw new SplitchCliError({
-      code: "CLI_USAGE_INVALID",
-      causeSummary: `--by is not accepted by splitch ${command.path.join(" ")}`,
-      remediation: `Drop --by, or run splitch ${command.path.join(" ")} --help to list the accepted flags`,
-    });
-  }
-  input.by = by;
 }
 
 function supportsDeleteMode(operationId: string): boolean {
