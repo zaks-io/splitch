@@ -35,7 +35,10 @@ srm_is_mismatch = p_value < 0.001
 
 **Threshold:** `p < 0.001`, matching common experiment-platform SRM diagnostics. SRM is monitored
 repeatedly and is not a sequentially-valid decision rule, so the threshold is intentionally
-conservative.
+conservative. The observation process (which Entities enter the counts, and when a later watermark
+revises rather than appends) is defined in
+[data-contracts.md](data-contracts.md#observation-process-at-a-watermark-data-entry-audit).
+Quarantine to `__multiple__` and late Activations can decrease an arm's earlier count.
 
 **On mismatch:** results are flagged untrusted. The mismatch is surfaced loudly in the UI.
 
@@ -94,6 +97,9 @@ bug, or a material-edit violation (ADR-0003 broken, a new Run should have been o
 
 The quarantine is fail-loud by design. "First-touch wins" would silently bias the earlier-assigned
 arm and SRM would not catch it (ADR-0011).
+
+A later ingest of a second Variant for the same Entity **revises** that Entity out of its previous
+arm. See [data-contracts.md](data-contracts.md#observation-process-at-a-watermark-data-entry-audit).
 
 ## Health metrics object
 

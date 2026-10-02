@@ -119,7 +119,10 @@ Environment are returned.
 
 All reads use the request's inclusive `ingest_ts <= dataWatermark` boundary and the same deduped
 Exposure source as Results. The watermark is the inclusive Copy Pipe boundary, so exact-equality rows
-remain in the evidence set. Raw Targeting Keys are never returned. Dimension values are the declared,
+remain in the evidence set. Trend points recompute the observation process in
+[data-contracts.md](data-contracts.md#observation-process-at-a-watermark-data-entry-audit) at that
+watermark; `__multiple__` quarantine and late Activations can revise earlier bucket counts rather
+than append. Raw Targeting Keys are never returned. Dimension values are the declared,
 allowlisted values captured by the Run, not free-form Entity data.
 
 ## Sources

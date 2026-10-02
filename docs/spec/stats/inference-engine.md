@@ -11,11 +11,11 @@ per-Entity Metric values (one row per Entity, aggregated upstream — ADR-0015)
   ▼ 1. Winsorization (additive Metrics only):
        cap value at p-th percentile, recompute variance over capped values
   ▼ 2. Type-appropriate variance estimator                         → variance_i
-  ▼ 3. Delta-method term (Ratio Metrics and relative-lift; always) → delta_adjusted_variance_i
+  ▼ 3. Delta-method term (Ratio Metrics)                           → delta_adjusted_variance_i
   ▼ 4. CUPED adjustment (gated; when applied, replaces variance_i) → cuped_adjusted_variance_i
   ▼ 5. Absolute-lift inference (aCS or fixed-horizon) → decision p-value / stop input:
        [absolute_ci_lower_N, absolute_ci_upper_N] (valid at any N for aCS)
-  ▼ 6. Relative-lift reporting interval (delta-method variance):
+  ▼ 6. Relative-lift interval (Fieller inversion of the absolute decision interval):
        [relative_lift_ci_lower, relative_lift_ci_upper]
   ▼ 7. Guardrail bound check (CI lower-bound vs. downside threshold) → guardrail_status
   ▼ 8. Benjamini-Hochberg FDR (across goal-metric × Variant family)  → is_significant (post-FDR)
@@ -50,7 +50,7 @@ mathematically equivalent but harder to compose into this stack (ADR-0014).
 The aCS adapter owns the time-uniform boundary and tuning schedule. The Run may carry a
 `target_n` tuning value for where the sequence should be tightest. Sequential intervals are wider
 than fixed-horizon intervals at the same N, the accepted price of safe peeking. Full tuning,
-p-value inversion, and adapter requirements live in
+p-value inversion (including the point mass at 1), and adapter requirements live in
 [sequential-testing-mechanics.md](sequential-testing-mechanics.md).
 
 ### Fixed-horizon opt-in
@@ -68,10 +68,10 @@ Three structural rules — the naive code paths do not exist:
 events, sessions, pageviews are never the denominator. Treating correlated observations as
 independent understates variance, pushing FPR from 5% to ~25% or worse.
 
-**Rule 2: Delta method for Ratio Metrics and relative-lift.** When numerator and denominator are
-correlated (Ratio Metric) or when computing relative lift (treatment mean / control mean), the
-naive ratio-of-means variance omits the covariance term; the delta method (first-order Taylor
-expansion) is the only path.
+**Rule 2: Delta method for Ratio Metrics.** When numerator and denominator are correlated
+(Ratio Metric), the naive ratio-of-means variance omits the covariance term; the delta method
+(first-order Taylor expansion) is the only path. Relative lift is not a second delta-method
+estimate: ADR-0015 rule 4 derives it by Fieller inversion of the absolute interval.
 
 **Rule 3: No naive variance code path exists.** One variance path; no flag or parameter selects
 ratio-of-means or events-as-independent variance.
@@ -126,11 +126,21 @@ fails only if the arm-level denominator mean `B = 0`.
 
 ### Relative-lift CI
 
-Relative lift is reported separately from the decision statistic. The base interval and p-value are
-always computed on absolute lift `R_t - R_c`. Relative-lift reporting and relative Guardrail bounds
-are the **Fieller inversion of that same absolute interval**, never a second independent estimate
-(ADR-0015 rule 4). If the Control estimate is zero, relative lift and its interval are undefined,
-while the absolute-lift decision remains available.
+Relative lift is a derived interval, not a second test. The base interval and p-value are always
+computed on absolute lift `R_t - R_c`. That absolute interval is the stopping input and the BH
+rank. Relative-lift reporting and relative Guardrail bounds are the **Fieller inversion of that
+same absolute interval**, never a second independent estimate (ADR-0015 rule 4). The
+implementation (`packages/stats/src/relative-ci.ts`) recovers the critical multiplier from the
+decision interval's half-width, so sequential Runs carry the aCS boundary into the ratio interval
+and fixed-horizon Runs carry the t (or z) critical value. If the Control estimate is zero,
+relative lift and its interval are undefined, while the absolute-lift decision remains available.
+
+Guardrail breach is `ci_lower < downside_threshold_pct` on this Fieller relative lower bound
+(`packages/stats/src/guardrail-bound-check.ts`). The relative interval is therefore
+**decision-bearing for Guardrails**. Time-uniform coverage of the Fieller inversion as a
+confidence sequence is unproven (no directly applicable Fieller CS construction was found;
+Waudby-Smith Proposition 3.5 is a delta-method alternative, not a refutation). D1 keeps Fieller
+and schedules that audit before any replacement.
 
 Both the point estimate and the interval bounds are reported in **percentage points**:
 
@@ -155,9 +165,9 @@ represent. This is deliberately conservative: the hull can contain 0% where the 
 it, so an unbounded relative interval means "uninformative", never "no effect".
 
 Because a ratio of 1 reduces Fieller's quadratic to the absolute test, the published relative
-interval contains 0% if and only if the decision interval contains zero — **when `a > 0`**. The
-unbounded case carries no such equivalence, which is why the absolute-lift interval, not the
-relative one, is the decision.
+interval contains 0% if and only if the decision interval contains zero, **when `a > 0`**. The
+unbounded case carries no such equivalence, which is why significance, stopping, and BH still
+read the absolute-lift interval. Guardrails still read the relative lower bound when it is finite.
 
 For a Binomial comparison with a non-zero effect but a zero plug-in variance at a boundary, the
 decision or relative-reporting standard error uses the documented Agresti-Caffo plus-two variance
@@ -213,3 +223,6 @@ rules (Guardrails, Secondary Metrics/Dimensions) live in
 - [../../adr/0016-cuped-and-winsorization-default-on-but-conditional.md](../../adr/0016-cuped-and-winsorization-default-on-but-conditional.md)
 - [../../architecture/metric-analysis-seam.md](../../architecture/metric-analysis-seam.md)
 - [Deng, Knoblich, and Lu, Applying the Delta Method in Metric Analytics](https://arxiv.org/abs/1803.06336)
+- [Fieller, Some Problems in Interval Estimation](https://doi.org/10.1111/j.2517-6161.1954.tb00159.x)
+- [Waudby-Smith, Arbour, Sinha, Kennedy, and Ramdas, Time-uniform central limit theory](https://arxiv.org/abs/2103.06476)
+  (Proposition 3.5 is a sequential delta-method alternative, not a refutation of Fieller)

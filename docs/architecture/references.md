@@ -225,3 +225,33 @@ variance trap are the two silent, high-bias errors this seam exists to prevent.
 - **Eppo — preferential Bonferroni / FWER** (the considered alternative): https://docs.geteppo.com/statistics/multiple-testing/
 - **Eppo — guardrails (CI lower-bound breach)**: https://docs.geteppo.com/data-management/organizing-metrics/guardrails/
 - **Spotify — guardrails as non-inferiority test**: https://confidence.spotify.com/blog/better-decisions-with-guardrails
+
+## Sequential p-values, Fieller, and the observation process (stats spec reconcile)
+
+Literature used to lock three spec claims against the code. Each source supports only the claim
+written next to it.
+
+- **Wang and Ramdas (2022). False discovery rate control with e-values.** JRSS-B 84(3).
+  https://arxiv.org/abs/2009.02824
+  Claim: valid sequential p-values are super-uniform, not uniform. splitch's sequential adapter
+  returns `p = 1` on a band of near-null statistics (`packages/stats/src/sequential-ci.ts`); A/A
+  and trust jobs must test the rejection-probability bound, not Uniform(0,1).
+- **Lindon and Kallus (2026). Anytime-valid inference under outcome delay and staggered entry.**
+  https://arxiv.org/abs/2603.25971
+  Claim: the Phase 0.1 data-entry audit is a calendar-time estimand (facts ingested by a clock /
+  ingest watermark), not a complete delayed-outcome analysis that waits for every Conversion
+  Window to close. Written in [data-contracts.md](../spec/stats/data-contracts.md).
+- **Lindon and Malek (2022). Anytime-valid inference for multinomial count data.** NeurIPS.
+  https://arxiv.org/abs/2011.03567
+  Claim: a sequential SRM martingale needs iid multinomial increments. `__multiple__` quarantine
+  and late Activations revise earlier arm counts, so those increments are not automatic.
+- **Fieller (1954). Some Problems in Interval Estimation.** JRSS-B 16(2).
+  https://doi.org/10.1111/j.2517-6161.1954.tb00159.x
+  Claim: the published relative interval is the Fieller inversion of the absolute test
+  (ADR-0015 rule 4). Guardrail breach reads that relative lower bound.
+- **Waudby-Smith, Arbour, Sinha, Kennedy, Ramdas (2024). Time-uniform central limit theory and
+  asymptotic confidence sequences.** Annals of Statistics 52(6).
+  https://arxiv.org/abs/2103.06476
+  Claim: Proposition 3.5 is a sequential delta-method construction and an alternative to
+  Fieller, not a refutation. Time-uniform coverage of the current Fieller inversion is unproven
+  and scheduled for audit (D1: keep Fieller).

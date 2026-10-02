@@ -90,7 +90,9 @@ Supplied only when CUPED applies (pre-period data present, coverage above thresh
 
 Pre-period is **always anchored at `first_exposure_ts`**, even when the Conversion Window re-anchors
 to `activation_ts`. Immutable: it captures what the Entity did before
-exposure, not before activation.
+exposure, not before activation. CUPED eligibility, selection, and fallback live in
+[variance-reduction.md](variance-reduction.md); this document only records which rows the pipes
+emit.
 
 ### Activation rows (when Activation gate is set)
 
@@ -172,18 +174,142 @@ from the same locked Run snapshot so SRM, Control selection, and decision famili
 mid-experiment.
 
 `guardrail_decisions` is the optional locked Guardrail family. When omitted, the engine treats it as
-empty. When present, Guardrail breach evaluation uses the treatment Arm's relative-lift CI lower
-bound and only emits a breach once the Arm is decisionable.
+empty. When present, Guardrail breach evaluation uses the treatment Arm's Fieller relative-lift CI
+lower bound (derived from the absolute decision interval, ADR-0015 rule 4) and only emits a breach
+once the Arm is decisionable. The relative interval is decision-bearing for that check; see
+[inference-engine.md](inference-engine.md) §Relative-lift CI.
 
 The engine is a **pure function**: same input → same output, no internal state. All retained facts and
 derived serving state live in Tinybird (raw logs, the deduped Exposure snapshot, and merged Metric/Web
 aggregate states), not the engine.
 
+## Observation process at a watermark (data-entry audit)
+
+This is the Phase 0.1 audit: which units enter each statistic at each refresh, written against
+Lindon and Kallus's calendar-time estimand (staggered entry and delayed outcomes, evaluated at a
+clock time rather than after every Conversion Window closes). Sequential SRM (item 0.6) must use
+this observation contract; it does not invent a different filtration.
+
+The Analysis Worker (`apps/analysis-api/src/results.ts`) builds one `StatsInput` per Results read
+and calls the engine. It does not incrementally append to a previous `StatsInput`. Counts that
+look like "new Entities since last look" are a difference of two full recomputes, not a martingale
+increment stored on disk.
+
+### Evidence watermark
+
+`data_watermark` is an inclusive ingest-time boundary (`ingest_ts <= watermark`), not an
+event-time cutoff. Default selection is `max(watermark_ts)` on `deduped_exposures` for the App and
+Environment (`infra/tinybird/pipes/analysis_run_inputs.pipe`). A Results read may pin
+`dataWatermark` instead. Every downstream pipe receives `ingest_watermark_ts`
+(`apps/analysis-api/src/results.ts` `watermarkPipeParams`). Rows whose `ingest_ts` equals the
+watermark are in the result ([result-contracts.md](result-contracts.md)).
+
+The Exposure snapshot Copy Pipe (`infra/tinybird/copies/cp_deduped_exposures.pipe`) is
+`COPY_MODE replace`, triggered from `apps/analysis-api/src/scheduled.ts`. Each run rebuilds
+`deduped_exposures` from `raw_events` with `ingest_ts <= copy_watermark`. It does not append a
+delta. A later snapshot can change an Entity's `variant`, `first_exposure_ts`, and arm membership
+that an earlier snapshot already published.
+
+Serving (`infra/tinybird/pipes/serve_deduped_exposures.pipe`) unions that snapshot with the raw
+tail (`ingest_ts` overlapping the snapshot watermark on both sides) and re-dedups. Overlap is
+deliberate so a row landing exactly on the boundary is not lost.
+
+Metric Events freeze membership the same way: `serve_deduped_metric_events` keeps
+`ingest_ts <= ingest_watermark_ts` after retry-key `argMinMerge`. The Analysis Worker then scans
+`accepted_at` from Run `started_at` through wall-clock `to_ts` (now), so a row accepted and
+ingested on the inclusive evidence edge is not dropped by `accepted_at < to_ts`
+(`apps/analysis-api/src/results.ts`, `apps/analysis-api/src/results-metric-query.ts`).
+
+Calendar-time reading: at watermark W the published numbers are the analysis of facts ingested by
+W, with Conversion Windows on `accepted_at` (and first-touch on `exposure_at`). They are not a
+complete delayed-outcome analysis that waits for every Entity's window to close. A later W can
+revise earlier Entity-level values.
+
+### Who enters each statistic
+
+| Statistic                                                                                     | Units that enter                                                                                                 | Code                                                                                                                           |
+| --------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| Full-exposed SRM `observed_counts`, `health.deduped_counts`, Metric `sample_size_n` (ungated) | One row per Entity in this Run with `variant != '__multiple__'`                                                  | `analysis_deduped_exposures.pipe` keeps `__multiple__` rows; `packages/stats/src/exposure-denominator.ts` drops them from arms |
+| `health.multiple_count` / `multiple_rate`                                                     | Those `__multiple__` Entities                                                                                    | same files; `packages/stats/src/srm-checker.ts`                                                                                |
+| Activated SRM, gated Metric denominators                                                      | Exposed, non-`__multiple__` Entities with a post-Exposure Activation (`activation_ts > first_exposure_ts`)       | `analysis_activation_rows.pipe`; gated Metrics also `INNER JOIN` in `analysis_metric_values_batch.pipe`                        |
+| Activation balance                                                                            | 2 × Variant table of activated vs not-activated among full-exposed (non-`__multiple__`) counts                   | `srm-checker.ts` `chiSquareActivationBalance`                                                                                  |
+| Per-Entity Metric values (Binomial / Count / Revenue / Ratio operands)                        | Left join of Metric Events onto the (gated or ungated) Exposure population; missing events are zero, not dropped | `analysis_metric_values_batch.pipe`; engine applies rows with `in_window` in `variance-estimators.ts`                          |
+| CUPED pre-period rows                                                                         | Non-Ratio Metrics; lookback ends at `first_exposure_ts` even when gated                                          | `analysis_pre_period_covariates.pipe` / `_batch`; selection rules: [variance-reduction.md](variance-reduction.md)              |
+
+Counterfactual Activations (`counterfactual = 1`) are excluded in
+`analysis_activation_rows.pipe` and the batch Metric pipe. They must not enter the activated
+denominator (`exposure-denominator.ts` reads `activated`, not the counterfactual flag).
+
+`analysis_deduped_exposures.pipe` currently emits `window_anchor = first_exposure_ts` because the
+pipe cannot read `runs.activation_metric_id`. Gated Conversion Windows are applied in
+`analysis_metric_values_batch.pipe` (`activation_gated = 1` sets `window_anchor` to
+`min(activation_ts)`). The engine still gates the denominator from `activation_rows`.
+
+### `__multiple__` quarantine (ADR-0011)
+
+Conflict is detected at query time: `countDistinct(variant) > 1` (or a null Variant) in the Copy
+Pipe and again on the snapshot-plus-tail union. The Entity is labelled `__multiple__` and excluded
+from every real arm, from both SRM denominators, and from Metric sample sizes. It is not
+first-touch resolved.
+
+A later watermark **revises** earlier arm counts when a second Variant is ingested for an Entity
+that previously sat in one arm. The Entity leaves that arm's SRM and Metric denominators and
+appears in `multiple_count`. This is not an iid multinomial increment. A sequential SRM wealth
+process that assumed append-only arm counts would be wrong on this path. Late delivery of an
+earlier `exposure_at` can also revise `first_exposure_ts` (and therefore windows and CUPED
+lookback) without changing Variant.
+
+### Activation gating (ADR-0012)
+
+When `analysis_run_inputs.activation_metric_id` is set, the Worker fetches
+`analysis_activation_rows` and passes `activation_gated=1` into the Metric batch pipe
+(`results-downstream-rows.ts`). Un-activated Entities are absent from that pipe's output rather
+than emitted with `activated = 0`; the engine treats absence and `activated = false` the same.
+Full-exposed SRM still uses every non-`__multiple__` Exposure.
+
+A late Activation (ingested after W1, at or before W2) **revises** the gated population: the
+Entity enters activated SRM, activation-balance counts, and gated Metric denominators, and its
+Conversion Window re-anchors to `activation_ts`. Outcomes that were scored from first Exposure on
+an ungated look are not the gated estimand; gated looks never included the Entity until
+activation arrived.
+
+### Late conversions
+
+A Metric Event enters an Entity's value when `ingest_ts <= watermark`, `accepted_at` falls in
+`[window_anchor, window_anchor + window_duration)` (duration `0` means open-ended), and the Event
+Definition / field contract matches. The batch pipe emits `in_window = 1` for every left-joined
+Entity, including zeros.
+
+A conversion ingested after W1 **revises** that Entity's `value` / Ratio pair at W2. It does not
+append a new denominator row unless the Entity was not yet in the Exposure population. Ratio
+zero-denominator Entities stay in the pair ([inference-engine.md](inference-engine.md)).
+
+### What revises versus what appends
+
+At watermark W2 versus W1:
+
+- **Append (new unit):** a newly ingested first Exposure for an Entity that did not appear at W1
+  (and is not `__multiple__`).
+- **Revise (same unit, new facts):** a late conversion; a late Activation; a later first-touch
+  `exposure_at`; a Variant conflict that moves the Entity to `__multiple__`; a Copy Pipe replace
+  that rebuilds snapshot keys. Arm counts, SRM chi-square inputs, and Metric means can go down as
+  well as up.
+- **Not observed:** Metric Events or Activations with `ingest_ts` after W, even if `accepted_at` /
+  `activation_ts` is in the window. Re-read at a later watermark to include them.
+
+Diagnostics that bucket by time (`decision-diagnostics.md` SRM trend) recompute this same process
+at the submitted `dataWatermark`; they do not replay a stored increment log.
+
 ## Sources
 
 - [../../adr/0015-variance-delta-method-aggregate-to-randomization-unit.md](../../adr/0015-variance-delta-method-aggregate-to-randomization-unit.md)
 - [../../adr/0012-activation-gate-semantics-ordering-reanchor-and-bias-guardrails.md](../../adr/0012-activation-gate-semantics-ordering-reanchor-and-bias-guardrails.md)
+- [../../adr/0011-conflicting-variant-entities-quarantined-to-multiple.md](../../adr/0011-conflicting-variant-entities-quarantined-to-multiple.md)
 - [../../adr/0010-exposure-pipeline-is-a-raw-append-only-log-deduped-at-query-time.md](../../adr/0010-exposure-pipeline-is-a-raw-append-only-log-deduped-at-query-time.md)
 - [../../architecture/metric-analysis-seam.md](../../architecture/metric-analysis-seam.md)
 - [../../architecture/activation-gate-seam.md](../../architecture/activation-gate-seam.md)
 - [Deng, Knoblich, and Lu, Applying the Delta Method in Metric Analytics](https://arxiv.org/abs/1803.06336)
+- [Lindon and Kallus, Anytime-valid inference under outcome delay and staggered entry](https://arxiv.org/abs/2603.25971)
+  (calendar-time estimand for the watermark observation process)
+- [Lindon and Malek, Anytime-valid inference for multinomial count data](https://arxiv.org/abs/2011.03567)
+  (iid multinomial increments; quarantine and late facts are not that process)

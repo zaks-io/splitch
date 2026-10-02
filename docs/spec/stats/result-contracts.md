@@ -5,22 +5,22 @@ contract and `StatsEngine` signature live in [data-contracts.md](data-contracts.
 
 ## Per-arm result object (one per (Variant, Metric))
 
-| Field                 | Type                 | Meaning                                                                                    |
-| --------------------- | -------------------- | ------------------------------------------------------------------------------------------ |
-| `variant`             | `string`             | Variant name                                                                               |
-| `metric_id`           | `string`             |                                                                                            |
-| `sample_size_n`       | `integer`            | Unique Entities in this arm (deduped)                                                      |
-| `point_estimate`      | `number`             | Per-Entity mean for this arm                                                               |
-| `relative_lift_pct`   | `number \| null`     | `(treatment / control - 1) × 100`; null for Control or undefined Control estimate          |
-| `ci_lower`            | `number \| null`     | Always-valid CI lower bound (relative-lift %); null for Control or undefined relative lift |
-| `ci_upper`            | `number \| null`     | Always-valid CI upper bound (relative-lift %); null for Control or undefined relative lift |
-| `p_value`             | `number`             | Always-valid p-value (valid under continuous peeking)                                      |
-| `is_significant`      | `boolean`            | After Benjamini-Hochberg FDR correction                                                    |
-| `in_bh_family`        | `boolean`            | True only for locked goal Metric × Variant family members                                  |
-| `exploratory`         | `boolean`            | True for post-start additions or Secondary outputs                                         |
-| `decision_valid`      | `boolean`            | True only when the result belongs to the locked decision spec                              |
-| `status`              | `enum`               | `running \| ready \| stopped \| insufficient_denominator \| insufficient_n \| error`       |
-| `variance_techniques` | `VarianceTechniques` | Which variance-reduction methods applied (see below)                                       |
+| Field                 | Type                 | Meaning                                                                                                              |
+| --------------------- | -------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| `variant`             | `string`             | Variant name                                                                                                         |
+| `metric_id`           | `string`             |                                                                                                                      |
+| `sample_size_n`       | `integer`            | Unique Entities in this arm (deduped)                                                                                |
+| `point_estimate`      | `number`             | Per-Entity mean for this arm                                                                                         |
+| `relative_lift_pct`   | `number \| null`     | `(treatment / control - 1) × 100`; null for Control or undefined Control estimate                                    |
+| `ci_lower`            | `number \| null`     | Always-valid CI lower bound (relative-lift %); null for Control or undefined relative lift                           |
+| `ci_upper`            | `number \| null`     | Always-valid CI upper bound (relative-lift %); null for Control or undefined relative lift                           |
+| `p_value`             | `number`             | Sequential: always-valid boundary-inversion p-value (super-uniform, mass at 1). Fixed-horizon: one-look t/z p-value. |
+| `is_significant`      | `boolean`            | After Benjamini-Hochberg FDR correction                                                                              |
+| `in_bh_family`        | `boolean`            | True only for locked goal Metric × Variant family members                                                            |
+| `exploratory`         | `boolean`            | True for post-start additions or Secondary outputs                                                                   |
+| `decision_valid`      | `boolean`            | True only when the result belongs to the locked decision spec                                                        |
+| `status`              | `enum`               | `running \| ready \| stopped \| insufficient_denominator \| insufficient_n \| error`                                 |
+| `variance_techniques` | `VarianceTechniques` | Which variance-reduction methods applied (see below)                                                                 |
 
 ## VarianceTechniques object (never silent)
 
@@ -77,6 +77,29 @@ contract and `StatsEngine` signature live in [data-contracts.md](data-contracts.
 Dimension result shapes (`DimensionResult`) are defined in
 [dimension-slicing.md](dimension-slicing.md).
 
+## Sequential `p_value` (super-uniform, mass at 1)
+
+For `horizon = 'sequential'`, `p_value` is the infimum alpha whose aCS excludes zero
+([sequential-testing-mechanics.md](sequential-testing-mechanics.md)). The adapter returns `1`
+when the estimate is zero and when the boundary at alpha just below `1` still covers the
+estimate (`packages/stats/src/sequential-ci.ts`). That is a point mass at `1`, not a bug.
+
+Valid sequential p-values are super-uniform: `P(p <= alpha) <= alpha` under the null (Wang and
+Ramdas). They are not Uniform(0, 1). A/A simulations, metric-trust jobs, and any Anderson-Darling
+(or similar) uniformity gate on these p-values would reject a correctly conservative test. Those
+jobs must check the rejection-probability bound at declared alphas, or compare to this adapter's
+simulated null reference, not to uniformity.
+
+Fixed-horizon `p_value` is a one-look t/z tail and is not this inversion.
+
+## Guardrail `ci_lower`
+
+`guardrail_results[].ci_lower` is the Fieller relative-lift lower bound derived from the same
+absolute decision interval (ADR-0015 rule 4). Breach evaluation is
+`ci_lower < threshold` once the Arm is decisionable
+(`packages/stats/src/guardrail-bound-check.ts`). Time-uniform coverage of that inversion is
+unproven; the Fieller sequential-coverage audit is scheduled separately.
+
 ## Analysis Results envelope
 
 The control-plane Results read uses the shipped `AnalysisResultsEnvelopeSchema` from
@@ -100,3 +123,5 @@ decision-bearing result exists.
 - [../../adr/0015-variance-delta-method-aggregate-to-randomization-unit.md](../../adr/0015-variance-delta-method-aggregate-to-randomization-unit.md)
 - [../../adr/0012-activation-gate-semantics-ordering-reanchor-and-bias-guardrails.md](../../adr/0012-activation-gate-semantics-ordering-reanchor-and-bias-guardrails.md)
 - [../../architecture/metric-analysis-seam.md](../../architecture/metric-analysis-seam.md)
+- [Wang and Ramdas, False discovery rate control with e-values](https://arxiv.org/abs/2009.02824)
+  (super-uniform versus uniform p-values)
