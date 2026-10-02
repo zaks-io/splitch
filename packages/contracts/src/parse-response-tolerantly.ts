@@ -6,12 +6,28 @@
  *
  * Algorithm: safeParse; when every issue is `unrecognized_keys`, delete
  * exactly those keys at their issue paths from a structured clone and
- * re-parse. Any other issue (wrong type, missing required field, refine
- * failure) fails loud unchanged. A failure without Zod issues (custom
- * panel parsers) also fails loud unchanged.
+ * re-parse. Ordinary `z.union` failures are retried per branch with the same
+ * rules; when more than one branch accepts after stripping, the last matching
+ * branch wins so hydrated Flag envelopes keep `configurations` (matching the
+ * `[bare, hydrated]` authoring order). Any other issue (wrong type, missing
+ * required field, refine failure) fails loud unchanged. A failure without Zod
+ * issues (custom panel parsers) also fails loud unchanged.
+ *
+ * Secret-bearing / provision-once credential fields (`keyMaterial`, `value`)
+ * are never stripped: an unrecognized occurrence fails loud so a Worker
+ * regression cannot hide a wire disclosure behind forward-compat stripping
+ * (ADR-0022).
  */
 
 const MAX_STRIP_PASSES = 16;
+
+/**
+ * Fields that must never be dropped as "additive unknowns".
+ * `keyMaterial` on an APIKey-shaped list row, and CreateCredentialResponse's
+ * once-only `value` when it appears outside a create envelope, are contract
+ * violations rather than forward-compatible extensions.
+ */
+const NEVER_STRIP_UNRECOGNIZED_KEYS = new Set(["keyMaterial", "value"]);
 
 export type ResponseParseSuccess<T> = { success: true; data: T };
 export type ResponseParseFailure = {
@@ -25,11 +41,16 @@ export type ResponseParseIssue = {
   readonly path: readonly PropertyKey[];
   readonly keys?: readonly string[];
   readonly message?: string;
+  readonly errors?: readonly (readonly ResponseParseIssue[])[];
 };
 
 export type ResponseSafeParseSchema<T> = {
   safeParse(input: unknown): ResponseParseSuccess<T> | { success: false; error?: unknown };
 };
+
+type StripOutcome<T> =
+  | { ok: true; data: T }
+  | { ok: false; failure: { success: false; error?: unknown } };
 
 export function parseResponseTolerantly<T>(
   schema: ResponseSafeParseSchema<T>,
@@ -49,7 +70,19 @@ export function parseResponseBody<T>(schema: ResponseSafeParseSchema<T>, input: 
 function parseWithStripping<T>(
   schema: ResponseSafeParseSchema<T>,
   input: unknown,
-): { ok: true; data: T } | { ok: false; failure: { success: false; error?: unknown } } {
+): StripOutcome<T> {
+  // Ordinary z.union collapses to one branch's unrecognized_keys when siblings
+  // abort. Blindly stripping those keys would drop hydrated fields such as
+  // `configurations`. Resolve unions per-branch before any strip pass.
+  const unionParsed = parseUnionBranchesTolerantly(schema, input);
+  if (unionParsed !== undefined) return unionParsed;
+  return stripUnrecognizedUntilValid(schema, input);
+}
+
+function stripUnrecognizedUntilValid<T>(
+  schema: ResponseSafeParseSchema<T>,
+  input: unknown,
+): StripOutcome<T> {
   let candidate = input;
   let lastFailure: { success: false; error?: unknown } | undefined;
   for (let pass = 0; pass < MAX_STRIP_PASSES; pass += 1) {
@@ -57,12 +90,125 @@ function parseWithStripping<T>(
     if (parsed.success) return { ok: true, data: parsed.data };
     lastFailure = parsed;
     const failure = asParseFailure(parsed);
-    if (!onlyUnrecognizedKeyIssues(failure)) return { ok: false, failure: parsed };
+    if (hasNeverStripUnrecognizedKeys(failure) || !onlyUnrecognizedKeyIssues(failure)) {
+      return { ok: false, failure: parsed };
+    }
     candidate = stripUnrecognizedKeys(candidate, failure.error?.issues ?? []);
   }
   const finalParsed = schema.safeParse(candidate);
   if (finalParsed.success) return { ok: true, data: finalParsed.data };
-  return { ok: false, failure: finalParsed };
+  return { ok: false, failure: lastFailure ?? finalParsed };
+}
+
+function parseUnionBranchesTolerantly<T>(
+  schema: ResponseSafeParseSchema<T>,
+  input: unknown,
+): StripOutcome<T> | undefined {
+  const options = unionOptions(schema);
+  if (options === undefined) return undefined;
+
+  const outcomes = options.map((option) => parseWithStripping(option, input));
+  const successIndexes = collectSuccessIndexes(outcomes);
+  if (successIndexes.length === 0) {
+    return firstUnionFailure(schema, input, outcomes);
+  }
+
+  // Hydrated Flag members are authored after the bare member; prefer the last
+  // tolerant match so `configurations` is kept when both branches accept.
+  const chosenIndex = successIndexes[successIndexes.length - 1] ?? -1;
+  const chosen = outcomes[chosenIndex];
+  if (!chosen?.ok) {
+    return firstUnionFailure(schema, input, outcomes);
+  }
+  const blocked = blockedByLaterFatalBranch<T>(outcomes, chosenIndex, input, chosen.data as T);
+  if (blocked) return blocked;
+  return { ok: true, data: chosen.data as T };
+}
+
+function collectSuccessIndexes(outcomes: readonly StripOutcome<unknown>[]): number[] {
+  const successIndexes: number[] = [];
+  for (let index = 0; index < outcomes.length; index += 1) {
+    if (outcomes[index]?.ok) successIndexes.push(index);
+  }
+  return successIndexes;
+}
+
+function firstUnionFailure<T>(
+  schema: ResponseSafeParseSchema<T>,
+  input: unknown,
+  outcomes: readonly StripOutcome<unknown>[],
+): StripOutcome<T> {
+  const unionFailure = schema.safeParse(input);
+  if (!unionFailure.success) return { ok: false, failure: unionFailure };
+  for (const outcome of outcomes) {
+    if (!outcome.ok) return { ok: false, failure: outcome.failure };
+  }
+  return { ok: false, failure: { success: false } };
+}
+
+function blockedByLaterFatalBranch<T>(
+  outcomes: readonly StripOutcome<unknown>[],
+  chosenIndex: number,
+  input: unknown,
+  chosenData: T,
+): StripOutcome<T> | undefined {
+  for (let index = chosenIndex + 1; index < outcomes.length; index += 1) {
+    const later = outcomes[index];
+    if (!later || later.ok) continue;
+    // A more-specific branch fatally rejected keys that the earlier success
+    // only accepted by stripping them (e.g. bare Flag dropping malformed
+    // `configurations`). Discriminator mismatches on keys that remain in the
+    // successful output must not block.
+    if (successStrippedKeysReferencedByFailure(input, chosenData, later.failure)) {
+      return { ok: false, failure: later.failure };
+    }
+  }
+  return undefined;
+}
+
+function successStrippedKeysReferencedByFailure(
+  input: unknown,
+  successData: unknown,
+  failure: { success: false; error?: unknown },
+): boolean {
+  const strippedTopKeys = topLevelKeysPresentInInputMissingFromSuccess(input, successData);
+  if (strippedTopKeys.length === 0) return false;
+  const issues = asParseFailure(failure).error?.issues;
+  if (!Array.isArray(issues)) return false;
+  return issues.some((issue) => {
+    const head = issue.path[0];
+    return typeof head === "string" && strippedTopKeys.includes(head);
+  });
+}
+
+function topLevelKeysPresentInInputMissingFromSuccess(
+  input: unknown,
+  successData: unknown,
+): string[] {
+  if (!isPlainRecord(input) || !isPlainRecord(successData)) return [];
+  return Object.keys(input).filter((key) => !(key in successData));
+}
+
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+function unionOptions(
+  schema: ResponseSafeParseSchema<unknown>,
+): ResponseSafeParseSchema<unknown>[] | undefined {
+  const record = schema as {
+    readonly _def?: { readonly type?: string; readonly options?: unknown };
+    readonly def?: { readonly type?: string; readonly options?: unknown };
+  };
+  const def = record._def ?? record.def;
+  if (def?.type !== "union" || !Array.isArray(def.options)) return undefined;
+  const options = def.options.filter(
+    (option): option is ResponseSafeParseSchema<unknown> =>
+      typeof option === "object" &&
+      option !== null &&
+      typeof (option as ResponseSafeParseSchema<unknown>).safeParse === "function",
+  );
+  return options.length > 0 ? options : undefined;
 }
 
 function asParseFailure(parsed: { success: false; error?: unknown }): ResponseParseFailure {
@@ -91,22 +237,42 @@ function onlyUnrecognizedKeyIssues(parsed: ResponseParseFailure): boolean {
   );
 }
 
+function hasNeverStripUnrecognizedKeys(parsed: ResponseParseFailure): boolean {
+  const issues = parsed.error?.issues;
+  if (!Array.isArray(issues)) return false;
+  return issues.some((issue) => issueHasNeverStripKey(issue));
+}
+
+function issueHasNeverStripKey(issue: ResponseParseIssue): boolean {
+  if (issue.code !== "unrecognized_keys" || !Array.isArray(issue.keys)) return false;
+  return issue.keys.some((key: string) => NEVER_STRIP_UNRECOGNIZED_KEYS.has(key));
+}
+
 function stripUnrecognizedKeys(input: unknown, issues: readonly ResponseParseIssue[]): unknown {
   const clone = structuredClone(input);
   for (const issue of issues) {
-    if (issue.code !== "unrecognized_keys" || issue.keys === undefined) continue;
-    const target = valueAtPath(clone, issue.path);
-    if (target === null || typeof target !== "object") {
-      throw new Error(
-        `parseResponseTolerantly: unrecognized_keys path ${JSON.stringify(issue.path)} did not resolve to an object`,
-      );
-    }
-    const record = target as Record<string, unknown>;
-    for (const key of issue.keys) {
-      delete record[key];
-    }
+    deleteUnrecognizedKeysAtIssue(clone, issue);
   }
   return clone;
+}
+
+function deleteUnrecognizedKeysAtIssue(clone: unknown, issue: ResponseParseIssue): void {
+  if (issue.code !== "unrecognized_keys" || issue.keys === undefined) return;
+  const target = valueAtPath(clone, issue.path);
+  if (target === null || typeof target !== "object") {
+    throw new Error(
+      `parseResponseTolerantly: unrecognized_keys path ${JSON.stringify(issue.path)} did not resolve to an object`,
+    );
+  }
+  const record = target as Record<string, unknown>;
+  for (const key of issue.keys) {
+    if (NEVER_STRIP_UNRECOGNIZED_KEYS.has(key)) {
+      throw new Error(
+        `parseResponseTolerantly: refused to strip secret-bearing response key ${JSON.stringify(key)}`,
+      );
+    }
+    delete record[key];
+  }
 }
 
 function valueAtPath(root: unknown, path: readonly PropertyKey[]): unknown {

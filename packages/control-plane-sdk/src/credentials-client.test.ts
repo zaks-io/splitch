@@ -184,15 +184,41 @@ describe("control plane sdk API Key operations", () => {
   });
 
   /**
-   * Provision-don't-read (ADR-0022): the APIKey leaf never types key material on
-   * LIST. Additive unknown fields (including a Worker regression that echoed
-   * `keyMaterial`) are stripped by tolerant response parsing so released clients
-   * stay forward-compatible; the typed result still never carries the secret.
+   * Provision-don't-read (ADR-0022) enforced at runtime, not just in the types:
+   * the APIKey leaf is `.strict()`, so a Worker that regressed and echoed key
+   * material on a LIST response cannot have that secret pass silently through the
+   * SDK into a caller. Tolerant response parsing refuses to strip secret-bearing
+   * keys, so the leak fails the parse loudly (ADR-0036) instead.
    */
-  it("strips leaked key material from a list response instead of hard-failing", async () => {
+  it("refuses to parse a list response that leaks key material", async () => {
     const { sdk } = sdkWith(() =>
       Response.json({
         ...boundListRead([{ ...apiKeyMetadata, keyMaterial: "sk_leaked_by_a_worker_regression" }]),
+      }),
+    );
+
+    await expect(
+      sdk.credentials.apiKeys.list({ appId: "app_checkout", environmentId: "env_staging" }),
+    ).rejects.toThrow("api_keys_list returned an invalid response body");
+  });
+
+  it("refuses to parse a list response that leaks the provision-once value", async () => {
+    const { sdk } = sdkWith(() =>
+      Response.json({
+        ...boundListRead([{ ...apiKeyMetadata, value: "sk_leaked_once" }]),
+      }),
+    );
+
+    await expect(
+      sdk.credentials.apiKeys.list({ appId: "app_checkout", environmentId: "env_staging" }),
+    ).rejects.toThrow("api_keys_list returned an invalid response body");
+  });
+
+  it("strips harmless additive metadata from a list response", async () => {
+    const { sdk } = sdkWith(() =>
+      Response.json({
+        ...boundListRead([{ ...apiKeyMetadata, nextRotationHint: "2027-01-01T00:00:00.000Z" }]),
+        serverTraceId: "trace_1",
       }),
     );
 
@@ -205,6 +231,5 @@ describe("control plane sdk API Key operations", () => {
       status: 200,
       data: boundListRead([apiKeyMetadata]),
     });
-    expect(JSON.stringify(result)).not.toContain("sk_leaked_by_a_worker_regression");
   });
 });

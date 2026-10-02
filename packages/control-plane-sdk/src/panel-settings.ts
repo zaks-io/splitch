@@ -1,5 +1,10 @@
 import type { ClientKey, Environment, EnvironmentPolicy } from "@splitch/contracts";
-import { ClientKeySchema, EnvironmentSchema, PANEL_API_KEY_SCOPES } from "@splitch/contracts";
+import {
+  ClientKeySchema,
+  EnvironmentSchema,
+  PANEL_API_KEY_SCOPES,
+  parseResponseTolerantly,
+} from "@splitch/contracts";
 import type { ApiKeysCreateOutput, ApiKeysRevokeOutput } from "@splitch/contracts/route-types";
 import { createControlPlaneSdk } from "./index";
 import type { ControlPlaneOperationResult } from "./operation-result";
@@ -75,12 +80,20 @@ export function createPanelSettingsClient(options: {
 }
 
 function parsePanelEnvironmentSettings(input: unknown) {
-  if (!isRecord(input) || !hasOnlyKeys(input, ["environment", "clientKey", "apiKeys"])) {
+  if (
+    !isRecord(input) ||
+    !("environment" in input) ||
+    !("clientKey" in input) ||
+    !Array.isArray(input.apiKeys)
+  ) {
     return { success: false as const };
   }
-  const environment = EnvironmentSchema.safeParse(input.environment);
-  const clientKey = ClientKeySchema.safeParse(input.clientKey);
-  if (!environment.success || !clientKey.success || !Array.isArray(input.apiKeys)) {
+  // Required keys stay required; additive envelope keys are ignored. Nested
+  // Environment / ClientKey leaves go through tolerant parsing so server-added
+  // metadata does not break the Panel, while secret-bearing unknowns still fail.
+  const environment = parseResponseTolerantly(EnvironmentSchema, input.environment);
+  const clientKey = parseResponseTolerantly(ClientKeySchema, input.clientKey);
+  if (!environment.success || !clientKey.success) {
     return { success: false as const };
   }
   const apiKeys = input.apiKeys.map(parseApiKeyMetadata);
@@ -96,9 +109,10 @@ function parsePanelEnvironmentSettings(input: unknown) {
 }
 
 function parseApiKeyMetadata(input: unknown): PanelApiKeyMetadata | null {
+  if (!isRecord(input)) return null;
+  // Provision-don't-read: metadata must never carry raw secret material.
+  if ("keyMaterial" in input || "value" in input) return null;
   if (
-    !isRecord(input) ||
-    !hasOnlyKeys(input, ["keyId", "keyHashPrefix", "scopes", "createdAt", "revokedAt"], true) ||
     !isNonEmptyString(input.keyId) ||
     !/^[a-f0-9]{12}$/u.test(String(input.keyHashPrefix)) ||
     !Array.isArray(input.scopes) ||
@@ -119,18 +133,6 @@ function parseApiKeyMetadata(input: unknown): PanelApiKeyMetadata | null {
     createdAt: input.createdAt,
     ...(input.revokedAt !== undefined ? { revokedAt: input.revokedAt as string | null } : {}),
   };
-}
-
-function hasOnlyKeys(
-  value: Record<string, unknown>,
-  allowed: string[],
-  optionalRevokedAt = false,
-): boolean {
-  const required = optionalRevokedAt ? allowed.filter((key) => key !== "revokedAt") : allowed;
-  return (
-    required.every((key) => key in value) &&
-    Object.keys(value).every((key) => allowed.includes(key))
-  );
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

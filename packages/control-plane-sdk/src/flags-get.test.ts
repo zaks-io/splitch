@@ -107,4 +107,74 @@ describe("control plane sdk flags.get wire shape", () => {
       expect(requests).toHaveLength(0);
     },
   );
+
+  it("tolerates additive fields on hydrated Flag reads without dropping configurations", async () => {
+    const configuration = {
+      environmentId: "env_prod",
+      enabled: true,
+      availableVariantNames: ["off"],
+      targetingRules: [],
+      rollout: null,
+      experiment: null,
+      futureConfigurationField: "config-level",
+    };
+    const hydrated = {
+      ...flag,
+      configurations: [configuration],
+      futureFlagField: "flag-level",
+    };
+    const { sdk } = flagsSdk(() =>
+      Response.json({
+        ...hydrated,
+        futureEnvelopeField: "envelope-level",
+      }),
+    );
+
+    const result = await sdk.flags.get({
+      appId: "app_a",
+      flagId: "flag_checkout",
+      include: "config",
+    });
+
+    expect(result).toEqual({
+      ok: true,
+      status: 200,
+      data: {
+        ...flag,
+        configurations: [
+          {
+            environmentId: "env_prod",
+            enabled: true,
+            availableVariantNames: ["off"],
+            targetingRules: [],
+            rollout: null,
+            experiment: null,
+          },
+        ],
+      },
+    });
+  });
+
+  it("fails loud when a known hydrated Configuration field has the wrong type", async () => {
+    const { sdk } = flagsSdk(() =>
+      Response.json({
+        ...flag,
+        configurations: [
+          {
+            environmentId: "env_prod",
+            enabled: "yes",
+            availableVariantNames: ["off"],
+            targetingRules: [],
+            rollout: null,
+            experiment: null,
+            futureConfigurationField: "config-level",
+          },
+        ],
+      }),
+    );
+
+    await expect(
+      sdk.flags.get({ appId: "app_a", flagId: "flag_checkout", include: "config" }),
+    ).rejects.toThrow("flags_get returned an invalid response body");
+  });
 });

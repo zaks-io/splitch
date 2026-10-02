@@ -95,4 +95,63 @@ describe("flags.list with Environment configuration", () => {
     expect(url.searchParams.get("envs")).toBe("env_dev,env_prod");
     expect(result).toEqual({ ok: true, status: 200, data: hydrated });
   });
+
+  it("tolerates additive fields at list envelope, Flag, and Configuration levels", async () => {
+    const configuration = {
+      environmentId: "env_prod",
+      enabled: true,
+      availableVariantNames: ["on"],
+      targetingRules: [],
+      rollout: null,
+      experiment: null,
+      futureConfigurationField: "config-level",
+    };
+    const sdk = createControlPlaneSdk({
+      baseUrl: "https://control-plane.test",
+      fetch: async () =>
+        Response.json({
+          items: [
+            {
+              ...flag,
+              configurations: [configuration],
+              futureFlagField: "flag-level",
+            },
+          ],
+          readTruncated: false,
+          readLimit: 200,
+          cursor: null,
+          futureEnvelopeField: "envelope-level",
+        }),
+    });
+
+    const result = await sdk.flags.list({
+      appId: "app_local",
+      include: "config",
+    });
+
+    expect(result).toEqual({
+      ok: true,
+      status: 200,
+      data: {
+        items: [
+          {
+            ...flag,
+            configurations: [
+              {
+                environmentId: "env_prod",
+                enabled: true,
+                availableVariantNames: ["on"],
+                targetingRules: [],
+                rollout: null,
+                experiment: null,
+              },
+            ],
+          },
+        ],
+        readTruncated: false,
+        readLimit: 200,
+        cursor: null,
+      },
+    });
+  });
 });

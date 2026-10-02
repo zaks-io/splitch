@@ -95,8 +95,7 @@ export type PanelExperimentResultsNoRun = Extract<
 >;
 
 export function parsePanelExperimentResultsOutput(input: unknown) {
-  const parsed = PanelExperimentResultsOutputSchema.safeParse(input);
-  return parsed.success
-    ? { success: true as const, data: parsed.data }
-    : { success: false as const };
+  // Preserve Zod issues so parseResponseTolerantly can drop additive keys while
+  // still failing loud on wrong types / missing required fields.
+  return PanelExperimentResultsOutputSchema.safeParse(input);
 }
