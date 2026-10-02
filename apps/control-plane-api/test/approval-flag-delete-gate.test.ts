@@ -1,4 +1,4 @@
-import { flagConfigKey } from "@splitch/contracts";
+import { flagConfigKey, getRoute } from "@splitch/contracts";
 import { appScope, envScope } from "@splitch/db";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { type Harness, ids, setProdPolicy } from "../src/config-store-harness-core";
@@ -86,6 +86,11 @@ describe("a Flag delete is gated where an Environment is not `allow`", () => {
   });
 
   it("applies the delete only through an approved Review", async () => {
+    expect(getRoute("approval_request_reviews_create")?.effects).toMatchObject({
+      destructive: true,
+      reversibility: "irreversible",
+    });
+
     const removed = await deleteFlagRequest(h, "flag_delete_approved");
     const requestId = removed.approvalRequestId;
     expect(requestId).toBeTruthy();

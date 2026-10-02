@@ -1,6 +1,5 @@
 import { z } from "@hono/zod-openapi";
 import { type ApiRouteContract, defineApiRoute } from "../openapi-route";
-import { createClosed, deleteClosed, readOnlyClosed, updateClosed } from "../route-effects";
 import {
   CreateFlagRequestSchema,
   CreateVariantRequestSchema,
@@ -13,6 +12,12 @@ import {
   PrincipalFlagListReadResponseSchema,
 } from "../resource-envelopes-flag";
 import {
+  createIdempotentClosed,
+  deleteClosed,
+  readOnlyClosed,
+  updateClosed,
+} from "../route-effects";
+import {
   AppParams,
   EnvFlagParams,
   FlagConfigMutationResponseSchema,
@@ -22,8 +27,8 @@ import {
   FlagParams,
   FlagVariantParams,
   PatchFlagConfigRequestSchema,
-  PromoteParams,
   PrincipalFlagListQuerySchema,
+  PromoteParams,
   PromoteRequestSchema,
   PromoteResponseSchema,
   ReplaceTargetingRulesRequestSchema,
@@ -75,7 +80,7 @@ export const flagRoutes = [
     auth: AUTH,
     rateLimit: RATE,
     idempotency: "required",
-    effects: createClosed,
+    effects: createIdempotentClosed,
     errors: ["APP_NOT_FOUND", "FORBIDDEN", "VALIDATION_ERROR", "IDEMPOTENCY_KEY_CONFLICT"],
   }),
   defineApiRoute({
@@ -137,7 +142,7 @@ export const flagRoutes = [
     auth: AUTH,
     rateLimit: RATE,
     idempotency: "required",
-    effects: createClosed,
+    effects: createIdempotentClosed,
     errors: ["FLAG_NOT_FOUND", "FORBIDDEN", ...APPROVAL_WRITE_ERRORS, "VALIDATION_ERROR"],
   }),
   defineApiRoute({
@@ -256,7 +261,7 @@ export const flagRoutes = [
     auth: AUTH,
     rateLimit: RATE,
     idempotency: "required",
-    effects: createClosed,
+    effects: createIdempotentClosed,
     errors: [
       "FLAG_NOT_FOUND",
       "VARIANT_NOT_AVAILABLE",

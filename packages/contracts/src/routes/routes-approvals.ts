@@ -1,5 +1,5 @@
 import { type ApiRouteContract, defineApiRoute } from "../openapi-route";
-import { createClosed, readOnlyClosed } from "../route-effects";
+import { deleteClosed, readOnlyClosed } from "../route-effects";
 import { listResponse } from "../wire-envelopes-core";
 import { AppParams, ApprovalRequestParams } from "./route-shapes";
 import {
@@ -12,6 +12,10 @@ import {
  * Approval Request reads and Review creation. The routes expose durable,
  * immutable proposals; effective staleness is computed against the live target
  * projection by the owning Worker before the response is rendered.
+ *
+ * `approval_request_reviews_create` advertises the most destructive supported
+ * behavior: `approve_and_apply` on `flags_delete` / `flag_variants_delete`
+ * permanently purges catalog rows and Flag Configuration KV snapshots.
  */
 
 const OWNER = "control-plane-api" as const;
@@ -60,7 +64,7 @@ export const approvalRoutes = [
     auth: AUTH,
     rateLimit: RATE,
     idempotency: "required",
-    effects: createClosed,
+    effects: deleteClosed,
     errors: [
       "APPROVAL_REQUEST_NOT_FOUND",
       "APPROVAL_REVIEW_FORBIDDEN",

@@ -1,3 +1,4 @@
+import { getRoute } from "@splitch/contracts";
 import { appScope, envScope } from "@splitch/db";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { type Harness, ids, setProdPolicy } from "../src/config-store-harness-core";
@@ -96,6 +97,11 @@ describe("catalog membership is gated where the Environment was never narrowed",
   });
 
   it("removes the Variant only when the delete is approved", async () => {
+    expect(getRoute("approval_request_reviews_create")?.effects).toMatchObject({
+      destructive: true,
+      reversibility: "irreversible",
+    });
+
     const removed = await deleteVariantRequest(h, "treatment", "cat_del2");
     const applied = await reviewRequest(h, removed.approvalRequestId as string, "cat_del2r");
     expect(applied.status).toBe(200);

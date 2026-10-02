@@ -47,7 +47,18 @@ function writes(effects: {
   };
 }
 
+/**
+ * Create that mints a fresh resource id (or otherwise accumulates on retry).
+ * Prefer `createIdempotentClosed` only when the route requires an idempotency
+ * key and the handler proves exact replay.
+ */
 export const createClosed = writes({
+  destructive: false,
+  idempotent: false,
+  reversibility: "compensable",
+});
+/** Create with required idempotency and handler-level exact replay. */
+export const createIdempotentClosed = writes({
   destructive: false,
   idempotent: true,
   reversibility: "compensable",

@@ -54,6 +54,22 @@ describe("Approval Request route contracts", () => {
     );
   });
 
+  it("advertises irreversible deletion for Review apply, matching flags_delete and flag_variants_delete", () => {
+    const review = getRoute("approval_request_reviews_create");
+    const flagDelete = getRoute("flags_delete");
+    const variantDelete = getRoute("flag_variants_delete");
+
+    expect(review?.effects).toEqual({
+      mutates: true,
+      destructive: true,
+      idempotent: true,
+      openWorld: false,
+      reversibility: "irreversible",
+    });
+    expect(review?.effects).toEqual(flagDelete?.effects);
+    expect(review?.effects).toEqual(variantDelete?.effects);
+  });
+
   it("registers winner Promotion as an Approval operation", () => {
     expect(approvalOperations).toContain("experiment_winner_promote");
     expect(ApprovalOperationSchema.safeParse("experiment_winner_promote").success).toBe(true);

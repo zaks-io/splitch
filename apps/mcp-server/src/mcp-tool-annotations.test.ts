@@ -1,9 +1,14 @@
+import {
+  getRoute,
+  mcpReversibilityMeta,
+  mcpToolAnnotations,
+  updateClosed,
+} from "@splitch/contracts";
 import { describe, expect, it } from "vitest";
-import { mcpReversibilityMeta, mcpToolAnnotations, updateClosed } from "@splitch/contracts";
 import { jsonRpcError, jsonRpcResult } from "./json-rpc";
 import { contextUseTool } from "./mcp-session-context";
-import { MCP_TOOL_DEFINITIONS } from "./tool-registry";
 import { withToolCallResultMeta } from "./mcp-tool-result-meta";
+import { MCP_TOOL_DEFINITIONS } from "./tool-registry";
 
 describe("context_use annotations", () => {
   it("advertises the same hints and reversibility class as mutating session writes", () => {
@@ -23,6 +28,27 @@ describe("tool call result metadata", () => {
     expect("result" in response && response.result).toEqual({
       structuredContent: { ok: true },
       _meta: { reversibilityClass: "reversible" },
+    });
+  });
+
+  it("copies irreversible deletion metadata for approval_request_reviews_create", () => {
+    const route = getRoute("approval_request_reviews_create");
+    expect(route?.effects).toMatchObject({
+      mutates: true,
+      destructive: true,
+      reversibility: "irreversible",
+    });
+
+    const response = withToolCallResultMeta(
+      jsonRpcResult(1, { structuredContent: { status: "applied" } }),
+      {
+        name: "approval_request_reviews_create",
+        arguments: { id: "apr_1", action: "approve_and_apply" },
+      },
+    );
+    expect("result" in response && response.result).toEqual({
+      structuredContent: { status: "applied" },
+      _meta: { reversibilityClass: "irreversible" },
     });
   });
 

@@ -56,6 +56,13 @@ The same `_meta.reversibilityClass` is copied onto each `tools/call` result. Rev
 annotation and result metadata only. It does not gate calls, invent undo, or change Worker
 behavior. Turning a Flag Config off stays ungated (ADR-0029).
 
+`createClosed` is non-idempotent by default: retries without handler-level replay mint a fresh
+resource id. Routes that require an idempotency key and prove exact replay use
+`createIdempotentClosed`. Review apply (`approval_request_reviews_create`) advertises the most
+destructive supported behavior (`deleteClosed`) because `approve_and_apply` can permanently delete
+Flags and Variants. Privacy export intake routes mutate (they write a Privacy Request and Job) even
+when they are not destructive.
+
 `context_use` is skin-local and still declares the same fields: a reversible, non-destructive,
 idempotent session write.
 
