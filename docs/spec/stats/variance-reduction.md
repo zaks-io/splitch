@@ -95,23 +95,48 @@ the pre-period captures what the Entity did before being exposed, not before act
 
 ### Fallback: attribute covariates for new-Entity Experiments
 
-When pre-period data is absent (coverage < threshold, e.g., new users, new workspaces):
+When pre-period coverage is below the threshold (new users, new workspaces), or when pre-period
+coverage meets the threshold but the covariate cannot be fit (singular design or low sample):
 
 1. Collect candidate Entity attributes from the Evaluation Context at assignment time
    (e.g., `signup_date`, `plan_tier`, `device_type`, `cohort`).
 2. Keep only covariates declared at Run Start or selected from pre-period / historical data
-   without using post-exposure outcomes.
-3. Score each remaining attribute by pre-period or historical variance-reduction magnitude on the Metric.
-4. Apply the highest-scoring eligible attribute as a covariate.
-5. Report `cuped_method = 'attribute_covariate'` and `cuped_attribute = '<attribute_name>'`
+   without using post-exposure outcomes. Unlocked rows are ineligible.
+3. Drop a candidate when min-arm coverage is below `cuped_coverage_threshold_pct`, when
+   within-arm covariate variance is zero (singular design), or when every arm has fewer than two
+   covered Entities (low sample: a slope cannot be fit).
+4. Rank remaining candidates by:
+   1. `attribute_source`: `declared`, then `pre_period_selected`, then `historical_selected`
+   2. higher min-arm coverage
+   3. lexicographic attribute name
+5. Apply the first remaining candidate as a covariate.
+6. Report `cuped_method = 'attribute_covariate'` and `cuped_attribute = '<attribute_name>'`
    in the output.
 
 Selection is **automatic** only within the locked eligible set. The engine never scans
-post-treatment outcomes to choose a covariate.
+post-treatment outcomes to choose a covariate. Ranking uses only locked covariate values and
+declared configuration. Permuting current Metric outcomes must not change which covariate is
+chosen.
 
-**Never silent**: if coverage is insufficient and no attribute covariate achieves meaningful
-variance reduction, the engine falls back to `cuped_method = 'none'` and reports it. It never
-applies CUPED to data that doesn't satisfy the gating condition.
+The slope θ is refit on the current sample at every analysis. That is coefficient estimation, not
+a change of specification. Which method and covariate are in force is the ranking above.
+
+**Corrected reanalysis.** An earlier engine scored fallback candidates by realized variance
+reduction on the current arms' outcomes. That rule is invalid. This ranking replaces it for every
+Run, including Runs started before the change. A later `analysis_version` lock at Run Start may
+freeze the chosen method; this spec does not wait for that lock before correcting the invalid
+rule.
+
+**Remaining gap: coverage-threshold flips.** The coverage gate, and coverage as a rank key among
+eligible attributes, can still switch the estimator between refreshes as more Entities arrive:
+`none` to `pre_period`, `none` to `attribute_covariate`, or one attribute to another. This slice
+does not add a Run-Start lock or an event-index cutoff. Until that lock exists, a later read can
+change method as coverage crosses the threshold even when raw outcomes are unchanged.
+
+**Never silent**: if coverage is insufficient, the design is singular, the sample is too small to
+fit, or no locked attribute remains, the engine falls back to `cuped_method = 'none'` and reports
+it. It never applies CUPED to data that does not satisfy the gating condition, and it never
+reports an applied CUPED for a zero-slope singular fit.
 
 ### CUPED adjustment in the CI pipeline
 

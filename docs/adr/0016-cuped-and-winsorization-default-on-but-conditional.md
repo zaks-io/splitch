@@ -1,6 +1,6 @@
 # CUPED and winsorization: default-on, but conditional on data they require
 
-**Status:** accepted
+**Status:** accepted; amended 2026-10-02
 
 Two variance-reduction techniques ship **on by default** but **gated** on the data they need, so neither
 silently mis-applies.
@@ -45,6 +45,24 @@ Winsorization introduces bias, so defaulting it on is a real choice — we make 
 safe-default reasoning as the rest of the engine (the untreated failure, a whale silently deciding the
 result, is worse than a small documented truncation bias), but we record it as a choice we own, not a
 consensus we inherited. The percentile is configurable and winsorization can be turned off per Metric.
+
+## 2026-10-02 amendment: fallback selection never uses outcomes
+
+An earlier engine scored attribute fallbacks by realized variance reduction on the current arms'
+outcomes. That rule is known-invalid: it scans post-treatment Metric values to choose a covariate.
+This amendment replaces it with a deterministic ranking over locked pre-period and attribute data
+only (declared source, then `pre_period_selected`, then `historical_selected`; then higher min-arm
+coverage; then attribute name). Missing coverage, a singular covariate (zero within-arm X
+variance), a sample too small to fit a slope, and the absence of any locked candidate all report
+`cuped_method = none` explicitly.
+
+This is a corrected reanalysis of that invalid rule. It applies to every Run, including Runs
+started before this amendment. Theta is still refit as the sample grows; that is coefficient
+estimation, not a change of which covariate was chosen.
+
+The coverage threshold can still switch the estimator between refreshes (`none` vs adjusted, or one
+eligible attribute vs another when coverage is the rank key). A Run-Start lock of method and
+covariate belongs with `analysis_version` (C12) and is not added here.
 
 ## Considered options
 

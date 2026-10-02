@@ -81,6 +81,7 @@ describe("CUPED metamorphic properties", () => {
     });
 
     expect(result.variance_techniques.cuped_method).toBe("attribute_covariate");
+    expect(result.variance_techniques.cuped_attribute).toBe("control_best");
     expect(result.control.variance_techniques.cuped_attribute).toBe(
       result.variance_techniques.cuped_attribute,
     );
@@ -88,7 +89,87 @@ describe("CUPED metamorphic properties", () => {
       result.variance_techniques.cuped_attribute,
     );
   });
+
+  it("keeps the chosen attribute covariate when outcome values are permuted", () => {
+    const controlIds = ["c1", "c2", "c3", "c4"];
+    const treatmentIds = ["t1", "t2", "t3", "t4"];
+    const controlValues = [0, 10, 20, 30];
+    const treatmentValues = [1, 2, 3, 100];
+    const covariates = [
+      ...attributeRows("control_best", controlIds, [0, 1, 2, 3]),
+      ...attributeRows("control_best", treatmentIds, [3, 2, 1, 0]),
+      ...attributeRows("treatment_best", controlIds, [3, 1, 2, 0]),
+      ...attributeRows("treatment_best", treatmentIds, [1, 2, 3, 100]),
+    ];
+
+    const baseline = estimateMetricComparison(
+      comparisonInput(controlIds, treatmentIds, controlValues, treatmentValues, covariates),
+    );
+    expect(baseline.variance_techniques.cuped_method).toBe("attribute_covariate");
+    expect(baseline.variance_techniques.cuped_attribute).toBe("control_best");
+
+    for (const seed of [1, 7, 13, 99, 255]) {
+      const permuted = estimateMetricComparison(
+        comparisonInput(
+          controlIds,
+          treatmentIds,
+          permute(controlValues, seed),
+          permute(treatmentValues, seed + 17),
+          covariates,
+        ),
+      );
+      expect(permuted.variance_techniques.cuped_method).toBe(
+        baseline.variance_techniques.cuped_method,
+      );
+      expect(permuted.variance_techniques.cuped_attribute).toBe(
+        baseline.variance_techniques.cuped_attribute,
+      );
+      expect(permuted.variance_techniques.cuped_attribute_source).toBe(
+        baseline.variance_techniques.cuped_attribute_source,
+      );
+    }
+  });
 });
+
+function comparisonInput(
+  controlIds: readonly string[],
+  treatmentIds: readonly string[],
+  controlValues: readonly number[],
+  treatmentValues: readonly number[],
+  pre_period_covariates: readonly CupedCovariateRow[],
+) {
+  return {
+    run_id: RUN_ID,
+    metric_id: "count_metric",
+    metric_type: "count" as const,
+    control_variant: "control",
+    treatment_variant: "treatment",
+    exposures: [...exposures("control", controlIds), ...exposures("treatment", treatmentIds)],
+    metric_values: [
+      ...controlIds.map((entityId, index) => countRow(entityId, controlValues[index] ?? 0)),
+      ...treatmentIds.map((entityId, index) => countRow(entityId, treatmentValues[index] ?? 0)),
+    ],
+    pre_period_covariates,
+    winsorize: false,
+  };
+}
+
+function permute(values: readonly number[], seed: number): number[] {
+  const next = [...values];
+  let state = seed >>> 0;
+  for (let index = next.length - 1; index > 0; index -= 1) {
+    state = (Math.imul(state, 1664525) + 1013904223) >>> 0;
+    const swapIndex = state % (index + 1);
+    const current = next[index];
+    const swapped = next[swapIndex];
+    if (current === undefined || swapped === undefined) {
+      throw new Error("permute hit a hole in the array.");
+    }
+    next[index] = swapped;
+    next[swapIndex] = current;
+  }
+  return next;
+}
 
 function cupedComparison({
   controlValues,
