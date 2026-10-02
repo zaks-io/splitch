@@ -12,8 +12,9 @@ default and remain outside Experiment measurement. Every evaluation accessor spe
 `ResolutionDetails` shape and is **fail-loud** — a failure-fallback always carries
 `reason: ERROR` + `errorCode`, never a silent default (ADR-0036). `idType` defaults to `'user'`.
 The evaluate endpoint is safe under a public Client Key (returns only the resolved Variant and a
-non-revealing `reason`, never config/rules/salt). The full OpenFeature _provider_ surface is
-deferred; the `ResolutionDetails` _shape_ is not.
+non-revealing `reason`, never config/rules/salt). OFREP Core is a projection of evaluate and
+evaluate-all. The remaining OpenFeature _provider_ surface (hooks, official SDK peer) is
+deferred; the `ResolutionDetails` _shape_ and the OFREP provider are not.
 
 ## Files
 
@@ -24,6 +25,7 @@ deferred; the `ResolutionDetails` _shape_ is not.
 | [exposure-accessor.md](./exposure-accessor.md#peek-endpoint-shape)           | `POST /api/sdk/peek` contract: API-Key-only non-exposing Variant resolution                                                             |
 | [verify-endpoint.md](./verify-endpoint.md)                                   | `POST /api/sdk/verify` contract: non-exposing setup confirmation, reason tiered by credential (ADR-0037)                                |
 | [evaluate-all-endpoint.md](./evaluate-all-endpoint.md)                       | `POST /api/sdk/evaluate-all` contract: Precomputed Evaluations, non-exposing, Exposure Tickets, ETag (ADR-0048)                         |
+| [ofrep-endpoint.md](./ofrep-endpoint.md)                                     | OFREP Core single-Flag and bulk evaluation, billing, and Exposure-on-prefetch rule (ADR-0059)                                           |
 | [exposures-endpoint.md](./exposures-endpoint.md)                             | `POST /api/sdk/exposures` contract: batched Exposure Ticket redemption, forgery-proof, deferred Assignment Store write                  |
 | [convex-integration-api.md](./convex-integration-api.md)                     | API-Key installation, config snapshot, signed webhook lifecycle, status, and uninstall                                                  |
 | [convex-component.md](./convex-component.md)                                 | `@splitch/convex`: signed nudge/pull sync and local query/mutation evaluation                                                           |

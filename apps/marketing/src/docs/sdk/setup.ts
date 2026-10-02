@@ -10,7 +10,7 @@ export const installTopic: SdkTopic = {
     { kind: "code", lang: "bash", code: "npm install @splitch/sdk" },
     {
       kind: "prose",
-      text: `\`@splitch/sdk\` is ESM only and supports Node ${sdkNodeMajor} or newer, browsers, Cloudflare Workers, and other edge runtimes. Pick the runtime guide for your host: [Node.js](/docs/sdk/node), [Browser client](/docs/sdk/browser), [React bindings](/docs/sdk/react), [Convex](/docs/sdk/convex), [Cloudflare Workers](/docs/sdk/cloudflare), or [Sentry](/docs/sdk/sentry).`,
+      text: `\`@splitch/sdk\` is ESM only and supports Node ${sdkNodeMajor} or newer, browsers, Cloudflare Workers, and other edge runtimes. Pick the runtime guide for your host: [Node.js](/docs/sdk/node), [Browser client](/docs/sdk/browser), [React bindings](/docs/sdk/react), [Convex](/docs/sdk/convex), [Cloudflare Workers](/docs/sdk/cloudflare), [Sentry](/docs/sdk/sentry), or [OpenFeature](/docs/sdk/openfeature).`,
     },
     { kind: "heading", text: "Export surface" },
     {
@@ -34,6 +34,11 @@ export const installTopic: SdkTopic = {
           "`@splitch/sdk/control-plane`",
           "typed control-plane client and contract schemas",
           "`zod`",
+        ],
+        [
+          "`@splitch/sdk/openfeature`",
+          "OFREP Provider and OpenFeature track() to Metric Events",
+          "none",
         ],
       ],
     },

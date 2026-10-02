@@ -25,6 +25,8 @@ import type { EvaluatePathDeps } from "./evaluate/evaluate-path";
 import type { ExposureAssemblyDeps } from "./evaluate/exposure-assembly";
 import type { MintExposureTicketDeps } from "./evaluate/exposure-ticket";
 import { makeEvaluateAllHandler } from "./evaluate-all";
+import { makeOfrepEvaluateBulkHandler } from "./ofrep/bulk";
+import { makeOfrepEvaluateHandler } from "./ofrep/single";
 import type { EvaluationCommitSink } from "./evaluation-commit-sink";
 import type { EvaluationUsageSink } from "./evaluation-usage-sink";
 import type { ExposureIngestSink } from "./exposure-redemption";
@@ -127,6 +129,8 @@ export function createApp(deps: AppDeps): Hono {
   registrar.mount(app, evaluationRoute("sdk_peek"), makePeekHandler(deps));
   registrar.mount(app, evaluationRoute("sdk_verify"), makeVerifyHandler(deps));
   registrar.mount(app, evaluationRoute("sdk_evaluate_all"), makeEvaluateAllHandler(deps));
+  registrar.mount(app, evaluationRoute("ofrep_evaluate"), makeOfrepEvaluateHandler(deps));
+  registrar.mount(app, evaluationRoute("ofrep_evaluate_bulk"), makeOfrepEvaluateBulkHandler(deps));
   registrar.mount(
     app,
     evaluationRoute("convex_exposures_create"),
@@ -181,7 +185,7 @@ function evaluationCorsHeaders(): Headers {
     "access-control-allow-origin": "*",
     "access-control-allow-methods": "POST, OPTIONS",
     "access-control-allow-headers":
-      "authorization, content-type, idempotency-key, if-none-match, x-splitch-sdk-runtime",
+      "authorization, content-type, idempotency-key, if-none-match, x-api-key, x-splitch-sdk-runtime",
     "access-control-expose-headers": "etag, x-request-id, x-reason, x-run-id, x-variant-name",
   });
 }

@@ -9,6 +9,8 @@ import { CLIENT_KEY } from "./sdk-route-test-fixtures";
 describe("evaluation public handler HTTP", () => {
   it("derives Evaluation Client Key routes from the contract registry", () => {
     expect(EVALUATION_CLIENT_KEY_ROUTES.map((route) => route.operationId).sort()).toEqual([
+      "ofrep_evaluate",
+      "ofrep_evaluate_bulk",
       "sdk_cached_evaluation_telemetry",
       "sdk_evaluate",
       "sdk_evaluate_all",
@@ -44,6 +46,7 @@ function assertProducedRouteShapes(
 
 function publicErrorCode(body: unknown): string {
   if (isRecord(body) && typeof body.code === "string") return body.code;
+  if (isRecord(body) && typeof body.errorCode === "string") return body.errorCode;
   if (isRecord(body) && Array.isArray(body.results)) {
     const result = body.results[0];
     if (isRecord(result) && typeof result.code === "string") return result.code;

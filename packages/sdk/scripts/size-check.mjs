@@ -191,6 +191,11 @@ console.log(createControlPlaneSdk, createMcpOperationAdapter, getRoute("flags_li
 console.log(ConvexConfigSnapshotSchema, evaluatePath);
 `;
   }
+  if (entry.exportPath === "./openfeature") {
+    return `import { SplitchOfrepProvider } from ${JSON.stringify(entry.importSpecifier)};
+console.log(new SplitchOfrepProvider({ baseUrl: "https://edge.example", credential: "pk_size" }));
+`;
+  }
   return `import { createSplitchClient } from ${JSON.stringify(entry.importSpecifier)};
 const client = createSplitchClient({ clientKey: "pk_size" });
 await client.evaluateDetails("flag", { targetingKey: "u", idempotencyKey: "k", defaultValue: false });

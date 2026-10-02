@@ -16,6 +16,7 @@
   "include": [
     "src/control-plane/**/*.ts",
     "src/local-evaluation/**/*.ts",
+    "src/openfeature/**/*.ts",
     "../contracts/src/**/*.ts",
     "../control-plane-sdk/src/**/*.ts",
     "../evaluation-core/src/**/*.ts"

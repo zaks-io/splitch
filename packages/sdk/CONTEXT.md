@@ -96,6 +96,10 @@ Precomputed Evaluations. The SDK redeems it on first local read via the batched 
 which is what fires the Exposure and establishes the holdover. Not a secret and not a credential;
 safe inside serialized bootstrap HTML.
 
+**OFREP Provider**:
+The OpenFeature-shaped Provider at `@splitch/sdk/openfeature` (`SplitchOfrepProvider`). It
+resolves Flags over OFREP Core and maps `track()` to Metric Events.
+
 **Browser Client**:
 The static-context client at `@splitch/sdk/browser` (`createSplitchBrowserClient`): one Evaluation
 Context for its lifetime, one Precomputed Evaluations fetch, synchronous `evaluate`/

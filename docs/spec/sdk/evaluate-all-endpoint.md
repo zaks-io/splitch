@@ -143,7 +143,8 @@ resolves 10 Flags consumes 10 Evaluations"). Local SDK reads of the result, boot
 and `304` revalidations consume **zero**. The required `Idempotency-Key` header is the billing
 replay identity: retrying with the same key must not double-charge (ADR-0033 ledger rules). The SDK
 mints a fresh UUID per logical fetch and reuses it for its own retry of that fetch; callers may
-supply their own. Ticket redemption bills zero ("Exposure side effects consume zero extra").
+supply their own. Ticket redemption bills zero ("Exposure side effects consume zero extra"). OFREP bulk
+evaluation uses the same counting rule: see [ofrep-endpoint.md](./ofrep-endpoint.md).
 
 ## Edge binding (ADR-0034)
 

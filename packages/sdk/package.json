@@ -46,6 +46,10 @@
     "./local-evaluation": {
       "types": "./dist/local-evaluation/index.d.ts",
       "import": "./dist/local-evaluation/index.js"
+    },
+    "./openfeature": {
+      "types": "./dist/openfeature/index.d.ts",
+      "import": "./dist/openfeature/index.js"
     }
   },
   "files": [

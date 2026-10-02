@@ -17,6 +17,7 @@ const addedSlugs = [
   "node",
   "cloudflare",
   "sentry",
+  "openfeature",
 ] as const;
 
 describe("SDK topic routes", () => {
@@ -54,6 +55,7 @@ describe("SDK topic routes", () => {
       "`@splitch/sdk/sentry`",
       "`@splitch/sdk/local-evaluation`",
       "`@splitch/sdk/control-plane`",
+      "`@splitch/sdk/openfeature`",
     ]) {
       expect(markdown, subpath).toContain(subpath);
     }
@@ -88,6 +90,7 @@ describe("SDK topic routes", () => {
       "convex",
       "cloudflare",
       "sentry",
+      "openfeature",
     ]);
   });
 

@@ -180,6 +180,18 @@ export const CLI_MCP_CONTRACT_EXCEPTIONS = [
     reason: "CLI setup check using an SDK credential; agents use flags_test_eval",
   },
   {
+    operationId: "ofrep_evaluate",
+    cli: false,
+    mcp: false,
+    reason: "OFREP data-plane operation",
+  },
+  {
+    operationId: "ofrep_evaluate_bulk",
+    cli: false,
+    mcp: false,
+    reason: "OFREP data-plane operation",
+  },
+  {
     operationId: "convex_installations_create",
     cli: false,
     mcp: false,

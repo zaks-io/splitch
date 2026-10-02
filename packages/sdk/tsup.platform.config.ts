@@ -4,6 +4,7 @@ export default defineConfig({
   entry: {
     "control-plane/index": "src/control-plane/index.ts",
     "local-evaluation/index": "src/local-evaluation/index.ts",
+    "openfeature/index": "src/openfeature/index.ts",
   },
   outDir: "dist",
   format: ["esm"],

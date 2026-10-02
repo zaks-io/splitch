@@ -7,6 +7,33 @@ import {
 import type { FlagConfig } from "./provider/provider";
 import { reasonForResolution } from "./resolution-reason";
 
+export function resolutionEntry(
+  result: EvaluateResult,
+  flag: FlagConfig,
+): Omit<EvaluateAllEntry, "exposureIdentity" | "exposureTicket"> & {
+  readonly exposureIdentity: null;
+  readonly exposureTicket: null;
+} {
+  if (result.kind === "error") {
+    return {
+      variant: valueForVariantName(flag.variants, result.variant),
+      variantName: result.variant,
+      reason: "ERROR",
+      errorCode: result.errorCode,
+      exposureIdentity: null,
+      exposureTicket: null,
+    };
+  }
+  return {
+    variant: valueForVariantName(flag.variants, result.variant),
+    variantName: result.variant,
+    reason: reasonForResolution(result),
+    errorCode: null,
+    exposureIdentity: null,
+    exposureTicket: null,
+  };
+}
+
 export async function entryFor(
   result: EvaluateResult,
   flag: FlagConfig,
