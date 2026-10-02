@@ -141,7 +141,9 @@ Body:
 Every new Flag names a lifecycle class. A missing class is `VALIDATION_ERROR` naming
 `body.lifecycleClass`. A `release` or `experiment` Flag without `owner` or `expiresAt` is
 `FLAG_LIFECYCLE_INCOMPLETE`, whose `details.missing` names the absent inputs. `ops` and `permission`
-Flags are intentionally permanent and may omit both. `expiresAt` accepts an offset and is stored and
+Flags are intentionally permanent and may omit both. The class is enforced after the Idempotency-Key
+replay lookup, so retrying an unchanged create that completed before lifecycle classes existed
+replays its original stored response instead of failing validation. `expiresAt` accepts an offset and is stored and
 returned as UTC.
 
 Requires an `Idempotency-Key` header. A Flag create re-establishes a key that a

@@ -11,7 +11,7 @@ afterEach(async () => {
 });
 
 const NOW = "2026-01-01T00:00:00.000Z";
-const LIFECYCLE_MIGRATION = "0035_flag_lifecycle.sql";
+const LIFECYCLE_MIGRATION = "0036_flag_lifecycle.sql";
 
 async function d1Through(lastMigration: string): Promise<D1Database> {
   mf = new Miniflare({

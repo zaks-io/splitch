@@ -27,6 +27,7 @@ import {
   schemaFromBody,
   variantSchemaIssues,
 } from "./flag-definition-model";
+import { StoredFlagCreateResponseSchema } from "./flag-create-replay";
 import { createLifecycle, type FlagLifecycle } from "./flag-lifecycle";
 import { objectBody, pathParam } from "./handler-input";
 
@@ -111,7 +112,7 @@ async function replayCreatedFlag(
     return createIdempotencyConflict("flag", idempotencyKey, requestId);
   }
   if (flag.createResponse) {
-    return Response.json(FlagResponseSchema.parse(JSON.parse(flag.createResponse)));
+    return Response.json(StoredFlagCreateResponseSchema.parse(JSON.parse(flag.createResponse)));
   }
   await resumeFlagCreateProvisioning(deps, appId, flag, body);
   const response = FlagResponseSchema.parse(await flagResponse(deps.repo, appId, flag));

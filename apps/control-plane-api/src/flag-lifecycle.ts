@@ -5,6 +5,7 @@ import {
   type StoredFlagLifecycleClass,
 } from "@splitch/contracts";
 import { renderError } from "@splitch/worker-runtime";
+import { validationErrors } from "./flag-definition-errors";
 import { fail, ok, type Result } from "./flag-definition-handler-utils";
 
 /** The lifecycle columns of a Flag row, as stored. */
@@ -24,7 +25,18 @@ export function createLifecycle(
   requestId: string,
 ): Result<FlagLifecycle & { lifecycleClass: FlagLifecycleClass }> {
   const lifecycleClass = body.lifecycleClass as FlagLifecycleClass | undefined;
-  if (!lifecycleClass) throw new Error("flags_create reached the handler without lifecycleClass");
+  // Optional only at the parse boundary so a pre-D9 create can replay; a new
+  // create is refused here exactly as the published contract would refuse it.
+  if (!lifecycleClass) {
+    return fail(
+      validationErrors(requestId, [
+        {
+          path: ["body", "lifecycleClass"],
+          message: "lifecycleClass is required on every new Flag",
+        },
+      ]),
+    );
+  }
   const lifecycle = {
     lifecycleClass,
     owner: (body.owner as string | undefined) ?? null,

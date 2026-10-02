@@ -242,7 +242,7 @@ CONFIGURATION (enabled state, available Variant subset, targeting, rollout) live
 | `description`            | text        | nullable                                                               |
 | `schema`                 | text        | nullable (JSON Schema); value contract Variant `value`s must satisfy   |
 | `default_variant_id`     | text        | FK → variants                                                          |
-| `lifecycle_class`        | text        | not null, CHECK in the D9 classes plus `unclassified` (migration 0035) |
+| `lifecycle_class`        | text        | not null, CHECK in the D9 classes plus `unclassified` (migration 0036) |
 | `owner`                  | text        | nullable; required by the Worker for `release` and `experiment`        |
 | `expires_at`             | text        | nullable ISO 8601 UTC; partial index `(app_id, expires_at)`            |
 | `create_idempotency_key` | text        | nullable                                                               |
