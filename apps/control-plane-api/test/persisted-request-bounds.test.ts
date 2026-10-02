@@ -67,6 +67,7 @@ describe("control-plane persisted request bounds", () => {
     const res = await request(h, "POST", `/apps/${created.app.id}/flags`, jwt, {
       appId: created.app.id,
       name: "Feature",
+      lifecycleClass: "permission",
       key: "nested-strict-flag",
       variants: [{ name: "control", value: false, isDefault: true, extra: true }],
       idempotency_key: "idem-nested-flag",

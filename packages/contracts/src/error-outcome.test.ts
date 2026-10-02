@@ -19,6 +19,7 @@ describe("error outcome class", () => {
     expect(errorOutcomeByCode.APPROVAL_REQUEST_RESOLVED).toBe("non_retryable");
     expect(errorOutcomeByCode.EVENT_DEFINITION_IMMUTABLE).toBe("non_retryable");
     expect(errorOutcomeByCode.VALIDATION_ERROR).toBe("user_action_required");
+    expect(errorOutcomeByCode.FLAG_LIFECYCLE_INCOMPLETE).toBe("user_action_required");
     expect(errorOutcomeByCode.SCOPE_UNRESOLVED).toBe("user_action_required");
     expect(errorOutcomeByCode.CONTEXT_USE_INVALID).toBe("user_action_required");
   });

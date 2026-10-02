@@ -27,6 +27,7 @@ import {
   schemaFromBody,
   variantSchemaIssues,
 } from "./flag-definition-model";
+import { createLifecycle, type FlagLifecycle } from "./flag-lifecycle";
 import { objectBody, pathParam } from "./handler-input";
 
 export async function createFlag(
@@ -195,6 +196,7 @@ function replayedVariantRow(
 
 interface PreparedCreateFlag {
   scope: TenantScope;
+  lifecycle: FlagLifecycle;
   schema: Record<string, unknown> | null;
   variantRows: Array<{ input: CreateVariantInput; id: string }>;
 }
@@ -207,6 +209,9 @@ async function prepareCreateFlag(
 ): Promise<Result<PreparedCreateFlag>> {
   const mismatch = pathBodyMismatch(body, { appId });
   if (mismatch) return fail(validationError(requestId, mismatch));
+
+  const lifecycle = createLifecycle(body, requestId);
+  if (!lifecycle.ok) return lifecycle;
 
   const variants = body.variants as CreateVariantInput[];
   const catalogIssue = exactlyOneDefaultIssue(variants) ?? duplicateVariantNameIssue(variants);
@@ -225,6 +230,7 @@ async function prepareCreateFlag(
   if (schemaErrors.length > 0) return fail(validationErrors(requestId, schemaErrors));
   return ok({
     scope,
+    lifecycle: lifecycle.value,
     schema,
     variantRows: variants.map((variant) => ({ input: variant, id: `var_${randomHex(12)}` })),
   });
@@ -254,6 +260,7 @@ async function insertFlag(
     ...(body.description ? { description: body.description as string } : {}),
     schema: serializeSchema(prepared.schema),
     defaultVariantId: defaultVariant.id,
+    ...prepared.lifecycle,
     createIdempotencyKey: idempotencyKey,
     createRequestHash: requestHash,
     createdAt: now,

@@ -33,7 +33,11 @@ describe("applyFlagsCreateConvenienceFields", () => {
   it("derives the quickstart FlagsCreateInput shape", () => {
     // `flags_create` is an Idempotency-Key route, so the assembled input already
     // carries the minted key by the time the convenience fields are derived.
-    const input: Record<string, unknown> = { appId: "app_checkout", idempotency_key: "cli_1" };
+    const input: Record<string, unknown> = {
+      appId: "app_checkout",
+      idempotency_key: "cli_1",
+      lifecycleClass: "ops",
+    };
     applyFlagsCreateConvenienceFields(input, {
       key: " new-checkout ",
       variants: "on,off",
@@ -42,6 +46,7 @@ describe("applyFlagsCreateConvenienceFields", () => {
     expect(input).toEqual({
       appId: "app_checkout",
       idempotency_key: "cli_1",
+      lifecycleClass: "ops",
       key: "new-checkout",
       name: "New Checkout",
       schema: { type: "boolean" },
@@ -88,9 +93,28 @@ describe("assertContractValidFlagsCreateInput", () => {
       name: flagNameFromKey("new-checkout"),
       schema: { type: "boolean" },
       variants: parseBooleanVariantsFlag("on,off"),
+      lifecycleClass: "ops",
       idempotency_key: "cli_1",
     };
 
     expect(() => assertContractValidFlagsCreateInput(input)).not.toThrow();
+  });
+
+  it("names lifecycleClass when a create omits it", () => {
+    const input = {
+      appId: "app_checkout",
+      key: "new-checkout",
+      name: flagNameFromKey("new-checkout"),
+      variants: parseBooleanVariantsFlag("on,off"),
+      idempotency_key: "cli_1",
+    };
+
+    expect(() => assertContractValidFlagsCreateInput(input)).toThrow(
+      expect.objectContaining({
+        payload: expect.objectContaining({
+          details: { field: "lifecycleClass", reason: "contract_validation_failed" },
+        }),
+      }),
+    );
   });
 });

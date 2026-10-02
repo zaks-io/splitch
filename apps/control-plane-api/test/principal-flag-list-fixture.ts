@@ -188,6 +188,7 @@ async function seedFlag(
     });
   }
   await repo.flags.flags.insert(scope, {
+    lifecycleClass: "ops",
     id: row.flagId,
     appId: row.appId,
     key: row.flagKey,

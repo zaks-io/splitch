@@ -135,6 +135,28 @@ export type ResolvedTargetingRule = z.infer<typeof ResolvedTargetingRuleSchema>;
 // lives in FlagConfigResponse / FlagConfigKV, not this App-level leaf.
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Flag Lifecycle Class (D9)
+//
+// Every new Flag declares why it exists. `unclassified` is never writable: it
+// is the migration state of Flags created before the class existed, readable
+// and evaluable like any other Flag, so an operator can see what still needs a
+// class without the catalog breaking.
+// ---------------------------------------------------------------------------
+
+// Permanent classes lead because derived help Examples take the first option,
+// and an Example naming a temporary class would omit the owner and expiry it needs.
+export const flagLifecycleClasses = ["ops", "permission", "release", "experiment"] as const;
+export const FlagLifecycleClassSchema = z.enum(flagLifecycleClasses);
+export type FlagLifecycleClass = z.infer<typeof FlagLifecycleClassSchema>;
+
+const UNCLASSIFIED_FLAG_LIFECYCLE = "unclassified" as const;
+export const StoredFlagLifecycleClassSchema = z.enum([
+  ...flagLifecycleClasses,
+  UNCLASSIFIED_FLAG_LIFECYCLE,
+]);
+export type StoredFlagLifecycleClass = z.infer<typeof StoredFlagLifecycleClassSchema>;
+
 export const FlagSchema = z
   .object({
     id: z.string(),
@@ -146,6 +168,11 @@ export const FlagSchema = z
     schema: z.record(z.string(), z.unknown()).nullable().optional(),
     variants: z.array(VariantSchema).min(1),
     defaultVariantId: z.string(),
+    lifecycleClass: StoredFlagLifecycleClassSchema,
+    // Who answers for removing this Flag; null only where the class permits it.
+    owner: z.string().nullable(),
+    // ISO 8601 UTC; null means no planned removal (ops, permission, unclassified).
+    expiresAt: z.string().nullable(),
     createdAt: z.string(),
     updatedAt: z.string(),
   })

@@ -1,6 +1,11 @@
 import { z } from "zod";
 import { ExperimentSchema } from "./leaf-schemas-experiment";
-import { FlagSchema, PercentageRolloutSchema, TargetingRuleSchema } from "./leaf-schemas-flag";
+import {
+  FlagLifecycleClassSchema,
+  FlagSchema,
+  PercentageRolloutSchema,
+  TargetingRuleSchema,
+} from "./leaf-schemas-flag";
 import { AppSchema, OrganizationSchema } from "./leaf-schemas-runtime";
 import {
   IdempotencyKeySchema,
@@ -27,6 +32,13 @@ import { WriteFlagJsonSchemaSchema, WriteVariantValueSchema } from "./write-pers
  * key/appId boundary is enforced structurally by `.strict()` on patch so a caller
  * cannot smuggle a frozen field past parse (fail loud).
  */
+
+const FlagOwnerSchema = PersistedNameSchema.describe(
+  "Person or team that answers for removing the Flag.",
+);
+const FlagExpiresAtSchema = z.iso
+  .datetime({ offset: true })
+  .describe("When the Flag is due for removal (ISO 8601); stored as UTC.");
 
 // ---------------------------------------------------------------------------
 // CreateFlagRequest
@@ -61,6 +73,14 @@ export const CreateFlagRequestSchema = z
     schema: WriteFlagJsonSchemaSchema.nullable().optional(),
     variants: persistedArray(CreateVariantCatalogEntrySchema).min(1),
     description: PersistedDescriptionSchema.optional(),
+    // Required for every new Flag (D9). Whether owner and expiresAt are also
+    // required depends on the class, which the Worker answers with
+    // FLAG_LIFECYCLE_INCOMPLETE naming the missing inputs.
+    lifecycleClass: FlagLifecycleClassSchema.describe(
+      "Why the Flag exists: release and experiment Flags are temporary and need owner and expiresAt; ops and permission Flags may be permanent.",
+    ),
+    owner: FlagOwnerSchema.optional(),
+    expiresAt: FlagExpiresAtSchema.optional(),
     idempotency_key: IdempotencyKeySchema,
   })
   .strict();
@@ -78,6 +98,11 @@ export const PatchFlagRequestSchema = z
     name: PersistedNameSchema.optional(),
     schema: WriteFlagJsonSchemaSchema.nullable().optional(),
     description: PersistedDescriptionSchema.optional(),
+    // `unclassified` is not writable: a legacy Flag leaves it by being classified.
+    lifecycleClass: FlagLifecycleClassSchema.optional(),
+    // null clears; the Worker refuses a clear the resulting class does not permit.
+    owner: FlagOwnerSchema.nullable().optional(),
+    expiresAt: FlagExpiresAtSchema.nullable().optional(),
   })
   .strict();
 export type PatchFlagRequest = z.infer<typeof PatchFlagRequestSchema>;
@@ -126,6 +151,14 @@ export type FlagListItem = z.infer<typeof FlagListItemSchema>;
 
 export const FlagListResponseSchema = listResponse(FlagListItemSchema);
 export type FlagListResponse = z.infer<typeof FlagListResponseSchema>;
+
+/**
+ * Flags whose `expiresAt` has passed and that still exist, so SDKs can still
+ * evaluate them. Deleting the Flag is what removes it from this list. Most
+ * overdue first, bounded like the catalog read.
+ */
+export const ExpiredFlagListResponseSchema = listResponse(FlagResponseSchema);
+export type ExpiredFlagListResponse = z.infer<typeof ExpiredFlagListResponseSchema>;
 
 // ---------------------------------------------------------------------------
 // Hydrated Flag reads

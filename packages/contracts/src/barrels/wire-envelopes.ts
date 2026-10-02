@@ -105,6 +105,7 @@ export type {
 } from "../parse-response-tolerantly";
 export { parseResponseBody, parseResponseTolerantly } from "../parse-response-tolerantly";
 export type {
+  ExpiredFlagListResponse,
   FlagConfigurationSummary,
   FlagListResponse,
   FlagResponse,
@@ -113,6 +114,7 @@ export type {
   HydratedFlagResponse,
 } from "../resource-envelopes-flag";
 export {
+  ExpiredFlagListResponseSchema,
   FlagListResponseSchema,
   FlagResponseSchema,
   HydratedFlagConfigurationSchema,

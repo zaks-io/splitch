@@ -31,6 +31,7 @@ async function seedChangedFlagConfigs(count: number, changedAt: (index: number) 
   for (let index = 0; index < count; index += 1) {
     const flagId = `flag_bulk_${String(index).padStart(3, "0")}`;
     await repo.flags.flags.insert(aScope, {
+      lifecycleClass: "ops",
       id: flagId,
       appId: ids.appId,
       key: `bulk-flag-${index}`,

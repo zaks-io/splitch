@@ -18,6 +18,12 @@ const quickstartCreateArgs = [
   "new-checkout",
   "--variants",
   "on,off",
+  "--lifecycle-class",
+  "release",
+  "--owner",
+  "checkout-team",
+  "--expires-at",
+  "2027-01-01T00:00:00Z",
 ] as const;
 
 afterEach(async () => {

@@ -24,6 +24,12 @@ const quickstartCreateArgs = [
   "new-checkout",
   "--variants",
   "on,off",
+  "--lifecycle-class",
+  "release",
+  "--owner",
+  "checkout-team",
+  "--expires-at",
+  "2027-01-01T00:00:00Z",
 ] as const;
 
 const createdFlag = {
@@ -37,6 +43,9 @@ const createdFlag = {
     { id: "var_off", name: "off", value: false },
   ],
   defaultVariantId: "var_off",
+  lifecycleClass: "unclassified" as const,
+  owner: null,
+  expiresAt: null,
   createdAt: "2026-07-03T00:00:00.000Z",
   updatedAt: "2026-07-03T00:00:00.000Z",
 };
@@ -75,6 +84,9 @@ describe("quickstart flag create drift", () => {
       name: "New Checkout",
       schema: { type: "boolean" },
       variants: parseBooleanVariantsFlag("on,off"),
+      lifecycleClass: "release",
+      owner: "checkout-team",
+      expiresAt: "2027-01-01T00:00:00Z",
     });
   });
 

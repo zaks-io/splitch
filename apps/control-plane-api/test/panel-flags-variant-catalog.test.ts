@@ -33,6 +33,7 @@ describe("Create Flag Variant catalog", () => {
       idempotency_key: "idem-panel-variant-catalog",
       key: "checkout-copy",
       name: "Checkout Copy",
+      lifecycleClass: "permission",
       schema: { type: "string" },
       variants: [
         { name: "control", value: "Buy now", isDefault: true },
@@ -67,6 +68,7 @@ describe("Create Flag Variant catalog", () => {
       appId: APP_ID,
       key: "checkout-mixed",
       name: "Checkout Mixed",
+      lifecycleClass: "permission",
       schema: { type: "string" },
       variants: [
         { name: "control", value: "Buy now", isDefault: true },

@@ -224,6 +224,9 @@ function detail(configuration: FlagConfigGetOutput | null): FlagDetailData {
         { id: "var_enabled", name: "enabled", value: true },
       ],
       defaultVariantId: "var_disabled",
+      lifecycleClass: "unclassified",
+      owner: null,
+      expiresAt: null,
     },
     configuration,
   };

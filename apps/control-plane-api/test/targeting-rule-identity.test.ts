@@ -182,6 +182,7 @@ function persistRow(id: string) {
 async function seedSecondFlag(): Promise<void> {
   const scope = appScope(ids.appId);
   await h.repo.flags.flags.insert(scope, {
+    lifecycleClass: "ops",
     id: SECOND_FLAG_ID,
     appId: ids.appId,
     key: "search",

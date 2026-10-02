@@ -39,6 +39,9 @@ const validFlag = {
   schema: null,
   variants: [validVariant, { id: "var_2", name: "treatment", value: "on" }],
   defaultVariantId: "var_1",
+  lifecycleClass: "unclassified",
+  owner: null,
+  expiresAt: null,
   createdAt: "2024-01-01T00:00:00Z",
   updatedAt: "2024-01-02T00:00:00Z",
 };
@@ -186,6 +189,9 @@ describe("FlagSchema", () => {
       name: "n".repeat(400),
       variants: [{ id: "var_1", name: "control", value: "s".repeat(5000) }],
       defaultVariantId: "var_1",
+      lifecycleClass: "unclassified",
+      owner: null,
+      expiresAt: null,
     });
     expect(result.success).toBe(true);
     if (!result.success) return;

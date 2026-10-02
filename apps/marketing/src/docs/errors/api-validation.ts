@@ -15,6 +15,15 @@ export const validationErrorDocs = {
     details: "{ expected: 100, got: number, variantAllocations: Record<string, number> }",
     related: ["VALIDATION_ERROR", "RUN_FROZEN"],
   },
+  FLAG_LIFECYCLE_INCOMPLETE: {
+    remediation:
+      "Send the inputs named in details.missing, or choose a class that does not need them",
+    cause:
+      "A release or experiment Flag was created or updated without an owner or an expiry. Those classes are temporary by definition, so the platform refuses to record one that nobody is due to remove.",
+    fix: "`details.missing` lists `owner`, `expiresAt`, or both, and `details.lifecycleClass` is the class that requires them. Resend with those fields, or classify the Flag as `ops` or `permission` if it is meant to be permanent.",
+    details: '{ lifecycleClass: string, missing: Array<"owner" | "expiresAt"> }',
+    related: ["VALIDATION_ERROR"],
+  },
   ACTIVATION_TIMESTAMP_INVALID: {
     remediation: "Move the activation timestamp after details.firstExposureTs",
     cause:

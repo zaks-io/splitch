@@ -264,6 +264,14 @@ try {
     fail(`the slug backfill did not run against the pre-existing row:\n${slug}`);
   }
 
+  const lifecycle = populated.execSql(
+    "SELECT lifecycle_class, owner, expires_at FROM flags WHERE id = 'flag_fk_probe'",
+    "verifying the Flag lifecycle migration state",
+  );
+  if (!lifecycle.includes('"lifecycle_class": "unclassified"')) {
+    fail(`a pre-existing Flag did not land in the unclassified lifecycle state:\n${lifecycle}`);
+  }
+
   const controlVariant = populated.execSql(
     "SELECT control_variant_id FROM runs WHERE id = 'run_fk_probe'",
     "verifying the frozen Control backfill",

@@ -94,6 +94,9 @@ Create a boolean Flag. This example uses `jq` to carry the returned Flag ID into
 FLAG_ID=$(splitch flags create \
   --key checkout \
   --variants on,off \
+  --lifecycle-class release \
+  --owner checkout-team \
+  --expires-at 2027-01-01T00:00:00Z \
   --json | jq -r '.id')
 ```
 

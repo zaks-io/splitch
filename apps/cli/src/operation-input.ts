@@ -12,6 +12,7 @@ import {
   applyFlagsCreateConvenienceFields,
   assertContractValidFlagsCreateInput,
 } from "./flag-create-input.js";
+import { applyFlagLifecycleFlags } from "./flag-lifecycle-input.js";
 import { applyOperationIdempotencyInput } from "./operation-idempotency-input.js";
 import type { ParsedGlobalFlags, ParsedInvocation } from "./parse-args.js";
 import { applyByFlag, applyRouteQueryFlags } from "./query-flags.js";
@@ -157,6 +158,7 @@ function applyNamedFlags(
     input.key = flags.key;
   }
   applyByFlag(command, flags.by, input);
+  applyFlagLifecycleFlags(command.operationId, flags, input);
   if (command.supportsConfirm && flags.confirm) {
     input.review = { action: "approve_and_apply" };
   }

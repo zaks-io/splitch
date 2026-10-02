@@ -165,6 +165,7 @@ describe("config store purge target isolation", () => {
     const otherExperimentId = "exp_unrelated_flag";
     const scope = envScope(ids.appId, ids.environmentId);
     await h.repo.flags.flags.insert(appScope(ids.appId), {
+      lifecycleClass: "ops",
       id: otherFlagId,
       appId: ids.appId,
       key: "unrelated-flag",

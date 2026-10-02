@@ -58,6 +58,7 @@ export async function seedOrganizationB(h: Harness): Promise<void> {
     updatedAt: NOW_B,
   });
   await repo.flags.flags.insert(appScope(B.appId), {
+    lifecycleClass: "ops",
     id: B.flagId,
     appId: B.appId,
     key: B.flagKey,

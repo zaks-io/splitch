@@ -78,6 +78,7 @@ export async function seedConfigGraph(d1: D1Database): Promise<void> {
     updatedAt: NOW,
   });
   await repo.flags.flags.insert(aScope, {
+    lifecycleClass: "ops",
     id: ids.flagId,
     appId: ids.appId,
     key: ids.flagKey,

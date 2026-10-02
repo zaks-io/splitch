@@ -33,7 +33,7 @@ export const quickstartSteps: readonly QuickstartStep[] = [
   {
     title: "Create a Flag",
     body: "Flag definition is App-level; serving config is per-Environment. A fresh Flag starts disabled with rollout null — it only ever serves the Default Variant until you flip Configuration.",
-    code: "splitch flags create --key new-checkout --variants on,off",
+    code: "splitch flags create --key new-checkout --variants on,off --lifecycle-class release --owner checkout-team --expires-at 2027-01-01T00:00:00Z",
   },
   {
     title: "Enable and roll out",

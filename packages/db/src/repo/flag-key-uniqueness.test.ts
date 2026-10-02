@@ -35,6 +35,7 @@ function flagValues(appId: string, id: string, key: string) {
     appId,
     key,
     name: "Second Flag",
+    lifecycleClass: "ops" as const,
     createdAt: NOW,
     updatedAt: NOW,
   };

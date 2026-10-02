@@ -42,6 +42,7 @@ const EXPECTED_GATES: Record<string, string> = {
   approval_request_reviews_create: "app:member",
   flags_list: "app:member",
   principal_flags_list: "membership-wide-read",
+  expired_flags_list: "app:member",
   flags_create: "app:admin",
   flags_get: "app:member",
   flags_update: "app:admin",

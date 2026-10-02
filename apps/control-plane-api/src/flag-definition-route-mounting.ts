@@ -13,6 +13,7 @@ export function mountFlagDefinitionRoutes(
 ): void {
   registrar.mount(app, controlPlaneRoute("flags_list"), handlers.listFlags);
   registrar.mount(app, controlPlaneRoute("principal_flags_list"), handlers.listPrincipalFlags);
+  registrar.mount(app, controlPlaneRoute("expired_flags_list"), handlers.listExpiredFlags);
   registrar.mount(app, controlPlaneRoute("flags_create"), handlers.createFlag);
   registrar.mount(app, controlPlaneRoute("flags_get"), handlers.getFlag);
   registrar.mount(app, controlPlaneRoute("flags_update"), handlers.updateFlag);

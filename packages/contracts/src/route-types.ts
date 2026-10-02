@@ -27,6 +27,7 @@ import type {
 import type {
   CreateFlagRequestSchema,
   CreateVariantRequestSchema,
+  ExpiredFlagListResponseSchema,
   FlagListReadResponseSchema,
   FlagMutationResponseSchema,
   FlagReadResponseSchema,
@@ -97,6 +98,8 @@ export type EntityPrivacyOutput = z.infer<typeof PrivacyResponseSchema>;
 
 export type FlagsListInput = z.infer<typeof AppParams> & z.infer<typeof FlagListQuerySchema>;
 export type FlagsListOutput = z.infer<typeof FlagListReadResponseSchema>;
+export type ExpiredFlagsListInput = z.infer<typeof AppParams>;
+export type ExpiredFlagsListOutput = z.infer<typeof ExpiredFlagListResponseSchema>;
 export type PrincipalFlagsListInput = z.infer<typeof PrincipalFlagListQuerySchema>;
 export type PrincipalFlagsListOutput = z.infer<typeof PrincipalFlagListReadResponseSchema>;
 export type FlagsCreateInput = z.infer<typeof AppParams> & z.infer<typeof CreateFlagRequestSchema>;
@@ -260,6 +263,7 @@ export interface RouteTypeMap {
 
   flags_list: { input: FlagsListInput; output: FlagsListOutput };
   principal_flags_list: { input: PrincipalFlagsListInput; output: PrincipalFlagsListOutput };
+  expired_flags_list: { input: ExpiredFlagsListInput; output: ExpiredFlagsListOutput };
   flags_create: { input: FlagsCreateInput; output: FlagsCreateOutput };
   flags_get: { input: FlagsGetInput; output: FlagsGetOutput };
   flags_update: { input: FlagsUpdateInput; output: FlagsUpdateOutput };

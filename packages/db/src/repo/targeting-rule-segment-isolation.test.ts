@@ -62,6 +62,7 @@ async function seedTenant(t: typeof TA): Promise<void> {
     updatedAt: NOW,
   });
   await repo.flags.flags.insert(appScope(t.appId), {
+    lifecycleClass: "ops",
     id: t.flagId,
     appId: t.appId,
     key: `key-${t.flagId}`,

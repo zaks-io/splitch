@@ -132,7 +132,8 @@ Before shipping to production, lock it to your app's origins in one step (contro
 ## 6. Create a Flag
 
 ```
-splitch flags create --key new-checkout --variants on,off       # CLI
+splitch flags create --key new-checkout --variants on,off \
+  --lifecycle-class release --owner checkout-team --expires-at 2027-01-01T00:00:00Z       # CLI
 flags_create {
   name: "New checkout",
   key: "new-checkout",
@@ -140,9 +141,16 @@ flags_create {
     { name: "on", value: true, isDefault: false },
     { name: "off", value: false, isDefault: true }
   ],
+  lifecycleClass: "release",
+  owner: "checkout-team",
+  expiresAt: "2027-01-01T00:00:00Z",
   idempotency_key: "create-new-checkout-v1"
 } # MCP tool
 ```
+
+Every new Flag names a lifecycle class: `release` and `experiment` Flags are temporary and must
+carry an `owner` and an `expiresAt`, while `ops` and `permission` Flags may be permanent. Flags
+past their expiry show up in `splitch expired-flags list` / `expired_flags_list` until deleted.
 
 Flag definition is App-level; serving config is per-Environment. Promote it into your
 Environment with `flags promote` / `flags_promote` when you are ready to serve it there.

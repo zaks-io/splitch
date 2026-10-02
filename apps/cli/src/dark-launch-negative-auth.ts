@@ -215,6 +215,7 @@ async function createProbeFlag(
       appId,
       key: flagKey,
       name: `${flagKey} isolation proof`,
+      lifecycleClass: "permission",
       schema: { type: "string" },
       variants: [
         {

@@ -28,7 +28,7 @@ const SCHEMA = [
   `CREATE UNIQUE INDEX client_keys_active_env_unique ON client_keys (app_id, environment_id) WHERE revoked_at IS NULL`,
   `CREATE TABLE api_keys (key_id TEXT PRIMARY KEY NOT NULL, app_id TEXT NOT NULL, environment_id TEXT NOT NULL, key_hash TEXT NOT NULL, scopes TEXT NOT NULL, revoked_at TEXT, last_rotated_at TEXT, created_at TEXT NOT NULL, created_by TEXT)`,
   `CREATE INDEX api_keys_key_hash_idx ON api_keys (key_hash)`,
-  `CREATE TABLE flags (id TEXT PRIMARY KEY NOT NULL, app_id TEXT NOT NULL, key TEXT NOT NULL, name TEXT NOT NULL, description TEXT, schema TEXT, default_variant_id TEXT, create_idempotency_key TEXT, create_request_hash TEXT, create_response TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, created_by TEXT, updated_by TEXT, version INTEGER DEFAULT 1 NOT NULL)`,
+  `CREATE TABLE flags (id TEXT PRIMARY KEY NOT NULL, app_id TEXT NOT NULL, key TEXT NOT NULL, name TEXT NOT NULL, description TEXT, schema TEXT, default_variant_id TEXT, lifecycle_class TEXT DEFAULT 'unclassified' NOT NULL CHECK (lifecycle_class IN ('unclassified', 'release', 'experiment', 'ops', 'permission')), owner TEXT, expires_at TEXT, create_idempotency_key TEXT, create_request_hash TEXT, create_response TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, created_by TEXT, updated_by TEXT, version INTEGER DEFAULT 1 NOT NULL)`,
   `CREATE UNIQUE INDEX flags_app_key_unique ON flags (app_id, key)`,
   `CREATE UNIQUE INDEX flags_create_idempotency_unique ON flags (app_id, created_by, create_idempotency_key)`,
   `CREATE TABLE variants (id TEXT PRIMARY KEY NOT NULL, flag_id TEXT NOT NULL, name TEXT NOT NULL, value TEXT NOT NULL, description TEXT, created_at TEXT NOT NULL)`,

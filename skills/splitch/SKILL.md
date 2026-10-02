@@ -99,7 +99,8 @@ splitch experiment-results get <experiment-id> --json
 Create, enable, and verify a boolean Flag:
 
 ```bash
-splitch flags create --key <flag-key> --variants on,off --json
+splitch flags create --key <flag-key> --variants on,off \
+  --lifecycle-class <release|experiment|ops|permission> [--owner <team>] [--expires-at <iso>] --json
 splitch flag-config update <flag-key> --enabled true --rollout 100 --json
 splitch flags test-eval <flag-key> --targeting-key <test-key> --json
 splitch flags verify <flag-key> --targeting-key <test-key> --json

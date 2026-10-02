@@ -17,6 +17,7 @@ import type { ApprovalCommit } from "./approval-types";
 import type { Db } from "./client";
 import { makeFlagConfigOps, scopedFlagConfig, scopedTargetingRule } from "./flag-config-ops";
 import { type FlagInScope, makeVariantOps } from "./flag-variant-ops";
+import { type FlagDefinitionPatch, makeListExpiredFlagPage } from "./flag-lifecycle-reads";
 import { makeFlagMultiAppReads } from "./flag-multi-app-reads";
 import { idBatches } from "./id-batches";
 import { assertMintedScope, envScope, type TenantScope } from "./scope";
@@ -104,12 +105,7 @@ export function makeFlagRepo(db: Db) {
     updateFlag(
       scope: TenantScope,
       flagId: string,
-      patch: Partial<
-        Pick<
-          typeof flags.$inferInsert,
-          "name" | "description" | "schema" | "defaultVariantId" | "updatedAt" | "updatedBy"
-        >
-      >,
+      patch: FlagDefinitionPatch,
     ): Promise<typeof flags.$inferSelect | null> {
       return flagsTable.update(scope, patch, eq(flags.id, flagId)).then((rows) => rows[0] ?? null);
     },
@@ -157,6 +153,8 @@ export function makeFlagRepo(db: Db) {
         orderBy: [desc(flags.createdAt), desc(flags.id)],
       });
     },
+
+    listExpiredFlagPage: makeListExpiredFlagPage(flagsTable),
 
     /**
      * App-scoped Flag fetch by a set of IDs, for callers that already hold a

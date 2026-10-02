@@ -161,7 +161,10 @@ function operationFlags(command: CliCommandDefinition): HelpFlag[] {
     case "flags_create":
       return [
         flag("--variants <names>", "comma-separated strings", "none", "Boolean Variant names."),
+        ...flagLifecycleHelp("none"),
       ];
+    case "flags_update":
+      return flagLifecycleHelp("current value");
     case "flags_promote":
       return [flag("--from-environment-id <id>", "string", "none", "Source Environment ID.")];
     case "flag_changes_list":
@@ -199,6 +202,24 @@ function operationFlags(command: CliCommandDefinition): HelpFlag[] {
     default:
       return [];
   }
+}
+
+function flagLifecycleHelp(defaultValue: string): HelpFlag[] {
+  return [
+    flag(
+      "--lifecycle-class <class>",
+      "ops | permission | release | experiment",
+      defaultValue,
+      "Why the Flag exists. Required on create; release and experiment Flags also need --owner and --expires-at.",
+    ),
+    flag("--owner <owner>", "string", defaultValue, "Person or team that removes the Flag."),
+    flag(
+      "--expires-at <date-time>",
+      "ISO 8601 date-time",
+      defaultValue,
+      "When the Flag is due for removal; expired Flags appear in splitch expired-flags list.",
+    ),
+  ];
 }
 
 export function metaFlags(command: (typeof META_COMMANDS)[number]): HelpFlag[] {

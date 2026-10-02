@@ -40,6 +40,9 @@ export function flagFrom(flag: FlagRow, variants: readonly VariantRow[]): Flag {
     schema: parseStoredSchema(flag.schema),
     variants: variants.map(toVariant),
     defaultVariantId: requiredString(flag.defaultVariantId),
+    lifecycleClass: flag.lifecycleClass,
+    owner: flag.owner,
+    expiresAt: flag.expiresAt,
     createdAt: flag.createdAt,
     updatedAt: flag.updatedAt,
   });

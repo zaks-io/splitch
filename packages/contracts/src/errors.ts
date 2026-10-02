@@ -18,6 +18,7 @@ import {
 } from "./error-vocabulary";
 import { eventErrorMembers } from "./event-errors";
 import { experimentConclusionErrorMembers } from "./experiment-conclusion-errors";
+import { flagLifecycleErrorMembers } from "./flag-lifecycle";
 import {
   InternalServerErrorDetailsSchema,
   SegmentRepublishDetailsShape,
@@ -94,6 +95,7 @@ const errorMembers = [
       variantAllocations: z.record(z.string(), z.number()),
     }),
   ),
+  ...flagLifecycleErrorMembers,
   member(
     "ACTIVATION_TIMESTAMP_INVALID",
     z.object({

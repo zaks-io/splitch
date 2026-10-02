@@ -100,7 +100,9 @@ function writeUseNotices(io: CliIo, clearedEnvironmentId: string | undefined): v
       `Cleared the previous Environment selection (${clearedEnvironmentId}); it belonged to the old App. Select one with splitch use --env <env>.`,
     );
   }
-  io.error("Next: splitch flags create --key <key> --variants on,off | splitch flags list");
+  io.error(
+    "Next: splitch flags create --key <key> --variants on,off --lifecycle-class <class> | splitch flags list",
+  );
 }
 
 /**

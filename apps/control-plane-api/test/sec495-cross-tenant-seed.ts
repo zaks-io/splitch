@@ -86,6 +86,7 @@ async function seedTenant(
     updatedAt: NOW,
   });
   await repo.flags.flags.insert(app, {
+    lifecycleClass: "ops",
     id: tenant.flagId,
     appId: tenant.appId,
     key: tenant.flagKey,

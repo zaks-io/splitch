@@ -9,6 +9,9 @@ const flag = {
   name: "Checkout",
   variants: [{ id: "var_on", name: "on", value: true }],
   defaultVariantId: "var_on",
+  lifecycleClass: "unclassified" as const,
+  owner: null,
+  expiresAt: null,
   createdAt: "2026-07-03T00:00:00.000Z",
   updatedAt: "2026-07-03T00:00:00.000Z",
 };

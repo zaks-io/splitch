@@ -25,6 +25,7 @@ import {
   schemaFromBody,
   variantSchemaIssues,
 } from "./flag-definition-model";
+import { patchLifecycle } from "./flag-lifecycle";
 import { objectBody, optionalQueryParam, pathParam } from "./handler-input";
 import { FLAG_LIST_READ_LIMIT } from "./overview-thresholds";
 
@@ -199,6 +200,8 @@ export async function updateFlag(
   if (!loaded.ok) return loaded.response;
 
   const body = objectBody(args.input);
+  const lifecycle = patchLifecycle(loaded.value.flag, body, args.requestId);
+  if (!lifecycle.ok) return lifecycle.response;
   const schema = await prepareSchemaPatch(deps, loaded.value, body, args.requestId);
   if (!schema.ok) return schema.response;
 
@@ -206,6 +209,7 @@ export async function updateFlag(
     ...(body.name !== undefined ? { name: body.name as string } : {}),
     ...(body.description !== undefined ? { description: body.description as string } : {}),
     ...(schema.value !== undefined ? { schema: serializeSchema(schema.value) } : {}),
+    ...lifecycle.value,
     updatedAt: nowIso(deps),
     updatedBy: args.principal.id,
   });

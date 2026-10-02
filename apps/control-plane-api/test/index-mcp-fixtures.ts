@@ -96,6 +96,7 @@ async function seedTenant(d1: D1Database, tenant: TenantFixture, owner: string):
   const repo = createRepository(d1);
   const controlVariantId = `${tenant.flagId}_control`;
   await repo.flags.flags.insert(appScope(tenant.appId), {
+    lifecycleClass: "ops",
     id: tenant.flagId,
     appId: tenant.appId,
     key: tenant.flagKey,
