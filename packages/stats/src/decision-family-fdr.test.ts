@@ -116,4 +116,62 @@ describe("applyDecisionFamilyCorrection", () => {
       }),
     ).toThrow(/duplicate decision_family member/);
   });
+
+  it("defaults family_correction to bh", () => {
+    const shared = {
+      confidence_level: 0.95,
+      decision_family: FAMILY,
+      arm_results: [
+        armResult("goal_clicks", "treatment_a", 0.026),
+        armResult("goal_clicks", "treatment_b", 0.04),
+      ],
+    };
+    const implied = applyDecisionFamilyCorrection(shared);
+    const explicit = applyDecisionFamilyCorrection({ ...shared, family_correction: "bh" });
+
+    expect(implied.arm_results.map((result) => result.is_significant)).toEqual(
+      explicit.arm_results.map((result) => result.is_significant),
+    );
+  });
+
+  it("uses the harmonic BH-G threshold when family_correction is bh_g", () => {
+    const output = applyDecisionFamilyCorrection({
+      confidence_level: 0.95,
+      family_correction: "bh_g",
+      decision_family: FAMILY,
+      arm_results: [
+        armResult("goal_clicks", "treatment_a", 0.026),
+        armResult("goal_clicks", "treatment_b", 0.04),
+      ],
+    });
+
+    expect(output.arm_results.every((result) => result.is_significant === false)).toBe(true);
+  });
+});
+
+describe("applyDecisionFamilyCorrection procedure validation", () => {
+  it("fails loud on an unknown family_correction procedure", () => {
+    expect(() =>
+      applyDecisionFamilyCorrection({
+        confidence_level: 0.95,
+        family_correction: "e_bh" as never,
+        decision_family: FAMILY,
+        arm_results: [
+          armResult("goal_clicks", "treatment_a", 0.01),
+          armResult("goal_clicks", "treatment_b", 0.02),
+        ],
+      }),
+    ).toThrow(/family_correction must be one of bh, bh_g/);
+  });
+
+  it("fails loud on an unknown family_correction even when the family is empty", () => {
+    expect(() =>
+      applyDecisionFamilyCorrection({
+        confidence_level: 0.95,
+        family_correction: "typo" as never,
+        decision_family: [],
+        arm_results: [armResult("secondary_clicks", "treatment_a", 0.01)],
+      }),
+    ).toThrow(/family_correction must be one of bh, bh_g/);
+  });
 });

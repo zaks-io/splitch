@@ -18,6 +18,13 @@ export { computeFixedHorizonCI, FIXED_HORIZON_CI_SOURCE, FixedHorizonCI } from "
 export { analyzeStats, StatsEngine } from "./stats-engine";
 export { applyGuardrailBoundChecks } from "./guardrail-bound-check";
 export { applyDecisionFamilyCorrection } from "./decision-family-fdr";
+export {
+  FAMILY_CORRECTION_PROCEDURES,
+  familyCorrectionAlpha,
+  harmonicNumber,
+  largestRejectedRank,
+  resolveFamilyCorrectionProcedure,
+} from "./family-correction";
 export { estimateMetricArm, estimateMetricComparison } from "./variance-estimators";
 export { checkSrmHealth, SRM_MISMATCH_P_VALUE } from "./srm-checker";
 export {
@@ -60,6 +67,7 @@ export type {
   DecisionFamilyCorrectionOutput,
   DecisionFamilyCorrectionSummary,
 } from "./decision-family-fdr";
+export type { FamilyCorrectionProcedure } from "./family-correction";
 export type { GuardrailBoundCheckInput, GuardrailThreshold } from "./guardrail-bound-check";
 export type {
   CupedCovariateRow,

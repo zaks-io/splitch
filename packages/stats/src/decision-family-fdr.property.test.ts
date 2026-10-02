@@ -78,6 +78,34 @@ describe("decision_family FDR metamorphic properties", () => {
       });
     }
   });
+
+  it("keeps BH-G rejections a subset of BH rejections on the same p-values", () => {
+    const random = seededRandom(217_331);
+
+    for (let iteration = 0; iteration < ITERATIONS; iteration += 1) {
+      const decisionFamily = familyMembers(FAMILY_SIZE);
+      const arm_results = decisionFamily.map((member) =>
+        armResult(member.metric_id, member.variant, random()),
+      );
+      const bh = applyDecisionFamilyCorrection({
+        confidence_level: 0.95,
+        family_correction: "bh",
+        decision_family: decisionFamily,
+        arm_results,
+      });
+      const bhG = applyDecisionFamilyCorrection({
+        confidence_level: 0.95,
+        family_correction: "bh_g",
+        decision_family: decisionFamily,
+        arm_results,
+      });
+      const bhKeys = new Set(bh.summary.rejected.map(resultKey));
+
+      for (const member of bhG.summary.rejected) {
+        expect(bhKeys.has(resultKey(member))).toBe(true);
+      }
+    }
+  });
 });
 
 function familyMembers(count: number): DecisionFamilyMember[] {
