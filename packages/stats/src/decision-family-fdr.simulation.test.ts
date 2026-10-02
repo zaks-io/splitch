@@ -2,6 +2,13 @@ import type { DecisionFamilyMember } from "@splitch/contracts";
 import { describe, expect, it } from "vitest";
 import { applyDecisionFamilyCorrection } from "./decision-family-fdr";
 import { armResult } from "./decision-family-fdr-test-helpers";
+import {
+  FAMILY_FDR_SIM_ALPHA,
+  FAMILY_FDR_SIM_AUDIT_LOOKS,
+  FAMILY_FDR_SIM_SMOKE_LOOKS,
+  runFamilyCorrectionStoppingSimulation,
+} from "./decision-family-fdr-simulation";
+import { monteCarloTolerance } from "./sequential-ci-simulation";
 
 const METRIC_COUNT = 6;
 const TREATMENT_VARIANTS = ["treatment_a", "treatment_b", "treatment_c", "treatment_d"] as const;
@@ -32,7 +39,38 @@ describe("decision_family FDR simulation smoke", () => {
     }
 
     const observedFdr = falseDiscoveryProportionSum / iterations;
-    expect(observedFdr).toBeLessThanOrEqual(Q + monteCarloTolerance(Q, iterations));
+    expect(observedFdr).toBeLessThanOrEqual(Q + oneLookTolerance(Q, iterations));
+  });
+
+  it("records BH and BH-G FDR and power under stop-at-first-crossing correlated mixed nulls", {
+    timeout: 120_000,
+  }, () => {
+    const mode = process.env.SPLITCH_STATS_SIMULATION_MODE === "audit" ? "audit" : "smoke";
+    const seed = process.env.SPLITCH_STATS_SIMULATION_SEED ?? "424242";
+    const iterations = Number.parseInt(
+      process.env.SPLITCH_STATS_SIMULATION_ITERATIONS ?? "300",
+      10,
+    );
+    const lookSchedule = mode === "audit" ? FAMILY_FDR_SIM_AUDIT_LOOKS : FAMILY_FDR_SIM_SMOKE_LOOKS;
+    const result = runFamilyCorrectionStoppingSimulation({
+      seed,
+      iterations,
+      lookSchedule,
+    });
+    const tolerance = monteCarloTolerance(FAMILY_FDR_SIM_ALPHA, iterations);
+
+    console.info(
+      `family FDR ${mode} seed=${seed} iterations=${iterations} ` +
+        `bhFdr=${result.bh.observedFdr} bhGFdr=${result.bh_g.observedFdr} ` +
+        `bhStopPower=${result.bh.power} bhGStopPower=${result.bh_g.power} ` +
+        `stopPowerCost=${result.stopPowerCost} ` +
+        `bhLastLookPower=${result.lastLookBh.power} bhGLastLookPower=${result.lastLookBhG.power} ` +
+        `lastLookPowerCost=${result.lastLookPowerCost} tolerance=${tolerance}`,
+    );
+
+    expect(result.bh_g.observedFdr).toBeLessThanOrEqual(FAMILY_FDR_SIM_ALPHA + tolerance);
+    expect(result.lastLookBhG.power).toBeLessThanOrEqual(result.lastLookBh.power + Number.EPSILON);
+    expect(result.lastLookPowerCost).toBeGreaterThanOrEqual(-Number.EPSILON);
   });
 });
 
@@ -45,7 +83,7 @@ function metricFamily(): DecisionFamilyMember[] {
   ).flat();
 }
 
-function monteCarloTolerance(q: number, iterations: number): number {
+function oneLookTolerance(q: number, iterations: number): number {
   return 3 * Math.sqrt((q * (1 - q)) / iterations) + 0.03;
 }
 

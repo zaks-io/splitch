@@ -1,4 +1,9 @@
 import type { ArmResult, DecisionFamilyMember } from "@splitch/contracts";
+import {
+  largestRejectedRank,
+  resolveFamilyCorrectionProcedure,
+  type FamilyCorrectionProcedure,
+} from "./family-correction";
 
 type DecisionFamilyKeyFields = Pick<DecisionFamilyMember, "metric_id" | "variant"> &
   Partial<Pick<DecisionFamilyMember, "dimension_id" | "dimension_value">>;
@@ -10,6 +15,8 @@ export interface DecisionFamilyCorrectionInput<Result extends DecisionFamilyArmR
   readonly decision_family: readonly DecisionFamilyMember[];
   readonly confidence_level: number;
   readonly control_variant?: string;
+  /** Defaults to `bh`. Production keeps BH until analysis_version selects BH-G. */
+  readonly family_correction?: FamilyCorrectionProcedure;
 }
 
 export interface DecisionFamilyCorrectionSummary {
@@ -50,7 +57,11 @@ export function applyDecisionFamilyCorrection<Result extends DecisionFamilyArmRe
 
   const resultByKey = lockedResultsByKey(input.arm_results, familyByKey);
   const ranked = rankDecisionFamilyMembers(familyByKey, resultByKey);
-  const rejectedKeys = rejectedDecisionKeys(ranked, familyByKey.size, alpha);
+  const rejectedKeys = rejectedDecisionKeys(
+    ranked,
+    alpha,
+    resolveFamilyCorrectionProcedure(input.family_correction),
+  );
 
   return {
     arm_results: input.arm_results.map((result) => {
@@ -151,20 +162,14 @@ function rankDecisionFamilyMembers<Result extends DecisionFamilyArmResult>(
 
 function rejectedDecisionKeys<Result extends DecisionFamilyArmResult>(
   ranked: readonly RankedFamilyMember<Result>[],
-  familySize: number,
   alpha: number,
+  procedure: FamilyCorrectionProcedure,
 ): Set<string> {
-  let maxRejectedRank = 0;
-
-  for (let index = 0; index < ranked.length; index += 1) {
-    const rank = index + 1;
-    const threshold = (rank / familySize) * alpha;
-    const entry = ranked[index];
-    if (entry !== undefined && entry.result.p_value <= threshold) {
-      maxRejectedRank = rank;
-    }
-  }
-
+  const maxRejectedRank = largestRejectedRank(
+    ranked.map((entry) => entry.result.p_value),
+    alpha,
+    procedure,
+  );
   return new Set(ranked.slice(0, maxRejectedRank).map((entry) => entry.key));
 }
 

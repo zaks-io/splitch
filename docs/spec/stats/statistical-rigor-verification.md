@@ -153,19 +153,20 @@ These tests prove invariants that should hold across many shapes of input.
 Simulation tests are seeded and versioned. They are regression alarms, not formal proofs. Thresholds
 must account for Monte Carlo error and should be documented with the seed and iteration count.
 
-| Test                                 | Null expectation                                                                                                                           |
-| ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------ |
-| Fixed-horizon no peeking             | Type I error near alpha at the locked sample size                                                                                          |
-| Sequential repeated looks            | Type I error near alpha under arbitrary looks                                                                                              |
-| Naive repeated fixed-horizon peeking | Fails in a control test, proving the harness can detect inflation                                                                          |
-| BH FDR                               | False discovery proportion controlled near configured q across Metric families                                                             |
-| Entity aggregation                   | Event-as-independent fake implementation fails under clustered data                                                                        |
-| Ratio covariance                     | Naive ratio variance fake implementation fails under correlated numerator/denominator                                                      |
-| CUPED                                | Pre-period covariate reduces variance without shifting null mean                                                                           |
-| Winsorization                        | Heavy-tail fixture reduces variance and keeps sample size unchanged                                                                        |
-| SRM                                  | Biased allocation trips SRM at high probability                                                                                            |
-| Sequential SRM martingale            | Continuous-monitoring false-alarm rate within Monte Carlo tolerance of alpha; seeded 2% allocation drift is detected with a recorded delay |
-| Activation balance                   | Treatment-affected gate trips activation-balance diagnostic                                                                                |
+| Test                                 | Null expectation                                                                                                                                                 |
+| ------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Fixed-horizon no peeking             | Type I error near alpha at the locked sample size                                                                                                                |
+| Sequential repeated looks            | Type I error near alpha under arbitrary looks                                                                                                                    |
+| Naive repeated fixed-horizon peeking | Fails in a control test, proving the harness can detect inflation                                                                                                |
+| BH FDR                               | False discovery proportion controlled near configured q across Metric families                                                                                   |
+| BH-G under stopping                  | Stop-at-first-crossing, correlated goal Metrics sharing Control, mixed nulls; BH-G FDR within Monte Carlo tolerance of alpha; BH and BH-G FDR and power recorded |
+| Entity aggregation                   | Event-as-independent fake implementation fails under clustered data                                                                                              |
+| Ratio covariance                     | Naive ratio variance fake implementation fails under correlated numerator/denominator                                                                            |
+| CUPED                                | Pre-period covariate reduces variance without shifting null mean                                                                                                 |
+| Winsorization                        | Heavy-tail fixture reduces variance and keeps sample size unchanged                                                                                              |
+| SRM                                  | Biased allocation trips SRM at high probability                                                                                                                  |
+| Sequential SRM martingale            | Continuous-monitoring false-alarm rate within Monte Carlo tolerance of alpha; seeded 2% allocation drift is detected with a recorded delay                       |
+| Activation balance                   | Treatment-affected gate trips activation-balance diagnostic                                                                                                      |
 
 Monte Carlo gates should run in two modes:
 

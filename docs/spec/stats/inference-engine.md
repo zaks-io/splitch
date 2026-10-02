@@ -18,7 +18,7 @@ per-Entity Metric values (one row per Entity, aggregated upstream — ADR-0015)
   ▼ 6. Relative-lift interval (Fieller inversion of the absolute decision interval):
        [relative_lift_ci_lower, relative_lift_ci_upper]
   ▼ 7. Guardrail bound check (CI lower-bound vs. downside threshold) → guardrail_status
-  ▼ 8. Benjamini-Hochberg FDR (across goal-metric × Variant family)  → is_significant (post-FDR)
+  ▼ 8. Family FDR (BH default; BH-G available as a typed comparator)  → is_significant (post-FDR)
 ```
 
 Note: step 1 winsorizes input values _before_ variance computation (effective ordering:
@@ -198,12 +198,60 @@ so comparing it would fire every Guardrail on a Run whose Control mean is merely
 disagreement between the two fields is a contract violation and throws: a defined relative lift with
 a `null` `ci_lower`, an undefined relative lift with a finite `ci_lower`, or a `NaN` bound.
 
-## Benjamini-Hochberg FDR (step 8)
+## Family FDR (step 8)
 
-The final stage converts per-(Metric, Variant) p-values into `is_significant` via BH FDR across
-the goal-metric × Variant family. Family definition, BH algorithm, "None" option, and exclusion
-rules (Guardrails, Secondary Metrics/Dimensions) live in
-[multiple-comparisons-fdr.md](multiple-comparisons-fdr.md).
+The final stage converts per-(Metric, Variant) p-values into `is_significant` across the locked
+goal-metric × Variant family. Production still applies Benjamini-Hochberg. BH-G (Benjamini-Yekutieli
+with the harmonic sum) is implemented as a typed `family_correction` argument and is not selected
+until `analysis_version` wiring lands. Family definition, algorithms, "None" option, and exclusion
+rules live in [multiple-comparisons-fdr.md](multiple-comparisons-fdr.md).
+
+## Composed inference contract
+
+BH and BH-G both rank the same p-values. Those p-values are claimed valid only under this composed
+contract. Claims that are asymptotic are labeled as such; they are not exact finite-sample
+guarantees.
+
+Supported estimators that emit a decision p-value:
+
+- Sequential default: normal-mixture asymptotic confidence sequence (aCS). The p-value is a
+  boundary inversion that recomputes the mixture parameter at every candidate alpha. It is
+  super-uniform under the adapter's Gaussian/asymptotic assumptions and calibration, and it has a
+  point mass at 1 when the boundary near alpha 1 still covers the estimate. There is no stored
+  e-process.
+- Fixed-horizon opt-in: two-sample z interval at the locked Entities-per-arm only. Peeking is
+  refused. This path keeps its own one-look correction story; BH-G is not required for a single
+  precommitted look.
+
+Observation assumptions the p-value inherits from earlier spine steps:
+
+- One row per Entity per Metric. Variance is at the randomization unit (the Targeting Key).
+- The analysis denominator is first-touch Exposure, after `__multiple__` quarantine.
+- Winsorization, type-appropriate variance, the delta method, and CUPED (when applied) all happen
+  before the adapter. The p-value is for that composed estimand, not for a raw unadjusted mean.
+
+Asymptotic versus exact:
+
+- aCS coverage and the inverted p-value are asymptotic. They are not an exact sequential t-test.
+- Entity-level variance estimators are sample moments. Ratio Metrics add a first-order delta-method
+  approximation.
+- Super-uniformity can fail at tiny n (the sequential Type-I helper records an exact two-observation
+  Gaussian tail well above nominal). That is why low-n is a gate, not a silent default.
+
+Burn-in:
+
+- The engine warns below 100 Entities in an arm. The decision gate blocks Conclude on that warning.
+- That count is a standing floor, not a calibrated per-estimator burn-in. Calibration of burn-in by
+  estimator remains a later item.
+
+Dependence and stopping:
+
+- Goal Metrics share Control Entities. Locked Primary Dimension members share Entities with the
+  aggregate. Johari, Pekelis, Walsh Theorem 7.3 gives FDR control for BH over always-valid p-values
+  only under a restricted stopping class and independence. Proposition C.3 gives FDR control for
+  BH-G under an arbitrary stopping time and arbitrary dependence.
+- Production still uses BH. The BH-G comparator exists so `analysis_version` can select it without
+  a second implementation of the rank-and-cut step.
 
 ## Failure contracts
 
