@@ -5,6 +5,7 @@ import {
   FlagChangeTargetTypeSchema,
 } from "../flag-change-diff";
 import { type ApiRouteContract, defineApiRoute } from "../openapi-route";
+import { readOnlyClosed } from "../route-effects";
 import { listResponse, PaginationQuerySchema } from "../wire-envelopes-core";
 import { AppParams } from "./route-shapes";
 
@@ -78,6 +79,7 @@ export const flagChangeRoutes = [
     response: FlagChangeListResponseSchema,
     auth: AUTH,
     rateLimit: RATE,
+    effects: readOnlyClosed,
     idempotency: "none",
     errors: [...READ_ERRORS],
   }),
@@ -92,6 +94,7 @@ export const flagChangeRoutes = [
     response: FlagChangeExportResponseSchema,
     auth: AUTH,
     rateLimit: RATE,
+    effects: readOnlyClosed,
     idempotency: "none",
     errors: [...READ_ERRORS],
   }),
