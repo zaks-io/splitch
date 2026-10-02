@@ -4,7 +4,11 @@ import {
   runGuardrailSimulation,
   runRelativeCoverageSimulation,
 } from "../src/relative-ci-simulation";
-import { coverageScenarios, guardrailSpec } from "../src/relative-ci-simulation-draws";
+import {
+  coverageScenarioKey,
+  coverageScenarios,
+  guardrailSpec,
+} from "../src/relative-ci-simulation-draws";
 import { FIELLER_SIMULATION_ALPHA } from "../src/relative-ci-simulation-look";
 import { monteCarloTolerance } from "../src/sequential-ci-simulation";
 
@@ -19,21 +23,28 @@ describe("Fieller coverage audit (heavy)", () => {
   const target_n = Math.max(...lookSchedule);
 
   it("records time-uniform coverage versus the delta-method comparator", {
-    timeout: 600_000,
+    timeout: 900_000,
   }, () => {
     const table: string[] = [];
     for (const spec of coverageScenarios()) {
+      const key = coverageScenarioKey(spec);
       const result = runRelativeCoverageSimulation({
-        seed: `${SEED}:${spec.kind}:${spec.cuped ? "cuped" : "raw"}`,
+        seed: `${SEED}:${key}`,
         iterations: ITERATIONS,
         lookSchedule,
         spec,
         target_n,
       });
       table.push(
-        `${spec.kind}\tcuped=${spec.cuped}\tfieller=${result.fieller.everMiscoverage.toFixed(4)}\t` +
-          `delta=${result.delta.everMiscoverage.toFixed(4)}\tunbounded=${result.fieller.unboundedTrials.toFixed(4)}`,
+        `${key}\ttruth=${result.trueRelativeLiftPct}\t` +
+          `fieller=${result.fieller.everMiscoverage.toFixed(4)}\t` +
+          `delta=${result.delta.everMiscoverage.toFixed(4)}\t` +
+          `undefined=${result.fieller.undefinedTrials.toFixed(4)}\t` +
+          `unbounded=${result.fieller.unboundedTrials.toFixed(4)}`,
       );
+      expect(result.trueRelativeLiftPct).not.toBeNull();
+      expect(result.trueRelativeLiftPct).not.toBe(0);
+      expect(result.fieller.undefinedTrials).toBe(0);
       expect(result.fieller.everMiscoverage).toBeLessThanOrEqual(
         FIELLER_SIMULATION_ALPHA + tolerance,
       );

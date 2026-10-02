@@ -35,17 +35,29 @@ export function classifyLook(
   truth: number | null,
   method: IntervalMethod,
 ): TrialClass {
-  const evaluated = evaluateLook(config, draw, look);
+  return classifyEvaluatedLook(evaluateLook(config, draw, look), truth, method, look);
+}
+
+/**
+ * Classifies one look after estimation. Exported so regression tests can feed a
+ * missing relative estimate or CI error without rewriting the variance path.
+ */
+export function classifyEvaluatedLook(
+  evaluated: { comparison: MetricComparisonEstimate; decision: CIResult } | null,
+  truth: number | null,
+  method: IntervalMethod,
+  look: number,
+): TrialClass {
   if (truth === null) {
     rejectPublishedUndefinedLift(evaluated);
     return "undefined";
   }
-  if (!evaluated) return "undefined";
-  const bounds = intervalFor(evaluated.comparison, evaluated.decision, method);
-  if (bounds === null) return "undefined";
-  rejectNanBounds(bounds, method, look);
-  if (!Number.isFinite(bounds.lower) || !Number.isFinite(bounds.upper)) return "unbounded";
-  return truth >= bounds.lower && truth <= bounds.upper ? "cover" : "miss";
+  const ready = requireDefinedLook(evaluated, method, look);
+  rejectNanBounds(ready.bounds, method, look);
+  if (!Number.isFinite(ready.bounds.lower) || !Number.isFinite(ready.bounds.upper)) {
+    return "unbounded";
+  }
+  return truth >= ready.bounds.lower && truth <= ready.bounds.upper ? "cover" : "miss";
 }
 
 export function trialGuardrail(
@@ -58,16 +70,32 @@ export function trialGuardrail(
   let undetermined = true;
   const lastLook = config.lookSchedule[config.lookSchedule.length - 1];
   for (const look of config.lookSchedule) {
-    const evaluated = evaluateLook(config, draw, look);
-    if (!evaluated) continue;
-    const bounds = intervalFor(evaluated.comparison, evaluated.decision, method);
-    const breach = guardrailBreach(evaluated.comparison, bounds);
+    const breach = lookGuardrailBreach(config, draw, look, method);
     if (breach === null) continue;
     undetermined = false;
     if (breach) everBreach = true;
     if (look === lastLook) lastLookBreach = breach;
   }
   return { everBreach, lastLookBreach, undetermined };
+}
+
+function lookGuardrailBreach(
+  config: RelativeCoverageConfig,
+  draw: RelativeExperimentDraw,
+  look: number,
+  method: IntervalMethod,
+): boolean | null {
+  const evaluated = evaluateLook(config, draw, look);
+  if (!evaluated) return null;
+  if (evaluated.decision.status === "error") {
+    throw new Error(
+      `Guardrail look ${look} sequential CI failed: ${evaluated.decision.error?.message ?? "unknown error"}.`,
+    );
+  }
+  return guardrailBreach(
+    evaluated.comparison,
+    intervalFor(evaluated.comparison, evaluated.decision, method),
+  );
 }
 
 function evaluateLook(
@@ -102,6 +130,34 @@ function evaluateLook(
       target_n: config.target_n ?? Math.max(...config.lookSchedule),
     }),
   };
+}
+
+function requireDefinedLook(
+  evaluated: { comparison: MetricComparisonEstimate; decision: CIResult } | null,
+  method: IntervalMethod,
+  look: number,
+): {
+  comparison: MetricComparisonEstimate;
+  decision: CIResult;
+  bounds: RelativeCiBounds;
+} {
+  if (evaluated === null) {
+    throw new Error(
+      `relative coverage look ${look} produced no absolute estimate while the true relative lift is defined.`,
+    );
+  }
+  if (evaluated.decision.status === "error") {
+    throw new Error(
+      `relative coverage look ${look} sequential CI failed: ${evaluated.decision.error?.message ?? "unknown error"}.`,
+    );
+  }
+  const bounds = intervalFor(evaluated.comparison, evaluated.decision, method);
+  if (bounds === null) {
+    throw new Error(
+      `relative coverage look ${look} produced no ${method} relative interval while the true relative lift is defined.`,
+    );
+  }
+  return { comparison: evaluated.comparison, decision: evaluated.decision, bounds };
 }
 
 function intervalFor(

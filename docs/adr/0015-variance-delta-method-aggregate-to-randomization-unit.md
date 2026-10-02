@@ -85,15 +85,21 @@ production estimator is unchanged.
 
 **D1 is confirmed.** Time-uniform coverage of the current Fieller inversion stays inside the
 predeclared Monte Carlo bound of alpha on binomial, count, revenue (heavy-tailed), and ratio Metrics,
-with CUPED applied where the engine allows it (Ratio excludes CUPED). A delta-method relative interval
-on the same sequential critical multiplier (Waudby-Smith Proposition 3.5 style) does not beat Fieller
-on ever-miscoverage, and on binomial and revenue it is more anti-conservative. There is no demonstrated
-coverage or Guardrail failure that would justify replacing rule 4.
+with CUPED applied where the engine allows it (Ratio excludes CUPED). Coverage fixtures use nonzero
+true lifts (±20%): Fieller's inclusion of 0% reduces to the absolute null test, so a zero-lift
+fixture cannot catch a relative-bound scaling bug that still covers zero. A delta-method relative
+interval on the same sequential critical multiplier (Waudby-Smith Proposition 3.5 style) does not
+beat Fieller on ever-miscoverage, and on binomial and revenue it is often more anti-conservative.
+There is no demonstrated coverage or Guardrail failure that would justify replacing rule 4.
+
+Unexpected missing absolute or relative estimates, and sequential CI errors, fail the audit loud.
+Coverage fixtures assert zero undefined-trial rate. The only legitimate unpublished relative lift is
+the zero-Control domain case.
 
 ### Seeds, schedule, and tolerance
 
 - Gate: `pnpm stats:simulation -- --mode=audit` (smoke caps at 40 iterations and looks `[80, 160, 280]`)
-- Seed family: `424242`, per-scenario suffix `:{kind}:{raw|cuped}`, domain
+- Seed family: `424242`, per-scenario suffix `:{kind}:{raw|cuped}:{plus20|minus20}`, domain
   `:domain:{zero|signed|near-zero}`, Guardrail `:guardrail:{known-safe|known-harmful}`
 - Audit iterations: 300. Alpha: 0.05. `target_n`: 1250.
 - Looks: 80, 120, 180, 260, 380, 520, 700, 950, 1250.
@@ -103,21 +109,28 @@ coverage or Guardrail failure that would justify replacing rule 4.
 - Ever-miscoverage counts a trial if any look's finite interval misses the true relative lift.
   An unbounded Fieller interval is counted as covering, not as a miss.
 
-### Time-uniform coverage (ever-miscoverage)
+### Time-uniform coverage (ever-miscoverage at ±20% true lift)
 
-| Metric   | CUPED | Fieller | Delta-method CS | Fieller unbounded |
-| -------- | ----- | ------- | --------------- | ----------------- |
-| binomial | off   | 0.0133  | 0.0367          | 0.0033            |
-| binomial | on    | 0.0100  | 0.0100          | 0                 |
-| count    | off   | 0.0133  | 0.0167          | 0                 |
-| count    | on    | 0.0167  | 0.0200          | 0                 |
-| revenue  | off   | 0.0033  | 0.0300          | 0.0500            |
-| revenue  | on    | 0.0067  | 0.0333          | 0.0267            |
-| ratio    | off   | 0.0100  | 0.0100          | 0                 |
+| Metric   | CUPED | True lift | Fieller | Delta-method CS | Fieller unbounded |
+| -------- | ----- | --------- | ------- | --------------- | ----------------- |
+| binomial | off   | +20%      | 0.0200  | 0.0300          | 0.0133            |
+| binomial | off   | -20%      | 0.0100  | 0.0200          | 0.0233            |
+| binomial | on    | +20%      | 0.0233  | 0.0167          | 0                 |
+| binomial | on    | -20%      | 0.0133  | 0.0067          | 0                 |
+| count    | off   | +20%      | 0.0067  | 0.0067          | 0                 |
+| count    | off   | -20%      | 0.0167  | 0.0167          | 0                 |
+| count    | on    | +20%      | 0.0067  | 0.0067          | 0                 |
+| count    | on    | -20%      | 0.0200  | 0.0200          | 0                 |
+| revenue  | off   | +20%      | 0.0167  | 0.0467          | 0.0200            |
+| revenue  | off   | -20%      | 0.0067  | 0.0467          | 0.0567            |
+| revenue  | on    | +20%      | 0.0100  | 0.0200          | 0.0300            |
+| revenue  | on    | -20%      | 0.0033  | 0.0167          | 0.0333            |
+| ratio    | off   | +20%      | 0.0067  | 0.0067          | 0                 |
+| ratio    | off   | -20%      | 0.0067  | 0.0033          | 0                 |
 
-All Fieller rates are below alpha + 0.0377. Revenue's higher unbounded rate is the Control mean
-failing to separate from zero under a heavy tail, which is the documented `a <= 0` hull, not a silent
-number.
+All Fieller rates are below alpha + 0.0377. Every coverage fixture recorded `undefinedTrials = 0`.
+Revenue's higher unbounded rate is the Control mean failing to separate from zero under a heavy
+tail, which is the documented `a <= 0` hull, not a silent number.
 
 ### Guardrail breach (same sequential boundary)
 
@@ -140,14 +153,14 @@ Recorded on the same audit seed and schedule. The engine already fails loud. No 
 | Control mean                          | Relative lift        | Interval                        | Guardrail           |
 | ------------------------------------- | -------------------- | ------------------------------- | ------------------- |
 | Exactly 0 (binomial, no conversions)  | unpublished (`null`) | unpublished (`null`)            | `is_breached: null` |
-| Negative and separated from zero      | defined              | bounded; 1.33% ever-miscoverage | evaluated           |
+| Negative and separated from zero      | defined (−25%)       | bounded; 1.33% ever-miscoverage | evaluated           |
 | Near zero (count mean 0.04, spread 7) | defined              | unbounded on 98% of trials      | `is_breached: null` |
 
 A Control mean of exactly zero never publishes a percentage. A Control mean that is not separated
 from zero publishes `(-Infinity, +Infinity)` rather than a finite-looking delta-method interval.
 Those are the fail-loud answers; the audit did not find a NaN or a silent default. Signed Control
-means stay defined as `(T / C - 1) * 100`. Read those Runs on absolute lift when the percentage
-sign is easy to misread.
+means stay defined as `(T / C - 1) * 100` (here Control −12 and Treatment −9 yield −25%, while
+absolute lift is +3). Read those Runs on absolute lift when the percentage sign is easy to misread.
 
 Replacement remains reserved for a later demonstrated failure (C4's one-sided bound still depends
 on this inversion).

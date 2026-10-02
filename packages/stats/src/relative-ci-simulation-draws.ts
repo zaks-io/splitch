@@ -31,16 +31,53 @@ export interface RelativeExperimentDraw {
   readonly covariates: readonly CupedCovariateRow[];
 }
 
+/**
+ * Nonzero true lifts only. Fieller's inclusion of 0% reduces to the absolute
+ * null test, so a zero-lift fixture cannot catch a relative-bound scaling bug
+ * that still covers zero. Positive and negative ±20% cover both sides.
+ */
 export function coverageScenarios(): readonly RelativeDrawSpec[] {
   return [
-    { kind: "binomial", controlMean: 0.25, treatmentMean: 0.25, cuped: false },
-    { kind: "binomial", controlMean: 0.25, treatmentMean: 0.25, cuped: true, correlation: 0.7 },
-    { kind: "count", controlMean: 10, treatmentMean: 10, cuped: false },
-    { kind: "count", controlMean: 10, treatmentMean: 10, cuped: true },
-    { kind: "revenue", controlMean: 12, treatmentMean: 12, cuped: false, logSigma: 1.2 },
-    { kind: "revenue", controlMean: 12, treatmentMean: 12, cuped: true, logSigma: 1.2 },
-    { kind: "ratio", controlMean: 4, treatmentMean: 4, cuped: false, denomMean: 8 },
+    { kind: "binomial", controlMean: 0.25, treatmentMean: 0.3, cuped: false },
+    { kind: "binomial", controlMean: 0.25, treatmentMean: 0.2, cuped: false },
+    {
+      kind: "binomial",
+      controlMean: 0.25,
+      treatmentMean: 0.3,
+      cuped: true,
+      correlation: 0.7,
+    },
+    {
+      kind: "binomial",
+      controlMean: 0.25,
+      treatmentMean: 0.2,
+      cuped: true,
+      correlation: 0.7,
+    },
+    { kind: "count", controlMean: 10, treatmentMean: 12, cuped: false },
+    { kind: "count", controlMean: 10, treatmentMean: 8, cuped: false },
+    { kind: "count", controlMean: 10, treatmentMean: 12, cuped: true },
+    { kind: "count", controlMean: 10, treatmentMean: 8, cuped: true },
+    { kind: "revenue", controlMean: 10, treatmentMean: 12, cuped: false, logSigma: 1.2 },
+    { kind: "revenue", controlMean: 10, treatmentMean: 8, cuped: false, logSigma: 1.2 },
+    { kind: "revenue", controlMean: 10, treatmentMean: 12, cuped: true, logSigma: 1.2 },
+    { kind: "revenue", controlMean: 10, treatmentMean: 8, cuped: true, logSigma: 1.2 },
+    { kind: "ratio", controlMean: 4, treatmentMean: 4.8, cuped: false, denomMean: 8 },
+    { kind: "ratio", controlMean: 4, treatmentMean: 3.2, cuped: false, denomMean: 8 },
   ];
+}
+
+export function coverageScenarioKey(spec: RelativeDrawSpec): string {
+  const lift = trueRelativeLiftPct(spec);
+  if (lift === null) {
+    throw new Error("coverage fixtures require a defined true relative lift.");
+  }
+  const rounded = Math.round(lift);
+  if (rounded === 0) {
+    throw new Error("coverage fixtures require a nonzero true relative lift.");
+  }
+  const sign = rounded > 0 ? "plus" : "minus";
+  return `${spec.kind}:${spec.cuped ? "cuped" : "raw"}:${sign}${Math.abs(rounded)}`;
 }
 
 export function guardrailSpec(fixture: "known-safe" | "known-harmful"): RelativeDrawSpec {
@@ -141,7 +178,7 @@ function drawEntity(
 ): EntityOutcome {
   const correlation = spec.correlation ?? 0.6;
   if (spec.kind === "binomial") {
-    return drawBinomial(uniform, spec.cuped, mean, correlation);
+    return drawBinomial(uniform, spec.cuped, mean, correlation, spec.controlMean);
   }
   if (spec.kind === "ratio") {
     const denomMean = spec.denomMean ?? 8;
@@ -158,15 +195,39 @@ function drawEntity(
   return drawCount(gaussian, spec, mean, correlation);
 }
 
+/**
+ * Shared-rate pre-period covariate so CUPED stays exchangeable across arms.
+ * When the outcome copies the covariate with probability `agreement`, the free
+ * Bernoulli rate is solved so E[value] still equals the arm mean. Drawing the
+ * covariate from the arm mean itself would erase a nonzero treatment effect.
+ */
 function drawBinomial(
   uniform: () => number,
   cuped: boolean,
   rate: number,
   agreement: number,
+  covariateRate: number,
 ): EntityOutcome {
-  const covariate = uniform() < rate ? 1 : 0;
-  const value = cuped && uniform() < agreement ? covariate : uniform() < rate ? 1 : 0;
-  return { value, num: 0, denom: 0, covariate: cuped ? covariate : null };
+  if (!cuped) {
+    return { value: uniform() < rate ? 1 : 0, num: 0, denom: 0, covariate: null };
+  }
+  const freeRate = freeBernoulliRate(rate, covariateRate, agreement);
+  const covariate = uniform() < covariateRate ? 1 : 0;
+  const value = uniform() < agreement ? covariate : uniform() < freeRate ? 1 : 0;
+  return { value, num: 0, denom: 0, covariate };
+}
+
+function freeBernoulliRate(rate: number, covariateRate: number, agreement: number): number {
+  if (!(agreement > 0) || !(agreement < 1)) {
+    throw new Error(`binomial CUPED agreement must be in (0, 1), got ${agreement}.`);
+  }
+  const freeRate = (rate - agreement * covariateRate) / (1 - agreement);
+  if (!(freeRate >= 0) || !(freeRate <= 1)) {
+    throw new Error(
+      `binomial CUPED cannot preserve mean ${rate} with covariate rate ${covariateRate} and agreement ${agreement}.`,
+    );
+  }
+  return freeRate;
 }
 
 function drawCount(

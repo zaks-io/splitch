@@ -6,7 +6,11 @@ import {
   runGuardrailSimulation,
   runRelativeCoverageSimulation,
 } from "./relative-ci-simulation";
-import { coverageScenarios, guardrailSpec } from "./relative-ci-simulation-draws";
+import {
+  coverageScenarioKey,
+  coverageScenarios,
+  guardrailSpec,
+} from "./relative-ci-simulation-draws";
 import { FIELLER_SIMULATION_ALPHA } from "./relative-ci-simulation-look";
 import { monteCarloTolerance } from "./sequential-ci-simulation";
 
@@ -19,11 +23,14 @@ describe("Fieller sequential coverage audit", () => {
   const tolerance = monteCarloTolerance(FIELLER_SIMULATION_ALPHA, iterations);
   const target_n = Math.max(...lookSchedule);
 
-  it("holds time-uniform Fieller coverage across Metric kinds", { timeout: 300_000 }, () => {
+  it("holds time-uniform Fieller coverage across nonzero-lift Metric fixtures", {
+    timeout: 600_000,
+  }, () => {
     const rows: RelativeCoverageResult[] = [];
     for (const spec of coverageScenarios()) {
+      const key = coverageScenarioKey(spec);
       const result = runRelativeCoverageSimulation({
-        seed: `${seed}:${spec.kind}:${spec.cuped ? "cuped" : "raw"}`,
+        seed: `${seed}:${key}`,
         iterations,
         lookSchedule,
         spec,
@@ -31,14 +38,18 @@ describe("Fieller sequential coverage audit", () => {
       });
       rows.push(result);
       console.info(
-        `Fieller ${mode} ${spec.kind} cuped=${spec.cuped} seed=${result.seed} n=${iterations} ` +
+        `Fieller ${mode} ${key} seed=${result.seed} n=${iterations} ` +
+          `truth=${result.trueRelativeLiftPct} ` +
           `fieller=${result.fieller.everMiscoverage} delta=${result.delta.everMiscoverage} ` +
+          `undefined=${result.fieller.undefinedTrials} ` +
           `unbounded=${result.fieller.unboundedTrials} tolerance=${tolerance}`,
       );
-      expect(
-        result.fieller.everMiscoverage,
-        `${spec.kind} cuped=${spec.cuped} Fieller ever-miscoverage`,
-      ).toBeLessThanOrEqual(FIELLER_SIMULATION_ALPHA + tolerance);
+      expect(result.trueRelativeLiftPct, `${key} true lift`).not.toBeNull();
+      expect(result.trueRelativeLiftPct, `${key} true lift`).not.toBe(0);
+      expect(result.fieller.undefinedTrials, `${key} unexpected undefined`).toBe(0);
+      expect(result.fieller.everMiscoverage, `${key} Fieller ever-miscoverage`).toBeLessThanOrEqual(
+        FIELLER_SIMULATION_ALPHA + tolerance,
+      );
     }
     expect(rows).toHaveLength(coverageScenarios().length);
   });
@@ -58,7 +69,7 @@ describe("Fieller sequential coverage audit", () => {
         `Domain ${mode} ${testCase.label} undefined=${result.fieller.undefinedTrials} ` +
           `unbounded=${result.fieller.unboundedTrials} miss=${result.fieller.everMiscoverage}`,
       );
-      expectDomain(testCase.label, result);
+      expectDomain(testCase.label, result, tolerance);
     }
   });
 
@@ -119,6 +130,7 @@ function domainCases() {
 function expectDomain(
   label: "zero" | "signed" | "near-zero",
   result: RelativeCoverageResult,
+  tolerance: number,
 ): void {
   if (label === "zero") {
     expect(result.fieller.undefinedTrials).toBe(1);
@@ -126,8 +138,15 @@ function expectDomain(
     return;
   }
   if (label === "signed") {
+    // (-9)/(-12) - 1 = -25%. Absolute lift is +3; the percentage sign is easy to
+    // misread on signed Control means, which is why the ADR points readers at
+    // absolute lift for these Runs.
+    expect(result.trueRelativeLiftPct).toBe(-25);
     expect(result.fieller.undefinedTrials).toBe(0);
     expect(result.fieller.unboundedTrials).toBe(0);
+    expect(result.fieller.everMiscoverage).toBeLessThanOrEqual(
+      FIELLER_SIMULATION_ALPHA + tolerance,
+    );
     return;
   }
   expect(result.fieller.unboundedTrials).toBeGreaterThan(0.5);
