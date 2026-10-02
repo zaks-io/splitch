@@ -13,21 +13,19 @@ export {
   StatsInputSchema,
   StatsOutputSchema,
 } from "@splitch/contracts";
-export {
-  computeSequentialCI,
-  SEQUENTIAL_CI_SOURCE,
-  SequentialCI,
-} from "./sequential-ci";
-export {
-  computeFixedHorizonCI,
-  FIXED_HORIZON_CI_SOURCE,
-  FixedHorizonCI,
-} from "./fixed-horizon-ci";
+export { computeSequentialCI, SEQUENTIAL_CI_SOURCE, SequentialCI } from "./sequential-ci";
+export { computeFixedHorizonCI, FIXED_HORIZON_CI_SOURCE, FixedHorizonCI } from "./fixed-horizon-ci";
 export { analyzeStats, StatsEngine } from "./stats-engine";
 export { applyGuardrailBoundChecks } from "./guardrail-bound-check";
 export { applyDecisionFamilyCorrection } from "./decision-family-fdr";
 export { estimateMetricArm, estimateMetricComparison } from "./variance-estimators";
 export { checkSrmHealth, SRM_MISMATCH_P_VALUE } from "./srm-checker";
+export {
+  computeSequentialSrm,
+  SEQUENTIAL_SRM_DEFAULT_ALPHA,
+  SEQUENTIAL_SRM_DEFAULT_CONCENTRATION,
+  SEQUENTIAL_SRM_SOURCE,
+} from "./sequential-srm";
 export type {
   ActivationRow,
   ArmResult,
@@ -73,3 +71,8 @@ export type {
   MetricVarianceStatus,
 } from "./variance-estimator-types";
 export type { SrmCheckerInput, SrmCheckerOutput } from "./srm-checker";
+export type {
+  SequentialSrmInput,
+  SequentialSrmObservations,
+  SequentialSrmResult,
+} from "./sequential-srm";

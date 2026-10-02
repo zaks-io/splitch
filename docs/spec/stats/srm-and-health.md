@@ -39,6 +39,37 @@ conservative.
 
 **On mismatch:** results are flagged untrusted. The mismatch is surfaced loudly in the UI.
 
+### Sequential Dirichlet-multinomial SRM (implemented, not the gate)
+
+`@splitch/stats` exports `computeSequentialSrm`, the Dirichlet-multinomial mixture martingale of
+Lindon and Malek (NeurIPS 2022). It is the sequential replacement for the chi-square peeking
+procedure. This slice implements the test only. The decision gate still reads the chi-square
+`p < 0.001` checks. Chi-square stays the fixed-horizon diagnostic. Wiring the martingale into
+Exposure SRM and activated-population SRM is a later slice. Activation-rate balance is a different
+hypothesis (unknown common rate) and is not this test.
+
+**Prior.** Dirichlet mean equals the declared allocation: `alpha_i = concentration * theta_i`.
+Default `concentration` is 100. Type I control from Ville's inequality does not depend on this
+value. The concentration only changes expected detection delay.
+
+**Input.** Cumulative per-arm counts in arrival order, or batches of nonnegative integer increments
+on the declared Variants. Allocation weights must be positive. Default threshold `alpha` is 0.001.
+
+**Output.** `wealth` is the Bayes factor / e-value `O_n`. `anytime_p_value` is the running minimum
+of `min(1, 1 / wealth)`, which is super-uniform under the null. `threshold_crossed` is true once
+`anytime_p_value <= alpha` and stays true if later wealth falls (alarm persistence).
+`first_cross_n` is the total Entity count at the first crossing, or null.
+
+**Observation contract.** Increments are iid multinomial under a fixed allocation. Counts are
+append-only. The function fails loud if a cumulative snapshot decreases an arm count. Revising
+earlier counts, including moving an Entity into `__multiple__` after it was counted in an arm,
+violates the contract. Reconciliation of those revisions is a later slice.
+
+**Looks.** Wealth is a function of the sufficient statistic. The anytime p-value is the running
+minimum over submitted increment batches. Singleton increments are continuous monitoring. A
+multi-Entity batch is one look after that batch is applied. Intra-batch processing order is not
+an arrival-time claim.
+
 ### Activated-population SRM
 
 Computed separately when an Activation gate is set. Guards against Treatment-affected gates
@@ -149,3 +180,4 @@ the stats engine core.
 - CONTEXT.md §SRM, §Activation Metric, §Exposure Pipeline
 - [Fabijan et al., Diagnosing Sample Ratio Mismatch in Online Controlled Experiments](https://dl.acm.org/doi/10.1145/3292500.3330722)
 - [Deng and Hu, Diluted Treatment Effect Estimation for Trigger Analysis](https://exp-platform.com/Documents/wsdm2015-dilution.pdf)
+- [Lindon and Malek, Anytime-Valid Inference For Multinomial Count Data](https://proceedings.neurips.cc/paper/2022/hash/12f3bd5d2b7d93eadc1bf508a0872dc2-Abstract.html)
