@@ -26,6 +26,10 @@ describe("runSnapshotRow", () => {
       horizon: "sequential",
       target_n: null,
       sample_size_locked: 2000,
+      analysis_version: null,
+      target_n_source: null,
+      planned_duration_days: null,
+      planned_duration_override_reason: null,
       allocation: '{"control":40,"treatment":60}',
       control_variant: "control",
       control_variant_id: "variant_control",
@@ -36,6 +40,30 @@ describe("runSnapshotRow", () => {
       metric_variance_config: "[]",
       dimensions: "[]",
       config_hash: "sha256:run-1",
+    });
+  });
+
+  it("ships the Run commitments a versioned Run froze at Start", () => {
+    const row = runSnapshotRow(
+      run({
+        horizon: "sequential",
+        sampleSizeLocked: null,
+        analysisVersion: "analysis-v1",
+        targetN: 5000,
+        targetNSource: "default",
+        plannedDurationDays: 10,
+        plannedDurationOverrideReason: "holiday freeze",
+      }),
+      scope,
+      [],
+      "now",
+    );
+    expect(row).toMatchObject({
+      analysis_version: "analysis-v1",
+      target_n: 5000,
+      target_n_source: "default",
+      planned_duration_days: 10,
+      planned_duration_override_reason: "holiday freeze",
     });
   });
 
@@ -196,6 +224,10 @@ function run(overrides: Partial<RunRow> = {}): RunRow {
     horizon: "sequential",
     targetN: null,
     sampleSizeLocked: 2000,
+    analysisVersion: null,
+    targetNSource: null,
+    plannedDurationDays: null,
+    plannedDurationOverrideReason: null,
     decisionFamily: '[{"metricId":"metric_1"}]',
     guardrailDecisions: "[]",
     metricVarianceConfig: "[]",

@@ -1,3 +1,4 @@
+import { CURRENT_ANALYSIS_VERSION } from "@splitch/contracts";
 import { envScope } from "@splitch/db";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
@@ -12,16 +13,11 @@ import {
 import { errorBody, request } from "../src/flag-definition-test-harness";
 import { makePoolBindings as makeLocalBindings } from "./pool-bindings";
 
-/**
- * Rewrites a pending proposal to the shape recorded before the horizon rode the
- * Approval Request. There is no API that can produce one any more, and the
- * whole point of the case is proposals that already exist in a deployed
- * database: an operator cannot edit a frozen proposal to add the field.
- */
-async function stripProposedHorizon(
+async function rewriteProposal(
   ctx: ExperimentRunHarness,
   appId: string,
   approvalRequestId: string,
+  rewrite: (diff: { proposed: Record<string, unknown> }) => void,
 ): Promise<void> {
   const row = await ctx.h.bindings.d1
     .prepare("SELECT diff FROM approval_requests WHERE app_id = ? AND id = ?")
@@ -29,12 +25,31 @@ async function stripProposedHorizon(
     .first<{ diff: string }>();
   if (!row) throw new Error(`no Approval Request ${approvalRequestId}`);
   const diff = JSON.parse(row.diff) as { proposed: Record<string, unknown> };
-  delete diff.proposed.horizon;
-  delete diff.proposed.sampleSizeLocked;
+  rewrite(diff);
   await ctx.h.bindings.d1
     .prepare("UPDATE approval_requests SET diff = ? WHERE app_id = ? AND id = ?")
     .bind(JSON.stringify(diff), appId, approvalRequestId)
     .run();
+}
+
+/**
+ * Rewrites a pending proposal to the shape recorded before the horizon and the
+ * Run commitments (ADR-0059) rode the Approval Request. No API can produce one
+ * any more, and the point of the case is proposals that already exist in a
+ * deployed database: an operator cannot edit a frozen proposal to add a field.
+ */
+function stripProposedHorizon(
+  ctx: ExperimentRunHarness,
+  appId: string,
+  approvalRequestId: string,
+): Promise<void> {
+  return rewriteProposal(ctx, appId, approvalRequestId, (diff) => {
+    delete diff.proposed.horizon;
+    delete diff.proposed.sampleSizeLocked;
+    delete diff.proposed.targetN;
+    delete diff.proposed.plannedDurationDays;
+    delete diff.proposed.plannedDurationOverrideReason;
+  });
 }
 
 let ctx: ExperimentRunHarness;
@@ -178,6 +193,15 @@ describe("Experiment decision spec at Start", () => {
       : null;
     expect(run?.horizon).toBe("sequential");
     expect(run?.sampleSizeLocked).toBe(null);
+    // Opened now, so it commits like a Start that omitted them: defaults,
+    // recorded as defaulted, under the current analysis version.
+    expect(run).toMatchObject({
+      analysisVersion: CURRENT_ANALYSIS_VERSION,
+      targetN: 5000,
+      targetNSource: "default",
+      plannedDurationDays: 7,
+      plannedDurationOverrideReason: null,
+    });
   });
 
   it("locks the decision spec once a Run froze it", async () => {
@@ -204,5 +228,81 @@ describe("Experiment decision spec at Start", () => {
       expect(error.details.recommendedAction).toBe("CREATE_NEW_RUN");
       expect(error.details.lockedFields).toEqual(Object.keys(patch));
     }
+  });
+});
+
+describe("Run commitments at Start (ADR-0059)", () => {
+  it("freezes a caller target and labeled duration override through an Approval", async () => {
+    const fx = await experimentFixture(ctx, "prod");
+    const experiment = await createExperimentDraft(ctx, fx, {
+      key: "committed-proposal",
+      allocation: { control: 50, treatment: 50 },
+    });
+    const intent = {
+      targetN: 20_000,
+      plannedDurationDays: 10,
+      plannedDurationOverrideReason: "holiday code freeze",
+    };
+
+    const proposed = await startExperiment(ctx, fx, experiment.id, intent);
+    expect(proposed.status).toBe(409);
+    const applied = await startExperiment(ctx, fx, experiment.id, {
+      ...intent,
+      review: { action: "approve_and_apply" },
+    });
+    expect(applied.status).toBe(200);
+
+    const { run } = (await applied.json()) as StartResponse;
+    expect(
+      await ctx.repo.experiments.getRun(envScope(fx.appId, fx.environmentId), run.id),
+    ).toMatchObject({
+      analysisVersion: CURRENT_ANALYSIS_VERSION,
+      targetN: 20_000,
+      targetNSource: "caller",
+      plannedDurationDays: 10,
+      plannedDurationOverrideReason: "holiday code freeze",
+    });
+  });
+
+  it("refuses an unbounded planned duration on both Start doors before any write", async () => {
+    const fx = await experimentFixture(ctx, "prod");
+    const experiment = await createExperimentDraft(ctx, fx, {
+      key: "unbounded-duration",
+      allocation: { control: 50, treatment: 50 },
+    });
+    const scope = envScope(fx.appId, fx.environmentId);
+    // Whole weeks and inside UInt32, yet no decision timestamp is representable.
+    const unbounded = { plannedDurationDays: 100_000_005 };
+
+    const direct = await startExperiment(ctx, fx, experiment.id, {
+      ...unbounded,
+      review: { action: "approve_and_apply" },
+    });
+    expect(direct.status).toBe(400);
+    expect((await errorBody(direct)).code).toBe("VALIDATION_ERROR");
+    const approvals = await ctx.h.bindings.d1
+      .prepare("SELECT COUNT(*) AS n FROM approval_requests WHERE app_id = ?")
+      .bind(fx.appId)
+      .first<{ n: number }>();
+    expect(approvals?.n).toBe(0);
+
+    // A proposal holding the value (recorded before the bound existed) is a
+    // malformed proposal at application, never a committed Run.
+    const proposed = await startExperiment(ctx, fx, experiment.id);
+    expect(proposed.status).toBe(409);
+    const approvalRequestId = (await errorBody(proposed)).details.approvalRequestId as string;
+    await rewriteProposal(ctx, fx.appId, approvalRequestId, (diff) => {
+      diff.proposed.plannedDurationDays = unbounded.plannedDurationDays;
+    });
+    const reviewed = await request(
+      ctx.h,
+      "POST",
+      `/apps/${fx.appId}/approval-requests/${approvalRequestId}/reviews`,
+      fx.jwt,
+      { action: "approve_and_apply", idempotency_key: "idem_review_unbounded" },
+    );
+    expect(reviewed.status).toBe(409);
+    expect(await errorBody(reviewed)).toMatchObject({ code: "APPROVAL_APPLICATION_FAILED" });
+    expect(await ctx.repo.experiments.listRunsForExperiment(scope, experiment.id)).toEqual([]);
   });
 });

@@ -22,6 +22,8 @@ export type StartRunExpectedDraft = Pick<
   "draftAllocation" | "draftSalt" | "draftTargetingRules" | "draftSegmentIds" | "liveRunId"
 > & { defaultVariantId: string };
 
+type NonNullableFields<T> = { [Key in keyof T]: NonNullable<T[Key]> };
+
 export type StartRunInput = {
   experimentId: string;
   flagId: string;
@@ -34,7 +36,10 @@ export type StartRunInput = {
     // them optional here and let a caller register a stopping rule or a
     // variance-reduction rule it never chose. The Run is the only home for both
     // (ADR-0014, variance-reduction.md), so Start must state them (ADR-0036).
-    Required<Pick<RunInsert, "horizon" | "metricVarianceConfig">>;
+    Required<Pick<RunInsert, "horizon" | "metricVarianceConfig">> &
+    // Nullable only so legacy rows load. A new Run always records the analysis
+    // version and planned duration it committed to (ADR-0059).
+    NonNullableFields<Required<Pick<RunInsert, "analysisVersion" | "plannedDurationDays">>>;
   endedAt: string;
   updatedAt: string;
   updatedBy?: string | null;

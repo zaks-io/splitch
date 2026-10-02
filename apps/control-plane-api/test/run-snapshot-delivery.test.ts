@@ -1,3 +1,4 @@
+import { CURRENT_ANALYSIS_VERSION } from "@splitch/contracts";
 import { envScope } from "@splitch/db";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
@@ -13,6 +14,15 @@ import type { RunSnapshotDelivery, RunSnapshotRow } from "../src/run-snapshot";
 import { makePoolBindings as makeLocalBindings } from "./pool-bindings";
 
 const captures: Array<{ url: string; init?: RequestInit }> = [];
+
+/** A Start that names no target or duration freezes the defaults as defaulted (ADR-0059). */
+const DEFAULTED_COMMITMENTS = {
+  target_n: 5000,
+  analysis_version: CURRENT_ANALYSIS_VERSION,
+  target_n_source: "default",
+  planned_duration_days: 7,
+  planned_duration_override_reason: null,
+};
 const disposers: Array<() => Promise<void>> = [];
 
 afterEach(async () => {
@@ -51,8 +61,8 @@ describe("Experiment Start Run Snapshot delivery", () => {
       snapshot_at: "2026-07-02T12:00:00.000Z",
       confidence_level: stored?.confidenceLevel,
       horizon: stored?.horizon,
-      target_n: stored?.targetN,
       sample_size_locked: stored?.sampleSizeLocked,
+      ...DEFAULTED_COMMITMENTS,
       allocation: stored?.allocation,
       control_variant: "control",
       control_variant_id: stored?.controlVariantId,

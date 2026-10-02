@@ -110,7 +110,8 @@ column of their own. While a Run is running they are rejected with `409 RUN_FROZ
 }
 ```
 
-Decision-locked fields (`confidence_level`, `horizon`, `target_n`, `sample_size_locked`, goal
+Decision-locked fields (`confidence_level`, `horizon`, `target_n`, `sample_size_locked`,
+`analysis_version`, `planned_duration_days`, goal
 Metric membership, Guardrail thresholds, and Primary Dimensions) cannot be changed for the current
 running Run's decision-valid result after Start. They may be drafted for the next Run or surfaced
 as exploratory analysis.
@@ -128,7 +129,8 @@ Returns: updated Experiment.
 Starts the draft as a new Run; ends any running Run.
 Body:
 `{ review?: { action: "approve_and_apply" }, reason?: string, horizon?: "sequential" | "fixed",
-sampleSizeLocked?: number | null, idempotency_key: string }`
+sampleSizeLocked?: number | null, targetN?: number, plannedDurationDays?: number,
+plannedDurationOverrideReason?: string, idempotency_key: string }`
 `horizon` and `sampleSizeLocked` are the Run-only half of the decision spec; they exist as columns on
 `runs` alone, so Start is where they are chosen and frozen. `horizon` defaults to `sequential`, both
 on the request and on an Approval proposal that recorded none. A `fixed` horizon without a
@@ -136,6 +138,15 @@ on the request and on an Approval proposal that recorded none. A `fixed` horizon
 than defaulted (ADR-0036). Both fields are part of what `idempotency_key` identifies: a Start retried
 under the same key with different intent is refused with `IDEMPOTENCY_KEY_CONFLICT`, never replayed
 as the earlier one.
+Start also freezes the Run commitments
+([ADR-0059](../../adr/0059-runs-freeze-an-analysis-version-and-legacy-runs-read-under-a-labeled-one.md)):
+the current `analysis_version`; `targetN`, which defaults to 5000 on a sequential Run and is recorded
+as defaulted (`target_n_source: "default"`), and is refused on a fixed horizon; and
+`plannedDurationDays`, which defaults to 7 and is at most 365 (one year; an unbounded day count can overflow the decision timestamp the gate computes). A duration that is not whole weeks needs
+`plannedDurationOverrideReason`, which is recorded as a labeled override; a reason on a whole-week
+duration is refused because it overrides nothing. The caller's values ride the Approval proposal and
+are part of what `idempotency_key` identifies; a proposal recorded before they existed resolves to
+the same defaults when applied.
 `reason` is an optional human note capturing _intent_ for the new Run ("testing higher exposure to
 v2"). It is stored as the Run's `start_reason` and surfaced by the Run-history timeline alongside the
 **derived** assignment-config diff from the prior Run (the timeline never depends on it being present —

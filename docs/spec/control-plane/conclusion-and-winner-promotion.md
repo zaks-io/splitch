@@ -128,11 +128,15 @@ to a ready `AnalysisResultsEnvelope`. A ready envelope without the pair remains 
 Results response, but it cannot be concluded; Conclude returns `DECISION_RESULT_UNAVAILABLE` with
 `envelopeState: "ready"`. `result_token` is SHA-256 over UTF-8 RFC 8785 JSON Canonicalization Scheme
 bytes of
-`{ appId, environmentId, experimentId, runId, runConfigHash, stats }`, with each arm result's
-`estimand` disclosure left out of `stats` ([result-contracts.md](../stats/result-contracts.md)).
-The watermark is excluded from
-the token, so advancing an ingest boundary without changing the computed result does not create
-false staleness.
+`{ appId, environmentId, experimentId, runId, runConfigHash, analysisVersion, stats }`, with each
+arm result's `estimand` disclosure left out of `stats`
+([result-contracts.md](../stats/result-contracts.md)). `analysisVersion` is the version the Run
+froze at Start. A legacy Run started before versioning omits the key, so its token is
+byte-identical to the token it had before the field existed
+([ADR-0059](../../adr/0059-runs-freeze-an-analysis-version-and-legacy-runs-read-under-a-labeled-one.md)).
+Conclude recomputes the token with the D1 Run's version, so evidence computed under any other
+version is not bound to the Run. The watermark is excluded from the token, so advancing an ingest
+boundary without changing the computed result does not create false staleness.
 
 Conclude recomputes the selected Run through the inclusive `ingest_ts <= dataWatermark` boundary the
 caller observed. `dataWatermark` comes from `deduped_exposures.watermark_ts`, the inclusive Copy Pipe
@@ -158,6 +162,7 @@ response. It never stops at the first failure.
 | `DECISION_CONTROL_IDENTITY_INVALID` | `control_identity`                       | The Run's frozen Control Variant cannot be resolved inside its own frozen Variant set            |
 | `DECISION_RESULT_INVALID`           | `engine_status`, `decision_valid_result` | A decision-valid result has `status: "error"`, or the locked decision family has no result       |
 | `DECISION_UNDERPOWERED`             | `underpowered`                           | Any decision-valid result is still collecting or insufficient, or `health.low_n_warning` is true |
+| `DECISION_DURATION_INCOMPLETE`      | `planned_duration`                       | The selected watermark minus the Run start is shorter than the Run's planned duration            |
 | `DECISION_SRM_MISMATCH`             | `exposure_srm`, `activated_srm`          | Full-exposed SRM fires, or activated-population SRM fires when an Activation Metric exists       |
 | `DECISION_ACTIVATION_IMBALANCE`     | `activation_balance`                     | An Activation Metric exists and the per-Variant activation-rate check fires                      |
 
@@ -167,6 +172,13 @@ Guardrail advisories and the `__multiple__` quarantine warning remain visible di
 not members of `decisionGateCheckIds` and do not block conclusion. The Stats engine's boolean verdict
 is authoritative for SRM and Activation imbalance. A rendering surface never reapplies thresholds.
 A caution-band SRM whose mismatch boolean is false remains diagnostic and does not block.
+
+`planned_duration` measures the selected evidence's observation window, `dataWatermark` minus the
+Run's `started_at`, never the wall clock, so a Conclude on day seven that selects a day-one
+watermark is refused exactly as a day-one Conclude is. Analysis refuses a submitted watermark later
+than the ingested evidence watermark, so the window cannot be claimed before it is observed. A Run started before planned durations were
+recorded reports the check as `not_applicable`; no duration is invented for it. A labeled duration
+override is part of the locked spec, chosen at Start, not at Conclude.
 
 The strict request schema has no override, bypass, force, or "ship anyway" field. `DECISION_BLOCKED`
 cannot be Reviewed into success. The underlying result must change, or a different valid Run must be

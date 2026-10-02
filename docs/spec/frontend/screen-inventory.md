@@ -367,7 +367,8 @@ trustworthy-experiments literature) and then adds splitch's enforcement seam.
 
 **CLI/MCP parity (ADR-0023).** The decision gate is a Worker invariant: `splitch runs
 conclude` fails with the same cited `control_identity`, `engine_status`, `decision_valid_result`,
-`underpowered`, `exposure_srm`, `activated_srm`, or `activation_balance` check on every skin. Reading
+`underpowered`, `planned_duration`, `exposure_srm`, `activated_srm`, or `activation_balance` check
+on every skin. Reading
 Results and diagnostics remains available on all three skins; only the rendering differs. Under
 `confirm`, "Conclude Run" is one interaction over the two durable commits specified in
 [conclusion-and-winner-promotion.md](../control-plane/conclusion-and-winner-promotion.md).

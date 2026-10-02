@@ -1,3 +1,4 @@
+import { DEFAULT_SEQUENTIAL_TARGET_N } from "@splitch/contracts";
 import {
   type CIAdapter,
   type CIError,
@@ -33,7 +34,10 @@ export const SEQUENTIAL_CI_SOURCE: CISource = {
   ],
 };
 
-const DEFAULT_TARGET_N = 5_000;
+// The default a Start records as defaulted when the caller names no target_n
+// (ADR-0059). Shared so the Control Plane cannot record one default while the
+// engine applies another.
+const DEFAULT_TARGET_N = DEFAULT_SEQUENTIAL_TARGET_N;
 const ROOT_SOLVER_ITERATIONS = 80;
 
 export class SequentialCI implements CIAdapter {

@@ -7,6 +7,14 @@ import {
 import { describe, expect, it, vi } from "vitest";
 import { createPanelExperimentsClient } from "./panel-experiments";
 
+/** A legacy Run: the planned-duration check is not applicable and blocks nothing. */
+const legacyDuration = {
+  plannedDurationDays: null,
+  overrideReason: null,
+  runStartedAt: "2026-07-01T00:00:00.000Z",
+  dataWatermark: null,
+};
+
 describe("panel experiment results tolerant parsing", () => {
   it("tolerates additive fields on panel experiment results through the client", async () => {
     const ready = panelResultsReady();
@@ -122,7 +130,7 @@ function panelResultsReady() {
     control: frozenControl,
     stats,
     srm: experimentSrmDiagnostics(stats),
-    gate: evaluateExperimentDecisionGate(stats, frozenControl),
+    gate: evaluateExperimentDecisionGate(stats, frozenControl, legacyDuration),
     significance: experimentSignificanceDisplays(stats),
   };
 }

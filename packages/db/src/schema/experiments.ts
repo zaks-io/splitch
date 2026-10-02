@@ -111,7 +111,13 @@ export const runs = sqliteTable(
     targetingRules: text("targeting_rules").notNull(), // immutable
     confidenceLevel: real("confidence_level").notNull(), // locked at Start
     horizon: text("horizon").notNull().default("sequential"), // locked at Start
-    targetN: integer("target_n"), // sequential tuning
+    targetN: integer("target_n"), // sequential tuning, locked at Start
+    // ADR-0059 Run commitments. All null on a legacy Run started before they
+    // were recorded; nothing is backfilled, so null means "never committed".
+    analysisVersion: text("analysis_version"), // locked at Start
+    targetNSource: text("target_n_source", { enum: ["caller", "default"] }), // null on fixed horizon
+    plannedDurationDays: integer("planned_duration_days"), // locked at Start
+    plannedDurationOverrideReason: text("planned_duration_override_reason"), // locked at Start
     sampleSizeLocked: integer("sample_size_locked"), // required for fixed horizon
     // JSON: locked goal Metric × Variant × Primary Dimension members.
     decisionFamily: text("decision_family").notNull(), // locked at Start

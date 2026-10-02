@@ -115,6 +115,8 @@ function startInput(approval: ApprovalCommit, startedAt: string) {
       decisionFamily: "[]",
       guardrailDecisions: "[]",
       metricVarianceConfig: "[]",
+      analysisVersion: "analysis-v1",
+      plannedDurationDays: 7,
       configHash: "hash_start",
       startedAt,
       createdAt: NOW,

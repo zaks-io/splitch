@@ -1,5 +1,7 @@
 import {
   AnalysisResultsEnvelopeSchema,
+  createResultToken,
+  type RunCommitments,
   type StatsEngine,
   type StatsInput,
   StatsInputSchema,
@@ -8,7 +10,6 @@ import {
 import { canonicalizeAnalysisRows } from "@splitch/privacy";
 import { StatsEngine as DefaultStatsEngine } from "@splitch/stats";
 import { type HandlerArgs, renderError } from "@splitch/worker-runtime";
-import { createResultToken } from "./result-token";
 import { readResultsExposureRows, readResultsRunRows } from "./results-bootstrap";
 import { readDownstreamAnalysisRows } from "./results-downstream-rows";
 import { resultsErrorResponse } from "./results-error-response";
@@ -30,6 +31,7 @@ import {
   rowObject,
   stringField,
 } from "./results-row-fields";
+import { materializeRunCommitments } from "./results-run-commitments";
 import {
   assertAnalysisInputsPresent,
   materializeMetricQueryConfig,
@@ -53,6 +55,7 @@ interface ResultsScope {
 interface ResultsComputation {
   statsInput: StatsInput;
   runConfigHash: string;
+  commitments: RunCommitments;
   dataWatermark?: string;
 }
 
@@ -77,6 +80,7 @@ export function makeResultsHandler(deps: ResultsDeps) {
               experimentId: scope.experimentId,
               runId: statsInput.run_id,
               runConfigHash: computation.runConfigHash,
+              analysisVersion: frozenAnalysisVersion(computation.commitments),
               stats,
             }),
           }
@@ -87,6 +91,7 @@ export function makeResultsHandler(deps: ResultsDeps) {
           run_id: statsInput.run_id,
           control_variant: statsInput.control_variant,
           ...evidence,
+          run_commitments: computation.commitments,
           stats,
         }),
       );
@@ -137,10 +142,12 @@ async function readResultsComputationFromTinybird(
     throw new ResultsNotFoundError("RUN_NOT_FOUND");
   }
   const run = materializeProvenancedRun(runInput, scope.runId);
+  const commitments = materializeRunCommitments(runInput);
   const runConfigHash = stringField(rowObject(runInput), "config_hash");
-  const dataWatermark =
-    scope.dataWatermark ??
-    normalizeDataWatermark(optionalString(rowObject(runInput).data_watermark));
+  const dataWatermark = selectedDataWatermark(
+    scope.dataWatermark,
+    normalizeDataWatermark(optionalString(rowObject(runInput).data_watermark)),
+  );
   const metricQueryConfig = materializeMetricQueryConfig(runInput);
   const params = {
     ...scopedPipeParams({ ...scope, runId: run.run_id }),
@@ -199,7 +206,17 @@ async function readResultsComputationFromTinybird(
       : {}),
   });
 
-  return { statsInput: input, runConfigHash, ...(dataWatermark ? { dataWatermark } : {}) };
+  return {
+    statsInput: input,
+    runConfigHash,
+    commitments,
+    ...(dataWatermark ? { dataWatermark } : {}),
+  };
+}
+
+/** A legacy Run's token omits the version so it stays byte-identical (ADR-0059). */
+function frozenAnalysisVersion(commitments: RunCommitments): string | null {
+  return commitments.analysis_version_source === "frozen" ? commitments.analysis_version : null;
 }
 
 function materializeProvenancedRun(runInput: unknown, requestedRunId: string | undefined) {
@@ -228,6 +245,24 @@ function watermarkPipeParams(dataWatermark: string | undefined): Record<string, 
   return dataWatermark === undefined
     ? {}
     : { ingest_watermark_ts: tinybirdDateTime64(dataWatermark) };
+}
+
+/**
+ * A pinned watermark is an evidence boundary, and the planned-duration gate
+ * measures the Run's observation window up to it. One later than what has been
+ * ingested would claim days of evidence that do not exist yet, so it is refused.
+ */
+function selectedDataWatermark(
+  pinned: string | undefined,
+  ingested: string | undefined,
+): string | undefined {
+  if (pinned === undefined) return ingested;
+  if (ingested === undefined || Date.parse(pinned) > Date.parse(ingested)) {
+    throw new ResultsInputError(
+      `dataWatermark ${pinned} is later than the ingested evidence watermark ${ingested ?? "(none)"}`,
+    );
+  }
+  return pinned;
 }
 
 function normalizeDataWatermark(value: string | undefined): string | undefined {

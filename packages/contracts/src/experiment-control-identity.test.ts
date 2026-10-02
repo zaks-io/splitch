@@ -141,6 +141,7 @@ describe("control_identity gate check", () => {
       "activation_balance",
       "engine_status",
       "underpowered",
+      "planned_duration",
       "decision_valid_result",
     ]);
     expect(check(gate, "control_identity").detail).toBe(

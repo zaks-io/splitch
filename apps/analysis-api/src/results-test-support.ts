@@ -87,6 +87,12 @@ export function rowsByPipe(): RowsByPipe {
         run_id: RUN_ID,
         config_hash: RUN_CONFIG_HASH,
         data_watermark: DATA_WATERMARK,
+        // A legacy Run: every commitment column present and null (ADR-0059).
+        analysis_version: null,
+        target_n: null,
+        target_n_source: null,
+        planned_duration_days: null,
+        planned_duration_override_reason: null,
         confidence_level: 0.95,
         horizon: "sequential",
         allocation: JSON.stringify({ control: 50, treatment: 50 }),

@@ -11,6 +11,10 @@ import {
   srmIsFiring,
   underpoweredCheck,
 } from "./experiment-decision-gate-checks";
+import {
+  type PlannedDurationEvidence,
+  plannedDurationCheck,
+} from "./experiment-decision-gate-duration";
 import type { StatsOutput } from "./stats-result-contract";
 
 /**
@@ -35,6 +39,7 @@ export const decisionGateCheckIds = [
   "activation_balance",
   "engine_status",
   "underpowered",
+  "planned_duration",
   "decision_valid_result",
 ] as const;
 export const DecisionGateCheckIdSchema = z.enum(decisionGateCheckIds);
@@ -149,6 +154,7 @@ export function experimentSrmDiagnostics(stats: StatsOutput): ExperimentSrmDiagn
 export function evaluateExperimentDecisionGate(
   stats: StatsOutput,
   control: FrozenControlIdentity,
+  duration: PlannedDurationEvidence,
 ): ExperimentDecisionGate {
   const srm = experimentSrmDiagnostics(stats);
   const checks: DecisionGateCheck[] = [
@@ -158,6 +164,7 @@ export function evaluateExperimentDecisionGate(
     activationBalanceCheck(srm.activationBalance, stats.health.activation_balance_mismatch),
     engineStatusCheck(stats),
     underpoweredCheck(stats),
+    plannedDurationCheck(duration),
     decisionValidCheck(stats),
   ];
   const blockedBy = checks.filter((check) => check.status === "fail").map((check) => check.id);

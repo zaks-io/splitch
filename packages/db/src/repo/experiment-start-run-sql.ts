@@ -48,6 +48,8 @@ export function insertRunStatement(
         targeting_key_field, targeting_key_type, salt, allocation, variant_set, control_variant_id,
         targeting_rules, activation_metric_id,
         confidence_level, horizon, sample_size_locked,
+        analysis_version, target_n, target_n_source,
+        planned_duration_days, planned_duration_override_reason,
         decision_family, guardrail_decisions, metric_variance_config, config_hash,
         started_at, start_reason, created_at, created_by
       )
@@ -61,6 +63,8 @@ export function insertRunStatement(
         'running',
         ?, ?, ?, ?, ?, ?, ?, ?,
         ?, ?, ?,
+        ?, ?, ?,
+        ?, ?,
         ?, ?, ?, ?,
         ?, ?, ?, ?
       WHERE EXISTS (SELECT 1 FROM experiments WHERE ${startGuardSql(input.approval)})
@@ -194,6 +198,11 @@ function insertRunParams(scope: EnvScope, input: StartRunInput): unknown[] {
     // state it and it is written through unchanged.
     input.run.horizon,
     input.run.sampleSizeLocked ?? null,
+    input.run.analysisVersion,
+    input.run.targetN ?? null,
+    input.run.targetNSource ?? null,
+    input.run.plannedDurationDays,
+    input.run.plannedDurationOverrideReason ?? null,
     input.run.decisionFamily,
     input.run.guardrailDecisions,
     input.run.metricVarianceConfig,

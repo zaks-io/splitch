@@ -73,6 +73,14 @@ function statsOutput(): StatsOutput {
   };
 }
 
+/** A legacy Run: the planned-duration check is not applicable and blocks nothing. */
+const legacyDuration = {
+  plannedDurationDays: null,
+  overrideReason: null,
+  runStartedAt: "2026-07-01T00:00:00.000Z",
+  dataWatermark: null,
+};
+
 function readyEnvelope() {
   const stats = statsOutput();
   return {
@@ -83,7 +91,7 @@ function readyEnvelope() {
     control: frozenControl,
     stats,
     srm: experimentSrmDiagnostics(stats),
-    gate: evaluateExperimentDecisionGate(stats, frozenControl),
+    gate: evaluateExperimentDecisionGate(stats, frozenControl, legacyDuration),
     significance: experimentSignificanceDisplays(stats),
   };
 }
@@ -148,7 +156,7 @@ describe("PanelExperimentResultsOutputSchema contract pins (SPL-305)", () => {
       PanelExperimentResultsOutputSchema.safeParse({
         ...readyEnvelope(),
         control,
-        gate: evaluateExperimentDecisionGate(stats, control),
+        gate: evaluateExperimentDecisionGate(stats, control, legacyDuration),
       }).success,
     ).toBe(true);
   });

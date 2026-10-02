@@ -227,7 +227,13 @@ export function resultsFixture(
     control: frozenControl(),
     stats,
     srm: experimentSrmDiagnostics(stats),
-    gate: evaluateExperimentDecisionGate(stats, overrides.control ?? frozenControl()),
+    // A legacy Run, so the planned-duration check stays out of these Panel cases.
+    gate: evaluateExperimentDecisionGate(stats, overrides.control ?? frozenControl(), {
+      plannedDurationDays: null,
+      overrideReason: null,
+      runStartedAt: "2026-07-01T00:00:00.000Z",
+      dataWatermark: null,
+    }),
     significance: experimentSignificanceDisplays(stats),
     ...fields,
   };

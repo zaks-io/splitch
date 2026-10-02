@@ -76,7 +76,8 @@ Sorted by edit type. The Worker enforces the edit taxonomy (ADR-0003):
 - Guardrail thresholds and directions
 - Primary Dimension membership / declared values
 
-`horizon`, `targetN`, and `sampleSizeLocked` are **Run-level**, not Experiment fields: they are
+`horizon`, `targetN`, `sampleSizeLocked`, and the planned duration (`plannedDurationDays`,
+`plannedDurationOverrideReason`) are **Run-level**, not Experiment fields: they are
 frozen at Run Start and immutable for the Run's life (see [storage-schemas-d1-experiment.md](./storage-schemas-d1-experiment.md)
 `runs` table). They are not patchable here at all, so they need no decision-lock on the Experiment patch.
 
