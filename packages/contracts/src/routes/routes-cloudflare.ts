@@ -9,6 +9,13 @@ import {
   CloudflareServerExposureResponseSchema,
 } from "../cloudflare-integration";
 import { type ApiRouteContract, defineApiRoute } from "../openapi-route";
+import {
+  createClosed,
+  deleteClosed,
+  openWorld,
+  readOnlyOpen,
+  recordEventClosed,
+} from "../route-effects";
 import { EnvParams } from "./route-shapes";
 
 const OWNER = "control-plane-api" as const;
@@ -45,6 +52,7 @@ export const cloudflareRoutes = [
     scopes: ["data-plane:evaluate"],
     rateLimit: "api-key",
     idempotency: "none",
+    effects: openWorld(createClosed),
     errors: [...commonErrors, "IDEMPOTENCY_KEY_CONFLICT"],
   }),
   defineApiRoute({
@@ -59,6 +67,7 @@ export const cloudflareRoutes = [
     scopes: ["data-plane:evaluate"],
     rateLimit: "api-key",
     idempotency: "none",
+    effects: readOnlyOpen,
     errors: [...commonErrors, "CLOUDFLARE_INSTALLATION_NOT_FOUND"],
   }),
   defineApiRoute({
@@ -73,6 +82,7 @@ export const cloudflareRoutes = [
     scopes: ["data-plane:evaluate"],
     rateLimit: "api-key",
     idempotency: "none",
+    effects: openWorld(deleteClosed),
     errors: commonErrors,
   }),
   defineApiRoute({
@@ -87,6 +97,7 @@ export const cloudflareRoutes = [
     scopes: ["data-plane:evaluate"],
     rateLimit: "api-key",
     idempotency: "none",
+    effects: openWorld(recordEventClosed),
     rawBodyByteLimit: {
       maxBytes: CLOUDFLARE_SERVER_EXPOSURE_MAX_BODY_BYTES,
       error: {
@@ -115,6 +126,7 @@ export const cloudflareRoutes = [
     auth: "control-plane-token",
     rateLimit: "control-plane-actor",
     idempotency: "none",
+    effects: readOnlyOpen,
     errors: panelErrors,
   }),
   defineApiRoute({
@@ -128,6 +140,7 @@ export const cloudflareRoutes = [
     auth: "control-plane-token",
     rateLimit: "control-plane-actor",
     idempotency: "none",
+    effects: openWorld(deleteClosed),
     errors: [...panelErrors, "CLOUDFLARE_INSTALLATION_NOT_FOUND"],
   }),
 ] as const satisfies readonly ApiRouteContract[];

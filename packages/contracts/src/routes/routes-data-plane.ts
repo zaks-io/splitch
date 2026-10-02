@@ -6,6 +6,12 @@ import {
 } from "../metric-event";
 import { type ApiRouteContract, defineApiRoute } from "../openapi-route";
 import {
+  exposureWriteClosed,
+  mintTicketsClosed,
+  readOnlyClosed,
+  recordEventClosed,
+} from "../route-effects";
+import {
   CachedEvaluationTelemetryRequestSchema,
   CachedEvaluationTelemetryResponseSchema,
   DataPlaneEvaluateRequestSchema,
@@ -55,6 +61,7 @@ export const dataPlaneRoutes = [
     scopes: ["data-plane:write"],
     rateLimit: "client-key",
     idempotency: "none",
+    effects: recordEventClosed,
     errors: [
       "UNAUTHORIZED",
       "CREDENTIAL_REVOKED",
@@ -83,6 +90,7 @@ export const dataPlaneRoutes = [
     scopes: ["data-plane:write"],
     rateLimit: "client-key",
     idempotency: "none",
+    effects: recordEventClosed,
     errors: [
       "UNAUTHORIZED",
       "CREDENTIAL_REVOKED",
@@ -111,6 +119,7 @@ export const dataPlaneRoutes = [
     // Evaluation usage is billed by this caller-owned logical Evaluation id.
     // The server cannot infer whether two requests are a retry.
     idempotency: "required",
+    effects: exposureWriteClosed,
     errors: [
       "UNAUTHORIZED",
       "CREDENTIAL_REVOKED",
@@ -133,6 +142,7 @@ export const dataPlaneRoutes = [
     auth: "client-key",
     rateLimit: "client-key",
     idempotency: "required",
+    effects: exposureWriteClosed,
     errors: [
       "UNAUTHORIZED",
       "CREDENTIAL_REVOKED",
@@ -154,6 +164,7 @@ export const dataPlaneRoutes = [
     scopes: ["data-plane:evaluate"],
     rateLimit: "api-key",
     idempotency: "none",
+    effects: readOnlyClosed,
     errors: [
       "UNAUTHORIZED",
       "CREDENTIAL_REVOKED",
@@ -177,6 +188,7 @@ export const dataPlaneRoutes = [
     scopes: ["data-plane:evaluate"],
     rateLimit: "client-key",
     idempotency: "none",
+    effects: readOnlyClosed,
     errors: [
       "UNAUTHORIZED",
       "CREDENTIAL_REVOKED",
@@ -205,6 +217,7 @@ export const dataPlaneRoutes = [
     // Batch Evaluation usage is billed by this caller-owned logical fetch id
     // (ADR-0033); retries with the same key must not double-charge.
     idempotency: "required",
+    effects: mintTicketsClosed,
     errors: [
       "UNAUTHORIZED",
       "CREDENTIAL_REVOKED",
@@ -230,6 +243,7 @@ export const dataPlaneRoutes = [
     rateLimit: "client-key",
     // Retry identity is per-item exposureId (SDK-owned), not a batch Idempotency-Key.
     idempotency: "none",
+    effects: exposureWriteClosed,
     rawBodyByteLimit: {
       maxBytes: EXPOSURE_BATCH_MAX_BODY_BYTES,
       error: {

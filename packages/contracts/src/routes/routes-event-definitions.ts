@@ -12,6 +12,7 @@ import {
   PublishEventDefinitionVersionRequestSchema,
 } from "../event-definition-write";
 import { type ApiRouteContract, defineApiRoute } from "../openapi-route";
+import { createClosed, publishVersionClosed, readOnlyClosed, updateClosed } from "../route-effects";
 import { AppParams } from "./route-shapes";
 
 const OWNER = "control-plane-api" as const;
@@ -32,6 +33,7 @@ export const eventDefinitionRoutes = [
     auth: AUTH,
     rateLimit: RATE,
     idempotency: "none",
+    effects: readOnlyClosed,
     errors: ["APP_NOT_FOUND", "FORBIDDEN"],
   }),
   defineApiRoute({
@@ -45,6 +47,7 @@ export const eventDefinitionRoutes = [
     auth: AUTH,
     rateLimit: RATE,
     idempotency: "optional",
+    effects: createClosed,
     errors: ["APP_NOT_FOUND", "FORBIDDEN", "VALIDATION_ERROR"],
   }),
   defineApiRoute({
@@ -58,6 +61,7 @@ export const eventDefinitionRoutes = [
     auth: AUTH,
     rateLimit: RATE,
     idempotency: "none",
+    effects: readOnlyClosed,
     errors: ["EVENT_DEFINITION_NOT_FOUND", "FORBIDDEN"],
   }),
   defineApiRoute({
@@ -71,6 +75,7 @@ export const eventDefinitionRoutes = [
     auth: AUTH,
     rateLimit: RATE,
     idempotency: "none",
+    effects: updateClosed,
     errors: ["EVENT_DEFINITION_NOT_FOUND", "FORBIDDEN", "VALIDATION_ERROR"],
   }),
   defineApiRoute({
@@ -84,6 +89,7 @@ export const eventDefinitionRoutes = [
     auth: AUTH,
     rateLimit: RATE,
     idempotency: "optional",
+    effects: publishVersionClosed,
     errors: [
       "EVENT_DEFINITION_NOT_FOUND",
       "EVENT_DEFINITION_IMMUTABLE",
@@ -103,6 +109,7 @@ export const eventDefinitionRoutes = [
     auth: AUTH,
     rateLimit: RATE,
     idempotency: "none",
+    effects: readOnlyClosed,
     errors: ["EVENT_DEFINITION_NOT_FOUND", "FORBIDDEN"],
   }),
   defineApiRoute({
@@ -116,6 +123,7 @@ export const eventDefinitionRoutes = [
     auth: AUTH,
     rateLimit: RATE,
     idempotency: "none",
+    effects: readOnlyClosed,
     errors: ["EVENT_DEFINITION_VERSION_NOT_FOUND", "FORBIDDEN"],
   }),
 ] as const satisfies readonly ApiRouteContract[];

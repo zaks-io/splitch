@@ -1,12 +1,19 @@
 import { z } from "@hono/zod-openapi";
 import { type ApiRouteContract, defineApiRoute } from "../openapi-route";
 import { PersistedIdentifierSchema } from "../persisted-field-limits";
+import {
+  createClosed,
+  createIdempotentClosed,
+  deleteClosed,
+  readOnlyClosed,
+} from "../route-effects";
 import { AppParams, OrgParams, PrivacyRequestParams } from "./route-shapes";
 
 /**
  * Privacy request intake: User/Org/App exports, User deletion, Entity data-subject
  * export/delete, and request status. Control Plane API Worker. Every call writes a
- * privacy_requests D1 row + audit event.
+ * privacy_requests D1 row + audit event. Export intake is therefore mutating even
+ * though it does not destroy subject data.
  * Endpoint canon: docs/spec/control-plane/endpoints-privacy-data.md.
  */
 
@@ -69,6 +76,7 @@ export const privacyRoutes = [
     auth: AUTH,
     rateLimit: RATE,
     idempotency: "none",
+    effects: createClosed,
     errors: ["UNAUTHORIZED", "SERVICE_UNAVAILABLE"],
   }),
   defineApiRoute({
@@ -81,6 +89,7 @@ export const privacyRoutes = [
     auth: AUTH,
     rateLimit: RATE,
     idempotency: "none",
+    effects: deleteClosed,
     errors: ["UNAUTHORIZED", "LAST_OWNER_REQUIRED", "SERVICE_UNAVAILABLE"],
   }),
   defineApiRoute({
@@ -94,6 +103,7 @@ export const privacyRoutes = [
     auth: AUTH,
     rateLimit: RATE,
     idempotency: "none",
+    effects: createClosed,
     errors: ["ORGANIZATION_NOT_FOUND", "FORBIDDEN", "SERVICE_UNAVAILABLE"],
   }),
   defineApiRoute({
@@ -107,6 +117,7 @@ export const privacyRoutes = [
     auth: AUTH,
     rateLimit: RATE,
     idempotency: "none",
+    effects: createClosed,
     errors: ["APP_NOT_FOUND", "FORBIDDEN", "SERVICE_UNAVAILABLE"],
   }),
   defineApiRoute({
@@ -120,6 +131,7 @@ export const privacyRoutes = [
     auth: AUTH,
     rateLimit: RATE,
     idempotency: "required",
+    effects: createIdempotentClosed,
     errors: [
       "APP_NOT_FOUND",
       "FORBIDDEN",
@@ -139,6 +151,7 @@ export const privacyRoutes = [
     auth: AUTH,
     rateLimit: RATE,
     idempotency: "required",
+    effects: deleteClosed,
     errors: [
       "APP_NOT_FOUND",
       "FORBIDDEN",
@@ -158,6 +171,7 @@ export const privacyRoutes = [
     auth: AUTH,
     rateLimit: RATE,
     idempotency: "none",
+    effects: readOnlyClosed,
     errors: ["PRIVACY_JOB_NOT_FOUND", "FORBIDDEN", "SERVICE_UNAVAILABLE"],
   }),
 ] as const satisfies readonly ApiRouteContract[];

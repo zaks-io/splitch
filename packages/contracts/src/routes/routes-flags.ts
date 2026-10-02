@@ -12,6 +12,12 @@ import {
   PrincipalFlagListReadResponseSchema,
 } from "../resource-envelopes-flag";
 import {
+  createIdempotentClosed,
+  deleteClosed,
+  readOnlyClosed,
+  updateClosed,
+} from "../route-effects";
+import {
   AppParams,
   EnvFlagParams,
   FlagConfigMutationResponseSchema,
@@ -21,8 +27,8 @@ import {
   FlagParams,
   FlagVariantParams,
   PatchFlagConfigRequestSchema,
-  PromoteParams,
   PrincipalFlagListQuerySchema,
+  PromoteParams,
   PromoteRequestSchema,
   PromoteResponseSchema,
   ReplaceTargetingRulesRequestSchema,
@@ -60,6 +66,7 @@ export const flagRoutes = [
     auth: AUTH,
     rateLimit: RATE,
     idempotency: "none",
+    effects: readOnlyClosed,
     errors: ["APP_NOT_FOUND", "ENVIRONMENT_NOT_FOUND", "FORBIDDEN", "INTERNAL_SERVER_ERROR"],
   }),
   defineApiRoute({
@@ -73,6 +80,7 @@ export const flagRoutes = [
     auth: AUTH,
     rateLimit: RATE,
     idempotency: "required",
+    effects: createIdempotentClosed,
     errors: ["APP_NOT_FOUND", "FORBIDDEN", "VALIDATION_ERROR", "IDEMPOTENCY_KEY_CONFLICT"],
   }),
   defineApiRoute({
@@ -86,6 +94,7 @@ export const flagRoutes = [
     auth: AUTH,
     rateLimit: RATE,
     idempotency: "none",
+    effects: readOnlyClosed,
     errors: ["FLAG_NOT_FOUND", "ENVIRONMENT_NOT_FOUND", "FORBIDDEN", "INTERNAL_SERVER_ERROR"],
   }),
   defineApiRoute({
@@ -99,6 +108,7 @@ export const flagRoutes = [
     auth: AUTH,
     rateLimit: RATE,
     idempotency: "none",
+    effects: updateClosed,
     errors: ["FLAG_NOT_FOUND", "FORBIDDEN", "VALIDATION_ERROR"],
   }),
   defineApiRoute({
@@ -112,6 +122,7 @@ export const flagRoutes = [
     auth: AUTH,
     rateLimit: RATE,
     idempotency: "required",
+    effects: deleteClosed,
     errors: [
       "FLAG_NOT_FOUND",
       "FORBIDDEN",
@@ -131,6 +142,7 @@ export const flagRoutes = [
     auth: AUTH,
     rateLimit: RATE,
     idempotency: "required",
+    effects: createIdempotentClosed,
     errors: ["FLAG_NOT_FOUND", "FORBIDDEN", ...APPROVAL_WRITE_ERRORS, "VALIDATION_ERROR"],
   }),
   defineApiRoute({
@@ -144,6 +156,7 @@ export const flagRoutes = [
     auth: AUTH,
     rateLimit: RATE,
     idempotency: "required",
+    effects: updateClosed,
     errors: [
       "FLAG_NOT_FOUND",
       "VARIANT_NOT_FOUND",
@@ -165,6 +178,7 @@ export const flagRoutes = [
     auth: AUTH,
     rateLimit: RATE,
     idempotency: "required",
+    effects: deleteClosed,
     errors: [
       "FLAG_NOT_FOUND",
       "VARIANT_NOT_FOUND",
@@ -186,6 +200,7 @@ export const flagRoutes = [
     auth: AUTH,
     rateLimit: RATE,
     idempotency: "none",
+    effects: readOnlyClosed,
     errors: ["FLAG_NOT_FOUND", "FORBIDDEN"],
   }),
   defineApiRoute({
@@ -199,6 +214,7 @@ export const flagRoutes = [
     auth: AUTH,
     rateLimit: RATE,
     idempotency: "required",
+    effects: updateClosed,
     errors: [
       "FLAG_NOT_FOUND",
       "VARIANT_NOT_AVAILABLE",
@@ -222,6 +238,7 @@ export const flagRoutes = [
     auth: AUTH,
     rateLimit: RATE,
     idempotency: "required",
+    effects: updateClosed,
     errors: [
       "FLAG_NOT_FOUND",
       "VARIANT_NOT_AVAILABLE",
@@ -244,6 +261,7 @@ export const flagRoutes = [
     auth: AUTH,
     rateLimit: RATE,
     idempotency: "required",
+    effects: createIdempotentClosed,
     errors: [
       "FLAG_NOT_FOUND",
       "VARIANT_NOT_AVAILABLE",
@@ -268,6 +286,7 @@ export const flagRoutes = [
     auth: AUTH,
     rateLimit: RATE,
     idempotency: "none",
+    effects: readOnlyClosed,
     errors: ["ENVIRONMENT_NOT_FOUND", "FORBIDDEN", "INTERNAL_SERVER_ERROR"],
   }),
 ] as const satisfies readonly ApiRouteContract[];

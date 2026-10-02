@@ -1,6 +1,7 @@
 import { z } from "@hono/zod-openapi";
 import { SegmentSchema } from "../leaf-schemas-flag";
 import { type ApiRouteContract, defineApiRoute } from "../openapi-route";
+import { createClosed, deleteClosed, readOnlyClosed, updateClosed } from "../route-effects";
 import { listResponse } from "../wire-envelopes-core";
 import {
   AppParams,
@@ -36,6 +37,7 @@ export const segmentRoutes = [
     auth: AUTH,
     rateLimit: RATE,
     idempotency: "none",
+    effects: readOnlyClosed,
     errors: ["APP_NOT_FOUND", "FORBIDDEN"],
   }),
   defineApiRoute({
@@ -49,6 +51,7 @@ export const segmentRoutes = [
     auth: AUTH,
     rateLimit: RATE,
     idempotency: "optional",
+    effects: createClosed,
     errors: ["APP_NOT_FOUND", "FORBIDDEN", "VALIDATION_ERROR"],
   }),
   defineApiRoute({
@@ -62,6 +65,7 @@ export const segmentRoutes = [
     auth: AUTH,
     rateLimit: RATE,
     idempotency: "none",
+    effects: readOnlyClosed,
     errors: ["SEGMENT_NOT_FOUND", "FORBIDDEN"],
   }),
   defineApiRoute({
@@ -75,6 +79,7 @@ export const segmentRoutes = [
     auth: AUTH,
     rateLimit: RATE,
     idempotency: "optional",
+    effects: updateClosed,
     errors: [
       "SEGMENT_NOT_FOUND",
       "FORBIDDEN",
@@ -98,6 +103,7 @@ export const segmentRoutes = [
     auth: AUTH,
     rateLimit: RATE,
     idempotency: "none",
+    effects: deleteClosed,
     errors: ["SEGMENT_NOT_FOUND", "FORBIDDEN", "RESOURCE_NOT_EMPTY"],
   }),
 ] as const satisfies readonly ApiRouteContract[];

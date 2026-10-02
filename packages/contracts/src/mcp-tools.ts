@@ -4,6 +4,7 @@ import { KILL_SWITCH_OFF_EXEMPTION } from "./kill-switch-off-exemption";
 import { type ApiRouteContract, jsonMediaTypeSchema } from "./openapi-route";
 import { IdempotencyKeySchema } from "./persisted-field-limits";
 import { routeRegistry } from "./route-registry";
+import { mcpReversibilityMeta, mcpToolAnnotations } from "./route-effects";
 
 /**
  * MCP tool-schema derivation from THE single route registry (ADR-0023/0025). One
@@ -46,6 +47,13 @@ export interface McpProtocolToolDefinition {
   description: string;
   inputSchema: Record<string, unknown>;
   outputSchema: Record<string, unknown>;
+  annotations: {
+    readOnlyHint: boolean;
+    destructiveHint: boolean;
+    idempotentHint: boolean;
+    openWorldHint: boolean;
+  };
+  _meta: { reversibilityClass: "reversible" | "compensable" | "irreversible" };
 }
 
 /** A route is an MCP tool iff it is a control-plane (token-authed) route. */
@@ -223,6 +231,8 @@ export function deriveMcpProtocolTools(): readonly McpProtocolToolDefinition[] {
       description: tool.description,
       inputSchema: contextAwareProtocolInputSchema(route, tool.inputSchema),
       outputSchema: z.toJSONSchema(tool.outputSchema) as Record<string, unknown>,
+      annotations: mcpToolAnnotations(route.effects),
+      _meta: mcpReversibilityMeta(route.effects),
     };
   });
 }

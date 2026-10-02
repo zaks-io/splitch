@@ -1,3 +1,18 @@
+import {
+  type McpToolAnnotations,
+  mcpReversibilityMeta,
+  mcpToolAnnotations,
+  updateClosed,
+} from "@splitch/contracts";
+
+export interface McpSkinToolDefinition {
+  name: string;
+  description: string;
+  inputSchema: Record<string, unknown>;
+  annotations: McpToolAnnotations;
+  _meta: { reversibilityClass: "reversible" | "compensable" | "irreversible" };
+}
+
 export interface McpSessionContext {
   readonly appId: string;
   readonly environmentId: string;
@@ -22,7 +37,7 @@ export type McpSessionContextValidator = (
   context: McpSessionContext,
 ) => Promise<McpSessionContextValidation>;
 
-export const contextUseTool = {
+export const contextUseTool: McpSkinToolDefinition = {
   name: "context_use",
   description: "Set the active App and Environment for this MCP transport session.",
   inputSchema: {
@@ -34,6 +49,8 @@ export const contextUseTool = {
     required: ["appId", "environmentId"],
     additionalProperties: false,
   },
+  annotations: mcpToolAnnotations(updateClosed),
+  _meta: mcpReversibilityMeta(updateClosed),
 };
 
 function parseContext(value: unknown): McpSessionContext | null {

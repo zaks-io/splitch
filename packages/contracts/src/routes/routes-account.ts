@@ -3,6 +3,13 @@ import { HeldScopeSchema } from "../held-scope";
 import { OrganizationMemberSchema } from "../leaf-schemas-runtime";
 import { type ApiRouteContract, defineApiRoute } from "../openapi-route";
 import {
+  createClosed,
+  deleteClosed,
+  membershipRemoveClosed,
+  readOnlyClosed,
+  updateClosed,
+} from "../route-effects";
+import {
   CreateOrganizationRequestSchema,
   OrganizationResponseSchema,
   PatchOrganizationRequestSchema,
@@ -49,6 +56,7 @@ const organizationRoutes = [
     auth: AUTH,
     rateLimit: RATE,
     idempotency: "none",
+    effects: readOnlyClosed,
     errors: [],
   }),
   defineApiRoute({
@@ -62,6 +70,7 @@ const organizationRoutes = [
     auth: AUTH,
     rateLimit: RATE,
     idempotency: "none",
+    effects: readOnlyClosed,
     errors: [],
   }),
   // Collection path is `/orgs`, matching every other Organization route. The
@@ -84,6 +93,7 @@ const organizationRoutes = [
     // would answer SLUG_CONFLICT instead of replaying the original success:
     // a guarantee advertised but not kept.
     idempotency: "none",
+    effects: createClosed,
     errors: ["VALIDATION_ERROR", "FORBIDDEN", "SLUG_CONFLICT", "QUOTA_EXCEEDED"],
   }),
   defineApiRoute({
@@ -97,6 +107,7 @@ const organizationRoutes = [
     auth: AUTH,
     rateLimit: RATE,
     idempotency: "none",
+    effects: readOnlyClosed,
     errors: ["ORGANIZATION_NOT_FOUND", "FORBIDDEN"],
   }),
   defineApiRoute({
@@ -110,6 +121,7 @@ const organizationRoutes = [
     auth: AUTH,
     rateLimit: RATE,
     idempotency: "none",
+    effects: updateClosed,
     errors: ["ORGANIZATION_NOT_FOUND", "FORBIDDEN", "VALIDATION_ERROR"],
   }),
   defineApiRoute({
@@ -123,6 +135,7 @@ const organizationRoutes = [
     auth: AUTH,
     rateLimit: RATE,
     idempotency: "none",
+    effects: deleteClosed,
     errors: [
       "ORGANIZATION_NOT_FOUND",
       "FORBIDDEN",
@@ -141,6 +154,7 @@ const organizationRoutes = [
     auth: AUTH,
     rateLimit: RATE,
     idempotency: "none",
+    effects: readOnlyClosed,
     errors: ["ORGANIZATION_NOT_FOUND", "FORBIDDEN", "SERVICE_UNAVAILABLE"],
   }),
   defineApiRoute({
@@ -154,6 +168,7 @@ const organizationRoutes = [
     auth: AUTH,
     rateLimit: RATE,
     idempotency: "none",
+    effects: createClosed,
     errors: [
       "ORGANIZATION_NOT_FOUND",
       "FORBIDDEN",
@@ -174,6 +189,7 @@ const organizationRoutes = [
     auth: AUTH,
     rateLimit: RATE,
     idempotency: "none",
+    effects: updateClosed,
     errors: [
       "ORGANIZATION_NOT_FOUND",
       "USER_NOT_FOUND",
@@ -194,6 +210,7 @@ const organizationRoutes = [
     auth: AUTH,
     rateLimit: RATE,
     idempotency: "none",
+    effects: membershipRemoveClosed,
     errors: ["ORGANIZATION_NOT_FOUND", "USER_NOT_FOUND", "FORBIDDEN", "LAST_OWNER_REQUIRED"],
   }),
 ] as const satisfies readonly ApiRouteContract[];

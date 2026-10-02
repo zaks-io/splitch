@@ -1,6 +1,14 @@
 import { z } from "@hono/zod-openapi";
 import { type ApiRouteContract, defineApiRoute } from "../openapi-route";
 import {
+  createClosed,
+  deleteClosed,
+  readOnlyClosed,
+  sealRunClosed,
+  startRunClosed,
+  updateClosed,
+} from "../route-effects";
+import {
   CreateMetricRequestSchema,
   MetricResponseSchema,
   PatchMetricRequestSchema,
@@ -54,6 +62,7 @@ export const experimentRoutes = [
     auth: AUTH,
     rateLimit: RATE,
     idempotency: "none",
+    effects: readOnlyClosed,
     errors: ["APP_NOT_FOUND", "FORBIDDEN"],
   }),
   defineApiRoute({
@@ -67,6 +76,7 @@ export const experimentRoutes = [
     auth: AUTH,
     rateLimit: RATE,
     idempotency: "optional",
+    effects: createClosed,
     errors: [
       "APP_NOT_FOUND",
       "FLAG_NOT_FOUND",
@@ -87,6 +97,7 @@ export const experimentRoutes = [
     auth: AUTH,
     rateLimit: RATE,
     idempotency: "none",
+    effects: readOnlyClosed,
     errors: ["EXPERIMENT_NOT_FOUND", "FORBIDDEN"],
   }),
   defineApiRoute({
@@ -101,6 +112,7 @@ export const experimentRoutes = [
     auth: AUTH,
     rateLimit: RATE,
     idempotency: "none",
+    effects: updateClosed,
     errors: [
       "EXPERIMENT_NOT_FOUND",
       "FORBIDDEN",
@@ -122,6 +134,7 @@ export const experimentRoutes = [
     auth: AUTH,
     rateLimit: RATE,
     idempotency: "required",
+    effects: startRunClosed,
     errors: [
       "EXPERIMENT_NOT_FOUND",
       "FORBIDDEN",
@@ -144,6 +157,7 @@ export const experimentRoutes = [
     auth: AUTH,
     rateLimit: RATE,
     idempotency: "none",
+    effects: deleteClosed,
     errors: ["EXPERIMENT_NOT_FOUND", "FORBIDDEN", "EXPERIMENT_RUNNING", "SERVICE_UNAVAILABLE"],
   }),
   defineApiRoute({
@@ -157,6 +171,7 @@ export const experimentRoutes = [
     auth: AUTH,
     rateLimit: RATE,
     idempotency: "none",
+    effects: readOnlyClosed,
     errors: ["EXPERIMENT_NOT_FOUND", "FORBIDDEN"],
   }),
   defineApiRoute({
@@ -170,6 +185,7 @@ export const experimentRoutes = [
     auth: AUTH,
     rateLimit: RATE,
     idempotency: "none",
+    effects: readOnlyClosed,
     errors: ["RUN_NOT_FOUND", "FORBIDDEN"],
   }),
   defineApiRoute({
@@ -183,6 +199,7 @@ export const experimentRoutes = [
     auth: AUTH,
     rateLimit: RATE,
     idempotency: "none",
+    effects: sealRunClosed,
     errors: ["RUN_NOT_FOUND", "FORBIDDEN", "RUN_NOT_RUNNING"],
   }),
   ...conclusionRoutes,
@@ -197,6 +214,7 @@ export const experimentRoutes = [
     auth: AUTH,
     rateLimit: RATE,
     idempotency: "none",
+    effects: readOnlyClosed,
     errors: ["APP_NOT_FOUND", "FORBIDDEN"],
   }),
   defineApiRoute({
@@ -210,6 +228,7 @@ export const experimentRoutes = [
     auth: AUTH,
     rateLimit: RATE,
     idempotency: "optional",
+    effects: createClosed,
     errors: ["APP_NOT_FOUND", "FORBIDDEN", "VALIDATION_ERROR"],
   }),
   defineApiRoute({
@@ -223,6 +242,7 @@ export const experimentRoutes = [
     auth: AUTH,
     rateLimit: RATE,
     idempotency: "none",
+    effects: readOnlyClosed,
     errors: ["METRIC_NOT_FOUND", "FORBIDDEN"],
   }),
   defineApiRoute({
@@ -236,6 +256,7 @@ export const experimentRoutes = [
     auth: AUTH,
     rateLimit: RATE,
     idempotency: "none",
+    effects: updateClosed,
     errors: ["METRIC_NOT_FOUND", "FORBIDDEN", "DECISION_LOCKED", "VALIDATION_ERROR"],
   }),
   defineApiRoute({
@@ -249,6 +270,7 @@ export const experimentRoutes = [
     auth: AUTH,
     rateLimit: RATE,
     idempotency: "none",
+    effects: deleteClosed,
     errors: ["METRIC_NOT_FOUND", "FORBIDDEN", "EXPERIMENT_RUNNING"],
   }),
 ] as const satisfies readonly ApiRouteContract[];

@@ -1,6 +1,13 @@
 import { z } from "zod";
 import { type ApiRouteContract, defineApiRoute } from "../openapi-route";
 import {
+  createClosed,
+  deleteClosed,
+  openWorld,
+  readOnlyOpen,
+  rotateClosed,
+} from "../route-effects";
+import {
   SentryInstallationCreateRequestSchema,
   SentryInstallationCreateResponseSchema,
   SentryInstallationListResponseSchema,
@@ -42,6 +49,7 @@ export const sentryRoutes = [
     auth: AUTH,
     rateLimit: RATE,
     idempotency: "none",
+    effects: readOnlyOpen,
     errors: commonErrors,
   }),
   defineApiRoute({
@@ -55,6 +63,7 @@ export const sentryRoutes = [
     auth: AUTH,
     rateLimit: RATE,
     idempotency: "none",
+    effects: openWorld(createClosed),
     errors: [
       ...commonErrors,
       "VALIDATION_ERROR",
@@ -73,6 +82,7 @@ export const sentryRoutes = [
     auth: AUTH,
     rateLimit: RATE,
     idempotency: "none",
+    effects: readOnlyOpen,
     errors: [...commonErrors, "SENTRY_INSTALLATION_NOT_FOUND"],
   }),
   defineApiRoute({
@@ -86,6 +96,7 @@ export const sentryRoutes = [
     auth: AUTH,
     rateLimit: RATE,
     idempotency: "none",
+    effects: openWorld(deleteClosed),
     errors: commonErrors,
   }),
   defineApiRoute({
@@ -99,6 +110,7 @@ export const sentryRoutes = [
     auth: AUTH,
     rateLimit: RATE,
     idempotency: "none",
+    effects: openWorld(rotateClosed),
     errors: [...commonErrors, "SENTRY_INSTALLATION_NOT_FOUND", "IDEMPOTENCY_KEY_CONFLICT"],
   }),
 ] as const satisfies readonly ApiRouteContract[];

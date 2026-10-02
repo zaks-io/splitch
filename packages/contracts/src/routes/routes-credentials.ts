@@ -5,6 +5,14 @@ import {
 import { ClientKeySchema } from "../leaf-schemas-runtime";
 import { type ApiRouteContract, defineApiRoute } from "../openapi-route";
 import {
+  deleteClosed,
+  mintSecretClosed,
+  provisionClosed,
+  readOnlyClosed,
+  rotateClosed,
+  updateClosed,
+} from "../route-effects";
+import {
   ApiKeyParams,
   ApiKeyRevokeResponseSchema,
   ClientKeyRotateResponseSchema,
@@ -37,6 +45,7 @@ export const credentialRoutes = [
     auth: AUTH,
     rateLimit: RATE,
     idempotency: "none",
+    effects: provisionClosed,
     errors: ["APP_NOT_FOUND", "FORBIDDEN"],
   }),
   defineApiRoute({
@@ -50,6 +59,7 @@ export const credentialRoutes = [
     auth: AUTH,
     rateLimit: RATE,
     idempotency: "none",
+    effects: updateClosed,
     errors: ["CREDENTIAL_NOT_FOUND", "FORBIDDEN", "VALIDATION_ERROR"],
   }),
   defineApiRoute({
@@ -63,6 +73,7 @@ export const credentialRoutes = [
     auth: AUTH,
     rateLimit: RATE,
     idempotency: "none",
+    effects: rotateClosed,
     errors: ["CREDENTIAL_NOT_FOUND", "FORBIDDEN"],
   }),
   defineApiRoute({
@@ -76,6 +87,7 @@ export const credentialRoutes = [
     auth: AUTH,
     rateLimit: RATE,
     idempotency: "none",
+    effects: readOnlyClosed,
     errors: ["APP_NOT_FOUND", "FORBIDDEN"],
   }),
   defineApiRoute({
@@ -91,6 +103,7 @@ export const credentialRoutes = [
     // A once-only raw secret cannot be replayed without retaining recoverable
     // secret material. Do not advertise idempotency the handler cannot honor.
     idempotency: "none",
+    effects: mintSecretClosed,
     errors: ["APP_NOT_FOUND", "FORBIDDEN", "VALIDATION_ERROR"],
   }),
   defineApiRoute({
@@ -104,6 +117,7 @@ export const credentialRoutes = [
     auth: AUTH,
     rateLimit: RATE,
     idempotency: "none",
+    effects: deleteClosed,
     errors: ["CREDENTIAL_NOT_FOUND", "FORBIDDEN"],
   }),
 ] as const satisfies readonly ApiRouteContract[];
