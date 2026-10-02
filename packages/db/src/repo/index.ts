@@ -38,7 +38,7 @@ export function createRepository(d1: D1Database) {
     convex: makeConvexIntegrationRepo(d1),
     cloudflare: makeCloudflareIntegrationRepo(d1),
     sentry: makeSentryIntegrationRepo(d1),
-    flagChangeEvents: makeFlagChangeEventRepo(d1),
+    flagChangeEvents: makeFlagChangeEventRepo(d1, db),
     claim: makeClaimStateRepo(d1),
     identity: makeIdentityRepo(db, d1),
     privacy: makePrivacyRepo(db, d1),

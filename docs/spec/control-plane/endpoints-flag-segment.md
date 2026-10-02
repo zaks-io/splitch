@@ -407,6 +407,31 @@ These three registered routes mechanically derive the MCP tools `approval_reques
 `approval_requests_get`, and `approval_request_reviews_create`. No hand-written MCP schema is
 required.
 
+## Flag change-log endpoints (App-level)
+
+The append-only `flag_change_events` log is the audit record and the integration outbox
+([ADR-0051](../../adr/0051-the-flag-change-log-is-both-the-audit-record-and-the-integration-outbox.md)).
+These reads project stored rows. They never invent a before or after value from live Flag
+Configuration.
+
+### `GET /apps/{app_id}/flag-changes`
+
+Query: `from?`, `to?` (ISO-8601 instants, supplied together), `environmentId?`,
+`fromEnvironmentId?` + `toEnvironmentId?` (a promotion pair; include both Environments plus
+App-level definition rows), `flagId?`, plus the shared pagination query.
+
+Returns `ListResponse` of entries. Each entry includes `diff: { before, after, fields }` computed
+from that row's stored `diff_json`.
+
+### `GET /apps/{app_id}/flag-changes/export`
+
+Same filters as the list, but `from` and `to` are required. `format` is `json` or `unified`. The
+JSON envelope always includes `items` and `unifiedDiff` so CLI and MCP share one contract.
+
+The Control Panel does not render this log. The overview "recently changed" card is a different
+read (`flag_configs.updated_at`) and has no existing detail pattern that can reuse
+`ApprovalDiffTable` without a new visual treatment.
+
 ## Segment endpoints
 
 ### `GET /apps/{app_id}/segments`
@@ -442,3 +467,4 @@ do not block Segment deletion and do not drift after deletion.
 - [../../adr/0028-variant-catalog-is-app-level-availability-is-per-environment-promotion-moves-config.md](../../adr/0028-variant-catalog-is-app-level-availability-is-per-environment-promotion-moves-config.md)
 - [../../adr/0029-environment-policy-configurable-per-change-type-confirmation-gates.md](../../adr/0029-environment-policy-configurable-per-change-type-confirmation-gates.md)
 - [../../adr/0018-identity-and-operational-state-in-d1-hot-validation-in-kv-audit-in-tinybird.md](../../adr/0018-identity-and-operational-state-in-d1-hot-validation-in-kv-audit-in-tinybird.md)
+- [../../adr/0051-the-flag-change-log-is-both-the-audit-record-and-the-integration-outbox.md](../../adr/0051-the-flag-change-log-is-both-the-audit-record-and-the-integration-outbox.md)

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { createRepository } from "../index";
+import { appScope, createRepository } from "../index";
 import { createLocalD1, type LocalD1 } from "./test-d1-pool";
 import {
   changes,
@@ -97,5 +97,39 @@ describe("flagChangeEvents repo", () => {
       limit: 100,
     });
     expect(pruned).toBe(0);
+  });
+
+  it("lists an App's stored rows under a minted TenantScope and never another tenant", async () => {
+    await insertConfig(local.d1, seed);
+    await toggleConfig(local.d1, seed);
+    const page = await repo.flagChangeEvents.listForApp(appScope(seed.a.appId), {
+      includeAppLevel: true,
+      order: "asc",
+      limit: 100,
+    });
+    expect(page.some((row) => row.diffJson !== null && row.appId === seed.a.appId)).toBe(true);
+    expect(page.every((row) => row.appId === seed.a.appId)).toBe(true);
+
+    const foreign = await repo.flagChangeEvents.listForApp(appScope(seed.b.appId), {
+      includeAppLevel: true,
+      order: "asc",
+      limit: 100,
+    });
+    expect(foreign.some((row) => row.appId === seed.a.appId)).toBe(false);
+  });
+
+  it("filters a promotion pair to those Environments plus App-level rows", async () => {
+    await insertSecondEnvironment(local.d1, seed);
+    await insertConfig(local.d1, seed);
+    await insertConfig(local.d1, seed, { id: "cfg_a2", environmentId: "env_a_two" });
+    await toggleConfig(local.d1, seed);
+    const page = await repo.flagChangeEvents.listForApp(appScope(seed.a.appId), {
+      environmentIds: [seed.a.environmentId, "env_a_two"],
+      includeAppLevel: true,
+      order: "asc",
+      limit: 100,
+    });
+    expect(page.some((row) => row.environmentId === seed.a.environmentId)).toBe(true);
+    expect(page.some((row) => row.environmentId === null)).toBe(true);
   });
 });

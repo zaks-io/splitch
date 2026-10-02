@@ -74,6 +74,8 @@ const MCP_TOOL_MEMBERSHIP_GATES = {
   flag_config_update: APP_ADMIN,
   flag_targeting_rules_replace: APP_ADMIN,
   flags_promote: APP_ADMIN,
+  flag_changes_list: APP_MEMBER,
+  flag_changes_export: APP_MEMBER,
   segments_list: APP_MEMBER,
   segments_create: APP_ADMIN,
   segments_get: APP_MEMBER,
