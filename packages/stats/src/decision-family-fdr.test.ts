@@ -147,7 +147,9 @@ describe("applyDecisionFamilyCorrection", () => {
 
     expect(output.arm_results.every((result) => result.is_significant === false)).toBe(true);
   });
+});
 
+describe("applyDecisionFamilyCorrection procedure validation", () => {
   it("fails loud on an unknown family_correction procedure", () => {
     expect(() =>
       applyDecisionFamilyCorrection({
@@ -158,6 +160,17 @@ describe("applyDecisionFamilyCorrection", () => {
           armResult("goal_clicks", "treatment_a", 0.01),
           armResult("goal_clicks", "treatment_b", 0.02),
         ],
+      }),
+    ).toThrow(/family_correction must be one of bh, bh_g/);
+  });
+
+  it("fails loud on an unknown family_correction even when the family is empty", () => {
+    expect(() =>
+      applyDecisionFamilyCorrection({
+        confidence_level: 0.95,
+        family_correction: "typo" as never,
+        decision_family: [],
+        arm_results: [armResult("secondary_clicks", "treatment_a", 0.01)],
       }),
     ).toThrow(/family_correction must be one of bh, bh_g/);
   });

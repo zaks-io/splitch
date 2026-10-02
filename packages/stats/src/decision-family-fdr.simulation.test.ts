@@ -8,13 +8,50 @@ import {
   FAMILY_FDR_SIM_SMOKE_LOOKS,
   runFamilyCorrectionStoppingSimulation,
 } from "./decision-family-fdr-simulation";
+import {
+  assertGeneratedMetricCorrelation,
+  FAMILY_FDR_SIM_CORRELATION,
+  familyFdrSimFactorLoadings,
+} from "./decision-family-fdr-simulation-correlation";
 import { monteCarloTolerance } from "./sequential-ci-simulation";
+import { seededNormal } from "./simulation-null-draws";
 
 const METRIC_COUNT = 6;
 const TREATMENT_VARIANTS = ["treatment_a", "treatment_b", "treatment_c", "treatment_d"] as const;
 const Q = 0.1;
 
 describe("decision_family FDR simulation smoke", () => {
+  it("uses sqrt loadings so pairwise correlation matches the declared design", () => {
+    const { sharedLoading, residualLoading } = familyFdrSimFactorLoadings(
+      FAMILY_FDR_SIM_CORRELATION,
+    );
+    expect(sharedLoading).toBeCloseTo(Math.sqrt(FAMILY_FDR_SIM_CORRELATION), 12);
+    expect(residualLoading).toBeCloseTo(Math.sqrt(1 - FAMILY_FDR_SIM_CORRELATION), 12);
+    expect(sharedLoading ** 2).toBeCloseTo(FAMILY_FDR_SIM_CORRELATION, 12);
+    // The previous 0.6 shared / 0.8 residual design realized 0.36, not 0.6.
+    expect(sharedLoading).not.toBeCloseTo(FAMILY_FDR_SIM_CORRELATION, 2);
+  });
+
+  it("fails loud when generated Metric pairs miss the declared correlation", () => {
+    const observed = assertGeneratedMetricCorrelation(
+      seededNormal("correlation-check-pass"),
+      FAMILY_FDR_SIM_CORRELATION,
+      20_000,
+      0.03,
+    );
+    expect(observed).toBeGreaterThan(FAMILY_FDR_SIM_CORRELATION - 0.03);
+    expect(observed).toBeLessThan(FAMILY_FDR_SIM_CORRELATION + 0.03);
+
+    expect(() =>
+      assertGeneratedMetricCorrelation(
+        seededNormal("correlation-check-fail"),
+        FAMILY_FDR_SIM_CORRELATION,
+        20_000,
+        0,
+      ),
+    ).toThrow(/generated pairwise Metric correlation/);
+  });
+
   it("controls false-discovery proportion near configured q across Metric families", () => {
     const iterations = Number.parseInt(
       process.env.SPLITCH_STATS_SIMULATION_ITERATIONS ?? "300",

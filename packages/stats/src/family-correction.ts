@@ -15,6 +15,12 @@ export function resolveFamilyCorrectionProcedure(
   if (procedure === undefined) {
     return "bh";
   }
+  return assertKnownFamilyCorrectionProcedure(procedure);
+}
+
+function assertKnownFamilyCorrectionProcedure(
+  procedure: FamilyCorrectionProcedure,
+): FamilyCorrectionProcedure {
   if (!PROCEDURES.has(procedure)) {
     throw new Error(
       `family_correction must be one of ${FAMILY_CORRECTION_PROCEDURES.join(", ")}; received ${JSON.stringify(procedure)}.`,
@@ -44,7 +50,8 @@ export function familyCorrectionAlpha(
   familySize: number,
   procedure: FamilyCorrectionProcedure,
 ): number {
-  if (procedure === "bh") {
+  const resolved = assertKnownFamilyCorrectionProcedure(procedure);
+  if (resolved === "bh") {
     return alpha;
   }
   return alpha / harmonicNumber(familySize);

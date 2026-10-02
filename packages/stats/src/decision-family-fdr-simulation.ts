@@ -5,6 +5,13 @@ import type {
 } from "@splitch/contracts";
 import { applyDecisionFamilyCorrection } from "./decision-family-fdr";
 import { armResult } from "./decision-family-fdr-test-helpers";
+import {
+  assertGeneratedMetricCorrelation,
+  FAMILY_FDR_SIM_CORRELATION,
+  FAMILY_FDR_SIM_CORRELATION_CHECK_N,
+  FAMILY_FDR_SIM_CORRELATION_TOLERANCE,
+  familyFdrSimFactorLoadings,
+} from "./decision-family-fdr-simulation-correlation";
 import type { FamilyCorrectionProcedure } from "./family-correction";
 import { SequentialCI } from "./sequential-ci";
 import {
@@ -19,7 +26,6 @@ import {
 import { estimateMetricComparison } from "./variance-estimators";
 
 export const FAMILY_FDR_SIM_ALPHA = 0.05;
-const FAMILY_FDR_SIM_CORRELATION = 0.6;
 const FAMILY_FDR_SIM_ALTERNATIVE_EFFECT = 0.35;
 const FAMILY_FDR_SIM_TARGET_N = 1_250;
 export const FAMILY_FDR_SIM_SMOKE_LOOKS = [100, 200, 400] as const;
@@ -76,6 +82,13 @@ interface Accumulator {
 export function runFamilyCorrectionStoppingSimulation(
   config: FamilyCorrectionSimulationConfig,
 ): FamilyCorrectionSimulationResult {
+  assertGeneratedMetricCorrelation(
+    seededNormal(`${config.seed}:correlation-check`),
+    FAMILY_FDR_SIM_CORRELATION,
+    FAMILY_FDR_SIM_CORRELATION_CHECK_N,
+    FAMILY_FDR_SIM_CORRELATION_TOLERANCE,
+  );
+
   const rng = seededNormal(config.seed);
   const adapter = new SequentialCI();
   const bh = emptyAccumulator();
@@ -200,7 +213,7 @@ function pValueAtLook(
 }
 
 function drawCorrelatedGoals(rng: () => number, size: number): NullExperimentDraw {
-  const residualScale = Math.sqrt(1 - FAMILY_FDR_SIM_CORRELATION ** 2);
+  const { sharedLoading, residualLoading } = familyFdrSimFactorLoadings(FAMILY_FDR_SIM_CORRELATION);
   const exposures: DedupeExposureRow[] = [];
   const metricValues: PerEntityMetricRow[] = [];
 
@@ -226,7 +239,7 @@ function drawCorrelatedGoals(rng: () => number, size: number): NullExperimentDra
           run_id: SIMULATION_RUN_ID,
           metric_id: metric.metric_id,
           metric_type: SIMULATION_METRIC_TYPE,
-          value: FAMILY_FDR_SIM_CORRELATION * shared + residualScale * residual + treatmentShift,
+          value: sharedLoading * shared + residualLoading * residual + treatmentShift,
           in_window: true,
         });
       }

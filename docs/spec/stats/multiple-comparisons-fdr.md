@@ -73,12 +73,12 @@ Recorded smoke results from `stats:simulation` (same seed and iteration count):
 
 | Procedure | Stop FDR | Stop power | Last-look power (n=400) |
 | --------- | -------- | ---------- | ----------------------- |
-| BH        | 0.0011   | 0.720      | 0.927                   |
-| BH-G      | 0.0011   | 0.735      | 0.888                   |
+| BH        | 0        | 0.792      | 0.923                   |
+| BH-G      | 0        | 0.760      | 0.883                   |
 
-Stop-policy power cost of BH-G versus BH: -0.015, because BH-G can wait past BH's first
-crossing and then reject more alternatives. Same-look power cost at the last look: 0.038
-(3.8 percentage points). BH-G observed FDR stayed within alpha plus the tolerance above.
+Stop-policy power cost of BH-G versus BH: 0.032. Same-look power cost at the last
+look: 0.040 (4.0 percentage points). BH-G observed FDR stayed within alpha plus the
+tolerance above.
 
 Primary Dimension tuples are locked-family members when declared, but production snapshots
 still write an empty dimension list, so they are not in this simulation.

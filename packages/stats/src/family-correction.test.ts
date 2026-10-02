@@ -32,4 +32,25 @@ describe("family correction procedure", () => {
   it("fails loud on a non-positive family size", () => {
     expect(() => harmonicNumber(0)).toThrow(/positive integer family size/);
   });
+
+  it("fails loud on an unknown procedure at the familyCorrectionAlpha boundary", () => {
+    expect(() => familyCorrectionAlpha(0.05, 4, "e_bh" as never)).toThrow(
+      /family_correction must be one of bh, bh_g/,
+    );
+    expect(() => familyCorrectionAlpha(0.05, 4, "typo" as never)).toThrow(
+      /family_correction must be one of bh, bh_g/,
+    );
+  });
+
+  it("fails loud on an unknown procedure at the largestRejectedRank boundary", () => {
+    expect(() => largestRejectedRank([0.01, 0.02], 0.05, "typo" as never)).toThrow(
+      /family_correction must be one of bh, bh_g/,
+    );
+  });
+
+  it("fails loud on an unknown procedure at resolveFamilyCorrectionProcedure", () => {
+    expect(() => resolveFamilyCorrectionProcedure("e_bh" as never)).toThrow(
+      /family_correction must be one of bh, bh_g/,
+    );
+  });
 });

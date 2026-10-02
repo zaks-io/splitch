@@ -77,16 +77,16 @@ burn-in) is in `docs/spec/stats/inference-engine.md`.
 Seeded Monte Carlo (smoke: seed `424242`, 300 iterations, looks 100/200/400 per arm, four
 correlated Count Metrics sharing one Control, two true nulls and two alternatives of
 absolute lift 0.35, residual correlation 0.6, SequentialCI `target_n` 1250, winsorization
-and CUPED off). FDR uses stop-at-first-crossing. Power is reported two ways because
-independent stopping lets BH-G wait for a later look:
+and CUPED off). FDR uses stop-at-first-crossing. Power is reported two ways because the
+procedures can stop at different looks:
 
 | Procedure | Stop FDR | Stop power | Last-look power (n=400) |
 | --------- | -------- | ---------- | ----------------------- |
-| BH        | 0.0011   | 0.720      | 0.927                   |
-| BH-G      | 0.0011   | 0.735      | 0.888                   |
+| BH        | 0        | 0.792      | 0.923                   |
+| BH-G      | 0        | 0.760      | 0.883                   |
 
-Stop-policy power cost of BH-G versus BH: -0.015 (BH-G waited and then rejected more
-alternatives). Same-look power cost at the last look: 0.038 (3.8 percentage points).
+Stop-policy power cost of BH-G versus BH: 0.032. Same-look power cost at the last look:
+0.040 (4.0 percentage points).
 
 Monte Carlo tolerance for FDR is
 `max(0.02, 3 * sqrt(alpha * (1 - alpha) / iterations))`, which is 0.038 at 300 iterations

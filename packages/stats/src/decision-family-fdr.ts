@@ -40,6 +40,7 @@ export function applyDecisionFamilyCorrection<Result extends DecisionFamilyArmRe
   input: DecisionFamilyCorrectionInput<Result>,
 ): DecisionFamilyCorrectionOutput<Result> {
   const alpha = alphaFromConfidenceLevel(input.confidence_level);
+  const procedure = resolveFamilyCorrectionProcedure(input.family_correction);
   const familyByKey = decisionFamilyByKey(input.decision_family);
 
   validatePValues(input.arm_results);
@@ -57,11 +58,7 @@ export function applyDecisionFamilyCorrection<Result extends DecisionFamilyArmRe
 
   const resultByKey = lockedResultsByKey(input.arm_results, familyByKey);
   const ranked = rankDecisionFamilyMembers(familyByKey, resultByKey);
-  const rejectedKeys = rejectedDecisionKeys(
-    ranked,
-    alpha,
-    resolveFamilyCorrectionProcedure(input.family_correction),
-  );
+  const rejectedKeys = rejectedDecisionKeys(ranked, alpha, procedure);
 
   return {
     arm_results: input.arm_results.map((result) => {
