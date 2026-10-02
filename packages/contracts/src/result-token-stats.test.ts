@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  AnalysisResultsEnvelopeSchema,
   ArmResultSchema,
   canonicalHash,
   EstimandDisclosureSchema,
@@ -92,6 +93,23 @@ function statsWith(arm: object): StatsOutput {
 describe("estimand disclosure contract", () => {
   it("still parses an arm recorded before the disclosure existed", () => {
     expect(ArmResultSchema.parse(legacyArm).estimand).toBeUndefined();
+  });
+
+  it("still parses a stored ready Results envelope whose arms predate the disclosure", () => {
+    const envelope = AnalysisResultsEnvelopeSchema.parse({
+      state: "ready",
+      run_id: "run_1",
+      control_variant: "control",
+      data_watermark: "2026-07-05T00:00:00.000Z",
+      result_token: `sha256:${"a".repeat(64)}`,
+      stats: statsWith(legacyArm),
+    });
+
+    if (envelope.state !== "ready") throw new Error("expected a ready envelope");
+    expect(envelope.stats.arm_results.every((arm) => arm.estimand === undefined)).toBe(true);
+    expect(
+      envelope.stats.dimension_results?.[0]?.arm_results.every((arm) => arm.estimand === undefined),
+    ).toBe(true);
   });
 
   it("requires the capped-Entity count and the uncapped estimate together", () => {
