@@ -33,7 +33,9 @@ export interface McpSessionStore {
   end(id: string, subject: string): Promise<void>;
 }
 
-type McpSessionContextValidation = { ok: true } | { ok: false; message: string };
+type McpSessionContextValidation =
+  | { ok: true }
+  | { ok: false; message: string; field?: "appId" | "environmentId" };
 
 export type McpSessionContextValidator = (
   context: McpSessionContext,
@@ -97,11 +99,12 @@ export async function setSessionContext(
   // internal-error path instead.
   const validation = await validate(context);
   if (!validation.ok) {
+    // Prefer the field the validator named. Unknown refusals stay form-level
+    // (`path: []`) so an agent does not rewrite the wrong axis.
+    const path = validation.field === undefined ? [] : [validation.field];
     return {
       ok: false,
-      error: contextUseInvalidError(validation.message, [
-        { path: ["appId"], message: validation.message },
-      ]),
+      error: contextUseInvalidError(validation.message, [{ path, message: validation.message }]),
     };
   }
   await sessionStore.set(sessionId, context, subject);
@@ -192,7 +195,12 @@ function inputRecord(value: unknown): Record<string, unknown> {
 export function parseToolCall(params: unknown): { name: string; arguments: unknown } | null {
   if (!params || typeof params !== "object" || Array.isArray(params)) return null;
   const call = params as { name?: unknown; arguments?: unknown };
+  // Default only when `arguments` is omitted. Explicit `null` (and other
+  // non-objects) must survive so the tool-call path can refuse them.
   return typeof call.name === "string"
-    ? { name: call.name, arguments: call.arguments ?? {} }
+    ? {
+        name: call.name,
+        arguments: call.arguments === undefined ? {} : call.arguments,
+      }
     : null;
 }

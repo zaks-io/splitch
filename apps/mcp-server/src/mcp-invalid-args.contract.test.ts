@@ -13,19 +13,26 @@ import { MCP_TOOL_DEFINITIONS } from "./tool-registry";
  * by leaving a hardcoded count stale.
  */
 describe("MCP invalid tool arguments contract", () => {
-  it("returns an isError result for invalid arguments on every advertised tool", async () => {
-    expect(MCP_TOOL_DEFINITIONS.length).toBeGreaterThan(0);
-    const seen: Request[] = [];
+  it.each([1, null, "string", true, []])(
+    "returns an isError result for non-object arguments (%j) on every advertised tool",
+    async (invalidArguments) => {
+      expect(MCP_TOOL_DEFINITIONS.length).toBeGreaterThan(0);
+      const seen: Request[] = [];
 
-    for (const tool of MCP_TOOL_DEFINITIONS) {
-      const body = await callTool(tool.name, invalidArgumentsFor(tool), seen);
-      expect(body.error, `${tool.name} must not be a JSON-RPC protocol error`).toBeUndefined();
-      expect(body.result?.isError, `${tool.name} must return isError`).toBe(true);
-      expect(typeof body.result?.structuredContent?.code, `${tool.name} code`).toBe("string");
-    }
+      for (const tool of MCP_TOOL_DEFINITIONS) {
+        const body = await callTool(tool.name, invalidArguments, seen);
+        expect(body.error, `${tool.name} must not be a JSON-RPC protocol error`).toBeUndefined();
+        expect(body.result?.isError, `${tool.name} must return isError`).toBe(true);
+        expect(body.result?.structuredContent).toMatchObject({
+          code: "VALIDATION_ERROR",
+          message: `${tool.name} arguments must be an object`,
+          details: { issues: [{ path: [], message: "must be an object" }] },
+        });
+      }
 
-    expect(seen).toEqual([]);
-  });
+      expect(seen).toEqual([]);
+    },
+  );
 
   it("keeps an unknown tool name as a JSON-RPC protocol error", async () => {
     const body = await callTool("missing_tool", {}, []);
@@ -34,18 +41,15 @@ describe("MCP invalid tool arguments contract", () => {
   });
 });
 
-function invalidArgumentsFor(tool: { inputSchema: Record<string, unknown> }): unknown {
-  const schema = tool.inputSchema;
-  if (schema.type !== "object") {
-    throw new Error(`advertised tool schema must be an object, got ${String(schema.type)}`);
-  }
-  // A non-object is invalid against every advertised object schema, including
-  // no-argument tools, and is refused before any Control Plane fetch (SEP-1303).
-  return 1;
-}
-
 interface ToolCallBody {
-  result?: { isError?: boolean; structuredContent?: { code?: string } };
+  result?: {
+    isError?: boolean;
+    structuredContent?: {
+      code?: string;
+      message?: string;
+      details?: { issues?: Array<{ path: string[]; message: string }> };
+    };
+  };
   error?: { code: number; message: string };
 }
 

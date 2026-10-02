@@ -177,6 +177,9 @@ describe("MCP context_use failure classes", () => {
           code: "CONTEXT_USE_INVALID",
           message: 'App "app_typo" did not resolve.',
           outcome: "user_action_required",
+          details: {
+            issues: [{ path: [], message: 'App "app_typo" did not resolve.' }],
+          },
         },
       },
     });

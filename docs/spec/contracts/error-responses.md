@@ -110,7 +110,7 @@ ErrorCode =
   | 'SERVICE_UNAVAILABLE'         // Provider config could not be resolved; retryable (503 + Retry-After).
                                  //   SDK maps this to OpenFeature errorCode PROVIDER_NOT_READY (ADR-0036)
   | 'PRIVACY_JOB_FAILED'
-  | 'INTERNAL_SERVER_ERROR'       // includes corrupted KV blob (fail-loud per ADR-0025)
+  | 'INTERNAL_SERVER_ERROR'       // deterministic platform fault (non-retryable); includes corrupted KV blob (fail-loud per ADR-0025)
 ```
 
 A mutation whose Environment Policy level is `allow` applies directly and creates

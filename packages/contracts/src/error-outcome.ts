@@ -16,12 +16,20 @@ export type PresentedError<T extends { readonly code: ErrorCode }> = T & {
   readonly outcome: ErrorOutcome;
 };
 
-const retryableCodes = ["RATE_LIMITED", "SERVICE_UNAVAILABLE", "INTERNAL_SERVER_ERROR"] as const;
+/**
+ * Transient platform codes only. `INTERNAL_SERVER_ERROR` is intentionally
+ * absent: Exposure claim-store faults and Flag-read contract mismatches reuse
+ * that code for deterministic failures, so classifying it retryable would tell
+ * agents and the Exposure drain to loop on poison. Transient seams use
+ * `SERVICE_UNAVAILABLE` (or `RATE_LIMITED`) instead.
+ */
+const retryableCodes = ["RATE_LIMITED", "SERVICE_UNAVAILABLE"] as const;
 
 const nonRetryableCodes = [
   "EVENT_DEFINITION_IMMUTABLE",
   "APPROVAL_REQUEST_RESOLVED",
   "ACTIVATION_NOT_AVAILABLE",
+  "INTERNAL_SERVER_ERROR",
 ] as const;
 
 const retryable = new Set<string>(retryableCodes);

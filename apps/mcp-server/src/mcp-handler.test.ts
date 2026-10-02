@@ -103,6 +103,7 @@ describe("mcp server Streamable HTTP transport", () => {
       isError: true,
       structuredContent: {
         code: "INTERNAL_SERVER_ERROR",
+        outcome: "non_retryable",
         remediation: expect.stringContaining("Update the server"),
         recommendedAction: "UPDATE_SERVER",
         docsUrl: "https://splitch.dev/docs/error/INTERNAL_SERVER_ERROR",

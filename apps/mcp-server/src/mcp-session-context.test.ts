@@ -47,12 +47,14 @@ describe("MCP session context", () => {
       appId: "app_typo",
       environmentId: "env_session",
       message: 'App "app_typo" did not resolve.',
+      issuePath: ["appId"],
       paths: ["/apps/app_typo"],
     },
     {
       appId: "app_session",
       environmentId: "env_typo",
       message: 'Environment "env_typo" did not resolve in App "app_session".',
+      issuePath: ["environmentId"],
       paths: ["/apps/app_session", "/apps/app_session/envs/env_typo"],
     },
   ])("refuses an unresolved $appId / $environmentId without storing it", async (testCase) => {
@@ -72,7 +74,17 @@ describe("MCP session context", () => {
       },
     );
 
-    expect(await errorMessage(response)).toBe(testCase.message);
+    const body = (await response.json()) as JsonRpcSuccess<
+      ToolResult<{
+        message: string;
+        details: { issues: Array<{ path: string[]; message: string }> };
+      }>
+    >;
+    expect(body.result.isError).toBe(true);
+    expect(body.result.structuredContent.message).toBe(testCase.message);
+    expect(body.result.structuredContent.details.issues).toEqual([
+      { path: testCase.issuePath, message: testCase.message },
+    ]);
     expect(seen.map((request) => new URL(request.url).pathname)).toEqual(testCase.paths);
     await expect(sessionStore.get(sessionId, sessionSubject)).resolves.toBeUndefined();
   });

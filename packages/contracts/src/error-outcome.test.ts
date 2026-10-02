@@ -14,7 +14,7 @@ describe("error outcome class", () => {
   it("treats transient platform faults as retryable and terminal states as non_retryable", () => {
     expect(errorOutcomeByCode.RATE_LIMITED).toBe("retryable");
     expect(errorOutcomeByCode.SERVICE_UNAVAILABLE).toBe("retryable");
-    expect(errorOutcomeByCode.INTERNAL_SERVER_ERROR).toBe("retryable");
+    expect(errorOutcomeByCode.INTERNAL_SERVER_ERROR).toBe("non_retryable");
     expect(errorOutcomeByCode.ACTIVATION_NOT_AVAILABLE).toBe("non_retryable");
     expect(errorOutcomeByCode.APPROVAL_REQUEST_RESOLVED).toBe("non_retryable");
     expect(errorOutcomeByCode.EVENT_DEFINITION_IMMUTABLE).toBe("non_retryable");
@@ -33,5 +33,24 @@ describe("error outcome class", () => {
       ...parsed,
       outcome: "user_action_required",
     });
+  });
+
+  it("marks Flag-read contract mismatches non_retryable so agents update the server", () => {
+    const parsed = ErrorResponseSchema.parse({
+      code: "INTERNAL_SERVER_ERROR",
+      message:
+        "flags_list requested complete Flag Configurations but received an unhydrated response",
+      details: { fault: "FLAG_READ_CONTRACT_MISMATCH" },
+    });
+    expect(presentErrorResponse(parsed).outcome).toBe("non_retryable");
+  });
+
+  it("marks Exposure claim-store INTERNAL_SERVER_ERROR faults non_retryable", () => {
+    const parsed = ErrorResponseSchema.parse({
+      code: "INTERNAL_SERVER_ERROR",
+      message: "Exposure claim-store protocol violation",
+      details: { fault: "claim_store_protocol_violation" },
+    });
+    expect(presentErrorResponse(parsed).outcome).toBe("non_retryable");
   });
 });
