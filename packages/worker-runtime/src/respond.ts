@@ -1,4 +1,9 @@
-import { type ErrorCode, type ErrorResponse, httpStatusForError } from "@splitch/contracts";
+import {
+  type ErrorCode,
+  type ErrorResponse,
+  httpStatusForError,
+  presentErrorResponse,
+} from "@splitch/contracts";
 
 const REQUEST_ID_HEADER = "x-request-id";
 
@@ -25,7 +30,7 @@ export function renderError(
     headers.set("retry-after", String(Math.ceil(retryAfterMs / 1000)));
   }
 
-  return new Response(JSON.stringify(error), { status, headers });
+  return new Response(JSON.stringify(presentErrorResponse(error)), { status, headers });
 }
 
 /** Build an ErrorResponse for a code whose details are empty (`{}`). */

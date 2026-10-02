@@ -5,6 +5,7 @@ import { type ErrorCode, ErrorCodeSchema, errorCodes } from "./error-code";
 import { capacityErrorMembers } from "./error-members-capacity";
 import { conflictErrorMembers } from "./error-members-conflict";
 import { integrationErrorMembers } from "./error-members-integration";
+import { localErrorMembers } from "./error-members-local";
 import { notFoundErrorMembers } from "./error-members-not-found";
 import {
   type PolicyChangeType,
@@ -117,6 +118,7 @@ const errorMembers = [
       .strict(),
   ),
   member("UNSUPPORTED_MEDIA_TYPE", UnsupportedMediaTypeDetailsSchema),
+  ...localErrorMembers,
 
   member(
     "RUN_FROZEN",

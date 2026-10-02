@@ -43,7 +43,7 @@ describe("registrar raw-body byte limit", () => {
     expect(handler).not.toHaveBeenCalled();
     parse.mockRestore();
     expect(response.status).toBe(400);
-    expect(await response.json()).toEqual(LIMIT_ERROR);
+    expect(await response.json()).toMatchObject(LIMIT_ERROR);
   });
 
   it("rejects an oversized body when Content-Length lies below the cap", async () => {
@@ -64,7 +64,7 @@ describe("registrar raw-body byte limit", () => {
     const response = await app.request(requestWithBody(body.stream, { "content-length": "2" }));
 
     expect(response.status).toBe(400);
-    expect(await response.json()).toEqual(LIMIT_ERROR);
+    expect(await response.json()).toMatchObject(LIMIT_ERROR);
     expect(auth).not.toHaveBeenCalled();
     expect(handler).not.toHaveBeenCalled();
   });
@@ -107,7 +107,7 @@ describe("registrar raw-body byte limit", () => {
     expect(JSON.stringify(errors)).not.toContain(rejectedMarker);
     parse.mockRestore();
     expect(response.status).toBe(400);
-    expect(await response.json()).toEqual(LIMIT_ERROR);
+    expect(await response.json()).toMatchObject(LIMIT_ERROR);
   });
 
   it("parses and validates an exactly-at-cap body once, then replays its exact bytes", async () => {

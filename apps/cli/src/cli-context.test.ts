@@ -108,6 +108,7 @@ describe("splitch context reports the session, never an empty success", () => {
       remediation: expect.stringContaining("splitch login"),
       docsUrl: "https://splitch.dev/docs/error/CLI_NOT_AUTHENTICATED",
       details: null,
+      outcome: null,
     });
   });
 

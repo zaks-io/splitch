@@ -1,9 +1,11 @@
 import {
+  type ErrorResponse,
   type McpToolAnnotations,
   mcpReversibilityMeta,
   mcpToolAnnotations,
   updateClosed,
 } from "@splitch/contracts";
+import { contextUseInvalidError, scopeUnresolvedError } from "./mcp-local-errors";
 
 export interface McpSkinToolDefinition {
   name: string;
@@ -70,20 +72,38 @@ export async function setSessionContext(
   sessionStore: McpSessionStore,
   validate: McpSessionContextValidator,
   subject: string,
-): Promise<{ ok: true; value: McpSessionContext } | { ok: false; message: string }> {
+): Promise<{ ok: true; value: McpSessionContext } | { ok: false; error: ErrorResponse }> {
   if (!sessionId) {
-    return { ok: false, message: "MCP session is required before calling context_use." };
+    return {
+      ok: false,
+      error: contextUseInvalidError("MCP session is required before calling context_use.", [
+        { path: ["session"], message: "required" },
+      ]),
+    };
   }
   const context = parseContext(arguments_);
   if (!context) {
-    return { ok: false, message: "context_use requires non-empty appId and environmentId." };
+    return {
+      ok: false,
+      error: contextUseInvalidError("context_use requires non-empty appId and environmentId.", [
+        { path: ["appId"], message: "required" },
+        { path: ["environmentId"], message: "required" },
+      ]),
+    };
   }
   // Only a resolution refusal is the caller's to fix. A validator or session
   // store that throws is an outage, and dressing it as `{ ok: false }` tells the
   // agent its own ids were wrong, so it retries new ids forever. Let it reach the
   // internal-error path instead.
   const validation = await validate(context);
-  if (!validation.ok) return validation;
+  if (!validation.ok) {
+    return {
+      ok: false,
+      error: contextUseInvalidError(validation.message, [
+        { path: ["appId"], message: validation.message },
+      ]),
+    };
+  }
   await sessionStore.set(sessionId, context, subject);
   return { ok: true, value: context };
 }
@@ -94,7 +114,7 @@ export async function resolveScope(
   sessionId: string | null,
   sessionStore: McpSessionStore,
   subject: string,
-): Promise<{ ok: true; value: Record<string, unknown> } | { ok: false; message: string }> {
+): Promise<{ ok: true; value: Record<string, unknown> } | { ok: false; error: ErrorResponse }> {
   const input = inputRecord(arguments_);
   // A session store that throws is an outage, not an unresolved scope: it
   // propagates to the internal-error path rather than posing as a caller fix.
@@ -106,7 +126,7 @@ function resolveRouteScope(
   path: string,
   input: Record<string, unknown>,
   context: McpSessionContext | undefined,
-): { ok: true; value: Record<string, unknown> } | { ok: false; message: string } {
+): { ok: true; value: Record<string, unknown> } | { ok: false; error: ErrorResponse } {
   const app = resolveScopeAxis(
     input.appId,
     context?.appId,
@@ -152,14 +172,14 @@ function resolveScopeAxis(
   required: boolean,
   name: "App" | "Environment",
   parameter: string,
-): { ok: true; value: string | undefined } | { ok: false; message: string } {
+): { ok: true; value: string | undefined } | { ok: false; error: ErrorResponse } {
   const value = explicit ?? session;
   if (!required || (typeof value === "string" && value.length > 0)) {
     return { ok: true, value: value as string | undefined };
   }
   return {
     ok: false,
-    message: `${name} scope is unresolved. Call context_use or pass ${parameter} explicitly.`,
+    error: scopeUnresolvedError(name, parameter),
   };
 }
 

@@ -44,6 +44,8 @@ export interface CliErrorDetail {
   readonly remediation: string;
   /** Structured refusal payload from the API; reaches the caller only under `--json`. */
   readonly details?: Record<string, unknown>;
+  /** Wire outcome class when the code is a server ErrorCode. */
+  readonly outcome?: "retryable" | "user_action_required" | "non_retryable";
   readonly originalError?: unknown;
 }
 
@@ -67,6 +69,7 @@ export class SplitchCliError extends Error {
   readonly remediation: string;
   readonly docsUrl: string;
   readonly details: Record<string, unknown> | null;
+  readonly outcome: "retryable" | "user_action_required" | "non_retryable" | null;
 
   constructor(detail: CliErrorDetail) {
     super(formatSdkErrorMessage(detail), { cause: detail.originalError });
@@ -77,6 +80,7 @@ export class SplitchCliError extends Error {
     this.remediation = sentence(detail.remediation);
     this.docsUrl = resolveErrorDocsUrl(detail.code);
     this.details = detail.details ?? null;
+    this.outcome = detail.outcome ?? null;
   }
 }
 
@@ -131,6 +135,7 @@ interface CliErrorJson {
   readonly remediation: string;
   readonly docsUrl: string;
   readonly details: Record<string, unknown> | null;
+  readonly outcome: "retryable" | "user_action_required" | "non_retryable" | null;
 }
 
 function cliErrorJson(error: SplitchCliError): CliErrorJson {
@@ -140,6 +145,7 @@ function cliErrorJson(error: SplitchCliError): CliErrorJson {
     remediation: error.remediation,
     docsUrl: error.docsUrl,
     details: error.details,
+    outcome: error.outcome,
   };
 }
 

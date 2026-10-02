@@ -164,6 +164,7 @@ describe("CLI fatal stderr contract", () => {
       remediation: expect.stringContaining("apr_01J00000000000000000000000"),
       docsUrl: "https://splitch.dev/docs/error/APPROVAL_REVIEW_REQUIRED",
       details: serverError.details,
+      outcome: "user_action_required",
     });
     expect(error).toHaveBeenCalledWith(expect.stringContaining("APPROVAL_REVIEW_REQUIRED"));
     expect(error).toHaveBeenCalledWith(expect.stringContaining("Remediation:"));
@@ -183,6 +184,7 @@ describe("CLI fatal stderr contract", () => {
       remediation: expect.stringContaining("splitch login"),
       docsUrl: "https://splitch.dev/docs/error/CLI_NOT_AUTHENTICATED",
       details: null,
+      outcome: null,
     });
   });
 
@@ -203,6 +205,7 @@ describe("CLI fatal stderr contract", () => {
       remediation: expect.any(String),
       docsUrl: "https://splitch.dev/docs/error/CLI_USAGE_INVALID",
       details: null,
+      outcome: null,
     });
   });
 

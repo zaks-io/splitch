@@ -1,4 +1,8 @@
-import { ErrorCodeSchema, type ErrorResponse } from "@splitch/sdk/control-plane";
+import {
+  ErrorCodeSchema,
+  type ErrorResponse,
+  errorOutcomeByCode,
+} from "@splitch/sdk/control-plane";
 import { remediationForServerError } from "./approval-stale-warn.js";
 import { commandSupportsConfirm } from "./command-registry.js";
 import { writeCliError } from "./errors.js";
@@ -32,5 +36,6 @@ export function writeServerError(
     // Machine output keeps the complete refusal so callers can act without
     // scraping the human remediation.
     details: error.details,
+    outcome: errorOutcomeByCode[parsedCode.data],
   });
 }
