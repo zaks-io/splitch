@@ -10,6 +10,7 @@ import { cloudflareRoutes } from "./routes/routes-cloudflare";
 import { convexRoutes } from "./routes/routes-convex";
 import { credentialRoutes } from "./routes/routes-credentials";
 import { dataPlaneRoutes } from "./routes/routes-data-plane";
+import { ofrepRoutes } from "./routes/routes-ofrep";
 import { eventDefinitionRoutes } from "./routes/routes-event-definitions";
 import { experimentRoutes } from "./routes/routes-experiments";
 import { flagChangeRoutes } from "./routes/routes-flag-changes";
@@ -92,6 +93,7 @@ export const routeRegistry = assertRegistry([
   ...analysisRoutes,
   ...privacyRoutes,
   ...dataPlaneRoutes,
+  ...ofrepRoutes,
 ] as const);
 
 /** Lookup by operationId. Returns undefined when no route owns the id. */

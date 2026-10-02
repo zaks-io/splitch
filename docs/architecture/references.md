@@ -17,6 +17,9 @@ vendors' own words — annotated below.
   (Targeting Key, Variant, Fractional Evaluation, Provider, Client, Resolution). The SDK is
   OpenFeature-shaped; their terms win over Flagship's where they differ.
 - **OpenFeature — full spec**: https://openfeature.dev/specification/
+- **OFREP — protocol**: https://github.com/open-feature/protocol
+  Core single-Flag and bulk evaluation HTTP shape. splitch implements those two
+  paths as a projection of evaluate / evaluate-all (ADR-0059).
 
 ## Experiment side
 

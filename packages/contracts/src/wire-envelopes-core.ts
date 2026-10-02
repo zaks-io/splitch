@@ -30,6 +30,24 @@ import {
   type ExposureBatchResultStatus,
   ExposureBatchResultStatusSchema,
 } from "./leaves/exposures-wire";
+import {
+  type OfrepBulkEvaluationFailure,
+  OfrepBulkEvaluationFailureSchema,
+  type OfrepBulkEvaluationRequest,
+  OfrepBulkEvaluationRequestSchema,
+  type OfrepBulkEvaluationSuccess,
+  OfrepBulkEvaluationSuccessSchema,
+  type OfrepEvaluationFailure,
+  OfrepEvaluationFailureSchema,
+  type OfrepEvaluationRequest,
+  OfrepEvaluationRequestRuntimeSchema,
+  OfrepEvaluationRequestSchema,
+  type OfrepEvaluationSuccess,
+  OfrepEvaluationSuccessSchema,
+  OfrepFlagKeyParamsSchema,
+  type OfrepGeneralError,
+  OfrepGeneralErrorSchema,
+} from "./leaves/ofrep-wire";
 import { ResolutionReasonSchema } from "./leaves/resolution-reason";
 import { VariantValueSchema } from "./leaves/variant-value";
 
@@ -56,6 +74,22 @@ export {
   ExposureBatchResultSchema,
   type ExposureBatchResultStatus,
   ExposureBatchResultStatusSchema,
+  type OfrepBulkEvaluationFailure,
+  OfrepBulkEvaluationFailureSchema,
+  type OfrepBulkEvaluationRequest,
+  OfrepBulkEvaluationRequestSchema,
+  type OfrepBulkEvaluationSuccess,
+  OfrepBulkEvaluationSuccessSchema,
+  type OfrepEvaluationFailure,
+  OfrepEvaluationFailureSchema,
+  type OfrepEvaluationRequest,
+  OfrepEvaluationRequestRuntimeSchema,
+  OfrepEvaluationRequestSchema,
+  type OfrepEvaluationSuccess,
+  OfrepEvaluationSuccessSchema,
+  OfrepFlagKeyParamsSchema,
+  type OfrepGeneralError,
+  OfrepGeneralErrorSchema,
   type PeekEvaluateResponse,
   PeekEvaluateResponseSchema,
 };

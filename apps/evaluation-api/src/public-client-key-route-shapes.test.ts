@@ -22,6 +22,8 @@ const CLIENT_KEY_ROUTES = routeRegistry.filter(
 describe("Client Key public route shapes", () => {
   it("derives Evaluation/Event Ingest Client Key routes from the contract registry", () => {
     expect(CLIENT_KEY_ROUTES.map((route) => route.operationId).sort()).toEqual([
+      "ofrep_evaluate",
+      "ofrep_evaluate_bulk",
       "sdk_activate",
       "sdk_cached_evaluation_telemetry",
       "sdk_evaluate",

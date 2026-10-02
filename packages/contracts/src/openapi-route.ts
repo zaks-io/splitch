@@ -46,6 +46,12 @@ export interface ApiRouteRequest {
   params?: z.ZodObject;
   query?: z.ZodObject;
   body?: z.ZodTypeAny;
+  /**
+   * When set, the registrar validates this schema instead of `body`. OpenAPI
+   * still documents `body`. Used when the handler classifies protocol-specific
+   * parse failures (for example OFREP PARSE_ERROR / INVALID_CONTEXT).
+   */
+  runtimeBody?: z.ZodTypeAny;
 }
 
 export interface DefineApiRouteInput {
@@ -66,6 +72,12 @@ export interface DefineApiRouteInput {
    * (If-None-Match revalidation).
    */
   notModifiedResponse?: boolean;
+  /**
+   * Route-specific error response schemas keyed by HTTP status. When present
+   * for a status, replaces the auto-built ErrorResponseSchema union for that
+   * status so protocol-shaped errors (OFREP, etc.) match the wire.
+   */
+  errorResponseSchemas?: Readonly<Record<number, z.ZodTypeAny>>;
   auth: AuthKind;
   scopes?: readonly string[];
   rateLimit: RateLimitClass;
@@ -128,8 +140,9 @@ function runtimeInput(request: ApiRouteRequest | undefined): z.ZodTypeAny {
   if (request?.query) {
     shape.query = request.query;
   }
-  if (request?.body) {
-    shape.body = request.body;
+  const body = request?.runtimeBody ?? request?.body;
+  if (body) {
+    shape.body = body;
   }
   return z.object(shape);
 }
@@ -185,21 +198,36 @@ const errorSchemaByCode = new Map<ErrorCode, z.ZodTypeAny>(
   ErrorResponseSchema.options.map((schema) => [schema.shape.code.value, schema]),
 );
 
-function buildOpenApiErrorResponses(codes: readonly ErrorCode[]) {
+/** The ErrorResponse Zod member for one ErrorCode (OpenAPI / custom unions). */
+export function errorResponseSchemaFor(code: ErrorCode): z.ZodTypeAny {
+  const schema = errorSchemaByCode.get(code);
+  if (!schema) {
+    throw new Error(`openapi-route: ErrorCode "${code}" has no ErrorResponse schema`);
+  }
+  return schema;
+}
+
+function buildOpenApiErrorResponses(
+  codes: readonly ErrorCode[],
+  overrides: Readonly<Record<number, z.ZodTypeAny>> | undefined,
+) {
   const schemasByStatus = new Map<number, z.ZodTypeAny[]>();
   for (const code of codes) {
     const status = errorStatusByCode[code];
     if (status === undefined) {
       throw new Error(`openapi-route: ErrorCode "${code}" has no mapped HTTP status`);
     }
-    const schema = errorSchemaByCode.get(code);
-    if (!schema) {
-      throw new Error(`openapi-route: ErrorCode "${code}" has no ErrorResponse schema`);
+    if (overrides?.[status] !== undefined) {
+      // Route-specific schema owns this status; skip ErrorResponse members.
+      continue;
     }
-    schemasByStatus.set(status, [...(schemasByStatus.get(status) ?? []), schema]);
+    schemasByStatus.set(status, [
+      ...(schemasByStatus.get(status) ?? []),
+      errorResponseSchemaFor(code),
+    ]);
   }
 
-  return Object.fromEntries(
+  const built = Object.fromEntries(
     [...schemasByStatus].map(([status, schemas]) => [
       status,
       {
@@ -210,6 +238,21 @@ function buildOpenApiErrorResponses(codes: readonly ErrorCode[]) {
       },
     ]),
   );
+
+  if (overrides === undefined) return built;
+
+  return {
+    ...built,
+    ...Object.fromEntries(
+      Object.entries(overrides).map(([status, schema]) => [
+        status,
+        {
+          description: "Error response.",
+          content: { [JSON_CONTENT]: { schema } },
+        },
+      ]),
+    ),
+  };
 }
 
 export function defineApiRoute<const Input extends DefineApiRouteInput>(input: Input) {
@@ -248,7 +291,7 @@ export function defineApiRoute<const Input extends DefineApiRouteInput>(input: I
           : {}),
       },
       responses: {
-        ...buildOpenApiErrorResponses(errors),
+        ...buildOpenApiErrorResponses(errors, input.errorResponseSchemas),
         200: {
           description: input.summary,
           content: { [JSON_CONTENT]: { schema: input.response } },

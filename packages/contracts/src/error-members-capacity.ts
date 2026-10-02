@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { ApprovalRequestIdSchema } from "./approval-identifiers";
-import type { ErrorCode } from "./error-code";
+import { errorMember as member } from "./error-member";
 
 export const capacityErrorMembers = [
   member(
@@ -23,7 +23,3 @@ export const capacityErrorMembers = [
     }),
   ),
 ] as const;
-
-function member<C extends ErrorCode, D extends z.ZodTypeAny>(code: C, details: D) {
-  return z.object({ code: z.literal(code), message: z.string(), details });
-}

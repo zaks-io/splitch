@@ -19,7 +19,7 @@ export * from "./barrels/storage-contracts";
 // biome-ignore lint/performance/noReExportAll: curated wire envelopes live in barrels/wire-envelopes.ts
 export * from "./barrels/wire-envelopes";
 export { type CanonicalJsonSha256, CanonicalJsonSha256Schema } from "./canonical-hash";
-export { canonicalHash, CanonicalJsonInputError, canonicalJson } from "./canonical-json";
+export { CanonicalJsonInputError, canonicalHash, canonicalJson } from "./canonical-json";
 export {
   CachedClientKeyRateLimitRpsFieldSchema,
   CLIENT_KEY_RATE_LIMIT_RPS_MESSAGE,
@@ -213,7 +213,7 @@ export {
   scopeSatisfiesMembershipGate,
 } from "./mcp-tool-membership-gates";
 export type { ApiRouteContract, ApiRouteRequest, DefineApiRouteInput } from "./openapi-route";
-export { defineApiRoute, jsonMediaTypeSchema } from "./openapi-route";
+export { defineApiRoute, errorResponseSchemaFor, jsonMediaTypeSchema } from "./openapi-route";
 export { type ControlPlaneRpcApp, controlPlaneRpcApp } from "./openapi-rpc";
 export { USER_OWNED_ORGANIZATION_LIMIT } from "./organization-limits";
 export {

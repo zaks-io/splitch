@@ -148,6 +148,13 @@ Durable Object that write-throughs to KV.
 
 Avoid: assignment cache; putting it behind the Provider.
 
+## OFREP
+
+OFREP Core (`POST /ofrep/v1/evaluate/flags/{key}` and `POST /ofrep/v1/evaluate/flags`) is a
+projection of evaluate and evaluate-all. Single-Flag OFREP fires Exposure. Bulk OFREP is a
+non-exposing prefetch; Exposure Tickets ride in `metadata` and are redeemed on first local
+read. Billing follows ADR-0033.
+
 ## Exposure behavior on evaluation
 
 Reading a Variant through the SDK accessor fires an Exposure. A distinct, loudly named "peek without

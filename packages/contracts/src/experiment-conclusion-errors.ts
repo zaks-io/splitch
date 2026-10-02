@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { CanonicalJsonSha256Schema } from "./canonical-hash";
-import type { ErrorCode } from "./error-code";
+import { errorMember as member } from "./error-member";
 import { UnresolvableControlReasonSchema } from "./experiment-control-identity";
 import type { DecisionGateCheckId } from "./experiment-decision-gate";
 import { StatsResultStatusSchema } from "./stats-result-contract";
@@ -135,11 +135,3 @@ export const experimentConclusionErrorMembers = {
     TargetConfigurationStaleDetailsSchema,
   ),
 } as const;
-
-function member<C extends ErrorCode, D extends z.ZodTypeAny>(code: C, details: D) {
-  return z.object({
-    code: z.literal(code),
-    message: z.string(),
-    details,
-  });
-}
