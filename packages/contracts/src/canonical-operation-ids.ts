@@ -153,4 +153,7 @@ export const CANONICAL_OPERATION_IDS = [
   "sdk_exposures",
   "sdk_track",
   "sdk_activate",
+  // OpenFeature Remote Evaluation Protocol (data plane, not MCP tools)
+  "ofrep_evaluate",
+  "ofrep_evaluate_bulk",
 ] as const;

@@ -2,6 +2,7 @@ import { z } from "zod";
 import { ApprovalRequestIdSchema, ApprovalReviewIdSchema } from "./approval-identifiers";
 import { CanonicalJsonSha256Schema } from "./canonical-hash";
 import { type ErrorCode, ErrorCodeSchema, errorCodes } from "./error-code";
+import { errorMember as member } from "./error-member";
 import { capacityErrorMembers } from "./error-members-capacity";
 import { conflictErrorMembers } from "./error-members-conflict";
 import { integrationErrorMembers } from "./error-members-integration";
@@ -333,11 +334,3 @@ const errorMembers = [
 
 export const ErrorResponseSchema = z.discriminatedUnion("code", errorMembers);
 export type ErrorResponse = z.infer<typeof ErrorResponseSchema>;
-
-function member<C extends ErrorCode, D extends z.ZodTypeAny>(code: C, details: D) {
-  return z.object({
-    code: z.literal(code),
-    message: z.string(),
-    details,
-  });
-}

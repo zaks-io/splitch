@@ -11,7 +11,6 @@ import {
   rateLimitClasses,
   routeOwners,
 } from "./route-contract";
-import { CANONICAL_OPERATION_IDS } from "./route-registry-canonical-ids";
 import {
   getRoute,
   operationIds,
