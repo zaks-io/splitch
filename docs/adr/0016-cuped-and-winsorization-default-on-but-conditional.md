@@ -92,6 +92,26 @@ adjustment no matter how many covariates it is run against. Only a realized A/A 
 distinguish the two, so an A/A Type-I simulation across a range of covariate correlations is a permanent
 part of the stats suite, not an optional extra.
 
+### Amendment: the winsorized estimand is named and the uncapped estimate is disclosed
+
+Accepting truncation bias is only honest if a reader can see what was truncated. Disclosing that
+winsorization ran and at which cap does not say what the published number estimates, and it hides
+how far the cap moved it. So every arm result now carries an estimand disclosure
+([result-contracts.md](../spec/stats/result-contracts.md)):
+
+- The published estimate is labeled by Metric kind and technique: capped or uncapped additive mean,
+  Binomial mean (never winsorized), or ratio of capped or uncapped component means.
+- When the cap applied, the uncapped estimate (point estimate, relative lift, interval, p-value) is
+  computed in the same pass over the same Entities, beside the capped one. It reuses the CUPED
+  covariate the capped estimate selected and refits the slope on uncapped outcomes, and it states
+  whether CUPED still applies. It never selects a covariate of its own.
+- Each arm reports how many Entities the cap lowered.
+- The capped estimate drives decisions, as before. The uncapped estimate never enters the
+  Benjamini-Hochberg family, the Guardrail check, or the decision gate.
+
+No decision changes. The result token hashes Stats without the disclosure, so a Run's token is
+byte-identical to the one it carried before the disclosure existed.
+
 ## Sources
 
 - Deng, Xu, Kohavi, and Walker, CUPED:

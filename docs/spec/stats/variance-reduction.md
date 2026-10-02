@@ -54,6 +54,15 @@ Winsorization introduces small upward bias in variance estimates (truncation bia
 accepted: the variance reduction for heavy-tailed Metrics is substantial (~20–40%), and the bias
 is bounded, documented, and user-configurable.
 
+### Estimand disclosure
+
+Every arm result names what its published estimate measures (`estimand.label` in
+[result-contracts.md](result-contracts.md)). When the cap applied, the same pass also computes the
+uncapped estimate over the same Entities and reports how many Entities per arm the cap lowered.
+The uncapped estimate reuses the CUPED covariate the capped estimate selected and refits the slope
+on uncapped outcomes; it never selects a covariate of its own. The capped estimate drives decisions;
+the uncapped one is disclosure only.
+
 ## CUPED (Controlled-experiment Using Pre-Experiment Data)
 
 ### What it does

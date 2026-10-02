@@ -128,7 +128,9 @@ to a ready `AnalysisResultsEnvelope`. A ready envelope without the pair remains 
 Results response, but it cannot be concluded; Conclude returns `DECISION_RESULT_UNAVAILABLE` with
 `envelopeState: "ready"`. `result_token` is SHA-256 over UTF-8 RFC 8785 JSON Canonicalization Scheme
 bytes of
-`{ appId, environmentId, experimentId, runId, runConfigHash, stats }`. The watermark is excluded from
+`{ appId, environmentId, experimentId, runId, runConfigHash, stats }`, with each arm result's
+`estimand` disclosure left out of `stats` ([result-contracts.md](../stats/result-contracts.md)).
+The watermark is excluded from
 the token, so advancing an ingest boundary without changing the computed result does not create
 false staleness.
 

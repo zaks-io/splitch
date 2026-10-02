@@ -21,6 +21,7 @@ contract and `StatsEngine` signature live in [data-contracts.md](data-contracts.
 | `decision_valid`      | `boolean`            | True only when the result belongs to the locked decision spec                                                        |
 | `status`              | `enum`               | `running \| ready \| stopped \| insufficient_denominator \| insufficient_n \| error`                                 |
 | `variance_techniques` | `VarianceTechniques` | Which variance-reduction methods applied (see below)                                                                 |
+| `estimand`            | `EstimandDisclosure` | What the published estimate measures and what the cap changed (see below)                                            |
 
 ## VarianceTechniques object (never silent)
 
@@ -35,6 +36,53 @@ contract and `StatsEngine` signature live in [data-contracts.md](data-contracts.
 | `cuped_attribute_source` | `enum \| null`                                 | `declared \| pre_period_selected \| historical_selected \| null`                                |
 | `cuped_coverage_pct`     | `number \| null`                               | Fraction of Entities with pre-period data (0–100)                                               |
 | `delta_method`           | `boolean`                                      | True if delta method was applied (always true for Ratio)                                        |
+
+## EstimandDisclosure object
+
+The engine emits `estimand` on every arm result, including Dimension arm results. The schema
+keeps it optional only so Stats recorded before it existed still parse.
+
+| Field                 | Type                       | Meaning                                                                                      |
+| --------------------- | -------------------------- | -------------------------------------------------------------------------------------------- |
+| `label`               | `EstimandLabel`            | What the published `point_estimate`, lift, interval, and p-value measure                     |
+| `decision_label`      | `EstimandLabel`            | The estimate decisions use. Always equal to `label`: the published (capped) estimate decides |
+| `capped_entity_count` | `integer \| null`          | Entities in this arm with at least one value lowered by the cap; null when not winsorized    |
+| `uncapped`            | `UncappedEstimate \| null` | The same arm without the cap, computed in the same pass; null when not winsorized            |
+
+`capped_entity_count` and `uncapped` are present together or null together.
+
+`EstimandLabel` is one of:
+
+| Label                     | Metric kind    | Technique                                                           |
+| ------------------------- | -------------- | ------------------------------------------------------------------- |
+| `uncapped_additive_mean`  | Count, Revenue | Per-Entity mean, no cap                                             |
+| `capped_additive_mean`    | Count, Revenue | Per-Entity mean of values capped at the pooled cap                  |
+| `binomial_mean`           | Binomial       | Per-Entity conversion rate. Never winsorized, so never capped       |
+| `ratio_of_uncapped_means` | Ratio          | Mean numerator over mean denominator, no cap                        |
+| `ratio_of_capped_means`   | Ratio          | Mean capped numerator over mean capped denominator (component caps) |
+
+A Ratio Entity counts once in `capped_entity_count` even when both components were capped.
+
+### UncappedEstimate object
+
+Disclosure only. It never enters the Benjamini-Hochberg family, the Guardrail check, or the
+decision gate. Its `p_value` uses the same method as the published `p_value` and is never
+FDR-corrected.
+
+| Field               | Type             | Meaning                                                                                   |
+| ------------------- | ---------------- | ----------------------------------------------------------------------------------------- |
+| `label`             | `EstimandLabel`  | `uncapped_additive_mean` or `ratio_of_uncapped_means`                                     |
+| `point_estimate`    | `number`         | Uncapped per-Entity mean (or ratio of means) for this arm                                 |
+| `relative_lift_pct` | `number \| null` | Uncapped relative lift; null for Control or undefined Control estimate                    |
+| `ci_lower`          | `number \| null` | Uncapped relative-lift interval lower bound, same interval method as the published one    |
+| `ci_upper`          | `number \| null` | Uncapped relative-lift interval upper bound                                               |
+| `p_value`           | `number`         | p-value of the uncapped comparison, same method as the published one, never FDR-corrected |
+| `status`            | `enum`           | Same status vocabulary as the arm result                                                  |
+| `cuped_applied`     | `boolean`        | True if CUPED still adjusts the uncapped estimate                                         |
+
+When CUPED applied to the capped estimate, the uncapped estimate uses the same selected covariate
+with its slope refit on uncapped outcomes, so `cuped_applied` matches the arm's
+`variance_techniques.cuped_applied`. Ratio Metrics never use CUPED.
 
 ## SRM result object
 
@@ -117,7 +165,11 @@ comes from the inclusive `deduped_exposures.watermark_ts` Copy Pipe boundary, so
 `ingest_ts` exactly equals the watermark are part of the result.
 `result_token` is `sha256:` plus 64 lowercase hexadecimal digits, computed as SHA-256 over RFC 8785
 canonical bytes of
-`{ appId, environmentId, experimentId, runId, runConfigHash, stats }`. It is evidence identity for
+`{ appId, environmentId, experimentId, runId, runConfigHash, stats }`, where `stats` omits every
+arm result's `estimand` (`resultTokenStats`). The disclosure labels the decision-driving estimate
+and adds an uncapped view that no decision reads, so leaving it out keeps a Run's token
+byte-identical to the token issued before the disclosure existed. A change to any decision-bearing field still
+changes the token. It is evidence identity for
 Conclude, not caller authority. The `no_run` and `no_data` members have neither field because no
 decision-bearing result exists.
 
