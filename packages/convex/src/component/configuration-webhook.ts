@@ -1,5 +1,5 @@
 import { readBoundedRequestBody } from "@splitch/bounded-body";
-import { ConvexConfigChangedSchema } from "@splitch/sdk/local-evaluation";
+import { ConvexConfigChangedSchema, parseResponseTolerantly } from "@splitch/sdk/local-evaluation";
 import { constantTimeEqual, hmacHex } from "./crypto";
 
 export const CONVEX_WEBHOOK_MAX_BODY_BYTES = 32 * 1024;
@@ -54,7 +54,7 @@ export async function handleConfigurationWebhook(
   } catch {
     return new Response("invalid body", { status: 400 });
   }
-  const changed = ConvexConfigChangedSchema.safeParse(parsed);
+  const changed = parseResponseTolerantly(ConvexConfigChangedSchema, parsed);
   if (!changed.success) return new Response("invalid body", { status: 400 });
   if (request.headers.get("splitch-delivery-id") !== changed.data.deliveryId)
     return new Response("delivery ID mismatch", { status: 400 });

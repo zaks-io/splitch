@@ -1,4 +1,4 @@
-import { ConvexConfigSnapshotSchema } from "@splitch/sdk/local-evaluation";
+import { ConvexConfigSnapshotSchema, parseResponseBody } from "@splitch/sdk/local-evaluation";
 import { internal } from "./_generated/api";
 import { type ActionCtx, env } from "./_generated/server";
 
@@ -17,7 +17,7 @@ export async function syncHandler(ctx: ActionCtx): Promise<number> {
   });
   if (response.status === 304) return integration.snapshotVersion ?? 0;
   const payload = await responseJson(response, "sync Convex configuration");
-  const snapshot = ConvexConfigSnapshotSchema.parse(payload);
+  const snapshot = parseResponseBody(ConvexConfigSnapshotSchema, payload);
   await ctx.runMutation(internal.integration.commitSnapshot, {
     payload: JSON.stringify(snapshot),
   });

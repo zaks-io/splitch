@@ -223,9 +223,10 @@ the resolved Targeting Rule snapshot frozen into the Run and matches `run.target
 `RunConfigKV` evaluation reads. An empty array means all Entities are eligible via allocation; Flag
 Configuration Targeting Rules do not apply while this Run is live.
 
-Deploy order: `frozenTargetingRules` is required on `StartRunResponseSchema` and control-plane
-clients parse Start responses strictly. Deploy the Worker that emits the field before CLI or SDK
-clients that validate against this schema, or every `experiments start` fails body parse.
+Deploy order: `frozenTargetingRules` is required on `StartRunResponseSchema`. Released clients ignore
+unknown response fields, so an older client still accepts a Start body that includes this field.
+Deploy the Worker that emits the field before any client that validates against a schema where the
+field is required, or every `experiments start` fails body parse on a missing required key.
 
 `approvalRequest` is null under `allow` and contains the applied request and latest Review under
 `confirm`. When required Review is omitted or future `approve` awaits a distinct reviewer, the

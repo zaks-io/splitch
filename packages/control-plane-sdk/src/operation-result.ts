@@ -1,5 +1,5 @@
 import type { ErrorResponse } from "@splitch/contracts";
-import { ErrorResponseSchema } from "@splitch/contracts";
+import { ErrorResponseSchema, parseResponseTolerantly } from "@splitch/contracts";
 
 export interface ControlPlaneOperationOptions {
   readonly authorization?: string | null;
@@ -46,7 +46,9 @@ export async function parseControlPlaneResponse<T>(
     throw new Error(`control-plane-sdk: ${operationId} failed with HTTP ${response.status}`);
   }
 
-  const parsed = output.safeParse(body);
+  // Additive server fields must not break released clients; unknown keys are
+  // dropped, wrong types and missing required fields still fail loud.
+  const parsed = parseResponseTolerantly(output, body);
   if (!parsed.success) {
     throw new Error(`control-plane-sdk: ${operationId} returned an invalid response body`);
   }

@@ -1,5 +1,9 @@
 import type { AnalysisResultsEnvelope, ErrorResponse } from "@splitch/contracts";
-import { AnalysisResultsEnvelopeSchema, ErrorResponseSchema } from "@splitch/contracts";
+import {
+  AnalysisResultsEnvelopeSchema,
+  ErrorResponseSchema,
+  parseResponseBody,
+} from "@splitch/contracts";
 
 /**
  * Reading one Run's results envelope back from the Analysis Worker.
@@ -54,7 +58,7 @@ export async function parseAnalysisResults(
   if (!response.ok) {
     throw await analysisFailure(response);
   }
-  const envelope = AnalysisResultsEnvelopeSchema.parse(await response.json());
+  const envelope = parseResponseBody(AnalysisResultsEnvelopeSchema, await response.json());
   // Analysis answers ready/no_data for a locked Run. `no_run` is resolved on the
   // Control Plane before the hop (SPL-305) and must not arrive from Analysis.
   if (envelope.state === "no_run") {

@@ -62,6 +62,28 @@ describe("panel settings binding transport", () => {
     );
   });
 
+  it("tolerates additive envelope and nested metadata while still rejecting secrets", async () => {
+    const fetcher = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) =>
+      Response.json({
+        ...settings,
+        futureEnvelopeField: "envelope-level",
+        environment: { ...settings.environment, futureEnvironmentField: true },
+        clientKey: { ...settings.clientKey, futureClientKeyField: true },
+        apiKeys: [{ ...settings.apiKeys[0], nextRotationHint: "soon" }],
+      }),
+    );
+    const client = createPanelSettingsClient({ fetch: fetcher });
+
+    await expect(client.read({ appId: "app_1", environmentId: "env_1" })).resolves.toMatchObject({
+      ok: true,
+      data: {
+        environment: settings.environment,
+        clientKey: settings.clientKey,
+        apiKeys: [{ keyId: "ak_1", keyHashPrefix: "aaaaaaaaaaaa" }],
+      },
+    });
+  });
+
   it("uses fixed data-plane scopes when provisioning", async () => {
     const requests: Request[] = [];
     const fetcher = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {

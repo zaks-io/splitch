@@ -4,6 +4,7 @@ import { resolve } from "node:path";
 import {
   CloudflareInstallationStatusSchema,
   ErrorResponseSchema,
+  parseResponseBody,
 } from "@splitch/sdk/control-plane";
 import {
   assertRecordedBindingPath,
@@ -231,7 +232,7 @@ async function installationStatus(state: CloudflareState, apiKey: string, deps: 
     method: "GET",
     signal: AbortSignal.timeout(STATUS_TIMEOUT_MS),
   });
-  return CloudflareInstallationStatusSchema.parse(await response.json());
+  return parseResponseBody(CloudflareInstallationStatusSchema, await response.json());
 }
 
 async function integrationRequest(
