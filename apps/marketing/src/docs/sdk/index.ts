@@ -5,6 +5,7 @@ import { evaluateAllTopic } from "./evaluate-all";
 import { nodeTopic } from "./node";
 import { reactTopic } from "./react";
 import { dedupTopic, failuresTopic, idempotencyTopic, methodsTopic } from "./semantics";
+import { openfeatureTopic } from "./openfeature";
 import { sentryTopic } from "./sentry";
 import { credentialsTopic, installTopic, optionsTopic } from "./setup";
 import type { SdkTopic } from "./types";
@@ -19,6 +20,7 @@ export const sdkIntegrationTopics: readonly SdkTopic[] = [
   convexTopic,
   cloudflareTopic,
   sentryTopic,
+  openfeatureTopic,
 ];
 
 /** The contract every integration shares, in reading order. */

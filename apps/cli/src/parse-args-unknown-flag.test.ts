@@ -1,23 +1,37 @@
-import { describe, expect, it } from "vitest";
-import { SplitchCliError } from "./errors.js";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { runCli } from "./cli.js";
+import { EXIT_USAGE } from "./exit-codes.js";
 import { parseInvocation } from "./parse-args.js";
 
 /**
  * An unrecognised flag used to be collected into the flag bag and then dropped,
  * so `--org-id org_x` reached the API as a request missing its Organization and
  * came back as a schema violation pointing at the body. The typo has to be named
- * at the point it was typed.
+ * at the point the command rejects it.
  */
 describe("unknown flags", () => {
-  it("rejects a near-miss flag by name instead of dropping it", () => {
-    try {
-      parseInvocation(["apps", "create", "--org-id", "org_x"]);
-      throw new Error("expected an unknown flag to fail parsing");
-    } catch (error) {
-      expect(error).toBeInstanceOf(SplitchCliError);
-      expect(error).toMatchObject({ code: "CLI_USAGE_INVALID" });
-      expect((error as SplitchCliError).message).toContain("--org-id");
-    }
+  afterEach(() => vi.restoreAllMocks());
+
+  it("rejects a near-miss flag by name instead of dropping it", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.spyOn(console, "log").mockImplementation(() => {});
+    const fetch = vi.fn<typeof globalThis.fetch>();
+    expect(await runCli(["apps", "create", "--org-id", "org_x", "--name", "App"], { fetch })).toBe(
+      EXIT_USAGE,
+    );
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it("parses route query flags into the query bag before command validation", () => {
+    const parsed = parseInvocation([
+      "approval-requests",
+      "list",
+      "--cursor",
+      "abc",
+      "--limit",
+      "10",
+    ]);
+    expect(parsed.flags.queryFlags).toEqual({ cursor: "abc", limit: "10" });
   });
 
   it("still accepts every flag the CLI reads, in kebab-case", () => {
@@ -87,12 +101,15 @@ describe("unknown flags", () => {
       json: true,
       confirm: true,
       summary: true,
+      queryFlags: {},
     });
   });
 
-  it("rejects the removed --with-config spelling instead of keeping a duplicate behavior", () => {
-    expect(() => parseInvocation(["flags", "list", "--with-config"])).toThrowError(
-      expect.objectContaining({ code: "CLI_USAGE_INVALID" }),
-    );
+  it("rejects the removed --with-config spelling instead of keeping a duplicate behavior", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.spyOn(console, "log").mockImplementation(() => {});
+    const fetch = vi.fn<typeof globalThis.fetch>();
+    expect(await runCli(["flags", "list", "--with-config", "1"], { fetch })).toBe(EXIT_USAGE);
+    expect(fetch).not.toHaveBeenCalled();
   });
 });

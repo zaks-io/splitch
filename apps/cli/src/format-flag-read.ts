@@ -5,6 +5,7 @@ import {
   type HydratedFlagResponse,
   HydratedFlagResponseSchema,
   HydratedPrincipalFlagListResponseSchema,
+  parseResponseTolerantly,
 } from "@splitch/sdk/control-plane";
 import { SplitchCliError } from "./errors.js";
 import { cellValue, formatTable, terminalText, truncationNotice } from "./format-payload.js";
@@ -14,26 +15,45 @@ export function formatFlagRead(operationId: string, payload: unknown, summary: b
     return formatFlagSummary(operationId, payload);
   }
   if (operationId === "flags_list") {
-    const parsed = HydratedFlagListResponseSchema.safeParse(payload);
+    const parsed = parseResponseTolerantly(HydratedFlagListResponseSchema, payload);
     if (!parsed.success) throw flagReadContractError(operationId, "hydrated");
     if (parsed.data.items.length === 0) return withFlagListBound(EMPTY_FLAG_CATALOG, parsed.data);
     return withFlagListBound(parsed.data.items.map(formatHydratedFlag).join("\n\n"), parsed.data);
   }
-  const parsed = HydratedFlagResponseSchema.safeParse(payload);
+  const parsed = parseResponseTolerantly(HydratedFlagResponseSchema, payload);
   if (!parsed.success) throw flagReadContractError(operationId, "hydrated");
   return formatHydratedFlag(parsed.data);
 }
 
 function formatFlagSummary(operationId: string, payload: unknown): string {
+  // Summary and hydrated Flag envelopes share a leaf prefix. Tolerant parse
+  // would otherwise strip `configurations` and accept a hydrated body as a
+  // summary; reject that mode mismatch before stripping unknown future keys.
+  if (payloadCarriesHydratedConfigurations(payload)) {
+    throw flagReadContractError(operationId, "summary");
+  }
   const parsed =
     operationId === "flags_list"
-      ? FlagListResponseSchema.safeParse(payload)
-      : FlagResponseSchema.safeParse(payload);
+      ? parseResponseTolerantly(FlagListResponseSchema, payload)
+      : parseResponseTolerantly(FlagResponseSchema, payload);
   if (!parsed.success) throw flagReadContractError(operationId, "summary");
   if (operationId !== "flags_list") return formatFlagSummaryList([parsed.data as SummaryFlag]);
   const list = parsed.data as FlagListBound & { items: SummaryFlag[] };
   if (list.items.length === 0) return withFlagListBound(EMPTY_FLAG_CATALOG, list);
   return withFlagListBound(formatFlagSummaryList(list.items), list);
+}
+
+export function payloadCarriesHydratedConfigurations(payload: unknown): boolean {
+  if (payload === null || typeof payload !== "object") return false;
+  const record = payload as Record<string, unknown>;
+  if (Array.isArray(record.configurations)) return true;
+  if (!Array.isArray(record.items)) return false;
+  return record.items.some(
+    (item) =>
+      item !== null &&
+      typeof item === "object" &&
+      Array.isArray((item as Record<string, unknown>).configurations),
+  );
 }
 
 export const EMPTY_FLAG_CATALOG = "No Flags found.";
@@ -57,14 +77,14 @@ export function withFlagListBound(rendered: string, list: FlagListBound): string
 export function assertHydratedFlagRead(operationId: string, payload: unknown): void {
   const parsed =
     operationId === "flags_list"
-      ? HydratedFlagListResponseSchema.safeParse(payload)
-      : HydratedFlagResponseSchema.safeParse(payload);
+      ? parseResponseTolerantly(HydratedFlagListResponseSchema, payload)
+      : parseResponseTolerantly(HydratedFlagResponseSchema, payload);
   if (!parsed.success) throw flagReadContractError(operationId, "hydrated");
 }
 
 /** The principal-wide read carries the same SPL-529 hydration contract as `flags_list`. */
 export function assertHydratedPrincipalFlagRead(payload: unknown): void {
-  const parsed = HydratedPrincipalFlagListResponseSchema.safeParse(payload);
+  const parsed = parseResponseTolerantly(HydratedPrincipalFlagListResponseSchema, payload);
   if (!parsed.success) throw flagReadContractError("principal_flags_list", "hydrated");
 }
 

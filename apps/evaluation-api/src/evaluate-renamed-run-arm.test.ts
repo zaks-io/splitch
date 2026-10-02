@@ -1,6 +1,13 @@
 import type { ErrorResponse } from "@splitch/contracts";
 import { describe, expect, it } from "vitest";
-import { CLIENT_KEY, makeSdkRouteHarness, sdkRouteInit } from "./sdk-route-test-fixtures";
+import { ofrepInit } from "./ofrep/public-shapes";
+import {
+  CLIENT_KEY,
+  EXPERIMENT_ID,
+  FLAG_KEY,
+  makeSdkRouteHarness,
+  sdkRouteInit,
+} from "./sdk-route-test-fixtures";
 
 /**
  * SPL-267 blast radius, executed.
@@ -65,5 +72,40 @@ describe("a Variant renamed under a live Run", () => {
     expect(res.status).toBe(200);
     expect(res.headers.get("x-variant-name")).toBe("control");
     expect(await res.json()).toEqual({ variant: false });
+  });
+
+  it("OFREP rejects the renamed arm before Exposure or holdover writes", async () => {
+    const { app, exposureSink, assignmentStore, evaluationUsageSink } = await makeSdkRouteHarness({
+      liveRun: true,
+      flagOverrides: RENAMED_CATALOG,
+      runOverrides: { allocation: { control: 0, treatment: 100 }, targetingRules: [] },
+    });
+
+    const res = await app.request(`/ofrep/v1/evaluate/flags/${FLAG_KEY}`, ofrepInit(CLIENT_KEY));
+    const body = (await res.json()) as Record<string, unknown>;
+
+    expect(res.status).toBe(500);
+    expect(body).toEqual({ errorDetails: "evaluation failed" });
+    expect(exposureSink.writes).toEqual([]);
+    expect(assignmentStore.putCalls).toEqual([]);
+    expect(evaluationUsageSink.writes).toEqual([]);
+  });
+
+  it("OFREP rejects a stale holdover whose Variant left the catalog", async () => {
+    const { app, exposureSink, assignmentStore, evaluationUsageSink } = await makeSdkRouteHarness({
+      liveRun: true,
+      flagOverrides: RENAMED_CATALOG,
+      holdovers: new Map([[EXPERIMENT_ID, { runId: "run-prior", variant: "treatment" }]]),
+      runOverrides: { allocation: { control: 0, treatment: 100 }, targetingRules: [] },
+    });
+
+    const res = await app.request(`/ofrep/v1/evaluate/flags/${FLAG_KEY}`, ofrepInit(CLIENT_KEY));
+    const body = (await res.json()) as Record<string, unknown>;
+
+    expect(res.status).toBe(500);
+    expect(body).toEqual({ errorDetails: "evaluation failed" });
+    expect(exposureSink.writes).toEqual([]);
+    expect(assignmentStore.putCalls).toEqual([]);
+    expect(evaluationUsageSink.writes).toEqual([]);
   });
 });

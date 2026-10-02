@@ -2,6 +2,7 @@ import {
   type CloudflareServerExposureItem,
   CloudflareServerExposureResponseSchema,
   EvaluationContextSchema,
+  parseResponseTolerantly,
 } from "@splitch/contracts";
 
 const PRIVACY_DEADLINE_MS = 24 * 60 * 60 * 1_000;
@@ -62,7 +63,10 @@ export async function deliverExposure(
 
 async function firstExposureResult(response: Response) {
   try {
-    const result = CloudflareServerExposureResponseSchema.safeParse(await response.json());
+    const result = parseResponseTolerantly(
+      CloudflareServerExposureResponseSchema,
+      await response.json(),
+    );
     return result.success ? (result.data.results[0] ?? null) : null;
   } catch {
     return null;

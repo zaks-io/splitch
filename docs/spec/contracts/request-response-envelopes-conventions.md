@@ -15,8 +15,15 @@ inferred or optional unless explicitly marked `no`.
 **Unknown request keys fail loud.** External create and patch bodies use Zod `.strict()`, including
 nested write objects (`WriteCondition`, `WriteMetricRef`, `TargetingRuleInput`, `runs_end`). An
 unrecognized field is `VALIDATION_ERROR` with the field path (for example
-`["body", "metrics", "0", "extra"]`). Response and storage schemas stay permissive so retained
-KV/D1 rows remain readable.
+`["body", "metrics", "0", "extra"]`). Requests stay strict forever.
+
+**Unknown response fields are ignored by clients.** Servers may add response fields without a
+breaking change. Released clients parse responses with `parseResponseTolerantly` /
+`parseResponseBody` from `@splitch/contracts`: unknown keys are dropped and the body is
+re-validated; a missing required field or a wrong type still fails loud. Removing a response field
+or changing its type is a breaking change. Response contract schemas may remain `.strict()` so the
+documented shape stays exact and server tests can assert it; the tolerance lives only in the client
+parse helper. Storage schemas stay permissive so retained KV/D1 rows remain readable.
 
 **Persisted field bounds.** Write envelopes compose named limits from `persisted-field-limits.ts`
 (names 200, descriptions 2000, identifiers 128, Condition values 1024, Variant strings 4096, salts

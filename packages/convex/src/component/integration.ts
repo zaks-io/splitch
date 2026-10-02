@@ -1,6 +1,7 @@
 import {
   ConvexConfigSnapshotSchema,
   ConvexInstallationSchema,
+  parseResponseBody,
 } from "@splitch/sdk/local-evaluation";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
@@ -97,7 +98,7 @@ export const install = action({
       redirect: "error",
     });
     if (!response.ok) throw installRejected(response.status, await response.text());
-    const parsed = ConvexInstallationSchema.parse(await response.json());
+    const parsed = parseResponseBody(ConvexInstallationSchema, await response.json());
     await ctx.runMutation(internal.integration.activate, {
       appId: parsed.appId,
       environmentId: parsed.environmentId,
@@ -130,7 +131,7 @@ export const commitSnapshot = internalMutation({
   args: { payload: v.string() },
   returns: v.null(),
   handler: async (ctx, args) => {
-    const snapshot = ConvexConfigSnapshotSchema.parse(JSON.parse(args.payload));
+    const snapshot = parseResponseBody(ConvexConfigSnapshotSchema, JSON.parse(args.payload));
     const integration = await requiredIntegration(ctx);
     if (
       integration.appId !== snapshot.appId ||

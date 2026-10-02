@@ -24,3 +24,4 @@ export {
 } from "../mcp-tools";
 export type { RequestBodyFieldHelp, RequestBodyHelp } from "../request-body-help";
 export { describeRequestBody, requestBodySchemaForOperation } from "../request-body-help";
+export { describeObjectFields, unwrapToObject } from "../request-body-help-unwrap";

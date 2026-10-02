@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { ErrorCode } from "./error-code";
+import { errorMember as member } from "./error-member";
 
 /**
  * MCP-local refusals that used to reach the agent as an `isError` message with
@@ -22,11 +22,3 @@ export const localErrorMembers = [
   ),
   member("CONTEXT_USE_INVALID", z.object({ issues: z.array(ValidationIssue).min(1) })),
 ] as const;
-
-function member<C extends ErrorCode, D extends z.ZodTypeAny>(code: C, details: D) {
-  return z.object({
-    code: z.literal(code),
-    message: z.string(),
-    details,
-  });
-}

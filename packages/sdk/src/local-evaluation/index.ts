@@ -3,6 +3,8 @@ export {
   ConvexConfigChangedSchema,
   ConvexConfigSnapshotSchema,
   ConvexInstallationSchema,
+  parseResponseBody,
+  parseResponseTolerantly,
 } from "../../../contracts/src/index";
 export type {
   ConvexConfigSnapshot,

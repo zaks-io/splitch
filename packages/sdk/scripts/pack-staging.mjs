@@ -77,15 +77,25 @@ export function parseTarballName(packOutput) {
   return tarballLine;
 }
 
+// The control-plane declaration bundle is past Node's 1 MiB default; a real
+// ceiling still fails loud (ENOBUFS) if a package ever balloons past it.
+const TAR_MAX_BUFFER_BYTES = 32 * 1024 * 1024;
+
 export function listTarballFiles(tarballPath) {
-  return execFileSync("tar", ["-tzf", tarballPath], { encoding: "utf8" })
+  return execFileSync("tar", ["-tzf", tarballPath], {
+    encoding: "utf8",
+    maxBuffer: TAR_MAX_BUFFER_BYTES,
+  })
     .split("\n")
     .map((line) => line.trim())
     .filter(Boolean);
 }
 
 export function readTarballFile(tarballPath, entryPath) {
-  return execFileSync("tar", ["-xOf", tarballPath, entryPath], { encoding: "utf8" });
+  return execFileSync("tar", ["-xOf", tarballPath, entryPath], {
+    encoding: "utf8",
+    maxBuffer: TAR_MAX_BUFFER_BYTES,
+  });
 }
 
 function declarationFiles(listing) {

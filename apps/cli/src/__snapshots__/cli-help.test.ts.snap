@@ -179,10 +179,14 @@ Usage:
   splitch approval-requests list [flags]
 
 Flags:
-  --app <app>          [type: string; default: SPLITCH_APP or config] App ID or slug.
-  --env <environment>  [type: string; default: none] Optional Environment ID or key filter (Policy context).
-  --json               [type: boolean; default: false] Write machine-readable JSON to stdout.
-  -h, --help           [type: boolean; default: false] Show help and exit.
+  --app <app>                  [type: string; default: SPLITCH_APP or config] App ID or slug.
+  --env <environment>          [type: string; default: none] Optional Environment ID or key filter (Policy context).
+  --limit <limit>              [type: number; default: 50] Query parameter limit.
+  --cursor <cursor>            [type: string | null; default: null] Query parameter cursor.
+  --status <status>            [type: string ("pending" | "applied" | "declined" | "stale"); default: none] Query parameter status.
+  --target-kind <target-kind>  [type: string ("flag" | "flag_configuration" | "flag_variant" | "segment" | "experiment_draft"); default: none] Query parameter target_kind.
+  --json                       [type: boolean; default: false] Write machine-readable JSON to stdout.
+  -h, --help                   [type: boolean; default: false] Show help and exit.
 
 Example:
   splitch approval-requests list --json",
@@ -708,6 +712,7 @@ Flags:
   --app <app>          [type: string; default: SPLITCH_APP or config] App ID or slug.
   --env <environment>  [type: string; default: SPLITCH_ENV or config] Environment ID or key.
   --by <mode>          [type: string; default: automatic] Allowed: id. Resolve a canonical-looking selector explicitly.
+  --run-id <run-id>    [type: string; default: none] Query parameter runId.
   --json               [type: boolean; default: false] Write machine-readable JSON to stdout.
   -h, --help           [type: boolean; default: false] Show help and exit.
 
@@ -902,10 +907,18 @@ Usage:
   splitch flag-changes export [flags]
 
 Flags:
-  --app <app>          [type: string; default: SPLITCH_APP or config] App ID or slug.
-  --env <environment>  [type: string; default: none] Optional Environment ID or key filter (Policy context).
-  --json               [type: boolean; default: false] Write machine-readable JSON to stdout.
-  -h, --help           [type: boolean; default: false] Show help and exit.
+  --app <app>                              [type: string; default: SPLITCH_APP or config] App ID or slug.
+  --env <environment>                      [type: string; default: none] Optional Environment ID or key filter (Policy context).
+  --from-environment-id <id>               [type: string; default: none] Source Environment ID of a promotion; requires --to-environment-id.
+  --limit <limit>                          [type: number; default: 50] Query parameter limit.
+  --cursor <cursor>                        [type: string | null; default: null] Query parameter cursor.
+  --from <from>                            [type: string; default: required] ISO-8601 instant with offset.
+  --to <to>                                [type: string; default: required] ISO-8601 instant with offset.
+  --to-environment-id <to-environment-id>  [type: string; default: none] Query parameter toEnvironmentId.
+  --flag-id <flag-id>                      [type: string; default: none] Query parameter flagId.
+  --format <format>                        [type: string ("json" | "unified"); default: "json"] Query parameter format.
+  --json                                   [type: boolean; default: false] Write machine-readable JSON to stdout.
+  -h, --help                               [type: boolean; default: false] Show help and exit.
 
 Example:
   splitch flag-changes export --json",
@@ -915,10 +928,17 @@ Usage:
   splitch flag-changes list [flags]
 
 Flags:
-  --app <app>          [type: string; default: SPLITCH_APP or config] App ID or slug.
-  --env <environment>  [type: string; default: none] Optional Environment ID or key filter (Policy context).
-  --json               [type: boolean; default: false] Write machine-readable JSON to stdout.
-  -h, --help           [type: boolean; default: false] Show help and exit.
+  --app <app>                              [type: string; default: SPLITCH_APP or config] App ID or slug.
+  --env <environment>                      [type: string; default: none] Optional Environment ID or key filter (Policy context).
+  --from-environment-id <id>               [type: string; default: none] Source Environment ID of a promotion; requires --to-environment-id.
+  --limit <limit>                          [type: number; default: 50] Query parameter limit.
+  --cursor <cursor>                        [type: string | null; default: null] Query parameter cursor.
+  --from <from>                            [type: string; default: none] ISO-8601 instant with offset.
+  --to <to>                                [type: string; default: none] ISO-8601 instant with offset.
+  --to-environment-id <to-environment-id>  [type: string; default: none] Query parameter toEnvironmentId.
+  --flag-id <flag-id>                      [type: string; default: none] Query parameter flagId.
+  --json                                   [type: boolean; default: false] Write machine-readable JSON to stdout.
+  -h, --help                               [type: boolean; default: false] Show help and exit.
 
 Example:
   splitch flag-changes list --json",

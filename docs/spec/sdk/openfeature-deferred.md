@@ -1,8 +1,8 @@
 # OpenFeature full provider surface: explicitly deferred
 
 The SDK is a thin JS/TS HTTP client — `evaluate` and `peekVariant`.
-A full OpenFeature-shaped provider is a documented, intentional future extension (ADR-0025).
-This file pins exactly what is deferred so implementing agents do not guess.
+OFREP Core and `@splitch/sdk/openfeature` (`SplitchOfrepProvider`) are implemented
+(ADR-0059). This file pins what is still deferred so implementing agents do not guess.
 
 ## Thin SDK scope
 
@@ -31,14 +31,11 @@ full OpenFeature _provider/client API_ below.
 The following are not part of the thin SDK contract. Do not scaffold, stub, or add TODOs for these in
 SDK code unless a separate decision record reopens the surface.
 
-**1. Standard OpenFeature SDK library**
-Whether to ship as a native OpenFeature `Provider` (implementing `OpenFeature.setProvider()`,
-`client.getBooleanValue()`, etc.) or as a standalone splitch SDK is undecided. ADR-0025
-notes "The public OpenFeature data-plane SDK contract is unresolved by design — a separate
-surface to be decided on its own." The thin SDK does not implement the full OpenFeature
-_provider/client API_ — but it **does** conform to the OpenFeature `ResolutionDetails` type and
-the standard `reason` / error-code enums (ADR-0036), so adopting the full provider later is a
-shape-compatible extension, not a rewrite.
+**1. Standard OpenFeature SDK library** — **partially resolved by ADR-0059.**
+`SplitchOfrepProvider` is an OpenFeature-shaped Provider that talks OFREP. It does not
+depend on `@openfeature/server-sdk`; callers pass it to `OpenFeature.setProvider()` if
+they already have that library. A first-party peer dependency on the official SDK remains
+deferred.
 
 **2. Language clients beyond JS/TS**
 The SDK is JS/TS only. Go, Python, and other language clients are
@@ -68,11 +65,10 @@ Per-Flag / per-Experiment **attribute-type** validation (e.g. enforcing `plan: s
 deferred. (The `ResolutionDetails` _output_ shape and the `reason`/error enums are **not**
 deferred — they are in scope per ADR-0036.)
 
-**7. Full OpenFeature `track()` compatibility**
-The thin SDK defines a standalone, stateless top-level `track()` surface exclusively for Metric
-Events. Adapting it to OpenFeature's client/context/details lifecycle remains deferred with the full
-Provider surface. The namespaced `web.track()` accessor is Splitch-specific and does not overload
-the OpenFeature or Metric Event surface.
+**7. Full OpenFeature `track()` compatibility** — **partially resolved by ADR-0059.**
+`SplitchOfrepProvider.track()` maps the OpenFeature tracking API onto `POST /api/sdk/events`
+(Metric Events) using `context.targetingKey` and an optional `eventId`. Hook-ordered track
+details and `web.track()` stay deferred.
 
 ## Why deferred
 

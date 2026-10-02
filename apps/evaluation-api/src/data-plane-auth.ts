@@ -126,10 +126,12 @@ export async function sha256Hex(value: string): Promise<string> {
 
 function bearerCredential(request: Request): string | null {
   const authorization = request.headers.get("authorization");
-  if (authorization === null) return null;
-  const [scheme, credential] = authorization.split(/\s+/, 2);
-  if (scheme?.toLowerCase() !== "bearer" || !credential) return null;
-  return credential;
+  if (authorization !== null) {
+    const [scheme, credential] = authorization.split(/\s+/, 2);
+    if (scheme?.toLowerCase() === "bearer" && credential) return credential;
+  }
+  const apiKey = request.headers.get("x-api-key");
+  return apiKey && apiKey.length > 0 ? apiKey : null;
 }
 
 function allowedOrigin(

@@ -12,6 +12,13 @@ export type {
   EvaluateAllReason,
   EvaluateAllRequest,
   EvaluateAllResponse,
+  OfrepBulkEvaluationFailure,
+  OfrepBulkEvaluationRequest,
+  OfrepBulkEvaluationSuccess,
+  OfrepEvaluationFailure,
+  OfrepEvaluationRequest,
+  OfrepEvaluationSuccess,
+  OfrepGeneralError,
   ExposureBatchItem,
   ExposureBatchRequest,
   ExposureBatchResponse,
@@ -33,6 +40,15 @@ export {
   EvaluateAllReasonSchema,
   EvaluateAllRequestSchema,
   EvaluateAllResponseSchema,
+  OfrepBulkEvaluationFailureSchema,
+  OfrepBulkEvaluationRequestSchema,
+  OfrepBulkEvaluationSuccessSchema,
+  OfrepEvaluationFailureSchema,
+  OfrepEvaluationRequestRuntimeSchema,
+  OfrepEvaluationRequestSchema,
+  OfrepEvaluationSuccessSchema,
+  OfrepFlagKeyParamsSchema,
+  OfrepGeneralErrorSchema,
   EXPOSURE_BATCH_MAX_BODY_BYTES,
   EXPOSURE_BATCH_MAX_ITEMS,
   ExposureBatchItemSchema,
@@ -80,6 +96,14 @@ export {
 } from "../exposure-retry-codes";
 export type { EnvironmentExposureStatusResponse } from "../environment-exposure-status";
 export { EnvironmentExposureStatusResponseSchema } from "../environment-exposure-status";
+export type {
+  ResponseParseFailure,
+  ResponseParseIssue,
+  ResponseParseResult,
+  ResponseParseSuccess,
+  ResponseSafeParseSchema,
+} from "../parse-response-tolerantly";
+export { parseResponseBody, parseResponseTolerantly } from "../parse-response-tolerantly";
 export type {
   FlagConfigurationSummary,
   FlagListResponse,

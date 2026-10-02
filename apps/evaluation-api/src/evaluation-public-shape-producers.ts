@@ -10,6 +10,7 @@ import {
   PATH as EXPOSURES_PATH,
 } from "./exposures-test-fixtures";
 import { flagConfigKV } from "./provider/fixtures";
+import { produceOfrepEvaluate, produceOfrepEvaluateBulk } from "./ofrep/public-shapes";
 import {
   APP_ID,
   CLIENT_KEY,
@@ -37,6 +38,8 @@ const PRODUCERS: Record<string, () => Promise<Produced>> = {
   sdk_evaluate_all: produceEvaluateAll,
   sdk_cached_evaluation_telemetry: produceTelemetry,
   sdk_exposures: produceExposures,
+  ofrep_evaluate: produceOfrepEvaluate,
+  ofrep_evaluate_bulk: produceOfrepEvaluateBulk,
 };
 
 export async function produceEvaluationClientKeyShapes(): Promise<Record<string, Produced>> {
