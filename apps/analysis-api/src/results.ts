@@ -1,5 +1,7 @@
 import {
   AnalysisResultsEnvelopeSchema,
+  createResultToken,
+  type RunCommitments,
   type StatsEngine,
   type StatsInput,
   StatsInputSchema,
@@ -8,7 +10,6 @@ import {
 import { canonicalizeAnalysisRows } from "@splitch/privacy";
 import { StatsEngine as DefaultStatsEngine } from "@splitch/stats";
 import { type HandlerArgs, renderError } from "@splitch/worker-runtime";
-import { createResultToken } from "./result-token";
 import { readResultsExposureRows, readResultsRunRows } from "./results-bootstrap";
 import { readDownstreamAnalysisRows } from "./results-downstream-rows";
 import { resultsErrorResponse } from "./results-error-response";
@@ -30,6 +31,7 @@ import {
   rowObject,
   stringField,
 } from "./results-row-fields";
+import { materializeRunCommitments } from "./results-run-commitments";
 import {
   assertAnalysisInputsPresent,
   materializeMetricQueryConfig,
@@ -53,6 +55,7 @@ interface ResultsScope {
 interface ResultsComputation {
   statsInput: StatsInput;
   runConfigHash: string;
+  commitments: RunCommitments;
   dataWatermark?: string;
 }
 
@@ -77,6 +80,7 @@ export function makeResultsHandler(deps: ResultsDeps) {
               experimentId: scope.experimentId,
               runId: statsInput.run_id,
               runConfigHash: computation.runConfigHash,
+              analysisVersion: frozenAnalysisVersion(computation.commitments),
               stats,
             }),
           }
@@ -87,6 +91,7 @@ export function makeResultsHandler(deps: ResultsDeps) {
           run_id: statsInput.run_id,
           control_variant: statsInput.control_variant,
           ...evidence,
+          run_commitments: computation.commitments,
           stats,
         }),
       );
@@ -137,6 +142,7 @@ async function readResultsComputationFromTinybird(
     throw new ResultsNotFoundError("RUN_NOT_FOUND");
   }
   const run = materializeProvenancedRun(runInput, scope.runId);
+  const commitments = materializeRunCommitments(runInput);
   const runConfigHash = stringField(rowObject(runInput), "config_hash");
   const dataWatermark =
     scope.dataWatermark ??
@@ -199,7 +205,17 @@ async function readResultsComputationFromTinybird(
       : {}),
   });
 
-  return { statsInput: input, runConfigHash, ...(dataWatermark ? { dataWatermark } : {}) };
+  return {
+    statsInput: input,
+    runConfigHash,
+    commitments,
+    ...(dataWatermark ? { dataWatermark } : {}),
+  };
+}
+
+/** A legacy Run's token omits the version so it stays byte-identical (ADR-0059). */
+function frozenAnalysisVersion(commitments: RunCommitments): string | null {
+  return commitments.analysis_version_source === "frozen" ? commitments.analysis_version : null;
 }
 
 function materializeProvenancedRun(runInput: unknown, requestedRunId: string | undefined) {

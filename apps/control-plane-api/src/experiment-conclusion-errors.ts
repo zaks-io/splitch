@@ -2,10 +2,15 @@ import type {
   DecisionFailure,
   ExperimentDecisionGate,
   FrozenControlIdentity,
+  PlannedDurationEvidence,
+  StatsOutput,
 } from "@splitch/contracts";
-import { decisionValidMembers } from "@splitch/contracts";
+import {
+  decisionValidMembers,
+  earliestDecisionWatermark,
+  observedEvidenceDays,
+} from "@splitch/contracts";
 import { renderError } from "@splitch/worker-runtime";
-import type { StatsOutput } from "@splitch/contracts";
 
 export function decisionResultUnavailable(
   runId: string,
@@ -87,6 +92,7 @@ export function decisionBlocked(
   dataWatermark: string,
   stats: StatsOutput,
   control: FrozenControlIdentity,
+  duration: PlannedDurationEvidence,
   gate: ExperimentDecisionGate,
   requestId: string,
 ): Response {
@@ -101,7 +107,7 @@ export function decisionBlocked(
         runId,
         resultToken,
         dataWatermark,
-        failures: decisionFailures(stats, control, gate),
+        failures: decisionFailures(stats, control, duration, gate),
       },
     },
     { requestId },
@@ -111,6 +117,7 @@ export function decisionBlocked(
 function decisionFailures(
   stats: StatsOutput,
   control: FrozenControlIdentity,
+  duration: PlannedDurationEvidence,
   gate: ExperimentDecisionGate,
 ): DecisionFailure[] {
   const failed = new Set(
@@ -156,6 +163,7 @@ function decisionFailures(
       },
     });
   }
+  if (failed.has("planned_duration")) failures.push(durationFailure(duration));
   if (failed.has("activation_balance")) {
     failures.push({
       code: "DECISION_ACTIVATION_IMBALANCE",
@@ -177,6 +185,31 @@ function resultMembers(stats: StatsOutput, include: (status: string) => boolean)
       status: result.status,
     }))
     .filter(({ status }) => include(status));
+}
+
+/**
+ * Conclude always carries a watermark, so a failed duration check here is
+ * always a short window, never a missing one.
+ */
+function durationFailure(duration: PlannedDurationEvidence): DecisionFailure {
+  const { plannedDurationDays, dataWatermark } = duration;
+  if (plannedDurationDays === null || dataWatermark === null) {
+    throw new Error("a failed planned_duration check needs a planned duration and a watermark");
+  }
+  return {
+    code: "DECISION_DURATION_INCOMPLETE",
+    checkIds: ["planned_duration"],
+    details: {
+      plannedDurationDays,
+      observedDays: observedEvidenceDays(duration.runStartedAt, dataWatermark),
+      runStartedAt: duration.runStartedAt,
+      earliestDecisionWatermark: earliestDecisionWatermark(
+        duration.runStartedAt,
+        plannedDurationDays,
+      ),
+      overrideReason: duration.overrideReason,
+    },
+  };
 }
 
 function controlFailure(control: FrozenControlIdentity): DecisionFailure {

@@ -1,4 +1,4 @@
-import { type ConcludeRunRequest, canonicalHash, type StatsOutput } from "@splitch/contracts";
+import { type ConcludeRunRequest, createResultToken, type StatsOutput } from "@splitch/contracts";
 import type { Repository } from "@splitch/db";
 import type { HandlerArgs, Principal } from "@splitch/worker-runtime";
 import { type Mock, vi } from "vitest";
@@ -41,10 +41,13 @@ export function conclusionFixture(
     targetConfigVersion?: number;
     expectedResultToken?: `sha256:${string}`;
     analysisEnvelope?: AnalysisEnvelope;
+    run?: Partial<ReturnType<typeof runRow>>;
+    nowIso?: string;
+    dataWatermark?: string;
   } = {},
 ): ConclusionFixture {
   const commit = vi.fn();
-  const readRun = vi.fn(async () => runRow("running"));
+  const readRun = vi.fn(async () => ({ ...runRow("running"), ...options.run }));
   const readTargetConfig = vi.fn(async () => flagConfigRow(options.targetConfigVersion ?? 1));
   const analysis = vi.fn(async () =>
     Response.json(
@@ -89,7 +92,7 @@ export function conclusionFixture(
   const body: ConcludeRunRequest = {
     selectedVariant: "treatment",
     expectedResultToken: options.expectedResultToken ?? `sha256:${"e".repeat(64)}`,
-    dataWatermark: WATERMARK,
+    dataWatermark: options.dataWatermark ?? WATERMARK,
     target: {
       environmentId: ENVIRONMENT_ID,
       flagId: FLAG_ID,
@@ -109,7 +112,7 @@ export function conclusionFixture(
     configStore: {
       writerFor: () => ({ syncExperimentConfig: vi.fn(async () => ({ ok: true })) }),
     },
-    nowIso: () => "2026-09-08T18:02:00.000Z",
+    nowIso: () => options.nowIso ?? "2026-09-08T18:02:00.000Z",
   } as unknown as ExperimentDeps;
   return {
     analysis,
@@ -150,6 +153,7 @@ function principal(): Principal {
   };
 }
 export function runRow(status: "running" | "ended") {
+  // A legacy Run by default: no analysis version or planned duration recorded.
   return {
     id: RUN_ID,
     appId: APP_ID,
@@ -170,7 +174,11 @@ export function runRow(status: "running" | "ended") {
     activationMetricId: null,
     confidenceLevel: 0.95,
     horizon: "sequential",
-    targetN: null,
+    targetN: null as number | null,
+    analysisVersion: null as string | null,
+    targetNSource: null as "caller" | "default" | null,
+    plannedDurationDays: null as number | null,
+    plannedDurationOverrideReason: null as string | null,
     sampleSizeLocked: null,
     decisionFamily: "[]",
     guardrailDecisions: "[]",
@@ -226,22 +234,30 @@ function environmentRow() {
     }),
   };
 }
-export async function resultToken(stats: StatsOutput): Promise<`sha256:${string}`> {
-  return canonicalHash({
+export async function resultToken(
+  stats: StatsOutput,
+  analysisVersion: string | null = null,
+): Promise<`sha256:${string}`> {
+  return createResultToken({
     appId: APP_ID,
     environmentId: ENVIRONMENT_ID,
     experimentId: EXPERIMENT_ID,
     runId: RUN_ID,
     runConfigHash: runRow("running").configHash,
+    analysisVersion,
     stats,
   });
 }
-export function readyEnvelope(stats: StatsOutput, token: `sha256:${string}`): AnalysisEnvelope {
+export function readyEnvelope(
+  stats: StatsOutput,
+  token: `sha256:${string}`,
+  dataWatermark = WATERMARK,
+): AnalysisEnvelope {
   return {
     state: "ready",
     run_id: RUN_ID,
     control_variant: "control",
-    data_watermark: WATERMARK,
+    data_watermark: dataWatermark,
     result_token: token,
     stats,
   };

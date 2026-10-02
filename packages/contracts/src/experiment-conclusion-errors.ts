@@ -66,6 +66,21 @@ export const DecisionFailureSchema = z.discriminatedUnion("code", [
     .strict(),
   z
     .object({
+      code: z.literal("DECISION_DURATION_INCOMPLETE"),
+      checkIds: z.tuple([z.literal("planned_duration")]),
+      details: z
+        .object({
+          plannedDurationDays: z.number().int().positive(),
+          observedDays: z.number().nonnegative(),
+          runStartedAt: z.string(),
+          earliestDecisionWatermark: z.string().datetime({ offset: true }),
+          overrideReason: z.string().nullable(),
+        })
+        .strict(),
+    })
+    .strict(),
+  z
+    .object({
       code: z.literal("DECISION_ACTIVATION_IMBALANCE"),
       checkIds: z.tuple([z.literal("activation_balance")]),
       details: z
@@ -86,6 +101,7 @@ export const decisionFailureCodeByCheckId = {
   activation_balance: "DECISION_ACTIVATION_IMBALANCE",
   engine_status: "DECISION_RESULT_INVALID",
   underpowered: "DECISION_UNDERPOWERED",
+  planned_duration: "DECISION_DURATION_INCOMPLETE",
   decision_valid_result: "DECISION_RESULT_INVALID",
 } as const satisfies Record<DecisionGateCheckId, DecisionFailure["code"]>;
 

@@ -1,3 +1,4 @@
+import { CURRENT_ANALYSIS_VERSION } from "@splitch/contracts";
 import { envScope } from "@splitch/db";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
@@ -13,8 +14,8 @@ import { errorBody, request } from "../src/flag-definition-test-harness";
 import { makePoolBindings as makeLocalBindings } from "./pool-bindings";
 
 /**
- * Rewrites a pending proposal to the shape recorded before the horizon rode the
- * Approval Request. There is no API that can produce one any more, and the
+ * Rewrites a pending proposal to the shape recorded before the horizon and the
+ * Run commitments (ADR-0059) rode the Approval Request. There is no API that can produce one any more, and the
  * whole point of the case is proposals that already exist in a deployed
  * database: an operator cannot edit a frozen proposal to add the field.
  */
@@ -31,6 +32,9 @@ async function stripProposedHorizon(
   const diff = JSON.parse(row.diff) as { proposed: Record<string, unknown> };
   delete diff.proposed.horizon;
   delete diff.proposed.sampleSizeLocked;
+  delete diff.proposed.targetN;
+  delete diff.proposed.plannedDurationDays;
+  delete diff.proposed.plannedDurationOverrideReason;
   await ctx.h.bindings.d1
     .prepare("UPDATE approval_requests SET diff = ? WHERE app_id = ? AND id = ?")
     .bind(JSON.stringify(diff), appId, approvalRequestId)
@@ -178,6 +182,15 @@ describe("Experiment decision spec at Start", () => {
       : null;
     expect(run?.horizon).toBe("sequential");
     expect(run?.sampleSizeLocked).toBe(null);
+    // Opened now, so it commits like a Start that omitted them: defaults,
+    // recorded as defaulted, under the current analysis version.
+    expect(run).toMatchObject({
+      analysisVersion: CURRENT_ANALYSIS_VERSION,
+      targetN: 5000,
+      targetNSource: "default",
+      plannedDurationDays: 7,
+      plannedDurationOverrideReason: null,
+    });
   });
 
   it("locks the decision spec once a Run froze it", async () => {
@@ -204,5 +217,39 @@ describe("Experiment decision spec at Start", () => {
       expect(error.details.recommendedAction).toBe("CREATE_NEW_RUN");
       expect(error.details.lockedFields).toEqual(Object.keys(patch));
     }
+  });
+});
+
+describe("Run commitments at Start (ADR-0059)", () => {
+  it("freezes a caller target and labeled duration override through an Approval", async () => {
+    const fx = await experimentFixture(ctx, "prod");
+    const experiment = await createExperimentDraft(ctx, fx, {
+      key: "committed-proposal",
+      allocation: { control: 50, treatment: 50 },
+    });
+    const intent = {
+      targetN: 20_000,
+      plannedDurationDays: 10,
+      plannedDurationOverrideReason: "holiday code freeze",
+    };
+
+    const proposed = await startExperiment(ctx, fx, experiment.id, intent);
+    expect(proposed.status).toBe(409);
+    const applied = await startExperiment(ctx, fx, experiment.id, {
+      ...intent,
+      review: { action: "approve_and_apply" },
+    });
+    expect(applied.status).toBe(200);
+
+    const { run } = (await applied.json()) as StartResponse;
+    expect(
+      await ctx.repo.experiments.getRun(envScope(fx.appId, fx.environmentId), run.id),
+    ).toMatchObject({
+      analysisVersion: CURRENT_ANALYSIS_VERSION,
+      targetN: 20_000,
+      targetNSource: "caller",
+      plannedDurationDays: 10,
+      plannedDurationOverrideReason: "holiday code freeze",
+    });
   });
 });

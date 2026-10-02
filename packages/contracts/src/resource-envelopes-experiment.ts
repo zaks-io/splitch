@@ -168,10 +168,12 @@ export type ExperimentUpdateResponse = z.infer<typeof ExperimentUpdateResponseSc
 // and freezes it into a Run. `review?` can approve and apply inline; without it,
 // a gated write returns an Approval Request. `reason?` is the Run's start note.
 //
-// `horizon` / `sampleSizeLocked` are the two decision-spec fields that live ONLY
-// on the Run (storage-schemas-d1-experiment.md), so Start — the moment a Run is
-// opened — is where they are chosen. Every other decision-spec field is carried
-// on the Experiment and frozen from it here.
+// `horizon` / `sampleSizeLocked`, the sequential `targetN`, and the planned
+// duration are decision-spec fields that live ONLY on the Run
+// (storage-schemas-d1-experiment.md), so Start, the moment a Run is opened, is
+// where they are chosen. Every other decision-spec field is carried on the
+// Experiment and frozen from it here. Omitted `targetN` and `plannedDurationDays`
+// freeze the defaults and record that they were defaulted (ADR-0059).
 // ---------------------------------------------------------------------------
 
 export const RunHorizonSchema = z.enum(["sequential", "fixed"]);
@@ -183,6 +185,11 @@ export const StartRunRequestSchema = z
     reason: PersistedDescriptionSchema.optional(),
     horizon: RunHorizonSchema.optional(),
     sampleSizeLocked: z.number().int().positive().nullable().optional(),
+    /** Sequential tuning target; defaults to 5000 and is recorded as defaulted. */
+    targetN: z.number().int().positive().optional(),
+    /** Whole weeks by policy (default 7); any other value needs an override reason. */
+    plannedDurationDays: z.number().int().positive().optional(),
+    plannedDurationOverrideReason: PersistedDescriptionSchema.min(1).optional(),
     idempotency_key: IdempotencyKeySchema,
   })
   .strict();

@@ -8,6 +8,11 @@ export * from "./experiment-control-identity";
 export * from "./experiment-decision-family";
 // biome-ignore lint/performance/noReExportAll: each source module owns one part of a cohesive rigor surface
 export * from "./experiment-decision-gate";
+export {
+  earliestDecisionWatermark,
+  observedEvidenceDays,
+  type PlannedDurationEvidence,
+} from "./experiment-decision-gate-duration";
 // biome-ignore lint/performance/noReExportAll: each source module owns one part of a cohesive rigor surface
 export * from "./experiment-significance-display";
 // biome-ignore lint/performance/noReExportAll: each source module owns one part of a cohesive rigor surface

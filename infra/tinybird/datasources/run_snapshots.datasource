@@ -18,7 +18,11 @@ SCHEMA >
     `metric_variance_config` String `json:$.metric_variance_config` DEFAULT '[]',
     `dimensions` String `json:$.dimensions`,
     `config_hash` String `json:$.config_hash`,
-    `activation_metric_id` Nullable(String) `json:$.activation_metric_id`
+    `activation_metric_id` Nullable(String) `json:$.activation_metric_id`,
+    `analysis_version` Nullable(String) `json:$.analysis_version`,
+    `target_n_source` Nullable(String) `json:$.target_n_source`,
+    `planned_duration_days` Nullable(UInt32) `json:$.planned_duration_days`,
+    `planned_duration_override_reason` Nullable(String) `json:$.planned_duration_override_reason`
 
 ENGINE "MergeTree"
 ENGINE_SORTING_KEY "app_id, environment_id, experiment_id, started_at"

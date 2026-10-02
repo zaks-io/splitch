@@ -1,17 +1,17 @@
 import {
   AnalysisResultsEnvelopeSchema,
-  canonicalHash,
   type ConcludeRunRequest,
+  canonicalHash,
+  createResultToken,
   evaluateExperimentDecisionGate,
   resolveAnalysisControlIntegrity,
   resolveFrozenControlIdentity,
-  resultTokenStats,
 } from "@splitch/contracts";
 import { appScope, envScope } from "@splitch/db";
 import type { HandlerArgs } from "@splitch/worker-runtime";
-import { requireAppAdmin } from "./app-authz";
 import { fetchAnalysis } from "./analysis-binding";
 import { analysisResultsRequest } from "./analysis-results-request";
+import { requireAppAdmin } from "./app-authz";
 import { experimentConclusionId } from "./approval-canonical";
 import { idempotencyConflict as renderIdempotencyConflict } from "./approval-review-outcomes";
 import { commitConclusion } from "./experiment-conclusion-commit";
@@ -25,6 +25,7 @@ import { conclusionPathIds, replayConclusion } from "./experiment-conclusion-res
 import { configStoreUnavailable, runNotFound, runNotRunning } from "./experiment-errors";
 import type { ExperimentDeps } from "./experiment-handler-shared";
 import { objectBody } from "./handler-input";
+import { type RunDurationRow, runDurationEvidence } from "./run-duration-evidence";
 
 export async function concludeRun(
   deps: ExperimentDeps,
@@ -75,6 +76,14 @@ export async function concludeRun(
   });
 }
 
+type ConcludedRun = RunDurationRow & {
+  id: string;
+  configHash: string;
+  controlVariantId: string;
+  variantSet: string;
+  analysisVersion: string | null;
+};
+
 async function loadRunAndProposal(
   deps: ExperimentDeps,
   ids: ReturnType<typeof conclusionPathIds>,
@@ -113,7 +122,7 @@ async function validatedEvidence(
   deps: ExperimentDeps,
   ids: ReturnType<typeof conclusionPathIds>,
   body: ConcludeRunRequest,
-  run: { id: string; configHash: string; controlVariantId: string; variantSet: string },
+  run: ConcludedRun,
   actorId: string,
   requestId: string,
 ) {
@@ -136,7 +145,7 @@ async function validatedEvidence(
       response: decisionResultUnavailable(run.id, "ready", requestId),
     };
   }
-  await assertEvidenceBinding(ids, body, run.configHash, envelope);
+  await assertEvidenceBinding(ids, body, run, envelope);
   const resultToken = envelope.result_token as `sha256:${string}`;
   if (resultToken !== body.expectedResultToken) {
     return {
@@ -153,7 +162,10 @@ async function validatedEvidence(
     resolveFrozenControlIdentity(run.controlVariantId, run.variantSet),
     envelope.control_variant,
   );
-  const gate = evaluateExperimentDecisionGate(envelope.stats, control);
+  // Measured against the selected watermark, never the clock, so a day-seven
+  // Conclude that selects day-one evidence is refused like a day-one Conclude.
+  const duration = runDurationEvidence(run, envelope.data_watermark);
+  const gate = evaluateExperimentDecisionGate(envelope.stats, control, duration);
   if (!gate.shipAllowed) {
     return {
       ok: false as const,
@@ -163,6 +175,7 @@ async function validatedEvidence(
         envelope.data_watermark,
         envelope.stats,
         control,
+        duration,
         gate,
         requestId,
       ),
@@ -182,7 +195,7 @@ async function validatedEvidence(
 async function assertEvidenceBinding(
   ids: ReturnType<typeof conclusionPathIds>,
   body: ConcludeRunRequest,
-  runConfigHash: string,
+  run: ConcludedRun,
   envelope: Extract<ReturnType<typeof AnalysisResultsEnvelopeSchema.parse>, { state: "ready" }>,
 ) {
   if (envelope.data_watermark !== body.dataWatermark) {
@@ -191,13 +204,16 @@ async function assertEvidenceBinding(
   if (envelope.run_id !== ids.runId) {
     throw new Error(`Analysis answered for Run ${envelope.run_id}, not ${ids.runId}`);
   }
-  const boundToken = await canonicalHash({
+  // The analysis version comes from the D1 Run, not the envelope: evidence read
+  // under any version other than the one the Run froze is not bound to it.
+  const boundToken = await createResultToken({
     appId: ids.appId,
     environmentId: ids.environmentId,
     experimentId: ids.experimentId,
     runId: ids.runId,
-    runConfigHash,
-    stats: resultTokenStats(envelope.stats),
+    runConfigHash: run.configHash,
+    analysisVersion: run.analysisVersion,
+    stats: envelope.stats,
   });
   if (envelope.result_token !== boundToken) {
     throw new Error("Analysis result token is not bound to the selected Run configuration");

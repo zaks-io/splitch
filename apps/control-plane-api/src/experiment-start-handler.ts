@@ -29,7 +29,11 @@ import {
 } from "./experiment-handler-shared";
 import { type ExperimentRow, json, jsonArray, runResponse } from "./experiment-model";
 import { prepareStart } from "./experiment-start";
-import { runDecisionSpecFromBody, startProposalFields } from "./experiment-start-decision-spec";
+import {
+  runCommitmentColumns,
+  runDecisionSpecFromBody,
+  startProposalFields,
+} from "./experiment-start-decision-spec";
 import { validateStartRequest } from "./experiment-start-request";
 import { readEnvironmentPolicy } from "./flag-config-policy";
 import { objectBody, pathParam } from "./handler-input";
@@ -77,6 +81,9 @@ export async function startExperiment(
       startReason: null,
       horizon: null,
       sampleSizeLocked: null,
+      targetN: null,
+      plannedDurationDays: null,
+      plannedDurationOverrideReason: null,
     };
     // The same fields the idempotency hash was taken over, spread from the same
     // value. The horizon is a Run field with no Experiment column, so the
@@ -127,8 +134,7 @@ export async function startExperiment(
       variantSet: json(prepared.value.variantSet),
       targetingRules: json(prepared.value.targetingRules),
       confidenceLevel: experiment.confidenceLevel,
-      horizon: decisionSpec.value.horizon,
-      sampleSizeLocked: decisionSpec.value.sampleSizeLocked,
+      ...runCommitmentColumns(decisionSpec.value),
       decisionFamily: json(prepared.value.decisionFamily),
       guardrailDecisions: json(prepared.value.guardrailDecisions),
       metricVarianceConfig: json(prepared.value.metricVarianceConfig),

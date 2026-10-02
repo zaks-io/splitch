@@ -1,3 +1,9 @@
+import { CURRENT_ANALYSIS_VERSION } from "@splitch/contracts";
+import {
+  type CommitmentIntent,
+  type ResolvedRunCommitments,
+  resolveRunCommitments,
+} from "./experiment-start-commitments";
 import { validationErrors } from "./flag-definition-errors";
 
 /**
@@ -12,7 +18,7 @@ import { validationErrors } from "./flag-definition-errors";
  * the caller is told what to fix rather than that something was wrong.
  */
 
-export interface RunDecisionSpec {
+export interface RunDecisionSpec extends ResolvedRunCommitments {
   horizon: "sequential" | "fixed";
   sampleSizeLocked: number | null;
 }
@@ -69,7 +75,16 @@ export function runDecisionSpecFromBody(
       ]),
     };
   }
-  return { ok: true, value: { horizon, sampleSizeLocked } };
+  const commitments = resolveRunCommitments(body, horizon);
+  if (!commitments.ok) {
+    return {
+      ok: false,
+      response: validationErrors(requestId, [
+        { path: ["body", commitments.issue.field], message: commitments.issue.message },
+      ]),
+    };
+  }
+  return { ok: true, value: { horizon, sampleSizeLocked, ...commitments.value } };
 }
 
 /**
@@ -87,11 +102,17 @@ export function startProposalFields(
   startReason: string | null;
   horizon: RunDecisionSpec["horizon"];
   sampleSizeLocked: number | null;
-} {
+} & Required<{ [Field in keyof CommitmentIntent]: unknown }> {
   return {
     startReason: typeof body.reason === "string" ? body.reason : null,
     horizon: decisionSpec.horizon,
     sampleSizeLocked: decisionSpec.sampleSizeLocked,
+    // The caller's intent, not the resolved value: replay runs the same
+    // resolver, so an omitted field is defaulted (and recorded as defaulted)
+    // identically on both Start doors (ADR-0059).
+    targetN: body.targetN ?? null,
+    plannedDurationDays: body.plannedDurationDays ?? null,
+    plannedDurationOverrideReason: body.plannedDurationOverrideReason ?? null,
   };
 }
 
@@ -117,5 +138,28 @@ export function decisionSpecFromProposal(
   // breaks it is a malformed row, and applying it would store a stopping rule
   // the ungated path would never have written.
   if ((horizon === "fixed") !== (sampleSizeLocked !== null)) return null;
-  return { horizon, sampleSizeLocked };
+  // A proposal recorded before Run commitments rode the Approval carries none
+  // of these fields. It resolves exactly like a Start that omitted them: the
+  // Run is opened now, under the current defaults, recorded as defaulted.
+  const commitments = resolveRunCommitments(proposed, horizon);
+  if (!commitments.ok) return null;
+  return { horizon, sampleSizeLocked, ...commitments.value };
+}
+
+/**
+ * The Run columns a resolved decision spec writes, shared by both Start doors.
+ * The analysis version is stamped here, when the Run opens, rather than carried
+ * on the proposal: no evidence exists before Start, so a pending Approval
+ * applied after a version change has nothing an older version could have read.
+ */
+export function runCommitmentColumns(spec: RunDecisionSpec) {
+  return {
+    horizon: spec.horizon,
+    sampleSizeLocked: spec.sampleSizeLocked,
+    analysisVersion: CURRENT_ANALYSIS_VERSION,
+    targetN: spec.targetN,
+    targetNSource: spec.targetNSource,
+    plannedDurationDays: spec.plannedDurationDays,
+    plannedDurationOverrideReason: spec.plannedDurationOverrideReason,
+  };
 }

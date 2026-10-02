@@ -93,6 +93,19 @@ describe("privacy request reset redaction", () => {
   });
 });
 
+describe("runs commitments (ADR-0059)", () => {
+  it.each([
+    ["analysis_version", "analysisVersion"],
+    ["target_n_source", "targetNSource"],
+    ["planned_duration_days", "plannedDurationDays"],
+    ["planned_duration_override_reason", "plannedDurationOverrideReason"],
+  ] as const)("applies and declares nullable %s so legacy Runs load", (column, field) => {
+    expect(migrationSql).toContain(`ALTER TABLE \`runs\` ADD \`${column}\``);
+    expect(getTableColumns(runs)[field].name).toBe(column);
+    expect(getTableColumns(runs)[field].notNull).toBe(false);
+  });
+});
+
 describe("runs storage-only decision columns", () => {
   // These live ONLY on the D1 runs table — the S02 Run Zod leaf omits them.
   const storageOnlyColumns = [

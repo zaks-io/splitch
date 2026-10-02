@@ -3,6 +3,7 @@ import {
   evaluateExperimentDecisionGate,
   experimentSignificanceDisplays,
   experimentSrmDiagnostics,
+  type PlannedDurationEvidence,
   resolveAnalysisControlIntegrity,
   resolveFrozenControlIdentity,
 } from "@splitch/contracts";
@@ -21,6 +22,7 @@ import { runningExperimentHealth } from "./experiment-health";
 import { experimentResponse, jsonArray, jsonObject } from "./experiment-model";
 import { metricResponse } from "./metric-segment-shared";
 import { panelScopeAccessError } from "./panel-scope-access";
+import { runDurationEvidence } from "./run-duration-evidence";
 
 interface PanelExperimentsDeps {
   repo: Repository;
@@ -280,6 +282,7 @@ export async function panelExperimentResults(
       runNumber: run.runNumber,
       runStatus,
       control,
+      duration: runDurationEvidence(run, results.data_watermark),
     }),
   );
 }
@@ -289,14 +292,15 @@ function panelReadyResults(
   run: Pick<
     Extract<PanelExperimentResultsOutput, { state: "ready" }>,
     "runId" | "runNumber" | "runStatus" | "control"
-  >,
+  > & { duration: PlannedDurationEvidence },
 ): Extract<PanelExperimentResultsOutput, { state: "ready" }> {
+  const { duration, ...identity } = run;
   const ready = {
     state: "ready",
-    ...run,
+    ...identity,
     stats: results.stats,
     srm: experimentSrmDiagnostics(results.stats),
-    gate: evaluateExperimentDecisionGate(results.stats, run.control),
+    gate: evaluateExperimentDecisionGate(results.stats, run.control, duration),
     significance: experimentSignificanceDisplays(results.stats),
   } as const;
   return results.data_watermark && results.result_token

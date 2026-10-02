@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { CanonicalJsonSha256Schema } from "./canonical-hash";
 import { MetricRefSchema } from "./leaf-schemas-experiment";
+import { RunCommitmentsSchema } from "./run-commitments";
 import type { StatsInput } from "./stats-input-contract";
 
 const MetricIdSchema = MetricRefSchema.shape.metricId;
@@ -245,6 +246,12 @@ export const AnalysisResultsEnvelopeSchema = z.discriminatedUnion("state", [
       control_variant: z.string().min(1),
       data_watermark: z.string().datetime({ offset: true }).optional(),
       result_token: CanonicalJsonSha256Schema.optional(),
+      /**
+       * What the Run froze at Start: analysis version, target_n and whether it
+       * was defaulted, planned duration (ADR-0059). Optional only so a Control
+       * Plane reading an Analysis Worker from before this field still parses.
+       */
+      run_commitments: RunCommitmentsSchema.optional(),
       stats: StatsOutputSchema,
     })
     .strict()

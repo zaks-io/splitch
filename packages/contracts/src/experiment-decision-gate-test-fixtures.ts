@@ -6,6 +6,7 @@
  */
 import type { FrozenControlIdentity } from "./experiment-control-identity";
 import { evaluateExperimentDecisionGate } from "./experiment-decision-gate";
+import type { PlannedDurationEvidence } from "./experiment-decision-gate-duration";
 import type { ArmResult, StatsOutput } from "./stats-result-contract";
 
 /** A Control the Run really froze, so cases exercise one variable at a time. */
@@ -13,8 +14,25 @@ function frozenControl(): FrozenControlIdentity {
   return { state: "frozen", variantId: "variant_control", variant: "control" };
 }
 
-export function gateFor(stats: StatsOutput, control: FrozenControlIdentity = frozenControl()) {
-  return evaluateExperimentDecisionGate(stats, control);
+/** A Run whose selected evidence already spans its default one-week plan. */
+export function reachedDuration(
+  overrides: Partial<PlannedDurationEvidence> = {},
+): PlannedDurationEvidence {
+  return {
+    plannedDurationDays: 7,
+    overrideReason: null,
+    runStartedAt: "2026-07-01T00:00:00.000Z",
+    dataWatermark: "2026-07-08T00:00:00.000Z",
+    ...overrides,
+  };
+}
+
+export function gateFor(
+  stats: StatsOutput,
+  control: FrozenControlIdentity = frozenControl(),
+  duration: PlannedDurationEvidence = reachedDuration(),
+) {
+  return evaluateExperimentDecisionGate(stats, control, duration);
 }
 
 const varianceTechniques: ArmResult["variance_techniques"] = {

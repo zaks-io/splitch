@@ -834,10 +834,13 @@ Flags:
   -h, --help               [type: boolean; default: false] Show help and exit.
 
 Request body (--body-json):
-  reason            optional  string
-  horizon           optional  string ("sequential" | "fixed")
-  sampleSizeLocked  optional  number | null
-  idempotency_key   required  string
+  reason                         optional  string
+  horizon                        optional  string ("sequential" | "fixed")
+  sampleSizeLocked               optional  number | null
+  targetN                        optional  number
+  plannedDurationDays            optional  number
+  plannedDurationOverrideReason  optional  string
+  idempotency_key                required  string
   Example:
     {"horizon":"sequential","idempotency_key":"idem-1"}
 

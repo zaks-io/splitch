@@ -1,11 +1,11 @@
 import type { ApprovalRequest, ErrorCode } from "@splitch/contracts";
 import { type ApprovalCommit, envScope } from "@splitch/db";
-import type { ApprovalApplicationDeps } from "./approval-application";
 import { nowIso } from "./app-environment-model";
+import type { ApprovalApplicationDeps } from "./approval-application";
 import { syncExperimentConfigFromD1 } from "./experiment-handler-shared";
 import { json } from "./experiment-model";
 import { prepareStart } from "./experiment-start";
-import { decisionSpecFromProposal } from "./experiment-start-decision-spec";
+import { decisionSpecFromProposal, runCommitmentColumns } from "./experiment-start-decision-spec";
 import { shipCommittedRunSnapshot } from "./run-snapshot";
 
 export async function applyExperimentStart(
@@ -36,7 +36,7 @@ export async function applyExperimentStart(
   const prepared = await prepareStart(deps.repo, scope, experiment, commit.reviewId);
   if (!prepared.ok) return await responseError(prepared.response);
   const decisionSpec = decisionSpecFromProposal(request.diff.proposed);
-  if (!decisionSpec) return malformedProposal("sampleSizeLocked");
+  if (!decisionSpec) return malformedProposal("decisionSpec");
   const committed = await deps.repo.experiments.startRun(scope, {
     experimentId: experiment.id,
     flagId: experiment.flagId,
@@ -60,8 +60,7 @@ export async function applyExperimentStart(
       variantSet: json(prepared.value.variantSet),
       targetingRules: json(prepared.value.targetingRules),
       confidenceLevel: experiment.confidenceLevel,
-      horizon: decisionSpec.horizon,
-      sampleSizeLocked: decisionSpec.sampleSizeLocked,
+      ...runCommitmentColumns(decisionSpec),
       decisionFamily: json(prepared.value.decisionFamily),
       guardrailDecisions: json(prepared.value.guardrailDecisions),
       metricVarianceConfig: json(prepared.value.metricVarianceConfig),

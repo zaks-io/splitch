@@ -26,6 +26,10 @@ export interface RunSnapshotRow {
   horizon: string;
   target_n: number | null;
   sample_size_locked: number | null;
+  analysis_version: string | null;
+  target_n_source: string | null;
+  planned_duration_days: number | null;
+  planned_duration_override_reason: string | null;
   allocation: string;
   control_variant: string;
   control_variant_id: string;
@@ -70,6 +74,12 @@ export function runSnapshotRow(
     horizon: run.horizon,
     target_n: run.targetN,
     sample_size_locked: run.sampleSizeLocked,
+    // Null on a legacy Run: Analysis reads that as the labeled legacy version
+    // with no target or duration commitment (ADR-0059).
+    analysis_version: run.analysisVersion,
+    target_n_source: run.targetNSource,
+    planned_duration_days: run.plannedDurationDays,
+    planned_duration_override_reason: run.plannedDurationOverrideReason,
     allocation: run.allocation,
     control_variant: controlVariant.name,
     control_variant_id: run.controlVariantId,

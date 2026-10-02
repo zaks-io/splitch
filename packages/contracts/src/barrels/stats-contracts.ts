@@ -1,5 +1,18 @@
 // biome-ignore-all lint/performance/noBarrelFile: internal sub-barrel of ../index.ts, which stays the only supported import path for these symbols
 
+export type { ResultTokenInput, RunCommitments, TargetNSource } from "../run-commitments";
+export {
+  CURRENT_ANALYSIS_VERSION,
+  createResultToken,
+  DEFAULT_PLANNED_DURATION_DAYS,
+  DEFAULT_SEQUENTIAL_TARGET_N,
+  LEGACY_ANALYSIS_VERSION,
+  LEGACY_RUN_COMMITMENTS,
+  PLANNED_DURATION_WEEK_DAYS,
+  RunCommitmentsSchema,
+  SUPPORTED_ANALYSIS_VERSIONS,
+  TargetNSourceSchema,
+} from "../run-commitments";
 // What the stats engine is handed and what it returns. Grouped because they are
 // read together: the analysis knobs frozen on the input (variance config,
 // guardrail bounds) are what the result's techniques and guardrail rows report
@@ -21,12 +34,12 @@ export {
   ActivationRowSchema,
   CupedCovariateRowSchema,
   CupedCovariateSourceSchema,
-  DecisionFamilyMemberSchema,
   DEFAULT_CUPED,
   DEFAULT_CUPED_COVERAGE_THRESHOLD_PCT,
   DEFAULT_CUPED_LOOKBACK_MS,
   DEFAULT_WINSORIZE,
   DEFAULT_WINSORIZE_PCT,
+  DecisionFamilyMemberSchema,
   DedupeExposureRowSchema,
   DimensionInputSchema,
   GuardrailDecisionSchema,
