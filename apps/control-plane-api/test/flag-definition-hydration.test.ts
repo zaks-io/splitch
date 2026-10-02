@@ -215,6 +215,7 @@ describe("hydrated Flag definition reads", () => {
       code: "INTERNAL_SERVER_ERROR",
       message: `Flag ${flag.id} has no Configuration in Environment ${prod.id}`,
       details: { fault: "FLAG_CONFIGURATION_MISSING" },
+      outcome: "non_retryable",
     });
   });
 

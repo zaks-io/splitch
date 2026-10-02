@@ -39,6 +39,7 @@ describe("approval Review POST apply-failure responses", () => {
       message:
         "Approval Request changed-field set could not be determined; refuse rather than apply",
       details: { fault: "approval_changed_fields_undetermined" },
+      outcome: "non_retryable",
     });
     expect(request).toMatchObject({
       status: "stale",
@@ -63,6 +64,7 @@ describe("approval Review POST apply-failure responses", () => {
       code: "INTERNAL_SERVER_ERROR",
       message: "Approval Request does not change any Flag Configuration field that can be applied",
       details: { fault: "approval_empty_change" },
+      outcome: "non_retryable",
     });
     expect(request).toMatchObject({
       status: "stale",
@@ -98,6 +100,7 @@ describe("approval Review POST apply-failure responses", () => {
         attemptedChange: "APPLY_APPROVED_FLAG_CONFIG:flag_route_terminal",
         recommendedAction: "END_RUNNING_RUN_FIRST",
       },
+      outcome: "user_action_required",
     };
     expect(response.status).toBe(409);
     expect(await response.json()).toEqual(error);
@@ -135,6 +138,7 @@ describe("approval Review POST apply-failure responses", () => {
         },
         recommendedAction: "RETRY_REVIEW",
       },
+      outcome: "user_action_required",
     });
     expect(request).toMatchObject({
       status: "pending",

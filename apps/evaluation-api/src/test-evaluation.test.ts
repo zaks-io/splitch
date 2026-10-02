@@ -172,7 +172,12 @@ describe("POST /apps/:appId/envs/:environmentId/flags/:flagKey/test-eval", () =>
     const body = (await res.json()) as ErrorResponse;
 
     expect(res.status).toBe(404);
-    expect(body).toEqual({ code: "FLAG_NOT_FOUND", message: "flag not found", details: {} });
+    expect(body).toEqual({
+      code: "FLAG_NOT_FOUND",
+      message: "flag not found",
+      details: {},
+      outcome: "user_action_required",
+    });
     expect(JSON.stringify(body)).not.toContain("app:");
     expect(assignmentStore.getAllCalls).toEqual([]);
     expect(assignmentStore.putCalls).toEqual([]);

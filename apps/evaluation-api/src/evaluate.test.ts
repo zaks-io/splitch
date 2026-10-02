@@ -294,6 +294,7 @@ describe("POST /api/sdk/evaluate: Client Key validation errors", () => {
       code: "VALIDATION_ERROR",
       message: "idType does not match the Experiment",
       details: { issues: [] },
+      outcome: "user_action_required",
     });
     expect(raw).not.toContain("workspace");
     expect(raw).not.toContain("targetingKeyType");
@@ -321,6 +322,7 @@ describe("POST /api/sdk/evaluate: Client Key validation errors", () => {
       code: "INTERNAL_SERVER_ERROR",
       message: "evaluation failed",
       details: {},
+      outcome: "non_retryable",
     });
     expect(raw).not.toContain(pattern);
     expect(raw).not.toContain("Invalid regex");
