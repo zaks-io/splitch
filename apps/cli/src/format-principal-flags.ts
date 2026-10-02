@@ -1,5 +1,6 @@
 import {
   HydratedPrincipalFlagListResponseSchema,
+  parseResponseTolerantly,
   PrincipalFlagListResponseSchema,
 } from "@splitch/sdk/control-plane";
 import {
@@ -7,6 +8,7 @@ import {
   flagReadContractError,
   formatFlagSummaryList,
   formatHydratedFlag,
+  payloadCarriesHydratedConfigurations,
   withFlagListBound,
 } from "./format-flag-read.js";
 import { terminalText } from "./format-payload.js";
@@ -28,7 +30,7 @@ export function formatPrincipalFlags(payload: unknown, summary: boolean): string
 }
 
 function formatPrincipalHydrated(payload: unknown): string {
-  const parsed = HydratedPrincipalFlagListResponseSchema.safeParse(payload);
+  const parsed = parseResponseTolerantly(HydratedPrincipalFlagListResponseSchema, payload);
   if (!parsed.success) throw flagReadContractError("principal_flags_list", "hydrated");
   if (parsed.data.items.length === 0) return withFlagListBound(EMPTY_FLAG_CATALOG, parsed.data);
   return withFlagListBound(
@@ -40,7 +42,12 @@ function formatPrincipalHydrated(payload: unknown): string {
 }
 
 function formatPrincipalSummary(payload: unknown): string {
-  const parsed = PrincipalFlagListResponseSchema.safeParse(payload);
+  // Same summary/hydrated mode guard as format-flag-read: tolerant parse would
+  // strip Configurations and accept a hydrated principal envelope as summary.
+  if (payloadCarriesHydratedConfigurations(payload)) {
+    throw flagReadContractError("principal_flags_list", "summary");
+  }
+  const parsed = parseResponseTolerantly(PrincipalFlagListResponseSchema, payload);
   if (!parsed.success) throw flagReadContractError("principal_flags_list", "summary");
   if (parsed.data.items.length === 0) return withFlagListBound(EMPTY_FLAG_CATALOG, parsed.data);
   return withFlagListBound(

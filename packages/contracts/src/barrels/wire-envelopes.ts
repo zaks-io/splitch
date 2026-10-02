@@ -81,6 +81,14 @@ export {
 export type { EnvironmentExposureStatusResponse } from "../environment-exposure-status";
 export { EnvironmentExposureStatusResponseSchema } from "../environment-exposure-status";
 export type {
+  ResponseParseFailure,
+  ResponseParseIssue,
+  ResponseParseResult,
+  ResponseParseSuccess,
+  ResponseSafeParseSchema,
+} from "../parse-response-tolerantly";
+export { parseResponseBody, parseResponseTolerantly } from "../parse-response-tolerantly";
+export type {
   FlagConfigurationSummary,
   FlagListResponse,
   FlagResponse,
