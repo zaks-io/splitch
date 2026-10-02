@@ -87,8 +87,11 @@ estimate (`packages/stats/src/sequential-ci.ts`). That is a point mass at `1`, n
 Valid sequential p-values are super-uniform: `P(p <= alpha) <= alpha` under the null (Wang and
 Ramdas). They are not Uniform(0, 1). A/A simulations, metric-trust jobs, and any Anderson-Darling
 (or similar) uniformity gate on these p-values would reject a correctly conservative test. Those
-jobs must check the rejection-probability bound at declared alphas, or compare to this adapter's
-simulated null reference, not to uniformity.
+jobs must check false-positive control directly: under the null, the probability that the
+p-value ever reaches `alpha` across the declared look schedule must not exceed `alpha`
+(`P(inf_t p_t <= alpha) <= alpha`), within a predeclared Monte Carlo tolerance. Matching this
+adapter's own simulated null distribution can supplement that check but never replaces it, since an
+adapter that over-rejects would match its own reference.
 
 Fixed-horizon `p_value` is a one-look t/z tail and is not this inversion.
 

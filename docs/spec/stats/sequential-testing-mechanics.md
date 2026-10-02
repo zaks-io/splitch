@@ -71,8 +71,9 @@ returns exactly `1` when the estimate is zero, and also when the boundary at alp
 still covers the estimate. That second case is a point mass at `1` for a band of standardized
 statistics near zero. A valid sequential p-value is **super-uniform**, not uniform: under the
 null, `P(p <= alpha) <= alpha` at each alpha (Wang and Ramdas). Any A/A or metric-trust check
-must test that rejection-probability bound, or compare to a simulated reference distribution for
-this adapter. Anderson-Darling uniformity of p-values would reject a correctly conservative test.
+must test that bound across the declared look schedule (`P(inf_t p_t <= alpha) <= alpha`). A
+comparison to this adapter's simulated reference distribution may supplement it but never replaces
+it. Anderson-Darling uniformity of p-values would reject a correctly conservative test.
 
 The base CI and p-value are for **absolute lift** `(treatment - control)`. That absolute interval
 is the stopping input and the BH rank. Relative-lift output is the **Fieller inversion of the
