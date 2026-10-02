@@ -906,6 +906,7 @@ Usage:
 Flags:
   --app <app>                              [type: string; default: SPLITCH_APP or config] App ID or slug.
   --env <environment>                      [type: string; default: none] Optional Environment ID or key filter (Policy context).
+  --from-environment-id <id>               [type: string; default: none] Source Environment ID of a promotion; requires --to-environment-id.
   --limit <limit>                          [type: number; default: 50] Query parameter limit.
   --cursor <cursor>                        [type: string | null; default: null] Query parameter cursor.
   --from <from>                            [type: string; default: required] ISO-8601 instant with offset.
@@ -926,6 +927,7 @@ Usage:
 Flags:
   --app <app>                              [type: string; default: SPLITCH_APP or config] App ID or slug.
   --env <environment>                      [type: string; default: none] Optional Environment ID or key filter (Policy context).
+  --from-environment-id <id>               [type: string; default: none] Source Environment ID of a promotion; requires --to-environment-id.
   --limit <limit>                          [type: number; default: 50] Query parameter limit.
   --cursor <cursor>                        [type: string | null; default: null] Query parameter cursor.
   --from <from>                            [type: string; default: none] ISO-8601 instant with offset.

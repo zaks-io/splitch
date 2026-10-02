@@ -181,6 +181,11 @@ function applyCommandSpecificFields(
     input.fromEnvironmentId = invocation.flags.fromEnvironmentId;
     input.select = input.select ?? { enabled: true };
   }
+  // --from-environment-id is a reserved global flag, so the derived query flag
+  // skips it; forward it to the change-log reads that filter by promotion.
+  if (isFlagChangeRead(command.operationId) && invocation.flags.fromEnvironmentId) {
+    input.fromEnvironmentId = invocation.flags.fromEnvironmentId;
+  }
   if (command.operationId === "flag_config_update") {
     applyFlagConfigUpdateFields(invocation.flags, input);
   }
@@ -292,4 +297,8 @@ function evaluationContextSource(
     causeSummary: "Evaluation Context must be a JSON object",
     remediation: "Pass an object with --context-json or as evaluationContext in --body-json",
   });
+}
+
+function isFlagChangeRead(operationId: string): boolean {
+  return operationId === "flag_changes_list" || operationId === "flag_changes_export";
 }
