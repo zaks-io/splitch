@@ -2,6 +2,7 @@ import { createRoute } from "@hono/zod-openapi";
 import { describe, expect, it } from "vitest";
 import { defineApiRoute, z } from "./openapi-route";
 import { FlagResponseSchema } from "./resource-envelopes-flag";
+import { mintTicketsClosed, readOnlyClosed } from "./route-effects";
 import { AppParams } from "./routes/route-shapes";
 
 const fromHelper = defineApiRoute({
@@ -15,6 +16,7 @@ const fromHelper = defineApiRoute({
   auth: "control-plane-token",
   rateLimit: "control-plane-actor",
   idempotency: "none",
+  effects: readOnlyClosed,
   errors: ["APP_NOT_FOUND", "FORBIDDEN"],
 });
 
@@ -56,6 +58,7 @@ describe("openapi route parity", () => {
       auth: "data-plane-key",
       rateLimit: "client-key",
       idempotency: "required",
+      effects: mintTicketsClosed,
       errors: ["UNAUTHORIZED"],
     });
 
@@ -77,6 +80,7 @@ describe("openapi route parity", () => {
         auth: "public",
         rateLimit: "none",
         idempotency: "none",
+        effects: readOnlyClosed,
         // @ts-expect-error -- bypass the authoring guard to prove generation fails loud.
         errors: ["NOT_A_REAL_ERROR_CODE"],
       }),

@@ -4,6 +4,7 @@ import type { ApiRouteContract, DefineApiRouteInput } from "./openapi-route";
 import { assertRegistry } from "./route-registry";
 import type { ErrorCode } from "./errors";
 import type { RouteContract } from "./route-contract";
+import { readOnlyClosed } from "./route-effects";
 
 /**
  * Fail-loud proofs for the registry's contract guards. A malformed registry must
@@ -23,6 +24,7 @@ function sampleRoute(over: Partial<DefineApiRouteInput> = {}): ApiRouteContract 
     rateLimit: "none",
     idempotency: "none",
     errors: [],
+    effects: readOnlyClosed,
     ...over,
   });
 }
@@ -32,6 +34,13 @@ describe("registry guard: duplicate operationId fails loud", () => {
     const a = sampleRoute({ operationId: "things_get" });
     const b = sampleRoute({ operationId: "things_get", path: "/things/:id" });
     expect(() => assertRegistry([a, b])).toThrow(/duplicate operationId "things_get"/);
+  });
+
+  it("throws when a route omits effects", () => {
+    const { effects: _effects, ...without } = sampleRoute();
+    expect(() => assertRegistry([without as unknown as ApiRouteContract])).toThrow(
+      /missing effects/,
+    );
   });
 
   it("accepts distinct operationIds", () => {

@@ -12,6 +12,14 @@ import {
   ConvexServerExposureResponseSchema,
 } from "../convex-integration";
 import { type ApiRouteContract, defineApiRoute } from "../openapi-route";
+import {
+  createClosed,
+  deleteClosed,
+  openWorld,
+  readOnlyOpen,
+  recordEventClosed,
+  rotateClosed,
+} from "../route-effects";
 import { EnvParams } from "./route-shapes";
 
 const OWNER = "control-plane-api" as const;
@@ -47,6 +55,7 @@ export const convexRoutes = [
     scopes: ["data-plane:evaluate"],
     rateLimit: "api-key",
     idempotency: "none",
+    effects: openWorld(createClosed),
     errors: [...commonErrors, "IDEMPOTENCY_KEY_CONFLICT"],
   }),
   defineApiRoute({
@@ -61,6 +70,7 @@ export const convexRoutes = [
     scopes: ["data-plane:evaluate"],
     rateLimit: "api-key",
     idempotency: "none",
+    effects: readOnlyOpen,
     errors: [...commonErrors, "CONVEX_INSTALLATION_NOT_FOUND"],
   }),
   defineApiRoute({
@@ -75,6 +85,7 @@ export const convexRoutes = [
     scopes: ["data-plane:evaluate"],
     rateLimit: "api-key",
     idempotency: "none",
+    effects: openWorld(deleteClosed),
     errors: commonErrors,
   }),
   defineApiRoute({
@@ -92,6 +103,7 @@ export const convexRoutes = [
     scopes: ["data-plane:evaluate"],
     rateLimit: "api-key",
     idempotency: "none",
+    effects: openWorld(rotateClosed),
     errors: [...commonErrors, "CONVEX_INSTALLATION_NOT_FOUND", "IDEMPOTENCY_KEY_CONFLICT"],
   }),
   defineApiRoute({
@@ -107,6 +119,7 @@ export const convexRoutes = [
     scopes: ["data-plane:evaluate"],
     rateLimit: "api-key",
     idempotency: "none",
+    effects: readOnlyOpen,
     errors: commonErrors,
   }),
   defineApiRoute({
@@ -121,6 +134,7 @@ export const convexRoutes = [
     scopes: ["data-plane:evaluate"],
     rateLimit: "api-key",
     idempotency: "none",
+    effects: openWorld(recordEventClosed),
     rawBodyByteLimit: {
       maxBytes: CONVEX_SERVER_EXPOSURE_MAX_BODY_BYTES,
       error: {
@@ -149,6 +163,7 @@ export const convexRoutes = [
     auth: "control-plane-token",
     rateLimit: "control-plane-actor",
     idempotency: "none",
+    effects: readOnlyOpen,
     errors: panelErrors,
   }),
   defineApiRoute({
@@ -162,6 +177,7 @@ export const convexRoutes = [
     auth: "control-plane-token",
     rateLimit: "control-plane-actor",
     idempotency: "none",
+    effects: openWorld(deleteClosed),
     errors: [...panelErrors, "CONVEX_INSTALLATION_NOT_FOUND"],
   }),
 ] as const satisfies readonly ApiRouteContract[];

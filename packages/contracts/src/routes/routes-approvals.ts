@@ -1,4 +1,5 @@
 import { type ApiRouteContract, defineApiRoute } from "../openapi-route";
+import { createClosed, readOnlyClosed } from "../route-effects";
 import { listResponse } from "../wire-envelopes-core";
 import { AppParams, ApprovalRequestParams } from "./route-shapes";
 import {
@@ -31,6 +32,7 @@ export const approvalRoutes = [
     auth: AUTH,
     rateLimit: RATE,
     idempotency: "none",
+    effects: readOnlyClosed,
     errors: ["APP_NOT_FOUND", "FORBIDDEN", "INVALID_PAGINATION"],
   }),
   defineApiRoute({
@@ -44,6 +46,7 @@ export const approvalRoutes = [
     auth: AUTH,
     rateLimit: RATE,
     idempotency: "none",
+    effects: readOnlyClosed,
     errors: ["APPROVAL_REQUEST_NOT_FOUND", "FORBIDDEN"],
   }),
   defineApiRoute({
@@ -57,6 +60,7 @@ export const approvalRoutes = [
     auth: AUTH,
     rateLimit: RATE,
     idempotency: "required",
+    effects: createClosed,
     errors: [
       "APPROVAL_REQUEST_NOT_FOUND",
       "APPROVAL_REVIEW_FORBIDDEN",

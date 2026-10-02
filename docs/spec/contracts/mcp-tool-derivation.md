@@ -34,6 +34,31 @@ Resource naming:
 
 Derivation runs at MCP server startup, not build time. No committed tool-definitions file.
 
+## Tool annotations and reversibility
+
+Every registry route declares audited `effects`: `mutates`, `destructive`, `idempotent`,
+`openWorld`, and a reversibility class (`reversible`, `compensable`, or `irreversible`). The
+fields are authored on the route. They are never inferred from the HTTP method.
+`client_key_get` is a GET that may provision a Client Key. `experiment_results_post` and
+`flags_test_eval` are POSTs that write nothing.
+
+MCP `tools/list` (protocol 2025-06-18) derives tool annotations from that metadata:
+
+```
+annotations.readOnlyHint     = not effects.mutates
+annotations.destructiveHint  = effects.destructive
+annotations.idempotentHint   = effects.idempotent
+annotations.openWorldHint    = effects.openWorld
+_meta.reversibilityClass     = effects.reversibility
+```
+
+The same `_meta.reversibilityClass` is copied onto each `tools/call` result. Reversibility is
+annotation and result metadata only. It does not gate calls, invent undo, or change Worker
+behavior. Turning a Flag Config off stays ungated (ADR-0029).
+
+`context_use` is skin-local and still declares the same fields: a reversible, non-destructive,
+idempotent session write.
+
 ## Tool list (canonical)
 
 Grouped by resource. All are thin 1:1 wrappers — no per-tool invariant logic (ADR-0023).

@@ -2,6 +2,13 @@ import { z } from "@hono/zod-openapi";
 import { AppMemberSchema, AppSchema, EnvironmentSchema } from "../leaf-schemas-runtime";
 import { type ApiRouteContract, defineApiRoute } from "../openapi-route";
 import {
+  createClosed,
+  deleteClosed,
+  membershipRemoveClosed,
+  readOnlyClosed,
+  updateClosed,
+} from "../route-effects";
+import {
   ResourceDeleteModeQuerySchema,
   ResourceDeleteResponseSchema,
 } from "../resource-delete-tree";
@@ -51,6 +58,7 @@ export const appEnvironmentRoutes = [
     auth: AUTH,
     rateLimit: RATE,
     idempotency: "none",
+    effects: readOnlyClosed,
     errors: ["ORGANIZATION_NOT_FOUND", "FORBIDDEN"],
   }),
   defineApiRoute({
@@ -64,6 +72,7 @@ export const appEnvironmentRoutes = [
     auth: AUTH,
     rateLimit: RATE,
     idempotency: "optional",
+    effects: createClosed,
     errors: ["ORGANIZATION_NOT_FOUND", "FORBIDDEN", "VALIDATION_ERROR", "IDEMPOTENCY_KEY_CONFLICT"],
   }),
   defineApiRoute({
@@ -77,6 +86,7 @@ export const appEnvironmentRoutes = [
     auth: AUTH,
     rateLimit: RATE,
     idempotency: "none",
+    effects: readOnlyClosed,
     errors: ["APP_NOT_FOUND", "FORBIDDEN"],
   }),
   defineApiRoute({
@@ -90,6 +100,7 @@ export const appEnvironmentRoutes = [
     auth: AUTH,
     rateLimit: RATE,
     idempotency: "none",
+    effects: updateClosed,
     errors: ["APP_NOT_FOUND", "FORBIDDEN", "VALIDATION_ERROR"],
   }),
   defineApiRoute({
@@ -104,6 +115,7 @@ export const appEnvironmentRoutes = [
     auth: AUTH,
     rateLimit: RATE,
     idempotency: "none",
+    effects: deleteClosed,
     errors: [
       "APP_NOT_FOUND",
       "FORBIDDEN",
@@ -123,6 +135,7 @@ export const appEnvironmentRoutes = [
     auth: AUTH,
     rateLimit: RATE,
     idempotency: "none",
+    effects: readOnlyClosed,
     errors: ["APP_NOT_FOUND", "FORBIDDEN"],
   }),
   defineApiRoute({
@@ -136,6 +149,7 @@ export const appEnvironmentRoutes = [
     auth: AUTH,
     rateLimit: RATE,
     idempotency: "none",
+    effects: createClosed,
     errors: ["APP_NOT_FOUND", "FORBIDDEN", "VALIDATION_ERROR"],
   }),
   defineApiRoute({
@@ -149,6 +163,7 @@ export const appEnvironmentRoutes = [
     auth: AUTH,
     rateLimit: RATE,
     idempotency: "none",
+    effects: readOnlyClosed,
     errors: ["APP_NOT_FOUND", "FORBIDDEN"],
   }),
   defineApiRoute({
@@ -162,6 +177,7 @@ export const appEnvironmentRoutes = [
     auth: AUTH,
     rateLimit: RATE,
     idempotency: "none",
+    effects: updateClosed,
     errors: ["APP_NOT_FOUND", "FORBIDDEN", "VALIDATION_ERROR"],
   }),
   defineApiRoute({
@@ -175,6 +191,7 @@ export const appEnvironmentRoutes = [
     auth: AUTH,
     rateLimit: RATE,
     idempotency: "none",
+    effects: deleteClosed,
     errors: [
       "APP_NOT_FOUND",
       "FORBIDDEN",
@@ -200,6 +217,7 @@ export const appEnvironmentRoutes = [
     auth: AUTH,
     rateLimit: RATE,
     idempotency: "none",
+    effects: readOnlyClosed,
     errors: ["APP_NOT_FOUND", "FORBIDDEN", "SERVICE_UNAVAILABLE"],
   }),
   defineApiRoute({
@@ -213,6 +231,7 @@ export const appEnvironmentRoutes = [
     auth: AUTH,
     rateLimit: RATE,
     idempotency: "none",
+    effects: createClosed,
     errors: [
       "APP_NOT_FOUND",
       "FORBIDDEN",
@@ -233,6 +252,7 @@ export const appEnvironmentRoutes = [
     auth: AUTH,
     rateLimit: RATE,
     idempotency: "none",
+    effects: updateClosed,
     errors: [
       "APP_NOT_FOUND",
       "USER_NOT_FOUND",
@@ -253,6 +273,7 @@ export const appEnvironmentRoutes = [
     auth: AUTH,
     rateLimit: RATE,
     idempotency: "none",
+    effects: membershipRemoveClosed,
     errors: [
       "APP_NOT_FOUND",
       "USER_NOT_FOUND",

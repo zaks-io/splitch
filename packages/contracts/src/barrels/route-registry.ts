@@ -14,6 +14,13 @@ export type {
   RouteContract,
   RouteOwner,
 } from "../route-contract";
+export type { McpToolAnnotations, ReversibilityClass, RouteEffects } from "../route-effects";
+export {
+  mcpReversibilityMeta,
+  mcpToolAnnotations,
+  reversibilityClasses,
+  updateClosed,
+} from "../route-effects";
 export {
   AuthDoorSchema,
   AuthKindSchema,

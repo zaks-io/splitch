@@ -1,6 +1,7 @@
 import { z } from "@hono/zod-openapi";
 import { EnvironmentExposureStatusResponseSchema } from "../environment-exposure-status";
 import { type ApiRouteContract, defineApiRoute } from "../openapi-route";
+import { deleteClosed, readOnlyClosed } from "../route-effects";
 import { OrganizationUsageResponseSchema } from "../resource-envelopes-usage";
 import { AnalysisResultsEnvelopeSchema } from "../stats-result-contract";
 import { TestEvaluationRequestSchema, TestEvaluationResponseSchema } from "../wire-envelopes-core";
@@ -65,6 +66,7 @@ export const analysisRoutes = [
     auth: AUTH,
     rateLimit: RATE,
     idempotency: "none",
+    effects: readOnlyClosed,
     errors: ["APP_NOT_FOUND", "FLAG_NOT_FOUND", "FORBIDDEN", "VALIDATION_ERROR"],
   }),
   defineApiRoute({
@@ -79,6 +81,7 @@ export const analysisRoutes = [
     auth: AUTH,
     rateLimit: RATE,
     idempotency: "none",
+    effects: readOnlyClosed,
     errors: [
       // The delegation hop refuses an Environment that belongs to another App
       // with APP_NOT_FOUND rather than confirming it exists elsewhere.
@@ -104,6 +107,7 @@ export const analysisRoutes = [
     auth: AUTH,
     rateLimit: RATE,
     idempotency: "none",
+    effects: readOnlyClosed,
     errors: [
       // The delegation hop refuses an Environment that belongs to another App
       // with APP_NOT_FOUND rather than confirming it exists elsewhere.
@@ -128,6 +132,7 @@ export const analysisRoutes = [
     auth: AUTH,
     rateLimit: RATE,
     idempotency: "none",
+    effects: readOnlyClosed,
     errors: [
       "APP_NOT_FOUND",
       "UNAUTHORIZED",
@@ -148,6 +153,7 @@ export const analysisRoutes = [
     auth: "internal-worker",
     rateLimit: "none",
     idempotency: "none",
+    effects: deleteClosed,
     errors: ["FORBIDDEN", "VALIDATION_ERROR", "SERVICE_UNAVAILABLE", "INTERNAL_SERVER_ERROR"],
   }),
   defineApiRoute({
@@ -161,6 +167,7 @@ export const analysisRoutes = [
     auth: "internal-worker",
     rateLimit: "none",
     idempotency: "none",
+    effects: readOnlyClosed,
     errors: ["FORBIDDEN", "VALIDATION_ERROR", "SERVICE_UNAVAILABLE", "INTERNAL_SERVER_ERROR"],
   }),
   defineApiRoute({
@@ -174,6 +181,7 @@ export const analysisRoutes = [
     auth: "internal-worker",
     rateLimit: "none",
     idempotency: "none",
+    effects: deleteClosed,
     errors: ["FORBIDDEN", "VALIDATION_ERROR", "SERVICE_UNAVAILABLE", "INTERNAL_SERVER_ERROR"],
   }),
   defineApiRoute({
@@ -187,6 +195,7 @@ export const analysisRoutes = [
     auth: "internal-worker",
     rateLimit: "none",
     idempotency: "none",
+    effects: deleteClosed,
     errors: ["FORBIDDEN", "VALIDATION_ERROR", "SERVICE_UNAVAILABLE", "INTERNAL_SERVER_ERROR"],
   }),
   defineApiRoute({
@@ -200,6 +209,7 @@ export const analysisRoutes = [
     auth: "internal-worker",
     rateLimit: "none",
     idempotency: "none",
+    effects: readOnlyClosed,
     errors: ["FORBIDDEN", "VALIDATION_ERROR", "SERVICE_UNAVAILABLE", "INTERNAL_SERVER_ERROR"],
   }),
   defineApiRoute({
@@ -213,6 +223,7 @@ export const analysisRoutes = [
     auth: "internal-worker",
     rateLimit: "none",
     idempotency: "none",
+    effects: deleteClosed,
     errors: ["FORBIDDEN", "VALIDATION_ERROR", "SERVICE_UNAVAILABLE", "INTERNAL_SERVER_ERROR"],
   }),
   defineApiRoute({
@@ -226,6 +237,7 @@ export const analysisRoutes = [
     auth: "internal-worker",
     rateLimit: "none",
     idempotency: "none",
+    effects: deleteClosed,
     errors: ["FORBIDDEN", "VALIDATION_ERROR", "SERVICE_UNAVAILABLE", "INTERNAL_SERVER_ERROR"],
   }),
   defineApiRoute({
@@ -240,6 +252,7 @@ export const analysisRoutes = [
     auth: "internal-worker",
     rateLimit: "none",
     idempotency: "none",
+    effects: deleteClosed,
     errors: ["FORBIDDEN", "VALIDATION_ERROR", "SERVICE_UNAVAILABLE", "INTERNAL_SERVER_ERROR"],
   }),
   defineApiRoute({
@@ -253,6 +266,7 @@ export const analysisRoutes = [
     auth: "internal-worker",
     rateLimit: "none",
     idempotency: "none",
+    effects: readOnlyClosed,
     errors: ["FORBIDDEN", "VALIDATION_ERROR", "SERVICE_UNAVAILABLE", "INTERNAL_SERVER_ERROR"],
   }),
   defineApiRoute({
@@ -266,6 +280,7 @@ export const analysisRoutes = [
     auth: "internal-worker",
     rateLimit: "none",
     idempotency: "none",
+    effects: deleteClosed,
     errors: ["FORBIDDEN", "VALIDATION_ERROR", "SERVICE_UNAVAILABLE", "INTERNAL_SERVER_ERROR"],
   }),
   defineApiRoute({
@@ -279,6 +294,7 @@ export const analysisRoutes = [
     auth: AUTH,
     rateLimit: RATE,
     idempotency: "none",
+    effects: readOnlyClosed,
     errors: ["UNAUTHORIZED", "FORBIDDEN", "SERVICE_UNAVAILABLE", "INTERNAL_SERVER_ERROR"],
   }),
   defineApiRoute({
@@ -291,6 +307,7 @@ export const analysisRoutes = [
     auth: "public",
     rateLimit: "none",
     idempotency: "none",
+    effects: readOnlyClosed,
     errors: [],
   }),
 ] as const satisfies readonly ApiRouteContract[];

@@ -16,7 +16,8 @@ import {
   type RouteContract,
   type RouteOwner,
 } from "./route-contract";
-import { CanonicalEnvironmentSelectorQuerySchema } from "./routes/route-shapes-params";
+import { derivedErrors, selectorAwareRequest } from "./openapi-route-request";
+import type { RouteEffects } from "./route-effects";
 
 /**
  * One authored shape per HTTP endpoint that serves BOTH consumers from a single
@@ -71,6 +72,8 @@ export interface DefineApiRouteInput {
   idempotency: IdempotencyMode;
   rawBodyByteLimit?: RawBodyByteLimit;
   errors: readonly ErrorCode[];
+  /** Audited effects; never inferred from `method`. */
+  effects: RouteEffects;
 }
 
 /**
@@ -85,6 +88,7 @@ export interface ApiRouteContract<
   operationId: string;
   summary: string;
   exposure: "public" | "mcp-binding";
+  effects: RouteEffects;
   /** The @hono/zod-openapi route definition derived from the same schemas. */
   openapi: RouteConfig;
 }
@@ -231,6 +235,7 @@ export function defineApiRoute<const Input extends DefineApiRouteInput>(input: I
     operationId: input.operationId,
     summary: input.summary,
     exposure: input.exposure ?? "public",
+    effects: input.effects,
     openapi: createRoute({
       method: input.method.toLowerCase() as Lowercase<HttpMethod>,
       path: honoPathToOpenApiPath(input.path) as HonoToOpenApiPath<Input["path"]>,
@@ -258,43 +263,6 @@ export function defineApiRoute<const Input extends DefineApiRouteInput>(input: I
       },
     } as const),
   };
-}
-
-/**
- * Environment ambiguity must expose a declared escape hatch on every affected route.
- * This deliberately gives all 26 control-plane-token routes with `:environmentId` or
- * `:targetEnvironmentId` a strict query contract: unknown query params now return
- * 400 VALIDATION_ERROR where routes without a query schema previously ignored them.
- * That fail-loud contract change is intentional under ADR-0036.
- */
-function selectorAwareRequest(input: DefineApiRouteInput): ApiRouteRequest | undefined {
-  if (
-    input.auth !== "control-plane-token" ||
-    (!input.path.includes(":environmentId") && !input.path.includes(":targetEnvironmentId"))
-  ) {
-    return input.request;
-  }
-  const request = input.request ?? {};
-  const query = request.query;
-  if (query?.shape.by) return request;
-  return {
-    ...request,
-    query: query
-      ? query.extend(CanonicalEnvironmentSelectorQuerySchema.shape)
-      : CanonicalEnvironmentSelectorQuerySchema,
-  };
-}
-
-/** Resolver errors are derived from App and nested selector axes exposed by the route. */
-function derivedErrors(input: DefineApiRouteInput): readonly ErrorCode[] {
-  const errors = new Set(input.errors);
-  if (input.method !== "GET") errors.add("UNSUPPORTED_MEDIA_TYPE");
-  if (input.auth === "control-plane-token" && input.path.includes(":appId")) {
-    errors.add("APP_NOT_FOUND");
-    errors.add("SELECTOR_AMBIGUOUS");
-    if (input.path.includes(":flagId")) errors.add("FLAG_NOT_FOUND");
-  }
-  return [...errors];
 }
 
 export { z };

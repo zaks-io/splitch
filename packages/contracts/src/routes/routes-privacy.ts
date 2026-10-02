@@ -1,5 +1,6 @@
 import { z } from "@hono/zod-openapi";
 import { type ApiRouteContract, defineApiRoute } from "../openapi-route";
+import { deleteClosed, readOnlyClosed } from "../route-effects";
 import { PersistedIdentifierSchema } from "../persisted-field-limits";
 import { AppParams, OrgParams, PrivacyRequestParams } from "./route-shapes";
 
@@ -69,6 +70,7 @@ export const privacyRoutes = [
     auth: AUTH,
     rateLimit: RATE,
     idempotency: "none",
+    effects: readOnlyClosed,
     errors: ["UNAUTHORIZED", "SERVICE_UNAVAILABLE"],
   }),
   defineApiRoute({
@@ -81,6 +83,7 @@ export const privacyRoutes = [
     auth: AUTH,
     rateLimit: RATE,
     idempotency: "none",
+    effects: deleteClosed,
     errors: ["UNAUTHORIZED", "LAST_OWNER_REQUIRED", "SERVICE_UNAVAILABLE"],
   }),
   defineApiRoute({
@@ -94,6 +97,7 @@ export const privacyRoutes = [
     auth: AUTH,
     rateLimit: RATE,
     idempotency: "none",
+    effects: readOnlyClosed,
     errors: ["ORGANIZATION_NOT_FOUND", "FORBIDDEN", "SERVICE_UNAVAILABLE"],
   }),
   defineApiRoute({
@@ -107,6 +111,7 @@ export const privacyRoutes = [
     auth: AUTH,
     rateLimit: RATE,
     idempotency: "none",
+    effects: readOnlyClosed,
     errors: ["APP_NOT_FOUND", "FORBIDDEN", "SERVICE_UNAVAILABLE"],
   }),
   defineApiRoute({
@@ -120,6 +125,7 @@ export const privacyRoutes = [
     auth: AUTH,
     rateLimit: RATE,
     idempotency: "required",
+    effects: readOnlyClosed,
     errors: [
       "APP_NOT_FOUND",
       "FORBIDDEN",
@@ -139,6 +145,7 @@ export const privacyRoutes = [
     auth: AUTH,
     rateLimit: RATE,
     idempotency: "required",
+    effects: deleteClosed,
     errors: [
       "APP_NOT_FOUND",
       "FORBIDDEN",
@@ -158,6 +165,7 @@ export const privacyRoutes = [
     auth: AUTH,
     rateLimit: RATE,
     idempotency: "none",
+    effects: readOnlyClosed,
     errors: ["PRIVACY_JOB_NOT_FOUND", "FORBIDDEN", "SERVICE_UNAVAILABLE"],
   }),
 ] as const satisfies readonly ApiRouteContract[];

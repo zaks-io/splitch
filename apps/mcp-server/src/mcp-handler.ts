@@ -27,6 +27,7 @@ import {
   parseToolCall,
 } from "./mcp-session-context";
 import { callTool, type McpToolCallFault } from "./mcp-tool-call";
+import { withToolCallResultMeta } from "./mcp-tool-result-meta";
 import { corsHeaders, jsonResponse, routeTransportRequest } from "./mcp-transport";
 import { MCP_TOOL_DEFINITIONS } from "./tool-registry";
 
@@ -236,15 +237,18 @@ async function dispatchMethod(
     return jsonRpcResult(id, { tools: MCP_TOOL_DEFINITIONS });
   }
   if (request.method === "tools/call") {
-    return callTool(
-      id,
+    return withToolCallResultMeta(
+      await callTool(
+        id,
+        request.params,
+        controlPlane,
+        actor,
+        sessionId,
+        sessionStore,
+        options.sessionContextValidator,
+        fault,
+      ),
       request.params,
-      controlPlane,
-      actor,
-      sessionId,
-      sessionStore,
-      options.sessionContextValidator,
-      fault,
     );
   }
   return jsonRpcError(id, JSON_RPC_METHOD_NOT_FOUND, "Method not found");

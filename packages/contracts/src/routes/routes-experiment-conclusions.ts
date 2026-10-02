@@ -5,6 +5,7 @@ import {
   CreateConclusionPromotionResponseSchema,
 } from "../experiment-conclusion";
 import { type ApiRouteContract, defineApiRoute } from "../openapi-route";
+import { createClosed, sealRunClosed } from "../route-effects";
 import { APPROVAL_WRITE_ERRORS } from "./approval-write-errors";
 import { ConclusionParams, RunParams } from "./route-shapes";
 
@@ -24,6 +25,7 @@ export const conclusionRoutes = [
     auth: AUTH,
     rateLimit: RATE,
     idempotency: "required",
+    effects: sealRunClosed,
     errors: [
       "RUN_NOT_FOUND",
       "RUN_NOT_RUNNING",
@@ -51,6 +53,7 @@ export const conclusionRoutes = [
     auth: AUTH,
     rateLimit: RATE,
     idempotency: "required",
+    effects: createClosed,
     errors: [
       "RUN_NOT_FOUND",
       "FORBIDDEN",

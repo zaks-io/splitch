@@ -1,5 +1,6 @@
 import { AppAttentionRollupResponseSchema } from "../resource-envelopes-account";
 import { type ApiRouteContract, defineApiRoute } from "../openapi-route";
+import { readOnlyClosed } from "../route-effects";
 import { AppParams } from "./route-shapes";
 
 export const attentionRoutes = [
@@ -14,6 +15,7 @@ export const attentionRoutes = [
     auth: "control-plane-token",
     rateLimit: "control-plane-actor",
     idempotency: "none",
+    effects: readOnlyClosed,
     errors: [
       "APP_NOT_FOUND",
       "FORBIDDEN",
