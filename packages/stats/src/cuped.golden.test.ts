@@ -76,6 +76,26 @@ describe("CUPED attribute and anchor golden fixtures", () => {
     });
   });
 
+  it("ranks locked attributes by source then coverage then name, never by outcomes", () => {
+    const result = countComparison({
+      controlValues: [0, 10, 20, 30],
+      treatmentValues: [1, 2, 3, 100],
+      pre_period_covariates: [
+        ...attributeRows("zeta_correlated", ["c1", "c2", "c3", "c4"], [0, 10, 20, 30], true),
+        ...attributeRows("zeta_correlated", ["t1", "t2", "t3", "t4"], [1, 2, 3, 100], true),
+        ...attributeRows("alpha_uncorrelated", ["c1", "c2", "c3", "c4"], [3, 1, 2, 0], true),
+        ...attributeRows("alpha_uncorrelated", ["t1", "t2", "t3", "t4"], [0, 3, 1, 2], true),
+      ],
+    });
+
+    expect(result.variance_techniques).toMatchObject({
+      cuped_applied: true,
+      cuped_method: "attribute_covariate",
+      cuped_attribute: "alpha_uncorrelated",
+      cuped_attribute_source: "historical_selected",
+    });
+  });
+
   it("rejects post-treatment attribute covariates before scoring fallback candidates", () => {
     expect(() =>
       countComparison({
