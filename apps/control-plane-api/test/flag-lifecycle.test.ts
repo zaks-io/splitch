@@ -144,6 +144,24 @@ describe("Flag lifecycle class (D9)", () => {
     expect(permanent.status).toBe(200);
     expect(await permanent.json()).toMatchObject({ lifecycleClass: "permission", expiresAt: null });
   });
+  it("keeps an existing owner and expiry when an experiment Flag becomes release", async () => {
+    const { appId, jwt } = await ownerSession();
+    const flag = await createFlag(
+      h,
+      appId,
+      jwt,
+      flagBody(appId, "experiment-flag", { lifecycleClass: "experiment", owner: "growth" }),
+    );
+    const res = await request(h, "PATCH", `/apps/${appId}/flags/${flag.id}`, jwt, {
+      lifecycleClass: "release",
+    });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({
+      lifecycleClass: "release",
+      owner: "growth",
+      expiresAt: "2026-08-01T12:00:00.000Z",
+    });
+  });
 });
 
 describe("expired_flags_list", () => {

@@ -1,14 +1,10 @@
-import {
-  type FlagLifecycleClass,
-  flagLifecycleClasses,
-  missingFlagLifecycleInputs,
-} from "@splitch/contracts";
+import { type FlagLifecycleClass, flagLifecycleClasses } from "@splitch/contracts";
 import { z } from "zod";
 
 /**
- * The lifecycle part of the Create Flag draft (D9). The class starts unchosen
- * rather than preset: the point of the field is that someone decides why the
- * Flag exists, and a preselected answer would record a decision nobody made.
+ * The lifecycle part of the Create Flag draft (D9). Every field is optional:
+ * blank inputs are left out of the request so the Worker applies the same
+ * defaults an agent gets (release, owned by the caller, 90 or 30 days out).
  */
 export const LifecycleDraftShape = {
   lifecycleClass: z.union([z.enum(flagLifecycleClasses), z.literal("")]),
@@ -28,42 +24,21 @@ export const emptyLifecycleDraft: LifecycleDraft = { lifecycleClass: "", owner: 
 const EXPIRES_ON_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 
 export function lifecycleIssues(draft: LifecycleDraft): { path: string; message: string }[] {
-  if (draft.lifecycleClass === "") {
-    return [{ path: "lifecycleClass", message: "Choose why this Flag exists." }];
-  }
-  const issues: { path: string; message: string }[] = [];
   if (draft.expiresOn !== "" && !EXPIRES_ON_PATTERN.test(draft.expiresOn)) {
-    issues.push({ path: "expiresAt", message: "Enter a date." });
+    return [{ path: "expiresAt", message: "Enter a date." }];
   }
-  const missing = missingFlagLifecycleInputs({
-    lifecycleClass: draft.lifecycleClass,
-    owner: draft.owner.trim(),
-    expiresAt: draft.expiresOn,
-  });
-  for (const field of missing) {
-    issues.push({
-      path: field,
-      message:
-        field === "owner"
-          ? `A ${draft.lifecycleClass} Flag needs an owner.`
-          : `A ${draft.lifecycleClass} Flag needs an expiry date.`,
-    });
-  }
-  return issues;
+  return [];
 }
 
-/** The `flags_create` lifecycle fields. Callers check `lifecycleIssues` first. */
+/** The `flags_create` lifecycle fields the user filled in. */
 export function lifecycleCreateFields(draft: LifecycleDraft): {
-  lifecycleClass: FlagLifecycleClass;
+  lifecycleClass?: FlagLifecycleClass;
   owner?: string;
   expiresAt?: string;
 } {
-  if (draft.lifecycleClass === "") {
-    throw new Error("create-flag-lifecycle: refusing to build a Flag with no lifecycle class");
-  }
   const owner = draft.owner.trim();
   return {
-    lifecycleClass: draft.lifecycleClass,
+    ...(draft.lifecycleClass === "" ? {} : { lifecycleClass: draft.lifecycleClass }),
     ...(owner === "" ? {} : { owner }),
     ...(draft.expiresOn === "" ? {} : { expiresAt: `${draft.expiresOn}T00:00:00.000Z` }),
   };

@@ -289,17 +289,18 @@ describe("Create Flag error surfacing", () => {
 });
 
 describe("Create Flag lifecycle (D9)", () => {
-  it("opens with no class chosen and refuses to submit until one is", () => {
+  it("opens with no class chosen and submits it as a server default", () => {
     expect(booleanPresetDraft().lifecycleClass).toBe("");
-    expect(draftIssues(draft({ lifecycleClass: "" }))).toContainEqual({
-      path: "lifecycleClass",
-      message: "Choose why this Flag exists.",
-    });
+    const blank = draft({ lifecycleClass: "" });
+    expect(draftIssues(blank)).toEqual([]);
+    const input = flagCreateInput("app_checkout", blank, "idem-1");
+    expect(input).not.toHaveProperty("lifecycleClass");
+    expect(input).not.toHaveProperty("owner");
+    expect(input).not.toHaveProperty("expiresAt");
   });
 
-  it("names the owner and expiry a release Flag is missing", () => {
-    const paths = draftIssues(draft({ lifecycleClass: "release" })).map((issue) => issue.path);
-    expect(paths).toEqual(["owner", "expiresAt"]);
+  it("lets a release Flag leave owner and expiry to the server defaults", () => {
+    expect(draftIssues(draft({ lifecycleClass: "release" }))).toEqual([]);
   });
 
   it("sends a release Flag's owner and expiry as a UTC date-time", () => {
