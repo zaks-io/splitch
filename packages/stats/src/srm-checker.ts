@@ -22,6 +22,7 @@ import { SRM_MISMATCH_P_VALUE } from "./srm-checker-threshold";
 import {
   activationRowsByEntityForRun,
   earliestValidActivationIngestTs,
+  exposuresByEntityForRun,
 } from "./srm-activated-arrival";
 
 export { SRM_MISMATCH_P_VALUE };
@@ -182,11 +183,18 @@ function assertExposureVariantsAreDeclared(
 
 function dedupedPathEntities(input: SrmCheckerInput, variants: readonly string[]): SrmPathEntity[] {
   return variants.flatMap((variant) =>
-    dedupedExposureRowsForVariant({ ...input, variant }).map((exposure) => ({
-      targeting_key_hash: exposure.targeting_key_hash,
-      variant: exposure.variant,
-      arrival_ts: exposure.first_ingest_ts,
-    })),
+    dedupedExposureRowsForVariant({ ...input, variant }).map((exposure) => {
+      if (exposure.first_ingest_ts === undefined || exposure.first_ingest_ts === "") {
+        throw new Error(
+          `first_ingest_ts is required for analysis-v2 SRM entity ${exposure.targeting_key_hash}.`,
+        );
+      }
+      return {
+        targeting_key_hash: exposure.targeting_key_hash,
+        variant: exposure.variant,
+        arrival_ts: exposure.first_ingest_ts,
+      };
+    }),
   );
 }
 
@@ -196,6 +204,7 @@ function activatedPathEntities(
 ): SrmPathEntity[] {
   const activationRows = input.activation_rows ?? [];
   const activationsByEntity = activationRowsByEntityForRun(input.run_id, activationRows);
+  const exposuresByEntity = exposuresByEntityForRun(input.run_id, input.exposures);
   const declared = new Set(variants);
   const path: SrmPathEntity[] = [];
   for (const exposure of activatedExposureRows({
@@ -209,7 +218,10 @@ function activatedPathEntities(
     path.push({
       targeting_key_hash: exposure.targeting_key_hash,
       variant: exposure.variant,
-      arrival_ts: earliestValidActivationIngestTs(exposure, activationsByEntity),
+      arrival_ts: earliestValidActivationIngestTs(
+        exposuresByEntity.get(exposure.targeting_key_hash) ?? [exposure],
+        activationsByEntity.get(exposure.targeting_key_hash) ?? [],
+      ),
     });
   }
   return path;

@@ -32,7 +32,7 @@ import {
  * append-only. Across Results reads, analysis-v2 does not feed revised totals
  * into a live filtration: `checkSrmHealth` rebuilds the Entity arrival path
  * from the current watermarked dataset (Exposure by first_ingest_ts, activated
- * by max(first_ingest_ts, activation_ingest_ts)) and re-evaluates after every
+ * by pairwise eligibility ingest) and re-evaluates after every
  * arrival. Quarantine to `__multiple__` removes an Entity from the cleaned set;
  * the next read recomputes the path from remaining Entities ordered by their
  * unchanged first_ingest_ts, so a late single-Entity conflict cannot clear a

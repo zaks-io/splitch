@@ -1,46 +1,50 @@
 import type { ActivationRow, DedupeExposureRow } from "@splitch/contracts";
 
 /**
- * When the Entity became eligible for activated-population SRM: the later of
- * first Exposure ingest and the earliest valid post-Exposure Activation ingest.
- * Using Activation ingest alone would place an Entity that activated before its
- * Exposure into an earlier path prefix once the late Exposure arrives.
+ * When the Entity became eligible for activated-population SRM: the minimum
+ * over qualifying raw (Exposure, Activation) pairs with
+ * `exposure_at < activation_ts` of `max(exposure.ingest_ts, activation.ingest_ts)`.
+ *
+ * Using `max(first_ingest_ts, activation_ingest)` on the deduped Exposure would
+ * back-date when a late earlier Exposure makes a previously non-qualifying
+ * Activation valid (the early Exposure ingest is not part of any qualifying
+ * pair until that late row arrives).
  */
 export function earliestValidActivationIngestTs(
-  exposure: DedupeExposureRow,
-  activationRowsByEntity: ReadonlyMap<string, readonly ActivationRow[]>,
+  exposures: readonly DedupeExposureRow[],
+  activationRows: readonly ActivationRow[],
 ): string {
-  const exposureEventMs = timestampMs(exposure.first_exposure_ts, "first_exposure_ts");
-  const exposureIngestMs = timestampMs(exposure.first_ingest_ts, "first_ingest_ts");
-  const rows = activationRowsByEntity.get(exposure.targeting_key_hash) ?? [];
-  let earliestActivationIngestTs: string | null = null;
-  let earliestActivationIngestMs = Number.POSITIVE_INFINITY;
-
-  for (const row of rows) {
-    if (!row.activated) {
-      continue;
-    }
-    const activationMs = timestampMs(row.activation_ts, "activation_ts");
-    if (activationMs <= exposureEventMs) {
-      continue;
-    }
-    const ingestMs = timestampMs(row.activation_ingest_ts, "activation_ingest_ts");
-    if (ingestMs < earliestActivationIngestMs) {
-      earliestActivationIngestMs = ingestMs;
-      earliestActivationIngestTs = row.activation_ingest_ts;
-    }
-  }
-
-  if (earliestActivationIngestTs === null) {
+  const earliestEligibilityTs = minQualifyingPairEligibilityTs(exposures, activationRows);
+  if (earliestEligibilityTs === null) {
+    const entity = exposures[0]?.targeting_key_hash ?? "unknown";
     throw new Error(
-      `activated SRM entity ${exposure.targeting_key_hash} has no post-Exposure activation_ingest_ts.`,
+      `activated SRM entity ${entity} has no qualifying Exposure/Activation ingest pair.`,
     );
   }
+  return earliestEligibilityTs;
+}
 
-  if (exposureIngestMs > earliestActivationIngestMs) {
-    return exposure.first_ingest_ts;
+function minQualifyingPairEligibilityTs(
+  exposures: readonly DedupeExposureRow[],
+  activationRows: readonly ActivationRow[],
+): string | null {
+  let earliestEligibilityTs: string | null = null;
+  let earliestEligibilityMs = Number.POSITIVE_INFINITY;
+  for (const exposure of exposures) {
+    for (const row of activationRows) {
+      const pairTs = qualifyingPairEligibilityTs(exposure, row);
+      if (pairTs === null) {
+        continue;
+      }
+      const pairMs = timestampMs(pairTs, "eligibility_ingest_ts");
+      if (pairMs >= earliestEligibilityMs) {
+        continue;
+      }
+      earliestEligibilityMs = pairMs;
+      earliestEligibilityTs = pairTs;
+    }
   }
-  return earliestActivationIngestTs;
+  return earliestEligibilityTs;
 }
 
 /** Index activated rows for one Run; skips other Runs and inactive rows. */
@@ -61,6 +65,52 @@ export function activationRowsByEntityForRun(
     }
   }
   return byEntity;
+}
+
+/** Group Exposure rows for one Run by Entity (keeps raw-like duplicates). */
+export function exposuresByEntityForRun(
+  runId: string,
+  exposures: readonly DedupeExposureRow[],
+): Map<string, DedupeExposureRow[]> {
+  const byEntity = new Map<string, DedupeExposureRow[]>();
+  for (const exposure of exposures) {
+    if (exposure.run_id !== runId) {
+      continue;
+    }
+    const existing = byEntity.get(exposure.targeting_key_hash);
+    if (existing === undefined) {
+      byEntity.set(exposure.targeting_key_hash, [exposure]);
+    } else {
+      existing.push(exposure);
+    }
+  }
+  return byEntity;
+}
+
+function qualifyingPairEligibilityTs(
+  exposure: DedupeExposureRow,
+  row: ActivationRow,
+): string | null {
+  if (!row.activated) {
+    return null;
+  }
+  const exposureEventMs = timestampMs(exposure.first_exposure_ts, "first_exposure_ts");
+  const activationMs = timestampMs(row.activation_ts, "activation_ts");
+  if (!(exposureEventMs < activationMs)) {
+    return null;
+  }
+  const exposureIngestTs = requiredTimestamp(exposure.first_ingest_ts, "first_ingest_ts");
+  const activationIngestTs = requiredTimestamp(row.activation_ingest_ts, "activation_ingest_ts");
+  const exposureIngestMs = timestampMs(exposureIngestTs, "first_ingest_ts");
+  const activationIngestMs = timestampMs(activationIngestTs, "activation_ingest_ts");
+  return exposureIngestMs >= activationIngestMs ? exposureIngestTs : activationIngestTs;
+}
+
+function requiredTimestamp(value: string | undefined, field: string): string {
+  if (value === undefined || value === "") {
+    throw new Error(`${field} is required for analysis-v2 SRM eligibility.`);
+  }
+  return value;
 }
 
 function timestampMs(value: string, field: string): number {

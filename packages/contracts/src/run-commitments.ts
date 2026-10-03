@@ -28,9 +28,9 @@ import type { StatsOutput } from "./stats-result-contract";
  * | analysis-v2          | Sequential Dirichlet-multinomial | BH-G              | Prop. B.1 one-sided contrast (C4)       | yes (current)               |
  *
  * analysis-v2 orders the SRM observation path by eligibility ingest time
- * (`first_ingest_ts` / pairwise activation eligibility) so a later watermark
- * extends an earlier path; event-time ordering is not used for the filtration
- * (ADR-0059).
+ * (`first_ingest_ts` / pairwise activation eligibility ingest) so a later
+ * watermark extends an earlier path; event-time ordering is not used for the
+ * filtration (ADR-0059).
  */
 export const ANALYSIS_V1_VERSION = "analysis-v1";
 export const ANALYSIS_V2_VERSION = "analysis-v2";

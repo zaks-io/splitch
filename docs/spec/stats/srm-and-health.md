@@ -79,9 +79,11 @@ after every Entity arrival (incremental log-gamma updates, O(N)). The filtration
   clock: conflict / `__multiple__` resolution can only remove an Entity (or change Variant), never
   back-date eligibility.
 - Activated-population SRM orders activated Entities by eligibility ingest time =
-  `max(first_ingest_ts, min(ingest_ts among valid post-Exposure Activation rows))`. Tinybird emits
-  that max as `activation_ingest_ts`. An Activation ingested before its qualifying Exposure must
-  not place the Entity into an earlier path prefix once the Exposure arrives.
+  min over qualifying raw (Exposure, Activation) pairs with `exposure_at < activation_ts` of
+  `max(exposure.ingest_ts, activation.ingest_ts)`. Tinybird emits that value as
+  `activation_ingest_ts`. A late earlier Exposure that newly qualifies an Activation must append
+  at the qualifying pair's max ingest, not at `max(first_ingest_ts, activation ingest)` which can
+  back-date into an earlier path prefix.
 
 Ties at identical ingest timestamps break deterministically by Entity pseudonym
 (`targeting_key_hash`) so pinned reads stay reproducible. Because the path is ordered by when each

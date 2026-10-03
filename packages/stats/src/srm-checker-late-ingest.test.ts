@@ -134,6 +134,72 @@ describe("SRMChecker eligibility-clock alarm persistence", () => {
     expect(afterLateExposure.srm.activated_srm_p_value).toBe(earlyOnly.srm.activated_srm_p_value);
   });
 
+  it("keeps activated SRM alarm when a late earlier Exposure newly qualifies Activations", () => {
+    // Codex review: Exposure at 10:00/11:00 + Activation at 09:00/12:00 is not
+    // qualifying. A duplicate Exposure at 08:00 ingested 20:00 makes the
+    // Activation valid; eligibility must be max(20:00, 12:00)=20:00, not
+    // max(first_ingest=11:00, 12:00)=12:00 which back-dates into the alarm prefix.
+    const laterExposureEvent = "2026-07-01T10:00:00.000Z";
+    const earlierExposureEvent = "2026-07-01T08:00:00.000Z";
+    const activationEvent = "2026-07-01T09:00:00.000Z";
+    const earlyExposureIngest = "2026-07-01T11:00:00.000Z";
+    const activationIngest = "2026-07-01T12:00:00.000Z";
+    const lateEarlierExposureIngest = "2026-07-01T20:00:00.000Z";
+    const control = exposuresOnDayWithIngest(
+      "control",
+      45,
+      earlierExposureEvent,
+      earlyExposureIngest,
+    );
+    const treatmentLaterExposure = exposuresOnDayWithIngest(
+      "treatment",
+      45,
+      laterExposureEvent,
+      earlyExposureIngest,
+    );
+    const treatmentEarlierExposure = exposuresOnDayWithIngest(
+      "treatment",
+      45,
+      earlierExposureEvent,
+      lateEarlierExposureIngest,
+    );
+
+    const beforeLateEarlier = checkSrmHealth({
+      run_id: RUN_ID,
+      allocation: { control: 50, treatment: 50 },
+      exposures: [...control, ...treatmentLaterExposure],
+      activation_rows: [
+        ...activationRowsAt(control, activationEvent, activationIngest),
+        // Pre-Exposure relative to the only known Exposure (10:00); not activated.
+      ],
+      srm_procedure: "sequential_martingale",
+    });
+    const afterLateEarlier = checkSrmHealth({
+      run_id: RUN_ID,
+      allocation: { control: 50, treatment: 50 },
+      // Raw-like duplicates: later Exposure (10:00/11:00) plus late earlier (08:00/20:00).
+      exposures: [...control, ...treatmentLaterExposure, ...treatmentEarlierExposure],
+      activation_rows: [
+        ...activationRowsAt(control, activationEvent, activationIngest),
+        ...activationRowsAt(treatmentLaterExposure, activationEvent, activationIngest),
+      ],
+      srm_procedure: "sequential_martingale",
+    });
+
+    expect(beforeLateEarlier.srm.activated_srm_mismatch).toBe(true);
+    expect(beforeLateEarlier.srm.activated_srm_p_value).toBeLessThan(0.001);
+    expect(afterLateEarlier.health.activation_rates).toMatchObject({
+      control: 1,
+      treatment: 1,
+    });
+    // Sticky anytime p: back-dating eligibility to 12:00 would insert 45 Treatments
+    // into the Control-only prefix and clear the alarm (p→1).
+    expect(afterLateEarlier.srm.activated_srm_mismatch).toBe(true);
+    expect(afterLateEarlier.srm.activated_srm_p_value).toBe(
+      beforeLateEarlier.srm.activated_srm_p_value,
+    );
+  });
+
   it("keeps the Exposure SRM alarm when a late conflict removes one Entity", () => {
     const earlyEvent = "2026-07-01T08:00:00.000Z";
     const earlyIngest = "2026-07-01T12:00:00.000Z";

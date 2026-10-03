@@ -72,7 +72,7 @@ diagnostics degrade gracefully. Never use `client_timestamp` for first-touch ord
 vulnerability). Never use `ingest_ts` for first-touch ordering either; first-touch stays
 `min(exposure_at)`. Under analysis-v2, sequential SRM orders its observation path by
 eligibility ingest time per Entity (`first_ingest_ts` for Exposure SRM;
-`max(first_ingest_ts, min(Activation ingest_ts))` emitted as `activation_ingest_ts` for activated
+pairwise `min(max(exposure.ingest, activation.ingest))` emitted as `activation_ingest_ts` for activated
 SRM) so late delivery appends rather than rewrites the filtration; that use is separate from
 first-touch and Conversion Windows.
 

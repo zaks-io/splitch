@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { MetricKindSchema, MetricRefSchema } from "./leaf-schemas-experiment";
-import { ANALYSIS_V1_VERSION } from "./run-commitments";
+import { ANALYSIS_V1_VERSION, ANALYSIS_V2_VERSION } from "./run-commitments";
 import { PreRegistrationSchema } from "./run-preregistration";
 import { CupedAttributeSourceSchema, DimensionClassSchema } from "./stats-result-contract";
 
@@ -89,8 +89,8 @@ export const ActivationRowSchema = z
     run_id: z.string(),
     activation_ts: TimestampSchema,
     /**
-     * Eligibility clock for activated SRM (pairwise min of
-     * max(exposure.ingest, activation.ingest) over qualifying pairs).
+     * Eligibility clock for activated SRM: min over qualifying raw
+     * (Exposure, Activation) pairs of max(exposure.ingest, activation.ingest).
      * analysis-v1/legacy ignore it. Optional on the row schema for deploy
      * compat; analysis-v2 fails loud when absent.
      */
@@ -254,5 +254,28 @@ export const StatsInputSchema = z
   .strict()
   .refine((input) => input.horizon !== "fixed" || input.sample_size_locked !== undefined, {
     message: "fixed horizon requires sample_size_locked",
+  })
+  .superRefine((input, ctx) => {
+    if (input.analysis_version !== ANALYSIS_V2_VERSION) {
+      return;
+    }
+    for (const [index, exposure] of input.exposures.entries()) {
+      if (exposure.first_ingest_ts === undefined) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["exposures", index, "first_ingest_ts"],
+          message: "analysis-v2 requires first_ingest_ts on every Exposure row",
+        });
+      }
+    }
+    for (const [index, row] of (input.activation_rows ?? []).entries()) {
+      if (row.activation_ingest_ts === undefined) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["activation_rows", index, "activation_ingest_ts"],
+          message: "analysis-v2 requires activation_ingest_ts on every Activation row",
+        });
+      }
+    }
   });
 export type StatsInput = z.infer<typeof StatsInputSchema>;

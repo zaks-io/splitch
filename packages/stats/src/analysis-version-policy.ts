@@ -22,9 +22,9 @@ export interface AnalysisVersionPolicy {
  * harmonic correction for arbitrary dependence and an arbitrary stopping time.
  * Plain BH can exceed alpha under a two-null adversarial distribution even when
  * both marginals are superuniform; the ADR-0014 stop simulation asserts BH-G's
- * FDR, which is the procedure v2 freezes. Its SRM path is ingestion-ordered
- * (`first_ingest_ts` / pairwise activation eligibility) with a running-minimum
- * p-value.
+ * FDR, which is the procedure v2 freezes. Its SRM path is eligibility-ingest
+ * ordered (`first_ingest_ts` / pairwise activation eligibility ingest)
+ * with a running-minimum p-value.
  *
  * analysis-v2 also selects the Proposition B.1 one-sided Guardrail contrast
  * (C4). legacy and analysis-v1 keep the two-sided Fieller relative lower bound

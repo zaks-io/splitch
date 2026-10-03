@@ -138,8 +138,10 @@ function anyWatermarkTripsActivatedSrm(
   }
 
   const orderedActivations = [...activationRows].sort((left, right) => {
-    const leftMs = Date.parse(left.activation_ingest_ts);
-    const rightMs = Date.parse(right.activation_ingest_ts);
+    const leftMs = Date.parse(requiredIngestTs(left.activation_ingest_ts, "activation_ingest_ts"));
+    const rightMs = Date.parse(
+      requiredIngestTs(right.activation_ingest_ts, "activation_ingest_ts"),
+    );
     if (leftMs !== rightMs) {
       return leftMs - rightMs;
     }
@@ -186,6 +188,13 @@ function biasedExposures(
       window_anchor: BASE_TS,
     };
   });
+}
+
+function requiredIngestTs(value: string | undefined, field: string): string {
+  if (value === undefined || value === "") {
+    throw new Error(`${field} is required for activated-SRM simulation fixtures.`);
+  }
+  return value;
 }
 
 function seededRandom(seed: number): () => number {

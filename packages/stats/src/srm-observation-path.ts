@@ -4,7 +4,7 @@
  * these rows on every Results read.
  *
  * `arrival_ts` is the eligibility clock: `first_ingest_ts` for Exposure SRM and
- * `max(first_ingest_ts, activation_ingest_ts)` for activated-population SRM.
+ * pairwise `min(max(exposure.ingest, activation.ingest))` for activated SRM.
  * Event time (`first_exposure_ts` / `activation_ts`) is not the filtration order.
  */
 export interface SrmPathEntity {

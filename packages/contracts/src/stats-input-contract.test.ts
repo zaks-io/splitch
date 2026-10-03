@@ -114,7 +114,6 @@ describe("DedupeExposureRowSchema", () => {
     "run_id",
     "variant",
     "first_exposure_ts",
-    "first_ingest_ts",
     "window_anchor",
   ])("rejects a missing %s field", (field) => {
     expect(DedupeExposureRowSchema.safeParse(omitField(exposureRow, field)).success).toBe(false);
@@ -239,16 +238,12 @@ describe("ActivationRowSchema", () => {
     activated: true,
   };
 
-  it.each([
-    "targeting_key_hash",
-    "run_id",
-    "activation_ts",
-    "activation_ingest_ts",
-    "counterfactual",
-    "activated",
-  ])("rejects a missing %s field", (field) => {
-    expect(ActivationRowSchema.safeParse(omitField(activationRow, field)).success).toBe(false);
-  });
+  it.each(["targeting_key_hash", "run_id", "activation_ts", "counterfactual", "activated"])(
+    "rejects a missing %s field",
+    (field) => {
+      expect(ActivationRowSchema.safeParse(omitField(activationRow, field)).success).toBe(false);
+    },
+  );
 
   it("parses the Activation gate row fields", () => {
     const row = ActivationRowSchema.parse(activationRow);

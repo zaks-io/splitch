@@ -76,8 +76,8 @@ function nullLateIngestPopulation(random: () => number, iteration: number): Dedu
 
 function anyIngestWatermarkTripsExposureSrm(exposures: readonly DedupeExposureRow[]): boolean {
   const ordered = [...exposures].sort((left, right) => {
-    const leftMs = Date.parse(left.first_ingest_ts);
-    const rightMs = Date.parse(right.first_ingest_ts);
+    const leftMs = Date.parse(requiredIngestTs(left.first_ingest_ts, "first_ingest_ts"));
+    const rightMs = Date.parse(requiredIngestTs(right.first_ingest_ts, "first_ingest_ts"));
     if (leftMs !== rightMs) {
       return leftMs - rightMs;
     }
@@ -101,6 +101,13 @@ function anyIngestWatermarkTripsExposureSrm(exposures: readonly DedupeExposureRo
     }
   }
   return false;
+}
+
+function requiredIngestTs(value: string | undefined, field: string): string {
+  if (value === undefined || value === "") {
+    throw new Error(`${field} is required for late-ingest simulation fixtures.`);
+  }
+  return value;
 }
 
 function seededRandom(seed: number): () => number {

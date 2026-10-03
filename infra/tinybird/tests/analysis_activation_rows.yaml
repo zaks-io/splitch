@@ -1,5 +1,5 @@
 - name: earliest_activation_after_exposure_wins_and_pre_exposure_candidates_never_hide_it
-  description: Candidates at or before first_exposure_ts are rejected before the minimum is taken, retries collapse to one row, an Entity whose only candidate precedes its Exposure is absent, an Entity with no Exposure at all is absent, counterfactual Activations are excluded, and activation_ingest_ts is max(first Exposure ingest, Activation ingest) so tk_control_snapshot (Activation before Exposure ingest) uses the Exposure ingest clock.
+  description: Candidates at or before first_exposure_ts are rejected before the minimum is taken, retries collapse to one row, an Entity whose only candidate precedes its Exposure is absent, an Entity with no Exposure at all is absent, counterfactual Activations are excluded, and activation_ingest_ts is the pairwise eligibility clock so tk_control_snapshot (Activation before Exposure ingest) uses the Exposure ingest clock.
   parameters: "app_id=app_1&environment_id=env_prod&experiment_id=exp_1&run_id=run_1"
   expected_http_status: 200
   expected_result: |
@@ -18,11 +18,17 @@
   expected_result: |
     {"targeting_key_hash":"tk_control_snapshot","run_id":"run_1","activation_ts":"2026-07-02 00:00:00.000","activation_ingest_ts":"2026-07-04 12:00:00.000","counterfactual":0,"activated":1}
 - name: activation_after_commit_and_before_delayed_receipt_is_eligible
-  description: Activation event ordering uses the delayed Convex encounter time; eligibility ingest is max(first Exposure ingest, Activation ingest) so the earlier Activation ingest does not precede the Exposure ingest clock.
+  description: Activation event ordering uses the delayed Convex encounter time; eligibility is min over qualifying raw (Exposure, Activation) pairs of max(ingest clocks). The remote Exposure at 08:00 does not qualify with Activation at 06:30; only the late earlier Convex Exposure (06:00 ingested 10:00) qualifies, so eligibility is 10:00 not min(first_ingest)=08:00.
   parameters: "app_id=app_delayed&environment_id=env_prod&experiment_id=exp_delayed&run_id=run_delayed"
   expected_http_status: 200
   expected_result: |
-    {"targeting_key_hash":"tk_delayed_convex","run_id":"run_delayed","activation_ts":"2026-07-05 06:30:00.000","activation_ingest_ts":"2026-07-05 08:00:00.000","counterfactual":0,"activated":1}
+    {"targeting_key_hash":"tk_delayed_convex","run_id":"run_delayed","activation_ts":"2026-07-05 06:30:00.000","activation_ingest_ts":"2026-07-05 10:00:00.000","counterfactual":0,"activated":1}
+- name: late_earlier_exposure_does_not_backdate_activation_eligibility
+  description: Exposure at 10:00 ingested 11:00 plus Activation at 09:00 ingested 12:00 is not qualifying. A late earlier Exposure at 08:00 ingested 20:00 newly qualifies; eligibility is max(20:00, 12:00)=20:00, not max(first_ingest=11:00, 12:00)=12:00.
+  parameters: "app_id=app_late_earlier&environment_id=env_prod&experiment_id=exp_late_earlier&run_id=run_late_earlier"
+  expected_http_status: 200
+  expected_result: |
+    {"targeting_key_hash":"tk_late_earlier","run_id":"run_late_earlier","activation_ts":"2026-07-01 09:00:00.000","activation_ingest_ts":"2026-07-01 20:00:00.000","counterfactual":0,"activated":1}
 - name: missing_environment_id_is_rejected
   description: A required scope parameter is never defaulted; the request fails loudly rather than reading across Environments.
   parameters: "app_id=app_1&experiment_id=exp_1&run_id=run_1"
