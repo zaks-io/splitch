@@ -109,6 +109,7 @@ export function enrichAnalysisResultsResponse(
   // result token. Segment/day slices are absent until decision-diagnostics is wired.
   const srmRootCause =
     analysis.state === "ready" ? classifySrmRootCauseFromStats(analysis.stats) : null;
+  const cohortEffect = analysis.state === "ready" ? (analysis.cohort_effect ?? null) : null;
   return produceExperimentResults({
     view: options.view,
     analysis,
@@ -120,6 +121,7 @@ export function enrichAnalysisResultsResponse(
     },
     canConclude: options.canConclude,
     srmRootCause,
+    cohortEffect,
     includeExploratory: options.includeExploratory === true,
   });
 }

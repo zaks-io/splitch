@@ -1,3 +1,4 @@
+import type { CohortEffectDiagnostic } from "./cohort-effect";
 import type { FrozenControlIdentity } from "./experiment-control-identity";
 import {
   type ExperimentDecisionGate,
@@ -43,6 +44,11 @@ export interface ProduceExperimentResultsInput {
    * enrich seam classifies and passes the result. Omit or null when SRM is clean.
    */
   srmRootCause?: SrmRootCauseClassification | null;
+  /**
+   * First-exposure-day cohort diagnostic from Analysis. Detailed mode only;
+   * omit or null when Analysis did not emit it (pre-compat Workers).
+   */
+  cohortEffect?: CohortEffectDiagnostic | null;
   /**
    * Concise mode omits stats unless this is true (exploratory statistics opt-in,
    * C10 part two). Ignored for detailed (stats always present).
@@ -130,7 +136,13 @@ export function produceExperimentResults(
   }
   // Detailed keeps Analysis stats byte-identical: same object reference order is
   // not guaranteed after JSON round-trip, but field set and values are unchanged.
-  return { view: "detailed", ...base, stats: input.analysis.stats };
+  // Cohort effect is additive diagnostics (detailed only), never in the token.
+  return {
+    view: "detailed",
+    ...base,
+    ...(input.cohortEffect != null ? { cohort_effect: input.cohortEffect } : {}),
+    stats: input.analysis.stats,
+  };
 }
 
 function readyBase(input: {

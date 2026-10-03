@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { materializeRunInput } from "./results-run-input";
+import { conversionWindowsFromQueryConfig, materializeRunInput } from "./results-run-input";
 
 function runRow(varianceConfig: unknown): Record<string, unknown> {
   return {
@@ -43,5 +43,22 @@ describe("materializeVarianceConfig", () => {
     expect(() =>
       materializeRunInput(runRow([currentConfig, { ...currentConfig, winsorize_pct: "99.9" }])),
     ).toThrow(/metric_variance_config\[1\].*winsorize_pct must be a number, got string/s);
+  });
+});
+
+describe("conversionWindowsFromQueryConfig", () => {
+  it("copies frozen Conversion Windows onto StatsInput", () => {
+    expect(
+      conversionWindowsFromQueryConfig([
+        {
+          metric_id: "conversion",
+          metric_type: "binomial",
+          event_definition_id: "event_definition_conversion",
+          event_field_name: null,
+          window_duration_ms: 259_200_000,
+          cuped_lookback_ms: 604_800_000,
+        },
+      ]),
+    ).toEqual([{ metric_id: "conversion", window_duration_ms: 259_200_000 }]);
   });
 });

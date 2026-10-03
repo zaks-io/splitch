@@ -269,3 +269,46 @@ describe("produceExperimentResults srm_root_cause", () => {
     expect(withCause.stats).toBe(analysis.stats);
   });
 });
+
+describe("produceExperimentResults cohort_effect", () => {
+  const cohortEffect = {
+    state: "unavailable" as const,
+    reason: "insufficient_entities" as const,
+  };
+
+  it("attaches cohort_effect on detailed Results only", () => {
+    const analysis = readyAnalysis();
+    const detailed = produceExperimentResults({
+      view: "detailed",
+      analysis,
+      run,
+      canConclude: true,
+      cohortEffect,
+    });
+    const concise = produceExperimentResults({
+      view: "concise",
+      analysis,
+      run,
+      canConclude: true,
+      cohortEffect,
+    });
+    expect(ExperimentResultsResponseSchema.parse(detailed)).toMatchObject({
+      cohort_effect: cohortEffect,
+    });
+    expect(concise).not.toHaveProperty("cohort_effect");
+    if (detailed.state !== "ready" || detailed.view !== "detailed") {
+      throw new Error("expected detailed ready");
+    }
+    expect(detailed.stats).toBe(analysis.stats);
+  });
+
+  it("omits cohort_effect when Analysis did not emit it", () => {
+    const produced = produceExperimentResults({
+      view: "detailed",
+      analysis: readyAnalysis(),
+      run,
+      canConclude: true,
+    });
+    expect(produced).not.toHaveProperty("cohort_effect");
+  });
+});
