@@ -1,6 +1,6 @@
 import {
-  AnalysisResultsEnvelopeSchema,
   ANALYSIS_V1_VERSION,
+  AnalysisResultsEnvelopeSchema,
   LEGACY_RUN_COMMITMENTS,
 } from "@splitch/contracts";
 import { describe, expect, it } from "vitest";
@@ -10,9 +10,9 @@ import {
   APP_ID,
   DATA_WATERMARK,
   ENVIRONMENT_ID,
-  rowsByPipe,
-  RUN_ID,
   type RowsByPipe,
+  RUN_ID,
+  rowsByPipe,
 } from "./results-test-support";
 
 describe("readyAnalysisEnvelope cohort_effect", () => {
@@ -56,6 +56,17 @@ describe("Experiment Results cohort_effect zero-variance regression", () => {
     expect(envelope.cohort_effect?.state).toBe("ready");
     if (envelope.cohort_effect?.state !== "ready") throw new Error("expected ready cohort_effect");
     expect(envelope.cohort_effect.comparisons[0]?.buckets[0]?.status).toBe("zero_variance");
+  });
+});
+
+describe("Experiment Results Retention primary cohort_effect", () => {
+  it("returns HTTP 200 when the primary Metric is Retention", async () => {
+    const fixture = retentionPrimaryRowsByPipe();
+    const { app } = makeResultsHarness(fixture);
+    const response = await app.request(`${RESULTS_PATH}?runId=${RUN_ID}`, resultsAuthInit("GET"));
+    expect(response.status).toBe(200);
+    const envelope = AnalysisResultsEnvelopeSchema.parse(await response.json());
+    expect(envelope.state).toBe("ready");
   });
 });
 
@@ -154,5 +165,37 @@ function zeroVarianceRowsByPipe(): RowsByPipe {
   }
   fixture.analysis_deduped_exposures = exposures;
   fixture.analysis_metric_values_batch = metricValues;
+  return fixture;
+}
+
+function retentionPrimaryRowsByPipe(): RowsByPipe {
+  const fixture = zeroVarianceRowsByPipe();
+  const run = fixture.analysis_run_inputs?.[0] as Record<string, unknown>;
+  fixture.analysis_run_inputs = [
+    {
+      ...run,
+      decision_family: JSON.stringify([{ metric_id: "d7_retained", variant: "treatment" }]),
+      metric_query_config: JSON.stringify([
+        {
+          metric_id: "d7_retained",
+          metric_type: "retention",
+          event_definition_id: "event_definition_signup",
+          event_field_name: null,
+          window_offset_ms: 0,
+          window_duration_ms: 86_400_000,
+          horizon_start_ms: 0,
+          horizon_end_ms: 86_400_000,
+          cuped_lookback_ms: 604_800_000,
+        },
+      ]),
+    },
+  ];
+  fixture.analysis_metric_values_batch = (fixture.analysis_metric_values_batch ?? []).map(
+    (row) => ({
+      ...(row as Record<string, unknown>),
+      metric_id: "d7_retained",
+      metric_type: "retention",
+    }),
+  );
   return fixture;
 }

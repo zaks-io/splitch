@@ -51,7 +51,17 @@ describe("Retention Metric CRUD", () => {
       horizonEndMs: 86_400_000,
     });
     expect(created.status).toBe(200);
-    expect(await created.json()).toMatchObject({
+    const body = (await created.json()) as { id: string; kind: string };
+    expect(body).toMatchObject({
+      kind: "retention",
+      horizonStartMs: 0,
+      horizonEndMs: 86_400_000,
+    });
+
+    const read = await request(h, "GET", `/apps/${appId}/metrics/${body.id}`, jwt);
+    expect(read.status).toBe(200);
+    expect(await read.json()).toMatchObject({
+      id: body.id,
       kind: "retention",
       horizonStartMs: 0,
       horizonEndMs: 86_400_000,

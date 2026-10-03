@@ -1,7 +1,7 @@
 import { isPresenceMetric, type VarianceTechniques } from "@splitch/contracts";
 import { applyCupedAdjustment } from "./cuped";
 import { reapplyCupedCovariate } from "./cuped-fit";
-import { aggregateEntitiesWithEligibility, lockedSample } from "./entity-aggregation";
+import { aggregateEntitiesWithEligibility } from "./entity-aggregation";
 import { clampSamplingVariance, mean, sampleCovariance, sampleVariance } from "./variance-math";
 import type {
   EntityAggregate,
@@ -50,7 +50,7 @@ export function estimateMetricComparisons(
     const { entities, immatureExcluded } = aggregateEntitiesWithEligibility({ ...input, variant });
     return {
       variant,
-      entities: lockedSample(entities, input.fixed_horizon_sample_size),
+      entities,
       immatureExcluded,
     };
   });

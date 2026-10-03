@@ -286,4 +286,32 @@ describe("Experiment Start freezes the analysis config", () => {
     ]);
     expect(frozen.value.metricVarianceConfig[0]?.winsorize).toBe(false);
   });
+
+  it("Start ships a Retention query config without mapping the Metric to binomial", async () => {
+    const fx = await experimentFixture(ctx);
+    const retentionId = await metric(fx.appId, "metric_d7_start", {
+      kind: "retention",
+      horizonStartMs: 86_400_000,
+      horizonEndMs: 172_800_000,
+    });
+    const experiment = await createExperimentDraft(ctx, fx, {
+      key: "retention-start",
+      allocation: { control: 50, treatment: 50 },
+      metrics: [{ metricId: retentionId }],
+    });
+    const response = await startExperiment(ctx, fx, experiment.id);
+    expect(response.status).toBe(200);
+    const frozen = await frozenAnalysisConfig(
+      ctx.repo,
+      fx.appId,
+      { metrics: [{ metricId: retentionId }], guardrailMetrics: [] },
+      ["treatment"],
+      60_000,
+      "user",
+      "req_retention_start",
+    );
+    if (!frozen.ok) throw new Error(await frozen.response.text());
+    expect(frozen.value.metricQueryConfig[0]?.metric_type).toBe("retention");
+    expect(frozen.value.metricQueryConfig[0]).not.toMatchObject({ metric_type: "binomial" });
+  });
 });

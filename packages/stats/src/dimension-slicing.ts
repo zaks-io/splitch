@@ -8,7 +8,7 @@ import type {
   StatsResultStatus,
 } from "@splitch/contracts";
 import { validatePrimaryDimensionSpecs } from "./dimension-family-validation";
-import { analyzeMetricArmResults, type ArmResultAdapters } from "./metric-arm-results";
+import { type ArmResultAdapters, analyzeMetricArmResults } from "./metric-arm-results";
 
 export type DimensionArmResult = ArmResult & {
   readonly dimension_id: string;
@@ -240,28 +240,6 @@ function dimensionDecisionFlags(
 }
 
 function stripDimensionFields(result: DimensionArmResult): ArmResult {
-  return {
-    variant: result.variant,
-    metric_id: result.metric_id,
-    sample_size_n: result.sample_size_n,
-    point_estimate: result.point_estimate,
-    relative_lift_pct: result.relative_lift_pct,
-    ci_lower: result.ci_lower,
-    ci_upper: result.ci_upper,
-    p_value: result.p_value,
-    is_significant: result.is_significant,
-    in_bh_family: result.in_bh_family,
-    exploratory: result.exploratory,
-    decision_valid: result.decision_valid,
-    status: result.status,
-    variance_techniques: result.variance_techniques,
-    ...(result.estimand === undefined ? {} : { estimand: result.estimand }),
-    ...(result.ropeVerdict === undefined ? {} : { ropeVerdict: result.ropeVerdict }),
-    ...(result.ropeScale === undefined ? {} : { ropeScale: result.ropeScale }),
-    ...(result.ropeVerdictUnavailable === undefined
-      ? {}
-      : { ropeVerdictUnavailable: result.ropeVerdictUnavailable }),
-    ...(result.futilityVerdict === undefined ? {} : { futilityVerdict: result.futilityVerdict }),
-    ...(result.futilityBecause === undefined ? {} : { futilityBecause: result.futilityBecause }),
-  };
+  const { dimension_id: _dimensionId, dimension_value: _dimensionValue, ...arm } = result;
+  return arm;
 }

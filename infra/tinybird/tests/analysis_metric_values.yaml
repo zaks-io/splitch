@@ -130,3 +130,12 @@
     {"targeting_key_hash":"tk_straddle","run_id":"run_1","metric_id":"metric_d7","metric_type":"retention","value":0,"in_window":1}
     {"targeting_key_hash":"tk_tail","run_id":"run_1","metric_id":"metric_d7","metric_type":"retention","value":1,"in_window":1}
     {"targeting_key_hash":"tk_treatment_snapshot","run_id":"run_1","metric_id":"metric_d7","metric_type":"retention","value":0,"in_window":1}
+- name: retention_offset_includes_events_on_both_shifted_boundaries
+  description: A Retention Metric counts an event at the inclusive horizon start and the last millisecond before the exclusive horizon end, and excludes events one millisecond outside either bound.
+  parameters: "app_id=app_retention_bounds&environment_id=env_prod&experiment_id=exp_retention_bounds&run_id=run_retention_bounds&metric_id=metric_d7&metric_type=retention&event_definition_id=event_definition_signup&window_offset_ms=86400000&window_duration_ms=86400000&from_ts=2026-07-01%2000%3A00%3A00.000&to_ts=2026-07-04%2000%3A00%3A00.000"
+  expected_http_status: 200
+  expected_result: |
+    {"targeting_key_hash":"tk_offset_before","run_id":"run_retention_bounds","metric_id":"metric_d7","metric_type":"retention","value":0,"in_window":1}
+    {"targeting_key_hash":"tk_offset_end","run_id":"run_retention_bounds","metric_id":"metric_d7","metric_type":"retention","value":0,"in_window":1}
+    {"targeting_key_hash":"tk_offset_end_inside","run_id":"run_retention_bounds","metric_id":"metric_d7","metric_type":"retention","value":1,"in_window":1}
+    {"targeting_key_hash":"tk_offset_start","run_id":"run_retention_bounds","metric_id":"metric_d7","metric_type":"retention","value":1,"in_window":1}

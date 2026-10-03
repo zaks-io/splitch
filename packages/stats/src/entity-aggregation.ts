@@ -6,8 +6,8 @@ import {
   partitionRetentionExposures,
   retentionHorizonForMetric,
 } from "./retention-eligibility";
-import { finiteValue } from "./variance-math";
 import type { EntityAggregate, MetricArmEstimateInput } from "./variance-estimator-types";
+import { finiteValue } from "./variance-math";
 
 export function aggregateEntitiesWithEligibility(input: MetricArmEstimateInput): {
   entities: EntityAggregate[];
@@ -33,7 +33,7 @@ function seedAndFill(input: MetricArmEstimateInput): {
 }
 
 /**
- * Cut a fixed-horizon arm down to the sample the Run pre-registered.
+ * Cut a list down to the first `sampleSize` items by Exposure time.
  *
  * A fixed-horizon z-test is decision-valid for exactly `sample_size_locked`
  * Entities per arm, and nothing stops Entities accruing past that: hash-bucketed
@@ -42,32 +42,35 @@ function seedAndFill(input: MetricArmEstimateInput): {
  * never reach the horizon or re-test a growing dataset at every poll, which is
  * peeking on a test that has no peeking correction. Truncating by exposure time
  * makes every re-analysis return the same pre-registered test.
+ *
+ * The lock happens on Exposures *before* Retention maturity filtering so a
+ * late-maturing early Entity cannot later displace an already selected one.
  */
-export function lockedSample(
-  entities: EntityAggregate[],
+function lockByFirstExposure<T>(
+  items: T[],
   sampleSize: number | undefined,
-): EntityAggregate[] {
-  if (sampleSize === undefined || entities.length <= sampleSize) {
-    return entities;
+  firstExposureTs: (item: T) => string,
+  tieBreak: (item: T) => string,
+): T[] {
+  if (sampleSize === undefined || items.length <= sampleSize) {
+    return items;
   }
-  // Parse each timestamp once rather than twice per comparison.
-  return entities
-    .map((entity) => ({ entity, ms: exposureMs(entity) }))
+  return items
+    .map((item) => ({ item, ms: exposureMs(firstExposureTs(item)), id: tieBreak(item) }))
     .sort(
       (left, right) =>
         // Entities exposed in the same millisecond still need a total order, or
         // which ones survive truncation would depend on row arrival order.
-        left.ms - right.ms ||
-        left.entity.targeting_key_hash.localeCompare(right.entity.targeting_key_hash),
+        left.ms - right.ms || left.id.localeCompare(right.id),
     )
     .slice(0, sampleSize)
-    .map((keyed) => keyed.entity);
+    .map((keyed) => keyed.item);
 }
 
-function exposureMs(entity: EntityAggregate): number {
-  const parsed = Date.parse(entity.first_exposure_ts);
+function exposureMs(firstExposureTs: string): number {
+  const parsed = Date.parse(firstExposureTs);
   if (!Number.isFinite(parsed)) {
-    throw new Error(`first_exposure_ts must be an ISO timestamp; got ${entity.first_exposure_ts}`);
+    throw new Error(`first_exposure_ts must be an ISO timestamp; got ${firstExposureTs}`);
   }
   return parsed;
 }
@@ -76,15 +79,23 @@ function seedExposedEntities(input: MetricArmEstimateInput): {
   entities: Map<string, EntityAggregate>;
   immatureExcluded: number;
 } {
-  const all = [...dedupedExposureRowsForVariant(input)];
+  // Lock the first-N population *before* maturity filtering. Otherwise a
+  // late-maturing early Entity in an Activation-gated Run can later displace
+  // an Entity that already entered a decision-valid fixed-horizon sample.
+  const locked = lockByFirstExposure(
+    [...dedupedExposureRowsForVariant(input)],
+    input.fixed_horizon_sample_size,
+    (exposure) => exposure.first_exposure_ts,
+    (exposure) => exposure.targeting_key_hash,
+  );
   const { eligible, immatureExcluded } =
     input.metric_type === "retention"
       ? partitionRetentionExposures(
-          all,
+          locked,
           retentionHorizonForMetric(input, input.metric_id).horizon_end_ms,
           parseWatermarkMs(input.data_watermark, input.metric_id),
         )
-      : { eligible: all, immatureExcluded: 0 };
+      : { eligible: locked, immatureExcluded: 0 };
   const entities = new Map<string, EntityAggregate>();
   for (const exposure of eligible) {
     entities.set(exposure.targeting_key_hash, {

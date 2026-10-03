@@ -76,6 +76,8 @@ export function contrastsForCohortPopulation(args: {
     winsorize_pct: variance?.winsorize_pct,
     cuped: variance?.cuped,
     cuped_coverage_threshold_pct: variance?.cuped_coverage_threshold_pct,
+    data_watermark: args.statsInput.data_watermark,
+    metric_retention_horizons: args.statsInput.metric_retention_horizons,
   });
 
   for (const treatment of args.lockedTreatments) {

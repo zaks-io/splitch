@@ -21,6 +21,11 @@ export interface MetricArmEstimateInput {
   readonly metric_values: readonly PerEntityMetricRow[];
   readonly data_watermark?: string;
   readonly metric_retention_horizons?: StatsInput["metric_retention_horizons"];
+  /**
+   * Set only for a fixed-horizon Run: lock the first `sample_size_locked`
+   * Entities by Exposure time before Retention maturity filtering.
+   */
+  readonly fixed_horizon_sample_size?: number;
 }
 
 export interface MetricArmEstimate {

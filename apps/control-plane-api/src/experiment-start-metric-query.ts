@@ -5,6 +5,7 @@ import {
 } from "@splitch/contracts";
 import { appScope, type Repository } from "@splitch/db";
 import { experimentStartInvalid } from "./experiment-errors";
+import { binomialQueryConfig } from "./experiment-start-binomial-query";
 import { retentionQueryConfig } from "./experiment-start-retention-query";
 
 type MetricRow = NonNullable<Awaited<ReturnType<Repository["experiments"]["getMetric"]>>>;
@@ -101,17 +102,7 @@ function queryConfig(
       },
     };
   }
-  return {
-    ok: true,
-    value: {
-      metric_id: metricId,
-      metric_type: "binomial",
-      event_definition_id: row.eventDefinitionId,
-      event_field_name: null,
-      window_duration_ms: conversionWindowMs,
-      cuped_lookback_ms: DEFAULT_CUPED_LOOKBACK_MS,
-    },
-  };
+  return binomialQueryConfig(row, metricType, conversionWindowMs, requestId);
 }
 
 function ratioQueryConfig(

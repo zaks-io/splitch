@@ -140,16 +140,15 @@ describe("Retention Metric deploy compatibility", () => {
         cuped_lookback_ms: 604_800_000,
       }).metric_type,
     ).toBe("retention");
-    expect(
-      MetricQueryConfigSchema.parse({
-        metric_id: "conversion",
-        metric_type: "binomial",
-        event_definition_id: "checkout",
-        event_field_name: null,
-        window_duration_ms: 259_200_000,
-        cuped_lookback_ms: 604_800_000,
-      }).window_offset_ms,
-    ).toBeUndefined();
+    const binomial = MetricQueryConfigSchema.parse({
+      metric_id: "conversion",
+      metric_type: "binomial",
+      event_definition_id: "checkout",
+      event_field_name: null,
+      window_duration_ms: 259_200_000,
+      cuped_lookback_ms: 604_800_000,
+    });
+    expect("window_offset_ms" in binomial).toBe(false);
   });
 
   it("accepts ArmResult with and without Retention eligibility fields", () => {

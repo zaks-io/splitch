@@ -164,6 +164,20 @@ describe("resultTokenStats", () => {
     );
   });
 
+  it("keeps the result token identical when Retention eligibility fields are published", async () => {
+    const identity = { appId: "app_1", runId: "run_1", runConfigHash: "sha256:abc" };
+    const legacy = statsWith(legacyArm);
+    const withEligibility = statsWith({
+      ...legacyArm,
+      eligible_n: 80,
+      immature_excluded_n: 20,
+    });
+
+    expect(await canonicalHash({ ...identity, stats: resultTokenStats(withEligibility) })).toBe(
+      await canonicalHash({ ...identity, stats: legacy }),
+    );
+  });
+
   it("still binds every decision-bearing field", async () => {
     const changed = statsWith({ ...legacyArm, point_estimate: 6.5, estimand });
 

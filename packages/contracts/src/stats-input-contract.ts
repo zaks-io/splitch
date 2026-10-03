@@ -160,7 +160,6 @@ const MetricSourceBindingSchema = z.union([
 const MetricQueryWindowSchema = {
   metric_id: MetricIdSchema,
   window_duration_ms: z.number().int().nonnegative(),
-  window_offset_ms: z.number().int().nonnegative().optional(),
   cuped_lookback_ms: z.number().int().nonnegative(),
 };
 
@@ -179,6 +178,10 @@ export const MetricQueryConfigSchema = z.union([
       metric_type: z.literal("retention"),
       event_definition_id: z.string(),
       event_field_name: z.null().default(null),
+      // Only Retention shifts the Conversion Window. Other kinds reject this
+      // field (strict schemas) rather than silently ignoring a bound Tinybird
+      // would not have applied on older pipes.
+      window_offset_ms: z.number().int().nonnegative(),
       horizon_start_ms: z.number().int().nonnegative(),
       horizon_end_ms: z.number().int().positive(),
     })
