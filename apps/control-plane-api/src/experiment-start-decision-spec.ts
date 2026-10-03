@@ -1,4 +1,4 @@
-import { CURRENT_ANALYSIS_VERSION } from "@splitch/contracts";
+import { CURRENT_ANALYSIS_VERSION, SUPPORTED_ANALYSIS_VERSIONS } from "@splitch/contracts";
 import {
   type CommitmentIntent,
   type ResolvedRunCommitments,
@@ -31,6 +31,8 @@ export function runDecisionSpecFromBody(
   body: Record<string, unknown>,
   requestId: string,
 ): { ok: true; value: RunDecisionSpec } | { ok: false; response: Response } {
+  const versionError = rejectUnsupportedRequestedAnalysisVersion(body, requestId);
+  if (versionError) return { ok: false, response: versionError };
   // Absent means sequential (the documented default); anything else present is a
   // horizon the Control Plane cannot honour, and coercing it to sequential would
   // silently register a different stopping rule than the caller asked for.
@@ -155,6 +157,11 @@ export function decisionSpecFromProposal(
  * applied after a version change has nothing an older version could have read.
  */
 export function runCommitmentColumns(spec: RunDecisionSpec) {
+  if (!SUPPORTED_ANALYSIS_VERSIONS.includes(CURRENT_ANALYSIS_VERSION)) {
+    throw new Error(
+      `CURRENT_ANALYSIS_VERSION ${JSON.stringify(CURRENT_ANALYSIS_VERSION)} is not in SUPPORTED_ANALYSIS_VERSIONS`,
+    );
+  }
   return {
     horizon: spec.horizon,
     sampleSizeLocked: spec.sampleSizeLocked,
@@ -164,4 +171,32 @@ export function runCommitmentColumns(spec: RunDecisionSpec) {
     plannedDurationDays: spec.plannedDurationDays,
     plannedDurationOverrideReason: spec.plannedDurationOverrideReason,
   };
+}
+
+/**
+ * Start stamps CURRENT. A caller-supplied version is only accepted when this
+ * deployment can analyze it. analysis-v2 is defined but unsupported, so a
+ * request for it fails loud like any other unknown version (ADR-0059).
+ */
+function rejectUnsupportedRequestedAnalysisVersion(
+  body: Record<string, unknown>,
+  requestId: string,
+): Response | null {
+  const field =
+    "analysisVersion" in body
+      ? "analysisVersion"
+      : "analysis_version" in body
+        ? "analysis_version"
+        : null;
+  if (field === null) return null;
+  const requested = body[field];
+  if (typeof requested === "string" && SUPPORTED_ANALYSIS_VERSIONS.includes(requested)) {
+    return null;
+  }
+  return validationErrors(requestId, [
+    {
+      path: ["body", field],
+      message: `analysis_version must be one of ${SUPPORTED_ANALYSIS_VERSIONS.join(", ")}; received ${JSON.stringify(requested)}`,
+    },
+  ]);
 }

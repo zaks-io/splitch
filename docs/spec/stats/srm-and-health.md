@@ -42,14 +42,19 @@ Quarantine to `__multiple__` and late Activations can decrease an arm's earlier 
 
 **On mismatch:** results are flagged untrusted. The mismatch is surfaced loudly in the UI.
 
-### Sequential Dirichlet-multinomial SRM (implemented, not the gate)
+### Sequential Dirichlet-multinomial SRM (analysis-v2 gate)
 
 `@splitch/stats` exports `computeSequentialSrm`, the Dirichlet-multinomial mixture martingale of
-Lindon and Malek (NeurIPS 2022). It is the sequential replacement for the chi-square peeking
-procedure. This slice implements the test only. The decision gate still reads the chi-square
-`p < 0.001` checks. Chi-square stays the fixed-horizon diagnostic. Wiring the martingale into
-Exposure SRM and activated-population SRM is a later slice. Activation-rate balance is a different
-hypothesis (unknown common rate) and is not this test.
+Lindon and Malek (NeurIPS 2022). Under `analysis-v2`, Exposure SRM and activated-population SRM
+read this martingale: `srm_p_value` is the anytime p-value and `srm_is_mismatch` is
+`threshold_crossed` at alpha 0.001. legacy-unversioned and analysis-v1 keep the chi-square
+`p < 0.001` gate. Chi-square stays the fixed-horizon diagnostic and the activation-balance test
+under every version (activation balance is equality of unknown rates, not the declared
+allocation multinomial). `analysis-v2` is defined in the exhaustive version switch but is
+**unsupported** for Start and Results: it is not in `SUPPORTED_ANALYSIS_VERSIONS`, new Runs
+freeze `analysis-v1`, and a Run frozen under v2 refuses loudly. The open blocker is an
+ingestion-ordered observation path (late ingestion with earlier event timestamps can erase an
+alarm when the path is ordered by event time).
 
 **Prior.** Dirichlet mean equals the declared allocation: `alpha_i = concentration * theta_i`.
 Default `concentration` is 100. Type I control from Ville's inequality does not depend on this
@@ -60,18 +65,37 @@ on the declared Variants. Allocation weights must be positive. Default threshold
 
 **Output.** `wealth` is the Bayes factor / e-value `O_n`. `anytime_p_value` is the running minimum
 of `min(1, 1 / wealth)`, which is super-uniform under the null. `threshold_crossed` is true once
-`anytime_p_value <= alpha` and stays true if later wealth falls (alarm persistence).
+`anytime_p_value <= alpha` and stays true if later wealth falls (alarm persistence along the path).
 `first_cross_n` is the total Entity count at the first crossing, or null.
 
-**Observation contract.** Increments are iid multinomial under a fixed allocation. Counts are
-append-only. The function fails loud if a cumulative snapshot decreases an arm count. Revising
-earlier counts, including moving an Entity into `__multiple__` after it was counted in an arm,
-violates the contract. Reconciliation of those revisions is a later slice.
+**Observation contract (Results gate).** On every Results read, the analysis-v2 SRM gate rebuilds
+an append-only arrival path from the current watermarked population and evaluates the martingale
+after every Entity arrival (incremental log-gamma updates, O(N)). Exposure SRM orders Entities by
+`first_exposure_ts`. Activated-population SRM orders activated Entities by their earliest valid
+`activation_ts` (the time they entered the activated population), not by first Exposure. Ties at
+identical timestamps break deterministically by Entity pseudonym (`targeting_key_hash`) so pinned
+reads stay reproducible. The reported p-value is the running minimum along that path, so an early
+mismatch stays sticky when later arrivals balance the totals. This holds as long as ingestion
+before the pinned watermark is complete (the watermark contract). The Entity set is exactly the
+pinned-watermark `StatsInput` exposures (and activation rows for activated SRM).
+
+**Open issue (why v2 is unsupported).** Ordering by event time is not the same as ordering by
+ingestion. A late-arriving row whose `activation_ts` / `first_exposure_ts` is earlier than rows
+already on the path can rewrite history and erase a previously sticky alarm. Until the Results
+gate has an ingestion-ordered (append-only across watermarks) observation path, `analysis-v2`
+stays out of `SUPPORTED_ANALYSIS_VERSIONS`, `CURRENT_ANALYSIS_VERSION` stays `analysis-v1`, and
+Start rejects a request for v2.
+
+**Quarantine and revisions.** A later watermark that moves an Entity into `__multiple__` (or
+revises `first_exposure_ts` / `activation_ts`) edits the dataset. The next read recomputes the
+whole path from the cleaned rows; it does not feed a decreasing arm total into a live filtration.
+Primitive `computeSequentialSrm` still fails loud if a single call's cumulative snapshots decrease
+an arm count.
 
 **Looks.** Wealth is a function of the sufficient statistic. The anytime p-value is the running
-minimum over submitted increment batches. Singleton increments are continuous monitoring. A
-multi-Entity batch is one look after that batch is applied. Intra-batch processing order is not
-an arrival-time claim.
+minimum after every singleton arrival in the reconstructed path. Continuous monitoring is the
+gate default; batching arrivals into larger increments is allowed for the primitive but is not
+how the Results gate rebuilds the path.
 
 ### Activated-population SRM
 

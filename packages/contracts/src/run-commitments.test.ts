@@ -70,8 +70,13 @@ describe("result token analysis version (ADR-0059)", () => {
     }
   });
 
-  it("supports the version new Runs freeze", () => {
+  it("supports every named version this deployment can analyze", () => {
+    // analysis-v2 stays defined in the exhaustive switch but is unsupported
+    // until an ingestion-ordered observation path lands (ADR-0059).
+    expect(SUPPORTED_ANALYSIS_VERSIONS).toEqual(["analysis-v1"]);
     expect(SUPPORTED_ANALYSIS_VERSIONS).toContain(CURRENT_ANALYSIS_VERSION);
+    expect(SUPPORTED_ANALYSIS_VERSIONS).not.toContain("analysis-v2");
+    expect(CURRENT_ANALYSIS_VERSION).toBe("analysis-v1");
   });
 });
 

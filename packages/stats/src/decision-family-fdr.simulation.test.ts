@@ -1,5 +1,6 @@
-import type { DecisionFamilyMember } from "@splitch/contracts";
+import { ANALYSIS_V2_VERSION, type DecisionFamilyMember } from "@splitch/contracts";
 import { describe, expect, it } from "vitest";
+import { analysisVersionPolicy } from "./analysis-version-policy";
 import { applyDecisionFamilyCorrection } from "./decision-family-fdr";
 import { armResult } from "./decision-family-fdr-test-helpers";
 import {
@@ -105,7 +106,9 @@ describe("decision_family FDR simulation smoke", () => {
         `lastLookPowerCost=${result.lastLookPowerCost} tolerance=${tolerance}`,
     );
 
-    expect(result.bh_g.observedFdr).toBeLessThanOrEqual(FAMILY_FDR_SIM_ALPHA + tolerance);
+    // Assert FDR for the procedure analysis-v2 selects (BH-G), not plain BH.
+    const selected = analysisVersionPolicy(ANALYSIS_V2_VERSION).familyCorrection;
+    expect(result[selected].observedFdr).toBeLessThanOrEqual(FAMILY_FDR_SIM_ALPHA + tolerance);
     expect(result.lastLookBhG.power).toBeLessThanOrEqual(result.lastLookBh.power + Number.EPSILON);
     expect(result.lastLookPowerCost).toBeGreaterThanOrEqual(-Number.EPSILON);
   });

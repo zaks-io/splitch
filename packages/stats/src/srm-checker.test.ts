@@ -1,16 +1,16 @@
-import {
-  HealthMetricsSchema,
-  SrmResultSchema,
-  type ActivationRow,
-  type DedupeExposureRow,
-} from "@splitch/contracts";
+import { HealthMetricsSchema, SrmResultSchema } from "@splitch/contracts";
 import { describe, expect, it } from "vitest";
 import { checkSrmHealth } from "./srm-checker";
+import {
+  activationRows,
+  exposure,
+  exposures,
+  omitField,
+  SRM_TEST_RUN_ID,
+} from "./srm-checker-test-helpers";
 import { estimateMetricArm } from "./variance-estimators";
 
-const RUN_ID = "run_srm_unit";
-const BASE_TS = "2026-07-01T00:00:00.000Z";
-const ACTIVATION_TS = "2026-07-01T00:05:00.000Z";
+const RUN_ID = SRM_TEST_RUN_ID;
 
 describe("SRMChecker", () => {
   it("returns null activated SRM and activation health when no Activation gate exists", () => {
@@ -123,36 +123,3 @@ describe("SRMChecker", () => {
     expect(result.health.activation_balance_mismatch).toBe(true);
   });
 });
-
-function omitField(input: Record<string, unknown>, field: string): Record<string, unknown> {
-  const copy = { ...input };
-  delete copy[field];
-  return copy;
-}
-
-function exposures(variant: string, count: number): DedupeExposureRow[] {
-  return Array.from({ length: count }, (_, index) => exposure(variant, `${variant}_${index}`));
-}
-
-function exposure(variant: string, targeting_key_hash: string): DedupeExposureRow {
-  return {
-    app_id: "app_1",
-    targeting_key_hash,
-    environment_id: "env_1",
-    id_type: "user",
-    run_id: RUN_ID,
-    variant,
-    first_exposure_ts: BASE_TS,
-    window_anchor: BASE_TS,
-  };
-}
-
-function activationRows(exposureRows: readonly DedupeExposureRow[]): ActivationRow[] {
-  return exposureRows.map((row) => ({
-    targeting_key_hash: row.targeting_key_hash,
-    run_id: RUN_ID,
-    activation_ts: ACTIVATION_TS,
-    counterfactual: false,
-    activated: true,
-  }));
-}

@@ -146,6 +146,7 @@ function activationGatedStatsInput(): StatsInput {
 
   return {
     run_id: ENGINE_RUN_ID,
+    analysis_version: "analysis-v1",
     confidence_level: 0.95,
     horizon: "sequential",
     allocation: { control: 50, treatment: 50 },
@@ -235,6 +236,7 @@ function binomialRow(
 function fixedHorizonDimensionStatsInput(): StatsInput {
   return {
     run_id: ENGINE_RUN_ID,
+    analysis_version: "analysis-v1",
     confidence_level: 0.95,
     horizon: "fixed",
     sample_size_locked: 100,

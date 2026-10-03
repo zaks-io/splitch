@@ -201,6 +201,7 @@ describe("StatsEngine", () => {
 
     const input: StatsInput = {
       run_id: "run_1",
+      analysis_version: "analysis-v1",
       confidence_level: 0.95,
       horizon: "sequential",
       allocation: { control: 50, treatment: 50 },

@@ -136,6 +136,7 @@ function dimensionGoldenInput(): StatsInput {
 
   return {
     run_id: ENGINE_RUN_ID,
+    analysis_version: "analysis-v1",
     confidence_level: 0.95,
     horizon: "fixed",
     sample_size_locked: 100,

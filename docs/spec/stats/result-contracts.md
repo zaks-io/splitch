@@ -86,14 +86,14 @@ with its slope refit on uncapped outcomes, so `cuped_applied` matches the arm's
 
 ## SRM result object
 
-| Field                    | Type                       | Meaning                                                  |
-| ------------------------ | -------------------------- | -------------------------------------------------------- |
-| `srm_p_value`            | `number`                   | Chi-square p-value over full-exposed deduped denominator |
-| `srm_is_mismatch`        | `boolean`                  | `true` if `srm_p_value < 0.001`                          |
-| `observed_counts`        | `Record<variant, integer>` | Deduped first-touch Entity counts per arm                |
-| `expected_counts`        | `Record<variant, integer>` | Expected counts per declared allocation                  |
-| `activated_srm_p_value`  | `number \| null`           | Chi-square on activated population; null if no gate      |
-| `activated_srm_mismatch` | `boolean \| null`          | `true` if `activated_srm_p_value < 0.001`                |
+| Field                    | Type                       | Meaning                                                                                          |
+| ------------------------ | -------------------------- | ------------------------------------------------------------------------------------------------ |
+| `srm_p_value`            | `number`                   | Full-exposed SRM p-value: chi-square under legacy/analysis-v1; anytime p-value under analysis-v2 |
+| `srm_is_mismatch`        | `boolean`                  | `true` when the version's gate fires (chi-square p < 0.001, or sequential threshold crossed)     |
+| `observed_counts`        | `Record<variant, integer>` | Deduped first-touch Entity counts per arm                                                        |
+| `expected_counts`        | `Record<variant, integer>` | Expected counts per declared allocation                                                          |
+| `activated_srm_p_value`  | `number \| null`           | Activated-population SRM under the same version rule; null if no gate                            |
+| `activated_srm_mismatch` | `boolean \| null`          | Activated mismatch under the same version rule; null if no gate                                  |
 
 ## Guardrail result object
 
@@ -206,6 +206,12 @@ A ready envelope also carries `run_commitments`, what the Run froze at Start
 A legacy Run never reports a target or duration it did not record. Analysis refuses a Run frozen
 under a version it does not implement with `VALIDATION_ERROR` instead of analyzing it under a
 different engine.
+
+Which estimators a version uses (SRM gate, family correction) is in
+[ADR-0059](../../adr/0059-runs-freeze-an-analysis-version-and-legacy-runs-read-under-a-labeled-one.md)
+§Version table. analysis-v2 switches Exposure and activated SRM to the sequential martingale and
+selects BH-G family correction; it is defined but unsupported for Start/Results until an
+ingestion-ordered observation path lands.
 
 ## Control Plane result producer (CLI, MCP, panel)
 

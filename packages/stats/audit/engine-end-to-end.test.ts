@@ -12,6 +12,7 @@ function engineInput(
   const allocation = Object.fromEntries(arms.map((a) => [a.variant, allocationShare]));
   const base: StatsInput = {
     run_id: RUN_ID,
+    analysis_version: "analysis-v1",
     confidence_level: 0.95,
     horizon: "sequential",
     allocation,
@@ -139,6 +140,7 @@ describe("analyzeStats end-to-end coherence", () => {
 
     const input: StatsInput = {
       run_id: RUN_ID,
+      analysis_version: "analysis-v1",
       confidence_level: 0.95,
       horizon: "sequential",
       allocation: { control: 50, treatment: 50 },

@@ -119,6 +119,7 @@ interface StatsEngine {
 
 interface StatsInput {
   run_id: string;
+  analysis_version: string;              // frozen at Run Start (ADR-0059); defaults to analysis-v1 for non-Run fixtures
   confidence_level: number;              // default 0.95
   horizon: 'sequential' | 'fixed';       // locked at Run Start; default 'sequential'
   target_n?: integer;                    // sequential tuning, locked at Run Start when set
@@ -167,7 +168,8 @@ interface StatsOutput {
 `StatsOutput` member shapes (`ArmResult`, `SrmResult`, `GuardrailResult`, `HealthMetrics`,
 `DimensionResult`) are defined in [result-contracts.md](result-contracts.md).
 
-The Run-mode fields are immutable inputs from Run Start. `horizon='fixed'` requires
+The Run-mode fields are immutable inputs from Run Start. `analysis_version` selects the SRM gate
+and family-correction procedure (ADR-0059 version table). `horizon='fixed'` requires
 `sample_size_locked` and disables peeking until that locked sample size is reached; sequential Runs
 may set `target_n` but must not send `sample_size_locked`. `allocation` and `control_variant` come
 from the same locked Run snapshot so SRM, Control selection, and decision families cannot drift
@@ -191,9 +193,14 @@ clock time rather than after every Conversion Window closes). Sequential SRM (it
 this observation contract; it does not invent a different filtration.
 
 The Analysis Worker (`apps/analysis-api/src/results.ts`) builds one `StatsInput` per Results read
-and calls the engine. It does not incrementally append to a previous `StatsInput`. Counts that
-look like "new Entities since last look" are a difference of two full recomputes, not a martingale
-increment stored on disk.
+and calls the engine, binding `analysis_version` from the Run Snapshot commitments. It does not
+incrementally append to a previous `StatsInput`. Counts that look like "new Entities since last
+look" are a difference of two full recomputes, not a martingale increment stored on disk. Under
+analysis-v2 the sequential SRM gate rebuilds the Entity arrival path from the current watermarked
+`StatsInput` (Exposure by `first_exposure_ts`, activated by `activation_ts`) and evaluates the
+martingale after every arrival (running-minimum p). Sticky alarms hold while ingestion before the
+pinned watermark is complete. Pinned `dataWatermark` fixes the Entity set, so the path and result
+token stay deterministic.
 
 ### Evidence watermark
 
@@ -260,10 +267,12 @@ first-touch resolved.
 
 A later watermark **revises** earlier arm counts when a second Variant is ingested for an Entity
 that previously sat in one arm. The Entity leaves that arm's SRM and Metric denominators and
-appears in `multiple_count`. This is not an iid multinomial increment. A sequential SRM wealth
-process that assumed append-only arm counts would be wrong on this path. Late delivery of an
-earlier `exposure_at` can also revise `first_exposure_ts` (and therefore windows and CUPED
-lookback) without changing Variant.
+appears in `multiple_count`. This is not an iid multinomial increment across watermarks. The
+analysis-v2 SRM gate therefore does not continue a prior filtration: it rebuilds the arrival
+path from the cleaned watermarked population and re-evaluates (see
+[srm-and-health.md](srm-and-health.md#sequential-dirichlet-multinomial-srm-analysis-v2-gate)).
+Late delivery of an earlier `exposure_at` can also revise `first_exposure_ts` (and therefore
+windows and CUPED lookback) without changing Variant; that likewise rebuilds the path.
 
 ### Activation gating (ADR-0012)
 

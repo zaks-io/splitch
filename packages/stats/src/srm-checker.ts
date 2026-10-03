@@ -4,15 +4,24 @@ import type {
   HealthMetrics,
   SrmResult,
 } from "@splitch/contracts";
-import { chiSquareUpperTail } from "./chi-square";
+import type { SrmProcedure } from "./analysis-version-policy";
 import {
   activatedExposureRows,
   dedupedExposureRowsForVariant,
   MULTIPLE_VARIANT,
 } from "./exposure-denominator";
+import {
+  chiSquareActivationBalance,
+  chiSquareAgainstAllocation,
+  type SrmTestInternalResult,
+} from "./srm-checker-chi-square";
+import { resolveSrmProcedure, sequentialSrmAlongEntityPath } from "./srm-checker-sequential";
+import type { SrmPathEntity } from "./srm-observation-path";
 import { expectedCountsForOutput, safeRate, sumCounts, zeroCounts } from "./srm-counts";
+import { SRM_MISMATCH_P_VALUE } from "./srm-checker-threshold";
+import { activationRowsByEntityForRun, earliestValidActivationTs } from "./srm-activated-arrival";
 
-export const SRM_MISMATCH_P_VALUE = 0.001;
+export { SRM_MISMATCH_P_VALUE };
 
 export interface SrmCheckerInput {
   readonly run_id: string;
@@ -20,6 +29,8 @@ export interface SrmCheckerInput {
   readonly exposures: readonly DedupeExposureRow[];
   readonly activation_rows?: readonly ActivationRow[];
   readonly has_activation_gate?: boolean;
+  /** Defaults to chi_square (analysis-v1 / legacy). analysis-v2 selects sequential_martingale. */
+  readonly srm_procedure?: SrmProcedure;
 }
 
 export interface SrmCheckerOutput {
@@ -27,45 +38,21 @@ export interface SrmCheckerOutput {
   readonly health: HealthMetrics;
 }
 
-interface InternalChiSquareResult {
-  readonly p_value: number;
-  readonly is_mismatch: boolean;
-  readonly chi2_stat: number;
-}
-
 export function checkSrmHealth(input: SrmCheckerInput): SrmCheckerOutput {
   const variants = allocationVariants(input.allocation);
   assertExposureVariantsAreDeclared(input, variants);
+  const procedure = resolveSrmProcedure(input.srm_procedure);
 
-  const dedupedCounts = dedupedCountsByVariant(input, variants);
-  const fullSrm = chiSquareAgainstAllocation(dedupedCounts, input.allocation, variants);
-  const hasActivationGate = input.has_activation_gate ?? input.activation_rows !== undefined;
-  const activatedCounts = hasActivationGate ? activatedCountsByVariant(input, variants) : null;
-  const activatedSrm =
-    activatedCounts === null
-      ? null
-      : activationGuardrail(
-          activatedCounts,
-          () => chiSquareAgainstAllocation(activatedCounts, input.allocation, variants),
-          variants,
-        );
-  const activationBalance =
-    activatedCounts === null
-      ? null
-      : activationGuardrail(
-          activatedCounts,
-          () => chiSquareActivationBalance(activatedCounts, dedupedCounts, variants),
-          variants,
-        );
-  const activationRates =
-    activatedCounts === null
-      ? null
-      : Object.fromEntries(
-          variants.map((variant) => [
-            variant,
-            safeRate(activatedCounts[variant] ?? 0, dedupedCounts[variant] ?? 0),
-          ]),
-        );
+  const dedupedEntities = dedupedPathEntities(input, variants);
+  const dedupedCounts = countsFromPathEntities(dedupedEntities, variants);
+  const fullSrm = srmAgainstPopulation(
+    dedupedCounts,
+    dedupedEntities,
+    input.allocation,
+    variants,
+    procedure,
+  );
+  const activation = activationDiagnostics(input, variants, dedupedCounts, procedure);
   const multipleCount = multipleEntityCount(input);
 
   return {
@@ -78,15 +65,15 @@ export function checkSrmHealth(input: SrmCheckerInput): SrmCheckerOutput {
         input.allocation,
         variants,
       ),
-      activated_srm_p_value: activatedSrm?.p_value ?? null,
-      activated_srm_mismatch: activatedSrm?.is_mismatch ?? null,
+      activated_srm_p_value: activation.activatedSrm?.p_value ?? null,
+      activated_srm_mismatch: activation.activatedSrm?.is_mismatch ?? null,
     },
     health: {
       multiple_rate: safeRate(multipleCount, sumCounts(dedupedCounts) + multipleCount),
       multiple_count: multipleCount,
-      activation_rates: activationRates,
-      activation_balance_p_value: activationBalance?.p_value ?? null,
-      activation_balance_mismatch: activationBalance?.is_mismatch ?? null,
+      activation_rates: activation.activationRates,
+      activation_balance_p_value: activation.activationBalance?.p_value ?? null,
+      activation_balance_mismatch: activation.activationBalance?.is_mismatch ?? null,
       exposure_counts: exposureCountsByVariant(input, variants),
       deduped_counts: dedupedCounts,
       low_n_warning: variants.some((variant) => (dedupedCounts[variant] ?? 0) < 100),
@@ -94,11 +81,59 @@ export function checkSrmHealth(input: SrmCheckerInput): SrmCheckerOutput {
   };
 }
 
+/**
+ * Activation balance stays chi-square under every analysis version: it tests
+ * equality of unknown rates, not the declared allocation multinomial (plan 0.6).
+ */
+function activationDiagnostics(
+  input: SrmCheckerInput,
+  variants: readonly string[],
+  dedupedCounts: Readonly<Record<string, number>>,
+  procedure: SrmProcedure,
+): {
+  readonly activatedSrm: SrmTestInternalResult | null;
+  readonly activationBalance: SrmTestInternalResult | null;
+  readonly activationRates: Record<string, number> | null;
+} {
+  const hasActivationGate = input.has_activation_gate ?? input.activation_rows !== undefined;
+  if (!hasActivationGate) {
+    return { activatedSrm: null, activationBalance: null, activationRates: null };
+  }
+
+  const activatedEntities = activatedPathEntities(input, variants);
+  const activatedCounts = countsFromPathEntities(activatedEntities, variants);
+  return {
+    activatedSrm: activationGuardrail(
+      activatedCounts,
+      () =>
+        srmAgainstPopulation(
+          activatedCounts,
+          activatedEntities,
+          input.allocation,
+          variants,
+          procedure,
+        ),
+      variants,
+    ),
+    activationBalance: activationGuardrail(
+      activatedCounts,
+      () => chiSquareActivationBalance(activatedCounts, dedupedCounts, variants),
+      variants,
+    ),
+    activationRates: Object.fromEntries(
+      variants.map((variant) => [
+        variant,
+        safeRate(activatedCounts[variant] ?? 0, dedupedCounts[variant] ?? 0),
+      ]),
+    ),
+  };
+}
+
 function activationGuardrail(
   activatedCounts: Readonly<Record<string, number>>,
-  calculate: () => InternalChiSquareResult,
+  calculate: () => SrmTestInternalResult,
   variants: readonly string[],
-): InternalChiSquareResult {
+): SrmTestInternalResult {
   if (variants.every((variant) => (activatedCounts[variant] ?? 0) === 0)) {
     return { p_value: 0, is_mismatch: true, chi2_stat: 0 };
   }
@@ -142,16 +177,50 @@ function assertExposureVariantsAreDeclared(
   }
 }
 
-function dedupedCountsByVariant(
+function dedupedPathEntities(input: SrmCheckerInput, variants: readonly string[]): SrmPathEntity[] {
+  return variants.flatMap((variant) =>
+    dedupedExposureRowsForVariant({ ...input, variant }).map((exposure) => ({
+      targeting_key_hash: exposure.targeting_key_hash,
+      variant: exposure.variant,
+      arrival_ts: exposure.first_exposure_ts,
+    })),
+  );
+}
+
+function activatedPathEntities(
   input: SrmCheckerInput,
   variants: readonly string[],
+): SrmPathEntity[] {
+  const activationRows = input.activation_rows ?? [];
+  const activationsByEntity = activationRowsByEntityForRun(input.run_id, activationRows);
+  const declared = new Set(variants);
+  const path: SrmPathEntity[] = [];
+  for (const exposure of activatedExposureRows({
+    run_id: input.run_id,
+    exposures: input.exposures,
+    activation_rows: activationRows,
+  })) {
+    if (!declared.has(exposure.variant)) {
+      continue;
+    }
+    path.push({
+      targeting_key_hash: exposure.targeting_key_hash,
+      variant: exposure.variant,
+      arrival_ts: earliestValidActivationTs(exposure, activationsByEntity),
+    });
+  }
+  return path;
+}
+
+function countsFromPathEntities(
+  entities: readonly SrmPathEntity[],
+  variants: readonly string[],
 ): Record<string, number> {
-  return Object.fromEntries(
-    variants.map((variant) => [
-      variant,
-      dedupedExposureRowsForVariant({ ...input, variant }).length,
-    ]),
-  );
+  const counts = zeroCounts(variants);
+  for (const entity of entities) {
+    counts[entity.variant] = (counts[entity.variant] ?? 0) + 1;
+  }
+  return counts;
 }
 
 function exposureCountsByVariant(
@@ -177,92 +246,16 @@ function multipleEntityCount(input: SrmCheckerInput): number {
   return entities.size;
 }
 
-function activatedCountsByVariant(
-  input: SrmCheckerInput,
-  variants: readonly string[],
-): Record<string, number> {
-  const counts = zeroCounts(variants);
-  const activatedRows = activatedExposureRows({
-    run_id: input.run_id,
-    exposures: input.exposures,
-    activation_rows: input.activation_rows ?? [],
-  });
-
-  for (const exposure of activatedRows) {
-    if (variants.includes(exposure.variant)) {
-      counts[exposure.variant] = (counts[exposure.variant] ?? 0) + 1;
-    }
-  }
-
-  return counts;
-}
-
-function chiSquareAgainstAllocation(
+function srmAgainstPopulation(
   observed: Readonly<Record<string, number>>,
+  entities: SrmPathEntity[],
   allocation: Readonly<Record<string, number>>,
   variants: readonly string[],
-): InternalChiSquareResult {
-  const totalObserved = variants.reduce((sum, variant) => sum + (observed[variant] ?? 0), 0);
-  if (totalObserved === 0) {
-    return { p_value: 1, is_mismatch: false, chi2_stat: 0 };
+  procedure: SrmProcedure,
+): SrmTestInternalResult {
+  if (procedure === "sequential_martingale") {
+    const sequential = sequentialSrmAlongEntityPath(entities, allocation);
+    return { ...sequential, chi2_stat: 0 };
   }
-
-  const allocationTotal = variants.reduce((sum, variant) => sum + (allocation[variant] ?? 0), 0);
-  let chi2Stat = 0;
-  for (const variant of variants) {
-    const expected = (totalObserved * (allocation[variant] ?? 0)) / allocationTotal;
-    if (expected <= 0) {
-      throw new Error(`SRM expected count for ${variant} must be positive.`);
-    }
-    const delta = (observed[variant] ?? 0) - expected;
-    chi2Stat += delta ** 2 / expected;
-  }
-
-  const pValue = chiSquareUpperTail(chi2Stat, variants.length - 1);
-  return {
-    p_value: pValue,
-    is_mismatch: pValue < SRM_MISMATCH_P_VALUE,
-    chi2_stat: chi2Stat,
-  };
-}
-
-function chiSquareActivationBalance(
-  activatedCounts: Readonly<Record<string, number>>,
-  exposedCounts: Readonly<Record<string, number>>,
-  variants: readonly string[],
-): InternalChiSquareResult {
-  const rows: Array<readonly [number, number]> = variants.map((variant) => {
-    const activated = activatedCounts[variant] ?? 0;
-    const exposed = exposedCounts[variant] ?? 0;
-    return [activated, Math.max(0, exposed - activated)];
-  });
-  const rowTotals = rows.map((row) => row[0] + row[1]);
-  const columnTotals = [
-    rows.reduce((sum, row) => sum + row[0], 0),
-    rows.reduce((sum, row) => sum + row[1], 0),
-  ];
-  const total = rowTotals.reduce((sum, value) => sum + value, 0);
-  if (total === 0) {
-    return { p_value: 1, is_mismatch: false, chi2_stat: 0 };
-  }
-
-  let chi2Stat = 0;
-  for (let rowIndex = 0; rowIndex < rows.length; rowIndex += 1) {
-    const row = rows[rowIndex];
-    const rowTotal = rowTotals[rowIndex] ?? 0;
-    for (let columnIndex = 0; columnIndex < columnTotals.length; columnIndex += 1) {
-      const observed = row?.[columnIndex] ?? 0;
-      const expected = (rowTotal * (columnTotals[columnIndex] ?? 0)) / total;
-      if (expected > 0) {
-        chi2Stat += (observed - expected) ** 2 / expected;
-      }
-    }
-  }
-
-  const pValue = chiSquareUpperTail(chi2Stat, variants.length - 1);
-  return {
-    p_value: pValue,
-    is_mismatch: pValue < SRM_MISMATCH_P_VALUE,
-    chi2_stat: chi2Stat,
-  };
+  return chiSquareAgainstAllocation(observed, allocation, variants);
 }
