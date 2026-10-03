@@ -15,6 +15,10 @@ import {
   type PlannedDurationEvidence,
   plannedDurationCheck,
 } from "./experiment-decision-gate-duration";
+import {
+  type SrmRootCauseClassification,
+  SrmRootCauseClassificationSchema,
+} from "./srm-root-cause";
 import type { StatsOutput } from "./stats-result-contract";
 
 /**
@@ -76,6 +80,12 @@ export const ExperimentSrmDiagnosticsSchema = z
       .object({ tier: SrmTierSchema, pValue: z.number().nullable() })
       .strict()
       .nullable(),
+    /**
+     * Fabijan root-cause branch. Present only when Exposure or activated SRM
+     * has fired. Omitted (not null) when clean so existing clients keep the
+     * pre-classifier diagnostics shape.
+     */
+    rootCause: SrmRootCauseClassificationSchema.optional(),
   })
   .strict();
 
@@ -120,7 +130,10 @@ export function srmTierFor(pValue: number | null, isMismatch: boolean | null): S
   return "clean";
 }
 
-export function experimentSrmDiagnostics(stats: StatsOutput): ExperimentSrmDiagnostics {
+export function experimentSrmDiagnostics(
+  stats: StatsOutput,
+  rootCause?: SrmRootCauseClassification | null,
+): ExperimentSrmDiagnostics {
   const hasActivationGate =
     stats.srm.activated_srm_p_value !== null || stats.srm.activated_srm_mismatch !== null;
   const hasActivationBalance =
@@ -148,6 +161,7 @@ export function experimentSrmDiagnostics(stats: StatsOutput): ExperimentSrmDiagn
           pValue: stats.health.activation_balance_p_value,
         }
       : null,
+    ...(rootCause ? { rootCause } : {}),
   };
 }
 

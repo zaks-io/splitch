@@ -8,6 +8,7 @@ import {
   resolveFrozenControlIdentity,
 } from "@splitch/contracts";
 import { envScope, type Repository } from "@splitch/db";
+import { classifySrmRootCauseFromStats } from "@splitch/stats";
 import { runDurationEvidence } from "./run-duration-evidence";
 
 const CONCLUDE_ROLES = new Set(["owner", "admin"]);
@@ -87,6 +88,10 @@ export function enrichAnalysisResultsResponse(
     analysis.control_variant,
   );
   const dataWatermark = analysis.state === "ready" ? analysis.data_watermark : undefined;
+  // Classifier is Control Plane-only: it must not touch Analysis stats or the
+  // result token. Segment/day slices are absent until decision-diagnostics is wired.
+  const srmRootCause =
+    analysis.state === "ready" ? classifySrmRootCauseFromStats(analysis.stats) : null;
   return produceExperimentResults({
     view: options.view,
     analysis,
@@ -97,6 +102,7 @@ export function enrichAnalysisResultsResponse(
       duration: runDurationEvidence(run, dataWatermark),
     },
     canConclude: options.canConclude,
+    srmRootCause,
   });
 }
 

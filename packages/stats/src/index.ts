@@ -48,6 +48,16 @@ export {
   SEQUENTIAL_SRM_SOURCE,
 } from "./sequential-srm";
 export { classifyRopeVerdict, ROPE_VERDICTS } from "./rope-verdict";
+export { classifySrmRootCause } from "./srm-root-cause";
+export {
+  SRM_ROOT_CAUSE_BRANCHES,
+  SRM_ROOT_CAUSE_FUTURE_BRANCHES,
+  SRM_ROOT_CAUSE_NEXT_CHECK,
+} from "./srm-root-cause-types";
+export {
+  classifySrmRootCauseFromStats,
+  srmRootCauseInputFromStats,
+} from "./srm-root-cause-from-stats";
 export type {
   ActivationRow,
   ArmResult,
@@ -108,3 +118,8 @@ export type {
   SequentialSrmResult,
 } from "./sequential-srm";
 export type { RopeScale, RopeVerdict, RopeVerdictInput } from "./rope-verdict";
+export type {
+  SrmRootCauseBranch,
+  SrmRootCauseClassification,
+  SrmRootCauseInput,
+} from "./srm-root-cause-types";

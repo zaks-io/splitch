@@ -202,6 +202,48 @@ Single implementation (chi-square); no adapter substitution needed. Not a deleti
 SRM has no alternative algorithm — but isolating it keeps the query-composition concerns out of
 the stats engine core.
 
+## SRM root-cause classifier (Fabijan et al. 2019)
+
+When Exposure SRM or activated-population SRM has fired, Results may carry an
+additive `srm_root_cause` object (also nested as `srm.rootCause` on the Panel
+diagnostics projection). The classifier is a pure function over outputs the
+platform already produces; it does not recompute the SRM test statistic, change
+the decision gate, or enter the result token.
+
+| Branch           | When it fires                                                                                      | Next check                                                          |
+| ---------------- | -------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------- |
+| `triggered_only` | Activated SRM mismatches, Exposure SRM does not, and activated-population count is positive        | `experiment_results_get` (inspect Activation rates / activated SRM) |
+| `unclassified`   | SRM fired but signals are absent, global, conflicting, or the zero-Activation fail-closed sentinel | `experiment_results_get`                                            |
+
+Rules:
+
+- Returns nothing when neither Exposure nor activated SRM has fired.
+- Never guesses: when the available signals do not isolate a single branch, the
+  classifier returns `unclassified` with `evidenceConsidered`.
+- Zero Activations on a gated Run sets `activated_srm_mismatch` as a fail-closed
+  sentinel, not Activation-imbalance evidence — the classifier returns
+  `unclassified` with `insufficient_evidence:zero_activations`.
+- Reconstructing Activation counts from health rates requires matching Exposure
+  denominators; a missing `deduped_counts` key fails loud rather than treating
+  the denominator as zero.
+
+### Future branches (omitted)
+
+These Fabijan branches are **not** emitted. They are listed on
+`SRM_ROOT_CAUSE_FUTURE_BRANCHES` in `@splitch/stats` until the inputs below
+exist:
+
+| Branch                 | Needed before it can ship                                                                                             |
+| ---------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| `day_one`              | Per-day Variant counts with a proportion-change test (boolean day-mismatch flags confuse lower power with balance)    |
+| `segment_localized`    | Per-Dimension mutually exclusive slices with multiplicity control (overlapping cuts across Dimensions are correlated) |
+| `engagement_direction` | Per-Variant engagement or activity intensity among Exposed Entities before the SRM window closes                      |
+| `latency_linked`       | Per-Variant Exposure or Assignment logging latency distributions tied to the same denominator                         |
+
+Reference: Fabijan, Gupchup, Gupta, Omhover, Qin, Vermeer, Dmitriev — _Diagnosing
+Sample Ratio Mismatch in Online Controlled Experiments_, KDD 2019
+(doi:10.1145/3292500.3330722).
+
 ## Sources
 
 - [../../adr/0011-conflicting-variant-entities-quarantined-to-multiple.md](../../adr/0011-conflicting-variant-entities-quarantined-to-multiple.md)

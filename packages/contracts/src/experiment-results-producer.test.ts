@@ -161,3 +161,36 @@ describe("produceExperimentResults", () => {
     expect(produced).not.toHaveProperty("stats");
   });
 });
+
+describe("produceExperimentResults srm_root_cause", () => {
+  it("attaches srm_root_cause only when the enrich seam supplies a classification", () => {
+    const rootCause = {
+      branch: "triggered_only" as const,
+      explanation: "Activated-population SRM fires while Exposure SRM does not.",
+      nextCheck: "experiment_results_get",
+    };
+    const analysis = readyAnalysis();
+    const withCause = produceExperimentResults({
+      view: "detailed",
+      analysis,
+      run,
+      canConclude: true,
+      srmRootCause: rootCause,
+    });
+    const withoutCause = produceExperimentResults({
+      view: "detailed",
+      analysis,
+      run,
+      canConclude: true,
+    });
+    expect(ExperimentResultsResponseSchema.parse(withCause)).toMatchObject({
+      srm_root_cause: rootCause,
+    });
+    expect(withoutCause).not.toHaveProperty("srm_root_cause");
+    // Diagnostics must not rewrite the Analysis stats object the token binds.
+    if (withCause.state !== "ready" || withCause.view !== "detailed") {
+      throw new Error("expected detailed ready");
+    }
+    expect(withCause.stats).toBe(analysis.stats);
+  });
+});

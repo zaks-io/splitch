@@ -23,3 +23,5 @@ export * from "./experiment-results-response";
 export * from "./experiment-significance-display";
 // biome-ignore lint/performance/noReExportAll: each source module owns one part of a cohesive rigor surface
 export * from "./p-value-format";
+// biome-ignore lint/performance/noReExportAll: each source module owns one part of a cohesive rigor surface
+export * from "./srm-root-cause";

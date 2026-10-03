@@ -11,6 +11,7 @@ import {
   statisticalReadiness,
 } from "./experiment-results-readiness";
 import type { ExperimentResultsResponse } from "./experiment-results-response";
+import type { SrmRootCauseClassification } from "./srm-root-cause";
 import type { AnalysisResultsEnvelope } from "./stats-result-contract";
 
 /**
@@ -35,6 +36,12 @@ export interface ProduceExperimentResultsInput {
   run: ExperimentResultsRunContext | null;
   /** Whether this caller may invoke Conclude (App owner/admin). */
   canConclude: boolean;
+  /**
+   * Precomputed Fabijan root-cause from `@splitch/stats`. The producer cannot
+   * import stats (contracts ← stats dependency direction), so the Control Plane
+   * enrich seam classifies and passes the result. Omit or null when SRM is clean.
+   */
+  srmRootCause?: SrmRootCauseClassification | null;
 }
 
 const NOT_READY: ExperimentResultsReadiness = {
@@ -118,6 +125,8 @@ export function produceExperimentResults(
     ...(input.analysis.run_commitments !== undefined
       ? { run_commitments: input.analysis.run_commitments }
       : {}),
+    // Additive diagnostics only: never hashed into result_token (stats unchanged).
+    ...(input.srmRootCause ? { srm_root_cause: input.srmRootCause } : {}),
   };
 
   if (input.view === "concise") {
