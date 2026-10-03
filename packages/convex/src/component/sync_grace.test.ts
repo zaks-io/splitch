@@ -172,6 +172,34 @@ describe("Convex sync grace", () => {
   });
 });
 
+describe("Convex snapshot commit", () => {
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => vi.useRealTimers());
+
+  it("rejects a reference-broken snapshot without touching held state or the deadline", async () => {
+    const convex = installed(7);
+    await announce(convex, 8);
+    const held = structuredClone(convex.rows("snapshots"));
+    const recoveryJobId = convex.integration().syncRecoveryJobId;
+    const broken = { ...snapshotAt(8), runs: [] };
+
+    await expect(
+      commitSnapshotHandler(convex.ctx, { payload: JSON.stringify(broken) }),
+    ).rejects.toThrow(/absent live Run/);
+
+    expect(convex.rows("snapshots")).toEqual(held);
+    expect(convex.integration().syncRecoveryJobId).toBe(recoveryJobId);
+    expect(recoveryJobId).toBeDefined();
+    await convex.advance(SYNC_DEADLINE_MS);
+    expect(convex.integration().syncOverdueVersion).toBe(8);
+
+    await expect(
+      commitSnapshotHandler(convex.ctx, { payload: JSON.stringify(broken) }),
+    ).rejects.toThrow(/absent live Run/);
+    expect(convex.integration().syncOverdueVersion).toBe(8);
+  });
+});
+
 function announce(convex: FakeConvex, environmentVersion: number) {
   return announceHandler(convex.ctx, {
     deliveryId: `delivery_${environmentVersion}`,
