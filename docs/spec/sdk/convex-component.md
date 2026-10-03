@@ -201,7 +201,8 @@ When `snapshot.environmentVersion < announcedVersion`, evaluation never throws:
   that version.
   Evaluation then returns the caller's Default Variant with `reason: ERROR`,
   `errorCode: PROVIDER_NOT_READY`, and a message naming both versions. `evaluate` stores no
-  idempotency claim and no Exposure while overdue. The state persists until a snapshot at or above
+  idempotency claim and no Exposure while overdue; a key already served from the held snapshot
+  still replays its `STALE` result. The state persists until a snapshot at or above
   `announcedVersion` commits; a newer announcement while overdue does not reopen the grace.
 
 Queries never read the clock. The deadline is a write to the integration row every evaluation reads,
