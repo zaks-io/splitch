@@ -25,10 +25,9 @@ export async function listStaleFlags(
   const appId = pathParam(input, "appId");
   const scope = appScope(appId);
   const now = nowIso(deps);
-  const [app, scanned, lastChangeByFlag] = await Promise.all([
+  const [app, scanned] = await Promise.all([
     deps.repo.identity.getApp(appId),
     deps.repo.flags.listFlagPage(scope, FLAG_LIST_READ_LIMIT + 1),
-    deps.repo.flagHealth.latestChangeAtByFlagId(scope),
   ]);
   if (!app) return appNotFound(requestId);
 
@@ -49,17 +48,19 @@ export async function listStaleFlags(
   }
 
   const flagIds = rows.map((row) => row.id);
-  const [catalogs, configs, targetingRules, experiments, runLifecycleByScope] = await Promise.all([
-    deps.repo.flags.listVariantsForFlags(scope, flagIds),
-    deps.repo.flags.listFlagConfigsByFlagIdsAcrossEnvironments(scope, flagIds, environmentIds),
-    deps.repo.flags.listTargetingRulesByFlagIdsAcrossEnvironments(scope, flagIds, environmentIds),
-    deps.repo.experiments.listRunningExperimentsForFlagsAcrossEnvironments(
-      scope,
-      flagIds,
-      environmentIds,
-    ),
-    deps.repo.flagHealth.latestRunLifecycleAtByFlagEnv(scope, flagIds, environmentIds),
-  ]);
+  const [catalogs, configs, targetingRules, experiments, runLifecycleByScope, lastChangeByFlag] =
+    await Promise.all([
+      deps.repo.flags.listVariantsForFlags(scope, flagIds),
+      deps.repo.flags.listFlagConfigsByFlagIdsAcrossEnvironments(scope, flagIds, environmentIds),
+      deps.repo.flags.listTargetingRulesByFlagIdsAcrossEnvironments(scope, flagIds, environmentIds),
+      deps.repo.experiments.listRunningExperimentsForFlagsAcrossEnvironments(
+        scope,
+        flagIds,
+        environmentIds,
+      ),
+      deps.repo.flagHealth.latestRunLifecycleAtByFlagEnv(scope, flagIds, environmentIds),
+      deps.repo.flagHealth.latestChangeAtByFlagId(scope, flagIds),
+    ]);
 
   const configByScope = new Map(
     configs.map((config) => [scopeKey(config.flagId, config.environmentId), config]),
