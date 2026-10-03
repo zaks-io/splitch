@@ -148,8 +148,9 @@ flags_create {
 } # MCP tool
 ```
 
-Every new Flag names a lifecycle class: `release` and `experiment` Flags are temporary and must
-carry an `owner` and an `expiresAt`, while `ops` and `permission` Flags may be permanent. Flags
+Lifecycle inputs are optional. A Flag created without a class is `release`; `release` and
+`experiment` Flags are temporary, so an omitted `owner` defaults to you and an omitted `expiresAt`
+to 90 or 30 days out. Name `ops` (kill switches) or `permission` for a Flag meant to be permanent. Flags
 past their expiry show up in `splitch expired-flags list` / `expired_flags_list` until deleted.
 Configuration-state stale candidates (uniform serving, past expiry, or long unchanged)
 appear in `splitch stale-flags list` / `stale_flags_list` with typed reasons and

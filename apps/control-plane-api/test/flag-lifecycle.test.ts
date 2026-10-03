@@ -7,6 +7,7 @@ import {
   type FlagDefinitionHarness,
   makeFlagDefinitionHarness,
   NOW_ISO,
+  OWNER,
   request,
 } from "../src/flag-definition-test-harness";
 import { makePoolBindings as makeLocalBindings } from "./pool-bindings";
@@ -30,38 +31,27 @@ function flagBody(appId: string, key: string, lifecycle: Record<string, unknown>
 }
 
 describe("Flag lifecycle class (D9)", () => {
-  it("refuses a release Flag with no owner or expiry and names both inputs", async () => {
+  it("defaults a Flag with no lifecycle inputs to release, owned by the caller, 90 days out", async () => {
     const { appId, jwt } = await ownerSession();
-    const res = await request(
-      h,
-      "POST",
-      `/apps/${appId}/flags`,
-      jwt,
-      flagBody(appId, "release-bare", { lifecycleClass: "release" }),
-    );
-    expect(res.status).toBe(400);
-    expect(await res.json()).toMatchObject({
-      code: "FLAG_LIFECYCLE_INCOMPLETE",
-      details: { lifecycleClass: "release", missing: ["owner", "expiresAt"] },
+    const { lifecycleClass: _, ...bare } = baseFlag(appId);
+    const flag = await createFlag(h, appId, jwt, bare);
+    expect(NOW_ISO).toBe("2026-07-02T12:00:00.000Z");
+    expect(flag).toMatchObject({
+      lifecycleClass: "release",
+      owner: OWNER,
+      expiresAt: "2026-09-30T12:00:00.000Z",
     });
-    const list = await request(h, "GET", `/apps/${appId}/flags`, jwt);
-    expect(((await list.json()) as { items: unknown[] }).items).toEqual([]);
   });
 
-  it("refuses an experiment Flag that names an owner but no expiry", async () => {
+  it("defaults an experiment Flag's expiry to 30 days and keeps the named owner", async () => {
     const { appId, jwt } = await ownerSession();
-    const res = await request(
+    const flag = await createFlag(
       h,
-      "POST",
-      `/apps/${appId}/flags`,
+      appId,
       jwt,
       flagBody(appId, "experiment-no-expiry", { lifecycleClass: "experiment", owner: "growth" }),
     );
-    expect(res.status).toBe(400);
-    expect(await res.json()).toMatchObject({
-      code: "FLAG_LIFECYCLE_INCOMPLETE",
-      details: { missing: ["expiresAt"] },
-    });
+    expect(flag).toMatchObject({ owner: "growth", expiresAt: "2026-08-01T12:00:00.000Z" });
   });
 
   it("does not count a blank owner as an owner", async () => {
@@ -81,17 +71,6 @@ describe("Flag lifecycle class (D9)", () => {
     expect(await res.json()).toMatchObject({
       code: "VALIDATION_ERROR",
       details: { issues: [{ path: ["body", "owner"] }] },
-    });
-  });
-
-  it("refuses a Flag with no lifecycle class, naming the missing input", async () => {
-    const { appId, jwt } = await ownerSession();
-    const { lifecycleClass: _, ...unclassified } = baseFlag(appId);
-    const res = await request(h, "POST", `/apps/${appId}/flags`, jwt, unclassified);
-    expect(res.status).toBe(400);
-    expect(await res.json()).toMatchObject({
-      code: "VALIDATION_ERROR",
-      details: { issues: [{ path: ["body", "lifecycleClass"] }] },
     });
   });
 
@@ -121,7 +100,7 @@ describe("Flag lifecycle class (D9)", () => {
     expect(flag).toMatchObject({ owner: "checkout-team", expiresAt: "2026-12-31T00:00:00.000Z" });
   });
 
-  it("classifies an existing Flag and refuses to clear an expiry the class requires", async () => {
+  it("classifies an existing Flag with defaults and refuses to clear an expiry the class requires", async () => {
     const { appId, jwt } = await ownerSession();
     const flag = await createFlag(
       h,
@@ -131,11 +110,12 @@ describe("Flag lifecycle class (D9)", () => {
     );
     const path = `/apps/${appId}/flags/${flag.id}`;
 
-    const incomplete = await request(h, "PATCH", path, jwt, { lifecycleClass: "release" });
-    expect(incomplete.status).toBe(400);
-    expect(await incomplete.json()).toMatchObject({
-      code: "FLAG_LIFECYCLE_INCOMPLETE",
-      details: { missing: ["owner", "expiresAt"] },
+    const defaulted = await request(h, "PATCH", path, jwt, { lifecycleClass: "release" });
+    expect(defaulted.status).toBe(200);
+    expect(await defaulted.json()).toMatchObject({
+      lifecycleClass: "release",
+      owner: OWNER,
+      expiresAt: "2026-09-30T12:00:00.000Z",
     });
 
     const classified = await request(h, "PATCH", path, jwt, {
@@ -152,7 +132,10 @@ describe("Flag lifecycle class (D9)", () => {
 
     const cleared = await request(h, "PATCH", path, jwt, { expiresAt: null });
     expect(cleared.status).toBe(400);
-    expect(await cleared.json()).toMatchObject({ details: { missing: ["expiresAt"] } });
+    expect(await cleared.json()).toMatchObject({
+      code: "FLAG_LIFECYCLE_INCOMPLETE",
+      details: { missing: ["expiresAt"] },
+    });
 
     const permanent = await request(h, "PATCH", path, jwt, {
       lifecycleClass: "permission",

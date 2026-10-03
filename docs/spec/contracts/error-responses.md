@@ -34,7 +34,7 @@ ErrorCode =
   | 'SCOPE_UNRESOLVED'            // MCP session has no App/Environment and the call omitted it
   | 'CONTEXT_USE_INVALID'         // context_use missing session or empty appId/environmentId
   | 'ALLOCATION_INVALID'          // Run allocation percentages do not sum to 100
-  | 'FLAG_LIFECYCLE_INCOMPLETE'   // release or experiment Flag without owner or expiry
+  | 'FLAG_LIFECYCLE_INCOMPLETE'   // a patch clears the owner or expiry a release or experiment Flag needs
   | 'INVALID_PAGINATION'          // bad cursor or limit
   | 'INVALID_SORT'                // unrecognized sort field
   | 'EVENT_SCHEMA_MISMATCH'       // Metric Event fields/Dimensions do not match accepting version

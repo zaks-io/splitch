@@ -11,12 +11,13 @@ the effect using Exposures and Metric Events.
 
 ## Use the CLI first
 
-Use the `splitch` CLI for Splitch work. It exposes the same control-plane operations as the web
-panel with stable JSON output, actionable errors, and command-specific help. Do not open or operate
-the Control Panel when the CLI can perform the task.
+Use the `splitch` CLI for Splitch work. It exposes every control-plane operation with stable JSON
+output, actionable errors, and command-specific help. Never open or operate the Control Panel, and
+never hand the user Control Panel steps to finish a task for you.
 
-The browser is expected only when `splitch login` asks the user to approve the OAuth device flow,
-or when the requested task genuinely has no CLI surface.
+The user is needed only to approve the `splitch login` OAuth device flow or an Approval Request an
+Environment Policy requires. Anything else you cannot complete is a Splitch defect: report the
+exact command, CLI version, and error, and stop.
 
 Check the installed CLI and current scope before acting:
 
@@ -82,6 +83,11 @@ splitch <resource> <action> --body-json '<json>' --json
 Do not invent commands, flags, request fields, or retry behavior. The installed binary's `--help`
 is authoritative for its version.
 
+The API can move ahead of an installed CLI. When the CLI refuses a flag or field that this skill or
+the docs name, upgrade first (`npm install --global @splitch/cli@latest`), then retry. If the
+newest CLI still refuses it, send the field through `--body-json`; if that is refused too, report a
+CLI and API version mismatch. Do not fall back to the Control Panel or an API Key.
+
 ## Common operations
 
 Inspect before changing state:
@@ -100,11 +106,16 @@ Create, enable, and verify a boolean Flag:
 
 ```bash
 splitch flags create --key <flag-key> --variants on,off \
-  --lifecycle-class <release|experiment|ops|permission> [--owner <team>] [--expires-at <iso>] --json
+  [--lifecycle-class <release|experiment|ops|permission>] [--owner <team>] [--expires-at <iso>] --json
 splitch flag-config update <flag-key> --enabled true --rollout 100 --json
 splitch flags test-eval <flag-key> --targeting-key <test-key> --json
 splitch flags verify <flag-key> --targeting-key <test-key> --json
 ```
+
+Lifecycle inputs are optional. An unnamed class is `release`, with the owner defaulting to you
+and the expiry to 90 days out (30 for `experiment`). Pass `--lifecycle-class ops` for a kill switch
+or `permission` for an entitlement gate; those are permanent. Read the defaults back from the
+response.
 
 `flags test-eval` tests resolution through the authenticated control plane. `flags verify` makes a
 real data-plane round trip with the selected Environment's Client Key. Neither fires an Exposure.

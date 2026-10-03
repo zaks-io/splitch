@@ -17,10 +17,10 @@ export const validationErrorDocs = {
   },
   FLAG_LIFECYCLE_INCOMPLETE: {
     remediation:
-      "Send the inputs named in details.missing, or choose a class that does not need them",
+      "Drop the null for the inputs named in details.missing, or reclassify the Flag as ops or permission",
     cause:
-      "A release or experiment Flag was created or updated without an owner or an expiry. Those classes are temporary by definition, so the platform refuses to record one that nobody is due to remove.",
-    fix: "`details.missing` lists `owner`, `expiresAt`, or both, and `details.lifecycleClass` is the class that requires them. Resend with those fields, or classify the Flag as `ops` or `permission` if it is meant to be permanent.",
+      "A flags_update patch explicitly cleared the owner or expiry of a release or experiment Flag. Those classes are temporary by definition, so the platform refuses to keep one that nobody is due to remove. Omitted values are never refused: creates and reclassifications fill them with defaults.",
+    fix: "`details.missing` lists `owner`, `expiresAt`, or both, and `details.lifecycleClass` is the class that requires them. Send a new value instead of `null`, or classify the Flag as `ops` or `permission` if it is meant to be permanent.",
     details: '{ lifecycleClass: string, missing: Array<"owner" | "expiresAt"> }',
     related: ["VALIDATION_ERROR"],
   },

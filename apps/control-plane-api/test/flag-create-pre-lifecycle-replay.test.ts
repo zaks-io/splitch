@@ -4,7 +4,6 @@ import {
   appToken,
   baseFlag,
   createDefaultApp,
-  errorBody,
   type FlagDefinitionHarness,
   makeFlagDefinitionHarness,
   request,
@@ -71,7 +70,7 @@ describe("flags_create replay across the D9 deploy", () => {
     expect(await retry.json()).toEqual(original);
   });
 
-  it("still refuses a new create with no lifecycle class", async () => {
+  it("defaults a new create with no lifecycle class instead of refusing it", async () => {
     const createdApp = await createDefaultApp(h);
     const appId = createdApp.app.id;
     const jwt = await appToken(h, appId);
@@ -82,10 +81,7 @@ describe("flags_create replay across the D9 deploy", () => {
 
     const res = await request(h, "POST", `/apps/${appId}/flags`, jwt, unclassified);
 
-    expect(res.status).toBe(400);
-    expect(await errorBody(res)).toMatchObject({
-      code: "VALIDATION_ERROR",
-      details: { issues: [{ path: ["body", "lifecycleClass"] }] },
-    });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ lifecycleClass: "release" });
   });
 });

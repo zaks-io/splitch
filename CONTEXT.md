@@ -54,9 +54,10 @@ has its own Flag Configuration, SDK credentials, experiment data, and Environmen
 **Flag**: a named feature toggle with a key, Variants, Targeting Rules, and enabled state. See
 [`apps/evaluation-api/CONTEXT.md`](./apps/evaluation-api/CONTEXT.md).
 
-**Flag Lifecycle Class**: why a Flag exists, declared when it is created: `release`, `experiment`,
-`ops`, or `permission`. Release and experiment Flags are temporary and carry an **owner** and an
-**expiry**; ops and permission Flags may be permanent. Flags created before classes existed are
+**Flag Lifecycle Class**: why a Flag exists, set when it is created: `release`, `experiment`,
+`ops`, or `permission`; a create that names none is `release`. Release and experiment Flags are
+temporary and always carry an **owner** and an **expiry**, defaulted to the caller and to 90 or 30
+days out when not given; ops and permission Flags may be permanent. Flags created before classes existed are
 `unclassified`. An **expired** Flag is one past its expiry that still exists. **Stale** detection
 reads configuration state only (uniform serving, past expiry, unchanged) and always labels
 `servingEvidence` as `unverified`; it never auto-archives. **Flag inventory health** is the per-App

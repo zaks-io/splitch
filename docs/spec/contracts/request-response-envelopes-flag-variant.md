@@ -26,9 +26,9 @@ not accepted by these App-level endpoints.
 | `schema`          | no       | Supported JSON Schema subset or null; every Variant value must satisfy it        |
 | `variants`        | yes      | `{ name, value, isDefault, description? }[]`; exactly one default                |
 | `description`     | no       | —                                                                                |
-| `lifecycleClass`  | yes      | `release`, `experiment`, `ops`, or `permission` (D9)                             |
-| `owner`           | no       | Required for `release` and `experiment`, else `FLAG_LIFECYCLE_INCOMPLETE`        |
-| `expiresAt`       | no       | ISO 8601; required for `release` and `experiment`; stored as UTC                 |
+| `lifecycleClass`  | no       | `release`, `experiment`, `ops`, or `permission` (D9); defaults to `release`      |
+| `owner`           | no       | `release` and `experiment` default to the calling principal's id                 |
+| `expiresAt`       | no       | ISO 8601, stored as UTC; `release` defaults to +90d, `experiment` to +30d        |
 | `idempotency_key` | yes      | `flags_create` is an Idempotency-Key route; sent as the `Idempotency-Key` header |
 
 Worker computes: `id`, `defaultVariantId`, `createdAt`, `updatedAt`.

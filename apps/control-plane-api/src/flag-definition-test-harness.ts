@@ -26,7 +26,7 @@ const ORG = {
   appKey: "existing-flag-app",
 };
 
-const OWNER = "user_flag_definition_owner";
+export const OWNER = "user_flag_definition_owner";
 const allowLimiter: RateLimiter = () => ({ limited: false });
 const nowSeconds = () => Math.floor(NOW_MS / 1000);
 const noOpExposureStatusCleanup: EnvironmentExposureStatusCleanup = {

@@ -1476,11 +1476,11 @@ Example:
   splitch flag-variants update <flag-id-or-key> <variant-name> --body-json '{"value":true,"idempotency_key":"idem-1"}' --json",
     "flags create": "Create a Flag definition (key, schema, Variant catalog, lifecycle class).
 
-Formats: appId: required canonical id. lifecycleClass: required Why the Flag exists: release and experiment Flags are temporary and need owner and expiresAt; ops and permission Flags may be permanent. one of "ops", "permission", "release", "experiment". owner: optional Person or team that answers for removing the Flag. expiresAt: optional When the Flag is due for removal (ISO 8601); stored as UTC.
+Formats: appId: required canonical id. lifecycleClass: optional Why the Flag exists. Defaults to release. Release and experiment Flags are temporary: owner defaults to the caller and expiresAt to 90 (release) or 30 (experiment) days out. Ops and permission Flags are permanent unless given an expiry; use ops for a kill switch. one of "ops", "permission", "release", "experiment". owner: optional Person or team that answers for removing the Flag. expiresAt: optional When the Flag is due for removal (ISO 8601); stored as UTC.
 
 Terms: Variant — the OpenFeature term for a possible Flag value. Flag — a named feature toggle with a key, Variants, Targeting Rules, and enabled state.
 
-Example arguments: {"appId":"app_1","name":"name","key":"key","variants":[{"name":"name","value":true,"isDefault":true}],"lifecycleClass":"ops","idempotency_key":"idem-1"}
+Example arguments: {"appId":"app_1","name":"name","key":"key","variants":[{"name":"name","value":true,"isDefault":true}],"idempotency_key":"idem-1"}
 
 Usage:
   splitch flags create [flags]
@@ -1505,12 +1505,12 @@ Request body (--body-json):
   schema           optional  Record<string, unknown> | null
   variants         required  { name: string; value: boolean | string | number | Record<string, unknown>; isDefault: boolean; description?: string }[]
   description      optional  string
-  lifecycleClass   required  string ("ops" | "permission" | "release" | "experiment")
+  lifecycleClass   optional  string ("ops" | "permission" | "release" | "experiment")
   owner            optional  string
   expiresAt        optional  string
   idempotency_key  required  string
   Example:
-    {"appId":"app_1","name":"name","key":"key","variants":[{"name":"name","value":true,"isDefault":true}],"lifecycleClass":"ops","idempotency_key":"idem-1"}
+    {"appId":"app_1","name":"name","key":"key","variants":[{"name":"name","value":true,"isDefault":true}],"idempotency_key":"idem-1"}
 
 Example:
   splitch flags create --key checkout --variants on,off --lifecycle-class release --owner checkout-team --expires-at 2027-01-01T00:00:00Z --json",

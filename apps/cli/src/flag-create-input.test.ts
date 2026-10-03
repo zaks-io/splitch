@@ -100,7 +100,7 @@ describe("assertContractValidFlagsCreateInput", () => {
     expect(() => assertContractValidFlagsCreateInput(input)).not.toThrow();
   });
 
-  it("names lifecycleClass when a create omits it", () => {
+  it("leaves lifecycleClass to the server default when a create omits it", () => {
     const input = {
       appId: "app_checkout",
       key: "new-checkout",
@@ -109,12 +109,6 @@ describe("assertContractValidFlagsCreateInput", () => {
       idempotency_key: "cli_1",
     };
 
-    expect(() => assertContractValidFlagsCreateInput(input)).toThrow(
-      expect.objectContaining({
-        payload: expect.objectContaining({
-          details: { field: "lifecycleClass", reason: "contract_validation_failed" },
-        }),
-      }),
-    );
+    expect(() => assertContractValidFlagsCreateInput(input)).not.toThrow();
   });
 });

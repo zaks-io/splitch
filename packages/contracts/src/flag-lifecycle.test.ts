@@ -37,11 +37,9 @@ describe("missingFlagLifecycleInputs (D9)", () => {
 });
 
 describe("CreateFlagRequestSchema lifecycle (D9)", () => {
-  it("requires a lifecycle class on every new Flag and names the missing input", () => {
+  it("accepts a new Flag with no lifecycle class so the Worker can default it", () => {
     const { lifecycleClass: _, ...unclassified } = createFlag;
-    const result = CreateFlagRequestSchema.safeParse(unclassified);
-    expect(result.success).toBe(false);
-    expect(result.error?.issues[0]?.path).toEqual(["lifecycleClass"]);
+    expect(CreateFlagRequestSchema.safeParse(unclassified).success).toBe(true);
   });
 
   it("refuses unclassified as a written class", () => {
