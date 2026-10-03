@@ -158,3 +158,35 @@ describe("SPL-307 CLI frozen targeting notices", () => {
     expect(logs.some((line) => line.includes("Frozen Targeting Rules"))).toBe(true);
   });
 });
+
+describe("mutation next CLI notices (plan 1.5)", () => {
+  it("prints next to stderr when present and not --json", () => {
+    const errors: string[] = [];
+    const io: CliIo = {
+      log: () => {},
+      error: (line) => {
+        errors.push(line);
+      },
+    };
+    emitOperationNotices(
+      "experiments_start",
+      {
+        ...startRunResponse,
+        next: {
+          tool: "experiment_results_get",
+          reason: "Poll Experiment results after the frozen planned duration.",
+          earliestAt: "2026-10-10T00:00:00.000Z",
+        },
+      },
+      false,
+      io,
+    );
+    expect(
+      errors.some(
+        (line) =>
+          line.includes("Next: experiment_results_get") &&
+          line.includes("2026-10-10T00:00:00.000Z"),
+      ),
+    ).toBe(true);
+  });
+});

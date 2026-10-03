@@ -336,6 +336,8 @@ never frozen. The freeze is checked **before** the Policy gate, so a change the 
 becomes a pending Approval Request.
 Returns the Flag Configuration fields plus `approvalRequest: ApprovalRequest | null` alongside
 (not wrapped in `config`). The request is null under `allow` and applied under `confirm`.
+When the write lands, optional `next` points at `flags_test_eval` with `args.flagKey` (plan 1.5);
+omitted when not determinable. Additive for older clients (`parseResponseTolerantly`, #647).
 
 ### `PUT /apps/{app_id}/envs/{environment_id}/flags/{flag_id}/targeting-rules`
 
@@ -396,7 +398,8 @@ Promotion preserves each authoring `segmentId` in D1 and republishes a resolved 
 
 Returns the updated target Flag Configuration fields at the same paths as `flag_config_get`, plus
 the immutable Approval `diff` and `approvalRequest: ApprovalRequest | null` alongside. The request
-is null under `allow` and applied under `confirm`.
+is null under `allow` and applied under `confirm`. When the Promotion lands, optional `next` points
+at `flags_test_eval` with `args.flagKey` (plan 1.5); omitted when not determinable.
 
 **Validation (Worker-enforced, fail-loud — ADR-0036):**
 

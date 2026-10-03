@@ -220,6 +220,12 @@ Applied response:
   approvalRequest: ApprovalRequest | null
   frozenTargetingRules: TargetingRule[]  // sibling of run; same snapshot evaluation uses; [] = all eligible
   runSnapshotShipped?: boolean           // present on the direct (allow) Start door
+  next?: {                               // omitted when not determinable (plan 1.5)
+    tool: "experiment_results_get"
+    reason: string
+    earliestAt: string                   // planned-duration floor from Run start
+    args: { appId, environmentId, experimentId, runId, targetN }
+  }
 }
 ```
 
@@ -227,6 +233,9 @@ Applied response:
 the resolved Targeting Rule snapshot frozen into the Run and matches `run.targetingRules` and the
 `RunConfigKV` evaluation reads. An empty array means all Entities are eligible via allocation; Flag
 Configuration Targeting Rules do not apply while this Run is live.
+
+`next` is additive and optional. Released clients ignore unknown response fields
+(`parseResponseTolerantly`, #647), so an older client still accepts a Start body that includes it.
 
 Deploy order: `frozenTargetingRules` is required on `StartRunResponseSchema`. Released clients ignore
 unknown response fields, so an older client still accepts a Start body that includes this field.

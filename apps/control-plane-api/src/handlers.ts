@@ -18,6 +18,7 @@ import { makePromotionHandlers } from "./flag-config-promotion-handler";
 import { flagConfigFreezeRefusal, targetingFreezeRefusal } from "./flag-config-run-freeze";
 import { flagConfigApprovalFlow } from "./flag-config-approval-flow";
 import { objectBody, pathParam } from "./handler-input";
+import { emitNextAfterFlagShip } from "./mutation-next-emit";
 import { type MemberProfileResolver, makeOrgHandlers } from "./org-handlers";
 
 /**
@@ -142,7 +143,10 @@ export function makeHandlers(deps: HandlerDeps) {
       const result = await configStore
         .writerFor(appId, environmentId)
         .writeFlagConfig(mutationInput);
-      return renderFlagConfigWriteResult(result, flagId, environmentId, requestId, null);
+      const next = result.ok
+        ? await emitNextAfterFlagShip(deps.repo, appId, environmentId, flagId)
+        : undefined;
+      return renderFlagConfigWriteResult(result, flagId, environmentId, requestId, null, next);
     },
 
     // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: authorization, preview, Approval creation, and application are ordered fail-fast gates

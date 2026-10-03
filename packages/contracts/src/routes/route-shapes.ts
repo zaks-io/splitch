@@ -13,6 +13,7 @@ import {
 } from "../persisted-field-limits";
 import { SlugSchema } from "../slug";
 import { TargetingRuleInputSchema, WriteConditionSchema } from "../write-persisted-schemas";
+import { MutationNextSchema } from "../mutation-next";
 import {
   ApprovalRequestSchema,
   InlineApproveAndApplyReviewSchema,
@@ -192,6 +193,8 @@ export const ReplaceTargetingRulesRequestSchema = z
  */
 export const FlagConfigMutationResponseSchema = FlagConfigResponseSchema.extend({
   approvalRequest: ApprovalRequestSchema.nullable(),
+  // Omitted when the next step is not determinable (plan 1.5).
+  next: MutationNextSchema.optional(),
 }).strict();
 
 // ---------------------------------------------------------------------------
@@ -217,6 +220,8 @@ export const PromoteRequestSchema = z
 export const PromoteResponseSchema = FlagConfigResponseSchema.extend({
   diff: z.object({ before: FlagConfigResponseSchema, after: FlagConfigResponseSchema }),
   approvalRequest: ApprovalRequestSchema.nullable(),
+  // Omitted when the next step is not determinable (plan 1.5).
+  next: MutationNextSchema.optional(),
 }).strict();
 
 // ---------------------------------------------------------------------------

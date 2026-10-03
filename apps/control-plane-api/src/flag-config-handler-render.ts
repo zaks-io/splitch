@@ -1,4 +1,4 @@
-import type { ApprovalRequest } from "@splitch/contracts";
+import type { ApprovalRequest, MutationNext } from "@splitch/contracts";
 import type { Principal } from "@splitch/worker-runtime";
 import type { ConfigStoreWriter } from "./config-store";
 import type { FlagConfigActor } from "./config-store-types";
@@ -82,8 +82,15 @@ export function renderFlagConfigWriteResult(
   environmentId: string,
   requestId: string,
   approvalRequest: ApprovalRequest | null,
+  next?: MutationNext,
 ): Response {
-  if (result.ok) return Response.json({ ...result.config, approvalRequest });
+  if (result.ok) {
+    return Response.json({
+      ...result.config,
+      approvalRequest,
+      ...(next !== undefined ? { next } : {}),
+    });
+  }
   if (result.reason === "VARIANT_NOT_AVAILABLE") {
     return variantNotAvailable(flagId, environmentId, result.missingVariants, requestId);
   }
@@ -111,9 +118,15 @@ export function renderPromotionResult(
   environmentId: string,
   requestId: string,
   approvalRequest: ApprovalRequest | null,
+  next?: MutationNext,
 ): Response {
   if (result.ok) {
-    return Response.json({ ...result.config, diff: result.diff, approvalRequest });
+    return Response.json({
+      ...result.config,
+      diff: result.diff,
+      approvalRequest,
+      ...(next !== undefined ? { next } : {}),
+    });
   }
   if (result.reason === "VARIANT_NOT_AVAILABLE") {
     return variantNotAvailable(flagId, environmentId, result.missingVariants, requestId);

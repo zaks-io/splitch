@@ -11,6 +11,7 @@ import { actorOf, type PromotionSelect, renderPromotionResult } from "./flag-con
 import { promotionGates, readEnvironmentPolicy } from "./flag-config-policy";
 import { flagConfigApprovalFlow } from "./flag-config-approval-flow";
 import { pathParam } from "./handler-input";
+import { emitNextAfterFlagShip } from "./mutation-next-emit";
 import { validatePromotionSource } from "./promotion-source-validation";
 
 /**
@@ -113,7 +114,10 @@ export function makePromotionHandlers(deps: PromotionHandlerDeps) {
       const result = await configStore
         .writerFor(appId, targetEnvironmentId)
         .promoteFlagConfig(mutationInput);
-      return renderPromotionResult(result, flagId, targetEnvironmentId, requestId, null);
+      const next = result.ok
+        ? await emitNextAfterFlagShip(deps.repo, appId, targetEnvironmentId, flagId)
+        : undefined;
+      return renderPromotionResult(result, flagId, targetEnvironmentId, requestId, null, next);
     },
   };
 }

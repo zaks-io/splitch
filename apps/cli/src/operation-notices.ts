@@ -31,11 +31,20 @@ export function emitOperationNotices(
   if (asJson) return;
   if (operationId === "experiments_start") {
     emitStartNotices(payload, io);
-    return;
-  }
-  if (operationId === "experiments_update") {
+  } else if (operationId === "experiments_update") {
     emitUpdateNotices(payload, io);
   }
+  emitNextNotice(payload, io);
+}
+
+function emitNextNotice(payload: unknown, io: CliIo): void {
+  if (!isObject(payload) || !isObject(payload.next)) return;
+  const tool = typeof payload.next.tool === "string" ? payload.next.tool : null;
+  const reason = typeof payload.next.reason === "string" ? payload.next.reason : null;
+  if (tool === null || reason === null) return;
+  const earliest =
+    typeof payload.next.earliestAt === "string" ? ` (earliest ${payload.next.earliestAt})` : "";
+  io.error(`Next: ${tool}${earliest} — ${reason}`);
 }
 
 function emitStartNotices(payload: unknown, io: CliIo): void {

@@ -172,8 +172,10 @@ v2"). It is stored as the Run's `start_reason` and surfaced by the Run-history t
 see [../frontend/screen-inventory.md](../frontend/screen-inventory.md)). Symmetric with the optional
 `reason` on `/end`.
 Returns:
-`{ experiment_id, run: RunObject, previous_run_id?: string, approval_request: ApprovalRequest | null }`.
-`approval_request` is null under `allow` and the applied request under `confirm`.
+`{ experimentId, run: RunObject, previousRunId, approvalRequest: ApprovalRequest | null, frozenTargetingRules, runSnapshotShipped?, next? }`.
+`approvalRequest` is null under `allow` and the applied request under `confirm`.
+When Start commits a Run, `next` points at `experiment_results_get` with `earliestAt` from the
+frozen planned duration and `targetN` in `args` (plan 1.5); omitted when not determinable.
 See [run-state-machine.md](run-state-machine.md) for transition details.
 Auth: App `owner` or `admin`. **Subject to the Environment Policy** (ADR-0029): if this Environment's
 Policy gates "Start an Experiment Run" at `confirm`, the proposer is authorized to perform the
