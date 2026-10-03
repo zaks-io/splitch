@@ -117,6 +117,44 @@ When Results classifies an SRM root cause (see
 and per-day counts with a proportion-change test). The classifier never changes
 this read's response shape.
 
+## First-exposure-day cohort effect (plan 2.8)
+
+Detailed Results may carry an additive `cohort_effect` diagnostic on the Analysis
+envelope and the shared Control Plane producer. It is never part of the decision
+gate, the BH family, or the result token.
+
+Per-Entity Metric values are one aggregate per Entity×Metric, not a per-day
+series. No Tinybird pipe is added. The cohort view therefore estimates the
+absolute effect separately for Entities grouped by **first-exposure day relative
+to Run start** (arrival cohort):
+
+| Bucket       | Days since Run start |
+| ------------ | -------------------- |
+| `day_0`      | 0                    |
+| `days_1_6`   | 1–6                  |
+| `day_7_plus` | 7+                   |
+
+For each Treatment in the primary Metric's locked decision family, each bucket
+reports `n_control`, `n_treatment`, absolute effect, and a fixed-horizon
+(one-look two-sample z) absolute interval at the observed per-bucket n. Below
+`COHORT_EFFECT_MIN_ARM_N` (30) Entities per arm the bucket is
+`insufficient_n` with null effect/interval.
+
+**Novelty / trigger-day flag.** A two-sample z test compares the day-0 absolute
+effect to the effect on Entities pooled from later buckets, at
+`COHORT_EFFECT_NOVELTY_ALPHA` (0.05). The flag is `detected`, `not_detected`, or
+`insufficient_data` when either side is below the per-arm minimum. Diagnostic
+only — it never stops or Concludes a Run.
+
+Primary Metric resolution: `pre_registration.primary_metric_id` when frozen;
+otherwise the unique top-level `decision_family` Metric. Zero Metrics →
+`unavailable` / `no_primary_metric`; more than one → `ambiguous_primary_metric`.
+Runs without enough Entities → `insufficient_entities`. Concise Results never
+carry `cohort_effect`.
+
+References: Sadeghi et al. 2021 (novelty/primacy); Chen, Liu, Xu 2019 (trigger-day
+bias); Dmitriev et al. 2017 (metric interpretation pitfalls).
+
 ## Tenant and provenance boundary
 
 The Analysis Worker receives App, Environment, Experiment, and Run identity from the authenticated

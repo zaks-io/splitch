@@ -11,33 +11,32 @@ import { canonicalizeAnalysisRows } from "@splitch/privacy";
 import { StatsEngine as DefaultStatsEngine } from "@splitch/stats";
 import { type HandlerArgs, renderError } from "@splitch/worker-runtime";
 import { readResultsExposureRows, readResultsRunRows } from "./results-bootstrap";
+import { readyAnalysisEnvelope } from "./results-cohort-effect";
 import { readDownstreamAnalysisRows } from "./results-downstream-rows";
 import { resultsErrorResponse } from "./results-error-response";
 import {
   AnalysisIsolationError,
   AnalysisProvenanceError,
-  ResultsForbiddenError,
   ResultsInputError,
   ResultsInsufficientDataError,
   ResultsNotFoundError,
 } from "./results-errors";
 import { assertMetricQueryCoverage } from "./results-metric-query";
+import { commitmentStatsBindings, frozenAnalysisVersion } from "./results-preregistration";
 import {
   booleanField,
   jsonField,
-  optionalObject,
   optionalString,
-  requiredPrincipalContext,
   rowObject,
   stringField,
 } from "./results-row-fields";
-import { commitmentStatsBindings, frozenAnalysisVersion } from "./results-preregistration";
 import { materializeRunCommitments } from "./results-run-commitments";
 import {
   assertAnalysisInputsPresent,
   materializeMetricQueryConfig,
   materializeRunInput,
 } from "./results-run-input";
+import { type ResultsScope, resultsScope } from "./results-scope";
 import { scopedPipeParams, type TinybirdReadTransport, tinybirdDateTime64 } from "./tinybird";
 
 interface ResultsDeps {
@@ -45,18 +44,11 @@ interface ResultsDeps {
   statsEngine?: StatsEngine;
 }
 
-interface ResultsScope {
-  appId: string;
-  environmentId: string;
-  experimentId: string;
-  runId?: string;
-  dataWatermark?: string;
-}
-
 interface ResultsComputation {
   statsInput: StatsInput;
   runConfigHash: string;
   commitments: RunCommitments;
+  runStartedAt: string;
   dataWatermark?: string;
 }
 
@@ -86,15 +78,17 @@ export function makeResultsHandler(deps: ResultsDeps) {
             }),
           }
         : {};
+      // cohort_effect is diagnostic-only (beside stats); token hashes stats alone.
       return Response.json(
-        AnalysisResultsEnvelopeSchema.parse({
-          state: "ready",
-          run_id: statsInput.run_id,
-          control_variant: statsInput.control_variant,
-          ...evidence,
-          run_commitments: computation.commitments,
-          stats,
-        }),
+        AnalysisResultsEnvelopeSchema.parse(
+          readyAnalysisEnvelope({
+            statsInput,
+            runStartedAt: computation.runStartedAt,
+            commitments: computation.commitments,
+            stats,
+            evidence,
+          }),
+        ),
       );
     } catch (cause) {
       // Early-Run collecting state: Exposures without Metric Events (or no
@@ -214,6 +208,7 @@ async function readResultsComputationFromTinybird(
     statsInput: input,
     runConfigHash,
     commitments,
+    runStartedAt: startedAt,
     ...(dataWatermark ? { dataWatermark } : {}),
   };
 }
@@ -308,42 +303,6 @@ function materializeActivationRow(row: unknown): Record<string, unknown> {
     ...source,
     counterfactual: booleanField(source, "counterfactual"),
     activated: booleanField(source, "activated"),
-  };
-}
-
-function resultsScope(
-  input: unknown,
-  principalAppId: string | null,
-  principalEnvironmentId: string | null,
-): ResultsScope {
-  const root = rowObject(input);
-  const params = rowObject(root.params);
-  const query = optionalObject(root.query);
-  const body = optionalObject(root.body);
-  const pathAppId = stringField(params, "appId");
-  const appId = requiredPrincipalContext(principalAppId);
-  if (pathAppId !== appId) {
-    throw new ResultsForbiddenError("path app_id does not match the authenticated App context");
-  }
-
-  // ADR-0027: a control-plane token binds an App and SELECTS the Environment by
-  // path within it, so an env-unbound principal legitimately names the path's
-  // Environment. A credential that IS env-bound is held to it. Either way the App
-  // check above is the tenant boundary, and both pipe reads below are keyed on
-  // this pair.
-  const environmentId = stringField(params, "environmentId");
-  if (principalEnvironmentId !== null && principalEnvironmentId !== environmentId) {
-    throw new ResultsForbiddenError(
-      "path environment_id does not match the authenticated Environment context",
-    );
-  }
-
-  return {
-    appId,
-    environmentId,
-    experimentId: stringField(params, "experimentId"),
-    runId: optionalString(body.runId ?? query.runId),
-    dataWatermark: optionalString(body.dataWatermark),
   };
 }
 
