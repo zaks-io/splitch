@@ -15,7 +15,7 @@ import {
   query,
 } from "./_generated/server";
 import { canonicalJson, sha256Hex } from "./crypto";
-import { servedDetails, syncOverdueDetails } from "./evaluation_details";
+import { servedDetails, staleDetails, syncOverdueDetails } from "./evaluation_details";
 import {
   localTargetingKeyHash,
   persistExposure,
@@ -96,7 +96,9 @@ export async function evaluateHandler(
         "IDEMPOTENCY_KEY_CONFLICT: idempotencyKey was reused for a different Convex Evaluation",
       );
     await ensureRetentionScheduled(ctx);
-    return JSON.parse(claim.result) as ResolutionDetails;
+    const replayed = JSON.parse(claim.result) as ResolutionDetails;
+    // The replay keeps its Variant and single Exposure but reports today's freshness.
+    return runtime.kind === "overdue" || runtime.syncing ? staleDetails(replayed) : replayed;
   }
   // No claim is stored: nothing was served, so a retry after the sync recovers must evaluate fresh.
   if (runtime.kind === "overdue") return syncOverdueDetails(runtime, args.defaultValue);

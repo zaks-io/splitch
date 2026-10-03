@@ -194,9 +194,11 @@ When `snapshot.environmentVersion < announcedVersion`, evaluation never throws:
 - **Sync grace.** Until the deadline below, `peek` and `evaluate` serve the last validated
   snapshot's real Variant with `reason: STALE`. `evaluate` persists Exposures from the held snapshot
   as usual, because they record what was actually served, and its idempotency fingerprint carries
-  the held `snapshotVersion`.
-- **Sync overdue.** Five seconds after an announcement or activation, a version-scoped scheduled
-  Mutation marks the installation sync-overdue if the snapshot is still behind that version.
+  the held `snapshotVersion`. An idempotent replay while the snapshot is behind keeps its Variant
+  and single Exposure and reports `STALE`.
+- **Sync overdue.** Five seconds after an announcement or activation, a scheduled Mutation scoped to
+  that installation and version marks the installation sync-overdue if the snapshot is still behind
+  that version.
   Evaluation then returns the caller's Default Variant with `reason: ERROR`,
   `errorCode: PROVIDER_NOT_READY`, and a message naming both versions. `evaluate` stores no
   idempotency claim and no Exposure while overdue. The state persists until a snapshot at or above

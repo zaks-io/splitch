@@ -166,7 +166,7 @@ export async function scheduleSyncRecovery(
 }
 
 export const markSyncOverdue = internalMutation({
-  args: { environmentVersion: v.number() },
+  args: { installationId: v.string(), environmentVersion: v.number() },
   returns: v.null(),
   handler: markSyncOverdueHandler,
 });
@@ -179,18 +179,25 @@ export async function scheduleSyncDeadline(
 ): Promise<void> {
   if ((integration.snapshotVersion ?? -1) >= integration.announcedVersion) return;
   await ctx.scheduler.runAfter(SYNC_DEADLINE_MS, internal.integration_recovery.markSyncOverdue, {
+    installationId: integration.installationId,
     environmentVersion: integration.announcedVersion,
   });
 }
 
 // Overdue persists until a current snapshot commits, so a newer announcement cannot reopen the
-// grace while pulls keep failing.
+// grace while pulls keep failing. The installation binding stops a deadline that outlived an
+// uninstall from failing a fresh installation.
 export async function markSyncOverdueHandler(
   ctx: MutationCtx,
-  args: { environmentVersion: number },
+  args: { installationId: string; environmentVersion: number },
 ): Promise<void> {
   const integration = await currentIntegration(ctx);
-  if (integration?.state !== "active" || integration.syncOverdueVersion !== undefined) return;
+  if (
+    integration?.state !== "active" ||
+    integration.installationId !== args.installationId ||
+    integration.syncOverdueVersion !== undefined
+  )
+    return;
   if ((integration.snapshotVersion ?? -1) >= args.environmentVersion) return;
   await ctx.db.patch(integration._id, { syncOverdueVersion: args.environmentVersion });
 }

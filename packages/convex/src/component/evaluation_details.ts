@@ -14,7 +14,11 @@ export function servedDetails(
   result: EvaluateResult,
 ): ResolutionDetails {
   const details = detailsFor(runtime.snapshot, args.flagKey, result, args.defaultValue);
-  if (!runtime.syncing || details.reason === "ERROR") return details;
+  return runtime.syncing ? staleDetails(details) : details;
+}
+
+export function staleDetails(details: ResolutionDetails): ResolutionDetails {
+  if (details.reason === "ERROR") return details;
   return { value: details.value, variantName: details.variantName, reason: "STALE" };
 }
 
