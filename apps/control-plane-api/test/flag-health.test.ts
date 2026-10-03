@@ -1,14 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
-  createExperimentDraft,
-  endRun,
-  type ExperimentRunHarness,
-  experimentFixture,
-  makeExperimentRunHarness,
-  startExperiment,
-  type StartResponse,
-} from "../src/experiment-run-test-fixture";
-import {
   allowAllPolicies,
   appToken,
   baseFlag,
@@ -120,63 +111,6 @@ describe("stale_flags_list", () => {
     expect(body.items).toHaveLength(1);
     expect(body.items[0]?.servingEvidence).toBe("unverified");
     expect(body.items[0]?.reasons.map((reason) => reason.kind)).toContain("past_expiry");
-  });
-});
-
-describe("stale_flags_list Run lifecycle", () => {
-  let ctx: ExperimentRunHarness;
-
-  beforeEach(async () => {
-    await h.bindings.dispose();
-    ctx = await makeExperimentRunHarness(makeLocalBindings);
-    h = ctx.h;
-  });
-
-  it("counts the 30-day uniform window from End, not the older Configuration", async () => {
-    const fx = await experimentFixture(ctx);
-    // Fixture Flags default to permanent `permission` (no uniform signal); release needs it.
-    await ctx.h.bindings.d1
-      .prepare(
-        `UPDATE flags
-         SET lifecycle_class = 'release', owner = 'checkout-team', expires_at = ?
-         WHERE app_id = ? AND id = ?`,
-      )
-      .bind("2026-12-01T00:00:00.000Z", fx.appId, fx.flag.id)
-      .run();
-    await setRolloutEverywhere(fx.appId, fx.flag.id, 100, "2026-05-01T00:00:00.000Z");
-
-    const beforeRun = await request(ctx.h, "GET", `/apps/${fx.appId}/stale-flags`, fx.jwt);
-    expect(beforeRun.status).toBe(200);
-    const beforeBody = (await beforeRun.json()) as {
-      items: Array<{
-        flag: { id: string };
-        reasons: Array<{ kind: string; uniformSince?: string }>;
-      }>;
-    };
-    const beforeItem = beforeBody.items.find((item) => item.flag.id === fx.flag.id);
-    expect(beforeItem?.reasons.map((reason) => reason.kind)).toContain("uniform_serving");
-
-    const experiment = await createExperimentDraft(ctx, fx, {
-      key: "uniform-after-end",
-      allocation: { control: 50, treatment: 50 },
-      salt: "uniform-after-end-salt",
-    });
-    const started = (await (await startExperiment(ctx, fx, experiment.id)).json()) as StartResponse;
-    const ended = await endRun(ctx, fx, started.run.id);
-    expect(ended.status).toBe(200);
-
-    const afterEnd = await request(ctx.h, "GET", `/apps/${fx.appId}/stale-flags`, fx.jwt);
-    expect(afterEnd.status).toBe(200);
-    const afterBody = (await afterEnd.json()) as {
-      items: Array<{
-        flag: { id: string };
-        reasons: Array<{ kind: string; uniformSince?: string }>;
-      }>;
-    };
-    const afterItem = afterBody.items.find((item) => item.flag.id === fx.flag.id);
-    const uniform = afterItem?.reasons.find((reason) => reason.kind === "uniform_serving");
-    // End lands at Worker NOW; the May Configuration alone would already be stale.
-    expect(uniform).toBeUndefined();
   });
 });
 

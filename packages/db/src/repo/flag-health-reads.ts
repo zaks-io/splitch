@@ -1,5 +1,5 @@
 import { and, count, eq, gte, inArray, isNotNull, lte, max, min, sql, type SQL } from "drizzle-orm";
-import { experiments, flagChangeEvents, flags, runs } from "../schema/index";
+import { flagChangeEvents, flags } from "../schema/index";
 import type { Db } from "./client";
 import { idBatches, twoAxisIdBatches } from "./id-batches";
 import { assertMintedScope, type TenantScope, withTenantScope } from "./scope";
@@ -11,11 +11,6 @@ const FLAG_SCOPE = {
 
 const CHANGE_SCOPE = {
   appId: flagChangeEvents.appId,
-  appIdKey: "appId",
-} as const;
-
-const RUN_SCOPE = {
-  appId: runs.appId,
   appIdKey: "appId",
 } as const;
 
@@ -128,6 +123,16 @@ function ageBucketsFromAggregateRow(
   return AGE_BUCKETS.map((bucket) => ({ bucket, count: counts[bucket] }));
 }
 
+/**
+ * Latest Start/End instant per Flag × Environment for uniform-serving windows.
+ *
+ * Runs do not store `flag_id`; `experiments.flag_id` is mutable after End (PATCH
+ * may reassign the Experiment). Attribution therefore uses `flag_change_events`
+ * with `target_type = 'run'`, which stamp `flag_id` at Start/End from the
+ * Experiment's Flag *at that instant*. Legacy Runs with no change-log row are
+ * omitted (attribution unknown) — never rebound through the Experiment's
+ * current `flagId`.
+ */
 async function loadLatestRunLifecycleAtByFlagEnv(
   db: Db,
   scope: TenantScope,
@@ -141,42 +146,40 @@ async function loadLatestRunLifecycleAtByFlagEnv(
     twoAxisIdBatches(flagIds, environmentIds).map(({ first, second }) =>
       db
         .select({
-          flagId: experiments.flagId,
-          environmentId: runs.environmentId,
-          latestStartedAt: max(runs.startedAt),
-          latestEndedAt: max(runs.endedAt),
+          flagId: flagChangeEvents.flagId,
+          environmentId: flagChangeEvents.environmentId,
+          latestChangedAt: max(flagChangeEvents.changedAt),
         })
-        .from(runs)
-        .innerJoin(
-          experiments,
-          and(eq(experiments.id, runs.experimentId), eq(experiments.appId, runs.appId)),
-        )
+        .from(flagChangeEvents)
         .where(
           withTenantScope(
-            RUN_SCOPE,
+            CHANGE_SCOPE,
             scope,
             requireSql(
-              and(inArray(experiments.flagId, first), inArray(runs.environmentId, second)),
+              and(
+                eq(flagChangeEvents.targetType, "run"),
+                inArray(flagChangeEvents.flagId, first),
+                inArray(flagChangeEvents.environmentId, second),
+              ),
               "run lifecycle predicate",
             ),
           ),
         )
-        .groupBy(experiments.flagId, runs.environmentId),
+        .groupBy(flagChangeEvents.flagId, flagChangeEvents.environmentId),
     ),
   );
   for (const row of pages.flat()) {
-    const candidates = [row.latestStartedAt, row.latestEndedAt].filter(
-      (value): value is string => value !== null,
-    );
-    if (candidates.length === 0) {
+    if (row.environmentId === null) {
       throw new Error(
-        `latestRunLifecycleAtByFlagEnv: Flag ${row.flagId} env ${row.environmentId} has Runs but no lifecycle instant`,
+        `latestRunLifecycleAtByFlagEnv: Flag ${row.flagId} has a run change-log row with null environmentId`,
       );
     }
-    out.set(
-      `${row.flagId}\0${row.environmentId}`,
-      candidates.reduce((a, b) => (a > b ? a : b)),
-    );
+    if (row.latestChangedAt === null) {
+      throw new Error(
+        `latestRunLifecycleAtByFlagEnv: Flag ${row.flagId} env ${row.environmentId} has run change-log rows but no changedAt`,
+      );
+    }
+    out.set(`${row.flagId}\0${row.environmentId}`, row.latestChangedAt);
   }
   return out;
 }
@@ -310,9 +313,9 @@ export function makeFlagHealthReads(db: Db) {
     },
 
     /**
-     * Latest Run Start/End instant per Flag × Environment. Uniform serving must
-     * not start until after the last Run that controlled that Flag stops; End
-     * updates the Run, not the Configuration.
+     * Latest Run Start/End instant per Flag × Environment, attributed via the
+     * change-log Flag stamped at Start/End (not the Experiment's mutable
+     * `flagId`). Uniform serving must not start until after that instant.
      */
     latestRunLifecycleAtByFlagEnv(
       scope: TenantScope,
