@@ -48,6 +48,10 @@ export {
   SEQUENTIAL_SRM_SOURCE,
 } from "./sequential-srm";
 export { classifyRopeVerdict, ROPE_VERDICTS } from "./rope-verdict";
+export {
+  classifyMdeExclusionFutility,
+  FUTILITY_VERDICTS,
+} from "./futility-verdict";
 export { classifySrmRootCause } from "./srm-root-cause";
 export {
   SRM_ROOT_CAUSE_BRANCHES,
@@ -118,6 +122,11 @@ export type {
   SequentialSrmResult,
 } from "./sequential-srm";
 export type { RopeScale, RopeVerdict, RopeVerdictInput } from "./rope-verdict";
+export type {
+  FutilityClassification,
+  FutilityVerdict,
+  FutilityVerdictInput,
+} from "./futility-verdict";
 export type {
   SrmRootCauseBranch,
   SrmRootCauseClassification,

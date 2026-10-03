@@ -1,26 +1,43 @@
 import { describe, expect, it } from "vitest";
-import type { StatsInput } from "@splitch/contracts";
+import { canonicalHash, resultTokenStats, type StatsInput } from "@splitch/contracts";
 import { analyzeStats } from "./stats-engine";
 import { ENGINE_RUN_ID, exposure } from "./stats-engine-test-helpers";
 
-describe("StatsEngine.analyze Dimension slicing with pre-registered ROPE", () => {
-  it("preserves ropeVerdict on a primary Dimension slice", async () => {
-    const output = await analyzeStats(primaryDimensionRopeInput());
-    const overall = armResult(output, "conversion", "treatment");
+describe("StatsEngine.analyze Dimension slicing with MDE-exclusion futility", () => {
+  it("surfaces futilityVerdict on overall and primary Dimension arms without changing the result token", async () => {
+    const enabled = await analyzeStats(primaryDimensionFutilityInput("mde_exclusion"));
+    const disabled = await analyzeStats(primaryDimensionFutilityInput("off"));
+
+    const overall = armResult(enabled, "conversion", "treatment");
     const slice = dimensionArmResult(
-      dimensionResult(output, "country", "US"),
+      dimensionResult(enabled, "country", "US"),
+      "conversion",
+      "treatment",
+    );
+    const overallOff = armResult(disabled, "conversion", "treatment");
+    const sliceOff = dimensionArmResult(
+      dimensionResult(disabled, "country", "US"),
       "conversion",
       "treatment",
     );
 
-    expect(overall.ropeVerdict).toBeDefined();
-    expect(overall.ropeScale).toBe("absolute");
-    expect(slice.ropeVerdict).toBe(overall.ropeVerdict);
-    expect(slice.ropeScale).toBe("absolute");
+    expect(overall.futilityVerdict).toBe("futile");
+    expect(overall.futilityBecause).toMatch(/upper bound/);
+    expect(slice.futilityVerdict).toBe(overall.futilityVerdict);
+    expect(slice.futilityBecause).toBe(overall.futilityBecause);
+
+    expect(overallOff.futilityVerdict).toBeUndefined();
+    expect(overallOff.futilityBecause).toBeUndefined();
+    expect(sliceOff.futilityVerdict).toBeUndefined();
+    expect(sliceOff.futilityBecause).toBeUndefined();
+
+    expect(await canonicalHash(resultTokenStats(enabled))).toBe(
+      await canonicalHash(resultTokenStats(disabled)),
+    );
   });
 });
 
-function primaryDimensionRopeInput(): StatsInput {
+function primaryDimensionFutilityInput(futility: "mde_exclusion" | "off"): StatsInput {
   return {
     run_id: ENGINE_RUN_ID,
     analysis_version: "analysis-v1",
@@ -45,18 +62,19 @@ function primaryDimensionRopeInput(): StatsInput {
       ...dimensionExposures("control", "US", 99),
       ...dimensionExposures("treatment", "US", 99),
     ],
+    // Matched conversion rates → absolute CS around zero; MDE 0.2 is excluded.
     metric_values: [
-      ...dimensionMetricRows("control", "US", 20),
-      ...dimensionMetricRows("treatment", "US", 40),
+      ...dimensionMetricRows("control", "US", 50),
+      ...dimensionMetricRows("treatment", "US", 50),
     ],
     pre_registration: {
-      hypothesis: "Treatment raises conversion in US",
+      hypothesis: "Treatment raises conversion by at least 20pp",
       primary_metric_id: "conversion",
       metrics: [
         {
           metric_id: "conversion",
           desirability: "higher_is_better",
-          rope: { lower: -0.05, upper: 0.05, scale: "absolute" },
+          mde_absolute: 0.2,
         },
       ],
       ship_rule: {
@@ -64,7 +82,7 @@ function primaryDimensionRopeInput(): StatsInput {
         margin_scale: "absolute",
         conflict_resolution: "primary_wins",
       },
-      futility: "off",
+      futility,
     },
     dimensions: [{ dimension_id: "country", class: "primary", values: ["US"] }],
   };

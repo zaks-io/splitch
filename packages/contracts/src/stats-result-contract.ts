@@ -127,6 +127,10 @@ export type RopeVerdict = z.infer<typeof RopeVerdictSchema>;
 export const RopeVerdictUnavailableReasonSchema = z.enum(["relative_sequential_coverage_unproven"]);
 export type RopeVerdictUnavailableReason = z.infer<typeof RopeVerdictUnavailableReasonSchema>;
 
+/** Advisory MDE-exclusion futility (plan 2.12); never stops or Concludes a Run. */
+export const FutilityVerdictSchema = z.enum(["futile", "not_futile"]);
+export type FutilityVerdict = z.infer<typeof FutilityVerdictSchema>;
+
 export const ArmResultSchema = z
   .object({
     variant: z.string(),
@@ -159,6 +163,14 @@ export const ArmResultSchema = z
      * ropeVerdict; never a silent omission of a pre-registered ROPE.
      */
     ropeVerdictUnavailable: RopeVerdictUnavailableReasonSchema.optional(),
+    /**
+     * Present only for the primary Metric when pre-registration froze
+     * `futility: "mde_exclusion"`, an absolute MDE, and a finite absolute
+     * decision interval. Absent (not defaulted) when futility is off or no MDE.
+     */
+    futilityVerdict: FutilityVerdictSchema.optional(),
+    /** One-sentence reason; required together with futilityVerdict. */
+    futilityBecause: z.string().min(1).optional(),
   })
   .strict()
   .superRefine((arm, context) => {
@@ -178,6 +190,12 @@ export const ArmResultSchema = z
       context.addIssue({
         code: "custom",
         message: "ropeScale requires ropeVerdict",
+      });
+    }
+    if ((arm.futilityVerdict === undefined) !== (arm.futilityBecause === undefined)) {
+      context.addIssue({
+        code: "custom",
+        message: "futilityVerdict and futilityBecause must be present together",
       });
     }
   });

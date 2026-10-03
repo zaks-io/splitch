@@ -3,11 +3,12 @@ import { MetricDirectionSchema, MetricRefSchema } from "./leaf-schemas-experimen
 
 /**
  * Pre-registration frozen at Run Start (plan 2.2): hypothesis, primary Metric,
- * per-Metric desirability / optional MDE / optional ROPE, and a locked ship rule.
+ * per-Metric desirability / optional MDE / optional ROPE, a locked ship rule,
+ * and an opt-in futility mode (plan 2.12).
  *
  * Optional on Start: omitting it leaves existing clients unchanged. Once frozen
  * it is immutable. Scorecard trust checks and the ship recommendation (plan 2.4)
- * read this object later; this slice only freezes and surfaces it.
+ * read this object later; this slice freezes and surfaces it.
  */
 
 const MetricIdSchema = MetricRefSchema.shape.metricId;
@@ -16,6 +17,14 @@ const MetricIdSchema = MetricRefSchema.shape.metricId;
 export const shipConflictResolutions = ["primary_wins", "unanimous_goals", "any_goal"] as const;
 export const ShipConflictResolutionSchema = z.enum(shipConflictResolutions);
 export type ShipConflictResolution = z.infer<typeof ShipConflictResolutionSchema>;
+
+/**
+ * Advisory MDE-exclusion futility (plan 2.12). Default `off`; never stops or
+ * Concludes a Run. `mde_exclusion` requires an absolute MDE on the primary Metric.
+ */
+export const futilityModes = ["off", "mde_exclusion"] as const;
+export const FutilityModeSchema = z.enum(futilityModes);
+export type FutilityMode = z.infer<typeof FutilityModeSchema>;
 
 export const RopeScaleSchema = z.enum(["absolute", "relative"]);
 export type RopeScale = z.infer<typeof RopeScaleSchema>;
@@ -69,6 +78,11 @@ export const PreRegistrationSchema = z
     primary_metric_id: MetricIdSchema,
     metrics: z.array(PreRegistrationMetricSchema).min(1),
     ship_rule: ShipRuleSchema,
+    /**
+     * Always written at freeze. `.default("off")` keeps Runs frozen before
+     * plan 2.12 parseable without inventing a different mode.
+     */
+    futility: FutilityModeSchema.default("off"),
   })
   .strict();
 export type PreRegistration = z.infer<typeof PreRegistrationSchema>;
@@ -112,6 +126,8 @@ export const PreRegistrationIntentSchema = z
         conflictResolution: ShipConflictResolutionSchema,
       })
       .strict(),
+    /** Omit to freeze as `off`. */
+    futility: FutilityModeSchema.optional(),
   })
   .strict();
 export type PreRegistrationIntent = z.infer<typeof PreRegistrationIntentSchema>;
@@ -127,6 +143,12 @@ export const preRegistrationIssueCodes = [
    * an always-valid confidence-sequence claim. Pre-register on `absolute`.
    */
   "PREREG_ROPE_RELATIVE_UNSUPPORTED",
+  /**
+   * `futility: "mde_exclusion"` needs an absolute MDE on the primary Metric.
+   * Relative MDE alone is refused: sequential Fieller coverage is unproven
+   * (same bar as relative ROPE; see result-contracts.md).
+   */
+  "PREREG_FUTILITY_REQUIRES_ABSOLUTE_MDE",
   "PREREG_DESIRABILITY_REQUIRED",
   "PREREG_PRIMARY_METRIC_MISSING",
   "PREREG_DUPLICATE_METRIC",

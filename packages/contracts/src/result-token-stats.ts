@@ -23,14 +23,16 @@ export function resultTokenStats(stats: StatsOutput): StatsOutput {
 }
 
 function withoutEstimand(arm: ArmResult): ArmResult {
-  // ropeVerdict / ropeVerdictUnavailable classify the already-tokenized
-  // decision interval against the frozen ROPE; stripping them keeps tokens for
-  // Runs without pre-registration byte-identical to before these fields existed.
+  // Classification overlays (ROPE, futility) read the already-tokenized
+  // decision interval against frozen pre-registration; stripping them keeps
+  // tokens for Runs without those fields byte-identical to before they existed.
   const {
     estimand: _estimand,
     ropeVerdict: _rope,
     ropeScale: _scale,
     ropeVerdictUnavailable: _unavailable,
+    futilityVerdict: _futility,
+    futilityBecause: _because,
     ...rest
   } = arm;
   return rest;

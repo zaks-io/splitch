@@ -190,6 +190,34 @@ Non-finite bounds, an inverted interval (`lower > upper`), or a non-positive-wid
 Scorecard rendering of trust checks and the ship recommendation that consumes the locked ship rule
 are plan item 2.4 and are out of scope here.
 
+## Futility verdict (MDE exclusion, advisory)
+
+`classifyMdeExclusionFutility` in `packages/stats/src/futility-verdict.ts` classifies a finite
+absolute confidence-sequence interval against the primary Metric's pre-registered absolute MDE and
+desirability. When Start freezes `futility: "mde_exclusion"` (plan 2.12; default `off`, always
+written explicitly on the freeze), treatment `ArmResult` rows for the primary Metric include
+`futilityVerdict` (`futile` | `not_futile`) and a one-sentence `futilityBecause`. When futility is
+`off`, no absolute MDE is present, the arm is not the primary Metric, or the absolute interval is
+not finite, both fields are absent (not defaulted).
+
+`mde_exclusion` at Start requires an absolute MDE on the primary Metric
+(`PREREG_FUTILITY_REQUIRES_ABSOLUTE_MDE`). Relative MDE alone is refused for the same reason relative
+ROPE is refused: sequential Fieller coverage is unproven. Likelihood-ratio futility is not adopted;
+Shim (2025) Truncated mSPRT ([arXiv:2509.07892](https://arxiv.org/abs/2509.07892)) was withdrawn in
+2026 because the denominator is not a supermartingale.
+
+The interval is closed. Futile means the beneficial-side bound excludes the MDE (the effect is
+credibly smaller than the MDE):
+
+| Desirability       | Futile when             |
+| ------------------ | ----------------------- |
+| `higher_is_better` | `upper < mde_absolute`  |
+| `lower_is_better`  | `lower > -mde_absolute` |
+
+Futility is advisory: it never stops or Concludes a Run by itself. The result token strips
+`futilityVerdict` / `futilityBecause` the same way it strips `ropeVerdict`, so existing Runs keep
+byte-identical tokens.
+
 ## Analysis Results envelope (Analysis Worker)
 
 The Analysis Worker returns `AnalysisResultsEnvelopeSchema`. Its strict `state: "ready"` member

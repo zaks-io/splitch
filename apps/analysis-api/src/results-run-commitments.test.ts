@@ -16,6 +16,7 @@ const validPreRegistration = {
     margin_scale: "absolute",
     conflict_resolution: "primary_wins",
   },
+  futility: "off",
 };
 
 function commitmentRow(fields: Record<string, unknown> = {}): Record<string, unknown> {

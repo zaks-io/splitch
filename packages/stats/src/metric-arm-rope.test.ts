@@ -44,6 +44,7 @@ const absolutePreRegistration = {
     margin_scale: "absolute" as const,
     conflict_resolution: "primary_wins" as const,
   },
+  futility: "off" as const,
 };
 
 const relativePreRegistration = {

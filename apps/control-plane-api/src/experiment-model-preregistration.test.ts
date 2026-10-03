@@ -27,6 +27,7 @@ describe("parsePreRegistrationIntent", () => {
         marginScale: "absolute",
         conflictResolution: "primary_wins",
       },
+      futility: "off",
     });
   });
 
