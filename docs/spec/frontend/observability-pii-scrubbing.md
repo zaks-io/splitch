@@ -112,6 +112,34 @@ can break schema validation in Sentry ingest). The function must recurse through
 - `appId`, `orgId`, `role` (organizational, not end-user PII)
 - Experiment IDs, Flag Keys, Variant names (not PII)
 
+### Server-side backstop in Sentry
+
+The in-process scrubber above is the control: Entity data must not leave the Worker, and Sentry's
+server-side scrubbing only runs after an event has arrived. The backstop exists to catch a scrubber
+regression, not to replace the scrubber. It is configured in the Sentry dashboard, not in code, so
+this section is its record. Change the dashboard and this section together.
+
+Project `splitch` (org `zaksio`) → Settings → Security & Privacy, set 2026-10-03:
+
+| Setting                         | Value                                                                                                                   |
+| ------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| Data Scrubber                   | on                                                                                                                      |
+| Use Default Scrubbers           | on                                                                                                                      |
+| Prevent Storing of IP Addresses | on                                                                                                                      |
+| Additional Sensitive Fields     | `targetingKey`, `targeting_key`, `evaluationContext`, `evaluation_context`                                              |
+| Safe Fields                     | none                                                                                                                    |
+| Advanced Data Scrubbing rule    | Replace, Anything, from `targeting \|\| targetingKey \|\| targeting_key \|\| evaluationContext \|\| evaluation_context` |
+
+Selector notes, from Sentry's advanced data scrubbing docs:
+
+- A bare key name selects that key. Do not use mid-path deep wildcards such as `**.targeting.**`:
+  Sentry rejects them, and `**` only reaches fields on Sentry's default PII list anyway.
+- The generic `context.*` path from "Fields to scrub" is deliberately not mirrored server-side. A
+  server-side `context` selector would also hit unrelated fields; the in-process scrubber owns it.
+
+The org-level "Require Data Scrubber", "Require Using Default Scrubbers", and "Prevent Storing of IP
+Addresses" toggles are off because they would apply to every project in the `zaksio` org.
+
 ## Axiom structured logs
 
 Axiom receives structured log events (request traces, query patterns, error counts). Rules:
