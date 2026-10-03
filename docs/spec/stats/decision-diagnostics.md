@@ -146,7 +146,11 @@ but zero mean denominator is `insufficient_denominator` (not
 `insufficient_n`). Bucketing uses the same `analysisExposureRows` filter as the
 main analysis (Activation-gated denominator when `activation_rows` are present)
 and forwards frozen `metric_variance_config` / `pre_period_covariates` into the
-estimator.
+estimator. Each cohort population (bucket, or later arrivals pooled) fits
+**all allocated arms together** via `estimateMetricComparisons` — the same
+Control baseline the main analysis publishes — then selects locked-family
+Treatments. Fitting Control+one Treatment alone would winsorize / CUPED-fit on
+a different arm population and disagree with `arm_results`.
 
 **Novelty / trigger-day flag.** A two-sample z test compares the day-0 absolute
 effect to the effect on Entities pooled from later buckets, at

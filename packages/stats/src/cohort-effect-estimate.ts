@@ -7,9 +7,10 @@ import type {
 } from "@splitch/contracts";
 import type { NoveltyContrastEstimate } from "./cohort-effect-novelty";
 import { inverseNormalCdf } from "./normal-distribution";
-import { estimateMetricComparison } from "./variance-estimators";
+import type { MetricComparisonEstimate } from "./variance-estimator-types";
+import { estimateMetricComparisons } from "./variance-estimators";
 
-type ContrastEstimate =
+export type CohortContrastEstimate =
   | {
       kind: "estimated";
       absoluteEffect: number;
@@ -29,92 +30,39 @@ type ContrastEstimate =
       nTreatment: number;
     };
 
-export function bucketEstimate(args: {
+/**
+ * Fit every allocated arm together for one cohort population (one bucket, or
+ * the later-arrivals pool), then project onto each locked-family Treatment.
+ *
+ * Winsorization and CUPED must span all arms — the same Control baseline the
+ * main analysis publishes — so a second Treatment cannot silently change the
+ * first Treatment's cohort estimate.
+ */
+export function contrastsForCohortPopulation(args: {
   statsInput: StatsInput;
   metricId: string;
   metricType: MetricKind;
-  treatmentVariant: string;
+  allocatedTreatments: readonly string[];
+  lockedTreatments: readonly string[];
   exposures: readonly DedupeExposureRow[];
-  bucket: CohortEffectBucketId;
-  minArmN: number;
-  alpha: number;
-}): CohortEffectBucket {
-  const contrast = contrastEstimate(args);
-  const nControl =
-    contrast?.nControl ?? countVariant(args.exposures, args.statsInput.control_variant);
-  const nTreatment = contrast?.nTreatment ?? countVariant(args.exposures, args.treatmentVariant);
-
-  if (contrast === null || nControl < args.minArmN || nTreatment < args.minArmN) {
-    return nullEffectBucket(args.bucket, nControl, nTreatment, "insufficient_n");
-  }
-  if (contrast.kind === "insufficient_denominator") {
-    return nullEffectBucket(args.bucket, nControl, nTreatment, "insufficient_denominator");
-  }
-  if (contrast.kind === "zero_variance") {
-    return {
-      bucket: args.bucket,
-      n_control: nControl,
-      n_treatment: nTreatment,
-      absolute_effect: contrast.absoluteEffect,
-      absolute_ci_lower: null,
-      absolute_ci_upper: null,
-      status: "zero_variance",
-    };
+}): Map<string, CohortContrastEstimate | null> {
+  const byTreatment = new Map<string, CohortContrastEstimate | null>();
+  if (args.exposures.length === 0 || args.allocatedTreatments.length === 0) {
+    for (const treatment of args.lockedTreatments) {
+      byTreatment.set(treatment, null);
+    }
+    return byTreatment;
   }
 
-  const interval = fixedHorizonAbsoluteInterval(
-    contrast.absoluteEffect,
-    contrast.samplingVar,
-    args.alpha,
-  );
-  return {
-    bucket: args.bucket,
-    n_control: nControl,
-    n_treatment: nTreatment,
-    absolute_effect: contrast.absoluteEffect,
-    absolute_ci_lower: interval.lower,
-    absolute_ci_upper: interval.upper,
-    status: "ready",
-  };
-}
-
-/** Novelty only uses positive-variance contrasts — never a zero-variance claim. */
-export function noveltyContrast(args: {
-  statsInput: StatsInput;
-  metricId: string;
-  metricType: MetricKind;
-  treatmentVariant: string;
-  exposures: readonly DedupeExposureRow[];
-}): NoveltyContrastEstimate | null {
-  const contrast = contrastEstimate(args);
-  if (contrast === null || contrast.kind !== "estimated") return null;
-  return {
-    absoluteEffect: contrast.absoluteEffect,
-    samplingVar: contrast.samplingVar,
-    nControl: contrast.nControl,
-    nTreatment: contrast.nTreatment,
-  };
-}
-
-function contrastEstimate(args: {
-  statsInput: StatsInput;
-  metricId: string;
-  metricType: MetricKind;
-  treatmentVariant: string;
-  exposures: readonly DedupeExposureRow[];
-}): ContrastEstimate | null {
-  if (args.exposures.length === 0) return null;
-
-  // Forward frozen variance-reduction settings exactly as analyzeMetricArmResults does.
   const variance = args.statsInput.metric_variance_config?.find(
     (config) => config.metric_id === args.metricId,
   );
-  const comparison = estimateMetricComparison({
+  const { comparisons } = estimateMetricComparisons({
     run_id: args.statsInput.run_id,
     metric_id: args.metricId,
     metric_type: args.metricType,
     control_variant: args.statsInput.control_variant,
-    treatment_variant: args.treatmentVariant,
+    treatment_variants: args.allocatedTreatments,
     exposures: args.exposures,
     metric_values: args.statsInput.metric_values,
     pre_period_covariates: args.statsInput.pre_period_covariates,
@@ -124,6 +72,77 @@ function contrastEstimate(args: {
     cuped_coverage_threshold_pct: variance?.cuped_coverage_threshold_pct,
   });
 
+  for (const treatment of args.lockedTreatments) {
+    const comparison = comparisons.find((candidate) => candidate.treatment.variant === treatment);
+    byTreatment.set(
+      treatment,
+      comparison === undefined ? null : contrastFromComparison(comparison),
+    );
+  }
+  return byTreatment;
+}
+
+export function bucketFromContrast(args: {
+  bucket: CohortEffectBucketId;
+  contrast: CohortContrastEstimate | null;
+  nControlFallback: number;
+  nTreatmentFallback: number;
+  minArmN: number;
+  alpha: number;
+}): CohortEffectBucket {
+  const nControl = args.contrast?.nControl ?? args.nControlFallback;
+  const nTreatment = args.contrast?.nTreatment ?? args.nTreatmentFallback;
+
+  if (args.contrast === null || nControl < args.minArmN || nTreatment < args.minArmN) {
+    return nullEffectBucket(args.bucket, nControl, nTreatment, "insufficient_n");
+  }
+  if (args.contrast.kind === "insufficient_denominator") {
+    return nullEffectBucket(args.bucket, nControl, nTreatment, "insufficient_denominator");
+  }
+  if (args.contrast.kind === "zero_variance") {
+    return {
+      bucket: args.bucket,
+      n_control: nControl,
+      n_treatment: nTreatment,
+      absolute_effect: args.contrast.absoluteEffect,
+      absolute_ci_lower: null,
+      absolute_ci_upper: null,
+      status: "zero_variance",
+    };
+  }
+
+  const interval = fixedHorizonAbsoluteInterval(
+    args.contrast.absoluteEffect,
+    args.contrast.samplingVar,
+    args.alpha,
+  );
+  return {
+    bucket: args.bucket,
+    n_control: nControl,
+    n_treatment: nTreatment,
+    absolute_effect: args.contrast.absoluteEffect,
+    absolute_ci_lower: interval.lower,
+    absolute_ci_upper: interval.upper,
+    status: "ready",
+  };
+}
+
+/** Novelty only uses positive-variance contrasts — never a zero-variance claim. */
+export function noveltyFromContrast(
+  contrast: CohortContrastEstimate | null,
+): NoveltyContrastEstimate | null {
+  if (contrast === null || contrast.kind !== "estimated") return null;
+  return {
+    absoluteEffect: contrast.absoluteEffect,
+    samplingVar: contrast.samplingVar,
+    nControl: contrast.nControl,
+    nTreatment: contrast.nTreatment,
+  };
+}
+
+function contrastFromComparison(
+  comparison: MetricComparisonEstimate,
+): CohortContrastEstimate | null {
   const nControl = comparison.control.sample_size_n;
   const nTreatment = comparison.treatment.sample_size_n;
   const absolute = absoluteContrast(
@@ -195,7 +214,7 @@ export function fixedHorizonAbsoluteInterval(
   return { lower: estimate - boundary, upper: estimate + boundary };
 }
 
-function countVariant(exposures: readonly DedupeExposureRow[], variant: string): number {
+export function countVariant(exposures: readonly DedupeExposureRow[], variant: string): number {
   return exposures.filter((exposure) => exposure.variant === variant).length;
 }
 

@@ -1,9 +1,9 @@
 import type {
+  CohortEffectBucketId,
   CohortEffectComparison,
   CohortEffectDiagnostic,
   CohortEffectUnavailableReason,
   DedupeExposureRow,
-  MetricKind,
   StatsInput,
 } from "@splitch/contracts";
 import {
@@ -11,7 +11,13 @@ import {
   exposuresInBucket,
   exposuresInLaterBuckets,
 } from "./cohort-effect-buckets";
-import { bucketEstimate, noveltyContrast } from "./cohort-effect-estimate";
+import {
+  bucketFromContrast,
+  contrastsForCohortPopulation,
+  countVariant,
+  noveltyFromContrast,
+  type CohortContrastEstimate,
+} from "./cohort-effect-estimate";
 import { classifyCohortNovelty } from "./cohort-effect-novelty";
 import {
   COHORT_EFFECT_MIN_ARM_N,
@@ -35,8 +41,8 @@ export function computeCohortEffect(input: CohortEffectComputeInput): CohortEffe
   const primary = resolvePrimaryMetric(input.statsInput);
   if (primary.state === "unavailable") return primary;
 
-  const treatments = treatmentVariants(input.statsInput, primary.metricId);
-  if (treatments.length === 0) {
+  const lockedTreatments = lockedTreatmentVariants(input.statsInput, primary.metricId);
+  if (lockedTreatments.length === 0) {
     return unavailable("no_treatment_variant");
   }
 
@@ -52,14 +58,51 @@ export function computeCohortEffect(input: CohortEffectComputeInput): CohortEffe
     activation_rows: input.statsInput.activation_rows,
   });
 
-  const comparisons = treatments.map((treatmentVariant) =>
+  const allocatedTreatments = allocatedTreatmentVariants(
+    input.statsInput.allocation,
+    input.statsInput.control_variant,
+  );
+
+  // One all-arm fit per cohort population (each bucket + later pool), then
+  // project onto locked-family Treatments — same Control baseline as arm_results.
+  const bucketContrasts = assertKnownBuckets().map((bucket) => {
+    const exposures = exposuresInBucket(analysisExposures, input.runStartedAt, bucket);
+    return {
+      bucket,
+      exposures,
+      contrasts: contrastsForCohortPopulation({
+        statsInput: input.statsInput,
+        metricId: primary.metricId,
+        metricType,
+        allocatedTreatments,
+        lockedTreatments,
+        exposures,
+      }),
+    };
+  });
+
+  const laterExposures = exposuresInLaterBuckets(analysisExposures, input.runStartedAt);
+  const laterContrasts = contrastsForCohortPopulation({
+    statsInput: input.statsInput,
+    metricId: primary.metricId,
+    metricType,
+    allocatedTreatments,
+    lockedTreatments,
+    exposures: laterExposures,
+  });
+
+  const day0 = bucketContrasts.find((entry) => entry.bucket === "day_0");
+  if (day0 === undefined) {
+    throw new Error("cohort effect requires a day_0 bucket.");
+  }
+
+  const comparisons = lockedTreatments.map((treatmentVariant) =>
     comparisonForTreatment({
-      statsInput: input.statsInput,
-      analysisExposures,
-      runStartedAt: input.runStartedAt,
-      metricId: primary.metricId,
-      metricType,
       treatmentVariant,
+      controlVariant: input.statsInput.control_variant,
+      bucketContrasts,
+      day0Contrasts: day0.contrasts,
+      laterContrasts,
       alpha,
       minArmN,
     }),
@@ -80,21 +123,29 @@ export function computeCohortEffect(input: CohortEffectComputeInput): CohortEffe
   };
 }
 
+type BucketContrastEntry = {
+  bucket: CohortEffectBucketId;
+  exposures: readonly DedupeExposureRow[];
+  contrasts: Map<string, CohortContrastEstimate | null>;
+};
+
 function comparisonForTreatment(args: {
-  statsInput: StatsInput;
-  analysisExposures: readonly DedupeExposureRow[];
-  runStartedAt: string;
-  metricId: string;
-  metricType: MetricKind;
   treatmentVariant: string;
+  controlVariant: string;
+  bucketContrasts: readonly BucketContrastEntry[];
+  day0Contrasts: Map<string, CohortContrastEstimate | null>;
+  laterContrasts: Map<string, CohortContrastEstimate | null>;
   alpha: number;
   minArmN: number;
 }): CohortEffectComparison {
-  const buckets = assertKnownBuckets().map((bucket) =>
-    bucketEstimate({
-      ...args,
-      exposures: exposuresInBucket(args.analysisExposures, args.runStartedAt, bucket),
-      bucket,
+  const buckets = args.bucketContrasts.map((entry) =>
+    bucketFromContrast({
+      bucket: entry.bucket,
+      contrast: entry.contrasts.get(args.treatmentVariant) ?? null,
+      nControlFallback: countVariant(entry.exposures, args.controlVariant),
+      nTreatmentFallback: countVariant(entry.exposures, args.treatmentVariant),
+      minArmN: args.minArmN,
+      alpha: args.alpha,
     }),
   );
 
@@ -102,14 +153,8 @@ function comparisonForTreatment(args: {
     treatment_variant: args.treatmentVariant,
     buckets,
     novelty: classifyCohortNovelty({
-      earliest: noveltyContrast({
-        ...args,
-        exposures: exposuresInBucket(args.analysisExposures, args.runStartedAt, "day_0"),
-      }),
-      laterPooled: noveltyContrast({
-        ...args,
-        exposures: exposuresInLaterBuckets(args.analysisExposures, args.runStartedAt),
-      }),
+      earliest: noveltyFromContrast(args.day0Contrasts.get(args.treatmentVariant) ?? null),
+      laterPooled: noveltyFromContrast(args.laterContrasts.get(args.treatmentVariant) ?? null),
       alpha: args.alpha,
       minArmN: args.minArmN,
     }),
@@ -142,7 +187,8 @@ function resolvePrimaryMetric(
   return { state: "ready", metricId: only };
 }
 
-function treatmentVariants(statsInput: StatsInput, metricId: string): string[] {
+/** Treatments the diagnostic publishes — locked decision family, else allocation. */
+function lockedTreatmentVariants(statsInput: StatsInput, metricId: string): string[] {
   const fromFamily = [
     ...new Set(
       statsInput.decision_family
@@ -156,9 +202,21 @@ function treatmentVariants(statsInput: StatsInput, metricId: string): string[] {
     ),
   ];
   if (fromFamily.length > 0) return fromFamily.sort((a, b) => a.localeCompare(b));
-  return Object.keys(statsInput.allocation)
-    .filter((variant) => variant !== statsInput.control_variant)
-    .sort((a, b) => a.localeCompare(b));
+  return allocatedTreatmentVariants(statsInput.allocation, statsInput.control_variant);
+}
+
+/** Every allocated Treatment — winsorization / CUPED fit spans these arms. */
+function allocatedTreatmentVariants(
+  allocation: Readonly<Record<string, number>>,
+  controlVariant: string,
+): string[] {
+  const variants = Object.keys(allocation);
+  if (!variants.includes(controlVariant)) {
+    throw new Error(`control_variant ${controlVariant} is missing from allocation.`);
+  }
+  return variants
+    .filter((variant) => variant !== controlVariant)
+    .sort((left, right) => left.localeCompare(right));
 }
 
 function unavailable(reason: CohortEffectUnavailableReason): UnavailableDiagnostic {

@@ -14,7 +14,7 @@ export const COHORT_RUN_START = "2026-07-01T00:00:00.000Z";
 const COHORT_RUN_ID = "run_cohort_effect";
 
 export interface CohortEntitySpec {
-  readonly variant: "control" | "treatment";
+  readonly variant: string;
   readonly dayOffset: number;
   readonly value: number;
   readonly index: number;
@@ -29,6 +29,10 @@ export interface CohortStatsInputOptions {
   readonly metricVarianceConfig?: readonly MetricVarianceConfig[];
   readonly activationRows?: readonly ActivationRow[];
   readonly prePeriodCovariates?: readonly CupedCovariateRow[];
+  /** Defaults to equal weight over every Variant present in `entities`. */
+  readonly allocation?: Readonly<Record<string, number>>;
+  /** Defaults to every non-control Variant present in `entities`. */
+  readonly decisionFamilyVariants?: readonly string[];
 }
 
 export function cohortStatsInput(
@@ -38,14 +42,21 @@ export function cohortStatsInput(
   const metricId = options.metricId ?? "conversion";
   const metricType = options.metricType ?? "binomial";
   const { exposures, metric_values } = rowsForEntities(entities, metricId, metricType);
+  const variants = [...new Set(entities.map((entity) => entity.variant))];
+  const allocation =
+    options.allocation ??
+    Object.fromEntries(variants.map((variant) => [variant, Math.floor(100 / variants.length)]));
+  const treatments =
+    options.decisionFamilyVariants ??
+    variants.filter((variant) => variant !== "control").sort((a, b) => a.localeCompare(b));
   return {
     run_id: COHORT_RUN_ID,
     analysis_version: ANALYSIS_V1_VERSION,
     confidence_level: 0.95,
     horizon: "sequential",
-    allocation: { control: 50, treatment: 50 },
+    allocation: { ...allocation },
     control_variant: "control",
-    decision_family: [{ metric_id: metricId, variant: "treatment" }],
+    decision_family: treatments.map((variant) => ({ metric_id: metricId, variant })),
     guardrail_decisions: [],
     metric_variance_config: [...(options.metricVarianceConfig ?? [])],
     exposures,
