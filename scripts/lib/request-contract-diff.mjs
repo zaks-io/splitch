@@ -6,14 +6,24 @@
  * const/enum literals, primitive types, and anyOf/oneOf unions. Anything else
  * (allOf, $ref, not, if) is reported as unsupported rather than skipped.
  */
+import {
+  acceptsPrimitive,
+  acceptsValue,
+  classify,
+  flattenUnion,
+  isSchema,
+  jsonTypeOf,
+  undeclaredKeys,
+  usesUnsupportedKeyword,
+} from "./request-contract-schema-shape.mjs";
 
 const MAX_DEPTH = 12;
-const PRIMITIVE_TYPES = new Set(["string", "number", "integer", "boolean", "null"]);
-const CONSTRAINING_KEYS = ["type", "const", "enum", "anyOf", "oneOf", "properties"];
-const UNSUPPORTED_KEYS = ["$ref", "allOf", "not", "if"];
 const PATH_PARAM = /:([A-Za-z_][A-Za-z0-9_]*)/g;
 // parseInput always builds these from the URL, so a client can never omit them.
 const RUNTIME_SUPPLIED = new Set(["params", "query"]);
+// What a released client sends for a runtime-supplied part its contract never
+// declared: an object with no keys at all.
+const NOTHING_SENT = { type: "object", properties: {}, additionalProperties: false };
 
 export function diffRequestContracts(released, head) {
   const violations = [];
@@ -77,72 +87,17 @@ function compareSchemas(before, after, path, depth, report) {
     report(path, "unsupported-schema", "uses allOf/$ref/not/if, which this gate cannot compare");
     return;
   }
-  if (acceptsAnything(after)) return;
-  if (acceptsAnything(before)) {
+  const was = classify(before);
+  const now = classify(after);
+  if (now.open) return;
+  if (was.open) {
     report(path, "type-narrowed", "accepted any value in the release, HEAD constrains it");
     return;
   }
-  const was = classify(before);
-  const now = classify(after);
   compareLiterals(was, now, path, report);
   comparePrimitives(was, now, path, report);
   compareObjects(was.objects, now.objects, path, depth, report);
   compareArrays(was.arrays, now.arrays, path, depth, report);
-}
-
-/** Split a schema into its union members, grouped by the kind of value they accept. */
-function classify(schema) {
-  const shape = { literals: [], primitives: new Set(), objects: [], arrays: [], open: false };
-  for (const member of flattenUnion(schema)) {
-    if (acceptsAnything(member)) shape.open = true;
-    else if ("const" in member) shape.literals.push(member.const);
-    else if (Array.isArray(member.enum)) shape.literals.push(...member.enum);
-    else addStructured(shape, member);
-  }
-  return shape;
-}
-
-function addStructured(shape, member) {
-  if (isObjectSchema(member)) shape.objects.push(member);
-  else if (member.type === "array") shape.arrays.push(member);
-  else if (PRIMITIVE_TYPES.has(member.type)) shape.primitives.add(member.type);
-}
-
-function flattenUnion(schema) {
-  if (!isSchema(schema)) return [];
-  const members = schema.anyOf ?? schema.oneOf;
-  if (Array.isArray(members)) return members.flatMap(flattenUnion);
-  if (Array.isArray(schema.type)) return schema.type.map((type) => ({ ...schema, type }));
-  return [schema];
-}
-
-function usesUnsupportedKeyword(schema) {
-  return UNSUPPORTED_KEYS.some((key) => key in schema);
-}
-
-function acceptsAnything(schema) {
-  return schema === true || (isSchema(schema) && !CONSTRAINING_KEYS.some((key) => key in schema));
-}
-
-function isObjectSchema(schema) {
-  return schema.type === "object" || "properties" in schema;
-}
-
-function jsonTypeOf(value) {
-  if (value === null) return "null";
-  if (typeof value === "number") return Number.isInteger(value) ? "integer" : "number";
-  return typeof value;
-}
-
-function acceptsPrimitive(shape, type) {
-  if (shape.open || shape.primitives.has(type)) return true;
-  return type === "integer" && shape.primitives.has("number");
-}
-
-function acceptsValue(schema, value) {
-  if (!isSchema(schema)) return false;
-  const shape = classify(schema);
-  return shape.literals.includes(value) || acceptsPrimitive(shape, jsonTypeOf(value));
 }
 
 function compareLiterals(was, now, path, report) {
@@ -221,6 +176,7 @@ function compareObject(before, after, path, depth, report) {
   for (const [field, schema] of Object.entries(before.properties ?? {})) {
     compareField(field, schema, after, join(path, field), depth, report);
   }
+  if (path === "") compareNewRuntimeParts(before, after, depth, report);
   compareOpenKeys(before, after, path, depth, report);
 }
 
@@ -238,37 +194,42 @@ function reportNewlyRequired(before, after, path, report) {
   }
 }
 
-/** A released field is fine if HEAD declares it, stripped if HEAD is open, refused if strict. */
-function compareField(field, schema, after, path, depth, report) {
-  const declared = after.properties?.[field];
-  if (declared) compareSchemas(schema, declared, path, depth + 1, report);
-  else if (after.additionalProperties === false) {
-    report(path, "field-removed", "accepted by the release, rejected by HEAD");
-  } else if (isSchema(after.additionalProperties)) {
-    compareSchemas(schema, after.additionalProperties, path, depth + 1, report);
+/**
+ * A query (or params) HEAD declares for the first time is always present, so
+ * its own required keys are what a released client fails to send.
+ */
+function compareNewRuntimeParts(before, after, depth, report) {
+  for (const part of RUNTIME_SUPPLIED) {
+    const declared = after.properties?.[part];
+    if (declared && !(part in (before.properties ?? {}))) {
+      compareSchemas(NOTHING_SENT, declared, part, depth + 1, report);
+    }
   }
 }
 
-/** Records and loose objects: keys beyond the declared properties. */
-function compareOpenKeys(before, after, path, depth, report) {
-  if (!isSchema(before.additionalProperties)) return;
-  const keysPath = join(path, "*");
-  if (after.additionalProperties === false) {
-    report(
-      keysPath,
-      "field-removed",
-      "accepted arbitrary keys in the release, HEAD accepts only declared keys",
-    );
+/** A released field is fine if HEAD declares it, stripped if HEAD is open, refused if strict. */
+function compareField(field, schema, after, path, depth, report) {
+  const declared = after.properties?.[field];
+  if (declared) {
+    compareSchemas(schema, declared, path, depth + 1, report);
     return;
   }
-  if (!isSchema(after.additionalProperties)) return;
-  compareSchemas(
-    before.additionalProperties,
-    after.additionalProperties,
-    keysPath,
-    depth + 1,
-    report,
-  );
+  const keys = undeclaredKeys(after);
+  if (keys === false) report(path, "field-removed", "accepted by the release, rejected by HEAD");
+  else compareSchemas(schema, keys, path, depth + 1, report);
+}
+
+/** Keys beyond the declared properties: stripped, loose, record, or strict. */
+function compareOpenKeys(before, after, path, depth, report) {
+  const was = undeclaredKeys(before);
+  if (was === false) return;
+  const keysPath = join(path, "*");
+  const now = undeclaredKeys(after);
+  if (now === false) {
+    report(keysPath, "field-removed", "accepted undeclared keys in the release, HEAD rejects them");
+    return;
+  }
+  compareSchemas(was, now, keysPath, depth + 1, report);
   if (isSchema(after.propertyNames)) {
     const releasedKeys = before.propertyNames ?? { type: "string" };
     compareSchemas(releasedKeys, after.propertyNames, join(path, "(key)"), depth + 1, report);
@@ -284,10 +245,6 @@ function compareArrays(was, now, path, depth, report) {
   if (was.length === 1 && now.length === 1 && was[0].items && now[0].items) {
     compareSchemas(was[0].items, now[0].items, `${path}[]`, depth + 1, report);
   }
-}
-
-function isSchema(value) {
-  return typeof value === "object" && value !== null;
 }
 
 function join(path, field) {

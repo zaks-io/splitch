@@ -135,7 +135,8 @@
       "outputs": []
     },
     "//#check:request-contract-compat": {
-      "cache": false
+      "cache": false,
+      "passThroughEnv": ["GH_TOKEN", "GITHUB_REPOSITORY", "GITHUB_API_URL"]
     },
     "//#check:cli-mcp-parity": {
       "dependsOn": ["@splitch/sdk#build"],

@@ -5,9 +5,14 @@
  * the newest released CLI can send must stay acceptable at HEAD. The response
  * side already tolerates skew; this guards the request side.
  *
- * Released ref: the highest-semver `cli-v*` git tag (created by cli-release.yml
- * and checked out by cli-publish.yml), cross-checked against the version in
- * apps/cli/package.json at that tag. Git refs only, no npm calls.
+ * Released ref: the highest-SemVer `cli-v*` git tag whose GitHub Release is
+ * published (non-draft), cross-checked against apps/cli/package.json at that
+ * tag. cli-release.yml pushes the tag while the release is still a draft and
+ * cli-publish.yml only ships to npm on publication, so the newest tag alone can
+ * be ahead of what users run. Publication is read from the GitHub Releases API
+ * with GH_TOKEN (CI passes the read-only workflow token); there is no offline
+ * fallback, and no npm calls. A published release whose npm publish then failed
+ * still counts, which only makes the baseline newer than what users run.
  *
  * For every operationId in the released route registry it compares the JSON
  * Schema (zod v4 `z.toJSONSchema`, io "input") of the route's runtime input
@@ -28,8 +33,7 @@
  * discriminator tag when the released union has one.
  *
  * Limits, honestly:
- *   - Only the newest tag is checked. Older CLIs still in use are not, and a
- *     draft release's tag counts once cli-release.yml pushes it, even unpublished.
+ *   - Only the newest published release is checked. Older CLIs still in use are not.
  *   - Refinements, transforms, and cross-field rules (superRefine "owner is
  *     required when ...") are invisible to JSON Schema and are not checked.
  *   - Tightened string/number constraints (pattern, format, min/max, length,
@@ -52,7 +56,7 @@ import {
   headContractsSrc,
   loadRequestContractSnapshot,
 } from "./lib/request-contract-snapshot.mjs";
-import { RELEASE_SEMVER_PATTERN } from "./release/resolve-version.mjs";
+import { githubPublicationLookup, newestPublishedCliTag } from "./lib/released-cli-tag.mjs";
 
 const TAG_PREFIX = "cli-v";
 const ALLOWLIST_PATH = "scripts/request-contract-compat-allowlist.json";
@@ -78,48 +82,22 @@ function git(args, repoRoot) {
   return result.stdout.trim();
 }
 
-/** Parse a release version as cli-release.yml accepts it; build metadata is ignored. */
-function parseVersion(tag) {
-  const version = tag.slice(TAG_PREFIX.length);
-  if (!RELEASE_SEMVER_PATTERN.test(version)) {
-    throw new Error(`${tag} is not a release semver tag; fix or delete it`);
-  }
-  const [, major, minor, patch, suffix] = /^(\d+)\.(\d+)\.(\d+)(.*)$/u.exec(version);
-  const prerelease = suffix.split("+")[0].replace(/^-/u, "");
-  return { core: [major, minor, patch].map(Number), prerelease: prerelease || undefined };
-}
-
-function compareVersions(left, right) {
-  for (let index = 0; index < 3; index += 1) {
-    const delta = left.core[index] - right.core[index];
-    if (delta !== 0) return delta;
-  }
-  if (left.prerelease === right.prerelease) return 0;
-  if (left.prerelease === undefined) return 1;
-  if (right.prerelease === undefined) return -1;
-  return left.prerelease.localeCompare(right.prerelease, "en", { numeric: true });
-}
-
-/** The highest-semver `cli-v*` tag name; throws on a `cli-v*` tag it cannot order. */
-export function latestCliTag(tagNames) {
-  let latest;
-  for (const tag of tagNames) {
-    if (!tag.startsWith(TAG_PREFIX)) continue;
-    const version = parseVersion(tag);
-    if (!latest || compareVersions(version, latest.version) > 0) latest = { tag, version };
-  }
-  return latest?.tag;
-}
-
-function resolveReleasedRef(repoRoot) {
+async function resolveReleasedRef(repoRoot) {
   const tags = git(["tag", "--list", `${TAG_PREFIX}*`], repoRoot)
     .split("\n")
     .filter(Boolean);
-  const tag = latestCliTag(tags);
-  if (!tag) {
+  if (tags.length === 0) {
     throw new Error(
       `no ${TAG_PREFIX}* tags found. CI must check out with fetch-depth: 0; locally run "git fetch --tags".`,
     );
+  }
+  const isPublished = githubPublicationLookup({
+    env: process.env,
+    originUrl: () => git(["remote", "get-url", "origin"], repoRoot),
+  });
+  const tag = await newestPublishedCliTag(tags, isPublished);
+  if (!tag) {
+    throw new Error(`none of the local ${TAG_PREFIX}* tags has a published GitHub Release`);
   }
   const manifest = JSON.parse(git(["show", `${tag}:apps/cli/package.json`], repoRoot));
   if (`${TAG_PREFIX}${manifest.version}` !== tag) {
@@ -175,9 +153,9 @@ function collectFailures(result, ref) {
 async function main() {
   const repoRoot = git(["rev-parse", "--show-toplevel"], process.cwd());
   const { releasedRef } = parseArgs(process.argv.slice(2));
-  const ref = releasedRef ?? resolveReleasedRef(repoRoot);
+  const ref = releasedRef ?? (await resolveReleasedRef(repoRoot));
   const commit = git(["rev-parse", "--short", `${ref}^{commit}`], repoRoot);
-  const source = releasedRef ? "an explicit --released-ref" : "the newest released CLI tag";
+  const source = releasedRef ? "an explicit --released-ref" : "the newest published CLI release";
   console.log(`${LABEL}: comparing HEAD request contracts against ${ref} (${commit}), ${source}`);
 
   const released = await loadReleasedSnapshot(repoRoot, ref);

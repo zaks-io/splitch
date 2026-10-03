@@ -60,7 +60,7 @@ Uncached or root-wide tasks:
 | Task                                  | Cache | Contract                                                               |
 | ------------------------------------- | ----- | ---------------------------------------------------------------------- |
 | `depcruise`                           | no    | root architecture import graph gate                                    |
-| `check:request-contract-compat`       | no    | HEAD request contracts vs the newest `cli-v*` tag; the anchor is a tag |
+| `check:request-contract-compat`       | no    | request contracts vs the newest published CLI release (GitHub API)     |
 | `duplicates`                          | no    | root duplicate-code detection over source-bearing paths                |
 | `secrets:*`                           | no    | Gitleaks scans working tree or git history; never cache security scans |
 | `d1:migrate:local` / `tinybird:local` | no    | local backing-resource validators                                      |

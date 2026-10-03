@@ -37,17 +37,26 @@ test("accepts a new optional field and a required field that became optional", (
   assert.deepEqual(diffBodies(before, after), []);
 });
 
-test("accepts a new optional query, which the runtime always supplies from the URL", () => {
+test("checks the required keys of a query HEAD declares for the first time", () => {
   const params = { type: "object", properties: { id: str }, required: ["id"] };
-  const query = { type: "object", properties: { dryRun: { type: "boolean" } } };
+  const query = (properties, required) => ({ type: "object", properties, required });
   const input = (properties) => ({
     type: "object",
     properties,
     required: Object.keys(properties),
   });
   const released = { things_get: route(str, { input: input({ params }) }) };
-  const head = { things_get: route(str, { input: input({ params, query }) }) };
-  assert.deepEqual(diffRequestContracts(released, head), []);
+  const withQuery = (schema) => ({
+    things_get: route(str, { input: input({ params, query: schema }) }),
+  });
+  assert.deepEqual(
+    diffRequestContracts(released, withQuery(query({ dryRun: { type: "boolean" } }, []))),
+    [],
+  );
+  assert.deepEqual(
+    describe(diffRequestContracts(released, withQuery(query({ tenant: str }, ["tenant"])))),
+    ["query.tenant required-added"],
+  );
 });
 
 test("flags a removed field only when HEAD rejects unknown keys", () => {
@@ -57,6 +66,14 @@ test("flags a removed field only when HEAD rejects unknown keys", () => {
   ]);
   const stripping = { type: "object", properties: { name: str }, required: ["name"] };
   assert.deepEqual(diffBodies(before, stripping), []);
+});
+
+test("flags a stripping object that became strict, since it accepted undeclared keys", () => {
+  const stripping = { type: "object", properties: { name: str }, required: ["name"] };
+  assert.deepEqual(diffBodies(stripping, strict({ name: str }, ["name"])), [
+    "body.* field-removed",
+  ]);
+  assert.deepEqual(diffBodies(stripping, stripping), []);
 });
 
 test("flags enum and literal values HEAD no longer accepts", () => {
@@ -141,6 +158,14 @@ test("flags narrowed primitive unions but treats integer as a number", () => {
 test("flags a field that accepted any value becoming constrained", () => {
   assert.deepEqual(diffBodies(strict({ m: {} }), strict({ m: str })), ["body.m type-narrowed"]);
   assert.deepEqual(diffBodies(strict({ m: str }), strict({ m: {} })), []);
+});
+
+test("treats an unconstrained union member as accepting every value", () => {
+  const anyOrString = { anyOf: [{}, str] };
+  assert.deepEqual(diffBodies(strict({ m: anyOrString }), strict({ m: str })), [
+    "body.m type-narrowed",
+  ]);
+  assert.deepEqual(diffBodies(strict({ m: strict({ a: str }) }), strict({ m: anyOrString })), []);
 });
 
 test("fails loud on schema keywords the diff cannot reason about", () => {

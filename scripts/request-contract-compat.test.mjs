@@ -4,7 +4,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
-import { latestCliTag } from "./check-request-contract-compat.mjs";
 import { applyAllowlist } from "./lib/request-contract-allowlist.mjs";
 import { loadRequestContractSnapshot } from "./lib/request-contract-snapshot.mjs";
 
@@ -42,21 +41,7 @@ test("allowlist excuses current-tag violations, fails stale or malformed entries
   ]);
 });
 
-test("picks the highest semver cli tag, with releases above their prereleases", () => {
-  assert.equal(
-    latestCliTag(["cli-v0.7.5", "cli-v0.10.0-rc.2", "cli-v0.9.9", "sdk-v9.0.0"]),
-    "cli-v0.10.0-rc.2",
-  );
-  assert.equal(latestCliTag(["cli-v0.10.0-rc.2", "cli-v0.10.0"]), "cli-v0.10.0");
-  assert.equal(latestCliTag(["cli-v1.0.0-rc+build+x", "cli-v0.9.0"]), "cli-v1.0.0-rc+build+x");
-  assert.equal(latestCliTag(["sdk-v1.0.0"]), undefined);
-});
-
-test("fails loud on a cli tag it cannot order instead of skipping it", () => {
-  assert.throws(() => latestCliTag(["cli-v0.7.5", "cli-vbad"]), /cli-vbad is not a release semver/);
-});
-
-test("snapshots real zod contracts with defaulted fields optional and strict objects closed", async () => {
+test("snapshots real zod contracts: defaults optional, strict closed, stripping open", async () => {
   const srcDir = mkdtempSync(join(tmpdir(), "request-contract-fixture-"));
   try {
     writeFileSync(
@@ -70,6 +55,7 @@ export const routeRegistry = [{
   input: z.object({ body: z.object({
     name: z.string(),
     kind: z.enum(["ops", "release"]).default("release"),
+    meta: z.object({ note: z.string() }),
   }).strict() }),
 }];
 `,
@@ -77,9 +63,10 @@ export const routeRegistry = [{
     const snapshot = await loadRequestContractSnapshot({ repoRoot, srcDir });
     const body = snapshot.things_create.input.properties.body;
     assert.equal(snapshot.things_create.idempotency, "required");
-    assert.deepEqual(body.required, ["name"]);
+    assert.deepEqual(body.required, ["name", "meta"]);
     assert.equal(body.additionalProperties, false);
     assert.deepEqual(body.properties.kind.enum, ["ops", "release"]);
+    assert.equal("additionalProperties" in body.properties.meta, false);
   } finally {
     rmSync(srcDir, { recursive: true, force: true });
   }

@@ -112,6 +112,17 @@ test("the plan step gates affected verification and runs before Verify", () => {
   assert.match(verifyJob, /pnpm verify:ci --output-logs=new-only/);
 });
 
+test("Verify lets the request-contract gate ask which CLI release is published", () => {
+  const verifyStep = verifyJob.slice(verifyJob.indexOf("- name: Verify\n"));
+  assert.match(verifyStep, /GH_TOKEN: \$\{\{ github\.token \}\}/);
+  assert.match(workflow, /permissions:\n {2}contents: read/);
+  const turbo = JSON.parse(readFileSync("turbo.json", "utf8"));
+  assert.ok(
+    turbo.tasks["//#check:request-contract-compat"].passThroughEnv.includes("GH_TOKEN"),
+    "turbo strict env mode must pass GH_TOKEN through to the gate",
+  );
+});
+
 test("the required Verify check gates merges on high and critical dependency advisories", () => {
   const manifest = JSON.parse(readFileSync("package.json", "utf8"));
   const verifyCi = manifest.scripts?.["verify:ci"];
