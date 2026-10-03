@@ -3,16 +3,17 @@ import type { ConfigStoreWriter } from "./config-store";
 import type { ConfigStoreAccess } from "./config-store-access";
 import type { FlagConfigResult } from "./config-store-types";
 import {
-  renderFlagConfigReadFailure,
-  renderFlagConfigWriteResult,
-  renderPromotionResult,
-} from "./flag-config-handler-render";
-import {
   type CreateApprovalInput,
   type ApprovalServiceDeps,
   createApproval,
   replayApprovalIfExists,
 } from "./approval-service";
+import {
+  renderFlagConfigReadFailure,
+  renderFlagConfigWriteResult,
+  renderPromotionResult,
+} from "./flag-config-handler-render";
+import { emitNextAfterFlagShip } from "./mutation-next-emit";
 
 type ApprovalFlowDeps = Omit<ApprovalServiceDeps, "configStore"> & {
   readonly configStore: ConfigStoreAccess;
@@ -59,7 +60,7 @@ export function flagConfigApprovalFlow(deps: ApprovalFlowDeps, input: FlagConfig
       const replay = await replayApprovalIfExists(deps, input);
       if (replay === null) return null;
       if (!replay.ok) return replay.response;
-      return appliedResponse(writer, readInput, input, replay.approvalRequest);
+      return appliedResponse(deps, writer, readInput, input, replay.approvalRequest);
     },
 
     async request(request: ApprovalRequestInput): Promise<Response> {
@@ -77,7 +78,7 @@ export function flagConfigApprovalFlow(deps: ApprovalFlowDeps, input: FlagConfig
         proposed: approvalProjection(preview.config),
       });
       if (!approval.ok) return approval.response;
-      return appliedResponse(writer, readInput, input, approval.approvalRequest);
+      return appliedResponse(deps, writer, readInput, input, approval.approvalRequest);
     },
   };
 }
@@ -87,6 +88,7 @@ function approvalProjection(config: FlagConfigResult): Record<string, unknown> {
 }
 
 async function appliedResponse(
+  deps: ApprovalFlowDeps,
   writer: ConfigStoreWriter,
   readInput: Parameters<ConfigStoreWriter["readFlagConfig"]>[0],
   input: FlagConfigApprovalFlowInput,
@@ -94,6 +96,11 @@ async function appliedResponse(
 ): Promise<Response> {
   const applied = await writer.readFlagConfig(readInput);
   if (!applied.ok) return renderFlagConfigReadFailure(applied, input.requestId);
+  // Targeting-rule replaces share this flow but are outside the plan-1.5 ship path.
+  const next =
+    input.operation === "flag_config_update" || input.operation === "flags_promote"
+      ? await emitNextAfterFlagShip(deps.repo, input.appId, input.environmentId, input.flagId)
+      : undefined;
   if (input.responseKind === "promotion") {
     return Response.json({
       ...applied.config,
@@ -102,9 +109,14 @@ async function appliedResponse(
         after: approvalRequest.diff.proposed,
       },
       approvalRequest,
+      ...(next !== undefined ? { next } : {}),
     });
   }
-  return Response.json({ ...applied.config, approvalRequest });
+  return Response.json({
+    ...applied.config,
+    approvalRequest,
+    ...(next !== undefined ? { next } : {}),
+  });
 }
 
 function previewFailure(

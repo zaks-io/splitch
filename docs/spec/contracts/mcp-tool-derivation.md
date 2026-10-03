@@ -16,6 +16,34 @@ outputSchema = route.responses[200] Zod schema
 errorSchema = shared ErrorResponse discriminated union (same for all tools)
 ```
 
+### Optional `next` on mutation results
+
+Selected mutation success bodies may include an optional `next` member so an agent knows what to
+call after a write (plan 1.5). Shape:
+
+```
+next?: {
+  tool: string          // canonical routeRegistry operationId
+  reason: string
+  earliestAt?: string   // ISO-8601 when the next call is first meaningful
+  args?: object         // handles the next call needs (ids, keys)
+}
+```
+
+Emitted today when determinable:
+
+| Mutation                                              | `next.tool`                       | Notes                                                                    |
+| ----------------------------------------------------- | --------------------------------- | ------------------------------------------------------------------------ |
+| `experiments_start`                                   | `experiment_results_get`          | `earliestAt` from the frozen planned duration; `args` includes `targetN` |
+| `runs_conclude` (pending Approval)                    | `approval_request_reviews_create` | `args.id` is the Approval Request id                                     |
+| `flag_config_update` / `flags_promote` (write landed) | `flags_test_eval`                 | `args.flagKey` is the Flag key                                           |
+
+Never a guess: when the next step is not determinable, `next` is omitted. Every emitted `next.tool`
+must resolve via `getRoute`. MCP returns `next` inside `structuredContent` (and the text JSON
+mirror) because `outputSchema` is the route response Zod schema. Older clients that parse with
+`parseResponseTolerantly` strip unknown additive keys (#647), so releasing a Worker that emits
+`next` before every client schema knows it remains compatible.
+
 `operationId` is explicit route metadata in `@splitch/contracts`, not inferred from the HTTP path.
 That keeps tool names stable if a path changes and prevents nested routes from generating noisy
 names. Adding a route without an `operationId`, or with a duplicate `operationId`, is a contract

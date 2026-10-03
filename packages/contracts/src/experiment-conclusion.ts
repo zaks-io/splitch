@@ -1,5 +1,6 @@
 import { z } from "@hono/zod-openapi";
 import { CanonicalJsonSha256Schema } from "./canonical-hash";
+import { MutationNextSchema } from "./mutation-next";
 import { IdempotencyKeySchema, PersistedDescriptionSchema } from "./persisted-field-limits";
 import { RunWithPreRegistrationSchema } from "./resource-envelopes-experiment";
 import {
@@ -57,6 +58,8 @@ export const ConcludeRunResponseSchema = z
     run: RunWithPreRegistrationSchema,
     conclusion: ExperimentConclusionSchema,
     approvalRequest: ApprovalRequestSchema,
+    // Omitted when the next step is not determinable (plan 1.5).
+    next: MutationNextSchema.optional(),
   })
   .strict();
 export type ConcludeRunResponse = z.infer<typeof ConcludeRunResponseSchema>;
@@ -76,6 +79,8 @@ export const CreateConclusionPromotionResponseSchema = z
   .object({
     conclusion: ExperimentConclusionSchema,
     approvalRequest: ApprovalRequestSchema,
+    // Omitted when the next step is not determinable (plan 1.5).
+    next: MutationNextSchema.optional(),
   })
   .strict();
 export type CreateConclusionPromotionResponse = z.infer<

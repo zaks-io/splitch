@@ -104,11 +104,17 @@ type ConcludeRunResponse = {
     concludedAt: string;
   };
   approvalRequest: ApprovalRequest;
+  next?: {
+    tool: "approval_request_reviews_create";
+    reason: string;
+    args: { appId: string; id: string };
+  }; // only when approvalRequest.status is pending (plan 1.5)
 };
 ```
 
-Without inline Review, `approvalRequest.status` is `pending`. With successful inline Review it is
-`applied`. An inline application failure returns the canonical `APPROVAL_APPLICATION_FAILED` error;
+Without inline Review, `approvalRequest.status` is `pending` and `next` names the Review tool plus
+the Approval Request id. With successful inline Review it is `applied` and `next` is omitted. An
+inline application failure returns the canonical `APPROVAL_APPLICATION_FAILED` error;
 its Approval Request diff carries `conclusionId`, so the already-committed evidence remains directly
 addressable.
 

@@ -28,17 +28,17 @@ describe("CLI/MCP JSON envelopes agree per verb class (SPL-451)", () => {
     {
       get: "flag_config_get",
       write: "flag_config_update",
-      sideChannels: ["approvalRequest"],
+      sideChannels: ["approvalRequest", "next"],
     },
     {
       get: "flag_config_get",
       write: "flag_targeting_rules_replace",
-      sideChannels: ["approvalRequest"],
+      sideChannels: ["approvalRequest", "next"],
     },
     {
       get: "flag_config_get",
       write: "flags_promote",
-      sideChannels: ["approvalRequest", "diff"],
+      sideChannels: ["approvalRequest", "diff", "next"],
     },
     {
       get: "flags_get",

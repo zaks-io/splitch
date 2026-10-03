@@ -34,7 +34,8 @@ Over-limit values fail at parse. Stored values are not truncated.
 **Optional fields are present-with-null, never omitted.** A field marked optional (`no`) in any
 envelope or leaf schema appears in the JSON with a `null` value rather than being absent. Consumers
 never need `hasOwnProperty` checks; the field always exists, the value may be `null`. The only
-exception is a field explicitly documented as "omitted when X" in its own schema.
+exception is a field explicitly documented as "omitted when X" in its own schema — for example
+mutation `next` (plan 1.5), omitted when the next step is not determinable.
 
 **Standard response headers.** Every JSON response carries:
 

@@ -27,7 +27,7 @@ import {
   requireWritableEnvironment,
   syncExperimentConfigFromD1,
 } from "./experiment-handler-shared";
-import { type ExperimentRow, json, jsonArray, runResponse } from "./experiment-model";
+import { type ExperimentRow, json } from "./experiment-model";
 import { prepareStart } from "./experiment-start";
 import {
   runCommitmentColumns,
@@ -40,6 +40,10 @@ import {
   runMetricIdsFromPrepared,
 } from "./experiment-start-preregistration";
 import { validateStartRequest } from "./experiment-start-request";
+import {
+  appliedExperimentStartResponse,
+  experimentStartResponse,
+} from "./experiment-start-response";
 import { readEnvironmentPolicy } from "./flag-config-policy";
 import { objectBody, pathParam } from "./handler-input";
 import { shipCommittedRunSnapshot } from "./run-snapshot";
@@ -161,16 +165,16 @@ export async function startExperiment(
     nowIso(deps),
   );
 
-  return Response.json({
-    experimentId: experiment.id,
-    run: runResponse(committed.run),
-    previousRunId: committed.previous?.id ?? null,
-    approvalRequest: null,
-    runSnapshotShipped,
-    // Same snapshot the committed Run row holds (and evaluation reads). Read the
-    // committed row so this door stays symmetric with the approval-applied path.
-    frozenTargetingRules: jsonArray(committed.run.targetingRules),
-  });
+  return Response.json(
+    experimentStartResponse({
+      experimentId: experiment.id,
+      run: committed.run,
+      previousRunId: committed.previous?.id ?? null,
+      approvalRequest: null,
+      appId: scope.appId,
+      runSnapshotShipped,
+    }),
+  );
 }
 
 async function proposeGatedStart(
@@ -257,38 +261,6 @@ async function replayExperimentStart(
   if (!replay) return null;
   if (!replay.ok) return replay.response;
   return appliedExperimentStartResponse(deps, scope, experimentId, replay.approvalRequest);
-}
-
-/**
- * Only reached for an `applied` Approval Request, so the application result and
- * the Run it names both have to exist. A 404 here would blame a missing
- * Experiment for what is really a broken applied record, so it fails loud
- * instead (ADR-0036).
- */
-async function appliedExperimentStartResponse(
-  deps: ExperimentDeps,
-  scope: EnvScope,
-  experimentId: string,
-  approvalRequest: import("@splitch/contracts").ApprovalRequest,
-) {
-  const result = approvalRequest.applicationResult;
-  if (!result) {
-    throw new Error(`applied Approval Request ${approvalRequest.id} carries no application result`);
-  }
-  const run = await deps.repo.experiments.getRun(scope, result.resourceId);
-  if (!run) {
-    throw new Error(
-      `applied Approval Request ${approvalRequest.id} names Run ${result.resourceId}, which does not exist`,
-    );
-  }
-  const previousRunId = approvalRequest.diff.current.liveRunId;
-  return Response.json({
-    experimentId,
-    run: runResponse(run),
-    previousRunId: typeof previousRunId === "string" ? previousRunId : null,
-    approvalRequest,
-    frozenTargetingRules: jsonArray(run.targetingRules),
-  });
 }
 
 async function prepareStartOrReplaySync(
