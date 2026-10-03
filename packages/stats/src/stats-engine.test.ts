@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { StatsInput } from "@splitch/contracts";
+import type { DedupeExposureRow, PerEntityMetricRow, StatsInput } from "@splitch/contracts";
 import { analyzeStats } from "./stats-engine";
 import { ENGINE_RUN_ID, binomialStatsInput, exposure } from "./stats-engine-test-helpers";
 
@@ -44,7 +44,9 @@ describe("StatsEngine.analyze analysis_version dispatch", () => {
     expect(v1.guardrail_results[0]?.is_breached).toBe(true);
     expect(v1.guardrail_results[0]?.breach_reason).toMatch(/CI lower bound/);
     expect(v2.guardrail_results[0]?.is_breached).toBe(true);
-    expect(v2.guardrail_results[0]?.breach_reason).toMatch(/one-sided contrast upper bound/);
+    expect(v2.guardrail_results[0]?.breach_reason).toMatch(
+      /one-sided oriented contrast upper bound/,
+    );
     // Reporting intervals on arm_results stay Fieller under both versions.
     const v1Arm = v1.arm_results.find(
       (arm) => arm.metric_id === "guardrail_conversion" && arm.variant === "treatment",
@@ -54,6 +56,22 @@ describe("StatsEngine.analyze analysis_version dispatch", () => {
     );
     expect(v2Arm?.ci_lower).toBe(v1Arm?.ci_lower);
     expect(v2Arm?.ci_upper).toBe(v1Arm?.ci_upper);
+  });
+
+  it("orients analysis-v2 Guardrails by negative Control through analyzeStats", async () => {
+    // C=-12, T=-9 → relative lift −25% vs −10% margin → breach when variance is tiny.
+    const harmful = await analyzeStats(negativeControlGuardrailInput(-12, -9));
+    expect(harmful.guardrail_results[0]?.is_breached).toBe(true);
+    expect(
+      harmful.arm_results.find((arm) => arm.variant === "treatment")?.relative_lift_pct,
+    ).toBeCloseTo(-25, 8);
+
+    // C=-12, T=-13 → relative lift +8.33% → safe at the same margin.
+    const safe = await analyzeStats(negativeControlGuardrailInput(-12, -13));
+    expect(safe.guardrail_results[0]?.is_breached).toBe(false);
+    expect(
+      safe.arm_results.find((arm) => arm.variant === "treatment")?.relative_lift_pct,
+    ).toBeCloseTo(((-13 - -12) / -12) * 100, 8);
   });
 });
 
@@ -227,4 +245,66 @@ function countRow(targeting_key_hash: string, value: number) {
     value,
     in_window: true,
   } satisfies StatsInput["metric_values"][number];
+}
+
+/**
+ * Near-constant-per-arm count Metric with a locked relative Guardrail under
+ * analysis-v2. Tiny within-arm noise keeps sampling variance positive while
+ * leaving the relative-lift sign unambiguous.
+ */
+function negativeControlGuardrailInput(controlMean: number, treatmentMean: number): StatsInput {
+  const n = 400;
+  const controlIds = Array.from({ length: n }, (_unused, index) => `control_${index}`);
+  const treatmentIds = Array.from({ length: n }, (_unused, index) => `treatment_${index}`);
+  const exposures: DedupeExposureRow[] = [
+    ...controlIds.map((id) => exposure("control", id)),
+    ...treatmentIds.map((id) => exposure("treatment", id)),
+  ];
+  const metric_values: PerEntityMetricRow[] = [
+    ...controlIds.map((id, index) => ({
+      targeting_key_hash: id,
+      run_id: ENGINE_RUN_ID,
+      metric_id: "guardrail_count",
+      metric_type: "count" as const,
+      value: controlMean + (index % 2 === 0 ? 0.01 : -0.01),
+      in_window: true,
+    })),
+    ...treatmentIds.map((id, index) => ({
+      targeting_key_hash: id,
+      run_id: ENGINE_RUN_ID,
+      metric_id: "guardrail_count",
+      metric_type: "count" as const,
+      value: treatmentMean + (index % 2 === 0 ? 0.01 : -0.01),
+      in_window: true,
+    })),
+  ];
+  return {
+    run_id: ENGINE_RUN_ID,
+    analysis_version: "analysis-v2",
+    confidence_level: 0.95,
+    horizon: "sequential",
+    allocation: { control: 50, treatment: 50 },
+    control_variant: "control",
+    decision_family: [],
+    guardrail_decisions: [
+      {
+        metric_id: "guardrail_count",
+        variant: "treatment",
+        downside_threshold_pct: -10,
+        guardrail_locked_at_run_start: true,
+        threshold_locked_at_run_start: true,
+      },
+    ],
+    metric_variance_config: [
+      {
+        metric_id: "guardrail_count",
+        winsorize: false,
+        winsorize_pct: 99,
+        cuped: false,
+        cuped_coverage_threshold_pct: 70,
+      },
+    ],
+    exposures,
+    metric_values,
+  };
 }

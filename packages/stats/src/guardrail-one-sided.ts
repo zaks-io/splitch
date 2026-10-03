@@ -18,30 +18,42 @@ export interface OneSidedGuardrailContrastInput {
 }
 
 export interface OneSidedGuardrailBound {
-  /** δ̂ = T̂ − (1 + margin) Ĉ */
+  /** Oriented contrast: sign(C) · (T̂ − (1 + margin) Ĉ). */
   readonly contrastEstimate: number;
   readonly contrastVar: number;
   readonly lower: number;
   readonly upper: number;
   readonly verdict: GuardrailVerdict;
   /**
-   * Relative-% form of the lower contrast bound so GuardrailResult.ci_lower
-   * stays on the downside_threshold_pct scale: threshold + 100 · L / Ĉ.
+   * Relative-% form of the oriented lower contrast bound so
+   * GuardrailResult.ci_lower stays on the downside_threshold_pct scale:
+   * threshold + 100 · L* / |Ĉ|. Null when Control's sign is uncertain.
    */
-  readonly relativeLowerPct: number;
+  readonly relativeLowerPct: number | null;
 }
 
 /**
  * Always-valid one-sided bounds for the relative non-inferiority contrast
- * δ = T − (1 + margin) C, with Var(δ) = v_T + (1+margin)² v_C.
+ * oriented by Control sign: δ* = sign(C) · (T − (1 + margin) C), with
+ * Var(δ*) = v_T + (1+margin)² v_C.
+ *
+ * Relative lift R = (T − C) / C satisfies δ_raw = C · (R − margin), so
+ * δ* = |C| · (R − margin). Safe means R is established above the margin
+ * regardless of whether Control is positive or negative.
+ *
+ * When Control's interval at the same critical multiplier as the contrast
+ * spans 0, the orientation is undefined and the verdict is undecided (no
+ * safe/breach claim). Dividing an unoriented lower bound by a negative
+ * Control would also flip the relative-% mapping.
  *
  * Verdict (analysis-v2 Guardrail semantics):
  * - safe: lower > 0 — established non-inferiority at the locked margin
  * - breach: upper < 0 — affirmative evidence of harm past the margin
- * - undecided: lower ≤ 0 ≤ upper — neither claim is established
+ * - undecided: lower ≤ 0 ≤ upper, or Control sign uncertain
  *
  * "Breach" is affirmative harm, not failure to establish safety. False-safety
- * is P(safe | true δ < 0) and is controlled at alpha by Proposition B.1.
+ * is P(safe | true δ* < 0) and is controlled at alpha by Proposition B.1 when
+ * the Control sign is identified.
  */
 export function evaluateOneSidedGuardrail(
   input: OneSidedGuardrailContrastInput,
@@ -49,7 +61,7 @@ export function evaluateOneSidedGuardrail(
   validateContrastInput(input);
 
   const weight = 1 + input.margin;
-  const contrastEstimate = input.treatmentEstimate - weight * input.controlEstimate;
+  const rawContrast = input.treatmentEstimate - weight * input.controlEstimate;
   const contrastVar = input.treatmentVar + weight ** 2 * input.controlVar;
   if (!(contrastVar > 0) || !Number.isFinite(contrastVar)) {
     throw new Error("guardrail contrast variance must be finite and positive.");
@@ -66,13 +78,28 @@ export function evaluateOneSidedGuardrail(
     throw new Error("one-sided guardrail boundary overflowed before producing a finite bound.");
   }
 
+  const criticalMultiplier = boundary / standardError;
+  const controlSign = identifiedControlSign(
+    input.controlEstimate,
+    input.controlVar,
+    criticalMultiplier,
+  );
+  if (controlSign === "uncertain") {
+    return {
+      contrastEstimate: rawContrast,
+      contrastVar,
+      lower: rawContrast - boundary,
+      upper: rawContrast + boundary,
+      verdict: "undecided",
+      relativeLowerPct: null,
+    };
+  }
+
+  const contrastEstimate = controlSign * rawContrast;
   const lower = contrastEstimate - boundary;
   const upper = contrastEstimate + boundary;
   const verdict = classifyVerdict(lower, upper);
-  const relativeLowerPct =
-    input.controlEstimate === 0
-      ? Number.NaN
-      : input.margin * 100 + (100 * lower) / input.controlEstimate;
+  const relativeLowerPct = input.margin * 100 + (100 * lower) / Math.abs(input.controlEstimate);
 
   if (!Number.isFinite(relativeLowerPct)) {
     throw new Error(
@@ -88,6 +115,21 @@ export function evaluateOneSidedGuardrail(
     verdict,
     relativeLowerPct,
   };
+}
+
+function identifiedControlSign(
+  controlEstimate: number,
+  controlVar: number,
+  criticalMultiplier: number,
+): 1 | -1 | "uncertain" {
+  const halfWidth = criticalMultiplier * Math.sqrt(controlVar);
+  if (!Number.isFinite(halfWidth) || halfWidth < 0) {
+    throw new Error("Control sign half-width must be finite and non-negative.");
+  }
+  if (controlEstimate - halfWidth <= 0 && controlEstimate + halfWidth >= 0) {
+    return "uncertain";
+  }
+  return controlEstimate > 0 ? 1 : -1;
 }
 
 function classifyVerdict(lower: number, upper: number): GuardrailVerdict {

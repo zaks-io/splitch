@@ -5,7 +5,7 @@ import { normalMixtureOneSidedBoundary } from "./normal-mixture-one-sided";
 const GOLDEN_TOLERANCE = 1e-12;
 
 describe("one-sided guardrail contrast golden fixtures", () => {
-  it("derives the Prop B.1 bound for treatment − (1 + margin) × control", () => {
+  it("derives the Prop B.1 bound for sign(C) · (treatment − (1 + margin) × control)", () => {
     const treatmentEstimate = 9.5;
     const controlEstimate = 10;
     const treatmentVar = 0.02;
@@ -88,5 +88,56 @@ describe("one-sided guardrail contrast golden fixtures", () => {
         controlVar: 0.05,
       }).verdict,
     ).toBe("undecided");
+  });
+
+  it("orients by negative Control so relative-lift harm is not classified safe", () => {
+    const base = {
+      treatmentVar: 0.0001,
+      controlVar: 0.0001,
+      margin: -0.1,
+      alpha: 0.05,
+      n_t: 2_500,
+      n_c: 2_500,
+      target_n: 5_000,
+      horizon: "sequential" as const,
+    };
+
+    // C=-12, T=-9 → relative lift −25% (below −10% margin). Unoriented δ_raw > 0.
+    const harmful = evaluateOneSidedGuardrail({
+      ...base,
+      treatmentEstimate: -9,
+      controlEstimate: -12,
+    });
+    expect(harmful.verdict).toBe("breach");
+    expect(harmful.contrastEstimate).toBeLessThan(0);
+    expect(harmful.relativeLowerPct).not.toBeNull();
+    expect(harmful.relativeLowerPct ?? 0).toBeLessThan(-10);
+
+    // C=-12, T=-13 → relative lift +8.33% (above −10% margin).
+    const safe = evaluateOneSidedGuardrail({
+      ...base,
+      treatmentEstimate: -13,
+      controlEstimate: -12,
+    });
+    expect(safe.verdict).toBe("safe");
+    expect(safe.contrastEstimate).toBeGreaterThan(0);
+  });
+
+  it("returns undecided when Control's interval spans 0", () => {
+    const result = evaluateOneSidedGuardrail({
+      treatmentEstimate: -9,
+      controlEstimate: -0.01,
+      treatmentVar: 1,
+      controlVar: 1,
+      margin: -0.1,
+      alpha: 0.05,
+      n_t: 50,
+      n_c: 50,
+      target_n: 100,
+      horizon: "sequential",
+    });
+
+    expect(result.verdict).toBe("undecided");
+    expect(result.relativeLowerPct).toBeNull();
   });
 });

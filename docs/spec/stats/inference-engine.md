@@ -207,35 +207,47 @@ a `null` `ci_lower`, an undefined relative lift with a finite `ci_lower`, or a `
 ### analysis-v2: one-sided Proposition B.1 contrast (C4)
 
 analysis-v2 replaces the two-sided Fieller Guardrail check with a one-sided always-valid bound on
-the relative non-inferiority contrast, at level `alpha` (not `alpha/2`):
+the relative non-inferiority contrast, at level `alpha` (not `alpha/2`). Relative lift
+`R = (T − C) / C` satisfies `T − (1 + margin) C = C · (R − margin)`, so the contrast is oriented
+by Control sign so that positive means `R` above the margin for both positive and negative Control:
 
 ```
 margin = downside_threshold_pct / 100
-δ = T − (1 + margin) · C
-Var(δ) = v_T + (1 + margin)² · v_C
+δ_raw = T − (1 + margin) · C
+δ* = sign(C) · δ_raw          # = |C| · (R − margin) when sign(C) is identified
+Var(δ*) = v_T + (1 + margin)² · v_C
 
 # Waudby-Smith et al. Proposition B.1 lower (1−α)-AsympCS; ρ tuned at 2α (§B.2).
-L = δ̂ − SE(δ̂) · sqrt( 2(1 + nρ²) / (nρ²) · log(1 + sqrt(1 + nρ²) / (2α)) )
-U = δ̂ + SE(δ̂) · (same scale)
+L = δ̂* − SE(δ̂*) · sqrt( 2(1 + nρ²) / (nρ²) · log(1 + sqrt(1 + nρ²) / (2α)) )
+U = δ̂* + SE(δ̂*) · (same scale)
 ```
+
+Control sign is identified only when Control's interval at the same critical multiplier as the
+contrast excludes 0. If that interval spans 0, orientation is undefined: the Guardrail is
+**undecided** (no safe/breach claim) and `ci_lower` is withheld. Dividing an unoriented lower
+bound by a negative Control would flip the relative-% mapping.
+
+Guardrail arm means and variance components come from one pooled per-Metric estimate across every
+allocated arm (same winsorization cap and CUPED fit as `arm_results`), not a Control+one-Treatment
+re-estimate.
 
 `arm_results[].ci_*` stay on the Fieller relative interval for reporting. Only
 `guardrail_results` switch. `guardrail_results[].ci_lower` is the relative-% form of `L`:
-`downside_threshold_pct + 100 · L / Ĉ` (so the field stays on the threshold scale).
+`downside_threshold_pct + 100 · L / |Ĉ|` (so the field stays on the threshold scale).
 
 **Breach / safe / undecided semantics** (affirmative claims, not "failure to establish"):
 
-| Verdict   | Condition   | `is_breached` | Meaning                                          |
-| --------- | ----------- | ------------- | ------------------------------------------------ |
-| safe      | `L > 0`     | `false`       | Established non-inferiority at the locked margin |
-| breach    | `U < 0`     | `true`        | Affirmative evidence of harm past the margin     |
-| undecided | `L ≤ 0 ≤ U` | `null`        | Neither safety nor harm is established           |
+| Verdict   | Condition                         | `is_breached` | Meaning                                          |
+| --------- | --------------------------------- | ------------- | ------------------------------------------------ |
+| safe      | `L > 0`                           | `false`       | Established non-inferiority at the locked margin |
+| breach    | `U < 0`                           | `true`        | Affirmative evidence of harm past the margin     |
+| undecided | `L ≤ 0 ≤ U`, or Control sign open | `null`        | Neither safety nor harm is established           |
 
-False-safety is `P(safe | true δ < 0)`. Proposition B.1 controls that rate at `alpha` under
-continuous monitoring; the seeded `stats:simulation` suite asserts it on the known-harmful
-fixture within the predeclared Monte Carlo tolerance. When Control estimate is 0 or the Arm is
-not decisionable, the Guardrail stays unevaluated (`is_breached: null`), same as relative lift
-undefined.
+False-safety is `P(safe | true δ* < 0)`. Proposition B.1 controls that rate at `alpha` under
+continuous monitoring when Control sign is identified; the seeded `stats:simulation` suite asserts
+it on the known-harmful fixture within the predeclared Monte Carlo tolerance. When Control estimate
+is 0 or the Arm is not decisionable, the Guardrail stays unevaluated (`is_breached: null`), same as
+relative lift undefined.
 
 ## Family FDR (step 8)
 

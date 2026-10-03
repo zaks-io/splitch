@@ -91,10 +91,10 @@ Run's relative bounds track the aCS boundary rather than a fixed-n z. Under lega
 Guardrail breach reads that relative lower bound
 (`packages/stats/src/guardrail-bound-check.ts`), so the relative interval **is decision-bearing
 for Guardrails** (ADR-0015 rule 4). analysis-v2 instead decides Guardrails from a one-sided
-Proposition B.1 bound on the contrast `T − (1 + margin) C`
-(`packages/stats/src/guardrail-one-sided.ts`); `arm_results` still publish Fieller. Neither path
-supplies the BH rank or the absolute stop. The Fieller sequential-coverage audit confirmed D1
-(keep Fieller for reporting).
+Proposition B.1 bound on the Control-sign-oriented contrast
+`sign(C) · (T − (1 + margin) C)` (`packages/stats/src/guardrail-one-sided.ts`);
+`arm_results` still publish Fieller. Neither path supplies the BH rank or the absolute stop.
+The Fieller sequential-coverage audit confirmed D1 (keep Fieller for reporting).
 
 ## Stopping rules
 

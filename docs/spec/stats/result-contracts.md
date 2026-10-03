@@ -151,8 +151,10 @@ Breach evaluation is `ci_lower < threshold` once the Arm is decisionable
 (`packages/stats/src/guardrail-bound-check.ts`) — failure to establish safety.
 
 Under analysis-v2, `guardrail_results[].ci_lower` is the relative-% form of the Proposition B.1
-one-sided lower bound on the contrast `T − (1 + margin) C`
-(`packages/stats/src/guardrail-one-sided.ts`). `is_breached` is then three-valued: `false` =
+one-sided lower bound on the Control-sign-oriented contrast
+`sign(C) · (T − (1 + margin) C)` (`packages/stats/src/guardrail-one-sided.ts`):
+`downside_threshold_pct + 100 · L / |Ĉ|`. When Control's interval spans 0, orientation is
+undefined and `ci_lower` is withheld (`null`). `is_breached` is three-valued: `false` =
 safe (`L > 0`), `true` = affirmative harm (`U < 0`), `null` = undecided or unevaluated. See
 [inference-engine.md](inference-engine.md) §Guardrail Metric behavior and ADR-0015's C4
 amendment.

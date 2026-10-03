@@ -176,9 +176,12 @@ v2 remains defined but unsupported for Start until its observation-path slice la
 
 ### Bound
 
-For locked margin `m = downside_threshold_pct / 100`, the contrast is
-`δ = T − (1 + m) C` with `Var(δ) = v_T + (1 + m)² v_C`. The lower and upper one-sided bounds use
-Waudby-Smith et al. Proposition B.1 at level `alpha` (not `alpha/2`), with mixture scale
+For locked margin `m = downside_threshold_pct / 100`, the raw contrast is
+`δ_raw = T − (1 + m) C` with `Var = v_T + (1 + m)² v_C`. Relative lift
+`R = (T − C) / C` satisfies `δ_raw = C · (R − m)`, so analysis-v2 orients by Control sign:
+`δ* = sign(C) · δ_raw` (= `|C| · (R − m)` when sign is identified). The lower and upper
+one-sided bounds use Waudby-Smith et al. Proposition B.1 at level `alpha` (not `alpha/2`),
+with mixture scale
 
 ```
 sqrt( 2(1 + nρ²)/(nρ²) · log(1 + sqrt(1 + nρ²)/(2α)) )
@@ -186,21 +189,26 @@ sqrt( 2(1 + nρ²)/(nρ²) · log(1 + sqrt(1 + nρ²)/(2α)) )
 
 and `ρ` tuned at `2α` (paper §B.2). This is not the two-sided bound at doubled alpha: the
 additive 1 inside the log is required. Fixed-horizon Runs under v2 use the one-sided normal
-critical value `z_{1−α}` on the same contrast.
+critical value `z_{1−α}` on the same oriented contrast. When Control's interval at that
+critical multiplier spans 0, orientation is undefined and the Guardrail is undecided (no
+safe/breach claim); `guardrail_results[].ci_lower` is withheld. Arm means and variance
+components are taken from one pooled per-Metric estimate across every allocated arm so
+winsorization and CUPED match `arm_results`.
 
 ### Breach semantics
 
-| Verdict   | Condition   | `is_breached` | Meaning                                          |
-| --------- | ----------- | ------------- | ------------------------------------------------ |
-| safe      | `L > 0`     | `false`       | Established non-inferiority at the locked margin |
-| breach    | `U < 0`     | `true`        | Affirmative evidence of harm past the margin     |
-| undecided | `L ≤ 0 ≤ U` | `null`        | Neither claim established                        |
+| Verdict   | Condition                         | `is_breached` | Meaning                                          |
+| --------- | --------------------------------- | ------------- | ------------------------------------------------ |
+| safe      | `L > 0`                           | `false`       | Established non-inferiority at the locked margin |
+| breach    | `U < 0`                           | `true`        | Affirmative evidence of harm past the margin     |
+| undecided | `L ≤ 0 ≤ U`, or Control sign open | `null`        | Neither claim established                        |
 
 **Breach means affirmative harm**, not failure to establish safety. That is a deliberate
 semantic change from analysis-v1's `ci_lower < threshold` rule, which fired on wide
-uninformative intervals. False-safety (`P(safe | true δ < 0)`) is the Type I rate Proposition
-B.1 controls; the seeded known-harmful simulation (`pnpm stats:simulation`, seed `424242`)
-keeps the ever-safe rate within `alpha + monteCarloTolerance`.
+uninformative intervals. False-safety (`P(safe | true δ* < 0)`) is the Type I rate Proposition
+B.1 controls when Control sign is identified; the seeded known-harmful simulation
+(`pnpm stats:simulation`, seed `424242`) keeps the ever-safe rate within
+`alpha + monteCarloTolerance`.
 
 `arm_results` relative intervals remain Fieller under every version. Only
 `guardrail_results` under analysis-v2 read the one-sided contrast.

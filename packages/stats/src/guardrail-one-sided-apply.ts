@@ -67,7 +67,7 @@ function oneSidedGuardrailResult(
     decision_valid: decisionValid(guardrail),
     breach_reason:
       isBreached === true
-        ? `one-sided contrast upper bound ${evaluated?.upper} < 0 at margin ${guardrail.downside_threshold_pct}%`
+        ? `one-sided oriented contrast upper bound ${evaluated?.upper} < 0 at margin ${guardrail.downside_threshold_pct}%`
         : null,
   };
 }
