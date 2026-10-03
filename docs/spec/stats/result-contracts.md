@@ -145,11 +145,19 @@ Fixed-horizon `p_value` is a one-look t/z tail and is not this inversion.
 
 ## Guardrail `ci_lower`
 
-`guardrail_results[].ci_lower` is the Fieller relative-lift lower bound derived from the same
-absolute decision interval (ADR-0015 rule 4). Breach evaluation is
-`ci_lower < threshold` once the Arm is decisionable
-(`packages/stats/src/guardrail-bound-check.ts`). Time-uniform coverage of that inversion is
-unproven; the Fieller sequential-coverage audit is scheduled separately.
+Under legacy-unversioned and analysis-v1, `guardrail_results[].ci_lower` is the Fieller
+relative-lift lower bound derived from the same absolute decision interval (ADR-0015 rule 4).
+Breach evaluation is `ci_lower < threshold` once the Arm is decisionable
+(`packages/stats/src/guardrail-bound-check.ts`) — failure to establish safety.
+
+Under analysis-v2, `guardrail_results[].ci_lower` remains the Fieller relative-lift lower
+bound (same reporting interval as `arm_results`). The Guardrail _verdict_ is separate:
+`is_breached` is three-valued from the union-bound oriented contrast
+(`packages/stats/src/guardrail-one-sided.ts`) — `false` = safe (`L > 0`), `true` =
+affirmative harm (`U < 0`), `null` = undecided (including Control sign not established at
+`α/2`) or unevaluated. No contrast-derived relative-scale lower bound is reported. See
+[inference-engine.md](inference-engine.md) §Guardrail Metric behavior and ADR-0015's C4
+amendment.
 
 ## ROPE verdict (confidence-sequence helper)
 
@@ -220,11 +228,11 @@ A legacy Run never reports a target or duration it did not record. Analysis refu
 under a version it does not implement with `VALIDATION_ERROR` instead of analyzing it under a
 different engine.
 
-Which estimators a version uses (SRM gate, family correction) is in
+Which estimators a version uses (SRM gate, family correction, Guardrail bound) is in
 [ADR-0059](../../adr/0059-runs-freeze-an-analysis-version-and-legacy-runs-read-under-a-labeled-one.md)
-§Version table. analysis-v2 switches Exposure and activated SRM to the sequential martingale and
-selects BH-G family correction; it is defined but unsupported for Start/Results until an
-ingestion-ordered observation path lands.
+§Version table. analysis-v2 switches Exposure and activated SRM to the sequential martingale,
+selects BH-G family correction, and uses the Proposition B.1 one-sided Guardrail contrast; it is
+defined but unsupported for Start/Results until an ingestion-ordered observation path lands.
 
 ## Control Plane result producer (CLI, MCP, panel)
 

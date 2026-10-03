@@ -178,25 +178,92 @@ decision and Guardrail paths.
 ## Guardrail Metric behavior
 
 A Guardrail Metric is a regular Metric carrying a `downside_threshold_pct` (a relative-lift lower
-bound in percent, on the same scale as `relative_lift_pct` and `ci_lower`). After the full CI
-pipeline, `guardrail_breached = ci_lower < downside_threshold_pct`, where `ci_lower` is the
-Fieller-derived relative lower bound in percentage points defined above. A
-breached Guardrail fires regardless of significance status. Guardrail Metrics are **excluded from
-the BH FDR family** — they do not consume multiplicity budget.
+bound in percent, on the same scale as `relative_lift_pct` and `ci_lower`). Guardrail Metrics are
+**excluded from the BH FDR family** — they do not consume multiplicity budget. Which bound the
+engine uses rides `analysis_version` (ADR-0059).
 
-The comparison is only reached when a relative lower bound exists. `guardrail_breached` is
+### legacy-unversioned and analysis-v1: two-sided Fieller relative lower
+
+After the full CI pipeline, `is_breached = ci_lower < downside_threshold_pct`, where `ci_lower` is
+the Fieller-derived relative lower bound in percentage points defined above. This is
+**failure to establish safety**: a wide early interval whose lower bound sits below the threshold
+fires even when the interval still covers values above the threshold. A breached Guardrail fires
+regardless of significance status.
+
+The comparison is only reached when a relative lower bound exists. `is_breached` is
 **`null`, meaning unevaluated**, in three cases, and the null is never compared numerically:
 
-| Case                                                        | `ci_lower`  | `guardrail_breached` |
-| ----------------------------------------------------------- | ----------- | -------------------- |
-| Relative lift undefined (`R_c = 0`)                         | `null`      | `null`               |
-| Arm not yet decisionable (status is neither ready, stopped) | any         | `null`               |
-| Fieller unbounded (`a <= 0`)                                | `-Infinity` | `null`               |
+| Case                                                        | `ci_lower`  | `is_breached` |
+| ----------------------------------------------------------- | ----------- | ------------- |
+| Relative lift undefined (`R_c = 0`)                         | `null`      | `null`        |
+| Arm not yet decisionable (status is neither ready, stopped) | any         | `null`        |
+| Fieller unbounded (`a <= 0`)                                | `-Infinity` | `null`        |
 
 An unbounded lower bound is unevaluated rather than breached: `-Infinity` is below every threshold,
 so comparing it would fire every Guardrail on a Run whose Control mean is merely noisy. Any other
 disagreement between the two fields is a contract violation and throws: a defined relative lift with
 a `null` `ci_lower`, an undefined relative lift with a finite `ci_lower`, or a `NaN` bound.
+
+### analysis-v2: one-sided Proposition B.1 contrast (C4)
+
+analysis-v2 replaces the two-sided Fieller Guardrail check with an always-valid decision on the
+relative non-inferiority contrast `D = T − (1 + margin) C`, oriented by Control sign. Relative lift
+`R = (T − C) / C` satisfies `D = C · (R − margin)`, so once `sign(C)` is established,
+`δ* = sign(C) · D = |C| · (R − margin)` and positive means `R` above the margin for both
+positive and negative Control.
+
+**Union bound at `alpha` (α/2 + α/2).** Picking Control's sign from the same noisy estimate and
+then testing either orientation at full `alpha` can double false-safety. The procedure therefore
+splits the budget:
+
+1. **Control sign — two-sided always-valid interval at `α/2`.** Establishing a sign requires
+   excluding 0 in either direction; a one-sided test whose side is chosen from `Ĉ` is
+   data-dependent. Sequential Runs use the two-sided normal-mixture CS on Control
+   (`n = n_c`, `Var = v_C`); fixed-horizon Runs use `z_{1−α/4}`. If that interval spans 0,
+   orientation is undefined and the Guardrail is **undecided** (no safe/breach claim).
+2. **Oriented contrast — one-sided always-valid bound at `α/2`.** When sign is established,
+   `δ* = sign(C) · D` with `Var(δ*) = v_T + (1 + margin)² v_C`. Sequential Runs use
+   Waudby-Smith et al. Proposition B.1 at `α/2` (`ρ` tuned at `2 · (α/2) = α`, §B.2);
+   fixed-horizon Runs use `z_{1−α/2}`. The verdict (safe/breach/undecided) comes **only** from
+   this contrast bound.
+
+```
+margin = downside_threshold_pct / 100
+D = T − (1 + margin) · C
+δ* = sign(C) · D              # only when Control's two-sided α/2 interval excludes 0
+Var(δ*) = v_T + (1 + margin)² · v_C
+
+# Proposition B.1 at α/2; ρ tuned at α (= 2 · α/2).
+L = δ̂* − SE(δ̂*) · sqrt( 2(1 + nρ²) / (nρ²) · log(1 + sqrt(1 + nρ²) / α) )
+U = δ̂* + SE(δ̂*) · (same scale)
+```
+
+**Power cost of the split.** Each piece runs at `α/2`, so both the Control-sign half-width and
+the contrast boundary are wider than a single level-`α` procedure. That is the price of joint
+validity: `P(false safe) ≤ P(Control-sign error) + P(contrast L > 0 | true δ* < 0) ≤ α`.
+
+A relative-scale lower bound of the form `margin + L / |Ĉ|` is **not** a valid lower confidence
+bound for relative lift and is not reported. `arm_results[].ci_*` and
+`guardrail_results[].ci_lower` stay on the Fieller relative interval (reporting only). The
+Guardrail verdict is `is_breached`, separate from that interval.
+
+Guardrail arm means and variance components come from one pooled per-Metric estimate across every
+allocated arm (same winsorization cap and CUPED fit as `arm_results`), not a Control+one-Treatment
+re-estimate.
+
+**Breach / safe / undecided semantics** (affirmative claims, not "failure to establish"):
+
+| Verdict   | Condition                         | `is_breached` | Meaning                                          |
+| --------- | --------------------------------- | ------------- | ------------------------------------------------ |
+| safe      | `L > 0`                           | `false`       | Established non-inferiority at the locked margin |
+| breach    | `U < 0`                           | `true`        | Affirmative evidence of harm past the margin     |
+| undecided | `L ≤ 0 ≤ U`, or Control sign open | `null`        | Neither safety nor harm is established           |
+
+False-safety is `P(safe | true δ* < 0)`. The seeded `stats:simulation` suite asserts it on the
+known-harmful fixture and on Codex near-zero-Control / margin-below-−100% Gaussian draws within
+the predeclared Monte Carlo tolerance of `alpha`. When Control estimate is 0 or the Arm is not
+decisionable, the Guardrail stays unevaluated (`is_breached: null`), same as relative lift
+undefined.
 
 ## Family FDR (step 8)
 

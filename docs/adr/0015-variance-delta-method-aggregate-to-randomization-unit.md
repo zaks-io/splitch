@@ -162,8 +162,71 @@ Those are the fail-loud answers; the audit did not find a NaN or a silent defaul
 means stay defined as `(T / C - 1) * 100` (here Control −12 and Treatment −9 yield −25%, while
 absolute lift is +3). Read those Runs on absolute lift when the percentage sign is easy to misread.
 
-Replacement remains reserved for a later demonstrated failure (C4's one-sided bound still depends
-on this inversion).
+Replacement remains reserved for a later demonstrated failure. C4's one-sided Guardrail bound
+(below) uses the arm means and variance components from the same absolute path; it does not
+replace the Fieller reporting interval on `arm_results`.
+
+## Amendment: one-sided Guardrail bound (C4, analysis-v2)
+
+Plan item 0.8. Two-sided Fieller Guardrail checks are conservative for a one-sided safety claim,
+not invalid. analysis-v2 switches Guardrail decisions to a one-sided always-valid bound;
+legacy-unversioned and analysis-v1 keep the two-sided Fieller rule above so their result tokens
+stay byte-identical. `SUPPORTED_ANALYSIS_VERSIONS` / `CURRENT_ANALYSIS_VERSION` are unchanged:
+v2 remains defined but unsupported for Start until its observation-path slice lands.
+
+### Bound
+
+For locked margin `m = downside_threshold_pct / 100`, the raw contrast is
+`D = T − (1 + m) C` with `Var = v_T + (1 + m)² v_C`. Relative lift
+`R = (T − C) / C` satisfies `D = C · (R − m)`, so analysis-v2 orients by Control sign:
+`δ* = sign(C) · D` (= `|C| · (R − m)` when sign is identified).
+
+**Union bound at `alpha`.** Establishing `sign(C)` and testing the oriented contrast cannot
+both spend the full `alpha` without inflating false-safety (picking orientation from the
+noisy Control estimate and then testing either side at `alpha` can roughly double the
+false-safe rate). The budget splits:
+
+1. **Control sign — two-sided always-valid interval at `α/2`** (sequential: two-sided
+   normal-mixture CS on Control; fixed: `z_{1−α/4}`). A one-sided sign test is the wrong
+   tool: the side would be chosen from `Ĉ`. If the interval spans 0, the Guardrail is
+   undecided.
+2. **Oriented contrast — one-sided always-valid bound at `α/2`** (sequential: Waudby-Smith
+   Proposition B.1 at `α/2` with `ρ` tuned at `α = 2 · (α/2)`, §B.2; fixed: `z_{1−α/2}`).
+   Mixture scale at the contrast alpha `α' = α/2`:
+
+```
+sqrt( 2(1 + nρ²)/(nρ²) · log(1 + sqrt(1 + nρ²)/(2α')) )
+```
+
+This is not the two-sided bound at doubled alpha: the additive 1 inside the log is
+required. The verdict (safe/breach/undecided) comes only from this contrast bound.
+
+**Power cost.** Both pieces run at `α/2`, so boundaries are wider than a single level-`α`
+procedure. Joint false-safety stays ≤ `α` by the union bound.
+
+A relative-scale map `m + L/|Ĉ|` is not a valid lower confidence bound for relative lift
+and is not emitted. `guardrail_results[].ci_lower` stays the Fieller reporting interval from
+`arm_results`; the Guardrail verdict is `is_breached`, reported separately. Arm means and
+variance components are taken from one pooled per-Metric estimate across every allocated arm
+so winsorization and CUPED match `arm_results`.
+
+### Breach semantics
+
+| Verdict   | Condition                         | `is_breached` | Meaning                                          |
+| --------- | --------------------------------- | ------------- | ------------------------------------------------ |
+| safe      | `L > 0`                           | `false`       | Established non-inferiority at the locked margin |
+| breach    | `U < 0`                           | `true`        | Affirmative evidence of harm past the margin     |
+| undecided | `L ≤ 0 ≤ U`, or Control sign open | `null`        | Neither claim established                        |
+
+**Breach means affirmative harm**, not failure to establish safety. That is a deliberate
+semantic change from analysis-v1's `ci_lower < threshold` rule, which fired on wide
+uninformative intervals. False-safety (`P(safe | true δ* < 0)`) is jointly controlled at
+`alpha` by the union bound; the seeded known-harmful simulation and Codex near-zero-Control
+Gaussian draws (`pnpm stats:simulation`, seed `424242`) keep the false-safe rate within
+`alpha + monteCarloTolerance`.
+
+`arm_results` relative intervals remain Fieller under every version. analysis-v2 Guardrail
+_decisions_ read the oriented contrast; reporting `ci_lower` stays Fieller.
 
 ## Sources
 

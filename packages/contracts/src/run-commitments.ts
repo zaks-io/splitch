@@ -21,11 +21,11 @@ import type { StatsOutput } from "./stats-result-contract";
  * in how locked evidence is computed: every Run started afterwards gets a
  * different result token for the same raw facts, which is the point.
  *
- * | Version              | SRM gate                         | Family correction | Supported for Start/Results |
- * | -------------------- | -------------------------------- | ----------------- | --------------------------- |
- * | legacy-unversioned   | Chi-square p < 0.001             | BH                | legacy read path only       |
- * | analysis-v1          | Chi-square p < 0.001             | BH                | yes (current)               |
- * | analysis-v2          | Sequential Dirichlet-multinomial | BH-G              | no (defined, unsupported)   |
+ * | Version              | SRM gate                         | Family correction | Guardrail bound                         | Supported for Start/Results |
+ * | -------------------- | -------------------------------- | ----------------- | --------------------------------------- | --------------------------- |
+ * | legacy-unversioned   | Chi-square p < 0.001             | BH                | Two-sided Fieller relative lower        | legacy read path only       |
+ * | analysis-v1          | Chi-square p < 0.001             | BH                | Two-sided Fieller relative lower        | yes (current)               |
+ * | analysis-v2          | Sequential Dirichlet-multinomial | BH-G              | Prop. B.1 one-sided contrast (C4)       | no (defined, unsupported)   |
  *
  * analysis-v2 stays in the exhaustive switch for unit tests and a future CURRENT
  * bump, but it is not in SUPPORTED_ANALYSIS_VERSIONS until an ingestion-ordered

@@ -16,6 +16,8 @@ import {
 } from "./dimension-slicing";
 import { analysisExposureRows } from "./exposure-denominator";
 import { applyGuardrailBoundChecks } from "./guardrail-bound-check";
+import { estimateGuardrailContrasts } from "./guardrail-contrasts";
+import { applyOneSidedGuardrailBoundChecks } from "./guardrail-one-sided-apply";
 import { analyzeMetricArmResults, defaultArmResultAdapters } from "./metric-arm-results";
 import type { CIAdapter } from "./sequential-ci";
 import { checkSrmHealth } from "./srm-checker";
@@ -73,10 +75,20 @@ export async function analyzeStats(
     dimensionResults,
     corrected.arm_results.slice(armResults.length) as DimensionArmResult[],
   );
-  const guardrailResults = applyGuardrailBoundChecks({
-    arm_results: correctedArmResults,
-    guardrails: input.guardrail_decisions,
-  });
+  const guardrailResults =
+    policy.guardrailBound === "one_sided_contrast"
+      ? applyOneSidedGuardrailBoundChecks({
+          arm_results: correctedArmResults,
+          guardrails: input.guardrail_decisions,
+          contrasts: estimateGuardrailContrasts(input, analysisExposures),
+          alpha: 1 - input.confidence_level,
+          target_n: input.target_n,
+          horizon: input.horizon,
+        })
+      : applyGuardrailBoundChecks({
+          arm_results: correctedArmResults,
+          guardrails: input.guardrail_decisions,
+        });
 
   return StatsOutputSchema.parse({
     arm_results: correctedArmResults,
