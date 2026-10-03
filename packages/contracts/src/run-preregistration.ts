@@ -149,6 +149,12 @@ export const preRegistrationIssueCodes = [
    * (same bar as relative ROPE; see result-contracts.md).
    */
   "PREREG_FUTILITY_REQUIRES_ABSOLUTE_MDE",
+  /**
+   * Relative ship-rule margins use Fieller intervals; sequential Fieller
+   * time-uniform coverage is unproven (result-contracts.md). Use absolute
+   * margin_scale on a sequential Run, or set horizon to fixed.
+   */
+  "PREREG_SHIP_RULE_RELATIVE_SEQUENTIAL_UNSUPPORTED",
   "PREREG_DESIRABILITY_REQUIRED",
   "PREREG_PRIMARY_METRIC_MISSING",
   "PREREG_DUPLICATE_METRIC",

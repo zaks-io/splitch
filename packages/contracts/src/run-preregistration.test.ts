@@ -152,6 +152,34 @@ describe("resolvePreRegistration", () => {
     if (result.ok) return;
     expect(codes(result.issues)).toContain("PREREG_SHIP_RULE_INVALID");
   });
+
+  it("refuses relative ship-rule margin on a sequential Run", () => {
+    const result = resolvePreRegistration(
+      {
+        ...validIntent,
+        shipRule: { ...validIntent.shipRule, marginScale: "relative" },
+      },
+      RUN_METRICS,
+      { horizon: "sequential" },
+    );
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(codes(result.issues)).toContain("PREREG_SHIP_RULE_RELATIVE_SEQUENTIAL_UNSUPPORTED");
+  });
+
+  it("accepts relative ship-rule margin on a fixed-horizon Run", () => {
+    const result = resolvePreRegistration(
+      {
+        ...validIntent,
+        shipRule: { ...validIntent.shipRule, marginScale: "relative" },
+      },
+      RUN_METRICS,
+      { horizon: "fixed" },
+    );
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.ship_rule.margin_scale).toBe("relative");
+  });
 });
 
 describe("resolvePreRegistration futility mode", () => {

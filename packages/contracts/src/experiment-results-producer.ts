@@ -146,6 +146,8 @@ function readyBase(input: {
     preRegistration: frozenPreRegistration(input.analysis.run_commitments),
     gate: input.gate,
     stats: input.analysis.stats,
+    controlVariant: input.analysis.control_variant,
+    horizon: runHorizon(input.analysis.run_commitments),
   });
   return {
     state: "ready" as const,
@@ -182,6 +184,20 @@ function frozenPreRegistration(
     return undefined;
   }
   return commitments.pre_registration;
+}
+
+/**
+ * Frozen commitments encode horizon via target_n: sequential has a tuning
+ * target; fixed has null. Legacy has no pre-registration, so ship never reads
+ * this path for a relative rule without a frozen Start.
+ */
+function runHorizon(
+  commitments: Extract<AnalysisResultsEnvelope, { state: "ready" }>["run_commitments"],
+): "sequential" | "fixed" | undefined {
+  if (commitments === undefined || commitments.analysis_version_source !== "frozen") {
+    return undefined;
+  }
+  return commitments.target_n === null ? "fixed" : "sequential";
 }
 
 function readyReadiness(input: {

@@ -80,6 +80,7 @@ export async function startExperiment(
     body.preRegistration,
     runMetricIdsFromPrepared(prepared.value),
     args.requestId,
+    decisionSpec.value.horizon,
   );
   if (!preRegistration.ok) return preRegistration.response;
   const preRegistrationJson = preRegistration.value === null ? null : json(preRegistration.value);

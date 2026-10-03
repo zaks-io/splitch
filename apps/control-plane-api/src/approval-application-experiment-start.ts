@@ -47,6 +47,7 @@ export async function applyExperimentStart(
     request.diff.proposed.preRegistration,
     runMetricIdsFromPrepared(prepared.value),
     commit.reviewId,
+    decisionSpec.horizon,
   );
   if (!preRegistration.ok) return await responseError(preRegistration.response);
   const preRegistrationJson = preRegistration.value === null ? null : json(preRegistration.value);

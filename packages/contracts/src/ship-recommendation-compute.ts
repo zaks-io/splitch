@@ -13,9 +13,12 @@ import type { GuardrailResult, StatsOutput } from "./stats-result-contract";
  * | 1 | No pre-registration | unavailable (`no_pre_registration`) |
  * | 2 | Trust/health gate fail (SRM, activation, engine, Control, decision family) | invalid |
  * | 3 | Gate not ready (underpowered, planned duration) | keep_running |
- * | 4 | Primary harmful OR any Guardrail breached | do_not_ship |
- * | 5 | Primary undecided | keep_running |
- * | 6 | Primary beneficial per required margin, no Guardrail breach | ship |
+ * | 4 | Any Guardrail breached | do_not_ship (before interval availability) |
+ * | 5 | Sequential Run + relative ship rule | unavailable (`relative_sequential_coverage_unproven`) |
+ * | 6 | Primary / goal interval unavailable | unavailable |
+ * | 7 | Combined goal harmful | do_not_ship |
+ * | 8 | Combined goal undecided | keep_running |
+ * | 9 | Combined goal beneficial, no Guardrail breach | ship |
  */
 
 const INVALID_CHECK_IDS = new Set([
@@ -40,6 +43,13 @@ export function computeShipRecommendation(input: {
   preRegistration: PreRegistration | undefined;
   gate: ExperimentDecisionGate;
   stats: StatsOutput;
+  /** Frozen Control Variant key; Treatments are every other Variant. */
+  controlVariant: string;
+  /**
+   * Run horizon. Sequential + relative ship rule is refused (Fieller coverage
+   * unproven). Omit only in tests that exercise absolute rules.
+   */
+  horizon?: "sequential" | "fixed";
 }): ShipRecommendationResult {
   if (input.preRegistration === undefined) {
     return { recommendationUnavailable: "no_pre_registration" };
@@ -59,44 +69,69 @@ export function computeShipRecommendation(input: {
     };
   }
 
-  const primary = resolvePrimaryEffect(input.preRegistration, input.stats.arm_results);
+  // Known Guardrail breach wins over missing intervals (fail-loud on harm).
+  const breached = firstBreachedGuardrail(input.stats.guardrail_results);
+  if (breached !== undefined) {
+    return {
+      recommendation: {
+        verdict: "do_not_ship",
+        because: guardrailBecause({
+          ciLower: breached.ci_lower,
+          threshold: breached.threshold,
+          breachReason: breached.breach_reason,
+        }),
+      },
+    };
+  }
+
+  if (
+    input.preRegistration.ship_rule.margin_scale === "relative" &&
+    input.horizon === "sequential"
+  ) {
+    return { recommendationUnavailable: "relative_sequential_coverage_unproven" };
+  }
+
+  const primary = resolvePrimaryEffect(
+    input.preRegistration,
+    input.stats.arm_results,
+    input.controlVariant,
+  );
   if (primary.status === "unavailable") {
     return { recommendationUnavailable: primary.reason };
   }
 
-  const breached = firstBreachedGuardrail(input.stats.guardrail_results);
-  const goals = goalEffects(input.preRegistration, input.stats.arm_results, primary);
+  const guardrailMetricIds = new Set(input.stats.guardrail_results.map((row) => row.metric_id));
+  const goals = goalEffects(
+    input.preRegistration,
+    input.stats.arm_results,
+    input.controlVariant,
+    primary.classified,
+    guardrailMetricIds,
+  );
   if (goals.status === "unavailable") {
     return { recommendationUnavailable: goals.reason };
   }
 
   const combined = combineEffects(
     input.preRegistration.ship_rule.conflict_resolution,
-    primary.effect,
-    goals.effects,
+    primary.classified,
+    goals.goals,
   );
 
-  if (combined === "harmful" || breached !== undefined) {
+  if (combined.effect === "harmful") {
     return {
       recommendation: {
         verdict: "do_not_ship",
-        because:
-          breached !== undefined
-            ? guardrailBecause({
-                ciLower: breached.ci_lower,
-                threshold: breached.threshold,
-                breachReason: breached.breach_reason,
-              })
-            : primary.because,
+        because: combined.because,
       },
     };
   }
 
-  if (combined === "undecided") {
+  if (combined.effect === "undecided") {
     return {
       recommendation: {
         verdict: "keep_running",
-        because: primary.because,
+        because: combined.because,
       },
     };
   }
@@ -104,7 +139,7 @@ export function computeShipRecommendation(input: {
   return {
     recommendation: {
       verdict: "ship",
-      because: `${primary.because.replace(/\.$/, "")} with no Guardrail breach.`,
+      because: `${combined.because.replace(/\.$/, "")} with no Guardrail breach.`,
     },
   };
 }

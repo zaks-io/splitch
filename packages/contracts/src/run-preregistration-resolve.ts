@@ -22,6 +22,7 @@ export interface PreRegistrationIssue {
 export function resolvePreRegistration(
   raw: unknown,
   runMetricIds: ReadonlySet<string>,
+  options: { horizon?: "sequential" | "fixed" } = {},
 ): { ok: true; value: PreRegistration } | { ok: false; issues: PreRegistrationIssue[] } {
   if (raw === undefined || raw === null) {
     return {
@@ -46,16 +47,17 @@ export function resolvePreRegistration(
       })),
     };
   }
-  return validateAndFreeze(parsed.data, runMetricIds);
+  return validateAndFreeze(parsed.data, runMetricIds, options.horizon);
 }
 
 function validateAndFreeze(
   intent: PreRegistrationIntent,
   runMetricIds: ReadonlySet<string>,
+  horizon: "sequential" | "fixed" | undefined,
 ): { ok: true; value: PreRegistration } | { ok: false; issues: PreRegistrationIssue[] } {
   const issues = [
     ...hypothesisIssues(intent),
-    ...shipRuleIssues(intent),
+    ...shipRuleIssues(intent, horizon),
     ...primaryMetricIssues(intent, runMetricIds),
     ...metricEntryIssues(intent, runMetricIds),
     ...futilityIssues(intent),
@@ -87,15 +89,27 @@ function hypothesisIssues(intent: PreRegistrationIntent): PreRegistrationIssue[]
   ];
 }
 
-function shipRuleIssues(intent: PreRegistrationIntent): PreRegistrationIssue[] {
-  if (intent.shipRule.requiredMargin > 0) return [];
-  return [
-    {
+function shipRuleIssues(
+  intent: PreRegistrationIntent,
+  horizon: "sequential" | "fixed" | undefined,
+): PreRegistrationIssue[] {
+  const issues: PreRegistrationIssue[] = [];
+  if (!(intent.shipRule.requiredMargin > 0)) {
+    issues.push({
       path: ["body", "preRegistration", "shipRule", "requiredMargin"],
       message: "shipRule.requiredMargin must be a positive finite number",
       code: "PREREG_SHIP_RULE_INVALID",
-    },
-  ];
+    });
+  }
+  if (horizon === "sequential" && intent.shipRule.marginScale === "relative") {
+    issues.push({
+      path: ["body", "preRegistration", "shipRule", "marginScale"],
+      message:
+        "relative ship-rule margin is not accepted on a sequential Run; sequential Fieller coverage is unproven, so use marginScale absolute or set horizon to fixed",
+      code: "PREREG_SHIP_RULE_RELATIVE_SEQUENTIAL_UNSUPPORTED",
+    });
+  }
+  return issues;
 }
 
 function primaryMetricIssues(

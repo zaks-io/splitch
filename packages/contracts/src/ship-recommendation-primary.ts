@@ -8,21 +8,24 @@ import {
 import type { RecommendationUnavailableReason } from "./ship-recommendation";
 import type { ArmResult } from "./stats-result-arm";
 
+export type ClassifiedEffect = {
+  effect: MetricEffectVerdict;
+  because: string;
+  arm: ArmResult;
+  interval: { lower: number; upper: number };
+};
+
 export type PrimaryResolved =
-  | {
-      status: "ok";
-      effect: MetricEffectVerdict;
-      because: string;
-      arm: ArmResult;
-    }
+  | { status: "ok"; classified: ClassifiedEffect }
   | { status: "unavailable"; reason: RecommendationUnavailableReason };
 
 export function resolvePrimaryEffect(
   preRegistration: PreRegistration,
   arms: readonly ArmResult[],
+  controlVariant: string,
 ): PrimaryResolved {
   const primaryMetric = requirePrimaryMetric(preRegistration);
-  const treatmentArms = treatmentArmsFor(preRegistration.primary_metric_id, arms);
+  const treatmentArms = treatmentArmsFor(preRegistration.primary_metric_id, arms, controlVariant);
   if (treatmentArms.length === 0) {
     return { status: "unavailable", reason: "primary_result_unavailable" };
   }
@@ -35,6 +38,7 @@ export function resolvePrimaryEffect(
     desirability: primaryMetric.desirability,
     scale,
     marginOnScale,
+    subject: "Primary Metric",
   });
   if (classified.status === "unavailable") return classified;
 
@@ -46,49 +50,46 @@ export function resolvePrimaryEffect(
 
   return {
     status: "ok",
-    effect,
-    arm: deciding.arm,
-    because: effectBecause({
-      effect,
-      desirability: primaryMetric.desirability,
-      scale,
-      ciLower: deciding.interval.lower,
-      ciUpper: deciding.interval.upper,
-      marginOnScale,
-      relativeLiftPct: deciding.arm.relative_lift_pct,
-    }),
+    classified: deciding,
   };
 }
 
 export function goalEffects(
   preRegistration: PreRegistration,
   arms: readonly ArmResult[],
-  primary: Extract<PrimaryResolved, { status: "ok" }>,
+  controlVariant: string,
+  primary: ClassifiedEffect,
+  guardrailMetricIds: ReadonlySet<string>,
 ):
-  | { status: "ok"; effects: MetricEffectVerdict[] }
+  | { status: "ok"; goals: ClassifiedEffect[] }
   | { status: "unavailable"; reason: RecommendationUnavailableReason } {
   if (preRegistration.ship_rule.conflict_resolution === "primary_wins") {
-    return { status: "ok", effects: [primary.effect] };
+    return { status: "ok", goals: [primary] };
   }
-  return classifyAllGoalMetrics(preRegistration, arms);
+  return classifyLockedGoalMetrics(preRegistration, arms, controlVariant, guardrailMetricIds);
 }
 
-function classifyAllGoalMetrics(
+function classifyLockedGoalMetrics(
   preRegistration: PreRegistration,
   arms: readonly ArmResult[],
+  controlVariant: string,
+  guardrailMetricIds: ReadonlySet<string>,
 ):
-  | { status: "ok"; effects: MetricEffectVerdict[] }
+  | { status: "ok"; goals: ClassifiedEffect[] }
   | { status: "unavailable"; reason: RecommendationUnavailableReason } {
   const scale = preRegistration.ship_rule.margin_scale;
   const marginOnScale = marginOnIntervalScale(preRegistration.ship_rule.required_margin, scale);
-  const effects: MetricEffectVerdict[] = [];
+  const lockedGoalIds = lockedGoalMetricIds(arms, guardrailMetricIds);
+  const goals: ClassifiedEffect[] = [];
 
-  for (const metric of preRegistration.metrics) {
+  for (const metric of goalMetricsOnly(preRegistration, lockedGoalIds, guardrailMetricIds)) {
     const classified = classifyTreatmentArms({
-      arms: treatmentArmsFor(metric.metric_id, arms),
+      arms: treatmentArmsFor(metric.metric_id, arms, controlVariant),
       desirability: metric.desirability,
       scale,
       marginOnScale,
+      subject:
+        metric.metric_id === preRegistration.primary_metric_id ? "Primary Metric" : "Goal Metric",
     });
     if (classified.status === "unavailable") {
       return unavailableForScale(classified.reason, scale);
@@ -96,9 +97,36 @@ function classifyAllGoalMetrics(
     if (classified.rows.length === 0) {
       return { status: "unavailable", reason: "primary_result_unavailable" };
     }
-    effects.push(...classified.rows.map((row) => row.effect));
+    goals.push(...classified.rows);
   }
-  return { status: "ok", effects };
+  if (goals.length === 0) {
+    return { status: "unavailable", reason: "primary_result_unavailable" };
+  }
+  return { status: "ok", goals };
+}
+
+function goalMetricsOnly(
+  preRegistration: PreRegistration,
+  lockedGoalIds: ReadonlySet<string>,
+  guardrailMetricIds: ReadonlySet<string>,
+): PreRegistration["metrics"] {
+  // Guardrails are evaluated only by breach rules; combine locked goals only.
+  return preRegistration.metrics.filter(
+    (metric) => !guardrailMetricIds.has(metric.metric_id) && lockedGoalIds.has(metric.metric_id),
+  );
+}
+
+function lockedGoalMetricIds(
+  arms: readonly ArmResult[],
+  guardrailMetricIds: ReadonlySet<string>,
+): Set<string> {
+  const ids = new Set<string>();
+  for (const arm of arms) {
+    if (arm.in_bh_family && !guardrailMetricIds.has(arm.metric_id)) {
+      ids.add(arm.metric_id);
+    }
+  }
+  return ids;
 }
 
 function unavailableForScale(
@@ -113,17 +141,38 @@ function unavailableForScale(
 
 export function combineEffects(
   resolution: PreRegistration["ship_rule"]["conflict_resolution"],
-  primary: MetricEffectVerdict,
-  goals: readonly MetricEffectVerdict[],
-): MetricEffectVerdict {
+  primary: ClassifiedEffect,
+  goals: readonly ClassifiedEffect[],
+): ClassifiedEffect {
   if (resolution === "primary_wins") return primary;
-  if (goals.some((effect) => effect === "harmful")) return "harmful";
-  if (resolution === "unanimous_goals") {
-    if (goals.every((effect) => effect === "beneficial")) return "beneficial";
-    return "undecided";
+  const harmful = goals.find((goal) => goal.effect === "harmful");
+  if (harmful !== undefined) return harmful;
+  if (resolution === "unanimous_goals") return combineUnanimous(primary, goals);
+  return combineAnyGoal(primary, goals);
+}
+
+function combineUnanimous(
+  primary: ClassifiedEffect,
+  goals: readonly ClassifiedEffect[],
+): ClassifiedEffect {
+  if (goals.every((goal) => goal.effect === "beneficial")) {
+    return firstWithEffect(goals, "beneficial") ?? primary;
   }
-  if (goals.some((effect) => effect === "beneficial")) return "beneficial";
-  return "undecided";
+  return firstWithEffect(goals, "undecided") ?? primary;
+}
+
+function combineAnyGoal(
+  primary: ClassifiedEffect,
+  goals: readonly ClassifiedEffect[],
+): ClassifiedEffect {
+  return firstWithEffect(goals, "beneficial") ?? firstWithEffect(goals, "undecided") ?? primary;
+}
+
+function firstWithEffect(
+  goals: readonly ClassifiedEffect[],
+  effect: MetricEffectVerdict,
+): ClassifiedEffect | undefined {
+  return goals.find((goal) => goal.effect === effect);
 }
 
 function requirePrimaryMetric(preRegistration: PreRegistration) {
@@ -136,8 +185,13 @@ function requirePrimaryMetric(preRegistration: PreRegistration) {
   return primaryMetric;
 }
 
-function treatmentArmsFor(metricId: string, arms: readonly ArmResult[]): ArmResult[] {
-  return arms.filter((arm) => arm.metric_id === metricId && arm.relative_lift_pct !== null);
+/** Treatments are every non-Control arm for the Metric (not "has relative lift"). */
+function treatmentArmsFor(
+  metricId: string,
+  arms: readonly ArmResult[],
+  controlVariant: string,
+): ArmResult[] {
+  return arms.filter((arm) => arm.metric_id === metricId && arm.variant !== controlVariant);
 }
 
 function classifyTreatmentArms(input: {
@@ -145,21 +199,11 @@ function classifyTreatmentArms(input: {
   desirability: PreRegistration["metrics"][number]["desirability"];
   scale: PreRegistration["ship_rule"]["margin_scale"];
   marginOnScale: number;
+  subject: "Primary Metric" | "Goal Metric";
 }):
-  | {
-      status: "ok";
-      rows: Array<{
-        arm: ArmResult;
-        effect: MetricEffectVerdict;
-        interval: { lower: number; upper: number };
-      }>;
-    }
+  | { status: "ok"; rows: ClassifiedEffect[] }
   | { status: "unavailable"; reason: RecommendationUnavailableReason } {
-  const rows: Array<{
-    arm: ArmResult;
-    effect: MetricEffectVerdict;
-    interval: { lower: number; upper: number };
-  }> = [];
+  const rows: ClassifiedEffect[] = [];
 
   for (const arm of input.arms) {
     const interval = intervalForScale(arm, input.scale);
@@ -172,7 +216,8 @@ function classifyTreatmentArms(input: {
             : "primary_result_unavailable",
       };
     }
-    const effect = armReady(arm)
+    // A win requires eligible, FDR-corrected decision evidence — not raw margin.
+    const effect = decisionEligible(arm)
       ? classifyMetricEffect({
           desirability: input.desirability,
           requiredMargin: input.marginOnScale,
@@ -181,13 +226,32 @@ function classifyTreatmentArms(input: {
           ciUpper: interval.upper,
         })
       : ("undecided" as const);
-    rows.push({ arm, effect, interval });
+    rows.push({
+      arm,
+      effect,
+      interval,
+      because: effectBecause({
+        effect,
+        desirability: input.desirability,
+        scale: input.scale,
+        ciLower: interval.lower,
+        ciUpper: interval.upper,
+        marginOnScale: input.marginOnScale,
+        relativeLiftPct: arm.relative_lift_pct,
+        subject: input.subject,
+      }),
+    });
   }
   return { status: "ok", rows };
 }
 
-function armReady(arm: ArmResult): boolean {
-  return arm.status === "ready" || arm.status === "stopped";
+function decisionEligible(arm: ArmResult): boolean {
+  return (
+    (arm.status === "ready" || arm.status === "stopped") &&
+    arm.is_significant === true &&
+    arm.in_bh_family === true &&
+    arm.decision_valid === true
+  );
 }
 
 function worstEffect(effects: readonly MetricEffectVerdict[]): MetricEffectVerdict {

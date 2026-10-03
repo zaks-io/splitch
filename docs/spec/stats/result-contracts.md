@@ -197,20 +197,38 @@ with numbers and no internal ids. Runs without a pre-registration omit
 
 Precedence (first matching row wins):
 
-| Order | Condition                                                                                   | Outcome                                            |
-| ----- | ------------------------------------------------------------------------------------------- | -------------------------------------------------- |
-| 1     | No pre-registration                                                                         | `recommendationUnavailable: "no_pre_registration"` |
-| 2     | Trust/health gate fail (Control identity, SRM, activation balance, engine, decision family) | `invalid`                                          |
-| 3     | Gate not ready (`underpowered` or `planned_duration`)                                       | `keep_running`                                     |
-| 4     | Primary Metric harmful in the desirable direction, or any Guardrail `is_breached: true`     | `do_not_ship`                                      |
-| 5     | Primary Metric undecided (interval has not cleared the required margin)                     | `keep_running`                                     |
-| 6     | Primary Metric beneficial per the ship rule's required margin, and no Guardrail breached    | `ship`                                             |
+| Order | Condition                                                                                                                            | Outcome                                                              |
+| ----- | ------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------- |
+| 1     | No pre-registration                                                                                                                  | `recommendationUnavailable: "no_pre_registration"`                   |
+| 2     | Trust/health gate fail (Control identity, SRM, activation balance, engine, decision family)                                          | `invalid`                                                            |
+| 3     | Gate not ready (`underpowered` or `planned_duration`)                                                                                | `keep_running`                                                       |
+| 4     | Any Guardrail `is_breached: true`                                                                                                    | `do_not_ship` (before interval-availability returns)                 |
+| 5     | Sequential Run with a relative ship-rule margin                                                                                      | `recommendationUnavailable: "relative_sequential_coverage_unproven"` |
+| 6     | Combined locked goal Metrics harmful in the desirable direction                                                                      | `do_not_ship`                                                        |
+| 7     | Combined locked goal Metrics undecided (interval has not cleared the required margin, or FDR-corrected decision evidence is missing) | `keep_running`                                                       |
+| 8     | Combined locked goal Metrics beneficial per the ship rule's required margin, no Guardrail breached                                   | `ship`                                                               |
+
+A win requires eligible FDR-corrected decision evidence (`is_significant`,
+`in_bh_family`, and `decision_valid` on the deciding Treatment arm). Clearing the
+margin alone is not enough. Conflict resolution (`primary_wins` /
+`unanimous_goals` / `any_goal`) combines only locked goal Metrics from the BH
+decision family; Guardrail Metrics listed in pre-registration are ignored for
+goal combination and evaluated only by their breach rows. `because` names the
+deciding Metric's interval (Primary or Goal) with numbers and no internal ids.
 
 Absolute margins use the absolute decision interval (`absolute_ci_*` on Treatment
 arms, stripped from the result token). Relative margins use the published relative
-CI (percent) against a fractional `required_margin`. Missing absolute bounds with
-an absolute ship rule yield `recommendationUnavailable: "absolute_interval_unavailable"`
-rather than a guessed verdict.
+CI (percent) against a fractional `required_margin`, and are accepted only on a
+**fixed-horizon** Run: sequential Fieller time-uniform coverage is unproven, so
+Start refuses `marginScale: "relative"` on a sequential Run with
+`PREREG_SHIP_RULE_RELATIVE_SEQUENTIAL_UNSUPPORTED` (same rationale as relative
+ROPE). If a sequential Run somehow carries a relative ship rule at results time,
+the producer emits `recommendationUnavailable: "relative_sequential_coverage_unproven"`
+rather than a Fieller-based ship. Missing absolute bounds with an absolute ship
+rule yield `recommendationUnavailable: "absolute_interval_unavailable"` rather
+than a guessed verdict. Treatments are identified by Control identity (every
+non-Control Variant), not by a non-null relative lift — so a zero Control mean
+still yields an absolute-rule recommendation when absolute intervals exist.
 
 ## Futility verdict (MDE exclusion, advisory)
 
@@ -313,9 +331,11 @@ field names and Analysis enums are not renamed or extended.
 
 After `reasons`, ready responses carry `recommendation` or `recommendationUnavailable` (plan 2.4).
 Concise omits `stats` unless the caller sets `includeExploratory: true` (exploratory statistics
-opt-in; detailed always includes full stats). The recommendation is never hashed into
-`result_token`. The panel Experiment Results read calls the same producer and maps into its
-camelCase projection; it does not re-derive the gate or the recommendation.
+opt-in; detailed always includes full stats). On GET, `includeExploratory` is a query string and
+accepts only `"true"` / `"false"` (coerced to a boolean); POST/MCP bodies keep a real JSON boolean.
+The recommendation is never hashed into `result_token`. The panel Experiment Results read calls the
+same producer and maps into its camelCase projection; it does not re-derive the gate or the
+recommendation.
 
 ## Sources
 

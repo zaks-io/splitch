@@ -29,6 +29,13 @@ export const recommendationUnavailableReasons = [
   "no_pre_registration",
   "absolute_interval_unavailable",
   "primary_result_unavailable",
+  /**
+   * Relative ship-rule margins use Fieller intervals; sequential Fieller
+   * time-uniform coverage is unproven (result-contracts.md). Refused at Start
+   * with PREREG_SHIP_RULE_RELATIVE_SEQUENTIAL_UNSUPPORTED; fail-loud here if a
+   * sequential Run somehow carries a relative ship rule.
+   */
+  "relative_sequential_coverage_unproven",
 ] as const;
 export const RecommendationUnavailableReasonSchema = z.enum(recommendationUnavailableReasons);
 export type RecommendationUnavailableReason = z.infer<typeof RecommendationUnavailableReasonSchema>;

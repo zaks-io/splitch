@@ -27,7 +27,10 @@ export function effectBecause(input: {
   ciUpper: number;
   marginOnScale: number;
   relativeLiftPct: number | null;
+  /** Deciding Metric label; no internal ids. Secondary goals use "Goal Metric". */
+  subject?: "Primary Metric" | "Goal Metric";
 }): string {
+  const subject = input.subject ?? "Primary Metric";
   const interval = formatInterval(input.ciLower, input.ciUpper, input.scale);
   const margin = formatMargin(input.marginOnScale, input.scale);
   const direction =
@@ -39,14 +42,14 @@ export function effectBecause(input: {
       input.relativeLiftPct !== null &&
       input.relativeLiftPct > 0
     ) {
-      return `Primary Metric shows a positive lift of ${trimNumber(input.relativeLiftPct)}% (interval ${interval}) against a ${direction} goal.`;
+      return `${subject} shows a positive lift of ${trimNumber(input.relativeLiftPct)}% (interval ${interval}) against a ${direction} goal.`;
     }
-    return `Primary Metric interval ${interval} shows harm for a ${direction} goal.`;
+    return `${subject} interval ${interval} shows harm for a ${direction} goal.`;
   }
   if (input.effect === "beneficial") {
-    return `Primary Metric interval ${interval} clears the required ${margin} margin for a ${direction} goal.`;
+    return `${subject} interval ${interval} clears the required ${margin} margin for a ${direction} goal.`;
   }
-  return `Primary Metric interval ${interval} has not cleared the required ${margin} margin.`;
+  return `${subject} interval ${interval} has not cleared the required ${margin} margin.`;
 }
 
 export function guardrailBecause(input: {

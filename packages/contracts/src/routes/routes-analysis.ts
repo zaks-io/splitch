@@ -23,7 +23,7 @@ import {
 } from "./routes-analysis-privacy";
 import {
   OptionalResultsSelectorSchema,
-  ResultsSelectorSchema,
+  ResultsSelectorQuerySchema,
 } from "./routes-analysis-results-selector";
 
 /**
@@ -77,7 +77,7 @@ export const analysisRoutes = [
     path: "/apps/:appId/envs/:environmentId/experiments/:experimentId/results",
     summary:
       "Get an Experiment's results: readiness, blockedBy, reasons, then ship recommendation when pre-registered; detailed stats by default; view=concise for the verdict block (includeExploratory attaches stats). States: ready, no_data, or no_run.",
-    request: { params: ExperimentParams, query: ResultsSelectorSchema },
+    request: { params: ExperimentParams, query: ResultsSelectorQuerySchema },
     response: ExperimentResultsResponseSchema,
     auth: AUTH,
     rateLimit: RATE,

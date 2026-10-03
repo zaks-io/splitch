@@ -10,9 +10,10 @@ export function resolveStartPreRegistration(
   raw: unknown,
   runMetricIds: ReadonlySet<string>,
   requestId: string,
+  horizon: "sequential" | "fixed",
 ): { ok: true; value: PreRegistration | null } | { ok: false; response: Response } {
   if (raw === undefined) return { ok: true, value: null };
-  const resolved = resolvePreRegistration(raw, runMetricIds);
+  const resolved = resolvePreRegistration(raw, runMetricIds, { horizon });
   if (!resolved.ok) {
     return { ok: false, response: validationErrors(requestId, resolved.issues) };
   }
