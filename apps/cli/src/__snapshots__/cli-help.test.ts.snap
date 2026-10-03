@@ -1699,7 +1699,7 @@ Example:
   splitch flags verify checkout --targeting-key workspace-123 --id-type workspace --json",
     "metrics create": "Create a Metric (binomial, count, revenue, ratio, retention, guardrail).
 
-Formats: appId: required canonical id. kind: required one of "binomial", "count", "revenue", "ratio". eventDefinitionId: optional canonical id. direction: optional one of "higher_is_better", "lower_is_better".
+Formats: appId: required canonical id. kind: required one of "binomial", "count", "revenue", "ratio", "retention". eventDefinitionId: optional canonical id. direction: optional one of "higher_is_better", "lower_is_better".
 
 Terms: Metric — a fact plus an aggregation.
 
@@ -1793,7 +1793,7 @@ Example:
   splitch metrics list --json",
     "metrics update": "Update a Metric (decision-valid edits gated by DECISION_LOCKED).
 
-Formats: appId: required Canonical App ID (app_...) or human-readable App slug. metricId: required canonical id. kind: optional one of "binomial", "count", "revenue", "ratio". eventDefinitionId: optional canonical id. direction: optional one of "higher_is_better", "lower_is_better".
+Formats: appId: required Canonical App ID (app_...) or human-readable App slug. metricId: required canonical id. kind: optional one of "binomial", "count", "revenue", "ratio", "retention". eventDefinitionId: optional canonical id. direction: optional one of "higher_is_better", "lower_is_better".
 
 Terms: Metric — a fact plus an aggregation. App — the product or service surface that groups related Flags and hosts Experiments.
 

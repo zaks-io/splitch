@@ -1,0 +1,15 @@
+- name: retention_shares_the_batch_cuped_pre_period_with_other_kinds
+  description: The production CUPED batch pipe treats Retention as a Binomial pre-period covariate and can return mixed Metric kinds in one query.
+  parameters: "app_id=app_1&environment_id=env_prod&experiment_id=exp_1&run_id=run_1&metric_query_config=%5B%7B%22metric_id%22%3A%22metric_signup%22%2C%22metric_type%22%3A%22binomial%22%2C%22event_definition_id%22%3A%22event_definition_signup%22%2C%22cuped_lookback_ms%22%3A86400000%7D%2C%7B%22metric_id%22%3A%22metric_d7%22%2C%22metric_type%22%3A%22retention%22%2C%22event_definition_id%22%3A%22event_definition_signup%22%2C%22cuped_lookback_ms%22%3A86400000%7D%2C%7B%22metric_id%22%3A%22metric_duration%22%2C%22metric_type%22%3A%22count%22%2C%22event_definition_id%22%3A%22event_definition_llm%22%2C%22event_field_name%22%3A%22duration_ms%22%2C%22cuped_lookback_ms%22%3A86400000%7D%5D&from_ts=2026-06-29%2000%3A00%3A00.000&to_ts=2026-07-09%2000%3A00%3A00.000"
+  expected_http_status: 200
+  expected_result: |
+    {"targeting_key_hash":"tk_control_snapshot","metric_id":"metric_d7","pre_period_value":1,"covariate_source":"pre_period"}
+    {"targeting_key_hash":"tk_control_snapshot","metric_id":"metric_duration","pre_period_value":800,"covariate_source":"pre_period"}
+    {"targeting_key_hash":"tk_control_snapshot","metric_id":"metric_signup","pre_period_value":1,"covariate_source":"pre_period"}
+- name: legacy_cuped_batch_configs_without_offsets_match_single_metric_results
+  description: CUPED batch configs that omit Retention offsets keep the same pre-period Binomial and Count covariates as the single-Metric pipe.
+  parameters: "app_id=app_1&environment_id=env_prod&experiment_id=exp_1&run_id=run_1&metric_query_config=%5B%7B%22metric_id%22%3A%22metric_signup%22%2C%22metric_type%22%3A%22binomial%22%2C%22event_definition_id%22%3A%22event_definition_signup%22%2C%22cuped_lookback_ms%22%3A86400000%7D%2C%7B%22metric_id%22%3A%22metric_duration%22%2C%22metric_type%22%3A%22count%22%2C%22event_definition_id%22%3A%22event_definition_llm%22%2C%22event_field_name%22%3A%22duration_ms%22%2C%22cuped_lookback_ms%22%3A86400000%7D%5D&from_ts=2026-06-29%2000%3A00%3A00.000&to_ts=2026-07-09%2000%3A00%3A00.000"
+  expected_http_status: 200
+  expected_result: |
+    {"targeting_key_hash":"tk_control_snapshot","metric_id":"metric_duration","pre_period_value":800,"covariate_source":"pre_period"}
+    {"targeting_key_hash":"tk_control_snapshot","metric_id":"metric_signup","pre_period_value":1,"covariate_source":"pre_period"}
