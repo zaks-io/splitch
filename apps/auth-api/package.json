@@ -19,8 +19,8 @@
     "@splitch/db": "workspace:*",
     "@splitch/observability": "workspace:*",
     "@splitch/worker-runtime": "workspace:*",
-    "hono": "^4.13.5",
-    "zod": "^4.5.1"
+    "hono": "^4.13.12",
+    "zod": "^4.6.5"
   },
   "devDependencies": {
     "@cloudflare/vitest-pool-workers": "0.22.0"

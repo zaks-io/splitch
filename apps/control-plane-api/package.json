@@ -19,12 +19,12 @@
     "@splitch/contracts": "workspace:*",
     "@splitch/control-plane-sdk": "workspace:*",
     "@splitch/db": "workspace:*",
+    "@splitch/evaluation-core": "workspace:*",
     "@splitch/observability": "workspace:*",
     "@splitch/privacy": "workspace:*",
     "@splitch/stats": "workspace:*",
     "@splitch/worker-runtime": "workspace:*",
-    "hono": "^4.13.5",
-    "@splitch/evaluation-core": "workspace:*"
+    "hono": "^4.13.12"
   },
   "devDependencies": {
     "@cloudflare/vitest-pool-workers": "0.22.0",

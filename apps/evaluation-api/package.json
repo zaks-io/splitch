@@ -21,7 +21,7 @@
     "@splitch/observability": "workspace:*",
     "@splitch/privacy": "workspace:*",
     "@splitch/worker-runtime": "workspace:*",
-    "hono": "^4.13.5"
+    "hono": "^4.13.12"
   },
   "devDependencies": {
     "@splitch/sdk": "workspace:*",

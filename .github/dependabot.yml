@@ -19,6 +19,12 @@ updates:
       - dependency-name: typescript
         update-types:
           - version-update:semver-major
+      # @cloudflare/vitest-pool-workers 0.22 (and its @cloudflare/vitest-plugin
+      # rename) peers vitest ^4.1 and its pool crashes on start under vitest 5.
+      # Lift this when cloudflare/workers-sdk#15618 ships.
+      - dependency-name: vitest
+        update-types:
+          - version-update:semver-major
     groups:
       routine-minor-patch:
         patterns:
