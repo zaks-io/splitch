@@ -1,8 +1,4 @@
-import {
-  ConvexConfigSnapshotSchema,
-  ConvexInstallationSchema,
-  parseResponseBody,
-} from "@splitch/sdk/local-evaluation";
+import { ConvexInstallationSchema, parseResponseBody } from "@splitch/sdk/local-evaluation";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import { action, env, internalAction, internalMutation, internalQuery } from "./_generated/server";
@@ -10,13 +6,7 @@ import { canonicalCallbackUrl } from "./callback_url";
 import { randomSecret } from "./crypto";
 import { purgeBatchHandler, revokeLocalHandler, uninstallHandler } from "./integration_cleanup";
 import { initializeHandler } from "./integration_initialize";
-import {
-  activateHandler,
-  cancelPendingSyncRecovery,
-  recoverSyncHandler,
-  SYNC_RECOVERY_DELAY_MS,
-  scheduleSyncRecovery,
-} from "./integration_recovery";
+import { activateHandler, recoverSyncHandler } from "./integration_recovery";
 import {
   installRejected,
   normalizedEndpoint,
@@ -25,7 +15,7 @@ import {
   syncHandler,
 } from "./integration_remote";
 import { CURRENT_KEY, requiredIntegration } from "./integration_state";
-import { ensureRetentionScheduled } from "./retention";
+import { announceHandler, commitSnapshotHandler } from "./integration_sync";
 import schema from "./schema";
 import { installationResultValidator } from "./validators";
 
@@ -130,46 +120,7 @@ export const recoverSync = internalMutation({
 export const commitSnapshot = internalMutation({
   args: { payload: v.string() },
   returns: v.null(),
-  handler: async (ctx, args) => {
-    const snapshot = parseResponseBody(ConvexConfigSnapshotSchema, JSON.parse(args.payload));
-    const integration = await requiredIntegration(ctx);
-    if (
-      integration.appId !== snapshot.appId ||
-      integration.environmentId !== snapshot.environmentId
-    ) {
-      throw new Error("Convex snapshot App or Environment does not match the installation");
-    }
-    if (snapshot.environmentVersion < integration.announcedVersion) {
-      throw new Error(
-        `Convex snapshot version ${snapshot.environmentVersion} is below announced version ${integration.announcedVersion}`,
-      );
-    }
-    const existing = await ctx.db
-      .query("snapshots")
-      .withIndex("by_key", (q) => q.eq("key", CURRENT_KEY))
-      .unique();
-    if (existing && snapshot.environmentVersion < existing.environmentVersion) {
-      throw new Error("Convex snapshot cannot move backwards");
-    }
-    if (existing)
-      await ctx.db.replace(existing._id, {
-        key: CURRENT_KEY,
-        environmentVersion: snapshot.environmentVersion,
-        payload: args.payload,
-      });
-    else
-      await ctx.db.insert("snapshots", {
-        key: CURRENT_KEY,
-        environmentVersion: snapshot.environmentVersion,
-        payload: args.payload,
-      });
-    await cancelPendingSyncRecovery(ctx, integration);
-    await ctx.db.patch(integration._id, {
-      snapshotVersion: snapshot.environmentVersion,
-      syncRecoveryJobId: undefined,
-      syncRecoveryVersion: undefined,
-    });
-  },
+  handler: commitSnapshotHandler,
 });
 
 export const announce = internalMutation({
@@ -180,31 +131,7 @@ export const announce = internalMutation({
     environmentVersion: v.number(),
   },
   returns: v.union(v.literal("scheduled"), v.literal("duplicate")),
-  handler: async (ctx, args): Promise<"scheduled" | "duplicate"> => {
-    const integration = await requiredIntegration(ctx);
-    if (
-      integration.state !== "active" ||
-      integration.appId !== args.appId ||
-      integration.environmentId !== args.environmentId
-    ) {
-      throw new Error("Config nudge does not match the active Convex installation");
-    }
-    const prior = await ctx.db
-      .query("webhookClaims")
-      .withIndex("by_delivery", (q) => q.eq("deliveryId", args.deliveryId))
-      .unique();
-    if (prior || args.environmentVersion <= integration.announcedVersion) return "duplicate";
-    await ctx.db.insert("webhookClaims", { deliveryId: args.deliveryId, claimedAt: Date.now() });
-    await ensureRetentionScheduled(ctx);
-    await ctx.db.patch(integration._id, { announcedVersion: args.environmentVersion });
-    await ctx.scheduler.runAfter(0, internal.integration.sync, {});
-    await scheduleSyncRecovery(
-      ctx,
-      { ...integration, announcedVersion: args.environmentVersion },
-      SYNC_RECOVERY_DELAY_MS,
-    );
-    return "scheduled";
-  },
+  handler: announceHandler,
 });
 
 export const stageRotation = internalMutation({

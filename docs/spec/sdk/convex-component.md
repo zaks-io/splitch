@@ -115,17 +115,19 @@ ConfigChanged {
 The request carries `Splitch-Signature` over the exact body plus a bounded timestamp. The component
 rejects an invalid signature, wrong App/Environment, expired timestamp, or reused `deliveryId`
 before scheduling work. A valid nudge first raises the stored `announcedVersion`, then atomically
-schedules an immediate sync Action and one version-scoped recovery Mutation. The recovery Mutation
-keeps scheduling the Action once per minute only while the stored snapshot remains behind that
-announced version, and cancels its next run when a current snapshot commits. Duplicate or older
-versions return `202` without another pull.
+schedules an immediate sync Action, one version-scoped recovery Mutation, and one version-scoped
+five-second sync deadline. The recovery Mutation keeps scheduling the Action once per minute only
+while the stored snapshot remains behind that announced version, and cancels its next run when a
+current snapshot commits. The deadline is described in
+[Local holdover and freshness](#local-holdover-and-freshness). Duplicate or older versions return
+`202` without another pull.
 
 There is no reconciliation cron. Configuration recovery and one installation-scoped Exposure batch
 successor are created atomically with the durable work they protect. The drainer claims up to 25
 Exposures within the 32 KiB request bound and settles the batch in one Mutation. Retained claims and
 terminal Exposure rows share one scheduled cleanup Mutation set for the earliest expiry; it
 schedules its successor only while retained data remains. Activation separately seeds
-version-scoped recovery when configuration is stale.
+version-scoped recovery and the sync deadline when configuration is stale.
 
 D1 triggers insert the webhook outbox in the same transaction as the authoritative Flag Configuration
 commit and increment the Environment configuration version. A lease scanner dispatches immediately
@@ -183,10 +185,29 @@ the original `runId` and Variant name. The raw Targeting Key is absent. A fresh 
 holdover commit together; concurrent first use is serialized by the Convex transaction. Later Runs
 replay the held Variant and create no new Exposure.
 
-No installed snapshot, invalid stored data, or `snapshot.environmentVersion < announcedVersion`
-returns `reason: ERROR` with an actionable code. If no newer version has been announced, the last
-validated snapshot remains usable with local/cached diagnostics. A sync Action never replaces good
-state with a partial or older snapshot.
+No installed snapshot or invalid stored data fails loud with an actionable code. If no newer version
+has been announced, the last validated snapshot remains usable with local/cached diagnostics. A sync
+Action never replaces good state with a partial or older snapshot.
+
+When `snapshot.environmentVersion < announcedVersion`, evaluation never throws:
+
+- **Sync grace.** Until the deadline below, `peek` and `evaluate` serve the last validated
+  snapshot's real Variant with `reason: STALE`. `evaluate` persists Exposures from the held snapshot
+  as usual, because they record what was actually served, and its idempotency fingerprint carries
+  the held `snapshotVersion`. An idempotent replay while the snapshot is behind keeps its Variant
+  and single Exposure and reports `STALE`.
+- **Sync overdue.** Five seconds after an announcement or activation, a scheduled Mutation scoped to
+  that installation and version marks the installation sync-overdue if the snapshot is still behind
+  that version.
+  Evaluation then returns the caller's Default Variant with `reason: ERROR`,
+  `errorCode: PROVIDER_NOT_READY`, and a message naming both versions. `evaluate` stores no
+  idempotency claim and no Exposure while overdue; a key already served from the held snapshot
+  still replays its `STALE` result. The state persists until a snapshot at or above
+  `announcedVersion` commits; a newer announcement while overdue does not reopen the grace.
+
+Queries never read the clock. The deadline is a write to the integration row every evaluation reads,
+so subscribed queries re-run when it lands. Kill-switch staleness is bounded by the five-second
+deadline plus scheduler latency, not by the one-minute recovery cadence.
 
 ## Deletion and uninstall
 

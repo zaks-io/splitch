@@ -115,10 +115,13 @@ export async function runtimeState(
     .withIndex("by_key", (q) => q.eq("key", "current"))
     .unique();
   if (!stored) throw new Error("PROVIDER_NOT_READY: @splitch/convex has no configuration snapshot");
-  if (stored.environmentVersion < integration.announcedVersion)
-    throw new Error(
-      `STALE: snapshot ${stored.environmentVersion} is behind announced version ${integration.announcedVersion}`,
-    );
+  const syncing = stored.environmentVersion < integration.announcedVersion;
+  if (syncing && integration.syncOverdueVersion !== undefined)
+    return {
+      kind: "overdue" as const,
+      snapshotVersion: stored.environmentVersion,
+      announcedVersion: integration.announcedVersion,
+    };
   const snapshot = parseSnapshot(stored.payload);
   const targetingKeyHash = await localTargetingKeyHash(integration.componentIdentityKey, context);
   const experimentId = snapshot.flags.find((flag) => flag.key === flagKey)?.experimentId;
@@ -139,8 +142,10 @@ export async function runtimeState(
       runId: assignment.runId,
       variant: assignment.variant,
     });
-  return { integration, snapshot, assignments };
+  return { kind: "ready" as const, syncing, integration, snapshot, assignments };
 }
+
+export type ReadyRuntime = Extract<Awaited<ReturnType<typeof runtimeState>>, { kind: "ready" }>;
 
 export async function persistExposure(
   ctx: MutationCtx,
@@ -150,7 +155,7 @@ export async function persistExposure(
     defaultValue: VariantValue;
     idempotencyKey: string;
   },
-  runtime: Awaited<ReturnType<typeof runtimeState>>,
+  runtime: ReadyRuntime,
   exposure: NonNullable<EvaluateResult["exposure"]>,
   fingerprint: string,
 ): Promise<void> {

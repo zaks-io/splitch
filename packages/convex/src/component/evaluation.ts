@@ -1,18 +1,26 @@
 import {
-  type ConvexConfigSnapshot,
   type EvaluateResult,
+  type EvaluationContext,
   evaluatePath,
   type LocalResolutionDetails as ResolutionDetails,
-  resolutionReasonFor,
   type VariantValue,
 } from "@splitch/sdk/local-evaluation";
 import { v } from "convex/values";
-import { internalAction, internalMutation, mutation, query } from "./_generated/server";
+import {
+  internalAction,
+  internalMutation,
+  type MutationCtx,
+  mutation,
+  type QueryCtx,
+  query,
+} from "./_generated/server";
 import { canonicalJson, sha256Hex } from "./crypto";
+import { servedDetails, staleDetails, syncOverdueDetails } from "./evaluation_details";
 import {
   localTargetingKeyHash,
   persistExposure,
   purgeEntityBatch,
+  type ReadyRuntime,
   runtimeState,
 } from "./evaluation_state";
 import {
@@ -42,78 +50,70 @@ const evaluateArgs = {
   defaultValue: variantValueValidator,
 };
 
+type EvaluateArgs = { flagKey: string; context: EvaluationContext; defaultValue: VariantValue };
+
 export const peek = query({
   args: evaluateArgs,
   returns: resolutionDetailsValidator,
-  handler: async (ctx, args): Promise<ResolutionDetails> => {
-    const runtime = await runtimeState(ctx, args.flagKey, args.context);
-    const result = await evaluatePath(
-      {
-        appId: runtime.snapshot.appId,
-        environmentId: runtime.snapshot.environmentId,
-        flagKey: args.flagKey,
-        evaluationContext: args.context,
-      },
-      {
-        provider: snapshotProvider(runtime.snapshot),
-        assignmentStore: readOnlyAssignmentStore(runtime.assignments),
-      },
-    );
-    return detailsFor(runtime.snapshot, args.flagKey, result, args.defaultValue);
-  },
+  handler: peekHandler,
 });
 
 export const evaluate = mutation({
   args: { ...evaluateArgs, idempotencyKey: v.string() },
   returns: resolutionDetailsValidator,
-  handler: async (ctx, args): Promise<ResolutionDetails> => {
-    if (!args.idempotencyKey)
-      throw new Error("idempotencyKey is required for Exposure-bearing Convex evaluation");
-    const runtime = await runtimeState(ctx, args.flagKey, args.context);
-    const fingerprint = await sha256Hex(
-      canonicalJson({
-        flagKey: args.flagKey,
-        context: args.context,
-        defaultValue: args.defaultValue,
-        snapshotVersion: runtime.snapshot.environmentVersion,
-      }),
-    );
-    const claim = await ctx.db
-      .query("evaluationClaims")
-      .withIndex("by_key", (q) => q.eq("idempotencyKey", args.idempotencyKey))
-      .unique();
-    if (claim) {
-      if (claim.fingerprint !== fingerprint)
-        throw new Error(
-          "IDEMPOTENCY_KEY_CONFLICT: idempotencyKey was reused for a different Convex Evaluation",
-        );
-      await ensureRetentionScheduled(ctx);
-      return JSON.parse(claim.result) as ResolutionDetails;
-    }
-    const result = await evaluatePath(
-      {
-        appId: runtime.snapshot.appId,
-        environmentId: runtime.snapshot.environmentId,
-        flagKey: args.flagKey,
-        evaluationContext: args.context,
-      },
-      {
-        provider: snapshotProvider(runtime.snapshot),
-        assignmentStore: readOnlyAssignmentStore(runtime.assignments),
-      },
-    );
-    const details = detailsFor(runtime.snapshot, args.flagKey, result, args.defaultValue);
-    if (result.exposure) await persistExposure(ctx, args, runtime, result.exposure, fingerprint);
-    await ctx.db.insert("evaluationClaims", {
-      idempotencyKey: args.idempotencyKey,
-      fingerprint,
-      result: JSON.stringify(details),
-      createdAt: Date.now(),
-    });
-    await ensureRetentionScheduled(ctx);
-    return details;
-  },
+  handler: evaluateHandler,
 });
+
+export async function peekHandler(ctx: QueryCtx, args: EvaluateArgs): Promise<ResolutionDetails> {
+  const runtime = await runtimeState(ctx, args.flagKey, args.context);
+  if (runtime.kind === "overdue") return syncOverdueDetails(runtime, args.defaultValue);
+  return servedDetails(runtime, args, await evaluateHeld(runtime, args));
+}
+
+export async function evaluateHandler(
+  ctx: MutationCtx,
+  args: EvaluateArgs & { idempotencyKey: string },
+): Promise<ResolutionDetails> {
+  if (!args.idempotencyKey)
+    throw new Error("idempotencyKey is required for Exposure-bearing Convex evaluation");
+  const runtime = await runtimeState(ctx, args.flagKey, args.context);
+  const fingerprint = await sha256Hex(
+    canonicalJson({
+      flagKey: args.flagKey,
+      context: args.context,
+      defaultValue: args.defaultValue,
+      snapshotVersion:
+        runtime.kind === "overdue" ? runtime.snapshotVersion : runtime.snapshot.environmentVersion,
+    }),
+  );
+  const claim = await ctx.db
+    .query("evaluationClaims")
+    .withIndex("by_key", (q) => q.eq("idempotencyKey", args.idempotencyKey))
+    .unique();
+  if (claim) {
+    if (claim.fingerprint !== fingerprint)
+      throw new Error(
+        "IDEMPOTENCY_KEY_CONFLICT: idempotencyKey was reused for a different Convex Evaluation",
+      );
+    await ensureRetentionScheduled(ctx);
+    const replayed = JSON.parse(claim.result) as ResolutionDetails;
+    // The replay keeps its Variant and single Exposure but reports today's freshness.
+    return runtime.kind === "overdue" || runtime.syncing ? staleDetails(replayed) : replayed;
+  }
+  // No claim is stored: nothing was served, so a retry after the sync recovers must evaluate fresh.
+  if (runtime.kind === "overdue") return syncOverdueDetails(runtime, args.defaultValue);
+  const result = await evaluateHeld(runtime, args);
+  const details = servedDetails(runtime, args, result);
+  if (result.exposure) await persistExposure(ctx, args, runtime, result.exposure, fingerprint);
+  await ctx.db.insert("evaluationClaims", {
+    idempotencyKey: args.idempotencyKey,
+    fingerprint,
+    result: JSON.stringify(details),
+    createdAt: Date.now(),
+  });
+  await ensureRetentionScheduled(ctx);
+  return details;
+}
 
 export const claimDelivery = internalMutation({
   args: { exposureId: v.string() },
@@ -205,6 +205,21 @@ export const drain = internalAction({
   handler: drainExposuresHandler,
 });
 
+function evaluateHeld(runtime: ReadyRuntime, args: EvaluateArgs): Promise<EvaluateResult> {
+  return evaluatePath(
+    {
+      appId: runtime.snapshot.appId,
+      environmentId: runtime.snapshot.environmentId,
+      flagKey: args.flagKey,
+      evaluationContext: args.context,
+    },
+    {
+      provider: snapshotProvider(runtime.snapshot),
+      assignmentStore: readOnlyAssignmentStore(runtime.assignments),
+    },
+  );
+}
+
 function readOnlyAssignmentStore(assignments: Map<string, { runId: string; variant: string }>) {
   const noWrite = async () => {
     throw new Error("read-only local Assignment Store");
@@ -215,50 +230,5 @@ function readOnlyAssignmentStore(assignments: Map<string, { runId: string; varia
     },
     put: noWrite,
     putHashed: noWrite,
-  };
-}
-
-function detailsFor(
-  snapshot: ConvexConfigSnapshot,
-  flagKey: string,
-  result: EvaluateResult,
-  defaultValue: VariantValue,
-): ResolutionDetails {
-  if (result.kind === "error")
-    return {
-      value: defaultValue,
-      variantName: null,
-      reason: "ERROR",
-      errorCode: result.errorCode,
-      errorMessage: result.errorMessage,
-    };
-  if (result.variant === null)
-    return {
-      value: defaultValue,
-      variantName: null,
-      reason: "ERROR",
-      errorCode: "INTERNAL_SERVER_ERROR",
-      errorMessage: "Evaluation returned no Variant",
-    };
-  const flag = snapshot.flags.find((candidate) => candidate.key === flagKey);
-  const variant = flag?.variants.find((candidate) => candidate.name === result.variant);
-  if (!variant)
-    return {
-      value: defaultValue,
-      variantName: null,
-      reason: "ERROR",
-      errorCode: "INTERNAL_SERVER_ERROR",
-      errorMessage: `Resolved Variant "${result.variant}" is absent from Flag "${flagKey}"`,
-    };
-  const reason = resolutionReasonFor(result.kind);
-  return {
-    value: variant.value,
-    variantName: variant.name,
-    reason,
-    ...(reason === "TARGETING_MATCH" &&
-    typeof result.reason === "object" &&
-    result.reason.type === "rule_matched"
-      ? { ruleId: result.reason.ruleId }
-      : {}),
   };
 }

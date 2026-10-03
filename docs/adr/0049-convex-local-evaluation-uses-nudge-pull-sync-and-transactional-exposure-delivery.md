@@ -1,6 +1,6 @@
 # Convex local evaluation uses nudge-pull sync and transactional Exposure delivery
 
-**Status:** accepted
+**Status:** accepted; amended 2026-10-03
 
 Convex queries and mutations cannot call third-party APIs. The current `@splitch/sdk` guidance
 therefore evaluates in an Action before calling a mutation. That is usable for Flags, but it is the
@@ -76,9 +76,15 @@ does not send evaluation events from queries.
 - `raw_events` gains additive `exposure_at`; existing producers populate it from
   `server_received_at`, so old behavior is preserved while the trusted Convex source can retain the
   actual encounter time.
-- Known staleness fails loud: after a newer version is announced, local evaluation cannot serve an
-  older snapshot. With no newer announcement, the last validated snapshot remains usable as cached
-  server configuration.
+- Known staleness fails loud after a bounded grace (amended 2026-10-03). After a newer version is
+  announced, local evaluation keeps serving the last validated snapshot's real Variant with
+  `reason: STALE` while the pull is in flight. Five seconds after the announcement, matching the
+  [five-second propagation contract](../spec/platform/config-store.md#five-second-evaluation-propagation-contract),
+  a version-scoped scheduled Mutation marks the installation sync-overdue if the snapshot is still
+  behind; evaluation then returns the caller's Default Variant with `reason: ERROR` until a snapshot
+  at or above the announced version commits. A newer announcement while overdue does not reopen the
+  grace. Queries never read the clock, and a behind snapshot never throws. With no newer
+  announcement, the last validated snapshot remains usable as cached server configuration.
 
 ## Sources
 
