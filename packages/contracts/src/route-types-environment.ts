@@ -5,6 +5,7 @@ import type {
   CreateConclusionPromotionRequestSchema,
   CreateConclusionPromotionResponseSchema,
 } from "./experiment-conclusion";
+import type { ExperimentPlanRequestSchema, ExperimentPlanResponseSchema } from "./experiment-plan";
 import { type ClientKeySchema, EnvironmentSchema } from "./leaf-schemas-runtime";
 import type {
   CreateCredentialResponseSchema,
@@ -93,6 +94,10 @@ export type ExperimentsStartInput = InEnvironment<
   z.infer<typeof ExperimentParams> & z.infer<typeof StartRunRequestSchema>
 >;
 export type ExperimentsStartOutput = z.infer<typeof StartRunResponseSchema>;
+export type ExperimentPlanInput = InEnvironment<
+  z.infer<typeof EnvParams> & z.infer<typeof ExperimentPlanRequestSchema>
+>;
+export type ExperimentPlanOutput = z.infer<typeof ExperimentPlanResponseSchema>;
 export type ExperimentsDeleteInput = InEnvironment<z.infer<typeof ExperimentParams>>;
 export type ExperimentsDeleteOutput = { deleted: true };
 export type RunsConcludeInput = InEnvironment<

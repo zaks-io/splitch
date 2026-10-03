@@ -15,6 +15,7 @@ export function mountExperimentRoutes(
   registrar.mount(app, controlPlaneRoute("experiments_update"), handlers.updateExperiment);
   registrar.mount(app, controlPlaneRoute("experiments_delete"), handlers.deleteExperiment);
   registrar.mount(app, controlPlaneRoute("experiments_start"), handlers.startExperiment);
+  registrar.mount(app, controlPlaneRoute("experiment_plan"), handlers.planExperiment);
   registrar.mount(app, controlPlaneRoute("runs_list"), handlers.listRuns);
   registrar.mount(app, controlPlaneRoute("runs_get"), handlers.getRun);
   registrar.mount(app, controlPlaneRoute("runs_end"), handlers.endRun);

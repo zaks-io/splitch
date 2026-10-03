@@ -95,6 +95,7 @@ const MCP_TOOL_MEMBERSHIP_GATES = {
   experiments_update: APP_ADMIN,
   experiments_delete: APP_ADMIN,
   experiments_start: APP_ADMIN,
+  experiment_plan: APP_MEMBER,
   runs_list: APP_MEMBER,
   runs_get: APP_MEMBER,
   runs_end: APP_ADMIN,

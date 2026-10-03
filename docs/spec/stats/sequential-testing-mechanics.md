@@ -57,8 +57,9 @@ alter decision-valid significance for the current Run.
 A sequential Run always freezes a `target_n`. When the Start caller names none, the 5000 default is
 frozen with `target_n_source: "default"`, and results metadata reports the value and that it was
 defaulted, so a reader can tell an unconsidered default from a chosen target. The Control Plane and
-the adapter share one `DEFAULT_SEQUENTIAL_TARGET_N` constant. A legacy Run started before this was
-recorded reports no `target_n` commitment
+the adapter share one `DEFAULT_SEQUENTIAL_TARGET_N` constant. Derive a tuned `target_n` from the
+[`experiment_plan`](experiment-power-planner.md) operation before Start when a predeclared MDE is
+available. A legacy Run started before this was recorded reports no `target_n` commitment
 ([ADR-0059](../../adr/0059-runs-freeze-an-analysis-version-and-legacy-runs-read-under-a-labeled-one.md)).
 
 ### Output at each analysis time N

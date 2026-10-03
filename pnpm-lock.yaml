@@ -271,6 +271,9 @@ importers:
       '@splitch/privacy':
         specifier: workspace:*
         version: link:../../packages/privacy
+      '@splitch/stats':
+        specifier: workspace:*
+        version: link:../../packages/stats
       '@splitch/worker-runtime':
         specifier: workspace:*
         version: link:../../packages/worker-runtime

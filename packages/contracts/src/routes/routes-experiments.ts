@@ -22,6 +22,7 @@ import {
   StartRunRequestSchema,
   StartRunResponseSchema,
 } from "../resource-envelopes-experiment";
+import { ExperimentPlanRequestSchema, ExperimentPlanResponseSchema } from "../experiment-plan";
 import { listResponse } from "../wire-envelopes-core";
 import { EndRunRequestSchema } from "../write-persisted-schemas";
 import { APPROVAL_WRITE_ERRORS } from "./approval-write-errors";
@@ -145,6 +146,21 @@ export const experimentRoutes = [
       ...APPROVAL_WRITE_ERRORS,
       "VALIDATION_ERROR",
     ],
+  }),
+  defineApiRoute({
+    operationId: "experiment_plan",
+    owner: OWNER,
+    method: "POST",
+    path: "/apps/:appId/envs/:environmentId/experiment-plan",
+    summary:
+      "Plan sample size, always-valid inflation, target_n, and expected duration from a predeclared MDE (or solve MDE from a fixed size). Never computes post-hoc power from observed effects. Pass targetN to experiments_start.",
+    request: { params: EnvParams, body: ExperimentPlanRequestSchema },
+    response: ExperimentPlanResponseSchema,
+    auth: AUTH,
+    rateLimit: RATE,
+    idempotency: "none",
+    effects: readOnlyClosed,
+    errors: ["APP_NOT_FOUND", "FORBIDDEN", "VALIDATION_ERROR"],
   }),
   defineApiRoute({
     operationId: "experiments_delete",

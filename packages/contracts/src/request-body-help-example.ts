@@ -42,7 +42,44 @@ function buildExampleCandidate(
     example[name] =
       help?.defaultValue !== undefined ? help.defaultValue : exampleValue(inner, name);
   }
+  // Cross-field refinements (e.g. baseline required when metricKind is continuous)
+  // name optional siblings. Fill those until the example parses or no progress.
+  fillExampleFromParseIssues(schema, fields, example);
   return example;
+}
+
+function fillExampleFromParseIssues(
+  schema: z.ZodObject,
+  fields: readonly RequestBodyFieldHelp[],
+  example: Record<string, unknown>,
+): void {
+  const byName = new Map(fields.map((field) => [field.name, field]));
+  for (let attempt = 0; attempt < fields.length; attempt += 1) {
+    const parsed = schema.safeParse(example);
+    if (parsed.success) return;
+    if (!addMissingIssueFields(schema, byName, example, parsed.error.issues)) return;
+  }
+}
+
+function addMissingIssueFields(
+  schema: z.ZodObject,
+  byName: Map<string, RequestBodyFieldHelp>,
+  example: Record<string, unknown>,
+  issues: readonly { path: PropertyKey[] }[],
+): boolean {
+  let added = false;
+  for (const issue of issues) {
+    const name = issue.path[0];
+    if (typeof name !== "string" || example[name] !== undefined) continue;
+    const fieldSchema = schema.shape[name] as z.ZodTypeAny | undefined;
+    if (!fieldSchema) continue;
+    const help = byName.get(name);
+    const { inner } = unwrapField(fieldSchema);
+    example[name] =
+      help?.defaultValue !== undefined ? help.defaultValue : exampleValue(inner, name);
+    added = true;
+  }
+  return added;
 }
 
 function assertExampleParses(schema: z.ZodObject, example: Record<string, unknown>): void {

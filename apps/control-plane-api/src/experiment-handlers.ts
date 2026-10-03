@@ -27,6 +27,7 @@ import {
 } from "./experiment-model";
 import { makeRunHandlers } from "./experiment-run-handlers";
 import { startExperiment } from "./experiment-start-handler";
+import { planExperimentHandler } from "./experiment-plan-handler";
 import {
   loadUpdateContext,
   prepareUpdatePatch,
@@ -45,6 +46,7 @@ export function makeExperimentHandlers(deps: ExperimentDeps) {
     updateExperiment: (args: HandlerArgs<unknown>) => updateExperiment(deps, args),
     deleteExperiment: (args: HandlerArgs<unknown>) => deleteExperiment(deps, args),
     startExperiment: (args: HandlerArgs<unknown>) => startExperiment(deps, args),
+    planExperiment: (args: HandlerArgs<unknown>) => planExperimentHandler(deps, args),
     ...makeRunHandlers(deps),
   };
 }

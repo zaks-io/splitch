@@ -308,6 +308,10 @@ export interface RouteTypeMap {
     input: EnvironmentRoutes.ExperimentsStartInput;
     output: EnvironmentRoutes.ExperimentsStartOutput;
   };
+  experiment_plan: {
+    input: EnvironmentRoutes.ExperimentPlanInput;
+    output: EnvironmentRoutes.ExperimentPlanOutput;
+  };
   experiments_delete: {
     input: EnvironmentRoutes.ExperimentsDeleteInput;
     output: EnvironmentRoutes.ExperimentsDeleteOutput;

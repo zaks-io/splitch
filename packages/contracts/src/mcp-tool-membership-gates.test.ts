@@ -74,6 +74,7 @@ const EXPECTED_GATES: Record<string, string> = {
   experiments_update: "app:admin",
   experiments_delete: "app:admin",
   experiments_start: "app:admin",
+  experiment_plan: "app:member",
   runs_list: "app:member",
   runs_get: "app:member",
   runs_end: "app:admin",

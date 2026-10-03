@@ -59,8 +59,9 @@ const experimentsSdkRoutes = [
   experimentRoutes[3],
   experimentRoutes[4],
   experimentRoutes[5],
-  experimentRoutes[9],
+  experimentRoutes[6],
   experimentRoutes[10],
+  experimentRoutes[11],
 ] as const;
 
 // Only `organizations_create` (SPL-171). The rest of the Organization surface
@@ -126,6 +127,7 @@ const experimentsControlPlaneClientApp = new OpenAPIHono().openapiRoutes([
   { route: experimentsSdkRoutes[5].openapi, handler: emitOnlyHandler(experimentsSdkRoutes[5]) },
   { route: experimentsSdkRoutes[6].openapi, handler: emitOnlyHandler(experimentsSdkRoutes[6]) },
   { route: experimentsSdkRoutes[7].openapi, handler: emitOnlyHandler(experimentsSdkRoutes[7]) },
+  { route: experimentsSdkRoutes[8].openapi, handler: emitOnlyHandler(experimentsSdkRoutes[8]) },
 ] as const);
 
 const organizationsControlPlaneClientApp = new OpenAPIHono().openapiRoutes([
