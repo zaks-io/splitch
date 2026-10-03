@@ -41,6 +41,8 @@ function withoutEstimand(arm: ArmResult): ArmResult {
     simultaneous_absolute_ci_upper: _simAbsUpper,
     simultaneous_ci_lower: _simLower,
     simultaneous_ci_upper: _simUpper,
+    eligible_n: _eligible,
+    immature_excluded_n: _immature,
     ...rest
   } = arm;
   return rest;

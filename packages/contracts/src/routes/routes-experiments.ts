@@ -238,7 +238,7 @@ export const experimentRoutes = [
     owner: OWNER,
     method: "POST",
     path: "/apps/:appId/metrics",
-    summary: "Create a Metric (binomial, count, revenue, ratio, guardrail).",
+    summary: "Create a Metric (binomial, count, revenue, ratio, retention, guardrail).",
     request: { params: AppParams, body: CreateMetricRequestSchema },
     response: MetricResponseSchema,
     auth: AUTH,

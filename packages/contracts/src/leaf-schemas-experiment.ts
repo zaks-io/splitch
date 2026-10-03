@@ -4,6 +4,7 @@ import {
   TargetingRuleSchema,
   VariantSchema,
 } from "./leaf-schemas-flag";
+import { applyMetricHorizonRefine } from "./leaf-schemas-metric-horizon";
 
 /**
  * Canonical Zod leaf schemas for the experiment-side glossary nouns.
@@ -42,10 +43,15 @@ export type RunStatus = z.infer<typeof RunStatusSchema>;
 // MetricKind
 // ---------------------------------------------------------------------------
 
-export const metricKinds = ["binomial", "count", "revenue", "ratio"] as const;
+export const metricKinds = ["binomial", "count", "revenue", "ratio", "retention"] as const;
 
 export const MetricKindSchema = z.enum(metricKinds);
 export type MetricKind = z.infer<typeof MetricKindSchema>;
+
+/** Binomial and Retention Metrics fold to a 0/1 per Entity; neither is winsorized. */
+export function isPresenceMetric(kind: MetricKind): kind is "binomial" | "retention" {
+  return kind === "binomial" || kind === "retention";
+}
 
 // ---------------------------------------------------------------------------
 // MetricDirection
@@ -104,6 +110,8 @@ const BaseMetricSchema = z.object({
   winsorizePct: z.number().gt(0).max(100).nullable().optional(),
   cuped: z.boolean().nullable().optional(),
   cupedCoverageThresholdPct: z.number().gt(0).max(100).nullable().optional(),
+  horizonStartMs: z.number().int().nonnegative().nullable().optional(),
+  horizonEndMs: z.number().int().nonnegative().nullable().optional(),
   createdAt: z.string(),
 });
 
@@ -125,7 +133,7 @@ export const MetricSchema = BaseMetricSchema.refine(
       m.kind === "revenue" ||
       m.eventFieldName == null ||
       isLegacyRatioMetric(m),
-    { message: "binomial and ratio metrics cannot carry eventFieldName" },
+    { message: "binomial, retention, and ratio metrics cannot carry eventFieldName" },
   )
   .refine(
     (m) =>
@@ -151,7 +159,8 @@ export const MetricSchema = BaseMetricSchema.refine(
   })
   .refine((m) => m.configurationStatus !== "needs_configuration" || isLegacyRatioMetric(m), {
     message: "only an incomplete legacy ratio metric can need configuration",
-  });
+  })
+  .superRefine(applyMetricHorizonRefine);
 export type Metric = z.infer<typeof MetricSchema>;
 
 /**
