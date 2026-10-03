@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { computeCohortEffect, fixedHorizonAbsoluteInterval } from "./cohort-effect";
+import { computeCohortEffect } from "./cohort-effect";
 import { exposureDayBucket } from "./cohort-effect-buckets";
 import { balancedEntities, COHORT_RUN_START, cohortStatsInput } from "./cohort-effect-cases";
+import { fixedHorizonAbsoluteInterval } from "./cohort-effect-estimate";
 import { classifyCohortNovelty } from "./cohort-effect-novelty";
 import { COHORT_EFFECT_MIN_ARM_N, COHORT_EFFECT_NOVELTY_ALPHA } from "./cohort-effect-types";
 import { inverseNormalCdf } from "./normal-distribution";

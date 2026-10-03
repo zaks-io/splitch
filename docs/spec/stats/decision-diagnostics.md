@@ -138,7 +138,15 @@ For each Treatment in the primary Metric's locked decision family, each bucket
 reports `n_control`, `n_treatment`, absolute effect, and a fixed-horizon
 (one-look two-sample z) absolute interval at the observed per-bucket n. Below
 `COHORT_EFFECT_MIN_ARM_N` (30) Entities per arm the bucket is
-`insufficient_n` with null effect/interval.
+`insufficient_n` with null effect/interval. Zero sampling variance (identical
+constant outcomes, or a zero-conversion Binomial bucket) is
+`zero_variance` with a point estimate, null interval, and no novelty claim — the
+diagnostic must never fail Results. A Ratio Metric bucket with enough Entities
+but zero mean denominator is `insufficient_denominator` (not
+`insufficient_n`). Bucketing uses the same `analysisExposureRows` filter as the
+main analysis (Activation-gated denominator when `activation_rows` are present)
+and forwards frozen `metric_variance_config` / `pre_period_covariates` into the
+estimator.
 
 **Novelty / trigger-day flag.** A two-sample z test compares the day-0 absolute
 effect to the effect on Entities pooled from later buckets, at

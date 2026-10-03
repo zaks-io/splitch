@@ -117,4 +117,34 @@ describe("cohort_effect deploy compatibility", () => {
       }),
     ).toThrow();
   });
+
+  it("accepts zero_variance and insufficient_denominator bucket statuses", () => {
+    const diagnostic = CohortEffectDiagnosticSchema.parse({
+      ...readyDiagnostic,
+      comparisons: [
+        {
+          treatment_variant: "treatment",
+          buckets: [
+            {
+              ...readyBucket,
+              status: "zero_variance",
+              absolute_ci_lower: null,
+              absolute_ci_upper: null,
+            },
+            {
+              ...readyBucket,
+              bucket: "days_1_6",
+              status: "insufficient_denominator",
+              absolute_effect: null,
+              absolute_ci_lower: null,
+              absolute_ci_upper: null,
+            },
+            { ...readyBucket, bucket: "day_7_plus", status: "insufficient_n" },
+          ],
+          novelty: { flag: "insufficient_data", alpha: 0.05 },
+        },
+      ],
+    });
+    expect(diagnostic.state).toBe("ready");
+  });
 });

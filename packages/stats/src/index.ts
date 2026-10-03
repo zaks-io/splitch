@@ -62,7 +62,8 @@ export {
   classifySrmRootCauseFromStats,
   srmRootCauseInputFromStats,
 } from "./srm-root-cause-from-stats";
-export { computeCohortEffect, fixedHorizonAbsoluteInterval } from "./cohort-effect";
+export { computeCohortEffect } from "./cohort-effect";
+export { fixedHorizonAbsoluteInterval } from "./cohort-effect-estimate";
 export { exposureDayBucket } from "./cohort-effect-buckets";
 export { classifyCohortNovelty } from "./cohort-effect-novelty";
 export {
