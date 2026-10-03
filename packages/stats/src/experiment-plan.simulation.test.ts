@@ -15,8 +15,10 @@ const PLANNER_BINOMIAL_SEED = "experiment-plan-binomial-4242";
 const PLANNER_UNEQUAL_SEED = "experiment-plan-unequal-4242";
 const PLANNER_SIM_ALPHA = 0.05;
 const PLANNER_SIM_POWER = 0.8;
+// Regular PR vitest uses a smoke default; `stats:simulation` overrides via env
+// (smoke=300, audit=1000). Bernoulli binomial trials are O(n·iters).
 const PLANNER_SIM_ITERATIONS = Number.parseInt(
-  process.env.SPLITCH_STATS_SIMULATION_ITERATIONS ?? "400",
+  process.env.SPLITCH_STATS_SIMULATION_ITERATIONS ?? "50",
   10,
 );
 

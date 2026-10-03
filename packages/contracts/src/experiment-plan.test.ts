@@ -4,6 +4,7 @@ import {
   EXPERIMENT_PLAN_MIN_ALPHA,
   EXPERIMENT_PLAN_MIN_BASELINE_MEAN_ABS,
   EXPERIMENT_PLAN_MIN_DAILY_ELIGIBLE_ENTITIES,
+  EXPERIMENT_PLAN_MIN_POWER,
   ExperimentPlanRequestSchema,
 } from "./experiment-plan";
 
@@ -74,5 +75,23 @@ describe("ExperimentPlanRequestSchema arm bounds", () => {
       alpha: EXPERIMENT_PLAN_MIN_ALPHA / 10,
     });
     expect(parsed.success).toBe(false);
+  });
+
+  it("rejects power below the documented z_beta floor", () => {
+    const parsed = ExperimentPlanRequestSchema.safeParse({
+      ...base,
+      armCount: 2,
+      power: EXPERIMENT_PLAN_MIN_POWER / 2,
+    });
+    expect(parsed.success).toBe(false);
+  });
+
+  it("accepts power at the documented floor", () => {
+    const parsed = ExperimentPlanRequestSchema.safeParse({
+      ...base,
+      armCount: 2,
+      power: EXPERIMENT_PLAN_MIN_POWER,
+    });
+    expect(parsed.success).toBe(true);
   });
 });

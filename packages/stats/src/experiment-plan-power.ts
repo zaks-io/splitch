@@ -55,6 +55,7 @@ export function representableArmCounts(
 /**
  * Per-Entity outcome variances under the planned alternative. Continuous Metrics
  * use the same variance on both arms; binomial uses p0(1-p0) and p1(1-p1).
+ * `mdeAbsolute` may be signed for binomial guardrail alternatives (rate shift).
  */
 export function armVariances(args: {
   metricKind: "continuous" | "binomial";

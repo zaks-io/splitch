@@ -1,4 +1,8 @@
-import { EXPERIMENT_PLAN_MAX_ARM_COUNT, EXPERIMENT_PLAN_MIN_ALPHA } from "@splitch/contracts";
+import {
+  EXPERIMENT_PLAN_MAX_ARM_COUNT,
+  EXPERIMENT_PLAN_MIN_ALPHA,
+  EXPERIMENT_PLAN_MIN_POWER,
+} from "@splitch/contracts";
 import type { ExperimentPlanInput, ExperimentPlanIssue } from "./experiment-plan-types";
 
 const DEFAULT_ALPHA = 0.05;
@@ -75,8 +79,11 @@ function validateAlphaPower(input: ExperimentPlanInput): ExperimentPlanIssue[] {
       message: `alpha must be finite and in [${EXPERIMENT_PLAN_MIN_ALPHA}, 1).`,
     });
   }
-  if (!(Number.isFinite(power) && power > 0 && power < 1)) {
-    issues.push({ path: ["power"], message: "power must be finite and in (0, 1)." });
+  if (!(Number.isFinite(power) && power >= EXPERIMENT_PLAN_MIN_POWER && power < 1)) {
+    issues.push({
+      path: ["power"],
+      message: `power must be finite and in [${EXPERIMENT_PLAN_MIN_POWER}, 1).`,
+    });
   }
   if (
     !(
@@ -251,15 +258,21 @@ function validateBinomialGuardrailBreach(input: ExperimentPlanInput): Experiment
   if (input.metricKind !== "binomial" || input.baselineRate === undefined) return [];
   const breach = binomialGuardrailBreach(input);
   if (breach === undefined) return [];
-  const alternativeRate = input.baselineRate + breach;
-  if (alternativeRate > 0 && alternativeRate < 1) return [];
+  // Breach has no declared direction: accept if either signed alternative stays
+  // in (0, 1). Reject only when neither upward nor downward rate is feasible.
+  const upward = input.baselineRate + breach;
+  const downward = input.baselineRate - breach;
+  const upwardOk = upward > 0 && upward < 1;
+  const downwardOk = downward > 0 && downward < 1;
+  if (upwardOk || downwardOk) return [];
   return [
     {
       path:
         input.guardrailBreachAbsolute !== undefined
           ? ["guardrailBreachAbsolute"]
           : ["guardrailBreachRelative"],
-      message: "Guardrail breach alternative rate (baselineRate + breach) must be in (0, 1).",
+      message:
+        "Guardrail breach alternative rate must leave at least one signed alternative (baselineRate ± breach) in (0, 1).",
     },
   ];
 }

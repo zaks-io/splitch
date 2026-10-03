@@ -16,7 +16,8 @@ import { PERSISTED_RECORD_MAX_KEYS } from "./persisted-field-limits";
  * non-zero continuous |baselineMean| so mdeRelative cannot overflow to
  * Infinity. Alpha is bounded below so inverse-normal critical values stay in
  * the supported probability range (alpha/2 does not underflow past the
- * inverseNormalCdf domain in practice).
+ * inverseNormalCdf domain in practice). Power is bounded below at 0.5 so
+ * z_beta stays non-negative and fixed-size MDE solving cannot clamp to zero.
  */
 export const EXPERIMENT_PLAN_MAX_ARM_COUNT = PERSISTED_RECORD_MAX_KEYS;
 
@@ -31,6 +32,12 @@ export const EXPERIMENT_PLAN_MIN_BASELINE_MEAN_ABS = 1e-100;
 
 /** Smallest alpha the planner math supports (inverse-normal critical values). */
 export const EXPERIMENT_PLAN_MIN_ALPHA = 1e-10;
+
+/**
+ * Minimum requested power. Below 0.5, z_beta is negative and fixed-size MDE
+ * solving collapses to zero (then divides by zero). Keep power in [0.5, 1).
+ */
+export const EXPERIMENT_PLAN_MIN_POWER = 0.5;
 
 type PlanRequestValue = {
   metricKind: "continuous" | "binomial";
@@ -137,7 +144,8 @@ export const ExperimentPlanRequestSchema = z
     baselineRate: z.number().gt(0).lt(1).optional(),
     // Floor keeps inverse-normal critical values in the supported domain.
     alpha: z.number().gte(EXPERIMENT_PLAN_MIN_ALPHA).lt(1).optional(),
-    power: z.number().gt(0).lt(1).optional(),
+    // Floor keeps z_beta >= 0 so fixed-size MDE cannot collapse to zero.
+    power: z.number().gte(EXPERIMENT_PLAN_MIN_POWER).lt(1).optional(),
     mdeAbsolute: z.number().finite().positive().optional(),
     mdeRelative: z.number().finite().positive().optional(),
     fixedSampleSizePerArm: z.number().int().positive().optional(),

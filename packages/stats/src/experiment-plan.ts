@@ -1,5 +1,6 @@
 import { alwaysValidInflation } from "./always-valid-inflation";
 import { solveBinomialMdeAtFixedSize } from "./experiment-plan-binomial-mde";
+import { computeGuardrailPower } from "./experiment-plan-guardrail";
 import { validatePlanOutputs } from "./experiment-plan-outputs";
 import type {
   ExperimentPlanInput,
@@ -7,11 +8,7 @@ import type {
   ExperimentPlanResult,
 } from "./experiment-plan-types";
 import { validatePlanInput } from "./experiment-plan-validate";
-import {
-  armVariances,
-  EXPERIMENT_PLAN_MAX_SAFE_COUNT,
-  minComparisonPower,
-} from "./experiment-plan-power";
+import { armVariances, EXPERIMENT_PLAN_MAX_SAFE_COUNT } from "./experiment-plan-power";
 import { fixedHorizonControlN, mdeAtFixedSize, sizeAlwaysValidArms } from "./experiment-plan-size";
 import { inverseNormalCdf } from "./normal-distribution";
 
@@ -284,37 +281,4 @@ function resolveTrafficSplit(armCount: number, split: readonly number[] | undefi
 function resolveMdeAbsolute(input: ExperimentPlanInput, baselineMean: number): number {
   if (input.mdeAbsolute !== undefined) return input.mdeAbsolute;
   return (input.mdeRelative as number) * Math.abs(baselineMean);
-}
-
-function computeGuardrailPower(args: {
-  input: ExperimentPlanInput;
-  baseline: { mean: number; variance: number };
-  nPerArm: readonly number[];
-  targetN: number;
-  alpha: number;
-  varianceControl: number;
-}): number | null {
-  const { input, baseline, nPerArm } = args;
-  let breach: number | undefined = input.guardrailBreachAbsolute;
-  if (breach === undefined && input.guardrailBreachRelative !== undefined) {
-    breach = input.guardrailBreachRelative * Math.abs(baseline.mean);
-  }
-  if (breach === undefined) return null;
-  // Variance under the breach alternative, not the goal MDE.
-  const breachVariances = armVariances({
-    metricKind: input.metricKind,
-    baselineVariance: baseline.variance,
-    baselineMean: baseline.mean,
-    mdeAbsolute: breach,
-  });
-  // Shared targetN makes each comparison's mixture boundary depend on its own
-  // n_c+n_t; the worst-case (minimum) power is not always the smallest arm.
-  return minComparisonPower({
-    nPerArm,
-    targetN: args.targetN,
-    alpha: args.alpha,
-    varianceControl: args.varianceControl,
-    varianceTreatment: breachVariances.treatment,
-    effectAbsolute: breach,
-  });
 }
