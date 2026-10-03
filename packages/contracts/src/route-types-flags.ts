@@ -13,6 +13,10 @@ import type {
   PrincipalFlagListReadResponseSchema,
 } from "./resource-envelopes-flag";
 import type {
+  FlagInventoryHealthResponseSchema,
+  StaleFlagListResponseSchema,
+} from "./resource-envelopes-flag-health";
+import type {
   AppParams,
   FlagGetQuerySchema,
   FlagListQuerySchema,
@@ -27,6 +31,10 @@ export type FlagsListInput = z.infer<typeof AppParams> & z.infer<typeof FlagList
 export type FlagsListOutput = z.infer<typeof FlagListReadResponseSchema>;
 export type ExpiredFlagsListInput = z.infer<typeof AppParams>;
 export type ExpiredFlagsListOutput = z.infer<typeof ExpiredFlagListResponseSchema>;
+export type StaleFlagsListInput = z.infer<typeof AppParams>;
+export type StaleFlagsListOutput = z.infer<typeof StaleFlagListResponseSchema>;
+export type FlagInventoryHealthGetInput = z.infer<typeof AppParams>;
+export type FlagInventoryHealthGetOutput = z.infer<typeof FlagInventoryHealthResponseSchema>;
 export type PrincipalFlagsListInput = z.infer<typeof PrincipalFlagListQuerySchema>;
 export type PrincipalFlagsListOutput = z.infer<typeof PrincipalFlagListReadResponseSchema>;
 export type FlagsCreateInput = z.infer<typeof AppParams> & z.infer<typeof CreateFlagRequestSchema>;

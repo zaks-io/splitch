@@ -190,6 +190,39 @@ Flags with no `expiresAt` never appear. The list keys on the expiry, not the cla
 `flags_list` and reports `readTruncated`, `readLimit`, and `cursor: null`. CLI:
 `splitch expired-flags list`. MCP: `expired_flags_list`.
 
+### `GET /apps/{app_id}/stale-flags`
+
+`stale_flags_list`: Flags that look stale from **configuration state only** (plan 3.6).
+Each item is a Flag definition plus one or more typed reasons and
+`servingEvidence: "unverified"`. Ordinary Flag reads record no served Variant, so
+this route never claims a Flag is unused. Reasons:
+
+- `uniform_serving`: every Environment has no Targeting Rules and is disabled,
+  default-only (null or 0% baseline rollout), or 100% baseline rollout, and the
+  latest Flag Configuration `updatedAt` across those Environments is at least the
+  class threshold old (30 days for `release`, `experiment`, and `unclassified`;
+  off for permanent `ops` and `permission`). A running Experiment blocks this
+  signal.
+- `past_expiry`: `expiresAt` is at or before the Worker clock (any class that
+  still carries a passed expiry).
+- `unchanged`: no Flag change-log event (falling back to definition `updatedAt`)
+  within the class threshold (90 days for temporary classes; off for permanent).
+
+Suggest only: the route never archives or writes. Bounded like `flags_list`
+(`readTruncated`, `readLimit`, `cursor: null`). CLI: `splitch stale-flags list`.
+MCP: `stale_flags_list`.
+
+### `GET /apps/{app_id}/flag-inventory-health`
+
+`flag_inventory_health_get`: per-App inventory health (plan 3.8). Returns counts
+by lifecycle class, a fixed age distribution over live Flags' `createdAt`
+(`0_30d`, `30_90d`, `90_180d`, `180_365d`, `365d_plus`), monthly additions
+(`additionsSource: "flag_created_at"`) versus removals
+(`removalsSource: "flag_change_log"`, from `action=deleted` / `target_type=flag`
+rows that carry `changedAt`), and `expiredButLiveCount`. Deletions are hard
+deletes with no `deleted_at` column; the change log is the timestamped removal
+record. CLI: `splitch flag-inventory-health get`. MCP: `flag_inventory_health_get`.
+
 ### `GET /apps/{app_id}/flags/{flag_id}/removal-brief`
 
 `flag_removal_brief`: a read-only advisory brief an agent can act on in the customer's codebase.

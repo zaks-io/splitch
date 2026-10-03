@@ -1,0 +1,89 @@
+import { describe, expect, it } from "vitest";
+import { getRoute } from "./route-registry";
+import {
+  FlagInventoryHealthResponseSchema,
+  StaleFlagListResponseSchema,
+} from "./resource-envelopes-flag-health";
+
+const flagLeaf = {
+  id: "flag_1",
+  appId: "app_1",
+  key: "checkout",
+  name: "Checkout",
+  schema: { type: "boolean" },
+  variants: [
+    { id: "var_1", name: "control", value: false },
+    { id: "var_2", name: "treatment", value: true },
+  ],
+  defaultVariantId: "var_1",
+  lifecycleClass: "release" as const,
+  owner: "checkout-team",
+  expiresAt: "2026-06-01T00:00:00.000Z",
+  createdAt: "2026-01-01T00:00:00.000Z",
+  updatedAt: "2026-01-01T00:00:00.000Z",
+};
+
+describe("Flag health envelopes", () => {
+  it("parses a stale list item with unverified serving evidence", () => {
+    const parsed = StaleFlagListResponseSchema.parse({
+      items: [
+        {
+          flag: flagLeaf,
+          reasons: [
+            {
+              kind: "past_expiry",
+              expiresAt: "2026-06-01T00:00:00.000Z",
+              lifecycleClass: "release",
+            },
+          ],
+          servingEvidence: "unverified",
+        },
+      ],
+      readTruncated: false,
+      readLimit: 200,
+      cursor: null,
+    });
+    expect(parsed.items[0]?.servingEvidence).toBe("unverified");
+  });
+
+  it("parses inventory health with named churn sources", () => {
+    const parsed = FlagInventoryHealthResponseSchema.parse({
+      appId: "app_1",
+      asOf: "2026-07-02T12:00:00.000Z",
+      countsByLifecycleClass: {
+        release: 1,
+        experiment: 0,
+        ops: 0,
+        permission: 0,
+        unclassified: 0,
+      },
+      ageDistribution: [
+        { bucket: "0_30d", count: 1 },
+        { bucket: "30_90d", count: 0 },
+        { bucket: "90_180d", count: 0 },
+        { bucket: "180_365d", count: 0 },
+        { bucket: "365d_plus", count: 0 },
+      ],
+      monthlyChurn: {
+        months: [{ month: "2026-07", added: 1, removed: 0 }],
+        additionsSource: "flag_created_at",
+        removalsSource: "flag_change_log",
+      },
+      expiredButLiveCount: 1,
+    });
+    expect(parsed.monthlyChurn.removalsSource).toBe("flag_change_log");
+  });
+
+  it("registers both health routes as readOnlyClosed", () => {
+    expect(getRoute("stale_flags_list")).toMatchObject({
+      method: "GET",
+      path: "/apps/:appId/stale-flags",
+      effects: { mutates: false, destructive: false },
+    });
+    expect(getRoute("flag_inventory_health_get")).toMatchObject({
+      method: "GET",
+      path: "/apps/:appId/flag-inventory-health",
+      effects: { mutates: false, destructive: false },
+    });
+  });
+});

@@ -40,6 +40,8 @@ export type * from "./route-types-flags";
 import type {
   ExpiredFlagsListInput,
   ExpiredFlagsListOutput,
+  FlagInventoryHealthGetInput,
+  FlagInventoryHealthGetOutput,
   FlagRemovalBriefInput,
   FlagRemovalBriefOutput,
   FlagsCreateInput,
@@ -60,6 +62,8 @@ import type {
   FlagVariantsUpdateOutput,
   PrincipalFlagsListInput,
   PrincipalFlagsListOutput,
+  StaleFlagsListInput,
+  StaleFlagsListOutput,
 } from "./route-types-flags";
 
 import {
@@ -248,6 +252,11 @@ export interface RouteTypeMap {
   flags_list: { input: FlagsListInput; output: FlagsListOutput };
   principal_flags_list: { input: PrincipalFlagsListInput; output: PrincipalFlagsListOutput };
   expired_flags_list: { input: ExpiredFlagsListInput; output: ExpiredFlagsListOutput };
+  stale_flags_list: { input: StaleFlagsListInput; output: StaleFlagsListOutput };
+  flag_inventory_health_get: {
+    input: FlagInventoryHealthGetInput;
+    output: FlagInventoryHealthGetOutput;
+  };
   flag_removal_brief: { input: FlagRemovalBriefInput; output: FlagRemovalBriefOutput };
   flags_create: { input: FlagsCreateInput; output: FlagsCreateOutput };
   flags_get: { input: FlagsGetInput; output: FlagsGetOutput };

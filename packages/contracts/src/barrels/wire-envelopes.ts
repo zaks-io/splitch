@@ -121,3 +121,15 @@ export {
   HydratedFlagListResponseSchema,
   HydratedFlagResponseSchema,
 } from "../resource-envelopes-flag";
+export type {
+  FlagInventoryHealthResponse,
+  StaleFlagItem,
+  StaleFlagListResponse,
+  StaleFlagReason,
+} from "../resource-envelopes-flag-health";
+export {
+  FlagInventoryHealthResponseSchema,
+  StaleFlagItemSchema,
+  StaleFlagListResponseSchema,
+  StaleFlagReasonSchema,
+} from "../resource-envelopes-flag-health";

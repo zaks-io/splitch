@@ -151,6 +151,11 @@ flags_create {
 Every new Flag names a lifecycle class: `release` and `experiment` Flags are temporary and must
 carry an `owner` and an `expiresAt`, while `ops` and `permission` Flags may be permanent. Flags
 past their expiry show up in `splitch expired-flags list` / `expired_flags_list` until deleted.
+Configuration-state stale candidates (uniform serving, past expiry, or long unchanged)
+appear in `splitch stale-flags list` / `stale_flags_list` with typed reasons and
+`servingEvidence: "unverified"`; the route never archives. Per-App inventory health
+(class counts, age buckets, monthly additions versus removals, expired-but-live) is
+`splitch flag-inventory-health get` / `flag_inventory_health_get`.
 Before deleting, `splitch flag-removal brief` / `flag_removal_brief` returns an advisory brief
 (served Variants per Environment, SDK search shapes, caveats); splitch never writes customer code.
 

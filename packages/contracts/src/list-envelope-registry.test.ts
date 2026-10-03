@@ -41,6 +41,7 @@ describe("list envelope: every *_list route uses listResponse", () => {
       "runs_list",
       "segments_list",
       "sentry_installations_list",
+      "stale_flags_list",
     ]);
   });
 

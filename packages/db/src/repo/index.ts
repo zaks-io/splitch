@@ -8,6 +8,7 @@ import { makeEventDefinitionRepo } from "./event-definitions";
 import { makeExperimentConclusionRepo } from "./experiment-conclusions";
 import { makeExperimentRepo } from "./experiments";
 import { makeFlagChangeEventRepo } from "./flag-change-events";
+import { makeFlagHealthReads } from "./flag-health-reads";
 import { makeFlagRepo } from "./flags";
 import { makeIdentityRepo } from "./identity";
 import { makePrivacyRepo } from "./privacy";
@@ -31,6 +32,7 @@ export function createRepository(d1: D1Database) {
   const db = createDb(d1);
   return {
     flags: makeFlagRepo(db),
+    flagHealth: makeFlagHealthReads(db),
     experiments: makeExperimentRepo(db, d1),
     experimentConclusions: makeExperimentConclusionRepo(db, d1),
     eventDefinitions: makeEventDefinitionRepo(db, d1),
