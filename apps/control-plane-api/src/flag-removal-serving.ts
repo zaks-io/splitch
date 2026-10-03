@@ -38,16 +38,19 @@ export async function analyzeEnvironmentServing(input: {
   hasLiveExperiment: boolean;
   variants: readonly Variant[];
 }): Promise<FlagRemovalEnvironmentServing> {
-  const blockers = structuralBlockers(input);
-  if (blockers.length > 0) {
-    return environmentServing(input, null, blockers);
-  }
-
+  // Default Variant must validate before structural blockers: a missing catalog
+  // reference is an evaluation error, not a 200 with only targeting/experiment
+  // blockers that hide the broken Configuration.
   const defaultVariant = input.variants.find((variant) => variant.id === input.defaultVariantId);
   if (!defaultVariant) {
     throw new Error(
       `flag-removal-serving: Environment ${input.environmentId} defaultVariantId ${input.defaultVariantId} names no Variant`,
     );
+  }
+
+  const blockers = structuralBlockers(input);
+  if (blockers.length > 0) {
+    return environmentServing(input, null, blockers);
   }
 
   const flagConfig: FlagConfig = {

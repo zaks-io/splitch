@@ -192,6 +192,63 @@ describe("flags_delete codeRemoval claim (direct path)", () => {
     expect(retryBody.code).not.toBe("IDEMPOTENCY_KEY_CONFLICT");
     expect(retryBody.details.approvalRequestId).toBe(firstBody.details.approvalRequestId);
   });
+
+  it("rejects a claim fingerprint mismatch after Policy confirm→allow (same Idempotency-Key)", async () => {
+    const { appId, jwt } = await ownerSession();
+    // Prod ships confirm; first DELETE only creates a pending Approval with claim A.
+    const flag = await createFlag(h, appId, jwt, {
+      ...baseFlag(appId),
+      key: "fingerprint-mismatch-policy",
+      lifecycleClass: "ops",
+    });
+    const key = "del-fingerprint-mismatch-policy";
+    const claimA = {
+      codeRemoval: { reference: "https://example.com/pr/a", state: "claimed" as const },
+    };
+    const first = await request(h, "DELETE", `/apps/${appId}/flags/${flag.id}`, jwt, claimA, key);
+    expect(first.status).toBe(409);
+    const firstBody = (await first.json()) as {
+      code: string;
+      details: { approvalRequestId: string };
+    };
+    expect(firstBody.code).toBe("APPROVAL_REVIEW_REQUIRED");
+
+    // Policy flip would otherwise let ignoreMismatch fall through to direct delete.
+    await allowAllPolicies(h, appId);
+
+    const retryNoClaim = await request(
+      h,
+      "DELETE",
+      `/apps/${appId}/flags/${flag.id}`,
+      jwt,
+      undefined,
+      key,
+    );
+    expect(retryNoClaim.status).toBe(409);
+    expect(await retryNoClaim.json()).toMatchObject({ code: "IDEMPOTENCY_KEY_CONFLICT" });
+
+    const claimB = {
+      codeRemoval: { reference: "https://example.com/pr/b", state: "claimed" as const },
+    };
+    const retryClaimB = await request(
+      h,
+      "DELETE",
+      `/apps/${appId}/flags/${flag.id}`,
+      jwt,
+      claimB,
+      key,
+    );
+    expect(retryClaimB.status).toBe(409);
+    expect(await retryClaimB.json()).toMatchObject({ code: "IDEMPOTENCY_KEY_CONFLICT" });
+
+    const repo = createRepository(h.bindings.d1);
+    expect(await repo.flags.getFlag(appScope(appId), flag.id)).toBeTruthy();
+    const pending = await repo.approvals.getRequest(
+      appScope(appId),
+      firstBody.details.approvalRequestId,
+    );
+    expect(pending?.status).toBe("pending");
+  });
 });
 
 describe("flags_delete codeRemoval claim (Approval apply path)", () => {

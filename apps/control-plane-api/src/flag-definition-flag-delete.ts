@@ -50,6 +50,9 @@ export async function deleteFlag(
   const proposed = { codeRemoval };
   // Idempotency key is the header the registrar already requires for this route.
   const idempotencyKey = args.request.headers.get("idempotency-key") ?? "";
+  // Fingerprint mismatch must conflict before any direct-delete path: a pending
+  // Approval under Policy `confirm` must not be bypassed by retrying the same
+  // Idempotency-Key with a different claim after Policy flips to `allow`.
   const replay = await replayApprovalIfExists(
     { ...deps, applyOther: makeOtherApprovalApplication(deps) },
     {
@@ -62,7 +65,6 @@ export async function deleteFlag(
       inlineReview: false,
       requestId: args.requestId,
     },
-    { ignoreMismatch: true },
   );
   if (replay) return replay.ok ? Response.json({ deleted: true }) : replay.response;
 

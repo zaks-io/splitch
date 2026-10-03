@@ -162,6 +162,25 @@ describe("flag-removal-serving rejection and uniformity", () => {
     ).rejects.toThrow(/defaultVariantId var_missing names no Variant/);
   });
 
+  it("throws for a missing Default Variant even when structural blockers are present", async () => {
+    const missingDefault = { defaultVariantId: "var_missing" };
+    await expect(
+      analyzeEnvironmentServing(baseServingInput({ ...missingDefault, hasLiveExperiment: true })),
+    ).rejects.toThrow(/defaultVariantId var_missing names no Variant/);
+    await expect(
+      analyzeEnvironmentServing(baseServingInput({ ...missingDefault, targetingRulesCount: 1 })),
+    ).rejects.toThrow(/defaultVariantId var_missing names no Variant/);
+    await expect(
+      analyzeEnvironmentServing(
+        baseServingInput({
+          ...missingDefault,
+          availableVariantNames: ["off", "on"],
+          rollout: { percentage: 50, salt: "s" },
+        }),
+      ),
+    ).rejects.toThrow(/defaultVariantId var_missing names no Variant/);
+  });
+
   it("reports uniform keepVariant only when every Environment agrees", async () => {
     const safe = await analyzeEnvironmentServing(baseServingInput({ enabled: false }));
     const other = await analyzeEnvironmentServing(
