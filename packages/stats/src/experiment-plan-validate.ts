@@ -1,3 +1,4 @@
+import { EXPERIMENT_PLAN_MAX_ARM_COUNT } from "@splitch/contracts";
 import type { ExperimentPlanInput, ExperimentPlanIssue } from "./experiment-plan-types";
 
 const DEFAULT_ALPHA = 0.05;
@@ -90,8 +91,17 @@ function validateAlphaPower(input: ExperimentPlanInput): ExperimentPlanIssue[] {
 
 function validateArmAndTraffic(input: ExperimentPlanInput): ExperimentPlanIssue[] {
   const issues: ExperimentPlanIssue[] = [];
-  if (!(Number.isInteger(input.armCount) && input.armCount >= 2)) {
-    issues.push({ path: ["armCount"], message: "armCount must be an integer >= 2." });
+  if (
+    !(
+      Number.isInteger(input.armCount) &&
+      input.armCount >= 2 &&
+      input.armCount <= EXPERIMENT_PLAN_MAX_ARM_COUNT
+    )
+  ) {
+    issues.push({
+      path: ["armCount"],
+      message: `armCount must be an integer in [2, ${EXPERIMENT_PLAN_MAX_ARM_COUNT}].`,
+    });
   }
   if (input.trafficSplit !== undefined) {
     issues.push(...validateTrafficSplit(input.armCount, input.trafficSplit));
@@ -219,18 +229,49 @@ function validateRelativeOnZeroBaseline(input: ExperimentPlanInput): ExperimentP
 }
 
 function validateBinomialAlternative(input: ExperimentPlanInput): ExperimentPlanIssue[] {
+  const issues: ExperimentPlanIssue[] = [];
   const mdeAbsolute = binomialMdeAbsolute(input);
-  if (mdeAbsolute === undefined) return [];
+  if (mdeAbsolute !== undefined) {
+    const alternativeRate = (input.baselineRate as number) + mdeAbsolute;
+    if (!(alternativeRate > 0 && alternativeRate < 1)) {
+      issues.push({
+        path: input.mdeAbsolute !== undefined ? ["mdeAbsolute"] : ["mdeRelative"],
+        message: "Alternative treatment rate (baselineRate + MDE) must be in (0, 1).",
+      });
+    }
+  }
+  issues.push(...validateBinomialGuardrailBreach(input));
+  return issues;
+}
 
-  const alternativeRate = (input.baselineRate as number) + mdeAbsolute;
+function validateBinomialGuardrailBreach(input: ExperimentPlanInput): ExperimentPlanIssue[] {
+  if (input.metricKind !== "binomial" || input.baselineRate === undefined) return [];
+  const breach = binomialGuardrailBreach(input);
+  if (breach === undefined) return [];
+  const alternativeRate = input.baselineRate + breach;
   if (alternativeRate > 0 && alternativeRate < 1) return [];
-
   return [
     {
-      path: input.mdeAbsolute !== undefined ? ["mdeAbsolute"] : ["mdeRelative"],
-      message: "Alternative treatment rate (baselineRate + MDE) must be in (0, 1).",
+      path:
+        input.guardrailBreachAbsolute !== undefined
+          ? ["guardrailBreachAbsolute"]
+          : ["guardrailBreachRelative"],
+      message: "Guardrail breach alternative rate (baselineRate + breach) must be in (0, 1).",
     },
   ];
+}
+
+function binomialGuardrailBreach(input: ExperimentPlanInput): number | undefined {
+  if (input.guardrailBreachAbsolute !== undefined) {
+    return Number.isFinite(input.guardrailBreachAbsolute) && input.guardrailBreachAbsolute > 0
+      ? input.guardrailBreachAbsolute
+      : undefined;
+  }
+  if (input.guardrailBreachRelative === undefined || input.baselineRate === undefined) {
+    return undefined;
+  }
+  const resolved = input.guardrailBreachRelative * Math.abs(input.baselineRate);
+  return Number.isFinite(resolved) && resolved > 0 ? resolved : undefined;
 }
 
 function binomialMdeAbsolute(input: ExperimentPlanInput): number | undefined {

@@ -1,4 +1,5 @@
 import { z } from "@hono/zod-openapi";
+import { PERSISTED_RECORD_MAX_KEYS } from "./persisted-field-limits";
 
 /**
  * Wire shapes for the read-only experiment_plan operation. The pure planner
@@ -6,7 +7,11 @@ import { z } from "@hono/zod-openapi";
  *
  * Cold start: callers must supply baseline mean/variance (or rate). This slice
  * does not read historical baselines; baselineSource is always "caller".
+ *
+ * Arm cap matches Experiment allocation's persisted record key limit (Variant
+ * names in the draft allocation), which is the create-time arm bound.
  */
+export const EXPERIMENT_PLAN_MAX_ARM_COUNT = PERSISTED_RECORD_MAX_KEYS;
 
 type PlanRequestValue = {
   metricKind: "continuous" | "binomial";
@@ -107,8 +112,12 @@ export const ExperimentPlanRequestSchema = z
     mdeAbsolute: z.number().finite().positive().optional(),
     mdeRelative: z.number().finite().positive().optional(),
     fixedSampleSizePerArm: z.number().int().positive().optional(),
-    armCount: z.number().int().min(2),
-    trafficSplit: z.array(z.number().finite().positive()).min(2).optional(),
+    armCount: z.number().int().min(2).max(EXPERIMENT_PLAN_MAX_ARM_COUNT),
+    trafficSplit: z
+      .array(z.number().finite().positive())
+      .min(2)
+      .max(EXPERIMENT_PLAN_MAX_ARM_COUNT)
+      .optional(),
     expectedDailyEligibleEntities: z.number().finite().positive(),
     guardrailBreachAbsolute: z.number().finite().positive().optional(),
     guardrailBreachRelative: z.number().finite().positive().optional(),

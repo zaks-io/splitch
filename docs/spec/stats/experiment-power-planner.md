@@ -32,7 +32,12 @@ Relative MDE or relative guardrail breach on a zero baseline is refused with
 `VALIDATION_ERROR` naming `mdeAbsolute` / `guardrailBreachAbsolute`. For binomial
 Metrics, sizing uses outcome variances `p0(1-p0)` and `p1(1-p1)` under the
 planned alternative `p1 = baselineRate + MDE`; an alternative rate outside
-`(0, 1)` is refused.
+`(0, 1)` is refused. Fixed-size binomial MDE solves the alternative variance
+jointly with the MDE (fixed-point iteration) and recomputes reported power from
+the final values. Guardrail power uses variance under the breach alternative,
+not the goal MDE. `armCount` / `trafficSplit` length are capped at the Experiment
+allocation record key limit (`EXPERIMENT_PLAN_MAX_ARM_COUNT`). Unrepresentable
+sample sizes (Control n above the searchable maximum) return `VALIDATION_ERROR`.
 
 ## Outputs
 

@@ -1,4 +1,5 @@
 import { alwaysValidInflation } from "./always-valid-inflation";
+import { solveBinomialMdeAtFixedSize } from "./experiment-plan-binomial-mde";
 import type {
   ExperimentPlanInput,
   ExperimentPlanOutcome,
@@ -42,20 +43,6 @@ export function planExperiment(input: ExperimentPlanInput): ExperimentPlanOutcom
   const fixedSize = input.fixedSampleSizePerArm;
   const mode = fixedSize !== undefined ? "mde_from_size" : "size_from_mde";
 
-  const mdeAbsolute =
-    mode === "size_from_mde" ? resolveMdeAbsolute(input, baseline.mean) : Number.NaN;
-
-  // For mde_from_size, variances under the alternative need the solved MDE. Use
-  // baseline variance on both arms for the continuous path; binomial fixed-size
-  // MDE uses baseline rate variance for both arms as a planning approximation
-  // (alternative rate is unknown until MDE is known; iterate once below).
-  const seedVariances = armVariances({
-    metricKind: input.metricKind,
-    baselineVariance: baseline.variance,
-    baselineMean: baseline.mean,
-    mdeAbsolute: mode === "size_from_mde" ? mdeAbsolute : 0,
-  });
-
   if (mode === "mde_from_size") {
     return planFromFixedSize({
       input,
@@ -66,10 +53,10 @@ export function planExperiment(input: ExperimentPlanInput): ExperimentPlanOutcom
       zBeta,
       inflation,
       fixedSize: fixedSize as number,
-      seedVariances,
     });
   }
 
+  const mdeAbsolute = resolveMdeAbsolute(input, baseline.mean);
   const variances = armVariances({
     metricKind: input.metricKind,
     baselineVariance: baseline.variance,
@@ -77,21 +64,20 @@ export function planExperiment(input: ExperimentPlanInput): ExperimentPlanOutcom
     mdeAbsolute,
   });
 
-  const fixedHorizonNPerArm = fixedHorizonControlN({
+  const sized = sizeAlwaysValidArms({
     split,
-    critical: inverseNormalCdf(1 - alpha / 2),
+    alpha,
+    power,
     zBeta,
     mdeAbsolute,
     varianceControl: variances.control,
     varianceTreatment: variances.treatment,
   });
+  if (!sized.ok) return sized;
 
-  // Size so every comparison hits the requested power under the shared targetN
-  // (Control + primary treatment), using each comparison's mixture boundary.
-  const sized = sizeAlwaysValidArms({
+  const fixedHorizonNPerArm = fixedHorizonControlN({
     split,
-    alpha,
-    power,
+    critical: inverseNormalCdf(1 - alpha / 2),
     zBeta,
     mdeAbsolute,
     varianceControl: variances.control,
@@ -109,9 +95,9 @@ export function planExperiment(input: ExperimentPlanInput): ExperimentPlanOutcom
       mode,
       mdeAbsolute,
       fixedHorizonNPerArm,
-      nPerArm: sized.nPerArm,
-      targetN: sized.targetN,
-      comparisonPowers: sized.comparisonPowers,
+      nPerArm: sized.sized.nPerArm,
+      targetN: sized.sized.targetN,
+      comparisonPowers: sized.sized.comparisonPowers,
       varianceControl: variances.control,
       varianceTreatment: variances.treatment,
     }),
@@ -127,56 +113,69 @@ function planFromFixedSize(args: {
   zBeta: number;
   inflation: number;
   fixedSize: number;
-  seedVariances: { control: number; treatment: number };
 }): ExperimentPlanOutcome {
-  let variances = args.seedVariances;
-  let solved = mdeAtFixedSize({
-    split: args.split,
-    alpha: args.alpha,
-    zBeta: args.zBeta,
-    fixedSampleSizePerArm: args.fixedSize,
-    varianceControl: variances.control,
-    varianceTreatment: variances.treatment,
-  });
-
   if (args.input.metricKind === "binomial") {
-    // Recompute treatment variance under the solved alternative rate.
-    variances = armVariances({
-      metricKind: "binomial",
+    const joint = solveBinomialMdeAtFixedSize({
+      baselineRate: args.baseline.mean,
       baselineVariance: args.baseline.variance,
-      baselineMean: args.baseline.mean,
-      mdeAbsolute: solved.mdeAbsolute,
+      split: args.split,
+      alpha: args.alpha,
+      zBeta: args.zBeta,
+      fixedSampleSizePerArm: args.fixedSize,
     });
-    const alternativeRate = args.baseline.mean + solved.mdeAbsolute;
-    if (!(alternativeRate > 0 && alternativeRate < 1)) {
-      return {
-        ok: false,
-        issues: [
-          {
-            path: ["fixedSampleSizePerArm"],
-            message:
-              "Solved alternative rate (baselineRate + MDE) must be in (0, 1) at this sample size.",
-          },
-        ],
-      };
-    }
-    solved = mdeAtFixedSize({
+    if (!joint.ok) return joint;
+    return finishFixedSizePlan({
+      ...args,
+      solved: joint.solved,
+      varianceControl: joint.varianceControl,
+      varianceTreatment: joint.varianceTreatment,
+    });
+  }
+  const variances = armVariances({
+    metricKind: "continuous",
+    baselineVariance: args.baseline.variance,
+    baselineMean: args.baseline.mean,
+    mdeAbsolute: 0,
+  });
+  return finishFixedSizePlan({
+    ...args,
+    solved: mdeAtFixedSize({
       split: args.split,
       alpha: args.alpha,
       zBeta: args.zBeta,
       fixedSampleSizePerArm: args.fixedSize,
       varianceControl: variances.control,
       varianceTreatment: variances.treatment,
-    });
-  }
+    }),
+    varianceControl: variances.control,
+    varianceTreatment: variances.treatment,
+  });
+}
 
+function finishFixedSizePlan(args: {
+  input: ExperimentPlanInput;
+  baseline: { mean: number; variance: number };
+  split: readonly number[];
+  alpha: number;
+  power: number;
+  zBeta: number;
+  inflation: number;
+  solved: {
+    mdeAbsolute: number;
+    nPerArm: readonly number[];
+    targetN: number;
+    comparisonPowers: readonly number[];
+  };
+  varianceControl: number;
+  varianceTreatment: number;
+}): ExperimentPlanOutcome {
   const fixedHorizonNPerArm = fixedHorizonControlN({
     split: args.split,
     critical: inverseNormalCdf(1 - args.alpha / 2),
     zBeta: args.zBeta,
-    mdeAbsolute: solved.mdeAbsolute,
-    varianceControl: variances.control,
-    varianceTreatment: variances.treatment,
+    mdeAbsolute: args.solved.mdeAbsolute,
+    varianceControl: args.varianceControl,
+    varianceTreatment: args.varianceTreatment,
   });
 
   return {
@@ -188,13 +187,13 @@ function planFromFixedSize(args: {
       power: args.power,
       inflation: args.inflation,
       mode: "mde_from_size",
-      mdeAbsolute: solved.mdeAbsolute,
+      mdeAbsolute: args.solved.mdeAbsolute,
       fixedHorizonNPerArm,
-      nPerArm: solved.nPerArm,
-      targetN: solved.targetN,
-      comparisonPowers: solved.comparisonPowers,
-      varianceControl: variances.control,
-      varianceTreatment: variances.treatment,
+      nPerArm: args.solved.nPerArm,
+      targetN: args.solved.targetN,
+      comparisonPowers: args.solved.comparisonPowers,
+      varianceControl: args.varianceControl,
+      varianceTreatment: args.varianceTreatment,
     }),
   };
 }
@@ -237,7 +236,6 @@ function buildPlan(args: {
       targetN: args.targetN,
       alpha: args.alpha,
       varianceControl: args.varianceControl,
-      varianceTreatment: args.varianceTreatment,
     }),
     baselineMean: args.baseline.mean,
     baselineVariance: args.baseline.variance,
@@ -272,7 +270,6 @@ function computeGuardrailPower(args: {
   targetN: number;
   alpha: number;
   varianceControl: number;
-  varianceTreatment: number;
 }): number | null {
   const { input, baseline, nPerArm } = args;
   let breach: number | undefined = input.guardrailBreachAbsolute;
@@ -280,8 +277,13 @@ function computeGuardrailPower(args: {
     breach = input.guardrailBreachRelative * Math.abs(baseline.mean);
   }
   if (breach === undefined) return null;
-
-  // Conservative: power against the smallest treatment arm under the shared targetN.
+  // Variance under the breach alternative, not the goal MDE.
+  const breachVariances = armVariances({
+    metricKind: input.metricKind,
+    baselineVariance: baseline.variance,
+    baselineMean: baseline.mean,
+    mdeAbsolute: breach,
+  });
   const nControl = armAt(nPerArm, 0);
   const nTreatment = Math.min(...nPerArm.slice(1));
   return comparisonPower({
@@ -290,7 +292,7 @@ function computeGuardrailPower(args: {
     targetN: args.targetN,
     alpha: args.alpha,
     varianceControl: args.varianceControl,
-    varianceTreatment: args.varianceTreatment,
+    varianceTreatment: breachVariances.treatment,
     effectAbsolute: breach,
   });
 }
