@@ -30,8 +30,13 @@ import type { StatsOutput } from "./stats-result-contract";
  */
 export const ANALYSIS_V1_VERSION = "analysis-v1";
 export const ANALYSIS_V2_VERSION = "analysis-v2";
-/** New Runs freeze this named implementation. Keep in sync with ANALYSIS_V2_VERSION. */
-export const CURRENT_ANALYSIS_VERSION = "analysis-v2";
+/**
+ * New Runs freeze this named implementation. analysis-v2 is defined in the
+ * exhaustive version switch but is not current yet: its Results gate orders by
+ * event time, so late ingestion with earlier timestamps can erase an alarm.
+ * Keep CURRENT on analysis-v1 until an ingestion-ordered observation path lands.
+ */
+export const CURRENT_ANALYSIS_VERSION = "analysis-v1";
 
 /**
  * The label a legacy Run is read under. Its compatibility implementation is the

@@ -50,7 +50,10 @@ read this martingale: `srm_p_value` is the anytime p-value and `srm_is_mismatch`
 `threshold_crossed` at alpha 0.001. legacy-unversioned and analysis-v1 keep the chi-square
 `p < 0.001` gate. Chi-square stays the fixed-horizon diagnostic and the activation-balance test
 under every version (activation balance is equality of unknown rates, not the declared
-allocation multinomial).
+allocation multinomial). `analysis-v2` is defined in the exhaustive version switch but is **not
+current**: new Runs still freeze `analysis-v1`. The open blocker is an ingestion-ordered
+observation path (late ingestion with earlier event timestamps can erase an alarm when the path
+is ordered by event time).
 
 **Prior.** Dirichlet mean equals the declared allocation: `alpha_i = concentration * theta_i`.
 Default `concentration` is 100. Type I control from Ville's inequality does not depend on this
@@ -74,6 +77,13 @@ reads stay reproducible. The reported p-value is the running minimum along that 
 mismatch stays sticky when later arrivals balance the totals. This holds as long as ingestion
 before the pinned watermark is complete (the watermark contract). The Entity set is exactly the
 pinned-watermark `StatsInput` exposures (and activation rows for activated SRM).
+
+**Open issue (why v2 is not current).** Ordering by event time is not the same as ordering by
+ingestion. A late-arriving row whose `activation_ts` / `first_exposure_ts` is earlier than rows
+already on the path can rewrite history and erase a previously sticky alarm. Until the Results
+gate has an ingestion-ordered observation path (or an equivalent filtration that cannot be revised
+by late event timestamps), `CURRENT_ANALYSIS_VERSION` stays `analysis-v1` and no new Run is started
+under `analysis-v2`.
 
 **Quarantine and revisions.** A later watermark that moves an Entity into `__multiple__` (or
 revises `first_exposure_ts` / `activation_ts`) edits the dataset. The next read recomputes the

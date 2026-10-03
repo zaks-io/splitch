@@ -39,6 +39,12 @@ describe("SRM observation arrival order", () => {
       ),
     ).toThrow(/arrival_ts must be an ISO timestamp/);
   });
+
+  it("fails loud when a singleton Entity has a malformed arrival timestamp", () => {
+    expect(() => sortEntitiesByArrival([entity("control", "solo", "garbage")])).toThrow(
+      /arrival_ts must be an ISO timestamp/,
+    );
+  });
 });
 
 function entity(variant: string, targeting_key_hash: string, arrival_ts: string): SrmPathEntity {

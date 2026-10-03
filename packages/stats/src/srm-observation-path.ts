@@ -40,8 +40,13 @@ export function compareSrmPathEntities(left: SrmPathEntity, right: SrmPathEntity
 /**
  * Sort Entities into the append-only arrival filtration. Mutates `entities` in
  * place so callers that already own the array avoid a second allocation.
+ * Every timestamp is validated before sorting so a singleton malformed Entity
+ * fails loud instead of skipping the comparator.
  */
 export function sortEntitiesByArrival(entities: SrmPathEntity[]): SrmPathEntity[] {
+  for (const entity of entities) {
+    arrivalMs(entity.arrival_ts);
+  }
   entities.sort(compareSrmPathEntities);
   return entities;
 }

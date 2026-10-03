@@ -131,7 +131,7 @@ describe("analysis version and Run commitments (ADR-0059)", () => {
 
     expect(v1.result_token).not.toBe(v2.result_token);
     expect(v1.result_token).toBe(ANALYSIS_V1_FIXTURE_TOKEN);
-    expect(CURRENT_ANALYSIS_VERSION).toBe(ANALYSIS_V2_VERSION);
+    expect(CURRENT_ANALYSIS_VERSION).toBe(ANALYSIS_V1_VERSION);
   });
 
   it("reports a caller target and a labeled duration override", async () => {
