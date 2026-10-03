@@ -79,6 +79,6 @@ export function balancedEntities(
   return entities;
 }
 
-export function isoDaysAfter(iso: string, days: number): string {
+function isoDaysAfter(iso: string, days: number): string {
   return new Date(Date.parse(iso) + days * MS_PER_DAY).toISOString();
 }
