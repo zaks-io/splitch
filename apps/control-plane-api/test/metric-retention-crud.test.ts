@@ -67,4 +67,84 @@ describe("Retention Metric CRUD", () => {
       horizonEndMs: 86_400_000,
     });
   });
+
+  it.each([
+    { key: "signup", kind: "binomial" as const },
+    { key: "items", kind: "count" as const, eventFieldName: "quantity" },
+    { key: "revenue", kind: "revenue" as const, eventFieldName: "amount" },
+  ])("rejects horizon fields on a $kind Metric PATCH", async ({ key, kind, eventFieldName }) => {
+    const createdApp = await createDefaultApp(h);
+    const appId = createdApp.app.id;
+    const jwt = await appToken(h, appId);
+    const eventDefinitionId = await ensureMetricEventDefinition(
+      h.bindings.d1,
+      appId,
+      key,
+      NOW_ISO,
+      eventFieldName,
+    );
+    const created = await request(h, "POST", `/apps/${appId}/metrics`, jwt, {
+      appId,
+      name: key,
+      key,
+      kind,
+      eventDefinitionId,
+      ...(eventFieldName ? { eventFieldName } : {}),
+    });
+    expect(created.status).toBe(200);
+    const metric = (await created.json()) as { id: string };
+
+    const patched = await request(h, "PATCH", `/apps/${appId}/metrics/${metric.id}`, jwt, {
+      horizonStartMs: 0,
+      horizonEndMs: 86_400_000,
+    });
+    expect(patched.status).toBe(400);
+    expect((await errorBody(patched)).code).toBe("VALIDATION_ERROR");
+  });
+
+  it("rejects horizon fields on a ratio Metric PATCH", async () => {
+    const createdApp = await createDefaultApp(h);
+    const appId = createdApp.app.id;
+    const jwt = await appToken(h, appId);
+    const numeratorId = await ensureMetricEventDefinition(h.bindings.d1, appId, "signup", NOW_ISO);
+    const denominatorId = await ensureMetricEventDefinition(
+      h.bindings.d1,
+      appId,
+      "session",
+      NOW_ISO,
+    );
+    const numerator = await request(h, "POST", `/apps/${appId}/metrics`, jwt, {
+      appId,
+      name: "signup",
+      key: "signup",
+      kind: "binomial",
+      eventDefinitionId: numeratorId,
+    });
+    const denominator = await request(h, "POST", `/apps/${appId}/metrics`, jwt, {
+      appId,
+      name: "session",
+      key: "session",
+      kind: "binomial",
+      eventDefinitionId: denominatorId,
+    });
+    expect(numerator.status).toBe(200);
+    expect(denominator.status).toBe(200);
+    const ratio = await request(h, "POST", `/apps/${appId}/metrics`, jwt, {
+      appId,
+      name: "signup-rate",
+      key: "signup-rate",
+      kind: "ratio",
+      numerator: { metricId: ((await numerator.json()) as { id: string }).id },
+      denominator: { metricId: ((await denominator.json()) as { id: string }).id },
+    });
+    expect(ratio.status).toBe(200);
+    const metric = (await ratio.json()) as { id: string };
+
+    const patched = await request(h, "PATCH", `/apps/${appId}/metrics/${metric.id}`, jwt, {
+      horizonStartMs: 0,
+      horizonEndMs: 86_400_000,
+    });
+    expect(patched.status).toBe(400);
+    expect((await errorBody(patched)).code).toBe("VALIDATION_ERROR");
+  });
 });

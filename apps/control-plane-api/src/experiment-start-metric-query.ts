@@ -4,18 +4,17 @@ import {
   type MetricQueryConfig,
 } from "@splitch/contracts";
 import { appScope, type Repository } from "@splitch/db";
-import { experimentStartInvalid } from "./experiment-errors";
 import { binomialQueryConfig } from "./experiment-start-binomial-query";
-import { retentionQueryConfig } from "./experiment-start-retention-query";
+import {
+  invalidMetric,
+  type MetricRow,
+  type PublishedSource,
+  type Result,
+  sourceEventDefinitionVersion,
+  sourceVersionIssue,
+} from "./experiment-start-metric-source";
+import { retentionStartQueryConfig } from "./experiment-start-retention-query";
 
-type MetricRow = NonNullable<Awaited<ReturnType<Repository["experiments"]["getMetric"]>>>;
-type EventDefinitionVersion = NonNullable<
-  Awaited<ReturnType<Repository["eventDefinitions"]["getVersion"]>>
->;
-type PublishedSource = Awaited<
-  ReturnType<Repository["eventDefinitions"]["listCurrentPublishedVersions"]>
->[number];
-type Result<T> = { ok: true; value: T } | { ok: false; response: Response };
 type SourceBinding = Extract<MetricQueryConfig, { metric_type: "ratio" }>["numerator"];
 
 export async function frozenMetricQueryConfig(
@@ -80,7 +79,7 @@ function queryConfig(
     return ratioQueryConfig(rows, sources, row, conversionWindowMs, targetingKeyType, requestId);
   }
   if (row.kind === "retention") {
-    return retentionQueryConfig(row, requestId);
+    return retentionStartQueryConfig(sources, row, targetingKeyType, requestId);
   }
   if (!row.eventDefinitionId) {
     return invalidMetric(metricId, "has no Event Definition", requestId);
@@ -200,67 +199,6 @@ function sourceBinding(
   return sourceBindingValue(row);
 }
 
-function sourceEventDefinitionVersion(
-  sources: Map<string, PublishedSource>,
-  row: MetricRow,
-  analyzedMetricId: string,
-  requestId: string,
-): Result<EventDefinitionVersion> {
-  if (!row.eventDefinitionId) {
-    return invalidMetric(
-      analyzedMetricId,
-      `source Metric ${row.id} has no Event Definition`,
-      requestId,
-    );
-  }
-  const source = sources.get(row.eventDefinitionId);
-  const definition = source?.definition;
-  if (definition?.family !== "metric" || !definition.currentPublishedVersionId) {
-    return invalidMetric(
-      analyzedMetricId,
-      `source Metric ${row.id} has no current published metric Event Definition`,
-      requestId,
-    );
-  }
-  const version = source?.version;
-  if (!version) {
-    return invalidMetric(
-      analyzedMetricId,
-      `Event Definition ${definition.id} has a stale Version`,
-      requestId,
-    );
-  }
-  return { ok: true, value: version };
-}
-
-function sourceVersionIssue(
-  row: MetricRow,
-  version: EventDefinitionVersion,
-  targetingKeyType: string,
-  analyzedMetricId: string,
-  requestId: string,
-): Result<never> | null {
-  if (version.entityType !== targetingKeyType) {
-    return invalidMetric(
-      analyzedMetricId,
-      `source Metric ${row.id} Entity type ${version.entityType ?? "null"} does not match Run Entity type ${targetingKeyType}`,
-      requestId,
-    );
-  }
-  if (row.kind === "count" || row.kind === "revenue") {
-    const fields = JSON.parse(version.fields) as Array<{ name: string; type: string }>;
-    const field = fields.find(({ name }) => name === row.eventFieldName);
-    if (field?.type !== "number") {
-      return invalidMetric(
-        analyzedMetricId,
-        `source Metric ${row.id} field ${row.eventFieldName ?? "null"} is missing or nonnumeric`,
-        requestId,
-      );
-    }
-  }
-  return null;
-}
-
 function sourceBindingValue(row: MetricRow): Result<SourceBinding> {
   if (!row.eventDefinitionId) {
     throw new Error(`prepareStart: source Metric ${row.id} lost its Event Definition`);
@@ -287,15 +225,5 @@ function sourceBindingValue(row: MetricRow): Result<SourceBinding> {
       event_definition_id: row.eventDefinitionId,
       event_field_name: row.eventFieldName,
     },
-  };
-}
-
-function invalidMetric<T>(metricId: string, message: string, requestId: string): Result<T> {
-  return {
-    ok: false,
-    response: experimentStartInvalid(
-      [{ path: ["body", "metrics", metricId], message: `Metric ${metricId} ${message}` }],
-      requestId,
-    ),
   };
 }

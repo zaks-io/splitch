@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  exposure,
   IMMATURE_WATERMARK,
   MATURE_WATERMARK,
   retentionAndBinomialInput,
@@ -53,6 +54,64 @@ describe("Retention Metric maturity eligibility", () => {
     ).toEqual([
       ["control", 2, 0],
       ["treatment", 2, 0],
+    ]);
+  });
+
+  it("matures gated Retention from Activation when the Exposure row still carries first_exposure_ts as window_anchor", async () => {
+    const sevenDays = 7 * 86_400_000;
+    const firstExposure = "2026-07-01T00:00:00.000Z";
+    const activation = "2026-07-03T00:00:00.000Z";
+    const exposures = [
+      exposure("control", "c_gated", firstExposure),
+      exposure("treatment", "t_gated", firstExposure),
+    ];
+    const input = {
+      ...retentionAndBinomialInput({
+        data_watermark: "2026-07-09T00:00:00.000Z",
+        lateAnchor: firstExposure,
+      }),
+      decision_family: [{ metric_id: "d7_retained", variant: "treatment" }],
+      metric_retention_horizons: [
+        { metric_id: "d7_retained", horizon_start_ms: 0, horizon_end_ms: sevenDays },
+      ],
+      exposures,
+      activation_rows: [
+        {
+          targeting_key_hash: "c_gated",
+          run_id: "run_retention",
+          activation_ts: activation,
+          counterfactual: false,
+          activated: true,
+        },
+        {
+          targeting_key_hash: "t_gated",
+          run_id: "run_retention",
+          activation_ts: activation,
+          counterfactual: false,
+          activated: true,
+        },
+      ],
+      metric_values: [],
+    };
+
+    const immature = await analyzeStats(input);
+    expect(
+      immature.arm_results
+        .filter((arm) => arm.metric_id === "d7_retained")
+        .map((arm) => [arm.variant, arm.sample_size_n, arm.immature_excluded_n]),
+    ).toEqual([
+      ["control", 0, 1],
+      ["treatment", 0, 1],
+    ]);
+
+    const mature = await analyzeStats({ ...input, data_watermark: "2026-07-10T00:00:00.000Z" });
+    expect(
+      mature.arm_results
+        .filter((arm) => arm.metric_id === "d7_retained")
+        .map((arm) => [arm.variant, arm.sample_size_n, arm.immature_excluded_n]),
+    ).toEqual([
+      ["control", 1, 0],
+      ["treatment", 1, 0],
     ]);
   });
 

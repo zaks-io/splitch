@@ -13,7 +13,10 @@ export function metricHorizons(
   current: MetricRow | null,
 ): { horizonStartMs: number | null; horizonEndMs: number | null } {
   if (kind !== "retention") {
-    return { horizonStartMs: null, horizonEndMs: null };
+    return {
+      horizonStartMs: suppliedHorizon(body, "horizonStartMs"),
+      horizonEndMs: suppliedHorizon(body, "horizonEndMs"),
+    };
   }
   return {
     horizonStartMs: resolveHorizon(body, "horizonStartMs", current),
@@ -28,6 +31,14 @@ export function copyHorizons(
 ): void {
   if (body.horizonStartMs !== undefined) patch.horizonStartMs = prepared.horizonStartMs;
   if (body.horizonEndMs !== undefined) patch.horizonEndMs = prepared.horizonEndMs;
+}
+
+function suppliedHorizon(
+  body: Record<string, unknown>,
+  field: "horizonStartMs" | "horizonEndMs",
+): number | null {
+  if (body[field] === undefined) return null;
+  return body[field] as number | null;
 }
 
 function resolveHorizon(
