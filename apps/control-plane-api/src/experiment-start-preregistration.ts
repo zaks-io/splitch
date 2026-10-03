@@ -10,9 +10,11 @@ export function resolveStartPreRegistration(
   raw: unknown,
   runMetricIds: ReadonlySet<string>,
   requestId: string,
+  horizon: "sequential" | "fixed",
+  lockedGoalMetricIds: ReadonlySet<string>,
 ): { ok: true; value: PreRegistration | null } | { ok: false; response: Response } {
   if (raw === undefined) return { ok: true, value: null };
-  const resolved = resolvePreRegistration(raw, runMetricIds);
+  const resolved = resolvePreRegistration(raw, runMetricIds, { horizon, lockedGoalMetricIds });
   if (!resolved.ok) {
     return { ok: false, response: validationErrors(requestId, resolved.issues) };
   }
@@ -27,4 +29,10 @@ export function runMetricIdsFromPrepared(prepared: {
     ...prepared.decisionFamily.map((metric) => metric.metricId),
     ...prepared.guardrailDecisions.map((metric) => metric.metric_id),
   ]);
+}
+
+export function lockedGoalMetricIdsFromPrepared(prepared: {
+  decisionFamily: ReadonlyArray<{ metricId: string }>;
+}): Set<string> {
+  return new Set(prepared.decisionFamily.map((metric) => metric.metricId));
 }

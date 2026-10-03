@@ -7,8 +7,8 @@ import { MetricDirectionSchema, MetricRefSchema } from "./leaf-schemas-experimen
  * and an opt-in futility mode (plan 2.12).
  *
  * Optional on Start: omitting it leaves existing clients unchanged. Once frozen
- * it is immutable. Scorecard trust checks and the ship recommendation (plan 2.4)
- * read this object later; this slice freezes and surfaces it.
+ * it is immutable. The ship recommendation (plan 2.4) and futility verdict
+ * (plan 2.12) read this object from `run_commitments.pre_registration`.
  */
 
 const MetricIdSchema = MetricRefSchema.shape.metricId;
@@ -149,7 +149,19 @@ export const preRegistrationIssueCodes = [
    * (same bar as relative ROPE; see result-contracts.md).
    */
   "PREREG_FUTILITY_REQUIRES_ABSOLUTE_MDE",
+  /**
+   * Relative ship-rule margins use Fieller intervals; sequential Fieller
+   * time-uniform coverage is unproven (result-contracts.md). Use absolute
+   * margin_scale on a sequential Run, or set horizon to fixed.
+   */
+  "PREREG_SHIP_RULE_RELATIVE_SEQUENTIAL_UNSUPPORTED",
   "PREREG_DESIRABILITY_REQUIRED",
+  /**
+   * `unanimous_goals` / `any_goal` combine every locked goal Metric; each must
+   * carry desirability in preRegistration.metrics so a significant harmful
+   * secondary cannot be silently dropped from the freeze.
+   */
+  "PREREG_LOCKED_GOAL_DESIRABILITY_REQUIRED",
   "PREREG_PRIMARY_METRIC_MISSING",
   "PREREG_DUPLICATE_METRIC",
   "PREREG_SHIP_RULE_INVALID",

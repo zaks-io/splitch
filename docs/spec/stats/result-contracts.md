@@ -187,8 +187,84 @@ sequence, an absolute-scale verdict is valid at any look (Kruschke 2018).
 Non-finite bounds, an inverted interval (`lower > upper`), or a non-positive-width ROPE
 (`ropeLower >= ropeUpper`) throw. A point interval (`lower === upper`) is allowed.
 
-Scorecard rendering of trust checks and the ship recommendation that consumes the locked ship rule
-are plan item 2.4 and are out of scope here.
+## Ship recommendation (plan 2.4)
+
+When a Run froze a pre-registration, the Control Plane result producer emits
+`recommendation: { verdict, because }`. Verdicts are `ship`, `do_not_ship`,
+`keep_running`, or `invalid`. `because` is one sentence naming the deciding fact
+with numbers and no internal ids. Runs without a pre-registration omit
+`recommendation` and set `recommendationUnavailable: "no_pre_registration"`.
+
+Precedence (first matching row wins):
+
+| Order | Condition                                                                                                                            | Outcome                                                              |
+| ----- | ------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------- |
+| 1     | No pre-registration                                                                                                                  | `recommendationUnavailable: "no_pre_registration"`                   |
+| 2     | Trust/health gate fail (Control identity, SRM, activation balance, engine, decision family)                                          | `invalid`                                                            |
+| 3     | Gate not ready (`underpowered` or `planned_duration`)                                                                                | `keep_running`                                                       |
+| 4     | Any Guardrail `is_breached: true`                                                                                                    | `do_not_ship` (before interval-availability returns)                 |
+| 5     | Sequential Run with a relative ship-rule margin                                                                                      | `recommendationUnavailable: "relative_sequential_coverage_unproven"` |
+| 6     | Relative ship-rule margin with a non-positive Control mean                                                                           | `recommendationUnavailable: "relative_control_mean_non_positive"`    |
+| 7     | Combining goals (`unanimous_goals` / `any_goal`) with a locked goal missing desirability in the freeze                               | `recommendationUnavailable: "locked_goal_desirability_missing"`      |
+| 8     | Combined locked goal Metrics harmful in the desirable direction                                                                      | `do_not_ship`                                                        |
+| 9     | Combined locked goal Metrics undecided (interval has not cleared the required margin, or FDR-corrected decision evidence is missing) | `keep_running`                                                       |
+| 10    | Combined locked goal Metrics beneficial per the ship rule's required margin, no Guardrail breached                                   | `ship`                                                               |
+
+A win requires eligible FDR-corrected decision evidence (`is_significant`,
+`in_bh_family`, and `decision_valid` on the deciding Treatment arm). Clearing the
+margin alone is not enough. Conflict resolution (`primary_wins` /
+`unanimous_goals` / `any_goal`) combines only locked goal Metrics from the BH
+decision family; Guardrail Metrics listed in pre-registration are ignored for
+goal combination and evaluated only by their breach rows. Start refuses a
+combining ship rule that omits a locked goal Metric's desirability with
+`PREREG_LOCKED_GOAL_DESIRABILITY_REQUIRED`; an existing partial freeze fails loud
+at results with `locked_goal_desirability_missing` rather than silently excluding
+the omitted goal. `because` names the deciding Metric's interval (Primary or Goal)
+with numbers and no internal ids. When an arm's interval clears the required
+margin but the arm fails FDR eligibility, `because` says so explicitly rather
+than claiming the margin was not cleared.
+
+### Simultaneous margin clearance (Bonferroni across shipping comparisons)
+
+FDR eligibility tests lift against **zero**. Margin clearance is a different
+claim (lift past the required margin). When the ship rule combines goals
+(`unanimous_goals` / `any_goal`) and `k > 1` Metric×Treatment comparisons can
+trigger shipping, a comparison clears the margin only if its always-valid
+interval recomputed at `alpha/k` (Bonferroni across those comparisons) clears
+the margin. `k` is the count of locked goal Metric × Treatment arm pairs (top-
+level `decision_family` members), not distinct Metrics alone — otherwise one
+goal with many Treatments under-corrects. For `k = 1` (including `primary_wins`)
+the ordinary alpha decision interval is used. The `alpha/k` interval is produced
+by the same confidence-sequence (or fixed-horizon) adapter as the decision
+interval on the absolute scale — never by rescaling the published alpha
+interval. Relative ship rules (fixed horizon only) derive Fieller percent bounds
+from that absolute `alpha/k` interval. Published fields:
+`simultaneous_absolute_ci_*` and, when relative, `simultaneous_ci_*` (stripped
+from the result token). Zero-null FDR eligibility remains an **additional**
+requirement on top of simultaneous margin clearance. Seeded Monte Carlo
+(`packages/stats/src/ship-recommendation-margin.simulation.test.ts`): 20 goals
+with true lift equal to the required margin under `any_goal`, and separately one
+goal with 10 Treatments at the margin, must keep the false-ship rate at or below
+`alpha` plus the predeclared Monte Carlo tolerance.
+
+Absolute margins use the absolute decision interval (`absolute_ci_*` on Treatment
+arms, stripped from the result token), with the simultaneous absolute interval
+above when combining goals. Relative margins use the published relative
+CI (percent) against a fractional `required_margin`, and are accepted only on a
+**fixed-horizon** Run: sequential Fieller time-uniform coverage is unproven, so
+Start refuses `marginScale: "relative"` on a sequential Run with
+`PREREG_SHIP_RULE_RELATIVE_SEQUENTIAL_UNSUPPORTED` (same rationale as relative
+ROPE). If a sequential Run somehow carries a relative ship rule at results time,
+the producer emits `recommendationUnavailable: "relative_sequential_coverage_unproven"`
+rather than a Fieller-based ship. Relative comparisons reverse desirability when
+the Control mean is zero or negative, so a relative-scale rule then emits
+`recommendationUnavailable: "relative_control_mean_non_positive"` rather than
+re-orienting the interval. Missing absolute bounds with an absolute ship rule
+yield `recommendationUnavailable: "absolute_interval_unavailable"` rather than a
+guessed verdict (including missing simultaneous bounds when `k > 1`). Treatments
+are identified by Control identity (every non-Control Variant), not by a
+non-null relative lift — so a zero Control mean still yields an absolute-rule
+recommendation when absolute intervals exist.
 
 ## Futility verdict (MDE exclusion, advisory)
 
@@ -289,9 +365,13 @@ handles (`run_id`, `run_number`, `run_status`, `control`, `control_variant`, `da
 the detailed member. Released CLI 0.7.5 and SDK 0.9.1 tolerate unknown additive fields; existing
 field names and Analysis enums are not renamed or extended.
 
-Ship / do-not-ship recommendation copy is intentionally absent until the ship policy is locked at
-Run Start (Phase 2.4). The panel Experiment Results read calls the same producer and maps into its
-camelCase projection; it does not re-derive the gate.
+After `reasons`, ready responses carry `recommendation` or `recommendationUnavailable` (plan 2.4).
+Concise omits `stats` unless the caller sets `includeExploratory: true` (exploratory statistics
+opt-in; detailed always includes full stats). On GET, `includeExploratory` is a query string and
+accepts only `"true"` / `"false"` (coerced to a boolean); POST/MCP bodies keep a real JSON boolean.
+The recommendation is never hashed into `result_token`. The panel Experiment Results read calls the
+same producer and maps into its camelCase projection; it does not re-derive the gate or the
+recommendation.
 
 ## Sources
 

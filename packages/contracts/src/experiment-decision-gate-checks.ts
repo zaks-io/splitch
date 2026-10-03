@@ -6,7 +6,8 @@ import type {
   SrmSignal,
 } from "./experiment-decision-gate";
 import { formatPValue } from "./p-value-format";
-import type { StatsOutput, StatsResultStatus } from "./stats-result-contract";
+import type { StatsResultStatus } from "./stats-result-arm";
+import type { StatsOutput } from "./stats-result-contract";
 
 export { controlIdentityCheck };
 

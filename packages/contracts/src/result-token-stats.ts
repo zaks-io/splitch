@@ -1,4 +1,5 @@
-import type { ArmResult, StatsOutput } from "./stats-result-contract";
+import type { ArmResult } from "./stats-result-arm";
+import type { StatsOutput } from "./stats-result-contract";
 
 /**
  * The Stats the result token hashes: everything except the estimand disclosure.
@@ -23,9 +24,10 @@ export function resultTokenStats(stats: StatsOutput): StatsOutput {
 }
 
 function withoutEstimand(arm: ArmResult): ArmResult {
-  // Classification overlays (ROPE, futility) read the already-tokenized
-  // decision interval against frozen pre-registration; stripping them keeps
-  // tokens for Runs without those fields byte-identical to before they existed.
+  // Classification overlays (ROPE, futility, absolute CI) and estimand disclosure
+  // are derived or advisory; stripping them keeps tokens for existing Runs
+  // byte-identical to before those fields existed. Decision-bearing relative CI
+  // and point estimates stay hashed.
   const {
     estimand: _estimand,
     ropeVerdict: _rope,
@@ -33,6 +35,12 @@ function withoutEstimand(arm: ArmResult): ArmResult {
     ropeVerdictUnavailable: _unavailable,
     futilityVerdict: _futility,
     futilityBecause: _because,
+    absolute_ci_lower: _absLower,
+    absolute_ci_upper: _absUpper,
+    simultaneous_absolute_ci_lower: _simAbsLower,
+    simultaneous_absolute_ci_upper: _simAbsUpper,
+    simultaneous_ci_lower: _simLower,
+    simultaneous_ci_upper: _simUpper,
     ...rest
   } = arm;
   return rest;

@@ -154,13 +154,18 @@ per-Metric desirability (`higher_is_better` | `lower_is_better`), optional per-M
 because sequential Fieller coverage is unproven; ROPE lower must be strictly less than upper), a
 ship rule (`requiredMargin`, `marginScale`, `conflictResolution`: `primary_wins` | `unanimous_goals` |
 `any_goal`), and optional `futility` (`off` | `mde_exclusion`; omit freezes as `off`).
-`mde_exclusion` requires an absolute MDE on the primary Metric
-(`PREREG_FUTILITY_REQUIRES_ABSOLUTE_MDE`); relative MDE alone is refused for the same Fieller reason.
-It is immutable after Start. Omitting `preRegistration` leaves Start behavior unchanged for existing
-clients. Making a plan mandatory with an override is a later product decision. Validation failures
-carry stable issue codes (`PREREG_*`) under `VALIDATION_ERROR`. The frozen value is exposed on Run
-reads (`preRegistration`) and on ready results (`run_commitments.pre_registration`). Scorecard trust
-checks and the ship recommendation (plan 2.4) are out of scope for this slice.
+Relative ship-rule margins (`marginScale: "relative"`) are refused on a sequential Run with
+`PREREG_SHIP_RULE_RELATIVE_SEQUENTIAL_UNSUPPORTED` for the same Fieller-coverage reason; use
+`marginScale: "absolute"` or set `horizon` to `fixed`. When `conflictResolution` is
+`unanimous_goals` or `any_goal`, every locked goal Metric must appear in `metrics` with
+desirability (`PREREG_LOCKED_GOAL_DESIRABILITY_REQUIRED`). `mde_exclusion` requires an absolute MDE
+on the primary Metric (`PREREG_FUTILITY_REQUIRES_ABSOLUTE_MDE`); relative MDE alone is refused for
+the same Fieller reason. It is immutable after Start. Omitting `preRegistration` leaves Start
+behavior unchanged for existing clients. Making a plan mandatory with an override is a later product
+decision. Validation failures carry stable issue codes (`PREREG_*`) under `VALIDATION_ERROR`. The
+frozen value is exposed on Run reads (`preRegistration`) and on ready results
+(`run_commitments.pre_registration`). The ship recommendation (plan 2.4) is computed by the shared
+results producer from this freeze.
 `reason` is an optional human note capturing _intent_ for the new Run ("testing higher exposure to
 v2"). It is stored as the Run's `start_reason` and surfaced by the Run-history timeline alongside the
 **derived** assignment-config diff from the prior Run (the timeline never depends on it being present —

@@ -1,6 +1,7 @@
 import {
   AnalysisResultsEnvelopeSchema,
   canonicalHash,
+  resultTokenStats,
   type ErrorResponse,
 } from "@splitch/contracts";
 import { describe, expect, it } from "vitest";
@@ -58,10 +59,8 @@ describe("Experiment result evidence", () => {
     if (envelope.state !== "ready") throw new Error("expected ready result evidence");
     expect(envelope.stats.arm_results.every((arm) => arm.estimand !== undefined)).toBe(true);
 
-    const legacyStats = {
-      ...envelope.stats,
-      arm_results: envelope.stats.arm_results.map(({ estimand: _estimand, ...arm }) => arm),
-    };
+    // Token hashing strips estimand / absolute CI / ROPE fields so pre-disclosure
+    // and pre-absolute-CI tokens stay byte-identical (resultTokenStats).
     expect(envelope.stats.dimension_results).toBeUndefined();
     expect(envelope.result_token).toBe(
       await canonicalHash({
@@ -70,7 +69,7 @@ describe("Experiment result evidence", () => {
         experimentId: EXPERIMENT_ID,
         runId: RUN_ID,
         runConfigHash: RUN_CONFIG_HASH,
-        stats: legacyStats,
+        stats: resultTokenStats(envelope.stats),
       }),
     );
   });

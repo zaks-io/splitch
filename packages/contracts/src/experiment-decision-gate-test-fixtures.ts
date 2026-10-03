@@ -7,7 +7,8 @@
 import type { FrozenControlIdentity } from "./experiment-control-identity";
 import { evaluateExperimentDecisionGate } from "./experiment-decision-gate";
 import type { PlannedDurationEvidence } from "./experiment-decision-gate-duration";
-import type { ArmResult, StatsOutput } from "./stats-result-contract";
+import type { ArmResult } from "./stats-result-arm";
+import type { StatsOutput } from "./stats-result-contract";
 
 /** A Control the Run really froze, so cases exercise one variable at a time. */
 function frozenControl(): FrozenControlIdentity {

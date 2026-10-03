@@ -736,23 +736,24 @@ Request body (--body-json):
 
 Example:
   splitch experiment plan --body-json '{"metricKind":"continuous","armCount":33,"expectedDailyEligibleEntities":0.000001,"baselineMean":1,"baselineVariance":1,"mdeAbsolute":1}' --json",
-    "experiment-results get": "Get an Experiment's results: readiness, blockedBy, and reasons first; detailed stats by default; view=concise for the verdict block only. States: ready, no_data (names the missing input), or no_run (names Start).
+    "experiment-results get": "Get an Experiment's results: readiness, blockedBy, reasons, then ship recommendation when pre-registered; detailed stats by default; view=concise for the verdict block (includeExploratory attaches stats). States: ready, no_data, or no_run.
 
 Usage:
   splitch experiment-results get <experiment-id> [flags]
 
 Flags:
-  --app <app>          [type: string; default: SPLITCH_APP or config] App ID or slug.
-  --env <environment>  [type: string; default: SPLITCH_ENV or config] Environment ID or key.
-  --by <mode>          [type: string; default: automatic] Allowed: id. Resolve a canonical-looking selector explicitly.
-  --run-id <run-id>    [type: string; default: none] Query parameter runId.
-  --view <view>        [type: string ("concise" | "detailed"); default: none] Query parameter view.
-  --json               [type: boolean; default: false] Write machine-readable JSON to stdout.
-  -h, --help           [type: boolean; default: false] Show help and exit.
+  --app <app>                                  [type: string; default: SPLITCH_APP or config] App ID or slug.
+  --env <environment>                          [type: string; default: SPLITCH_ENV or config] Environment ID or key.
+  --by <mode>                                  [type: string; default: automatic] Allowed: id. Resolve a canonical-looking selector explicitly.
+  --run-id <run-id>                            [type: string; default: none] Query parameter runId.
+  --view <view>                                [type: string ("concise" | "detailed"); default: none] Query parameter view.
+  --include-exploratory <include-exploratory>  [type: boolean; default: none] Query parameter includeExploratory.
+  --json                                       [type: boolean; default: false] Write machine-readable JSON to stdout.
+  -h, --help                                   [type: boolean; default: false] Show help and exit.
 
 Example:
   splitch experiment-results get <experiment-id> --json",
-    "experiment-results post": "Get an Experiment's results: readiness, blockedBy, and reasons first; detailed stats by default; view=concise for the verdict block only. States: ready, no_data (names the missing input), or no_run (names Start).
+    "experiment-results post": "Get an Experiment's results: readiness, blockedBy, reasons, then ship recommendation when pre-registered; detailed stats by default; view=concise for the verdict block (includeExploratory attaches stats). States: ready, no_data, or no_run.
 
 Usage:
   splitch experiment-results post <experiment-id> [flags]
@@ -766,14 +767,15 @@ Flags:
   -h, --help           [type: boolean; default: false] Show help and exit.
 
 Request body (--body-json):
-  runId          optional  string
-  view           optional  string ("concise" | "detailed")
-  dataWatermark  optional  string
+  runId               optional  string
+  view                optional  string ("concise" | "detailed")
+  includeExploratory  optional  boolean
+  dataWatermark       optional  string
   Example:
-    {"view":"concise"}
+    {"view":"concise","includeExploratory":true}
 
 Example:
-  splitch experiment-results post <experiment-id> --body-json '{"view":"concise"}' --json",
+  splitch experiment-results post <experiment-id> --body-json '{"view":"concise","includeExploratory":true}' --json",
     "experiments create": "Create an Experiment draft.
 
 Usage:
@@ -2102,8 +2104,8 @@ Usage:
   splitch experiment-results <action> [arguments] [flags]
 
 Commands:
-  get             Get an Experiment's results: readiness, blockedBy, and reasons first; detailed stats by default; view=concise for the verdict block only. States: ready, no_data (names the missing input), or no_run (names Start).
-  post            Get an Experiment's results: readiness, blockedBy, and reasons first; detailed stats by default; view=concise for the verdict block only. States: ready, no_data (names the missing input), or no_run (names Start).
+  get             Get an Experiment's results: readiness, blockedBy, reasons, then ship recommendation when pre-registered; detailed stats by default; view=concise for the verdict block (includeExploratory attaches stats). States: ready, no_data, or no_run.
+  post            Get an Experiment's results: readiness, blockedBy, reasons, then ship recommendation when pre-registered; detailed stats by default; view=concise for the verdict block (includeExploratory attaches stats). States: ready, no_data, or no_run.
 
 Flags:
   -h, --help  [type: boolean; default: false] Show help and exit.

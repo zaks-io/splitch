@@ -152,6 +152,66 @@ describe("resolvePreRegistration", () => {
     if (result.ok) return;
     expect(codes(result.issues)).toContain("PREREG_SHIP_RULE_INVALID");
   });
+
+  it("refuses relative ship-rule margin on a sequential Run", () => {
+    const result = resolvePreRegistration(
+      {
+        ...validIntent,
+        shipRule: { ...validIntent.shipRule, marginScale: "relative" },
+      },
+      RUN_METRICS,
+      { horizon: "sequential" },
+    );
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(codes(result.issues)).toContain("PREREG_SHIP_RULE_RELATIVE_SEQUENTIAL_UNSUPPORTED");
+  });
+
+  it("accepts relative ship-rule margin on a fixed-horizon Run", () => {
+    const result = resolvePreRegistration(
+      {
+        ...validIntent,
+        shipRule: { ...validIntent.shipRule, marginScale: "relative" },
+      },
+      RUN_METRICS,
+      { horizon: "fixed" },
+    );
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.ship_rule.margin_scale).toBe("relative");
+  });
+});
+
+describe("resolvePreRegistration locked goal desirability", () => {
+  it("refuses combining goals when a locked goal Metric is omitted from metrics", () => {
+    const lockedGoals = new Set(["metric_goal", "metric_secondary"]);
+    const runMetrics = new Set(["metric_goal", "metric_secondary", "metric_guard"]);
+    const result = resolvePreRegistration(
+      {
+        ...validIntent,
+        metrics: [{ metricId: "metric_goal", desirability: "higher_is_better" }],
+        shipRule: { ...validIntent.shipRule, conflictResolution: "unanimous_goals" },
+      },
+      runMetrics,
+      { lockedGoalMetricIds: lockedGoals },
+    );
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(codes(result.issues)).toContain("PREREG_LOCKED_GOAL_DESIRABILITY_REQUIRED");
+  });
+
+  it("allows primary_wins when a locked secondary is omitted from metrics", () => {
+    const result = resolvePreRegistration(
+      {
+        ...validIntent,
+        metrics: [{ metricId: "metric_goal", desirability: "higher_is_better" }],
+        shipRule: { ...validIntent.shipRule, conflictResolution: "primary_wins" },
+      },
+      new Set(["metric_goal", "metric_secondary"]),
+      { lockedGoalMetricIds: new Set(["metric_goal", "metric_secondary"]) },
+    );
+    expect(result.ok).toBe(true);
+  });
 });
 
 describe("resolvePreRegistration futility mode", () => {

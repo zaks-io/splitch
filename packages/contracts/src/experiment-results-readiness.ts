@@ -7,8 +7,8 @@ import type { DecisionGateCheck, DecisionGateCheckId } from "./experiment-decisi
  * Statistical readiness means the analysis evidence supports a decision: the
  * evidence-side gate checks pass. Conclude-executable means Conclude can run
  * right now: statistical readiness plus lifecycle, planned duration, evidence
- * handles, and the caller's conclude permission. Ship / do-not-ship copy waits
- * for the locked ship policy (Phase 2.4).
+ * handles, and the caller's conclude permission. Ship recommendation (plan 2.4)
+ * is a separate producer member computed from the locked ship rule.
  */
 
 export const experimentResultsViews = ["concise", "detailed"] as const;

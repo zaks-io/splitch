@@ -132,6 +132,7 @@ function panelResultsReady() {
     readiness: { statistical: gate.shipAllowed, concludeExecutable: false },
     blockedBy: gate.blockedBy,
     reasons: [],
+    recommendationUnavailable: "no_pre_registration" as const,
     stats,
     srm: experimentSrmDiagnostics(stats),
     gate,

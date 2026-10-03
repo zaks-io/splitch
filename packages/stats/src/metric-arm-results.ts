@@ -5,6 +5,7 @@ import type {
   StatsInput,
   StatsResultStatus,
 } from "@splitch/contracts";
+import { absoluteCiForOutput } from "./absolute-ci-for-output";
 import { type CappedArmEvidence, estimandDisclosure } from "./estimand-disclosure";
 import { FixedHorizonCI } from "./fixed-horizon-ci";
 import { withFutilityVerdict } from "./metric-arm-futility";
@@ -12,6 +13,7 @@ import { withRopeVerdict } from "./metric-arm-rope";
 import { metricTypesById } from "./metric-discovery";
 import { fiellerRelativeCi } from "./relative-ci";
 import { SequentialCI, type CIAdapter, type CIResult } from "./sequential-ci";
+import { simultaneousShipMarginCiForOutput } from "./simultaneous-ci-for-output";
 import { estimateMetricComparisons } from "./variance-estimators";
 import type {
   MetricArmEstimate,
@@ -210,6 +212,12 @@ function treatmentArmResult(
       decision_valid: false,
       status,
       variance_techniques: comparison.variance_techniques,
+      ...absoluteCiForOutput(decisionCi),
+      ...simultaneousShipMarginCiForOutput({
+        statsInput: input,
+        comparison,
+        adapters,
+      }),
     },
     {
       preRegistration: input.pre_registration,

@@ -11,14 +11,15 @@ import {
   statisticalReadiness,
 } from "./experiment-results-readiness";
 import type { ExperimentResultsResponse } from "./experiment-results-response";
+import { computeShipRecommendation } from "./ship-recommendation-compute";
 import type { SrmRootCauseClassification } from "./srm-root-cause";
 import type { AnalysisResultsEnvelope } from "./stats-result-contract";
 
 /**
- * Shared Control Plane result producer (plan 0.15). CLI, MCP, and the panel
- * all read this shape. Analysis still emits the raw envelope; this layer
- * resolves Control identity, lifecycle, duration, and permissions into
- * readiness before any skin renders a verdict.
+ * Shared Control Plane result producer (plan 0.15 / 2.4). CLI, MCP, and the
+ * panel all read this shape. Analysis still emits the raw envelope; this layer
+ * resolves Control identity, lifecycle, duration, permissions, and the ship
+ * recommendation before any skin renders a verdict.
  */
 
 export interface ExperimentResultsRunContext {
@@ -42,6 +43,11 @@ export interface ProduceExperimentResultsInput {
    * enrich seam classifies and passes the result. Omit or null when SRM is clean.
    */
   srmRootCause?: SrmRootCauseClassification | null;
+  /**
+   * Concise mode omits stats unless this is true (exploratory statistics opt-in,
+   * C10 part two). Ignored for detailed (stats always present).
+   */
+  includeExploratory?: boolean;
 }
 
 const NOT_READY: ExperimentResultsReadiness = {
@@ -105,18 +111,59 @@ export function produceExperimentResults(
     }),
   ];
 
-  const base = {
-    state: "ready" as const,
-    readiness,
-    blockedBy: gate.blockedBy,
-    reasons,
+  const base = readyBase({
     gate,
+    readiness,
+    reasons,
+    analysis: input.analysis,
+    run: input.run,
+    hasEvidence,
+    srmRootCause: input.srmRootCause,
+  });
+
+  if (input.view === "concise") {
+    return {
+      view: "concise",
+      ...base,
+      ...(input.includeExploratory === true ? { stats: input.analysis.stats } : {}),
+    };
+  }
+  // Detailed keeps Analysis stats byte-identical: same object reference order is
+  // not guaranteed after JSON round-trip, but field set and values are unchanged.
+  return { view: "detailed", ...base, stats: input.analysis.stats };
+}
+
+function readyBase(input: {
+  gate: ExperimentDecisionGate;
+  readiness: ExperimentResultsReadiness;
+  reasons: string[];
+  analysis: Extract<AnalysisResultsEnvelope, { state: "ready" }>;
+  run: ExperimentResultsRunContext;
+  hasEvidence: boolean;
+  srmRootCause?: SrmRootCauseClassification | null;
+}) {
+  const ship = computeShipRecommendation({
+    preRegistration: frozenPreRegistration(input.analysis.run_commitments),
+    gate: input.gate,
+    stats: input.analysis.stats,
+    controlVariant: input.analysis.control_variant,
+    horizon: runHorizon(input.analysis.run_commitments),
+  });
+  return {
+    state: "ready" as const,
+    readiness: input.readiness,
+    blockedBy: input.gate.blockedBy,
+    reasons: input.reasons,
+    ...(ship.recommendation !== undefined
+      ? { recommendation: ship.recommendation }
+      : { recommendationUnavailable: ship.recommendationUnavailable }),
+    gate: input.gate,
     run_id: input.analysis.run_id,
     run_number: input.run.runNumber,
     run_status: input.run.runStatus,
     control_variant: input.analysis.control_variant,
     control: input.run.control,
-    ...(hasEvidence
+    ...(input.hasEvidence
       ? {
           data_watermark: input.analysis.data_watermark,
           result_token: input.analysis.result_token,
@@ -128,13 +175,29 @@ export function produceExperimentResults(
     // Additive diagnostics only: never hashed into result_token (stats unchanged).
     ...(input.srmRootCause ? { srm_root_cause: input.srmRootCause } : {}),
   };
+}
 
-  if (input.view === "concise") {
-    return { view: "concise", ...base };
+function frozenPreRegistration(
+  commitments: Extract<AnalysisResultsEnvelope, { state: "ready" }>["run_commitments"],
+) {
+  if (commitments === undefined || commitments.analysis_version_source !== "frozen") {
+    return undefined;
   }
-  // Detailed keeps Analysis stats byte-identical: same object reference order is
-  // not guaranteed after JSON round-trip, but field set and values are unchanged.
-  return { view: "detailed", ...base, stats: input.analysis.stats };
+  return commitments.pre_registration;
+}
+
+/**
+ * Frozen commitments encode horizon via target_n: sequential has a tuning
+ * target; fixed has null. Legacy has no pre-registration, so ship never reads
+ * this path for a relative rule without a frozen Start.
+ */
+function runHorizon(
+  commitments: Extract<AnalysisResultsEnvelope, { state: "ready" }>["run_commitments"],
+): "sequential" | "fixed" | undefined {
+  if (commitments === undefined || commitments.analysis_version_source !== "frozen") {
+    return undefined;
+  }
+  return commitments.target_n === null ? "fixed" : "sequential";
 }
 
 function readyReadiness(input: {

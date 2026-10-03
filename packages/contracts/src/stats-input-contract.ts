@@ -2,7 +2,8 @@ import { z } from "zod";
 import { MetricKindSchema, MetricRefSchema } from "./leaf-schemas-experiment";
 import { ANALYSIS_V1_VERSION } from "./run-commitments";
 import { PreRegistrationSchema } from "./run-preregistration";
-import { CupedAttributeSourceSchema, DimensionClassSchema } from "./stats-result-contract";
+import { CupedAttributeSourceSchema } from "./stats-result-arm";
+import { DimensionClassSchema } from "./stats-result-contract";
 
 const MetricIdSchema = MetricRefSchema.shape.metricId;
 const TimestampSchema = z.string();

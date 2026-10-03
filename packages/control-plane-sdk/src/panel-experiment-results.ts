@@ -5,6 +5,8 @@ import {
   ExperimentSignificanceDisplaysSchema,
   ExperimentSrmDiagnosticsSchema,
   FrozenControlIdentitySchema,
+  RecommendationUnavailableReasonSchema,
+  ShipRecommendationSchema,
   StatsOutputSchema,
 } from "@splitch/contracts";
 import { z } from "zod";
@@ -25,6 +27,11 @@ const producerReadinessFields = {
   readiness: ExperimentResultsReadinessSchema,
   blockedBy: z.array(DecisionGateCheckIdSchema),
   reasons: z.array(z.string()),
+} as const;
+
+const producerRecommendationFields = {
+  recommendation: ShipRecommendationSchema.optional(),
+  recommendationUnavailable: RecommendationUnavailableReasonSchema.optional(),
 } as const;
 
 /**
@@ -49,6 +56,7 @@ const readyFields = {
    */
   control: FrozenControlIdentitySchema,
   ...producerReadinessFields,
+  ...producerRecommendationFields,
   stats: StatsOutputSchema,
   srm: ExperimentSrmDiagnosticsSchema,
   gate: ExperimentDecisionGateSchema,
