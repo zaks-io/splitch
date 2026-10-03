@@ -1,4 +1,3 @@
-import { ConvexConfigSnapshotSchema, parseResponseBody } from "@splitch/sdk/local-evaluation";
 import { internal } from "./_generated/api";
 import type { MutationCtx } from "./_generated/server";
 import {
@@ -9,12 +8,14 @@ import {
 } from "./integration_recovery";
 import { CURRENT_KEY, requiredIntegration } from "./integration_state";
 import { ensureRetentionScheduled } from "./retention";
+import { parseSnapshot } from "./snapshot";
 
 export async function commitSnapshotHandler(
   ctx: MutationCtx,
   args: { payload: string },
 ): Promise<void> {
-  const snapshot = parseResponseBody(ConvexConfigSnapshotSchema, JSON.parse(args.payload));
+  // References are checked here, not only at read time, so a broken pull never displaces good state.
+  const snapshot = parseSnapshot(args.payload);
   const integration = await requiredIntegration(ctx);
   if (
     integration.appId !== snapshot.appId ||
