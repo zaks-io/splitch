@@ -90,10 +90,12 @@ Fieller recovers its critical multiplier from the decision interval's half-width
 Run's relative bounds track the aCS boundary rather than a fixed-n z. Under legacy/analysis-v1,
 Guardrail breach reads that relative lower bound
 (`packages/stats/src/guardrail-bound-check.ts`), so the relative interval **is decision-bearing
-for Guardrails** (ADR-0015 rule 4). analysis-v2 instead decides Guardrails from a one-sided
-Proposition B.1 bound on the Control-sign-oriented contrast
-`sign(C) · (T − (1 + margin) C)` (`packages/stats/src/guardrail-one-sided.ts`);
-`arm_results` still publish Fieller. Neither path supplies the BH rank or the absolute stop.
+for Guardrails** (ADR-0015 rule 4). analysis-v2 instead decides Guardrails from a union-bound procedure: two-sided
+Control-sign establishment at `α/2` plus a one-sided Proposition B.1 bound at `α/2` on the
+oriented contrast `sign(C) · (T − (1 + margin) C)`
+(`packages/stats/src/guardrail-one-sided.ts`); `arm_results` and
+`guardrail_results[].ci_lower` still publish Fieller. Neither path supplies the BH rank or
+the absolute stop.
 The Fieller sequential-coverage audit confirmed D1 (keep Fieller for reporting).
 
 ## Stopping rules

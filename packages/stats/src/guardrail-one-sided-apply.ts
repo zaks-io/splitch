@@ -8,7 +8,7 @@ import type { MetricComparisonEstimate } from "./variance-estimator-types";
 export interface OneSidedGuardrailApplyInput {
   readonly arm_results: readonly Pick<
     ArmResult,
-    "metric_id" | "variant" | "relative_lift_pct" | "status"
+    "metric_id" | "variant" | "relative_lift_pct" | "ci_lower" | "status"
   >[];
   readonly guardrails: readonly GuardrailThreshold[];
   readonly contrasts: ReadonlyMap<GuardrailContrastKey, MetricComparisonEstimate>;
@@ -19,29 +19,32 @@ export interface OneSidedGuardrailApplyInput {
 
 /**
  * analysis-v2 Guardrail path: Proposition B.1 one-sided bounds on the relative
- * non-inferiority contrast. Arm status still gates decisionability so a
- * not-ready Arm stays unevaluated (is_breached null).
+ * non-inferiority contrast, with Control sign established by a separate
+ * two-sided always-valid interval (union bound at α/2 + α/2). Arm status still
+ * gates decisionability so a not-ready Arm stays unevaluated (is_breached null).
+ *
+ * `ci_lower` is the Fieller relative lower bound from `arm_results` (reporting
+ * only). The Guardrail verdict is `is_breached`, not a contrast-derived
+ * relative lower bound.
  */
 export function applyOneSidedGuardrailBoundChecks(
   input: OneSidedGuardrailApplyInput,
 ): GuardrailResult[] {
-  const statusByKey = armStatusByKey(input.arm_results);
+  const armByKey = armResultsByKey(input.arm_results);
   validateGuardrailKeys(input.guardrails);
 
-  return input.guardrails.map((guardrail) =>
-    oneSidedGuardrailResult(guardrail, statusByKey, input),
-  );
+  return input.guardrails.map((guardrail) => oneSidedGuardrailResult(guardrail, armByKey, input));
 }
 
 function oneSidedGuardrailResult(
   guardrail: GuardrailThreshold,
-  statusByKey: ReadonlyMap<string, string>,
+  armByKey: ReadonlyMap<string, OneSidedGuardrailApplyInput["arm_results"][number]>,
   input: OneSidedGuardrailApplyInput,
 ): GuardrailResult {
   validateThreshold(guardrail);
   const key = contrastKey(guardrail.metric_id, guardrail.variant);
-  const status = statusByKey.get(key);
-  if (status === undefined) {
+  const arm = armByKey.get(key);
+  if (arm === undefined) {
     throw new Error(`guardrail ${key} has no ArmResult.`);
   }
   const comparison = input.contrasts.get(key);
@@ -49,7 +52,7 @@ function oneSidedGuardrailResult(
     throw new Error(`guardrail ${key} has no contrast estimate.`);
   }
 
-  const decisionable = status === "ready" || status === "stopped";
+  const decisionable = arm.status === "ready" || arm.status === "stopped";
   const evaluated =
     decisionable && comparison.relative_lift_pct !== null
       ? evaluateFromComparison(comparison, guardrail, input)
@@ -59,7 +62,7 @@ function oneSidedGuardrailResult(
   return {
     metric_id: guardrail.metric_id,
     variant: guardrail.variant,
-    ci_lower: evaluated?.relativeLowerPct ?? null,
+    ci_lower: arm.ci_lower,
     threshold: guardrail.downside_threshold_pct,
     is_breached: isBreached,
     in_bh_family: false,
@@ -117,14 +120,16 @@ function verdictToBreached(verdict: GuardrailVerdict): boolean | null {
   return null;
 }
 
-function armStatusByKey(results: OneSidedGuardrailApplyInput["arm_results"]): Map<string, string> {
-  const byKey = new Map<string, string>();
+function armResultsByKey(
+  results: OneSidedGuardrailApplyInput["arm_results"],
+): Map<string, OneSidedGuardrailApplyInput["arm_results"][number]> {
+  const byKey = new Map<string, OneSidedGuardrailApplyInput["arm_results"][number]>();
   for (const result of results) {
     const key = contrastKey(result.metric_id, result.variant);
     if (byKey.has(key)) {
       throw new Error(`arm_results contains duplicate guardrail member ${key}.`);
     }
-    byKey.set(key, result.status);
+    byKey.set(key, result);
   }
   return byKey;
 }

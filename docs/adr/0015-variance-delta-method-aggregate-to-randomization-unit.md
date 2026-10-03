@@ -177,23 +177,38 @@ v2 remains defined but unsupported for Start until its observation-path slice la
 ### Bound
 
 For locked margin `m = downside_threshold_pct / 100`, the raw contrast is
-`δ_raw = T − (1 + m) C` with `Var = v_T + (1 + m)² v_C`. Relative lift
-`R = (T − C) / C` satisfies `δ_raw = C · (R − m)`, so analysis-v2 orients by Control sign:
-`δ* = sign(C) · δ_raw` (= `|C| · (R − m)` when sign is identified). The lower and upper
-one-sided bounds use Waudby-Smith et al. Proposition B.1 at level `alpha` (not `alpha/2`),
-with mixture scale
+`D = T − (1 + m) C` with `Var = v_T + (1 + m)² v_C`. Relative lift
+`R = (T − C) / C` satisfies `D = C · (R − m)`, so analysis-v2 orients by Control sign:
+`δ* = sign(C) · D` (= `|C| · (R − m)` when sign is identified).
+
+**Union bound at `alpha`.** Establishing `sign(C)` and testing the oriented contrast cannot
+both spend the full `alpha` without inflating false-safety (picking orientation from the
+noisy Control estimate and then testing either side at `alpha` can roughly double the
+false-safe rate). The budget splits:
+
+1. **Control sign — two-sided always-valid interval at `α/2`** (sequential: two-sided
+   normal-mixture CS on Control; fixed: `z_{1−α/4}`). A one-sided sign test is the wrong
+   tool: the side would be chosen from `Ĉ`. If the interval spans 0, the Guardrail is
+   undecided.
+2. **Oriented contrast — one-sided always-valid bound at `α/2`** (sequential: Waudby-Smith
+   Proposition B.1 at `α/2` with `ρ` tuned at `α = 2 · (α/2)`, §B.2; fixed: `z_{1−α/2}`).
+   Mixture scale at the contrast alpha `α' = α/2`:
 
 ```
-sqrt( 2(1 + nρ²)/(nρ²) · log(1 + sqrt(1 + nρ²)/(2α)) )
+sqrt( 2(1 + nρ²)/(nρ²) · log(1 + sqrt(1 + nρ²)/(2α')) )
 ```
 
-and `ρ` tuned at `2α` (paper §B.2). This is not the two-sided bound at doubled alpha: the
-additive 1 inside the log is required. Fixed-horizon Runs under v2 use the one-sided normal
-critical value `z_{1−α}` on the same oriented contrast. When Control's interval at that
-critical multiplier spans 0, orientation is undefined and the Guardrail is undecided (no
-safe/breach claim); `guardrail_results[].ci_lower` is withheld. Arm means and variance
-components are taken from one pooled per-Metric estimate across every allocated arm so
-winsorization and CUPED match `arm_results`.
+This is not the two-sided bound at doubled alpha: the additive 1 inside the log is
+required. The verdict (safe/breach/undecided) comes only from this contrast bound.
+
+**Power cost.** Both pieces run at `α/2`, so boundaries are wider than a single level-`α`
+procedure. Joint false-safety stays ≤ `α` by the union bound.
+
+A relative-scale map `m + L/|Ĉ|` is not a valid lower confidence bound for relative lift
+and is not emitted. `guardrail_results[].ci_lower` stays the Fieller reporting interval from
+`arm_results`; the Guardrail verdict is `is_breached`, reported separately. Arm means and
+variance components are taken from one pooled per-Metric estimate across every allocated arm
+so winsorization and CUPED match `arm_results`.
 
 ### Breach semantics
 
@@ -205,13 +220,13 @@ winsorization and CUPED match `arm_results`.
 
 **Breach means affirmative harm**, not failure to establish safety. That is a deliberate
 semantic change from analysis-v1's `ci_lower < threshold` rule, which fired on wide
-uninformative intervals. False-safety (`P(safe | true δ* < 0)`) is the Type I rate Proposition
-B.1 controls when Control sign is identified; the seeded known-harmful simulation
-(`pnpm stats:simulation`, seed `424242`) keeps the ever-safe rate within
+uninformative intervals. False-safety (`P(safe | true δ* < 0)`) is jointly controlled at
+`alpha` by the union bound; the seeded known-harmful simulation and Codex near-zero-Control
+Gaussian draws (`pnpm stats:simulation`, seed `424242`) keep the false-safe rate within
 `alpha + monteCarloTolerance`.
 
-`arm_results` relative intervals remain Fieller under every version. Only
-`guardrail_results` under analysis-v2 read the one-sided contrast.
+`arm_results` relative intervals remain Fieller under every version. analysis-v2 Guardrail
+_decisions_ read the oriented contrast; reporting `ci_lower` stays Fieller.
 
 ## Sources
 

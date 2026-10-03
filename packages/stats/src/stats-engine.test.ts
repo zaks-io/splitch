@@ -56,6 +56,8 @@ describe("StatsEngine.analyze analysis_version dispatch", () => {
     );
     expect(v2Arm?.ci_lower).toBe(v1Arm?.ci_lower);
     expect(v2Arm?.ci_upper).toBe(v1Arm?.ci_upper);
+    // v2 Guardrail ci_lower is that Fieller report, not a contrast-derived relative bound.
+    expect(v2.guardrail_results[0]?.ci_lower).toBe(v2Arm?.ci_lower);
   });
 
   it("orients analysis-v2 Guardrails by negative Control through analyzeStats", async () => {

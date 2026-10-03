@@ -150,12 +150,12 @@ relative-lift lower bound derived from the same absolute decision interval (ADR-
 Breach evaluation is `ci_lower < threshold` once the Arm is decisionable
 (`packages/stats/src/guardrail-bound-check.ts`) — failure to establish safety.
 
-Under analysis-v2, `guardrail_results[].ci_lower` is the relative-% form of the Proposition B.1
-one-sided lower bound on the Control-sign-oriented contrast
-`sign(C) · (T − (1 + margin) C)` (`packages/stats/src/guardrail-one-sided.ts`):
-`downside_threshold_pct + 100 · L / |Ĉ|`. When Control's interval spans 0, orientation is
-undefined and `ci_lower` is withheld (`null`). `is_breached` is three-valued: `false` =
-safe (`L > 0`), `true` = affirmative harm (`U < 0`), `null` = undecided or unevaluated. See
+Under analysis-v2, `guardrail_results[].ci_lower` remains the Fieller relative-lift lower
+bound (same reporting interval as `arm_results`). The Guardrail _verdict_ is separate:
+`is_breached` is three-valued from the union-bound oriented contrast
+(`packages/stats/src/guardrail-one-sided.ts`) — `false` = safe (`L > 0`), `true` =
+affirmative harm (`U < 0`), `null` = undecided (including Control sign not established at
+`α/2`) or unevaluated. No contrast-derived relative-scale lower bound is reported. See
 [inference-engine.md](inference-engine.md) §Guardrail Metric behavior and ADR-0015's C4
 amendment.
 
