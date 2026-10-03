@@ -1,4 +1,3 @@
-import { CreateFlagRequestSchema } from "@splitch/sdk/control-plane";
 import { SplitchCliError } from "./errors.js";
 
 const BOOLEAN_VARIANT_ALIASES: Readonly<Record<string, boolean>> = {
@@ -169,29 +168,5 @@ export function applyFlagsCreateConvenienceFields(
       options.name ?? (typeof input.name === "string" ? input.name : flagNameFromKey(trimmedKey));
     input.schema = { type: "boolean" };
     input.variants = parseBooleanVariantsFlag(options.variants);
-    return;
   }
-
-  if (!Array.isArray(input.variants)) {
-    throw new CliInputError({
-      code: "CLI_VALIDATION_ERROR",
-      message: "splitch flags create requires --variants or --body-json with a variant catalog",
-      details: { field: "variants", reason: "missing_variant_catalog" },
-    });
-  }
-}
-
-export function assertContractValidFlagsCreateInput(input: Record<string, unknown>): void {
-  const parsed = CreateFlagRequestSchema.safeParse(input);
-  if (parsed.success) {
-    return;
-  }
-
-  const issue = parsed.error.issues[0];
-  const path = issue?.path.join(".") || "body";
-  throw new CliInputError({
-    code: "CLI_VALIDATION_ERROR",
-    message: `splitch flags create input is invalid: ${issue?.message ?? "validation failed"}`,
-    details: { field: path, reason: "contract_validation_failed" },
-  });
 }

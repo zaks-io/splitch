@@ -154,6 +154,34 @@ describe("mcp operation adapter body path stripping (SPL-296)", () => {
   });
 });
 
+describe("mcp operation adapter body passthrough", () => {
+  it("sends keys a strip-mode body schema does not declare instead of dropping them", async () => {
+    let forwardedRequest: Request | undefined;
+    const adapter = createMcpOperationAdapter({
+      baseUrl: "https://control-plane.test",
+      fetch: async (request) => {
+        forwardedRequest = request instanceof Request ? request : new Request(request);
+        return validationErrorResponse();
+      },
+    });
+
+    // A newer Worker may accept a field this bundle has never heard of; the
+    // adapter must not decide on its behalf by parsing it away.
+    await adapter.callOperationById("flags_test_eval", {
+      appId: "app_local",
+      environmentId: "env_local",
+      flagKey: "checkout",
+      evaluationContext: { targetingKey: "user-1", idType: "user", attributes: {} },
+      fieldFromNewerApi: { mode: "trace" },
+    });
+
+    await expect(forwardedRequest?.json()).resolves.toEqual({
+      evaluationContext: { targetingKey: "user-1", idType: "user", attributes: {} },
+      fieldFromNewerApi: { mode: "trace" },
+    });
+  });
+});
+
 describe("mcp operation adapter header-only idempotency bodies", () => {
   it("keeps a header-only idempotency key out of a strict request body", async () => {
     let forwardedRequest: Request | undefined;

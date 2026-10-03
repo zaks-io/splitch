@@ -8,10 +8,7 @@ import {
 import type { CliCommandDefinition } from "./command-registry.js";
 import type { ResolvedContext } from "./context.js";
 import { SplitchCliError } from "./errors.js";
-import {
-  applyFlagsCreateConvenienceFields,
-  assertContractValidFlagsCreateInput,
-} from "./flag-create-input.js";
+import { applyFlagsCreateConvenienceFields } from "./flag-create-input.js";
 import { applyFlagLifecycleFlags } from "./flag-lifecycle-input.js";
 import { applyOperationIdempotencyInput } from "./operation-idempotency-input.js";
 import type { ParsedGlobalFlags, ParsedInvocation } from "./parse-args.js";
@@ -43,8 +40,8 @@ export function buildOperationInput(
   applyPositionalFields(command, invocation, input);
   applyNamedFlags(command, invocation.flags, input);
   applyRouteQueryFlags(command.operationId, invocation.flags.queryFlags, input, command.path);
-  // The Idempotency Key is minted before the command-specific step because that
-  // step validates the assembled input against the contract.
+  // No contract check here: the Worker judges the body, so a CLI older than the
+  // API can still send fields its bundled contract does not know (--body-json).
   applyOperationIdempotencyInput(command.operationId, invocation.flags.idempotencyKey, input);
   applyCommandSpecificFields(command, invocation, input);
   applyFlagReadFields(command, invocation, context, input);
@@ -205,7 +202,6 @@ function applyCommandSpecificFields(
       name: invocation.flags.name,
       variants: invocation.flags.variants,
     });
-    assertContractValidFlagsCreateInput(input);
   }
 }
 

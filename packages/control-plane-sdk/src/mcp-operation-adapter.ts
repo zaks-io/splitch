@@ -217,15 +217,14 @@ function ownValue(record: Record<string, unknown>, key: string): unknown {
 
 function bodyForRoute(route: ApiRouteContract, input: unknown): unknown {
   const rawBodySchema = jsonMediaTypeSchema(route.openapi.request?.body?.content);
-  const bodySchema = safeParseSchema(rawBodySchema);
-  if (!bodySchema) {
+  if (!isSchema(rawBodySchema)) {
     return undefined;
   }
 
   // Path/query keys and a header-only idempotency key do not belong in JSON.
-  // Strip them even when the remaining body fails schema validation so the
-  // failure names only caller-sent body keys, not injected transport context.
-  // Fields declared in both places, such as CreateFlag's `appId`, stay in JSON.
+  // Strip them so a VALIDATION_ERROR names only caller-sent body keys, not
+  // injected transport context. Fields declared in both places, such as
+  // CreateFlag's `appId`, stay in JSON.
   const bodyDeclared = new Set(objectSchemaKeys(rawBodySchema));
   const idempotencyField = idempotencyInputField(bodyDeclared);
   const routeOnlyKeys = [
@@ -236,24 +235,14 @@ function bodyForRoute(route: ApiRouteContract, input: unknown): unknown {
       : []),
   ].filter((key) => key.length > 0 && !bodyDeclared.has(key));
 
-  const bodyCandidate = stripKeys(input, routeOnlyKeys);
-  const parsed = bodySchema.safeParse(bodyCandidate);
-  if (parsed.success) {
-    return parsed.data;
-  }
-  return bodyCandidate;
+  // The body goes out as the caller wrote it, never re-parsed through the
+  // bundled schema: a strip-mode parse would silently drop a field a newer
+  // Worker accepts. The Worker is the one judge of the body.
+  return stripKeys(input, routeOnlyKeys);
 }
 
-type SafeParseResult = { success: true; data: unknown } | { success: false };
-
-interface SafeParseSchema {
-  safeParse(input: unknown): SafeParseResult;
-}
-
-function safeParseSchema(schema: unknown): SafeParseSchema | undefined {
-  return typeof (schema as { safeParse?: unknown } | undefined)?.safeParse === "function"
-    ? (schema as SafeParseSchema)
-    : undefined;
+function isSchema(schema: unknown): boolean {
+  return typeof (schema as { safeParse?: unknown } | undefined)?.safeParse === "function";
 }
 
 function inputRecord(input: unknown): Record<string, unknown> {

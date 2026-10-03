@@ -100,7 +100,16 @@ export function remediationForServerError(
   if (reviewRequired) return reviewRequired;
   const undetermined = undeterminedChangeRemediation(error);
   if (undetermined) return undetermined;
+  if (error.code === "VALIDATION_ERROR") return validationRemediation(invocation);
   return "Correct the reported API failure and retry the command";
+}
+
+// The Worker is the only judge of request bodies, so its issue paths are the
+// authoritative list of what to fix.
+function validationRemediation(invocation: ParsedInvocation | undefined): string {
+  const path = invocation?.commandPath.join(" ");
+  const help = path ? `; splitch ${path} --help prints the request body schema` : "";
+  return `Correct the fields named in details.issues and retry${help}`;
 }
 
 const CONFIRM_HINT = "rerun the same command with --confirm if you hold approver rights";

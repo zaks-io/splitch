@@ -1,3 +1,4 @@
+import { unrecognizedFlagRemediation } from "./cli-version.js";
 import { parseBodyJsonRecord } from "./command-positionals.js";
 import type { CliCommandDefinition } from "./command-registry.js";
 import { writeCliError } from "./errors.js";
@@ -22,7 +23,7 @@ export function validateAdvertisedFlags(
   writeCliError(io, {
     code: "CLI_USAGE_INVALID",
     causeSummary: `${unsupported} is not accepted by splitch ${path}`,
-    remediation: `Drop ${unsupported}, or run splitch ${path} --help to list the accepted flags`,
+    remediation: unrecognizedFlagRemediation(unsupported, path, accepted.has("--body-json")),
   });
   return { exitCode: EXIT_USAGE };
 }
