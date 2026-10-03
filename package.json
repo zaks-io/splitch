@@ -55,6 +55,7 @@
     "smoke:local": "node scripts/smoke-workers-local.mjs",
     "smoke:local:api": "node scripts/smoke-workers-local.mjs api",
     "spec:lint": "node scripts/spec-lint.mjs",
+    "worktree:setup": "bash scripts/setup-worktree.sh",
     "stats:audit": "turbo run stats:audit",
     "stats:golden": "turbo run stats:golden",
     "stats:property": "turbo run stats:property",

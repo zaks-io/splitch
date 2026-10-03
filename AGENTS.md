@@ -14,6 +14,10 @@ Before using the workflow skills, read **`docs/agents/workflow/config.md`**:
 the repo's workflow lookup table (commands, Linear tracker IDs, labels, review
 gates, environment safety).
 
+In a fresh Git worktree, run `pnpm worktree:setup` before anything else. It
+installs dependencies and git hooks and copies the gitignored `.env.local` from
+the main checkout.
+
 ## Workflow skills
 
 - `ziw-to-issues`: turn a spec, PRD, or epic into dependency-ordered

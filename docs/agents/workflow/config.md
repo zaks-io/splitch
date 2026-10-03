@@ -288,7 +288,8 @@ real package API boundary.
 
 ## Work Coordination
 
-- Worker delegation paths: `local-worktree` is usable now. `issue-assigned`
+- Worker delegation paths: `local-worktree` is usable now; bootstrap each new
+  worktree with `pnpm worktree:setup`. `issue-assigned`
   (Linear-exposed agent, `remote-cursor` environment) is no longer blocked on
   repo-route or code host existence, but the default worker path remains unset.
 - Default worker path: unset.
