@@ -92,4 +92,36 @@ describe("planExperimentHandler", () => {
       },
     ]);
   });
+
+  it("returns structured 400 when derived arm counts exceed safe integers", async () => {
+    const response = await planExperimentHandler(depsWithEnvironment(true), {
+      input: {
+        params: { appId: "app_1", environmentId: "env_1" },
+        body: {
+          metricKind: "continuous",
+          baselineMean: 0,
+          baselineVariance: 1,
+          armCount: 2,
+          trafficSplit: [1e-16, 1],
+          fixedSampleSizePerArm: 100,
+          expectedDailyEligibleEntities: 1_000,
+        },
+      },
+      requestId: "req_4",
+      principal: null,
+    } as never);
+
+    expect(response.status).toBe(400);
+    const body = (await response.json()) as {
+      code: string;
+      details: { issues: Array<{ path: string[]; message: string }> };
+    };
+    expect(body.code).toBe("VALIDATION_ERROR");
+    expect(body.details.issues).toEqual([
+      {
+        path: ["body", "fixedSampleSizePerArm"],
+        message: expect.stringContaining("representable maximum"),
+      },
+    ]);
+  });
 });

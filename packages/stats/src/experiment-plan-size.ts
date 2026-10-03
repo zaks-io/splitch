@@ -1,6 +1,6 @@
 import { alwaysValidCriticalScale } from "./always-valid-inflation";
 import type { ExperimentPlanIssue } from "./experiment-plan-types";
-import { normalCdf, normalSurvival } from "./normal-distribution";
+import { armAt, comparisonPowersForPlan, representableArmCounts } from "./experiment-plan-power";
 import { normalMixtureScale, rhoSquaredForTargetN } from "./sequential-ci";
 
 /** Hard cap on searchable Control-arm n. Beyond this the plan is unrepresentable. */
@@ -17,89 +17,15 @@ export type SizedArmsOutcome =
   | { ok: true; sized: SizedArms }
   | { ok: false; issues: readonly ExperimentPlanIssue[] };
 
-export type FixedSizeMde = SizedArms & { mdeAbsolute: number };
+type FixedSizeMde = SizedArms & { mdeAbsolute: number };
+
+export type FixedSizeMdeSolve =
+  | { ok: true; solved: FixedSizeMde }
+  | { ok: false; issues: readonly ExperimentPlanIssue[] };
 
 export type FixedSizeMdeOutcome =
   | { ok: true; solved: FixedSizeMde; varianceControl: number; varianceTreatment: number }
   | { ok: false; issues: readonly ExperimentPlanIssue[] };
-
-export function armAt(values: readonly number[], index: number): number {
-  const value = values[index];
-  if (value === undefined) {
-    throw new Error(`expected arm index ${index} in a plan with ${values.length} arms`);
-  }
-  return value;
-}
-
-function armsFromControl(controlN: number, split: readonly number[]): number[] {
-  const controlShare = armAt(split, 0);
-  return split.map((share) => Math.ceil(controlN * (share / controlShare)));
-}
-
-/**
- * Per-Entity outcome variances under the planned alternative. Continuous Metrics
- * use the same variance on both arms; binomial uses p0(1-p0) and p1(1-p1).
- */
-export function armVariances(args: {
-  metricKind: "continuous" | "binomial";
-  baselineVariance: number;
-  baselineMean: number;
-  mdeAbsolute: number;
-}): { control: number; treatment: number } {
-  if (args.metricKind === "continuous") {
-    return { control: args.baselineVariance, treatment: args.baselineVariance };
-  }
-  const p0 = args.baselineMean;
-  const p1 = p0 + args.mdeAbsolute;
-  return { control: p0 * (1 - p0), treatment: p1 * (1 - p1) };
-}
-
-export function comparisonPower(args: {
-  nControl: number;
-  nTreatment: number;
-  targetN: number;
-  alpha: number;
-  varianceControl: number;
-  varianceTreatment: number;
-  effectAbsolute: number;
-}): number {
-  const se = Math.sqrt(
-    args.varianceControl / args.nControl + args.varianceTreatment / args.nTreatment,
-  );
-  const scale = normalMixtureScale(
-    args.nControl + args.nTreatment,
-    args.alpha,
-    rhoSquaredForTargetN(args.alpha, args.targetN),
-  );
-  const deltaOverSe = args.effectAbsolute / se;
-  return normalCdf(-scale - deltaOverSe) + normalSurvival(scale - deltaOverSe);
-}
-
-function comparisonPowersForPlan(args: {
-  nPerArm: readonly number[];
-  targetN: number;
-  alpha: number;
-  varianceControl: number;
-  varianceTreatment: number;
-  effectAbsolute: number;
-}): number[] {
-  const nControl = armAt(args.nPerArm, 0);
-  const powers: number[] = [];
-  for (let index = 1; index < args.nPerArm.length; index += 1) {
-    powers.push(
-      comparisonPower({
-        nControl,
-        nTreatment: armAt(args.nPerArm, index),
-        targetN: args.targetN,
-        alpha: args.alpha,
-        varianceControl: args.varianceControl,
-        varianceTreatment: args.varianceTreatment,
-        effectAbsolute: args.effectAbsolute,
-      }),
-    );
-  }
-  return powers;
-}
 
 function oversizedControlIssue(path: readonly string[]): ExperimentPlanIssue {
   return {
@@ -140,16 +66,16 @@ export function sizeAlwaysValidArms(args: {
   const bound = expandControlBound(Math.max(2, Math.ceil(seed)), meets);
   if (!bound.ok) return bound;
   const controlN = binarySearchControlN(bound.low, bound.high, meets);
-  const nPerArm = armsFromControl(controlN, args.split);
-  const targetN = armAt(nPerArm, 0) + armAt(nPerArm, 1);
+  const counts = representableArmCounts(controlN, args.split, ["mdeAbsolute"]);
+  if (!counts.ok) return counts;
   return {
     ok: true,
     sized: {
-      nPerArm,
-      targetN,
+      nPerArm: counts.nPerArm,
+      targetN: counts.targetN,
       comparisonPowers: comparisonPowersForPlan({
-        nPerArm,
-        targetN,
+        nPerArm: counts.nPerArm,
+        targetN: counts.targetN,
         alpha: args.alpha,
         varianceControl: args.varianceControl,
         varianceTreatment: args.varianceTreatment,
@@ -168,11 +94,11 @@ function planMeetsPower(args: {
   varianceTreatment: number;
   controlN: number;
 }): boolean {
-  const nPerArm = armsFromControl(args.controlN, args.split);
-  const targetN = armAt(nPerArm, 0) + armAt(nPerArm, 1);
+  const counts = representableArmCounts(args.controlN, args.split, ["mdeAbsolute"]);
+  if (!counts.ok) return false;
   return comparisonPowersForPlan({
-    nPerArm,
-    targetN,
+    nPerArm: counts.nPerArm,
+    targetN: counts.targetN,
     alpha: args.alpha,
     varianceControl: args.varianceControl,
     varianceTreatment: args.varianceTreatment,
@@ -251,9 +177,12 @@ export function mdeAtFixedSize(args: {
   fixedSampleSizePerArm: number;
   varianceControl: number;
   varianceTreatment: number;
-}): FixedSizeMde {
-  const nPerArm = armsFromControl(args.fixedSampleSizePerArm, args.split);
-  const targetN = armAt(nPerArm, 0) + armAt(nPerArm, 1);
+}): FixedSizeMdeSolve {
+  const counts = representableArmCounts(args.fixedSampleSizePerArm, args.split, [
+    "fixedSampleSizePerArm",
+  ]);
+  if (!counts.ok) return counts;
+  const { nPerArm, targetN } = counts;
   const nControl = armAt(nPerArm, 0);
   let mdeAbsolute = 0;
   for (let index = 1; index < nPerArm.length; index += 1) {
@@ -267,16 +196,19 @@ export function mdeAtFixedSize(args: {
     mdeAbsolute = Math.max(mdeAbsolute, se * (scale + args.zBeta));
   }
   return {
-    mdeAbsolute,
-    nPerArm,
-    targetN,
-    comparisonPowers: comparisonPowersForPlan({
+    ok: true,
+    solved: {
+      mdeAbsolute,
       nPerArm,
       targetN,
-      alpha: args.alpha,
-      varianceControl: args.varianceControl,
-      varianceTreatment: args.varianceTreatment,
-      effectAbsolute: mdeAbsolute,
-    }),
+      comparisonPowers: comparisonPowersForPlan({
+        nPerArm,
+        targetN,
+        alpha: args.alpha,
+        varianceControl: args.varianceControl,
+        varianceTreatment: args.varianceTreatment,
+        effectAbsolute: mdeAbsolute,
+      }),
+    },
   };
 }

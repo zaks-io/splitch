@@ -703,6 +703,39 @@ Request body (--body-json):
 
 Example:
   splitch event-definitions update <event-definition-id> --body-json '{"displayName":"displayName"}' --json",
+    "experiment plan": "Plan sample size, always-valid inflation, target_n, and expected duration from a predeclared MDE (or solve MDE from a fixed size). Never computes post-hoc power from observed effects. Pass targetN to experiments_start.
+
+Usage:
+  splitch experiment plan [flags]
+
+Flags:
+  --app <app>          [type: string; default: SPLITCH_APP or config] App ID or slug.
+  --env <environment>  [type: string; default: SPLITCH_ENV or config] Environment ID or key.
+  --by <mode>          [type: string; default: automatic] Allowed: id. Resolve a canonical-looking selector explicitly.
+  --body-json <json>   [type: JSON object; default: none] Request body fields; see Request body below.
+  --json               [type: boolean; default: false] Write machine-readable JSON to stdout.
+  -h, --help           [type: boolean; default: false] Show help and exit.
+
+Request body (--body-json):
+  metricKind                     required  string ("continuous" | "binomial")
+  baselineMean                   optional  number
+  baselineVariance               optional  number
+  baselineRate                   optional  number
+  alpha                          optional  number
+  power                          optional  number
+  mdeAbsolute                    optional  number
+  mdeRelative                    optional  number
+  fixedSampleSizePerArm          optional  number
+  armCount                       required  number
+  trafficSplit                   optional  number[]
+  expectedDailyEligibleEntities  required  number
+  guardrailBreachAbsolute        optional  number
+  guardrailBreachRelative        optional  number
+  Example:
+    {"metricKind":"continuous","armCount":33,"expectedDailyEligibleEntities":1,"baselineMean":1,"baselineVariance":1,"mdeAbsolute":1}
+
+Example:
+  splitch experiment plan --body-json '{"metricKind":"continuous","armCount":33,"expectedDailyEligibleEntities":1,"baselineMean":1,"baselineVariance":1,"mdeAbsolute":1}' --json",
     "experiment-results get": "Get an Experiment's results: readiness, blockedBy, and reasons first; detailed stats by default; view=concise for the verdict block only. States: ready, no_data (names the missing input), or no_run (names Start).
 
 Usage:
@@ -2007,6 +2040,19 @@ Flags:
 
 Example:
   splitch event-definitions list --help",
+    "experiment": "Manage experiment resources.
+
+Usage:
+  splitch experiment <action> [arguments] [flags]
+
+Commands:
+  plan            Plan sample size, always-valid inflation, target_n, and expected duration from a predeclared MDE (or solve MDE from a fixed size). Never computes post-hoc power from observed effects. Pass targetN to experiments_start.
+
+Flags:
+  -h, --help  [type: boolean; default: false] Show help and exit.
+
+Example:
+  splitch experiment plan --help",
     "experiment-results": "Manage experiment-results resources.
 
 Usage:
@@ -2352,6 +2398,7 @@ Resource groups:
   envs
   event-definition-versions
   event-definitions
+  experiment
   experiment-results
   experiments
   expired-flags

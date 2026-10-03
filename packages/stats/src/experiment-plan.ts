@@ -7,13 +7,11 @@ import type {
 } from "./experiment-plan-types";
 import { validatePlanInput } from "./experiment-plan-validate";
 import {
-  armAt,
   armVariances,
-  comparisonPower,
-  fixedHorizonControlN,
-  mdeAtFixedSize,
-  sizeAlwaysValidArms,
-} from "./experiment-plan-size";
+  EXPERIMENT_PLAN_MAX_SAFE_COUNT,
+  minComparisonPower,
+} from "./experiment-plan-power";
+import { fixedHorizonControlN, mdeAtFixedSize, sizeAlwaysValidArms } from "./experiment-plan-size";
 import { inverseNormalCdf } from "./normal-distribution";
 
 export type {
@@ -137,16 +135,18 @@ function planFromFixedSize(args: {
     baselineMean: args.baseline.mean,
     mdeAbsolute: 0,
   });
+  const solved = mdeAtFixedSize({
+    split: args.split,
+    alpha: args.alpha,
+    zBeta: args.zBeta,
+    fixedSampleSizePerArm: args.fixedSize,
+    varianceControl: variances.control,
+    varianceTreatment: variances.treatment,
+  });
+  if (!solved.ok) return solved;
   return finishFixedSizePlan({
     ...args,
-    solved: mdeAtFixedSize({
-      split: args.split,
-      alpha: args.alpha,
-      zBeta: args.zBeta,
-      fixedSampleSizePerArm: args.fixedSize,
-      varianceControl: variances.control,
-      varianceTreatment: variances.treatment,
-    }),
+    solved: solved.solved,
     varianceControl: variances.control,
     varianceTreatment: variances.treatment,
   });
@@ -177,6 +177,17 @@ function finishFixedSizePlan(args: {
     varianceControl: args.varianceControl,
     varianceTreatment: args.varianceTreatment,
   });
+  if (!Number.isSafeInteger(fixedHorizonNPerArm) || fixedHorizonNPerArm < 1) {
+    return {
+      ok: false,
+      issues: [
+        {
+          path: ["fixedSampleSizePerArm"],
+          message: `Derived arm sample size or targetN exceeds the representable maximum (${EXPERIMENT_PLAN_MAX_SAFE_COUNT}).`,
+        },
+      ],
+    };
+  }
 
   return {
     ok: true,
@@ -284,11 +295,10 @@ function computeGuardrailPower(args: {
     baselineMean: baseline.mean,
     mdeAbsolute: breach,
   });
-  const nControl = armAt(nPerArm, 0);
-  const nTreatment = Math.min(...nPerArm.slice(1));
-  return comparisonPower({
-    nControl,
-    nTreatment,
+  // Shared targetN makes each comparison's mixture boundary depend on its own
+  // n_c+n_t; the worst-case (minimum) power is not always the smallest arm.
+  return minComparisonPower({
+    nPerArm,
     targetN: args.targetN,
     alpha: args.alpha,
     varianceControl: args.varianceControl,
