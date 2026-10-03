@@ -75,7 +75,7 @@ export function MetricsTable({
 }
 
 function aggregationField(metric: Metric, names: Map<string, string>): string {
-  if (metric.kind === "binomial") return "Event occurrence";
+  if (metric.kind === "binomial" || metric.kind === "retention") return "Event occurrence";
   if (metric.kind === "ratio") {
     const numerator = names.get(metric.numerator?.metricId ?? "") ?? "Missing numerator";
     const denominator = names.get(metric.denominator?.metricId ?? "") ?? "Missing denominator";

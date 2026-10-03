@@ -5,6 +5,12 @@ exports[`published CLI help > snapshots the root, every group, and every registe
   "commands": {
     "api-keys create": "Mint an API Key (raw secret surfaced once only).
 
+Formats: appId: required Canonical App ID (app_...) or human-readable App slug. environmentId: required Canonical Environment ID (env_...) or human-readable Environment key. by: optional one of "id".
+
+Terms: Environment — a named deployment context under an App, such as \`dev\` or \`prod\`. API Key — the secret server-side SDK key. App — the product or service surface that groups related Flags and hosts Experiments.
+
+Example arguments: {"appId":"app_1","environmentId":"environment_1","scopes":[]}
+
 Usage:
   splitch api-keys create [flags]
 
@@ -29,6 +35,10 @@ Example:
   splitch api-keys create --body-json '{"scopes":[]}' --output-file <secret-file> --json",
     "api-keys list": "List API Key metadata (no secrets; bounded; reports its own truncation).
 
+Formats: appId: required Canonical App ID (app_...) or human-readable App slug. environmentId: required Canonical Environment ID (env_...) or human-readable Environment key. by: optional one of "id".
+
+Terms: Environment — a named deployment context under an App, such as \`dev\` or \`prod\`. API Key — the secret server-side SDK key. App — the product or service surface that groups related Flags and hosts Experiments.
+
 Usage:
   splitch api-keys list [flags]
 
@@ -45,6 +55,12 @@ Credential semantics:
 Example:
   splitch api-keys list --json",
     "api-keys revoke": "Revoke an API Key.
+
+Formats: appId: required Canonical App ID (app_...) or human-readable App slug. environmentId: required Canonical Environment ID (env_...) or human-readable Environment key. keyId: required canonical id. by: optional one of "id".
+
+Terms: Environment — a named deployment context under an App, such as \`dev\` or \`prod\`. API Key — the secret server-side SDK key. App — the product or service surface that groups related Flags and hosts Experiments.
+
+Example arguments: {"appId":"app_1","environmentId":"environment_1","keyId":"key_1"}
 
 Usage:
   splitch api-keys revoke <key-id> [flags]
@@ -69,6 +85,10 @@ Example:
   splitch api-keys revoke <key-id> --body-json '{}' --json",
     "app-attention-rollup get": "Read explicit per-Environment SRM and Guardrail attention for one App.
 
+Formats: appId: required Canonical App ID (app_...) or human-readable App slug.
+
+Terms: Environment — a named deployment context under an App, such as \`dev\` or \`prod\`. App — the product or service surface that groups related Flags and hosts Experiments.
+
 Usage:
   splitch app-attention-rollup get [flags]
 
@@ -80,6 +100,12 @@ Flags:
 Example:
   splitch app-attention-rollup get --json",
     "app-members add": "Grant a user a role on an App.
+
+Formats: appId: required Canonical App ID (app_...) or human-readable App slug. userId: required canonical id. role: required one of "owner", "admin", "member".
+
+Terms: App — the product or service surface that groups related Flags and hosts Experiments.
+
+Example arguments: {"appId":"app_1","userId":"user_1","role":"owner"}
 
 Usage:
   splitch app-members add [flags]
@@ -100,6 +126,10 @@ Example:
   splitch app-members add --body-json '{"userId":"user_1","role":"owner"}' --json",
     "app-members list": "List the members of an App and their App roles.
 
+Formats: appId: required Canonical App ID (app_...) or human-readable App slug.
+
+Terms: App — the product or service surface that groups related Flags and hosts Experiments.
+
 Usage:
   splitch app-members list [flags]
 
@@ -112,6 +142,12 @@ Example:
   splitch app-members list --json",
     "app-members remove": "Revoke a user's access to an App (rejected if removing the last owner).
 
+Formats: appId: required Canonical App ID (app_...) or human-readable App slug. userId: required canonical id.
+
+Terms: App — the product or service surface that groups related Flags and hosts Experiments.
+
+Example arguments: {"appId":"app_1","userId":"user_1"}
+
 Usage:
   splitch app-members remove <user-id> [flags]
 
@@ -123,6 +159,12 @@ Flags:
 Example:
   splitch app-members remove <user-id> --json",
     "app-members update": "Change a member's App role.
+
+Formats: appId: required Canonical App ID (app_...) or human-readable App slug. userId: required canonical id. role: required one of "owner", "admin", "member".
+
+Terms: App — the product or service surface that groups related Flags and hosts Experiments.
+
+Example arguments: {"appId":"app_1","userId":"user_1","role":"owner"}
 
 Usage:
   splitch app-members update <user-id> [flags]
@@ -141,6 +183,12 @@ Request body (--body-json):
 Example:
   splitch app-members update <user-id> --body-json '{"role":"owner"}' --json",
     "approval-request-reviews create": "Review a pending Approval Request and optionally apply its proposal.
+
+Formats: appId: required Canonical App ID (app_...) or human-readable App slug. id: required canonical id. action: required one of "approve_and_apply", "decline".
+
+Terms: App — the product or service surface that groups related Flags and hosts Experiments.
+
+Example arguments: {"appId":"app_1","id":"apr_01J00000000000000000000000","action":"approve_and_apply","idempotency_key":"idem-1"}
 
 Usage:
   splitch approval-request-reviews create <id> [flags]
@@ -163,6 +211,10 @@ Example:
   splitch approval-request-reviews create <id> --body-json '{"action":"approve_and_apply","idempotency_key":"idem-1"}' --json",
     "approval-requests get": "Get one full Approval Request projection.
 
+Formats: appId: required Canonical App ID (app_...) or human-readable App slug. id: required canonical id.
+
+Terms: App — the product or service surface that groups related Flags and hosts Experiments.
+
 Usage:
   splitch approval-requests get <id> [flags]
 
@@ -174,6 +226,10 @@ Flags:
 Example:
   splitch approval-requests get <id> --json",
     "approval-requests list": "List Approval Requests in an App (bounded; reports its own truncation).
+
+Formats: appId: required Canonical App ID (app_...) or human-readable App slug. status: optional one of "pending", "applied", "declined", "stale". target_kind: optional one of "flag", "flag_configuration", "flag_variant", "segment", "experiment_draft". environmentId: optional canonical id.
+
+Terms: App — the product or service surface that groups related Flags and hosts Experiments.
 
 Usage:
   splitch approval-requests list [flags]
@@ -191,6 +247,12 @@ Flags:
 Example:
   splitch approval-requests list --json",
     "apps create": "Create an App (provisions dev + prod Environments and Client Keys).
+
+Formats: orgId: required canonical id.
+
+Terms: Environment — a named deployment context under an App, such as \`dev\` or \`prod\`. Client Key — the public, non-secret key used by untrusted client-side SDKs. App — the product or service surface that groups related Flags and hosts Experiments.
+
+Example arguments: {"orgId":"org_1","name":"name"}
 
 Usage:
   splitch apps create --org <organization> [flags]
@@ -216,6 +278,12 @@ Example:
   splitch apps create --org <organization> --name "My App" --json",
     "apps delete": "Delete an App. Dry-run mode lists every blocker with IDs and remove commands; force mode cascades non-gated children and stops with pending Approval Request IDs when Policy requires Review. Blocked while any Experiment is running.
 
+Formats: appId: required Canonical App ID (app_...) or human-readable App slug.
+
+Terms: Experiment — a test that compares Variants of one or more Flags to measure their effect on Metrics for a population of Entities. App — the product or service surface that groups related Flags and hosts Experiments.
+
+Example arguments: {"appId":"app_1"}
+
 Usage:
   splitch apps delete [flags]
 
@@ -230,6 +298,10 @@ Example:
   splitch apps delete --json",
     "apps get": "Get one App.
 
+Formats: appId: required Canonical App ID (app_...) or human-readable App slug.
+
+Terms: App — the product or service surface that groups related Flags and hosts Experiments.
+
 Usage:
   splitch apps get [flags]
 
@@ -242,6 +314,10 @@ Example:
   splitch apps get --json",
     "apps list": "List the Apps in an organization.
 
+Formats: orgId: required canonical id.
+
+Terms: App — the product or service surface that groups related Flags and hosts Experiments.
+
 Usage:
   splitch apps list --org <organization> [flags]
 
@@ -253,6 +329,12 @@ Flags:
 Example:
   splitch apps list --org <organization> --json",
     "apps update": "Rename an App or change its URL slug.
+
+Formats: appId: required Canonical App ID (app_...) or human-readable App slug.
+
+Terms: App — the product or service surface that groups related Flags and hosts Experiments.
+
+Example arguments: {"appId":"app_1","name":"name"}
 
 Usage:
   splitch apps update [flags]
@@ -276,6 +358,12 @@ Example:
   splitch apps update --name "Checkout" --json",
     "client-key get": "Get the Environment's public Client Key (never 404s for a live Env).
 
+Formats: appId: required Canonical App ID (app_...) or human-readable App slug. environmentId: required Canonical Environment ID (env_...) or human-readable Environment key. by: optional one of "id".
+
+Terms: Environment — a named deployment context under an App, such as \`dev\` or \`prod\`. Client Key — the public, non-secret key used by untrusted client-side SDKs. App — the product or service surface that groups related Flags and hosts Experiments.
+
+Example arguments: {"appId":"app_1","environmentId":"environment_1"}
+
 Usage:
   splitch client-key get [flags]
 
@@ -293,6 +381,12 @@ Example:
   splitch client-key get --json",
     "client-key rotate": "Revoke the current Client Key and create its replacement.
 
+Formats: appId: required Canonical App ID (app_...) or human-readable App slug. environmentId: required Canonical Environment ID (env_...) or human-readable Environment key. by: optional one of "id".
+
+Terms: Environment — a named deployment context under an App, such as \`dev\` or \`prod\`. Client Key — the public, non-secret key used by untrusted client-side SDKs. App — the product or service surface that groups related Flags and hosts Experiments.
+
+Example arguments: {"appId":"app_1","environmentId":"environment_1"}
+
 Usage:
   splitch client-key rotate [flags]
 
@@ -309,6 +403,12 @@ Credential semantics:
 Example:
   splitch client-key rotate --json",
     "client-key update": "Update the Client Key's origin allow-list / rate limit.
+
+Formats: appId: required Canonical App ID (app_...) or human-readable App slug. environmentId: required Canonical Environment ID (env_...) or human-readable Environment key. by: optional one of "id".
+
+Terms: Environment — a named deployment context under an App, such as \`dev\` or \`prod\`. Client Key — the public, non-secret key used by untrusted client-side SDKs. App — the product or service surface that groups related Flags and hosts Experiments.
+
+Example arguments: {"appId":"app_1","environmentId":"environment_1","originAllowlist":["https://app.example.com"]}
 
 Usage:
   splitch client-key update [flags]
@@ -371,6 +471,10 @@ Example:
   splitch cloudflare status --env production --json",
     "cloudflare-installations list": "List Cloudflare installations and their delivery health for this Environment.
 
+Formats: appId: required Canonical App ID (app_...) or human-readable App slug. environmentId: required Canonical Environment ID (env_...) or human-readable Environment key. by: optional one of "id".
+
+Terms: Environment — a named deployment context under an App, such as \`dev\` or \`prod\`. App — the product or service surface that groups related Flags and hosts Experiments.
+
 Usage:
   splitch cloudflare-installations list [flags]
 
@@ -385,6 +489,12 @@ Example:
   splitch cloudflare-installations list --json",
     "cloudflare-installations revoke": "Revoke a Cloudflare integration and suppress pending deliveries.
 
+Formats: appId: required Canonical App ID (app_...) or human-readable App slug. environmentId: required Canonical Environment ID (env_...) or human-readable Environment key. installationId: required canonical id. by: optional one of "id".
+
+Terms: Environment — a named deployment context under an App, such as \`dev\` or \`prod\`. App — the product or service surface that groups related Flags and hosts Experiments.
+
+Example arguments: {"appId":"app_1","environmentId":"environment_1","installationId":"018f2b7c-3c9a-7b3e-9a52-0c1d2e3f4a5b"}
+
 Usage:
   splitch cloudflare-installations revoke <installation-id> [flags]
 
@@ -398,6 +508,12 @@ Flags:
 Example:
   splitch cloudflare-installations revoke <installation-id> --json",
     "conclusion-promotion-requests create": "Replace a stale winner Promotion request from immutable conclusion evidence.
+
+Formats: appId: required Canonical App ID (app_...) or human-readable App slug. environmentId: required Canonical Environment ID (env_...) or human-readable Environment key. experimentId: required canonical id. runId: required canonical id. conclusionId: required canonical id. by: optional one of "id". idempotencyKey: required canonical id.
+
+Terms: Environment — a named deployment context under an App, such as \`dev\` or \`prod\`. Promotion — applying a Flag Configuration, or a Variant's availability, to a target Environment. App — the product or service surface that groups related Flags and hosts Experiments.
+
+Example arguments: {"appId":"app_1","environmentId":"environment_1","experimentId":"experiment_1","runId":"run_1","conclusionId":"conclusion_1","expectedConfigVersion":0,"idempotencyKey":"idem-1"}
 
 Usage:
   splitch conclusion-promotion-requests create <experiment-id> <run-id> <conclusion-id> [flags]
@@ -422,6 +538,10 @@ Example:
   splitch conclusion-promotion-requests create <experiment-id> <run-id> <conclusion-id> --body-json '{"expectedConfigVersion":0,"idempotencyKey":"idem-1"}' --json",
     "convex-installations list": "List Convex installations and their delivery health for this Environment.
 
+Formats: appId: required Canonical App ID (app_...) or human-readable App slug. environmentId: required Canonical Environment ID (env_...) or human-readable Environment key. by: optional one of "id".
+
+Terms: Environment — a named deployment context under an App, such as \`dev\` or \`prod\`. App — the product or service surface that groups related Flags and hosts Experiments.
+
 Usage:
   splitch convex-installations list [flags]
 
@@ -435,6 +555,12 @@ Flags:
 Example:
   splitch convex-installations list --json",
     "convex-installations revoke": "Revoke a Convex integration and suppress pending deliveries.
+
+Formats: appId: required Canonical App ID (app_...) or human-readable App slug. environmentId: required Canonical Environment ID (env_...) or human-readable Environment key. installationId: required canonical id. by: optional one of "id".
+
+Terms: Environment — a named deployment context under an App, such as \`dev\` or \`prod\`. App — the product or service surface that groups related Flags and hosts Experiments.
+
+Example arguments: {"appId":"app_1","environmentId":"environment_1","installationId":"018f2b7c-3c9a-7b3e-9a52-0c1d2e3f4a5b"}
 
 Usage:
   splitch convex-installations revoke <installation-id> [flags]
@@ -494,6 +620,10 @@ Example:
   splitch env-policy set --body-json '{"variantAvailability":"allow","targetingRolloutValue":"allow","enabledState":"allow","startExperimentRun":"allow"}' --json",
     "environment-exposure-status get": "Get whether an Environment has received its first real Exposure.
 
+Formats: appId: required Canonical App ID (app_...) or human-readable App slug. environmentId: required Canonical Environment ID (env_...) or human-readable Environment key. by: optional one of "id".
+
+Terms: Environment — a named deployment context under an App, such as \`dev\` or \`prod\`. Exposure — the event that an Entity actually encountered its assigned Variant. App — the product or service surface that groups related Flags and hosts Experiments.
+
 Usage:
   splitch environment-exposure-status get [flags]
 
@@ -507,6 +637,12 @@ Flags:
 Example:
   splitch environment-exposure-status get --json",
     "envs create": "Create an Environment (auto-provisions its Client Key, returned inline).
+
+Formats: appId: required Canonical App ID (app_...) or human-readable App slug.
+
+Terms: Environment — a named deployment context under an App, such as \`dev\` or \`prod\`. Client Key — the public, non-secret key used by untrusted client-side SDKs. App — the product or service surface that groups related Flags and hosts Experiments.
+
+Example arguments: {"appId":"app_1","key":"key"}
 
 Usage:
   splitch envs create [flags]
@@ -530,6 +666,12 @@ Example:
   splitch envs create --key staging --name "Staging" --json",
     "envs delete": "Delete an Environment (blocked if running or last Environment).
 
+Formats: appId: required Canonical App ID (app_...) or human-readable App slug. environmentId: required Canonical Environment ID (env_...) or human-readable Environment key. by: optional one of "id".
+
+Terms: Environment — a named deployment context under an App, such as \`dev\` or \`prod\`. App — the product or service surface that groups related Flags and hosts Experiments.
+
+Example arguments: {"appId":"app_1","environmentId":"environment_1"}
+
 Usage:
   splitch envs delete [flags]
 
@@ -543,6 +685,10 @@ Flags:
 Example:
   splitch envs delete --json",
     "envs get": "Get one Environment (includes its inline Policy).
+
+Formats: appId: required Canonical App ID (app_...) or human-readable App slug. environmentId: required Canonical Environment ID (env_...) or human-readable Environment key. by: optional one of "id".
+
+Terms: Environment — a named deployment context under an App, such as \`dev\` or \`prod\`. App — the product or service surface that groups related Flags and hosts Experiments.
 
 Usage:
   splitch envs get [flags]
@@ -558,6 +704,10 @@ Example:
   splitch envs get --json",
     "envs list": "List an App's Environments.
 
+Formats: appId: required Canonical App ID (app_...) or human-readable App slug.
+
+Terms: Environment — a named deployment context under an App, such as \`dev\` or \`prod\`. App — the product or service surface that groups related Flags and hosts Experiments.
+
 Usage:
   splitch envs list [flags]
 
@@ -569,6 +719,12 @@ Flags:
 Example:
   splitch envs list --json",
     "envs update": "Rename an Environment or edit its Policy.
+
+Formats: appId: required Canonical App ID (app_...) or human-readable App slug. environmentId: required Canonical Environment ID (env_...) or human-readable Environment key. by: optional one of "id".
+
+Terms: Environment — a named deployment context under an App, such as \`dev\` or \`prod\`. App — the product or service surface that groups related Flags and hosts Experiments.
+
+Example arguments: {"appId":"app_1","environmentId":"environment_1","name":"name"}
 
 Usage:
   splitch envs update [flags]
@@ -592,6 +748,12 @@ Example:
   splitch envs update --name "Production" --json",
     "event-definition-versions create": "Publish the next immutable Event Definition Version.
 
+Formats: appId: required Canonical App ID (app_...) or human-readable App slug. eventDefinitionId: required canonical id.
+
+Terms: App — the product or service surface that groups related Flags and hosts Experiments.
+
+Example arguments: {"appId":"app_1","eventDefinitionId":"eventDefinition_1","entityType":"entityType","fields":[],"dimensions":[]}
+
 Usage:
   splitch event-definition-versions create <event-definition-id> [flags]
 
@@ -614,6 +776,10 @@ Example:
   splitch event-definition-versions create <event-definition-id> --body-json '{"entityType":"entityType","fields":[],"dimensions":[]}' --json",
     "event-definition-versions get": "Get one immutable Event Definition Version.
 
+Formats: appId: required Canonical App ID (app_...) or human-readable App slug. eventDefinitionId: required canonical id. versionId: required canonical id.
+
+Terms: App — the product or service surface that groups related Flags and hosts Experiments.
+
 Usage:
   splitch event-definition-versions get <event-definition-id> <version-id> [flags]
 
@@ -626,6 +792,10 @@ Example:
   splitch event-definition-versions get <event-definition-id> <version-id> --json",
     "event-definition-versions list": "List immutable Event Definition Versions.
 
+Formats: appId: required Canonical App ID (app_...) or human-readable App slug. eventDefinitionId: required canonical id.
+
+Terms: App — the product or service surface that groups related Flags and hosts Experiments.
+
 Usage:
   splitch event-definition-versions list <event-definition-id> [flags]
 
@@ -637,6 +807,12 @@ Flags:
 Example:
   splitch event-definition-versions list <event-definition-id> --json",
     "event-definitions create": "Create an App-level Event Definition.
+
+Formats: appId: required Canonical App ID (app_...) or human-readable App slug. family: required one of "metric", "web".
+
+Terms: App — the product or service surface that groups related Flags and hosts Experiments.
+
+Example arguments: {"appId":"app_1","name":"name","family":"metric","displayName":"displayName"}
 
 Usage:
   splitch event-definitions create [flags]
@@ -662,6 +838,10 @@ Example:
   splitch event-definitions create --body-json '{"name":"name","family":"metric","displayName":"displayName"}' --json",
     "event-definitions get": "Get an Event Definition and its immutable published Versions.
 
+Formats: appId: required Canonical App ID (app_...) or human-readable App slug. eventDefinitionId: required canonical id.
+
+Terms: App — the product or service surface that groups related Flags and hosts Experiments.
+
 Usage:
   splitch event-definitions get <event-definition-id> [flags]
 
@@ -674,6 +854,10 @@ Example:
   splitch event-definitions get <event-definition-id> --json",
     "event-definitions list": "List Event Definitions in an App.
 
+Formats: appId: required Canonical App ID (app_...) or human-readable App slug.
+
+Terms: App — the product or service surface that groups related Flags and hosts Experiments.
+
 Usage:
   splitch event-definitions list [flags]
 
@@ -685,6 +869,12 @@ Flags:
 Example:
   splitch event-definitions list --json",
     "event-definitions update": "Update Event Definition display metadata.
+
+Formats: appId: required Canonical App ID (app_...) or human-readable App slug. eventDefinitionId: required canonical id.
+
+Terms: App — the product or service surface that groups related Flags and hosts Experiments.
+
+Example arguments: {"appId":"app_1","eventDefinitionId":"eventDefinition_1","displayName":"displayName"}
 
 Usage:
   splitch event-definitions update <event-definition-id> [flags]
@@ -704,6 +894,10 @@ Request body (--body-json):
 Example:
   splitch event-definitions update <event-definition-id> --body-json '{"displayName":"displayName"}' --json",
     "experiment plan": "Plan sample size, always-valid inflation, target_n, and expected duration from a predeclared MDE (or solve MDE from a fixed size). Never computes post-hoc power from observed effects. Pass targetN to experiments_start.
+
+Formats: appId: required Canonical App ID (app_...) or human-readable App slug. environmentId: required Canonical Environment ID (env_...) or human-readable Environment key. by: optional one of "id". metricKind: required one of "continuous", "binomial".
+
+Terms: Environment — a named deployment context under an App, such as \`dev\` or \`prod\`. App — the product or service surface that groups related Flags and hosts Experiments.
 
 Usage:
   splitch experiment plan [flags]
@@ -736,23 +930,32 @@ Request body (--body-json):
 
 Example:
   splitch experiment plan --body-json '{"metricKind":"continuous","armCount":33,"expectedDailyEligibleEntities":0.000001,"baselineMean":1,"baselineVariance":1,"mdeAbsolute":1}' --json",
-    "experiment-results get": "Get an Experiment's results: readiness, blockedBy, and reasons first; detailed stats by default; view=concise for the verdict block only. States: ready, no_data (names the missing input), or no_run (names Start).
+    "experiment-results get": "Get an Experiment's results: readiness, blockedBy, reasons, then ship recommendation when pre-registered; detailed stats by default; view=concise for the verdict block (includeExploratory attaches stats). States: ready, no_data, or no_run.
+
+Formats: appId: required Canonical App ID (app_...) or human-readable App slug. environmentId: required Canonical Environment ID (env_...) or human-readable Environment key. experimentId: required canonical id. runId: optional canonical id. view: optional one of "concise", "detailed". by: optional one of "id".
+
+Terms: Environment — a named deployment context under an App, such as \`dev\` or \`prod\`. Experiment — a test that compares Variants of one or more Flags to measure their effect on Metrics for a population of Entities. App — the product or service surface that groups related Flags and hosts Experiments.
 
 Usage:
   splitch experiment-results get <experiment-id> [flags]
 
 Flags:
-  --app <app>          [type: string; default: SPLITCH_APP or config] App ID or slug.
-  --env <environment>  [type: string; default: SPLITCH_ENV or config] Environment ID or key.
-  --by <mode>          [type: string; default: automatic] Allowed: id. Resolve a canonical-looking selector explicitly.
-  --run-id <run-id>    [type: string; default: none] Query parameter runId.
-  --view <view>        [type: string ("concise" | "detailed"); default: none] Query parameter view.
-  --json               [type: boolean; default: false] Write machine-readable JSON to stdout.
-  -h, --help           [type: boolean; default: false] Show help and exit.
+  --app <app>                                  [type: string; default: SPLITCH_APP or config] App ID or slug.
+  --env <environment>                          [type: string; default: SPLITCH_ENV or config] Environment ID or key.
+  --by <mode>                                  [type: string; default: automatic] Allowed: id. Resolve a canonical-looking selector explicitly.
+  --run-id <run-id>                            [type: string; default: none] Query parameter runId.
+  --view <view>                                [type: string ("concise" | "detailed"); default: none] Query parameter view.
+  --include-exploratory <include-exploratory>  [type: boolean; default: none] Query parameter includeExploratory.
+  --json                                       [type: boolean; default: false] Write machine-readable JSON to stdout.
+  -h, --help                                   [type: boolean; default: false] Show help and exit.
 
 Example:
   splitch experiment-results get <experiment-id> --json",
-    "experiment-results post": "Get an Experiment's results: readiness, blockedBy, and reasons first; detailed stats by default; view=concise for the verdict block only. States: ready, no_data (names the missing input), or no_run (names Start).
+    "experiment-results post": "Get an Experiment's results: readiness, blockedBy, reasons, then ship recommendation when pre-registered; detailed stats by default; view=concise for the verdict block (includeExploratory attaches stats). States: ready, no_data, or no_run.
+
+Formats: appId: required Canonical App ID (app_...) or human-readable App slug. environmentId: required Canonical Environment ID (env_...) or human-readable Environment key. experimentId: required canonical id. by: optional one of "id". runId: optional canonical id. view: optional one of "concise", "detailed".
+
+Terms: Environment — a named deployment context under an App, such as \`dev\` or \`prod\`. Experiment — a test that compares Variants of one or more Flags to measure their effect on Metrics for a population of Entities. App — the product or service surface that groups related Flags and hosts Experiments.
 
 Usage:
   splitch experiment-results post <experiment-id> [flags]
@@ -766,15 +969,22 @@ Flags:
   -h, --help           [type: boolean; default: false] Show help and exit.
 
 Request body (--body-json):
-  runId          optional  string
-  view           optional  string ("concise" | "detailed")
-  dataWatermark  optional  string
+  runId               optional  string
+  view                optional  string ("concise" | "detailed")
+  includeExploratory  optional  boolean
+  dataWatermark       optional  string
   Example:
-    {"view":"concise"}
+    {"view":"concise","includeExploratory":true}
 
 Example:
-  splitch experiment-results post <experiment-id> --body-json '{"view":"concise"}' --json",
+  splitch experiment-results post <experiment-id> --body-json '{"view":"concise","includeExploratory":true}' --json",
     "experiments create": "Create an Experiment draft.
+
+Formats: appId: required canonical id. environmentId: required canonical id. by: optional one of "id". flagId: required canonical id. targetingKey: required canonical id. activationMetricId: optional canonical id. segmentIds: optional canonical id.
+
+Terms: Experiment — a test that compares Variants of one or more Flags to measure their effect on Metrics for a population of Entities.
+
+Example arguments: {"appId":"app_1","environmentId":"environment_1","name":"name","key":"key","flagId":"flag_1","targetingKey":"userId","targetingKeyType":"user","metrics":[{"metricId":"metric_1"}]}
 
 Usage:
   splitch experiments create [flags]
@@ -818,6 +1028,12 @@ Example:
   splitch experiments create --body-json '{"appId":"app_1","environmentId":"environment_1","name":"name","key":"key","flagId":"flag_1","targetingKey":"userId","targetingKeyType":"user","metrics":[{"metricId":"metric_1"}]}' --json",
     "experiments delete": "Archive an Experiment; Runs are retained (blocked while a Run is running).
 
+Formats: appId: required Canonical App ID (app_...) or human-readable App slug. environmentId: required Canonical Environment ID (env_...) or human-readable Environment key. experimentId: required canonical id. by: optional one of "id".
+
+Terms: Environment — a named deployment context under an App, such as \`dev\` or \`prod\`. Experiment — a test that compares Variants of one or more Flags to measure their effect on Metrics for a population of Entities. Experiment Run — the immutable, time-boxed unit of experiment analysis. App — the product or service surface that groups related Flags and hosts Experiments.
+
+Example arguments: {"appId":"app_1","environmentId":"environment_1","experimentId":"experiment_1"}
+
 Usage:
   splitch experiments delete <experiment-id> [flags]
 
@@ -831,6 +1047,10 @@ Flags:
 Example:
   splitch experiments delete <experiment-id> --json",
     "experiments get": "Get an Experiment (includes live Run id, draft config).
+
+Formats: appId: required Canonical App ID (app_...) or human-readable App slug. environmentId: required Canonical Environment ID (env_...) or human-readable Environment key. experimentId: required canonical id. by: optional one of "id".
+
+Terms: Environment — a named deployment context under an App, such as \`dev\` or \`prod\`. Experiment — a test that compares Variants of one or more Flags to measure their effect on Metrics for a population of Entities. App — the product or service surface that groups related Flags and hosts Experiments. Experiment Run — the immutable, time-boxed unit of experiment analysis.
 
 Usage:
   splitch experiments get <experiment-id> [flags]
@@ -846,6 +1066,10 @@ Example:
   splitch experiments get <experiment-id> --json",
     "experiments list": "List Experiments in an Environment.
 
+Formats: appId: required Canonical App ID (app_...) or human-readable App slug. environmentId: required Canonical Environment ID (env_...) or human-readable Environment key. by: optional one of "id".
+
+Terms: Environment — a named deployment context under an App, such as \`dev\` or \`prod\`. Experiment — a test that compares Variants of one or more Flags to measure their effect on Metrics for a population of Entities. App — the product or service surface that groups related Flags and hosts Experiments.
+
 Usage:
   splitch experiments list [flags]
 
@@ -859,6 +1083,12 @@ Flags:
 Example:
   splitch experiments list --json",
     "experiments start": "Start the draft as a new Run; ends any running Run (Policy-gated). Freezes draft Targeting Rules into the Run.
+
+Formats: appId: required Canonical App ID (app_...) or human-readable App slug. environmentId: required Canonical Environment ID (env_...) or human-readable Environment key. experimentId: required canonical id. by: optional one of "id". horizon: optional one of "sequential", "fixed".
+
+Terms: Environment — a named deployment context under an App, such as \`dev\` or \`prod\`. App — the product or service surface that groups related Flags and hosts Experiments. Experiment Run — the immutable, time-boxed unit of experiment analysis.
+
+Example arguments: {"appId":"app_1","environmentId":"environment_1","experimentId":"experiment_1","idempotency_key":"idem-1","horizon":"sequential"}
 
 Usage:
   splitch experiments start <experiment-id> [flags]
@@ -888,11 +1118,18 @@ Request body (--body-json):
 Behavior:
   Start freezes the Experiment draft Targeting Rules into the new Run; the response field frozenTargetingRules is that snapshot (same as run.targetingRules).
   An empty frozen set means all Entities are eligible via allocation; Flag Configuration targeting rules do not apply while the Run is live.
-  Without --json, the CLI prints a frozen-targeting summary to stderr.
+  A successful Start may include optional next (tool experiment_results_get, earliestAt from the frozen planned duration, target_n in args).
+  Without --json, the CLI prints a frozen-targeting summary and any next hint to stderr.
 
 Example:
   splitch experiments start <experiment-id> --body-json '{"horizon":"sequential","idempotency_key":"idem-1"}' --json",
     "experiments update": "Edit an Experiment (assignment edits gated by RUN_FROZEN / DECISION_LOCKED). Staged Targeting Rule edits under a live Run leave evaluation on the frozen Run.
+
+Formats: appId: required Canonical App ID (app_...) or human-readable App slug. environmentId: required Canonical Environment ID (env_...) or human-readable Environment key. experimentId: required canonical id. by: optional one of "id". flagId: optional canonical id. targetingKey: optional canonical id. activationMetricId: optional canonical id. segmentIds: optional canonical id. stageForNextRun: optional one of true.
+
+Terms: Environment — a named deployment context under an App, such as \`dev\` or \`prod\`. Experiment — a test that compares Variants of one or more Flags to measure their effect on Metrics for a population of Entities. App — the product or service surface that groups related Flags and hosts Experiments. Experiment Run — the immutable, time-boxed unit of experiment analysis.
+
+Example arguments: {"appId":"app_1","environmentId":"environment_1","experimentId":"experiment_1","tags":[],"allocation":{"control":1,"treatment":1},"segmentIds":[],"dimensions":[],"stageForNextRun":true}
 
 Usage:
   splitch experiments update <experiment-id> [flags]
@@ -939,6 +1176,10 @@ Example:
   splitch experiments update <experiment-id> --body-json '{"tags":[],"allocation":{"control":1,"treatment":1},"segmentIds":[],"dimensions":[],"stageForNextRun":true}' --json",
     "expired-flags list": "List Flags past their expiresAt that still exist and can still be evaluated, most overdue first (bounded; reports its own truncation).
 
+Formats: appId: required Canonical App ID (app_...) or human-readable App slug.
+
+Terms: Flag — a named feature toggle with a key, Variants, Targeting Rules, and enabled state. App — the product or service surface that groups related Flags and hosts Experiments.
+
 Usage:
   splitch expired-flags list [flags]
 
@@ -950,6 +1191,10 @@ Flags:
 Example:
   splitch expired-flags list --json",
     "flag-changes export": "Export a Flag change-log time range, or the stored changes between two Environments, as JSON plus a unified text diff.
+
+Formats: appId: required Canonical App ID (app_...) or human-readable App slug. from: required ISO-8601 instant with offset. to: required ISO-8601 instant with offset. environmentId: optional canonical id. fromEnvironmentId: optional canonical id. toEnvironmentId: optional canonical id. flagId: optional canonical id. format: optional one of "json", "unified".
+
+Terms: Environment — a named deployment context under an App, such as \`dev\` or \`prod\`. Flag — a named feature toggle with a key, Variants, Targeting Rules, and enabled state. App — the product or service surface that groups related Flags and hosts Experiments.
 
 Usage:
   splitch flag-changes export [flags]
@@ -972,6 +1217,10 @@ Example:
   splitch flag-changes export --json",
     "flag-changes list": "List Flag change-log entries with a structured before/after diff computed from stored records.
 
+Formats: appId: required Canonical App ID (app_...) or human-readable App slug. from: optional ISO-8601 instant with offset. to: optional ISO-8601 instant with offset. environmentId: optional canonical id. fromEnvironmentId: optional canonical id. toEnvironmentId: optional canonical id. flagId: optional canonical id.
+
+Terms: Flag — a named feature toggle with a key, Variants, Targeting Rules, and enabled state. App — the product or service surface that groups related Flags and hosts Experiments.
+
 Usage:
   splitch flag-changes list [flags]
 
@@ -992,6 +1241,10 @@ Example:
   splitch flag-changes list --json",
     "flag-config get": "Get a Flag's per-Environment Configuration.
 
+Formats: appId: required Canonical App ID (app_...) or human-readable App slug. environmentId: required Canonical Environment ID (env_...) or human-readable Environment key. flagId: required Canonical Flag ID (flag_...) or human-readable Flag key. by: optional one of "id".
+
+Terms: Environment — a named deployment context under an App, such as \`dev\` or \`prod\`. Flag — a named feature toggle with a key, Variants, Targeting Rules, and enabled state. App — the product or service surface that groups related Flags and hosts Experiments.
+
 Usage:
   splitch flag-config get <flag-id-or-key> [flags]
 
@@ -1005,6 +1258,12 @@ Flags:
 Example:
   splitch flag-config get <flag-id-or-key> --json",
     "flag-config update": "Update enabled state / available Variants (Policy-gated change types). Turning a Flag Config off applies without approval regardless of this level.
+
+Formats: appId: required Canonical App ID (app_...) or human-readable App slug. environmentId: required Canonical Environment ID (env_...) or human-readable Environment key. flagId: required Canonical Flag ID (flag_...) or human-readable Flag key. by: optional one of "id".
+
+Terms: Environment — a named deployment context under an App, such as \`dev\` or \`prod\`. Variant — the OpenFeature term for a possible Flag value. Flag — a named feature toggle with a key, Variants, Targeting Rules, and enabled state. App — the product or service surface that groups related Flags and hosts Experiments.
+
+Example arguments: {"appId":"app_1","environmentId":"environment_1","flagId":"flag_1","idempotency_key":"idem-1","enabled":true,"availableVariantNames":[]}
 
 Usage:
   splitch flag-config update <flag-id-or-key> [flags]
@@ -1029,9 +1288,17 @@ Request body (--body-json):
   Example:
     {"enabled":true,"availableVariantNames":[],"idempotency_key":"idem-1"}
 
+Behavior:
+  A successful write may include optional next naming the registered tool to call next (omitted when not determinable).
+  Without --json, the CLI prints any next hint to stderr; MCP returns next in structuredContent.
+
 Example:
   splitch flag-config update <flag-id-or-key> --enabled true --rollout 100 --json",
     "flag-inventory-health get": "Per-App Flag inventory health: counts by lifecycle class, age distribution, monthly additions versus removals, and expired-but-live count.
+
+Formats: appId: required Canonical App ID (app_...) or human-readable App slug.
+
+Terms: Flag — a named feature toggle with a key, Variants, Targeting Rules, and enabled state. App — the product or service surface that groups related Flags and hosts Experiments.
 
 Usage:
   splitch flag-inventory-health get [flags]
@@ -1044,6 +1311,10 @@ Flags:
 Example:
   splitch flag-inventory-health get --json",
     "flag-removal brief": "Advisory brief for removing a Flag from customer code: served Variants per Environment, SDK search shapes, and explicit caveats (read-only; never writes code).
+
+Formats: appId: required Canonical App ID (app_...) or human-readable App slug. flagId: required Canonical Flag ID (flag_...) or human-readable Flag key.
+
+Terms: Environment — a named deployment context under an App, such as \`dev\` or \`prod\`. Variant — the OpenFeature term for a possible Flag value. Flag — a named feature toggle with a key, Variants, Targeting Rules, and enabled state. App — the product or service surface that groups related Flags and hosts Experiments.
 
 Usage:
   splitch flag-removal brief <flag-id-or-key> [flags]
@@ -1082,6 +1353,12 @@ Example:
   splitch flag-targeting-rules add checkout --when plan=enterprise --serve on --json",
     "flag-targeting-rules replace": "Full-replace this Environment's ordered Targeting Rule list.
 
+Formats: appId: required Canonical App ID (app_...) or human-readable App slug. environmentId: required Canonical Environment ID (env_...) or human-readable Environment key. flagId: required Canonical Flag ID (flag_...) or human-readable Flag key. by: optional one of "id".
+
+Terms: Environment — a named deployment context under an App, such as \`dev\` or \`prod\`. Flag — a named feature toggle with a key, Variants, Targeting Rules, and enabled state. App — the product or service surface that groups related Flags and hosts Experiments.
+
+Example arguments: {"appId":"app_1","environmentId":"environment_1","flagId":"flag_1","targetingRules":[{"id":"id_1","flagId":"flag_1","priority":0,"conditions":[{"attribute":"attribute","operator":"eq","value":true}],"variantId":"variant_1"}],"idempotency_key":"idem-1"}
+
 Usage:
   splitch flag-targeting-rules replace <flag-id-or-key> [flags]
 
@@ -1111,6 +1388,12 @@ Example:
   splitch flag-targeting-rules replace <flag-id-or-key> --body-json '{"targetingRules":[{"id":"id_1","flagId":"flag_1","priority":0,"conditions":[{"attribute":"attribute","operator":"eq","value":true}],"variantId":"variant_1"}],"idempotency_key":"idem-1"}' --json",
     "flag-variants create": "Add a Variant to the App-level catalog.
 
+Formats: appId: required canonical id. flagId: required canonical id.
+
+Terms: Variant — the OpenFeature term for a possible Flag value. App — the product or service surface that groups related Flags and hosts Experiments.
+
+Example arguments: {"appId":"app_1","flagId":"flag_1","name":"name","value":true,"idempotency_key":"idem-1"}
+
 Usage:
   splitch flag-variants create <flag-id-or-key> [flags]
 
@@ -1138,6 +1421,12 @@ Example:
   splitch flag-variants create <flag-id-or-key> --body-json '{"appId":"app_1","flagId":"flag_1","name":"name","value":true,"idempotency_key":"idem-1"}' --json",
     "flag-variants delete": "Remove a catalog Variant (blocked if available, referenced by a Targeting Rule, or in a running Run).
 
+Formats: appId: required Canonical App ID (app_...) or human-readable App slug. flagId: required Canonical Flag ID (flag_...) or human-readable Flag key.
+
+Terms: Variant — the OpenFeature term for a possible Flag value. Flag — a named feature toggle with a key, Variants, Targeting Rules, and enabled state. App — the product or service surface that groups related Flags and hosts Experiments. Experiment Run — the immutable, time-boxed unit of experiment analysis.
+
+Example arguments: {"appId":"app_1","flagId":"flag_1","variantName":"variantName","idempotency_key":"idem-1"}
+
 Usage:
   splitch flag-variants delete <flag-id-or-key> <variant-name> [flags]
 
@@ -1156,6 +1445,12 @@ Behavior:
 Example:
   splitch flag-variants delete <flag-id-or-key> <variant-name> --json",
     "flag-variants update": "Update a catalog Variant (value is Run-frozen).
+
+Formats: appId: required Canonical App ID (app_...) or human-readable App slug. flagId: required Canonical Flag ID (flag_...) or human-readable Flag key.
+
+Terms: Variant — the OpenFeature term for a possible Flag value. Flag — a named feature toggle with a key, Variants, Targeting Rules, and enabled state. App — the product or service surface that groups related Flags and hosts Experiments. Experiment Run — the immutable, time-boxed unit of experiment analysis.
+
+Example arguments: {"appId":"app_1","flagId":"flag_1","variantName":"variantName","idempotency_key":"idem-1","value":true}
 
 Usage:
   splitch flag-variants update <flag-id-or-key> <variant-name> [flags]
@@ -1180,6 +1475,12 @@ Request body (--body-json):
 Example:
   splitch flag-variants update <flag-id-or-key> <variant-name> --body-json '{"value":true,"idempotency_key":"idem-1"}' --json",
     "flags create": "Create a Flag definition (key, schema, Variant catalog, lifecycle class).
+
+Formats: appId: required canonical id. lifecycleClass: required Why the Flag exists: release and experiment Flags are temporary and need owner and expiresAt; ops and permission Flags may be permanent. one of "ops", "permission", "release", "experiment". owner: optional Person or team that answers for removing the Flag. expiresAt: optional When the Flag is due for removal (ISO 8601); stored as UTC.
+
+Terms: Variant — the OpenFeature term for a possible Flag value. Flag — a named feature toggle with a key, Variants, Targeting Rules, and enabled state.
+
+Example arguments: {"appId":"app_1","name":"name","key":"key","variants":[{"name":"name","value":true,"isDefault":true}],"lifecycleClass":"ops","idempotency_key":"idem-1"}
 
 Usage:
   splitch flags create [flags]
@@ -1215,6 +1516,12 @@ Example:
   splitch flags create --key checkout --variants on,off --lifecycle-class release --owner checkout-team --expires-at 2027-01-01T00:00:00Z --json",
     "flags delete": "Delete a Flag (blocked if referenced by a running Experiment).
 
+Formats: appId: required Canonical App ID (app_...) or human-readable App slug. flagId: required Canonical Flag ID (flag_...) or human-readable Flag key.
+
+Terms: Experiment — a test that compares Variants of one or more Flags to measure their effect on Metrics for a population of Entities. Flag — a named feature toggle with a key, Variants, Targeting Rules, and enabled state. App — the product or service surface that groups related Flags and hosts Experiments.
+
+Example arguments: {"appId":"app_1","flagId":"flag_1","idempotency_key":"idem-1","codeRemoval":{"reference":"reference","state":"claimed"}}
+
 Usage:
   splitch flags delete <flag-id-or-key> [flags]
 
@@ -1240,6 +1547,10 @@ Example:
   splitch flags delete <flag-id-or-key> --body-json '{"codeRemoval":{"reference":"reference","state":"claimed"}}' --json",
     "flags get": "Get a Flag definition by canonical ID or key. Returns complete per-Environment Flag Configurations and running Experiment references for every Environment in the App by default.
 
+Formats: appId: required Canonical App ID (app_...) or human-readable App slug. flagId: required Canonical Flag ID (flag_...) or human-readable Flag key. by: optional one of "id", "key". include: optional one of "config".
+
+Terms: Environment — a named deployment context under an App, such as \`dev\` or \`prod\`. Experiment — a test that compares Variants of one or more Flags to measure their effect on Metrics for a population of Entities. Flag — a named feature toggle with a key, Variants, Targeting Rules, and enabled state. App — the product or service surface that groups related Flags and hosts Experiments.
+
 Usage:
   splitch flags get <flag-id-or-key> [flags]
 
@@ -1255,6 +1566,10 @@ Example:
   splitch flags get <flag-id-or-key> --json",
     "flags list": "List every readable Flag across the principal's Apps, ordered by App then Flag key (bounded; reports its own truncation). Returns complete per-Environment Flag Configurations and running Experiment references for every Environment across those Apps by default.
 
+Formats: include: optional one of "config".
+
+Terms: Environment — a named deployment context under an App, such as \`dev\` or \`prod\`. Experiment — a test that compares Variants of one or more Flags to measure their effect on Metrics for a population of Entities. Flag — a named feature toggle with a key, Variants, Targeting Rules, and enabled state. App — the product or service surface that groups related Flags and hosts Experiments.
+
 Usage:
   splitch flags list [flags]
 
@@ -1268,6 +1583,12 @@ Flags:
 Example:
   splitch flags list --json",
     "flags promote": "Promote selected Flag Configuration field-groups between Environments.
+
+Formats: appId: required Canonical App ID (app_...) or human-readable App slug. targetEnvironmentId: required Canonical Environment ID (env_...) or human-readable Environment key. flagId: required Canonical Flag ID (flag_...) or human-readable Flag key. by: optional one of "id". fromEnvironmentId: required canonical id.
+
+Terms: Environment — a named deployment context under an App, such as \`dev\` or \`prod\`. Flag — a named feature toggle with a key, Variants, Targeting Rules, and enabled state. App — the product or service surface that groups related Flags and hosts Experiments.
+
+Example arguments: {"appId":"app_1","targetEnvironmentId":"targetEnvironment_1","flagId":"flag_1","fromEnvironmentId":"fromEnvironment_1","select":{"availability":[],"targeting":true,"rollout":true,"enabled":true},"idempotency_key":"idem-1"}
 
 Usage:
   splitch flags promote <flag-id-or-key> [flags]
@@ -1290,9 +1611,17 @@ Request body (--body-json):
   Example:
     {"fromEnvironmentId":"fromEnvironment_1","select":{"availability":[],"targeting":true,"rollout":true,"enabled":true},"idempotency_key":"idem-1"}
 
+Behavior:
+  A successful write may include optional next naming the registered tool to call next (omitted when not determinable).
+  Without --json, the CLI prints any next hint to stderr; MCP returns next in structuredContent.
+
 Example:
   splitch flags promote <flag-id-or-key> --body-json '{"fromEnvironmentId":"fromEnvironment_1","select":{"availability":[],"targeting":true,"rollout":true,"enabled":true},"idempotency_key":"idem-1"}' --json",
     "flags test-eval": "Dry-run resolve a Flag with the flat data-plane reason token and full resolution detail without firing an Exposure.
+
+Formats: appId: required Canonical App ID (app_...) or human-readable App slug. environmentId: required Canonical Environment ID (env_...) or human-readable Environment key. flagKey: required canonical id. by: optional one of "id".
+
+Terms: Environment — a named deployment context under an App, such as \`dev\` or \`prod\`. Exposure — the event that an Entity actually encountered its assigned Variant. Flag — a named feature toggle with a key, Variants, Targeting Rules, and enabled state. App — the product or service surface that groups related Flags and hosts Experiments.
 
 Usage:
   splitch flags test-eval <flag-key> [flags]
@@ -1316,6 +1645,12 @@ Request body (--body-json):
 Example:
   splitch flags test-eval <flag-key> --targeting-key workspace-123 --id-type workspace --json",
     "flags update": "Update a Flag definition's name, description, schema, or lifecycle.
+
+Formats: appId: required Canonical App ID (app_...) or human-readable App slug. flagId: required Canonical Flag ID (flag_...) or human-readable Flag key. lifecycleClass: optional one of "ops", "permission", "release", "experiment". owner: optional Person or team that answers for removing the Flag. expiresAt: optional When the Flag is due for removal (ISO 8601); stored as UTC.
+
+Terms: Flag — a named feature toggle with a key, Variants, Targeting Rules, and enabled state. App — the product or service surface that groups related Flags and hosts Experiments.
+
+Example arguments: {"appId":"app_1","flagId":"flag_1","lifecycleClass":"ops"}
 
 Usage:
   splitch flags update <flag-id-or-key> [flags]
@@ -1362,7 +1697,13 @@ Credential semantics:
 
 Example:
   splitch flags verify checkout --targeting-key workspace-123 --id-type workspace --json",
-    "metrics create": "Create a Metric (binomial, count, revenue, ratio, guardrail).
+    "metrics create": "Create a Metric (binomial, count, revenue, ratio, retention, guardrail).
+
+Formats: appId: required canonical id. kind: required one of "binomial", "count", "revenue", "ratio", "retention". eventDefinitionId: optional canonical id. direction: optional one of "higher_is_better", "lower_is_better".
+
+Terms: Metric — a fact plus an aggregation.
+
+Example arguments: {"appId":"app_1","name":"name","key":"key","kind":"binomial"}
 
 Usage:
   splitch metrics create [flags]
@@ -1380,7 +1721,7 @@ Request body (--body-json):
   appId                      required  string
   name                       required  string
   key                        required  string
-  kind                       required  string ("binomial" | "count" | "revenue" | "ratio")
+  kind                       required  string ("binomial" | "count" | "revenue" | "ratio" | "retention")
   eventDefinitionId          optional  string
   eventFieldName             optional  string
   numerator                  optional  { metricId: string }
@@ -1392,6 +1733,8 @@ Request body (--body-json):
   winsorizePct               optional  number | null
   cuped                      optional  boolean | null
   cupedCoverageThresholdPct  optional  number | null
+  horizonStartMs             optional  number | null
+  horizonEndMs               optional  number | null
   idempotency_key            optional  string
   Example:
     {"appId":"app_1","name":"name","key":"key","kind":"binomial"}
@@ -1399,6 +1742,12 @@ Request body (--body-json):
 Example:
   splitch metrics create --body-json '{"appId":"app_1","name":"name","key":"key","kind":"binomial"}' --json",
     "metrics delete": "Delete a Metric (blocked if referenced by a running Experiment).
+
+Formats: appId: required Canonical App ID (app_...) or human-readable App slug. metricId: required canonical id.
+
+Terms: Experiment — a test that compares Variants of one or more Flags to measure their effect on Metrics for a population of Entities. Metric — a fact plus an aggregation. App — the product or service surface that groups related Flags and hosts Experiments.
+
+Example arguments: {"appId":"app_1","metricId":"metric_1"}
 
 Usage:
   splitch metrics delete <metric-id> [flags]
@@ -1412,6 +1761,10 @@ Example:
   splitch metrics delete <metric-id> --json",
     "metrics get": "Get a Metric.
 
+Formats: appId: required Canonical App ID (app_...) or human-readable App slug. metricId: required canonical id.
+
+Terms: Metric — a fact plus an aggregation. App — the product or service surface that groups related Flags and hosts Experiments.
+
 Usage:
   splitch metrics get <metric-id> [flags]
 
@@ -1424,6 +1777,10 @@ Example:
   splitch metrics get <metric-id> --json",
     "metrics list": "List Metrics in an App.
 
+Formats: appId: required Canonical App ID (app_...) or human-readable App slug.
+
+Terms: Metric — a fact plus an aggregation. App — the product or service surface that groups related Flags and hosts Experiments.
+
 Usage:
   splitch metrics list [flags]
 
@@ -1435,6 +1792,12 @@ Flags:
 Example:
   splitch metrics list --json",
     "metrics update": "Update a Metric (decision-valid edits gated by DECISION_LOCKED).
+
+Formats: appId: required Canonical App ID (app_...) or human-readable App slug. metricId: required canonical id. kind: optional one of "binomial", "count", "revenue", "ratio", "retention". eventDefinitionId: optional canonical id. direction: optional one of "higher_is_better", "lower_is_better".
+
+Terms: Metric — a fact plus an aggregation. App — the product or service surface that groups related Flags and hosts Experiments.
+
+Example arguments: {"appId":"app_1","metricId":"metric_1","kind":"binomial"}
 
 Usage:
   splitch metrics update <metric-id> [flags]
@@ -1450,7 +1813,7 @@ Flags:
 Request body (--body-json):
   name                       optional  string
   key                        optional  string
-  kind                       optional  string ("binomial" | "count" | "revenue" | "ratio")
+  kind                       optional  string ("binomial" | "count" | "revenue" | "ratio" | "retention")
   eventDefinitionId          optional  string | null
   eventFieldName             optional  string | null
   numerator                  optional  { metricId: string }
@@ -1462,12 +1825,18 @@ Request body (--body-json):
   winsorizePct               optional  number | null
   cuped                      optional  boolean | null
   cupedCoverageThresholdPct  optional  number | null
+  horizonStartMs             optional  number | null
+  horizonEndMs               optional  number | null
   Example:
     {"kind":"binomial"}
 
 Example:
   splitch metrics update <metric-id> --body-json '{"kind":"binomial"}' --json",
     "organization-members add": "Add a member to an organization.
+
+Formats: orgId: required canonical id. userId: required canonical id. role: required one of "owner", "admin", "member".
+
+Example arguments: {"orgId":"org_1","userId":"user_1","role":"owner"}
 
 Usage:
   splitch organization-members add --org <organization> [flags]
@@ -1488,6 +1857,8 @@ Example:
   splitch organization-members add --org <organization> --body-json '{"userId":"user_1","role":"owner"}' --json",
     "organization-members list": "List organization members.
 
+Formats: orgId: required canonical id.
+
 Usage:
   splitch organization-members list --org <organization> [flags]
 
@@ -1500,6 +1871,10 @@ Example:
   splitch organization-members list --org <organization> --json",
     "organization-members remove": "Remove a member (rejected if removing the last owner).
 
+Formats: orgId: required canonical id. userId: required canonical id.
+
+Example arguments: {"orgId":"org_1","userId":"user_1"}
+
 Usage:
   splitch organization-members remove --org <organization> <user-id> [flags]
 
@@ -1511,6 +1886,10 @@ Flags:
 Example:
   splitch organization-members remove --org <organization> <user-id> --json",
     "organization-members update": "Change a member's role.
+
+Formats: orgId: required canonical id. userId: required canonical id. role: required one of "owner", "admin", "member".
+
+Example arguments: {"orgId":"org_1","userId":"user_1","role":"owner"}
 
 Usage:
   splitch organization-members update --org <organization> <user-id> [flags]
@@ -1530,6 +1909,10 @@ Example:
   splitch organization-members update --org <organization> <user-id> --body-json '{"role":"owner"}' --json",
     "organization-usage get": "Get an Organization's current-month Evaluation usage breakdown.
 
+Formats: orgId: required canonical id.
+
+Terms: Organization — the account and ownership unit. It owns Apps and has Users as members.
+
 Usage:
   splitch organization-usage get --org <organization> [flags]
 
@@ -1541,6 +1924,10 @@ Flags:
 Example:
   splitch organization-usage get --org <organization> --json",
     "orgs create": "Create an organization; the calling principal becomes its owner.
+
+Formats: no id, timestamp, or enum arguments.
+
+Example arguments: {"name":"name"}
 
 Usage:
   splitch orgs create [flags]
@@ -1561,6 +1948,8 @@ Example:
   splitch orgs create --name "My Org" --json",
     "orgs get": "Get one organization.
 
+Formats: orgId: required canonical id.
+
 Usage:
   splitch orgs get --org <organization> [flags]
 
@@ -1573,6 +1962,8 @@ Example:
   splitch orgs get --org <organization> --json",
     "orgs list": "List organizations the token can reach (agent cold-start entry).
 
+Formats: no id, timestamp, or enum arguments.
+
 Usage:
   splitch orgs list [flags]
 
@@ -1583,6 +1974,10 @@ Flags:
 Example:
   splitch orgs list --json",
     "orgs update": "Rename an organization or change its plan.
+
+Formats: orgId: required canonical id. plan: optional one of "free", "pro", "enterprise".
+
+Example arguments: {"orgId":"org_1","plan":"free"}
 
 Usage:
   splitch orgs update --org <organization> [flags]
@@ -1603,6 +1998,12 @@ Request body (--body-json):
 Example:
   splitch orgs update --org <organization> --body-json '{"plan":"free"}' --json",
     "runs conclude": "End a Run, freeze its decision evidence, and request winner Promotion.
+
+Formats: appId: required Canonical App ID (app_...) or human-readable App slug. environmentId: required Canonical Environment ID (env_...) or human-readable Environment key. experimentId: required canonical id. runId: required canonical id. by: optional one of "id". idempotencyKey: required canonical id.
+
+Terms: Environment — a named deployment context under an App, such as \`dev\` or \`prod\`. Promotion — applying a Flag Configuration, or a Variant's availability, to a target Environment. App — the product or service surface that groups related Flags and hosts Experiments. Experiment Run — the immutable, time-boxed unit of experiment analysis.
+
+Example arguments: {"appId":"app_1","environmentId":"environment_1","experimentId":"experiment_1","runId":"run_1","selectedVariant":"selectedVariant","expectedResultToken":"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","dataWatermark":"2026-01-01T00:00:00.000Z","target":{"environmentId":"environment_1","flagId":"flag_1","expectedConfigVersion":0,"proposedConfig":{"enabled":true,"availableVariantNames":[],"targetingRules":[{"id":"id_1","flagId":"flag_1","priority":0,"conditions":[{"attribute":"attribute","operator":"eq","value":true}],"variantId":"variant_1"}],"rollout":{"percentage":50}}},"idempotencyKey":"idem-1"}
 
 Usage:
   splitch runs conclude <experiment-id> <run-id> [flags]
@@ -1627,9 +2028,19 @@ Request body (--body-json):
   Example:
     {"selectedVariant":"selectedVariant","expectedResultToken":"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","dataWatermark":"2026-01-01T00:00:00.000Z","target":{"environmentId":"environment_1","flagId":"flag_1","expectedConfigVersion":0,"proposedConfig":{"enabled":true,"availableVariantNames":[],"targetingRules":[{"id":"id_1","flagId":"flag_1","priority":0,"conditions":[{"attribute":"attribute","operator":"eq","value":true}],"variantId":"variant_1"}],"rollout":{"percentage":50}}},"idempotencyKey":"idem-1"}
 
+Behavior:
+  A successful write may include optional next naming the registered tool to call next (omitted when not determinable).
+  Without --json, the CLI prints any next hint to stderr; MCP returns next in structuredContent.
+
 Example:
   splitch runs conclude <experiment-id> <run-id> --body-json '{"selectedVariant":"selectedVariant","expectedResultToken":"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","dataWatermark":"2026-01-01T00:00:00.000Z","target":{"environmentId":"environment_1","flagId":"flag_1","expectedConfigVersion":0,"proposedConfig":{"enabled":true,"availableVariantNames":[],"targetingRules":[{"id":"id_1","flagId":"flag_1","priority":0,"conditions":[{"attribute":"attribute","operator":"eq","value":true}],"variantId":"variant_1"}],"rollout":{"percentage":50}}},"idempotencyKey":"idem-1"}' --json",
     "runs end": "End a running Run.
+
+Formats: appId: required Canonical App ID (app_...) or human-readable App slug. environmentId: required Canonical Environment ID (env_...) or human-readable Environment key. runId: required canonical id. by: optional one of "id".
+
+Terms: Environment — a named deployment context under an App, such as \`dev\` or \`prod\`. App — the product or service surface that groups related Flags and hosts Experiments. Experiment Run — the immutable, time-boxed unit of experiment analysis.
+
+Example arguments: {"appId":"app_1","environmentId":"environment_1","runId":"run_1","reason":"reason"}
 
 Usage:
   splitch runs end <run-id> [flags]
@@ -1651,6 +2062,10 @@ Example:
   splitch runs end <run-id> --body-json '{"reason":"reason"}' --json",
     "runs get": "Get a full Run (frozen assignment + measurement config + status).
 
+Formats: appId: required Canonical App ID (app_...) or human-readable App slug. environmentId: required Canonical Environment ID (env_...) or human-readable Environment key. experimentId: required canonical id. runId: required canonical id. by: optional one of "id".
+
+Terms: Environment — a named deployment context under an App, such as \`dev\` or \`prod\`. App — the product or service surface that groups related Flags and hosts Experiments. Experiment Run — the immutable, time-boxed unit of experiment analysis.
+
 Usage:
   splitch runs get <experiment-id> <run-id> [flags]
 
@@ -1665,6 +2080,10 @@ Example:
   splitch runs get <experiment-id> <run-id> --json",
     "runs list": "List an Experiment's Runs (newest first).
 
+Formats: appId: required Canonical App ID (app_...) or human-readable App slug. environmentId: required Canonical Environment ID (env_...) or human-readable Environment key. experimentId: required canonical id. by: optional one of "id".
+
+Terms: Environment — a named deployment context under an App, such as \`dev\` or \`prod\`. Experiment — a test that compares Variants of one or more Flags to measure their effect on Metrics for a population of Entities. Experiment Run — the immutable, time-boxed unit of experiment analysis. App — the product or service surface that groups related Flags and hosts Experiments.
+
 Usage:
   splitch runs list <experiment-id> [flags]
 
@@ -1678,6 +2097,12 @@ Flags:
 Example:
   splitch runs list <experiment-id> --json",
     "segments create": "Create a Segment.
+
+Formats: appId: required Canonical App ID (app_...) or human-readable App slug.
+
+Terms: App — the product or service surface that groups related Flags and hosts Experiments.
+
+Example arguments: {"appId":"app_1","name":"name","conditions":[{"attribute":"attribute","operator":"eq","value":true}]}
 
 Usage:
   splitch segments create [flags]
@@ -1702,6 +2127,12 @@ Example:
   splitch segments create --body-json '{"name":"name","conditions":[{"attribute":"attribute","operator":"eq","value":true}]}' --json",
     "segments delete": "Delete a Segment when no mutable Flag Configuration or Experiment draft uses it.
 
+Formats: appId: required Canonical App ID (app_...) or human-readable App slug. segmentId: required canonical id.
+
+Terms: Experiment — a test that compares Variants of one or more Flags to measure their effect on Metrics for a population of Entities. Flag — a named feature toggle with a key, Variants, Targeting Rules, and enabled state. App — the product or service surface that groups related Flags and hosts Experiments.
+
+Example arguments: {"appId":"app_1","segmentId":"segment_1"}
+
 Usage:
   splitch segments delete <segment-id> [flags]
 
@@ -1713,6 +2144,10 @@ Flags:
 Example:
   splitch segments delete <segment-id> --json",
     "segments get": "Get a Segment.
+
+Formats: appId: required Canonical App ID (app_...) or human-readable App slug. segmentId: required canonical id.
+
+Terms: App — the product or service surface that groups related Flags and hosts Experiments.
 
 Usage:
   splitch segments get <segment-id> [flags]
@@ -1726,6 +2161,10 @@ Example:
   splitch segments get <segment-id> --json",
     "segments list": "List Segments in an App.
 
+Formats: appId: required Canonical App ID (app_...) or human-readable App slug.
+
+Terms: App — the product or service surface that groups related Flags and hosts Experiments.
+
 Usage:
   splitch segments list [flags]
 
@@ -1737,6 +2176,12 @@ Flags:
 Example:
   splitch segments list --json",
     "segments update": "Update a Segment.
+
+Formats: appId: required Canonical App ID (app_...) or human-readable App slug. segmentId: required canonical id.
+
+Terms: App — the product or service surface that groups related Flags and hosts Experiments.
+
+Example arguments: {"appId":"app_1","segmentId":"segment_1","name":"name"}
 
 Usage:
   splitch segments update <segment-id> [flags]
@@ -1762,6 +2207,12 @@ Example:
   splitch segments update <segment-id> --body-json '{"name":"name"}' --json",
     "sentry-installations create": "Send this Organization's Flag changes to a Sentry organization.
 
+Formats: orgId: required canonical id. installationId: required canonical id.
+
+Terms: Organization — the account and ownership unit. It owns Apps and has Users as members. Flag — a named feature toggle with a key, Variants, Targeting Rules, and enabled state.
+
+Example arguments: {"orgId":"org_1","installationId":"018f2b7c-3c9a-7b3e-9a52-0c1d2e3f4a5b","webhookUrl":"https://app.example.com"}
+
 Usage:
   splitch sentry-installations create --org <organization> [flags]
 
@@ -1782,6 +2233,10 @@ Example:
   splitch sentry-installations create --org <organization> --body-json '{"installationId":"018f2b7c-3c9a-7b3e-9a52-0c1d2e3f4a5b","webhookUrl":"https://app.example.com"}' --output-file <secret-file> --json",
     "sentry-installations delete": "Revoke a Sentry integration and stop change delivery.
 
+Formats: orgId: required canonical id. installationId: required canonical id.
+
+Example arguments: {"orgId":"org_1","installationId":"018f2b7c-3c9a-7b3e-9a52-0c1d2e3f4a5b"}
+
 Usage:
   splitch sentry-installations delete --org <organization> <installation-id> [flags]
 
@@ -1793,6 +2248,8 @@ Flags:
 Example:
   splitch sentry-installations delete --org <organization> <installation-id> --json",
     "sentry-installations get": "Read Sentry change-tracking delivery health without secrets.
+
+Formats: orgId: required canonical id. installationId: required canonical id.
 
 Usage:
   splitch sentry-installations get --org <organization> <installation-id> [flags]
@@ -1806,6 +2263,8 @@ Example:
   splitch sentry-installations get --org <organization> <installation-id> --json",
     "sentry-installations list": "List Sentry change-tracking installations and their delivery health.
 
+Formats: orgId: required canonical id.
+
 Usage:
   splitch sentry-installations list --org <organization> [flags]
 
@@ -1817,6 +2276,10 @@ Flags:
 Example:
   splitch sentry-installations list --org <organization> --json",
     "sentry-secret-rotations create": "Rotate the Sentry webhook signing secret.
+
+Formats: orgId: required canonical id. installationId: required canonical id. rotationId: required canonical id.
+
+Example arguments: {"orgId":"org_1","installationId":"018f2b7c-3c9a-7b3e-9a52-0c1d2e3f4a5b","rotationId":"018f2b7c-3c9a-7b3e-9a52-0c1d2e3f4a5b"}
 
 Usage:
   splitch sentry-secret-rotations create --org <organization> <installation-id> [flags]
@@ -1836,6 +2299,10 @@ Request body (--body-json):
 Example:
   splitch sentry-secret-rotations create --org <organization> <installation-id> --body-json '{"rotationId":"018f2b7c-3c9a-7b3e-9a52-0c1d2e3f4a5b"}' --output-file <secret-file> --json",
     "stale-flags list": "List Flags that look stale from configuration state (uniform serving, past expiry, or unchanged), with typed reasons. Serving evidence is always unverified. Suggest only; never archives.
+
+Formats: appId: required Canonical App ID (app_...) or human-readable App slug.
+
+Terms: Flag — a named feature toggle with a key, Variants, Targeting Rules, and enabled state. App — the product or service surface that groups related Flags and hosts Experiments.
 
 Usage:
   splitch stale-flags list [flags]
@@ -2102,8 +2569,8 @@ Usage:
   splitch experiment-results <action> [arguments] [flags]
 
 Commands:
-  get             Get an Experiment's results: readiness, blockedBy, and reasons first; detailed stats by default; view=concise for the verdict block only. States: ready, no_data (names the missing input), or no_run (names Start).
-  post            Get an Experiment's results: readiness, blockedBy, and reasons first; detailed stats by default; view=concise for the verdict block only. States: ready, no_data (names the missing input), or no_run (names Start).
+  get             Get an Experiment's results: readiness, blockedBy, reasons, then ship recommendation when pre-registered; detailed stats by default; view=concise for the verdict block (includeExploratory attaches stats). States: ready, no_data, or no_run.
+  post            Get an Experiment's results: readiness, blockedBy, reasons, then ship recommendation when pre-registered; detailed stats by default; view=concise for the verdict block (includeExploratory attaches stats). States: ready, no_data, or no_run.
 
 Flags:
   -h, --help  [type: boolean; default: false] Show help and exit.
@@ -2251,7 +2718,7 @@ Usage:
 
 Commands:
   list            List Metrics in an App.
-  create          Create a Metric (binomial, count, revenue, ratio, guardrail).
+  create          Create a Metric (binomial, count, revenue, ratio, retention, guardrail).
   get             Get a Metric.
   update          Update a Metric (decision-valid edits gated by DECISION_LOCKED).
   delete          Delete a Metric (blocked if referenced by a running Experiment).

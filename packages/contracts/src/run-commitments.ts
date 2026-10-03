@@ -81,7 +81,7 @@ const frozenCommitmentsFields = {
   planned_duration_override_reason: z.string().min(1).nullable(),
   /**
    * Optional: absent when Start omitted pre-registration. Never invented for a
-   * legacy Run. Scorecard / ship recommendation (2.4) are out of scope here.
+   * legacy Run. The ship recommendation (2.4) reads this from the producer.
    */
   pre_registration: PreRegistrationSchema.optional(),
 } as const;

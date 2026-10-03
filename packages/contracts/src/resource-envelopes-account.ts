@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { MetricSchema } from "./leaf-schemas-experiment";
+import { applyMetricHorizonRefine } from "./leaf-schemas-metric-horizon";
 import {
   APIKeySchema,
   AppSchema,
@@ -56,6 +57,8 @@ const MetricAnalysisFields = {
   winsorizePct: MetricSchema.shape.winsorizePct,
   cuped: MetricSchema.shape.cuped,
   cupedCoverageThresholdPct: MetricSchema.shape.cupedCoverageThresholdPct,
+  horizonStartMs: MetricSchema.shape.horizonStartMs,
+  horizonEndMs: MetricSchema.shape.horizonEndMs,
 };
 
 export const CreateMetricRequestSchema = z
@@ -72,7 +75,8 @@ export const CreateMetricRequestSchema = z
     ...MetricAnalysisFields,
     idempotency_key: IdempotencyKeySchema.optional(),
   })
-  .strict();
+  .strict()
+  .superRefine(applyMetricHorizonRefine);
 export type CreateMetricRequest = z.infer<typeof CreateMetricRequestSchema>;
 
 // All fields optional; Metric patches are measurement edits that recompute over

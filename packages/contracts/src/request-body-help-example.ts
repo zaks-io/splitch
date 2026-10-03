@@ -21,7 +21,7 @@ export function exampleForObject(
   return example;
 }
 
-function buildExampleCandidate(
+export function buildExampleCandidate(
   schema: z.ZodObject,
   fields: readonly RequestBodyFieldHelp[],
 ): Record<string, unknown> {

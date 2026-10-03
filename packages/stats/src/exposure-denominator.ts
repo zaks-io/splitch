@@ -1,4 +1,5 @@
 import type { ActivationRow, DedupeExposureRow } from "@splitch/contracts";
+import { earliestValidActivationTs } from "./srm-activated-arrival";
 
 export const MULTIPLE_VARIANT = "__multiple__";
 
@@ -68,7 +69,14 @@ export function activatedExposureRows(input: ActivatedExposureInput): DedupeExpo
       continue;
     }
 
-    entities.set(`${exposure.variant}/${exposure.targeting_key_hash}`, exposure);
+    // analysis_deduped_exposures emits window_anchor = first_exposure_ts.
+    // Tinybird's gated Metric window uses min(activation_ts) where
+    // activation_ts > first_exposure_ts; re-anchor so Retention maturity
+    // matches that Conversion Window.
+    entities.set(`${exposure.variant}/${exposure.targeting_key_hash}`, {
+      ...exposure,
+      window_anchor: earliestValidActivationTs(exposure, activationsByEntity),
+    });
   }
 
   return [...entities.values()];

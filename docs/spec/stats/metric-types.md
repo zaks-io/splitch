@@ -5,12 +5,13 @@ variance computation ([inference-engine.md](inference-engine.md)).
 
 ## Metric taxonomy
 
-| Type       | CONTEXT.md term | Aggregation per Entity      | Variance estimator           |
-| ---------- | --------------- | --------------------------- | ---------------------------- |
-| `binomial` | Binomial Metric | `0` or `1` (did/didn't)     | `p(1-p)`                     |
-| `count`    | Count Metric    | sum of event values         | sample variance of sums      |
-| `revenue`  | Revenue Metric  | sum of event values         | sample variance of sums      |
-| `ratio`    | Ratio Metric    | `(num_sum, denom_sum)` pair | delta method with covariance |
+| Type        | CONTEXT.md term  | Aggregation per Entity      | Variance estimator            |
+| ----------- | ---------------- | --------------------------- | ----------------------------- |
+| `binomial`  | Binomial Metric  | `0` or `1` (did/didn't)     | `p(1-p)`                      |
+| `retention` | Retention Metric | `0` or `1` inside a horizon | `p(1-p)` on eligible Entities |
+| `count`     | Count Metric     | sum of event values         | sample variance of sums       |
+| `revenue`   | Revenue Metric   | sum of event values         | sample variance of sums       |
+| `ratio`     | Ratio Metric     | `(num_sum, denom_sum)` pair | delta method with covariance  |
 
 A "Conversion" is informal language for a Binomial Metric event. It is not a first-class type.
 
@@ -27,6 +28,26 @@ y_i = 1 if entity_i had >= 1 qualifying event in Conversion Window, else 0
 - Aggregation: one boolean fold per Entity per Run.
 - Denominator for variance: unique Entities in the arm (deduped, first-touch).
 - Winsorization: **never applied** (0/1 has no tail).
+
+### Retention Metric
+
+```
+y_i = 1 if entity_i had >= 1 qualifying event in [anchor + horizon_start, anchor + horizon_end), else 0
+```
+
+- Same Conversion Window **anchor** as every other Metric (`window_anchor`: first Exposure, or
+  Activation when the Run is gated).
+- Query: reuse the Binomial pipe with `window_offset_ms = horizon_start_ms` and
+  `window_duration_ms = horizon_end_ms - horizon_start_ms`. No separate pipe.
+- Eligibility: Entity `i` is in this Metric's numerator **and** denominator iff
+  `anchor_i + horizon_end_ms <= analysis watermark`. Immature Entities are omitted from this Metric
+  only; every other Metric still uses the full Exposure denominator.
+- Counting an immature Entity as `0` would treat "not yet mature" as "not retained". Dropping
+  Exposures to wait for maturity would shrink every Metric's denominator.
+- Winsorization: **never applied**.
+- Kaplan-Meier (time-to-event with censoring) is a **separate future contract**. This slice is a
+  horizon-gated binomial. Public online writing on this exact per-Metric maturity rule is thin; the
+  rule is the product contract.
 
 ### Count Metric
 
@@ -113,18 +134,20 @@ activation rows satisfy this invariant.
 
 ## Metric definition fields
 
-| Field                    | Type                                    | Required | Meaning                                                                 |
-| ------------------------ | --------------------------------------- | -------- | ----------------------------------------------------------------------- |
-| `metric_id`              | `string`                                | yes      | Unique within App                                                       |
-| `metric_type`            | `binomial \| count \| revenue \| ratio` | yes      |                                                                         |
-| `event_definition_id`    | `string \| null`                        | cond.    | Required for non-Ratio Metrics                                          |
-| `event_field_name`       | `string \| null`                        | cond.    | Declared number field; required for Count and Revenue                   |
-| `numerator_metric_id`    | `string \| null`                        | cond.    | Ratio-only, same-App non-Ratio Metric                                   |
-| `denominator_metric_id`  | `string \| null`                        | cond.    | Ratio-only, same-App non-Ratio Metric                                   |
-| `window_duration`        | `duration`                              | yes      | Per-Metric window override                                              |
-| `winsorize`              | `boolean`                               | yes      | Default `true` for count/revenue/ratio, `false` for binomial (ADR-0016) |
-| `winsorize_pct`          | `number`                                | yes      | Default `99.9`; ignored if winsorize=false                              |
-| `downside_threshold_pct` | `number \| null`                        | no       | Percent. Set to make this a Guardrail Metric                            |
+| Field                    | Type                                                 | Required | Meaning                                                                           |
+| ------------------------ | ---------------------------------------------------- | -------- | --------------------------------------------------------------------------------- |
+| `metric_id`              | `string`                                             | yes      | Unique within App                                                                 |
+| `metric_type`            | `binomial \| count \| revenue \| ratio \| retention` | yes      |                                                                                   |
+| `event_definition_id`    | `string \| null`                                     | cond.    | Required for non-Ratio Metrics                                                    |
+| `event_field_name`       | `string \| null`                                     | cond.    | Declared number field; required for Count and Revenue                             |
+| `numerator_metric_id`    | `string \| null`                                     | cond.    | Ratio-only, same-App non-Ratio Metric                                             |
+| `denominator_metric_id`  | `string \| null`                                     | cond.    | Ratio-only, same-App non-Ratio Metric                                             |
+| `horizon_start_ms`       | `integer \| null`                                    | cond.    | Retention only; start of `[anchor + start, anchor + end)`                         |
+| `horizon_end_ms`         | `integer \| null`                                    | cond.    | Retention only; must be greater than `horizon_start_ms`                           |
+| `window_duration`        | `duration`                                           | yes      | Per-Metric window override                                                        |
+| `winsorize`              | `boolean`                                            | yes      | Default `true` for count/revenue/ratio, `false` for binomial/retention (ADR-0016) |
+| `winsorize_pct`          | `number`                                             | yes      | Default `99.9`; ignored if winsorize=false                                        |
+| `downside_threshold_pct` | `number \| null`                                     | no       | Percent. Set to make this a Guardrail Metric                                      |
 
 The Analysis Worker reads `serve_deduped_metric_events` after its aggregate-state merge, not physical
 `metric_events` rows and not the Exposure/Activation `raw_events` log. For a non-Ratio Metric it

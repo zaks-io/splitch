@@ -253,4 +253,65 @@ describe("Experiment Start freezes the analysis config", () => {
     expect(frozen.find((row) => row.metric_id === optedOutId)?.cuped).toBe(false);
     expect(frozen.find((row) => row.metric_id === ratioId)?.cuped).toBe(false);
   });
+
+  it("freezes a Retention Metric as a horizon-offset Binomial query", async () => {
+    const fx = await experimentFixture(ctx);
+    const retentionId = await metric(fx.appId, "metric_d7", {
+      kind: "retention",
+      horizonStartMs: 86_400_000,
+      horizonEndMs: 172_800_000,
+    });
+    const frozen = await frozenAnalysisConfig(
+      ctx.repo,
+      fx.appId,
+      { metrics: [{ metricId: retentionId }], guardrailMetrics: [] },
+      ["treatment"],
+      60_000,
+      "user",
+      "req_retention_freeze",
+    );
+    if (!frozen.ok) throw new Error(await frozen.response.text());
+    expect(frozen.value.metricQueryConfig).toEqual([
+      {
+        metric_id: retentionId,
+        metric_type: "retention",
+        event_definition_id: `event_definition_${retentionId}_${fx.appId}`,
+        event_field_name: null,
+        window_offset_ms: 86_400_000,
+        window_duration_ms: 86_400_000,
+        horizon_start_ms: 86_400_000,
+        horizon_end_ms: 172_800_000,
+        cuped_lookback_ms: 604_800_000,
+      },
+    ]);
+    expect(frozen.value.metricVarianceConfig[0]?.winsorize).toBe(false);
+  });
+
+  it("Start ships a Retention query config without mapping the Metric to binomial", async () => {
+    const fx = await experimentFixture(ctx);
+    const retentionId = await metric(fx.appId, "metric_d7_start", {
+      kind: "retention",
+      horizonStartMs: 86_400_000,
+      horizonEndMs: 172_800_000,
+    });
+    const experiment = await createExperimentDraft(ctx, fx, {
+      key: "retention-start",
+      allocation: { control: 50, treatment: 50 },
+      metrics: [{ metricId: retentionId }],
+    });
+    const response = await startExperiment(ctx, fx, experiment.id);
+    expect(response.status).toBe(200);
+    const frozen = await frozenAnalysisConfig(
+      ctx.repo,
+      fx.appId,
+      { metrics: [{ metricId: retentionId }], guardrailMetrics: [] },
+      ["treatment"],
+      60_000,
+      "user",
+      "req_retention_start",
+    );
+    if (!frozen.ok) throw new Error(await frozen.response.text());
+    expect(frozen.value.metricQueryConfig[0]?.metric_type).toBe("retention");
+    expect(frozen.value.metricQueryConfig[0]).not.toMatchObject({ metric_type: "binomial" });
+  });
 });

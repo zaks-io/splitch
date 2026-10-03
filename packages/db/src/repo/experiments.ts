@@ -191,6 +191,8 @@ export function makeExperimentRepo(db: Db, d1: D1Database) {
           | "winsorizePct"
           | "cuped"
           | "cupedCoverageThresholdPct"
+          | "horizonStartMs"
+          | "horizonEndMs"
         >
       >,
     ): Promise<typeof metrics.$inferSelect | null> {

@@ -15,6 +15,7 @@ import {
   persistedArray,
   persistedSegmentRefArray,
 } from "./persisted-field-limits";
+import { MutationNextSchema } from "./mutation-next";
 import {
   ApprovalRequestSchema,
   InlineApproveAndApplyReviewSchema,
@@ -231,6 +232,8 @@ export const StartRunResponseSchema = z
     // Empty means all Entities are eligible via allocation; Flag Configuration
     // Targeting Rules do not apply while this Run is live (SPL-307).
     frozenTargetingRules: z.array(ResolvedTargetingRuleSchema),
+    // Omitted when the next step is not determinable (plan 1.5).
+    next: MutationNextSchema.optional(),
   })
   .strict();
 export type StartRunResponse = z.infer<typeof StartRunResponseSchema>;

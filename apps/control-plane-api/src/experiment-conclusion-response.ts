@@ -14,6 +14,7 @@ import { conclusionProjectionUnavailable } from "./experiment-conclusion-errors"
 import type { ExperimentDeps } from "./experiment-handler-shared";
 import { runResponse } from "./experiment-model";
 import { pathParam } from "./handler-input";
+import { emitNextAfterPendingApproval } from "./mutation-next-emit";
 
 export type ConclusionPathIds = ReturnType<typeof conclusionPathIds>;
 
@@ -82,10 +83,14 @@ export async function finishConclusion(
   if (!conclusion || !run || !approval) {
     throw new Error("committed conclusion could not be reloaded");
   }
+  const approvalRequest = await approvalRequestProjection(deps.repo, approval);
   const response: ConcludeRunResponse = {
     run: runResponse(run),
     conclusion: conclusionProjection(conclusion),
-    approvalRequest: await approvalRequestProjection(deps.repo, approval),
+    approvalRequest,
+    ...(approvalRequest.status === "pending"
+      ? { next: emitNextAfterPendingApproval(ids.appId, approvalRequest.id) }
+      : {}),
   };
   return Response.json(response);
 }
@@ -111,9 +116,13 @@ export async function finishReplacement(
   }
   const row = await deps.repo.approvals.getRequest(appScope(conclusion.appId), approvalId);
   if (!row) throw new Error("replacement Approval Request could not be reloaded");
+  const approvalRequest = await approvalRequestProjection(deps.repo, row);
   const response: CreateConclusionPromotionResponse = {
     conclusion: conclusionProjection(conclusion),
-    approvalRequest: await approvalRequestProjection(deps.repo, row),
+    approvalRequest,
+    ...(approvalRequest.status === "pending"
+      ? { next: emitNextAfterPendingApproval(conclusion.appId, approvalRequest.id) }
+      : {}),
   };
   return Response.json(response);
 }

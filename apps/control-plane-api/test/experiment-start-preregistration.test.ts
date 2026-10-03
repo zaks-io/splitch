@@ -158,6 +158,53 @@ describe("experiments_start pre-registration validation codes", () => {
       "PREREG_ROPE_RELATIVE_UNSUPPORTED",
     );
   });
+
+  it("returns PREREG_SHIP_RULE_RELATIVE_SEQUENTIAL_UNSUPPORTED for relative margin on sequential", async () => {
+    const fx = await experimentFixture(ctx);
+    const experiment = await createExperimentDraft(ctx, fx, {
+      key: "prereg-relative-ship-seq",
+      allocation: { control: 50, treatment: 50 },
+      salt: "prereg-relative-ship-seq-salt",
+    });
+
+    const response = await startExperiment(ctx, fx, experiment.id, {
+      // Default Start horizon is sequential.
+      preRegistration: {
+        ...validPreRegistration(fx.metricId),
+        shipRule: { ...validShipRule, marginScale: "relative" },
+      },
+    });
+
+    expect(response.status).toBe(400);
+    const body = (await response.json()) as {
+      code: string;
+      details: { issues: Array<{ code?: string; path: string[] }> };
+    };
+    expect(body.code).toBe("VALIDATION_ERROR");
+    expect(body.details.issues.map((issue) => issue.code)).toContain(
+      "PREREG_SHIP_RULE_RELATIVE_SEQUENTIAL_UNSUPPORTED",
+    );
+  });
+
+  it("accepts relative ship-rule margin on a fixed-horizon Start", async () => {
+    const fx = await experimentFixture(ctx);
+    const experiment = await createExperimentDraft(ctx, fx, {
+      key: "prereg-relative-ship-fixed",
+      allocation: { control: 50, treatment: 50 },
+      salt: "prereg-relative-ship-fixed-salt",
+    });
+
+    const response = await startExperiment(ctx, fx, experiment.id, {
+      horizon: "fixed",
+      sampleSizeLocked: 5_000,
+      preRegistration: {
+        ...validPreRegistration(fx.metricId),
+        shipRule: { ...validShipRule, marginScale: "relative" },
+      },
+    });
+
+    expect(response.status).toBe(200);
+  });
 });
 
 describe("experiments_start pre-registration success path", () => {

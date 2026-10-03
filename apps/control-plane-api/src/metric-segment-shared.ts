@@ -53,6 +53,8 @@ export function metricResponse(row: MetricRow): Metric {
     winsorizePct: row.winsorizePct,
     cuped: row.cuped,
     cupedCoverageThresholdPct: row.cupedCoverageThresholdPct,
+    horizonStartMs: row.horizonStartMs,
+    horizonEndMs: row.horizonEndMs,
     createdAt: row.createdAt,
   };
 }

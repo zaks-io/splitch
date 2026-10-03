@@ -1,10 +1,11 @@
 import { z } from "zod";
 import { ErrorResponseSchema } from "./errors";
 import { KILL_SWITCH_OFF_EXEMPTION } from "./kill-switch-off-exemption";
+import { composeMcpToolDescription } from "./mcp-tool-description";
 import { type ApiRouteContract, jsonMediaTypeSchema } from "./openapi-route";
 import { IdempotencyKeySchema } from "./persisted-field-limits";
-import { routeRegistry } from "./route-registry";
 import { mcpReversibilityMeta, mcpToolAnnotations } from "./route-effects";
+import { routeRegistry } from "./route-registry";
 
 /**
  * MCP tool-schema derivation from THE single route registry (ADR-0023/0025). One
@@ -186,21 +187,28 @@ function deriveOutputSchema(route: ApiRouteContract): z.ZodTypeAny {
 
 /** Derive one MCP tool from one control-plane route. */
 function deriveTool(route: ApiRouteContract): McpToolDefinition {
+  const inputSchema = deriveInputSchema(route);
   return {
     name: route.operationId,
-    description: toolDescription(route),
-    inputSchema: deriveInputSchema(route),
+    description: composeMcpToolDescription({
+      narrative: toolNarrative(route),
+      mutates: route.effects.mutates,
+      inputSchema,
+      bodySchema: requestParts(route).body,
+      operationId: route.operationId,
+    }),
+    inputSchema,
     outputSchema: deriveOutputSchema(route),
     errorSchema: ErrorResponseSchema,
   };
 }
 
 /**
- * MCP/CLI share this description (ADR-0023). Append the kill-switch-off
- * exemption on Flag Config update so an agent choosing the call sees ADR-0029
- * before sending `--enabled false` under a confirm Policy.
+ * Authored registry summary plus the few skin-level sentences that are not
+ * route.summary (hydrated Flag reads, kill-switch-off). Formats, glossary
+ * definitions, and mutation examples are appended from the same Zod input.
  */
-function toolDescription(route: ApiRouteContract): string {
+function toolNarrative(route: ApiRouteContract): string {
   if (route.operationId === "principal_flags_list") {
     return `${route.summary} Returns complete per-Environment Flag Configurations and running Experiment references for every Environment across those Apps by default.`;
   }

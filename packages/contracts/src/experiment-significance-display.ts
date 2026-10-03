@@ -1,5 +1,6 @@
 import { z } from "zod";
-import type { ArmResult, StatsOutput } from "./stats-result-contract";
+import type { ArmResult } from "./stats-result-arm";
+import type { StatsOutput } from "./stats-result-contract";
 
 /**
  * What a surface is allowed to claim about a result's significance.

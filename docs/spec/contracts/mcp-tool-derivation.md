@@ -16,6 +16,34 @@ outputSchema = route.responses[200] Zod schema
 errorSchema = shared ErrorResponse discriminated union (same for all tools)
 ```
 
+### Optional `next` on mutation results
+
+Selected mutation success bodies may include an optional `next` member so an agent knows what to
+call after a write (plan 1.5). Shape:
+
+```
+next?: {
+  tool: string          // canonical routeRegistry operationId
+  reason: string
+  earliestAt?: string   // ISO-8601 when the next call is first meaningful
+  args?: object         // handles the next call needs (ids, keys)
+}
+```
+
+Emitted today when determinable:
+
+| Mutation                                              | `next.tool`                       | Notes                                                                    |
+| ----------------------------------------------------- | --------------------------------- | ------------------------------------------------------------------------ |
+| `experiments_start`                                   | `experiment_results_get`          | `earliestAt` from the frozen planned duration; `args` includes `targetN` |
+| `runs_conclude` (pending Approval)                    | `approval_request_reviews_create` | `args.id` is the Approval Request id                                     |
+| `flag_config_update` / `flags_promote` (write landed) | `flags_test_eval`                 | `args.flagKey` is the Flag key                                           |
+
+Never a guess: when the next step is not determinable, `next` is omitted. Every emitted `next.tool`
+must resolve via `getRoute`. MCP returns `next` inside `structuredContent` (and the text JSON
+mirror) because `outputSchema` is the route response Zod schema. Older clients that parse with
+`parseResponseTolerantly` strip unknown additive keys (#647), so releasing a Worker that emits
+`next` before every client schema knows it remains compatible.
+
 `operationId` is explicit route metadata in `@splitch/contracts`, not inferred from the HTTP path.
 That keeps tool names stable if a path changes and prevents nested routes from generating noisy
 names. Adding a route without an `operationId`, or with a duplicate `operationId`, is a contract
@@ -421,6 +449,20 @@ App/Environment in the transport session (see [../control-plane/mcp-and-cli-surf
 **Failure contract:** a schema change in contracts is reflected in the tool definition on the next
 server restart. Drift between "what the tool says it accepts" and "what the Worker enforces" is
 impossible by construction — both consume the same Zod source.
+
+## Tool descriptions
+
+Every derived tool description is composed from the registry, never from generated MCP files:
+
+- **Formats.** Top-level id, timestamp, and enum arguments, including selector wording already on
+  the Zod field (canonical `app_...` / slug, ISO-8601 instants with offset, enum values).
+- **Terms.** Any curated CONTEXT.md glossary noun the narrative uses is defined in a `Terms:`
+  section with that glossary's wording.
+- **Example arguments.** Every mutating tool includes one JSON arguments object that parses
+  against the derived input schema.
+
+A contract test in `@splitch/contracts` fails when a mutating route lacks the example or a
+description uses a curated term without defining it.
 
 **Deletion test:** 2 real adapters already exist (MCP server and CLI), both deriving from the same
 contract package. Single-implementation boundary does not apply.

@@ -1,8 +1,9 @@
+import type { CohortEffectDiagnostic } from "./cohort-effect";
 import type { FrozenControlIdentity } from "./experiment-control-identity";
 import {
   type ExperimentDecisionGate,
-  type PersistedSrmAlarm,
   evaluateExperimentDecisionGate,
+  type PersistedSrmAlarm,
 } from "./experiment-decision-gate";
 import type { PlannedDurationEvidence } from "./experiment-decision-gate-duration";
 import {
@@ -12,14 +13,15 @@ import {
   statisticalReadiness,
 } from "./experiment-results-readiness";
 import type { ExperimentResultsResponse } from "./experiment-results-response";
+import { computeShipRecommendation } from "./ship-recommendation-compute";
 import type { SrmRootCauseClassification } from "./srm-root-cause";
 import type { AnalysisResultsEnvelope } from "./stats-result-contract";
 
 /**
- * Shared Control Plane result producer (plan 0.15). CLI, MCP, and the panel
- * all read this shape. Analysis still emits the raw envelope; this layer
- * resolves Control identity, lifecycle, duration, and permissions into
- * readiness before any skin renders a verdict.
+ * Shared Control Plane result producer (plan 0.15 / 2.4). CLI, MCP, and the
+ * panel all read this shape. Analysis still emits the raw envelope; this layer
+ * resolves Control identity, lifecycle, duration, permissions, and the ship
+ * recommendation before any skin renders a verdict.
  */
 
 export interface ExperimentResultsRunContext {
@@ -44,10 +46,20 @@ export interface ProduceExperimentResultsInput {
    */
   srmRootCause?: SrmRootCauseClassification | null;
   /**
-   * Durable analysis-v2 SRM alarms from D1. ORed into the gate and detailed
-   * stats mismatch flags. v1/legacy callers omit this.
+   * Durable analysis-v2 SRM alarms from D1. ORed into the gate and surfaced as
+   * persisted_srm_alarms; Analysis stats stay untouched. v1/legacy callers omit this.
    */
   persistedSrmAlarms?: readonly PersistedSrmAlarm[];
+  /**
+   * First-exposure-day cohort diagnostic from Analysis. Detailed mode only;
+   * omit or null when Analysis did not emit it (pre-compat Workers).
+   */
+  cohortEffect?: CohortEffectDiagnostic | null;
+  /**
+   * Concise mode omits stats unless this is true (exploratory statistics opt-in,
+   * C10 part two). Ignored for detailed (stats always present).
+   */
+  includeExploratory?: boolean;
 }
 
 const NOT_READY: ExperimentResultsReadiness = {
@@ -113,18 +125,67 @@ export function produceExperimentResults(
     }),
   ];
 
-  const base = {
-    state: "ready" as const,
-    readiness,
-    blockedBy: gate.blockedBy,
-    reasons,
+  const base = readyBase({
     gate,
+    readiness,
+    reasons,
+    analysis: input.analysis,
+    run: input.run,
+    hasEvidence,
+    srmRootCause: input.srmRootCause,
+    persistedSrmAlarms,
+  });
+
+  if (input.view === "concise") {
+    return {
+      view: "concise",
+      ...base,
+      ...(input.includeExploratory === true ? { stats: input.analysis.stats } : {}),
+    };
+  }
+  // Detailed keeps Analysis stats byte-identical: same object reference order is
+  // not guaranteed after JSON round-trip, but field set and values are unchanged.
+  // Cohort effect is additive diagnostics (detailed only), never in the token.
+  return {
+    view: "detailed",
+    ...base,
+    ...(input.cohortEffect != null ? { cohort_effect: input.cohortEffect } : {}),
+    stats: input.analysis.stats,
+  };
+}
+
+function readyBase(input: {
+  gate: ExperimentDecisionGate;
+  readiness: ExperimentResultsReadiness;
+  reasons: string[];
+  analysis: Extract<AnalysisResultsEnvelope, { state: "ready" }>;
+  run: ExperimentResultsRunContext;
+  hasEvidence: boolean;
+  srmRootCause?: SrmRootCauseClassification | null;
+  persistedSrmAlarms: readonly PersistedSrmAlarm[];
+}) {
+  const ship = computeShipRecommendation({
+    preRegistration: frozenPreRegistration(input.analysis.run_commitments),
+    gate: input.gate,
+    stats: input.analysis.stats,
+    controlVariant: input.analysis.control_variant,
+    horizon: runHorizon(input.analysis.run_commitments),
+  });
+  return {
+    state: "ready" as const,
+    readiness: input.readiness,
+    blockedBy: input.gate.blockedBy,
+    reasons: input.reasons,
+    ...(ship.recommendation !== undefined
+      ? { recommendation: ship.recommendation }
+      : { recommendationUnavailable: ship.recommendationUnavailable }),
+    gate: input.gate,
     run_id: input.analysis.run_id,
     run_number: input.run.runNumber,
     run_status: input.run.runStatus,
     control_variant: input.analysis.control_variant,
     control: input.run.control,
-    ...(hasEvidence
+    ...(input.hasEvidence
       ? {
           data_watermark: input.analysis.data_watermark,
           result_token: input.analysis.result_token,
@@ -135,20 +196,33 @@ export function produceExperimentResults(
       : {}),
     // Additive diagnostics only: never hashed into result_token (stats unchanged).
     ...(input.srmRootCause ? { srm_root_cause: input.srmRootCause } : {}),
-    ...(persistedSrmAlarms.length > 0 ? { persisted_srm_alarms: [...persistedSrmAlarms] } : {}),
+    ...(input.persistedSrmAlarms.length > 0
+      ? { persisted_srm_alarms: [...input.persistedSrmAlarms] }
+      : {}),
   };
+}
 
-  if (input.view === "concise") {
-    return { view: "concise", ...base };
+function frozenPreRegistration(
+  commitments: Extract<AnalysisResultsEnvelope, { state: "ready" }>["run_commitments"],
+) {
+  if (commitments === undefined || commitments.analysis_version_source !== "frozen") {
+    return undefined;
   }
-  // Detailed stats stay byte-identical to Analysis (result_token binding).
-  // Durable alarms apply only through the gate, diagnostics, and
-  // persisted_srm_alarms — never by rewriting stats.srm mismatch flags.
-  return {
-    view: "detailed",
-    ...base,
-    stats: input.analysis.stats,
-  };
+  return commitments.pre_registration;
+}
+
+/**
+ * Frozen commitments encode horizon via target_n: sequential has a tuning
+ * target; fixed has null. Legacy has no pre-registration, so ship never reads
+ * this path for a relative rule without a frozen Start.
+ */
+function runHorizon(
+  commitments: Extract<AnalysisResultsEnvelope, { state: "ready" }>["run_commitments"],
+): "sequential" | "fixed" | undefined {
+  if (commitments === undefined || commitments.analysis_version_source !== "frozen") {
+    return undefined;
+  }
+  return commitments.target_n === null ? "fixed" : "sequential";
 }
 
 function readyReadiness(input: {

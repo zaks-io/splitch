@@ -3,6 +3,8 @@ import {
   DEFAULT_CUPED_COVERAGE_THRESHOLD_PCT,
   DEFAULT_WINSORIZE,
   DEFAULT_WINSORIZE_PCT,
+  isPresenceMetric,
+  MetricKindSchema,
   type GuardrailDecision,
   type MetricQueryConfig,
   type MetricRef,
@@ -153,7 +155,9 @@ function varianceConfig(rows: Map<string, MetricRow>, metricId: string): MetricV
   if (!row) throw new Error(`prepareStart: Metric ${metricId} was not loaded`);
   return {
     metric_id: metricId,
-    winsorize: row.kind === "binomial" ? false : (row.winsorize ?? DEFAULT_WINSORIZE),
+    winsorize: isPresenceMetric(MetricKindSchema.parse(row.kind))
+      ? false
+      : (row.winsorize ?? DEFAULT_WINSORIZE),
     winsorize_pct: row.winsorizePct ?? DEFAULT_WINSORIZE_PCT,
     // A ratio Metric is estimated by the delta method, which the engine never
     // CUPED-adjusts; freezing `true` would report a technique that never ran.

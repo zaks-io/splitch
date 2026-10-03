@@ -132,6 +132,52 @@ describe("resultTokenStats", () => {
     );
   });
 
+  it("keeps the result token identical when absolute CI bounds are published", async () => {
+    const identity = { appId: "app_1", runId: "run_1", runConfigHash: "sha256:abc" };
+    const legacy = statsWith(legacyArm);
+    const withAbsolute = statsWith({
+      ...legacyArm,
+      absolute_ci_lower: 0.02,
+      absolute_ci_upper: 0.08,
+    });
+
+    expect(await canonicalHash({ ...identity, stats: resultTokenStats(withAbsolute) })).toBe(
+      await canonicalHash({ ...identity, stats: legacy }),
+    );
+  });
+
+  it("keeps the result token identical when simultaneous ship-margin CIs are published", async () => {
+    const identity = { appId: "app_1", runId: "run_1", runConfigHash: "sha256:abc" };
+    const legacy = statsWith(legacyArm);
+    const withSimultaneous = statsWith({
+      ...legacyArm,
+      absolute_ci_lower: 0.02,
+      absolute_ci_upper: 0.08,
+      simultaneous_absolute_ci_lower: 0.01,
+      simultaneous_absolute_ci_upper: 0.09,
+      simultaneous_ci_lower: -1,
+      simultaneous_ci_upper: 20,
+    });
+
+    expect(await canonicalHash({ ...identity, stats: resultTokenStats(withSimultaneous) })).toBe(
+      await canonicalHash({ ...identity, stats: legacy }),
+    );
+  });
+
+  it("keeps the result token identical when Retention eligibility fields are published", async () => {
+    const identity = { appId: "app_1", runId: "run_1", runConfigHash: "sha256:abc" };
+    const legacy = statsWith(legacyArm);
+    const withEligibility = statsWith({
+      ...legacyArm,
+      eligible_n: 80,
+      immature_excluded_n: 20,
+    });
+
+    expect(await canonicalHash({ ...identity, stats: resultTokenStats(withEligibility) })).toBe(
+      await canonicalHash({ ...identity, stats: legacy }),
+    );
+  });
+
   it("still binds every decision-bearing field", async () => {
     const changed = statsWith({ ...legacyArm, point_estimate: 6.5, estimand });
 

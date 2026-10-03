@@ -1,35 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { reachedDuration, stats } from "./experiment-decision-gate-test-fixtures";
+import { armResult, stats } from "./experiment-decision-gate-test-fixtures";
 import { produceExperimentResults } from "./experiment-results-producer";
+import { control, readyAnalysis, run } from "./experiment-results-producer-test-fixtures";
 import { ExperimentResultsResponseSchema } from "./experiment-results-response";
-import type { AnalysisResultsEnvelope } from "./stats-result-contract";
-
-const control = {
-  state: "frozen" as const,
-  variantId: "variant_control",
-  variant: "control",
-};
-
-const run = {
-  runNumber: 2,
-  runStatus: "running" as const,
-  control,
-  duration: reachedDuration(),
-};
-
-function readyAnalysis(
-  overrides: Partial<Extract<AnalysisResultsEnvelope, { state: "ready" }>> = {},
-): Extract<AnalysisResultsEnvelope, { state: "ready" }> {
-  return {
-    state: "ready",
-    run_id: "run_1",
-    control_variant: "control",
-    data_watermark: "2026-07-08T00:00:00.000Z",
-    result_token: `sha256:${"a".repeat(64)}`,
-    stats: stats(),
-    ...overrides,
-  };
-}
 
 describe("produceExperimentResults", () => {
   it("puts readiness, blockedBy, and reasons before detailed stats", () => {
@@ -43,15 +16,17 @@ describe("produceExperimentResults", () => {
     expect(parsed.state).toBe("ready");
     if (parsed.state !== "ready" || parsed.view !== "detailed")
       throw new Error("expected detailed");
-    expect(Object.keys(parsed).slice(0, 5)).toEqual([
+    expect(Object.keys(parsed).slice(0, 6)).toEqual([
       "view",
       "state",
       "readiness",
       "blockedBy",
       "reasons",
+      "recommendationUnavailable",
     ]);
     expect(parsed.readiness).toEqual({ statistical: true, concludeExecutable: true });
     expect(parsed.blockedBy).toEqual([]);
+    expect(parsed.recommendationUnavailable).toBe("no_pre_registration");
     expect(parsed.stats).toEqual(readyAnalysis().stats);
   });
 
@@ -83,8 +58,28 @@ describe("produceExperimentResults", () => {
       run_id: "run_1",
       result_token: expect.stringMatching(/^sha256:/),
       data_watermark: "2026-07-08T00:00:00.000Z",
+      recommendationUnavailable: "no_pre_registration",
     });
     expect(parsed).not.toHaveProperty("stats");
+  });
+
+  it("attaches stats on concise only when includeExploratory is set", () => {
+    const analysis = readyAnalysis();
+    const produced = produceExperimentResults({
+      view: "concise",
+      analysis,
+      run,
+      canConclude: true,
+      includeExploratory: true,
+    });
+    expect(ExperimentResultsResponseSchema.parse(produced)).toMatchObject({
+      view: "concise",
+      state: "ready",
+    });
+    if (produced.state !== "ready" || produced.view !== "concise") {
+      throw new Error("expected concise ready");
+    }
+    expect(produced.stats).toBe(analysis.stats);
   });
 
   it("separates statistical readiness from concludeExecutable lifecycle and permission", () => {
@@ -162,71 +157,98 @@ describe("produceExperimentResults", () => {
   });
 });
 
-describe("produceExperimentResults persisted SRM alarms", () => {
-  it("keeps Analysis stats byte-identical when durable alarms OR into the gate", () => {
-    const analysis = readyAnalysis({
-      stats: stats({
-        srm: {
-          ...stats().srm,
-          srm_is_mismatch: false,
-          srm_p_value: 0.001234,
-        },
-      }),
-    });
+describe("produceExperimentResults ship recommendation", () => {
+  it("surfaces do_not_ship for a lower_is_better primary with a positive lift", () => {
     const produced = produceExperimentResults({
       view: "detailed",
-      analysis,
+      analysis: readyAnalysis({
+        run_commitments: {
+          analysis_version_source: "frozen",
+          analysis_version: "analysis-v1",
+          target_n: 5000,
+          target_n_source: "default",
+          planned_duration_days: 7,
+          planned_duration_override_reason: null,
+          pre_registration: {
+            hypothesis: "Treatment lowers latency",
+            primary_metric_id: "checkout-conversion",
+            metrics: [
+              {
+                metric_id: "checkout-conversion",
+                desirability: "lower_is_better",
+              },
+            ],
+            ship_rule: {
+              required_margin: 0.02,
+              margin_scale: "absolute",
+              conflict_resolution: "primary_wins",
+            },
+            futility: "off",
+          },
+        },
+        stats: stats({
+          arm_results: [
+            armResult({
+              absolute_ci_lower: 0.02,
+              absolute_ci_upper: 0.06,
+              ci_lower: 4,
+              ci_upper: 12,
+              relative_lift_pct: 8,
+            }),
+          ],
+        }),
+      }),
       run,
       canConclude: true,
-      persistedSrmAlarms: [
-        {
-          srmKind: "exposure",
-          firstCrossedAt: "2026-07-02T00:00:00.000Z",
-          pValue: 0.000945,
-        },
-      ],
     });
-    expect(produced.state).toBe("ready");
-    if (produced.state !== "ready" || produced.view !== "detailed") {
-      throw new Error("expected detailed ready");
-    }
-    expect(produced.stats).toBe(analysis.stats);
-    expect(produced.stats.srm.srm_is_mismatch).toBe(false);
-    expect(produced.persisted_srm_alarms).toHaveLength(1);
-    expect(produced.gate.blockedBy).toContain("exposure_srm");
-    expect(produced.readiness.concludeExecutable).toBe(false);
+    expect(ExperimentResultsResponseSchema.parse(produced)).toMatchObject({
+      recommendation: {
+        verdict: "do_not_ship",
+        because: expect.stringMatching(/positive lift/),
+      },
+    });
   });
 });
 
-describe("produceExperimentResults srm_root_cause", () => {
-  it("attaches srm_root_cause only when the enrich seam supplies a classification", () => {
-    const rootCause = {
-      branch: "triggered_only" as const,
-      explanation: "Activated-population SRM fires while Exposure SRM does not.",
-      nextCheck: "experiment_results_get",
-    };
+describe("produceExperimentResults cohort_effect", () => {
+  const cohortEffect = {
+    state: "unavailable" as const,
+    reason: "insufficient_entities" as const,
+  };
+
+  it("attaches cohort_effect on detailed Results only", () => {
     const analysis = readyAnalysis();
-    const withCause = produceExperimentResults({
+    const detailed = produceExperimentResults({
       view: "detailed",
       analysis,
       run,
       canConclude: true,
-      srmRootCause: rootCause,
+      cohortEffect,
     });
-    const withoutCause = produceExperimentResults({
-      view: "detailed",
+    const concise = produceExperimentResults({
+      view: "concise",
       analysis,
       run,
       canConclude: true,
+      cohortEffect,
     });
-    expect(ExperimentResultsResponseSchema.parse(withCause)).toMatchObject({
-      srm_root_cause: rootCause,
+    expect(ExperimentResultsResponseSchema.parse(detailed)).toMatchObject({
+      cohort_effect: cohortEffect,
     });
-    expect(withoutCause).not.toHaveProperty("srm_root_cause");
-    // Diagnostics must not rewrite the Analysis stats object the token binds.
-    if (withCause.state !== "ready" || withCause.view !== "detailed") {
+    expect(concise).not.toHaveProperty("cohort_effect");
+    if (detailed.state !== "ready" || detailed.view !== "detailed") {
       throw new Error("expected detailed ready");
     }
-    expect(withCause.stats).toBe(analysis.stats);
+    expect(detailed.stats).toBe(analysis.stats);
+  });
+
+  it("omits cohort_effect when Analysis did not emit it", () => {
+    const produced = produceExperimentResults({
+      view: "detailed",
+      analysis: readyAnalysis(),
+      run,
+      canConclude: true,
+    });
+    expect(produced).not.toHaveProperty("cohort_effect");
   });
 });

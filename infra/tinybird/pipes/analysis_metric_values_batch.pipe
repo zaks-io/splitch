@@ -21,6 +21,7 @@ SQL >
         JSONExtractString(config_json, 'event_definition_id') AS event_definition_id,
         JSONExtractString(config_json, 'event_field_name') AS event_field_name,
         JSONExtractUInt(config_json, 'window_duration_ms') AS window_duration_ms,
+        JSONExtractUInt(config_json, 'window_offset_ms') AS window_offset_ms,
         JSONExtractString(config_json, 'numerator', 'metric_type') AS numerator_metric_type,
         JSONExtractString(
             config_json, 'numerator', 'event_definition_id'
@@ -38,7 +39,7 @@ SQL >
     WHERE
         throwIf(
             metric_id = ''
-            OR metric_type NOT IN ('binomial', 'count', 'revenue', 'ratio')
+            OR metric_type NOT IN ('binomial', 'count', 'revenue', 'ratio', 'retention')
             OR NOT JSONHas(config_json, 'window_duration_ms')
             OR (
                 metric_type != 'ratio'
@@ -77,7 +78,8 @@ SQL >
         event_definition_id,
         metric_type AS source_metric_type,
         event_field_name,
-        window_duration_ms
+        window_duration_ms,
+        window_offset_ms
     FROM metric_configs
     WHERE metric_type != 'ratio'
     UNION ALL
@@ -88,7 +90,8 @@ SQL >
         numerator_event_definition_id AS event_definition_id,
         numerator_metric_type AS source_metric_type,
         numerator_event_field_name AS event_field_name,
-        window_duration_ms
+        window_duration_ms,
+        window_offset_ms
     FROM metric_configs
     WHERE metric_type = 'ratio'
     UNION ALL
@@ -99,7 +102,8 @@ SQL >
         denominator_event_definition_id AS event_definition_id,
         denominator_metric_type AS source_metric_type,
         denominator_event_field_name AS event_field_name,
-        window_duration_ms
+        window_duration_ms,
+        window_offset_ms
     FROM metric_configs
     WHERE metric_type = 'ratio'
 
@@ -234,11 +238,12 @@ SQL >
         bindings.metric_type AS metric_type,
         bindings.operand AS operand,
         if(
-            bindings.source_metric_type = 'binomial',
+            bindings.source_metric_type IN ('binomial', 'retention'),
             toFloat64(countIf(events.event_definition_id != '') > 0),
             sum(
                 if(
-                    bindings.source_metric_type = 'binomial' OR events.event_definition_id = '',
+                    bindings.source_metric_type IN ('binomial', 'retention')
+                    OR events.event_definition_id = '',
                     toFloat64(0),
                     toFloat64(JSONExtractRaw(events.fields, bindings.event_field_name))
                 )
@@ -264,14 +269,17 @@ SQL >
                 exposures.targeting_key_hash
             )
         )
-        AND events.accepted_at >= exposures.window_anchor
+        AND events.accepted_at >= addMilliseconds(exposures.window_anchor, bindings.window_offset_ms)
         AND (
             bindings.window_duration_ms = 0
             OR events.accepted_at
-            < addMilliseconds(exposures.window_anchor, bindings.window_duration_ms)
+            < addMilliseconds(
+                exposures.window_anchor,
+                bindings.window_offset_ms + bindings.window_duration_ms
+            )
         )
         AND (
-            bindings.source_metric_type = 'binomial'
+            bindings.source_metric_type IN ('binomial', 'retention')
             OR JSONHas(events.fields, bindings.event_field_name)
         )
     GROUP BY

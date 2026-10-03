@@ -12,6 +12,7 @@ import { experimentNotFound, runNotFound } from "./experiment-errors";
 import {
   analysisHopParts,
   enrichAnalysisResultsResponse,
+  includeExploratoryFromParts,
   loadResultsRun,
   produceNoRunResults,
   resultsViewFromParts,
@@ -69,6 +70,7 @@ export async function handleExperimentResultsDelegation(args: {
     scope,
     runId: preHop.runId,
     view,
+    includeExploratory: includeExploratoryFromParts(args.parts),
   });
 }
 
@@ -109,6 +111,7 @@ async function hopAndEnrich(args: {
   scope: ResultsPathScope;
   runId: string;
   view: ExperimentResultsView;
+  includeExploratory: boolean;
 }): Promise<ExperimentResultsDelegationResult> {
   const run = await loadResultsRun(args.repo, {
     appId: args.scope.appId,
@@ -148,6 +151,7 @@ async function hopAndEnrich(args: {
       await enrichAnalysisResultsResponse(args.repo, await analysisResponse.json(), run, {
         view: args.view,
         canConclude,
+        includeExploratory: args.includeExploratory,
       }),
     ),
   };

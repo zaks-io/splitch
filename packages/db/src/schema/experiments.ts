@@ -168,6 +168,8 @@ export const metrics = sqliteTable(
     winsorizePct: real("winsorize_pct"),
     cuped: integer("cuped", { mode: "boolean" }),
     cupedCoverageThresholdPct: real("cuped_coverage_threshold_pct"),
+    horizonStartMs: integer("horizon_start_ms"),
+    horizonEndMs: integer("horizon_end_ms"),
     createdAt: createdAt(),
     createdBy: userRef("created_by"),
   },

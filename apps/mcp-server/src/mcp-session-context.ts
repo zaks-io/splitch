@@ -43,7 +43,12 @@ export type McpSessionContextValidator = (
 
 export const contextUseTool: McpSkinToolDefinition = {
   name: "context_use",
-  description: "Set the active App and Environment for this MCP transport session.",
+  description: [
+    "Set the active App and Environment for this MCP transport session.",
+    "Formats: appId: required Canonical App ID (app_...) or human-readable App slug. environmentId: required Canonical Environment ID (env_...) or human-readable Environment key.",
+    "Terms: App — the product or service surface that groups related Flags and hosts Experiments. Environment — a named deployment context under an App, such as `dev` or `prod`.",
+    'Example arguments: {"appId":"app_1","environmentId":"env_1"}',
+  ].join("\n\n"),
   inputSchema: {
     type: "object",
     properties: {

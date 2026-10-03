@@ -3,7 +3,7 @@ import { CanonicalJsonSha256Schema } from "./canonical-hash";
 import { errorMember as member } from "./error-member";
 import { UnresolvableControlReasonSchema } from "./experiment-control-identity";
 import type { DecisionGateCheckId } from "./experiment-decision-gate";
-import { StatsResultStatusSchema } from "./stats-result-contract";
+import { StatsResultStatusSchema } from "./stats-result-arm";
 
 const ResultMemberSchema = z
   .object({ metricId: z.string(), variant: z.string(), status: StatsResultStatusSchema })

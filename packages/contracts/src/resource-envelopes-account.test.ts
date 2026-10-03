@@ -25,6 +25,40 @@ describe("CreateMetricRequestSchema", () => {
     expect(req.kind).toBe("binomial");
   });
 
+  it("requires a horizon on a Retention Metric and rejects one on binomial", () => {
+    expect(
+      CreateMetricRequestSchema.safeParse({
+        appId: "app_1",
+        name: "D7",
+        key: "d7",
+        kind: "retention",
+        eventDefinitionId: "signed_up",
+      }).success,
+    ).toBe(false);
+    expect(
+      CreateMetricRequestSchema.parse({
+        appId: "app_1",
+        name: "D7",
+        key: "d7",
+        kind: "retention",
+        eventDefinitionId: "signed_up",
+        horizonStartMs: 0,
+        horizonEndMs: 86_400_000,
+      }).kind,
+    ).toBe("retention");
+    expect(
+      CreateMetricRequestSchema.safeParse({
+        appId: "app_1",
+        name: "Signup",
+        key: "signup",
+        kind: "binomial",
+        eventDefinitionId: "signed_up",
+        horizonStartMs: 0,
+        horizonEndMs: 86_400_000,
+      }).success,
+    ).toBe(false);
+  });
+
   it("accepts an optional idempotency_key", () => {
     const req = CreateMetricRequestSchema.parse({
       appId: "app_1",

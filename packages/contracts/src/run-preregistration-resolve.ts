@@ -22,6 +22,11 @@ export interface PreRegistrationIssue {
 export function resolvePreRegistration(
   raw: unknown,
   runMetricIds: ReadonlySet<string>,
+  options: {
+    horizon?: "sequential" | "fixed";
+    /** Decision-family Metric ids the Run will lock (non-Guardrail goals). */
+    lockedGoalMetricIds?: ReadonlySet<string>;
+  } = {},
 ): { ok: true; value: PreRegistration } | { ok: false; issues: PreRegistrationIssue[] } {
   if (raw === undefined || raw === null) {
     return {
@@ -46,18 +51,21 @@ export function resolvePreRegistration(
       })),
     };
   }
-  return validateAndFreeze(parsed.data, runMetricIds);
+  return validateAndFreeze(parsed.data, runMetricIds, options.horizon, options.lockedGoalMetricIds);
 }
 
 function validateAndFreeze(
   intent: PreRegistrationIntent,
   runMetricIds: ReadonlySet<string>,
+  horizon: "sequential" | "fixed" | undefined,
+  lockedGoalMetricIds: ReadonlySet<string> | undefined,
 ): { ok: true; value: PreRegistration } | { ok: false; issues: PreRegistrationIssue[] } {
   const issues = [
     ...hypothesisIssues(intent),
-    ...shipRuleIssues(intent),
+    ...shipRuleIssues(intent, horizon),
     ...primaryMetricIssues(intent, runMetricIds),
     ...metricEntryIssues(intent, runMetricIds),
+    ...lockedGoalDesirabilityIssues(intent, lockedGoalMetricIds),
     ...futilityIssues(intent),
   ];
   if (issues.length > 0) return { ok: false, issues };
@@ -87,15 +95,27 @@ function hypothesisIssues(intent: PreRegistrationIntent): PreRegistrationIssue[]
   ];
 }
 
-function shipRuleIssues(intent: PreRegistrationIntent): PreRegistrationIssue[] {
-  if (intent.shipRule.requiredMargin > 0) return [];
-  return [
-    {
+function shipRuleIssues(
+  intent: PreRegistrationIntent,
+  horizon: "sequential" | "fixed" | undefined,
+): PreRegistrationIssue[] {
+  const issues: PreRegistrationIssue[] = [];
+  if (!(intent.shipRule.requiredMargin > 0)) {
+    issues.push({
       path: ["body", "preRegistration", "shipRule", "requiredMargin"],
       message: "shipRule.requiredMargin must be a positive finite number",
       code: "PREREG_SHIP_RULE_INVALID",
-    },
-  ];
+    });
+  }
+  if (horizon === "sequential" && intent.shipRule.marginScale === "relative") {
+    issues.push({
+      path: ["body", "preRegistration", "shipRule", "marginScale"],
+      message:
+        "relative ship-rule margin is not accepted on a sequential Run; sequential Fieller coverage is unproven, so use marginScale absolute or set horizon to fixed",
+      code: "PREREG_SHIP_RULE_RELATIVE_SEQUENTIAL_UNSUPPORTED",
+    });
+  }
+  return issues;
 }
 
 function primaryMetricIssues(
@@ -192,6 +212,30 @@ function desirabilityMessage(hasMde: boolean, isPrimary: boolean, hasRope: boole
   if (isPrimary) return "desirability is required for the primary Metric";
   if (hasRope) return "desirability is required for a Metric that declares a ROPE";
   return "desirability is required for every pre-registered Metric";
+}
+
+/**
+ * When the ship rule combines goals, every locked goal Metric needs
+ * desirability in the freeze so combination cannot silently drop one.
+ */
+function lockedGoalDesirabilityIssues(
+  intent: PreRegistrationIntent,
+  lockedGoalMetricIds: ReadonlySet<string> | undefined,
+): PreRegistrationIssue[] {
+  if (lockedGoalMetricIds === undefined || intent.shipRule.conflictResolution === "primary_wins") {
+    return [];
+  }
+  const listed = new Set(intent.metrics.map((metric) => metric.metricId));
+  const issues: PreRegistrationIssue[] = [];
+  for (const metricId of lockedGoalMetricIds) {
+    if (listed.has(metricId)) continue;
+    issues.push({
+      path: ["body", "preRegistration", "metrics"],
+      message: `desirability is required for locked goal Metric ${JSON.stringify(metricId)} when shipRule.conflictResolution combines goals`,
+      code: "PREREG_LOCKED_GOAL_DESIRABILITY_REQUIRED",
+    });
+  }
+  return issues;
 }
 
 function futilityIssues(intent: PreRegistrationIntent): PreRegistrationIssue[] {

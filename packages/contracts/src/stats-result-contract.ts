@@ -1,205 +1,20 @@
 import { z } from "zod";
 import { CanonicalJsonSha256Schema } from "./canonical-hash";
+import { CohortEffectDiagnosticSchema } from "./cohort-effect";
 import { MetricRefSchema } from "./leaf-schemas-experiment";
 import { RunCommitmentsSchema } from "./run-commitments";
-import { RopeScaleSchema } from "./run-preregistration";
 import type { StatsInput } from "./stats-input-contract";
+import { ArmResultSchema, CiBoundSchema } from "./stats-result-arm";
+
+// Re-exports live in barrels/stats-contracts.ts so this file is not a barrel.
 
 const MetricIdSchema = MetricRefSchema.shape.metricId;
 const IntegerSchema = z.number().int();
-const CiBoundSchema = z
-  .union([z.number(), z.literal(Number.NEGATIVE_INFINITY), z.literal(Number.POSITIVE_INFINITY)])
-  .nullable();
 const VariantCountSchema = z.record(z.string(), IntegerSchema);
 
-export const statsResultStatuses = [
-  "running",
-  "ready",
-  "stopped",
-  "insufficient_denominator",
-  "insufficient_n",
-  "error",
-] as const;
-
-export const StatsResultStatusSchema = z.enum(statsResultStatuses);
-export type StatsResultStatus = z.infer<typeof StatsResultStatusSchema>;
-
-export const cupedMethods = ["pre_period", "attribute_covariate", "none"] as const;
-
-export const CupedMethodSchema = z.enum(cupedMethods);
-export type CupedMethod = z.infer<typeof CupedMethodSchema>;
-
-export const cupedAttributeSources = [
-  "declared",
-  "pre_period_selected",
-  "historical_selected",
-] as const;
-
-export const CupedAttributeSourceSchema = z.enum(cupedAttributeSources);
-export type CupedAttributeSource = z.infer<typeof CupedAttributeSourceSchema>;
-
 export const dimensionClasses = ["primary", "secondary"] as const;
-
 export const DimensionClassSchema = z.enum(dimensionClasses);
 export type DimensionClass = z.infer<typeof DimensionClassSchema>;
-
-export const WinsorizeCapSchema = z.union([
-  z.number(),
-  z
-    .object({
-      num_value: z.number(),
-      denom_value: z.number(),
-    })
-    .strict(),
-]);
-export type WinsorizeCap = z.infer<typeof WinsorizeCapSchema>;
-
-export const VarianceTechniquesSchema = z
-  .object({
-    winsorized: z.boolean(),
-    winsorize_pct: z.number().nullable(),
-    winsorize_cap: WinsorizeCapSchema.nullable(),
-    cuped_applied: z.boolean(),
-    cuped_method: CupedMethodSchema.nullable(),
-    cuped_attribute: z.string().nullable(),
-    cuped_attribute_source: CupedAttributeSourceSchema.nullable(),
-    cuped_coverage_pct: z.number().nullable(),
-    delta_method: z.boolean(),
-  })
-  .strict();
-export type VarianceTechniques = z.infer<typeof VarianceTechniquesSchema>;
-
-/**
- * What the published estimate measures, by Metric kind and applied technique.
- * A Binomial Metric is never winsorized, so it has no capped label.
- */
-export const estimandLabels = [
-  "uncapped_additive_mean",
-  "capped_additive_mean",
-  "binomial_mean",
-  "ratio_of_uncapped_means",
-  "ratio_of_capped_means",
-] as const;
-
-export const EstimandLabelSchema = z.enum(estimandLabels);
-export type EstimandLabel = z.infer<typeof EstimandLabelSchema>;
-
-/** The same arm and comparison computed in the same pass without the cap. Disclosure only. */
-export const UncappedEstimateSchema = z
-  .object({
-    label: EstimandLabelSchema,
-    point_estimate: z.number(),
-    relative_lift_pct: z.number().nullable(),
-    ci_lower: CiBoundSchema,
-    ci_upper: CiBoundSchema,
-    p_value: z.number(),
-    status: StatsResultStatusSchema,
-    cuped_applied: z.boolean(),
-  })
-  .strict();
-export type UncappedEstimate = z.infer<typeof UncappedEstimateSchema>;
-
-export const EstimandDisclosureSchema = z
-  .object({
-    label: EstimandLabelSchema,
-    decision_label: EstimandLabelSchema,
-    capped_entity_count: IntegerSchema.nullable(),
-    uncapped: UncappedEstimateSchema.nullable(),
-  })
-  .strict()
-  .superRefine((estimand, context) => {
-    if ((estimand.capped_entity_count === null) === (estimand.uncapped === null)) return;
-    context.addIssue({
-      code: "custom",
-      message: "capped_entity_count and uncapped must be present together",
-    });
-  });
-export type EstimandDisclosure = z.infer<typeof EstimandDisclosureSchema>;
-
-export const RopeVerdictSchema = z.enum(["outside", "inside", "undecided"]);
-export type RopeVerdict = z.infer<typeof RopeVerdictSchema>;
-
-/**
- * Why a pre-registered ROPE did not yield a ropeVerdict. Present instead of a
- * silent omission when the interval on that scale is not a proven confidence
- * sequence (relative + sequential Fieller).
- */
-export const RopeVerdictUnavailableReasonSchema = z.enum(["relative_sequential_coverage_unproven"]);
-export type RopeVerdictUnavailableReason = z.infer<typeof RopeVerdictUnavailableReasonSchema>;
-
-/** Advisory MDE-exclusion futility (plan 2.12); never stops or Concludes a Run. */
-export const FutilityVerdictSchema = z.enum(["futile", "not_futile"]);
-export type FutilityVerdict = z.infer<typeof FutilityVerdictSchema>;
-
-export const ArmResultSchema = z
-  .object({
-    variant: z.string(),
-    metric_id: MetricIdSchema,
-    sample_size_n: IntegerSchema,
-    point_estimate: z.number(),
-    relative_lift_pct: z.number().nullable(),
-    ci_lower: CiBoundSchema,
-    ci_upper: CiBoundSchema,
-    p_value: z.number(),
-    is_significant: z.boolean(),
-    in_bh_family: z.boolean(),
-    exploratory: z.boolean(),
-    decision_valid: z.boolean(),
-    status: StatsResultStatusSchema,
-    variance_techniques: VarianceTechniquesSchema,
-    // Optional only so Stats recorded before the disclosure existed still
-    // parse; the engine always emits it.
-    estimand: EstimandDisclosureSchema.optional(),
-    /**
-     * Present only when this Metric pre-registered an absolute ROPE and the
-     * decision interval is finite. Absent (not defaulted) otherwise.
-     */
-    ropeVerdict: RopeVerdictSchema.optional(),
-    /** Scale the ROPE and decision interval shared when ropeVerdict is present. */
-    ropeScale: RopeScaleSchema.optional(),
-    /**
-     * Present when a ROPE was pre-registered but no always-valid verdict can be
-     * claimed (relative scale under sequential analysis). Exclusive with
-     * ropeVerdict; never a silent omission of a pre-registered ROPE.
-     */
-    ropeVerdictUnavailable: RopeVerdictUnavailableReasonSchema.optional(),
-    /**
-     * Present only for the primary Metric when pre-registration froze
-     * `futility: "mde_exclusion"`, an absolute MDE, and a finite absolute
-     * decision interval. Absent (not defaulted) when futility is off or no MDE.
-     */
-    futilityVerdict: FutilityVerdictSchema.optional(),
-    /** One-sentence reason; required together with futilityVerdict. */
-    futilityBecause: z.string().min(1).optional(),
-  })
-  .strict()
-  .superRefine((arm, context) => {
-    if (arm.ropeVerdict !== undefined && arm.ropeVerdictUnavailable !== undefined) {
-      context.addIssue({
-        code: "custom",
-        message: "ropeVerdict and ropeVerdictUnavailable are mutually exclusive",
-      });
-    }
-    if (arm.ropeVerdict !== undefined && arm.ropeScale === undefined) {
-      context.addIssue({
-        code: "custom",
-        message: "ropeScale is required when ropeVerdict is present",
-      });
-    }
-    if (arm.ropeVerdict === undefined && arm.ropeScale !== undefined) {
-      context.addIssue({
-        code: "custom",
-        message: "ropeScale requires ropeVerdict",
-      });
-    }
-    if ((arm.futilityVerdict === undefined) !== (arm.futilityBecause === undefined)) {
-      context.addIssue({
-        code: "custom",
-        message: "futilityVerdict and futilityBecause must be present together",
-      });
-    }
-  });
-export type ArmResult = z.infer<typeof ArmResultSchema>;
 
 export const SrmResultSchema = z
   .object({
@@ -324,6 +139,12 @@ export const AnalysisResultsEnvelopeSchema = z.discriminatedUnion("state", [
        * Plane reading an Analysis Worker from before this field still parses.
        */
       run_commitments: RunCommitmentsSchema.optional(),
+      /**
+       * First-exposure-day cohort-effect diagnostic (plan 2.8). Optional so
+       * Control Plane can deploy before Analysis emits it; never hashed into
+       * result_token.
+       */
+      cohort_effect: CohortEffectDiagnosticSchema.optional(),
       stats: StatsOutputSchema,
     })
     .strict()

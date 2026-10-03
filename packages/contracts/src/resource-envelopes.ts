@@ -13,6 +13,14 @@ export * from "./persisted-field-limits";
 export * from "./incoming-json-bound";
 // biome-ignore lint/performance/noReExportAll: each source module owns a cohesive resource family
 export * from "./resource-envelopes-account";
+export type { MutationNext } from "./mutation-next";
+export {
+  MutationNextSchema,
+  mutationNext,
+  nextAfterExperimentStart,
+  nextAfterFlagShip,
+  nextAfterPendingApproval,
+} from "./mutation-next";
 // biome-ignore lint/performance/noReExportAll: each source module owns a cohesive resource family
 export * from "./resource-envelopes-experiment";
 // biome-ignore lint/performance/noReExportAll: experiment_plan wire shapes sit beside Experiment envelopes

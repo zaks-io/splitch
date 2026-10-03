@@ -104,6 +104,7 @@ export {
   ExperimentSchema,
   ExperimentStatusSchema,
   experimentStatuses,
+  isPresenceMetric,
   MetricDirectionSchema,
   MetricKindSchema,
   MetricRefSchema,
@@ -114,6 +115,7 @@ export {
   RunStatusSchema,
   runStatuses,
 } from "./leaf-schemas-experiment";
+export { applyMetricHorizonRefine, metricHorizonIssue } from "./leaf-schemas-metric-horizon";
 export type {
   Condition,
   ConditionOperator,

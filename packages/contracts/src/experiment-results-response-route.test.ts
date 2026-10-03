@@ -76,6 +76,7 @@ describe("declared /results response contract", () => {
     readiness: { statistical: true, concludeExecutable: true },
     blockedBy: [] as string[],
     reasons: [] as string[],
+    recommendationUnavailable: "no_pre_registration" as const,
     gate,
     run_id: "run_1",
     run_number: 1,

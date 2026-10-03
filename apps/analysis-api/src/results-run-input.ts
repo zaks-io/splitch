@@ -76,6 +76,16 @@ export function materializeMetricQueryConfig(row: unknown): MetricQueryConfig[] 
   });
 }
 
+export function conversionWindowsFromQueryConfig(
+  configs: readonly MetricQueryConfig[],
+): NonNullable<StatsInput["metric_conversion_windows"]> {
+  return configs.map((config) => ({
+    metric_id: config.metric_id,
+    window_duration_ms:
+      config.metric_type === "retention" ? config.horizon_end_ms : config.window_duration_ms,
+  }));
+}
+
 /**
  * Fail loud when a locked Run is missing the inputs analysis needs. Empty
  * Metric values with a non-empty decision family used to reach StatsEngine as

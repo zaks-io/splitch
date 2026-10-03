@@ -17,7 +17,18 @@ export function operationBehaviorNotes(command: CliCommandDefinition): string[] 
     return [
       "Start freezes the Experiment draft Targeting Rules into the new Run; the response field frozenTargetingRules is that snapshot (same as run.targetingRules).",
       "An empty frozen set means all Entities are eligible via allocation; Flag Configuration targeting rules do not apply while the Run is live.",
-      "Without --json, the CLI prints a frozen-targeting summary to stderr.",
+      "A successful Start may include optional next (tool experiment_results_get, earliestAt from the frozen planned duration, target_n in args).",
+      "Without --json, the CLI prints a frozen-targeting summary and any next hint to stderr.",
+    ];
+  }
+  if (
+    command.operationId === "flag_config_update" ||
+    command.operationId === "flags_promote" ||
+    command.operationId === "runs_conclude"
+  ) {
+    return [
+      "A successful write may include optional next naming the registered tool to call next (omitted when not determinable).",
+      "Without --json, the CLI prints any next hint to stderr; MCP returns next in structuredContent.",
     ];
   }
   if (command.operationId === "experiments_update") {

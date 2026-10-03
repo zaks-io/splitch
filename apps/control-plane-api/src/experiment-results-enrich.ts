@@ -29,6 +29,19 @@ export function resultsViewFromParts(parts: {
   return ExperimentResultsViewSchema.parse(raw);
 }
 
+export function includeExploratoryFromParts(parts: {
+  query?: Record<string, unknown>;
+  body?: unknown;
+}): boolean {
+  const raw =
+    typeof parts.query?.includeExploratory === "boolean"
+      ? parts.query.includeExploratory
+      : isRecord(parts.body) && typeof parts.body.includeExploratory === "boolean"
+        ? parts.body.includeExploratory
+        : false;
+  return raw;
+}
+
 /** Strip skin-only selectors before the Analysis hop. */
 export function analysisHopParts(parts: {
   params?: Record<string, string>;
@@ -41,9 +54,9 @@ export function analysisHopParts(parts: {
 } {
   return {
     ...(parts.params !== undefined ? { params: parts.params } : {}),
-    ...(parts.query !== undefined ? { query: withoutView(parts.query) } : {}),
+    ...(parts.query !== undefined ? { query: withoutSkinSelectors(parts.query) } : {}),
     ...(parts.body !== undefined
-      ? { body: isRecord(parts.body) ? withoutView(parts.body) : parts.body }
+      ? { body: isRecord(parts.body) ? withoutSkinSelectors(parts.body) : parts.body }
       : {}),
   };
 }
@@ -75,7 +88,11 @@ export async function enrichAnalysisResultsResponse(
     plannedDurationOverrideReason: string | null;
     analysisVersion: string | null;
   },
-  options: { view: ExperimentResultsView; canConclude: boolean },
+  options: {
+    view: ExperimentResultsView;
+    canConclude: boolean;
+    includeExploratory?: boolean;
+  },
 ): Promise<ExperimentResultsResponse> {
   const analysis = AnalysisResultsEnvelopeSchema.parse(analysisBody);
   // Callers only reach enrich after D1 resolved a Run. Analysis no_run here is a
@@ -102,6 +119,7 @@ export async function enrichAnalysisResultsResponse(
     analysis.state === "ready"
       ? await syncAnalysisV2SrmAlarms(repo, run, analysis.stats, dataWatermark)
       : [];
+  const cohortEffect = analysis.state === "ready" ? (analysis.cohort_effect ?? null) : null;
   return produceExperimentResults({
     view: options.view,
     analysis,
@@ -114,6 +132,8 @@ export async function enrichAnalysisResultsResponse(
     canConclude: options.canConclude,
     srmRootCause,
     persistedSrmAlarms,
+    cohortEffect,
+    includeExploratory: options.includeExploratory === true,
   });
 }
 
@@ -228,8 +248,8 @@ export function produceNoRunResults(view: ExperimentResultsView): ExperimentResu
   });
 }
 
-function withoutView(record: Record<string, unknown>): Record<string, unknown> {
-  const { view: _view, ...rest } = record;
+function withoutSkinSelectors(record: Record<string, unknown>): Record<string, unknown> {
+  const { view: _view, includeExploratory: _exploratory, ...rest } = record;
   return rest;
 }
 

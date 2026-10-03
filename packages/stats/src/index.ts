@@ -62,6 +62,16 @@ export {
   classifySrmRootCauseFromStats,
   srmRootCauseInputFromStats,
 } from "./srm-root-cause-from-stats";
+export { computeCohortEffect } from "./cohort-effect";
+export { fixedHorizonAbsoluteInterval } from "./cohort-effect-estimate";
+export { exposureDayBucket } from "./cohort-effect-buckets";
+export { classifyCohortNovelty } from "./cohort-effect-novelty";
+export {
+  COHORT_EFFECT_BUCKET_IDS,
+  COHORT_EFFECT_MIN_ARM_N,
+  COHORT_EFFECT_NOVELTY_ALPHA,
+} from "./cohort-effect-types";
+export type { CohortEffectComputeInput } from "./cohort-effect-types";
 export type {
   ActivationRow,
   ArmResult,

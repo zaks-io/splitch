@@ -1,6 +1,39 @@
 import type { ActivationRow, DedupeExposureRow } from "@splitch/contracts";
 
 /**
+ * Earliest Activation timestamp that places the Entity in the activated
+ * population (`activation_ts > first_exposure_ts`). Event time, not ingest
+ * time: Metric windows and cohort days anchor here.
+ */
+export function earliestValidActivationTs(
+  exposure: DedupeExposureRow,
+  activationRowsByEntity: ReadonlyMap<string, readonly ActivationRow[]>,
+): string {
+  const exposureMs = timestampMs(exposure.first_exposure_ts, "first_exposure_ts");
+  const rows = activationRowsByEntity.get(exposure.targeting_key_hash) ?? [];
+  let earliestTs: string | null = null;
+  let earliestMs = Number.POSITIVE_INFINITY;
+
+  for (const row of rows) {
+    if (!row.activated) {
+      continue;
+    }
+    const activationMs = timestampMs(row.activation_ts, "activation_ts");
+    if (activationMs > exposureMs && activationMs < earliestMs) {
+      earliestMs = activationMs;
+      earliestTs = row.activation_ts;
+    }
+  }
+
+  if (earliestTs === null) {
+    throw new Error(
+      `activated SRM entity ${exposure.targeting_key_hash} has no post-Exposure activation_ts.`,
+    );
+  }
+  return earliestTs;
+}
+
+/**
  * When the Entity became eligible for activated-population SRM: the minimum
  * over qualifying raw (Exposure, Activation) pairs with
  * `exposure_at < activation_ts` of `max(exposure.ingest_ts, activation.ingest_ts)`.

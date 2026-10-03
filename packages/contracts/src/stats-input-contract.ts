@@ -2,7 +2,8 @@ import { z } from "zod";
 import { MetricKindSchema, MetricRefSchema } from "./leaf-schemas-experiment";
 import { ANALYSIS_V1_VERSION, ANALYSIS_V2_VERSION } from "./run-commitments";
 import { PreRegistrationSchema } from "./run-preregistration";
-import { CupedAttributeSourceSchema, DimensionClassSchema } from "./stats-result-contract";
+import { CupedAttributeSourceSchema } from "./stats-result-arm";
+import { DimensionClassSchema } from "./stats-result-contract";
 
 const MetricIdSchema = MetricRefSchema.shape.metricId;
 const TimestampSchema = z.string();
@@ -185,6 +186,23 @@ export const MetricQueryConfigSchema = z.union([
   z
     .object({
       ...MetricQueryWindowSchema,
+      metric_type: z.literal("retention"),
+      event_definition_id: z.string(),
+      event_field_name: z.null().default(null),
+      // Only Retention shifts the Conversion Window. Other kinds reject this
+      // field (strict schemas) rather than silently ignoring a bound Tinybird
+      // would not have applied on older pipes.
+      window_offset_ms: z.number().int().nonnegative(),
+      horizon_start_ms: z.number().int().nonnegative(),
+      horizon_end_ms: z.number().int().positive(),
+    })
+    .strict()
+    .refine((config) => config.horizon_end_ms > config.horizon_start_ms, {
+      message: "horizon_end_ms must be greater than horizon_start_ms",
+    }),
+  z
+    .object({
+      ...MetricQueryWindowSchema,
       metric_type: z.enum(["count", "revenue"]),
       event_definition_id: z.string(),
       event_field_name: z.string(),
@@ -222,6 +240,35 @@ export const MetricVarianceConfigSchema = z
   .strict();
 export type MetricVarianceConfig = z.infer<typeof MetricVarianceConfigSchema>;
 
+/**
+ * Frozen Conversion Window per Metric from the Run snapshot. Optional so
+ * Control Plane can send it before Analysis consumes it; other StatsInput
+ * readers ignore it. `window_duration_ms` of 0 is unbounded.
+ */
+export const MetricConversionWindowSchema = z
+  .object({
+    metric_id: MetricIdSchema,
+    window_duration_ms: z.number().int().nonnegative(),
+  })
+  .strict();
+export type MetricConversionWindow = z.infer<typeof MetricConversionWindowSchema>;
+
+/**
+ * Frozen Retention horizon per Metric. Optional so Control Plane can send it
+ * before Analysis consumes it; other StatsInput readers ignore it.
+ */
+export const MetricRetentionHorizonSchema = z
+  .object({
+    metric_id: MetricIdSchema,
+    horizon_start_ms: z.number().int().nonnegative(),
+    horizon_end_ms: z.number().int().positive(),
+  })
+  .strict()
+  .refine((horizon) => horizon.horizon_end_ms > horizon.horizon_start_ms, {
+    message: "horizon_end_ms must be greater than horizon_start_ms",
+  });
+export type MetricRetentionHorizon = z.infer<typeof MetricRetentionHorizonSchema>;
+
 export const StatsInputSchema = z
   .object({
     run_id: z.string(),
@@ -241,6 +288,24 @@ export const StatsInputSchema = z
     decision_family: z.array(DecisionFamilyMemberSchema),
     guardrail_decisions: z.array(GuardrailDecisionSchema).default([]),
     metric_variance_config: z.array(MetricVarianceConfigSchema).default([]),
+    /**
+     * Frozen Conversion Window per Metric (Run snapshot / MetricQueryConfig).
+     * Optional and ignored by the decision engine; cohort-effect completeness
+     * filtering reads it when present.
+     */
+    metric_conversion_windows: z.array(MetricConversionWindowSchema).optional(),
+    /**
+     * Frozen Retention horizon per Metric. Optional; Analysis requires it when
+     * a Retention Metric is analyzed.
+     */
+    metric_retention_horizons: z.array(MetricRetentionHorizonSchema).optional(),
+    /**
+     * Inclusive evidence watermark used to decide Retention maturity. Optional
+     * so older Analysis Workers can omit it; a Retention Metric without it
+     * fails in the engine rather than silently treating immature Entities as
+     * failures.
+     */
+    data_watermark: TimestampSchema.optional(),
     /**
      * Frozen pre-registration when the Run recorded one. Drives per-Metric
      * ropeVerdict on ArmResult; omit when Start did not pre-register.
