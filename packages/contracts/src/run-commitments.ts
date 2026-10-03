@@ -19,22 +19,23 @@ import type { StatsOutput } from "./stats-result-contract";
  * in how locked evidence is computed: every Run started afterwards gets a
  * different result token for the same raw facts, which is the point.
  *
- * | Version              | SRM gate                         | Family correction |
- * | -------------------- | -------------------------------- | ----------------- |
- * | legacy-unversioned   | Chi-square p < 0.001             | BH                |
- * | analysis-v1          | Chi-square p < 0.001             | BH                |
- * | analysis-v2          | Sequential Dirichlet-multinomial | BH                |
+ * | Version              | SRM gate                         | Family correction | Supported for Start/Results |
+ * | -------------------- | -------------------------------- | ----------------- | --------------------------- |
+ * | legacy-unversioned   | Chi-square p < 0.001             | BH                | legacy read path only       |
+ * | analysis-v1          | Chi-square p < 0.001             | BH                | yes (current)               |
+ * | analysis-v2          | Sequential Dirichlet-multinomial | BH-G              | no (defined, unsupported)   |
  *
- * analysis-v2 keeps BH because the ADR-0014 stop-at-first-crossing simulation
- * recorded BH FDR of 0 (alpha 0.05); plain BH did not exceed the FDR target.
+ * analysis-v2 stays in the exhaustive switch for unit tests and a future CURRENT
+ * bump, but it is not in SUPPORTED_ANALYSIS_VERSIONS until an ingestion-ordered
+ * (append-only across watermarks) observation path lands: event-time ordering
+ * can erase an SRM alarm under late ingestion (ADR-0059).
  */
 export const ANALYSIS_V1_VERSION = "analysis-v1";
 export const ANALYSIS_V2_VERSION = "analysis-v2";
 /**
  * New Runs freeze this named implementation. analysis-v2 is defined in the
- * exhaustive version switch but is not current yet: its Results gate orders by
- * event time, so late ingestion with earlier timestamps can erase an alarm.
- * Keep CURRENT on analysis-v1 until an ingestion-ordered observation path lands.
+ * exhaustive version switch but is unsupported for Start and Results until an
+ * ingestion-ordered observation path lands. Keep CURRENT on analysis-v1.
  */
 export const CURRENT_ANALYSIS_VERSION = "analysis-v1";
 
@@ -45,11 +46,13 @@ export const CURRENT_ANALYSIS_VERSION = "analysis-v1";
  */
 export const LEGACY_ANALYSIS_VERSION = "legacy-unversioned";
 
-/** Versions this deployment can analyze. A Run frozen under any other refuses. */
-export const SUPPORTED_ANALYSIS_VERSIONS: readonly string[] = [
-  ANALYSIS_V1_VERSION,
-  ANALYSIS_V2_VERSION,
-];
+/**
+ * Versions this deployment will Start or analyze. A Run frozen under any other
+ * version (including defined-but-unsupported analysis-v2) refuses loudly.
+ * Known versions that are not listed here remain in the exhaustive switch for
+ * unit tests; they are not Startable and not readable on a frozen Run.
+ */
+export const SUPPORTED_ANALYSIS_VERSIONS: readonly string[] = [ANALYSIS_V1_VERSION];
 
 /** GrowthBook's documented default; recorded as defaulted when the caller names none. */
 export const DEFAULT_SEQUENTIAL_TARGET_N = 5_000;

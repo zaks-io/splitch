@@ -29,6 +29,30 @@ describe("family correction procedure", () => {
     expect(largestRejectedRank([0.06], 0.05, "bh_g")).toBe(0);
   });
 
+  it("keeps BH-G at or under alpha on the two-null adversarial dependence distribution where BH exceeds alpha", () => {
+    // Two nulls; pairs at probability 0.025 each, (1,1) otherwise. Both
+    // marginals are superuniform, yet BH rejects with probability 0.075 > 0.05.
+    const alpha = 0.05;
+    const outcomes: ReadonlyArray<{ pValues: readonly [number, number]; weight: number }> = [
+      { pValues: [0.025, 1], weight: 0.025 },
+      { pValues: [1, 0.025], weight: 0.025 },
+      { pValues: [0.05, 0.05], weight: 0.025 },
+      { pValues: [1, 1], weight: 0.925 },
+    ];
+
+    let bhRejectProbability = 0;
+    let bhGRejectProbability = 0;
+    for (const { pValues, weight } of outcomes) {
+      const sorted = [...pValues].sort((left, right) => left - right);
+      if (largestRejectedRank(sorted, alpha, "bh") > 0) bhRejectProbability += weight;
+      if (largestRejectedRank(sorted, alpha, "bh_g") > 0) bhGRejectProbability += weight;
+    }
+
+    expect(bhRejectProbability).toBeCloseTo(0.075, 12);
+    expect(bhRejectProbability).toBeGreaterThan(alpha);
+    expect(bhGRejectProbability).toBeLessThanOrEqual(alpha);
+  });
+
   it("fails loud on a non-positive family size", () => {
     expect(() => harmonicNumber(0)).toThrow(/positive integer family size/);
   });

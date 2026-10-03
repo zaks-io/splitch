@@ -83,15 +83,19 @@ Worker rolled back below a Run's version refuses that Run until it is rolled for
 Dispatch is one exhaustive switch over known versions. Unknown versions refuse. There is no
 silent fallthrough to the newest.
 
-| Version              | SRM gate (Exposure and activated)           | Family correction | Notes                                                                                                                                                                        |
-| -------------------- | ------------------------------------------- | ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `legacy-unversioned` | Chi-square, mismatch at p < 0.001           | BH                | Compatibility implementation as of versioning start; token omits `analysisVersion`                                                                                           |
-| `analysis-v1`        | Chi-square, mismatch at p < 0.001           | BH                | First frozen version; same estimators as legacy. **Current** for new Runs until analysis-v2 has an ingestion-ordered observation path                                        |
-| `analysis-v2`        | Sequential Dirichlet-multinomial martingale | BH                | Defined in the exhaustive switch, **not current**. Event-time ordering can erase an alarm under late ingestion; pending ingestion-ordered path. Keeps BH (ADR-0014 stop FDR) |
+| Version              | SRM gate (Exposure and activated)           | Family correction | Notes                                                                                                                                                                                                 |
+| -------------------- | ------------------------------------------- | ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `legacy-unversioned` | Chi-square, mismatch at p < 0.001           | BH                | Compatibility implementation as of versioning start; token omits `analysisVersion`                                                                                                                    |
+| `analysis-v1`        | Chi-square, mismatch at p < 0.001           | BH                | First frozen version; same estimators as legacy. **Current** for new Runs                                                                                                                             |
+| `analysis-v2`        | Sequential Dirichlet-multinomial martingale | BH-G              | Defined in the exhaustive switch, **unsupported** for Start and Results until an ingestion-ordered (append-only across watermarks) observation path lands. Event-time ordering can erase an SRM alarm |
 
 Activation-rate balance stays chi-square under every version until a sequential equality-of-rates
-test is chosen. BH-G remains a typed comparator; it is not selected for analysis-v2 because the
-recorded stop-at-first-crossing simulation did not show plain BH exceeding the FDR target.
+test is chosen. analysis-v2 selects BH-G (Johari, Pekelis, Walsh Proposition C.3) for arbitrary
+dependence and an arbitrary stopping time; plain BH can exceed alpha under a two-null adversarial
+distribution even when both marginals are superuniform. `SUPPORTED_ANALYSIS_VERSIONS` omits
+`analysis-v2`: Start rejects a request for it with a structured validation error, and any Run
+frozen under it refuses loudly like an unknown version. The v2 code paths stay in the switch for
+unit tests. Making v2 current or supported is out of scope until the ingestion-ordered path lands.
 
 ## Sources
 

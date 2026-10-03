@@ -4,7 +4,7 @@ import { analyzeStats } from "./stats-engine";
 import { ENGINE_RUN_ID, binomialStatsInput, exposure } from "./stats-engine-test-helpers";
 
 describe("StatsEngine.analyze analysis_version dispatch", () => {
-  it("dispatches SRM by analysis_version and keeps BH under v2", async () => {
+  it("dispatches sequential SRM under analysis-v2 (unit path; v2 is unsupported for Runs)", async () => {
     const shared = {
       controlN: 900,
       treatmentN: 100,
@@ -21,9 +21,6 @@ describe("StatsEngine.analyze analysis_version dispatch", () => {
     expect(v1.srm.srm_is_mismatch).toBe(true);
     expect(v2.srm.srm_is_mismatch).toBe(true);
     expect(v2.srm.srm_p_value).not.toBe(v1.srm.srm_p_value);
-    expect(v1.arm_results.map((arm) => arm.is_significant)).toEqual(
-      v2.arm_results.map((arm) => arm.is_significant),
-    );
   });
 });
 

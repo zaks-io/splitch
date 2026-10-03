@@ -16,12 +16,12 @@ describe("analysisVersionPolicy", () => {
     }
   });
 
-  it("selects sequential SRM under analysis-v2 and keeps BH", () => {
-    // ADR-0014 amendment: BH stop FDR was 0 under the recorded stopping
-    // simulation, so plain BH did not exceed the FDR target.
+  it("selects sequential SRM and BH-G under analysis-v2", () => {
+    // Proposition C.3 needs BH-G for arbitrary dependence / stopping; plain BH
+    // exceeds alpha on the two-null adversarial distribution in family-correction.
     expect(analysisVersionPolicy(ANALYSIS_V2_VERSION)).toEqual({
       srm: "sequential_martingale",
-      familyCorrection: "bh",
+      familyCorrection: "bh_g",
     });
   });
 

@@ -16,10 +16,14 @@ export interface AnalysisVersionPolicy {
  * One explicit, exhaustive switch over known analysis versions. Unknown versions
  * throw; there is no silent fallthrough to the newest (ADR-0059).
  *
- * analysis-v2 keeps BH: the ADR-0014 amendment recorded BH stop FDR of 0 under
- * stop-at-first-crossing with correlated mixed nulls (alpha 0.05, smoke seed
- * 424242, 300 iterations). Plain BH did not exceed the FDR target, so BH-G is
- * not selected for v2.
+ * analysis-v2 selects BH-G: Johari, Pekelis, Walsh Proposition C.3 needs the
+ * harmonic correction for arbitrary dependence and an arbitrary stopping time.
+ * Plain BH can exceed alpha under a two-null adversarial distribution even when
+ * both marginals are superuniform; the ADR-0014 stop simulation asserts BH-G's
+ * FDR, which is the procedure v2 freezes.
+ *
+ * analysis-v2 remains defined here for unit tests, but it is not in
+ * SUPPORTED_ANALYSIS_VERSIONS until an ingestion-ordered observation path lands.
  */
 export function analysisVersionPolicy(version: string): AnalysisVersionPolicy {
   switch (version) {
@@ -27,7 +31,7 @@ export function analysisVersionPolicy(version: string): AnalysisVersionPolicy {
     case ANALYSIS_V1_VERSION:
       return { srm: "chi_square", familyCorrection: "bh" };
     case ANALYSIS_V2_VERSION:
-      return { srm: "sequential_martingale", familyCorrection: "bh" };
+      return { srm: "sequential_martingale", familyCorrection: "bh_g" };
     default:
       throw new Error(
         `unsupported analysis_version ${JSON.stringify(version)}; known: ${[

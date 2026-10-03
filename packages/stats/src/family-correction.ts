@@ -7,7 +7,7 @@ const PROCEDURES = new Set<string>(FAMILY_CORRECTION_PROCEDURES);
 /**
  * Production defaults to Benjamini-Hochberg when the caller omits the argument.
  * analysisVersionPolicy selects the procedure for a frozen Run; analysis-v2
- * keeps BH because the recorded stop FDR did not exceed the target.
+ * selects BH-G for the arbitrary-dependence / arbitrary-stopping guarantee.
  */
 export function resolveFamilyCorrectionProcedure(
   procedure: FamilyCorrectionProcedure | undefined,

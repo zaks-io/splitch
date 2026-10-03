@@ -125,12 +125,14 @@ describe("analysis version and Run commitments (ADR-0059)", () => {
     });
   });
 
-  it("yields different tokens for the same evidence under analysis-v1 and analysis-v2", async () => {
-    const v1 = await readyEnvelope(withRunFields(committedFieldsFor(ANALYSIS_V1_VERSION)));
-    const v2 = await readyEnvelope(withRunFields(committedFieldsFor(ANALYSIS_V2_VERSION)));
+  it("refuses a Run frozen under analysis-v2 exactly like an unknown version", async () => {
+    const { app } = makeResultsHarness(withRunFields(committedFieldsFor(ANALYSIS_V2_VERSION)));
 
-    expect(v1.result_token).not.toBe(v2.result_token);
-    expect(v1.result_token).toBe(ANALYSIS_V1_FIXTURE_TOKEN);
+    const response = await app.request(`${RESULTS_PATH}?runId=${RUN_ID}`, resultsAuthInit("GET"));
+    const error = (await response.json()) as ErrorResponse;
+
+    expect(response.status).toBe(400);
+    expect(JSON.stringify(error)).toContain(ANALYSIS_V2_VERSION);
     expect(CURRENT_ANALYSIS_VERSION).toBe(ANALYSIS_V1_VERSION);
   });
 

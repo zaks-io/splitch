@@ -5,9 +5,10 @@ final stage of the CI pipeline that turns per-(Metric, Variant) p-values into `i
 calls.
 
 This is step 8 of the CI pipeline in [inference-engine.md](inference-engine.md). Production
-selects the procedure through `analysis_version` (ADR-0059). legacy-unversioned, analysis-v1,
-and analysis-v2 all apply Benjamini-Hochberg. BH-G is implemented beside them and is selected
-only when the caller passes `family_correction: "bh_g"` or a future analysis version chooses it.
+selects the procedure through `analysis_version` (ADR-0059). legacy-unversioned and analysis-v1
+apply Benjamini-Hochberg. analysis-v2 selects BH-G for the arbitrary-dependence / arbitrary-stopping
+guarantee (Proposition C.3). analysis-v2 is defined but unsupported for Start/Results until an
+ingestion-ordered observation path lands.
 
 ## Family definition (locked at Experiment design time)
 
@@ -53,9 +54,9 @@ here is a boundary inversion, not an e-value, so e-BH is not available as a swap
 
 `applyDecisionFamilyCorrection({ family_correction })` shares one implementation:
 `"bh"` (default) and `"bh_g"`. The stats engine passes the procedure from
-`analysisVersionPolicy`. analysis-v2 keeps BH because the recorded stop-at-first-crossing
-simulation below shows BH FDR of 0 (alpha 0.05); plain BH did not exceed the FDR target under
-stopping, so BH-G is not selected for that version.
+`analysisVersionPolicy`. analysis-v2 selects BH-G: plain BH can exceed alpha under a two-null
+adversarial dependence distribution even when both marginals are superuniform, and the
+stop-at-first-crossing simulation below asserts FDR for the selected procedure (BH-G).
 
 ## Dependence and stopping simulation
 

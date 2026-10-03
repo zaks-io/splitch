@@ -202,9 +202,9 @@ a `null` `ci_lower`, an undefined relative lift with a finite `ci_lower`, or a `
 
 The final stage converts per-(Metric, Variant) p-values into `is_significant` across the locked
 goal-metric × Variant family. Production selects Benjamini-Hochberg through `analysis_version`
-for legacy-unversioned, analysis-v1, and analysis-v2. BH-G (Benjamini-Yekutieli with the
-harmonic sum) is implemented as a typed `family_correction` argument. analysis-v2 keeps BH
-because the ADR-0014 stop-at-first-crossing simulation recorded BH FDR of 0 under alpha 0.05.
+for legacy-unversioned and analysis-v1. analysis-v2 selects BH-G (Benjamini-Yekutieli with the
+harmonic sum) for arbitrary dependence and an arbitrary stopping time; that version is defined
+but unsupported for Start/Results until an ingestion-ordered observation path lands (ADR-0059).
 Family definition, algorithms, "None" option, and exclusion rules live in
 [multiple-comparisons-fdr.md](multiple-comparisons-fdr.md).
 
@@ -252,9 +252,9 @@ Dependence and stopping:
   aggregate. Johari, Pekelis, Walsh Theorem 7.3 gives FDR control for BH over always-valid p-values
   only under a restricted stopping class and independence. Proposition C.3 gives FDR control for
   BH-G under an arbitrary stopping time and arbitrary dependence.
-- Production versions through analysis-v2 use BH. The BH-G comparator stays typed so a later
-  analysis version can select it without a second implementation of the rank-and-cut step when an
-  audit shows BH exceeding the FDR target under stopping.
+- Production-supported versions (legacy and analysis-v1) use BH. analysis-v2 selects BH-G in the
+  exhaustive switch; it is not Startable or readable on a frozen Run until the ingestion-ordered
+  observation path lands.
 
 ## Failure contracts
 

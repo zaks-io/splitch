@@ -210,7 +210,8 @@ different engine.
 Which estimators a version uses (SRM gate, family correction) is in
 [ADR-0059](../../adr/0059-runs-freeze-an-analysis-version-and-legacy-runs-read-under-a-labeled-one.md)
 §Version table. analysis-v2 switches Exposure and activated SRM to the sequential martingale and
-keeps BH family correction.
+selects BH-G family correction; it is defined but unsupported for Start/Results until an
+ingestion-ordered observation path lands.
 
 ## Control Plane result producer (CLI, MCP, panel)
 
