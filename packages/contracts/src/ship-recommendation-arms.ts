@@ -61,10 +61,11 @@ export function classifyTreatmentArms(input: {
   marginOnScale: number;
   subject: "Primary Metric" | "Goal Metric";
   /**
-   * Locked goal Metrics combined by the ship rule. When k > 1, margin clearance
-   * uses the published alpha/k simultaneous interval.
+   * Metric×Treatment comparisons that can trigger shipping under the combining
+   * ship rule. When k > 1, margin clearance uses the published alpha/k
+   * simultaneous interval.
    */
-  lockedGoalCount: number;
+  shipMarginComparisonCount: number;
 }):
   | { status: "ok"; rows: ClassifiedEffect[] }
   | { status: "unavailable"; reason: RecommendationUnavailableReason } {
@@ -85,7 +86,7 @@ function classifyOneTreatmentArm(
     scale: PreRegistration["ship_rule"]["margin_scale"];
     marginOnScale: number;
     subject: "Primary Metric" | "Goal Metric";
-    lockedGoalCount: number;
+    shipMarginComparisonCount: number;
   },
 ):
   | { status: "ok"; row: ClassifiedEffect }
@@ -95,7 +96,7 @@ function classifyOneTreatmentArm(
     return { status: "unavailable", reason: missingIntervalReason(input.scale) };
   }
   const marginInterval =
-    input.lockedGoalCount > 1 ? simultaneousIntervalForScale(arm, input.scale) : interval;
+    input.shipMarginComparisonCount > 1 ? simultaneousIntervalForScale(arm, input.scale) : interval;
   if (marginInterval === null) {
     return { status: "unavailable", reason: missingIntervalReason(input.scale) };
   }

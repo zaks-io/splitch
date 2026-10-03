@@ -5,9 +5,10 @@ import type { MetricComparisonEstimate } from "./variance-estimator-types";
 
 /**
  * Bonferroni simultaneous intervals for ship-rule margin clearance when the
- * freeze combines k > 1 locked goal Metrics (unanimous_goals / any_goal).
- * Recomputes the decision CI at alpha/k with the same adapter; never rescales
- * the ordinary alpha interval. Omitted when k <= 1 or primary_wins.
+ * freeze can ship on any of k > 1 Metric×Treatment comparisons
+ * (unanimous_goals / any_goal). Recomputes the decision CI at alpha/k with the
+ * same adapter; never rescales the ordinary alpha interval. Omitted when
+ * k <= 1 or primary_wins.
  */
 
 export type SimultaneousShipMarginCi =
@@ -19,12 +20,17 @@ export type SimultaneousShipMarginCi =
     }
   | Record<string, never>;
 
-export function shipMarginGoalCount(input: StatsInput): number {
+/**
+ * k for ship-rule Bonferroni: top-level decision_family members (locked goal
+ * Metric × Treatment arm). Distinct Metrics alone under-correct when any_goal
+ * ships on any Treatment comparison.
+ */
+export function shipMarginComparisonCount(input: StatsInput): number {
   const resolution = input.pre_registration?.ship_rule.conflict_resolution;
   if (resolution !== "unanimous_goals" && resolution !== "any_goal") {
     return 1;
   }
-  const count = new Set(input.decision_family.map((member) => member.metric_id)).size;
+  const count = input.decision_family.filter((member) => member.dimension_id == null).length;
   return count > 0 ? count : 1;
 }
 
@@ -33,15 +39,15 @@ export function simultaneousShipMarginCiForOutput(input: {
   comparison: MetricComparisonEstimate;
   adapters: { sequentialCI: CIAdapter; fixedHorizonCI: CIAdapter };
 }): SimultaneousShipMarginCi {
-  const goalCount = shipMarginGoalCount(input.statsInput);
-  if (goalCount <= 1) return {};
+  const comparisonCount = shipMarginComparisonCount(input.statsInput);
+  if (comparisonCount <= 1) return {};
 
   const alpha = 1 - input.statsInput.confidence_level;
   const simultaneous = decisionCiAtAlpha({
     statsInput: input.statsInput,
     comparison: input.comparison,
     adapters: input.adapters,
-    alpha: alpha / goalCount,
+    alpha: alpha / comparisonCount,
   });
   if (
     simultaneous === null ||

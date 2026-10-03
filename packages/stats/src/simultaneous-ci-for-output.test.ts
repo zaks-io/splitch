@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { FixedHorizonCI } from "./fixed-horizon-ci";
 import { SequentialCI } from "./sequential-ci";
 import {
-  shipMarginGoalCount,
+  shipMarginComparisonCount,
   simultaneousShipMarginCiForOutput,
 } from "./simultaneous-ci-for-output";
 import type { MetricArmEstimate, MetricComparisonEstimate } from "./variance-estimator-types";
@@ -108,7 +108,7 @@ describe("simultaneousShipMarginCiForOutput", () => {
         futility: "off",
       },
     });
-    expect(shipMarginGoalCount(input)).toBe(1);
+    expect(shipMarginComparisonCount(input)).toBe(1);
     expect(
       simultaneousShipMarginCiForOutput({
         statsInput: input,
@@ -120,7 +120,7 @@ describe("simultaneousShipMarginCiForOutput", () => {
 
   it("publishes a wider absolute interval at alpha/k for any_goal with k > 1", () => {
     const input = baseInput();
-    expect(shipMarginGoalCount(input)).toBe(2);
+    expect(shipMarginComparisonCount(input)).toBe(2);
     const ordinary = adapters.sequentialCI.compute({
       estimate: 0.02,
       sampling_var: 0.0001,
@@ -141,5 +141,44 @@ describe("simultaneousShipMarginCiForOutput", () => {
     const lower = (published as { simultaneous_absolute_ci_lower: number })
       .simultaneous_absolute_ci_lower;
     expect(lower).toBeLessThan(ordinary.ci_lower);
+  });
+
+  it("counts Metric×Treatment comparisons, not distinct Metrics", () => {
+    const treatments = Array.from({ length: 10 }, (_, index) => `treatment_${index}`);
+    const input = baseInput({
+      allocation: Object.fromEntries([
+        ["control", 1 / 11],
+        ...treatments.map((variant) => [variant, 1 / 11] as const),
+      ]),
+      decision_family: treatments.map((variant) => ({ metric_id: "goal_a", variant })),
+      pre_registration: {
+        hypothesis: "any treatment ships",
+        primary_metric_id: "goal_a",
+        metrics: [{ metric_id: "goal_a", desirability: "higher_is_better" }],
+        ship_rule: {
+          required_margin: 0.02,
+          margin_scale: "absolute",
+          conflict_resolution: "any_goal",
+        },
+        futility: "off",
+      },
+    });
+    expect(shipMarginComparisonCount(input)).toBe(10);
+    const atMetricOnlyAlpha = adapters.sequentialCI.compute({
+      estimate: 0.02,
+      sampling_var: 0.0001,
+      n_t: 1_000,
+      n_c: 1_000,
+      alpha: 0.05,
+      target_n: 2_000,
+    });
+    const published = simultaneousShipMarginCiForOutput({
+      statsInput: input,
+      comparison: comparison(),
+      adapters,
+    });
+    const lower = (published as { simultaneous_absolute_ci_lower: number })
+      .simultaneous_absolute_ci_lower;
+    expect(lower).toBeLessThan(atMetricOnlyAlpha.ci_lower);
   });
 });

@@ -28,7 +28,8 @@ export function classifyLockedGoalMetrics(
     preRegistration.metrics.map((metric) => [metric.metric_id, metric] as const),
   );
   const lockedIds = lockedGoalMetricIds(arms, guardrailMetricIds);
-  const lockedGoalCount = lockedIds.size;
+  // Bonferroni k = comparisons that can ship (locked goals × Treatment arms).
+  const shipMarginComparisonCount = countShipMarginComparisons(lockedIds, arms, controlVariant);
   const goals: ClassifiedEffect[] = [];
 
   for (const metricId of lockedIds) {
@@ -40,7 +41,7 @@ export function classifyLockedGoalMetrics(
       controlVariant,
       scale,
       marginOnScale,
-      lockedGoalCount,
+      shipMarginComparisonCount,
     });
     if (one.status === "unavailable") return one;
     goals.push(...one.rows);
@@ -51,6 +52,18 @@ export function classifyLockedGoalMetrics(
   return { status: "ok", goals };
 }
 
+function countShipMarginComparisons(
+  lockedIds: ReadonlySet<string>,
+  arms: readonly ArmResult[],
+  controlVariant: string,
+): number {
+  let count = 0;
+  for (const metricId of lockedIds) {
+    count += treatmentArmsFor(metricId, arms, controlVariant).length;
+  }
+  return count > 0 ? count : 1;
+}
+
 function classifyOneLockedGoal(input: {
   metricId: string;
   metric: PreRegistration["metrics"][number] | undefined;
@@ -59,7 +72,7 @@ function classifyOneLockedGoal(input: {
   controlVariant: string;
   scale: PreRegistration["ship_rule"]["margin_scale"];
   marginOnScale: number;
-  lockedGoalCount: number;
+  shipMarginComparisonCount: number;
 }):
   | { status: "ok"; rows: ClassifiedEffect[] }
   | { status: "unavailable"; reason: RecommendationUnavailableReason } {
@@ -79,7 +92,7 @@ function classifyOneLockedGoal(input: {
     scale: input.scale,
     marginOnScale: input.marginOnScale,
     subject: input.metricId === input.primaryMetricId ? "Primary Metric" : "Goal Metric",
-    lockedGoalCount: input.lockedGoalCount,
+    shipMarginComparisonCount: input.shipMarginComparisonCount,
   });
   if (classified.status === "unavailable") {
     return unavailableForScale(classified.reason, input.scale);

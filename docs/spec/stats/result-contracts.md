@@ -224,15 +224,18 @@ with numbers and no internal ids. When an arm's interval clears the required
 margin but the arm fails FDR eligibility, `because` says so explicitly rather
 than claiming the margin was not cleared.
 
-### Simultaneous margin clearance (Bonferroni across locked goals)
+### Simultaneous margin clearance (Bonferroni across shipping comparisons)
 
 FDR eligibility tests lift against **zero**. Margin clearance is a different
-claim (lift past the required margin). When the ship rule combines `k > 1`
-locked goal Metrics (`unanimous_goals` / `any_goal`), a goal clears the margin
-only if its always-valid interval recomputed at `alpha/k` (Bonferroni across the
-`k` locked goals) clears the margin. For `k = 1` (including `primary_wins`) the
-ordinary alpha decision interval is used. The `alpha/k` interval is produced by
-the same confidence-sequence (or fixed-horizon) adapter as the decision
+claim (lift past the required margin). When the ship rule combines goals
+(`unanimous_goals` / `any_goal`) and `k > 1` Metric×Treatment comparisons can
+trigger shipping, a comparison clears the margin only if its always-valid
+interval recomputed at `alpha/k` (Bonferroni across those comparisons) clears
+the margin. `k` is the count of locked goal Metric × Treatment arm pairs (top-
+level `decision_family` members), not distinct Metrics alone — otherwise one
+goal with many Treatments under-corrects. For `k = 1` (including `primary_wins`)
+the ordinary alpha decision interval is used. The `alpha/k` interval is produced
+by the same confidence-sequence (or fixed-horizon) adapter as the decision
 interval on the absolute scale — never by rescaling the published alpha
 interval. Relative ship rules (fixed horizon only) derive Fieller percent bounds
 from that absolute `alpha/k` interval. Published fields:
@@ -240,8 +243,9 @@ from that absolute `alpha/k` interval. Published fields:
 from the result token). Zero-null FDR eligibility remains an **additional**
 requirement on top of simultaneous margin clearance. Seeded Monte Carlo
 (`packages/stats/src/ship-recommendation-margin.simulation.test.ts`): 20 goals
-with true lift equal to the required margin under `any_goal` must keep the
-false-ship rate at or below `alpha` plus the predeclared Monte Carlo tolerance.
+with true lift equal to the required margin under `any_goal`, and separately one
+goal with 10 Treatments at the margin, must keep the false-ship rate at or below
+`alpha` plus the predeclared Monte Carlo tolerance.
 
 Absolute margins use the absolute decision interval (`absolute_ci_*` on Treatment
 arms, stripped from the result token), with the simultaneous absolute interval

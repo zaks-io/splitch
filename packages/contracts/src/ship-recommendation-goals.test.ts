@@ -234,6 +234,43 @@ describe("computeShipRecommendation simultaneous margin clearance", () => {
     expect(result.recommendation?.verdict).toBe("keep_running");
     expect(result.recommendation?.verdict).not.toBe("ship");
   });
+
+  it("requires alpha/k intervals for one goal with multiple Treatments under any_goal", () => {
+    // Distinct Metrics would be k=1 (ordinary interval); comparisons are k=2.
+    const output = stats({
+      arm_results: [
+        armResult({
+          variant: "treatment_a",
+          metric_id: "checkout-conversion",
+          absolute_ci_lower: 0.021,
+          absolute_ci_upper: 0.08,
+          simultaneous_absolute_ci_lower: 0.01,
+          simultaneous_absolute_ci_upper: 0.09,
+        }),
+        armResult({
+          variant: "treatment_b",
+          metric_id: "checkout-conversion",
+          absolute_ci_lower: 0.021,
+          absolute_ci_upper: 0.08,
+          simultaneous_absolute_ci_lower: 0.01,
+          simultaneous_absolute_ci_upper: 0.09,
+        }),
+      ],
+    });
+    const result = recommend(
+      output,
+      preReg({
+        metrics: [{ metric_id: "checkout-conversion", desirability: "higher_is_better" }],
+        ship_rule: {
+          required_margin: 0.02,
+          margin_scale: "absolute",
+          conflict_resolution: "any_goal",
+        },
+      }),
+    );
+    expect(result.recommendation?.verdict).toBe("keep_running");
+    expect(result.recommendation?.verdict).not.toBe("ship");
+  });
 });
 
 describe("computeShipRecommendation partial goal freeze", () => {
