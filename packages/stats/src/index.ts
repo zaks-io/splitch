@@ -38,12 +38,13 @@ export {
   SEQUENTIAL_SRM_SOURCE,
 } from "./sequential-srm";
 export { classifyRopeVerdict, ROPE_VERDICTS } from "./rope-verdict";
+export { classifySrmRootCause } from "./srm-root-cause";
 export {
-  classifySrmRootCause,
   SRM_ROOT_CAUSE_BRANCHES,
   SRM_ROOT_CAUSE_NEXT_CHECK,
+  SRM_ROOT_CAUSE_SEGMENT_HOMOGENEITY_ALPHA,
   SRM_ROOT_CAUSE_TELEMETRY_GAPS,
-} from "./srm-root-cause";
+} from "./srm-root-cause-types";
 export {
   classifySrmRootCauseFromStats,
   srmRootCauseInputFromStats,
@@ -114,4 +115,4 @@ export type {
   SrmRootCauseDayBucket,
   SrmRootCauseInput,
   SrmRootCauseSegmentCut,
-} from "./srm-root-cause";
+} from "./srm-root-cause-types";

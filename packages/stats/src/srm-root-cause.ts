@@ -1,88 +1,27 @@
 /**
  * Fabijan et al. 2019 SRM root-cause classifier over outputs the platform
- * already produces. It never recomputes chi-square or changes the gate; it
- * only names the likely diagnostic branch and the next check to run.
+ * already produces. It never recomputes the decision-gate SRM statistic or
+ * changes the gate; it only names the likely diagnostic branch and the next
+ * check to run. Segment localization may run a separate homogeneity test over
+ * already-sliced arm counts (not the gate test).
  *
  * `engagement_direction` and `latency_linked` need telemetry that does not
  * exist yet (see `SRM_ROOT_CAUSE_TELEMETRY_GAPS`). Those branches are omitted
  * rather than guessed.
  */
 
-export const SRM_ROOT_CAUSE_BRANCHES = [
-  "triggered_only",
-  "segment_localized",
-  "day_one",
-  "unclassified",
-] as const;
-
-export type SrmRootCauseBranch = (typeof SRM_ROOT_CAUSE_BRANCHES)[number];
-
-/** Branches Fabijan describes that this classifier cannot judge today. */
-export const SRM_ROOT_CAUSE_TELEMETRY_GAPS = [
-  {
-    branch: "engagement_direction",
-    needed:
-      "Per-Variant engagement or activity intensity among Exposed Entities before the SRM window closes.",
-  },
-  {
-    branch: "latency_linked",
-    needed:
-      "Per-Variant Exposure or Assignment logging latency distributions tied to the same denominator.",
-  },
-] as const;
-
-export interface SrmRootCauseSegmentCut {
-  readonly dimensionId: string;
-  readonly dimensionValue: string;
-  readonly srmIsMismatch: boolean;
-}
-
-/**
- * First-Exposure calendar-day (or equivalent) arm counts already scored for
- * SRM. Buckets must be ordered earliest-first; this function does not sort.
- */
-export interface SrmRootCauseDayBucket {
-  readonly day: string;
-  readonly srmIsMismatch: boolean;
-}
-
-export interface SrmRootCauseInput {
-  readonly exposureMismatch: boolean;
-  /** `null` when the Run has no Activation gate. */
-  readonly activatedMismatch: boolean | null;
-  /**
-   * Dimension / Segment auto-cuts from decision-diagnostics. Omit when the
-   * producer has not fetched them; an empty list means cuts were fetched and
-   * none exist.
-   */
-  readonly segmentCuts?: readonly SrmRootCauseSegmentCut[];
-  /**
-   * Per first-Exposure-day SRM scores. Omit when trend buckets are unavailable;
-   * an empty list means the range was fetched and is empty.
-   */
-  readonly dayBuckets?: readonly SrmRootCauseDayBucket[];
-}
-
-/** Canonical operation id every branch's `nextCheck` must resolve to today. */
-export const SRM_ROOT_CAUSE_NEXT_CHECK = "experiment_results_get" as const;
-
-export interface SrmRootCauseClassification {
-  readonly branch: SrmRootCauseBranch;
-  readonly explanation: string;
-  /**
-   * Canonical `routeRegistry` operationId the operator/agent should call next.
-   * Must resolve via `getRoute` — never a future/spec-only path name.
-   */
-  readonly nextCheck: string;
-  /** Set on `unclassified`: every signal the classifier weighed. */
-  readonly evidenceConsidered?: string[];
-}
-
-interface MatchedBranch {
-  readonly branch: Exclude<SrmRootCauseBranch, "unclassified">;
-  readonly explanation: string;
-  readonly nextCheck: string;
-}
+import {
+  segmentLocalizedMatch,
+  segmentThresholdCrossingsWithoutLocalization,
+} from "./srm-root-cause-segment";
+import {
+  SRM_ROOT_CAUSE_NEXT_CHECK,
+  type SrmRootCauseClassification,
+  type SrmRootCauseDayBucket,
+  type SrmRootCauseInput,
+  type SrmRootCauseMatchedBranch,
+  type SrmRootCauseSegmentCut,
+} from "./srm-root-cause-types";
 
 /**
  * Returns `null` when neither Exposure nor activated-population SRM has fired.
@@ -98,6 +37,8 @@ export function classifySrmRootCause(input: SrmRootCauseInput): SrmRootCauseClas
     return null;
   }
 
+  const zeroActivationInsufficient =
+    activatedFired && input.activationCount !== null && input.activationCount === 0;
   const matches = collectMatches(input, exposureFired, activatedFired);
   if (matches.length === 1) {
     const only = matches[0];
@@ -111,12 +52,39 @@ export function classifySrmRootCause(input: SrmRootCauseInput): SrmRootCauseClas
     };
   }
 
+  if (matches.length === 0 && zeroActivationInsufficient && !exposureFired) {
+    return {
+      branch: "unclassified",
+      explanation:
+        "Activated SRM is a fail-closed sentinel with zero Activations, which is insufficient evidence for an Activation-gate (triggered_only) root cause.",
+      nextCheck: SRM_ROOT_CAUSE_NEXT_CHECK,
+      evidenceConsidered: evidenceConsidered(input, exposureFired, activatedFired, matches, {
+        zeroActivationInsufficient: true,
+      }),
+    };
+  }
+
+  const thresholdOnly = segmentThresholdCrossingsWithoutLocalization(input.segmentCuts);
+  if (matches.length === 0 && thresholdOnly !== null) {
+    return {
+      branch: "unclassified",
+      explanation: thresholdOnly.explanation,
+      nextCheck: SRM_ROOT_CAUSE_NEXT_CHECK,
+      evidenceConsidered: evidenceConsidered(input, exposureFired, activatedFired, matches, {
+        zeroActivationInsufficient,
+        segmentThresholdNote: thresholdOnly.evidenceTag,
+      }),
+    };
+  }
+
   return {
     branch: "unclassified",
     explanation:
       "Sample Ratio Mismatch fired, but the available signals do not isolate a single Fabijan branch.",
     nextCheck: SRM_ROOT_CAUSE_NEXT_CHECK,
-    evidenceConsidered: evidenceConsidered(input, exposureFired, activatedFired, matches),
+    evidenceConsidered: evidenceConsidered(input, exposureFired, activatedFired, matches, {
+      zeroActivationInsufficient,
+    }),
   };
 }
 
@@ -124,10 +92,18 @@ function collectMatches(
   input: SrmRootCauseInput,
   exposureFired: boolean,
   activatedFired: boolean,
-): MatchedBranch[] {
-  const matches: MatchedBranch[] = [];
+): SrmRootCauseMatchedBranch[] {
+  const matches: SrmRootCauseMatchedBranch[] = [];
 
-  if (activatedFired && !exposureFired) {
+  // Zero Activations: activated_srm_mismatch is a fail-closed sentinel, not
+  // evidence the Activation gate skewed the activated population. Require a
+  // positive activation count before claiming triggered_only.
+  if (
+    activatedFired &&
+    !exposureFired &&
+    input.activationCount !== null &&
+    input.activationCount > 0
+  ) {
     matches.push({
       branch: "triggered_only",
       explanation:
@@ -136,7 +112,7 @@ function collectMatches(
     });
   }
 
-  const segment = segmentLocalized(input.segmentCuts);
+  const segment = segmentLocalizedMatch(input.segmentCuts);
   if (segment !== null) {
     matches.push(segment);
   }
@@ -149,33 +125,9 @@ function collectMatches(
   return matches;
 }
 
-function segmentLocalized(
-  cuts: readonly SrmRootCauseSegmentCut[] | undefined,
-): MatchedBranch | null {
-  if (cuts === undefined) {
-    return null;
-  }
-  const mismatched = cuts.filter((cut) => cut.srmIsMismatch);
-  // Localized means some slices carry the imbalance and others do not.
-  if (mismatched.length === 0 || mismatched.length === cuts.length) {
-    return null;
-  }
-  const sample = mismatched[0];
-  if (sample === undefined) {
-    throw new Error("SRM root-cause mismatched segment list was empty after a non-empty filter.");
-  }
-  const label =
-    mismatched.length === 1
-      ? `${sample.dimensionId}=${sample.dimensionValue}`
-      : `${mismatched.length} Dimension slices`;
-  return {
-    branch: "segment_localized",
-    explanation: `SRM is concentrated in ${label} while other requested slices remain balanced.`,
-    nextCheck: SRM_ROOT_CAUSE_NEXT_CHECK,
-  };
-}
-
-function dayOneBranch(days: readonly SrmRootCauseDayBucket[] | undefined): MatchedBranch | null {
+function dayOneBranch(
+  days: readonly SrmRootCauseDayBucket[] | undefined,
+): SrmRootCauseMatchedBranch | null {
   if (days === undefined || days.length === 0) {
     return null;
   }
@@ -204,38 +156,69 @@ function evidenceConsidered(
   input: SrmRootCauseInput,
   exposureFired: boolean,
   activatedFired: boolean,
-  matches: readonly MatchedBranch[],
+  matches: readonly SrmRootCauseMatchedBranch[],
+  extras: {
+    zeroActivationInsufficient?: boolean;
+    segmentThresholdNote?: string;
+  } = {},
 ): string[] {
   const evidence = [
     `exposure_srm:${exposureFired ? "mismatch" : "clean"}`,
-    `activated_srm:${
-      input.activatedMismatch === null ? "not_applicable" : activatedFired ? "mismatch" : "clean"
-    }`,
+    activatedSrmEvidence(input.activatedMismatch, activatedFired),
+    `activation_count:${input.activationCount === null ? "absent" : String(input.activationCount)}`,
   ];
-  if (input.segmentCuts === undefined) {
-    evidence.push("segment_cuts:absent");
-  } else {
-    evidence.push(
-      `segment_cuts:mismatched_${input.segmentCuts.filter((c) => c.srmIsMismatch).length}_of_${input.segmentCuts.length}`,
-    );
+  if (extras.zeroActivationInsufficient === true) {
+    evidence.push("insufficient_evidence:zero_activations");
   }
-  if (input.dayBuckets === undefined) {
-    evidence.push("day_buckets:absent");
-  } else {
-    evidence.push(
-      `day_buckets:mismatched_${input.dayBuckets.filter((d) => d.srmIsMismatch).length}_of_${input.dayBuckets.length}`,
-    );
+  evidence.push(segmentCutsEvidence(input.segmentCuts));
+  if (extras.segmentThresholdNote !== undefined) {
+    evidence.push(extras.segmentThresholdNote);
   }
+  evidence.push(dayBucketsEvidence(input.dayBuckets));
   if (matches.length > 1) {
     evidence.push(`conflicting_branches:${matches.map((m) => m.branch).join(",")}`);
   }
   return evidence;
 }
 
+function activatedSrmEvidence(activatedMismatch: boolean | null, activatedFired: boolean): string {
+  if (activatedMismatch === null) {
+    return "activated_srm:not_applicable";
+  }
+  return activatedFired ? "activated_srm:mismatch" : "activated_srm:clean";
+}
+
+function segmentCutsEvidence(cuts: readonly SrmRootCauseSegmentCut[] | undefined): string {
+  if (cuts === undefined) {
+    return "segment_cuts:absent";
+  }
+  const mismatched = cuts.filter((c) => c.srmIsMismatch).length;
+  return `segment_cuts:mismatched_${mismatched}_of_${cuts.length}`;
+}
+
+function dayBucketsEvidence(days: readonly SrmRootCauseDayBucket[] | undefined): string {
+  if (days === undefined) {
+    return "day_buckets:absent";
+  }
+  const mismatched = days.filter((d) => d.srmIsMismatch).length;
+  return `day_buckets:mismatched_${mismatched}_of_${days.length}`;
+}
+
 function validateInput(input: SrmRootCauseInput): void {
   assertBoolean("exposureMismatch", input.exposureMismatch);
   if (input.activatedMismatch !== null) {
     assertBoolean("activatedMismatch", input.activatedMismatch);
+  }
+  if (input.activationCount !== null) {
+    if (
+      typeof input.activationCount !== "number" ||
+      !Number.isInteger(input.activationCount) ||
+      input.activationCount < 0
+    ) {
+      throw new Error(
+        `activationCount must be a non-negative integer or null; received ${JSON.stringify(input.activationCount)}.`,
+      );
+    }
   }
   validateSegmentCuts(input.segmentCuts);
   validateDayBuckets(input.dayBuckets);
@@ -254,6 +237,26 @@ function validateSegmentCuts(cuts: readonly SrmRootCauseSegmentCut[] | undefined
       throw new Error(`segmentCuts[${index}] requires non-empty dimensionId and dimensionValue.`);
     }
     assertBoolean(`segmentCuts[${index}].srmIsMismatch`, cut.srmIsMismatch);
+    if (cut.observedCounts !== undefined) {
+      validateObservedCounts(`segmentCuts[${index}].observedCounts`, cut.observedCounts);
+    }
+  }
+}
+
+function validateObservedCounts(name: string, counts: Readonly<Record<string, number>>): void {
+  const entries = Object.entries(counts);
+  if (entries.length === 0) {
+    throw new Error(`${name} must include at least one Variant count.`);
+  }
+  for (const [variant, count] of entries) {
+    if (variant.trim() === "") {
+      throw new Error(`${name} Variant keys must be non-empty.`);
+    }
+    if (typeof count !== "number" || !Number.isInteger(count) || count < 0) {
+      throw new Error(
+        `${name}.${variant} must be a non-negative integer; received ${JSON.stringify(count)}.`,
+      );
+    }
   }
 }
 
