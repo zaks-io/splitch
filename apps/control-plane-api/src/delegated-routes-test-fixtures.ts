@@ -1,10 +1,13 @@
+import { MEMBERSHIP_WIDE_READ_AUTHORIZATION } from "@splitch/contracts";
 import type { Repository } from "@splitch/db";
-import type { AuthResolver, RateLimiter } from "@splitch/worker-runtime";
+import type { AuthResolver, Principal, RateLimiter } from "@splitch/worker-runtime";
 import { vi } from "vitest";
 import type { DelegationBindings } from "./delegated-routes";
+import { appAdminScope } from "./scope-binding";
 
 export const RESULTS_PATH = "/apps/app_1/envs/env_1/experiments/exp_1/results";
 export const OTHER_TENANT_RESULTS_PATH = "/apps/app_1/envs/env_1/experiments/exp_tenant_b/results";
+export const RESULTS_APP_ID = "app_1";
 
 export const NO_RUN_BODY = {
   view: "detailed",
@@ -50,6 +53,8 @@ const ENVIRONMENTS = new Set(["app_1/env_1", "app_2/env_9"]);
 export function deps(options: {
   bindings?: DelegationBindings;
   appId?: string;
+  principal?: Partial<Principal>;
+  membershipRole?: string | null;
   experiments?: {
     getExperiment: ReturnType<typeof vi.fn>;
     listRunsForExperiment: ReturnType<typeof vi.fn>;
@@ -61,32 +66,50 @@ export function deps(options: {
   repo: Repository;
   delegationBindings?: DelegationBindings;
 } {
+  const appId = options.appId ?? RESULTS_APP_ID;
   const authResolver: AuthResolver = () => ({
     ok: true as const,
     principal: {
       kind: "control-plane-token" as const,
       id: "user_1",
-      scopes: [],
+      scopes: [appAdminScope(appId)],
       orgId: null,
-      appId: options.appId ?? "app_1",
+      appId,
       environmentId: null,
       authDoor: "device_flow" as const,
+      ...options.principal,
     },
   });
   const rateLimiter: RateLimiter = () => ({ limited: false });
   return {
     authResolver,
     rateLimiter,
-    repo: stubRepo(options.experiments),
+    repo: stubRepo(options.experiments, options.membershipRole),
     ...(options.bindings ? { delegationBindings: options.bindings } : {}),
   };
 }
 
-function stubRepo(experiments?: {
-  getExperiment: ReturnType<typeof vi.fn>;
-  listRunsForExperiment: ReturnType<typeof vi.fn>;
-  getRun?: ReturnType<typeof vi.fn>;
-}): Repository {
+/** Membership-wide read principal that still has live App admin membership. */
+export function membershipWideAdminPrincipal(appId = RESULTS_APP_ID): Partial<Principal> {
+  return {
+    scopes: [],
+    appId: null,
+    authorization: MEMBERSHIP_WIDE_READ_AUTHORIZATION,
+    memberships: {
+      organizations: [{ id: "org_1", role: "admin" }],
+      apps: [{ id: appId, organizationId: "org_1", role: "admin" }],
+    },
+  };
+}
+
+function stubRepo(
+  experiments?: {
+    getExperiment: ReturnType<typeof vi.fn>;
+    listRunsForExperiment: ReturnType<typeof vi.fn>;
+    getRun?: ReturnType<typeof vi.fn>;
+  },
+  membershipRole: string | null = "admin",
+): Repository {
   return {
     identity: {
       getEnvironment: async ({ appId }: { appId: string }, environmentId: string) =>
@@ -95,7 +118,9 @@ function stubRepo(experiments?: {
         ENVIRONMENTS.has(`${appId}/${selector}`)
           ? [{ environmentId: selector, environmentKey: "development" }]
           : [],
-      getAppMembership: vi.fn(async () => ({ role: "admin" })),
+      getAppMembership: vi.fn(async () =>
+        membershipRole === null ? null : { role: membershipRole },
+      ),
     },
     experiments: {
       getExperiment:

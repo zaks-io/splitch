@@ -1,16 +1,16 @@
 import type { ExperimentResultsView } from "@splitch/contracts";
-import { appScope, type Repository } from "@splitch/db";
+import type { Repository } from "@splitch/db";
 import {
   delegatedIdentityFrom,
   delegatedRequest,
-  type HandlerArgs,
+  enforceScopes,
   type Principal,
 } from "@splitch/worker-runtime";
 import { resolveExperimentResultsTarget } from "./analysis-results-request";
+import { requireAppAdmin } from "./app-authz";
 import { experimentNotFound, runNotFound } from "./experiment-errors";
 import {
   analysisHopParts,
-  canConcludeWithRole,
   enrichAnalysisResultsResponse,
   loadResultsRun,
   produceNoRunResults,
@@ -131,7 +131,17 @@ async function hopAndEnrich(args: {
     return { kind: "response", response: analysisResponse };
   }
 
-  const canConclude = await actorCanConclude(args.repo, args.scope.appId, args.principal);
+  const canConclude = await actorCanConclude(
+    args.repo,
+    {
+      appId: args.scope.appId,
+      environmentId: args.scope.environmentId,
+      experimentId: args.scope.experimentId,
+      runId: args.runId,
+    },
+    args.principal,
+    args.requestId,
+  );
   return {
     kind: "response",
     response: Response.json(
@@ -172,13 +182,26 @@ function pinRunId(
   };
 }
 
+/**
+ * Mirror the runs_conclude door: registrar scope/co-scope/read-only guards,
+ * then the handler's requireAppAdmin check. Live membership alone must not
+ * advertise concludeExecutable when the POST would be rejected.
+ */
 async function actorCanConclude(
   repo: Repository,
-  appId: string,
-  principal: Pick<HandlerArgs<unknown>["principal"], "id">,
+  params: {
+    appId: string;
+    environmentId: string;
+    experimentId: string;
+    runId: string;
+  },
+  principal: Principal,
+  requestId: string,
 ): Promise<boolean> {
-  const membership = await repo.identity.getAppMembership(appScope(appId), principal.id);
-  return canConcludeWithRole(membership?.role);
+  if (enforceScopes(controlPlaneRoute("runs_conclude"), principal, params) !== null) {
+    return false;
+  }
+  return (await requireAppAdmin({ repo }, params.appId, principal, requestId)) === null;
 }
 
 function optionalRunId(parts: {

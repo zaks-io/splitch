@@ -47,4 +47,9 @@ export {
   WORKER_BASELINE_SECURITY_HEADERS,
   wrapWorkerHandler,
 } from "./security-headers";
-export { appAccessCovers, organizationAccessCovers, requireWideMemberships } from "./steps/scopes";
+export {
+  appAccessCovers,
+  enforceScopes,
+  organizationAccessCovers,
+  requireWideMemberships,
+} from "./steps/scopes";

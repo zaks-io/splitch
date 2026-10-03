@@ -53,7 +53,7 @@ describe("delegated control-plane routes", () => {
       operation: "experiment_results_get",
       actorId: "user_1",
       authKind: "control-plane-token",
-      scopes: [],
+      scopes: ["app:app_1:admin"],
       orgId: null,
       appId: "app_1",
       environmentId: "env_1",

@@ -3,8 +3,10 @@ import { createApp } from "./app";
 import {
   binding,
   deps,
+  membershipWideAdminPrincipal,
   NO_RUN_BODY,
   OTHER_TENANT_RESULTS_PATH,
+  RESULTS_APP_ID,
   RESULTS_PATH,
   stubRun,
 } from "./delegated-routes-test-fixtures";
@@ -164,5 +166,41 @@ describe("experiment results Experiment vs Run resolution (SPL-305)", () => {
     expect(body).toMatchObject({ view: "concise", state: "ready", run_id: "run_7" });
     expect(body).not.toHaveProperty("stats");
     expect(new URL(forwarded[0]?.url ?? "").searchParams.has("view")).toBe(false);
+  });
+});
+
+describe("experiment results concludeExecutable matches runs_conclude guards", () => {
+  it("is false for a membership-wide-read token even when live role is admin", async () => {
+    const analysis = binding([], Response.json(analysisEnvelope("run_7", statsOutput())));
+    const response = await createApp(
+      deps({
+        bindings: { "analysis-api": analysis },
+        principal: membershipWideAdminPrincipal(),
+      }),
+    ).request(RESULTS_PATH, { headers: { authorization: "Bearer stub" } });
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      readiness: { concludeExecutable: false },
+    });
+  });
+
+  it("is false when the principal lacks App admin/owner scopes", async () => {
+    const analysis = binding([], Response.json(analysisEnvelope("run_7", statsOutput())));
+    const response = await createApp(
+      deps({
+        bindings: { "analysis-api": analysis },
+        principal: {
+          scopes: [`app:${RESULTS_APP_ID}:member`],
+          appId: RESULTS_APP_ID,
+        },
+        membershipRole: "admin",
+      }),
+    ).request(RESULTS_PATH, { headers: { authorization: "Bearer stub" } });
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      readiness: { concludeExecutable: false },
+    });
   });
 });
