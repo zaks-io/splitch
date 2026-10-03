@@ -29,12 +29,12 @@ export function preReg(overrides: Partial<PreRegistration> = {}): PreRegistratio
   };
 }
 
-export function gateFor(statsOutput: ReturnType<typeof stats>) {
+export function gateFor(statsOutput: StatsOutput) {
   return evaluateExperimentDecisionGate(statsOutput, control, reachedDuration());
 }
 
 export function recommend(
-  statsOutput: ReturnType<typeof stats>,
+  statsOutput: StatsOutput,
   registration: PreRegistration = preReg(),
   horizon: "sequential" | "fixed" = "fixed",
 ) {
