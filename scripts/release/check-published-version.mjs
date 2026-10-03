@@ -3,7 +3,7 @@ import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { getReleaseTarget } from "./constants.mjs";
 
-const NPM_REGISTRY = "https://registry.npmjs.org";
+export const NPM_REGISTRY = "https://registry.npmjs.org";
 
 /**
  * @typedef {{ status: number | null; stdout: string; stderr: string }} NpmViewResult

@@ -9,7 +9,7 @@ export function readReleaseManifest(targetKey, repoRoot) {
   return JSON.parse(readFileSync(join(repoRoot, config.packagePath), "utf8"));
 }
 
-const RELEASE_SEMVER_PATTERN = /^\d+\.\d+\.\d+(?:[-+][\w.-]+)*$/;
+export const RELEASE_SEMVER_PATTERN = /^\d+\.\d+\.\d+(?:[-+][\w.-]+)*$/;
 
 export function readReleaseVersion(targetKey, repoRoot) {
   const config = getReleaseTarget(targetKey);

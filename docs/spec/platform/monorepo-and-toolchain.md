@@ -60,6 +60,7 @@ Uncached or root-wide tasks:
 | Task                                  | Cache | Contract                                                               |
 | ------------------------------------- | ----- | ---------------------------------------------------------------------- |
 | `depcruise`                           | no    | root architecture import graph gate                                    |
+| `check:request-contract-compat`       | no    | request contracts vs the newest CLI version on npm                     |
 | `duplicates`                          | no    | root duplicate-code detection over source-bearing paths                |
 | `secrets:*`                           | no    | Gitleaks scans working tree or git history; never cache security scans |
 | `d1:migrate:local` / `tinybird:local` | no    | local backing-resource validators                                      |

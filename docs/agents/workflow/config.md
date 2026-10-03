@@ -72,8 +72,13 @@ in this config; refresh them from Linear during each workflow run.
   `tinybird:local`, `d1:migrate:local`, `d1:migrate:populated`).
 - CI gate: `.github/workflows/ci.yml` job `Verify` runs `pnpm secrets:range` and
   then affected `pnpm verify:ci` (`format:check`, `lint`, `typecheck`, `knip`,
-  `depcruise`, `spec:lint`, `test:scripts`, `test`, `stats:golden`, `stats:property`,
-  `build`, and the SDK bundle-size `size:check`). The Tinybird and D1 validators are conditional steps inside the same
+  `depcruise`, `spec:lint`, `check:request-contract-compat`, `test:scripts`, `test`,
+  `stats:golden`, `stats:property`, `build`, and the SDK bundle-size `size:check`).
+  `check:request-contract-compat` fails when HEAD would refuse a request the newest
+  installable CLI (the highest `cli-v*` tag whose version is on the public npm
+  registry) can send; reviewed exceptions, each scoped to the release tag it
+  excuses, live in
+  `scripts/request-contract-compat-allowlist.json`. The Tinybird and D1 validators are conditional steps inside the same
   job, each gated on `scripts/plan-ci-verification.mjs` outputs so it no-ops
   unless its inputs changed. A lockfile bump revalidates D1 (it shells out to
   `pnpm exec wrangler`) but not Tinybird (`tb` is curl-installed and the
