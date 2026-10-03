@@ -9,14 +9,10 @@ import {
   renderError,
 } from "@splitch/worker-runtime";
 import type { Hono } from "hono";
-import {
-  analysisResultsNoRunEnvelope,
-  resolveExperimentResultsTarget,
-} from "./analysis-results-request";
 import { requireAppMember } from "./app-authz";
 import { appNotFound } from "./app-environment-model";
 import type { ConfigStoreAccess } from "./config-store-access";
-import { experimentNotFound, runNotFound } from "./experiment-errors";
+import { handleExperimentResultsDelegation } from "./experiment-results-delegated";
 import { environmentExists } from "./experiment-handler-shared";
 import { controlPlaneRoute } from "./routes";
 
@@ -35,8 +31,8 @@ import { controlPlaneRoute } from "./routes";
  * passed, because the owner Worker trusts what arrives over it.
  *
  * Experiment results additionally resolve Experiment existence and Run selection
- * here (SPL-305): Analysis only sees Tinybird, which cannot tell a draft
- * Experiment from a missing id.
+ * here (SPL-305), then enrich the Analysis envelope through the shared result
+ * producer (plan 0.15) before the response leaves.
  */
 export type DelegationBindings = Partial<Record<RouteOwner, Fetcher>>;
 
@@ -85,31 +81,28 @@ function delegatingHandler(
 ): RouteHandler<unknown> {
   return async ({ input, principal, requestId }: HandlerArgs<unknown>): Promise<Response> => {
     const parts = inputParts(input);
-    const trafficError = await analysisTrafficError(
-      route,
-      parts.params?.appId,
-      configStore,
-      requestId,
-    );
-    if (trafficError) return trafficError;
-    const scopeError = await delegationScopeError(
+    const refused = await refuseBeforeDelegation(
       route,
       repo,
-      parts.params ?? {},
+      configStore,
       principal,
+      parts,
       requestId,
     );
-    if (scopeError) return scopeError;
+    if (refused) return refused;
 
-    // Experiment results: D1 can finish the read without Analysis (draft →
-    // no_run, missing → EXPERIMENT_NOT_FOUND). Run that gate before the binding
-    // check so an unbound ANALYSIS_API cannot mask those as SERVICE_UNAVAILABLE
-    // (SPL-305 / production outage class from 31d86f6a).
-    const pinned = await pinExperimentResultsRun(route, repo, parts, requestId);
-    if (pinned instanceof Response) return pinned;
-
+    if (isExperimentResultsRoute(route.operationId)) {
+      return experimentResultsResponse(
+        route.operationId,
+        route,
+        binding,
+        repo,
+        principal,
+        requestId,
+        parts,
+      );
+    }
     if (!binding) return missingOwnerBinding(route, requestId);
-
     return binding.fetch(
       delegatedRequest(route, delegatedIdentityFrom(route, principal, parts.params ?? {}), {
         ...parts,
@@ -117,6 +110,41 @@ function delegatingHandler(
       }),
     );
   };
+}
+
+async function refuseBeforeDelegation(
+  route: ApiRouteContract,
+  repo: Repository,
+  configStore: ConfigStoreAccess | undefined,
+  principal: HandlerArgs<unknown>["principal"],
+  parts: ReturnType<typeof inputParts>,
+  requestId: string,
+): Promise<Response | null> {
+  return (
+    (await analysisTrafficError(route, parts.params?.appId, configStore, requestId)) ??
+    (await delegationScopeError(route, repo, parts.params ?? {}, principal, requestId))
+  );
+}
+
+async function experimentResultsResponse(
+  operationId: "experiment_results_get" | "experiment_results_post",
+  route: ApiRouteContract,
+  binding: Fetcher | undefined,
+  repo: Repository,
+  principal: HandlerArgs<unknown>["principal"],
+  requestId: string,
+  parts: ReturnType<typeof inputParts>,
+): Promise<Response> {
+  const result = await handleExperimentResultsDelegation({
+    repo,
+    binding,
+    principal,
+    requestId,
+    operationId,
+    parts,
+  });
+  if (result.kind === "needs_binding") return missingOwnerBinding(route, requestId);
+  return result.response;
 }
 
 async function analysisTrafficError(
@@ -214,94 +242,10 @@ function missingOwnerBinding(route: ApiRouteContract, requestId: string): Respon
   );
 }
 
-/**
- * For experiment results: resolve Experiment/Run in D1 and either return a
- * finished Response (draft / missing) or mutate `parts` to pin the Run id on
- * the hop. Other delegated routes pass through unchanged.
- */
-async function pinExperimentResultsRun(
-  route: ApiRouteContract,
-  repo: Repository,
-  parts: {
-    params?: Record<string, string>;
-    query?: Record<string, unknown>;
-    body?: unknown;
-  },
-  requestId: string,
-): Promise<Response | undefined> {
-  if (!isExperimentResultsRoute(route.operationId)) return undefined;
-
-  const gated = await experimentResultsBeforeHop(repo, parts, requestId);
-  if (gated.response) return gated.response;
-
-  // Pin the resolved Run on the hop so Analysis never guesses from empty
-  // Tinybird rows. GET carries runId in the query; POST in the body.
-  if (route.method === "GET") {
-    parts.query = { ...parts.query, runId: gated.runId };
-  } else {
-    parts.body = { ...(isRecord(parts.body) ? parts.body : {}), runId: gated.runId };
-  }
-  return undefined;
-}
-
 function isExperimentResultsRoute(
   operationId: string,
 ): operationId is "experiment_results_get" | "experiment_results_post" {
   return operationId === "experiment_results_get" || operationId === "experiment_results_post";
-}
-
-/**
- * Separate Experiment existence from Run existence before Analysis sees the
- * request. Returns a finished Response for draft / missing cases, or the Run
- * id to pin on the hop so Analysis never has to guess from empty Tinybird rows.
- */
-async function experimentResultsBeforeHop(
-  repo: Repository,
-  parts: {
-    params?: Record<string, string>;
-    query?: Record<string, unknown>;
-    body?: unknown;
-  },
-  requestId: string,
-): Promise<{ response: Response; runId?: undefined } | { response?: undefined; runId: string }> {
-  const params = parts.params ?? {};
-  const appId = params.appId;
-  const environmentId = params.environmentId;
-  const experimentId = params.experimentId;
-  if (appId === undefined || environmentId === undefined || experimentId === undefined) {
-    return { response: experimentNotFound(requestId) };
-  }
-
-  const requestedRunId = optionalRunId(parts);
-  const resolved = await resolveExperimentResultsTarget(repo, {
-    appId,
-    environmentId,
-    experimentId,
-    ...(requestedRunId !== undefined ? { runId: requestedRunId } : {}),
-  });
-
-  switch (resolved.outcome) {
-    case "experiment_not_found":
-      return { response: experimentNotFound(requestId) };
-    case "no_run":
-      return { response: Response.json(analysisResultsNoRunEnvelope()) };
-    case "run_not_found":
-      return { response: runNotFound(requestId) };
-    case "run":
-      return { runId: resolved.runId };
-  }
-}
-
-function optionalRunId(parts: {
-  query?: Record<string, unknown>;
-  body?: unknown;
-}): string | undefined {
-  const fromQuery = parts.query?.runId;
-  if (typeof fromQuery === "string" && fromQuery.length > 0) return fromQuery;
-  if (isRecord(parts.body) && typeof parts.body.runId === "string" && parts.body.runId.length > 0) {
-    return parts.body.runId;
-  }
-  return undefined;
 }
 
 /**

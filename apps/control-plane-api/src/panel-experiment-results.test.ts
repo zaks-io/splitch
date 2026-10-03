@@ -195,6 +195,27 @@ describe("panel Experiment Results payload and decision gate", () => {
     expect(body.gate.blockedBy).toEqual([]);
   });
 
+  it("carries producer readiness and sets concludeExecutable from live App membership", async () => {
+    const evidence = {
+      data_watermark: "2026-09-08T18:00:00.000Z",
+      result_token: `sha256:${"a".repeat(64)}`,
+    };
+    const admin = await results(analysisReturning(statsOutput(), evidence));
+    expect(await admin.json()).toMatchObject({
+      readiness: { statistical: true, concludeExecutable: true },
+      blockedBy: [],
+    });
+
+    const member = await results(
+      analysisReturning(statsOutput(), evidence),
+      {},
+      repository({ appMembership: { role: "member" } }),
+    );
+    expect(await member.json()).toMatchObject({
+      readiness: { statistical: true, concludeExecutable: false },
+    });
+  });
+
   it("blocks an underpowered Run and still returns every arm result", async () => {
     const base = statsOutput();
     const response = await results(
@@ -229,6 +250,9 @@ describe("panel Experiment Results draft vs missing (SPL-305)", () => {
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({
       state: "no_run",
+      readiness: { statistical: false, concludeExecutable: false },
+      blockedBy: [],
+      reasons: ["No Run has been Started for this Experiment. Call experiments_start."],
       recommendedAction: "START_A_RUN",
     });
     expect(analysis).not.toHaveBeenCalled();

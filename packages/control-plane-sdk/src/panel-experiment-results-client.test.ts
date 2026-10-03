@@ -122,15 +122,19 @@ function panelResultsReady() {
       low_n_warning: false,
     },
   };
+  const gate = evaluateExperimentDecisionGate(stats, frozenControl, legacyDuration);
   return {
     state: "ready" as const,
     runId: "run_1",
     runNumber: 1,
     runStatus: "running" as const,
     control: frozenControl,
+    readiness: { statistical: gate.shipAllowed, concludeExecutable: false },
+    blockedBy: gate.blockedBy,
+    reasons: [],
     stats,
     srm: experimentSrmDiagnostics(stats),
-    gate: evaluateExperimentDecisionGate(stats, frozenControl, legacyDuration),
+    gate,
     significance: experimentSignificanceDisplays(stats),
   };
 }

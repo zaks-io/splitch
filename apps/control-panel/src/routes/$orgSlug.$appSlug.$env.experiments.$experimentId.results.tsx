@@ -17,7 +17,6 @@ function ExperimentResultsTab() {
   const route = useExperimentDetailRouteData();
   return (
     <ExperimentResultsPanel
-      canConclude={route.scope.appRole === "owner" || route.scope.appRole === "admin"}
       environments={route.environments}
       flagId={route.data.experiment.flagId}
       appId={route.scope.appId}

@@ -51,7 +51,14 @@ interface SurfaceOutcome {
   readonly body: unknown;
 }
 
-const noRunEnvelope = { state: "no_run", recommended_action: "START_A_RUN" };
+const noRunEnvelope = {
+  view: "detailed",
+  state: "no_run",
+  readiness: { statistical: false, concludeExecutable: false },
+  blockedBy: [],
+  reasons: ["No Run has been Started for this Experiment. Call experiments_start."],
+  recommended_action: "START_A_RUN",
+};
 
 const scenarios: readonly Scenario[] = [
   {

@@ -212,7 +212,8 @@ export type StatsOutput = z.infer<typeof StatsOutputSchema>;
  * Exposures without Metric Events (or vice versa) is a healthy collecting state,
  * not a request validation failure and not an Analysis outage (SPL-302).
  */
-const AnalysisResultsMissingInputSchema = z.enum(["exposures", "metric_events"]);
+export const AnalysisResultsMissingInputSchema = z.enum(["exposures", "metric_events"]);
+export type AnalysisResultsMissingInput = z.infer<typeof AnalysisResultsMissingInputSchema>;
 
 /**
  * What the Analysis Worker answers a /results read with.

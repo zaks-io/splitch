@@ -279,6 +279,13 @@ the credential their code holds.
 | `experiment_results_post`         | POST   | `/apps/:appId/envs/:environmentId/experiments/:experimentId/results` |
 | `environment_exposure_status_get` | GET    | `/apps/:appId/envs/:environmentId/exposure-status`                   |
 
+`experiment_results_get` and `experiment_results_post` derive from the shared Control Plane result
+producer (see [result-contracts.md](../stats/result-contracts.md#control-plane-result-producer-cli-mcp-panel)).
+The output schema leads with `readiness`, `blockedBy`, and `reasons`. Optional request field
+`view: "concise" | "detailed"` (default detailed) selects the concise verdict member or the detailed
+member with unchanged statistics. There is no hand-written MCP tool for results; CLI and MCP both
+come from this route registry entry.
+
 Control-plane HTTP routes that are not implemented end to end are not advertised as MCP tools or
 CLI commands. This currently excludes Organization deletion and the privacy export/deletion routes;
 the route contracts remain typed so direct HTTP callers receive a stable unavailable response rather

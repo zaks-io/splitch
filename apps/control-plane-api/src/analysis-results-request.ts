@@ -1,4 +1,3 @@
-import { type AnalysisResultsEnvelope, AnalysisResultsEnvelopeSchema } from "@splitch/contracts";
 import { envScope, type Repository } from "@splitch/db";
 import { delegatedRequest } from "@splitch/worker-runtime";
 import { controlPlaneRoute } from "./routes";
@@ -57,18 +56,6 @@ export async function resolveExperimentResultsTarget(
     first,
   );
   return { outcome: "run", runId: latest.id };
-}
-
-/**
- * Typed 200 for a draft Experiment that has never had a Run. New envelope
- * member (not a `missing` value on `no_data`): there is no `run_id` to report
- * without fabricating a placeholder.
- */
-export function analysisResultsNoRunEnvelope(): AnalysisResultsEnvelope {
-  return AnalysisResultsEnvelopeSchema.parse({
-    state: "no_run",
-    recommended_action: "START_A_RUN",
-  });
 }
 
 /**

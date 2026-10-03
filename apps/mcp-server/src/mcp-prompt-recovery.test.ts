@@ -60,11 +60,11 @@ describe("MCP recover_from_error attention fan-out", () => {
     expect(experimentSchema?.properties).not.toHaveProperty("srm");
     expect(experimentSchema?.properties).not.toHaveProperty("guardrail_results");
 
-    // experiment_results_get's 200 body is AnalysisResultsEnvelope. The ready
-    // branch carries StatsOutput on `stats` (SRM/Guardrail health); no_data does
-    // not invent zeros.
+    // experiment_results_get's 200 body is the Control Plane producer envelope.
+    // The ready branch carries StatsOutput on `stats` (SRM/Guardrail health);
+    // no_data does not invent zeros. Zod unions may emit oneOf or anyOf.
     const resultsSchema = resultsTool.outputSchema as unknown as JsonSchemaLike;
-    const readyBranch = resultsSchema.oneOf?.find(
+    const readyBranch = [...(resultsSchema.oneOf ?? []), ...(resultsSchema.anyOf ?? [])].find(
       (branch) => branch.properties?.state?.const === "ready",
     );
     const statsSchema = readyBranch?.properties?.stats ?? resultsSchema.properties?.stats;
@@ -77,4 +77,5 @@ interface JsonSchemaLike {
   properties?: Record<string, JsonSchemaLike & { const?: string }>;
   items?: JsonSchemaLike;
   oneOf?: JsonSchemaLike[];
+  anyOf?: JsonSchemaLike[];
 }
