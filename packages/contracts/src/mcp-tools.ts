@@ -194,6 +194,7 @@ function deriveTool(route: ApiRouteContract): McpToolDefinition {
       narrative: toolNarrative(route),
       mutates: route.effects.mutates,
       inputSchema,
+      bodySchema: requestParts(route).body,
       operationId: route.operationId,
     }),
     inputSchema,

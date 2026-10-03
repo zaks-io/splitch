@@ -46,7 +46,7 @@ function formatNote(name: string, schema: z.ZodTypeAny): McpToolFormatNote | und
   if (enumValues.length > 0) {
     parts.push(`one of ${enumValues.map((value) => JSON.stringify(value)).join(", ")}.`);
   }
-  if (idLike && !described) parts.push("canonical id or human-readable selector.");
+  if (idLike && !described) parts.push("canonical id.");
   return { name, text: parts.join(" ") };
 }
 

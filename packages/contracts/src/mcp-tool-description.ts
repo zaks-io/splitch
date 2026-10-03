@@ -13,6 +13,7 @@ export function composeMcpToolDescription(input: {
   readonly mutates: boolean;
   readonly inputSchema: z.ZodTypeAny;
   readonly operationId: string;
+  readonly bodySchema?: z.ZodTypeAny;
 }): string {
   const sections = [
     input.narrative.trim(),
@@ -24,7 +25,9 @@ export function composeMcpToolDescription(input: {
   }
   if (input.mutates) {
     sections.push(
-      renderMcpToolExample(mcpToolArgumentsExample(input.inputSchema, input.operationId)),
+      renderMcpToolExample(
+        mcpToolArgumentsExample(input.inputSchema, input.operationId, input.bodySchema),
+      ),
     );
   }
   return sections.join("\n\n");

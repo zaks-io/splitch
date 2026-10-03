@@ -10,6 +10,7 @@ const CROCKFORD_ULID = "01J00000000000000000000000";
 export function mcpToolArgumentsExample(
   schema: z.ZodTypeAny,
   operationId: string,
+  bodySchema?: z.ZodTypeAny,
 ): Record<string, unknown> {
   const objectSchema = unwrapToObject(schema);
   if (!objectSchema) {
@@ -18,7 +19,17 @@ export function mcpToolArgumentsExample(
     );
   }
   const fields = describeObjectFields(objectSchema);
-  const example = repairExample(objectSchema, buildExampleCandidate(objectSchema, fields));
+  // Path params are required, so a flattened schema would drop optional body
+  // fields. Build the body example first (all-optional PATCH bodies include a
+  // writable field), then overlay path/query.
+  const bodyObject = bodySchema ? unwrapToObject(bodySchema) : undefined;
+  const bodyExample = bodyObject
+    ? buildExampleCandidate(bodyObject, describeObjectFields(bodyObject))
+    : {};
+  const example = repairExample(objectSchema, {
+    ...buildExampleCandidate(objectSchema, fields),
+    ...bodyExample,
+  });
   const parsed = objectSchema.safeParse(example);
   if (parsed.success) return example;
   const issue = parsed.error.issues[0];
