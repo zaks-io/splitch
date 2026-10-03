@@ -72,7 +72,10 @@ after every Entity arrival (incremental log-gamma updates, O(N)). The filtration
 
 - Exposure SRM orders Entities by `first_ingest_ts` = `min(ingest_ts)` over Exposure rows for that
   Entity in the Run (`raw_events.ingest_ts`, stamped at Tinybird insertion with `DEFAULT now64(3)`
-  since the datasource existed; there is no pre-column Entity batch).
+  since the datasource existed). The deduped snapshot carries the same `min(ingest_ts)` from the
+  Copy Pipe. Snapshot rows written before that column existed carry the epoch DEFAULT and form
+  **one initial batch**, ordered only by `targeting_key_hash`, until the next `COPY_MODE replace`
+  fills real values.
 - Activated-population SRM orders activated Entities by `activation_ingest_ts` = `min(ingest_ts)`
   among valid post-Exposure Activation rows for that Entity.
 

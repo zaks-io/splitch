@@ -8,6 +8,10 @@ SCHEMA >
     `entity_family_hash` String `json:$.entity_family_hash` DEFAULT if(startsWith(targeting_key_hash, 'local-v1:'), concat('v1:', substring(targeting_key_hash, 10)), targeting_key_hash),
     `variant` String `json:$.variant`,
     `first_exposure_ts` DateTime64(3) `json:$.first_exposure_ts`,
+    -- min(ingest_ts) of Exposure rows for the Entity at Copy time. Epoch DEFAULT
+    -- marks rows written before this column existed: one initial SRM batch ordered
+    -- by targeting_key_hash until the next COPY_MODE replace fills real values.
+    `first_ingest_ts` DateTime64(3) `json:$.first_ingest_ts` DEFAULT toDateTime64('1970-01-01 00:00:00', 3, 'UTC'),
     `snapshot_ts` DateTime64(3) `json:$.snapshot_ts`,
     `watermark_ts` DateTime64(3) `json:$.watermark_ts`
 

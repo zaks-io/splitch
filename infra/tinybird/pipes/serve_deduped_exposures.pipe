@@ -36,7 +36,11 @@ SQL >
         exposures.targeting_key_hash AS targeting_key_hash,
         exposures.entity_family_hash AS entity_family_hash,
         exposures.variant AS variant,
-        exposures.first_exposure_ts AS encounter_ts
+        exposures.first_exposure_ts AS encounter_ts,
+        -- Snapshot-side ingestion clock. Rows written before this column existed
+        -- carry the epoch DEFAULT and form one initial batch ordered by
+        -- targeting_key_hash until the next Copy Pipe replace fills real values.
+        exposures.first_ingest_ts AS first_ingest_ts
     FROM deduped_exposures AS exposures
     LEFT JOIN entity_deletion_cutoffs AS deletions
         ON deletions.app_id = exposures.app_id
@@ -71,7 +75,8 @@ SQL >
             '__multiple__',
             max(assumeNotNull(variant))
         ) AS variant,
-        min(exposure_at) AS encounter_ts
+        min(exposure_at) AS encounter_ts,
+        min(events.ingest_ts) AS first_ingest_ts
     FROM raw_events AS events
     LEFT JOIN entity_deletion_cutoffs AS deletions
         ON deletions.app_id = events.app_id
@@ -117,73 +122,30 @@ SQL >
         events.id_type,
         events.entity_family_hash
 
-NODE entity_first_ingest
-SQL >
-    %
-    -- min(ingest_ts) over Exposure rows for the Entity. analysis-v2 SRM orders
-    -- by this so a late-ingested row with an earlier exposure_at appends to the
-    -- path instead of rewriting it. raw_events.ingest_ts has always been stamped
-    -- at insertion (DEFAULT now64(3)); there is no pre-column Entity batch.
-    SELECT
-        events.app_id AS app_id,
-        events.environment_id AS environment_id,
-        events.experiment_id AS experiment_id,
-        events.run_id AS run_id,
-        events.id_type AS id_type,
-        events.entity_family_hash AS entity_family_hash,
-        min(events.ingest_ts) AS first_ingest_ts
-    FROM raw_events AS events
-    LEFT JOIN app_identity_generation_tombstones AS generation_tombstones
-        ON generation_tombstones.app_id = events.app_id
-        AND generation_tombstones.targeting_key_version = splitByChar(':', events.targeting_key_hash)[1]
-    WHERE events.type = 'exposure'
-        AND events.app_id = {{String(app_id)}}
-        AND events.environment_id = {{String(environment_id)}}
-        AND events.experiment_id = {{String(experiment_id)}}
-        AND events.run_id = {{String(run_id)}}
-        AND generation_tombstones.app_id = ''
-        {% if defined(ingest_watermark_ts) %}
-        AND events.ingest_ts <= {{DateTime64(ingest_watermark_ts)}}
-        {% end %}
-    GROUP BY
-        events.app_id,
-        events.environment_id,
-        events.experiment_id,
-        events.run_id,
-        events.id_type,
-        events.entity_family_hash
-
 NODE union_and_final_dedup
 SQL >
     SELECT
-        united.app_id AS app_id,
-        united.environment_id AS environment_id,
-        united.experiment_id AS experiment_id,
-        united.run_id AS run_id,
-        united.id_type AS id_type,
-        united.entity_family_hash AS entity_family_hash,
-        argMin(united.targeting_key_hash, united.encounter_ts) AS targeting_key_hash,
-        if(countDistinct(united.variant) > 1, '__multiple__', max(united.variant)) AS variant,
-        min(united.encounter_ts) AS first_exposure_ts,
-        -- INNER JOIN: every first-touch Entity came from raw_events, so a missing
-        -- ingest row would be a pipe defect, not an empty population.
-        any(ingests.first_ingest_ts) AS first_ingest_ts
+        app_id,
+        environment_id,
+        experiment_id,
+        run_id,
+        id_type,
+        entity_family_hash,
+        argMin(targeting_key_hash, encounter_ts) AS targeting_key_hash,
+        if(countDistinct(variant) > 1, '__multiple__', max(variant)) AS variant,
+        min(encounter_ts) AS first_exposure_ts,
+        -- Earliest ingest across snapshot and tail layers. analysis-v2 SRM orders
+        -- by this so late event-time rows append rather than rewrite the path.
+        min(first_ingest_ts) AS first_ingest_ts
     FROM (
         SELECT * FROM snapshot_layer
         UNION ALL
         SELECT * FROM tail_layer
-    ) AS united
-    INNER JOIN entity_first_ingest AS ingests
-        ON ingests.app_id = united.app_id
-        AND ingests.environment_id = united.environment_id
-        AND ingests.experiment_id = united.experiment_id
-        AND ingests.run_id = united.run_id
-        AND ingests.id_type = united.id_type
-        AND ingests.entity_family_hash = united.entity_family_hash
+    )
     GROUP BY
-        united.app_id,
-        united.environment_id,
-        united.experiment_id,
-        united.run_id,
-        united.id_type,
-        united.entity_family_hash
+        app_id,
+        environment_id,
+        experiment_id,
+        run_id,
+        id_type,
+        entity_family_hash
