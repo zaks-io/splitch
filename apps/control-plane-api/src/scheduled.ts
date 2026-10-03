@@ -12,6 +12,7 @@ import { purgeExpiredPrivacyArtifacts, reconcilePrivacyJobs } from "./entity-pri
 import type { ControlPlaneApiEnv } from "./env";
 import { runCredentialCacheBackfill } from "./internal-routes";
 import { deleteOrphanedPrivacyExports } from "./privacy-export-cleanup";
+import { FLAG_CHANGE_LOG_RETENTION_MS } from "./flag-change-log-retention";
 import { dispatchSentryWebhooks } from "./sentry-webhook-dispatch";
 
 const service = "splitch-control-plane-api";
@@ -121,7 +122,7 @@ async function runFlagChangeLogRetention(
   const scheduled = new Date(event.scheduledTime);
   const cursor = await repo.sentry.minUndeliveredSeq();
   const pruned = await repo.flagChangeEvents.pruneBefore({
-    changedBefore: new Date(scheduled.getTime() - RETENTION_MS).toISOString(),
+    changedBefore: new Date(scheduled.getTime() - FLAG_CHANGE_LOG_RETENTION_MS).toISOString(),
     minUndeliveredSeq: cursor ?? Number.MAX_SAFE_INTEGER,
     limit: RETENTION_BATCH,
   });
@@ -132,7 +133,6 @@ async function runFlagChangeLogRetention(
   );
 }
 
-const RETENTION_MS = 90 * 24 * 60 * 60 * 1_000;
 const RETENTION_BATCH = 1_000;
 
 async function runConvexWebhookDispatch(

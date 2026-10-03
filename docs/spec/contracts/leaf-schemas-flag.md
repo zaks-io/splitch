@@ -45,6 +45,12 @@ per-Environment (ADR-0027) and lives in separate Flag Configuration schemas.
 | `createdAt`        | `string` (ISO 8601)  | yes      | —                                                                                                    |
 | `updatedAt`        | `string` (ISO 8601)  | yes      | —                                                                                                    |
 
+Lifecycle class also drives configuration-state stale thresholds used by
+`stale_flags_list`: temporary classes (`release`, `experiment`, `unclassified`) use
+30 days for uniform serving and 90 days for unchanged; permanent classes (`ops`,
+`permission`) turn those signals off. See
+[endpoints-flag-segment.md](../control-plane/endpoints-flag-segment.md#get-appsapp_idstale-flags).
+
 ---
 
 ## TargetingRule

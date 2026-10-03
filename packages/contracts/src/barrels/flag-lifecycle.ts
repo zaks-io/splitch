@@ -3,6 +3,29 @@
 // The Flag lifecycle vocabulary (D9): the writable classes, the stored state
 // that adds `unclassified` for pre-existing Flags, and the one rule saying which
 // classes need an owner and an expiry. Worker, panel, and CLI read the same rule.
+// Stale detection (3.6) and age buckets for inventory health (3.8) live here too.
+export {
+  type EnvironmentConfigState,
+  type ServingEvidence,
+  type StaleFlagSignals,
+  type StaleReason,
+  type UniformEnvironmentEvidence,
+  type UniformServingMode,
+  type UniformServingSignal,
+  SERVING_EVIDENCE_UNVERIFIED,
+  daysBetween,
+  detectStaleReasons,
+  uniformServingMode,
+} from "../flag-stale-detect";
+export {
+  type FlagAgeBucket,
+  type FlagStaleThresholds,
+  FLAG_AGE_BUCKET_BOUNDS,
+  FLAG_AGE_BUCKETS,
+  FLAG_STALE_THRESHOLDS,
+  FLAG_UNIFORM_SERVING_HISTORY_WINDOW_DAYS,
+  flagAgeBucket,
+} from "../flag-stale-thresholds";
 export { type FlagLifecycleInput, missingFlagLifecycleInputs } from "../flag-lifecycle";
 export {
   type FlagLifecycleClass,

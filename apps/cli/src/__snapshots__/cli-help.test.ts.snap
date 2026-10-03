@@ -1030,6 +1030,18 @@ Request body (--body-json):
 
 Example:
   splitch flag-config update <flag-id-or-key> --enabled true --rollout 100 --json",
+    "flag-inventory-health get": "Per-App Flag inventory health: counts by lifecycle class, age distribution, monthly additions versus removals, and expired-but-live count.
+
+Usage:
+  splitch flag-inventory-health get [flags]
+
+Flags:
+  --app <app>  [type: string; default: SPLITCH_APP or config] App ID or slug.
+  --json       [type: boolean; default: false] Write machine-readable JSON to stdout.
+  -h, --help   [type: boolean; default: false] Show help and exit.
+
+Example:
+  splitch flag-inventory-health get --json",
     "flag-removal brief": "Advisory brief for removing a Flag from customer code: served Variants per Environment, SDK search shapes, and explicit caveats (read-only; never writes code).
 
 Usage:
@@ -1822,6 +1834,18 @@ Request body (--body-json):
 
 Example:
   splitch sentry-secret-rotations create --org <organization> <installation-id> --body-json '{"rotationId":"018f2b7c-3c9a-7b3e-9a52-0c1d2e3f4a5b"}' --output-file <secret-file> --json",
+    "stale-flags list": "List Flags that look stale from configuration state (uniform serving, past expiry, or unchanged), with typed reasons. Serving evidence is always unverified. Suggest only; never archives.
+
+Usage:
+  splitch stale-flags list [flags]
+
+Flags:
+  --app <app>  [type: string; default: SPLITCH_APP or config] App ID or slug.
+  --json       [type: boolean; default: false] Write machine-readable JSON to stdout.
+  -h, --help   [type: boolean; default: false] Show help and exit.
+
+Example:
+  splitch stale-flags list --json",
   },
   "groups": {
     "api-keys": "Manage api-keys resources.
@@ -2144,6 +2168,19 @@ Flags:
 
 Example:
   splitch flag-config get --help",
+    "flag-inventory-health": "Manage flag-inventory-health resources.
+
+Usage:
+  splitch flag-inventory-health <action> [arguments] [flags]
+
+Commands:
+  get             Per-App Flag inventory health: counts by lifecycle class, age distribution, monthly additions versus removals, and expired-but-live count.
+
+Flags:
+  -h, --help  [type: boolean; default: false] Show help and exit.
+
+Example:
+  splitch flag-inventory-health get --help",
     "flag-removal": "Manage flag-removal resources.
 
 Usage:
@@ -2330,6 +2367,19 @@ Flags:
 
 Example:
   splitch sentry-secret-rotations create --help",
+    "stale-flags": "Manage stale-flags resources.
+
+Usage:
+  splitch stale-flags <action> [arguments] [flags]
+
+Commands:
+  list            List Flags that look stale from configuration state (uniform serving, past expiry, or unchanged), with typed reasons. Serving evidence is always unverified. Suggest only; never archives.
+
+Flags:
+  -h, --help  [type: boolean; default: false] Show help and exit.
+
+Example:
+  splitch stale-flags list --help",
   },
   "meta": {
     "context": "Show the logged-in principal and the resolved App and Environment.
@@ -2435,6 +2485,7 @@ Resource groups:
   expired-flags
   flag-changes
   flag-config
+  flag-inventory-health
   flag-removal
   flag-targeting-rules
   flag-variants
@@ -2447,6 +2498,7 @@ Resource groups:
   segments
   sentry-installations
   sentry-secret-rotations
+  stale-flags
 
 Flags:
   -v, --version  [type: boolean; default: false] Show the installed CLI version and exit.

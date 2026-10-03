@@ -57,7 +57,11 @@ has its own Flag Configuration, SDK credentials, experiment data, and Environmen
 **Flag Lifecycle Class**: why a Flag exists, declared when it is created: `release`, `experiment`,
 `ops`, or `permission`. Release and experiment Flags are temporary and carry an **owner** and an
 **expiry**; ops and permission Flags may be permanent. Flags created before classes existed are
-`unclassified`. An **expired** Flag is one past its expiry that still exists.
+`unclassified`. An **expired** Flag is one past its expiry that still exists. **Stale** detection
+reads configuration state only (uniform serving, past expiry, unchanged) and always labels
+`servingEvidence` as `unverified`; it never auto-archives. **Flag inventory health** is the per-App
+rollup of class counts, age buckets, monthly additions versus removals (each month
+labeled complete or partial against change-log retention), and expired-but-live.
 
 **Variant**: the OpenFeature term for a possible Flag value. Flagship calls this a Variation, but
 Variation is quarantined to the Flagship adapter seam. See

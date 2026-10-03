@@ -14,6 +14,7 @@ import { ofrepRoutes } from "./routes/routes-ofrep";
 import { eventDefinitionRoutes } from "./routes/routes-event-definitions";
 import { experimentRoutes } from "./routes/routes-experiments";
 import { flagChangeRoutes } from "./routes/routes-flag-changes";
+import { flagHealthRoutes } from "./routes/routes-flag-health";
 import { flagLifecycleReadRoutes } from "./routes/routes-flag-lifecycle-reads";
 import { flagRoutes } from "./routes/routes-flags";
 import { privacyRoutes } from "./routes/routes-privacy";
@@ -83,6 +84,7 @@ export const routeRegistry = assertRegistry([
   ...approvalRoutes,
   ...attentionRoutes,
   ...flagRoutes,
+  ...flagHealthRoutes,
   ...flagLifecycleReadRoutes,
   ...flagChangeRoutes,
   ...segmentRoutes,

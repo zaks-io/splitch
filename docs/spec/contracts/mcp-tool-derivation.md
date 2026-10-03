@@ -141,15 +141,17 @@ three tools to exist.
 
 ### Flags
 
-| Tool                 | Method | Path                                       |
-| -------------------- | ------ | ------------------------------------------ |
-| `flags_list`         | GET    | `/apps/:appId/flags`                       |
-| `expired_flags_list` | GET    | `/apps/:appId/expired-flags`               |
-| `flag_removal_brief` | GET    | `/apps/:appId/flags/:flagId/removal-brief` |
-| `flags_create`       | POST   | `/apps/:appId/flags`                       |
-| `flags_get`          | GET    | `/apps/:appId/flags/:flagId`               |
-| `flags_update`       | PATCH  | `/apps/:appId/flags/:flagId`               |
-| `flags_delete`       | DELETE | `/apps/:appId/flags/:flagId`               |
+| Tool                        | Method | Path                                       |
+| --------------------------- | ------ | ------------------------------------------ |
+| `flags_list`                | GET    | `/apps/:appId/flags`                       |
+| `expired_flags_list`        | GET    | `/apps/:appId/expired-flags`               |
+| `stale_flags_list`          | GET    | `/apps/:appId/stale-flags`                 |
+| `flag_inventory_health_get` | GET    | `/apps/:appId/flag-inventory-health`       |
+| `flag_removal_brief`        | GET    | `/apps/:appId/flags/:flagId/removal-brief` |
+| `flags_create`              | POST   | `/apps/:appId/flags`                       |
+| `flags_get`                 | GET    | `/apps/:appId/flags/:flagId`               |
+| `flags_update`              | PATCH  | `/apps/:appId/flags/:flagId`               |
+| `flags_delete`              | DELETE | `/apps/:appId/flags/:flagId`               |
 
 `flags_list` and `flags_get` default to `include=config`, so one tool call returns the Flag
 definition, Variant catalog, every requested Environment's complete Flag Configuration, and its
