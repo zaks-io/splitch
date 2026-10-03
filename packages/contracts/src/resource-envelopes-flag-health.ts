@@ -85,11 +85,12 @@ const MonthChurnSchema = z
   .strict();
 
 /**
- * Per-App inventory health (plan 3.8). Removals come from the Flag change log
- * (`action=deleted`, `target_type=flag`), which records `changedAt`; additions
- * come from live Flags' `createdAt`. Pre-change-log deletions are absent from
- * the log rather than reported as zero without saying so: the sources are named
- * so agents do not treat the series as a closed world.
+ * Per-App inventory health (plan 3.8). Additions and removals both come from the
+ * Flag change log (`action=created|deleted`, `target_type=flag`) so a hard
+ * delete does not rewrite prior months. `historyCoverageStartsAt` is the
+ * earliest log instant for the App (null when the App has no log rows yet);
+ * Flags that predate migration 0026 have no create event and are outside that
+ * window rather than silently zeroed.
  */
 export const FlagInventoryHealthResponseSchema = z
   .object({
@@ -100,8 +101,10 @@ export const FlagInventoryHealthResponseSchema = z
     monthlyChurn: z
       .object({
         months: z.array(MonthChurnSchema),
-        additionsSource: z.literal("flag_created_at"),
+        additionsSource: z.literal("flag_change_log"),
         removalsSource: z.literal("flag_change_log"),
+        /** Earliest `flag_change_events.changedAt` for the App; null = no log yet. */
+        historyCoverageStartsAt: z.string().nullable(),
       })
       .strict(),
     expiredButLiveCount: z.number().int().nonnegative(),

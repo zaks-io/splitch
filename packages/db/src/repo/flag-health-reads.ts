@@ -1,7 +1,7 @@
-import { and, count, eq, gte, isNotNull, lte, max, sql, type SQL } from "drizzle-orm";
-import { flagChangeEvents } from "../schema/flag-change-events";
-import { flags } from "../schema/index";
+import { and, count, eq, gte, inArray, isNotNull, lte, max, min, sql, type SQL } from "drizzle-orm";
+import { experiments, flagChangeEvents, flags, runs } from "../schema/index";
 import type { Db } from "./client";
+import { twoAxisIdBatches } from "./id-batches";
 import { assertMintedScope, type TenantScope, withTenantScope } from "./scope";
 
 const FLAG_SCOPE = {
@@ -11,6 +11,11 @@ const FLAG_SCOPE = {
 
 const CHANGE_SCOPE = {
   appId: flagChangeEvents.appId,
+  appIdKey: "appId",
+} as const;
+
+const RUN_SCOPE = {
+  appId: runs.appId,
   appIdKey: "appId",
 } as const;
 
@@ -31,6 +36,88 @@ export type MonthCountRow = {
   month: string;
   count: number;
 };
+
+async function countFlagActionByMonth(
+  db: Db,
+  scope: TenantScope,
+  action: "created" | "deleted",
+  label: string,
+): Promise<MonthCountRow[]> {
+  assertMintedScope(scope);
+  const monthExpr = sql<string>`substr(${flagChangeEvents.changedAt}, 1, 7)`;
+  const rows = await db
+    .select({
+      month: monthExpr,
+      count: count(),
+    })
+    .from(flagChangeEvents)
+    .where(
+      withTenantScope(
+        CHANGE_SCOPE,
+        scope,
+        requireSql(
+          and(eq(flagChangeEvents.action, action), eq(flagChangeEvents.targetType, "flag")),
+          label,
+        ),
+      ),
+    )
+    .groupBy(monthExpr)
+    .orderBy(monthExpr);
+  return rows.map((row) => ({ month: row.month, count: Number(row.count) }));
+}
+
+async function loadLatestRunLifecycleAtByFlagEnv(
+  db: Db,
+  scope: TenantScope,
+  flagIds: readonly string[],
+  environmentIds: readonly string[],
+): Promise<Map<string, string>> {
+  assertMintedScope(scope);
+  if (flagIds.length === 0 || environmentIds.length === 0) return new Map();
+  const out = new Map<string, string>();
+  const pages = await Promise.all(
+    twoAxisIdBatches(flagIds, environmentIds).map(({ first, second }) =>
+      db
+        .select({
+          flagId: experiments.flagId,
+          environmentId: runs.environmentId,
+          latestStartedAt: max(runs.startedAt),
+          latestEndedAt: max(runs.endedAt),
+        })
+        .from(runs)
+        .innerJoin(
+          experiments,
+          and(eq(experiments.id, runs.experimentId), eq(experiments.appId, runs.appId)),
+        )
+        .where(
+          withTenantScope(
+            RUN_SCOPE,
+            scope,
+            requireSql(
+              and(inArray(experiments.flagId, first), inArray(runs.environmentId, second)),
+              "run lifecycle predicate",
+            ),
+          ),
+        )
+        .groupBy(experiments.flagId, runs.environmentId),
+    ),
+  );
+  for (const row of pages.flat()) {
+    const candidates = [row.latestStartedAt, row.latestEndedAt].filter(
+      (value): value is string => value !== null,
+    );
+    if (candidates.length === 0) {
+      throw new Error(
+        `latestRunLifecycleAtByFlagEnv: Flag ${row.flagId} env ${row.environmentId} has Runs but no lifecycle instant`,
+      );
+    }
+    out.set(
+      `${row.flagId}\0${row.environmentId}`,
+      candidates.reduce((a, b) => (a > b ? a : b)),
+    );
+  }
+  return out;
+}
 
 /**
  * Aggregations for Flag inventory health (plan 3.8) and the latest change-log
@@ -81,33 +168,28 @@ export function makeFlagHealthReads(db: Db) {
       return Number(row?.count ?? 0);
     },
 
+    /** Creation months from the change log; survives hard delete. */
+    countFlagCreationsByMonth(scope: TenantScope): Promise<MonthCountRow[]> {
+      return countFlagActionByMonth(db, scope, "created", "creation predicate");
+    },
+
+    /** Deletion months from the change log (`action=deleted`, `target_type=flag`). */
+    countFlagDeletionsByMonth(scope: TenantScope): Promise<MonthCountRow[]> {
+      return countFlagActionByMonth(db, scope, "deleted", "deletion predicate");
+    },
+
     /**
-     * Deletion months from the change log (`action=deleted`, `target_type=flag`).
-     * Flag DEFINITION deletes always carry a `changedAt`, so removals are known
-     * for every delete that happened after the log existed (migration 0026).
+     * Earliest change-log instant for the App. Null when the App has no log rows
+     * yet: addition/removal months before that instant are not covered (Flags
+     * that predate migration 0026 have no create event).
      */
-    async countFlagDeletionsByMonth(scope: TenantScope): Promise<MonthCountRow[]> {
+    async earliestChangeLogAt(scope: TenantScope): Promise<string | null> {
       assertMintedScope(scope);
-      const monthExpr = sql<string>`substr(${flagChangeEvents.changedAt}, 1, 7)`;
-      const rows = await db
-        .select({
-          month: monthExpr,
-          count: count(),
-        })
+      const [row] = await db
+        .select({ earliest: min(flagChangeEvents.changedAt) })
         .from(flagChangeEvents)
-        .where(
-          withTenantScope(
-            CHANGE_SCOPE,
-            scope,
-            requireSql(
-              and(eq(flagChangeEvents.action, "deleted"), eq(flagChangeEvents.targetType, "flag")),
-              "deletion predicate",
-            ),
-          ),
-        )
-        .groupBy(monthExpr)
-        .orderBy(monthExpr);
-      return rows.map((row) => ({ month: row.month, count: Number(row.count) }));
+        .where(withTenantScope(CHANGE_SCOPE, scope, gte(flagChangeEvents.seq, 0)));
+      return row?.earliest ?? null;
     },
 
     /**
@@ -135,6 +217,19 @@ export function makeFlagHealthReads(db: Db) {
         out.set(row.flagId, row.lastChangedAt);
       }
       return out;
+    },
+
+    /**
+     * Latest Run Start/End instant per Flag × Environment. Uniform serving must
+     * not start until after the last Run that controlled that Flag stops; End
+     * updates the Run, not the Configuration.
+     */
+    latestRunLifecycleAtByFlagEnv(
+      scope: TenantScope,
+      flagIds: readonly string[],
+      environmentIds: readonly string[],
+    ): Promise<Map<string, string>> {
+      return loadLatestRunLifecycleAtByFlagEnv(db, scope, flagIds, environmentIds);
     },
   };
 }

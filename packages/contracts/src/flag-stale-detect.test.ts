@@ -16,6 +16,7 @@ function env(overrides: Partial<EnvironmentConfigState> = {}): EnvironmentConfig
     rolloutPercentage: 100,
     hasRunningExperiment: false,
     updatedAt: "2026-05-01T00:00:00.000Z",
+    lastRunLifecycleAt: null,
     ...overrides,
   };
 }
@@ -63,6 +64,46 @@ describe("detectStaleReasons", () => {
       now: NOW,
     });
     expect(split.reasons.map((reason) => reason.kind)).not.toContain("uniform_serving");
+  });
+
+  it("counts the uniform window from End when a Run controlled the Flag", () => {
+    const afterRecentEnd = detectStaleReasons({
+      lifecycleClass: "release",
+      expiresAt: "2026-12-01T00:00:00.000Z",
+      flagUpdatedAt: "2026-05-01T00:00:00.000Z",
+      lastChangeLogAt: "2026-06-20T00:00:00.000Z",
+      configurations: [
+        env({
+          environmentId: "env_dev",
+          updatedAt: "2026-05-01T00:00:00.000Z",
+          lastRunLifecycleAt: "2026-06-20T00:00:00.000Z",
+        }),
+        env({ environmentId: "env_prod", updatedAt: "2026-05-01T00:00:00.000Z" }),
+      ],
+      now: NOW,
+    });
+    expect(afterRecentEnd.reasons.map((reason) => reason.kind)).not.toContain("uniform_serving");
+
+    const afterAgedEnd = detectStaleReasons({
+      lifecycleClass: "release",
+      expiresAt: "2026-12-01T00:00:00.000Z",
+      flagUpdatedAt: "2026-05-01T00:00:00.000Z",
+      lastChangeLogAt: "2026-05-20T00:00:00.000Z",
+      configurations: [
+        env({
+          environmentId: "env_dev",
+          updatedAt: "2026-05-01T00:00:00.000Z",
+          lastRunLifecycleAt: "2026-05-20T00:00:00.000Z",
+        }),
+        env({ environmentId: "env_prod", updatedAt: "2026-05-01T00:00:00.000Z" }),
+      ],
+      now: NOW,
+    });
+    const uniform = afterAgedEnd.reasons.find((reason) => reason.kind === "uniform_serving");
+    expect(uniform).toMatchObject({
+      kind: "uniform_serving",
+      uniformSince: "2026-05-20T00:00:00.000Z",
+    });
   });
 
   it("does not apply uniform-serving or unchanged to permanent classes", () => {

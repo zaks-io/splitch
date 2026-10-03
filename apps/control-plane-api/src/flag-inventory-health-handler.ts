@@ -28,8 +28,8 @@ const EMPTY_CLASS_COUNTS: LifecycleClassCounts = {
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
 /**
- * Per-App Flag inventory health (plan 3.8). Removals use the Flag change log
- * (deletes carry `changedAt`); additions use live Flags' `createdAt`.
+ * Per-App Flag inventory health (plan 3.8). Monthly additions and removals both
+ * read the Flag change log so a deleted Flag still counts in its creation month.
  */
 export async function getFlagInventoryHealth(
   deps: FlagDefinitionDeps,
@@ -41,12 +41,15 @@ export async function getFlagInventoryHealth(
   const app = await deps.repo.identity.getApp(appId);
   if (!app) return appNotFound(requestId);
 
-  const [classRows, createdAts, expiredButLiveCount, deletionMonths] = await Promise.all([
-    deps.repo.flagHealth.countFlagsByLifecycleClass(scope),
-    deps.repo.flagHealth.listFlagCreatedAt(scope),
-    deps.repo.flagHealth.countExpiredFlags(scope, asOf),
-    deps.repo.flagHealth.countFlagDeletionsByMonth(scope),
-  ]);
+  const [classRows, createdAts, expiredButLiveCount, creationMonths, deletionMonths, coverageAt] =
+    await Promise.all([
+      deps.repo.flagHealth.countFlagsByLifecycleClass(scope),
+      deps.repo.flagHealth.listFlagCreatedAt(scope),
+      deps.repo.flagHealth.countExpiredFlags(scope, asOf),
+      deps.repo.flagHealth.countFlagCreationsByMonth(scope),
+      deps.repo.flagHealth.countFlagDeletionsByMonth(scope),
+      deps.repo.flagHealth.earliestChangeLogAt(scope),
+    ]);
 
   const countsByLifecycleClass = { ...EMPTY_CLASS_COUNTS };
   for (const row of classRows) {
@@ -60,7 +63,6 @@ export async function getFlagInventoryHealth(
     (typeof FLAG_AGE_BUCKETS)[number],
     number
   >;
-  const addedByMonth = new Map<string, number>();
   const asOfMs = Date.parse(asOf);
   if (!Number.isFinite(asOfMs)) {
     throw new Error(`flag_inventory_health_get: asOf is not a valid instant: ${asOf}`);
@@ -73,10 +75,9 @@ export async function getFlagInventoryHealth(
       );
     }
     ageCounts[flagAgeBucket((asOfMs - createdMs) / MS_PER_DAY)] += 1;
-    const month = createdAt.slice(0, 7);
-    addedByMonth.set(month, (addedByMonth.get(month) ?? 0) + 1);
   }
 
+  const addedByMonth = new Map(creationMonths.map((row) => [row.month, row.count]));
   const removedByMonth = new Map(deletionMonths.map((row) => [row.month, row.count]));
   const months = [...new Set([...addedByMonth.keys(), ...removedByMonth.keys()])].sort();
 
@@ -94,8 +95,9 @@ export async function getFlagInventoryHealth(
         added: addedByMonth.get(month) ?? 0,
         removed: removedByMonth.get(month) ?? 0,
       })),
-      additionsSource: "flag_created_at",
+      additionsSource: "flag_change_log",
       removalsSource: "flag_change_log",
+      historyCoverageStartsAt: coverageAt,
     },
     expiredButLiveCount,
   };

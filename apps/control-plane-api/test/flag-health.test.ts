@@ -1,5 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
+  createExperimentDraft,
+  endRun,
+  type ExperimentRunHarness,
+  experimentFixture,
+  makeExperimentRunHarness,
+  startExperiment,
+  type StartResponse,
+} from "../src/experiment-run-test-fixture";
+import {
   allowAllPolicies,
   appToken,
   baseFlag,
@@ -114,6 +123,63 @@ describe("stale_flags_list", () => {
   });
 });
 
+describe("stale_flags_list Run lifecycle", () => {
+  let ctx: ExperimentRunHarness;
+
+  beforeEach(async () => {
+    await h.bindings.dispose();
+    ctx = await makeExperimentRunHarness(makeLocalBindings);
+    h = ctx.h;
+  });
+
+  it("counts the 30-day uniform window from End, not the older Configuration", async () => {
+    const fx = await experimentFixture(ctx);
+    // Fixture Flags default to permanent `permission` (no uniform signal); release needs it.
+    await ctx.h.bindings.d1
+      .prepare(
+        `UPDATE flags
+         SET lifecycle_class = 'release', owner = 'checkout-team', expires_at = ?
+         WHERE app_id = ? AND id = ?`,
+      )
+      .bind("2026-12-01T00:00:00.000Z", fx.appId, fx.flag.id)
+      .run();
+    await setRolloutEverywhere(fx.appId, fx.flag.id, 100, "2026-05-01T00:00:00.000Z");
+
+    const beforeRun = await request(ctx.h, "GET", `/apps/${fx.appId}/stale-flags`, fx.jwt);
+    expect(beforeRun.status).toBe(200);
+    const beforeBody = (await beforeRun.json()) as {
+      items: Array<{
+        flag: { id: string };
+        reasons: Array<{ kind: string; uniformSince?: string }>;
+      }>;
+    };
+    const beforeItem = beforeBody.items.find((item) => item.flag.id === fx.flag.id);
+    expect(beforeItem?.reasons.map((reason) => reason.kind)).toContain("uniform_serving");
+
+    const experiment = await createExperimentDraft(ctx, fx, {
+      key: "uniform-after-end",
+      allocation: { control: 50, treatment: 50 },
+      salt: "uniform-after-end-salt",
+    });
+    const started = (await (await startExperiment(ctx, fx, experiment.id)).json()) as StartResponse;
+    const ended = await endRun(ctx, fx, started.run.id);
+    expect(ended.status).toBe(200);
+
+    const afterEnd = await request(ctx.h, "GET", `/apps/${fx.appId}/stale-flags`, fx.jwt);
+    expect(afterEnd.status).toBe(200);
+    const afterBody = (await afterEnd.json()) as {
+      items: Array<{
+        flag: { id: string };
+        reasons: Array<{ kind: string; uniformSince?: string }>;
+      }>;
+    };
+    const afterItem = afterBody.items.find((item) => item.flag.id === fx.flag.id);
+    const uniform = afterItem?.reasons.find((reason) => reason.kind === "uniform_serving");
+    // End lands at Worker NOW; the May Configuration alone would already be stale.
+    expect(uniform).toBeUndefined();
+  });
+});
+
 describe("flag_inventory_health_get", () => {
   it("counts by class, ages, monthly additions, and expired-but-live", async () => {
     const { appId, jwt } = await ownerSession();
@@ -158,6 +224,7 @@ describe("flag_inventory_health_get", () => {
         months: Array<{ month: string; added: number; removed: number }>;
         additionsSource: string;
         removalsSource: string;
+        historyCoverageStartsAt: string | null;
       };
       expiredButLiveCount: number;
     };
@@ -170,10 +237,55 @@ describe("flag_inventory_health_get", () => {
     expect(body.expiredButLiveCount).toBe(1);
     expect(body.ageDistribution.find((row) => row.bucket === "0_30d")?.count).toBe(1);
     expect(body.ageDistribution.find((row) => row.bucket === "30_90d")?.count).toBe(1);
-    expect(body.monthlyChurn.additionsSource).toBe("flag_created_at");
+    expect(body.monthlyChurn.additionsSource).toBe("flag_change_log");
     expect(body.monthlyChurn.removalsSource).toBe("flag_change_log");
+    expect(body.monthlyChurn.historyCoverageStartsAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
     // Change-log triggers stamp changed_at with SQLite utcnow, not the Worker clock.
     expect(body.monthlyChurn.months.some((row) => row.removed >= 1)).toBe(true);
     expect(body.monthlyChurn.months.some((row) => row.added >= 1)).toBe(true);
+  });
+
+  it("keeps a deleted Flag in its original creation month", async () => {
+    const { appId, jwt } = await ownerSession();
+    await allowAllPolicies(h, appId);
+    const doomed = await createFlag(h, appId, jwt, {
+      ...baseFlag(appId),
+      key: "may-create",
+      name: "may-create",
+      lifecycleClass: "permission",
+    });
+    await h.bindings.d1
+      .prepare(
+        `UPDATE flag_change_events
+         SET changed_at = ?
+         WHERE app_id = ? AND flag_id = ? AND action = 'created' AND target_type = 'flag'`,
+      )
+      .bind("2026-05-15T10:00:00.000Z", appId, doomed.id)
+      .run();
+
+    const del = await request(
+      h,
+      "DELETE",
+      `/apps/${appId}/flags/${doomed.id}`,
+      jwt,
+      undefined,
+      `idem-delete-may-create-${crypto.randomUUID()}`,
+    );
+    expect(del.status).toBe(200);
+
+    const res = await request(h, "GET", `/apps/${appId}/flag-inventory-health`, jwt);
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      monthlyChurn: {
+        months: Array<{ month: string; added: number; removed: number }>;
+        historyCoverageStartsAt: string | null;
+      };
+    };
+    expect(body.monthlyChurn.historyCoverageStartsAt).toBeTruthy();
+    expect(body.monthlyChurn.months.find((row) => row.month === "2026-05")).toMatchObject({
+      month: "2026-05",
+      added: 1,
+    });
+    expect(body.monthlyChurn.months.some((row) => row.removed >= 1)).toBe(true);
   });
 });

@@ -66,12 +66,14 @@ describe("Flag health envelopes", () => {
       ],
       monthlyChurn: {
         months: [{ month: "2026-07", added: 1, removed: 0 }],
-        additionsSource: "flag_created_at",
+        additionsSource: "flag_change_log",
         removalsSource: "flag_change_log",
+        historyCoverageStartsAt: "2026-07-01T00:00:00.000Z",
       },
       expiredButLiveCount: 1,
     });
-    expect(parsed.monthlyChurn.removalsSource).toBe("flag_change_log");
+    expect(parsed.monthlyChurn.additionsSource).toBe("flag_change_log");
+    expect(parsed.monthlyChurn.historyCoverageStartsAt).toBe("2026-07-01T00:00:00.000Z");
   });
 
   it("registers both health routes as readOnlyClosed", () => {

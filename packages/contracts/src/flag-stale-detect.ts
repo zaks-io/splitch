@@ -20,6 +20,12 @@ export type EnvironmentConfigState = {
   hasRunningExperiment: boolean;
   /** Last write to this Flag Configuration (ISO UTC). */
   updatedAt: string;
+  /**
+   * Latest Run Start/End/Conclude instant for this Flag in this Environment, or
+   * null when no Run has touched it. End updates the Run, not the Configuration,
+   * so uniform serving cannot start until after that lifecycle instant.
+   */
+  lastRunLifecycleAt: string | null;
 };
 
 export type UniformEnvironmentEvidence = {
@@ -136,21 +142,30 @@ function tryUniformServingReason(
   now: string,
 ): StaleReason | null {
   const environments: UniformEnvironmentEvidence[] = [];
-  let latestUpdate: string | null = null;
+  let uniformSince: string | null = null;
   for (const config of configurations) {
     const mode = uniformServingMode(config);
     if (mode === null) return null;
     environments.push({ environmentId: config.environmentId, mode, updatedAt: config.updatedAt });
-    if (latestUpdate === null || config.updatedAt > latestUpdate) latestUpdate = config.updatedAt;
+    const envSince = uniformServingStart(config);
+    if (uniformSince === null || envSince > uniformSince) uniformSince = envSince;
   }
-  if (latestUpdate === null) return null;
-  if (daysBetween(latestUpdate, now) < thresholdDays) return null;
+  if (uniformSince === null) return null;
+  if (daysBetween(uniformSince, now) < thresholdDays) return null;
   return {
     kind: "uniform_serving",
     thresholdDays,
-    uniformSince: latestUpdate,
+    uniformSince,
     environments,
   };
+}
+
+/** Latest of Configuration change and any Run lifecycle change in that Environment. */
+function uniformServingStart(config: EnvironmentConfigState): string {
+  if (config.lastRunLifecycleAt === null) return config.updatedAt;
+  return config.lastRunLifecycleAt > config.updatedAt
+    ? config.lastRunLifecycleAt
+    : config.updatedAt;
 }
 
 function tryUnchangedReason(

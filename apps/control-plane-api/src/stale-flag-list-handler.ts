@@ -49,7 +49,7 @@ export async function listStaleFlags(
   }
 
   const flagIds = rows.map((row) => row.id);
-  const [catalogs, configs, targetingRules, experiments] = await Promise.all([
+  const [catalogs, configs, targetingRules, experiments, runLifecycleByScope] = await Promise.all([
     deps.repo.flags.listVariantsForFlags(scope, flagIds),
     deps.repo.flags.listFlagConfigsByFlagIdsAcrossEnvironments(scope, flagIds, environmentIds),
     deps.repo.flags.listTargetingRulesByFlagIdsAcrossEnvironments(scope, flagIds, environmentIds),
@@ -58,6 +58,7 @@ export async function listStaleFlags(
       flagIds,
       environmentIds,
     ),
+    deps.repo.flagHealth.latestRunLifecycleAtByFlagEnv(scope, flagIds, environmentIds),
   ]);
 
   const configByScope = new Map(
@@ -89,6 +90,7 @@ export async function listStaleFlags(
         rolloutPercentage: rolloutPercentage(config.rollout),
         hasRunningExperiment: runningExperimentScopes.has(key),
         updatedAt: config.updatedAt,
+        lastRunLifecycleAt: runLifecycleByScope.get(key) ?? null,
       };
     });
 

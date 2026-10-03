@@ -199,10 +199,12 @@ this route never claims a Flag is unused. Reasons:
 
 - `uniform_serving`: every Environment has no Targeting Rules and is disabled,
   default-only (null or 0% baseline rollout), or 100% baseline rollout, and the
-  latest Flag Configuration `updatedAt` across those Environments is at least the
-  class threshold old (30 days for `release`, `experiment`, and `unclassified`;
-  off for permanent `ops` and `permission`). A running Experiment blocks this
-  signal.
+  latest of Flag Configuration `updatedAt` and any Run lifecycle instant
+  (Start/End/Conclude) for that Flag in that Environment is at least the class
+  threshold old (30 days for `release`, `experiment`, and `unclassified`; off
+  for permanent `ops` and `permission`). A running Experiment / active Run
+  blocks this signal; after End the 30-day window counts from End, not from the
+  earlier Configuration write.
 - `past_expiry`: `expiresAt` is at or before the Worker clock (any class that
   still carries a passed expiry).
 - `unchanged`: no Flag change-log event (falling back to definition `updatedAt`)
@@ -216,12 +218,14 @@ MCP: `stale_flags_list`.
 
 `flag_inventory_health_get`: per-App inventory health (plan 3.8). Returns counts
 by lifecycle class, a fixed age distribution over live Flags' `createdAt`
-(`0_30d`, `30_90d`, `90_180d`, `180_365d`, `365d_plus`), monthly additions
-(`additionsSource: "flag_created_at"`) versus removals
-(`removalsSource: "flag_change_log"`, from `action=deleted` / `target_type=flag`
-rows that carry `changedAt`), and `expiredButLiveCount`. Deletions are hard
-deletes with no `deleted_at` column; the change log is the timestamped removal
-record. CLI: `splitch flag-inventory-health get`. MCP: `flag_inventory_health_get`.
+(`0_30d`, `30_90d`, `90_180d`, `180_365d`, `365d_plus`), monthly additions versus
+removals (both from the Flag change log: `action=created|deleted` /
+`target_type=flag`), `historyCoverageStartsAt` (earliest log `changedAt` for the
+App, or null when the App has no log rows; Flags that predate the log are
+outside that window rather than silently zeroed), and `expiredButLiveCount`.
+Deletions are hard deletes with no `deleted_at` column; create events remain so
+a May addition still counts after a June removal. CLI:
+`splitch flag-inventory-health get`. MCP: `flag_inventory_health_get`.
 
 ### `GET /apps/{app_id}/flags/{flag_id}/removal-brief`
 
