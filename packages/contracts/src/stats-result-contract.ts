@@ -171,6 +171,27 @@ export const ArmResultSchema = z
     futilityVerdict: FutilityVerdictSchema.optional(),
     /** One-sentence reason; required together with futilityVerdict. */
     futilityBecause: z.string().min(1).optional(),
+    /**
+     * Absolute decision-interval bounds. Optional for arms recorded before
+     * plan 2.4. Present together when the absolute interval is finite; stripped
+     * from the result token so existing Runs keep byte-identical tokens.
+     */
+    absolute_ci_lower: CiBoundSchema.optional(),
+    absolute_ci_upper: CiBoundSchema.optional(),
+    /**
+     * Bonferroni simultaneous absolute interval at alpha/k for ship-rule margin
+     * clearance when the freeze combines k > 1 locked goal Metrics. Recomputed
+     * from the same CI adapter (not a rescaled ordinary interval). Stripped
+     * from the result token. Present together when finite.
+     */
+    simultaneous_absolute_ci_lower: CiBoundSchema.optional(),
+    simultaneous_absolute_ci_upper: CiBoundSchema.optional(),
+    /**
+     * Fieller relative (percent) bounds derived from the alpha/k absolute
+     * interval when the ship rule is relative. Present together when finite.
+     */
+    simultaneous_ci_lower: CiBoundSchema.optional(),
+    simultaneous_ci_upper: CiBoundSchema.optional(),
   })
   .strict()
   .superRefine((arm, context) => {
@@ -196,6 +217,28 @@ export const ArmResultSchema = z
       context.addIssue({
         code: "custom",
         message: "futilityVerdict and futilityBecause must be present together",
+      });
+    }
+    if ((arm.absolute_ci_lower === undefined) !== (arm.absolute_ci_upper === undefined)) {
+      context.addIssue({
+        code: "custom",
+        message: "absolute_ci_lower and absolute_ci_upper must be present together",
+      });
+    }
+    if (
+      (arm.simultaneous_absolute_ci_lower === undefined) !==
+      (arm.simultaneous_absolute_ci_upper === undefined)
+    ) {
+      context.addIssue({
+        code: "custom",
+        message:
+          "simultaneous_absolute_ci_lower and simultaneous_absolute_ci_upper must be present together",
+      });
+    }
+    if ((arm.simultaneous_ci_lower === undefined) !== (arm.simultaneous_ci_upper === undefined)) {
+      context.addIssue({
+        code: "custom",
+        message: "simultaneous_ci_lower and simultaneous_ci_upper must be present together",
       });
     }
   });
