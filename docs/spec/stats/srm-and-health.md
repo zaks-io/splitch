@@ -202,6 +202,43 @@ Single implementation (chi-square); no adapter substitution needed. Not a deleti
 SRM has no alternative algorithm — but isolating it keeps the query-composition concerns out of
 the stats engine core.
 
+## SRM root-cause classifier (Fabijan et al. 2019)
+
+When Exposure SRM or activated-population SRM has fired, Results may carry an
+additive `srm_root_cause` object (also nested as `srm.rootCause` on the Panel
+diagnostics projection). The classifier is a pure function over outputs the
+platform already produces; it does not recompute the SRM test statistic, change
+the decision gate, or enter the result token.
+
+| Branch              | When it fires                                                                           | Next check                                                          |
+| ------------------- | --------------------------------------------------------------------------------------- | ------------------------------------------------------------------- |
+| `triggered_only`    | Activated SRM mismatches and Exposure SRM does not                                      | `experiment_results_get` (inspect Activation rates / activated SRM) |
+| `segment_localized` | Decision-diagnostics Dimension auto-cuts are present and a proper subset mismatch       | `decision-diagnostics`                                              |
+| `day_one`           | First-Exposure-day buckets are present, the first day mismatches, and later days do not | `decision-diagnostics`                                              |
+| `unclassified`      | SRM fired but signals are absent, global, or conflicting                                | `decision-diagnostics`                                              |
+
+Rules:
+
+- Returns nothing when neither Exposure nor activated SRM has fired.
+- Never guesses: conflicting matches (for example `triggered_only` and
+  `segment_localized` together) become `unclassified` with `evidenceConsidered`.
+- `segment_localized` and `day_one` require optional decision-diagnostics inputs.
+  Until that route is wired into the Results producer, those branches stay inert
+  and live Results that only have `StatsOutput` typically land on
+  `triggered_only` or `unclassified`.
+
+### Telemetry gaps (branches omitted)
+
+Fabijan et al. also describe engagement-direction and latency-linked diagnoses.
+splitch has no per-Variant engagement intensity or Assignment/Exposure logging
+latency tied to the SRM denominator today, so those branches are **not**
+emitted. They are listed on `SRM_ROOT_CAUSE_TELEMETRY_GAPS` in `@splitch/stats`
+until that telemetry exists.
+
+Reference: Fabijan, Gupchup, Gupta, Omhover, Qin, Vermeer, Dmitriev — _Diagnosing
+Sample Ratio Mismatch in Online Controlled Experiments_, KDD 2019
+(doi:10.1145/3292500.3330722).
+
 ## Sources
 
 - [../../adr/0011-conflicting-variant-entities-quarantined-to-multiple.md](../../adr/0011-conflicting-variant-entities-quarantined-to-multiple.md)

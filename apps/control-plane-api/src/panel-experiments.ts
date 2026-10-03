@@ -292,7 +292,7 @@ function panelFromProducer(produced: ExperimentResultsResponse): PanelExperiment
     control: produced.control,
     ...readiness,
     stats: produced.stats,
-    srm: experimentSrmDiagnostics(produced.stats),
+    srm: experimentSrmDiagnostics(produced.stats, produced.srm_root_cause ?? null),
     gate: produced.gate,
     significance: experimentSignificanceDisplays(produced.stats),
   };

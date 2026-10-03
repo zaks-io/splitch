@@ -10,6 +10,7 @@ import {
   ExperimentResultsViewSchema,
 } from "./experiment-results-readiness";
 import { RunCommitmentsSchema } from "./run-commitments";
+import { SrmRootCauseClassificationSchema } from "./srm-root-cause";
 import { AnalysisResultsMissingInputSchema, StatsOutputSchema } from "./stats-result-contract";
 
 /**
@@ -40,6 +41,11 @@ const evidencePair = {
   result_token: CanonicalJsonSha256Schema.optional(),
 } as const;
 
+/** Fabijan SRM root-cause; present only when Exposure or activated SRM fired. */
+const srmRootCauseField = {
+  srm_root_cause: SrmRootCauseClassificationSchema.optional(),
+} as const;
+
 const readyDetailedSchema = z
   .object({
     view: z.literal("detailed"),
@@ -49,6 +55,7 @@ const readyDetailedSchema = z
     ...runIdentityFields,
     ...evidencePair,
     run_commitments: RunCommitmentsSchema.optional(),
+    ...srmRootCauseField,
     stats: StatsOutputSchema,
   })
   .strict()
@@ -63,6 +70,7 @@ const readyConciseSchema = z
     ...runIdentityFields,
     ...evidencePair,
     run_commitments: RunCommitmentsSchema.optional(),
+    ...srmRootCauseField,
   })
   .strict()
   .superRefine(evidencePairRefine);

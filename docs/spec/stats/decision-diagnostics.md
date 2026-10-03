@@ -109,6 +109,11 @@ cursor reused with different evidence returns `DECISION_RESULT_STALE`.
 These are diagnostic slices only. They never enter the Run's BH family, change `decision_valid`, or
 independently authorize conclusion.
 
+When Results classifies an SRM root cause (see
+[srm-and-health.md](srm-and-health.md#srm-root-cause-classifier-fabijan-et-al-2019)), `autoCuts`
+feed `segment_localized` and per-day trend points feed `day_one`. The classifier never changes this
+read's response shape; it only consumes the same signals once the Results producer wires them in.
+
 ## Tenant and provenance boundary
 
 The Analysis Worker receives App, Environment, Experiment, and Run identity from the authenticated
