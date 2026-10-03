@@ -1,5 +1,6 @@
-import type { MetricKind, MetricRef } from "@splitch/contracts";
+import { metricHorizonIssue, type MetricKind, type MetricRef } from "@splitch/contracts";
 import type { Repository, TenantScope } from "@splitch/db";
+import { copyHorizons, metricHorizons } from "./metric-horizon-write";
 import { validationError } from "./flag-definition-errors";
 import {
   type MetricAnalysisConfig,
@@ -21,6 +22,8 @@ export interface PreparedMetricWrite {
   eventFieldName: string | null;
   numeratorMetricId: string | null;
   denominatorMetricId: string | null;
+  horizonStartMs: number | null;
+  horizonEndMs: number | null;
   analysis: MetricAnalysisConfig;
 }
 
@@ -48,6 +51,7 @@ export async function prepareMetricWrite(
     eventFieldName: directBinding(body, "eventFieldName", kind, current),
     numeratorMetricId: metricOperand(body, "numerator", current?.numeratorMetricId ?? null),
     denominatorMetricId: metricOperand(body, "denominator", current?.denominatorMetricId ?? null),
+    ...metricHorizons(body, kind, current),
     analysis: metricAnalysisConfig(body, current),
   };
   return (await validateMetricShape(deps, scope, current, prepared, requestId)) ?? ok(prepared);
@@ -62,6 +66,7 @@ export function metricPatch(
   copyTextFields(body, patch);
   copyDirectBinding(body, patch, prepared, current);
   copyOperands(body, patch, prepared);
+  copyHorizons(body, patch, prepared);
   return patch;
 }
 
@@ -195,8 +200,10 @@ async function validateRatioOperands(
     const operand = metricId ? await deps.repo.experiments.getMetric(scope, metricId) : null;
     if (!operand)
       return fail(metricIssue(requestId, field, `${field} Metric must belong to this App`));
-    if (operand.kind === "ratio") {
-      return fail(metricIssue(requestId, field, `${field} Metric must be non-Ratio`));
+    if (operand.kind === "ratio" || operand.kind === "retention") {
+      return fail(
+        metricIssue(requestId, field, `${field} Metric must be non-Ratio and non-Retention`),
+      );
     }
   }
   return null;
@@ -212,7 +219,9 @@ function metricShapeIssue(
   const operandIssue = metricOperandIssue(prepared, metricId, requestId);
   if (operandIssue) return operandIssue;
   const analysisIssue = metricAnalysisIssue(prepared.kind, prepared.analysis);
-  return analysisIssue ? metricIssue(requestId, analysisIssue.field, analysisIssue.message) : null;
+  if (analysisIssue) return metricIssue(requestId, analysisIssue.field, analysisIssue.message);
+  const horizonIssue = metricHorizonIssue(prepared);
+  return horizonIssue ? metricIssue(requestId, "horizonStartMs", horizonIssue) : null;
 }
 
 function metricBindingIssue(prepared: PreparedMetricWrite, requestId: string): Response | null {
@@ -223,7 +232,10 @@ function metricBindingIssue(prepared: PreparedMetricWrite, requestId: string): R
       `${prepared.kind} Metric requires eventFieldName`,
     );
   }
-  if ((prepared.kind === "binomial" || prepared.kind === "ratio") && prepared.eventFieldName) {
+  if (
+    (prepared.kind === "binomial" || prepared.kind === "ratio" || prepared.kind === "retention") &&
+    prepared.eventFieldName
+  ) {
     return metricIssue(
       requestId,
       "eventFieldName",

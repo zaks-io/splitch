@@ -1,4 +1,4 @@
-import type { MetricDirection, MetricKind } from "@splitch/contracts";
+import { isPresenceMetric, type MetricDirection, type MetricKind } from "@splitch/contracts";
 import type { MetricRow } from "./metric-segment-shared";
 
 /**
@@ -57,10 +57,10 @@ export function metricAnalysisIssue(
   kind: MetricKind,
   config: MetricAnalysisConfig,
 ): { field: string; message: string } | null {
-  if (kind !== "binomial") return null;
+  if (!isPresenceMetric(kind)) return null;
   for (const field of ["winsorize", "winsorizePct"] as const) {
     if (config[field] !== null) {
-      return { field, message: `binomial Metric cannot set ${field}; 0/1 values have no tail` };
+      return { field, message: `${kind} Metric cannot set ${field}; 0/1 values have no tail` };
     }
   }
   return null;

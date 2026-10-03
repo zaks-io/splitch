@@ -81,7 +81,8 @@ export function conversionWindowsFromQueryConfig(
 ): NonNullable<StatsInput["metric_conversion_windows"]> {
   return configs.map((config) => ({
     metric_id: config.metric_id,
-    window_duration_ms: config.window_duration_ms,
+    window_duration_ms:
+      config.metric_type === "retention" ? config.horizon_end_ms : config.window_duration_ms,
   }));
 }
 

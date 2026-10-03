@@ -119,6 +119,8 @@ function comparisonsForMetric(
     winsorize_pct: variance?.winsorize_pct,
     cuped: variance?.cuped,
     cuped_coverage_threshold_pct: variance?.cuped_coverage_threshold_pct,
+    data_watermark: input.data_watermark,
+    metric_retention_horizons: input.metric_retention_horizons,
     ...(input.horizon === "fixed" && input.sample_size_locked !== undefined
       ? { fixed_horizon_sample_size: input.sample_size_locked }
       : {}),

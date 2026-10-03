@@ -167,9 +167,9 @@ Body:
   key: string;
   name: string;
   description?: string;
-  kind: "binomial" | "count" | "revenue" | "ratio";
+  kind: "binomial" | "count" | "revenue" | "ratio" | "retention";
 
-  // Required for binomial/count/revenue; absent for ratio.
+  // Required for binomial/count/revenue/retention; absent for ratio.
   event_definition_id?: string;
 
   // Required for count/revenue. Must be a declared top-level number field.
@@ -179,11 +179,15 @@ Body:
   numerator_metric_id?: string;
   denominator_metric_id?: string;
 
+  // Required for retention. Window is [anchor + horizon_start_ms, anchor + horizon_end_ms).
+  horizon_start_ms?: number;
+  horizon_end_ms?: number;
+
   conversion_window_ms?: number;
 
   // Analysis knobs. Null means "engine default"; Run Start resolves each one and
   // freezes the answer on the Run. Every threshold below is a percent.
-  winsorize?: boolean | null;         // rejected on binomial: 0/1 has no tail to cap
+  winsorize?: boolean | null;         // rejected on binomial and retention: 0/1 has no tail to cap
   winsorize_pct?: number | null;      // > 0, <= 100
   cuped?: boolean | null;             // ignored on ratio: the delta method is never CUPED-adjusted
   cuped_coverage_threshold_pct?: number | null;  // > 0, <= 100
@@ -195,11 +199,12 @@ Body:
 The Worker resolves the current published Event Definition Version before writing a Metric that
 directly references an Event Definition. The Event Definition must have `family = "metric"`:
 
-- Binomial references the definition and leaves `event_field_name` absent.
+- Binomial and Retention reference the definition and leave `event_field_name` absent. Retention
+  also requires `horizon_start_ms` and `horizon_end_ms` (`end > start`).
 - Count and Revenue reference a declared `number` field by exact name on that published version.
   JSON paths and expressions are rejected.
-- Ratio references two same-App non-Ratio Metrics with distinct ids, rejects Ratio operands and
-  dependency cycles, and carries no direct Event Definition or field.
+- Ratio references two same-App non-Ratio, non-Retention Metrics with distinct ids, rejects Ratio
+  and Retention operands and dependency cycles, and carries no direct Event Definition or field.
 
 Metrics store `event_definition_id` (not a pinned version). Create and patch validate the field
 contract against the then-current published version. Analysis never re-resolves fields from the

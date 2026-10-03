@@ -2,13 +2,14 @@ import { describe, expect, it } from "vitest";
 import { computeCohortEffect } from "./cohort-effect";
 import {
   activationForEntities,
+  COHORT_ANALYSIS_WATERMARK,
   COHORT_RUN_START,
   cohortStatsInput,
   prePeriodForEntities,
   type CohortEntitySpec,
 } from "./cohort-effect-cases";
 import { fixedHorizonAbsoluteInterval } from "./cohort-effect-estimate";
-import { COHORT_EFFECT_NOVELTY_ALPHA } from "./cohort-effect-types";
+import { COHORT_EFFECT_NOVELTY_ALPHA, MS_PER_DAY } from "./cohort-effect-types";
 import { estimateMetricComparison } from "./variance-estimators";
 
 describe("cohort effect zero-variance / denominator", () => {
@@ -195,6 +196,25 @@ describe("cohort effect frozen variance settings", () => {
       (expected.upper - expected.lower) / 2,
       12,
     );
+  });
+});
+
+describe("cohort effect Retention primary", () => {
+  it("forwards frozen horizons and the analysis watermark into the estimator", () => {
+    const diagnostic = computeCohortEffect({
+      statsInput: cohortStatsInput(constantBinomialEntities(40, 0), {
+        metricId: "d7_retained",
+        metricType: "retention",
+        metricRetentionHorizons: [
+          { metric_id: "d7_retained", horizon_start_ms: 0, horizon_end_ms: MS_PER_DAY },
+        ],
+        dataWatermark: COHORT_ANALYSIS_WATERMARK,
+      }),
+      runStartedAt: COHORT_RUN_START,
+      analysisWatermark: COHORT_ANALYSIS_WATERMARK,
+      minArmN: 30,
+    });
+    expect(diagnostic.state).toBe("ready");
   });
 });
 

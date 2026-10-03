@@ -1,5 +1,5 @@
 DESCRIPTION >
-    Returns one zero-preserving per-Entity value for a Binomial, Count, or Revenue Metric.
+    Returns one zero-preserving per-Entity value for a Binomial, Retention, Count, or Revenue Metric. Retention reuses the Binomial 0/1 fold with optional window_offset_ms.
 
 NODE scoped_exposures
 SQL >
@@ -25,10 +25,10 @@ SQL >
     {% if not defined(environment_id) %} {{ error('environment_id is required') }}{% end %}
     {% if not defined(event_definition_id) %} {{ error('event_definition_id is required') }}{% end %}
     {% if not defined(metric_type) %} {{ error('metric_type is required') }}{% end %}
-    {% if metric_type not in ['binomial', 'count', 'revenue'] %}
-        {{ error('metric_type must be binomial, count, or revenue') }}
+    {% if metric_type not in ['binomial', 'count', 'revenue', 'retention'] %}
+        {{ error('metric_type must be binomial, count, revenue, or retention') }}
     {% end %}
-    {% if metric_type != 'binomial' and not defined(event_field_name) %}
+    {% if metric_type not in ['binomial', 'retention'] and not defined(event_field_name) %}
         {{ error('event_field_name is required for Count and Revenue') }}
     {% end %}
     {% if not defined(from_ts) %} {{ error('from_ts is required') }}{% end %}
@@ -40,7 +40,7 @@ SQL >
         targeting_key_hash,
         entity_family_hash,
         accepted_at,
-        {% if metric_type == 'binomial' %} toFloat64(1) AS event_value
+        {% if metric_type in ['binomial', 'retention'] %} toFloat64(1) AS event_value
         {% else %} toFloat64(JSONExtractRaw(fields, {{ String(event_field_name) }})) AS event_value
         {% end %}
     FROM serve_deduped_metric_events
@@ -50,7 +50,7 @@ SQL >
         AND event_definition_id = {{ String(event_definition_id) }}
         AND accepted_at >= {{ DateTime64(from_ts) }}
         AND accepted_at < {{ DateTime64(to_ts) }}
-        {% if metric_type != 'binomial' %}
+        {% if metric_type not in ['binomial', 'retention'] %}
             AND JSONHas(fields, {{ String(event_field_name) }})
         {% end %}
 
@@ -67,7 +67,7 @@ SQL >
         exposures.run_id AS run_id,
         {{ String(metric_id) }} AS metric_id,
         {{ String(metric_type) }} AS metric_type,
-        {% if metric_type == 'binomial' %} toFloat64(countIf(events.event_value > 0) > 0) AS value,
+        {% if metric_type in ['binomial', 'retention'] %} toFloat64(countIf(events.event_value > 0) > 0) AS value,
         {% else %} sum(events.event_value) AS value,
         {% end %}
         toUInt8(1) AS in_window
@@ -91,11 +91,19 @@ SQL >
                 exposures.targeting_key_hash
             )
         )
-        AND events.accepted_at >= exposures.window_anchor
+        AND events.accepted_at
+        >= addMilliseconds(
+            exposures.window_anchor,
+            {% if defined(window_offset_ms) %}{{ UInt64(window_offset_ms) }}{% else %}0{% end %}
+        )
         AND (
             {{ UInt64(window_duration_ms) }} = 0
             OR events.accepted_at
-            < addMilliseconds(exposures.window_anchor, {{ UInt64(window_duration_ms) }})
+            < addMilliseconds(
+                exposures.window_anchor,
+                {% if defined(window_offset_ms) %}{{ UInt64(window_offset_ms) }}{% else %}0{% end %}
+                + {{ UInt64(window_duration_ms) }}
+            )
         )
     WHERE
         exposures.app_id = {{ String(app_id) }}

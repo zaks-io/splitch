@@ -207,6 +207,21 @@ describe("Experiment Start refuses an unreadable Metric source binding", () => {
     expect(details).toContain("Entity type session does not match Run Entity type user");
   });
 
+  it("refuses a Retention Metric whose Entity type does not match the Run's targeting key", async () => {
+    const fx = await experimentFixture(ctx);
+    const id = await metric(
+      fx.appId,
+      "metric_session_retention",
+      { kind: "retention", horizonStartMs: 0, horizonEndMs: 86_400_000 },
+      { entityType: "session" },
+    );
+
+    const { code, details } = await refusal(fx.appId, [id], "user");
+
+    expect(code).toBe("VALIDATION_ERROR");
+    expect(details).toContain("Entity type session does not match Run Entity type user");
+  });
+
   it("refuses a Metric whose Event Definition has no published Version", async () => {
     const fx = await experimentFixture(ctx);
     const id = await metric(

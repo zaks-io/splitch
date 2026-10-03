@@ -38,6 +38,8 @@ export interface CohortStatsInputOptions {
   readonly decisionFamilyVariants?: readonly string[];
   /** Frozen Conversion Window; omit to leave novelty `insufficient_data`. */
   readonly metricConversionWindows?: StatsInput["metric_conversion_windows"];
+  readonly metricRetentionHorizons?: StatsInput["metric_retention_horizons"];
+  readonly dataWatermark?: string;
 }
 
 export function cohortStatsInput(
@@ -75,6 +77,10 @@ export function cohortStatsInput(
     ...(options.metricConversionWindows !== undefined
       ? { metric_conversion_windows: [...options.metricConversionWindows] }
       : {}),
+    ...(options.metricRetentionHorizons !== undefined
+      ? { metric_retention_horizons: [...options.metricRetentionHorizons] }
+      : {}),
+    ...(options.dataWatermark !== undefined ? { data_watermark: options.dataWatermark } : {}),
   };
 }
 

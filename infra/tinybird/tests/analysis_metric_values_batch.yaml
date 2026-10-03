@@ -10,3 +10,63 @@
   expected_http_status: 200
   expected_result: |
     {"targeting_key_hash":"tk_delayed_convex","run_id":"run_delayed","metric_id":"metric_signup","metric_type":"binomial","value":1,"num_value":0,"denom_value":0,"in_window":1}
+- name: retention_shifted_horizon_includes_start_and_excludes_exclusive_end
+  description: The production batch pipe counts a Retention event exactly at the shifted horizon start and drops one at the exclusive end, while keeping exposed Entities with no in-horizon events as zeros.
+  parameters: "app_id=app_retention_bounds&environment_id=env_prod&experiment_id=exp_retention_bounds&run_id=run_retention_bounds&activation_gated=0&metric_query_config=%5B%7B%22metric_id%22%3A%22metric_d7%22%2C%22metric_type%22%3A%22retention%22%2C%22event_definition_id%22%3A%22event_definition_signup%22%2C%22window_offset_ms%22%3A86400000%2C%22window_duration_ms%22%3A86400000%2C%22cuped_lookback_ms%22%3A86400000%7D%5D&from_ts=2026-07-01%2000%3A00%3A00.000&to_ts=2026-07-04%2000%3A00%3A00.000"
+  expected_http_status: 200
+  expected_result: |
+    {"targeting_key_hash":"tk_offset_before","run_id":"run_retention_bounds","metric_id":"metric_d7","metric_type":"retention","value":0,"num_value":0,"denom_value":0,"in_window":1}
+    {"targeting_key_hash":"tk_offset_end","run_id":"run_retention_bounds","metric_id":"metric_d7","metric_type":"retention","value":0,"num_value":0,"denom_value":0,"in_window":1}
+    {"targeting_key_hash":"tk_offset_end_inside","run_id":"run_retention_bounds","metric_id":"metric_d7","metric_type":"retention","value":1,"num_value":0,"denom_value":0,"in_window":1}
+    {"targeting_key_hash":"tk_offset_start","run_id":"run_retention_bounds","metric_id":"metric_d7","metric_type":"retention","value":1,"num_value":0,"denom_value":0,"in_window":1}
+- name: gated_retention_reanchors_the_shifted_horizon_to_activation
+  description: A gated Retention Metric measures the delayed horizon from Activation, so a post-Activation event at the shifted start counts and a pre-Activation event does not.
+  parameters: "app_id=app_delayed&environment_id=env_prod&experiment_id=exp_delayed&run_id=run_delayed&activation_gated=1&metric_query_config=%5B%7B%22metric_id%22%3A%22metric_d7%22%2C%22metric_type%22%3A%22retention%22%2C%22event_definition_id%22%3A%22event_definition_signup%22%2C%22window_offset_ms%22%3A1800000%2C%22window_duration_ms%22%3A1800000%2C%22cuped_lookback_ms%22%3A86400000%7D%5D&from_ts=2026-07-05%2000%3A00%3A00.000&to_ts=2026-07-06%2000%3A00%3A00.000"
+  expected_http_status: 200
+  expected_result: |
+    {"targeting_key_hash":"tk_delayed_convex","run_id":"run_delayed","metric_id":"metric_d7","metric_type":"retention","value":1,"num_value":0,"denom_value":0,"in_window":1}
+- name: mixed_metric_kinds_share_one_batch_and_keep_zero_event_entities
+  description: One production batch query returns Binomial, Retention, and Count values together, including exposed Entities that never emitted a Metric Event.
+  parameters: "app_id=app_1&environment_id=env_prod&experiment_id=exp_1&run_id=run_1&activation_gated=0&metric_query_config=%5B%7B%22metric_id%22%3A%22metric_signup%22%2C%22metric_type%22%3A%22binomial%22%2C%22event_definition_id%22%3A%22event_definition_signup%22%2C%22window_duration_ms%22%3A259200000%2C%22cuped_lookback_ms%22%3A86400000%7D%2C%7B%22metric_id%22%3A%22metric_d7%22%2C%22metric_type%22%3A%22retention%22%2C%22event_definition_id%22%3A%22event_definition_signup%22%2C%22window_offset_ms%22%3A172800000%2C%22window_duration_ms%22%3A259200000%2C%22cuped_lookback_ms%22%3A86400000%7D%2C%7B%22metric_id%22%3A%22metric_duration%22%2C%22metric_type%22%3A%22count%22%2C%22event_definition_id%22%3A%22event_definition_llm%22%2C%22event_field_name%22%3A%22duration_ms%22%2C%22window_duration_ms%22%3A259200000%2C%22cuped_lookback_ms%22%3A86400000%7D%5D&from_ts=2026-07-01%2000%3A00%3A00.000&to_ts=2026-07-09%2000%3A00%3A00.000"
+  expected_http_status: 200
+  expected_result: |
+    {"targeting_key_hash":"tk_conflict","run_id":"run_1","metric_id":"metric_d7","metric_type":"retention","value":0,"num_value":0,"denom_value":0,"in_window":1}
+    {"targeting_key_hash":"tk_control_snapshot","run_id":"run_1","metric_id":"metric_d7","metric_type":"retention","value":0,"num_value":0,"denom_value":0,"in_window":1}
+    {"targeting_key_hash":"tk_edge","run_id":"run_1","metric_id":"metric_d7","metric_type":"retention","value":0,"num_value":0,"denom_value":0,"in_window":1}
+    {"targeting_key_hash":"tk_null_variant","run_id":"run_1","metric_id":"metric_d7","metric_type":"retention","value":0,"num_value":0,"denom_value":0,"in_window":1}
+    {"targeting_key_hash":"tk_straddle","run_id":"run_1","metric_id":"metric_d7","metric_type":"retention","value":0,"num_value":0,"denom_value":0,"in_window":1}
+    {"targeting_key_hash":"tk_tail","run_id":"run_1","metric_id":"metric_d7","metric_type":"retention","value":1,"num_value":0,"denom_value":0,"in_window":1}
+    {"targeting_key_hash":"tk_treatment_snapshot","run_id":"run_1","metric_id":"metric_d7","metric_type":"retention","value":0,"num_value":0,"denom_value":0,"in_window":1}
+    {"targeting_key_hash":"tk_conflict","run_id":"run_1","metric_id":"metric_duration","metric_type":"count","value":0,"num_value":0,"denom_value":0,"in_window":1}
+    {"targeting_key_hash":"tk_control_snapshot","run_id":"run_1","metric_id":"metric_duration","metric_type":"count","value":1000,"num_value":0,"denom_value":0,"in_window":1}
+    {"targeting_key_hash":"tk_edge","run_id":"run_1","metric_id":"metric_duration","metric_type":"count","value":0,"num_value":0,"denom_value":0,"in_window":1}
+    {"targeting_key_hash":"tk_null_variant","run_id":"run_1","metric_id":"metric_duration","metric_type":"count","value":0,"num_value":0,"denom_value":0,"in_window":1}
+    {"targeting_key_hash":"tk_straddle","run_id":"run_1","metric_id":"metric_duration","metric_type":"count","value":0,"num_value":0,"denom_value":0,"in_window":1}
+    {"targeting_key_hash":"tk_tail","run_id":"run_1","metric_id":"metric_duration","metric_type":"count","value":0,"num_value":0,"denom_value":0,"in_window":1}
+    {"targeting_key_hash":"tk_treatment_snapshot","run_id":"run_1","metric_id":"metric_duration","metric_type":"count","value":2000,"num_value":0,"denom_value":0,"in_window":1}
+    {"targeting_key_hash":"tk_conflict","run_id":"run_1","metric_id":"metric_signup","metric_type":"binomial","value":0,"num_value":0,"denom_value":0,"in_window":1}
+    {"targeting_key_hash":"tk_control_snapshot","run_id":"run_1","metric_id":"metric_signup","metric_type":"binomial","value":1,"num_value":0,"denom_value":0,"in_window":1}
+    {"targeting_key_hash":"tk_edge","run_id":"run_1","metric_id":"metric_signup","metric_type":"binomial","value":0,"num_value":0,"denom_value":0,"in_window":1}
+    {"targeting_key_hash":"tk_null_variant","run_id":"run_1","metric_id":"metric_signup","metric_type":"binomial","value":0,"num_value":0,"denom_value":0,"in_window":1}
+    {"targeting_key_hash":"tk_straddle","run_id":"run_1","metric_id":"metric_signup","metric_type":"binomial","value":0,"num_value":0,"denom_value":0,"in_window":1}
+    {"targeting_key_hash":"tk_tail","run_id":"run_1","metric_id":"metric_signup","metric_type":"binomial","value":0,"num_value":0,"denom_value":0,"in_window":1}
+    {"targeting_key_hash":"tk_treatment_snapshot","run_id":"run_1","metric_id":"metric_signup","metric_type":"binomial","value":1,"num_value":0,"denom_value":0,"in_window":1}
+- name: legacy_batch_configs_without_offsets_match_unshifted_windows
+  description: Omitting window_offset_ms leaves Binomial and Retention windows unshifted, so historical configs keep the same per-Entity values.
+  parameters: "app_id=app_1&environment_id=env_prod&experiment_id=exp_1&run_id=run_1&activation_gated=0&metric_query_config=%5B%7B%22metric_id%22%3A%22metric_signup%22%2C%22metric_type%22%3A%22binomial%22%2C%22event_definition_id%22%3A%22event_definition_signup%22%2C%22window_duration_ms%22%3A259200000%2C%22cuped_lookback_ms%22%3A86400000%7D%2C%7B%22metric_id%22%3A%22metric_d7%22%2C%22metric_type%22%3A%22retention%22%2C%22event_definition_id%22%3A%22event_definition_signup%22%2C%22window_duration_ms%22%3A259200000%2C%22cuped_lookback_ms%22%3A86400000%7D%5D&from_ts=2026-07-01%2000%3A00%3A00.000&to_ts=2026-07-09%2000%3A00%3A00.000"
+  expected_http_status: 200
+  expected_result: |
+    {"targeting_key_hash":"tk_conflict","run_id":"run_1","metric_id":"metric_d7","metric_type":"retention","value":0,"num_value":0,"denom_value":0,"in_window":1}
+    {"targeting_key_hash":"tk_control_snapshot","run_id":"run_1","metric_id":"metric_d7","metric_type":"retention","value":1,"num_value":0,"denom_value":0,"in_window":1}
+    {"targeting_key_hash":"tk_edge","run_id":"run_1","metric_id":"metric_d7","metric_type":"retention","value":0,"num_value":0,"denom_value":0,"in_window":1}
+    {"targeting_key_hash":"tk_null_variant","run_id":"run_1","metric_id":"metric_d7","metric_type":"retention","value":0,"num_value":0,"denom_value":0,"in_window":1}
+    {"targeting_key_hash":"tk_straddle","run_id":"run_1","metric_id":"metric_d7","metric_type":"retention","value":0,"num_value":0,"denom_value":0,"in_window":1}
+    {"targeting_key_hash":"tk_tail","run_id":"run_1","metric_id":"metric_d7","metric_type":"retention","value":0,"num_value":0,"denom_value":0,"in_window":1}
+    {"targeting_key_hash":"tk_treatment_snapshot","run_id":"run_1","metric_id":"metric_d7","metric_type":"retention","value":1,"num_value":0,"denom_value":0,"in_window":1}
+    {"targeting_key_hash":"tk_conflict","run_id":"run_1","metric_id":"metric_signup","metric_type":"binomial","value":0,"num_value":0,"denom_value":0,"in_window":1}
+    {"targeting_key_hash":"tk_control_snapshot","run_id":"run_1","metric_id":"metric_signup","metric_type":"binomial","value":1,"num_value":0,"denom_value":0,"in_window":1}
+    {"targeting_key_hash":"tk_edge","run_id":"run_1","metric_id":"metric_signup","metric_type":"binomial","value":0,"num_value":0,"denom_value":0,"in_window":1}
+    {"targeting_key_hash":"tk_null_variant","run_id":"run_1","metric_id":"metric_signup","metric_type":"binomial","value":0,"num_value":0,"denom_value":0,"in_window":1}
+    {"targeting_key_hash":"tk_straddle","run_id":"run_1","metric_id":"metric_signup","metric_type":"binomial","value":0,"num_value":0,"denom_value":0,"in_window":1}
+    {"targeting_key_hash":"tk_tail","run_id":"run_1","metric_id":"metric_signup","metric_type":"binomial","value":0,"num_value":0,"denom_value":0,"in_window":1}
+    {"targeting_key_hash":"tk_treatment_snapshot","run_id":"run_1","metric_id":"metric_signup","metric_type":"binomial","value":1,"num_value":0,"denom_value":0,"in_window":1}

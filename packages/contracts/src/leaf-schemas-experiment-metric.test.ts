@@ -204,6 +204,33 @@ describe("MetricSchema — ratio requires two operand Metrics", () => {
   });
 });
 
+describe("MetricSchema — retention requires a horizon", () => {
+  it("parses with both horizon bounds", () => {
+    const metric = MetricSchema.parse({
+      ...baseMetric,
+      kind: "retention",
+      horizonStartMs: 0,
+      horizonEndMs: 86_400_000,
+    });
+    expect(metric.horizonEndMs).toBe(86_400_000);
+  });
+
+  it("rejects a missing horizon", () => {
+    expect(MetricSchema.safeParse({ ...baseMetric, kind: "retention" }).success).toBe(false);
+  });
+
+  it("rejects a horizon on a Binomial Metric", () => {
+    expect(
+      MetricSchema.safeParse({
+        ...baseMetric,
+        kind: "binomial",
+        horizonStartMs: 0,
+        horizonEndMs: 86_400_000,
+      }).success,
+    ).toBe(false);
+  });
+});
+
 describe("MetricSchema — required fields", () => {
   it("accepts an optional description", () => {
     const m = MetricSchema.parse({ ...baseMetric, kind: "binomial", description: "Conv rate" });

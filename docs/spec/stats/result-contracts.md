@@ -9,7 +9,7 @@ contract and `StatsEngine` signature live in [data-contracts.md](data-contracts.
 | --------------------- | -------------------- | -------------------------------------------------------------------------------------------------------------------- |
 | `variant`             | `string`             | Variant name                                                                                                         |
 | `metric_id`           | `string`             |                                                                                                                      |
-| `sample_size_n`       | `integer`            | Unique Entities in this arm (deduped)                                                                                |
+| `sample_size_n`       | `integer`            | Unique Entities in this arm (deduped). For Retention, eligible Entities only                                         |
 | `point_estimate`      | `number`             | Per-Entity mean for this arm                                                                                         |
 | `relative_lift_pct`   | `number \| null`     | `(treatment / control - 1) × 100`; null for Control or undefined Control estimate                                    |
 | `ci_lower`            | `number \| null`     | Always-valid CI lower bound (relative-lift %); null for Control or undefined relative lift                           |
@@ -22,6 +22,8 @@ contract and `StatsEngine` signature live in [data-contracts.md](data-contracts.
 | `status`              | `enum`               | `running \| ready \| stopped \| insufficient_denominator \| insufficient_n \| error`                                 |
 | `variance_techniques` | `VarianceTechniques` | Which variance-reduction methods applied (see below)                                                                 |
 | `estimand`            | `EstimandDisclosure` | What the published estimate measures and what the cap changed (see below)                                            |
+| `eligible_n`          | `integer`            | Retention only: unique Entities whose horizon matured. Absent on other kinds. Equals `sample_size_n`                 |
+| `immature_excluded_n` | `integer`            | Retention only: unique Entities omitted from this Metric because the horizon has not matured. Absent otherwise       |
 
 ## VarianceTechniques object (never silent)
 
@@ -53,13 +55,13 @@ keeps it optional only so Stats recorded before it existed still parse.
 
 `EstimandLabel` is one of:
 
-| Label                     | Metric kind    | Technique                                                           |
-| ------------------------- | -------------- | ------------------------------------------------------------------- |
-| `uncapped_additive_mean`  | Count, Revenue | Per-Entity mean, no cap                                             |
-| `capped_additive_mean`    | Count, Revenue | Per-Entity mean of values capped at the pooled cap                  |
-| `binomial_mean`           | Binomial       | Per-Entity conversion rate. Never winsorized, so never capped       |
-| `ratio_of_uncapped_means` | Ratio          | Mean numerator over mean denominator, no cap                        |
-| `ratio_of_capped_means`   | Ratio          | Mean capped numerator over mean capped denominator (component caps) |
+| Label                     | Metric kind         | Technique                                                               |
+| ------------------------- | ------------------- | ----------------------------------------------------------------------- |
+| `uncapped_additive_mean`  | Count, Revenue      | Per-Entity mean, no cap                                                 |
+| `capped_additive_mean`    | Count, Revenue      | Per-Entity mean of values capped at the pooled cap                      |
+| `binomial_mean`           | Binomial, Retention | Per-Entity conversion/retention rate. Never winsorized, so never capped |
+| `ratio_of_uncapped_means` | Ratio               | Mean numerator over mean denominator, no cap                            |
+| `ratio_of_capped_means`   | Ratio               | Mean capped numerator over mean capped denominator (component caps)     |
 
 A Ratio Entity counts once in `capped_entity_count` even when both components were capped.
 
@@ -310,7 +312,9 @@ canonical bytes of
 `{ appId, environmentId, experimentId, runId, runConfigHash, analysisVersion, stats }`, where
 `stats` omits every arm result's `estimand` (`resultTokenStats`). The disclosure labels the
 decision-driving estimate and adds an uncapped view that no decision reads, so leaving it out keeps
-a Run's token byte-identical to the token issued before the disclosure existed. A change to any
+a Run's token byte-identical to the token issued before the disclosure existed. Retention
+`eligible_n` / `immature_excluded_n` are stripped the same way so existing Runs stay byte-identical.
+A change to any
 decision-bearing field still changes the token. A legacy Run omits `analysisVersion`, so its token
 is byte-identical to the token it had before versioning. It is evidence identity for Conclude, not
 caller authority. The `no_run` and `no_data` members have neither field because no decision-bearing

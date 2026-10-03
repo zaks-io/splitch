@@ -39,6 +39,18 @@ Binomial Metric event, not a first-class separate concept.
 
 Avoid: conversion as a distinct domain concept.
 
+**Retention Metric**:
+A horizon-gated Binomial Metric. An Entity is retained when it has a qualifying Metric Event in
+`[window_anchor + horizon_start_ms, window_anchor + horizon_end_ms)`. The Conversion Window
+anchor is unchanged (first Exposure, or Activation when the Run is gated). An Entity is eligible
+for this Metric only once `anchor + horizon_end_ms` is at or before the analysis watermark;
+ineligible Entities are excluded from this Metric's numerator and denominator only. Dropping those
+rows as zeros would count them as failures; dropping Exposures would change every other Metric.
+Kaplan-Meier (event times and censoring) is a separate future contract. Public online literature
+on this exact eligibility rule is thin; the rule is the product contract, not a named paper.
+
+Avoid: treating immature Entities as non-retained.
+
 **Count Metric**:
 A Metric that sums event values per Entity, such as pages viewed per Entity.
 
