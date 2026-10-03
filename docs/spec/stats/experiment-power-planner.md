@@ -13,7 +13,7 @@ pre-registration.
 | ---------------------------------------- | ---------------------------------------------------------- |
 | `metricKind`                             | `continuous` (count/revenue-style) or `binomial`           |
 | `baselineMean` / `baselineVariance`      | Required for continuous; never invented                    |
-| `baselineRate`                           | Required for binomial in `(0, 1)`; variance is `p(1-p)`    |
+| `baselineRate`                           | Required for binomial in `(0, 1)`                          |
 | `alpha`, `power`                         | Default `0.05` / `0.8`                                     |
 | `mdeAbsolute` or `mdeRelative`           | Size from MDE (exactly one)                                |
 | `fixedSampleSizePerArm`                  | Solve MDE at a fixed Control-arm size (exclusive with MDE) |
@@ -28,6 +28,12 @@ This slice is **caller-only** (`baselineSource: "caller"`). Missing baselines ar
 refused with `VALIDATION_ERROR` naming the fields. Historical baseline lookup is
 left for a later slice.
 
+Relative MDE or relative guardrail breach on a zero baseline is refused with
+`VALIDATION_ERROR` naming `mdeAbsolute` / `guardrailBreachAbsolute`. For binomial
+Metrics, sizing uses outcome variances `p0(1-p0)` and `p1(1-p1)` under the
+planned alternative `p1 = baselineRate + MDE`; an alternative rate outside
+`(0, 1)` is refused.
+
 ## Outputs
 
 | Field                  | Meaning                                                                 |
@@ -37,6 +43,7 @@ left for a later slice.
 | `nPerArm`              | Always-valid Entities per arm (exact mixture critical scale + `z_beta`) |
 | `targetN`              | `n_control + n_primary_treatment`; pass to Start as `targetN`           |
 | `expectedDurationDays` | Calendar days at the stated daily eligibility                           |
+| `comparisonPowers`     | Achieved two-sided power per Control-vs-treatment comparison            |
 | `guardrailPower`       | Two-sided power to detect the stated breach size at planned n, or null  |
 
 `u_alpha` is the engine's normal-mixture scale at the tuned decision time
@@ -44,9 +51,11 @@ left for a later slice.
 ratio equals the alpha-only optimum, so `k*` does not depend on the chosen
 `target_n`.
 
-Sizing uses `u_alpha + z_beta` (exact power at the tuned time). Reported `k*` is
-the Schultzberg reference; realized `n_av / n_fh` is close but not identical
-because `z_beta` is shared by both formulas.
+Sizing uses the mixture boundary at each comparison's own `n_c + n_t` under the
+single shared `targetN`, and takes the binding comparison so every arm reaches
+the requested power. Reported `k*` is the Schultzberg reference; realized
+`n_av / n_fh` is close but not identical because `z_beta` is shared by both
+formulas.
 
 ## References
 
@@ -64,5 +73,9 @@ because `z_beta` is shared by both formulas.
 ## Simulation gate
 
 `packages/stats/src/experiment-plan.simulation.test.ts` (in `stats:simulation`)
-uses a predeclared seed and Monte Carlo tolerance to check that rejection rate
-under the stated MDE at the planned `target_n` matches the planned power.
+uses predeclared seeds and Monte Carlo tolerance to check:
+
+- continuous equal-arm inflation at the planned `target_n`
+- binomial Bernoulli outcomes under the alternative-rate variance
+- unequal multi-arm traffic where every comparison reaches planned power under
+  the shared `targetN`

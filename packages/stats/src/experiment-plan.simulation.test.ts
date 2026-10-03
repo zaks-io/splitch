@@ -7,11 +7,12 @@ import { seededNormal } from "./simulation-null-draws";
 
 /**
  * Predeclared seeds and Monte Carlo tolerance for the always-valid inflation
- * planner. The simulation checks that at the planner's target_n, under an
- * absolute-lift MDE, the engine's mixture rejects at approximately the planned
- * power (not post-hoc power from an observed effect).
+ * planner. Simulations check rejection under the stated MDE at the planner's
+ * sizes (not post-hoc power from an observed effect).
  */
 const PLANNER_SIM_SEED = "experiment-plan-inflation-4242";
+const PLANNER_BINOMIAL_SEED = "experiment-plan-binomial-4242";
+const PLANNER_UNEQUAL_SEED = "experiment-plan-unequal-4242";
 const PLANNER_SIM_ALPHA = 0.05;
 const PLANNER_SIM_POWER = 0.8;
 const PLANNER_SIM_ITERATIONS = Number.parseInt(
@@ -37,11 +38,14 @@ describe("experiment_plan always-valid inflation simulation", () => {
 
     const nPerArm = planned.plan.nPerArm[0];
     if (nPerArm === undefined) throw new Error("planned nPerArm missing");
-    const rejectionRate = runPowerTrials({
-      nPerArm,
+    const rejectionRate = runGaussianPowerTrials({
+      seed: PLANNER_SIM_SEED,
+      nControl: nPerArm,
+      nTreatment: nPerArm,
       targetN: planned.plan.targetN,
       mdeAbsolute,
-      baselineVariance: 1,
+      varianceControl: 1,
+      varianceTreatment: 1,
     });
     const tolerance = monteCarloTolerance(PLANNER_SIM_POWER, PLANNER_SIM_ITERATIONS);
     console.info(
@@ -52,31 +56,105 @@ describe("experiment_plan always-valid inflation simulation", () => {
     );
     expect(Math.abs(rejectionRate - PLANNER_SIM_POWER)).toBeLessThanOrEqual(tolerance);
   });
+
+  it("achieves planned power for binomial Metrics under Bernoulli draws", () => {
+    const baselineRate = 0.01;
+    const mdeAbsolute = 0.01;
+    const planned = planExperiment({
+      metricKind: "binomial",
+      baselineRate,
+      armCount: 2,
+      mdeAbsolute,
+      alpha: PLANNER_SIM_ALPHA,
+      power: PLANNER_SIM_POWER,
+      expectedDailyEligibleEntities: 10_000,
+    });
+    expect(planned.ok).toBe(true);
+    if (!planned.ok) return;
+
+    const nPerArm = planned.plan.nPerArm[0];
+    if (nPerArm === undefined) throw new Error("planned nPerArm missing");
+    const rejectionRate = runBernoulliPowerTrials({
+      seed: PLANNER_BINOMIAL_SEED,
+      nControl: nPerArm,
+      nTreatment: nPerArm,
+      targetN: planned.plan.targetN,
+      baselineRate,
+      treatmentRate: baselineRate + mdeAbsolute,
+    });
+    const tolerance = monteCarloTolerance(PLANNER_SIM_POWER, PLANNER_SIM_ITERATIONS);
+    console.info(
+      `experiment_plan binomial seed=${PLANNER_BINOMIAL_SEED} iterations=${PLANNER_SIM_ITERATIONS} ` +
+        `nPerArm=${nPerArm} target_n=${planned.plan.targetN} rejectionRate=${rejectionRate} ` +
+        `plannedPower=${PLANNER_SIM_POWER} tolerance=${tolerance}`,
+    );
+    expect(Math.abs(rejectionRate - PLANNER_SIM_POWER)).toBeLessThanOrEqual(tolerance);
+  });
+
+  it("achieves planned power on every comparison under unequal multi-arm traffic", () => {
+    const mdeAbsolute = 0.1;
+    const planned = planExperiment({
+      metricKind: "continuous",
+      baselineMean: 0,
+      baselineVariance: 1,
+      armCount: 3,
+      trafficSplit: [0.1, 0.89, 0.01],
+      mdeAbsolute,
+      alpha: PLANNER_SIM_ALPHA,
+      power: PLANNER_SIM_POWER,
+      expectedDailyEligibleEntities: 10_000,
+    });
+    expect(planned.ok).toBe(true);
+    if (!planned.ok) return;
+
+    const nControl = planned.plan.nPerArm[0];
+    if (nControl === undefined) throw new Error("planned Control n missing");
+    const tolerance = monteCarloTolerance(PLANNER_SIM_POWER, PLANNER_SIM_ITERATIONS);
+
+    for (let arm = 1; arm < planned.plan.nPerArm.length; arm += 1) {
+      const nTreatment = planned.plan.nPerArm[arm];
+      if (nTreatment === undefined) throw new Error(`planned treatment n missing for arm ${arm}`);
+      const rejectionRate = runGaussianPowerTrials({
+        seed: `${PLANNER_UNEQUAL_SEED}-arm${arm}`,
+        nControl,
+        nTreatment,
+        targetN: planned.plan.targetN,
+        mdeAbsolute,
+        varianceControl: 1,
+        varianceTreatment: 1,
+      });
+      console.info(
+        `experiment_plan unequal seed=${PLANNER_UNEQUAL_SEED}-arm${arm} iterations=${PLANNER_SIM_ITERATIONS} ` +
+          `n_c=${nControl} n_t=${nTreatment} target_n=${planned.plan.targetN} ` +
+          `rejectionRate=${rejectionRate} plannedPower=${PLANNER_SIM_POWER} tolerance=${tolerance}`,
+      );
+      expect(rejectionRate).toBeGreaterThanOrEqual(PLANNER_SIM_POWER - tolerance);
+    }
+  });
 });
 
-function runPowerTrials(args: {
-  nPerArm: number;
+function runGaussianPowerTrials(args: {
+  seed: string;
+  nControl: number;
+  nTreatment: number;
   targetN: number;
   mdeAbsolute: number;
-  baselineVariance: number;
+  varianceControl: number;
+  varianceTreatment: number;
 }): number {
   const adapter = new SequentialCI();
-  const rng = seededNormal(PLANNER_SIM_SEED);
+  const rng = seededNormal(args.seed);
   let rejections = 0;
 
   for (let iteration = 0; iteration < PLANNER_SIM_ITERATIONS; iteration += 1) {
-    // Per-Entity outcomes ~ N(0, 1) in Control and N(mde, 1) in Treatment.
-    let sumT = 0;
-    let sumC = 0;
-    for (let index = 0; index < args.nPerArm; index += 1) {
-      sumC += rng();
-      sumT += rng() + args.mdeAbsolute;
-    }
+    // Draw arm means directly: sum of i.i.d. normals is normal.
+    const meanC = rng() * Math.sqrt(args.varianceControl / args.nControl);
+    const meanT = rng() * Math.sqrt(args.varianceTreatment / args.nTreatment) + args.mdeAbsolute;
     const result = adapter.compute({
-      estimate: sumT / args.nPerArm - sumC / args.nPerArm,
-      sampling_var: (2 * args.baselineVariance) / args.nPerArm,
-      n_t: args.nPerArm,
-      n_c: args.nPerArm,
+      estimate: meanT - meanC,
+      sampling_var: args.varianceControl / args.nControl + args.varianceTreatment / args.nTreatment,
+      n_t: args.nTreatment,
+      n_c: args.nControl,
       alpha: PLANNER_SIM_ALPHA,
       target_n: args.targetN,
     });
@@ -86,4 +164,64 @@ function runPowerTrials(args: {
   }
 
   return rejections / PLANNER_SIM_ITERATIONS;
+}
+
+function runBernoulliPowerTrials(args: {
+  seed: string;
+  nControl: number;
+  nTreatment: number;
+  targetN: number;
+  baselineRate: number;
+  treatmentRate: number;
+}): number {
+  const adapter = new SequentialCI();
+  const uniform = seededUniform(args.seed);
+  let rejections = 0;
+
+  for (let iteration = 0; iteration < PLANNER_SIM_ITERATIONS; iteration += 1) {
+    const successesC = binomialCount(args.nControl, args.baselineRate, uniform);
+    const successesT = binomialCount(args.nTreatment, args.treatmentRate, uniform);
+    const result = adapter.compute({
+      estimate: successesT / args.nTreatment - successesC / args.nControl,
+      // Theoretical SE under the planned alternative matches the sizing model.
+      sampling_var:
+        (args.baselineRate * (1 - args.baselineRate)) / args.nControl +
+        (args.treatmentRate * (1 - args.treatmentRate)) / args.nTreatment,
+      n_t: args.nTreatment,
+      n_c: args.nControl,
+      alpha: PLANNER_SIM_ALPHA,
+      target_n: args.targetN,
+    });
+    if (result.status === "ok" && result.p_value <= PLANNER_SIM_ALPHA) {
+      rejections += 1;
+    }
+  }
+
+  return rejections / PLANNER_SIM_ITERATIONS;
+}
+
+/** Exact Binomial(n, p) via Bernoulli trials (n is a few thousand in these gates). */
+function binomialCount(n: number, p: number, uniform: () => number): number {
+  let successes = 0;
+  for (let index = 0; index < n; index += 1) {
+    if (uniform() < p) successes += 1;
+  }
+  return successes;
+}
+
+function seededUniform(seed: string): () => number {
+  // Same FNV-1a + mulberry32 path as seededNormal, exposed as U(0,1) for Bernoulli.
+  let hash = 0x811c9dc5;
+  for (let index = 0; index < seed.length; index += 1) {
+    hash ^= seed.charCodeAt(index);
+    hash = Math.imul(hash, 0x01000193);
+  }
+  let state = hash >>> 0;
+  return () => {
+    state = (state + 0x6d2b79f5) >>> 0;
+    let next = state;
+    next = Math.imul(next ^ (next >>> 15), next | 1);
+    next ^= next + Math.imul(next ^ (next >>> 7), next | 61);
+    return ((next ^ (next >>> 14)) >>> 0) / 4294967296;
+  };
 }

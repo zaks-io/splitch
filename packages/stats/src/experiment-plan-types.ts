@@ -42,6 +42,8 @@ export interface ExperimentPlanResult {
   readonly mdeRelative: number | null;
   readonly alpha: number;
   readonly power: number;
+  /** Achieved two-sided power for each Control-vs-treatment comparison at planned n. */
+  readonly comparisonPowers: readonly number[];
   readonly guardrailPower: number | null;
   readonly baselineMean: number;
   readonly baselineVariance: number;

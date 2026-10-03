@@ -134,6 +134,7 @@ export const ExperimentPlanResponseSchema = z
     mdeRelative: z.number().finite().positive().nullable(),
     alpha: z.number().gt(0).lt(1),
     power: z.number().gt(0).lt(1),
+    comparisonPowers: z.array(z.number().gte(0).lte(1)).min(1),
     guardrailPower: z.number().gte(0).lte(1).nullable(),
     baselineMean: z.number().finite(),
     baselineVariance: z.number().finite().positive(),

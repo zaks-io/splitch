@@ -22,7 +22,7 @@ describe("alwaysValidInflation", () => {
   });
 });
 
-describe("planExperiment", () => {
+describe("planExperiment validation", () => {
   it("refuses a continuous Metric with no baseline mean or variance", () => {
     const outcome = planExperiment({
       metricKind: "continuous",
@@ -52,6 +52,77 @@ describe("planExperiment", () => {
     ]);
   });
 
+  it("refuses a binomial alternative rate outside (0, 1)", () => {
+    const outcome = planExperiment({
+      metricKind: "binomial",
+      baselineRate: 0.95,
+      armCount: 2,
+      mdeAbsolute: 0.1,
+      expectedDailyEligibleEntities: 1_000,
+    });
+    expect(outcome.ok).toBe(false);
+    if (outcome.ok) return;
+    expect(outcome.issues).toEqual([
+      {
+        path: ["mdeAbsolute"],
+        message: "Alternative treatment rate (baselineRate + MDE) must be in (0, 1).",
+      },
+    ]);
+  });
+
+  it("refuses relative MDE on a zero baseline", () => {
+    const outcome = planExperiment({
+      metricKind: "continuous",
+      baselineMean: 0,
+      baselineVariance: 1,
+      armCount: 2,
+      mdeRelative: 0.1,
+      expectedDailyEligibleEntities: 1_000,
+    });
+    expect(outcome.ok).toBe(false);
+    if (outcome.ok) return;
+    expect(outcome.issues).toEqual([
+      {
+        path: ["mdeAbsolute"],
+        message: "mdeRelative requires a non-zero baseline; provide mdeAbsolute instead.",
+      },
+    ]);
+  });
+
+  it("refuses relative guardrail breach on a zero baseline", () => {
+    const outcome = planExperiment({
+      metricKind: "continuous",
+      baselineMean: 0,
+      baselineVariance: 1,
+      armCount: 2,
+      mdeAbsolute: 0.1,
+      guardrailBreachRelative: 0.05,
+      expectedDailyEligibleEntities: 1_000,
+    });
+    expect(outcome.ok).toBe(false);
+    if (outcome.ok) return;
+    expect(outcome.issues).toEqual([
+      {
+        path: ["guardrailBreachAbsolute"],
+        message:
+          "guardrailBreachRelative requires a non-zero baseline; provide guardrailBreachAbsolute instead.",
+      },
+    ]);
+  });
+
+  it("rejects observed-effect-shaped input that omits both MDE and fixed size", () => {
+    const outcome = planExperiment({
+      metricKind: "continuous",
+      baselineMean: 1,
+      baselineVariance: 1,
+      armCount: 2,
+      expectedDailyEligibleEntities: 100,
+    });
+    expect(outcome.ok).toBe(false);
+  });
+});
+
+describe("planExperiment sizing", () => {
   it("plans size from absolute MDE and returns a Start-ready targetN", () => {
     const outcome = planExperiment({
       metricKind: "continuous",
@@ -89,6 +160,47 @@ describe("planExperiment", () => {
     if (!outcome.ok) return;
     expect(outcome.plan.mdeAbsolute).toBeCloseTo(0.01, 12);
     expect(outcome.plan.baselineVariance).toBeCloseTo(0.09, 12);
+    expect(outcome.plan.comparisonPowers).toHaveLength(1);
+    expect(outcome.plan.comparisonPowers[0]).toBeGreaterThanOrEqual(0.8);
+  });
+
+  it("sizes binomial Metrics under alternative-rate variance p0(1-p0)+p1(1-p1)", () => {
+    const outcome = planExperiment({
+      metricKind: "binomial",
+      baselineRate: 0.01,
+      armCount: 2,
+      mdeAbsolute: 0.01,
+      power: 0.8,
+      alpha: 0.05,
+      expectedDailyEligibleEntities: 10_000,
+    });
+    expect(outcome.ok).toBe(true);
+    if (!outcome.ok) return;
+    // Baseline-only variance undersizes (~2976); alternative-rate variance is larger.
+    expect(outcome.plan.nPerArm[0]).toBeGreaterThan(4_000);
+    expect(outcome.plan.comparisonPowers[0]).toBeGreaterThanOrEqual(0.8);
+  });
+
+  it("sizes unequal multi-arm so every comparison reaches requested power", () => {
+    const outcome = planExperiment({
+      metricKind: "continuous",
+      baselineMean: 0,
+      baselineVariance: 1,
+      armCount: 3,
+      trafficSplit: [0.1, 0.89, 0.01],
+      mdeAbsolute: 0.1,
+      power: 0.8,
+      alpha: 0.05,
+      expectedDailyEligibleEntities: 10_000,
+    });
+    expect(outcome.ok).toBe(true);
+    if (!outcome.ok) return;
+    expect(outcome.plan.comparisonPowers).toHaveLength(2);
+    for (const achieved of outcome.plan.comparisonPowers) {
+      expect(achieved).toBeGreaterThanOrEqual(0.8);
+    }
+    // Binding skinny arm forces a larger Control than Control+primary-only sizing.
+    expect(outcome.plan.targetN).toBeGreaterThan(163_677);
   });
 
   it("solves MDE from a fixed per-arm sample size", () => {
@@ -125,16 +237,5 @@ describe("planExperiment", () => {
     if (guardrailPower === null) return;
     expect(guardrailPower).toBeGreaterThan(0.5);
     expect(guardrailPower).toBeLessThanOrEqual(1);
-  });
-
-  it("rejects observed-effect-shaped input that omits both MDE and fixed size", () => {
-    const outcome = planExperiment({
-      metricKind: "continuous",
-      baselineMean: 1,
-      baselineVariance: 1,
-      armCount: 2,
-      expectedDailyEligibleEntities: 100,
-    });
-    expect(outcome.ok).toBe(false);
   });
 });

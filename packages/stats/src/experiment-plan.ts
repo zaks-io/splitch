@@ -1,11 +1,19 @@
-import { alwaysValidCriticalScale, alwaysValidInflation } from "./always-valid-inflation";
+import { alwaysValidInflation } from "./always-valid-inflation";
 import type {
   ExperimentPlanInput,
   ExperimentPlanOutcome,
   ExperimentPlanResult,
 } from "./experiment-plan-types";
 import { validatePlanInput } from "./experiment-plan-validate";
-import { inverseNormalCdf, normalCdf, normalSurvival } from "./normal-distribution";
+import {
+  armAt,
+  armVariances,
+  comparisonPower,
+  fixedHorizonControlN,
+  mdeAtFixedSize,
+  sizeAlwaysValidArms,
+} from "./experiment-plan-size";
+import { inverseNormalCdf } from "./normal-distribution";
 
 export type {
   ExperimentPlanBaselineSource,
@@ -30,78 +38,213 @@ export function planExperiment(input: ExperimentPlanInput): ExperimentPlanOutcom
   const baseline = resolveBaseline(input);
   const split = resolveTrafficSplit(input.armCount, input.trafficSplit);
   const inflation = alwaysValidInflation(alpha);
-  const critical = alwaysValidCriticalScale(alpha);
   const zBeta = inverseNormalCdf(power);
   const fixedSize = input.fixedSampleSizePerArm;
   const mode = fixedSize !== undefined ? "mde_from_size" : "size_from_mde";
 
   const mdeAbsolute =
-    mode === "size_from_mde"
-      ? resolveMdeAbsolute(input, baseline.mean)
-      : mdeAtFixedSize({
-          baselineVariance: baseline.variance,
-          split,
-          critical,
-          zBeta,
-          fixedSampleSizePerArm: fixedSize as number,
-        });
+    mode === "size_from_mde" ? resolveMdeAbsolute(input, baseline.mean) : Number.NaN;
 
-  const fixedHorizonNPerArm = sampleSizePerArmForCritical({
+  // For mde_from_size, variances under the alternative need the solved MDE. Use
+  // baseline variance on both arms for the continuous path; binomial fixed-size
+  // MDE uses baseline rate variance for both arms as a planning approximation
+  // (alternative rate is unknown until MDE is known; iterate once below).
+  const seedVariances = armVariances({
+    metricKind: input.metricKind,
     baselineVariance: baseline.variance,
+    baselineMean: baseline.mean,
+    mdeAbsolute: mode === "size_from_mde" ? mdeAbsolute : 0,
+  });
+
+  if (mode === "mde_from_size") {
+    return planFromFixedSize({
+      input,
+      baseline,
+      split,
+      alpha,
+      power,
+      zBeta,
+      inflation,
+      fixedSize: fixedSize as number,
+      seedVariances,
+    });
+  }
+
+  const variances = armVariances({
+    metricKind: input.metricKind,
+    baselineVariance: baseline.variance,
+    baselineMean: baseline.mean,
+    mdeAbsolute,
+  });
+
+  const fixedHorizonNPerArm = fixedHorizonControlN({
     split,
     critical: inverseNormalCdf(1 - alpha / 2),
     zBeta,
     mdeAbsolute,
+    varianceControl: variances.control,
+    varianceTreatment: variances.treatment,
   });
 
-  // Size with the engine mixture critical scale (exact power at the tuned
-  // time). Report Schultzberg k* as the reference inflation; realized
-  // n_av / n_fh is close but not identical because z_beta is shared.
-  const nPerArm =
-    mode === "size_from_mde"
-      ? sampleSizeArmsForCritical({
-          baselineVariance: baseline.variance,
-          split,
-          critical,
-          zBeta,
-          mdeAbsolute,
-        })
-      : nPerArmFromFixed(fixedSize as number, split);
-
-  const controlN = armAt(nPerArm, 0);
-  const treatmentN = armAt(nPerArm, 1);
-  const totalEntities = nPerArm.reduce((sum, n) => sum + n, 0);
-  const expectedDurationDays = Math.ceil(totalEntities / input.expectedDailyEligibleEntities);
-  const mdeRelative = baseline.mean === 0 ? null : mdeAbsolute / Math.abs(baseline.mean);
+  // Size so every comparison hits the requested power under the shared targetN
+  // (Control + primary treatment), using each comparison's mixture boundary.
+  const sized = sizeAlwaysValidArms({
+    split,
+    alpha,
+    power,
+    zBeta,
+    mdeAbsolute,
+    varianceControl: variances.control,
+    varianceTreatment: variances.treatment,
+  });
 
   return {
     ok: true,
-    plan: {
-      fixedHorizonNPerArm,
-      alwaysValidInflation: inflation,
-      nPerArm,
-      targetN: controlN + treatmentN,
-      expectedDurationDays,
-      mdeAbsolute,
-      mdeRelative,
+    plan: buildPlan({
+      input,
+      baseline,
       alpha,
       power,
-      guardrailPower: computeGuardrailPower({ input, baseline, nPerArm, critical }),
-      baselineMean: baseline.mean,
-      baselineVariance: baseline.variance,
-      // History lookup is not wired in this slice; callers must supply baselines.
-      baselineSource: "caller",
+      inflation,
       mode,
-    } satisfies ExperimentPlanResult,
+      mdeAbsolute,
+      fixedHorizonNPerArm,
+      nPerArm: sized.nPerArm,
+      targetN: sized.targetN,
+      comparisonPowers: sized.comparisonPowers,
+      varianceControl: variances.control,
+      varianceTreatment: variances.treatment,
+    }),
   };
 }
 
-function armAt(values: readonly number[], index: number): number {
-  const value = values[index];
-  if (value === undefined) {
-    throw new Error(`expected arm index ${index} in a plan with ${values.length} arms`);
+function planFromFixedSize(args: {
+  input: ExperimentPlanInput;
+  baseline: { mean: number; variance: number };
+  split: readonly number[];
+  alpha: number;
+  power: number;
+  zBeta: number;
+  inflation: number;
+  fixedSize: number;
+  seedVariances: { control: number; treatment: number };
+}): ExperimentPlanOutcome {
+  let variances = args.seedVariances;
+  let solved = mdeAtFixedSize({
+    split: args.split,
+    alpha: args.alpha,
+    zBeta: args.zBeta,
+    fixedSampleSizePerArm: args.fixedSize,
+    varianceControl: variances.control,
+    varianceTreatment: variances.treatment,
+  });
+
+  if (args.input.metricKind === "binomial") {
+    // Recompute treatment variance under the solved alternative rate.
+    variances = armVariances({
+      metricKind: "binomial",
+      baselineVariance: args.baseline.variance,
+      baselineMean: args.baseline.mean,
+      mdeAbsolute: solved.mdeAbsolute,
+    });
+    const alternativeRate = args.baseline.mean + solved.mdeAbsolute;
+    if (!(alternativeRate > 0 && alternativeRate < 1)) {
+      return {
+        ok: false,
+        issues: [
+          {
+            path: ["fixedSampleSizePerArm"],
+            message:
+              "Solved alternative rate (baselineRate + MDE) must be in (0, 1) at this sample size.",
+          },
+        ],
+      };
+    }
+    solved = mdeAtFixedSize({
+      split: args.split,
+      alpha: args.alpha,
+      zBeta: args.zBeta,
+      fixedSampleSizePerArm: args.fixedSize,
+      varianceControl: variances.control,
+      varianceTreatment: variances.treatment,
+    });
   }
-  return value;
+
+  const fixedHorizonNPerArm = fixedHorizonControlN({
+    split: args.split,
+    critical: inverseNormalCdf(1 - args.alpha / 2),
+    zBeta: args.zBeta,
+    mdeAbsolute: solved.mdeAbsolute,
+    varianceControl: variances.control,
+    varianceTreatment: variances.treatment,
+  });
+
+  return {
+    ok: true,
+    plan: buildPlan({
+      input: args.input,
+      baseline: args.baseline,
+      alpha: args.alpha,
+      power: args.power,
+      inflation: args.inflation,
+      mode: "mde_from_size",
+      mdeAbsolute: solved.mdeAbsolute,
+      fixedHorizonNPerArm,
+      nPerArm: solved.nPerArm,
+      targetN: solved.targetN,
+      comparisonPowers: solved.comparisonPowers,
+      varianceControl: variances.control,
+      varianceTreatment: variances.treatment,
+    }),
+  };
+}
+
+function buildPlan(args: {
+  input: ExperimentPlanInput;
+  baseline: { mean: number; variance: number };
+  alpha: number;
+  power: number;
+  inflation: number;
+  mode: "size_from_mde" | "mde_from_size";
+  mdeAbsolute: number;
+  fixedHorizonNPerArm: number;
+  nPerArm: readonly number[];
+  targetN: number;
+  comparisonPowers: readonly number[];
+  varianceControl: number;
+  varianceTreatment: number;
+}): ExperimentPlanResult {
+  const totalEntities = args.nPerArm.reduce((sum, n) => sum + n, 0);
+  const expectedDurationDays = Math.ceil(totalEntities / args.input.expectedDailyEligibleEntities);
+  const mdeRelative =
+    args.baseline.mean === 0 ? null : args.mdeAbsolute / Math.abs(args.baseline.mean);
+
+  return {
+    fixedHorizonNPerArm: args.fixedHorizonNPerArm,
+    alwaysValidInflation: args.inflation,
+    nPerArm: args.nPerArm,
+    targetN: args.targetN,
+    expectedDurationDays,
+    mdeAbsolute: args.mdeAbsolute,
+    mdeRelative,
+    alpha: args.alpha,
+    power: args.power,
+    comparisonPowers: args.comparisonPowers,
+    guardrailPower: computeGuardrailPower({
+      input: args.input,
+      baseline: args.baseline,
+      nPerArm: args.nPerArm,
+      targetN: args.targetN,
+      alpha: args.alpha,
+      varianceControl: args.varianceControl,
+      varianceTreatment: args.varianceTreatment,
+    }),
+    baselineMean: args.baseline.mean,
+    baselineVariance: args.baseline.variance,
+    // History lookup is not wired in this slice; callers must supply baselines.
+    baselineSource: "caller",
+    mode: args.mode,
+  };
 }
 
 function resolveBaseline(input: ExperimentPlanInput): { mean: number; variance: number } {
@@ -122,76 +265,32 @@ function resolveMdeAbsolute(input: ExperimentPlanInput, baselineMean: number): n
   return (input.mdeRelative as number) * Math.abs(baselineMean);
 }
 
-function allocationFactor(split: readonly number[]): number {
-  const controlShare = armAt(split, 0);
-  let maxFactor = 0;
-  for (let index = 1; index < split.length; index += 1) {
-    maxFactor = Math.max(maxFactor, 1 / controlShare + 1 / armAt(split, index));
-  }
-  return maxFactor;
-}
-
-function sampleSizePerArmForCritical(args: {
-  baselineVariance: number;
-  split: readonly number[];
-  critical: number;
-  zBeta: number;
-  mdeAbsolute: number;
-}): number {
-  const totalN =
-    (args.baselineVariance * allocationFactor(args.split) * (args.critical + args.zBeta) ** 2) /
-    args.mdeAbsolute ** 2;
-  return Math.ceil(totalN * armAt(args.split, 0));
-}
-
-function sampleSizeArmsForCritical(args: {
-  baselineVariance: number;
-  split: readonly number[];
-  critical: number;
-  zBeta: number;
-  mdeAbsolute: number;
-}): number[] {
-  const controlN = sampleSizePerArmForCritical(args);
-  const controlShare = armAt(args.split, 0);
-  return args.split.map((share) => Math.ceil(controlN * (share / controlShare)));
-}
-
-function nPerArmFromFixed(fixedSampleSizePerArm: number, split: readonly number[]): number[] {
-  const controlShare = armAt(split, 0);
-  return split.map((share) => Math.ceil(fixedSampleSizePerArm * (share / controlShare)));
-}
-
-function mdeAtFixedSize(args: {
-  baselineVariance: number;
-  split: readonly number[];
-  critical: number;
-  zBeta: number;
-  fixedSampleSizePerArm: number;
-}): number {
-  const nPerArm = nPerArmFromFixed(args.fixedSampleSizePerArm, args.split);
-  const nControl = armAt(nPerArm, 0);
-  const nTreatment = Math.min(...nPerArm.slice(1));
-  const se = Math.sqrt(args.baselineVariance * (1 / nControl + 1 / nTreatment));
-  return se * (args.critical + args.zBeta);
-}
-
 function computeGuardrailPower(args: {
   input: ExperimentPlanInput;
   baseline: { mean: number; variance: number };
   nPerArm: readonly number[];
-  critical: number;
+  targetN: number;
+  alpha: number;
+  varianceControl: number;
+  varianceTreatment: number;
 }): number | null {
-  const { input, baseline, nPerArm, critical } = args;
+  const { input, baseline, nPerArm } = args;
   let breach: number | undefined = input.guardrailBreachAbsolute;
   if (breach === undefined && input.guardrailBreachRelative !== undefined) {
-    if (baseline.mean === 0) return null;
     breach = input.guardrailBreachRelative * Math.abs(baseline.mean);
   }
   if (breach === undefined) return null;
 
+  // Conservative: power against the smallest treatment arm under the shared targetN.
   const nControl = armAt(nPerArm, 0);
   const nTreatment = Math.min(...nPerArm.slice(1));
-  const se = Math.sqrt(baseline.variance * (1 / nControl + 1 / nTreatment));
-  const deltaOverSe = breach / se;
-  return normalCdf(-critical - deltaOverSe) + normalSurvival(critical - deltaOverSe);
+  return comparisonPower({
+    nControl,
+    nTreatment,
+    targetN: args.targetN,
+    alpha: args.alpha,
+    varianceControl: args.varianceControl,
+    varianceTreatment: args.varianceTreatment,
+    effectAbsolute: breach,
+  });
 }

@@ -61,4 +61,35 @@ describe("planExperimentHandler", () => {
       "body.baselineVariance",
     ]);
   });
+
+  it("names mdeAbsolute when relative MDE is used on a zero baseline", async () => {
+    const response = await planExperimentHandler(depsWithEnvironment(true), {
+      input: {
+        params: { appId: "app_1", environmentId: "env_1" },
+        body: {
+          metricKind: "continuous",
+          baselineMean: 0,
+          baselineVariance: 1,
+          armCount: 2,
+          mdeRelative: 0.1,
+          expectedDailyEligibleEntities: 1_000,
+        },
+      },
+      requestId: "req_3",
+      principal: null,
+    } as never);
+
+    expect(response.status).toBe(400);
+    const body = (await response.json()) as {
+      code: string;
+      details: { issues: Array<{ path: string[]; message: string }> };
+    };
+    expect(body.code).toBe("VALIDATION_ERROR");
+    expect(body.details.issues).toEqual([
+      {
+        path: ["body", "mdeAbsolute"],
+        message: "mdeRelative requires a non-zero baseline; provide mdeAbsolute instead.",
+      },
+    ]);
+  });
 });

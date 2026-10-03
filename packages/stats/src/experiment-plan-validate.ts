@@ -10,6 +10,8 @@ export function validatePlanInput(input: ExperimentPlanInput): ExperimentPlanIss
     ...validateArmAndTraffic(input),
     ...validateObjective(input),
     ...validateGuardrail(input),
+    ...validateRelativeOnZeroBaseline(input),
+    ...validateBinomialAlternative(input),
   ];
 }
 
@@ -193,4 +195,54 @@ function validateGuardrail(input: ExperimentPlanInput): ExperimentPlanIssue[] {
     });
   }
   return issues;
+}
+
+function validateRelativeOnZeroBaseline(input: ExperimentPlanInput): ExperimentPlanIssue[] {
+  const issues: ExperimentPlanIssue[] = [];
+  const baselineMean = input.metricKind === "continuous" ? input.baselineMean : input.baselineRate;
+  if (baselineMean !== 0) return issues;
+
+  if (input.mdeRelative !== undefined) {
+    issues.push({
+      path: ["mdeAbsolute"],
+      message: "mdeRelative requires a non-zero baseline; provide mdeAbsolute instead.",
+    });
+  }
+  if (input.guardrailBreachRelative !== undefined) {
+    issues.push({
+      path: ["guardrailBreachAbsolute"],
+      message:
+        "guardrailBreachRelative requires a non-zero baseline; provide guardrailBreachAbsolute instead.",
+    });
+  }
+  return issues;
+}
+
+function validateBinomialAlternative(input: ExperimentPlanInput): ExperimentPlanIssue[] {
+  const mdeAbsolute = binomialMdeAbsolute(input);
+  if (mdeAbsolute === undefined) return [];
+
+  const alternativeRate = (input.baselineRate as number) + mdeAbsolute;
+  if (alternativeRate > 0 && alternativeRate < 1) return [];
+
+  return [
+    {
+      path: input.mdeAbsolute !== undefined ? ["mdeAbsolute"] : ["mdeRelative"],
+      message: "Alternative treatment rate (baselineRate + MDE) must be in (0, 1).",
+    },
+  ];
+}
+
+function binomialMdeAbsolute(input: ExperimentPlanInput): number | undefined {
+  if (input.metricKind !== "binomial") return undefined;
+  if (input.baselineRate === undefined) return undefined;
+  if (input.fixedSampleSizePerArm !== undefined) return undefined;
+  if (input.mdeAbsolute !== undefined) {
+    return Number.isFinite(input.mdeAbsolute) && input.mdeAbsolute > 0
+      ? input.mdeAbsolute
+      : undefined;
+  }
+  if (input.mdeRelative === undefined) return undefined;
+  const resolved = input.mdeRelative * Math.abs(input.baselineRate);
+  return Number.isFinite(resolved) && resolved > 0 ? resolved : undefined;
 }
