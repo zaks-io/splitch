@@ -148,7 +148,11 @@ continue. Never treat a full page as the whole set.
 
 Typed flags cover the common fields (`--key`, `--name`, `--variants`, `--enabled`, `--rollout`,
 `--targeting-key`, `--context-json`). Anything a route accepts that has no typed flag goes through
-`--body-json '<json>'`; `splitch <resource> <action> --help` prints that route's body schema.
+`--body-json '<json>'`; `splitch <resource> <action> --help` prints that route's body schema. The
+CLI does not check the body against its own bundled contract: the API judges it and answers
+`VALIDATION_ERROR` with the failing paths in `details.issues`. So when the API gains a field before
+this CLI gains a typed flag for it, `--body-json` still sends it. Upgrade with
+`npm install --global @splitch/cli@latest`.
 
 Two more worth knowing:
 

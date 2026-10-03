@@ -9,14 +9,14 @@ export const cliErrorDocs = {
   CLI_USAGE_INVALID: {
     cause:
       "The invocation did not parse: an unknown command or flag, a flag missing its value, a required positional missing or supplied twice, an out-of-range value, or malformed `--body-json`.",
-    fix: "Read the `Cause:` clause, which names the exact token at fault, then run the command with `--help` to list what it accepts. `splitch` with no arguments prints the supported command paths.",
+    fix: "Read the `Cause:` clause, which names the exact token at fault, then run the command with `--help` to list what it accepts. `splitch` with no arguments prints the supported command paths. A flag the CLI does not recognize may be one a newer release added: the remediation names the installed version, and `npm install --global @splitch/cli@latest` upgrades it. Until then, send the field in `--body-json`, which the CLI passes to the API without checking it against its own bundled contract.",
     exitCode: 1,
     related: ["CLI_VALIDATION_ERROR", "VALIDATION_ERROR"],
   },
   CLI_VALIDATION_ERROR: {
     cause:
-      "The invocation parsed but its input failed contract validation before any request was sent. `splitch flags create` without a variant catalog, `--variants` without `--key`, or an unrecognized `SPLITCH_PLATFORM_TARGET` all land here.",
-    fix: "The error names the offending field and reason. Fix the field and retry. Validation runs locally so a malformed create never reaches the control plane and never half-writes.",
+      "A typed flag or local setting could not be converted into a request, so nothing was sent. A malformed `--variants` list, `--variants` without `--key`, or an unrecognized `SPLITCH_PLATFORM_TARGET` all land here. Request bodies are never judged locally: the API validates them and answers `VALIDATION_ERROR`.",
+    fix: "The error names the offending field and reason. Fix the field and retry.",
     details: "{ field: string, reason: string }",
     exitCode: 1,
     related: ["CLI_USAGE_INVALID", "VALIDATION_ERROR"],

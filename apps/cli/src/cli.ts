@@ -1,5 +1,5 @@
-import { createRequire } from "node:module";
 import { initCliObservability, shutdownCliObservability } from "@splitch/observability";
+import { cliVersion } from "./cli-version.js";
 import { CLI_COMMANDS, findCommand } from "./command-registry.js";
 import { createFileCredentialStore } from "./credentials.js";
 import { normalizeCliError, writeCliError } from "./errors.js";
@@ -171,17 +171,6 @@ async function executeParsedInvocation(
 function printUsageUnlessJson(io: CliIo): void {
   if (io.json) return;
   console.log(renderRootHelp());
-}
-
-function cliVersion(): string {
-  // The published package ships dist/cli.js beside package.json; the same
-  // relative shape holds in the repo. createRequire keeps this a runtime
-  // lookup so the bundler cannot inline a stale value.
-  const pkg = createRequire(import.meta.url)("../package.json") as { version?: string };
-  if (!pkg.version) {
-    throw new Error("package.json next to the CLI bundle has no version");
-  }
-  return pkg.version;
 }
 
 export async function launchCli(): Promise<void> {

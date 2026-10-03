@@ -2,7 +2,6 @@ import { CreateFlagRequestSchema } from "@splitch/sdk/control-plane";
 import { describe, expect, it } from "vitest";
 import {
   applyFlagsCreateConvenienceFields,
-  assertContractValidFlagsCreateInput,
   CliInputError,
   flagNameFromKey,
   parseBooleanVariantsFlag,
@@ -71,44 +70,15 @@ describe("applyFlagsCreateConvenienceFields", () => {
     expect(input.variants).toEqual([{ name: "control", value: false, isDefault: true }]);
   });
 
-  it("requires a variant catalog when neither --variants nor body variants are present", () => {
+  it("leaves a body without a variant catalog for the server to judge", () => {
     const input: Record<string, unknown> = { appId: "app_checkout", key: "checkout" };
-    expect(() => applyFlagsCreateConvenienceFields(input, { key: "checkout" })).toThrow(
-      CliInputError,
-    );
+    applyFlagsCreateConvenienceFields(input, { key: "checkout" });
+    expect(input).toEqual({ appId: "app_checkout", key: "checkout" });
   });
 });
 
 describe("flagNameFromKey", () => {
   it("title-cases dashed keys", () => {
     expect(flagNameFromKey("new-checkout")).toBe("New Checkout");
-  });
-});
-
-describe("assertContractValidFlagsCreateInput", () => {
-  it("accepts a contract-valid quickstart payload", () => {
-    const input = {
-      appId: "app_checkout",
-      key: "new-checkout",
-      name: flagNameFromKey("new-checkout"),
-      schema: { type: "boolean" },
-      variants: parseBooleanVariantsFlag("on,off"),
-      lifecycleClass: "ops",
-      idempotency_key: "cli_1",
-    };
-
-    expect(() => assertContractValidFlagsCreateInput(input)).not.toThrow();
-  });
-
-  it("leaves lifecycleClass to the server default when a create omits it", () => {
-    const input = {
-      appId: "app_checkout",
-      key: "new-checkout",
-      name: flagNameFromKey("new-checkout"),
-      variants: parseBooleanVariantsFlag("on,off"),
-      idempotency_key: "cli_1",
-    };
-
-    expect(() => assertContractValidFlagsCreateInput(input)).not.toThrow();
   });
 });
