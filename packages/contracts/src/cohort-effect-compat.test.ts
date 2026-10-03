@@ -89,6 +89,26 @@ describe("cohort_effect deploy compatibility", () => {
     expect(diagnostic).toEqual({ state: "unavailable", reason: "insufficient_entities" });
   });
 
+  it.each(["zero_variance", "insufficient_denominator"] as const)(
+    "accepts a %s bucket with no interval",
+    (status) => {
+      const bucket = {
+        ...readyBucket,
+        absolute_ci_lower: null,
+        absolute_ci_upper: null,
+        status,
+      };
+      const envelope = AnalysisResultsEnvelopeSchema.parse({
+        ...envelopeBase,
+        cohort_effect: {
+          ...readyDiagnostic,
+          comparisons: [{ ...readyDiagnostic.comparisons[0], buckets: [bucket, bucket, bucket] }],
+        },
+      });
+      expect(envelope.state).toBe("ready");
+    },
+  );
+
   it("rejects an unknown unavailable reason (fail loud)", () => {
     expect(() =>
       CohortEffectDiagnosticSchema.parse({

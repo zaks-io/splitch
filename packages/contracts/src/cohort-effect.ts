@@ -15,7 +15,14 @@ export const cohortEffectBucketIds = ["day_0", "days_1_6", "day_7_plus"] as cons
 export const CohortEffectBucketIdSchema = z.enum(cohortEffectBucketIds);
 export type CohortEffectBucketId = z.infer<typeof CohortEffectBucketIdSchema>;
 
-export const cohortEffectBucketStatuses = ["ready", "insufficient_n"] as const;
+export const cohortEffectBucketStatuses = [
+  "ready",
+  "insufficient_n",
+  /** Identical constant outcomes (or a zero-conversion Binomial bucket): point estimate only. */
+  "zero_variance",
+  /** Ratio Metric with enough Entities but zero mean denominator. */
+  "insufficient_denominator",
+] as const;
 export const CohortEffectBucketStatusSchema = z.enum(cohortEffectBucketStatuses);
 export type CohortEffectBucketStatus = z.infer<typeof CohortEffectBucketStatusSchema>;
 
