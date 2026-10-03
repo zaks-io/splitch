@@ -29,6 +29,11 @@ export function effectBecause(input: {
   relativeLiftPct: number | null;
   /** Deciding Metric label; no internal ids. Secondary goals use "Goal Metric". */
   subject?: "Primary Metric" | "Goal Metric";
+  /**
+   * When the interval clears the margin but the arm is not FDR-eligible, name
+   * the eligibility failure instead of implying the margin was not cleared.
+   */
+  eligibilityFailure?: "fdr_decision_evidence_missing";
 }): string {
   const subject = input.subject ?? "Primary Metric";
   const interval = formatInterval(input.ciLower, input.ciUpper, input.scale);
@@ -48,6 +53,9 @@ export function effectBecause(input: {
   }
   if (input.effect === "beneficial") {
     return `${subject} interval ${interval} clears the required ${margin} margin for a ${direction} goal.`;
+  }
+  if (input.eligibilityFailure === "fdr_decision_evidence_missing") {
+    return `${subject} interval ${interval} clears the required ${margin} margin but lacks FDR-corrected decision evidence.`;
   }
   return `${subject} interval ${interval} has not cleared the required ${margin} margin.`;
 }

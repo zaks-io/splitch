@@ -16,6 +16,8 @@ describe("computeShipRecommendation FDR evidence", () => {
     const result = recommend(output);
     expect(result.recommendation?.verdict).toBe("keep_running");
     expect(result.recommendation?.verdict).not.toBe("ship");
+    expect(result.recommendation?.because).toMatch(/lacks FDR-corrected decision evidence/);
+    expect(result.recommendation?.because).not.toMatch(/has not cleared the required/);
   });
 
   it("does not ship a Multi-Metric win when a family member fails FDR", () => {
@@ -45,6 +47,7 @@ describe("computeShipRecommendation FDR evidence", () => {
       }),
     );
     expect(result.recommendation?.verdict).toBe("keep_running");
+    expect(result.recommendation?.because).toMatch(/lacks FDR-corrected decision evidence/);
   });
 });
 
@@ -104,6 +107,8 @@ describe("computeShipRecommendation Guardrails vs goals", () => {
           metric_id: "checkout-conversion",
           absolute_ci_lower: -0.01,
           absolute_ci_upper: 0.04,
+          simultaneous_absolute_ci_lower: -0.02,
+          simultaneous_absolute_ci_upper: 0.05,
           ci_lower: -2,
           ci_upper: 8,
           relative_lift_pct: 3,
@@ -151,7 +156,9 @@ describe("computeShipRecommendation Guardrails vs goals", () => {
     expect(result.recommendation?.verdict).toBe("ship");
     expect(result.recommendation?.because).toMatch(/Goal Metric/);
   });
+});
 
+describe("computeShipRecommendation combiner explanations", () => {
   it("explains do_not_ship from a harmful secondary goal, not the beneficial primary", () => {
     const output = stats({
       arm_results: [
@@ -160,6 +167,8 @@ describe("computeShipRecommendation Guardrails vs goals", () => {
           metric_id: "secondary-goal",
           absolute_ci_lower: -0.08,
           absolute_ci_upper: -0.03,
+          simultaneous_absolute_ci_lower: -0.09,
+          simultaneous_absolute_ci_upper: -0.02,
           ci_lower: -15,
           ci_upper: -5,
           relative_lift_pct: -10,
@@ -184,6 +193,46 @@ describe("computeShipRecommendation Guardrails vs goals", () => {
     expect(result.recommendation?.because).toMatch(/Goal Metric/);
     expect(result.recommendation?.because).toMatch(/\[-0\.08/);
     expect(result.recommendation?.because).not.toMatch(/\[0\.03/);
+  });
+});
+
+describe("computeShipRecommendation simultaneous margin clearance", () => {
+  it("does not ship any_goal when only the ordinary alpha interval clears the margin", () => {
+    // Ordinary lower clears 0.02; simultaneous (alpha/k) does not — no false ship.
+    const output = stats({
+      arm_results: [
+        armResult({
+          metric_id: "checkout-conversion",
+          absolute_ci_lower: 0.021,
+          absolute_ci_upper: 0.08,
+          simultaneous_absolute_ci_lower: 0.01,
+          simultaneous_absolute_ci_upper: 0.09,
+        }),
+        armResult({
+          metric_id: "secondary-goal",
+          absolute_ci_lower: 0.021,
+          absolute_ci_upper: 0.08,
+          simultaneous_absolute_ci_lower: 0.01,
+          simultaneous_absolute_ci_upper: 0.09,
+        }),
+      ],
+    });
+    const result = recommend(
+      output,
+      preReg({
+        metrics: [
+          { metric_id: "checkout-conversion", desirability: "higher_is_better" },
+          { metric_id: "secondary-goal", desirability: "higher_is_better" },
+        ],
+        ship_rule: {
+          required_margin: 0.02,
+          margin_scale: "absolute",
+          conflict_resolution: "any_goal",
+        },
+      }),
+    );
+    expect(result.recommendation?.verdict).toBe("keep_running");
+    expect(result.recommendation?.verdict).not.toBe("ship");
   });
 });
 

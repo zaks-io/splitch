@@ -220,10 +220,32 @@ combining ship rule that omits a locked goal Metric's desirability with
 `PREREG_LOCKED_GOAL_DESIRABILITY_REQUIRED`; an existing partial freeze fails loud
 at results with `locked_goal_desirability_missing` rather than silently excluding
 the omitted goal. `because` names the deciding Metric's interval (Primary or Goal)
-with numbers and no internal ids.
+with numbers and no internal ids. When an arm's interval clears the required
+margin but the arm fails FDR eligibility, `because` says so explicitly rather
+than claiming the margin was not cleared.
+
+### Simultaneous margin clearance (Bonferroni across locked goals)
+
+FDR eligibility tests lift against **zero**. Margin clearance is a different
+claim (lift past the required margin). When the ship rule combines `k > 1`
+locked goal Metrics (`unanimous_goals` / `any_goal`), a goal clears the margin
+only if its always-valid interval recomputed at `alpha/k` (Bonferroni across the
+`k` locked goals) clears the margin. For `k = 1` (including `primary_wins`) the
+ordinary alpha decision interval is used. The `alpha/k` interval is produced by
+the same confidence-sequence (or fixed-horizon) adapter as the decision
+interval on the absolute scale — never by rescaling the published alpha
+interval. Relative ship rules (fixed horizon only) derive Fieller percent bounds
+from that absolute `alpha/k` interval. Published fields:
+`simultaneous_absolute_ci_*` and, when relative, `simultaneous_ci_*` (stripped
+from the result token). Zero-null FDR eligibility remains an **additional**
+requirement on top of simultaneous margin clearance. Seeded Monte Carlo
+(`packages/stats/src/ship-recommendation-margin.simulation.test.ts`): 20 goals
+with true lift equal to the required margin under `any_goal` must keep the
+false-ship rate at or below `alpha` plus the predeclared Monte Carlo tolerance.
 
 Absolute margins use the absolute decision interval (`absolute_ci_*` on Treatment
-arms, stripped from the result token). Relative margins use the published relative
+arms, stripped from the result token), with the simultaneous absolute interval
+above when combining goals. Relative margins use the published relative
 CI (percent) against a fractional `required_margin`, and are accepted only on a
 **fixed-horizon** Run: sequential Fieller time-uniform coverage is unproven, so
 Start refuses `marginScale: "relative"` on a sequential Run with
@@ -235,9 +257,10 @@ the Control mean is zero or negative, so a relative-scale rule then emits
 `recommendationUnavailable: "relative_control_mean_non_positive"` rather than
 re-orienting the interval. Missing absolute bounds with an absolute ship rule
 yield `recommendationUnavailable: "absolute_interval_unavailable"` rather than a
-guessed verdict. Treatments are identified by Control identity (every non-Control
-Variant), not by a non-null relative lift — so a zero Control mean still yields
-an absolute-rule recommendation when absolute intervals exist.
+guessed verdict (including missing simultaneous bounds when `k > 1`). Treatments
+are identified by Control identity (every non-Control Variant), not by a
+non-null relative lift — so a zero Control mean still yields an absolute-rule
+recommendation when absolute intervals exist.
 
 ## Futility verdict (MDE exclusion, advisory)
 

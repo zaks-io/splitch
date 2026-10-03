@@ -52,8 +52,14 @@ export function beneficialArm(overrides: Parameters<typeof armResult>[0] = {}) {
   return armResult({
     absolute_ci_lower: 0.03,
     absolute_ci_upper: 0.08,
+    // Unit fixtures publish a clearing simultaneous interval so multi-goal
+    // ship rules can exercise combiner logic without the stats engine.
+    simultaneous_absolute_ci_lower: 0.025,
+    simultaneous_absolute_ci_upper: 0.075,
     ci_lower: 5,
     ci_upper: 15,
+    simultaneous_ci_lower: 4,
+    simultaneous_ci_upper: 14,
     relative_lift_pct: 10,
     ...overrides,
   });
@@ -63,8 +69,12 @@ export function harmfulLowerIsBetterArm() {
   return armResult({
     absolute_ci_lower: 0.02,
     absolute_ci_upper: 0.06,
+    simultaneous_absolute_ci_lower: 0.01,
+    simultaneous_absolute_ci_upper: 0.07,
     ci_lower: 4,
     ci_upper: 12,
+    simultaneous_ci_lower: 2,
+    simultaneous_ci_upper: 14,
     relative_lift_pct: 8,
   });
 }

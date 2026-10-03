@@ -27,9 +27,11 @@ export function classifyLockedGoalMetrics(
   const metricsById = new Map(
     preRegistration.metrics.map((metric) => [metric.metric_id, metric] as const),
   );
+  const lockedIds = lockedGoalMetricIds(arms, guardrailMetricIds);
+  const lockedGoalCount = lockedIds.size;
   const goals: ClassifiedEffect[] = [];
 
-  for (const metricId of lockedGoalMetricIds(arms, guardrailMetricIds)) {
+  for (const metricId of lockedIds) {
     const one = classifyOneLockedGoal({
       metricId,
       metric: metricsById.get(metricId),
@@ -38,6 +40,7 @@ export function classifyLockedGoalMetrics(
       controlVariant,
       scale,
       marginOnScale,
+      lockedGoalCount,
     });
     if (one.status === "unavailable") return one;
     goals.push(...one.rows);
@@ -56,6 +59,7 @@ function classifyOneLockedGoal(input: {
   controlVariant: string;
   scale: PreRegistration["ship_rule"]["margin_scale"];
   marginOnScale: number;
+  lockedGoalCount: number;
 }):
   | { status: "ok"; rows: ClassifiedEffect[] }
   | { status: "unavailable"; reason: RecommendationUnavailableReason } {
@@ -75,6 +79,7 @@ function classifyOneLockedGoal(input: {
     scale: input.scale,
     marginOnScale: input.marginOnScale,
     subject: input.metricId === input.primaryMetricId ? "Primary Metric" : "Goal Metric",
+    lockedGoalCount: input.lockedGoalCount,
   });
   if (classified.status === "unavailable") {
     return unavailableForScale(classified.reason, input.scale);

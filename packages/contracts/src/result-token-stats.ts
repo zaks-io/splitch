@@ -37,6 +37,10 @@ function withoutEstimand(arm: ArmResult): ArmResult {
     futilityBecause: _because,
     absolute_ci_lower: _absLower,
     absolute_ci_upper: _absUpper,
+    simultaneous_absolute_ci_lower: _simAbsLower,
+    simultaneous_absolute_ci_upper: _simAbsUpper,
+    simultaneous_ci_lower: _simLower,
+    simultaneous_ci_upper: _simUpper,
     ...rest
   } = arm;
   return rest;

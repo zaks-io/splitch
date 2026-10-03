@@ -44,6 +44,8 @@ export function resolvePrimaryEffect(
     scale,
     marginOnScale,
     subject: "Primary Metric",
+    // primary_wins (and this path before combining) uses the ordinary alpha interval.
+    lockedGoalCount: 1,
   });
   if (classified.status === "unavailable") return classified;
 
