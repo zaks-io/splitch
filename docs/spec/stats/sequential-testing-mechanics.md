@@ -106,8 +106,17 @@ Monitor continuously. Stop when:
 
 1. **Reject H0 (declare winner/loser):** `ci_lower > 0` (treatment wins) or `ci_upper < 0`
    (treatment loses on this Metric).
-2. **Futility (optional):** when the futility boundary triggers — CI is not narrowing toward
-   significance despite growing N. Configurable per Experiment; off by default.
+2. **Futility (optional, advisory):** when pre-registration freezes
+   `futility: "mde_exclusion"` (default `off`) and the primary Metric has an absolute MDE,
+   Results attach `futilityVerdict` / `futilityBecause` on that Metric's treatment arms.
+   Verdict is `futile` when the absolute confidence-sequence bound on the beneficial side
+   excludes the MDE (`upper < mde` for `higher_is_better`; `lower > -mde` for
+   `lower_is_better`); otherwise `not_futile`. Futility never stops or Concludes a Run by
+   itself. Relative MDE is refused for this mode (`PREREG_FUTILITY_REQUIRES_ABSOLUTE_MDE`)
+   because sequential Fieller coverage is unproven. Likelihood-ratio futility is not
+   adopted: Shim (2025) Truncated mSPRT for practical significance
+   ([arXiv:2509.07892](https://arxiv.org/abs/2509.07892)) was withdrawn in 2026 because the
+   denominator is not a supermartingale.
 3. **Budget / time deadline:** when maximum run duration or maximum N is reached.
 
 No correction for multiple looks is needed — the aCS handles it by construction.

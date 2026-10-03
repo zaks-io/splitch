@@ -64,6 +64,7 @@ function primaryDimensionRopeInput(): StatsInput {
         margin_scale: "absolute",
         conflict_resolution: "primary_wins",
       },
+      futility: "off",
     },
     dimensions: [{ dimension_id: "country", class: "primary", values: ["US"] }],
   };

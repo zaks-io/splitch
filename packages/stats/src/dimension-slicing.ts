@@ -261,5 +261,7 @@ function stripDimensionFields(result: DimensionArmResult): ArmResult {
     ...(result.ropeVerdictUnavailable === undefined
       ? {}
       : { ropeVerdictUnavailable: result.ropeVerdictUnavailable }),
+    ...(result.futilityVerdict === undefined ? {} : { futilityVerdict: result.futilityVerdict }),
+    ...(result.futilityBecause === undefined ? {} : { futilityBecause: result.futilityBecause }),
   };
 }

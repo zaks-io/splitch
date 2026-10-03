@@ -58,6 +58,7 @@ function validateAndFreeze(
     ...shipRuleIssues(intent),
     ...primaryMetricIssues(intent, runMetricIds),
     ...metricEntryIssues(intent, runMetricIds),
+    ...futilityIssues(intent),
   ];
   if (issues.length > 0) return { ok: false, issues };
 
@@ -70,6 +71,7 @@ function validateAndFreeze(
       margin_scale: intent.shipRule.marginScale,
       conflict_resolution: intent.shipRule.conflictResolution,
     },
+    futility: intent.futility ?? "off",
   });
   return { ok: true, value: frozen };
 }
@@ -192,6 +194,22 @@ function desirabilityMessage(hasMde: boolean, isPrimary: boolean, hasRope: boole
   return "desirability is required for every pre-registered Metric";
 }
 
+function futilityIssues(intent: PreRegistrationIntent): PreRegistrationIssue[] {
+  if (intent.futility !== "mde_exclusion") return [];
+  const primary = intent.metrics.find((metric) => metric.metricId === intent.primaryMetricId);
+  if (primary?.mdeAbsolute !== undefined) return [];
+  const hasRelativeOnly = primary?.mdeRelative !== undefined;
+  return [
+    {
+      path: ["body", "preRegistration", "futility"],
+      message: hasRelativeOnly
+        ? 'futility "mde_exclusion" requires an absolute MDE on the primary Metric; relative MDE alone is unsupported because sequential Fieller coverage is unproven'
+        : 'futility "mde_exclusion" requires an absolute MDE on the primary Metric',
+      code: "PREREG_FUTILITY_REQUIRES_ABSOLUTE_MDE",
+    },
+  ];
+}
+
 function freezeMetric(metric: PreRegistrationIntent["metrics"][number]): PreRegistrationMetric {
   if (metric.desirability === undefined) {
     throw new Error("freezeMetric requires desirability after validation");
@@ -230,5 +248,6 @@ export function preRegistrationToIntent(frozen: PreRegistration): PreRegistratio
       marginScale: frozen.ship_rule.margin_scale,
       conflictResolution: frozen.ship_rule.conflict_resolution,
     },
+    futility: frozen.futility,
   };
 }

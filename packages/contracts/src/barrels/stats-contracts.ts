@@ -18,6 +18,7 @@ export {
   TargetNSourceSchema,
 } from "../run-commitments";
 export type {
+  FutilityMode,
   PreRegistration,
   PreRegistrationIntent,
   PreRegistrationIssueCode,
@@ -28,6 +29,7 @@ export type {
   ShipRule,
 } from "../run-preregistration";
 export {
+  FutilityModeSchema,
   PreRegistrationIntentSchema,
   PreRegistrationMetricSchema,
   PreRegistrationRopeSchema,
@@ -35,6 +37,7 @@ export {
   RopeScaleSchema,
   ShipConflictResolutionSchema,
   ShipRuleSchema,
+  futilityModes,
   preRegistrationIssueCodes,
   shipConflictResolutions,
 } from "../run-preregistration";
@@ -89,6 +92,7 @@ export type {
   DimensionResult,
   EstimandDisclosure,
   EstimandLabel,
+  FutilityVerdict,
   GuardrailResult,
   HealthMetrics,
   RopeVerdict,
@@ -115,6 +119,7 @@ export {
   EstimandDisclosureSchema,
   EstimandLabelSchema,
   estimandLabels,
+  FutilityVerdictSchema,
   GuardrailResultSchema,
   HealthMetricsSchema,
   RopeVerdictSchema,

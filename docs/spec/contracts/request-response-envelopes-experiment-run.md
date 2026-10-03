@@ -150,17 +150,17 @@ stage them; every other decision-spec field (`confidenceLevel`, the goal Metric 
 Metric set, `dimensions`) is staged on the Experiment and frozen from there. All of them lock at
 Start (ADR-0002 Run immutability, ADR-0003 assignment-vs-measurement edits):
 
-| Field                           | Required | Notes                                                                                                       |
-| ------------------------------- | -------- | ----------------------------------------------------------------------------------------------------------- |
-| `review`                        | no       | `{ action: 'approve_and_apply' }`; inline use of the canonical Review action under `confirm`                |
-| `reason`                        | no       | Human or agent-readable Start reason copied onto the Run                                                    |
-| `horizon`                       | no       | `sequential` (default) or `fixed`; frozen onto `runs.horizon`                                               |
-| `sampleSizeLocked`              | no       | Required when `horizon = 'fixed'`, refused when `sequential`; frozen onto `runs.sample_size_locked`         |
-| `targetN`                       | no       | Sequential tuning target; defaults to 5000 and is recorded as defaulted (ADR-0059)                          |
-| `plannedDurationDays`           | no       | Planned duration; defaults to 7; non-whole-weeks need an override reason                                    |
-| `plannedDurationOverrideReason` | no       | Label when the planned duration is not whole weeks                                                          |
-| `preRegistration`               | no       | Optional pre-registration (hypothesis, primary Metric, per-Metric MDE/ROPE, ship rule); frozen when present |
-| `idempotency_key`               | yes      | Idempotently owns Approval Request creation and any inline Review; no assignment config is accepted         |
+| Field                           | Required | Notes                                                                                                                      |
+| ------------------------------- | -------- | -------------------------------------------------------------------------------------------------------------------------- |
+| `review`                        | no       | `{ action: 'approve_and_apply' }`; inline use of the canonical Review action under `confirm`                               |
+| `reason`                        | no       | Human or agent-readable Start reason copied onto the Run                                                                   |
+| `horizon`                       | no       | `sequential` (default) or `fixed`; frozen onto `runs.horizon`                                                              |
+| `sampleSizeLocked`              | no       | Required when `horizon = 'fixed'`, refused when `sequential`; frozen onto `runs.sample_size_locked`                        |
+| `targetN`                       | no       | Sequential tuning target; defaults to 5000 and is recorded as defaulted (ADR-0059)                                         |
+| `plannedDurationDays`           | no       | Planned duration; defaults to 7; non-whole-weeks need an override reason                                                   |
+| `plannedDurationOverrideReason` | no       | Label when the planned duration is not whole weeks                                                                         |
+| `preRegistration`               | no       | Optional pre-registration (hypothesis, primary Metric, per-Metric MDE/ROPE, ship rule, futility mode); frozen when present |
+| `idempotency_key`               | yes      | Idempotently owns Approval Request creation and any inline Review; no assignment config is accepted                        |
 
 A `fixed` horizon with no `sampleSizeLocked`, or a `sequential` horizon carrying one, is refused with
 `VALIDATION_ERROR` at `["body","sampleSizeLocked"]` rather than defaulted: a silently chosen stopping

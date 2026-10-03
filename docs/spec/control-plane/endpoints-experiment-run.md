@@ -151,9 +151,12 @@ the same defaults when applied.
 Optional `preRegistration` freezes a hypothesis, primary Metric id (must be one of the Run's Metrics),
 per-Metric desirability (`higher_is_better` | `lower_is_better`), optional per-Metric MDE and ROPE
 (ROPE must use `scale: "absolute"` — relative ROPE is refused with `PREREG_ROPE_RELATIVE_UNSUPPORTED`
-because sequential Fieller coverage is unproven; ROPE lower must be strictly less than upper), and a
+because sequential Fieller coverage is unproven; ROPE lower must be strictly less than upper), a
 ship rule (`requiredMargin`, `marginScale`, `conflictResolution`: `primary_wins` | `unanimous_goals` |
-`any_goal`). It is immutable after Start. Omitting it leaves Start behavior unchanged for existing
+`any_goal`), and optional `futility` (`off` | `mde_exclusion`; omit freezes as `off`).
+`mde_exclusion` requires an absolute MDE on the primary Metric
+(`PREREG_FUTILITY_REQUIRES_ABSOLUTE_MDE`); relative MDE alone is refused for the same Fieller reason.
+It is immutable after Start. Omitting `preRegistration` leaves Start behavior unchanged for existing
 clients. Making a plan mandatory with an override is a later product decision. Validation failures
 carry stable issue codes (`PREREG_*`) under `VALIDATION_ERROR`. The frozen value is exposed on Run
 reads (`preRegistration`) and on ready results (`run_commitments.pre_registration`). Scorecard trust

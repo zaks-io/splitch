@@ -7,6 +7,7 @@ import type {
 } from "@splitch/contracts";
 import { type CappedArmEvidence, estimandDisclosure } from "./estimand-disclosure";
 import { FixedHorizonCI } from "./fixed-horizon-ci";
+import { withFutilityVerdict } from "./metric-arm-futility";
 import { withRopeVerdict } from "./metric-arm-rope";
 import { metricTypesById } from "./metric-discovery";
 import { fiellerRelativeCi } from "./relative-ci";
@@ -193,7 +194,7 @@ function treatmentArmResult(
   const ci_lower = relativeCiBoundForOutput(comparison, decisionCi, "lower");
   const ci_upper = relativeCiBoundForOutput(comparison, decisionCi, "upper");
 
-  return withRopeVerdict(
+  const withRope = withRopeVerdict(
     {
       variant: comparison.treatment.variant,
       metric_id: comparison.metric_id,
@@ -215,6 +216,10 @@ function treatmentArmResult(
       decisionCi,
     },
   );
+  return withFutilityVerdict(withRope, {
+    preRegistration: input.pre_registration,
+    decisionCi,
+  });
 }
 
 function decisionCiForComparison(

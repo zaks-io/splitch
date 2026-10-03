@@ -52,6 +52,7 @@ describe("resolvePreRegistration", () => {
         margin_scale: "absolute",
         conflict_resolution: "primary_wins",
       },
+      futility: "off",
     });
   });
 
@@ -150,5 +151,71 @@ describe("resolvePreRegistration", () => {
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(codes(result.issues)).toContain("PREREG_SHIP_RULE_INVALID");
+  });
+});
+
+describe("resolvePreRegistration futility mode", () => {
+  it("freezes omitted futility as off and preserves mde_exclusion when set", () => {
+    const off = resolvePreRegistration(validIntent, RUN_METRICS);
+    expect(off.ok).toBe(true);
+    if (!off.ok) return;
+    expect(off.value.futility).toBe("off");
+
+    const on = resolvePreRegistration({ ...validIntent, futility: "mde_exclusion" }, RUN_METRICS);
+    expect(on.ok).toBe(true);
+    if (!on.ok) return;
+    expect(on.value.futility).toBe("mde_exclusion");
+  });
+
+  it("parses a legacy freeze without futility as off", () => {
+    const legacy = {
+      hypothesis: "legacy",
+      primary_metric_id: "metric_goal",
+      metrics: [{ metric_id: "metric_goal", desirability: "higher_is_better" }],
+      ship_rule: {
+        required_margin: 0.02,
+        margin_scale: "absolute",
+        conflict_resolution: "primary_wins",
+      },
+    };
+    expect(PreRegistrationSchema.parse(legacy).futility).toBe("off");
+  });
+
+  it("refuses mde_exclusion without an absolute primary MDE", () => {
+    const result = resolvePreRegistration(
+      {
+        ...validIntent,
+        futility: "mde_exclusion",
+        metrics: [
+          { metricId: "metric_goal", desirability: "higher_is_better" },
+          { metricId: "metric_guard", desirability: "lower_is_better" },
+        ],
+      },
+      RUN_METRICS,
+    );
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(codes(result.issues)).toContain("PREREG_FUTILITY_REQUIRES_ABSOLUTE_MDE");
+  });
+
+  it("refuses mde_exclusion when the primary has only a relative MDE", () => {
+    const result = resolvePreRegistration(
+      {
+        ...validIntent,
+        futility: "mde_exclusion",
+        metrics: [
+          {
+            metricId: "metric_goal",
+            desirability: "higher_is_better",
+            mdeRelative: 0.1,
+          },
+          { metricId: "metric_guard", desirability: "lower_is_better" },
+        ],
+      },
+      RUN_METRICS,
+    );
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(codes(result.issues)).toContain("PREREG_FUTILITY_REQUIRES_ABSOLUTE_MDE");
   });
 });

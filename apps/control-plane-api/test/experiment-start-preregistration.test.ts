@@ -51,11 +51,12 @@ function expectedFrozen(metricId: string) {
       margin_scale: "absolute",
       conflict_resolution: "primary_wins",
     },
+    futility: "off",
   };
 }
 
 function expectedRunIntent(metricId: string) {
-  return validPreRegistration(metricId);
+  return { ...validPreRegistration(metricId), futility: "off" as const };
 }
 
 const captures: Array<{ url: string; init?: RequestInit }> = [];
