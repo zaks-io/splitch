@@ -13,7 +13,8 @@
  * convert scales.
  *
  * Pre-registration (plan 2.2) supplies the ROPE per Metric; metric-arm-rope
- * attaches ropeVerdict on ArmResult when that Metric froze one.
+ * attaches ropeVerdict on ArmResult only for absolute ROPEs (proven CS).
+ * Relative ROPEs surface ropeVerdictUnavailable instead.
  */
 
 export const ROPE_VERDICTS = ["outside", "inside", "undecided"] as const;

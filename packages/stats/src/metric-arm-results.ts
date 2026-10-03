@@ -213,8 +213,6 @@ function treatmentArmResult(
     {
       preRegistration: input.pre_registration,
       decisionCi,
-      relativeLower: ci_lower,
-      relativeUpper: ci_upper,
     },
   );
 }

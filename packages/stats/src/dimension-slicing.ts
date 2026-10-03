@@ -258,5 +258,8 @@ function stripDimensionFields(result: DimensionArmResult): ArmResult {
     ...(result.estimand === undefined ? {} : { estimand: result.estimand }),
     ...(result.ropeVerdict === undefined ? {} : { ropeVerdict: result.ropeVerdict }),
     ...(result.ropeScale === undefined ? {} : { ropeScale: result.ropeScale }),
+    ...(result.ropeVerdictUnavailable === undefined
+      ? {}
+      : { ropeVerdictUnavailable: result.ropeVerdictUnavailable }),
   };
 }

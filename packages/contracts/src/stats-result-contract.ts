@@ -119,6 +119,14 @@ export type EstimandDisclosure = z.infer<typeof EstimandDisclosureSchema>;
 export const RopeVerdictSchema = z.enum(["outside", "inside", "undecided"]);
 export type RopeVerdict = z.infer<typeof RopeVerdictSchema>;
 
+/**
+ * Why a pre-registered ROPE did not yield a ropeVerdict. Present instead of a
+ * silent omission when the interval on that scale is not a proven confidence
+ * sequence (relative + sequential Fieller).
+ */
+export const RopeVerdictUnavailableReasonSchema = z.enum(["relative_sequential_coverage_unproven"]);
+export type RopeVerdictUnavailableReason = z.infer<typeof RopeVerdictUnavailableReasonSchema>;
+
 export const ArmResultSchema = z
   .object({
     variant: z.string(),
@@ -139,20 +147,39 @@ export const ArmResultSchema = z
     // parse; the engine always emits it.
     estimand: EstimandDisclosureSchema.optional(),
     /**
-     * Present only when this Metric pre-registered a ROPE and the decision
-     * interval on that ROPE's scale is finite. Absent (not defaulted) otherwise.
+     * Present only when this Metric pre-registered an absolute ROPE and the
+     * decision interval is finite. Absent (not defaulted) otherwise.
      */
     ropeVerdict: RopeVerdictSchema.optional(),
     /** Scale the ROPE and decision interval shared when ropeVerdict is present. */
     ropeScale: RopeScaleSchema.optional(),
+    /**
+     * Present when a ROPE was pre-registered but no always-valid verdict can be
+     * claimed (relative scale under sequential analysis). Exclusive with
+     * ropeVerdict; never a silent omission of a pre-registered ROPE.
+     */
+    ropeVerdictUnavailable: RopeVerdictUnavailableReasonSchema.optional(),
   })
   .strict()
   .superRefine((arm, context) => {
-    if ((arm.ropeVerdict === undefined) === (arm.ropeScale === undefined)) return;
-    context.addIssue({
-      code: "custom",
-      message: "ropeVerdict and ropeScale must be present together",
-    });
+    if (arm.ropeVerdict !== undefined && arm.ropeVerdictUnavailable !== undefined) {
+      context.addIssue({
+        code: "custom",
+        message: "ropeVerdict and ropeVerdictUnavailable are mutually exclusive",
+      });
+    }
+    if (arm.ropeVerdict !== undefined && arm.ropeScale === undefined) {
+      context.addIssue({
+        code: "custom",
+        message: "ropeScale is required when ropeVerdict is present",
+      });
+    }
+    if (arm.ropeVerdict === undefined && arm.ropeScale !== undefined) {
+      context.addIssue({
+        code: "custom",
+        message: "ropeScale requires ropeVerdict",
+      });
+    }
   });
 export type ArmResult = z.infer<typeof ArmResultSchema>;
 

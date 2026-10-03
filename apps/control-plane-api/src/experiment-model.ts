@@ -1,15 +1,15 @@
 import {
+  type Experiment,
   ExperimentSchema,
   ExperimentUpdateResponseSchema,
-  type Experiment,
   type LiveRunUnaffected,
   type MetricRef,
   type PreRegistration,
   type PreRegistrationIntent,
   PreRegistrationSchema,
   preRegistrationToIntent,
-  RunResponseSchema,
   type Run,
+  RunResponseSchema,
   type TargetingRule,
   type Variant,
 } from "@splitch/contracts";
@@ -115,12 +115,27 @@ export function json(value: unknown): string {
   return JSON.stringify(value);
 }
 
-function parsePreRegistrationIntent(
+/**
+ * Recorded null means the Run never pre-registered. Empty string or a missing
+ * column is refused rather than dropped, matching Analysis materialization so a
+ * corrupted freeze cannot silently become "no pre-registration" on Run reads.
+ */
+export function parsePreRegistrationIntent(
   raw: string | null | undefined,
 ): PreRegistrationIntent | undefined {
-  // D1 NULL and a missing column both mean "never pre-registered".
-  if (raw === null || raw === undefined || raw === "") return undefined;
-  const parsed = PreRegistrationSchema.safeParse(JSON.parse(raw) as unknown);
+  if (raw === null) return undefined;
+  if (raw === undefined || raw === "") {
+    throw new Error("Run pre_registration is empty; expected JSON or null (never registered)");
+  }
+  let value: unknown;
+  try {
+    value = JSON.parse(raw) as unknown;
+  } catch (cause) {
+    throw new Error(
+      `Run pre_registration is not valid JSON: ${cause instanceof Error ? cause.message : String(cause)}`,
+    );
+  }
+  const parsed = PreRegistrationSchema.safeParse(value);
   if (!parsed.success) {
     throw new Error(
       `Run pre_registration is invalid: ${parsed.error.issues.map((issue) => issue.message).join("; ")}`,

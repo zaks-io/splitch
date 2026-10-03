@@ -84,6 +84,25 @@ describe("resolvePreRegistration", () => {
     expect(codes(result.issues)).toContain("PREREG_ROPE_BOUNDS_INVALID");
   });
 
+  it("refuses a relative ROPE with PREREG_ROPE_RELATIVE_UNSUPPORTED", () => {
+    const result = resolvePreRegistration(
+      {
+        ...validIntent,
+        metrics: [
+          {
+            metricId: "metric_goal",
+            desirability: "higher_is_better",
+            rope: { lower: -0.05, upper: 0.05, scale: "relative" },
+          },
+        ],
+      },
+      RUN_METRICS,
+    );
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(codes(result.issues)).toContain("PREREG_ROPE_RELATIVE_UNSUPPORTED");
+  });
+
   it("refuses an MDE without desirability with PREREG_DESIRABILITY_REQUIRED", () => {
     const result = resolvePreRegistration(
       {

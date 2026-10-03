@@ -23,9 +23,15 @@ export function resultTokenStats(stats: StatsOutput): StatsOutput {
 }
 
 function withoutEstimand(arm: ArmResult): ArmResult {
-  // ropeVerdict is a classification of the already-tokenized decision interval
-  // against the frozen ROPE; stripping it keeps tokens for Runs without
-  // pre-registration byte-identical to before this field existed.
-  const { estimand: _estimand, ropeVerdict: _rope, ropeScale: _scale, ...rest } = arm;
+  // ropeVerdict / ropeVerdictUnavailable classify the already-tokenized
+  // decision interval against the frozen ROPE; stripping them keeps tokens for
+  // Runs without pre-registration byte-identical to before these fields existed.
+  const {
+    estimand: _estimand,
+    ropeVerdict: _rope,
+    ropeScale: _scale,
+    ropeVerdictUnavailable: _unavailable,
+    ...rest
+  } = arm;
   return rest;
 }

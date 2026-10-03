@@ -20,7 +20,12 @@ export type ShipConflictResolution = z.infer<typeof ShipConflictResolutionSchema
 export const RopeScaleSchema = z.enum(["absolute", "relative"]);
 export type RopeScale = z.infer<typeof RopeScaleSchema>;
 
-/** Frozen ROPE on the same scale the decision gate uses for that Metric. */
+/**
+ * Frozen ROPE. Start accepts only `scale: "absolute"` (proven confidence
+ * sequence); relative is refused with `PREREG_ROPE_RELATIVE_UNSUPPORTED`.
+ * The schema still admits `"relative"` so a corrupted or legacy freeze can be
+ * parsed and surface `ropeVerdictUnavailable` at results time.
+ */
 export const PreRegistrationRopeSchema = z
   .object({
     lower: z.number().finite(),
@@ -116,6 +121,12 @@ export const preRegistrationIssueCodes = [
   "PREREG_UNKNOWN_PRIMARY_METRIC",
   "PREREG_UNKNOWN_METRIC",
   "PREREG_ROPE_BOUNDS_INVALID",
+  /**
+   * Relative ROPE is refused at Start: sequential Fieller relative intervals do
+   * not yet have proven time-uniform coverage, so a ROPE verdict would not be
+   * an always-valid confidence-sequence claim. Pre-register on `absolute`.
+   */
+  "PREREG_ROPE_RELATIVE_UNSUPPORTED",
   "PREREG_DESIRABILITY_REQUIRED",
   "PREREG_PRIMARY_METRIC_MISSING",
   "PREREG_DUPLICATE_METRIC",

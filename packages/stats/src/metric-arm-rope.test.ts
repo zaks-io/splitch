@@ -29,7 +29,7 @@ const armBase = {
   },
 };
 
-const preRegistration = {
+const absolutePreRegistration = {
   hypothesis: "Treatment raises the goal",
   primary_metric_id: "metric_goal",
   metrics: [
@@ -44,6 +44,17 @@ const preRegistration = {
     margin_scale: "absolute" as const,
     conflict_resolution: "primary_wins" as const,
   },
+};
+
+const relativePreRegistration = {
+  ...absolutePreRegistration,
+  metrics: [
+    {
+      metric_id: "metric_goal",
+      desirability: "higher_is_better" as const,
+      rope: { lower: -0.05, upper: 0.05, scale: "relative" as const },
+    },
+  ],
 };
 
 const finiteDecisionCi: CIResult = {
@@ -67,35 +78,42 @@ describe("withRopeVerdict", () => {
     const arm = withRopeVerdict(armBase, {
       preRegistration: undefined,
       decisionCi: finiteDecisionCi,
-      relativeLower: 5,
-      relativeUpper: 35,
     });
     expect(arm.ropeVerdict).toBeUndefined();
     expect(arm.ropeScale).toBeUndefined();
+    expect(arm.ropeVerdictUnavailable).toBeUndefined();
   });
 
   it("classifies an absolute ROPE against the decision interval", () => {
     const arm = withRopeVerdict(armBase, {
-      preRegistration,
+      preRegistration: absolutePreRegistration,
       decisionCi: finiteDecisionCi,
-      relativeLower: 5,
-      relativeUpper: 35,
     });
     expect(arm.ropeVerdict).toBe("undecided");
     expect(arm.ropeScale).toBe("absolute");
+    expect(arm.ropeVerdictUnavailable).toBeUndefined();
   });
 
-  it("omits ropeVerdict when the decision interval is not finite", () => {
+  it("omits ropeVerdict when the absolute decision interval is not finite", () => {
     const arm = withRopeVerdict(armBase, {
-      preRegistration,
+      preRegistration: absolutePreRegistration,
       decisionCi: {
         ...finiteDecisionCi,
         ci_lower: Number.NEGATIVE_INFINITY,
         ci_upper: Number.POSITIVE_INFINITY,
       },
-      relativeLower: 5,
-      relativeUpper: 35,
     });
     expect(arm.ropeVerdict).toBeUndefined();
+    expect(arm.ropeVerdictUnavailable).toBeUndefined();
+  });
+
+  it("emits ropeVerdictUnavailable for a relative ROPE instead of classifying Fieller bounds", () => {
+    const arm = withRopeVerdict(armBase, {
+      preRegistration: relativePreRegistration,
+      decisionCi: finiteDecisionCi,
+    });
+    expect(arm.ropeVerdict).toBeUndefined();
+    expect(arm.ropeScale).toBeUndefined();
+    expect(arm.ropeVerdictUnavailable).toBe("relative_sequential_coverage_unproven");
   });
 });

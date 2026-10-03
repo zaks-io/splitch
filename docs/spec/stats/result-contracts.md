@@ -153,16 +153,22 @@ unproven; the Fieller sequential-coverage audit is scheduled separately.
 
 ## ROPE verdict (confidence-sequence helper)
 
-`classifyRopeVerdict` in `packages/stats/src/rope-verdict.ts` classifies a finite confidence-sequence
-interval against a Region Of Practical Equivalence (ROPE) on the same scale the decision gate uses
-(absolute or relative, as the caller states). When a Metric's pre-registration freezes a ROPE at
-Run Start (plan 2.2), treatment `ArmResult` rows include `ropeVerdict` and `ropeScale` for that
-Metric; when none was pre-registered, or the interval on that scale is not finite, both fields are
-absent (not defaulted). The result token strips `ropeVerdict` / `ropeScale` the same way it strips
-`estimand`, so Runs without pre-registration keep byte-identical tokens.
+`classifyRopeVerdict` in `packages/stats/src/rope-verdict.ts` classifies a finite absolute
+confidence-sequence interval against a Region Of Practical Equivalence (ROPE) on the absolute scale.
+When a Metric's pre-registration freezes an absolute ROPE at Run Start (plan 2.2), treatment
+`ArmResult` rows include `ropeVerdict` and `ropeScale: "absolute"` for that Metric; when none was
+pre-registered, or the absolute interval is not finite, both fields are absent (not defaulted).
 
-Both the interval and the ROPE are closed. Because the interval is an always-valid confidence
-sequence, the verdict is valid at any look (Kruschke 2018).
+Relative ROPEs are refused at Start with `PREREG_ROPE_RELATIVE_UNSUPPORTED`: the Fieller relative
+inversion used for relative intervals does not yet have proven time-uniform coverage under sequential
+analysis (see Guardrail `ci_lower` above). If a relative ROPE is nonetheless present at results time,
+the engine emits `ropeVerdictUnavailable: "relative_sequential_coverage_unproven"` instead of a
+verdict or a silent omission. The result token strips `ropeVerdict` / `ropeScale` /
+`ropeVerdictUnavailable` the same way it strips `estimand`, so Runs without pre-registration keep
+byte-identical tokens.
+
+Both the interval and the ROPE are closed. Because the absolute interval is an always-valid confidence
+sequence, an absolute-scale verdict is valid at any look (Kruschke 2018).
 
 | Verdict     | Meaning                                                                                    |
 | ----------- | ------------------------------------------------------------------------------------------ |

@@ -174,6 +174,14 @@ function singleMetricIssues(
       code: "PREREG_ROPE_BOUNDS_INVALID",
     });
   }
+  if (metric.rope?.scale === "relative") {
+    issues.push({
+      path: [...base, "rope", "scale"],
+      message:
+        "relative ROPE is not accepted at Start; sequential Fieller coverage is unproven, so ROPE must use scale absolute",
+      code: "PREREG_ROPE_RELATIVE_UNSUPPORTED",
+    });
+  }
   return issues;
 }
 
