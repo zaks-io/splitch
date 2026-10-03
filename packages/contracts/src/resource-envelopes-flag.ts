@@ -73,12 +73,11 @@ export const CreateFlagRequestSchema = z
     schema: WriteFlagJsonSchemaSchema.nullable().optional(),
     variants: persistedArray(CreateVariantCatalogEntrySchema).min(1),
     description: PersistedDescriptionSchema.optional(),
-    // Required for every new Flag (D9). Whether owner and expiresAt are also
-    // required depends on the class, which the Worker answers with
-    // FLAG_LIFECYCLE_INCOMPLETE naming the missing inputs.
+    // Optional so a caller that predates D9, or does not care, is never
+    // refused: the Worker fills every lifecycle input it leaves out.
     lifecycleClass: FlagLifecycleClassSchema.describe(
-      "Why the Flag exists: release and experiment Flags are temporary and need owner and expiresAt; ops and permission Flags may be permanent.",
-    ),
+      "Why the Flag exists. Defaults to release. Release and experiment Flags are temporary: owner defaults to the caller and expiresAt to 90 (release) or 30 (experiment) days out. Ops and permission Flags are permanent unless given an expiry; use ops for a kill switch.",
+    ).optional(),
     owner: FlagOwnerSchema.optional(),
     expiresAt: FlagExpiresAtSchema.optional(),
     idempotency_key: IdempotencyKeySchema,

@@ -209,8 +209,9 @@ export async function updateFlag(
     updatedAt: nowIso(deps),
     updatedBy: args.principal.id,
   };
+  const lifecycleDefaults = { owner: args.principal.id, now: fields.updatedAt };
 
-  return writeFlagPatch(deps, loaded.value, body, fields, args.requestId);
+  return writeFlagPatch(deps, loaded.value, body, fields, lifecycleDefaults, args.requestId);
 }
 
 async function prepareSchemaPatch(

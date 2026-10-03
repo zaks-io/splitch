@@ -31,7 +31,7 @@ export function FlagLifecycleFields({
           }
           value={value.lifecycleClass}
         >
-          <option value="">Choose a class</option>
+          <option value="">release (default)</option>
           {flagLifecycleClasses.map((lifecycleClass) => (
             <option key={lifecycleClass} value={lifecycleClass}>
               {lifecycleClass}
@@ -40,7 +40,7 @@ export function FlagLifecycleFields({
         </select>
         <FieldHint
           error={errors.lifecycleClass}
-          help="Release and experiment Flags are temporary. Ops and permission Flags may be permanent."
+          help="Release and experiment Flags are temporary. Ops and permission Flags are permanent; use ops for a kill switch."
           id="flag-lifecycle-class"
         />
       </div>
@@ -59,7 +59,7 @@ export function FlagLifecycleFields({
         />
         <FieldHint
           error={errors.owner}
-          help="Who removes this Flag when it is done."
+          help="Who removes this Flag when it is done. Defaults to you for release and experiment Flags."
           id="flag-owner"
         />
       </div>
@@ -77,7 +77,7 @@ export function FlagLifecycleFields({
         />
         <FieldHint
           error={errors.expiresAt}
-          help="The Flag is listed as expired from 00:00 UTC on this date."
+          help="The Flag is listed as expired from 00:00 UTC on this date. Release defaults to 90 days, experiment to 30."
           id="flag-expires-on"
         />
       </div>

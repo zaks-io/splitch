@@ -131,19 +131,20 @@ Body:
   variants: [                // the App-level Variant catalog
     { name: string, value: boolean|string|number|object, isDefault: boolean }
   ],
-  lifecycleClass: "release"|"experiment"|"ops"|"permission",  // required (D9)
-  owner?: string,            // required for release and experiment
-  expiresAt?: string,        // ISO 8601; required for release and experiment
+  lifecycleClass?: "release"|"experiment"|"ops"|"permission",  // default "release" (D9)
+  owner?: string,            // release/experiment default: the calling principal
+  expiresAt?: string,        // ISO 8601; release default +90d, experiment +30d
   idempotency_key: string    // also sent as the `Idempotency-Key` header
 }
 ```
 
-Every new Flag names a lifecycle class. A missing class is `VALIDATION_ERROR` naming
-`body.lifecycleClass`. A `release` or `experiment` Flag without `owner` or `expiresAt` is
-`FLAG_LIFECYCLE_INCOMPLETE`, whose `details.missing` names the absent inputs. `ops` and `permission`
-Flags are intentionally permanent and may omit both. The class is enforced after the Idempotency-Key
-replay lookup, so retrying an unchanged create that completed before lifecycle classes existed
-replays its original stored response instead of failing validation. `expiresAt` accepts an offset and is stored and
+No lifecycle input is required, so a caller that predates lifecycle classes is never refused. An
+omitted class is `release`. A `release` or `experiment` Flag without `owner` gets the calling
+principal's id, and without `expiresAt` gets the create time plus 90 days (`release`) or 30 days
+(`experiment`). `ops` and `permission` Flags are intentionally permanent: nothing is defaulted, and
+`owner` and `expiresAt` are stored only when given. The response carries the stored values, so the
+caller sees every default. Retrying an unchanged create that completed before lifecycle classes
+existed replays its original stored response. `expiresAt` accepts an offset and is stored and
 returned as UTC.
 
 Requires an `Idempotency-Key` header. A Flag create re-establishes a key that a
@@ -172,9 +173,10 @@ Panel when it is past that ceiling. A key that only exists in another App is
 ### `PATCH /apps/{app_id}/flags/{flag_id}`
 
 Body: `{ name?, description?, schema?, lifecycleClass?, owner?, expiresAt? }`. Does NOT accept
-`variants` or `enabled`. `owner: null` or `expiresAt: null` clears the value. The D9 rule is checked
-against the Flag as it would be after the patch, so classifying an `unclassified` Flag as `release`
-without also supplying a missing owner or expiry, or clearing the expiry of a `release` Flag, is
+`variants` or `enabled`. `owner: null` or `expiresAt: null` clears the value. Reclassifying a Flag
+as `release` or `experiment` fills an owner or expiry it lacks with the create defaults, measured
+from the patch time, unless the patch names that field. An explicit clear is still checked against
+the Flag as it would be after the patch, so clearing the owner or expiry of a `release` Flag is
 `FLAG_LIFECYCLE_INCOMPLETE`. `unclassified` cannot be written.
 Returns: updated Flag definition.
 

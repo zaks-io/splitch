@@ -3,7 +3,6 @@ import type { Registrar } from "@splitch/worker-runtime";
 import type { Hono } from "hono";
 import { makeFlagChangeHandlers } from "./flag-change-handlers";
 import type { makeFlagDefinitionHandlers } from "./flag-definition-handlers";
-import { replayTolerantCreateRoute } from "./flag-create-replay";
 import { controlPlaneRoute } from "./routes";
 
 export function mountFlagDefinitionRoutes(
@@ -22,11 +21,7 @@ export function mountFlagDefinitionRoutes(
     handlers.getFlagInventoryHealth,
   );
   registrar.mount(app, controlPlaneRoute("flag_removal_brief"), handlers.getFlagRemovalBrief);
-  registrar.mount(
-    app,
-    replayTolerantCreateRoute(controlPlaneRoute("flags_create")),
-    handlers.createFlag,
-  );
+  registrar.mount(app, controlPlaneRoute("flags_create"), handlers.createFlag);
   registrar.mount(app, controlPlaneRoute("flags_get"), handlers.getFlag);
   registrar.mount(app, controlPlaneRoute("flags_update"), handlers.updateFlag);
   registrar.mount(app, controlPlaneRoute("flags_delete"), handlers.deleteFlag);

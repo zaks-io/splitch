@@ -2,7 +2,7 @@ import type { FlagDefinitionPatch } from "@splitch/db";
 import { flagNotFound } from "./flag-definition-errors";
 import type { FlagDefinitionDeps, LoadedFlag } from "./flag-definition-handler-utils";
 import { flagResponse } from "./flag-definition-model";
-import { patchLifecycle } from "./flag-lifecycle";
+import { type LifecycleDefaults, patchLifecycle } from "./flag-lifecycle";
 
 const LIFECYCLE_WRITE_ATTEMPTS = 3;
 
@@ -17,12 +17,21 @@ export async function writeFlagPatch(
   loaded: LoadedFlag,
   body: Record<string, unknown>,
   fields: FlagDefinitionPatch,
+  lifecycleDefaults: LifecycleDefaults,
   requestId: string,
 ): Promise<Response> {
   let current: LoadedFlag["flag"] | null = loaded.flag;
   for (let attempt = 0; attempt < LIFECYCLE_WRITE_ATTEMPTS; attempt += 1) {
     if (!current) return flagNotFound(requestId);
-    const written = await attemptWrite(deps, loaded, current, body, fields, requestId);
+    const written = await attemptWrite(
+      deps,
+      loaded,
+      current,
+      body,
+      fields,
+      lifecycleDefaults,
+      requestId,
+    );
     if (written) return written;
     current = await deps.repo.flags.getFlag(loaded.scope, current.id);
   }
@@ -36,9 +45,10 @@ async function attemptWrite(
   current: LoadedFlag["flag"],
   body: Record<string, unknown>,
   fields: FlagDefinitionPatch,
+  lifecycleDefaults: LifecycleDefaults,
   requestId: string,
 ): Promise<Response | null> {
-  const lifecycle = patchLifecycle(current, body, requestId);
+  const lifecycle = patchLifecycle(current, body, lifecycleDefaults, requestId);
   if (!lifecycle.ok) return lifecycle.response;
   const updated = await deps.repo.flags.updateFlag(
     loaded.scope,

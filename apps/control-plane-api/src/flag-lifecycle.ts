@@ -5,7 +5,6 @@ import {
   type StoredFlagLifecycleClass,
 } from "@splitch/contracts";
 import { renderError } from "@splitch/worker-runtime";
-import { validationErrors } from "./flag-definition-errors";
 import { fail, ok, type Result } from "./flag-definition-handler-utils";
 
 /** The lifecycle columns of a Flag row, as stored. */
@@ -15,45 +14,50 @@ export interface FlagLifecycle {
   expiresAt: string | null;
 }
 
+/** Who is writing and when, so an omitted owner or expiry can be filled. */
+export interface LifecycleDefaults {
+  owner: string;
+  now: string;
+}
+
+const DEFAULT_LIFECYCLE_CLASS: FlagLifecycleClass = "release";
+const DAY_MS = 24 * 60 * 60 * 1000;
+// Only the temporary classes get a default lifetime; ops and permission Flags
+// are permanent by design (D9).
+const DEFAULT_EXPIRY_DAYS: Partial<Record<StoredFlagLifecycleClass, number>> = {
+  release: 90,
+  experiment: 30,
+};
+
 /**
- * The lifecycle a create writes. The body already passed the contract, so the
- * class is present; this applies the class-dependent D9 rule the schema cannot
- * express without hiding which input is missing.
+ * The lifecycle a create writes. Nothing is required: an agent that names no
+ * class gets a release Flag owned by the caller that expires in 90 days, so
+ * stale detection still has an owner and a date to act on.
  */
 export function createLifecycle(
   body: Record<string, unknown>,
-  requestId: string,
-): Result<FlagLifecycle & { lifecycleClass: FlagLifecycleClass }> {
-  const lifecycleClass = body.lifecycleClass as FlagLifecycleClass | undefined;
-  // Optional only at the parse boundary so a pre-D9 create can replay; a new
-  // create is refused here exactly as the published contract would refuse it.
-  if (!lifecycleClass) {
-    return fail(
-      validationErrors(requestId, [
-        {
-          path: ["body", "lifecycleClass"],
-          message: "lifecycleClass is required on every new Flag",
-        },
-      ]),
-    );
-  }
-  const lifecycle = {
+  defaults: LifecycleDefaults,
+): FlagLifecycle & { lifecycleClass: FlagLifecycleClass } {
+  const lifecycleClass =
+    (body.lifecycleClass as FlagLifecycleClass | undefined) ?? DEFAULT_LIFECYCLE_CLASS;
+  const temporary = lifecycleClass in DEFAULT_EXPIRY_DAYS;
+  return {
     lifecycleClass,
-    owner: (body.owner as string | undefined) ?? null,
-    expiresAt: utcExpiry(body.expiresAt),
+    owner: (body.owner as string | undefined) ?? (temporary ? defaults.owner : null),
+    expiresAt: utcExpiry(body.expiresAt) ?? defaultExpiry(lifecycleClass, defaults.now),
   };
-  return checked(lifecycle, requestId);
 }
 
 /**
  * The lifecycle columns a patch writes, or `undefined` when the patch names
- * none. The rule is checked against the merged result, so classifying a legacy
- * Flag as `release` without also naming its owner and expiry is refused, and so
- * is clearing the expiry of a Flag that is already `release`.
+ * none. Reclassifying to a temporary class fills an owner or expiry the patch
+ * does not mention. An explicit `null` is a request to clear, so clearing what
+ * a temporary class needs is still refused against the merged result.
  */
 export function patchLifecycle(
   current: FlagLifecycle,
   body: Record<string, unknown>,
+  defaults: LifecycleDefaults,
   requestId: string,
 ): Result<Partial<FlagLifecycle> | undefined> {
   const touched = ["lifecycleClass", "owner", "expiresAt"].some((field) => field in body);
@@ -65,14 +69,26 @@ export function patchLifecycle(
     ...(body.owner !== undefined ? { owner: body.owner as string | null } : {}),
     ...(body.expiresAt !== undefined ? { expiresAt: utcExpiry(body.expiresAt) } : {}),
   };
-  const merged = checked({ ...current, ...patch }, requestId);
-  return merged.ok ? ok(patch) : merged;
+  const merged = { ...current, ...patch };
+  for (const missing of missingFlagLifecycleInputs(merged)) {
+    if (body[missing] !== undefined) continue;
+    patch[missing] =
+      missing === "owner" ? defaults.owner : defaultExpiry(merged.lifecycleClass, defaults.now);
+  }
+  const checked = checkLifecycle({ ...current, ...patch }, requestId);
+  return checked.ok ? ok(patch) : checked;
 }
 
-function checked<T extends FlagLifecycle>(lifecycle: T, requestId: string): Result<T> {
+function checkLifecycle<T extends FlagLifecycle>(lifecycle: T, requestId: string): Result<T> {
   const missing = missingFlagLifecycleInputs(lifecycle);
   if (missing.length === 0) return ok(lifecycle);
   return fail(flagLifecycleIncomplete(requestId, lifecycle.lifecycleClass, missing));
+}
+
+function defaultExpiry(lifecycleClass: StoredFlagLifecycleClass, now: string): string | null {
+  const days = DEFAULT_EXPIRY_DAYS[lifecycleClass];
+  if (days === undefined) return null;
+  return new Date(Date.parse(now) + days * DAY_MS).toISOString();
 }
 
 /**
@@ -96,7 +112,7 @@ function flagLifecycleIncomplete(
   return renderError(
     {
       code: "FLAG_LIFECYCLE_INCOMPLETE",
-      message: `a ${lifecycleClass}-class Flag requires ${missing.join(" and ")}`,
+      message: `a ${lifecycleClass}-class Flag cannot clear its ${missing.join(" and ")}`,
       details: { lifecycleClass, missing },
     },
     { requestId },

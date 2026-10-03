@@ -28,7 +28,7 @@ import {
   variantSchemaIssues,
 } from "./flag-definition-model";
 import { StoredFlagCreateResponseSchema } from "./flag-create-replay";
-import { createLifecycle, type FlagLifecycle } from "./flag-lifecycle";
+import { createLifecycle, type FlagLifecycle, type LifecycleDefaults } from "./flag-lifecycle";
 import { objectBody, pathParam } from "./handler-input";
 
 export async function createFlag(
@@ -57,10 +57,16 @@ export async function createFlag(
   );
   if (replay) return replay;
 
-  const prepared = await prepareCreateFlag(deps, appId, body, requestId);
+  const now = nowIso(deps);
+  const prepared = await prepareCreateFlag(
+    deps,
+    appId,
+    body,
+    { owner: principal.id, now },
+    requestId,
+  );
   if (!prepared.ok) return prepared.response;
 
-  const now = nowIso(deps);
   const inserted = await insertFlag(
     deps,
     appId,
@@ -206,13 +212,11 @@ async function prepareCreateFlag(
   deps: FlagDefinitionDeps,
   appId: string,
   body: Record<string, unknown>,
+  lifecycleDefaults: LifecycleDefaults,
   requestId: string,
 ): Promise<Result<PreparedCreateFlag>> {
   const mismatch = pathBodyMismatch(body, { appId });
   if (mismatch) return fail(validationError(requestId, mismatch));
-
-  const lifecycle = createLifecycle(body, requestId);
-  if (!lifecycle.ok) return lifecycle;
 
   const variants = body.variants as CreateVariantInput[];
   const catalogIssue = exactlyOneDefaultIssue(variants) ?? duplicateVariantNameIssue(variants);
@@ -231,7 +235,7 @@ async function prepareCreateFlag(
   if (schemaErrors.length > 0) return fail(validationErrors(requestId, schemaErrors));
   return ok({
     scope,
-    lifecycle: lifecycle.value,
+    lifecycle: createLifecycle(body, lifecycleDefaults),
     schema,
     variantRows: variants.map((variant) => ({ input: variant, id: `var_${randomHex(12)}` })),
   });
