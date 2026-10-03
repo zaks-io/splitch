@@ -77,14 +77,13 @@ export async function evaluateHandler(
   if (!args.idempotencyKey)
     throw new Error("idempotencyKey is required for Exposure-bearing Convex evaluation");
   const runtime = await runtimeState(ctx, args.flagKey, args.context);
-  // No claim is stored: nothing was served, so a retry after the sync recovers must evaluate fresh.
-  if (runtime.kind === "overdue") return syncOverdueDetails(runtime, args.defaultValue);
   const fingerprint = await sha256Hex(
     canonicalJson({
       flagKey: args.flagKey,
       context: args.context,
       defaultValue: args.defaultValue,
-      snapshotVersion: runtime.snapshot.environmentVersion,
+      snapshotVersion:
+        runtime.kind === "overdue" ? runtime.snapshotVersion : runtime.snapshot.environmentVersion,
     }),
   );
   const claim = await ctx.db
@@ -99,6 +98,8 @@ export async function evaluateHandler(
     await ensureRetentionScheduled(ctx);
     return JSON.parse(claim.result) as ResolutionDetails;
   }
+  // No claim is stored: nothing was served, so a retry after the sync recovers must evaluate fresh.
+  if (runtime.kind === "overdue") return syncOverdueDetails(runtime, args.defaultValue);
   const result = await evaluateHeld(runtime, args);
   const details = servedDetails(runtime, args, result);
   if (result.exposure) await persistExposure(ctx, args, runtime, result.exposure, fingerprint);

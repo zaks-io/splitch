@@ -56,6 +56,11 @@ describe("Convex sync grace", () => {
     expect(convex.rows("evaluationClaims")).toEqual([
       expect.objectContaining({ idempotencyKey: "once", fingerprint: heldFingerprint }),
     ]);
+
+    await convex.advance(SYNC_DEADLINE_MS);
+    const overdueRetry = await evaluateHandler(convex.ctx, { ...args, idempotencyKey: "once" });
+    expect(overdueRetry).toEqual(first);
+    expect(convex.rows("exposureOutbox")).toHaveLength(1);
   });
 
   it("fails loud with the Default Variant once the deadline passes behind", async () => {
@@ -248,10 +253,7 @@ function installed(version: number) {
     _id: "integration_current",
     key: "current",
     installationId: "installation_1",
-    webhookSecret: "webhook-secret",
     componentIdentityKey: "identity-key",
-    endpoint: "https://edge.test",
-    callbackUrl: "https://example.convex.site/integrations/splitch/",
     appId: APP_ID,
     environmentId: ENVIRONMENT_ID,
     announcedVersion: version,
