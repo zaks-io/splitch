@@ -703,7 +703,7 @@ Request body (--body-json):
 
 Example:
   splitch event-definitions update <event-definition-id> --body-json '{"displayName":"displayName"}' --json",
-    "experiment-results get": "Get an Experiment's results envelope: state ready with StatsOutput, state no_data naming the missing input, or state no_run naming Start when the Experiment has never had a Run.
+    "experiment-results get": "Get an Experiment's results: readiness, blockedBy, and reasons first; detailed stats by default; view=concise for the verdict block only. States: ready, no_data (names the missing input), or no_run (names Start).
 
 Usage:
   splitch experiment-results get <experiment-id> [flags]
@@ -713,12 +713,13 @@ Flags:
   --env <environment>  [type: string; default: SPLITCH_ENV or config] Environment ID or key.
   --by <mode>          [type: string; default: automatic] Allowed: id. Resolve a canonical-looking selector explicitly.
   --run-id <run-id>    [type: string; default: none] Query parameter runId.
+  --view <view>        [type: string ("concise" | "detailed"); default: none] Query parameter view.
   --json               [type: boolean; default: false] Write machine-readable JSON to stdout.
   -h, --help           [type: boolean; default: false] Show help and exit.
 
 Example:
   splitch experiment-results get <experiment-id> --json",
-    "experiment-results post": "Get an Experiment's results envelope: state ready with StatsOutput, state no_data naming the missing input, or state no_run naming Start when the Experiment has never had a Run.
+    "experiment-results post": "Get an Experiment's results: readiness, blockedBy, and reasons first; detailed stats by default; view=concise for the verdict block only. States: ready, no_data (names the missing input), or no_run (names Start).
 
 Usage:
   splitch experiment-results post <experiment-id> [flags]
@@ -733,12 +734,13 @@ Flags:
 
 Request body (--body-json):
   runId          optional  string
+  view           optional  string ("concise" | "detailed")
   dataWatermark  optional  string
   Example:
-    {"runId":"run_1"}
+    {"view":"concise"}
 
 Example:
-  splitch experiment-results post <experiment-id> --body-json '{"runId":"run_1"}' --json",
+  splitch experiment-results post <experiment-id> --body-json '{"view":"concise"}' --json",
     "experiments create": "Create an Experiment draft.
 
 Usage:
@@ -2011,8 +2013,8 @@ Usage:
   splitch experiment-results <action> [arguments] [flags]
 
 Commands:
-  get             Get an Experiment's results envelope: state ready with StatsOutput, state no_data naming the missing input, or state no_run naming Start when the Experiment has never had a Run.
-  post            Get an Experiment's results envelope: state ready with StatsOutput, state no_data naming the missing input, or state no_run naming Start when the Experiment has never had a Run.
+  get             Get an Experiment's results: readiness, blockedBy, and reasons first; detailed stats by default; view=concise for the verdict block only. States: ready, no_data (names the missing input), or no_run (names Start).
+  post            Get an Experiment's results: readiness, blockedBy, and reasons first; detailed stats by default; view=concise for the verdict block only. States: ready, no_data (names the missing input), or no_run (names Start).
 
 Flags:
   -h, --help  [type: boolean; default: false] Show help and exit.

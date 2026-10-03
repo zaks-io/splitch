@@ -3,7 +3,7 @@ import { EnvironmentExposureStatusResponseSchema } from "../environment-exposure
 import { type ApiRouteContract, defineApiRoute } from "../openapi-route";
 import { deleteClosed, readOnlyClosed } from "../route-effects";
 import { OrganizationUsageResponseSchema } from "../resource-envelopes-usage";
-import { AnalysisResultsEnvelopeSchema } from "../stats-result-contract";
+import { ExperimentResultsResponseSchema } from "../experiment-results-response";
 import { TestEvaluationRequestSchema, TestEvaluationResponseSchema } from "../wire-envelopes-core";
 import {
   AppParams,
@@ -21,6 +21,10 @@ import {
   EntityStorePrivacyMutationSchema,
   EntityStorePrivacyRequestSchema,
 } from "./routes-analysis-privacy";
+import {
+  OptionalResultsSelectorSchema,
+  ResultsSelectorSchema,
+} from "./routes-analysis-results-selector";
 
 /**
  * Control-plane-AUTHORIZED reads that do not all live on the Control Plane Worker:
@@ -28,17 +32,14 @@ import {
  * (Analysis Worker), and the unauthenticated OpenAPI discovery doc (Control Plane
  * Worker). Every one of them is ADDRESSED at the Control Plane, which authorizes
  * the caller and delegates to the owner over a service binding (ADR-0046).
+ * Experiment results are enriched by the Control Plane result producer before
+ * the response leaves (readiness / blockedBy / reasons; plan 0.15).
  * Endpoint canon: docs/spec/control-plane/endpoints-test-eval-analytics.md.
  */
 
 const AUTH = "control-plane-token" as const;
 const RATE = "control-plane-actor" as const;
 
-const ResultsSelectorSchema = z.object({ runId: z.string().optional() }).strict();
-const ConclusionResultsSelectorSchema = ResultsSelectorSchema.extend({
-  dataWatermark: z.string().datetime({ offset: true }).optional(),
-}).strict();
-const OptionalResultsSelectorSchema = ConclusionResultsSelectorSchema.default({});
 const ExposureStatusDeleteQuerySchema = z
   .object({ environmentId: z.string().min(1).optional() })
   .strict();
@@ -75,9 +76,9 @@ export const analysisRoutes = [
     method: "GET",
     path: "/apps/:appId/envs/:environmentId/experiments/:experimentId/results",
     summary:
-      "Get an Experiment's results envelope: state ready with StatsOutput, state no_data naming the missing input, or state no_run naming Start when the Experiment has never had a Run.",
+      "Get an Experiment's results: readiness, blockedBy, and reasons first; detailed stats by default; view=concise for the verdict block only. States: ready, no_data (names the missing input), or no_run (names Start).",
     request: { params: ExperimentParams, query: ResultsSelectorSchema },
-    response: AnalysisResultsEnvelopeSchema,
+    response: ExperimentResultsResponseSchema,
     auth: AUTH,
     rateLimit: RATE,
     idempotency: "none",
@@ -101,9 +102,9 @@ export const analysisRoutes = [
     method: "POST",
     path: "/apps/:appId/envs/:environmentId/experiments/:experimentId/results",
     summary:
-      "Get an Experiment's results envelope: state ready with StatsOutput, state no_data naming the missing input, or state no_run naming Start when the Experiment has never had a Run.",
+      "Get an Experiment's results: readiness, blockedBy, and reasons first; detailed stats by default; view=concise for the verdict block only. States: ready, no_data (names the missing input), or no_run (names Start).",
     request: { params: ExperimentParams, body: OptionalResultsSelectorSchema },
-    response: AnalysisResultsEnvelopeSchema,
+    response: ExperimentResultsResponseSchema,
     auth: AUTH,
     rateLimit: RATE,
     idempotency: "none",

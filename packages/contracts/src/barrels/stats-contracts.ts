@@ -53,6 +53,7 @@ export {
 } from "../stats-input-contract";
 export type {
   AnalysisResultsEnvelope,
+  AnalysisResultsMissingInput,
   ArmResult,
   CupedAttributeSource,
   CupedMethod,
@@ -72,6 +73,7 @@ export type {
 } from "../stats-result-contract";
 export {
   AnalysisResultsEnvelopeSchema,
+  AnalysisResultsMissingInputSchema,
   ArmResultSchema,
   CupedAttributeSourceSchema,
   CupedMethodSchema,

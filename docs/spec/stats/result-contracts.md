@@ -170,14 +170,13 @@ sequence, the verdict is valid at any look (Kruschke 2018).
 Non-finite bounds, an inverted interval (`lower > upper`), or a non-positive-width ROPE
 (`ropeLower >= ropeUpper`) throw. A point interval (`lower === upper`) is allowed.
 
-## Analysis Results envelope
+## Analysis Results envelope (Analysis Worker)
 
-The control-plane Results read uses the shipped `AnalysisResultsEnvelopeSchema` from
-`@splitch/contracts`; there is no parallel Results type. Its strict `state: "ready"` member contains
-`run_id`, `control_variant`, and `stats`. It admits `data_watermark` and `result_token` only as an
-all-or-nothing pair. A Results read that supports Conclude returns both; the result-delivery runtime
-slice owns populating them. Their absence keeps the current read compatible but provides no evidence
-inputs for Conclude.
+The Analysis Worker returns `AnalysisResultsEnvelopeSchema`. Its strict `state: "ready"` member
+contains `run_id`, `control_variant`, and `stats`. It admits `data_watermark` and `result_token`
+only as an all-or-nothing pair. A Results read that supports Conclude returns both; the
+result-delivery runtime slice owns populating them. Their absence keeps the current read compatible
+but provides no evidence inputs for Conclude.
 
 `data_watermark` is the server-selected inclusive `ingest_ts` boundary used by the complete read. It
 comes from the inclusive `deduped_exposures.watermark_ts` Copy Pipe boundary, so rows whose
@@ -207,6 +206,37 @@ A ready envelope also carries `run_commitments`, what the Run froze at Start
 A legacy Run never reports a target or duration it did not record. Analysis refuses a Run frozen
 under a version it does not implement with `VALIDATION_ERROR` instead of analyzing it under a
 different engine.
+
+## Control Plane result producer (CLI, MCP, panel)
+
+Public `experiment_results_get` / `experiment_results_post` responses are produced by the Control
+Plane (`ExperimentResultsResponseSchema`), not the raw Analysis envelope. The producer resolves
+Control identity against the Run Snapshot, Run lifecycle, planned duration (`run_commitments` /
+D1), caller conclude permission, and analysis evidence, then emits:
+
+1. `view`: `detailed` (default) or `concise`
+2. `state`: `ready` | `no_data` | `no_run` (same members as Analysis; never null or a bare error for
+   those cases)
+3. `readiness.statistical`: evidence-side gate checks pass (Control identity, SRM, activation
+   balance, engine status, underpowered, decision-valid membership)
+4. `readiness.concludeExecutable`: Conclude can run for this caller on this evidence right now
+   (statistical readiness plus planned duration, running lifecycle, evidence handles, App
+   owner/admin)
+5. `blockedBy`: failing decision-gate check ids
+6. `reasons`: human-readable failure details (gate checks plus lifecycle / permission / evidence
+   handle blockers)
+7. Then, for `view: "detailed"` and `state: "ready"`, the unchanged Analysis statistics (`stats`)
+   and the full `gate` object
+
+`view: "concise"` is a separate schema member: same readiness / blockedBy / reasons / operational
+handles (`run_id`, `run_number`, `run_status`, `control`, `control_variant`, `data_watermark`,
+`result_token`, `run_commitments`, `gate`) without `stats`. It does not delete required fields from
+the detailed member. Released CLI 0.7.5 and SDK 0.9.1 tolerate unknown additive fields; existing
+field names and Analysis enums are not renamed or extended.
+
+Ship / do-not-ship recommendation copy is intentionally absent until the ship policy is locked at
+Run Start (Phase 2.4). The panel Experiment Results read calls the same producer and maps into its
+camelCase projection; it does not re-derive the gate.
 
 ## Sources
 

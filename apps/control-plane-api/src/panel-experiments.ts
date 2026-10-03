@@ -1,14 +1,9 @@
 import {
-  type AnalysisResultsEnvelope,
-  evaluateExperimentDecisionGate,
   experimentSignificanceDisplays,
   experimentSrmDiagnostics,
-  type PlannedDurationEvidence,
-  resolveAnalysisControlIntegrity,
-  resolveFrozenControlIdentity,
+  type ExperimentResultsResponse,
 } from "@splitch/contracts";
 import {
-  isAnalysisResultsNoData,
   type PanelExperimentListItem,
   type PanelExperimentResultsOutput,
   parseAnalysisResults,
@@ -17,12 +12,16 @@ import { appScope, envScope, type Repository } from "@splitch/db";
 import type { PerformanceSpanRecorder } from "@splitch/observability/performance-spans";
 import { fetchAnalysis } from "./analysis-binding";
 import { analysisResultsRequest } from "./analysis-results-request";
+import {
+  canConcludeWithRole,
+  enrichAnalysisResultsResponse,
+  produceNoRunResults,
+} from "./experiment-results-enrich";
 import { experimentNotFound, runNotFound } from "./experiment-errors";
 import { runningExperimentHealth } from "./experiment-health";
 import { experimentResponse, jsonArray, jsonObject } from "./experiment-model";
 import { metricResponse } from "./metric-segment-shared";
 import { panelScopeAccessError } from "./panel-scope-access";
-import { runDurationEvidence } from "./run-duration-evidence";
 
 interface PanelExperimentsDeps {
   repo: Repository;
@@ -200,10 +199,11 @@ async function referencedEventDefinitions(
 }
 
 /**
- * Results for exactly one Run, with the ship-decision gate evaluated here.
+ * Results for exactly one Run, via the shared Control Plane result producer.
  *
- * The gate is a Worker invariant (ADR-0030): the Panel renders this refusal and
- * never recomputes it, so the Panel, CLI, and MCP skins cannot disagree.
+ * The producer is a Worker invariant (ADR-0030 / plan 0.15): the Panel renders
+ * its gate and readiness and never recomputes them, so the Panel, CLI, and MCP
+ * skins cannot disagree.
  */
 export async function panelExperimentResults(
   deps: PanelExperimentsDeps,
@@ -214,11 +214,12 @@ export async function panelExperimentResults(
   if (accessError) return accessError;
 
   const scope = envScope(input.appId, input.environmentId);
-  const [experiment, selectedRun] = await Promise.all([
+  const [experiment, selectedRun, membership] = await Promise.all([
     deps.repo.experiments.getExperiment(scope, input.experimentId),
     input.runId
       ? deps.repo.experiments.getRun(scope, input.runId)
       : deps.repo.experiments.findLatestRunForExperiment(scope, input.experimentId),
+    deps.repo.identity.getAppMembership(appScope(input.appId), input.actorId),
   ]);
   if (!experiment) return experimentNotFound(requestId);
 
@@ -228,14 +229,10 @@ export async function panelExperimentResults(
   // missing Run id is still RUN_NOT_FOUND — that is a different condition.
   if (!run) {
     if (input.runId !== undefined) return runNotFound(requestId);
-    const output: PanelExperimentResultsOutput = {
-      state: "no_run",
-      recommendedAction: "START_A_RUN",
-    };
-    return Response.json(output);
+    return Response.json(panelFromProducer(produceNoRunResults("detailed")));
   }
 
-  const results = await parseAnalysisResults(
+  const analysis = await parseAnalysisResults(
     await fetchAnalysis(
       deps.analysis,
       analysisResultsRequest(
@@ -253,61 +250,50 @@ export async function panelExperimentResults(
     run.id,
   );
 
-  // Provenance, not current configuration: the baseline comes from the Run's own
-  // immutable control_variant_id resolved inside the Variant set that same Run
-  // froze (SPL-184, ADR-0002). Reading the Experiment's default Variant here
-  // instead would relabel a historical Run's arms whenever somebody edits it.
-  // The Analysis envelope carries its own control_variant from the Run Snapshot
-  // written at Start (ADR-0047). It cannot relabel the frozen Run, but disagreement
-  // is an integrity failure because the statistics may use a different Control.
-  const control = resolveAnalysisControlIntegrity(
-    resolveFrozenControlIdentity(run.controlVariantId, run.variantSet),
-    results.control_variant,
-  );
-  const runStatus = run.status === "ended" ? ("ended" as const) : ("running" as const);
-  if (isAnalysisResultsNoData(results)) {
-    const output: PanelExperimentResultsOutput = {
-      state: "no_data",
-      runId: run.id,
-      runNumber: run.runNumber,
-      runStatus,
-      control,
-      missing: results.missing,
-    };
-    return Response.json(output);
-  }
-  return Response.json(
-    panelReadyResults(results, {
-      runId: run.id,
-      runNumber: run.runNumber,
-      runStatus,
-      control,
-      duration: runDurationEvidence(run, results.data_watermark),
-    }),
-  );
+  const produced = enrichAnalysisResultsResponse(analysis, run, {
+    view: "detailed",
+    canConclude: canConcludeWithRole(membership?.role),
+  });
+  return Response.json(panelFromProducer(produced));
 }
 
-function panelReadyResults(
-  results: Extract<AnalysisResultsEnvelope, { state: "ready" }>,
-  run: Pick<
-    Extract<PanelExperimentResultsOutput, { state: "ready" }>,
-    "runId" | "runNumber" | "runStatus" | "control"
-  > & { duration: PlannedDurationEvidence },
-): Extract<PanelExperimentResultsOutput, { state: "ready" }> {
-  const { duration, ...identity } = run;
+/**
+ * Map the shared producer (public snake_case + readiness) onto the Panel's
+ * camelCase projection. Visual treatment stays in the Panel; verdict math does not.
+ */
+function panelFromProducer(produced: ExperimentResultsResponse): PanelExperimentResultsOutput {
+  if (produced.state === "no_run") {
+    return { state: "no_run", recommendedAction: "START_A_RUN" };
+  }
+  if (produced.state === "no_data") {
+    return {
+      state: "no_data",
+      runId: produced.run_id,
+      runNumber: produced.run_number,
+      runStatus: produced.run_status,
+      control: produced.control,
+      missing: produced.missing,
+    };
+  }
+  if (produced.view !== "detailed") {
+    throw new Error("panel Experiment Results requires the detailed producer view");
+  }
   const ready = {
-    state: "ready",
-    ...identity,
-    stats: results.stats,
-    srm: experimentSrmDiagnostics(results.stats),
-    gate: evaluateExperimentDecisionGate(results.stats, run.control, duration),
-    significance: experimentSignificanceDisplays(results.stats),
-  } as const;
-  return results.data_watermark && results.result_token
+    state: "ready" as const,
+    runId: produced.run_id,
+    runNumber: produced.run_number,
+    runStatus: produced.run_status,
+    control: produced.control,
+    stats: produced.stats,
+    srm: experimentSrmDiagnostics(produced.stats),
+    gate: produced.gate,
+    significance: experimentSignificanceDisplays(produced.stats),
+  };
+  return produced.data_watermark && produced.result_token
     ? {
         ...ready,
-        dataWatermark: results.data_watermark,
-        resultToken: results.result_token,
+        dataWatermark: produced.data_watermark,
+        resultToken: produced.result_token,
       }
     : ready;
 }
