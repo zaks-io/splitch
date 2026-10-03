@@ -14,6 +14,7 @@ import {
   RecommendationUnavailableReasonSchema,
   ShipRecommendationSchema,
 } from "./ship-recommendation";
+import { CohortEffectDiagnosticSchema } from "./cohort-effect";
 import { SrmRootCauseClassificationSchema } from "./srm-root-cause";
 import { AnalysisResultsMissingInputSchema, StatsOutputSchema } from "./stats-result-contract";
 
@@ -53,6 +54,11 @@ const srmRootCauseField = {
   srm_root_cause: SrmRootCauseClassificationSchema.optional(),
 } as const;
 
+/** Detailed-only diagnostic; concise Results never carry the cohort curve. */
+const cohortEffectField = {
+  cohort_effect: CohortEffectDiagnosticSchema.optional(),
+} as const;
+
 const readyDetailedSchema = z
   .object({
     view: z.literal("detailed"),
@@ -64,6 +70,7 @@ const readyDetailedSchema = z
     ...evidencePair,
     run_commitments: RunCommitmentsSchema.optional(),
     ...srmRootCauseField,
+    ...cohortEffectField,
     stats: StatsOutputSchema,
   })
   .strict()

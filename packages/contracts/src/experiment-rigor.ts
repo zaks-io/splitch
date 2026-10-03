@@ -29,3 +29,5 @@ export { computeShipRecommendation } from "./ship-recommendation-compute";
 export type { ShipRecommendationResult } from "./ship-recommendation-compute";
 // biome-ignore lint/performance/noReExportAll: each source module owns one part of a cohesive rigor surface
 export * from "./srm-root-cause";
+// biome-ignore lint/performance/noReExportAll: each source module owns one part of a cohesive rigor surface
+export * from "./cohort-effect";
