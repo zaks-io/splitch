@@ -2,7 +2,7 @@ import { commandUsageLine } from "./command-positionals.js";
 import { CLI_COMMANDS, type CliCommandDefinition, META_COMMANDS } from "./command-registry.js";
 import { operationBehaviorNotes } from "./help-behavior-notes.js";
 import { renderBodyJsonSection } from "./help-body-json.js";
-import { commandDescription } from "./help-command-description.js";
+import { commandDescription, commandDescriptionBrief } from "./help-command-description.js";
 import { commandExample } from "./help-command-example.js";
 import { commandFlags, formatFlags, helpFlag, metaFlags, versionFlag } from "./help-flags.js";
 import { META_DESCRIPTIONS, META_EXAMPLES } from "./help-meta.js";
@@ -104,7 +104,7 @@ function renderGroupHelp(group: string): string {
     "",
     "Commands:",
     ...commands.map(
-      (command) => `  ${(command.path[1] ?? "").padEnd(16)}${commandDescription(command)}`,
+      (command) => `  ${(command.path[1] ?? "").padEnd(16)}${commandDescriptionBrief(command)}`,
     ),
     "",
     "Flags:",

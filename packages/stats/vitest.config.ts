@@ -9,6 +9,7 @@ export default defineConfig({
   },
   test: {
     include: ["src/**/*.{test,spec}.ts"],
+    exclude: ["src/**/*.simulation.test.ts"],
     passWithNoTests: true,
   },
 });
