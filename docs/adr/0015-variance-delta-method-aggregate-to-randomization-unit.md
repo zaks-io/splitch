@@ -171,8 +171,8 @@ replace the Fieller reporting interval on `arm_results`.
 Plan item 0.8. Two-sided Fieller Guardrail checks are conservative for a one-sided safety claim,
 not invalid. analysis-v2 switches Guardrail decisions to a one-sided always-valid bound;
 legacy-unversioned and analysis-v1 keep the two-sided Fieller rule above so their result tokens
-stay byte-identical. `SUPPORTED_ANALYSIS_VERSIONS` / `CURRENT_ANALYSIS_VERSION` are unchanged:
-v2 remains defined but unsupported for Start until its observation-path slice lands.
+stay byte-identical. The ingestion-ordered observation path makes analysis-v2 supported and
+`CURRENT_ANALYSIS_VERSION`: new Starts freeze v2 and pick up the one-sided Guardrail bound.
 
 ### Bound
 
