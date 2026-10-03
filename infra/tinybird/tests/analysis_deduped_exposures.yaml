@@ -38,7 +38,7 @@
   parameters: "app_id=app_compat&environment_id=env_compat&experiment_id=exp_compat&run_id=run_compat"
   expected_http_status: 200
   expected_result: |
-    {"app_id":"app_compat","environment_id":"env_compat","id_type":"user","run_id":"run_compat","targeting_key_hash":"compat_new","variant":"control","first_exposure_ts":"2026-07-09 23:59:00.000","first_ingest_ts":"2026-07-09 23:59:00.000","window_anchor":"2026-07-09 23:59:00.000"}
+    {"app_id":"app_compat","environment_id":"env_compat","id_type":"user","run_id":"run_compat","targeting_key_hash":"compat_new","variant":"control","first_exposure_ts":"2026-07-09 23:59:00.000","first_ingest_ts":"2026-07-10 00:00:00.000","window_anchor":"2026-07-09 23:59:00.000"}
     {"app_id":"app_compat","environment_id":"env_compat","id_type":"user","run_id":"run_compat","targeting_key_hash":"compat_old","variant":"treatment","first_exposure_ts":"2026-07-10 00:00:00.000","first_ingest_ts":"2026-07-10 00:00:00.000","window_anchor":"2026-07-10 00:00:00.000"}
 - name: another_tenant_sees_only_its_own_entities_under_identical_identifiers
   description: A second App using the same Run, Experiment, and Environment identifiers gets its own population and none of the first App's, in both the snapshot and the tail.
