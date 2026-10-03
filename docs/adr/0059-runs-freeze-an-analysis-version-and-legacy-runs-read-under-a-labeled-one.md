@@ -78,6 +78,21 @@ Worker rolled back below a Run's version refuses that Run until it is rolled for
   through it fail loud until the Control Plane deploys.
 - `run_snapshots` gains nullable columns, so old rows read as legacy with no rewrite.
 
+## Version table
+
+Dispatch is one exhaustive switch over known versions. Unknown versions refuse. There is no
+silent fallthrough to the newest.
+
+| Version              | SRM gate (Exposure and activated)           | Family correction | Notes                                                                                           |
+| -------------------- | ------------------------------------------- | ----------------- | ----------------------------------------------------------------------------------------------- |
+| `legacy-unversioned` | Chi-square, mismatch at p < 0.001           | BH                | Compatibility implementation as of versioning start; token omits `analysisVersion`              |
+| `analysis-v1`        | Chi-square, mismatch at p < 0.001           | BH                | First frozen version; same estimators as legacy                                                 |
+| `analysis-v2`        | Sequential Dirichlet-multinomial martingale | BH                | Continuous-monitoring SRM. Keeps BH: ADR-0014 recorded BH stop FDR 0 (alpha 0.05), under target |
+
+Activation-rate balance stays chi-square under every version until a sequential equality-of-rates
+test is chosen. BH-G remains a typed comparator; it is not selected for analysis-v2 because the
+recorded stop-at-first-crossing simulation did not show plain BH exceeding the FDR target.
+
 ## Sources
 
 - [Conclusion and decision gate](../spec/control-plane/conclusion-and-winner-promotion.md)

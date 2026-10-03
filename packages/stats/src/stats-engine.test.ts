@@ -3,6 +3,30 @@ import type { StatsInput } from "@splitch/contracts";
 import { analyzeStats } from "./stats-engine";
 import { ENGINE_RUN_ID, binomialStatsInput, exposure } from "./stats-engine-test-helpers";
 
+describe("StatsEngine.analyze analysis_version dispatch", () => {
+  it("dispatches SRM by analysis_version and keeps BH under v2", async () => {
+    const shared = {
+      controlN: 900,
+      treatmentN: 100,
+      controlConversions: 90,
+      treatmentConversions: 20,
+    };
+    const v1 = await analyzeStats(
+      binomialStatsInput({ ...shared, analysisVersion: "analysis-v1" }),
+    );
+    const v2 = await analyzeStats(
+      binomialStatsInput({ ...shared, analysisVersion: "analysis-v2" }),
+    );
+
+    expect(v1.srm.srm_is_mismatch).toBe(true);
+    expect(v2.srm.srm_is_mismatch).toBe(true);
+    expect(v2.srm.srm_p_value).not.toBe(v1.srm.srm_p_value);
+    expect(v1.arm_results.map((arm) => arm.is_significant)).toEqual(
+      v2.arm_results.map((arm) => arm.is_significant),
+    );
+  });
+});
+
 describe("StatsEngine.analyze", () => {
   it("returns a running infinite CI when either arm has N=0", async () => {
     const output = await analyzeStats(
@@ -45,6 +69,7 @@ describe("StatsEngine.analyze", () => {
   it("turns divergent CI math into an error status instead of a finite corrupt CI", async () => {
     const input: StatsInput = {
       run_id: ENGINE_RUN_ID,
+      analysis_version: "analysis-v1",
       confidence_level: 0.95,
       horizon: "sequential",
       allocation: { control: 50, treatment: 50 },

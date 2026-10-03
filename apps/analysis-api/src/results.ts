@@ -192,6 +192,9 @@ async function readResultsComputationFromTinybird(
 
   const input = StatsInputSchema.parse({
     ...run,
+    // Bind the Run's frozen (or legacy) version so the engine cannot silently
+    // re-decide under a newer implementation (ADR-0059).
+    analysis_version: commitments.analysis_version,
     exposures,
     metric_values,
     ...(prePeriodRows.length > 0

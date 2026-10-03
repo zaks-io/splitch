@@ -3,6 +3,8 @@
 export { resultTokenStats } from "../result-token-stats";
 export type { ResultTokenInput, RunCommitments, TargetNSource } from "../run-commitments";
 export {
+  ANALYSIS_V1_VERSION,
+  ANALYSIS_V2_VERSION,
   CURRENT_ANALYSIS_VERSION,
   createResultToken,
   DEFAULT_PLANNED_DURATION_DAYS,

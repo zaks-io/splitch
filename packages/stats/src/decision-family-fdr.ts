@@ -15,7 +15,7 @@ export interface DecisionFamilyCorrectionInput<Result extends DecisionFamilyArmR
   readonly decision_family: readonly DecisionFamilyMember[];
   readonly confidence_level: number;
   readonly control_variant?: string;
-  /** Defaults to `bh`. Production keeps BH until analysis_version selects BH-G. */
+  /** Defaults to `bh`. analysisVersionPolicy passes the Run's selected procedure. */
   readonly family_correction?: FamilyCorrectionProcedure;
 }
 

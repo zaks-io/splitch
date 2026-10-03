@@ -31,7 +31,8 @@ import {
  * Revising earlier counts violates the contract. Moving an Entity into the
  * `__multiple__` quarantine after it was already counted in an arm is one such
  * revision. Reconciling those corrections into the filtration is a later slice.
- * This function is not wired into the decision gate.
+ * analysis-v2 selects this martingale for Exposure and activated-population SRM
+ * via `analysisVersionPolicy`; analysis-v1 and legacy keep chi-square.
  */
 export const SEQUENTIAL_SRM_SOURCE = {
   family: "dirichlet-multinomial-mixture-martingale",

@@ -4,15 +4,18 @@ import type {
   HealthMetrics,
   SrmResult,
 } from "@splitch/contracts";
+import type { SrmProcedure } from "./analysis-version-policy";
 import { chiSquareUpperTail } from "./chi-square";
 import {
   activatedExposureRows,
   dedupedExposureRowsForVariant,
   MULTIPLE_VARIANT,
 } from "./exposure-denominator";
+import { resolveSrmProcedure, sequentialSrmAgainstAllocation } from "./srm-checker-sequential";
 import { expectedCountsForOutput, safeRate, sumCounts, zeroCounts } from "./srm-counts";
+import { SRM_MISMATCH_P_VALUE } from "./srm-checker-threshold";
 
-export const SRM_MISMATCH_P_VALUE = 0.001;
+export { SRM_MISMATCH_P_VALUE };
 
 export interface SrmCheckerInput {
   readonly run_id: string;
@@ -20,6 +23,8 @@ export interface SrmCheckerInput {
   readonly exposures: readonly DedupeExposureRow[];
   readonly activation_rows?: readonly ActivationRow[];
   readonly has_activation_gate?: boolean;
+  /** Defaults to chi_square (analysis-v1 / legacy). analysis-v2 selects sequential_martingale. */
+  readonly srm_procedure?: SrmProcedure;
 }
 
 export interface SrmCheckerOutput {
@@ -36,9 +41,10 @@ interface InternalChiSquareResult {
 export function checkSrmHealth(input: SrmCheckerInput): SrmCheckerOutput {
   const variants = allocationVariants(input.allocation);
   assertExposureVariantsAreDeclared(input, variants);
+  const procedure = resolveSrmProcedure(input.srm_procedure);
 
   const dedupedCounts = dedupedCountsByVariant(input, variants);
-  const fullSrm = chiSquareAgainstAllocation(dedupedCounts, input.allocation, variants);
+  const fullSrm = srmAgainstAllocation(dedupedCounts, input.allocation, variants, procedure);
   const hasActivationGate = input.has_activation_gate ?? input.activation_rows !== undefined;
   const activatedCounts = hasActivationGate ? activatedCountsByVariant(input, variants) : null;
   const activatedSrm =
@@ -46,9 +52,12 @@ export function checkSrmHealth(input: SrmCheckerInput): SrmCheckerOutput {
       ? null
       : activationGuardrail(
           activatedCounts,
-          () => chiSquareAgainstAllocation(activatedCounts, input.allocation, variants),
+          () => srmAgainstAllocation(activatedCounts, input.allocation, variants, procedure),
           variants,
         );
+  // Activation balance tests equality of unknown rates, not the declared
+  // allocation multinomial. Keep chi-square for every analysis version until
+  // a sequential equality-of-rates test is chosen (plan 0.6).
   const activationBalance =
     activatedCounts === null
       ? null
@@ -195,6 +204,19 @@ function activatedCountsByVariant(
   }
 
   return counts;
+}
+
+function srmAgainstAllocation(
+  observed: Readonly<Record<string, number>>,
+  allocation: Readonly<Record<string, number>>,
+  variants: readonly string[],
+  procedure: SrmProcedure,
+): InternalChiSquareResult {
+  if (procedure === "sequential_martingale") {
+    const sequential = sequentialSrmAgainstAllocation(observed, allocation);
+    return { ...sequential, chi2_stat: 0 };
+  }
+  return chiSquareAgainstAllocation(observed, allocation, variants);
 }
 
 function chiSquareAgainstAllocation(

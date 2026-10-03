@@ -119,6 +119,7 @@ interface StatsEngine {
 
 interface StatsInput {
   run_id: string;
+  analysis_version: string;              // frozen at Run Start (ADR-0059); defaults to analysis-v1 for non-Run fixtures
   confidence_level: number;              // default 0.95
   horizon: 'sequential' | 'fixed';       // locked at Run Start; default 'sequential'
   target_n?: integer;                    // sequential tuning, locked at Run Start when set
@@ -167,7 +168,8 @@ interface StatsOutput {
 `StatsOutput` member shapes (`ArmResult`, `SrmResult`, `GuardrailResult`, `HealthMetrics`,
 `DimensionResult`) are defined in [result-contracts.md](result-contracts.md).
 
-The Run-mode fields are immutable inputs from Run Start. `horizon='fixed'` requires
+The Run-mode fields are immutable inputs from Run Start. `analysis_version` selects the SRM gate
+and family-correction procedure (ADR-0059 version table). `horizon='fixed'` requires
 `sample_size_locked` and disables peeking until that locked sample size is reached; sequential Runs
 may set `target_n` but must not send `sample_size_locked`. `allocation` and `control_variant` come
 from the same locked Run snapshot so SRM, Control selection, and decision families cannot drift
@@ -191,9 +193,11 @@ clock time rather than after every Conversion Window closes). Sequential SRM (it
 this observation contract; it does not invent a different filtration.
 
 The Analysis Worker (`apps/analysis-api/src/results.ts`) builds one `StatsInput` per Results read
-and calls the engine. It does not incrementally append to a previous `StatsInput`. Counts that
-look like "new Entities since last look" are a difference of two full recomputes, not a martingale
-increment stored on disk.
+and calls the engine, binding `analysis_version` from the Run Snapshot commitments. It does not
+incrementally append to a previous `StatsInput`. Counts that look like "new Entities since last
+look" are a difference of two full recomputes, not a martingale increment stored on disk. Under
+analysis-v2 the sequential SRM gate evaluates the martingale on the current cumulative arm counts
+as one look on the sufficient statistic.
 
 ### Evidence watermark
 

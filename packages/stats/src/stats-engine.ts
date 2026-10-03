@@ -7,6 +7,7 @@ import {
   type StatsInput,
   type StatsOutput,
 } from "@splitch/contracts";
+import { analysisVersionPolicy } from "./analysis-version-policy";
 import { applyDecisionFamilyCorrection } from "./decision-family-fdr";
 import {
   analyzeDimensionResults,
@@ -37,12 +38,14 @@ export async function analyzeStats(
 ): Promise<StatsOutput> {
   const input = StatsInputSchema.parse(rawInput);
   validateLockedRunInput(input);
+  const policy = analysisVersionPolicy(input.analysis_version);
 
   const { srm, health } = checkSrmHealth({
     run_id: input.run_id,
     allocation: input.allocation,
     exposures: input.exposures,
     activation_rows: input.activation_rows,
+    srm_procedure: policy.srm,
   });
   const adapters = defaultArmResultAdapters(options);
   const analysisExposures = analysisExposureRows({
@@ -57,11 +60,13 @@ export async function analyzeStats(
     decision_family: input.decision_family,
     confidence_level: input.confidence_level,
     control_variant: input.control_variant,
+    family_correction: policy.familyCorrection,
   } satisfies {
     arm_results: CorrectableArmResult[];
     decision_family: readonly DecisionFamilyMember[];
     confidence_level: number;
     control_variant: string;
+    family_correction: typeof policy.familyCorrection;
   });
   const correctedArmResults = corrected.arm_results.slice(0, armResults.length) as ArmResult[];
   const correctedDimensionResults = dimensionResultsWithCorrectedArms(

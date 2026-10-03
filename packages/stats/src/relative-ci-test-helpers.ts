@@ -80,6 +80,7 @@ function statsInput(
 ): StatsInput {
   return {
     run_id: RUN_ID,
+    analysis_version: "analysis-v1",
     confidence_level: 1 - ALPHA,
     horizon,
     ...(horizon === "sequential"

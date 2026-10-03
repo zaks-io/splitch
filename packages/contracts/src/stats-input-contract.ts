@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { MetricKindSchema, MetricRefSchema } from "./leaf-schemas-experiment";
+import { ANALYSIS_V1_VERSION } from "./run-commitments";
 import { CupedAttributeSourceSchema, DimensionClassSchema } from "./stats-result-contract";
 
 const MetricIdSchema = MetricRefSchema.shape.metricId;
@@ -208,6 +209,13 @@ export type MetricVarianceConfig = z.infer<typeof MetricVarianceConfigSchema>;
 export const StatsInputSchema = z
   .object({
     run_id: z.string(),
+    /**
+     * Which analysis implementation reads this evidence (ADR-0059). Callers that
+     * bind a Run must pass the frozen (or legacy) version. The schema default is
+     * analysis-v1 so non-Run unit fixtures keep the compatibility engine without
+     * inventing a newer commitment.
+     */
+    analysis_version: z.string().min(1).default(ANALYSIS_V1_VERSION),
     confidence_level: z.number().default(0.95),
     horizon: z.enum(["sequential", "fixed"]).default("sequential"),
     target_n: IntegerSchema.optional(),

@@ -70,8 +70,10 @@ describe("result token analysis version (ADR-0059)", () => {
     }
   });
 
-  it("supports the version new Runs freeze", () => {
+  it("supports every named version this deployment can analyze", () => {
+    expect(SUPPORTED_ANALYSIS_VERSIONS).toEqual(["analysis-v1", "analysis-v2"]);
     expect(SUPPORTED_ANALYSIS_VERSIONS).toContain(CURRENT_ANALYSIS_VERSION);
+    expect(CURRENT_ANALYSIS_VERSION).toBe("analysis-v2");
   });
 });
 

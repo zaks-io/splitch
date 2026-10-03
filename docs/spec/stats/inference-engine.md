@@ -201,10 +201,12 @@ a `null` `ci_lower`, an undefined relative lift with a finite `ci_lower`, or a `
 ## Family FDR (step 8)
 
 The final stage converts per-(Metric, Variant) p-values into `is_significant` across the locked
-goal-metric × Variant family. Production still applies Benjamini-Hochberg. BH-G (Benjamini-Yekutieli
-with the harmonic sum) is implemented as a typed `family_correction` argument and is not selected
-until `analysis_version` wiring lands. Family definition, algorithms, "None" option, and exclusion
-rules live in [multiple-comparisons-fdr.md](multiple-comparisons-fdr.md).
+goal-metric × Variant family. Production selects Benjamini-Hochberg through `analysis_version`
+for legacy-unversioned, analysis-v1, and analysis-v2. BH-G (Benjamini-Yekutieli with the
+harmonic sum) is implemented as a typed `family_correction` argument. analysis-v2 keeps BH
+because the ADR-0014 stop-at-first-crossing simulation recorded BH FDR of 0 under alpha 0.05.
+Family definition, algorithms, "None" option, and exclusion rules live in
+[multiple-comparisons-fdr.md](multiple-comparisons-fdr.md).
 
 ## Composed inference contract
 
@@ -250,8 +252,9 @@ Dependence and stopping:
   aggregate. Johari, Pekelis, Walsh Theorem 7.3 gives FDR control for BH over always-valid p-values
   only under a restricted stopping class and independence. Proposition C.3 gives FDR control for
   BH-G under an arbitrary stopping time and arbitrary dependence.
-- Production still uses BH. The BH-G comparator exists so `analysis_version` can select it without
-  a second implementation of the rank-and-cut step.
+- Production versions through analysis-v2 use BH. The BH-G comparator stays typed so a later
+  analysis version can select it without a second implementation of the rank-and-cut step when an
+  audit shows BH exceeding the FDR target under stopping.
 
 ## Failure contracts
 

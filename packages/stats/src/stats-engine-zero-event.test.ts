@@ -155,6 +155,7 @@ function armResult(
 function zeroEventDecisionFamilyStatsInput(): StatsInput {
   return {
     run_id: ENGINE_RUN_ID,
+    analysis_version: "analysis-v1",
     confidence_level: 0.95,
     horizon: "sequential",
     allocation: { control: 50, treatment: 50 },

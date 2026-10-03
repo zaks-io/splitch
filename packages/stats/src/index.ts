@@ -16,6 +16,8 @@ export {
 export { computeSequentialCI, SEQUENTIAL_CI_SOURCE, SequentialCI } from "./sequential-ci";
 export { computeFixedHorizonCI, FIXED_HORIZON_CI_SOURCE, FixedHorizonCI } from "./fixed-horizon-ci";
 export { analyzeStats, StatsEngine } from "./stats-engine";
+export { analysisVersionPolicy } from "./analysis-version-policy";
+export type { AnalysisVersionPolicy, SrmProcedure } from "./analysis-version-policy";
 export { applyGuardrailBoundChecks } from "./guardrail-bound-check";
 export { applyDecisionFamilyCorrection } from "./decision-family-fdr";
 export {

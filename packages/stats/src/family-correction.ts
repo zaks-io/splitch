@@ -5,9 +5,9 @@ export type FamilyCorrectionProcedure = (typeof FAMILY_CORRECTION_PROCEDURES)[nu
 const PROCEDURES = new Set<string>(FAMILY_CORRECTION_PROCEDURES);
 
 /**
- * Production still defaults to Benjamini-Hochberg. BH-G (Benjamini-Yekutieli
- * with the harmonic sum) is the comparator for arbitrary stopping; analysis
- * version wiring chooses it later.
+ * Production defaults to Benjamini-Hochberg when the caller omits the argument.
+ * analysisVersionPolicy selects the procedure for a frozen Run; analysis-v2
+ * keeps BH because the recorded stop FDR did not exceed the target.
  */
 export function resolveFamilyCorrectionProcedure(
   procedure: FamilyCorrectionProcedure | undefined,

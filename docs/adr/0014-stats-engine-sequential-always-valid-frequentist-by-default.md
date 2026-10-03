@@ -68,8 +68,10 @@ correction for arbitrary stopping: Benjamini-Yekutieli / BH-G, which is BH at
 `alpha / H_m` where `H_m = sum_{i=1..m} 1/i`.
 
 `applyDecisionFamilyCorrection` now takes `family_correction: "bh" | "bh_g"` and defaults to
-`"bh"`. The production decision path does not pass the argument. Selection by
-`analysis_version` is a later wiring change.
+`"bh"`. `analysisVersionPolicy` selects the procedure per frozen analysis version. analysis-v2
+keeps BH because this amendment's stop-at-first-crossing simulation recorded BH FDR of 0
+(well inside alpha plus Monte Carlo tolerance). BH-G remains available as an explicit
+comparator and for a future version if a later audit shows BH exceeding the FDR target.
 
 The composed p-value contract (estimators, observation assumptions, asymptotic versus exact,
 burn-in) is in `docs/spec/stats/inference-engine.md`.

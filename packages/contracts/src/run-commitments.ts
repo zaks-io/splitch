@@ -14,12 +14,24 @@ import type { StatsOutput } from "./stats-result-contract";
  */
 
 /**
- * The analysis implementation new Runs freeze. Bump it only for a deliberate
- * change in how locked evidence is computed: every Run started afterwards gets a
- * different result token for the same raw facts, which is the point. Never
- * date-shaped: tooling that shifts fixture dates would rewrite it.
+ * Named analysis implementations. Never date-shaped: tooling that shifts
+ * fixture dates would rewrite them. Bump CURRENT only for a deliberate change
+ * in how locked evidence is computed: every Run started afterwards gets a
+ * different result token for the same raw facts, which is the point.
+ *
+ * | Version              | SRM gate                         | Family correction |
+ * | -------------------- | -------------------------------- | ----------------- |
+ * | legacy-unversioned   | Chi-square p < 0.001             | BH                |
+ * | analysis-v1          | Chi-square p < 0.001             | BH                |
+ * | analysis-v2          | Sequential Dirichlet-multinomial | BH                |
+ *
+ * analysis-v2 keeps BH because the ADR-0014 stop-at-first-crossing simulation
+ * recorded BH FDR of 0 (alpha 0.05); plain BH did not exceed the FDR target.
  */
-export const CURRENT_ANALYSIS_VERSION = "analysis-v1";
+export const ANALYSIS_V1_VERSION = "analysis-v1";
+export const ANALYSIS_V2_VERSION = "analysis-v2";
+/** New Runs freeze this named implementation. Keep in sync with ANALYSIS_V2_VERSION. */
+export const CURRENT_ANALYSIS_VERSION = "analysis-v2";
 
 /**
  * The label a legacy Run is read under. Its compatibility implementation is the
@@ -29,7 +41,10 @@ export const CURRENT_ANALYSIS_VERSION = "analysis-v1";
 export const LEGACY_ANALYSIS_VERSION = "legacy-unversioned";
 
 /** Versions this deployment can analyze. A Run frozen under any other refuses. */
-export const SUPPORTED_ANALYSIS_VERSIONS: readonly string[] = [CURRENT_ANALYSIS_VERSION];
+export const SUPPORTED_ANALYSIS_VERSIONS: readonly string[] = [
+  ANALYSIS_V1_VERSION,
+  ANALYSIS_V2_VERSION,
+];
 
 /** GrowthBook's documented default; recorded as defaulted when the caller names none. */
 export const DEFAULT_SEQUENTIAL_TARGET_N = 5_000;

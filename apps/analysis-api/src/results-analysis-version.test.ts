@@ -1,5 +1,7 @@
 import {
   AnalysisResultsEnvelopeSchema,
+  ANALYSIS_V1_VERSION,
+  ANALYSIS_V2_VERSION,
   CURRENT_ANALYSIS_VERSION,
   canonicalHash,
   createResultToken,
@@ -26,6 +28,13 @@ import {
 const LEGACY_FIXTURE_TOKEN =
   "sha256:b8a6af69eaef6679ed1ffa0c23669a29596e9e22c8f22bfb0db425dd6ebadf70";
 
+/**
+ * Same evidence under analysis-v1. Pinned so a later estimator change cannot
+ * quietly rewrite v1 tokens while CURRENT moves forward.
+ */
+const ANALYSIS_V1_FIXTURE_TOKEN =
+  "sha256:5cd63c772cdd78f3b22d1b58c5b16666eba1ed46af24e84741e085a4957bd6b7";
+
 async function readyEnvelope(rows = rowsByPipe()) {
   const { app } = makeResultsHarness(rows);
   const response = await app.request(
@@ -44,13 +53,17 @@ function withRunFields(fields: Record<string, unknown>) {
   return rows;
 }
 
-const committedFields = {
-  analysis_version: CURRENT_ANALYSIS_VERSION,
-  target_n: 5000,
-  target_n_source: "default",
-  planned_duration_days: 7,
-  planned_duration_override_reason: null,
-};
+function committedFieldsFor(version: string) {
+  return {
+    analysis_version: version,
+    target_n: 5000,
+    target_n_source: "default",
+    planned_duration_days: 7,
+    planned_duration_override_reason: null,
+  };
+}
+
+const committedFields = committedFieldsFor(CURRENT_ANALYSIS_VERSION);
 
 describe("analysis version and Run commitments (ADR-0059)", () => {
   it("keeps a legacy Run's token byte-identical and labels its version", async () => {
@@ -79,6 +92,16 @@ describe("analysis version and Run commitments (ADR-0059)", () => {
     });
   });
 
+  it("keeps an analysis-v1 Run's token byte-identical after CURRENT moves on", async () => {
+    const envelope = await readyEnvelope(withRunFields(committedFieldsFor(ANALYSIS_V1_VERSION)));
+
+    expect(envelope.result_token).toBe(ANALYSIS_V1_FIXTURE_TOKEN);
+    expect(envelope.run_commitments).toMatchObject({
+      analysis_version_source: "frozen",
+      analysis_version: ANALYSIS_V1_VERSION,
+    });
+  });
+
   it("binds a versioned Run's token to the version it froze", async () => {
     const legacy = await readyEnvelope();
     const versioned = await readyEnvelope(withRunFields(committedFields));
@@ -100,6 +123,15 @@ describe("analysis version and Run commitments (ADR-0059)", () => {
       analysis_version_source: "frozen",
       ...committedFields,
     });
+  });
+
+  it("yields different tokens for the same evidence under analysis-v1 and analysis-v2", async () => {
+    const v1 = await readyEnvelope(withRunFields(committedFieldsFor(ANALYSIS_V1_VERSION)));
+    const v2 = await readyEnvelope(withRunFields(committedFieldsFor(ANALYSIS_V2_VERSION)));
+
+    expect(v1.result_token).not.toBe(v2.result_token);
+    expect(v1.result_token).toBe(ANALYSIS_V1_FIXTURE_TOKEN);
+    expect(CURRENT_ANALYSIS_VERSION).toBe(ANALYSIS_V2_VERSION);
   });
 
   it("reports a caller target and a labeled duration override", async () => {

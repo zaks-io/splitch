@@ -43,6 +43,21 @@ describe("SRMChecker", () => {
     }
   });
 
+  it("uses sequential anytime p-values when srm_procedure is sequential_martingale", () => {
+    const shared = {
+      run_id: RUN_ID,
+      allocation: { control: 50, treatment: 50 },
+      exposures: [...exposures("control", 900), ...exposures("treatment", 100)],
+    };
+    const chiSquare = checkSrmHealth(shared);
+    const sequential = checkSrmHealth({ ...shared, srm_procedure: "sequential_martingale" });
+
+    expect(chiSquare.srm.srm_is_mismatch).toBe(true);
+    expect(sequential.srm.srm_is_mismatch).toBe(true);
+    expect(sequential.srm.srm_p_value).not.toBe(chiSquare.srm.srm_p_value);
+    expect(sequential.srm.observed_counts).toEqual(chiSquare.srm.observed_counts);
+  });
+
   it("excludes multiple Entities from arm denominators and reports them separately", () => {
     const result = checkSrmHealth({
       run_id: RUN_ID,

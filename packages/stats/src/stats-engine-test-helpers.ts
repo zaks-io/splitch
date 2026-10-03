@@ -1,4 +1,5 @@
 import type { DedupeExposureRow, PerEntityMetricRow, StatsInput } from "@splitch/contracts";
+import { ANALYSIS_V1_VERSION } from "@splitch/contracts";
 
 export const ENGINE_RUN_ID = "run_stats_engine";
 const ENGINE_TS = "2026-07-01T00:00:00.000Z";
@@ -11,6 +12,7 @@ export function binomialStatsInput(options: {
   readonly horizon?: "sequential" | "fixed";
   readonly sampleSizeLocked?: number;
   readonly includeGuardrail?: boolean;
+  readonly analysisVersion?: string;
 }): StatsInput {
   const exposures = [
     ...exposuresForVariant("control", options.controlN),
@@ -30,6 +32,7 @@ export function binomialStatsInput(options: {
 
   return {
     run_id: ENGINE_RUN_ID,
+    analysis_version: options.analysisVersion ?? ANALYSIS_V1_VERSION,
     confidence_level: 0.95,
     horizon: options.horizon ?? "sequential",
     sample_size_locked: options.sampleSizeLocked,

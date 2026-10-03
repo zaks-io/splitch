@@ -42,14 +42,15 @@ Quarantine to `__multiple__` and late Activations can decrease an arm's earlier 
 
 **On mismatch:** results are flagged untrusted. The mismatch is surfaced loudly in the UI.
 
-### Sequential Dirichlet-multinomial SRM (implemented, not the gate)
+### Sequential Dirichlet-multinomial SRM (analysis-v2 gate)
 
 `@splitch/stats` exports `computeSequentialSrm`, the Dirichlet-multinomial mixture martingale of
-Lindon and Malek (NeurIPS 2022). It is the sequential replacement for the chi-square peeking
-procedure. This slice implements the test only. The decision gate still reads the chi-square
-`p < 0.001` checks. Chi-square stays the fixed-horizon diagnostic. Wiring the martingale into
-Exposure SRM and activated-population SRM is a later slice. Activation-rate balance is a different
-hypothesis (unknown common rate) and is not this test.
+Lindon and Malek (NeurIPS 2022). Under `analysis-v2`, Exposure SRM and activated-population SRM
+read this martingale: `srm_p_value` is the anytime p-value and `srm_is_mismatch` is
+`threshold_crossed` at alpha 0.001. legacy-unversioned and analysis-v1 keep the chi-square
+`p < 0.001` gate. Chi-square stays the fixed-horizon diagnostic and the activation-balance test
+under every version (activation balance is equality of unknown rates, not the declared
+allocation multinomial).
 
 **Prior.** Dirichlet mean equals the declared allocation: `alpha_i = concentration * theta_i`.
 Default `concentration` is 100. Type I control from Ville's inequality does not depend on this
