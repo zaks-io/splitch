@@ -62,6 +62,7 @@ test.describe("onboarding: connect your code", () => {
     const dialog = page.getByRole("dialog");
     await dialog.getByLabel("Flag name").fill("Onboarding Flag");
     await dialog.getByLabel("Flag key").fill(flagKey);
+    await dialog.getByLabel("Lifecycle class").selectOption("permission");
     await dialog.getByRole("button", { name: "Create Flag" }).click();
 
     await expect(dialog.getByRole("heading", { name: "Connect your code" })).toBeVisible();
@@ -111,6 +112,7 @@ test.describe("onboarding: connect your code", () => {
     const dialog = page.getByRole("dialog");
     await dialog.getByLabel("Flag name").fill("Onboarding Flag");
     await dialog.getByLabel("Flag key").fill(flagKey);
+    await dialog.getByLabel("Lifecycle class").selectOption("permission");
     await dialog.getByRole("button", { name: "Create Flag" }).click();
 
     const verifyPanel = dialog.getByTestId("verify-panel");
@@ -140,6 +142,7 @@ test.describe("onboarding: connect your code", () => {
     const dialog = page.getByRole("dialog");
     await dialog.getByLabel("Flag name").fill("Onboarding Flag");
     await dialog.getByLabel("Flag key").fill(flagKey);
+    await dialog.getByLabel("Lifecycle class").selectOption("permission");
     await dialog.getByRole("button", { name: "Create Flag" }).click();
 
     const exposureStatus = dialog.getByTestId("exposure-status-not-received");

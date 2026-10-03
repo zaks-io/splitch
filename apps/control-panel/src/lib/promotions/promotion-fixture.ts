@@ -14,6 +14,7 @@ export function promotionView(overrides: Partial<FlagDetailView> = {}): FlagDeta
     name: "New Checkout",
     env: "prod",
     schema: '{"type":"boolean"}',
+    lifecycle: { lifecycleClass: "unclassified", owner: null, expiresAt: null },
     configured: true,
     enabled: false,
     catalog: [

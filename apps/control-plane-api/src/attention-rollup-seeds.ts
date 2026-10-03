@@ -78,6 +78,7 @@ export async function seedOtherOrganization(repo: Repository) {
     updatedAt: NOW,
   });
   await repo.flags.flags.insert(scope, {
+    lifecycleClass: "ops",
     id: flagId,
     appId,
     key: "other-org-flag",

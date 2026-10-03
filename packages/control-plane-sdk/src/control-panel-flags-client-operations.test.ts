@@ -42,6 +42,9 @@ const flagDefinition = {
     { id: "var_enabled", name: "enabled", value: true },
   ],
   defaultVariantId: "var_disabled",
+  lifecycleClass: "unclassified" as const,
+  owner: null,
+  expiresAt: null,
   createdAt: "2026-07-18T00:00:00.000Z",
   updatedAt: "2026-07-18T00:00:00.000Z",
 };
@@ -91,6 +94,7 @@ describe("Panel Flags client → control-panel operation coverage", () => {
         key: FLAG_KEY,
         name: "New Checkout",
         schema: { type: "boolean" },
+        lifecycleClass: "ops",
         variants: [
           { name: "disabled", value: false, isDefault: true },
           { name: "enabled", value: true, isDefault: false },

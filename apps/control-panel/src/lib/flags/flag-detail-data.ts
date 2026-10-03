@@ -23,6 +23,9 @@ export type FlagDetailData = {
     schema: Flag["schema"];
     variants: Flag["variants"];
     defaultVariantId: string;
+    lifecycleClass: Flag["lifecycleClass"];
+    owner: Flag["owner"];
+    expiresAt: Flag["expiresAt"];
   };
   /** Per-Environment, or null when this Flag has no Configuration here yet. */
   configuration: FlagConfigGetOutput | null;
@@ -105,6 +108,9 @@ export async function readFlagDetail(
         schema: definition.schema ?? null,
         variants: definition.variants,
         defaultVariantId: definition.defaultVariantId,
+        lifecycleClass: definition.lifecycleClass,
+        owner: definition.owner,
+        expiresAt: definition.expiresAt,
       },
       configuration: configuration.ok ? configuration.data : null,
     },

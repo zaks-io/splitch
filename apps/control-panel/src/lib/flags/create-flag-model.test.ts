@@ -19,7 +19,13 @@ import {
 } from "#lib/flags/create-flag-model";
 
 function draft(overrides: Partial<FlagDraft> = {}): FlagDraft {
-  return { ...booleanPresetDraft(), name: "New Checkout", key: "new-checkout", ...overrides };
+  return {
+    ...booleanPresetDraft(),
+    name: "New Checkout",
+    key: "new-checkout",
+    lifecycleClass: "permission",
+    ...overrides,
+  };
 }
 
 function rows(valueType: VariantValueType, ...values: string[]) {
@@ -40,6 +46,7 @@ describe("Create Flag preset", () => {
       key: "new-checkout",
       idempotency_key: "idem-1",
       name: "New Checkout",
+      lifecycleClass: "permission",
       schema: { type: "boolean" },
       variants: [
         { name: "disabled", value: false, isDefault: true },
@@ -278,5 +285,39 @@ describe("Create Flag error surfacing", () => {
     };
 
     expect(flagFieldError(error, "key")).toBe("flag key already exists");
+  });
+});
+
+describe("Create Flag lifecycle (D9)", () => {
+  it("opens with no class chosen and refuses to submit until one is", () => {
+    expect(booleanPresetDraft().lifecycleClass).toBe("");
+    expect(draftIssues(draft({ lifecycleClass: "" }))).toContainEqual({
+      path: "lifecycleClass",
+      message: "Choose why this Flag exists.",
+    });
+  });
+
+  it("names the owner and expiry a release Flag is missing", () => {
+    const paths = draftIssues(draft({ lifecycleClass: "release" })).map((issue) => issue.path);
+    expect(paths).toEqual(["owner", "expiresAt"]);
+  });
+
+  it("sends a release Flag's owner and expiry as a UTC date-time", () => {
+    const input = flagCreateInput(
+      "app_checkout",
+      draft({ lifecycleClass: "release", owner: " checkout-team ", expiresOn: "2026-12-31" }),
+      "idem-1",
+    );
+    expect(input).toMatchObject({
+      lifecycleClass: "release",
+      owner: "checkout-team",
+      expiresAt: "2026-12-31T00:00:00.000Z",
+    });
+  });
+
+  it("omits owner and expiry for a permission Flag that leaves them blank", () => {
+    const input = flagCreateInput("app_checkout", draft(), "idem-1");
+    expect(input).not.toHaveProperty("owner");
+    expect(input).not.toHaveProperty("expiresAt");
   });
 });

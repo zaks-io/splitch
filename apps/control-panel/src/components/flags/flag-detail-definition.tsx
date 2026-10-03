@@ -50,6 +50,22 @@ export function FlagDetailDefinition({
             <Term>Default Variant</Term>
             <dd className="font-mono text-foreground text-sm">{view.defaultVariantName}</dd>
           </div>
+          <div className="grid gap-1">
+            <Term>Lifecycle class</Term>
+            <dd className="font-mono text-foreground text-sm" data-flag-lifecycle-class="true">
+              {view.lifecycle.lifecycleClass}
+            </dd>
+          </div>
+          <div className="grid gap-1">
+            <Term>Owner</Term>
+            <dd className="text-foreground text-sm">{view.lifecycle.owner ?? "None"}</dd>
+          </div>
+          <div className="grid gap-1">
+            <Term>Expires</Term>
+            <dd className="font-mono text-foreground text-sm">
+              {view.lifecycle.expiresAt ?? "No expiry"}
+            </dd>
+          </div>
           <div className="grid gap-1 sm:col-span-2">
             <Term>Value schema</Term>
             <dd className="font-mono text-foreground text-sm" data-flag-schema="true">

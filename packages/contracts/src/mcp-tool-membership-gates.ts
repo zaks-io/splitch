@@ -63,6 +63,7 @@ const MCP_TOOL_MEMBERSHIP_GATES = {
   approval_request_reviews_create: APP_MEMBER,
   flags_list: APP_MEMBER,
   principal_flags_list: WIDE_READ,
+  expired_flags_list: APP_MEMBER,
   flags_create: APP_ADMIN,
   flags_get: APP_MEMBER,
   flags_update: APP_ADMIN,

@@ -97,6 +97,7 @@ describe("control-plane Variant nested null writes", () => {
     const res = await request(h, "POST", `/apps/${created.app.id}/flags`, jwt, {
       appId: created.app.id,
       name: "Null object",
+      lifecycleClass: "permission",
       key: "null-object-flag",
       variants: [{ name: "control", value: { a: null }, isDefault: true }],
       idempotency_key: "idem-nested-null-flag",

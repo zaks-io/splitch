@@ -40,6 +40,7 @@ export const CANONICAL_OPERATION_IDS = [
   // Flags
   "flags_list",
   "principal_flags_list",
+  "expired_flags_list",
   "flags_create",
   "flags_get",
   "flags_update",

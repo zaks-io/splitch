@@ -56,6 +56,7 @@ describe("INSERT cannot be forged into another tenant", () => {
     const aScope = appScope(seed.a.appId);
 
     const returned = await repo.flags.flags.insert(aScope, {
+      lifecycleClass: "ops",
       id: "flag_forge_attempt",
       appId: seed.b.appId, // FORGED: caller claims App B from App A's scope
       key: "flag-key-forge",

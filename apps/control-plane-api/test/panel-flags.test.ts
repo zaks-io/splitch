@@ -63,6 +63,7 @@ describe("SignedControlPanelEntrypoint Flags operations", () => {
       idempotency_key: "idem-panel-create-flag",
       key: "new-checkout",
       name: "New Checkout",
+      lifecycleClass: "permission",
       schema: { type: "boolean" },
       variants: [
         { name: "disabled", value: false, isDefault: true },
@@ -161,6 +162,7 @@ describe("SignedControlPanelEntrypoint Flags operations", () => {
       idempotency_key: "idem-panel-body-bound",
       key: "body-bound-original",
       name: "Body Bound Original",
+      lifecycleClass: "permission",
       schema: { type: "boolean" },
       variants: [
         { name: "disabled", value: false, isDefault: true },

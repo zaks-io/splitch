@@ -78,6 +78,7 @@ async function seedTenant(repo: ReturnType<typeof createRepository>, t: Tenant):
   });
 
   await repo.flags.flags.insert(aScope, {
+    lifecycleClass: "ops",
     id: t.flagId,
     appId: t.appId,
     key: t.flagKey,

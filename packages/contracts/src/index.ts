@@ -18,6 +18,8 @@ export * from "./barrels/stats-contracts";
 export * from "./barrels/storage-contracts";
 // biome-ignore lint/performance/noReExportAll: curated wire envelopes live in barrels/wire-envelopes.ts
 export * from "./barrels/wire-envelopes";
+// biome-ignore lint/performance/noReExportAll: the D9 lifecycle vocabulary lives in barrels/flag-lifecycle.ts
+export * from "./barrels/flag-lifecycle";
 export { type CanonicalJsonSha256, CanonicalJsonSha256Schema } from "./canonical-hash";
 export { CanonicalJsonInputError, canonicalHash, canonicalJson } from "./canonical-json";
 export {

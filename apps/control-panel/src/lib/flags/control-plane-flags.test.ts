@@ -101,7 +101,12 @@ describe("Control Panel Flags transport", () => {
     const result = await flags.create(
       flagCreateInput(
         "app_checkout",
-        { ...booleanPresetDraft(), name: "New Checkout", key: "new-checkout" },
+        {
+          ...booleanPresetDraft(),
+          name: "New Checkout",
+          key: "new-checkout",
+          lifecycleClass: "permission",
+        },
         "idem-1",
       ),
     );
@@ -205,6 +210,9 @@ function createdFlag() {
       { id: "var_enabled", name: "enabled", value: true },
     ],
     defaultVariantId: "var_disabled",
+    lifecycleClass: "unclassified" as const,
+    owner: null,
+    expiresAt: null,
     createdAt: "2026-07-18T00:00:00.000Z",
     updatedAt: "2026-07-18T00:00:00.000Z",
   };

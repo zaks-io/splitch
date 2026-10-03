@@ -134,6 +134,9 @@ export function formatHydratedFlag(flag: HydratedFlagResponse): string {
     // value rather than a stand-in for one.
     `Schema: ${flag.schema === null ? "(none)" : terminalText(JSON.stringify(flag.schema))}`,
     `Default Variant ID: ${terminalText(flag.defaultVariantId)}`,
+    `Lifecycle class: ${terminalText(flag.lifecycleClass)}`,
+    `Owner: ${flag.owner === null ? "(none)" : terminalText(flag.owner)}`,
+    `Expires: ${flag.expiresAt === null ? "(none)" : terminalText(flag.expiresAt)}`,
     `Created: ${terminalText(flag.createdAt)}`,
     `Updated: ${terminalText(flag.updatedAt)}`,
   ];

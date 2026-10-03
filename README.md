@@ -72,7 +72,8 @@ splitch orgs create --name "My Org" --json
 splitch apps create --org <orgId> --name "My App" --json
 splitch use --app my-app --env dev
 
-splitch flags create --key new-checkout --variants on,off --json
+splitch flags create --key new-checkout --variants on,off \
+  --lifecycle-class release --owner checkout-team --expires-at 2027-01-01T00:00:00Z --json
 splitch flag-config update new-checkout --enabled true --rollout 100 --json
 ```
 

@@ -33,6 +33,7 @@ import {
   FlagSchemaField,
   FlagValueTypeField,
 } from "#components/flags/create-flag-fields";
+import { FlagLifecycleFields } from "#components/flags/create-flag-lifecycle-fields";
 import { VariantRowEditor } from "#components/flags/variant-row-editor";
 
 export function CreateFlagForm({
@@ -60,6 +61,11 @@ export function CreateFlagForm({
   const keyError = issueFor(shown, "key") ?? flagFieldError(mutationError, "key");
   const schemaError = issueFor(shown, "schema") ?? flagFieldError(mutationError, "schema");
   const defaultError = issueFor(shown, "defaultIndex");
+  const lifecycleErrors = {
+    lifecycleClass: issueFor(shown, "lifecycleClass"),
+    owner: issueFor(shown, "owner"),
+    expiresAt: issueFor(shown, "expiresAt"),
+  };
 
   function edit(next: typeof draft) {
     setDraft(next);
@@ -123,6 +129,12 @@ export function CreateFlagForm({
           edit({ ...draft, key });
         }}
         value={draft.key}
+      />
+
+      <FlagLifecycleFields
+        errors={lifecycleErrors}
+        onChange={(patch) => edit({ ...draft, ...patch })}
+        value={draft}
       />
 
       <FlagValueTypeField onChange={changeValueType} value={draft.valueType} />

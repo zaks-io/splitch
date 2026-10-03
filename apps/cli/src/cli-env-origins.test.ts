@@ -28,6 +28,8 @@ const createArgs = [
   "checkout",
   "--variants",
   "on,off",
+  "--lifecycle-class",
+  "ops",
 ] as const;
 
 function controlPlaneTransport(): FakeCliTransport {

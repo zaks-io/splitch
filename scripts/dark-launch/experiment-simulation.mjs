@@ -47,6 +47,10 @@ async function provisionSimulation(deps, keys, resources) {
       isDefault: name === "control",
     })),
     description: "Disposable balanced Experiment pipeline smoke.",
+    // Disposable experiment Flag: its own run deletes it, due within a day.
+    lifecycleClass: "experiment",
+    owner: "experiment-simulation",
+    expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
     idempotency_key: `experiment-smoke-flag-${deps.runId}`,
   });
   resources.flagId = flag.id;

@@ -197,6 +197,7 @@ function view(overrides: Partial<FlagDetailView> = {}): FlagDetailView {
     name: "New Checkout",
     env: "dev",
     schema: '{"type":"boolean"}',
+    lifecycle: { lifecycleClass: "unclassified", owner: null, expiresAt: null },
     configured: true,
     enabled: true,
     catalog: [

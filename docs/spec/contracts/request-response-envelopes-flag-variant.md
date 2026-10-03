@@ -26,6 +26,9 @@ not accepted by these App-level endpoints.
 | `schema`          | no       | Supported JSON Schema subset or null; every Variant value must satisfy it        |
 | `variants`        | yes      | `{ name, value, isDefault, description? }[]`; exactly one default                |
 | `description`     | no       | —                                                                                |
+| `lifecycleClass`  | yes      | `release`, `experiment`, `ops`, or `permission` (D9)                             |
+| `owner`           | no       | Required for `release` and `experiment`, else `FLAG_LIFECYCLE_INCOMPLETE`        |
+| `expiresAt`       | no       | ISO 8601; required for `release` and `experiment`; stored as UTC                 |
 | `idempotency_key` | yes      | `flags_create` is an Idempotency-Key route; sent as the `Idempotency-Key` header |
 
 Worker computes: `id`, `defaultVariantId`, `createdAt`, `updatedAt`.
@@ -35,11 +38,14 @@ Worker computes: `id`, `defaultVariantId`, `createdAt`, `updatedAt`.
 Accepts only non-key, non-appId App-level definition fields. `enabled`,
 `availableVariantNames`, `defaultVariantId`, and targeting fields are rejected here.
 
-| Field         | Required | Notes                                                                         |
-| ------------- | -------- | ----------------------------------------------------------------------------- |
-| `name`        | no       | DEFINITION                                                                    |
-| `schema`      | no       | Supported JSON Schema subset or null; existing Variant values must satisfy it |
-| `description` | no       | —                                                                             |
+| Field            | Required | Notes                                                                         |
+| ---------------- | -------- | ----------------------------------------------------------------------------- |
+| `name`           | no       | DEFINITION                                                                    |
+| `schema`         | no       | Supported JSON Schema subset or null; existing Variant values must satisfy it |
+| `description`    | no       | —                                                                             |
+| `lifecycleClass` | no       | Writable classes only; `unclassified` is refused                              |
+| `owner`          | no       | `null` clears; refused when the resulting class needs it                      |
+| `expiresAt`      | no       | `null` clears; refused when the resulting class needs it                      |
 
 Variants and TargetingRules are managed via sub-resource endpoints (`/variants`, `/targeting-rules`).
 

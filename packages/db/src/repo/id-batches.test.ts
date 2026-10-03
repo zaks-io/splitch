@@ -28,6 +28,7 @@ beforeAll(async () => {
   const scope = appScope(seed.a.appId);
   for (const id of bulkIds) {
     await repo.flags.flags.insert(scope, {
+      lifecycleClass: "ops",
       id,
       appId: seed.a.appId,
       key: id,

@@ -18,7 +18,23 @@ const validCreateFlag = {
   key: "feature-x",
   schema: null,
   variants: [variantControl, variantTreatment],
+  lifecycleClass: "permission",
   idempotency_key: "idem-create-flag",
+};
+
+const storedFlag = {
+  id: "flag_1",
+  appId: "app_1",
+  key: "feature-x",
+  name: "Feature X",
+  schema: null,
+  variants: [{ id: "var_1", name: "control", value: false }],
+  defaultVariantId: "var_1",
+  lifecycleClass: "unclassified",
+  owner: null,
+  expiresAt: null,
+  createdAt: "2026-06-28T00:00:00.000Z",
+  updatedAt: "2026-06-28T00:00:00.000Z",
 };
 
 describe("CreateFlagRequestSchema", () => {
@@ -129,18 +145,8 @@ describe("PatchFlagRequestSchema (immutable key/appId boundary)", () => {
 describe("FlagResponseSchema", () => {
   it("parses an App-level Flag definition without enabled state", () => {
     const res = FlagResponseSchema.parse({
-      id: "flag_1",
-      appId: "app_1",
-      key: "feature-x",
-      name: "Feature X",
-      schema: null,
-      variants: [
-        { id: "var_1", name: "control", value: false },
-        { id: "var_2", name: "treatment", value: "on" },
-      ],
-      defaultVariantId: "var_1",
-      createdAt: "2026-06-28T00:00:00.000Z",
-      updatedAt: "2026-06-28T00:00:00.000Z",
+      ...storedFlag,
+      variants: [...storedFlag.variants, { id: "var_2", name: "treatment", value: "on" }],
     });
     expect(res.id).toBe("flag_1");
     expect("enabled" in res).toBe(false);
@@ -152,17 +158,7 @@ describe("FlagResponseSchema", () => {
 });
 
 describe("FlagListResponseSchema", () => {
-  const flag = {
-    id: "flag_1",
-    appId: "app_1",
-    key: "feature-x",
-    name: "Feature X",
-    schema: null,
-    variants: [{ id: "var_1", name: "control", value: false }],
-    defaultVariantId: "var_1",
-    createdAt: "2026-06-28T00:00:00.000Z",
-    updatedAt: "2026-06-28T00:00:00.000Z",
-  };
+  const flag = storedFlag;
 
   it("keeps the bare Flag list shape unchanged", () => {
     const response = { items: [flag], readTruncated: false, readLimit: 200, cursor: null };
@@ -196,15 +192,7 @@ describe("FlagListResponseSchema", () => {
 describe("HydratedFlagResponseSchema", () => {
   it("requires the distinct full per-Environment Configuration envelope", () => {
     const response = {
-      id: "flag_1",
-      appId: "app_1",
-      key: "feature-x",
-      name: "Feature X",
-      schema: null,
-      variants: [{ id: "var_1", name: "control", value: false }],
-      defaultVariantId: "var_1",
-      createdAt: "2026-06-28T00:00:00.000Z",
-      updatedAt: "2026-06-28T00:00:00.000Z",
+      ...storedFlag,
       configurations: [
         {
           environmentId: "env_prod",
@@ -238,17 +226,7 @@ describe("HydratedFlagResponseSchema", () => {
       rollout: null,
       experiment: null,
     };
-    const flag = {
-      id: "flag_1",
-      appId: "app_1",
-      key: "feature-x",
-      name: "Feature X",
-      schema: null,
-      variants: [{ id: "var_1", name: "control", value: false }],
-      defaultVariantId: "var_1",
-      createdAt: "2026-06-28T00:00:00.000Z",
-      updatedAt: "2026-06-28T00:00:00.000Z",
-    };
+    const flag = storedFlag;
 
     expect(
       HydratedFlagResponseSchema.safeParse({

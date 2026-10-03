@@ -139,6 +139,7 @@ async function seedRunningExperiment(appId: string, environmentId: string, suffi
   // hand-written schema declares no foreign keys at all, so this row used to
   // insert against a flag that never existed; the migrated schema rejects it.
   await repo.flags.flags.insert(appScope(appId), {
+    lifecycleClass: "ops",
     id: flagId,
     appId,
     key: `delete-guard-${suffix}`,
@@ -195,6 +196,7 @@ async function seedFlagConfig(appId: string, environmentId: string, suffix = "pr
   const repo = createRepository(h.bindings.d1);
   const flagId = `flag_delete_block_${suffix}`;
   await repo.flags.flags.insert(appScope(appId), {
+    lifecycleClass: "ops",
     id: flagId,
     appId,
     key: `delete-block-${suffix}`,
@@ -216,6 +218,7 @@ async function seedFlagConfig(appId: string, environmentId: string, suffix = "pr
 
 async function seedAppFlag(appId: string, suffix = "primary") {
   await createRepository(h.bindings.d1).flags.flags.insert(appScope(appId), {
+    lifecycleClass: "ops",
     id: `flag_app_delete_block_${suffix}`,
     appId,
     key: `app-delete-block-${suffix}`,

@@ -97,6 +97,7 @@ describe("BUG 2 — a hand-forged (unminted) scope is rejected on the WRITE path
 
     await expect(
       repo.flags.flags.insert(forged, {
+        lifecycleClass: "ops",
         id: flagId,
         appId: TA.appId,
         key: TB.flagKey,
@@ -161,6 +162,7 @@ describe("BUG 3 — a forged scope cannot be branded by lifting the marker off a
 
     await expect(
       repo.flags.flags.insert(forged as unknown as TenantScope, {
+        lifecycleClass: "ops",
         id: flagId,
         appId: TA.appId,
         key: `${TB.flagKey}-lift`,
@@ -214,6 +216,7 @@ describe("BUG 1 — a minted scope is immutable; it cannot be rebound to another
 
     const flagId = "flag_frozen_app";
     await repo.flags.flags.insert(s, {
+      lifecycleClass: "ops",
       id: flagId,
       appId: TB.appId, // input lies; the (unmutated) scope must win
       key: `${TA.flagKey}-frozen`,
@@ -257,6 +260,7 @@ describe("no regression — a normally minted scope writes and reads back", () =
     const flagId = "flag_happy_app";
     const s = appScope(TA.appId);
     const inserted = await repo.flags.flags.insert(s, {
+      lifecycleClass: "ops",
       id: flagId,
       appId: TA.appId,
       key: `${TA.flagKey}-happy`,

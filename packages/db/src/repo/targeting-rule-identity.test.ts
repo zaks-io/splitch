@@ -24,6 +24,7 @@ describe("Targeting Rule identity is scoped to one Flag Configuration", () => {
   it("lets two Flags in the same Environment persist the same rule id", async () => {
     const secondFlagId = "flag_a_search";
     await repo.flags.flags.insert(appScope(seed.a.appId), {
+      lifecycleClass: "ops",
       id: secondFlagId,
       appId: seed.a.appId,
       key: "search",

@@ -901,6 +901,18 @@ Behavior:
 
 Example:
   splitch experiments update <experiment-id> --body-json '{"tags":[],"allocation":{"control":1,"treatment":1},"segmentIds":[],"dimensions":[],"stageForNextRun":true}' --json",
+    "expired-flags list": "List Flags past their expiresAt that still exist and can still be evaluated, most overdue first (bounded; reports its own truncation).
+
+Usage:
+  splitch expired-flags list [flags]
+
+Flags:
+  --app <app>  [type: string; default: SPLITCH_APP or config] App ID or slug.
+  --json       [type: boolean; default: false] Write machine-readable JSON to stdout.
+  -h, --help   [type: boolean; default: false] Show help and exit.
+
+Example:
+  splitch expired-flags list --json",
     "flag-changes export": "Export a Flag change-log time range, or the stored changes between two Environments, as JSON plus a unified text diff.
 
 Usage:
@@ -1107,20 +1119,23 @@ Request body (--body-json):
 
 Example:
   splitch flag-variants update <flag-id-or-key> <variant-name> --body-json '{"value":true,"idempotency_key":"idem-1"}' --json",
-    "flags create": "Create a Flag definition (key, schema, Variant catalog).
+    "flags create": "Create a Flag definition (key, schema, Variant catalog, lifecycle class).
 
 Usage:
   splitch flags create [flags]
 
 Flags:
-  --app <app>              [type: string; default: SPLITCH_APP or config] App ID or slug.
-  --name <name>            [type: string; default: none] Resource name.
-  --key <key>              [type: string; default: none] Flag KEY.
-  --variants <names>       [type: comma-separated strings; default: none] Boolean Variant names.
-  --body-json <json>       [type: JSON object; default: none] Request body fields; see Request body below.
-  --idempotency-key <key>  [type: string; default: generated] Stable retry key for this mutation.
-  --json                   [type: boolean; default: false] Write machine-readable JSON to stdout.
-  -h, --help               [type: boolean; default: false] Show help and exit.
+  --app <app>                [type: string; default: SPLITCH_APP or config] App ID or slug.
+  --name <name>              [type: string; default: none] Resource name.
+  --key <key>                [type: string; default: none] Flag KEY.
+  --variants <names>         [type: comma-separated strings; default: none] Boolean Variant names.
+  --lifecycle-class <class>  [type: ops | permission | release | experiment; default: none] Why the Flag exists. Required on create; release and experiment Flags also need --owner and --expires-at.
+  --owner <owner>            [type: string; default: none] Person or team that removes the Flag.
+  --expires-at <date-time>   [type: ISO 8601 date-time; default: none] When the Flag is due for removal; expired Flags appear in splitch expired-flags list.
+  --body-json <json>         [type: JSON object; default: none] Request body fields; see Request body below.
+  --idempotency-key <key>    [type: string; default: generated] Stable retry key for this mutation.
+  --json                     [type: boolean; default: false] Write machine-readable JSON to stdout.
+  -h, --help                 [type: boolean; default: false] Show help and exit.
 
 Request body (--body-json):
   appId            required  string
@@ -1129,12 +1144,15 @@ Request body (--body-json):
   schema           optional  Record<string, unknown> | null
   variants         required  { name: string; value: boolean | string | number | Record<string, unknown>; isDefault: boolean; description?: string }[]
   description      optional  string
+  lifecycleClass   required  string ("ops" | "permission" | "release" | "experiment")
+  owner            optional  string
+  expiresAt        optional  string
   idempotency_key  required  string
   Example:
-    {"appId":"app_1","name":"name","key":"key","variants":[{"name":"name","value":true,"isDefault":true}],"idempotency_key":"idem-1"}
+    {"appId":"app_1","name":"name","key":"key","variants":[{"name":"name","value":true,"isDefault":true}],"lifecycleClass":"ops","idempotency_key":"idem-1"}
 
 Example:
-  splitch flags create --key checkout --variants on,off --json",
+  splitch flags create --key checkout --variants on,off --lifecycle-class release --owner checkout-team --expires-at 2027-01-01T00:00:00Z --json",
     "flags delete": "Delete a Flag (blocked if referenced by a running Experiment).
 
 Usage:
@@ -1231,24 +1249,30 @@ Request body (--body-json):
 
 Example:
   splitch flags test-eval <flag-key> --targeting-key workspace-123 --id-type workspace --json",
-    "flags update": "Update a Flag definition's name/description/schema.
+    "flags update": "Update a Flag definition's name, description, schema, or lifecycle.
 
 Usage:
   splitch flags update <flag-id-or-key> [flags]
 
 Flags:
-  --app <app>         [type: string; default: SPLITCH_APP or config] App ID or slug.
-  --name <name>       [type: string; default: none] Resource name.
-  --body-json <json>  [type: JSON object; default: none] Request body fields; see Request body below.
-  --json              [type: boolean; default: false] Write machine-readable JSON to stdout.
-  -h, --help          [type: boolean; default: false] Show help and exit.
+  --app <app>                [type: string; default: SPLITCH_APP or config] App ID or slug.
+  --name <name>              [type: string; default: none] Resource name.
+  --lifecycle-class <class>  [type: ops | permission | release | experiment; default: current value] Why the Flag exists. Required on create; release and experiment Flags also need --owner and --expires-at.
+  --owner <owner>            [type: string; default: current value] Person or team that removes the Flag.
+  --expires-at <date-time>   [type: ISO 8601 date-time; default: current value] When the Flag is due for removal; expired Flags appear in splitch expired-flags list.
+  --body-json <json>         [type: JSON object; default: none] Request body fields; see Request body below.
+  --json                     [type: boolean; default: false] Write machine-readable JSON to stdout.
+  -h, --help                 [type: boolean; default: false] Show help and exit.
 
 Request body (--body-json):
-  name         optional  string
-  schema       optional  Record<string, unknown> | null
-  description  optional  string
+  name            optional  string
+  schema          optional  Record<string, unknown> | null
+  description     optional  string
+  lifecycleClass  optional  string ("ops" | "permission" | "release" | "experiment")
+  owner           optional  string | null
+  expiresAt       optional  string | null
   Example:
-    {"name":"name"}
+    {"lifecycleClass":"ops"}
 
 Example:
   splitch flags update <flag-id-or-key> --name "Checkout" --json",
@@ -2013,6 +2037,19 @@ Flags:
 
 Example:
   splitch experiments list --help",
+    "expired-flags": "Manage expired-flags resources.
+
+Usage:
+  splitch expired-flags <action> [arguments] [flags]
+
+Commands:
+  list            List Flags past their expiresAt that still exist and can still be evaluated, most overdue first (bounded; reports its own truncation).
+
+Flags:
+  -h, --help  [type: boolean; default: false] Show help and exit.
+
+Example:
+  splitch expired-flags list --help",
     "flag-changes": "Manage flag-changes resources.
 
 Usage:
@@ -2076,9 +2113,9 @@ Usage:
   splitch flags <action> [arguments] [flags]
 
 Commands:
-  create          Create a Flag definition (key, schema, Variant catalog).
+  create          Create a Flag definition (key, schema, Variant catalog, lifecycle class).
   get             Get a Flag definition by canonical ID or key. Returns complete per-Environment Flag Configurations and running Experiment references for every Environment in the App by default.
-  update          Update a Flag definition's name/description/schema.
+  update          Update a Flag definition's name, description, schema, or lifecycle.
   delete          Delete a Flag (blocked if referenced by a running Experiment).
   promote         Promote selected Flag Configuration field-groups between Environments.
   test-eval       Dry-run resolve a Flag with the flat data-plane reason token and full resolution detail without firing an Exposure.
@@ -2315,6 +2352,7 @@ Resource groups:
   event-definitions
   experiment-results
   experiments
+  expired-flags
   flag-changes
   flag-config
   flag-targeting-rules

@@ -43,6 +43,7 @@ async function seedFlags(appId: string, count: number): Promise<void> {
     const suffix = String(index).padStart(4, "0");
     const variantId = `var_bulk_${suffix}`;
     await repo.flags.flags.insert(scope, {
+      lifecycleClass: "ops",
       id: `flag_bulk_${suffix}`,
       appId,
       key: `bulk-flag-${suffix}`,

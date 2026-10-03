@@ -68,6 +68,10 @@ export async function createFlag(deps, appId, flagKey, variants, purpose) {
         schema: { type: "string" },
         variants,
         description: `Transient safe-delivery tracer Flag (SPL-151): ${purpose}.`,
+        // Transient tracer Flag: a release that its own run deletes, due within a day.
+        lifecycleClass: "release",
+        owner: "safe-delivery-journey",
+        expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
         idempotency_key: idempotencyKey,
       },
       idempotencyKey,

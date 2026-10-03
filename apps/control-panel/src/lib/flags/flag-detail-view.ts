@@ -70,6 +70,8 @@ export type FlagDetailView = {
   env: string;
   /** JSON text, or `null` when unconstrained: any Variant value passes. */
   schema: string | null;
+  /** D9 lifecycle; `unclassified` marks a Flag created before classes existed. */
+  lifecycle: Pick<FlagDetailData["definition"], "lifecycleClass" | "owner" | "expiresAt">;
   /** No Configuration in this Environment yet; nothing is servable here. */
   configured: boolean;
   enabled: boolean;
@@ -102,6 +104,11 @@ export function flagDetailView(
     ...(data.definition.description ? { description: data.definition.description } : {}),
     env,
     schema: data.definition.schema ? JSON.stringify(data.definition.schema) : null,
+    lifecycle: {
+      lifecycleClass: data.definition.lifecycleClass,
+      owner: data.definition.owner,
+      expiresAt: data.definition.expiresAt,
+    },
     configured: config !== null,
     enabled: config?.enabled ?? false,
     catalog: catalog.map((variant) => ({

@@ -37,6 +37,7 @@ async function seedFlags(appId: string, count: number): Promise<void> {
     const suffix = String(index).padStart(4, "0");
     const variantId = `var_bulk_${suffix}`;
     await repo.flags.flags.insert(scope, {
+      lifecycleClass: "ops",
       id: `flag_bulk_${suffix}`,
       appId,
       key: `bulk-flag-${suffix}`,
@@ -69,6 +70,7 @@ async function seedIdKeyCollision(appId: string): Promise<void> {
   const scope = appScope(appId);
   const repo = createRepository(h.bindings.d1);
   await repo.flags.flags.insert(scope, {
+    lifecycleClass: "ops",
     id: COLLIDING_ID,
     appId,
     key: "shadow-key",
@@ -85,6 +87,7 @@ async function seedIdKeyCollision(appId: string): Promise<void> {
     createdAt: NOW_ISO,
   });
   await repo.flags.flags.insert(scope, {
+    lifecycleClass: "ops",
     id: "flag_keyed_elsewhere_0001",
     appId,
     key: COLLIDING_ID,

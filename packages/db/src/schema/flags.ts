@@ -1,4 +1,12 @@
-import { foreignKey, integer, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
+import {
+  foreignKey,
+  index,
+  integer,
+  sqliteTable,
+  text,
+  uniqueIndex,
+} from "drizzle-orm/sqlite-core";
+import { isNotNull } from "drizzle-orm";
 import { createdAt, updatedAt, userRef } from "./columns";
 import { apps, environments } from "./identity";
 
@@ -31,6 +39,14 @@ export const flags = sqliteTable(
     // JSON Schema (nullable): value contract Variant `value`s must satisfy.
     schema: text("schema"),
     defaultVariantId: text("default_variant_id"),
+    // D9. No Drizzle default: the SQL default only classifies pre-migration
+    // rows as `unclassified`, and every new write must name its class.
+    lifecycleClass: text("lifecycle_class", {
+      enum: ["unclassified", "release", "experiment", "ops", "permission"],
+    }).notNull(),
+    owner: text("owner"),
+    // ISO 8601 UTC, so lexicographic order is chronological order.
+    expiresAt: text("expires_at"),
     createIdempotencyKey: text("create_idempotency_key"),
     createRequestHash: text("create_request_hash"),
     createResponse: text("create_response"),
@@ -44,6 +60,7 @@ export const flags = sqliteTable(
   (t) => [
     uniqueIndex("flags_app_key_unique").on(t.appId, t.key),
     uniqueIndex("flags_create_idempotency_unique").on(t.appId, t.createdBy, t.createIdempotencyKey),
+    index("flags_app_expires_at_idx").on(t.appId, t.expiresAt).where(isNotNull(t.expiresAt)),
   ],
 );
 

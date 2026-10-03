@@ -119,6 +119,7 @@ async function seedCascadeChildren(
   const flagId = `flag_cascade_${suffix}`;
   const segmentId = `segment_cascade_${suffix}`;
   await repo.flags.flags.insert(appScope(appId), {
+    lifecycleClass: "ops",
     id: flagId,
     appId,
     key: `cascade-${suffix}`,

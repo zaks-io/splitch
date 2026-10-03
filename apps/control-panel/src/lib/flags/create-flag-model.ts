@@ -9,6 +9,12 @@ import {
   parseJsonRecord,
   variantSchemaIssue,
 } from "#lib/flags/create-flag-schema";
+import {
+  emptyLifecycleDraft,
+  LifecycleDraftShape,
+  lifecycleCreateFields,
+  lifecycleIssues,
+} from "#lib/flags/create-flag-lifecycle";
 
 /**
  * One value type per Flag. These are the four the Variant leaf's `value` union
@@ -39,6 +45,7 @@ export const FlagDraftSchema = z.object({
   variants: z.array(VariantDraftSchema),
   /** Index into `variants`. -1 once the Default is removed — never auto-promoted. */
   defaultIndex: z.number().int(),
+  ...LifecycleDraftShape,
 });
 
 export type VariantDraft = z.infer<typeof VariantDraftSchema>;
@@ -58,6 +65,7 @@ export function booleanPresetDraft(): FlagDraft {
       { name: "enabled", value: "true", description: "" },
     ],
     defaultIndex: 0,
+    ...emptyLifecycleDraft,
   };
 }
 
@@ -138,6 +146,7 @@ export function draftIssues(draft: FlagDraft): DraftIssue[] {
   if (draft.name.trim() === "") issues.push({ path: "name", message: "Give the Flag a name." });
   issues.push(...keyIssues(draft.key.trim()));
   issues.push(...flagSchemaIssues(draft.valueType, draft.schemaText));
+  issues.push(...lifecycleIssues(draft));
   if (draft.variants.length === 0) {
     issues.push({ path: "variants", message: "A Flag needs at least one Variant." });
   }
@@ -227,6 +236,7 @@ export function flagCreateInput(
     key: draft.key.trim(),
     idempotency_key: idempotencyKey,
     name: draft.name.trim(),
+    ...lifecycleCreateFields(draft),
     schema,
     variants: draft.variants.map((variant, index) => ({
       name: variant.name.trim(),

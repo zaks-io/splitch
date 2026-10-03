@@ -25,6 +25,7 @@ import {
   schemaFromBody,
   variantSchemaIssues,
 } from "./flag-definition-model";
+import { writeFlagPatch } from "./flag-lifecycle-write";
 import { objectBody, optionalQueryParam, pathParam } from "./handler-input";
 import { FLAG_LIST_READ_LIMIT } from "./overview-thresholds";
 
@@ -201,16 +202,15 @@ export async function updateFlag(
   const body = objectBody(args.input);
   const schema = await prepareSchemaPatch(deps, loaded.value, body, args.requestId);
   if (!schema.ok) return schema.response;
-
-  const updated = await deps.repo.flags.updateFlag(loaded.value.scope, loaded.value.flag.id, {
+  const fields = {
     ...(body.name !== undefined ? { name: body.name as string } : {}),
     ...(body.description !== undefined ? { description: body.description as string } : {}),
     ...(schema.value !== undefined ? { schema: serializeSchema(schema.value) } : {}),
     updatedAt: nowIso(deps),
     updatedBy: args.principal.id,
-  });
-  if (!updated) return flagNotFound(args.requestId);
-  return Response.json(await flagResponse(deps.repo, loaded.value.appId, updated));
+  };
+
+  return writeFlagPatch(deps, loaded.value, body, fields, args.requestId);
 }
 
 async function prepareSchemaPatch(

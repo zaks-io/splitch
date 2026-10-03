@@ -131,15 +131,26 @@ Body:
   variants: [                // the App-level Variant catalog
     { name: string, value: boolean|string|number|object, isDefault: boolean }
   ],
+  lifecycleClass: "release"|"experiment"|"ops"|"permission",  // required (D9)
+  owner?: string,            // required for release and experiment
+  expiresAt?: string,        // ISO 8601; required for release and experiment
   idempotency_key: string    // also sent as the `Idempotency-Key` header
 }
 ```
+
+Every new Flag names a lifecycle class. A missing class is `VALIDATION_ERROR` naming
+`body.lifecycleClass`. A `release` or `experiment` Flag without `owner` or `expiresAt` is
+`FLAG_LIFECYCLE_INCOMPLETE`, whose `details.missing` names the absent inputs. `ops` and `permission`
+Flags are intentionally permanent and may omit both. The class is enforced after the Idempotency-Key
+replay lookup, so retrying an unchanged create that completed before lifecycle classes existed
+replays its original stored response instead of failing validation. `expiresAt` accepts an offset and is stored and
+returned as UTC.
 
 Requires an `Idempotency-Key` header. A Flag create re-establishes a key that a
 gated delete may have just refused to free, so a retried create must never mint a
 second definition for the same key.
 
-Returns: `{ id, appId, key, name, schema, variants, defaultVariantId, createdAt, updatedAt }`
+Returns: `{ id, appId, key, name, schema, variants, defaultVariantId, lifecycleClass, owner, expiresAt, createdAt, updatedAt }`
 Invariant: exactly one Variant is the Default Variant; every Variant `value` satisfies `schema`.
 **No `enabled` here** — enabled state is per-Environment (it lives on the Flag Configuration).
 
@@ -160,8 +171,24 @@ Panel when it is past that ceiling. A key that only exists in another App is
 
 ### `PATCH /apps/{app_id}/flags/{flag_id}`
 
-Body: `{ name?, description?, schema? }`. Does NOT accept `variants` or `enabled`.
+Body: `{ name?, description?, schema?, lifecycleClass?, owner?, expiresAt? }`. Does NOT accept
+`variants` or `enabled`. `owner: null` or `expiresAt: null` clears the value. The D9 rule is checked
+against the Flag as it would be after the patch, so classifying an `unclassified` Flag as `release`
+without also supplying a missing owner or expiry, or clearing the expiry of a `release` Flag, is
+`FLAG_LIFECYCLE_INCOMPLETE`. `unclassified` cannot be written.
 Returns: updated Flag definition.
+
+### `GET /apps/{app_id}/expired-flags`
+
+`expired_flags_list`: the App's expired-but-live Flags. A Flag is expired when its `expiresAt` is at
+or before the Worker's clock, and live while it still exists, because an existing Flag is still
+evaluable; deleting it is what takes it off this list. Items are bare Flag definitions, most overdue
+first (`expiresAt` ascending, then `id`), so each carries the `owner` who answers for removing it.
+Flags with no `expiresAt` never appear. The list keys on the expiry, not the class: an `ops` or
+`permission` Flag that keeps a passed expiry after reclassification is still listed until its
+`expiresAt` is cleared. The read is bounded like
+`flags_list` and reports `readTruncated`, `readLimit`, and `cursor: null`. CLI:
+`splitch expired-flags list`. MCP: `expired_flags_list`.
 
 ### `POST /apps/{app_id}/flags/{flag_id}/variants`
 

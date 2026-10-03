@@ -18,6 +18,9 @@ export interface ParsedGlobalFlags {
   readonly bodyJson?: string;
   readonly by?: string;
   readonly variants?: string;
+  readonly lifecycleClass?: string;
+  readonly owner?: string;
+  readonly expiresAt?: string;
   readonly fromEnvironmentId?: string;
   readonly enabled?: boolean;
   readonly rollout?: number | null;
@@ -67,6 +70,9 @@ const KNOWN_FLAGS = new Set([
   "bodyJson",
   "by",
   "variants",
+  "lifecycleClass",
+  "owner",
+  "expiresAt",
   "fromEnvironmentId",
   "enabled",
   "rollout",
@@ -237,6 +243,9 @@ function toParsedFlags(
     bodyJson: stringFlag(flags.bodyJson),
     by: stringFlag(flags.by),
     variants: stringFlag(flags.variants),
+    lifecycleClass: stringFlag(flags.lifecycleClass),
+    owner: stringFlag(flags.owner),
+    expiresAt: stringFlag(flags.expiresAt),
     fromEnvironmentId: stringFlag(flags.fromEnvironmentId),
     enabled: parseEnabledFlag(flags.enabled),
     rollout: parseRolloutFlag(flags.rollout),

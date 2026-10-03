@@ -28,6 +28,7 @@ const probes: Record<string, (sdk: ControlPlaneSdk) => Promise<unknown>> = {
       name: "Probe",
       key: "probe",
       schema: null,
+      lifecycleClass: "ops",
       variants: [{ name: "on", value: true, isDefault: true }],
       idempotency_key: KEY,
     }),

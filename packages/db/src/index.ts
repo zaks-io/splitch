@@ -28,6 +28,7 @@ export type { ReplaceTargetingRulesResult } from "./repo/flag-config-ops";
 export type { UpdateVariantResult } from "./repo/flag-variant-approval";
 export type { RemoveVariantResult, TargetingRuleVariantRef } from "./repo/flag-variant-ops";
 export type { VariantFrozenChange, VariantRunFreeze } from "./repo/flag-variant-run-freeze";
+export type { FlagDefinitionPatch } from "./repo/flag-lifecycle-reads";
 export type { CreateFlagResult } from "./repo/flags";
 export type {
   ApprovalCommit,

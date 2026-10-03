@@ -217,6 +217,8 @@ export function baseFlag(appId: string) {
     idempotency_key: `idem-create-flag-${crypto.randomUUID()}`,
     key: "checkout-redesign",
     name: "Checkout redesign",
+    // Permanent class, so fixtures that are not about lifecycle need no owner or expiry.
+    lifecycleClass: "permission" as const,
     schema: { type: "boolean" },
     variants: [
       { name: "control", value: false, isDefault: true },

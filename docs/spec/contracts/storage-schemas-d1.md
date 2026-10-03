@@ -233,23 +233,26 @@ Flag DEFINITION is App-level: `key`, value schema, and the Variant catalog. Per-
 CONFIGURATION (enabled state, available Variant subset, targeting, rollout) lives in `flag_configs`
 (ADR-0027).
 
-| Column                   | Type        | Constraints                                                          |
-| ------------------------ | ----------- | -------------------------------------------------------------------- |
-| `id`                     | text        | PK                                                                   |
-| `app_id`                 | text        | FK → apps, not null                                                  |
-| `key`                    | text        | not null, unique per `(app_id)`                                      |
-| `name`                   | text        | not null                                                             |
-| `description`            | text        | nullable                                                             |
-| `schema`                 | text        | nullable (JSON Schema); value contract Variant `value`s must satisfy |
-| `default_variant_id`     | text        | FK → variants                                                        |
-| `create_idempotency_key` | text        | nullable                                                             |
-| `create_request_hash`    | text        | nullable; canonical create payload hash                              |
-| `create_response`        | text        | nullable; exact successful response JSON                             |
-| `created_at`             | timestamptz | not null                                                             |
-| `updated_at`             | timestamptz | not null                                                             |
-| `created_by`             | text        | WorkOS user ID or deleted-user tombstone                             |
-| `updated_by`             | text        | WorkOS user ID or deleted-user tombstone                             |
-| `version`                | integer     | not null, default 1; optimistic-lock counter                         |
+| Column                   | Type        | Constraints                                                            |
+| ------------------------ | ----------- | ---------------------------------------------------------------------- |
+| `id`                     | text        | PK                                                                     |
+| `app_id`                 | text        | FK → apps, not null                                                    |
+| `key`                    | text        | not null, unique per `(app_id)`                                        |
+| `name`                   | text        | not null                                                               |
+| `description`            | text        | nullable                                                               |
+| `schema`                 | text        | nullable (JSON Schema); value contract Variant `value`s must satisfy   |
+| `default_variant_id`     | text        | FK → variants                                                          |
+| `lifecycle_class`        | text        | not null, CHECK in the D9 classes plus `unclassified` (migration 0036) |
+| `owner`                  | text        | nullable; required by the Worker for `release` and `experiment`        |
+| `expires_at`             | text        | nullable ISO 8601 UTC; partial index `(app_id, expires_at)`            |
+| `create_idempotency_key` | text        | nullable                                                               |
+| `create_request_hash`    | text        | nullable; canonical create payload hash                                |
+| `create_response`        | text        | nullable; exact successful response JSON                               |
+| `created_at`             | timestamptz | not null                                                               |
+| `updated_at`             | timestamptz | not null                                                               |
+| `created_by`             | text        | WorkOS user ID or deleted-user tombstone                               |
+| `updated_by`             | text        | WorkOS user ID or deleted-user tombstone                               |
+| `version`                | integer     | not null, default 1; optimistic-lock counter                           |
 
 UNIQUE constraint: `(app_id, created_by, create_idempotency_key)`. An exact-key retry returns the
 stored response; different intent returns `IDEMPOTENCY_KEY_CONFLICT`.
