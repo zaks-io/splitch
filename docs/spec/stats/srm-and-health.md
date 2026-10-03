@@ -210,12 +210,12 @@ diagnostics projection). The classifier is a pure function over outputs the
 platform already produces; it does not recompute the SRM test statistic, change
 the decision gate, or enter the result token.
 
-| Branch              | When it fires                                                                           | Next check                                                          |
-| ------------------- | --------------------------------------------------------------------------------------- | ------------------------------------------------------------------- |
-| `triggered_only`    | Activated SRM mismatches and Exposure SRM does not                                      | `experiment_results_get` (inspect Activation rates / activated SRM) |
-| `segment_localized` | Decision-diagnostics Dimension auto-cuts are present and a proper subset mismatch       | `decision-diagnostics`                                              |
-| `day_one`           | First-Exposure-day buckets are present, the first day mismatches, and later days do not | `decision-diagnostics`                                              |
-| `unclassified`      | SRM fired but signals are absent, global, or conflicting                                | `decision-diagnostics`                                              |
+| Branch              | When it fires                                                                                                  | Next check                                                                       |
+| ------------------- | -------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| `triggered_only`    | Activated SRM mismatches and Exposure SRM does not                                                             | `experiment_results_get` (inspect Activation rates / activated SRM)              |
+| `segment_localized` | Decision-diagnostics Dimension auto-cuts are present and a proper subset mismatch                              | `experiment_results_get` (canonical id until decision-diagnostics is registered) |
+| `day_one`           | First-Exposure-day buckets are present, the first day mismatches, and at least one later scored day does not   | `experiment_results_get` (canonical id until decision-diagnostics is registered) |
+| `unclassified`      | SRM fired but signals are absent, global, conflicting, or a singleton mismatching day with no later scored day | `experiment_results_get`                                                         |
 
 Rules:
 

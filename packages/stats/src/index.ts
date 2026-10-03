@@ -41,6 +41,7 @@ export { classifyRopeVerdict, ROPE_VERDICTS } from "./rope-verdict";
 export {
   classifySrmRootCause,
   SRM_ROOT_CAUSE_BRANCHES,
+  SRM_ROOT_CAUSE_NEXT_CHECK,
   SRM_ROOT_CAUSE_TELEMETRY_GAPS,
 } from "./srm-root-cause";
 export {

@@ -63,10 +63,16 @@ export interface SrmRootCauseInput {
   readonly dayBuckets?: readonly SrmRootCauseDayBucket[];
 }
 
+/** Canonical operation id every branch's `nextCheck` must resolve to today. */
+export const SRM_ROOT_CAUSE_NEXT_CHECK = "experiment_results_get" as const;
+
 export interface SrmRootCauseClassification {
   readonly branch: SrmRootCauseBranch;
   readonly explanation: string;
-  /** Concrete tool or route name the operator/agent should call next. */
+  /**
+   * Canonical `routeRegistry` operationId the operator/agent should call next.
+   * Must resolve via `getRoute` — never a future/spec-only path name.
+   */
   readonly nextCheck: string;
   /** Set on `unclassified`: every signal the classifier weighed. */
   readonly evidenceConsidered?: string[];
@@ -109,7 +115,7 @@ export function classifySrmRootCause(input: SrmRootCauseInput): SrmRootCauseClas
     branch: "unclassified",
     explanation:
       "Sample Ratio Mismatch fired, but the available signals do not isolate a single Fabijan branch.",
-    nextCheck: "decision-diagnostics",
+    nextCheck: SRM_ROOT_CAUSE_NEXT_CHECK,
     evidenceConsidered: evidenceConsidered(input, exposureFired, activatedFired, matches),
   };
 }
@@ -126,7 +132,7 @@ function collectMatches(
       branch: "triggered_only",
       explanation:
         "Activated-population SRM fires while Exposure SRM does not, so the Activation gate is the likely bias source.",
-      nextCheck: "experiment_results_get",
+      nextCheck: SRM_ROOT_CAUSE_NEXT_CHECK,
     });
   }
 
@@ -165,7 +171,7 @@ function segmentLocalized(
   return {
     branch: "segment_localized",
     explanation: `SRM is concentrated in ${label} while other requested slices remain balanced.`,
-    nextCheck: "decision-diagnostics",
+    nextCheck: SRM_ROOT_CAUSE_NEXT_CHECK,
   };
 }
 
@@ -180,15 +186,17 @@ function dayOneBranch(days: readonly SrmRootCauseDayBucket[] | undefined): Match
   if (!first.srmIsMismatch) {
     return null;
   }
-  // Imbalance on day one only: later first-Exposure days do not themselves mismatch.
-  if (days.slice(1).some((day) => day.srmIsMismatch)) {
+  // Presence in dayBuckets means the day was scored (enough volume for SRM).
+  // A singleton mismatching day cannot claim "later days are balanced".
+  const later = days.slice(1);
+  if (later.length === 0 || later.some((day) => day.srmIsMismatch)) {
     return null;
   }
   return {
     branch: "day_one",
     explanation:
       "SRM is concentrated in the first Exposure day; later first-Exposure days are balanced.",
-    nextCheck: "decision-diagnostics",
+    nextCheck: SRM_ROOT_CAUSE_NEXT_CHECK,
   };
 }
 

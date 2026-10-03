@@ -1,8 +1,10 @@
+import { getRoute } from "@splitch/contracts";
 import { describe, expect, it } from "vitest";
 import {
   classifySrmRootCause,
   type SrmRootCauseBranch,
   type SrmRootCauseInput,
+  SRM_ROOT_CAUSE_NEXT_CHECK,
   SRM_ROOT_CAUSE_TELEMETRY_GAPS,
 } from "./srm-root-cause";
 
@@ -16,6 +18,17 @@ describe("classifySrmRootCause", () => {
     expect(result?.branch).toBe(expectedBranch);
     expect(result?.nextCheck).toBe(nextCheck);
     expect(result?.explanation.length).toBeGreaterThan(0);
+  });
+
+  it("every branch nextCheck resolves to a registered routeRegistry operation", () => {
+    for (const { input, expectedBranch } of branchCases()) {
+      if (expectedBranch === null) continue;
+      const result = classifySrmRootCause(input);
+      if (result === null) {
+        throw new Error(`expected classification for ${expectedBranch}`);
+      }
+      expect(getRoute(result.nextCheck), result.nextCheck).toBeDefined();
+    }
   });
 
   it("triggered_only explanation names the Activation gate", () => {
@@ -47,7 +60,7 @@ describe("classifySrmRootCause", () => {
       branch: "unclassified",
       explanation:
         "Sample Ratio Mismatch fired, but the available signals do not isolate a single Fabijan branch.",
-      nextCheck: "decision-diagnostics",
+      nextCheck: SRM_ROOT_CAUSE_NEXT_CHECK,
       evidenceConsidered: [
         "exposure_srm:mismatch",
         "activated_srm:clean",
@@ -70,6 +83,16 @@ describe("classifySrmRootCause", () => {
     expect(result?.evidenceConsidered).toContain(
       "conflicting_branches:triggered_only,segment_localized",
     );
+  });
+
+  it("singleton mismatching day stays unclassified (no vacuous later-day balance)", () => {
+    const result = classifySrmRootCause({
+      exposureMismatch: true,
+      activatedMismatch: false,
+      dayBuckets: [{ day: "2026-07-01", srmIsMismatch: true }],
+    });
+    expect(result?.branch).toBe("unclassified");
+    expect(result?.evidenceConsidered).toContain("day_buckets:mismatched_1_of_1");
   });
 
   it("lists engagement_direction and latency_linked as telemetry gaps, never as branches", () => {
@@ -125,7 +148,7 @@ function branchCases(): Array<{
       name: "triggered_only when activated fires and Exposure is clean",
       input: { exposureMismatch: false, activatedMismatch: true },
       expectedBranch: "triggered_only",
-      nextCheck: "experiment_results_get",
+      nextCheck: SRM_ROOT_CAUSE_NEXT_CHECK,
     },
     {
       name: "segment_localized when a proper subset of cuts mismatch",
@@ -139,7 +162,7 @@ function branchCases(): Array<{
         ],
       },
       expectedBranch: "segment_localized",
-      nextCheck: "decision-diagnostics",
+      nextCheck: SRM_ROOT_CAUSE_NEXT_CHECK,
     },
     {
       name: "day_one when only the first Exposure day mismatches",
@@ -153,13 +176,13 @@ function branchCases(): Array<{
         ],
       },
       expectedBranch: "day_one",
-      nextCheck: "decision-diagnostics",
+      nextCheck: SRM_ROOT_CAUSE_NEXT_CHECK,
     },
     {
       name: "unclassified when Exposure fires without localizing signals",
       input: { exposureMismatch: true, activatedMismatch: false },
       expectedBranch: "unclassified",
-      nextCheck: "decision-diagnostics",
+      nextCheck: SRM_ROOT_CAUSE_NEXT_CHECK,
     },
     {
       name: "unclassified when every segment cut mismatches",
@@ -172,7 +195,7 @@ function branchCases(): Array<{
         ],
       },
       expectedBranch: "unclassified",
-      nextCheck: "decision-diagnostics",
+      nextCheck: SRM_ROOT_CAUSE_NEXT_CHECK,
     },
     {
       name: "unclassified when day-one and a later day both mismatch",
@@ -185,13 +208,23 @@ function branchCases(): Array<{
         ],
       },
       expectedBranch: "unclassified",
-      nextCheck: "decision-diagnostics",
+      nextCheck: SRM_ROOT_CAUSE_NEXT_CHECK,
+    },
+    {
+      name: "unclassified for a singleton mismatching day (no later scored day)",
+      input: {
+        exposureMismatch: true,
+        activatedMismatch: false,
+        dayBuckets: [{ day: "2026-07-01", srmIsMismatch: true }],
+      },
+      expectedBranch: "unclassified",
+      nextCheck: SRM_ROOT_CAUSE_NEXT_CHECK,
     },
     {
       name: "unclassified when both Exposure and activated SRM fire without slices",
       input: { exposureMismatch: true, activatedMismatch: true },
       expectedBranch: "unclassified",
-      nextCheck: "decision-diagnostics",
+      nextCheck: SRM_ROOT_CAUSE_NEXT_CHECK,
     },
   ];
 }
