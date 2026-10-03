@@ -6,6 +6,10 @@ import { syncExperimentConfigFromD1 } from "./experiment-handler-shared";
 import { json } from "./experiment-model";
 import { prepareStart } from "./experiment-start";
 import { decisionSpecFromProposal, runCommitmentColumns } from "./experiment-start-decision-spec";
+import {
+  resolveStartPreRegistration,
+  runMetricIdsFromPrepared,
+} from "./experiment-start-preregistration";
 import { shipCommittedRunSnapshot } from "./run-snapshot";
 
 export async function applyExperimentStart(
@@ -37,6 +41,15 @@ export async function applyExperimentStart(
   if (!prepared.ok) return await responseError(prepared.response);
   const decisionSpec = decisionSpecFromProposal(request.diff.proposed);
   if (!decisionSpec) return malformedProposal("decisionSpec");
+  // Re-resolve the caller's intent against the Metrics this apply freezes so
+  // the frozen value is what the reviewer approved (plan 2.2).
+  const preRegistration = resolveStartPreRegistration(
+    request.diff.proposed.preRegistration,
+    runMetricIdsFromPrepared(prepared.value),
+    commit.reviewId,
+  );
+  if (!preRegistration.ok) return await responseError(preRegistration.response);
+  const preRegistrationJson = preRegistration.value === null ? null : json(preRegistration.value);
   const committed = await deps.repo.experiments.startRun(scope, {
     experimentId: experiment.id,
     flagId: experiment.flagId,
@@ -60,7 +73,7 @@ export async function applyExperimentStart(
       variantSet: json(prepared.value.variantSet),
       targetingRules: json(prepared.value.targetingRules),
       confidenceLevel: experiment.confidenceLevel,
-      ...runCommitmentColumns(decisionSpec),
+      ...runCommitmentColumns(decisionSpec, preRegistrationJson),
       decisionFamily: json(prepared.value.decisionFamily),
       guardrailDecisions: json(prepared.value.guardrailDecisions),
       metricVarianceConfig: json(prepared.value.metricVarianceConfig),

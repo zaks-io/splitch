@@ -167,7 +167,10 @@ test("privacy export deploy helpers select only the Control Plane Worker", () =>
 test("follows workspace dependencies to affected Workers", () => {
   const plan = classifyProductionChanges(["packages/stats/src/index.ts"]);
 
-  assert.deepEqual(plan.workerPackages, ["@splitch/analysis-api"]);
+  // Control Plane depends on @splitch/stats for experiment_plan (power / MDE
+  // planner). ROPE / pre-registration validation stays in @splitch/contracts —
+  // this edge is the planner import, not the freeze path.
+  assert.deepEqual(plan.workerPackages, ["@splitch/analysis-api", "@splitch/control-plane-api"]);
 });
 
 test("Cloudflare toolchain changes select D1 and Workers", () => {

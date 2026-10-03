@@ -20,6 +20,7 @@ import {
   InlineApproveAndApplyReviewSchema,
 } from "./routes/route-shapes-approval-request";
 import { MAX_PLANNED_DURATION_DAYS } from "./run-commitments";
+import { PreRegistrationIntentSchema } from "./run-preregistration";
 import { TargetingKeyTypeSchema } from "./targeting-key-type";
 import { TargetingRuleInputSchema, WriteMetricRefSchema } from "./write-persisted-schemas";
 
@@ -169,12 +170,14 @@ export type ExperimentUpdateResponse = z.infer<typeof ExperimentUpdateResponseSc
 // and freezes it into a Run. `review?` can approve and apply inline; without it,
 // a gated write returns an Approval Request. `reason?` is the Run's start note.
 //
-// `horizon` / `sampleSizeLocked`, the sequential `targetN`, and the planned
-// duration are decision-spec fields that live ONLY on the Run
-// (storage-schemas-d1-experiment.md), so Start, the moment a Run is opened, is
-// where they are chosen. Every other decision-spec field is carried on the
-// Experiment and frozen from it here. Omitted `targetN` and `plannedDurationDays`
-// freeze the defaults and record that they were defaulted (ADR-0059).
+// `horizon` / `sampleSizeLocked`, the sequential `targetN`, the planned
+// duration, and optional pre-registration are decision-spec fields that live
+// ONLY on the Run (storage-schemas-d1-experiment.md), so Start, the moment a
+// Run is opened, is where they are chosen. Every other decision-spec field is
+// carried on the Experiment and frozen from it here. Omitted `targetN` and
+// `plannedDurationDays` freeze the defaults and record that they were defaulted
+// (ADR-0059). Omitted `preRegistration` leaves the Run without one (no behavior
+// change for existing clients).
 // ---------------------------------------------------------------------------
 
 export const RunHorizonSchema = z.enum(["sequential", "fixed"]);
@@ -191,15 +194,31 @@ export const StartRunRequestSchema = z
     /** Whole weeks by policy (default 7, at most 365); any other value needs an override reason. */
     plannedDurationDays: z.number().int().positive().max(MAX_PLANNED_DURATION_DAYS).optional(),
     plannedDurationOverrideReason: PersistedDescriptionSchema.min(1).optional(),
+    /**
+     * Optional pre-registration (hypothesis, primary Metric, per-Metric
+     * desirability / MDE / ROPE, ship rule). Frozen immutably when present.
+     */
+    preRegistration: PreRegistrationIntentSchema.optional(),
     idempotency_key: IdempotencyKeySchema,
   })
   .strict();
 export type StartRunRequest = z.infer<typeof StartRunRequestSchema>;
 
+/**
+ * Run leaf plus optional frozen pre-registration. Shared by Start / Conclude /
+ * GET Run responses so SDK parsing cannot strip a field handlers already return
+ * via `runResponse()`.
+ */
+export const RunWithPreRegistrationSchema = RunSchema.extend({
+  /** Frozen pre-registration when Start recorded one; absent otherwise. */
+  preRegistration: PreRegistrationIntentSchema.optional(),
+});
+export type RunWithPreRegistration = z.infer<typeof RunWithPreRegistrationSchema>;
+
 export const StartRunResponseSchema = z
   .object({
     experimentId: z.string(),
-    run: RunSchema,
+    run: RunWithPreRegistrationSchema,
     previousRunId: z.string().nullable(),
     approvalRequest: ApprovalRequestSchema.nullable(),
     // Present only when this request itself committed the Start (the direct
@@ -244,7 +263,7 @@ export type PatchRunRequest = z.infer<typeof PatchRunRequestSchema>;
 // second call (SPL-307).
 // ---------------------------------------------------------------------------
 
-export const RunResponseSchema = RunSchema.extend({
+export const RunResponseSchema = RunWithPreRegistrationSchema.extend({
   draftTargetingRules: z.array(TargetingRuleSchema).nullable().optional(),
 });
 export type RunResponse = z.infer<typeof RunResponseSchema>;

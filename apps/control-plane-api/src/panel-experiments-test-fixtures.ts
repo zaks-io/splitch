@@ -72,6 +72,7 @@ export function runRow(ids: PanelExperimentIds, runNumber: 1 | 2) {
     targetNSource: null,
     plannedDurationDays: null,
     plannedDurationOverrideReason: null,
+    preRegistration: null,
     sampleSizeLocked: null,
     decisionFamily: "[]",
     guardrailDecisions: "[]",

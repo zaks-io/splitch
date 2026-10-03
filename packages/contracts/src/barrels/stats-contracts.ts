@@ -17,6 +17,32 @@ export {
   SUPPORTED_ANALYSIS_VERSIONS,
   TargetNSourceSchema,
 } from "../run-commitments";
+export type {
+  PreRegistration,
+  PreRegistrationIntent,
+  PreRegistrationIssueCode,
+  PreRegistrationMetric,
+  PreRegistrationRope,
+  RopeScale,
+  ShipConflictResolution,
+  ShipRule,
+} from "../run-preregistration";
+export {
+  PreRegistrationIntentSchema,
+  PreRegistrationMetricSchema,
+  PreRegistrationRopeSchema,
+  PreRegistrationSchema,
+  RopeScaleSchema,
+  ShipConflictResolutionSchema,
+  ShipRuleSchema,
+  preRegistrationIssueCodes,
+  shipConflictResolutions,
+} from "../run-preregistration";
+export type { PreRegistrationIssue } from "../run-preregistration-resolve";
+export {
+  preRegistrationToIntent,
+  resolvePreRegistration,
+} from "../run-preregistration-resolve";
 // What the stats engine is handed and what it returns. Grouped because they are
 // read together: the analysis knobs frozen on the input (variance config,
 // guardrail bounds) are what the result's techniques and guardrail rows report
@@ -65,6 +91,8 @@ export type {
   EstimandLabel,
   GuardrailResult,
   HealthMetrics,
+  RopeVerdict,
+  RopeVerdictUnavailableReason,
   SrmResult,
   StatsEngine,
   StatsOutput,
@@ -89,6 +117,8 @@ export {
   estimandLabels,
   GuardrailResultSchema,
   HealthMetricsSchema,
+  RopeVerdictSchema,
+  RopeVerdictUnavailableReasonSchema,
   SrmResultSchema,
   StatsOutputSchema,
   StatsResultStatusSchema,

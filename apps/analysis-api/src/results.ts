@@ -31,6 +31,7 @@ import {
   rowObject,
   stringField,
 } from "./results-row-fields";
+import { commitmentStatsBindings, frozenAnalysisVersion } from "./results-preregistration";
 import { materializeRunCommitments } from "./results-run-commitments";
 import {
   assertAnalysisInputsPresent,
@@ -194,7 +195,7 @@ async function readResultsComputationFromTinybird(
     ...run,
     // Bind the Run's frozen (or legacy) version so the engine cannot silently
     // re-decide under a newer implementation (ADR-0059).
-    analysis_version: commitments.analysis_version,
+    ...commitmentStatsBindings(commitments),
     exposures,
     metric_values,
     ...(prePeriodRows.length > 0
@@ -215,11 +216,6 @@ async function readResultsComputationFromTinybird(
     commitments,
     ...(dataWatermark ? { dataWatermark } : {}),
   };
-}
-
-/** A legacy Run's token omits the version so it stays byte-identical (ADR-0059). */
-function frozenAnalysisVersion(commitments: RunCommitments): string | null {
-  return commitments.analysis_version_source === "frozen" ? commitments.analysis_version : null;
 }
 
 function materializeProvenancedRun(runInput: unknown, requestedRunId: string | undefined) {

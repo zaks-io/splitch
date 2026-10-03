@@ -9,6 +9,8 @@
 export interface ValidationIssue {
   path: string[];
   message: string;
+  /** Stable machine code for structured validation failures (e.g. pre-registration). */
+  code?: string;
 }
 
 export function schemaDefinitionIssues(

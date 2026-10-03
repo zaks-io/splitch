@@ -106,6 +106,14 @@ describe("runs commitments (ADR-0059)", () => {
   });
 });
 
+describe("runs pre-registration (plan 2.2)", () => {
+  it("applies and declares nullable pre_registration so Starts without one stay null", () => {
+    expect(migrationSql).toContain("ALTER TABLE `runs` ADD `pre_registration` text");
+    expect(getTableColumns(runs).preRegistration.name).toBe("pre_registration");
+    expect(getTableColumns(runs).preRegistration.notNull).toBe(false);
+  });
+});
+
 describe("runs storage-only decision columns", () => {
   // These live ONLY on the D1 runs table — the S02 Run Zod leaf omits them.
   const storageOnlyColumns = [

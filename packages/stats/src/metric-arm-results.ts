@@ -7,6 +7,7 @@ import type {
 } from "@splitch/contracts";
 import { type CappedArmEvidence, estimandDisclosure } from "./estimand-disclosure";
 import { FixedHorizonCI } from "./fixed-horizon-ci";
+import { withRopeVerdict } from "./metric-arm-rope";
 import { metricTypesById } from "./metric-discovery";
 import { fiellerRelativeCi } from "./relative-ci";
 import { SequentialCI, type CIAdapter, type CIResult } from "./sequential-ci";
@@ -69,8 +70,9 @@ export function analyzeMetricArmResults(
 
     for (const comparison of comparisons) {
       const variant = comparison.treatment.variant;
+      const treatment = treatmentArmResult(input, comparison, adapters);
       armResults.push({
-        ...treatmentArmResult(input, comparison, adapters),
+        ...treatment,
         estimand: estimandDisclosure(
           metricType,
           winsorized &&
@@ -188,23 +190,31 @@ function treatmentArmResult(
 ): ArmResult {
   const decisionCi = decisionCiForComparison(input, comparison, adapters);
   const status = treatmentStatusForOutput(comparison, decisionCi);
+  const ci_lower = relativeCiBoundForOutput(comparison, decisionCi, "lower");
+  const ci_upper = relativeCiBoundForOutput(comparison, decisionCi, "upper");
 
-  return {
-    variant: comparison.treatment.variant,
-    metric_id: comparison.metric_id,
-    sample_size_n: comparison.treatment.sample_size_n,
-    point_estimate: pointEstimateForOutput(comparison.treatment),
-    relative_lift_pct: relativeLiftForOutput(comparison),
-    ci_lower: relativeCiBoundForOutput(comparison, decisionCi, "lower"),
-    ci_upper: relativeCiBoundForOutput(comparison, decisionCi, "upper"),
-    p_value: decisionCi?.p_value ?? 1,
-    is_significant: false,
-    in_bh_family: false,
-    exploratory: true,
-    decision_valid: false,
-    status,
-    variance_techniques: comparison.variance_techniques,
-  };
+  return withRopeVerdict(
+    {
+      variant: comparison.treatment.variant,
+      metric_id: comparison.metric_id,
+      sample_size_n: comparison.treatment.sample_size_n,
+      point_estimate: pointEstimateForOutput(comparison.treatment),
+      relative_lift_pct: relativeLiftForOutput(comparison),
+      ci_lower,
+      ci_upper,
+      p_value: decisionCi?.p_value ?? 1,
+      is_significant: false,
+      in_bh_family: false,
+      exploratory: true,
+      decision_valid: false,
+      status,
+      variance_techniques: comparison.variance_techniques,
+    },
+    {
+      preRegistration: input.pre_registration,
+      decisionCi,
+    },
+  );
 }
 
 function decisionCiForComparison(

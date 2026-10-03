@@ -20,6 +20,7 @@ SQL >
         target_n_source,
         planned_duration_days,
         planned_duration_override_reason,
+        pre_registration,
         allocation,
         control_variant,
         control_variant_id,

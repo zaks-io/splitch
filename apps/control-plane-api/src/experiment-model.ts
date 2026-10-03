@@ -1,11 +1,15 @@
 import {
+  type Experiment,
   ExperimentSchema,
   ExperimentUpdateResponseSchema,
-  type Experiment,
   type LiveRunUnaffected,
   type MetricRef,
-  RunResponseSchema,
+  type PreRegistration,
+  type PreRegistrationIntent,
+  PreRegistrationSchema,
+  preRegistrationToIntent,
   type Run,
+  RunResponseSchema,
   type TargetingRule,
   type Variant,
 } from "@splitch/contracts";
@@ -67,6 +71,7 @@ export function runResponse(
   row: RunRow,
   options?: { draftTargetingRules?: TargetingRule[] | null },
 ): Run & { draftTargetingRules?: TargetingRule[] | null } {
+  const preRegistration = parsePreRegistrationIntent(row.preRegistration);
   return RunResponseSchema.parse({
     id: row.id,
     experimentId: row.experimentId,
@@ -82,6 +87,7 @@ export function runResponse(
     startedAt: row.startedAt,
     endedAt: row.endedAt,
     createdAt: row.createdAt,
+    ...(preRegistration !== undefined ? { preRegistration } : {}),
     ...(options && "draftTargetingRules" in options
       ? { draftTargetingRules: options.draftTargetingRules ?? null }
       : {}),
@@ -107,6 +113,35 @@ export function jsonObject<T extends Record<string, unknown>>(raw: string | null
 
 export function json(value: unknown): string {
   return JSON.stringify(value);
+}
+
+/**
+ * Recorded null means the Run never pre-registered. Empty string or a missing
+ * column is refused rather than dropped, matching Analysis materialization so a
+ * corrupted freeze cannot silently become "no pre-registration" on Run reads.
+ */
+export function parsePreRegistrationIntent(
+  raw: string | null | undefined,
+): PreRegistrationIntent | undefined {
+  if (raw === null) return undefined;
+  if (raw === undefined || raw === "") {
+    throw new Error("Run pre_registration is empty; expected JSON or null (never registered)");
+  }
+  let value: unknown;
+  try {
+    value = JSON.parse(raw) as unknown;
+  } catch (cause) {
+    throw new Error(
+      `Run pre_registration is not valid JSON: ${cause instanceof Error ? cause.message : String(cause)}`,
+    );
+  }
+  const parsed = PreRegistrationSchema.safeParse(value);
+  if (!parsed.success) {
+    throw new Error(
+      `Run pre_registration is invalid: ${parsed.error.issues.map((issue) => issue.message).join("; ")}`,
+    );
+  }
+  return preRegistrationToIntent(parsed.data satisfies PreRegistration);
 }
 
 export async function runConfigHash(input: {

@@ -153,13 +153,22 @@ unproven; the Fieller sequential-coverage audit is scheduled separately.
 
 ## ROPE verdict (confidence-sequence helper)
 
-`classifyRopeVerdict` in `packages/stats/src/rope-verdict.ts` classifies a finite confidence-sequence
-interval against a Region Of Practical Equivalence (ROPE) on the same scale the decision gate uses
-(absolute or relative, as the caller states). Pre-registration will supply the ROPE per Metric; this
-slice exports the pure classifier only and does not yet attach a `ropeVerdict` field to `ArmResult`.
+`classifyRopeVerdict` in `packages/stats/src/rope-verdict.ts` classifies a finite absolute
+confidence-sequence interval against a Region Of Practical Equivalence (ROPE) on the absolute scale.
+When a Metric's pre-registration freezes an absolute ROPE at Run Start (plan 2.2), treatment
+`ArmResult` rows include `ropeVerdict` and `ropeScale: "absolute"` for that Metric; when none was
+pre-registered, or the absolute interval is not finite, both fields are absent (not defaulted).
 
-Both the interval and the ROPE are closed. Because the interval is an always-valid confidence
-sequence, the verdict is valid at any look (Kruschke 2018).
+Relative ROPEs are refused at Start with `PREREG_ROPE_RELATIVE_UNSUPPORTED`: the Fieller relative
+inversion used for relative intervals does not yet have proven time-uniform coverage under sequential
+analysis (see Guardrail `ci_lower` above). If a relative ROPE is nonetheless present at results time,
+the engine emits `ropeVerdictUnavailable: "relative_sequential_coverage_unproven"` instead of a
+verdict or a silent omission. The result token strips `ropeVerdict` / `ropeScale` /
+`ropeVerdictUnavailable` the same way it strips `estimand`, so Runs without pre-registration keep
+byte-identical tokens.
+
+Both the interval and the ROPE are closed. Because the absolute interval is an always-valid confidence
+sequence, an absolute-scale verdict is valid at any look (Kruschke 2018).
 
 | Verdict     | Meaning                                                                                    |
 | ----------- | ------------------------------------------------------------------------------------------ |
@@ -169,6 +178,9 @@ sequence, the verdict is valid at any look (Kruschke 2018).
 
 Non-finite bounds, an inverted interval (`lower > upper`), or a non-positive-width ROPE
 (`ropeLower >= ropeUpper`) throw. A point interval (`lower === upper`) is allowed.
+
+Scorecard rendering of trust checks and the ship recommendation that consumes the locked ship rule
+are plan item 2.4 and are out of scope here.
 
 ## Analysis Results envelope (Analysis Worker)
 
@@ -195,13 +207,14 @@ result exists.
 A ready envelope also carries `run_commitments`, what the Run froze at Start
 ([ADR-0059](../../adr/0059-runs-freeze-an-analysis-version-and-legacy-runs-read-under-a-labeled-one.md)):
 
-| Field                              | Versioned Run (`analysis_version_source: "frozen"`)   | Legacy Run (`"legacy"`) |
-| ---------------------------------- | ----------------------------------------------------- | ----------------------- |
-| `analysis_version`                 | The frozen version                                    | `legacy-unversioned`    |
-| `target_n`                         | Frozen target; null on a fixed horizon                | null                    |
-| `target_n_source`                  | `caller` or `default`; null on a fixed horizon        | null                    |
-| `planned_duration_days`            | Planned duration                                      | null                    |
-| `planned_duration_override_reason` | Label when the duration is not whole weeks, else null | null                    |
+| Field                              | Versioned Run (`analysis_version_source: "frozen"`)               | Legacy Run (`"legacy"`) |
+| ---------------------------------- | ----------------------------------------------------------------- | ----------------------- |
+| `analysis_version`                 | The frozen version                                                | `legacy-unversioned`    |
+| `target_n`                         | Frozen target; null on a fixed horizon                            | null                    |
+| `target_n_source`                  | `caller` or `default`; null on a fixed horizon                    | null                    |
+| `planned_duration_days`            | Planned duration                                                  | null                    |
+| `planned_duration_override_reason` | Label when the duration is not whole weeks, else null             | null                    |
+| `pre_registration`                 | Frozen pre-registration when Start supplied one; otherwise absent | absent                  |
 
 A legacy Run never reports a target or duration it did not record. Analysis refuses a Run frozen
 under a version it does not implement with `VALIDATION_ERROR` instead of analyzing it under a

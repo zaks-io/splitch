@@ -1,7 +1,7 @@
 import { z } from "@hono/zod-openapi";
 import { CanonicalJsonSha256Schema } from "./canonical-hash";
-import { RunSchema } from "./leaf-schemas-experiment";
 import { IdempotencyKeySchema, PersistedDescriptionSchema } from "./persisted-field-limits";
+import { RunWithPreRegistrationSchema } from "./resource-envelopes-experiment";
 import {
   ApprovalRequestSchema,
   InlineApproveAndApplyReviewSchema,
@@ -54,7 +54,7 @@ export type ExperimentConclusion = z.infer<typeof ExperimentConclusionSchema>;
 
 export const ConcludeRunResponseSchema = z
   .object({
-    run: RunSchema,
+    run: RunWithPreRegistrationSchema,
     conclusion: ExperimentConclusionSchema,
     approvalRequest: ApprovalRequestSchema,
   })

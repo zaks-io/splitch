@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { MetricKindSchema, MetricRefSchema } from "./leaf-schemas-experiment";
 import { ANALYSIS_V1_VERSION } from "./run-commitments";
+import { PreRegistrationSchema } from "./run-preregistration";
 import { CupedAttributeSourceSchema, DimensionClassSchema } from "./stats-result-contract";
 
 const MetricIdSchema = MetricRefSchema.shape.metricId;
@@ -229,6 +230,11 @@ export const StatsInputSchema = z
     decision_family: z.array(DecisionFamilyMemberSchema),
     guardrail_decisions: z.array(GuardrailDecisionSchema).default([]),
     metric_variance_config: z.array(MetricVarianceConfigSchema).default([]),
+    /**
+     * Frozen pre-registration when the Run recorded one. Drives per-Metric
+     * ropeVerdict on ArmResult; omit when Start did not pre-register.
+     */
+    pre_registration: PreRegistrationSchema.optional(),
     exposures: z.array(DedupeExposureRowSchema),
     metric_values: z.array(PerEntityMetricRowSchema),
     pre_period_covariates: z.array(CupedCovariateRowSchema).optional(),
