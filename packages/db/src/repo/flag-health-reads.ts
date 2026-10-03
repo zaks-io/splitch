@@ -1,11 +1,15 @@
-import { and, count, eq, gte, inArray, isNotNull, lte, max, min, sql, type SQL } from "drizzle-orm";
+import { and, count, eq, gte, isNotNull, lte, min, sql, type SQL } from "drizzle-orm";
 import { flagChangeEvents, flags } from "../schema/index";
 import type { Db } from "./client";
 import {
   loadHasInWindowLegacyRuns,
   loadLatestRunLifecycleAtByFlagEnv,
 } from "./flag-health-run-history";
-import { idBatches } from "./id-batches";
+import {
+  loadLatestChangeAtByFlagIds,
+  readStaleDetectionSnapshot,
+  type StaleDetectionSnapshot,
+} from "./flag-health-stale-snapshot";
 import { assertMintedScope, type TenantScope, withTenantScope } from "./scope";
 
 const FLAG_SCOPE = {
@@ -127,120 +131,97 @@ function ageBucketsFromAggregateRow(
   return AGE_BUCKETS.map((bucket) => ({ bucket, count: counts[bucket] }));
 }
 
-async function loadLatestChangeAtByFlagIds(
+async function readInventoryHealthAggregates(
   db: Db,
   scope: TenantScope,
-  flagIds: readonly string[],
-): Promise<Map<string, string>> {
+  asOf: string,
+): Promise<FlagInventoryHealthAggregates> {
   assertMintedScope(scope);
-  if (flagIds.length === 0) return new Map();
-  const pages = await Promise.all(
-    idBatches(flagIds).map((batch) =>
-      db
-        .select({
-          flagId: flagChangeEvents.flagId,
-          lastChangedAt: max(flagChangeEvents.changedAt),
-        })
-        .from(flagChangeEvents)
-        .where(
-          withTenantScope(
-            CHANGE_SCOPE,
-            scope,
-            requireSql(inArray(flagChangeEvents.flagId, batch), "latest change flagIds"),
-          ),
-        )
-        .groupBy(flagChangeEvents.flagId),
+  const classQuery = db
+    .select({
+      lifecycleClass: flags.lifecycleClass,
+      count: count(),
+    })
+    .from(flags)
+    .where(withTenantScope(FLAG_SCOPE, scope, anyFlag))
+    .groupBy(flags.lifecycleClass);
+  const ageQuery = ageBucketCountsQuery(db, scope, asOf);
+  const creationQuery = flagActionByMonthQuery(db, scope, "created", "creation predicate");
+  const deletionQuery = flagActionByMonthQuery(db, scope, "deleted", "deletion predicate");
+  const earliestQuery = db
+    .select({ earliest: min(flagChangeEvents.changedAt) })
+    .from(flagChangeEvents)
+    .where(withTenantScope(CHANGE_SCOPE, scope, gte(flagChangeEvents.seq, 0)));
+  const expiredQuery = db
+    .select({ count: count() })
+    .from(flags)
+    .where(
+      withTenantScope(
+        FLAG_SCOPE,
+        scope,
+        requireSql(
+          and(isNotNull(flags.expiresAt), lte(flags.expiresAt, asOf)),
+          "expired predicate",
+        ),
+      ),
+    );
+
+  const [classRows, ageRows, creationMonths, deletionMonths, earliestRows, expiredRows] =
+    await db.batch([
+      classQuery,
+      ageQuery,
+      creationQuery,
+      deletionQuery,
+      earliestQuery,
+      expiredQuery,
+    ] as unknown as Parameters<Db["batch"]>[0]);
+
+  return {
+    classRows: (classRows as Array<{ lifecycleClass: string; count: number }>).map((row) => ({
+      lifecycleClass: row.lifecycleClass,
+      count: Number(row.count),
+    })),
+    ageBuckets: ageBucketsFromAggregateRow(
+      (
+        ageRows as Array<{
+          c0_30d: number;
+          c30_90d: number;
+          c90_180d: number;
+          c180_365d: number;
+          c365d_plus: number;
+        }>
+      )[0],
     ),
-  );
-  const out = new Map<string, string>();
-  for (const row of pages.flat()) {
-    if (row.lastChangedAt === null) {
-      throw new Error(
-        `latestChangeAtByFlagId: Flag ${row.flagId} has change-log rows but no changedAt`,
-      );
-    }
-    out.set(row.flagId, row.lastChangedAt);
-  }
-  return out;
+    creationMonths: mapMonthRows(creationMonths as Array<{ month: string; count: number }>),
+    deletionMonths: mapMonthRows(deletionMonths as Array<{ month: string; count: number }>),
+    earliestLog: (earliestRows as Array<{ earliest: string | null }>)[0]?.earliest ?? null,
+    expiredButLiveCount: Number((expiredRows as Array<{ count: number }>)[0]?.count ?? 0),
+  };
 }
 
 /**
- * Aggregations for Flag inventory health (plan 3.8) and the latest change-log
- * instant per Flag for stale unchanged detection (plan 3.6). All reads bind a
- * minted TenantScope; none invent defaults for missing data.
+ * Aggregations for Flag inventory health (plan 3.8) and stale detection reads
+ * (plan 3.6). All reads bind a minted TenantScope; none invent defaults for
+ * missing data.
  */
 export function makeFlagHealthReads(db: Db) {
   return {
-    /**
-     * Inventory + churn aggregates in one D1 batch so concurrent Flag create /
-     * delete cannot make earliestChangeLogAt, monthly churn, class totals, age
-     * buckets, and expired counts disagree.
-     */
-    async loadInventoryHealthAggregates(
+    /** Inventory + churn aggregates in one D1 batch (consistent snapshot). */
+    loadInventoryHealthAggregates(
       scope: TenantScope,
       asOf: string,
     ): Promise<FlagInventoryHealthAggregates> {
-      assertMintedScope(scope);
-      const classQuery = db
-        .select({
-          lifecycleClass: flags.lifecycleClass,
-          count: count(),
-        })
-        .from(flags)
-        .where(withTenantScope(FLAG_SCOPE, scope, anyFlag))
-        .groupBy(flags.lifecycleClass);
-      const ageQuery = ageBucketCountsQuery(db, scope, asOf);
-      const creationQuery = flagActionByMonthQuery(db, scope, "created", "creation predicate");
-      const deletionQuery = flagActionByMonthQuery(db, scope, "deleted", "deletion predicate");
-      const earliestQuery = db
-        .select({ earliest: min(flagChangeEvents.changedAt) })
-        .from(flagChangeEvents)
-        .where(withTenantScope(CHANGE_SCOPE, scope, gte(flagChangeEvents.seq, 0)));
-      const expiredQuery = db
-        .select({ count: count() })
-        .from(flags)
-        .where(
-          withTenantScope(
-            FLAG_SCOPE,
-            scope,
-            requireSql(
-              and(isNotNull(flags.expiresAt), lte(flags.expiresAt, asOf)),
-              "expired predicate",
-            ),
-          ),
-        );
+      return readInventoryHealthAggregates(db, scope, asOf);
+    },
 
-      const [classRows, ageRows, creationMonths, deletionMonths, earliestRows, expiredRows] =
-        await db.batch([
-          classQuery,
-          ageQuery,
-          creationQuery,
-          deletionQuery,
-          earliestQuery,
-          expiredQuery,
-        ] as unknown as Parameters<Db["batch"]>[0]);
-
-      return {
-        classRows: (classRows as Array<{ lifecycleClass: string; count: number }>).map((row) => ({
-          lifecycleClass: row.lifecycleClass,
-          count: Number(row.count),
-        })),
-        ageBuckets: ageBucketsFromAggregateRow(
-          (
-            ageRows as Array<{
-              c0_30d: number;
-              c30_90d: number;
-              c90_180d: number;
-              c180_365d: number;
-              c365d_plus: number;
-            }>
-          )[0],
-        ),
-        creationMonths: mapMonthRows(creationMonths as Array<{ month: string; count: number }>),
-        deletionMonths: mapMonthRows(deletionMonths as Array<{ month: string; count: number }>),
-        earliestLog: (earliestRows as Array<{ earliest: string | null }>)[0]?.earliest ?? null,
-        expiredButLiveCount: Number((expiredRows as Array<{ count: number }>)[0]?.count ?? 0),
-      };
+    /** Stale-detection evidence in one D1 batch (consistent snapshot). */
+    loadStaleDetectionSnapshot(
+      scope: TenantScope,
+      flagIds: readonly string[],
+      environmentIds: readonly string[],
+      windowStartIso: string,
+    ): Promise<StaleDetectionSnapshot> {
+      return readStaleDetectionSnapshot(db, scope, flagIds, environmentIds, windowStartIso);
     },
 
     /**

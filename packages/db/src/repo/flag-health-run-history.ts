@@ -14,6 +14,12 @@ const RUN_SCOPE = {
   appIdKey: "appId",
 } as const;
 
+export type RunLifecycleAggregateRow = {
+  flagId: string;
+  environmentId: string | null;
+  latestChangedAt: string | null;
+};
+
 function requireSql(value: SQL | undefined, label: string): SQL {
   if (!value) throw new Error(`flag-health-run-history: ${label} produced no SQL`);
   return value;
@@ -30,42 +36,44 @@ function requireSql(value: SQL | undefined, label: string): SQL {
  * current `flagId`. Callers must probe `hasInWindowLegacyRuns` and fail loud
  * when any such Run still affects the uniform-serving window.
  */
-export async function loadLatestRunLifecycleAtByFlagEnv(
+export function runLifecycleQueries(
   db: Db,
   scope: TenantScope,
   flagIds: readonly string[],
   environmentIds: readonly string[],
-): Promise<Map<string, string>> {
+) {
   assertMintedScope(scope);
-  if (flagIds.length === 0 || environmentIds.length === 0) return new Map();
-  const out = new Map<string, string>();
-  const pages = await Promise.all(
-    twoAxisIdBatches(flagIds, environmentIds).map(({ first, second }) =>
-      db
-        .select({
-          flagId: flagChangeEvents.flagId,
-          environmentId: flagChangeEvents.environmentId,
-          latestChangedAt: max(flagChangeEvents.changedAt),
-        })
-        .from(flagChangeEvents)
-        .where(
-          withTenantScope(
-            CHANGE_SCOPE,
-            scope,
-            requireSql(
-              and(
-                eq(flagChangeEvents.targetType, "run"),
-                inArray(flagChangeEvents.flagId, first),
-                inArray(flagChangeEvents.environmentId, second),
-              ),
-              "run lifecycle predicate",
+  return twoAxisIdBatches(flagIds, environmentIds).map(({ first, second }) =>
+    db
+      .select({
+        flagId: flagChangeEvents.flagId,
+        environmentId: flagChangeEvents.environmentId,
+        latestChangedAt: max(flagChangeEvents.changedAt),
+      })
+      .from(flagChangeEvents)
+      .where(
+        withTenantScope(
+          CHANGE_SCOPE,
+          scope,
+          requireSql(
+            and(
+              eq(flagChangeEvents.targetType, "run"),
+              inArray(flagChangeEvents.flagId, first),
+              inArray(flagChangeEvents.environmentId, second),
             ),
+            "run lifecycle predicate",
           ),
-        )
-        .groupBy(flagChangeEvents.flagId, flagChangeEvents.environmentId),
-    ),
+        ),
+      )
+      .groupBy(flagChangeEvents.flagId, flagChangeEvents.environmentId),
   );
-  for (const row of pages.flat()) {
+}
+
+export function mapRunLifecycleRows(
+  rows: readonly RunLifecycleAggregateRow[],
+): Map<string, string> {
+  const out = new Map<string, string>();
+  for (const row of rows) {
     if (row.environmentId === null) {
       throw new Error(
         `latestRunLifecycleAtByFlagEnv: Flag ${row.flagId} has a run change-log row with null environmentId`,
@@ -81,6 +89,17 @@ export async function loadLatestRunLifecycleAtByFlagEnv(
   return out;
 }
 
+export async function loadLatestRunLifecycleAtByFlagEnv(
+  db: Db,
+  scope: TenantScope,
+  flagIds: readonly string[],
+  environmentIds: readonly string[],
+): Promise<Map<string, string>> {
+  if (flagIds.length === 0 || environmentIds.length === 0) return new Map();
+  const pages = await Promise.all(runLifecycleQueries(db, scope, flagIds, environmentIds));
+  return mapRunLifecycleRows(pages.flat());
+}
+
 /**
  * A legacy Run is one with no Start change-log row (`target_type=run` and
  * `diff_json.runNumber` present, as the INSERT trigger writes). The Run
@@ -90,11 +109,7 @@ export async function loadLatestRunLifecycleAtByFlagEnv(
  * Returns true when any such Run in the App is still running or ended at or
  * after `windowStartIso` (the uniform-serving history window floor).
  */
-export async function loadHasInWindowLegacyRuns(
-  db: Db,
-  scope: TenantScope,
-  windowStartIso: string,
-): Promise<boolean> {
+export function legacyRunsProbeQuery(db: Db, scope: TenantScope, windowStartIso: string) {
   assertMintedScope(scope);
   // Start (INSERT) rows carry runNumber; End (status UPDATE) rows do not.
   const hasStartLog = sql`exists (
@@ -108,7 +123,7 @@ export async function loadHasInWindowLegacyRuns(
     or(eq(runs.status, "running"), and(isNotNull(runs.endedAt), gte(runs.endedAt, windowStartIso))),
     "legacy run window predicate",
   );
-  const rows = await db
+  return db
     .select({ id: runs.id })
     .from(runs)
     .where(
@@ -119,5 +134,13 @@ export async function loadHasInWindowLegacyRuns(
       ),
     )
     .limit(1);
+}
+
+export async function loadHasInWindowLegacyRuns(
+  db: Db,
+  scope: TenantScope,
+  windowStartIso: string,
+): Promise<boolean> {
+  const rows = await legacyRunsProbeQuery(db, scope, windowStartIso);
   return rows.length > 0;
 }

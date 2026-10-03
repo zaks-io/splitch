@@ -18,6 +18,9 @@ import { FLAG_LIST_READ_LIMIT } from "./overview-thresholds";
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
 type FlagRow = Awaited<ReturnType<Repository["flags"]["listFlagPage"]>>[number];
+type StaleDetectionSnapshot = Awaited<
+  ReturnType<Repository["flagHealth"]["loadStaleDetectionSnapshot"]>
+>;
 
 /**
  * Configuration-state stale detection (plan 3.6). Suggest only: no archive, no
@@ -64,12 +67,10 @@ export async function listStaleFlags(
 
 type StaleDetectionContext = {
   catalogs: Awaited<ReturnType<Repository["flags"]["listVariantsForFlags"]>>;
-  configByScope: Map<string, { enabled: boolean; rollout: string | null; updatedAt: string }>;
+  snapshot: StaleDetectionSnapshot;
+  configByScope: Map<string, StaleDetectionSnapshot["configs"][number]>;
   ruleCountByScope: Map<string, number>;
   runningExperimentScopes: Set<string>;
-  runLifecycleByScope: Map<string, string>;
-  lastChangeByFlag: Map<string, string>;
-  runHistory: "available" | "unavailable";
 };
 
 async function loadStaleDetectionContext(
@@ -83,47 +84,30 @@ async function loadStaleDetectionContext(
   const windowStartIso = new Date(
     Date.parse(now) - FLAG_UNIFORM_SERVING_HISTORY_WINDOW_DAYS * MS_PER_DAY,
   ).toISOString();
-  const [
-    catalogs,
-    configs,
-    targetingRules,
-    experiments,
-    runLifecycleByScope,
-    lastChangeByFlag,
-    hasInWindowLegacyRuns,
-  ] = await Promise.all([
+  const [catalogs, snapshot] = await Promise.all([
     repo.flags.listVariantsForFlags(scope, flagIds),
-    repo.flags.listFlagConfigsByFlagIdsAcrossEnvironments(scope, flagIds, environmentIds),
-    repo.flags.listTargetingRulesByFlagIdsAcrossEnvironments(scope, flagIds, environmentIds),
-    repo.experiments.listRunningExperimentsForFlagsAcrossEnvironments(
-      scope,
-      flagIds,
-      environmentIds,
-    ),
-    repo.flagHealth.latestRunLifecycleAtByFlagEnv(scope, flagIds, environmentIds),
-    repo.flagHealth.latestChangeAtByFlagId(scope, flagIds),
-    repo.flagHealth.hasInWindowLegacyRuns(scope, windowStartIso),
+    repo.flagHealth.loadStaleDetectionSnapshot(scope, flagIds, environmentIds, windowStartIso),
   ]);
 
   const configByScope = new Map(
-    configs.map((config) => [scopeKey(config.flagId, config.environmentId), config]),
+    snapshot.configs.map((config) => [scopeKey(config.flagId, config.environmentId), config]),
   );
   const ruleCountByScope = new Map<string, number>();
-  for (const rule of targetingRules) {
+  for (const rule of snapshot.targetingRules) {
     const key = scopeKey(rule.flagId, rule.environmentId);
     ruleCountByScope.set(key, (ruleCountByScope.get(key) ?? 0) + 1);
   }
 
   return {
     catalogs,
+    snapshot,
     configByScope,
     ruleCountByScope,
     runningExperimentScopes: new Set(
-      experiments.map((experiment) => scopeKey(experiment.flagId, experiment.environmentId)),
+      snapshot.runningExperiments.map((experiment) =>
+        scopeKey(experiment.flagId, experiment.environmentId),
+      ),
     ),
-    runLifecycleByScope,
-    lastChangeByFlag,
-    runHistory: hasInWindowLegacyRuns ? "unavailable" : "available",
   };
 }
 
@@ -138,10 +122,10 @@ function staleItemForFlag(
     lifecycleClass: row.lifecycleClass,
     expiresAt: row.expiresAt,
     flagUpdatedAt: row.updatedAt,
-    lastChangeLogAt: context.lastChangeByFlag.get(row.id) ?? null,
+    lastChangeLogAt: context.snapshot.lastChangeByFlag.get(row.id) ?? null,
     configurations,
     now,
-    runHistory: context.runHistory,
+    runHistory: context.snapshot.hasInWindowLegacyRuns ? "unavailable" : "available",
   });
   if (!shouldIncludeStaleItem(detected)) return null;
   const flag = flagFrom(row, context.catalogs.get(row.id) ?? []);
@@ -189,7 +173,7 @@ function environmentConfigsForFlag(
       rolloutPercentage: rolloutPercentage(config.rollout),
       hasRunningExperiment: context.runningExperimentScopes.has(key),
       updatedAt: config.updatedAt,
-      lastRunLifecycleAt: context.runLifecycleByScope.get(key) ?? null,
+      lastRunLifecycleAt: context.snapshot.runLifecycleByScope.get(key) ?? null,
     };
   });
 }
