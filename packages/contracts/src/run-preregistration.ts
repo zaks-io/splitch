@@ -156,6 +156,12 @@ export const preRegistrationIssueCodes = [
    */
   "PREREG_SHIP_RULE_RELATIVE_SEQUENTIAL_UNSUPPORTED",
   "PREREG_DESIRABILITY_REQUIRED",
+  /**
+   * `unanimous_goals` / `any_goal` combine every locked goal Metric; each must
+   * carry desirability in preRegistration.metrics so a significant harmful
+   * secondary cannot be silently dropped from the freeze.
+   */
+  "PREREG_LOCKED_GOAL_DESIRABILITY_REQUIRED",
   "PREREG_PRIMARY_METRIC_MISSING",
   "PREREG_DUPLICATE_METRIC",
   "PREREG_SHIP_RULE_INVALID",

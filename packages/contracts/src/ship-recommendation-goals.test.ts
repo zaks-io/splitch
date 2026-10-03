@@ -186,3 +186,36 @@ describe("computeShipRecommendation Guardrails vs goals", () => {
     expect(result.recommendation?.because).not.toMatch(/\[0\.03/);
   });
 });
+
+describe("computeShipRecommendation partial goal freeze", () => {
+  it("returns locked_goal_desirability_missing when a locked harmful secondary is omitted", () => {
+    const output = stats({
+      arm_results: [
+        beneficialArm({ metric_id: "checkout-conversion" }),
+        armResult({
+          metric_id: "secondary-goal",
+          absolute_ci_lower: -0.08,
+          absolute_ci_upper: -0.03,
+          ci_lower: -15,
+          ci_upper: -5,
+          relative_lift_pct: -10,
+        }),
+      ],
+    });
+    // Partial freeze: primary only. Without the gate, unanimous_goals would
+    // ship over the significant harmful secondary that never entered the freeze.
+    expect(
+      recommend(
+        output,
+        preReg({
+          metrics: [{ metric_id: "checkout-conversion", desirability: "higher_is_better" }],
+          ship_rule: {
+            required_margin: 0.02,
+            margin_scale: "absolute",
+            conflict_resolution: "unanimous_goals",
+          },
+        }),
+      ),
+    ).toEqual({ recommendationUnavailable: "locked_goal_desirability_missing" });
+  });
+});

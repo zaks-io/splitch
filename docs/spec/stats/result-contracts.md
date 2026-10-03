@@ -204,17 +204,23 @@ Precedence (first matching row wins):
 | 3     | Gate not ready (`underpowered` or `planned_duration`)                                                                                | `keep_running`                                                       |
 | 4     | Any Guardrail `is_breached: true`                                                                                                    | `do_not_ship` (before interval-availability returns)                 |
 | 5     | Sequential Run with a relative ship-rule margin                                                                                      | `recommendationUnavailable: "relative_sequential_coverage_unproven"` |
-| 6     | Combined locked goal Metrics harmful in the desirable direction                                                                      | `do_not_ship`                                                        |
-| 7     | Combined locked goal Metrics undecided (interval has not cleared the required margin, or FDR-corrected decision evidence is missing) | `keep_running`                                                       |
-| 8     | Combined locked goal Metrics beneficial per the ship rule's required margin, no Guardrail breached                                   | `ship`                                                               |
+| 6     | Relative ship-rule margin with a non-positive Control mean                                                                           | `recommendationUnavailable: "relative_control_mean_non_positive"`    |
+| 7     | Combining goals (`unanimous_goals` / `any_goal`) with a locked goal missing desirability in the freeze                               | `recommendationUnavailable: "locked_goal_desirability_missing"`      |
+| 8     | Combined locked goal Metrics harmful in the desirable direction                                                                      | `do_not_ship`                                                        |
+| 9     | Combined locked goal Metrics undecided (interval has not cleared the required margin, or FDR-corrected decision evidence is missing) | `keep_running`                                                       |
+| 10    | Combined locked goal Metrics beneficial per the ship rule's required margin, no Guardrail breached                                   | `ship`                                                               |
 
 A win requires eligible FDR-corrected decision evidence (`is_significant`,
 `in_bh_family`, and `decision_valid` on the deciding Treatment arm). Clearing the
 margin alone is not enough. Conflict resolution (`primary_wins` /
 `unanimous_goals` / `any_goal`) combines only locked goal Metrics from the BH
 decision family; Guardrail Metrics listed in pre-registration are ignored for
-goal combination and evaluated only by their breach rows. `because` names the
-deciding Metric's interval (Primary or Goal) with numbers and no internal ids.
+goal combination and evaluated only by their breach rows. Start refuses a
+combining ship rule that omits a locked goal Metric's desirability with
+`PREREG_LOCKED_GOAL_DESIRABILITY_REQUIRED`; an existing partial freeze fails loud
+at results with `locked_goal_desirability_missing` rather than silently excluding
+the omitted goal. `because` names the deciding Metric's interval (Primary or Goal)
+with numbers and no internal ids.
 
 Absolute margins use the absolute decision interval (`absolute_ci_*` on Treatment
 arms, stripped from the result token). Relative margins use the published relative
@@ -224,11 +230,14 @@ Start refuses `marginScale: "relative"` on a sequential Run with
 `PREREG_SHIP_RULE_RELATIVE_SEQUENTIAL_UNSUPPORTED` (same rationale as relative
 ROPE). If a sequential Run somehow carries a relative ship rule at results time,
 the producer emits `recommendationUnavailable: "relative_sequential_coverage_unproven"`
-rather than a Fieller-based ship. Missing absolute bounds with an absolute ship
-rule yield `recommendationUnavailable: "absolute_interval_unavailable"` rather
-than a guessed verdict. Treatments are identified by Control identity (every
-non-Control Variant), not by a non-null relative lift — so a zero Control mean
-still yields an absolute-rule recommendation when absolute intervals exist.
+rather than a Fieller-based ship. Relative comparisons reverse desirability when
+the Control mean is zero or negative, so a relative-scale rule then emits
+`recommendationUnavailable: "relative_control_mean_non_positive"` rather than
+re-orienting the interval. Missing absolute bounds with an absolute ship rule
+yield `recommendationUnavailable: "absolute_interval_unavailable"` rather than a
+guessed verdict. Treatments are identified by Control identity (every non-Control
+Variant), not by a non-null relative lift — so a zero Control mean still yields
+an absolute-rule recommendation when absolute intervals exist.
 
 ## Futility verdict (MDE exclusion, advisory)
 

@@ -15,10 +15,12 @@ import type { GuardrailResult, StatsOutput } from "./stats-result-contract";
  * | 3 | Gate not ready (underpowered, planned duration) | keep_running |
  * | 4 | Any Guardrail breached | do_not_ship (before interval availability) |
  * | 5 | Sequential Run + relative ship rule | unavailable (`relative_sequential_coverage_unproven`) |
- * | 6 | Primary / goal interval unavailable | unavailable |
- * | 7 | Combined goal harmful | do_not_ship |
- * | 8 | Combined goal undecided | keep_running |
- * | 9 | Combined goal beneficial, no Guardrail breach | ship |
+ * | 6 | Relative rule with non-positive Control mean | unavailable (`relative_control_mean_non_positive`) |
+ * | 7 | Combining goals with a locked goal missing desirability | unavailable (`locked_goal_desirability_missing`) |
+ * | 8 | Primary / goal interval unavailable | unavailable |
+ * | 9 | Combined goal harmful | do_not_ship |
+ * | 10 | Combined goal undecided | keep_running |
+ * | 11 | Combined goal beneficial, no Guardrail breach | ship |
  */
 
 const INVALID_CHECK_IDS = new Set([

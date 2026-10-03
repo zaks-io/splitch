@@ -210,6 +210,7 @@ describe("produceExperimentResults ship recommendation", () => {
               margin_scale: "absolute",
               conflict_resolution: "primary_wins",
             },
+            futility: "off",
           },
         },
         stats: stats({

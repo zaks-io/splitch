@@ -7,6 +7,7 @@ import { json } from "./experiment-model";
 import { prepareStart } from "./experiment-start";
 import { decisionSpecFromProposal, runCommitmentColumns } from "./experiment-start-decision-spec";
 import {
+  lockedGoalMetricIdsFromPrepared,
   resolveStartPreRegistration,
   runMetricIdsFromPrepared,
 } from "./experiment-start-preregistration";
@@ -48,6 +49,7 @@ export async function applyExperimentStart(
     runMetricIdsFromPrepared(prepared.value),
     commit.reviewId,
     decisionSpec.horizon,
+    lockedGoalMetricIdsFromPrepared(prepared.value),
   );
   if (!preRegistration.ok) return await responseError(preRegistration.response);
   const preRegistrationJson = preRegistration.value === null ? null : json(preRegistration.value);

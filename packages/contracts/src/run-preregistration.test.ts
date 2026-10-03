@@ -182,6 +182,38 @@ describe("resolvePreRegistration", () => {
   });
 });
 
+describe("resolvePreRegistration locked goal desirability", () => {
+  it("refuses combining goals when a locked goal Metric is omitted from metrics", () => {
+    const lockedGoals = new Set(["metric_goal", "metric_secondary"]);
+    const runMetrics = new Set(["metric_goal", "metric_secondary", "metric_guard"]);
+    const result = resolvePreRegistration(
+      {
+        ...validIntent,
+        metrics: [{ metricId: "metric_goal", desirability: "higher_is_better" }],
+        shipRule: { ...validIntent.shipRule, conflictResolution: "unanimous_goals" },
+      },
+      runMetrics,
+      { lockedGoalMetricIds: lockedGoals },
+    );
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(codes(result.issues)).toContain("PREREG_LOCKED_GOAL_DESIRABILITY_REQUIRED");
+  });
+
+  it("allows primary_wins when a locked secondary is omitted from metrics", () => {
+    const result = resolvePreRegistration(
+      {
+        ...validIntent,
+        metrics: [{ metricId: "metric_goal", desirability: "higher_is_better" }],
+        shipRule: { ...validIntent.shipRule, conflictResolution: "primary_wins" },
+      },
+      new Set(["metric_goal", "metric_secondary"]),
+      { lockedGoalMetricIds: new Set(["metric_goal", "metric_secondary"]) },
+    );
+    expect(result.ok).toBe(true);
+  });
+});
+
 describe("resolvePreRegistration futility mode", () => {
   it("freezes omitted futility as off and preserves mde_exclusion when set", () => {
     const off = resolvePreRegistration(validIntent, RUN_METRICS);

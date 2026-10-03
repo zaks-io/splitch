@@ -25,6 +25,7 @@ export function preReg(overrides: Partial<PreRegistration> = {}): PreRegistratio
       margin_scale: "absolute",
       conflict_resolution: "primary_wins",
     },
+    futility: "off",
     ...overrides,
   };
 }

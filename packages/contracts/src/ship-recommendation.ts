@@ -36,6 +36,18 @@ export const recommendationUnavailableReasons = [
    * sequential Run somehow carries a relative ship rule.
    */
   "relative_sequential_coverage_unproven",
+  /**
+   * Relative lift / Fieller intervals reverse desirability when the Control
+   * mean is zero or negative. Do not re-orient; refuse the relative-scale rule.
+   */
+  "relative_control_mean_non_positive",
+  /**
+   * Conflict resolution that combines goals needs desirability for every locked
+   * goal Metric. Partial freezes that omit a locked goal fail loud here rather
+   * than silently excluding it (Start refuses with
+   * PREREG_LOCKED_GOAL_DESIRABILITY_REQUIRED).
+   */
+  "locked_goal_desirability_missing",
 ] as const;
 export const RecommendationUnavailableReasonSchema = z.enum(recommendationUnavailableReasons);
 export type RecommendationUnavailableReason = z.infer<typeof RecommendationUnavailableReasonSchema>;

@@ -35,6 +35,7 @@ import {
   startProposalFields,
 } from "./experiment-start-decision-spec";
 import {
+  lockedGoalMetricIdsFromPrepared,
   resolveStartPreRegistration,
   runMetricIdsFromPrepared,
 } from "./experiment-start-preregistration";
@@ -81,6 +82,7 @@ export async function startExperiment(
     runMetricIdsFromPrepared(prepared.value),
     args.requestId,
     decisionSpec.value.horizon,
+    lockedGoalMetricIdsFromPrepared(prepared.value),
   );
   if (!preRegistration.ok) return preRegistration.response;
   const preRegistrationJson = preRegistration.value === null ? null : json(preRegistration.value);
