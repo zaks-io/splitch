@@ -88,6 +88,11 @@ export function conclusionFixture(
       getRequest: vi.fn(async () => null),
       latestReview: vi.fn(async () => null),
     },
+    runSrmAlarms: {
+      listForRun: vi.fn(async () => []),
+      insertIgnore: vi.fn(async () => undefined),
+      deleteForRun: vi.fn(async () => undefined),
+    },
   } as unknown as Repository;
   const body: ConcludeRunRequest = {
     selectedVariant: "treatment",

@@ -49,6 +49,11 @@ export function repository(
       ),
       getRun: vi.fn(async (_scope, runId) => runs.find((run) => run.id === runId) ?? null),
     },
+    runSrmAlarms: {
+      listForRun: vi.fn(async () => []),
+      insertIgnore: vi.fn(async () => undefined),
+      deleteForRun: vi.fn(async () => undefined),
+    },
   } as unknown as Repository;
 }
 

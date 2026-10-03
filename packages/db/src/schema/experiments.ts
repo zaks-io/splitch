@@ -1,4 +1,4 @@
-import { integer, real, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
+import { integer, primaryKey, real, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
 import { createdAt, updatedAt, userRef } from "./columns";
 import { flags } from "./flags";
 import { apps, environments } from "./identity";
@@ -172,4 +172,30 @@ export const metrics = sqliteTable(
     createdBy: userRef("created_by"),
   },
   (t) => [uniqueIndex("metrics_app_key_unique").on(t.appId, t.key)],
+);
+
+/**
+ * Durable analysis-v2 SRM alarm: first Results (or Conclude) read that observes
+ * a sequential threshold crossing wins. Later membership edits cannot clear it.
+ * v1/legacy Runs never read or write this table.
+ */
+export const runSrmAlarms = sqliteTable(
+  "run_srm_alarms",
+  {
+    runId: text("run_id")
+      .notNull()
+      .references(() => runs.id),
+    srmKind: text("srm_kind", { enum: ["exposure", "activated"] }).notNull(),
+    firstCrossedAt: text("first_crossed_at").notNull(),
+    watermark: text("watermark").notNull(),
+    pValue: real("p_value").notNull(),
+    analysisVersion: text("analysis_version").notNull(),
+    appId: text("app_id")
+      .notNull()
+      .references(() => apps.id),
+    environmentId: text("environment_id")
+      .notNull()
+      .references(() => environments.id),
+  },
+  (t) => [primaryKey({ columns: [t.runId, t.srmKind] })],
 );

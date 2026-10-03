@@ -76,6 +76,20 @@ export function makeDeleteAppCascade(d1: D1Database) {
       d1.prepare(`DELETE FROM experiment_conclusions WHERE app_id = ?`).bind(appId),
       d1
         .prepare(
+          `DELETE FROM run_srm_alarms
+           WHERE app_id = ?
+             AND run_id IN (
+               SELECT id FROM runs
+               WHERE app_id = ?
+                 AND experiment_id IN (
+                   SELECT id FROM experiments
+                   WHERE app_id = ? AND status = 'archived'
+                 )
+             )`,
+        )
+        .bind(appId, appId, appId),
+      d1
+        .prepare(
           `DELETE FROM runs
            WHERE app_id = ?
              AND experiment_id IN (

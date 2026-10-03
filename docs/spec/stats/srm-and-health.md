@@ -50,11 +50,9 @@ read this martingale: `srm_p_value` is the anytime p-value and `srm_is_mismatch`
 `threshold_crossed` at alpha 0.001. legacy-unversioned and analysis-v1 keep the chi-square
 `p < 0.001` gate. Chi-square stays the fixed-horizon diagnostic and the activation-balance test
 under every version (activation balance is equality of unknown rates, not the declared
-allocation multinomial). `analysis-v2` is defined in the exhaustive version switch but is
-**unsupported** for Start and Results: it is not in `SUPPORTED_ANALYSIS_VERSIONS`, new Runs
-freeze `analysis-v1`, and a Run frozen under v2 refuses loudly. The remaining blockers are
-sticky Copy clocks across raw TTL and a durable per-Run SRM alarm that survives quarantine /
-membership edits (running-minimum p-value alone is not enough when the rebuilt path changes).
+allocation multinomial). `analysis-v2` is **current**: it is in `SUPPORTED_ANALYSIS_VERSIONS`,
+new Runs freeze it, and sticky Copy clocks plus durable D1 `run_srm_alarms` keep alarms sticky
+across raw TTL and quarantine once a Results (or Conclude) read has observed them.
 
 **Prior.** Dirichlet mean equals the declared allocation: `alpha_i = concentration * theta_i`.
 Default `concentration` is 100. Type I control from Ville's inequality does not depend on this
@@ -75,8 +73,10 @@ after every Entity arrival (incremental log-gamma updates, O(N)). The filtration
 
 - Exposure SRM orders Entities by `first_ingest_ts` = `min(ingest_ts)` over Exposure rows for that
   Entity in the Run (`raw_events.ingest_ts`, stamped at Tinybird insertion with `DEFAULT now64(3)`
-  since the datasource existed). The deduped snapshot carries the same `min(ingest_ts)` from the
-  Copy Pipe. Snapshot rows written before that column existed carry the epoch DEFAULT and form
+  since the datasource existed). The Copy Pipe keeps `min(previous snapshot, raw)` so a 90-day raw
+  TTL cannot move an Entity later on the path, and previous-only membership survives when every
+  raw Exposure for that Entity has expired (privacy generation tombstones still remove the Entity
+  entirely). Snapshot rows written before that column existed carry the epoch DEFAULT and form
   **one initial batch**, ordered only by `targeting_key_hash`, until the next `COPY_MODE replace`
   fills real values. No other qualifying fact can move an Entity _into_ Exposure SRM at an earlier
   clock: conflict / `__multiple__` resolution can only remove an Entity (or change Variant), never
@@ -87,8 +87,8 @@ after every Entity arrival (incremental log-gamma updates, O(N)). The filtration
   `activation_ingest_ts`. The activated **row set** is still main's membership
   (`activation_ts > first_exposure_ts` via the deduped Exposure snapshot); the eligibility clock
   is an additional column and must not change which Entities count as activated. The Copy
-  snapshot persists the clock when an Entity first becomes eligible and never recomputes it, so
-  a later raw TTL expiry of the qualifying Exposure cannot drop the Entity or rewrite its clock.
+  snapshot keeps `min(previous, live)` for the clock and sticky first-exposure membership so a
+  later raw TTL expiry of the qualifying Exposure cannot drop the Entity or rewrite its clock.
   A late earlier Exposure that newly qualifies an Activation must append at the qualifying pair's
   max ingest, not at `max(first_ingest_ts, activation ingest)` which can back-date into an earlier
   path prefix.
@@ -103,14 +103,23 @@ before the pinned watermark is complete (the watermark contract). The Entity set
 pinned-watermark `StatsInput` exposures (and activation rows for activated SRM). Missing
 `first_ingest_ts` / `activation_ingest_ts` fails loud; the engine never substitutes event time.
 
-**Quarantine and revisions.** A later watermark that moves an Entity into `__multiple__` (or
-revises `first_exposure_ts` / `activation_ts`) edits the dataset. The next read recomputes the
-whole path from the cleaned rows; it does not feed a decreasing arm total into a live filtration.
-Survivors keep their original `first_ingest_ts`, so a late single-Entity conflict cannot clear a
-sticky early mismatch among the remaining population (running minimum on the recomputed path still
-holds). Primitive `computeSequentialSrm` still fails loud if a single call's cumulative snapshots
-decrease an arm count. Mass membership revisions that erase an early imbalance are dataset edits,
-not ingest-order rewrites.
+**Durable alarms and quarantine.** The running minimum over the stable ingestion-ordered path
+catches crossings between Results reads. Separately, the Control Plane persists the first observed
+v2 sequential crossing per `(run_id, exposure|activated)` in D1 `run_srm_alarms` (INSERT OR IGNORE
+on every Results or Conclude read) and ORs that row into the SRM verdict and decision gate,
+reporting `firstCrossedAt`. A persisted alarm blocks Conclude exactly like a live mismatch. v1 and
+legacy Runs never read or write the table. Privacy / App / Environment / Flag cascade deletes
+remove the rows with the Run. The residual gap is a crossing that is never read before a later
+quarantine removes it.
+
+A later watermark that moves an Entity into `__multiple__` (or revises `first_exposure_ts` /
+`activation_ts`) edits the dataset. The next read recomputes the whole path from the cleaned rows;
+it does not feed a decreasing arm total into a live filtration. Survivors keep their original
+`first_ingest_ts`, so a late single-Entity conflict cannot clear a sticky early mismatch among the
+remaining population when the running minimum on the recomputed path still holds — and when a
+prior read already persisted the alarm, the D1 row keeps the gate firing even if live p rises
+above 0.001. Primitive `computeSequentialSrm` still fails loud if a single call's cumulative
+snapshots decrease an arm count.
 
 **Looks.** Wealth is a function of the sufficient statistic. The anytime p-value is the running
 minimum after every singleton arrival in the reconstructed path. Continuous monitoring is the

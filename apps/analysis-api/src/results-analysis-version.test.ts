@@ -114,15 +114,17 @@ describe("analysis version and Run commitments (ADR-0059)", () => {
     });
   });
 
-  it("refuses a Run frozen under analysis-v2 exactly like an unknown version", async () => {
-    const { app } = makeResultsHarness(withRunFields(committedFieldsFor(ANALYSIS_V2_VERSION)));
+  it("analyzes a Run frozen under analysis-v2 and keeps v1 tokens distinct", async () => {
+    const v1 = await readyEnvelope(withRunFields(committedFieldsFor(ANALYSIS_V1_VERSION)));
+    const v2 = await readyEnvelope(withRunFields(committedFieldsFor(ANALYSIS_V2_VERSION)));
 
-    const response = await app.request(`${RESULTS_PATH}?runId=${RUN_ID}`, resultsAuthInit("GET"));
-    const error = (await response.json()) as ErrorResponse;
-
-    expect(response.status).toBe(400);
-    expect(JSON.stringify(error)).toContain(ANALYSIS_V2_VERSION);
-    expect(CURRENT_ANALYSIS_VERSION).toBe(ANALYSIS_V1_VERSION);
+    expect(v2.state).toBe("ready");
+    expect(v2.run_commitments).toEqual({
+      analysis_version_source: "frozen",
+      ...committedFieldsFor(ANALYSIS_V2_VERSION),
+    });
+    expect(v2.result_token).not.toBe(v1.result_token);
+    expect(CURRENT_ANALYSIS_VERSION).toBe(ANALYSIS_V2_VERSION);
   });
 
   it("reports a caller target and a labeled duration override", async () => {

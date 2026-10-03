@@ -171,9 +171,8 @@ replace the Fieller reporting interval on `arm_results`.
 Plan item 0.8. Two-sided Fieller Guardrail checks are conservative for a one-sided safety claim,
 not invalid. analysis-v2 switches Guardrail decisions to a one-sided always-valid bound;
 legacy-unversioned and analysis-v1 keep the two-sided Fieller rule above so their result tokens
-stay byte-identical. `SUPPORTED_ANALYSIS_VERSIONS` / `CURRENT_ANALYSIS_VERSION` are unchanged:
-v2 remains defined but unsupported for Start until sticky Copy clocks and durable SRM alarm
-persistence land (the ingestion-ordered path alone is not enough).
+stay byte-identical. analysis-v2 is current (`CURRENT_ANALYSIS_VERSION`) once sticky Copy clocks
+and durable D1 `run_srm_alarms` land with the ingestion-ordered path (ADR-0059).
 
 ### Bound
 

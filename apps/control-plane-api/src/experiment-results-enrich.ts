@@ -1,8 +1,10 @@
 import {
+  ANALYSIS_V2_VERSION,
   AnalysisResultsEnvelopeSchema,
   type ExperimentResultsResponse,
   type ExperimentResultsView,
   ExperimentResultsViewSchema,
+  type PersistedSrmAlarm,
   produceExperimentResults,
   resolveAnalysisControlIntegrity,
   resolveFrozenControlIdentity,
@@ -57,10 +59,13 @@ export async function loadResultsRun(
   return repo.experiments.getRun(envScope(args.appId, args.environmentId), args.runId);
 }
 
-export function enrichAnalysisResultsResponse(
+export async function enrichAnalysisResultsResponse(
+  repo: Repository,
   analysisBody: unknown,
   run: {
     id: string;
+    appId: string;
+    environmentId: string;
     runNumber: number;
     status: string;
     controlVariantId: string;
@@ -68,9 +73,10 @@ export function enrichAnalysisResultsResponse(
     startedAt: string;
     plannedDurationDays: number | null;
     plannedDurationOverrideReason: string | null;
+    analysisVersion: string | null;
   },
   options: { view: ExperimentResultsView; canConclude: boolean },
-): ExperimentResultsResponse {
+): Promise<ExperimentResultsResponse> {
   const analysis = AnalysisResultsEnvelopeSchema.parse(analysisBody);
   // Callers only reach enrich after D1 resolved a Run. Analysis no_run here is a
   // contract violation (drafts are finished before the hop); masking it as
@@ -92,6 +98,10 @@ export function enrichAnalysisResultsResponse(
   // result token. Segment/day slices are absent until decision-diagnostics is wired.
   const srmRootCause =
     analysis.state === "ready" ? classifySrmRootCauseFromStats(analysis.stats) : null;
+  const persistedSrmAlarms =
+    analysis.state === "ready"
+      ? await syncAnalysisV2SrmAlarms(repo, run, analysis.stats, dataWatermark)
+      : [];
   return produceExperimentResults({
     view: options.view,
     analysis,
@@ -103,7 +113,62 @@ export function enrichAnalysisResultsResponse(
     },
     canConclude: options.canConclude,
     srmRootCause,
+    persistedSrmAlarms,
   });
+}
+
+/**
+ * For analysis-v2 only: INSERT OR IGNORE on live sequential crossings, then
+ * return every persisted alarm for the Run so the gate ORs them in.
+ */
+export async function syncAnalysisV2SrmAlarms(
+  repo: Repository,
+  run: {
+    id: string;
+    appId: string;
+    environmentId: string;
+    analysisVersion: string | null;
+  },
+  stats: {
+    srm: {
+      srm_is_mismatch: boolean;
+      srm_p_value: number;
+      activated_srm_mismatch: boolean | null;
+      activated_srm_p_value: number | null;
+    };
+  },
+  dataWatermark: string | undefined,
+): Promise<readonly PersistedSrmAlarm[]> {
+  if (run.analysisVersion !== ANALYSIS_V2_VERSION) return [];
+  const scope = envScope(run.appId, run.environmentId);
+  const now = new Date().toISOString();
+  const watermark = dataWatermark ?? now;
+  if (stats.srm.srm_is_mismatch) {
+    await repo.runSrmAlarms.insertIgnore(scope, {
+      runId: run.id,
+      srmKind: "exposure",
+      firstCrossedAt: now,
+      watermark,
+      pValue: stats.srm.srm_p_value,
+      analysisVersion: ANALYSIS_V2_VERSION,
+    });
+  }
+  if (stats.srm.activated_srm_mismatch === true && stats.srm.activated_srm_p_value !== null) {
+    await repo.runSrmAlarms.insertIgnore(scope, {
+      runId: run.id,
+      srmKind: "activated",
+      firstCrossedAt: now,
+      watermark,
+      pValue: stats.srm.activated_srm_p_value,
+      analysisVersion: ANALYSIS_V2_VERSION,
+    });
+  }
+  const rows = await repo.runSrmAlarms.listForRun(scope, run.id);
+  return rows.map((row) => ({
+    srmKind: row.srmKind,
+    firstCrossedAt: row.firstCrossedAt,
+    pValue: row.pValue,
+  }));
 }
 
 export function produceNoRunResults(view: ExperimentResultsView): ExperimentResultsResponse {

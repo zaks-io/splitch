@@ -1,7 +1,9 @@
 import type { FrozenControlIdentity } from "./experiment-control-identity";
 import {
   type ExperimentDecisionGate,
+  type PersistedSrmAlarm,
   evaluateExperimentDecisionGate,
+  overlayPersistedSrmAlarms,
 } from "./experiment-decision-gate";
 import type { PlannedDurationEvidence } from "./experiment-decision-gate-duration";
 import {
@@ -42,6 +44,11 @@ export interface ProduceExperimentResultsInput {
    * enrich seam classifies and passes the result. Omit or null when SRM is clean.
    */
   srmRootCause?: SrmRootCauseClassification | null;
+  /**
+   * Durable analysis-v2 SRM alarms from D1. ORed into the gate and detailed
+   * stats mismatch flags. v1/legacy callers omit this.
+   */
+  persistedSrmAlarms?: readonly PersistedSrmAlarm[];
 }
 
 const NOT_READY: ExperimentResultsReadiness = {
@@ -83,10 +90,12 @@ export function produceExperimentResults(
     };
   }
 
+  const persistedSrmAlarms = input.persistedSrmAlarms ?? [];
   const gate = evaluateExperimentDecisionGate(
     input.analysis.stats,
     input.run.control,
     input.run.duration,
+    persistedSrmAlarms,
   );
   const hasEvidence =
     input.analysis.data_watermark !== undefined && input.analysis.result_token !== undefined;
@@ -127,14 +136,19 @@ export function produceExperimentResults(
       : {}),
     // Additive diagnostics only: never hashed into result_token (stats unchanged).
     ...(input.srmRootCause ? { srm_root_cause: input.srmRootCause } : {}),
+    ...(persistedSrmAlarms.length > 0 ? { persisted_srm_alarms: [...persistedSrmAlarms] } : {}),
   };
 
   if (input.view === "concise") {
     return { view: "concise", ...base };
   }
-  // Detailed keeps Analysis stats byte-identical: same object reference order is
-  // not guaranteed after JSON round-trip, but field set and values are unchanged.
-  return { view: "detailed", ...base, stats: input.analysis.stats };
+  // Detailed stats match Analysis except analysis-v2 durable SRM alarm OR into
+  // mismatch flags. result_token stays hashed from the Analysis envelope.
+  return {
+    view: "detailed",
+    ...base,
+    stats: overlayPersistedSrmAlarms(input.analysis.stats, persistedSrmAlarms),
+  };
 }
 
 function readyReadiness(input: {

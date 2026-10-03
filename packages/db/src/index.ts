@@ -74,6 +74,7 @@ export {
   orgMemberships,
   privacyRequests,
   runs,
+  runSrmAlarms,
   segments,
   targetingRules,
   trustedIdps,

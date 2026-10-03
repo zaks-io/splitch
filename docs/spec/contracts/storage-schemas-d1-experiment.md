@@ -104,6 +104,26 @@ at Start.
 UNIQUE constraint: `(experiment_id, salt)` — salt unique per Experiment.
 UNIQUE constraint: `(experiment_id, run_number)` — run numbers are dense and unique per Experiment.
 
+### `run_srm_alarms`
+
+Durable analysis-v2 SRM alarm per Run and kind. The Control Plane Results / Conclude path
+INSERT OR IGNOREs the first observed sequential crossing; later membership edits cannot clear it.
+v1 and legacy Runs never read or write this table. Deleted with the Run on every cascade /
+privacy path.
+
+| Column             | Type        | Constraints                                                  |
+| ------------------ | ----------- | ------------------------------------------------------------ |
+| `run_id`           | text        | FK → runs, not null; composite PK with `srm_kind`            |
+| `srm_kind`         | text        | not null; `exposure` or `activated`                          |
+| `first_crossed_at` | timestamptz | not null; first Results/Conclude observation of the crossing |
+| `watermark`        | timestamptz | not null; evidence watermark at first observation            |
+| `p_value`          | real        | not null; anytime p-value at first observation               |
+| `analysis_version` | text        | not null; always `analysis-v2` for writers today             |
+| `app_id`           | text        | FK → apps, not null                                          |
+| `environment_id`   | text        | FK → environments, not null                                  |
+
+PRIMARY KEY: `(run_id, srm_kind)`.
+
 ### `experiment_conclusions`
 
 One immutable decision record per concluded Run. Standalone End creates no row. Every lookup and

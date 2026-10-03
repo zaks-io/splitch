@@ -1,5 +1,13 @@
 import { and, eq, inArray } from "drizzle-orm";
-import { experiments, flagConfigs, flags, runs, targetingRules, variants } from "../schema/index";
+import {
+  experiments,
+  flagConfigs,
+  flags,
+  runs,
+  runSrmAlarms,
+  targetingRules,
+  variants,
+} from "../schema/index";
 import {
   appliedRequestUpdate,
   appliedReviewInsert,
@@ -111,17 +119,38 @@ function archivedExperimentPurgeForFlag(
     eq(experiments.flagId, flagId),
     eq(experiments.status, "archived"),
   );
+  const archivedRunIds = db.select({ id: experiments.id }).from(experiments).where(archivedForFlag);
   return [
+    db
+      .delete(runSrmAlarms)
+      .where(
+        and(
+          eq(runSrmAlarms.appId, appId),
+          eq(runSrmAlarms.environmentId, environmentId),
+          inArray(
+            runSrmAlarms.runId,
+            db
+              .select({ id: runs.id })
+              .from(runs)
+              .where(
+                and(
+                  eq(runs.appId, appId),
+                  eq(runs.environmentId, environmentId),
+                  inArray(runs.experimentId, archivedRunIds),
+                ),
+              ),
+          ),
+          ...pending,
+        ),
+      )
+      .returning({ runId: runSrmAlarms.runId }),
     db
       .delete(runs)
       .where(
         and(
           eq(runs.appId, appId),
           eq(runs.environmentId, environmentId),
-          inArray(
-            runs.experimentId,
-            db.select({ id: experiments.id }).from(experiments).where(archivedForFlag),
-          ),
+          inArray(runs.experimentId, archivedRunIds),
           ...pending,
         ),
       )

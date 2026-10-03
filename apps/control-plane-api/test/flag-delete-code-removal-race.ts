@@ -32,6 +32,15 @@ export async function legacyDeleteLeavingNullAudit(
   await d1.batch([
     d1
       .prepare(
+        `DELETE FROM run_srm_alarms WHERE app_id = ? AND run_id IN (
+           SELECT id FROM runs WHERE app_id = ? AND experiment_id IN (
+             SELECT id FROM experiments WHERE app_id = ? AND flag_id = ?
+           )
+         )`,
+      )
+      .bind(appId, appId, appId, flagId),
+    d1
+      .prepare(
         `DELETE FROM runs WHERE app_id = ? AND experiment_id IN (
            SELECT id FROM experiments WHERE app_id = ? AND flag_id = ?
          )`,

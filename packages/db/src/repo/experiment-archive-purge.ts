@@ -14,6 +14,20 @@ export function makePurgeArchivedExperimentsInEnvironment(d1: D1Database) {
     await d1.batch([
       d1
         .prepare(
+          `DELETE FROM run_srm_alarms
+           WHERE app_id = ? AND environment_id = ?
+             AND run_id IN (
+               SELECT id FROM runs
+               WHERE app_id = ? AND environment_id = ?
+                 AND experiment_id IN (
+                   SELECT id FROM experiments
+                   WHERE app_id = ? AND environment_id = ? AND status = 'archived'
+                 )
+             )`,
+        )
+        .bind(...scopeParams, ...scopeParams, ...scopeParams),
+      d1
+        .prepare(
           `DELETE FROM runs
            WHERE app_id = ? AND environment_id = ?
              AND experiment_id IN (

@@ -106,6 +106,7 @@ afterEach(async () => {
 
 /** Clear non-cascaded children so deleteAppCascade can succeed (emptiness guard passed). */
 async function clearNonCascadedChildren(appId: string): Promise<void> {
+  await local.d1.prepare(`DELETE FROM run_srm_alarms WHERE app_id = ?`).bind(appId).run();
   await local.d1.prepare(`DELETE FROM runs WHERE app_id = ?`).bind(appId).run();
   await local.d1.prepare(`DELETE FROM experiments WHERE app_id = ?`).bind(appId).run();
   await local.d1

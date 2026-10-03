@@ -34,6 +34,7 @@ export const D1_TEST_FILES = defineTestFileManifest(import.meta.url, [
   "src/repo/organization-create-quota.test.ts",
   "src/repo/isolation.test.ts",
   "src/repo/privacy-cascade-isolation.test.ts",
+  "src/repo/run-srm-alarms.test.ts",
   "src/repo/scope-tamper.test.ts",
   "src/repo/targeting-rule-identity.test.ts",
   "src/repo/targeting-rule-segment-isolation.test.ts",

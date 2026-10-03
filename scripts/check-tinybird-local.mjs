@@ -6,6 +6,7 @@ import { assertEnvironmentExposureStatusContract } from "./lib/tinybird-exposure
 import { assertPromotedForwardQueriesRemoved } from "./lib/tinybird-forward-query-cleanup-contract.mjs";
 import { assertMetricStubsRetiredWhenMetricEventsExist } from "./lib/tinybird-metric-stub-tripwire.mjs";
 import { output, quietExitCode, quietExitCodeWithInput, run } from "./lib/tinybird-process.mjs";
+import { proveStickyCopyClocksAfterExpiry } from "./lib/tinybird-sticky-copy-clocks-proof.mjs";
 import { acquireMachineLock } from "./machine-lock.mjs";
 
 const projectConfigPath = "tinybird.config.json";
@@ -46,6 +47,7 @@ try {
   await resetTinybirdLocal(projectDir, tokens);
   await run("tb", ["--no-version-warning", "build"], projectDir);
   await proveExposureAtCompatibility(projectDir, staged.shiftMs);
+  await proveStickyCopyClocksAfterExpiry(projectDir, staged.shiftMs, fail);
   await proveAnalysisScopePredicates(
     tinybirdRoot,
     (sql) => output("tb", ["--no-version-warning", "--output", "json", "sql", sql], projectDir),

@@ -24,26 +24,21 @@ import type { StatsOutput } from "./stats-result-contract";
  * | Version              | SRM gate                         | Family correction | Guardrail bound                         | Supported for Start/Results |
  * | -------------------- | -------------------------------- | ----------------- | --------------------------------------- | --------------------------- |
  * | legacy-unversioned   | Chi-square p < 0.001             | BH                | Two-sided Fieller relative lower        | legacy read path only       |
- * | analysis-v1          | Chi-square p < 0.001             | BH                | Two-sided Fieller relative lower        | yes (current)               |
- * | analysis-v2          | Sequential Dirichlet-multinomial | BH-G              | Prop. B.1 one-sided contrast (C4)       | no (defined, unsupported)   |
+ * | analysis-v1          | Chi-square p < 0.001             | BH                | Two-sided Fieller relative lower        | yes                         |
+ * | analysis-v2          | Sequential Dirichlet-multinomial | BH-G              | Prop. B.1 one-sided contrast (C4)       | yes (current)               |
  *
  * analysis-v2's ingestion-ordered path (`first_ingest_ts` / pairwise activation
- * eligibility) is implemented in `@splitch/stats` and Tinybird clock columns,
- * but v2 stays out of SUPPORTED until Copy replacement preserves earliest
- * clocks across raw TTL and a durable per-Run SRM alarm survives quarantine /
- * membership edits (ADR-0059).
+ * eligibility) plus sticky Copy clocks and durable D1 `run_srm_alarms` make
+ * sequential SRM alarms sticky across raw TTL and quarantine (ADR-0059).
  */
 export const ANALYSIS_V1_VERSION = "analysis-v1";
 export const ANALYSIS_V2_VERSION = "analysis-v2";
 /**
- * New Runs freeze this named implementation. Keep CURRENT on analysis-v1:
- * analysis-v2 stays defined in the exhaustive switch (unit tests, clock
- * columns, sequential path) but is unsupported for Start/Results until sticky
- * Copy clocks and durable SRM alarm persistence land. Keep the literal (not
+ * New Runs freeze this named implementation. Keep the literal (not
  * `ANALYSIS_V2_VERSION`) so the two exports stay distinct names for knip /
  * intentional version bumps.
  */
-export const CURRENT_ANALYSIS_VERSION = "analysis-v1";
+export const CURRENT_ANALYSIS_VERSION = "analysis-v2";
 
 /**
  * The label a legacy Run is read under. Its compatibility implementation is the
@@ -54,11 +49,12 @@ export const LEGACY_ANALYSIS_VERSION = "legacy-unversioned";
 
 /**
  * Versions this deployment will Start or analyze. A Run frozen under any other
- * version (including defined-but-unsupported analysis-v2) refuses loudly.
- * Known versions that are not listed here remain in the exhaustive switch for
- * unit tests; they are not Startable and not readable on a frozen Run.
+ * version refuses loudly.
  */
-export const SUPPORTED_ANALYSIS_VERSIONS: readonly string[] = [ANALYSIS_V1_VERSION];
+export const SUPPORTED_ANALYSIS_VERSIONS: readonly string[] = [
+  ANALYSIS_V1_VERSION,
+  ANALYSIS_V2_VERSION,
+];
 
 /** GrowthBook's documented default; recorded as defaulted when the caller names none. */
 export const DEFAULT_SEQUENTIAL_TARGET_N = 5_000;

@@ -250,7 +250,7 @@ export async function panelExperimentResults(
     run.id,
   );
 
-  const produced = enrichAnalysisResultsResponse(analysis, run, {
+  const produced = await enrichAnalysisResultsResponse(deps.repo, analysis, run, {
     view: "detailed",
     canConclude: canConcludeWithRole(membership?.role),
   });
@@ -292,7 +292,11 @@ function panelFromProducer(produced: ExperimentResultsResponse): PanelExperiment
     control: produced.control,
     ...readiness,
     stats: produced.stats,
-    srm: experimentSrmDiagnostics(produced.stats, produced.srm_root_cause ?? null),
+    srm: experimentSrmDiagnostics(
+      produced.stats,
+      produced.srm_root_cause ?? null,
+      produced.persisted_srm_alarms ?? [],
+    ),
     gate: produced.gate,
     significance: experimentSignificanceDisplays(produced.stats),
   };

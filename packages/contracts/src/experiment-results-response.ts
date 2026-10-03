@@ -4,6 +4,7 @@ import { FrozenControlIdentitySchema } from "./experiment-control-identity";
 import {
   DecisionGateCheckIdSchema,
   ExperimentDecisionGateSchema,
+  PersistedSrmAlarmSchema,
 } from "./experiment-decision-gate";
 import {
   ExperimentResultsReadinessSchema,
@@ -46,6 +47,11 @@ const srmRootCauseField = {
   srm_root_cause: SrmRootCauseClassificationSchema.optional(),
 } as const;
 
+/** Durable analysis-v2 SRM alarms ORed into the gate; omitted when none. */
+const persistedSrmAlarmsField = {
+  persisted_srm_alarms: z.array(PersistedSrmAlarmSchema).optional(),
+} as const;
+
 const readyDetailedSchema = z
   .object({
     view: z.literal("detailed"),
@@ -56,6 +62,7 @@ const readyDetailedSchema = z
     ...evidencePair,
     run_commitments: RunCommitmentsSchema.optional(),
     ...srmRootCauseField,
+    ...persistedSrmAlarmsField,
     stats: StatsOutputSchema,
   })
   .strict()
@@ -71,6 +78,7 @@ const readyConciseSchema = z
     ...evidencePair,
     run_commitments: RunCommitmentsSchema.optional(),
     ...srmRootCauseField,
+    ...persistedSrmAlarmsField,
   })
   .strict()
   .superRefine(evidencePairRefine);
