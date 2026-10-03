@@ -1,4 +1,4 @@
-import { EXPERIMENT_PLAN_MAX_ARM_COUNT } from "@splitch/contracts";
+import { EXPERIMENT_PLAN_MAX_ARM_COUNT, EXPERIMENT_PLAN_MIN_ALPHA } from "@splitch/contracts";
 import type { ExperimentPlanInput, ExperimentPlanIssue } from "./experiment-plan-types";
 
 const DEFAULT_ALPHA = 0.05;
@@ -69,8 +69,11 @@ function validateAlphaPower(input: ExperimentPlanInput): ExperimentPlanIssue[] {
   const issues: ExperimentPlanIssue[] = [];
   const alpha = input.alpha ?? DEFAULT_ALPHA;
   const power = input.power ?? DEFAULT_POWER;
-  if (!(Number.isFinite(alpha) && alpha > 0 && alpha < 1)) {
-    issues.push({ path: ["alpha"], message: "alpha must be finite and in (0, 1)." });
+  if (!(Number.isFinite(alpha) && alpha >= EXPERIMENT_PLAN_MIN_ALPHA && alpha < 1)) {
+    issues.push({
+      path: ["alpha"],
+      message: `alpha must be finite and in [${EXPERIMENT_PLAN_MIN_ALPHA}, 1).`,
+    });
   }
   if (!(Number.isFinite(power) && power > 0 && power < 1)) {
     issues.push({ path: ["power"], message: "power must be finite and in (0, 1)." });

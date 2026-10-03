@@ -21,7 +21,8 @@ export function alwaysValidInflation(alpha: number): number {
     alpha,
     rhoSquaredForTargetN(alpha, referenceTargetN),
   );
-  const zCritical = inverseNormalCdf(1 - alpha / 2);
+  // Lower-tail form: 1 - alpha/2 rounds to 1 for tiny alpha and inverseNormalCdf throws.
+  const zCritical = -inverseNormalCdf(alpha / 2);
   return (scale / zCritical) ** 2;
 }
 

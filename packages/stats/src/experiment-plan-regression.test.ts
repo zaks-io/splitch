@@ -203,4 +203,52 @@ describe("planExperiment bound and unequal-traffic regressions", () => {
     expect(outcome.issues[0]?.path).toEqual(["fixedSampleSizePerArm"]);
     expect(outcome.issues[0]?.message).toContain("representable maximum");
   });
+
+  it("refuses plans whose expectedDurationDays is not a safe integer", () => {
+    const outcome = planExperiment({
+      metricKind: "continuous",
+      baselineMean: 1,
+      baselineVariance: 1,
+      armCount: 2,
+      mdeAbsolute: 0.1,
+      expectedDailyEligibleEntities: 1e-20,
+    });
+    expect(outcome.ok).toBe(false);
+    if (outcome.ok) return;
+    expect(outcome.issues.some((issue) => issue.path[0] === "expectedDurationDays")).toBe(true);
+  });
+
+  it("refuses plans whose mdeRelative overflows to non-finite", () => {
+    const outcome = planExperiment({
+      metricKind: "continuous",
+      baselineMean: 1e-320,
+      baselineVariance: 1,
+      armCount: 2,
+      mdeAbsolute: 0.1,
+      expectedDailyEligibleEntities: 1_000,
+    });
+    expect(outcome.ok).toBe(false);
+    if (outcome.ok) return;
+    expect(outcome.issues).toEqual([
+      expect.objectContaining({
+        path: ["mdeRelative"],
+        message: expect.stringContaining("finite and positive"),
+      }),
+    ]);
+  });
+
+  it("refuses alpha below the supported inverse-normal floor", () => {
+    const outcome = planExperiment({
+      metricKind: "continuous",
+      baselineMean: 1,
+      baselineVariance: 1,
+      armCount: 2,
+      mdeAbsolute: 0.1,
+      alpha: 1e-20,
+      expectedDailyEligibleEntities: 1_000,
+    });
+    expect(outcome.ok).toBe(false);
+    if (outcome.ok) return;
+    expect(outcome.issues[0]?.path).toEqual(["alpha"]);
+  });
 });

@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { EXPERIMENT_PLAN_MAX_ARM_COUNT, ExperimentPlanRequestSchema } from "./experiment-plan";
+import {
+  EXPERIMENT_PLAN_MAX_ARM_COUNT,
+  EXPERIMENT_PLAN_MIN_ALPHA,
+  EXPERIMENT_PLAN_MIN_BASELINE_MEAN_ABS,
+  EXPERIMENT_PLAN_MIN_DAILY_ELIGIBLE_ENTITIES,
+  ExperimentPlanRequestSchema,
+} from "./experiment-plan";
 
 describe("ExperimentPlanRequestSchema arm bounds", () => {
   const base = {
@@ -39,6 +45,33 @@ describe("ExperimentPlanRequestSchema arm bounds", () => {
       ...base,
       armCount: 2,
       trafficSplit: Array.from({ length: EXPERIMENT_PLAN_MAX_ARM_COUNT + 1 }, () => 0.01),
+    });
+    expect(parsed.success).toBe(false);
+  });
+
+  it("rejects daily traffic below the documented floor", () => {
+    const parsed = ExperimentPlanRequestSchema.safeParse({
+      ...base,
+      armCount: 2,
+      expectedDailyEligibleEntities: EXPERIMENT_PLAN_MIN_DAILY_ELIGIBLE_ENTITIES / 10,
+    });
+    expect(parsed.success).toBe(false);
+  });
+
+  it("rejects non-zero baselineMean below the documented absolute floor", () => {
+    const parsed = ExperimentPlanRequestSchema.safeParse({
+      ...base,
+      armCount: 2,
+      baselineMean: EXPERIMENT_PLAN_MIN_BASELINE_MEAN_ABS / 10,
+    });
+    expect(parsed.success).toBe(false);
+  });
+
+  it("rejects alpha below the documented inverse-normal floor", () => {
+    const parsed = ExperimentPlanRequestSchema.safeParse({
+      ...base,
+      armCount: 2,
+      alpha: EXPERIMENT_PLAN_MIN_ALPHA / 10,
     });
     expect(parsed.success).toBe(false);
   });

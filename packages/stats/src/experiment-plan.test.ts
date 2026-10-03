@@ -9,7 +9,7 @@ describe("alwaysValidInflation", () => {
     const alpha = 0.05;
     const targetN = 5_000;
     const scale = normalMixtureScale(targetN, alpha, rhoSquaredForTargetN(alpha, targetN));
-    const zCritical = inverseNormalCdf(1 - alpha / 2);
+    const zCritical = -inverseNormalCdf(alpha / 2);
     expect(alwaysValidInflation(alpha)).toBeCloseTo((scale / zCritical) ** 2, 12);
     expect(alwaysValidCriticalScale(alpha)).toBeCloseTo(scale, 12);
   });
@@ -19,6 +19,11 @@ describe("alwaysValidInflation", () => {
     const scaleSmall = normalMixtureScale(100, alpha, rhoSquaredForTargetN(alpha, 100));
     const scaleLarge = normalMixtureScale(10_000, alpha, rhoSquaredForTargetN(alpha, 10_000));
     expect(scaleSmall).toBeCloseTo(scaleLarge, 12);
+  });
+
+  it("computes k* for tiny alpha via the lower-tail critical (no inverseNormalCdf throw)", () => {
+    expect(() => alwaysValidInflation(1e-20)).not.toThrow();
+    expect(alwaysValidInflation(1e-20)).toBeGreaterThan(1);
   });
 });
 

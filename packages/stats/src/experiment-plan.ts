@@ -1,5 +1,6 @@
 import { alwaysValidInflation } from "./always-valid-inflation";
 import { solveBinomialMdeAtFixedSize } from "./experiment-plan-binomial-mde";
+import { validatePlanOutputs } from "./experiment-plan-outputs";
 import type {
   ExperimentPlanInput,
   ExperimentPlanOutcome,
@@ -25,6 +26,11 @@ export type {
 
 const DEFAULT_ALPHA = 0.05;
 const DEFAULT_POWER = 0.8;
+
+/** Two-sided normal critical value via the lower tail (avoids 1 - alpha/2 → 1). */
+function twoSidedNormalCritical(alpha: number): number {
+  return -inverseNormalCdf(alpha / 2);
+}
 
 export function planExperiment(input: ExperimentPlanInput): ExperimentPlanOutcome {
   const issues = validatePlanInput(input);
@@ -75,16 +81,15 @@ export function planExperiment(input: ExperimentPlanInput): ExperimentPlanOutcom
 
   const fixedHorizonNPerArm = fixedHorizonControlN({
     split,
-    critical: inverseNormalCdf(1 - alpha / 2),
+    critical: twoSidedNormalCritical(alpha),
     zBeta,
     mdeAbsolute,
     varianceControl: variances.control,
     varianceTreatment: variances.treatment,
   });
 
-  return {
-    ok: true,
-    plan: buildPlan({
+  return finalizePlan(
+    buildPlan({
       input,
       baseline,
       alpha,
@@ -99,7 +104,7 @@ export function planExperiment(input: ExperimentPlanInput): ExperimentPlanOutcom
       varianceControl: variances.control,
       varianceTreatment: variances.treatment,
     }),
-  };
+  );
 }
 
 function planFromFixedSize(args: {
@@ -171,7 +176,7 @@ function finishFixedSizePlan(args: {
 }): ExperimentPlanOutcome {
   const fixedHorizonNPerArm = fixedHorizonControlN({
     split: args.split,
-    critical: inverseNormalCdf(1 - args.alpha / 2),
+    critical: twoSidedNormalCritical(args.alpha),
     zBeta: args.zBeta,
     mdeAbsolute: args.solved.mdeAbsolute,
     varianceControl: args.varianceControl,
@@ -189,9 +194,8 @@ function finishFixedSizePlan(args: {
     };
   }
 
-  return {
-    ok: true,
-    plan: buildPlan({
+  return finalizePlan(
+    buildPlan({
       input: args.input,
       baseline: args.baseline,
       alpha: args.alpha,
@@ -206,7 +210,15 @@ function finishFixedSizePlan(args: {
       varianceControl: args.varianceControl,
       varianceTreatment: args.varianceTreatment,
     }),
-  };
+  );
+}
+
+function finalizePlan(plan: ExperimentPlanResult): ExperimentPlanOutcome {
+  const issues = validatePlanOutputs(plan);
+  if (issues.length > 0) {
+    return { ok: false, issues };
+  }
+  return { ok: true, plan };
 }
 
 function buildPlan(args: {

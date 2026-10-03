@@ -10,8 +10,27 @@ import { PERSISTED_RECORD_MAX_KEYS } from "./persisted-field-limits";
  *
  * Arm cap matches Experiment allocation's persisted record key limit (Variant
  * names in the draft allocation), which is the create-time arm bound.
+ *
+ * Input floors below keep derived outputs representable: daily traffic so
+ * expectedDurationDays stays in the safe-integer range for realistic n, and
+ * non-zero continuous |baselineMean| so mdeRelative cannot overflow to
+ * Infinity. Alpha is bounded below so inverse-normal critical values stay in
+ * the supported probability range (alpha/2 does not underflow past the
+ * inverseNormalCdf domain in practice).
  */
 export const EXPERIMENT_PLAN_MAX_ARM_COUNT = PERSISTED_RECORD_MAX_KEYS;
+
+/** Minimum expectedDailyEligibleEntities on the wire (positive, but not tiny). */
+export const EXPERIMENT_PLAN_MIN_DAILY_ELIGIBLE_ENTITIES = 1e-6;
+
+/**
+ * Non-zero continuous baselineMean must have at least this absolute magnitude
+ * so mdeAbsolute / |mean| stays finite under IEEE doubles.
+ */
+export const EXPERIMENT_PLAN_MIN_BASELINE_MEAN_ABS = 1e-100;
+
+/** Smallest alpha the planner math supports (inverse-normal critical values). */
+export const EXPERIMENT_PLAN_MIN_ALPHA = 1e-10;
 
 type PlanRequestValue = {
   metricKind: "continuous" | "binomial";
@@ -34,6 +53,15 @@ function refineBaseline(value: PlanRequestValue, ctx: z.RefinementCtx): void {
         code: "custom",
         path: ["baselineMean"],
         message: "baselineMean is required for continuous Metrics.",
+      });
+    } else if (
+      value.baselineMean !== 0 &&
+      !(Math.abs(value.baselineMean) >= EXPERIMENT_PLAN_MIN_BASELINE_MEAN_ABS)
+    ) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["baselineMean"],
+        message: `Non-zero baselineMean absolute magnitude must be at least ${EXPERIMENT_PLAN_MIN_BASELINE_MEAN_ABS} so derived mdeRelative stays finite.`,
       });
     }
     if (value.baselineVariance === undefined) {
@@ -107,7 +135,8 @@ export const ExperimentPlanRequestSchema = z
     baselineMean: z.number().finite().optional(),
     baselineVariance: z.number().finite().positive().optional(),
     baselineRate: z.number().gt(0).lt(1).optional(),
-    alpha: z.number().gt(0).lt(1).optional(),
+    // Floor keeps inverse-normal critical values in the supported domain.
+    alpha: z.number().gte(EXPERIMENT_PLAN_MIN_ALPHA).lt(1).optional(),
     power: z.number().gt(0).lt(1).optional(),
     mdeAbsolute: z.number().finite().positive().optional(),
     mdeRelative: z.number().finite().positive().optional(),
@@ -118,7 +147,11 @@ export const ExperimentPlanRequestSchema = z
       .min(2)
       .max(EXPERIMENT_PLAN_MAX_ARM_COUNT)
       .optional(),
-    expectedDailyEligibleEntities: z.number().finite().positive(),
+    // Floor keeps expectedDurationDays representable for realistic sample sizes.
+    expectedDailyEligibleEntities: z
+      .number()
+      .finite()
+      .gte(EXPERIMENT_PLAN_MIN_DAILY_ELIGIBLE_ENTITIES),
     guardrailBreachAbsolute: z.number().finite().positive().optional(),
     guardrailBreachRelative: z.number().finite().positive().optional(),
   })
