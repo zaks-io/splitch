@@ -12,8 +12,13 @@ const CONTROL_PLANE_ORIGIN = "https://cp.splitch.test";
 let local: LocalBindings;
 let env: AuthApiEnv;
 let disposeLocal: (() => void) | undefined;
+let controlPlaneModules: ReturnType<typeof importControlPlaneModules>;
 
 beforeAll(async () => {
+  // Cold-importing the whole Control Plane app can outlast the 15s test timeout
+  // on a loaded CI runner; the hook gets the longer hookTimeout instead.
+  controlPlaneModules = importControlPlaneModules();
+  await controlPlaneModules;
   local = await makePoolBindings();
   disposeLocal = local.dispose;
   env = {
@@ -165,14 +170,19 @@ async function expectOwnerMemberships(registration: Registration): Promise<void>
   expect(app?.role).toBe("owner");
 }
 
-async function makeControlPlaneApp(): Promise<TestApp> {
-  const [appModule, authModule, jwksModule, sessionModule, membershipModule] = await Promise.all([
+function importControlPlaneModules() {
+  return Promise.all([
     import(new URL("../../control-plane-api/src/app.ts", import.meta.url).href),
     import(new URL("../../control-plane-api/src/auth-resolver.ts", import.meta.url).href),
     import(new URL("../../control-plane-api/src/jwks-verify.ts", import.meta.url).href),
     import(new URL("../../control-plane-api/src/session-store.ts", import.meta.url).href),
     import(new URL("../../control-plane-api/src/token-membership.ts", import.meta.url).href),
   ]);
+}
+
+async function makeControlPlaneApp(): Promise<TestApp> {
+  const [appModule, authModule, jwksModule, sessionModule, membershipModule] =
+    await controlPlaneModules;
   const verifier = jwksModule.makeJwksVerifier({
     issuer: AUTH_ORIGIN,
     fetchJwks: async () => {
