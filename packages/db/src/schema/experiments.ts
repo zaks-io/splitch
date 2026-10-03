@@ -118,6 +118,8 @@ export const runs = sqliteTable(
     targetNSource: text("target_n_source", { enum: ["caller", "default"] }), // null on fixed horizon
     plannedDurationDays: integer("planned_duration_days"), // locked at Start
     plannedDurationOverrideReason: text("planned_duration_override_reason"), // locked at Start
+    // JSON PreRegistration; null when Start omitted pre-registration (plan 2.2).
+    preRegistration: text("pre_registration"), // locked at Start
     sampleSizeLocked: integer("sample_size_locked"), // required for fixed horizon
     // JSON: locked goal Metric × Variant × Primary Dimension members.
     decisionFamily: text("decision_family").notNull(), // locked at Start

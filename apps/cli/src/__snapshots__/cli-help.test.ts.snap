@@ -880,6 +880,7 @@ Request body (--body-json):
   targetN                        optional  number
   plannedDurationDays            optional  number
   plannedDurationOverrideReason  optional  string
+  preRegistration                optional  { hypothesis: string; primaryMetricId: string; metrics: { metricId: string; desirability?: string ("higher_is_better" | "lower_is_better"); mdeAbsolute?: number; mdeRelative?: number; rope?: { lower: number; upper: number; scale: string ("absolute" | "relative") } }[]; shipRule: { requiredMargin: number; marginScale: string ("absolute" | "relative"); conflictResolution: string ("primary_wins" | "unanimous_goals" | "any_goal") } }
   idempotency_key                required  string
   Example:
     {"horizon":"sequential","idempotency_key":"idem-1"}

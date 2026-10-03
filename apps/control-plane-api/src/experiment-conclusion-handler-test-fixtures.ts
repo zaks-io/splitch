@@ -179,6 +179,7 @@ export function runRow(status: "running" | "ended") {
     targetNSource: null as "caller" | "default" | null,
     plannedDurationDays: null as number | null,
     plannedDurationOverrideReason: null as string | null,
+    preRegistration: null as string | null,
     sampleSizeLocked: null,
     decisionFamily: "[]",
     guardrailDecisions: "[]",

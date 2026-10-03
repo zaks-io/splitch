@@ -22,7 +22,8 @@ SCHEMA >
     `analysis_version` Nullable(String) `json:$.analysis_version`,
     `target_n_source` Nullable(String) `json:$.target_n_source`,
     `planned_duration_days` Nullable(UInt32) `json:$.planned_duration_days`,
-    `planned_duration_override_reason` Nullable(String) `json:$.planned_duration_override_reason`
+    `planned_duration_override_reason` Nullable(String) `json:$.planned_duration_override_reason`,
+    `pre_registration` Nullable(String) `json:$.pre_registration`
 
 ENGINE "MergeTree"
 ENGINE_SORTING_KEY "app_id, environment_id, experiment_id, started_at"

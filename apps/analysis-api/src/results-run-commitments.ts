@@ -1,5 +1,7 @@
 import {
   LEGACY_RUN_COMMITMENTS,
+  type PreRegistration,
+  PreRegistrationSchema,
   type RunCommitments,
   RunCommitmentsSchema,
   SUPPORTED_ANALYSIS_VERSIONS,
@@ -40,6 +42,7 @@ export function materializeRunCommitments(row: unknown): RunCommitments {
       `Run froze analysis_version ${String(version)}, which this Analysis deployment does not implement (supported: ${SUPPORTED_ANALYSIS_VERSIONS.join(", ")})`,
     );
   }
+  const preRegistration = materializePreRegistration(source.pre_registration);
   const parsed = RunCommitmentsSchema.safeParse({
     analysis_version_source: "frozen",
     analysis_version: version,
@@ -47,6 +50,7 @@ export function materializeRunCommitments(row: unknown): RunCommitments {
     target_n_source: source.target_n_source,
     planned_duration_days: source.planned_duration_days,
     planned_duration_override_reason: source.planned_duration_override_reason,
+    ...(preRegistration !== undefined ? { pre_registration: preRegistration } : {}),
   });
   if (!parsed.success) {
     throw new ResultsInputError(
@@ -55,6 +59,23 @@ export function materializeRunCommitments(row: unknown): RunCommitments {
   }
   if ((parsed.data.target_n === null) !== (parsed.data.target_n_source === null)) {
     throw new ResultsInputError("Run commitments pair target_n with target_n_source");
+  }
+  return parsed.data;
+}
+
+/**
+ * Null / absent means the Run never pre-registered. A present JSON blob that
+ * fails to parse is refused rather than dropped, so a corrupted freeze cannot
+ * silently become "no pre-registration".
+ */
+function materializePreRegistration(raw: unknown): PreRegistration | undefined {
+  if (raw === undefined || raw === null || raw === "") return undefined;
+  const value = typeof raw === "string" ? (JSON.parse(raw) as unknown) : raw;
+  const parsed = PreRegistrationSchema.safeParse(value);
+  if (!parsed.success) {
+    throw new ResultsInputError(
+      `Run pre_registration is invalid: ${parsed.error.issues.map((issue) => `${issue.path.join(".")} ${issue.message}`).join("; ")}`,
+    );
   }
   return parsed.data;
 }

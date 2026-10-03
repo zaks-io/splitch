@@ -104,6 +104,8 @@ export function startProposalFields(
   startReason: string | null;
   horizon: RunDecisionSpec["horizon"];
   sampleSizeLocked: number | null;
+  /** Caller intent; apply re-resolves against the Run's Metrics. */
+  preRegistration: unknown;
 } & Required<{ [Field in keyof CommitmentIntent]: unknown }> {
   return {
     startReason: typeof body.reason === "string" ? body.reason : null,
@@ -117,6 +119,7 @@ export function startProposalFields(
     targetN: body.targetN,
     plannedDurationDays: body.plannedDurationDays,
     plannedDurationOverrideReason: body.plannedDurationOverrideReason,
+    preRegistration: body.preRegistration,
   };
 }
 
@@ -156,7 +159,10 @@ export function decisionSpecFromProposal(
  * on the proposal: no evidence exists before Start, so a pending Approval
  * applied after a version change has nothing an older version could have read.
  */
-export function runCommitmentColumns(spec: RunDecisionSpec) {
+export function runCommitmentColumns(
+  spec: RunDecisionSpec,
+  preRegistrationJson: string | null = null,
+) {
   if (!SUPPORTED_ANALYSIS_VERSIONS.includes(CURRENT_ANALYSIS_VERSION)) {
     throw new Error(
       `CURRENT_ANALYSIS_VERSION ${JSON.stringify(CURRENT_ANALYSIS_VERSION)} is not in SUPPORTED_ANALYSIS_VERSIONS`,
@@ -170,6 +176,7 @@ export function runCommitmentColumns(spec: RunDecisionSpec) {
     targetNSource: spec.targetNSource,
     plannedDurationDays: spec.plannedDurationDays,
     plannedDurationOverrideReason: spec.plannedDurationOverrideReason,
+    preRegistration: preRegistrationJson,
   };
 }
 

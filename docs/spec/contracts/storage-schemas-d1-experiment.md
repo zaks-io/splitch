@@ -88,6 +88,7 @@ at Start.
 | `analysis_version`                 | text        | nullable; analysis implementation frozen at Run Start; null only on a legacy Run (ADR-0059)              |
 | `planned_duration_days`            | integer     | nullable, > 0; planned duration locked at Run Start; null only on a legacy Run                           |
 | `planned_duration_override_reason` | text        | nullable; label for a duration that is not whole weeks                                                   |
+| `pre_registration`                 | text        | nullable (JSON `PreRegistration`); frozen at Start when supplied; null when omitted (plan 2.2)           |
 | `sample_size_locked`               | integer     | nullable; required for fixed horizon                                                                     |
 | `decision_family`                  | text        | not null (JSON); locked goal Metric × Variant × Primary Dimension members                                |
 | `guardrail_decisions`              | text        | not null (JSON `GuardrailDecision[]`, one per (Metric, treatment Variant)); locked thresholds            |

@@ -4,6 +4,10 @@ import {
   type Experiment,
   type LiveRunUnaffected,
   type MetricRef,
+  type PreRegistration,
+  type PreRegistrationIntent,
+  PreRegistrationSchema,
+  preRegistrationToIntent,
   RunResponseSchema,
   type Run,
   type TargetingRule,
@@ -67,6 +71,7 @@ export function runResponse(
   row: RunRow,
   options?: { draftTargetingRules?: TargetingRule[] | null },
 ): Run & { draftTargetingRules?: TargetingRule[] | null } {
+  const preRegistration = parsePreRegistrationIntent(row.preRegistration);
   return RunResponseSchema.parse({
     id: row.id,
     experimentId: row.experimentId,
@@ -82,6 +87,7 @@ export function runResponse(
     startedAt: row.startedAt,
     endedAt: row.endedAt,
     createdAt: row.createdAt,
+    ...(preRegistration !== undefined ? { preRegistration } : {}),
     ...(options && "draftTargetingRules" in options
       ? { draftTargetingRules: options.draftTargetingRules ?? null }
       : {}),
@@ -107,6 +113,20 @@ export function jsonObject<T extends Record<string, unknown>>(raw: string | null
 
 export function json(value: unknown): string {
   return JSON.stringify(value);
+}
+
+function parsePreRegistrationIntent(
+  raw: string | null | undefined,
+): PreRegistrationIntent | undefined {
+  // D1 NULL and a missing column both mean "never pre-registered".
+  if (raw === null || raw === undefined || raw === "") return undefined;
+  const parsed = PreRegistrationSchema.safeParse(JSON.parse(raw) as unknown);
+  if (!parsed.success) {
+    throw new Error(
+      `Run pre_registration is invalid: ${parsed.error.issues.map((issue) => issue.message).join("; ")}`,
+    );
+  }
+  return preRegistrationToIntent(parsed.data satisfies PreRegistration);
 }
 
 export async function runConfigHash(input: {

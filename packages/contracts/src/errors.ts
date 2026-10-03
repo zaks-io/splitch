@@ -77,6 +77,8 @@ const EmptyDetails = z.object({}).strict();
 const ValidationIssue = z.object({
   path: z.array(z.string()),
   message: z.string(),
+  /** Stable machine code for structured validation failures (e.g. pre-registration). */
+  code: z.string().optional(),
 });
 
 /**

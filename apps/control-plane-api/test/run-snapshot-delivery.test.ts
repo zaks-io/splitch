@@ -22,6 +22,7 @@ const DEFAULTED_COMMITMENTS = {
   target_n_source: "default",
   planned_duration_days: 7,
   planned_duration_override_reason: null,
+  pre_registration: null,
 };
 const disposers: Array<() => Promise<void>> = [];
 

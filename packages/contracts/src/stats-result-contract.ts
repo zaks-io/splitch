@@ -2,6 +2,7 @@ import { z } from "zod";
 import { CanonicalJsonSha256Schema } from "./canonical-hash";
 import { MetricRefSchema } from "./leaf-schemas-experiment";
 import { RunCommitmentsSchema } from "./run-commitments";
+import { RopeScaleSchema } from "./run-preregistration";
 import type { StatsInput } from "./stats-input-contract";
 
 const MetricIdSchema = MetricRefSchema.shape.metricId;
@@ -115,6 +116,9 @@ export const EstimandDisclosureSchema = z
   });
 export type EstimandDisclosure = z.infer<typeof EstimandDisclosureSchema>;
 
+export const RopeVerdictSchema = z.enum(["outside", "inside", "undecided"]);
+export type RopeVerdict = z.infer<typeof RopeVerdictSchema>;
+
 export const ArmResultSchema = z
   .object({
     variant: z.string(),
@@ -134,8 +138,22 @@ export const ArmResultSchema = z
     // Optional only so Stats recorded before the disclosure existed still
     // parse; the engine always emits it.
     estimand: EstimandDisclosureSchema.optional(),
+    /**
+     * Present only when this Metric pre-registered a ROPE and the decision
+     * interval on that ROPE's scale is finite. Absent (not defaulted) otherwise.
+     */
+    ropeVerdict: RopeVerdictSchema.optional(),
+    /** Scale the ROPE and decision interval shared when ropeVerdict is present. */
+    ropeScale: RopeScaleSchema.optional(),
   })
-  .strict();
+  .strict()
+  .superRefine((arm, context) => {
+    if ((arm.ropeVerdict === undefined) === (arm.ropeScale === undefined)) return;
+    context.addIssue({
+      code: "custom",
+      message: "ropeVerdict and ropeScale must be present together",
+    });
+  });
 export type ArmResult = z.infer<typeof ArmResultSchema>;
 
 export const SrmResultSchema = z

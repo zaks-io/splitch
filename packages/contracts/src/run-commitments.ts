@@ -1,12 +1,14 @@
 import { z } from "zod";
 import { canonicalHash } from "./canonical-json";
 import { resultTokenStats } from "./result-token-stats";
+import { PreRegistrationSchema } from "./run-preregistration";
 import type { StatsOutput } from "./stats-result-contract";
 
 /**
  * What a Run commits to at Start beyond its assignment config (ADR-0059): the
  * analysis version that will read its evidence, the sequential tuning target,
- * and the planned duration the decision gate measures evidence against.
+ * the planned duration the decision gate measures evidence against, and
+ * optional pre-registration (plan 2.2).
  *
  * A Run started before these were recorded is a legacy Run. It is read under a
  * labeled compatibility version and is never given a target or duration it did
@@ -69,17 +71,26 @@ export const MAX_PLANNED_DURATION_DAYS = 365;
 export const TargetNSourceSchema = z.enum(["caller", "default"]);
 export type TargetNSource = z.infer<typeof TargetNSourceSchema>;
 
+const frozenCommitmentsFields = {
+  analysis_version: z.string().min(1),
+  /** Null on a fixed-horizon Run, which has no sequential tuning target. */
+  target_n: z.number().int().positive().nullable(),
+  target_n_source: TargetNSourceSchema.nullable(),
+  planned_duration_days: z.number().int().positive().max(MAX_PLANNED_DURATION_DAYS),
+  /** Present only when the planned duration departs from whole weeks. */
+  planned_duration_override_reason: z.string().min(1).nullable(),
+  /**
+   * Optional: absent when Start omitted pre-registration. Never invented for a
+   * legacy Run. Scorecard / ship recommendation (2.4) are out of scope here.
+   */
+  pre_registration: PreRegistrationSchema.optional(),
+} as const;
+
 export const RunCommitmentsSchema = z.discriminatedUnion("analysis_version_source", [
   z
     .object({
       analysis_version_source: z.literal("frozen"),
-      analysis_version: z.string().min(1),
-      /** Null on a fixed-horizon Run, which has no sequential tuning target. */
-      target_n: z.number().int().positive().nullable(),
-      target_n_source: TargetNSourceSchema.nullable(),
-      planned_duration_days: z.number().int().positive().max(MAX_PLANNED_DURATION_DAYS),
-      /** Present only when the planned duration departs from whole weeks. */
-      planned_duration_override_reason: z.string().min(1).nullable(),
+      ...frozenCommitmentsFields,
     })
     .strict(),
   z

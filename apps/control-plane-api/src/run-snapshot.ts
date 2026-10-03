@@ -30,6 +30,8 @@ export interface RunSnapshotRow {
   target_n_source: string | null;
   planned_duration_days: number | null;
   planned_duration_override_reason: string | null;
+  /** JSON PreRegistration or null when Start omitted it. */
+  pre_registration: string | null;
   allocation: string;
   control_variant: string;
   control_variant_id: string;
@@ -80,6 +82,7 @@ export function runSnapshotRow(
     target_n_source: run.targetNSource,
     planned_duration_days: run.plannedDurationDays,
     planned_duration_override_reason: run.plannedDurationOverrideReason,
+    pre_registration: run.preRegistration,
     allocation: run.allocation,
     control_variant: controlVariant.name,
     control_variant_id: run.controlVariantId,

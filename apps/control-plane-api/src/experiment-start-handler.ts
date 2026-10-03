@@ -34,6 +34,10 @@ import {
   runDecisionSpecFromBody,
   startProposalFields,
 } from "./experiment-start-decision-spec";
+import {
+  resolveStartPreRegistration,
+  runMetricIdsFromPrepared,
+} from "./experiment-start-preregistration";
 import { validateStartRequest } from "./experiment-start-request";
 import { readEnvironmentPolicy } from "./flag-config-policy";
 import { objectBody, pathParam } from "./handler-input";
@@ -70,46 +74,30 @@ export async function startExperiment(
     args.requestId,
   );
   if (!prepared.ok) return prepared.response;
+  // Validate against the Metrics this Start will freeze so the Approval proposal
+  // carries only a pre-registration the Run can honour (plan 2.2).
+  const preRegistration = resolveStartPreRegistration(
+    body.preRegistration,
+    runMetricIdsFromPrepared(prepared.value),
+    args.requestId,
+  );
+  if (!preRegistration.ok) return preRegistration.response;
+  const preRegistrationJson = preRegistration.value === null ? null : json(preRegistration.value);
 
   const policy = await readEnvironmentPolicy(deps.repo, scope.appId, scope.environmentId);
   if (!policy) return appNotFound(args.requestId);
   const contexts = environmentPolicyContexts(scope.environmentId, policy, ["start_experiment_run"]);
   if (contexts.some((context) => context.level !== "allow")) {
-    const current = {
-      ...experimentTargetProjection(experiment as unknown as Record<string, unknown>),
-      status: "draft",
-      startReason: null,
-      horizon: null,
-      sampleSizeLocked: null,
-      targetN: null,
-      plannedDurationDays: null,
-      plannedDurationOverrideReason: null,
-    };
-    // The same fields the idempotency hash was taken over, spread from the same
-    // value. The horizon is a Run field with no Experiment column, so the
-    // Approval Request is the only place it survives proposal to application.
-    const proposed = { ...current, status: "running", ...proposalInput };
-    const approval = await createApproval(
-      {
-        ...deps,
-        applyOther: makeOtherApprovalApplication(deps),
-      },
-      {
-        appId: scope.appId,
-        operation: "experiments_start",
-        target: { type: "experiment_draft", id: experiment.id },
-        policyContexts: contexts,
-        current,
-        proposed,
-        proposalInput,
-        principal: args.principal,
-        idempotencyKey: startContext.body.idempotency_key as string,
-        inlineReview: startContext.body.review !== undefined,
-        requestId: args.requestId,
-      },
-    );
-    if (!approval.ok) return approval.response;
-    return appliedExperimentStartResponse(deps, scope, experiment.id, approval.approvalRequest);
+    return proposeGatedStart(deps, {
+      scope,
+      experiment,
+      proposalInput,
+      contexts,
+      principal: args.principal,
+      idempotencyKey: startContext.body.idempotency_key as string,
+      inlineReview: startContext.body.review !== undefined,
+      requestId: args.requestId,
+    });
   }
 
   const now = nowIso(deps);
@@ -134,7 +122,7 @@ export async function startExperiment(
       variantSet: json(prepared.value.variantSet),
       targetingRules: json(prepared.value.targetingRules),
       confidenceLevel: experiment.confidenceLevel,
-      ...runCommitmentColumns(decisionSpec.value),
+      ...runCommitmentColumns(decisionSpec.value, preRegistrationJson),
       decisionFamily: json(prepared.value.decisionFamily),
       guardrailDecisions: json(prepared.value.guardrailDecisions),
       metricVarianceConfig: json(prepared.value.metricVarianceConfig),
@@ -180,6 +168,62 @@ export async function startExperiment(
     // committed row so this door stays symmetric with the approval-applied path.
     frozenTargetingRules: jsonArray(committed.run.targetingRules),
   });
+}
+
+async function proposeGatedStart(
+  deps: ExperimentDeps,
+  args: {
+    scope: EnvScope;
+    experiment: ExperimentRow;
+    proposalInput: ReturnType<typeof startProposalFields>;
+    contexts: ReturnType<typeof environmentPolicyContexts>;
+    principal: HandlerArgs<unknown>["principal"];
+    idempotencyKey: string;
+    inlineReview: boolean;
+    requestId: string;
+  },
+): Promise<Response> {
+  const current = {
+    ...experimentTargetProjection(args.experiment as unknown as Record<string, unknown>),
+    status: "draft",
+    startReason: null,
+    horizon: null,
+    sampleSizeLocked: null,
+    targetN: null,
+    plannedDurationDays: null,
+    plannedDurationOverrideReason: null,
+    preRegistration: null,
+  };
+  // The same fields the idempotency hash was taken over, spread from the same
+  // value. The horizon is a Run field with no Experiment column, so the
+  // Approval Request is the only place it survives proposal to application.
+  const proposed = { ...current, status: "running", ...args.proposalInput };
+  const approval = await createApproval(
+    {
+      ...deps,
+      applyOther: makeOtherApprovalApplication(deps),
+    },
+    {
+      appId: args.scope.appId,
+      operation: "experiments_start",
+      target: { type: "experiment_draft", id: args.experiment.id },
+      policyContexts: args.contexts,
+      current,
+      proposed,
+      proposalInput: args.proposalInput,
+      principal: args.principal,
+      idempotencyKey: args.idempotencyKey,
+      inlineReview: args.inlineReview,
+      requestId: args.requestId,
+    },
+  );
+  if (!approval.ok) return approval.response;
+  return appliedExperimentStartResponse(
+    deps,
+    args.scope,
+    args.experiment.id,
+    approval.approvalRequest,
+  );
 }
 
 async function replayExperimentStart(

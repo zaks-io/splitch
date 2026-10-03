@@ -12,8 +12,8 @@
  * on the same scale (absolute lift or relative lift); this function does not
  * convert scales.
  *
- * Pre-registration supplies the ROPE per Metric later. This helper is a pure
- * export; wiring onto per-Metric result shapes follows that slice.
+ * Pre-registration (plan 2.2) supplies the ROPE per Metric; metric-arm-rope
+ * attaches ropeVerdict on ArmResult when that Metric froze one.
  */
 
 export const ROPE_VERDICTS = ["outside", "inside", "undecided"] as const;

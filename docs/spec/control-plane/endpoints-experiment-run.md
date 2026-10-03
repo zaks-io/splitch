@@ -130,7 +130,8 @@ Starts the draft as a new Run; ends any running Run.
 Body:
 `{ review?: { action: "approve_and_apply" }, reason?: string, horizon?: "sequential" | "fixed",
 sampleSizeLocked?: number | null, targetN?: number, plannedDurationDays?: number,
-plannedDurationOverrideReason?: string, idempotency_key: string }`
+plannedDurationOverrideReason?: string, preRegistration?: PreRegistrationIntent,
+idempotency_key: string }`
 `horizon` and `sampleSizeLocked` are the Run-only half of the decision spec; they exist as columns on
 `runs` alone, so Start is where they are chosen and frozen. `horizon` defaults to `sequential`, both
 on the request and on an Approval proposal that recorded none. A `fixed` horizon without a
@@ -147,6 +148,15 @@ as defaulted (`target_n_source: "default"`), and is refused on a fixed horizon; 
 duration is refused because it overrides nothing. The caller's values ride the Approval proposal and
 are part of what `idempotency_key` identifies; a proposal recorded before they existed resolves to
 the same defaults when applied.
+Optional `preRegistration` freezes a hypothesis, primary Metric id (must be one of the Run's Metrics),
+per-Metric desirability (`higher_is_better` | `lower_is_better`), optional per-Metric MDE and ROPE
+(on the decision-interval scale; ROPE lower must be strictly less than upper), and a ship rule
+(`requiredMargin`, `marginScale`, `conflictResolution`: `primary_wins` | `unanimous_goals` |
+`any_goal`). It is immutable after Start. Omitting it leaves Start behavior unchanged for existing
+clients. Making a plan mandatory with an override is a later product decision. Validation failures
+carry stable issue codes (`PREREG_*`) under `VALIDATION_ERROR`. The frozen value is exposed on Run
+reads (`preRegistration`) and on ready results (`run_commitments.pre_registration`). Scorecard trust
+checks and the ship recommendation (plan 2.4) are out of scope for this slice.
 `reason` is an optional human note capturing _intent_ for the new Run ("testing higher exposure to
 v2"). It is stored as the Run's `start_reason` and surfaced by the Run-history timeline alongside the
 **derived** assignment-config diff from the prior Run (the timeline never depends on it being present —
