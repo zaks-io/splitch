@@ -13,6 +13,11 @@ import {
   deleteFlagD1Cascade,
   purgeFlagConfigsKvForKey,
 } from "./flag-config-lifecycle";
+import {
+  codeRemovalRecordFromBody,
+  flagsDeleteProposalInput,
+  parseFlagsDeleteBody,
+} from "./flag-deletion-code-removal";
 import { resourceNotEmpty, runningExperimentError } from "./flag-definition-errors";
 import { experimentReferencingFlag } from "./flag-definition-guards";
 import {
@@ -37,22 +42,29 @@ export async function deleteFlag(
   const loaded = await loadWritableFlag(deps, args);
   if (!loaded.ok) return loaded.response;
 
-  // DELETE carries no body, so the Approval idempotency key is the header the
-  // registrar already requires for this route.
+  const body = parseFlagsDeleteBody(args.input);
+  const codeRemoval = codeRemovalRecordFromBody(body);
+  // proposalInput fingerprints only caller-supplied claim fields; proposed
+  // always carries an explicit record for Review apply and the deletion audit.
+  const proposalInput = flagsDeleteProposalInput(loaded.value.flag.id, body);
+  const proposed = { codeRemoval };
+  // Idempotency key is the header the registrar already requires for this route.
   const idempotencyKey = args.request.headers.get("idempotency-key") ?? "";
+  // Fingerprint mismatch must conflict before any direct-delete path: a pending
+  // Approval under Policy `confirm` must not be bypassed by retrying the same
+  // Idempotency-Key with a different claim after Policy flips to `allow`.
   const replay = await replayApprovalIfExists(
     { ...deps, applyOther: makeOtherApprovalApplication(deps) },
     {
       appId: loaded.value.appId,
       operation: "flags_delete",
       target: { type: "flag", id: loaded.value.flag.id },
-      proposalInput: { flagId: loaded.value.flag.id },
+      proposalInput,
       principal: args.principal,
       idempotencyKey,
       inlineReview: false,
       requestId: args.requestId,
     },
-    { ignoreMismatch: true },
   );
   if (replay) return replay.ok ? Response.json({ deleted: true }) : replay.response;
 
@@ -71,8 +83,8 @@ export async function deleteFlag(
         target: { type: "flag", id: loaded.value.flag.id },
         policyContexts: contexts,
         current: flagProjection(loaded.value),
-        proposed: {},
-        proposalInput: { flagId: loaded.value.flag.id },
+        proposed,
+        proposalInput,
         principal: args.principal,
         idempotencyKey,
         inlineReview: false,
@@ -88,7 +100,7 @@ export async function deleteFlag(
     loaded.value.appId,
     loaded.value.flag.id,
   );
-  await deleteFlagD1Cascade(deps, loaded.value.appId, loaded.value.flag.id);
+  await deleteFlagD1Cascade(deps, loaded.value.appId, loaded.value.flag.id, codeRemoval);
   await purgeFlagConfigsKvForKey(
     deps,
     loaded.value.appId,

@@ -126,17 +126,23 @@ export function createFlagsClient(
         ),
       );
     },
-    delete: (input, callOptions) =>
-      invokeHcRoute<FlagsDeleteOutput>("flags_delete", () =>
+    delete: (input, callOptions) => {
+      const { appId, flagId, ...body } = input;
+      const json = Object.keys(body).length > 0 ? body : undefined;
+      return invokeHcRoute<FlagsDeleteOutput>("flags_delete", () =>
         hcClient.apps[":appId"].flags[":flagId"].$delete(
-          { param: { appId: input.appId, flagId: input.flagId } },
+          {
+            param: { appId, flagId },
+            ...(json !== undefined ? { json } : {}),
+          } as never,
           withIdempotencyHeader(
             "flags_delete",
             hcRequestOptions(withAuthorization(hcOptions, callOptions)),
             callOptions?.idempotencyKey,
           ),
         ),
-      ),
+      );
+    },
     // CreateVariantRequestSchema is `.strict()` and itself requires appId/flagId,
     // so the whole input is the body — stripping the path params would fail the
     // Worker's body validation.

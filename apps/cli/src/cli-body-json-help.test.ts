@@ -105,7 +105,7 @@ describe("CLI --body-json schema help coverage (SPL-309)", () => {
   it("renders a Request body section for every MCP route with a JSON body", () => {
     const bodyRoutes = mcpRoutesWithJsonBody();
     // Exact current corpus size — leave no slack for a body route to drop out unnoticed.
-    expect(bodyRoutes.length).toBe(39);
+    expect(bodyRoutes.length).toBe(40);
     // Named anchors for ticket-critical commands (not the full invariant).
     expect(bodyRoutes.map((route) => route.operationId)).toEqual(
       expect.arrayContaining([
@@ -121,6 +121,7 @@ describe("CLI --body-json schema help coverage (SPL-309)", () => {
         "runs_conclude",
         "conclusion_promotion_requests_create",
         "experiment_plan",
+        "flags_delete",
       ]),
     );
 

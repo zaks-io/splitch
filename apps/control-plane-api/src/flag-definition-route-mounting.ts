@@ -15,6 +15,7 @@ export function mountFlagDefinitionRoutes(
   registrar.mount(app, controlPlaneRoute("flags_list"), handlers.listFlags);
   registrar.mount(app, controlPlaneRoute("principal_flags_list"), handlers.listPrincipalFlags);
   registrar.mount(app, controlPlaneRoute("expired_flags_list"), handlers.listExpiredFlags);
+  registrar.mount(app, controlPlaneRoute("flag_removal_brief"), handlers.getFlagRemovalBrief);
   registrar.mount(
     app,
     replayTolerantCreateRoute(controlPlaneRoute("flags_create")),

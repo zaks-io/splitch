@@ -70,7 +70,8 @@ async function proposeFlagDeleteIfGated(
         name: flag.name,
         version: flag.version,
       },
-      proposed: {},
+      proposed: { codeRemoval: { state: "unknown" } },
+      // Omit synthetic unknown from the fingerprint so it matches bodyless deletes.
       proposalInput: { flagId: flag.id },
       principal,
       idempotencyKey,

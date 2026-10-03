@@ -24,35 +24,43 @@ import type {
   OrganizationResponseSchema,
   PatchAppRequestSchema,
 } from "./resource-envelopes-account";
-import type {
-  CreateFlagRequestSchema,
-  CreateVariantRequestSchema,
-  ExpiredFlagListResponseSchema,
-  FlagListReadResponseSchema,
-  FlagMutationResponseSchema,
-  FlagReadResponseSchema,
-  FlagResponseSchema,
-  PatchFlagRequestSchema,
-  PatchVariantRequestSchema,
-  PrincipalFlagListReadResponseSchema,
-} from "./resource-envelopes-flag";
 import type * as EnvironmentRoutes from "./route-types-environment";
 import type {
   AddAppMemberRequestSchema,
   AppMemberParams,
   AppParams,
   ApprovalRequestParams,
-  FlagGetQuerySchema,
-  FlagListQuerySchema,
-  FlagParams,
-  FlagVariantParams,
   OrgAppsParams,
-  PrincipalFlagListQuerySchema,
   UpdateAppMemberRequestSchema,
 } from "./routes/route-shapes";
 import type { EntityPrivacyRequestSchema, PrivacyResponseSchema } from "./routes/routes-privacy";
 
 export type * from "./route-types-environment";
+export type * from "./route-types-flags";
+import type {
+  ExpiredFlagsListInput,
+  ExpiredFlagsListOutput,
+  FlagRemovalBriefInput,
+  FlagRemovalBriefOutput,
+  FlagsCreateInput,
+  FlagsCreateOutput,
+  FlagsDeleteInput,
+  FlagsDeleteOutput,
+  FlagsGetInput,
+  FlagsGetOutput,
+  FlagsListInput,
+  FlagsListOutput,
+  FlagsUpdateInput,
+  FlagsUpdateOutput,
+  FlagVariantsCreateInput,
+  FlagVariantsCreateOutput,
+  FlagVariantsDeleteInput,
+  FlagVariantsDeleteOutput,
+  FlagVariantsUpdateInput,
+  FlagVariantsUpdateOutput,
+  PrincipalFlagsListInput,
+  PrincipalFlagsListOutput,
+} from "./route-types-flags";
 
 import {
   type ApprovalRequestListQuerySchema,
@@ -68,7 +76,6 @@ import { listResponse } from "./wire-envelopes-core";
  */
 
 const ApprovalRequestListResponseSchema = listResponse(ApprovalRequestSchema);
-const DeletedResponseSchema = z.object({ deleted: z.literal(true) });
 
 type EventDefinitionPath = z.infer<typeof AppParams> & { eventDefinitionId: string };
 type EventDefinitionVersionPath = EventDefinitionPath & { versionId: string };
@@ -96,20 +103,6 @@ export type EntityPrivacyInput = z.infer<typeof AppParams> &
   z.infer<typeof EntityPrivacyRequestSchema>;
 export type EntityPrivacyOutput = z.infer<typeof PrivacyResponseSchema>;
 
-export type FlagsListInput = z.infer<typeof AppParams> & z.infer<typeof FlagListQuerySchema>;
-export type FlagsListOutput = z.infer<typeof FlagListReadResponseSchema>;
-export type ExpiredFlagsListInput = z.infer<typeof AppParams>;
-export type ExpiredFlagsListOutput = z.infer<typeof ExpiredFlagListResponseSchema>;
-export type PrincipalFlagsListInput = z.infer<typeof PrincipalFlagListQuerySchema>;
-export type PrincipalFlagsListOutput = z.infer<typeof PrincipalFlagListReadResponseSchema>;
-export type FlagsCreateInput = z.infer<typeof AppParams> & z.infer<typeof CreateFlagRequestSchema>;
-export type FlagsCreateOutput = z.infer<typeof FlagResponseSchema>;
-export type FlagsGetInput = z.infer<typeof FlagParams> & z.infer<typeof FlagGetQuerySchema>;
-export type FlagsGetOutput = z.infer<typeof FlagReadResponseSchema>;
-export type FlagsUpdateInput = z.infer<typeof FlagParams> & z.infer<typeof PatchFlagRequestSchema>;
-export type FlagsUpdateOutput = z.infer<typeof FlagResponseSchema>;
-export type FlagsDeleteInput = z.infer<typeof FlagParams>;
-export type FlagsDeleteOutput = z.infer<typeof DeletedResponseSchema>;
 export type ApprovalRequestsListInput = z.infer<typeof AppParams> &
   z.infer<typeof ApprovalRequestListQuerySchema>;
 export type ApprovalRequestsListOutput = z.infer<typeof ApprovalRequestListResponseSchema>;
@@ -118,15 +111,6 @@ export type ApprovalRequestsGetOutput = z.infer<typeof ApprovalRequestSchema>;
 export type ApprovalRequestReviewsCreateInput = z.infer<typeof ApprovalRequestParams> &
   z.infer<typeof ReviewApprovalRequestSchema>;
 export type ApprovalRequestReviewsCreateOutput = z.infer<typeof ApprovalRequestSchema>;
-
-export type FlagVariantsCreateInput = z.infer<typeof FlagParams> &
-  z.infer<typeof CreateVariantRequestSchema>;
-export type FlagVariantsCreateOutput = z.infer<typeof FlagResponseSchema>;
-export type FlagVariantsUpdateInput = z.infer<typeof FlagVariantParams> &
-  z.infer<typeof PatchVariantRequestSchema>;
-export type FlagVariantsUpdateOutput = z.infer<typeof FlagMutationResponseSchema>;
-export type FlagVariantsDeleteInput = z.infer<typeof FlagVariantParams>;
-export type FlagVariantsDeleteOutput = z.infer<typeof FlagResponseSchema>;
 
 const AppListResponseSchema = listResponse(AppSchema);
 const AppMemberListResponseSchema = listResponse(AppMemberSchema);
@@ -264,6 +248,7 @@ export interface RouteTypeMap {
   flags_list: { input: FlagsListInput; output: FlagsListOutput };
   principal_flags_list: { input: PrincipalFlagsListInput; output: PrincipalFlagsListOutput };
   expired_flags_list: { input: ExpiredFlagsListInput; output: ExpiredFlagsListOutput };
+  flag_removal_brief: { input: FlagRemovalBriefInput; output: FlagRemovalBriefOutput };
   flags_create: { input: FlagsCreateInput; output: FlagsCreateOutput };
   flags_get: { input: FlagsGetInput; output: FlagsGetOutput };
   flags_update: { input: FlagsUpdateInput; output: FlagsUpdateOutput };

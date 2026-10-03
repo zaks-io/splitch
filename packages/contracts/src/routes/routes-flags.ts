@@ -3,7 +3,6 @@ import { type ApiRouteContract, defineApiRoute } from "../openapi-route";
 import {
   CreateFlagRequestSchema,
   CreateVariantRequestSchema,
-  ExpiredFlagListResponseSchema,
   FlagListReadResponseSchema,
   FlagMutationResponseSchema,
   FlagReadResponseSchema,
@@ -12,6 +11,7 @@ import {
   PatchVariantRequestSchema,
   PrincipalFlagListReadResponseSchema,
 } from "../resource-envelopes-flag";
+import { DeleteFlagRequestSchema } from "../flag-removal";
 import {
   createIdempotentClosed,
   deleteClosed,
@@ -124,7 +124,7 @@ export const flagRoutes = [
     method: "DELETE",
     path: "/apps/:appId/flags/:flagId",
     summary: "Delete a Flag (blocked if referenced by a running Experiment).",
-    request: { params: FlagParams },
+    request: { params: FlagParams, body: DeleteFlagRequestSchema.optional() },
     response: DeletedResponse,
     auth: AUTH,
     rateLimit: RATE,
@@ -135,6 +135,7 @@ export const flagRoutes = [
       "FORBIDDEN",
       "EXPERIMENT_RUNNING",
       "RESOURCE_NOT_EMPTY",
+      "VALIDATION_ERROR",
       ...APPROVAL_WRITE_ERRORS,
     ],
   }),
@@ -295,20 +296,5 @@ export const flagRoutes = [
     idempotency: "none",
     effects: readOnlyClosed,
     errors: ["ENVIRONMENT_NOT_FOUND", "FORBIDDEN", "INTERNAL_SERVER_ERROR"],
-  }),
-  defineApiRoute({
-    operationId: "expired_flags_list",
-    owner: OWNER,
-    method: "GET",
-    path: "/apps/:appId/expired-flags",
-    summary:
-      "List Flags past their expiresAt that still exist and can still be evaluated, most overdue first (bounded; reports its own truncation).",
-    request: { params: AppParams },
-    response: ExpiredFlagListResponseSchema,
-    auth: AUTH,
-    rateLimit: RATE,
-    idempotency: "none",
-    effects: readOnlyClosed,
-    errors: ["APP_NOT_FOUND", "FORBIDDEN"],
   }),
 ] as const satisfies readonly ApiRouteContract[];

@@ -190,6 +190,20 @@ Flags with no `expiresAt` never appear. The list keys on the expiry, not the cla
 `flags_list` and reports `readTruncated`, `readLimit`, and `cursor: null`. CLI:
 `splitch expired-flags list`. MCP: `expired_flags_list`.
 
+### `GET /apps/{app_id}/flags/{flag_id}/removal-brief`
+
+`flag_removal_brief`: a read-only advisory brief an agent can act on in the customer's codebase.
+It returns the Flag key, its Variants, which Variant each Environment's Configuration currently
+serves (derived via `@splitch/evaluation-core` from that Environment's stored Configuration,
+including its own `defaultVariantId` and enabled state; `servingEvidence` is always
+`configuration_unverified` because ordinary Flag reads record no served-Variant telemetry), whether
+that outcome is uniform across Environments, the lifecycle class/owner/expiry, SDK/OpenFeature call
+shapes to search for (derived from the real `@splitch/sdk` API names, not invented), and explicit
+caveats: splitch never writes customer code and has no repository evidence. Targeting Rules, partial
+rollouts, live Experiments, and Configurations that evaluation rejects leave `removalSafe` false with
+`removalBlockers` naming why (never a substituted Variant). CLI: `splitch flag-removal brief`.
+MCP: `flag_removal_brief`.
+
 ### `POST /apps/{app_id}/flags/{flag_id}/variants`
 
 Adds a Variant to the **catalog** (App-level). Body:
@@ -227,12 +241,20 @@ A **running** Experiment returns `EXPERIMENT_RUNNING`; draft or ended Experiment
 `RESOURCE_NOT_EMPTY` with `childType: "experiment"`. Archived Experiments (and their retained Runs)
 are hard-deleted as part of the Flag cascade once no non-archived reference remains.
 
-Requires an `Idempotency-Key` header. Because the delete destroys every Environment's available
-Variant set and frees the Flag key for immediate re-creation, it is a `variant_availability` change:
-if any Environment serving the Flag is not `allow`, the delete opens an Approval Request
-(`target.type = "flag"`) instead of applying. The target version covers `flags.version` plus the
-sorted vector of configured Environments, their Flag Configuration versions, and their Policy
-levels, so any of those moving before Review renders the request terminal `stale`.
+Requires an `Idempotency-Key` header. Optional JSON body:
+`{ codeRemoval?: { reference: string, state: "claimed" } }`. When present, `reference` is a URL or
+commit/PR ref the caller claims removed the Flag from customer code. That claim is stored on the
+Flag deletion audit row (`flag_change_events.diff_json.codeRemoval`) as an **auditable claim, not
+proof**. When the field is omitted, the audit record stores an explicit
+`{ state: "unknown" }` — never null-as-unknown. There is no archive verb; delete is the removal
+operation.
+
+Because the delete destroys every Environment's available Variant set and frees the Flag key for
+immediate re-creation, it is a `variant_availability` change: if any Environment serving the Flag
+is not `allow`, the delete opens an Approval Request (`target.type = "flag"`) instead of applying.
+The target version covers `flags.version` plus the sorted vector of configured Environments, their
+Flag Configuration versions, and their Policy levels, so any of those moving before Review renders
+the request terminal `stale`.
 
 ## Flag Configuration endpoints (per-Environment)
 

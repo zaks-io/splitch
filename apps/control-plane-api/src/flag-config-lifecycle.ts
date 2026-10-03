@@ -200,15 +200,20 @@ export async function deleteFlagD1Cascade(
   deps: FlagConfigLifecycleDeps,
   appId: string,
   flagId: string,
+  codeRemoval: { state: "unknown" } | { state: "claimed"; reference: string } = {
+    state: "unknown",
+  },
 ): Promise<void> {
   const scope = appScope(appId);
   const environments = await deps.repo.identity.listEnvironments(scope);
   // Archived Experiment + Run purge lives inside deleteFlagCascade (same batch /
   // Approval guard) so a declined Review cannot destroy retained rows.
+  // codeRemoval claim is written in that same batch as the deletion audit row.
   await deps.repo.flags.deleteFlagCascade(
     scope,
     flagId,
     environments.map((environment) => environment.id),
+    { codeRemoval },
   );
 }
 
