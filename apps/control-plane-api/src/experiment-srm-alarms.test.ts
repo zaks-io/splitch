@@ -10,7 +10,10 @@ import {
 } from "@splitch/contracts";
 import type { Repository } from "@splitch/db";
 import { describe, expect, it, vi } from "vitest";
-import { syncAnalysisV2SrmAlarms } from "./experiment-results-enrich";
+import {
+  SrmAlarmWatermarkRequiredError,
+  syncAnalysisV2SrmAlarms,
+} from "./experiment-results-enrich";
 import { statsOutput } from "./panel-experiments-test-fixtures";
 
 const CONTROL = {
@@ -225,6 +228,34 @@ describe("durable analysis-v2 SRM alarms: insufficient-data sentinel", () => {
       balancedLater,
     );
     expect(gate.blockedBy).not.toContain("activated_srm");
+  });
+});
+
+describe("durable analysis-v2 SRM alarms: watermark required", () => {
+  it("fails loud and inserts nothing when a crossing has no data_watermark", async () => {
+    const { repo } = alarmRepo();
+    await expect(
+      syncAnalysisV2SrmAlarms(
+        repo,
+        {
+          id: "run_no_watermark",
+          appId: "app_1",
+          environmentId: "env_1",
+          analysisVersion: ANALYSIS_V2_VERSION,
+        },
+        statsOutput({
+          srm: {
+            ...statsOutput().srm,
+            srm_p_value: 0.0001,
+            srm_is_mismatch: true,
+            srm_sequential_threshold_crossed: true,
+            activated_srm_sequential_threshold_crossed: null,
+          },
+        }),
+        undefined,
+      ),
+    ).rejects.toBeInstanceOf(SrmAlarmWatermarkRequiredError);
+    expect(repo.runSrmAlarms.insertIgnore).not.toHaveBeenCalled();
   });
 });
 

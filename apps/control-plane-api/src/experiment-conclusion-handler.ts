@@ -201,6 +201,8 @@ async function validatedEvidence(
       resultToken,
       dataWatermark: envelope.data_watermark,
       stats: envelope.stats,
+      control,
+      duration,
       gate,
     },
   };

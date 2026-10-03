@@ -4,6 +4,9 @@ import {
   canonicalJson,
   type ConcludeRunRequest,
   type ExperimentDecisionGate,
+  type FrozenControlIdentity,
+  type PlannedDurationEvidence,
+  type StatsOutput,
 } from "@splitch/contracts";
 import { appScope, envScope } from "@splitch/db";
 import type { HandlerArgs } from "@splitch/worker-runtime";
@@ -34,7 +37,9 @@ interface ConclusionContext {
   evidence: {
     resultToken: `sha256:${string}`;
     dataWatermark: string;
-    stats: unknown;
+    stats: StatsOutput;
+    control: FrozenControlIdentity;
+    duration: PlannedDurationEvidence;
     gate: ExperimentDecisionGate;
   };
 }
@@ -131,6 +136,7 @@ export async function commitConclusion(
         expectedConfigVersion: body.target.expectedConfigVersion,
         idempotencyKey: body.idempotencyKey,
         requestHash: context.requestHash,
+        evidence,
       },
       cause,
     );

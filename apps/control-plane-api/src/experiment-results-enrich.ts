@@ -117,6 +117,82 @@ export async function enrichAnalysisResultsResponse(
   });
 }
 
+/** A sequential crossing without a real Analysis watermark must not invent one. */
+export class SrmAlarmWatermarkRequiredError extends Error {
+  constructor() {
+    super(
+      "analysis-v2 sequential SRM crossing reported without data_watermark; refuse to invent an evidence boundary",
+    );
+    this.name = "SrmAlarmWatermarkRequiredError";
+  }
+}
+
+type SrmAlarmStats = {
+  srm: {
+    srm_is_mismatch: boolean;
+    srm_p_value: number;
+    activated_srm_mismatch: boolean | null;
+    activated_srm_p_value: number | null;
+    srm_sequential_threshold_crossed?: boolean;
+    activated_srm_sequential_threshold_crossed?: boolean | null;
+  };
+};
+
+function assertSequentialCrossingFlags(srm: SrmAlarmStats["srm"]): void {
+  if (
+    srm.srm_sequential_threshold_crossed !== true &&
+    srm.srm_sequential_threshold_crossed !== false
+  ) {
+    throw new Error(
+      "analysis-v2 Results omit srm_sequential_threshold_crossed; refuse to persist SRM alarms",
+    );
+  }
+  if (
+    srm.activated_srm_mismatch !== null &&
+    srm.activated_srm_sequential_threshold_crossed !== true &&
+    srm.activated_srm_sequential_threshold_crossed !== false
+  ) {
+    throw new Error(
+      "analysis-v2 Results omit activated_srm_sequential_threshold_crossed; refuse to persist SRM alarms",
+    );
+  }
+}
+
+/** Persist only genuine sequential crossings; never invent a watermark. */
+async function persistSequentialCrossings(
+  repo: Repository,
+  run: { id: string; appId: string; environmentId: string },
+  srm: SrmAlarmStats["srm"],
+  dataWatermark: string | undefined,
+  now: string,
+): Promise<void> {
+  const exposureCrossed = srm.srm_sequential_threshold_crossed === true;
+  const activatedCrossed = srm.activated_srm_sequential_threshold_crossed === true;
+  if (!exposureCrossed && !activatedCrossed) return;
+  if (dataWatermark === undefined) throw new SrmAlarmWatermarkRequiredError();
+  const scope = envScope(run.appId, run.environmentId);
+  if (exposureCrossed) {
+    await repo.runSrmAlarms.insertIgnore(scope, {
+      runId: run.id,
+      srmKind: "exposure",
+      firstCrossedAt: now,
+      watermark: dataWatermark,
+      pValue: srm.srm_p_value,
+      analysisVersion: ANALYSIS_V2_VERSION,
+    });
+  }
+  if (activatedCrossed) {
+    await repo.runSrmAlarms.insertIgnore(scope, {
+      runId: run.id,
+      srmKind: "activated",
+      firstCrossedAt: now,
+      watermark: dataWatermark,
+      pValue: srm.activated_srm_p_value ?? 0,
+      analysisVersion: ANALYSIS_V2_VERSION,
+    });
+  }
+}
+
 /**
  * For analysis-v2 only: INSERT OR IGNORE on live sequential crossings, then
  * return every persisted alarm for the Run so the gate ORs them in.
@@ -129,62 +205,13 @@ export async function syncAnalysisV2SrmAlarms(
     environmentId: string;
     analysisVersion: string | null;
   },
-  stats: {
-    srm: {
-      srm_is_mismatch: boolean;
-      srm_p_value: number;
-      activated_srm_mismatch: boolean | null;
-      activated_srm_p_value: number | null;
-      srm_sequential_threshold_crossed?: boolean;
-      activated_srm_sequential_threshold_crossed?: boolean | null;
-    };
-  },
+  stats: SrmAlarmStats,
   dataWatermark: string | undefined,
 ): Promise<readonly PersistedSrmAlarm[]> {
   if (run.analysisVersion !== ANALYSIS_V2_VERSION) return [];
-  if (
-    stats.srm.srm_sequential_threshold_crossed !== true &&
-    stats.srm.srm_sequential_threshold_crossed !== false
-  ) {
-    throw new Error(
-      "analysis-v2 Results omit srm_sequential_threshold_crossed; refuse to persist SRM alarms",
-    );
-  }
-  if (
-    stats.srm.activated_srm_mismatch !== null &&
-    stats.srm.activated_srm_sequential_threshold_crossed !== true &&
-    stats.srm.activated_srm_sequential_threshold_crossed !== false
-  ) {
-    throw new Error(
-      "analysis-v2 Results omit activated_srm_sequential_threshold_crossed; refuse to persist SRM alarms",
-    );
-  }
-  const scope = envScope(run.appId, run.environmentId);
-  const now = new Date().toISOString();
-  const watermark = dataWatermark ?? now;
-  // Persist only genuine sequential crossings — never the zero-Activation
-  // insufficient-data sentinel (mismatch with sequential_threshold_crossed=false).
-  if (stats.srm.srm_sequential_threshold_crossed === true) {
-    await repo.runSrmAlarms.insertIgnore(scope, {
-      runId: run.id,
-      srmKind: "exposure",
-      firstCrossedAt: now,
-      watermark,
-      pValue: stats.srm.srm_p_value,
-      analysisVersion: ANALYSIS_V2_VERSION,
-    });
-  }
-  if (stats.srm.activated_srm_sequential_threshold_crossed === true) {
-    await repo.runSrmAlarms.insertIgnore(scope, {
-      runId: run.id,
-      srmKind: "activated",
-      firstCrossedAt: now,
-      watermark,
-      pValue: stats.srm.activated_srm_p_value ?? 0,
-      analysisVersion: ANALYSIS_V2_VERSION,
-    });
-  }
-  const rows = await repo.runSrmAlarms.listForRun(scope, run.id);
+  assertSequentialCrossingFlags(stats.srm);
+  await persistSequentialCrossings(repo, run, stats.srm, dataWatermark, new Date().toISOString());
+  const rows = await repo.runSrmAlarms.listForRun(envScope(run.appId, run.environmentId), run.id);
   return rows.map((row) => ({
     srmKind: row.srmKind,
     firstCrossedAt: row.firstCrossedAt,
