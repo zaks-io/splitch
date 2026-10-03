@@ -220,11 +220,14 @@ MCP: `stale_flags_list`.
 by lifecycle class, a fixed age distribution over live Flags' `createdAt`
 (`0_30d`, `30_90d`, `90_180d`, `180_365d`, `365d_plus`), monthly additions versus
 removals (both from the Flag change log: `action=created|deleted` /
-`target_type=flag`), `historyCoverageStartsAt` (earliest log `changedAt` for the
-App, or null when the App has no log rows; Flags that predate the log are
-outside that window rather than silently zeroed), and `expiredButLiveCount`.
-Deletions are hard deletes with no `deleted_at` column; create events remain so
-a May addition still counts after a June removal. CLI:
+`target_type=flag`), per-month `coverage` (`complete` | `partial`),
+`historyCoverageStartsAt` (later of earliest surviving log `changedAt` and the
+90-day retention floor the pruning cron uses, or null when the App has no log
+rows; Flags that predate the log are outside that window rather than silently
+zeroed), and `expiredButLiveCount`. A month is `complete` only when its UTC
+start is at or after `historyCoverageStartsAt`; partial months still report
+counts. Deletions are hard deletes with no `deleted_at` column; create events
+remain so a May addition still counts after a June removal. CLI:
 `splitch flag-inventory-health get`. MCP: `flag_inventory_health_get`.
 
 ### `GET /apps/{app_id}/flags/{flag_id}/removal-brief`

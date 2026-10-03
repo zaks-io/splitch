@@ -221,7 +221,12 @@ describe("flag_inventory_health_get", () => {
       countsByLifecycleClass: Record<string, number>;
       ageDistribution: Array<{ bucket: string; count: number }>;
       monthlyChurn: {
-        months: Array<{ month: string; added: number; removed: number }>;
+        months: Array<{
+          month: string;
+          added: number;
+          removed: number;
+          coverage: "complete" | "partial";
+        }>;
         additionsSource: string;
         removalsSource: string;
         historyCoverageStartsAt: string | null;
@@ -243,6 +248,11 @@ describe("flag_inventory_health_get", () => {
     // Change-log triggers stamp changed_at with SQLite utcnow, not the Worker clock.
     expect(body.monthlyChurn.months.some((row) => row.removed >= 1)).toBe(true);
     expect(body.monthlyChurn.months.some((row) => row.added >= 1)).toBe(true);
+    expect(
+      body.monthlyChurn.months.every(
+        (row) => row.coverage === "complete" || row.coverage === "partial",
+      ),
+    ).toBe(true);
   });
 
   it("keeps a deleted Flag in its original creation month", async () => {
@@ -277,7 +287,12 @@ describe("flag_inventory_health_get", () => {
     expect(res.status).toBe(200);
     const body = (await res.json()) as {
       monthlyChurn: {
-        months: Array<{ month: string; added: number; removed: number }>;
+        months: Array<{
+          month: string;
+          added: number;
+          removed: number;
+          coverage: "complete" | "partial";
+        }>;
         historyCoverageStartsAt: string | null;
       };
     };
@@ -285,6 +300,7 @@ describe("flag_inventory_health_get", () => {
     expect(body.monthlyChurn.months.find((row) => row.month === "2026-05")).toMatchObject({
       month: "2026-05",
       added: 1,
+      coverage: "partial",
     });
     expect(body.monthlyChurn.months.some((row) => row.removed >= 1)).toBe(true);
   });

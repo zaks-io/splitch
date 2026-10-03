@@ -81,16 +81,21 @@ const MonthChurnSchema = z
     month: z.string().regex(/^\d{4}-\d{2}$/),
     added: z.number().int().nonnegative(),
     removed: z.number().int().nonnegative(),
+    /**
+     * `complete` only when the UTC month start is at or after
+     * `historyCoverageStartsAt`; otherwise counts may miss pruned rows.
+     */
+    coverage: z.enum(["complete", "partial"]),
   })
   .strict();
 
 /**
  * Per-App inventory health (plan 3.8). Additions and removals both come from the
  * Flag change log (`action=created|deleted`, `target_type=flag`) so a hard
- * delete does not rewrite prior months. `historyCoverageStartsAt` is the
- * earliest log instant for the App (null when the App has no log rows yet);
- * Flags that predate migration 0026 have no create event and are outside that
- * window rather than silently zeroed.
+ * delete does not rewrite prior months. `historyCoverageStartsAt` is the later
+ * of the earliest surviving log instant and the retention floor (same 90-day
+ * window the pruning cron uses); null when the App has no log rows yet. Months
+ * that start before that instant are labeled `coverage: "partial"`.
  */
 export const FlagInventoryHealthResponseSchema = z
   .object({
@@ -103,7 +108,10 @@ export const FlagInventoryHealthResponseSchema = z
         months: z.array(MonthChurnSchema),
         additionsSource: z.literal("flag_change_log"),
         removalsSource: z.literal("flag_change_log"),
-        /** Earliest `flag_change_events.changedAt` for the App; null = no log yet. */
+        /**
+         * Later of earliest surviving `changedAt` and retention floor; null =
+         * no log yet.
+         */
         historyCoverageStartsAt: z.string().nullable(),
       })
       .strict(),

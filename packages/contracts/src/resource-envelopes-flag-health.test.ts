@@ -65,7 +65,7 @@ describe("Flag health envelopes", () => {
         { bucket: "365d_plus", count: 0 },
       ],
       monthlyChurn: {
-        months: [{ month: "2026-07", added: 1, removed: 0 }],
+        months: [{ month: "2026-07", added: 1, removed: 0, coverage: "complete" }],
         additionsSource: "flag_change_log",
         removalsSource: "flag_change_log",
         historyCoverageStartsAt: "2026-07-01T00:00:00.000Z",
@@ -74,6 +74,7 @@ describe("Flag health envelopes", () => {
     });
     expect(parsed.monthlyChurn.additionsSource).toBe("flag_change_log");
     expect(parsed.monthlyChurn.historyCoverageStartsAt).toBe("2026-07-01T00:00:00.000Z");
+    expect(parsed.monthlyChurn.months[0]?.coverage).toBe("complete");
   });
 
   it("registers both health routes as readOnlyClosed", () => {
