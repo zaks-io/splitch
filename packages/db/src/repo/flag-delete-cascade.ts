@@ -4,6 +4,7 @@ import {
   appliedRequestUpdate,
   appliedReviewInsert,
   approvalPendingCondition,
+  approvalReviewLanded,
 } from "./approval-atomic";
 import type { ApprovalCommit } from "./approval-types";
 import type { Db } from "./client";
@@ -14,6 +15,8 @@ import {
 } from "./flag-deletion-code-removal";
 import type { FlagInScope } from "./flag-variant-ops";
 import { envScope, type TenantScope } from "./scope";
+
+type PendingGuard = ReturnType<typeof approvalPendingCondition>;
 
 /**
  * When an Approval Review authorizes the delete, EVERY statement in the
@@ -37,25 +40,15 @@ export function makeDeleteFlagCascade(db: Db, flagInScope: FlagInScope) {
     const approval = options?.approval;
     const codeRemoval = options?.codeRemoval ?? { state: "unknown" as const };
     const pending = approval ? [approvalPendingCondition(db, scope, approval)] : [];
+    const { prefix, flagDeleteIndex } = deleteCascadePrefix(
+      db,
+      scope,
+      flagId,
+      environmentIds,
+      pending,
+    );
     const batch = [
-      ...environmentIds.flatMap((environmentId) => {
-        const env = envScope(scope.appId, environmentId);
-        return [
-          ...archivedExperimentPurgeForFlag(db, env.appId, environmentId, flagId, pending),
-          db
-            .delete(targetingRules)
-            .where(and(scopedTargetingRule(env, flagId), ...pending))
-            .returning(),
-          db
-            .delete(flagConfigs)
-            .where(and(scopedFlagConfig(env, flagId), ...pending))
-            .returning(),
-        ];
-      }),
-      db
-        .delete(variants)
-        .where(and(eq(variants.flagId, flagId), ...pending))
-        .returning(),
+      ...prefix,
       db
         .delete(flags)
         .where(and(eq(flags.appId, scope.appId), eq(flags.id, flagId), ...pending))
@@ -64,11 +57,44 @@ export function makeDeleteFlagCascade(db: Db, flagInScope: FlagInScope) {
       ...(approval
         ? [appliedReviewInsert(db, scope, approval), appliedRequestUpdate(db, scope, approval)]
         : []),
-      ...codeRemovalClaimBatchStatements(db, scope, flag, codeRemoval),
+      ...codeRemovalClaimBatchStatements(db, scope, flag, codeRemoval, { approval }),
     ];
-    await db.batch(batch as unknown as Parameters<Db["batch"]>[0]);
-    return approval ? (await flagInScope(scope, flagId)) === null : true;
+    const results = await db.batch(batch as unknown as Parameters<Db["batch"]>[0]);
+    if (approval) return approvalReviewLanded(db, scope, approval);
+    // Direct path: success only when THIS attempt's Flag DELETE returned a row.
+    return (results[flagDeleteIndex]?.length ?? 0) > 0;
   };
+}
+
+function deleteCascadePrefix(
+  db: Db,
+  scope: TenantScope,
+  flagId: string,
+  environmentIds: readonly string[],
+  pending: PendingGuard[],
+) {
+  const prefix: unknown[] = [];
+  for (const environmentId of environmentIds) {
+    const env = envScope(scope.appId, environmentId);
+    prefix.push(
+      ...archivedExperimentPurgeForFlag(db, env.appId, environmentId, flagId, pending),
+      db
+        .delete(targetingRules)
+        .where(and(scopedTargetingRule(env, flagId), ...pending))
+        .returning(),
+      db
+        .delete(flagConfigs)
+        .where(and(scopedFlagConfig(env, flagId), ...pending))
+        .returning(),
+    );
+  }
+  prefix.push(
+    db
+      .delete(variants)
+      .where(and(eq(variants.flagId, flagId), ...pending))
+      .returning(),
+  );
+  return { prefix, flagDeleteIndex: prefix.length };
 }
 
 /** Runs first, then Experiments — both share the Approval pending guard. */
@@ -77,7 +103,7 @@ function archivedExperimentPurgeForFlag(
   appId: string,
   environmentId: string,
   flagId: string,
-  pending: ReturnType<typeof approvalPendingCondition>[],
+  pending: PendingGuard[],
 ) {
   const archivedForFlag = and(
     eq(experiments.appId, appId),
