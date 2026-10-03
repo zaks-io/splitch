@@ -16,26 +16,26 @@
     "wrangler:types": "wrangler types src/worker-configuration.d.ts"
   },
   "dependencies": {
-    "@sentry/react": "^10.72.0",
+    "@sentry/react": "^10.75.3",
     "@splitch/cli": "workspace:*",
     "@splitch/contracts": "workspace:*",
     "@splitch/observability": "workspace:*",
     "@splitch/ui": "workspace:*",
-    "@tanstack/react-router": "^1.170.32",
-    "@tanstack/react-start": "^1.168.49",
-    "lucide-react": "^1.35.0",
-    "react": "^19.2.8",
-    "react-dom": "^19.2.8"
+    "@tanstack/react-router": "^1.170.40",
+    "@tanstack/react-start": "^1.168.59",
+    "lucide-react": "^1.49.0",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0"
   },
   "devDependencies": {
-    "@cloudflare/vite-plugin": "^1.54.2",
-    "@cloudflare/workers-types": "5.20260828.1",
+    "@cloudflare/vite-plugin": "^1.62.3",
+    "@cloudflare/workers-types": "5.20260930.2",
     "@splitch/sdk": "workspace:*",
     "@tailwindcss/vite": "^4.3.3",
-    "@types/react": "^19.2.18",
-    "@types/react-dom": "^19.2.5",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react": "^6.1.1",
-    "vite": "^8.2.2",
-    "wrangler": "4.127.1"
+    "vite": "^8.3.1",
+    "wrangler": "4.145.0"
   }
 }

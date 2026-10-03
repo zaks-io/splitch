@@ -76,21 +76,21 @@
     "access": "public"
   },
   "dependencies": {
-    "@hono/zod-openapi": "^1.6.1",
-    "hono": "^4.13.5",
-    "zod": "^4.5.1"
+    "@hono/zod-openapi": "^1.6.3",
+    "hono": "^4.13.12",
+    "zod": "^4.6.5"
   },
   "devDependencies": {
     "@openfeature/server-sdk": "^1.23.0",
-    "@sentry/core": "^10.72.0",
+    "@sentry/core": "^10.75.3",
     "@splitch/contracts": "workspace:*",
     "@splitch/control-plane-sdk": "workspace:*",
     "@splitch/evaluation-core": "workspace:*",
-    "@types/react": "^19.2.18",
-    "@types/react-dom": "^19.2.5",
-    "happy-dom": "^20.11.13",
-    "react": "^19.2.8",
-    "react-dom": "^19.2.8"
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "happy-dom": "^20.14.5",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0"
   },
   "peerDependencies": {
     "@openfeature/server-sdk": "^1.23.0",

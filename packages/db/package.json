@@ -32,11 +32,11 @@
     "typecheck": "tsc -p tsconfig.test.json"
   },
   "dependencies": {
-    "drizzle-orm": "^0.45.2"
+    "drizzle-orm": "^0.45.3"
   },
   "devDependencies": {
     "@cloudflare/vitest-pool-workers": "0.22.0",
-    "drizzle-kit": "^0.31.10",
+    "drizzle-kit": "^0.31.11",
     "miniflare": "^4.20260730.0",
     "typescript": "^6.0.3"
   }
