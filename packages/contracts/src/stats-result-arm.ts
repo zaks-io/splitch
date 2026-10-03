@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { MetricRefSchema } from "./leaf-schemas-experiment";
 import { RopeScaleSchema } from "./run-preregistration";
+import { applyArmResultPairRefine } from "./stats-result-arm-pairs";
 
 /**
  * Per-arm Stats result schemas (and the disclosure / variance shapes they nest).
@@ -176,54 +177,18 @@ export const ArmResultSchema = z
      */
     simultaneous_ci_lower: CiBoundSchema.optional(),
     simultaneous_ci_upper: CiBoundSchema.optional(),
+    /**
+     * Retention only: unique Entities whose horizon has matured at the
+     * analysis watermark. Absent on every other Metric kind. sample_size_n is
+     * this count when present.
+     */
+    eligible_n: IntegerSchema.optional(),
+    /**
+     * Retention only: unique Entities excluded from this Metric because
+     * anchor + horizon_end is after the analysis watermark. Absent otherwise.
+     */
+    immature_excluded_n: IntegerSchema.optional(),
   })
   .strict()
-  .superRefine((arm, context) => {
-    if (arm.ropeVerdict !== undefined && arm.ropeVerdictUnavailable !== undefined) {
-      context.addIssue({
-        code: "custom",
-        message: "ropeVerdict and ropeVerdictUnavailable are mutually exclusive",
-      });
-    }
-    if (arm.ropeVerdict !== undefined && arm.ropeScale === undefined) {
-      context.addIssue({
-        code: "custom",
-        message: "ropeScale is required when ropeVerdict is present",
-      });
-    }
-    if (arm.ropeVerdict === undefined && arm.ropeScale !== undefined) {
-      context.addIssue({
-        code: "custom",
-        message: "ropeScale requires ropeVerdict",
-      });
-    }
-    if ((arm.futilityVerdict === undefined) !== (arm.futilityBecause === undefined)) {
-      context.addIssue({
-        code: "custom",
-        message: "futilityVerdict and futilityBecause must be present together",
-      });
-    }
-    if ((arm.absolute_ci_lower === undefined) !== (arm.absolute_ci_upper === undefined)) {
-      context.addIssue({
-        code: "custom",
-        message: "absolute_ci_lower and absolute_ci_upper must be present together",
-      });
-    }
-    if (
-      (arm.simultaneous_absolute_ci_lower === undefined) !==
-      (arm.simultaneous_absolute_ci_upper === undefined)
-    ) {
-      context.addIssue({
-        code: "custom",
-        message:
-          "simultaneous_absolute_ci_lower and simultaneous_absolute_ci_upper must be present together",
-      });
-    }
-    if ((arm.simultaneous_ci_lower === undefined) !== (arm.simultaneous_ci_upper === undefined)) {
-      context.addIssue({
-        code: "custom",
-        message: "simultaneous_ci_lower and simultaneous_ci_upper must be present together",
-      });
-    }
-  });
+  .superRefine(applyArmResultPairRefine);
 export type ArmResult = z.infer<typeof ArmResultSchema>;
