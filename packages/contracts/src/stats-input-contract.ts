@@ -26,6 +26,8 @@ export const DedupeExposureRowSchema = z
     run_id: z.string(),
     variant: z.string(),
     first_exposure_ts: TimestampSchema,
+    /** Optional ingest clock; analysis-v1/legacy ignore, analysis-v2 requires. */
+    first_ingest_ts: TimestampSchema.optional(),
     window_anchor: TimestampSchema,
     dimension_values: z.record(z.string(), z.string()).optional(),
   })
@@ -80,6 +82,8 @@ export const ActivationRowSchema = z
     targeting_key_hash: z.string(),
     run_id: z.string(),
     activation_ts: TimestampSchema,
+    /** Optional eligibility clock; analysis-v1/legacy ignore, analysis-v2 requires. */
+    activation_ingest_ts: TimestampSchema.optional(),
     counterfactual: z.boolean(),
     activated: z.boolean(),
   })
