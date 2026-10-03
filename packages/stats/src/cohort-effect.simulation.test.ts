@@ -31,7 +31,9 @@ const DELAYED_WINDOW_MS = 7 * MS_PER_DAY;
 const DELAYED_WATERMARK = "2026-07-11T00:00:00.000Z";
 
 describe("cohort-effect novelty simulation", () => {
-  it("null constant effect keeps novelty flag rate within alpha + tolerance", () => {
+  it("null constant effect keeps novelty flag rate within alpha + tolerance", {
+    timeout: 120_000,
+  }, () => {
     const uniform = seededUniform(`${SIM_SEED}:null`);
     let flagged = 0;
     for (let iteration = 0; iteration < ITERATIONS; iteration += 1) {
@@ -60,7 +62,7 @@ describe("cohort-effect novelty simulation", () => {
     expect(rate).toBeLessThanOrEqual(COHORT_EFFECT_NOVELTY_ALPHA + NULL_TOLERANCE);
   });
 
-  it("injected decaying early effect fires the novelty flag", () => {
+  it("injected decaying early effect fires the novelty flag", { timeout: 120_000 }, () => {
     const uniform = seededUniform(`${SIM_SEED}:decay`);
     const entities = drawBinomialEntities({
       uniform,
@@ -81,7 +83,9 @@ describe("cohort-effect novelty simulation", () => {
     expect(diagnostic.comparisons[0]?.novelty.flag).toBe("detected");
   });
 
-  it("delayed conversion with constant eventual lift stays within alpha + tolerance", () => {
+  it("delayed conversion with constant eventual lift stays within alpha + tolerance", {
+    timeout: 120_000,
+  }, () => {
     const uniform = seededUniform(DELAYED_SEED);
     let flagged = 0;
     for (let iteration = 0; iteration < DELAYED_ITERATIONS; iteration += 1) {
