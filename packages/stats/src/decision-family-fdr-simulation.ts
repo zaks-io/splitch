@@ -228,6 +228,7 @@ function drawCorrelatedGoals(rng: () => number, size: number): NullExperimentDra
         run_id: SIMULATION_RUN_ID,
         variant,
         first_exposure_ts: "2026-01-01T00:00:00.000Z",
+        first_ingest_ts: "2026-01-01T00:00:00.000Z",
         window_anchor: "2026-01-01T00:00:00.000Z",
       });
       const shared = rng();

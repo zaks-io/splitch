@@ -12,6 +12,7 @@ import { makeFlagHealthReads } from "./flag-health-reads";
 import { makeFlagRepo } from "./flags";
 import { makeIdentityRepo } from "./identity";
 import { makePrivacyRepo } from "./privacy";
+import { makeRunSrmAlarmRepo } from "./run-srm-alarms";
 import { makeSentryIntegrationRepo } from "./sentry-integrations";
 
 /**
@@ -45,6 +46,7 @@ export function createRepository(d1: D1Database) {
     identity: makeIdentityRepo(db, d1),
     privacy: makePrivacyRepo(db, d1),
     approvals: makeApprovalRepo(db, d1),
+    runSrmAlarms: makeRunSrmAlarmRepo(db, d1),
   };
 }
 

@@ -23,6 +23,7 @@ const confirmPolicy = {
 beforeEach(async () => {
   h = await makePoolHarness();
   await setProdPolicy(h, confirmPolicy);
+  await h.d1.prepare("DELETE FROM run_srm_alarms WHERE app_id = ?").bind(ids.appId).run();
   await h.d1.prepare("DELETE FROM runs WHERE app_id = ?").bind(ids.appId).run();
   await h.d1.prepare("DELETE FROM experiments WHERE app_id = ?").bind(ids.appId).run();
 });

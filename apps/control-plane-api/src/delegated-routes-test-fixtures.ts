@@ -30,6 +30,8 @@ export function binding(forwarded: Request[], response: Response): Fetcher {
 export function stubRun(runId: string, runNumber: number) {
   return {
     id: runId,
+    appId: RESULTS_APP_ID,
+    environmentId: "env_1",
     experimentId: "exp_1",
     runNumber,
     status: "running",
@@ -41,6 +43,7 @@ export function stubRun(runId: string, runNumber: number) {
     startedAt: "2026-07-01T00:00:00.000Z",
     plannedDurationDays: null,
     plannedDurationOverrideReason: null,
+    analysisVersion: null as string | null,
   };
 }
 
@@ -128,6 +131,11 @@ function stubRepo(
       listRunsForExperiment:
         experiments?.listRunsForExperiment ?? vi.fn(async () => [{ id: "run_7", runNumber: 1 }]),
       getRun: experiments?.getRun ?? vi.fn(async (_scope, runId: string) => stubRun(runId, 1)),
+    },
+    runSrmAlarms: {
+      listForRun: vi.fn(async () => []),
+      insertIgnore: vi.fn(async () => undefined),
+      deleteForRun: vi.fn(async () => undefined),
     },
   } as unknown as Repository;
 }

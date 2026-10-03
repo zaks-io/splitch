@@ -24,6 +24,14 @@ export const SrmResultSchema = z
     expected_counts: VariantCountSchema,
     activated_srm_p_value: z.number().nullable(),
     activated_srm_mismatch: z.boolean().nullable(),
+    /**
+     * analysis-v2 only: genuine sequential martingale threshold crossing.
+     * Absent on chi-square (v1/legacy) so those tokens stay byte-identical.
+     * The zero-Activation fail-closed sentinel sets mismatch without setting
+     * this true — do not infer a crossing from p_value=0.
+     */
+    srm_sequential_threshold_crossed: z.boolean().optional(),
+    activated_srm_sequential_threshold_crossed: z.boolean().nullable().optional(),
   })
   .strict();
 export type SrmResult = z.infer<typeof SrmResultSchema>;

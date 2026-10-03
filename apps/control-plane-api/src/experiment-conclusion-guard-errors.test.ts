@@ -54,6 +54,7 @@ function fixture(
         listApprovalLinks,
       },
       approvals: { getRequestByActorKey: getReplacementReplay },
+      runSrmAlarms: { listForRun: vi.fn(async () => []) },
     },
   } as unknown as ExperimentDeps;
   return {

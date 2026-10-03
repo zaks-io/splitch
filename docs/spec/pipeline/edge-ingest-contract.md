@@ -56,12 +56,12 @@ The SDK maintains a per-`(experiment_id, run_id)` seen-set as a **hot-path optim
 
 ## Timestamp sourcing
 
-| Field                | Source                                                   | Use                                                             |
-| -------------------- | -------------------------------------------------------- | --------------------------------------------------------------- |
-| `exposure_at`        | Splitch receive time, or verified trusted adapter commit | Canonical encounter time for first-touch and Conversion Windows |
-| `server_received_at` | Evaluation Worker's durable-acceptance time              | Delivery diagnostics and retention                              |
-| `ingest_ts`          | Tinybird insertion time (`DEFAULT now64(3)`)             | Snapshot/tail watermark only; never used for analysis ordering  |
-| `client_timestamp`   | SDK payload from the client runtime                      | Diagnostics only; never used for ordering                       |
+| Field                | Source                                                   | Use                                                                                                    |
+| -------------------- | -------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| `exposure_at`        | Splitch receive time, or verified trusted adapter commit | Canonical encounter time for first-touch and Conversion Windows                                        |
+| `server_received_at` | Evaluation Worker's durable-acceptance time              | Delivery diagnostics and retention                                                                     |
+| `ingest_ts`          | Tinybird insertion time (`DEFAULT now64(3)`)             | Snapshot/tail watermark; analysis-v2 SRM filtration clock (`first_ingest_ts` / `activation_ingest_ts`) |
+| `client_timestamp`   | SDK payload from the client runtime                      | Diagnostics only; never used for ordering                                                              |
 
 `exposure_at` and `server_received_at` are sealed in the canonical payload. Ordinary Evaluation and
 ticket redemption set them to the same Splitch timestamp. The API-Key-only trusted-adapter endpoint
@@ -69,8 +69,12 @@ may set `exposure_at` from a bounded, recomputed server commit while Splitch sta
 `server_received_at`. The producer omits `ingest_ts`; Tinybird populates it when the Events API
 inserts the physical row. `client_timestamp` is optional; if absent,
 diagnostics degrade gracefully. Never use `client_timestamp` for first-touch ordering (clock skew
-vulnerability). Never use `ingest_ts` for first-touch ordering either; it exists only so the physical
-snapshot/tail layer can safely catch late Queue delivery and manual replay.
+vulnerability). Never use `ingest_ts` for first-touch ordering either; first-touch stays
+`min(exposure_at)`. Under analysis-v2, sequential SRM orders its observation path by
+eligibility ingest time per Entity (`first_ingest_ts` for Exposure SRM;
+pairwise `min(max(exposure.ingest, activation.ingest))` emitted as `activation_ingest_ts` for activated
+SRM) so late delivery appends rather than rewrites the filtration; that use is separate from
+first-touch and Conversion Windows.
 
 ## `run_id` stamping
 

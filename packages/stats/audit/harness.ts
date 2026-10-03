@@ -62,6 +62,7 @@ export function exposuresFor(arms: readonly ArmData[]): DedupeExposureRow[] {
         run_id: RUN_ID,
         variant: arm.variant,
         first_exposure_ts: ts,
+        first_ingest_ts: ts,
         window_anchor: ts,
       });
     }

@@ -8,6 +8,16 @@ SCHEMA >
     `entity_family_hash` String `json:$.entity_family_hash` DEFAULT if(startsWith(targeting_key_hash, 'local-v1:'), concat('v1:', substring(targeting_key_hash, 10)), targeting_key_hash),
     `variant` String `json:$.variant`,
     `first_exposure_ts` DateTime64(3) `json:$.first_exposure_ts`,
+    -- Sticky earliest Exposure ingest clock: Copy keeps
+    -- min(previous snapshot, raw min(ingest_ts)). Epoch DEFAULT marks rows
+    -- written before this column existed: one initial SRM batch ordered by
+    -- targeting_key_hash until the next COPY_MODE replace fills real values.
+    `first_ingest_ts` DateTime64(3) `json:$.first_ingest_ts` DEFAULT toDateTime64('1970-01-01 00:00:00', 3, 'UTC'),
+    -- Sticky activated-SRM eligibility clock: min(previous, live pairwise) once
+    -- set, and first-exposure membership survives raw TTL so a qualifying
+    -- Activation cannot disappear. Epoch DEFAULT means unset;
+    -- analysis_activation_rows then falls back to a live pairwise compute.
+    `activation_ingest_ts` DateTime64(3) `json:$.activation_ingest_ts` DEFAULT toDateTime64('1970-01-01 00:00:00', 3, 'UTC'),
     `snapshot_ts` DateTime64(3) `json:$.snapshot_ts`,
     `watermark_ts` DateTime64(3) `json:$.watermark_ts`
 

@@ -7,8 +7,7 @@ calls.
 This is step 8 of the CI pipeline in [inference-engine.md](inference-engine.md). Production
 selects the procedure through `analysis_version` (ADR-0059). legacy-unversioned and analysis-v1
 apply Benjamini-Hochberg. analysis-v2 selects BH-G for the arbitrary-dependence / arbitrary-stopping
-guarantee (Proposition C.3). analysis-v2 is defined but unsupported for Start/Results until an
-ingestion-ordered observation path lands.
+guarantee (Proposition C.3) and is current for new Runs.
 
 ## Family definition (locked at Experiment design time)
 

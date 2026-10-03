@@ -50,11 +50,9 @@ read this martingale: `srm_p_value` is the anytime p-value and `srm_is_mismatch`
 `threshold_crossed` at alpha 0.001. legacy-unversioned and analysis-v1 keep the chi-square
 `p < 0.001` gate. Chi-square stays the fixed-horizon diagnostic and the activation-balance test
 under every version (activation balance is equality of unknown rates, not the declared
-allocation multinomial). `analysis-v2` is defined in the exhaustive version switch but is
-**unsupported** for Start and Results: it is not in `SUPPORTED_ANALYSIS_VERSIONS`, new Runs
-freeze `analysis-v1`, and a Run frozen under v2 refuses loudly. The open blocker is an
-ingestion-ordered observation path (late ingestion with earlier event timestamps can erase an
-alarm when the path is ordered by event time).
+allocation multinomial). `analysis-v2` is **current**: it is in `SUPPORTED_ANALYSIS_VERSIONS`,
+new Runs freeze it, and sticky Copy clocks plus durable D1 `run_srm_alarms` keep alarms sticky
+across raw TTL and quarantine once a Results (or Conclude) read has observed them.
 
 **Prior.** Dirichlet mean equals the declared allocation: `alpha_i = concentration * theta_i`.
 Default `concentration` is 100. Type I control from Ville's inequality does not depend on this
@@ -70,27 +68,62 @@ of `min(1, 1 / wealth)`, which is super-uniform under the null. `threshold_cross
 
 **Observation contract (Results gate).** On every Results read, the analysis-v2 SRM gate rebuilds
 an append-only arrival path from the current watermarked population and evaluates the martingale
-after every Entity arrival (incremental log-gamma updates, O(N)). Exposure SRM orders Entities by
-`first_exposure_ts`. Activated-population SRM orders activated Entities by their earliest valid
-`activation_ts` (the time they entered the activated population), not by first Exposure. Ties at
-identical timestamps break deterministically by Entity pseudonym (`targeting_key_hash`) so pinned
-reads stay reproducible. The reported p-value is the running minimum along that path, so an early
+after every Entity arrival (incremental log-gamma updates, O(N)). The filtration clock is
+**ingestion time**, not event time:
+
+- Exposure SRM orders Entities by `first_ingest_ts` = `min(ingest_ts)` over Exposure rows for that
+  Entity in the Run (`raw_events.ingest_ts`, stamped at Tinybird insertion with `DEFAULT now64(3)`
+  since the datasource existed). The Copy Pipe keeps `min(previous snapshot, raw)` so a 90-day raw
+  TTL cannot move an Entity later on the path, and previous-only membership survives when every
+  raw Exposure for that Entity has expired (privacy generation tombstones still remove the Entity
+  entirely). Snapshot rows written before that column existed carry the epoch DEFAULT and form
+  **one initial batch**, ordered only by `targeting_key_hash`, until the next `COPY_MODE replace`
+  fills real values. No other qualifying fact can move an Entity _into_ Exposure SRM at an earlier
+  clock: conflict / `__multiple__` resolution can only remove an Entity (or change Variant), never
+  back-date eligibility.
+- Activated-population SRM orders activated Entities by eligibility ingest time =
+  min over qualifying raw (Exposure, Activation) pairs with `exposure_at < activation_ts` of
+  `max(exposure.ingest_ts, activation.ingest_ts)`. Tinybird emits that value as
+  `activation_ingest_ts`. The activated **row set** is still main's membership
+  (`activation_ts > first_exposure_ts` via the deduped Exposure snapshot); the eligibility clock
+  is an additional column and must not change which Entities count as activated. The Copy
+  snapshot keeps `min(previous, live)` for the clock and sticky first-exposure membership so a
+  later raw TTL expiry of the qualifying Exposure cannot drop the Entity or rewrite its clock.
+  A late earlier Exposure that newly qualifies an Activation must append at the qualifying pair's
+  max ingest, not at `max(first_ingest_ts, activation ingest)` which can back-date into an earlier
+  path prefix.
+
+Ties at identical ingest timestamps break deterministically by Entity pseudonym
+(`targeting_key_hash`) so pinned reads stay reproducible. Because the path is ordered by when each
+Entity became eligible, a later watermark's path is an extension of an earlier one: a
+late-ingested row with an earlier `exposure_at` / `activation_ts` appends at the end rather than
+reordering history. The reported p-value is the running minimum along that path, so an early
 mismatch stays sticky when later arrivals balance the totals. This holds as long as ingestion
 before the pinned watermark is complete (the watermark contract). The Entity set is exactly the
-pinned-watermark `StatsInput` exposures (and activation rows for activated SRM).
+pinned-watermark `StatsInput` exposures (and activation rows for activated SRM). Missing
+`first_ingest_ts` / `activation_ingest_ts` fails loud; the engine never substitutes event time.
 
-**Open issue (why v2 is unsupported).** Ordering by event time is not the same as ordering by
-ingestion. A late-arriving row whose `activation_ts` / `first_exposure_ts` is earlier than rows
-already on the path can rewrite history and erase a previously sticky alarm. Until the Results
-gate has an ingestion-ordered (append-only across watermarks) observation path, `analysis-v2`
-stays out of `SUPPORTED_ANALYSIS_VERSIONS`, `CURRENT_ANALYSIS_VERSION` stays `analysis-v1`, and
-Start rejects a request for v2.
+**Durable alarms and quarantine.** The running minimum over the stable ingestion-ordered path
+catches crossings between Results reads. Separately, the Control Plane persists the first observed
+v2 sequential crossing per `(run_id, exposure|activated)` in D1 `run_srm_alarms` (INSERT OR IGNORE
+on every Results or Conclude read) and ORs that row into the decision gate and diagnostics,
+reporting `firstCrossedAt` and `persisted_srm_alarms`. Returned Analysis `stats` stay
+byte-identical to the token-bound envelope — durable alarms never rewrite `stats.srm` mismatch
+flags. Persistence keys off the explicit `srm_sequential_threshold_crossed` /
+`activated_srm_sequential_threshold_crossed` fields (analysis-v2 only); the zero-Activation
+fail-closed sentinel sets `activated_srm_mismatch` without those crossing flags and must not
+persist. A persisted alarm blocks Conclude exactly like a live mismatch. v1 and legacy Runs never
+read or write the table. Privacy / App / Environment / Flag cascade deletes remove the rows with
+the Run. The residual gap is a crossing that is never read before a later quarantine removes it.
 
-**Quarantine and revisions.** A later watermark that moves an Entity into `__multiple__` (or
-revises `first_exposure_ts` / `activation_ts`) edits the dataset. The next read recomputes the
-whole path from the cleaned rows; it does not feed a decreasing arm total into a live filtration.
-Primitive `computeSequentialSrm` still fails loud if a single call's cumulative snapshots decrease
-an arm count.
+A later watermark that moves an Entity into `__multiple__` (or revises `first_exposure_ts` /
+`activation_ts`) edits the dataset. The next read recomputes the whole path from the cleaned rows;
+it does not feed a decreasing arm total into a live filtration. Survivors keep their original
+`first_ingest_ts`, so a late single-Entity conflict cannot clear a sticky early mismatch among the
+remaining population when the running minimum on the recomputed path still holds — and when a
+prior read already persisted the alarm, the D1 row keeps the gate firing even if live p rises
+above 0.001. Primitive `computeSequentialSrm` still fails loud if a single call's cumulative
+snapshots decrease an arm count.
 
 **Looks.** Wealth is a function of the sufficient statistic. The anytime p-value is the running
 minimum after every singleton arrival in the reconstructed path. Continuous monitoring is the
@@ -222,7 +255,9 @@ Rules:
   classifier returns `unclassified` with `evidenceConsidered`.
 - Zero Activations on a gated Run sets `activated_srm_mismatch` as a fail-closed
   sentinel, not Activation-imbalance evidence — the classifier returns
-  `unclassified` with `insufficient_evidence:zero_activations`.
+  `unclassified` with `insufficient_evidence:zero_activations`. Under analysis-v2
+  the sentinel also sets `activated_srm_sequential_threshold_crossed: false` so
+  Control Plane does not persist a durable alarm from insufficient data.
 - Reconstructing Activation counts from health rates requires matching Exposure
   denominators; a missing `deduped_counts` key fails loud rather than treating
   the denominator as zero.

@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { MetricKindSchema, MetricRefSchema } from "./leaf-schemas-experiment";
-import { ANALYSIS_V1_VERSION } from "./run-commitments";
+import { ANALYSIS_V1_VERSION, ANALYSIS_V2_VERSION } from "./run-commitments";
 import { PreRegistrationSchema } from "./run-preregistration";
 import { CupedAttributeSourceSchema } from "./stats-result-arm";
 import { DimensionClassSchema } from "./stats-result-contract";
@@ -28,7 +28,12 @@ export const DedupeExposureRowSchema = z
     run_id: z.string(),
     variant: z.string(),
     first_exposure_ts: TimestampSchema,
-    /** Optional ingest clock; analysis-v1/legacy ignore, analysis-v2 requires. */
+    /**
+     * When the system first ingested any Exposure for this Entity in the Run
+     * (`min(ingest_ts)` on `raw_events`). analysis-v2 SRM orders by this;
+     * analysis-v1/legacy ignore it. Optional on the row schema for deploy
+     * compat; analysis-v2 fails loud when absent.
+     */
     first_ingest_ts: TimestampSchema.optional(),
     window_anchor: TimestampSchema,
     dimension_values: z.record(z.string(), z.string()).optional(),
@@ -84,8 +89,14 @@ export const ActivationRowSchema = z
     targeting_key_hash: z.string(),
     run_id: z.string(),
     activation_ts: TimestampSchema,
-    /** Optional eligibility clock; analysis-v1/legacy ignore, analysis-v2 requires. */
-    activation_ingest_ts: TimestampSchema.optional(),
+    /**
+     * Eligibility clock for activated SRM: min over qualifying raw
+     * (Exposure, Activation) pairs of max(exposure.ingest, activation.ingest).
+     * analysis-v1/legacy ignore it. Optional/nullable on the row schema for
+     * deploy compat and Tinybird null emission when no clock exists;
+     * analysis-v2 fails loud when absent or null.
+     */
+    activation_ingest_ts: TimestampSchema.nullish(),
     counterfactual: z.boolean(),
     activated: z.boolean(),
   })
@@ -309,5 +320,28 @@ export const StatsInputSchema = z
   .strict()
   .refine((input) => input.horizon !== "fixed" || input.sample_size_locked !== undefined, {
     message: "fixed horizon requires sample_size_locked",
+  })
+  .superRefine((input, ctx) => {
+    if (input.analysis_version !== ANALYSIS_V2_VERSION) {
+      return;
+    }
+    for (const [index, exposure] of input.exposures.entries()) {
+      if (exposure.first_ingest_ts === undefined) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["exposures", index, "first_ingest_ts"],
+          message: "analysis-v2 requires first_ingest_ts on every Exposure row",
+        });
+      }
+    }
+    for (const [index, row] of (input.activation_rows ?? []).entries()) {
+      if (row.activation_ingest_ts === undefined || row.activation_ingest_ts === null) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["activation_rows", index, "activation_ingest_ts"],
+          message: "analysis-v2 requires activation_ingest_ts on every Activation row",
+        });
+      }
+    }
   });
 export type StatsInput = z.infer<typeof StatsInputSchema>;

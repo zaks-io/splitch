@@ -245,7 +245,7 @@ export async function panelExperimentResults(
     run.id,
   );
 
-  const produced = enrichAnalysisResultsResponse(analysis, run, {
+  const produced = await enrichAnalysisResultsResponse(deps.repo, analysis, run, {
     view: "detailed",
     canConclude: canConcludeWithRole(membership?.role),
   });

@@ -123,6 +123,7 @@ describe("privacy cascade helpers tenant isolation (SPL-326)", () => {
       .prepare(`UPDATE api_keys SET revoked_at = ? WHERE app_id = ?`)
       .bind(NOW, seed.a.appId)
       .run();
+    await local.d1.prepare(`DELETE FROM run_srm_alarms WHERE app_id = ?`).bind(seed.a.appId).run();
     await local.d1.prepare(`DELETE FROM runs WHERE app_id = ?`).bind(seed.a.appId).run();
     await local.d1.prepare(`DELETE FROM experiments WHERE app_id = ?`).bind(seed.a.appId).run();
     await local.d1

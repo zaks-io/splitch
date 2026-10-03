@@ -3,50 +3,50 @@
   parameters: "app_id=app_1&environment_id=env_prod&experiment_id=exp_1&run_id=run_1"
   expected_http_status: 200
   expected_result: |
-    {"app_id":"app_1","environment_id":"env_prod","id_type":"user","run_id":"run_1","targeting_key_hash":"tk_conflict","variant":"__multiple__","first_exposure_ts":"2026-07-01 00:02:00.000","window_anchor":"2026-07-01 00:02:00.000"}
-    {"app_id":"app_1","environment_id":"env_prod","id_type":"user","run_id":"run_1","targeting_key_hash":"tk_null_variant","variant":"__multiple__","first_exposure_ts":"2026-07-05 04:00:00.000","window_anchor":"2026-07-05 04:00:00.000"}
-    {"app_id":"app_1","environment_id":"env_prod","id_type":"user","run_id":"run_1","targeting_key_hash":"tk_straddle","variant":"__multiple__","first_exposure_ts":"2026-07-01 00:03:00.000","window_anchor":"2026-07-01 00:03:00.000"}
-    {"app_id":"app_1","environment_id":"env_prod","id_type":"user","run_id":"run_1","targeting_key_hash":"tk_control_snapshot","variant":"control","first_exposure_ts":"2026-07-01 00:00:00.000","window_anchor":"2026-07-01 00:00:00.000"}
-    {"app_id":"app_1","environment_id":"env_prod","id_type":"user","run_id":"run_1","targeting_key_hash":"tk_edge","variant":"control","first_exposure_ts":"2026-07-05 00:00:00.000","window_anchor":"2026-07-05 00:00:00.000"}
-    {"app_id":"app_1","environment_id":"env_prod","id_type":"user","run_id":"run_1","targeting_key_hash":"tk_tail","variant":"treatment","first_exposure_ts":"2026-07-05 01:00:00.000","window_anchor":"2026-07-05 01:00:00.000"}
-    {"app_id":"app_1","environment_id":"env_prod","id_type":"user","run_id":"run_1","targeting_key_hash":"tk_treatment_snapshot","variant":"treatment","first_exposure_ts":"2026-07-01 00:01:00.000","window_anchor":"2026-07-01 00:01:00.000"}
+    {"app_id":"app_1","environment_id":"env_prod","id_type":"user","run_id":"run_1","targeting_key_hash":"tk_conflict","variant":"__multiple__","first_exposure_ts":"2026-07-01 00:02:00.000","first_ingest_ts":"2026-07-01 00:02:00.000","window_anchor":"2026-07-01 00:02:00.000"}
+    {"app_id":"app_1","environment_id":"env_prod","id_type":"user","run_id":"run_1","targeting_key_hash":"tk_null_variant","variant":"__multiple__","first_exposure_ts":"2026-07-05 04:00:00.000","first_ingest_ts":"2026-07-05 04:00:00.000","window_anchor":"2026-07-05 04:00:00.000"}
+    {"app_id":"app_1","environment_id":"env_prod","id_type":"user","run_id":"run_1","targeting_key_hash":"tk_straddle","variant":"__multiple__","first_exposure_ts":"2026-07-01 00:03:00.000","first_ingest_ts":"2026-07-01 00:03:00.000","window_anchor":"2026-07-01 00:03:00.000"}
+    {"app_id":"app_1","environment_id":"env_prod","id_type":"user","run_id":"run_1","targeting_key_hash":"tk_control_snapshot","variant":"control","first_exposure_ts":"2026-07-01 00:00:00.000","first_ingest_ts":"2026-07-04 12:00:00.000","window_anchor":"2026-07-01 00:00:00.000"}
+    {"app_id":"app_1","environment_id":"env_prod","id_type":"user","run_id":"run_1","targeting_key_hash":"tk_edge","variant":"control","first_exposure_ts":"2026-07-05 00:00:00.000","first_ingest_ts":"2026-07-05 00:00:00.000","window_anchor":"2026-07-05 00:00:00.000"}
+    {"app_id":"app_1","environment_id":"env_prod","id_type":"user","run_id":"run_1","targeting_key_hash":"tk_tail","variant":"treatment","first_exposure_ts":"2026-07-05 01:00:00.000","first_ingest_ts":"2026-07-05 01:00:00.000","window_anchor":"2026-07-05 01:00:00.000"}
+    {"app_id":"app_1","environment_id":"env_prod","id_type":"user","run_id":"run_1","targeting_key_hash":"tk_treatment_snapshot","variant":"treatment","first_exposure_ts":"2026-07-01 00:01:00.000","first_ingest_ts":"2026-07-01 00:01:00.000","window_anchor":"2026-07-01 00:01:00.000"}
 - name: other_run_is_isolated_from_the_requested_run
   description: The Run filter, not the watermark, decides membership; a sibling Run in the same App and Environment returns only its own Entity.
   parameters: "app_id=app_1&environment_id=env_prod&experiment_id=exp_1&run_id=run_2"
   expected_http_status: 200
   expected_result: |
-    {"app_id":"app_1","environment_id":"env_prod","id_type":"user","run_id":"run_2","targeting_key_hash":"tk_other_run","variant":"control","first_exposure_ts":"2026-07-01 00:04:00.000","window_anchor":"2026-07-01 00:04:00.000"}
-    {"app_id":"app_1","environment_id":"env_prod","id_type":"user","run_id":"run_2","targeting_key_hash":"tk_other_run_tail","variant":"control","first_exposure_ts":"2026-07-05 05:00:00.000","window_anchor":"2026-07-05 05:00:00.000"}
+    {"app_id":"app_1","environment_id":"env_prod","id_type":"user","run_id":"run_2","targeting_key_hash":"tk_other_run","variant":"control","first_exposure_ts":"2026-07-01 00:04:00.000","first_ingest_ts":"2026-07-01 00:04:00.000","window_anchor":"2026-07-01 00:04:00.000"}
+    {"app_id":"app_1","environment_id":"env_prod","id_type":"user","run_id":"run_2","targeting_key_hash":"tk_other_run_tail","variant":"control","first_exposure_ts":"2026-07-05 05:00:00.000","first_ingest_ts":"2026-07-05 05:00:00.000","window_anchor":"2026-07-05 05:00:00.000"}
 - name: caller_watermark_is_inclusive_and_excludes_the_later_tail
   description: Re-analysis includes an Exposure ingested exactly at the caller's Copy Pipe watermark and excludes every physical row after it.
   parameters: "app_id=app_1&environment_id=env_prod&experiment_id=exp_1&run_id=run_1&ingest_watermark_ts=2026-07-05%2000%3A00%3A00.000"
   expected_http_status: 200
   expected_result: |
-    {"app_id":"app_1","environment_id":"env_prod","id_type":"user","run_id":"run_1","targeting_key_hash":"tk_conflict","variant":"__multiple__","first_exposure_ts":"2026-07-01 00:02:00.000","window_anchor":"2026-07-01 00:02:00.000"}
-    {"app_id":"app_1","environment_id":"env_prod","id_type":"user","run_id":"run_1","targeting_key_hash":"tk_control_snapshot","variant":"control","first_exposure_ts":"2026-07-01 00:00:00.000","window_anchor":"2026-07-01 00:00:00.000"}
-    {"app_id":"app_1","environment_id":"env_prod","id_type":"user","run_id":"run_1","targeting_key_hash":"tk_edge","variant":"control","first_exposure_ts":"2026-07-05 00:00:00.000","window_anchor":"2026-07-05 00:00:00.000"}
-    {"app_id":"app_1","environment_id":"env_prod","id_type":"user","run_id":"run_1","targeting_key_hash":"tk_straddle","variant":"control","first_exposure_ts":"2026-07-01 00:03:00.000","window_anchor":"2026-07-01 00:03:00.000"}
-    {"app_id":"app_1","environment_id":"env_prod","id_type":"user","run_id":"run_1","targeting_key_hash":"tk_treatment_snapshot","variant":"treatment","first_exposure_ts":"2026-07-01 00:01:00.000","window_anchor":"2026-07-01 00:01:00.000"}
+    {"app_id":"app_1","environment_id":"env_prod","id_type":"user","run_id":"run_1","targeting_key_hash":"tk_conflict","variant":"__multiple__","first_exposure_ts":"2026-07-01 00:02:00.000","first_ingest_ts":"2026-07-01 00:02:00.000","window_anchor":"2026-07-01 00:02:00.000"}
+    {"app_id":"app_1","environment_id":"env_prod","id_type":"user","run_id":"run_1","targeting_key_hash":"tk_control_snapshot","variant":"control","first_exposure_ts":"2026-07-01 00:00:00.000","first_ingest_ts":"2026-07-04 12:00:00.000","window_anchor":"2026-07-01 00:00:00.000"}
+    {"app_id":"app_1","environment_id":"env_prod","id_type":"user","run_id":"run_1","targeting_key_hash":"tk_edge","variant":"control","first_exposure_ts":"2026-07-05 00:00:00.000","first_ingest_ts":"2026-07-05 00:00:00.000","window_anchor":"2026-07-05 00:00:00.000"}
+    {"app_id":"app_1","environment_id":"env_prod","id_type":"user","run_id":"run_1","targeting_key_hash":"tk_straddle","variant":"control","first_exposure_ts":"2026-07-01 00:03:00.000","first_ingest_ts":"2026-07-01 00:03:00.000","window_anchor":"2026-07-01 00:03:00.000"}
+    {"app_id":"app_1","environment_id":"env_prod","id_type":"user","run_id":"run_1","targeting_key_hash":"tk_treatment_snapshot","variant":"treatment","first_exposure_ts":"2026-07-01 00:01:00.000","first_ingest_ts":"2026-07-01 00:01:00.000","window_anchor":"2026-07-01 00:01:00.000"}
 - name: delayed_convex_commit_time_wins_first_touch
   description: A delayed trusted-adapter Exposure with an earlier encounter time beats a remote Exposure received first, and the Stats input carries that same anchor.
   parameters: "app_id=app_delayed&environment_id=env_prod&experiment_id=exp_delayed&run_id=run_delayed"
   expected_http_status: 200
   expected_result: |
-    {"app_id":"app_delayed","environment_id":"env_prod","id_type":"user","run_id":"run_delayed","targeting_key_hash":"tk_delayed_convex","variant":"treatment","first_exposure_ts":"2026-07-05 06:00:00.000","window_anchor":"2026-07-05 06:00:00.000"}
+    {"app_id":"app_delayed","environment_id":"env_prod","id_type":"user","run_id":"run_delayed","targeting_key_hash":"tk_delayed_convex","variant":"treatment","first_exposure_ts":"2026-07-05 06:00:00.000","first_ingest_ts":"2026-07-05 08:00:00.000","window_anchor":"2026-07-05 06:00:00.000"}
 - name: retained_rows_keep_their_prior_first_touch_time
   description: Rows written before exposure_at existed project server_received_at, while explicit encounter timestamps remain unchanged.
   parameters: "app_id=app_compat&environment_id=env_compat&experiment_id=exp_compat&run_id=run_compat"
   expected_http_status: 200
   expected_result: |
-    {"app_id":"app_compat","environment_id":"env_compat","id_type":"user","run_id":"run_compat","targeting_key_hash":"compat_new","variant":"control","first_exposure_ts":"2026-07-09 23:59:00.000","window_anchor":"2026-07-09 23:59:00.000"}
-    {"app_id":"app_compat","environment_id":"env_compat","id_type":"user","run_id":"run_compat","targeting_key_hash":"compat_old","variant":"treatment","first_exposure_ts":"2026-07-10 00:00:00.000","window_anchor":"2026-07-10 00:00:00.000"}
+    {"app_id":"app_compat","environment_id":"env_compat","id_type":"user","run_id":"run_compat","targeting_key_hash":"compat_new","variant":"control","first_exposure_ts":"2026-07-09 23:59:00.000","first_ingest_ts":"2026-07-10 00:00:00.000","window_anchor":"2026-07-09 23:59:00.000"}
+    {"app_id":"app_compat","environment_id":"env_compat","id_type":"user","run_id":"run_compat","targeting_key_hash":"compat_old","variant":"treatment","first_exposure_ts":"2026-07-10 00:00:00.000","first_ingest_ts":"2026-07-10 00:00:00.000","window_anchor":"2026-07-10 00:00:00.000"}
 - name: another_tenant_sees_only_its_own_entities_under_identical_identifiers
   description: A second App using the same Run, Experiment, and Environment identifiers gets its own population and none of the first App's, in both the snapshot and the tail.
   parameters: "app_id=app_2&environment_id=env_prod&experiment_id=exp_1&run_id=run_1"
   expected_http_status: 200
   expected_result: |
-    {"app_id":"app_2","environment_id":"env_prod","id_type":"user","run_id":"run_1","targeting_key_hash":"tk_other_app","variant":"control","first_exposure_ts":"2026-07-01 00:06:00.000","window_anchor":"2026-07-01 00:06:00.000"}
-    {"app_id":"app_2","environment_id":"env_prod","id_type":"user","run_id":"run_1","targeting_key_hash":"tk_other_app_tail","variant":"control","first_exposure_ts":"2026-07-05 07:00:00.000","window_anchor":"2026-07-05 07:00:00.000"}
+    {"app_id":"app_2","environment_id":"env_prod","id_type":"user","run_id":"run_1","targeting_key_hash":"tk_other_app","variant":"control","first_exposure_ts":"2026-07-01 00:06:00.000","first_ingest_ts":"2026-07-01 00:06:00.000","window_anchor":"2026-07-01 00:06:00.000"}
+    {"app_id":"app_2","environment_id":"env_prod","id_type":"user","run_id":"run_1","targeting_key_hash":"tk_other_app_tail","variant":"control","first_exposure_ts":"2026-07-05 07:00:00.000","first_ingest_ts":"2026-07-05 07:00:00.000","window_anchor":"2026-07-05 07:00:00.000"}
 - name: missing_run_id_is_rejected
   description: A required scope parameter is never defaulted; the request fails loudly rather than widening to every Run.
   parameters: "app_id=app_1&environment_id=env_prod&experiment_id=exp_1"
@@ -57,10 +57,10 @@
   parameters: "app_id=app_privacy&environment_id=env_prod&experiment_id=exp_privacy&run_id=run_privacy"
   expected_http_status: 200
   expected_result: |
-    {"app_id":"app_privacy","environment_id":"env_prod","id_type":"user","run_id":"run_privacy","targeting_key_hash":"app-v1:bbbb-new","variant":"control","first_exposure_ts":"2026-07-03 00:00:00.000","window_anchor":"2026-07-03 00:00:00.000"}
+    {"app_id":"app_privacy","environment_id":"env_prod","id_type":"user","run_id":"run_privacy","targeting_key_hash":"app-v1:bbbb-new","variant":"control","first_exposure_ts":"2026-07-03 00:00:00.000","first_ingest_ts":"2026-07-03 00:00:00.000","window_anchor":"2026-07-03 00:00:00.000"}
 - name: late_old_generation_copy_stays_hidden_after_reset
   description: A Copy snapshot that finishes after reset cannot make local-v1, v1, or app-v1 rows visible, while replacement app-v2 remains visible.
   parameters: "app_id=app_reset_generation&environment_id=env_prod&experiment_id=exp_reset&run_id=run_reset"
   expected_http_status: 200
   expected_result: |
-    {"app_id":"app_reset_generation","environment_id":"env_prod","id_type":"user","run_id":"run_reset","targeting_key_hash":"app-v2:replacement","variant":"treatment","first_exposure_ts":"2026-07-12 00:00:00.000","window_anchor":"2026-07-12 00:00:00.000"}
+    {"app_id":"app_reset_generation","environment_id":"env_prod","id_type":"user","run_id":"run_reset","targeting_key_hash":"app-v2:replacement","variant":"treatment","first_exposure_ts":"2026-07-12 00:00:00.000","first_ingest_ts":"2026-07-12 00:00:00.000","window_anchor":"2026-07-12 00:00:00.000"}

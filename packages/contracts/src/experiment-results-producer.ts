@@ -3,6 +3,7 @@ import type { FrozenControlIdentity } from "./experiment-control-identity";
 import {
   type ExperimentDecisionGate,
   evaluateExperimentDecisionGate,
+  type PersistedSrmAlarm,
 } from "./experiment-decision-gate";
 import type { PlannedDurationEvidence } from "./experiment-decision-gate-duration";
 import {
@@ -44,6 +45,11 @@ export interface ProduceExperimentResultsInput {
    * enrich seam classifies and passes the result. Omit or null when SRM is clean.
    */
   srmRootCause?: SrmRootCauseClassification | null;
+  /**
+   * Durable analysis-v2 SRM alarms from D1. ORed into the gate and surfaced as
+   * persisted_srm_alarms; Analysis stats stay untouched. v1/legacy callers omit this.
+   */
+  persistedSrmAlarms?: readonly PersistedSrmAlarm[];
   /**
    * First-exposure-day cohort diagnostic from Analysis. Detailed mode only;
    * omit or null when Analysis did not emit it (pre-compat Workers).
@@ -95,10 +101,12 @@ export function produceExperimentResults(
     };
   }
 
+  const persistedSrmAlarms = input.persistedSrmAlarms ?? [];
   const gate = evaluateExperimentDecisionGate(
     input.analysis.stats,
     input.run.control,
     input.run.duration,
+    persistedSrmAlarms,
   );
   const hasEvidence =
     input.analysis.data_watermark !== undefined && input.analysis.result_token !== undefined;
@@ -125,6 +133,7 @@ export function produceExperimentResults(
     run: input.run,
     hasEvidence,
     srmRootCause: input.srmRootCause,
+    persistedSrmAlarms,
   });
 
   if (input.view === "concise") {
@@ -153,6 +162,7 @@ function readyBase(input: {
   run: ExperimentResultsRunContext;
   hasEvidence: boolean;
   srmRootCause?: SrmRootCauseClassification | null;
+  persistedSrmAlarms: readonly PersistedSrmAlarm[];
 }) {
   const ship = computeShipRecommendation({
     preRegistration: frozenPreRegistration(input.analysis.run_commitments),
@@ -186,6 +196,9 @@ function readyBase(input: {
       : {}),
     // Additive diagnostics only: never hashed into result_token (stats unchanged).
     ...(input.srmRootCause ? { srm_root_cause: input.srmRootCause } : {}),
+    ...(input.persistedSrmAlarms.length > 0
+      ? { persisted_srm_alarms: [...input.persistedSrmAlarms] }
+      : {}),
   };
 }
 

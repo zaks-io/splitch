@@ -6,6 +6,7 @@ import { assertEnvironmentExposureStatusContract } from "./lib/tinybird-exposure
 import { assertPromotedForwardQueriesRemoved } from "./lib/tinybird-forward-query-cleanup-contract.mjs";
 import { assertMetricStubsRetiredWhenMetricEventsExist } from "./lib/tinybird-metric-stub-tripwire.mjs";
 import { output, quietExitCode, quietExitCodeWithInput, run } from "./lib/tinybird-process.mjs";
+import { proveStickyCopyClocksAfterExpiry } from "./lib/tinybird-sticky-copy-clocks-proof.mjs";
 import { acquireMachineLock } from "./machine-lock.mjs";
 
 const projectConfigPath = "tinybird.config.json";
@@ -54,6 +55,10 @@ try {
   if (hasTinybirdTests(testsDir)) {
     await run("tb", ["--no-version-warning", "test", "run"], projectDir);
   }
+  // COPY_MODE replace rewrites the whole deduped_exposures snapshot. Run after
+  // fixture tests so the replace cannot change Variant quarantine / membership
+  // that analysis_* yaml expectations pin to the staged fixtures.
+  await proveStickyCopyClocksAfterExpiry(projectDir, staged.shiftMs, fail);
 } finally {
   await removeTinybirdLocal(projectDir);
   lock.release();

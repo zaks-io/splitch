@@ -19,7 +19,11 @@ import { resolveSrmProcedure, sequentialSrmAlongEntityPath } from "./srm-checker
 import type { SrmPathEntity } from "./srm-observation-path";
 import { expectedCountsForOutput, safeRate, sumCounts, zeroCounts } from "./srm-counts";
 import { SRM_MISMATCH_P_VALUE } from "./srm-checker-threshold";
-import { activationRowsByEntityForRun, earliestValidActivationTs } from "./srm-activated-arrival";
+import {
+  activationRowsByEntityForRun,
+  earliestValidActivationIngestTs,
+  exposuresByEntityForRun,
+} from "./srm-activated-arrival";
 
 export { SRM_MISMATCH_P_VALUE };
 
@@ -43,11 +47,10 @@ export function checkSrmHealth(input: SrmCheckerInput): SrmCheckerOutput {
   assertExposureVariantsAreDeclared(input, variants);
   const procedure = resolveSrmProcedure(input.srm_procedure);
 
-  const dedupedEntities = dedupedPathEntities(input, variants);
-  const dedupedCounts = countsFromPathEntities(dedupedEntities, variants);
+  const dedupedCounts = dedupedCountsByVariant(input, variants);
   const fullSrm = srmAgainstPopulation(
     dedupedCounts,
-    dedupedEntities,
+    () => dedupedPathEntities(input, variants),
     input.allocation,
     variants,
     procedure,
@@ -67,6 +70,17 @@ export function checkSrmHealth(input: SrmCheckerInput): SrmCheckerOutput {
       ),
       activated_srm_p_value: activation.activatedSrm?.p_value ?? null,
       activated_srm_mismatch: activation.activatedSrm?.is_mismatch ?? null,
+      // Explicit sequential-crossing flags (analysis-v2 only). Absent on
+      // chi-square so v1/legacy result tokens stay byte-identical. Never infer
+      // a crossing from p_value=0 — the zero-Activation sentinel is mismatch
+      // without sequential_threshold_crossed.
+      ...(procedure === "sequential_martingale"
+        ? {
+            srm_sequential_threshold_crossed: fullSrm.sequential_threshold_crossed,
+            activated_srm_sequential_threshold_crossed:
+              activation.activatedSrm?.sequential_threshold_crossed ?? null,
+          }
+        : {}),
     },
     health: {
       multiple_rate: safeRate(multipleCount, sumCounts(dedupedCounts) + multipleCount),
@@ -100,15 +114,14 @@ function activationDiagnostics(
     return { activatedSrm: null, activationBalance: null, activationRates: null };
   }
 
-  const activatedEntities = activatedPathEntities(input, variants);
-  const activatedCounts = countsFromPathEntities(activatedEntities, variants);
+  const activatedCounts = activatedCountsByVariant(input, variants);
   return {
     activatedSrm: activationGuardrail(
       activatedCounts,
       () =>
         srmAgainstPopulation(
           activatedCounts,
-          activatedEntities,
+          () => activatedPathEntities(input, variants),
           input.allocation,
           variants,
           procedure,
@@ -135,7 +148,14 @@ function activationGuardrail(
   variants: readonly string[],
 ): SrmTestInternalResult {
   if (variants.every((variant) => (activatedCounts[variant] ?? 0) === 0)) {
-    return { p_value: 0, is_mismatch: true, chi2_stat: 0 };
+    // Fail-closed insufficient-data sentinel: mismatch without a sequential
+    // crossing, so Control Plane must not persist a durable alarm.
+    return {
+      p_value: 0,
+      is_mismatch: true,
+      chi2_stat: 0,
+      sequential_threshold_crossed: false,
+    };
   }
   return calculate();
 }
@@ -177,22 +197,68 @@ function assertExposureVariantsAreDeclared(
   }
 }
 
+function dedupedCountsByVariant(
+  input: SrmCheckerInput,
+  variants: readonly string[],
+): Record<string, number> {
+  const counts = zeroCounts(variants);
+  for (const variant of variants) {
+    counts[variant] = dedupedExposureRowsForVariant({ ...input, variant }).length;
+  }
+  return counts;
+}
+
+function activatedCountsByVariant(
+  input: SrmCheckerInput,
+  variants: readonly string[],
+): Record<string, number> {
+  const counts = zeroCounts(variants);
+  const declared = new Set(variants);
+  for (const exposure of activatedExposureRows({
+    run_id: input.run_id,
+    exposures: input.exposures,
+    activation_rows: input.activation_rows ?? [],
+  })) {
+    if (!declared.has(exposure.variant)) {
+      continue;
+    }
+    counts[exposure.variant] = (counts[exposure.variant] ?? 0) + 1;
+  }
+  return counts;
+}
+
+/**
+ * Ingest clocks are required only for the sequential (analysis-v2) path.
+ * Chi-square / v1 / legacy never reads first_ingest_ts.
+ */
 function dedupedPathEntities(input: SrmCheckerInput, variants: readonly string[]): SrmPathEntity[] {
   return variants.flatMap((variant) =>
-    dedupedExposureRowsForVariant({ ...input, variant }).map((exposure) => ({
-      targeting_key_hash: exposure.targeting_key_hash,
-      variant: exposure.variant,
-      arrival_ts: exposure.first_exposure_ts,
-    })),
+    dedupedExposureRowsForVariant({ ...input, variant }).map((exposure) => {
+      if (exposure.first_ingest_ts === undefined || exposure.first_ingest_ts === "") {
+        throw new Error(
+          `first_ingest_ts is required for analysis-v2 SRM entity ${exposure.targeting_key_hash}.`,
+        );
+      }
+      return {
+        targeting_key_hash: exposure.targeting_key_hash,
+        variant: exposure.variant,
+        arrival_ts: exposure.first_ingest_ts,
+      };
+    }),
   );
 }
 
+/**
+ * Ingest clocks are required only for the sequential (analysis-v2) path.
+ * Chi-square / v1 / legacy never reads activation_ingest_ts.
+ */
 function activatedPathEntities(
   input: SrmCheckerInput,
   variants: readonly string[],
 ): SrmPathEntity[] {
   const activationRows = input.activation_rows ?? [];
   const activationsByEntity = activationRowsByEntityForRun(input.run_id, activationRows);
+  const exposuresByEntity = exposuresByEntityForRun(input.run_id, input.exposures);
   const declared = new Set(variants);
   const path: SrmPathEntity[] = [];
   for (const exposure of activatedExposureRows({
@@ -206,21 +272,13 @@ function activatedPathEntities(
     path.push({
       targeting_key_hash: exposure.targeting_key_hash,
       variant: exposure.variant,
-      arrival_ts: earliestValidActivationTs(exposure, activationsByEntity),
+      arrival_ts: earliestValidActivationIngestTs(
+        exposuresByEntity.get(exposure.targeting_key_hash) ?? [exposure],
+        activationsByEntity.get(exposure.targeting_key_hash) ?? [],
+      ),
     });
   }
   return path;
-}
-
-function countsFromPathEntities(
-  entities: readonly SrmPathEntity[],
-  variants: readonly string[],
-): Record<string, number> {
-  const counts = zeroCounts(variants);
-  for (const entity of entities) {
-    counts[entity.variant] = (counts[entity.variant] ?? 0) + 1;
-  }
-  return counts;
 }
 
 function exposureCountsByVariant(
@@ -248,13 +306,14 @@ function multipleEntityCount(input: SrmCheckerInput): number {
 
 function srmAgainstPopulation(
   observed: Readonly<Record<string, number>>,
-  entities: SrmPathEntity[],
+  pathEntities: () => SrmPathEntity[],
   allocation: Readonly<Record<string, number>>,
   variants: readonly string[],
   procedure: SrmProcedure,
 ): SrmTestInternalResult {
   if (procedure === "sequential_martingale") {
-    const sequential = sequentialSrmAlongEntityPath(entities, allocation);
+    // Clocks are read/required only here — chi-square never builds the path.
+    const sequential = sequentialSrmAlongEntityPath(pathEntities(), allocation);
     return { ...sequential, chi2_stat: 0 };
   }
   return chiSquareAgainstAllocation(observed, allocation, variants);

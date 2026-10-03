@@ -9,6 +9,7 @@ const exposureRow = {
   run_id: "run_1",
   variant: "treatment",
   first_exposure_ts: "2026-07-01T00:00:00.000Z",
+  first_ingest_ts: "2026-07-01T00:00:00.000Z",
   window_anchor: "2026-07-01T00:00:00.000Z",
 };
 

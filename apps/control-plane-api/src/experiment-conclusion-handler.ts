@@ -24,6 +24,7 @@ import { prepareWinnerProposal } from "./experiment-conclusion-proposal";
 import { conclusionPathIds, replayConclusion } from "./experiment-conclusion-response";
 import { configStoreUnavailable, runNotFound, runNotRunning } from "./experiment-errors";
 import type { ExperimentDeps } from "./experiment-handler-shared";
+import { syncAnalysisV2SrmAlarms } from "./experiment-results-enrich";
 import { objectBody } from "./handler-input";
 import { type RunDurationRow, runDurationEvidence } from "./run-duration-evidence";
 
@@ -78,6 +79,8 @@ export async function concludeRun(
 
 type ConcludedRun = RunDurationRow & {
   id: string;
+  appId: string;
+  environmentId: string;
   configHash: string;
   controlVariantId: string;
   variantSet: string;
@@ -165,7 +168,18 @@ async function validatedEvidence(
   // Measured against the selected watermark, never the clock, so a day-seven
   // Conclude that selects day-one evidence is refused like a day-one Conclude.
   const duration = runDurationEvidence(run, envelope.data_watermark);
-  const gate = evaluateExperimentDecisionGate(envelope.stats, control, duration);
+  const persistedSrmAlarms = await syncAnalysisV2SrmAlarms(
+    deps.repo,
+    run,
+    envelope.stats,
+    envelope.data_watermark,
+  );
+  const gate = evaluateExperimentDecisionGate(
+    envelope.stats,
+    control,
+    duration,
+    persistedSrmAlarms,
+  );
   if (!gate.shipAllowed) {
     return {
       ok: false as const,
@@ -187,6 +201,8 @@ async function validatedEvidence(
       resultToken,
       dataWatermark: envelope.data_watermark,
       stats: envelope.stats,
+      control,
+      duration,
       gate,
     },
   };

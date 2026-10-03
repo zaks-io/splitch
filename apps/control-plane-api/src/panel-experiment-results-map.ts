@@ -45,7 +45,11 @@ export function panelFromProducer(
       ? { recommendation: produced.recommendation }
       : { recommendationUnavailable: produced.recommendationUnavailable }),
     stats: produced.stats,
-    srm: experimentSrmDiagnostics(produced.stats, produced.srm_root_cause ?? null),
+    srm: experimentSrmDiagnostics(
+      produced.stats,
+      produced.srm_root_cause ?? null,
+      produced.persisted_srm_alarms ?? [],
+    ),
     gate: produced.gate,
     significance: experimentSignificanceDisplays(produced.stats),
   };

@@ -67,6 +67,7 @@ function exposureRow(variant: string, targetingKeyHash: string): DedupeExposureR
     run_id: SIMULATION_RUN_ID,
     variant,
     first_exposure_ts: SIMULATION_TS,
+    first_ingest_ts: SIMULATION_TS,
     window_anchor: SIMULATION_TS,
   };
 }

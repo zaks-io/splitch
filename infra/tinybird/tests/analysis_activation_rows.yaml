@@ -1,28 +1,53 @@
 - name: earliest_activation_after_exposure_wins_and_pre_exposure_candidates_never_hide_it
-  description: Candidates at or before first_exposure_ts are rejected before the minimum is taken, retries collapse to one row, an Entity whose only candidate precedes its Exposure is absent, an Entity with no Exposure at all is absent, and counterfactual Activations are excluded.
+  description: Candidates at or before first_exposure_ts are rejected before the minimum is taken, retries collapse to one row, an Entity whose only candidate precedes its Exposure is absent, an Entity with no Exposure at all is absent, counterfactual Activations are excluded, and activation_ingest_ts is the pairwise eligibility clock so tk_control_snapshot (Activation before Exposure ingest) uses the Exposure ingest clock.
   parameters: "app_id=app_1&environment_id=env_prod&experiment_id=exp_1&run_id=run_1"
   expected_http_status: 200
   expected_result: |
-    {"targeting_key_hash":"tk_control_snapshot","run_id":"run_1","activation_ts":"2026-07-02 00:00:00.000","counterfactual":0,"activated":1}
-    {"targeting_key_hash":"tk_tail","run_id":"run_1","activation_ts":"2026-07-05 12:00:00.000","counterfactual":0,"activated":1}
+    {"targeting_key_hash":"tk_control_snapshot","run_id":"run_1","activation_ts":"2026-07-02 00:00:00.000","activation_ingest_ts":"2026-07-04 12:00:00.000","counterfactual":0,"activated":1}
+    {"targeting_key_hash":"tk_tail","run_id":"run_1","activation_ts":"2026-07-05 12:00:00.000","activation_ingest_ts":"2026-07-05 12:00:00.000","counterfactual":0,"activated":1}
+- name: activation_row_set_matches_main_membership
+  description: The activated Entity set for the existing run_1 fixtures is exactly main's membership (tk_control_snapshot, tk_tail). The eligibility clock is an additional column and must not change which Entities count as activated.
+  parameters: "app_id=app_1&environment_id=env_prod&experiment_id=exp_1&run_id=run_1"
+  expected_http_status: 200
+  expected_result: |
+    {"targeting_key_hash":"tk_control_snapshot","run_id":"run_1","activation_ts":"2026-07-02 00:00:00.000","activation_ingest_ts":"2026-07-04 12:00:00.000","counterfactual":0,"activated":1}
+    {"targeting_key_hash":"tk_tail","run_id":"run_1","activation_ts":"2026-07-05 12:00:00.000","activation_ingest_ts":"2026-07-05 12:00:00.000","counterfactual":0,"activated":1}
 - name: sibling_run_returns_only_its_own_entities
   description: The Run scope, not the Experiment, bounds the population.
   parameters: "app_id=app_1&environment_id=env_prod&experiment_id=exp_1&run_id=run_2"
   expected_http_status: 200
   expected_result: |
-    {"targeting_key_hash":"tk_other_run","run_id":"run_2","activation_ts":"2026-07-02 00:00:00.000","counterfactual":0,"activated":1}
+    {"targeting_key_hash":"tk_other_run","run_id":"run_2","activation_ts":"2026-07-02 00:00:00.000","activation_ingest_ts":"2026-07-02 00:00:00.000","counterfactual":0,"activated":1}
 - name: caller_watermark_includes_the_exact_activation_edge
-  description: Re-analysis keeps an Activation ingested exactly at the evidence boundary and excludes later candidates.
+  description: Re-analysis keeps an Activation ingested exactly at the evidence boundary and excludes later candidates; eligibility ingest still uses the later Exposure ingest clock.
   parameters: "app_id=app_1&environment_id=env_prod&experiment_id=exp_1&run_id=run_1&ingest_watermark_ts=2026-07-05%2000%3A00%3A00.000"
   expected_http_status: 200
   expected_result: |
-    {"targeting_key_hash":"tk_control_snapshot","run_id":"run_1","activation_ts":"2026-07-02 00:00:00.000","counterfactual":0,"activated":1}
+    {"targeting_key_hash":"tk_control_snapshot","run_id":"run_1","activation_ts":"2026-07-02 00:00:00.000","activation_ingest_ts":"2026-07-04 12:00:00.000","counterfactual":0,"activated":1}
 - name: activation_after_commit_and_before_delayed_receipt_is_eligible
-  description: Activation ordering uses the delayed Convex encounter time, not the later Splitch receipt time.
+  description: Activation event ordering uses the delayed Convex encounter time; eligibility is min over qualifying raw (Exposure, Activation) pairs of max(ingest clocks). The remote Exposure at 08:00 does not qualify with Activation at 06:30; only the late earlier Convex Exposure (06:00 ingested 10:00) qualifies, so eligibility is 10:00 not min(first_ingest)=08:00.
   parameters: "app_id=app_delayed&environment_id=env_prod&experiment_id=exp_delayed&run_id=run_delayed"
   expected_http_status: 200
   expected_result: |
-    {"targeting_key_hash":"tk_delayed_convex","run_id":"run_delayed","activation_ts":"2026-07-05 06:30:00.000","counterfactual":0,"activated":1}
+    {"targeting_key_hash":"tk_delayed_convex","run_id":"run_delayed","activation_ts":"2026-07-05 06:30:00.000","activation_ingest_ts":"2026-07-05 10:00:00.000","counterfactual":0,"activated":1}
+- name: late_earlier_exposure_does_not_backdate_activation_eligibility
+  description: Exposure at 10:00 ingested 11:00 plus Activation at 09:00 ingested 12:00 is not qualifying. A late earlier Exposure at 08:00 ingested 20:00 newly qualifies; eligibility is max(20:00, 12:00)=20:00, not max(first_ingest=11:00, 12:00)=12:00.
+  parameters: "app_id=app_late_earlier&environment_id=env_prod&experiment_id=exp_late_earlier&run_id=run_late_earlier"
+  expected_http_status: 200
+  expected_result: |
+    {"targeting_key_hash":"tk_late_earlier","run_id":"run_late_earlier","activation_ts":"2026-07-01 09:00:00.000","activation_ingest_ts":"2026-07-01 20:00:00.000","counterfactual":0,"activated":1}
+- name: expired_first_exposure_keeps_activated_entity_with_sticky_clock
+  description: Exposure day 1 + Activation day 5 made the Entity eligible (clock persisted on the Copy snapshot). After the day-1 raw Exposure expires under the 90-day TTL, only a non-qualifying day-10 repeat remains in raw. Membership still follows main (activation_ts > snapshotted first_exposure_ts), and the sticky Copy clock is emitted unchanged.
+  parameters: "app_id=app_ttl_activation&environment_id=env_prod&experiment_id=exp_ttl&run_id=run_ttl"
+  expected_http_status: 200
+  expected_result: |
+    {"targeting_key_hash":"tk_ttl_repeat","run_id":"run_ttl","activation_ts":"2026-07-05 00:00:00.000","activation_ingest_ts":"2026-07-05 00:00:00.000","counterfactual":0,"activated":1}
+- name: copy_gap_recovers_eligibility_from_snapshot_fact_not_epoch
+  description: Same TTL pattern as the sticky-clock case, but the Copy snapshot has no persisted activation_ingest_ts (epoch unset). Pairwise must recover the eligibility clock from the snapshotted first-touch Exposure fact rather than emitting epoch or null; a surviving non-qualifying day-10 repeat alone would not qualify.
+  parameters: "app_id=app_ttl_copy_gap&environment_id=env_prod&experiment_id=exp_ttl_gap&run_id=run_ttl_gap"
+  expected_http_status: 200
+  expected_result: |
+    {"targeting_key_hash":"tk_ttl_gap","run_id":"run_ttl_gap","activation_ts":"2026-07-05 00:00:00.000","activation_ingest_ts":"2026-07-05 00:00:00.000","counterfactual":0,"activated":1}
 - name: missing_environment_id_is_rejected
   description: A required scope parameter is never defaulted; the request fails loudly rather than reading across Environments.
   parameters: "app_id=app_1&experiment_id=exp_1&run_id=run_1"

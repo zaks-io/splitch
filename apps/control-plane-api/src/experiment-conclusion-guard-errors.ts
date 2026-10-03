@@ -1,8 +1,15 @@
+import {
+  evaluateExperimentDecisionGate,
+  type ExperimentDecisionGate,
+  type FrozenControlIdentity,
+  type PlannedDurationEvidence,
+  type StatsOutput,
+} from "@splitch/contracts";
 import { appScope, envScope } from "@splitch/db";
 import type { HandlerArgs } from "@splitch/worker-runtime";
 import { requireAppAdmin } from "./app-authz";
 import { idempotencyConflict } from "./approval-review-outcomes";
-import { targetConfigurationStale } from "./experiment-conclusion-errors";
+import { decisionBlocked, targetConfigurationStale } from "./experiment-conclusion-errors";
 import { runNotRunning } from "./experiment-errors";
 import type { ExperimentDeps } from "./experiment-handler-shared";
 
@@ -28,12 +35,22 @@ interface TargetGuard {
   expectedConfigVersion: number;
 }
 
+interface ConclusionEvidence {
+  resultToken: `sha256:${string}`;
+  dataWatermark: string;
+  stats: StatsOutput;
+  control: FrozenControlIdentity;
+  duration: PlannedDurationEvidence;
+  gate: ExperimentDecisionGate;
+}
+
 interface ConclusionGuardInput extends TargetGuard {
   environmentId: string;
   experimentId: string;
   runId: string;
   idempotencyKey: string;
   requestHash: string;
+  evidence: ConclusionEvidence;
 }
 
 interface ReplacementGuardInput extends TargetGuard {
@@ -72,6 +89,35 @@ export async function resolveConclusionGuardFailure(
   ]);
   if (run && (run.status !== "running" || !experiment || experiment.liveRunId !== input.runId)) {
     return { kind: "response", response: runNotRunning(input.runId, args.requestId) };
+  }
+
+  // Alarm-absence guard aborted the batch: a concurrent Results read persisted
+  // an SRM alarm after the Conclude pre-read. Re-evaluate and refuse ship.
+  const alarms = await deps.repo.runSrmAlarms.listForRun(scope, input.runId);
+  if (alarms.length > 0) {
+    const gate = evaluateExperimentDecisionGate(
+      input.evidence.stats,
+      input.evidence.control,
+      input.evidence.duration,
+      alarms.map((row) => ({
+        srmKind: row.srmKind,
+        firstCrossedAt: row.firstCrossedAt,
+        pValue: row.pValue,
+      })),
+    );
+    return {
+      kind: "response",
+      response: decisionBlocked(
+        input.runId,
+        input.evidence.resultToken,
+        input.evidence.dataWatermark,
+        input.evidence.stats,
+        input.evidence.control,
+        input.evidence.duration,
+        gate,
+        args.requestId,
+      ),
+    };
   }
 
   const stale = await freshTargetError(deps, args.requestId, input);

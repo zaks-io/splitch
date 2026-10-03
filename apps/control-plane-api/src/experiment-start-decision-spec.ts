@@ -182,8 +182,7 @@ export function runCommitmentColumns(
 
 /**
  * Start stamps CURRENT. A caller-supplied version is only accepted when this
- * deployment can analyze it. analysis-v2 is defined but unsupported, so a
- * request for it fails loud like any other unknown version (ADR-0059).
+ * deployment can analyze it; unsupported versions fail loud (ADR-0059).
  */
 function rejectUnsupportedRequestedAnalysisVersion(
   body: Record<string, unknown>,

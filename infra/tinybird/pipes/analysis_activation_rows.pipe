@@ -20,7 +20,9 @@ SQL >
         id_type,
         targeting_key_hash,
         counterfactual,
-        assumeNotNull(activation_ts) AS activation_ts
+        assumeNotNull(activation_ts) AS activation_ts,
+        -- Earliest physical insert among retries of this (Entity, activation_ts).
+        min(ingest_ts) AS candidate_activation_ingest_ts
     FROM raw_events
     LEFT JOIN app_identity_generation_tombstones AS generation_tombstones
         ON generation_tombstones.app_id = raw_events.app_id
@@ -45,7 +47,114 @@ SQL >
     -- under a fresh event_id, and the retries are identical by contract.
     GROUP BY run_id, id_type, targeting_key_hash, counterfactual, activation_ts
 
-NODE earliest_post_exposure
+NODE raw_exposure_facts
+SQL >
+    %
+    {% if not defined(app_id) %}
+    {{error('app_id is required')}}
+    {% end %}
+    {% if not defined(environment_id) %}
+    {{error('environment_id is required')}}
+    {% end %}
+    {% if not defined(experiment_id) %}
+    {{error('experiment_id is required')}}
+    {% end %}
+    {% if not defined(run_id) %}
+    {{error('run_id is required')}}
+    {% end %}
+    SELECT
+        run_id,
+        id_type,
+        targeting_key_hash,
+        exposure_at,
+        ingest_ts
+    FROM raw_events
+    LEFT JOIN app_identity_generation_tombstones AS generation_tombstones
+        ON generation_tombstones.app_id = raw_events.app_id
+        AND generation_tombstones.targeting_key_version = splitByChar(':', raw_events.targeting_key_hash)[1]
+    WHERE type = 'exposure'
+        AND app_id = {{String(app_id)}}
+        AND environment_id = {{String(environment_id)}}
+        AND experiment_id = {{String(experiment_id)}}
+        AND run_id = {{String(run_id)}}
+        AND generation_tombstones.app_id = ''
+        {% if defined(ingest_watermark_ts) %}
+        AND ingest_ts <= {{DateTime64(ingest_watermark_ts)}}
+        {% end %}
+
+NODE raw_exposure_mins
+SQL >
+    SELECT
+        run_id,
+        id_type,
+        targeting_key_hash,
+        min(exposure_at) AS min_raw_exposure_at
+    FROM raw_exposure_facts
+    GROUP BY
+        run_id,
+        id_type,
+        targeting_key_hash
+
+NODE exposure_facts
+SQL >
+    %
+    -- Pairwise eligibility clock only. Membership never uses this node.
+    -- Include the snapshotted first-touch fact when raw has no rows for the
+    -- Entity, or when every surviving raw Exposure is strictly later than the
+    -- sticky first_exposure_ts (TTL expired the qualifying first-touch). Do not
+    -- always UNION serve_deduped: its first_ingest_ts can come from a different
+    -- raw row than first_exposure_ts and would forge a false eligibility pair.
+    SELECT
+        run_id,
+        id_type,
+        targeting_key_hash,
+        exposure_at,
+        ingest_ts
+    FROM raw_exposure_facts
+    UNION ALL
+    SELECT
+        exposures.run_id AS run_id,
+        exposures.id_type AS id_type,
+        exposures.targeting_key_hash AS targeting_key_hash,
+        exposures.first_exposure_ts AS exposure_at,
+        exposures.first_ingest_ts AS ingest_ts
+    FROM serve_deduped_exposures AS exposures
+    LEFT JOIN raw_exposure_mins AS raw_mins
+        ON raw_mins.run_id = exposures.run_id
+        AND raw_mins.id_type = exposures.id_type
+        AND raw_mins.targeting_key_hash = exposures.targeting_key_hash
+    WHERE raw_mins.targeting_key_hash = ''
+        OR exposures.first_exposure_ts < raw_mins.min_raw_exposure_at
+
+NODE pairwise_eligibility
+SQL >
+    SELECT
+        candidates.targeting_key_hash AS targeting_key_hash,
+        candidates.run_id AS run_id,
+        candidates.counterfactual AS counterfactual,
+        -- Eligibility: min over qualifying (Exposure, Activation) pairs of
+        -- max(exposure.ingest_ts, activation.ingest_ts). Deduped first_ingest_ts
+        -- alone would back-date when a late earlier Exposure makes a previously
+        -- non-qualifying Activation valid.
+        min(
+            if(
+                exposure_facts.ingest_ts > candidates.candidate_activation_ingest_ts,
+                exposure_facts.ingest_ts,
+                candidates.candidate_activation_ingest_ts
+            )
+        ) AS activation_ingest_ts
+    FROM activation_candidates AS candidates
+    INNER JOIN exposure_facts
+        ON exposure_facts.run_id = candidates.run_id
+        AND exposure_facts.id_type = candidates.id_type
+        AND exposure_facts.targeting_key_hash = candidates.targeting_key_hash
+    WHERE exposure_facts.exposure_at < candidates.activation_ts
+    GROUP BY
+        candidates.targeting_key_hash,
+        candidates.run_id,
+        candidates.counterfactual
+
+NODE activated_membership
 SQL >
     SELECT
         candidates.targeting_key_hash AS targeting_key_hash,
@@ -57,7 +166,9 @@ SQL >
         -- definition of `activated`. An Entity whose only candidates precede its
         -- Exposure has no valid activation_ts to report, so it is absent rather
         -- than emitted with activated = 0; the Stats Engine skips both identically.
-        toUInt8(1) AS activated
+        toUInt8(1) AS activated,
+        -- Sticky Copy clock when set; epoch means fall back to live pairwise.
+        any(exposures.activation_ingest_ts) AS persisted_activation_ingest_ts
     FROM activation_candidates AS candidates
     INNER JOIN serve_deduped_exposures AS exposures
         ON exposures.run_id = candidates.run_id
@@ -66,11 +177,40 @@ SQL >
     -- Reject pre-Exposure candidates BEFORE taking the minimum. Reducing first
     -- would let one early stray Activation hide a later valid one and drop the
     -- Entity out of gated analysis entirely (ADR-0012).
+    -- Membership filter is exactly main's: activation_ts > first_exposure_ts.
+    -- Pairwise exposure_facts must not filter this row set.
     WHERE candidates.activation_ts > exposures.first_exposure_ts
     GROUP BY
         candidates.targeting_key_hash,
         candidates.run_id,
         candidates.counterfactual
+
+NODE earliest_post_exposure
+SQL >
+    WITH toDateTime64('1970-01-01 00:00:00', 3, 'UTC') AS epoch
+    SELECT
+        membership.targeting_key_hash AS targeting_key_hash,
+        membership.run_id AS run_id,
+        membership.activation_ts AS activation_ts,
+        -- Never default a missing eligibility clock to epoch: that would look
+        -- like the start of SRM history. Emit null so analysis-v2 fails loud;
+        -- v1/legacy ignore the column. Prefer sticky Copy clock, else pairwise.
+        if(
+            membership.persisted_activation_ingest_ts > epoch,
+            toNullable(membership.persisted_activation_ingest_ts),
+            if(
+                pairwise.targeting_key_hash != '',
+                toNullable(pairwise.activation_ingest_ts),
+                CAST(NULL AS Nullable(DateTime64(3, 'UTC')))
+            )
+        ) AS activation_ingest_ts,
+        membership.counterfactual AS counterfactual,
+        membership.activated AS activated
+    FROM activated_membership AS membership
+    LEFT JOIN pairwise_eligibility AS pairwise
+        ON pairwise.targeting_key_hash = membership.targeting_key_hash
+        AND pairwise.run_id = membership.run_id
+        AND pairwise.counterfactual = membership.counterfactual
     ORDER BY targeting_key_hash
 
 TYPE ENDPOINT

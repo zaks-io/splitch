@@ -148,7 +148,7 @@ async function hopAndEnrich(args: {
   return {
     kind: "response",
     response: Response.json(
-      enrichAnalysisResultsResponse(await analysisResponse.json(), run, {
+      await enrichAnalysisResultsResponse(args.repo, await analysisResponse.json(), run, {
         view: args.view,
         canConclude,
         includeExploratory: args.includeExploratory,

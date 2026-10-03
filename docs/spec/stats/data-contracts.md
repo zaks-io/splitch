@@ -200,10 +200,10 @@ and calls the engine, binding `analysis_version` from the Run Snapshot commitmen
 incrementally append to a previous `StatsInput`. Counts that look like "new Entities since last
 look" are a difference of two full recomputes, not a martingale increment stored on disk. Under
 analysis-v2 the sequential SRM gate rebuilds the Entity arrival path from the current watermarked
-`StatsInput` (Exposure by `first_exposure_ts`, activated by `activation_ts`) and evaluates the
-martingale after every arrival (running-minimum p). Sticky alarms hold while ingestion before the
-pinned watermark is complete. Pinned `dataWatermark` fixes the Entity set, so the path and result
-token stay deterministic.
+`StatsInput` (Exposure by `first_ingest_ts`, activated by
+pairwise activation eligibility ingest) and evaluates the martingale after every arrival
+(running-minimum p). Sticky alarms hold while ingestion before the pinned watermark is complete.
+Pinned `dataWatermark` fixes the Entity set, so the path and result token stay deterministic.
 
 ### Evidence watermark
 
@@ -274,8 +274,10 @@ appears in `multiple_count`. This is not an iid multinomial increment across wat
 analysis-v2 SRM gate therefore does not continue a prior filtration: it rebuilds the arrival
 path from the cleaned watermarked population and re-evaluates (see
 [srm-and-health.md](srm-and-health.md#sequential-dirichlet-multinomial-srm-analysis-v2-gate)).
-Late delivery of an earlier `exposure_at` can also revise `first_exposure_ts` (and therefore
-windows and CUPED lookback) without changing Variant; that likewise rebuilds the path.
+Late delivery of an earlier `exposure_at` can revise `first_exposure_ts` (and therefore windows
+and CUPED lookback) without changing Variant; the SRM path still orders by `first_ingest_ts`, so
+the Entity's filtration position stays the first ingest, and the path for a later watermark
+extends the earlier one when the Entity set only grows.
 
 ### Activation gating (ADR-0012)
 

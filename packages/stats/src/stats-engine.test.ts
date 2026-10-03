@@ -4,7 +4,7 @@ import { analyzeStats } from "./stats-engine";
 import { ENGINE_RUN_ID, binomialStatsInput, exposure } from "./stats-engine-test-helpers";
 
 describe("StatsEngine.analyze analysis_version dispatch", () => {
-  it("dispatches sequential SRM under analysis-v2 (unit path; v2 is unsupported for Runs)", async () => {
+  it("dispatches sequential SRM under analysis-v2", async () => {
     const shared = {
       controlN: 900,
       treatmentN: 100,

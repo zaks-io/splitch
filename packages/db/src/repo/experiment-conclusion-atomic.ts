@@ -1,4 +1,5 @@
 import type { approvalRequests, experimentConclusions } from "../schema/index";
+import { endRunningRunStatement } from "./experiment-conclusion-end-run";
 import type { EnvScope } from "./scope";
 
 type ConclusionInsert = Omit<typeof experimentConclusions.$inferInsert, "appId">;
@@ -40,37 +41,14 @@ export function conclusionStatements(
     c.targetFlagId,
     input.expectedTargetConfigVersion,
   ];
-  const actorGuard = `EXISTS (
-    SELECT 1 FROM app_memberships
-    WHERE app_id = ? AND user_id = ? AND role IN ('owner', 'admin')
-  )`;
   return [
-    d1
-      .prepare(
-        `UPDATE runs SET status = 'ended', ended_at = ?, end_reason = ?
-         WHERE app_id = ? AND environment_id = ? AND experiment_id = ? AND id = ?
-           AND status = 'running' AND ${targetGuard}
-           AND ${actorGuard}
-           AND EXISTS (
-             SELECT 1 FROM experiments WHERE app_id = ? AND environment_id = ?
-               AND id = ? AND live_run_id = ?
-           ) RETURNING id`,
-      )
-      .bind(
-        c.concludedAt,
-        c.reason ?? null,
-        scope.appId,
-        scope.environmentId,
-        c.experimentId,
-        c.runId,
-        ...targetParams,
-        scope.appId,
-        c.concludedBy,
-        scope.appId,
-        scope.environmentId,
-        c.experimentId,
-        input.expectedLiveRunId,
-      ),
+    endRunningRunStatement(
+      d1,
+      scope,
+      c,
+      input.expectedLiveRunId,
+      input.expectedTargetConfigVersion,
+    ),
     d1
       .prepare(
         `UPDATE experiments SET status = 'draft', live_run_id = NULL, updated_at = ?, updated_by = ?

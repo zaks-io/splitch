@@ -5,6 +5,12 @@ export interface SrmTestInternalResult {
   readonly p_value: number;
   readonly is_mismatch: boolean;
   readonly chi2_stat: number;
+  /**
+   * True only for a genuine sequential martingale threshold crossing.
+   * Chi-square and the zero-Activation fail-closed sentinel leave this false
+   * so durable alarms never treat insufficient data as a sticky crossing.
+   */
+  readonly sequential_threshold_crossed: boolean;
 }
 
 export function chiSquareAgainstAllocation(
@@ -14,7 +20,7 @@ export function chiSquareAgainstAllocation(
 ): SrmTestInternalResult {
   const totalObserved = variants.reduce((sum, variant) => sum + (observed[variant] ?? 0), 0);
   if (totalObserved === 0) {
-    return { p_value: 1, is_mismatch: false, chi2_stat: 0 };
+    return { p_value: 1, is_mismatch: false, chi2_stat: 0, sequential_threshold_crossed: false };
   }
 
   const allocationTotal = variants.reduce((sum, variant) => sum + (allocation[variant] ?? 0), 0);
@@ -33,6 +39,7 @@ export function chiSquareAgainstAllocation(
     p_value: pValue,
     is_mismatch: pValue < SRM_MISMATCH_P_VALUE,
     chi2_stat: chi2Stat,
+    sequential_threshold_crossed: false,
   };
 }
 
@@ -53,7 +60,7 @@ export function chiSquareActivationBalance(
   ];
   const total = rowTotals.reduce((sum, value) => sum + value, 0);
   if (total === 0) {
-    return { p_value: 1, is_mismatch: false, chi2_stat: 0 };
+    return { p_value: 1, is_mismatch: false, chi2_stat: 0, sequential_threshold_crossed: false };
   }
 
   let chi2Stat = 0;
@@ -74,5 +81,6 @@ export function chiSquareActivationBalance(
     p_value: pValue,
     is_mismatch: pValue < SRM_MISMATCH_P_VALUE,
     chi2_stat: chi2Stat,
+    sequential_threshold_crossed: false,
   };
 }

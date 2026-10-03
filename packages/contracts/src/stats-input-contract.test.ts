@@ -62,6 +62,7 @@ const exposureRow = {
   run_id: "run_1",
   variant: "treatment",
   first_exposure_ts: "2026-07-01T00:00:00.000Z",
+  first_ingest_ts: "2026-07-01T00:00:00.000Z",
   window_anchor: "2026-07-01T00:00:00.000Z",
   dimension_values: { country: "US" },
 };
@@ -232,6 +233,7 @@ describe("ActivationRowSchema", () => {
     targeting_key_hash: "tkh_1",
     run_id: "run_1",
     activation_ts: "2026-07-01T00:05:00.000Z",
+    activation_ingest_ts: "2026-07-01T00:05:00.000Z",
     counterfactual: false,
     activated: true,
   };

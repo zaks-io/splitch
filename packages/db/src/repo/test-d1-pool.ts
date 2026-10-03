@@ -10,6 +10,7 @@ export const RESET_TABLES = [
   "event_definitions",
   "conclusion_approval_requests",
   "experiment_conclusions",
+  "run_srm_alarms",
   "approval_reviews",
   "approval_requests",
   "claim_idempotency",

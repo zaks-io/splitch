@@ -70,9 +70,8 @@ correction for arbitrary stopping: Benjamini-Yekutieli / BH-G, which is BH at
 `applyDecisionFamilyCorrection` now takes `family_correction: "bh" | "bh_g"` and defaults to
 `"bh"`. `analysisVersionPolicy` selects the procedure per frozen analysis version. analysis-v2
 selects BH-G for the Proposition C.3 arbitrary-dependence / arbitrary-stopping guarantee (plain
-BH can exceed alpha under a two-null adversarial distribution). analysis-v2 is defined but
-unsupported for Start/Results until an ingestion-ordered observation path lands (ADR-0059).
-legacy and analysis-v1 stay on BH.
+BH can exceed alpha under a two-null adversarial distribution) and is current for new Runs
+(ADR-0059). legacy and analysis-v1 stay on BH.
 
 The composed p-value contract (estimators, observation assumptions, asymptotic versus exact,
 burn-in) is in `docs/spec/stats/inference-engine.md`.

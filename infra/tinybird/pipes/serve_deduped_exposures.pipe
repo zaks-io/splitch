@@ -36,7 +36,14 @@ SQL >
         exposures.targeting_key_hash AS targeting_key_hash,
         exposures.entity_family_hash AS entity_family_hash,
         exposures.variant AS variant,
-        exposures.first_exposure_ts AS encounter_ts
+        exposures.first_exposure_ts AS encounter_ts,
+        -- Snapshot-side ingestion clock. Rows written before this column existed
+        -- carry the epoch DEFAULT and form one initial batch ordered by
+        -- targeting_key_hash until the next Copy Pipe replace fills real values.
+        exposures.first_ingest_ts AS first_ingest_ts,
+        -- Sticky activated-SRM eligibility clock persisted at Copy time. Epoch
+        -- means unset; analysis_activation_rows falls back to live pairwise.
+        exposures.activation_ingest_ts AS activation_ingest_ts
     FROM deduped_exposures AS exposures
     LEFT JOIN entity_deletion_cutoffs AS deletions
         ON deletions.app_id = exposures.app_id
@@ -71,7 +78,11 @@ SQL >
             '__multiple__',
             max(assumeNotNull(variant))
         ) AS variant,
-        min(exposure_at) AS encounter_ts
+        min(exposure_at) AS encounter_ts,
+        min(events.ingest_ts) AS first_ingest_ts,
+        -- Tail has no persisted eligibility clock; epoch lets the union prefer
+        -- any snapshotted sticky value for the same Entity.
+        toDateTime64('1970-01-01 00:00:00', 3, 'UTC') AS activation_ingest_ts
     FROM raw_events AS events
     LEFT JOIN entity_deletion_cutoffs AS deletions
         ON deletions.app_id = events.app_id
@@ -128,7 +139,16 @@ SQL >
         entity_family_hash,
         argMin(targeting_key_hash, encounter_ts) AS targeting_key_hash,
         if(countDistinct(variant) > 1, '__multiple__', max(variant)) AS variant,
-        min(encounter_ts) AS first_exposure_ts
+        min(encounter_ts) AS first_exposure_ts,
+        -- Earliest ingest across snapshot and tail layers. analysis-v2 SRM orders
+        -- by this so late event-time rows append rather than rewrite the path.
+        min(first_ingest_ts) AS first_ingest_ts,
+        -- Prefer any non-epoch sticky clock from the snapshot layer.
+        if(
+            max(activation_ingest_ts) > toDateTime64('1970-01-01 00:00:00', 3, 'UTC'),
+            max(activation_ingest_ts),
+            toDateTime64('1970-01-01 00:00:00', 3, 'UTC')
+        ) AS activation_ingest_ts
     FROM (
         SELECT * FROM snapshot_layer
         UNION ALL

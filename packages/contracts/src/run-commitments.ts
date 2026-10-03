@@ -24,22 +24,21 @@ import type { StatsOutput } from "./stats-result-contract";
  * | Version              | SRM gate                         | Family correction | Guardrail bound                         | Supported for Start/Results |
  * | -------------------- | -------------------------------- | ----------------- | --------------------------------------- | --------------------------- |
  * | legacy-unversioned   | Chi-square p < 0.001             | BH                | Two-sided Fieller relative lower        | legacy read path only       |
- * | analysis-v1          | Chi-square p < 0.001             | BH                | Two-sided Fieller relative lower        | yes (current)               |
- * | analysis-v2          | Sequential Dirichlet-multinomial | BH-G              | Prop. B.1 one-sided contrast (C4)       | no (defined, unsupported)   |
+ * | analysis-v1          | Chi-square p < 0.001             | BH                | Two-sided Fieller relative lower        | yes                         |
+ * | analysis-v2          | Sequential Dirichlet-multinomial | BH-G              | Prop. B.1 one-sided contrast (C4)       | yes (current)               |
  *
- * analysis-v2 stays in the exhaustive switch for unit tests and a future CURRENT
- * bump, but it is not in SUPPORTED_ANALYSIS_VERSIONS until an ingestion-ordered
- * (append-only across watermarks) observation path lands: event-time ordering
- * can erase an SRM alarm under late ingestion (ADR-0059).
+ * analysis-v2's ingestion-ordered path (`first_ingest_ts` / pairwise activation
+ * eligibility) plus sticky Copy clocks and durable D1 `run_srm_alarms` make
+ * sequential SRM alarms sticky across raw TTL and quarantine (ADR-0059).
  */
 export const ANALYSIS_V1_VERSION = "analysis-v1";
 export const ANALYSIS_V2_VERSION = "analysis-v2";
 /**
- * New Runs freeze this named implementation. analysis-v2 is defined in the
- * exhaustive version switch but is unsupported for Start and Results until an
- * ingestion-ordered observation path lands. Keep CURRENT on analysis-v1.
+ * New Runs freeze this named implementation. Keep the literal (not
+ * `ANALYSIS_V2_VERSION`) so the two exports stay distinct names for knip /
+ * intentional version bumps.
  */
-export const CURRENT_ANALYSIS_VERSION = "analysis-v1";
+export const CURRENT_ANALYSIS_VERSION = "analysis-v2";
 
 /**
  * The label a legacy Run is read under. Its compatibility implementation is the
@@ -50,11 +49,12 @@ export const LEGACY_ANALYSIS_VERSION = "legacy-unversioned";
 
 /**
  * Versions this deployment will Start or analyze. A Run frozen under any other
- * version (including defined-but-unsupported analysis-v2) refuses loudly.
- * Known versions that are not listed here remain in the exhaustive switch for
- * unit tests; they are not Startable and not readable on a frozen Run.
+ * version refuses loudly.
  */
-export const SUPPORTED_ANALYSIS_VERSIONS: readonly string[] = [ANALYSIS_V1_VERSION];
+export const SUPPORTED_ANALYSIS_VERSIONS: readonly string[] = [
+  ANALYSIS_V1_VERSION,
+  ANALYSIS_V2_VERSION,
+];
 
 /** GrowthBook's documented default; recorded as defaulted when the caller names none. */
 export const DEFAULT_SEQUENTIAL_TARGET_N = 5_000;

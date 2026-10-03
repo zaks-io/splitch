@@ -4,6 +4,7 @@ import { FrozenControlIdentitySchema } from "./experiment-control-identity";
 import {
   DecisionGateCheckIdSchema,
   ExperimentDecisionGateSchema,
+  PersistedSrmAlarmSchema,
 } from "./experiment-decision-gate";
 import {
   ExperimentResultsReadinessSchema,
@@ -54,6 +55,11 @@ const srmRootCauseField = {
   srm_root_cause: SrmRootCauseClassificationSchema.optional(),
 } as const;
 
+/** Durable analysis-v2 SRM alarms ORed into the gate; omitted when none. */
+const persistedSrmAlarmsField = {
+  persisted_srm_alarms: z.array(PersistedSrmAlarmSchema).optional(),
+} as const;
+
 /** Detailed-only diagnostic; concise Results never carry the cohort curve. */
 const cohortEffectField = {
   cohort_effect: CohortEffectDiagnosticSchema.optional(),
@@ -70,6 +76,7 @@ const readyDetailedSchema = z
     ...evidencePair,
     run_commitments: RunCommitmentsSchema.optional(),
     ...srmRootCauseField,
+    ...persistedSrmAlarmsField,
     ...cohortEffectField,
     stats: StatsOutputSchema,
   })
@@ -87,6 +94,7 @@ const readyConciseSchema = z
     ...evidencePair,
     run_commitments: RunCommitmentsSchema.optional(),
     ...srmRootCauseField,
+    ...persistedSrmAlarmsField,
     /** Present only when the caller set includeExploratory on concise (C10 part two). */
     stats: StatsOutputSchema.optional(),
   })

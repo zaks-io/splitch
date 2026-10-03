@@ -299,6 +299,7 @@ function exposureRow(variant: string, targetingKeyHash: string): DedupeExposureR
     run_id: FIELLER_RUN_ID,
     variant,
     first_exposure_ts: TS,
+    first_ingest_ts: TS,
     window_anchor: TS,
   };
 }

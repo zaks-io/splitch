@@ -3,8 +3,9 @@
  * arm (not `__multiple__`). The sequential SRM gate rebuilds its look path from
  * these rows on every Results read.
  *
- * `arrival_ts` is first Exposure for Exposure SRM and the Entity's earliest
- * valid Activation timestamp for activated-population SRM.
+ * `arrival_ts` is the eligibility clock: `first_ingest_ts` for Exposure SRM and
+ * pairwise `min(max(exposure.ingest, activation.ingest))` for activated SRM.
+ * Event time (`first_exposure_ts` / `activation_ts`) is not the filtration order.
  */
 export interface SrmPathEntity {
   readonly targeting_key_hash: string;
@@ -14,8 +15,9 @@ export interface SrmPathEntity {
 
 /**
  * Deterministic total order for the analysis-v2 SRM filtration: ascending
- * arrival time, then Entity pseudonym. Ties must break the same way on every
- * pinned-watermark read so the result token stays reproducible.
+ * ingestion time, then Entity pseudonym. Ties must break the same way on every
+ * pinned-watermark read so the result token stays reproducible. Ordering by
+ * ingestion keeps a later watermark's path an extension of an earlier one.
  */
 export function compareSrmPathEntities(left: SrmPathEntity, right: SrmPathEntity): number {
   const leftMs = arrivalMs(left.arrival_ts);
@@ -38,8 +40,8 @@ export function compareSrmPathEntities(left: SrmPathEntity, right: SrmPathEntity
 }
 
 /**
- * Sort Entities into the append-only arrival filtration. Mutates `entities` in
- * place so callers that already own the array avoid a second allocation.
+ * Sort Entities into the append-only ingestion filtration. Mutates `entities`
+ * in place so callers that already own the array avoid a second allocation.
  * Every timestamp is validated before sorting so a singleton malformed Entity
  * fails loud instead of skipping the comparator.
  */

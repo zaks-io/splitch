@@ -46,6 +46,7 @@ describe("GET experiment results activation health", () => {
           targeting_key_hash: "control_0",
           run_id: RUN_ID,
           activation_ts: "2026-07-01T01:00:00.000Z",
+          activation_ingest_ts: "2026-07-01T01:00:00.000Z",
           counterfactual: false,
           activated: true,
         },

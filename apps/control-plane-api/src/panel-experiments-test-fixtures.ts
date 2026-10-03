@@ -158,6 +158,8 @@ export function statsOutput(overrides: Partial<StatsOutput> = {}): StatsOutput {
       expected_counts: { control: 500, treatment: 500 },
       activated_srm_p_value: null,
       activated_srm_mismatch: null,
+      srm_sequential_threshold_crossed: false,
+      activated_srm_sequential_threshold_crossed: null,
     },
     guardrail_results: [
       {

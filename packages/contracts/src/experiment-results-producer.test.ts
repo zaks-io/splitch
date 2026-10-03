@@ -1,35 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { armResult, reachedDuration, stats } from "./experiment-decision-gate-test-fixtures";
+import { armResult, stats } from "./experiment-decision-gate-test-fixtures";
 import { produceExperimentResults } from "./experiment-results-producer";
+import { control, readyAnalysis, run } from "./experiment-results-producer-test-fixtures";
 import { ExperimentResultsResponseSchema } from "./experiment-results-response";
-import type { AnalysisResultsEnvelope } from "./stats-result-contract";
-
-const control = {
-  state: "frozen" as const,
-  variantId: "variant_control",
-  variant: "control",
-};
-
-const run = {
-  runNumber: 2,
-  runStatus: "running" as const,
-  control,
-  duration: reachedDuration(),
-};
-
-function readyAnalysis(
-  overrides: Partial<Extract<AnalysisResultsEnvelope, { state: "ready" }>> = {},
-): Extract<AnalysisResultsEnvelope, { state: "ready" }> {
-  return {
-    state: "ready",
-    run_id: "run_1",
-    control_variant: "control",
-    data_watermark: "2026-07-08T00:00:00.000Z",
-    result_token: `sha256:${"a".repeat(64)}`,
-    stats: stats(),
-    ...overrides,
-  };
-}
 
 describe("produceExperimentResults", () => {
   it("puts readiness, blockedBy, and reasons before detailed stats", () => {
@@ -234,39 +207,6 @@ describe("produceExperimentResults ship recommendation", () => {
         because: expect.stringMatching(/positive lift/),
       },
     });
-  });
-});
-
-describe("produceExperimentResults srm_root_cause", () => {
-  it("attaches srm_root_cause only when the enrich seam supplies a classification", () => {
-    const rootCause = {
-      branch: "triggered_only" as const,
-      explanation: "Activated-population SRM fires while Exposure SRM does not.",
-      nextCheck: "experiment_results_get",
-    };
-    const analysis = readyAnalysis();
-    const withCause = produceExperimentResults({
-      view: "detailed",
-      analysis,
-      run,
-      canConclude: true,
-      srmRootCause: rootCause,
-    });
-    const withoutCause = produceExperimentResults({
-      view: "detailed",
-      analysis,
-      run,
-      canConclude: true,
-    });
-    expect(ExperimentResultsResponseSchema.parse(withCause)).toMatchObject({
-      srm_root_cause: rootCause,
-    });
-    expect(withoutCause).not.toHaveProperty("srm_root_cause");
-    // Diagnostics must not rewrite the Analysis stats object the token binds.
-    if (withCause.state !== "ready" || withCause.view !== "detailed") {
-      throw new Error("expected detailed ready");
-    }
-    expect(withCause.stats).toBe(analysis.stats);
   });
 });
 

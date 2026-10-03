@@ -69,6 +69,7 @@ export function exposure(variant: string, targeting_key_hash: string): DedupeExp
     run_id: ENGINE_RUN_ID,
     variant,
     first_exposure_ts: ENGINE_TS,
+    first_ingest_ts: ENGINE_TS,
     window_anchor: ENGINE_TS,
   };
 }

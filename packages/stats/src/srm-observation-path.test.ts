@@ -6,7 +6,7 @@ import {
 } from "./srm-observation-path";
 
 describe("SRM observation arrival order", () => {
-  it("orders by arrival timestamp then Entity pseudonym", () => {
+  it("orders by ingestion arrival timestamp then Entity pseudonym", () => {
     const entities: SrmPathEntity[] = [
       entity("treatment", "t_late", "2026-07-01T18:00:00.000Z"),
       entity("control", "c_b", "2026-07-01T08:00:00.000Z"),

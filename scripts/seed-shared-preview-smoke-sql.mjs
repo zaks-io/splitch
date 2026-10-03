@@ -50,6 +50,7 @@ const TRANSIENT_APP_SCOPED_TABLES = [
   "experiment_conclusions",
   "approval_reviews",
   "approval_requests",
+  "run_srm_alarms",
   "runs",
   "experiments",
   "metrics",

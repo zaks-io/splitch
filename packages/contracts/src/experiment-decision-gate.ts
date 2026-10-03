@@ -68,8 +68,23 @@ export const SrmSignalSchema = z
     pValue: z.number().nullable(),
     /** Per-Variant observed minus expected exposures: the cause-hunting diagnostic. */
     deviations: z.array(SrmDeviationSchema),
+    /**
+     * When a durable analysis-v2 SRM alarm was persisted on an earlier read,
+     * the first crossing timestamp. Omitted when no alarm exists.
+     */
+    firstCrossedAt: z.string().datetime({ offset: true }).optional(),
   })
   .strict();
+
+/** Persisted analysis-v2 SRM alarm rows ORed into the Control Plane verdict. */
+export const PersistedSrmAlarmSchema = z
+  .object({
+    srmKind: z.enum(["exposure", "activated"]),
+    firstCrossedAt: z.string().datetime({ offset: true }),
+    pValue: z.number(),
+  })
+  .strict();
+export type PersistedSrmAlarm = z.infer<typeof PersistedSrmAlarmSchema>;
 
 export const ExperimentSrmDiagnosticsSchema = z
   .object({
@@ -133,23 +148,33 @@ export function srmTierFor(pValue: number | null, isMismatch: boolean | null): S
 export function experimentSrmDiagnostics(
   stats: StatsOutput,
   rootCause?: SrmRootCauseClassification | null,
+  persistedAlarms: readonly PersistedSrmAlarm[] = [],
 ): ExperimentSrmDiagnostics {
+  const exposureAlarm = alarmFor(persistedAlarms, "exposure");
+  const activatedAlarm = alarmFor(persistedAlarms, "activated");
+  const exposureMismatch = stats.srm.srm_is_mismatch || exposureAlarm !== undefined;
+  const activatedMismatch =
+    stats.srm.activated_srm_mismatch === true || activatedAlarm !== undefined;
   const hasActivationGate =
-    stats.srm.activated_srm_p_value !== null || stats.srm.activated_srm_mismatch !== null;
+    stats.srm.activated_srm_p_value !== null ||
+    stats.srm.activated_srm_mismatch !== null ||
+    activatedAlarm !== undefined;
   const hasActivationBalance =
     stats.health.activation_balance_p_value !== null ||
     stats.health.activation_balance_mismatch !== null;
   return {
     exposure: {
-      tier: srmTierFor(stats.srm.srm_p_value, stats.srm.srm_is_mismatch),
+      tier: srmTierFor(stats.srm.srm_p_value, exposureMismatch),
       pValue: stats.srm.srm_p_value,
       deviations: srmDeviations(stats.srm.observed_counts, stats.srm.expected_counts),
+      ...(exposureAlarm ? { firstCrossedAt: exposureAlarm.firstCrossedAt } : {}),
     },
     activated: hasActivationGate
       ? {
-          tier: srmTierFor(stats.srm.activated_srm_p_value, stats.srm.activated_srm_mismatch),
+          tier: srmTierFor(stats.srm.activated_srm_p_value, activatedMismatch),
           pValue: stats.srm.activated_srm_p_value,
           deviations: [],
+          ...(activatedAlarm ? { firstCrossedAt: activatedAlarm.firstCrossedAt } : {}),
         }
       : null,
     activationBalance: hasActivationBalance
@@ -165,21 +190,46 @@ export function experimentSrmDiagnostics(
   };
 }
 
+/**
+ * OR durable analysis-v2 alarms into Analysis stats for the Control Plane gate
+ * and diagnostics. Analysis result tokens stay hashed from the live envelope.
+ */
+export function overlayPersistedSrmAlarms(
+  stats: StatsOutput,
+  persistedAlarms: readonly PersistedSrmAlarm[],
+): StatsOutput {
+  if (persistedAlarms.length === 0) return stats;
+  const exposureAlarm = alarmFor(persistedAlarms, "exposure");
+  const activatedAlarm = alarmFor(persistedAlarms, "activated");
+  if (!exposureAlarm && !activatedAlarm) return stats;
+  return {
+    ...stats,
+    srm: {
+      ...stats.srm,
+      srm_is_mismatch: stats.srm.srm_is_mismatch || exposureAlarm !== undefined,
+      activated_srm_mismatch:
+        activatedAlarm !== undefined ? true : stats.srm.activated_srm_mismatch,
+    },
+  };
+}
+
 export function evaluateExperimentDecisionGate(
   stats: StatsOutput,
   control: FrozenControlIdentity,
   duration: PlannedDurationEvidence,
+  persistedAlarms: readonly PersistedSrmAlarm[] = [],
 ): ExperimentDecisionGate {
-  const srm = experimentSrmDiagnostics(stats);
+  const effective = overlayPersistedSrmAlarms(stats, persistedAlarms);
+  const srm = experimentSrmDiagnostics(effective, null, persistedAlarms);
   const checks: DecisionGateCheck[] = [
     controlIdentityCheck(control),
-    exposureSrmCheck(srm.exposure, stats.srm.srm_is_mismatch),
-    activatedSrmCheck(srm.activated, stats.srm.activated_srm_mismatch),
-    activationBalanceCheck(srm.activationBalance, stats.health.activation_balance_mismatch),
-    engineStatusCheck(stats),
-    underpoweredCheck(stats),
+    exposureSrmCheck(srm.exposure, effective.srm.srm_is_mismatch),
+    activatedSrmCheck(srm.activated, effective.srm.activated_srm_mismatch),
+    activationBalanceCheck(srm.activationBalance, effective.health.activation_balance_mismatch),
+    engineStatusCheck(effective),
+    underpoweredCheck(effective),
     plannedDurationCheck(duration),
-    decisionValidCheck(stats),
+    decisionValidCheck(effective),
   ];
   const blockedBy = checks.filter((check) => check.status === "fail").map((check) => check.id);
   return {
@@ -188,6 +238,13 @@ export function evaluateExperimentDecisionGate(
     checks,
     enforcedBy: "control-plane-api",
   };
+}
+
+function alarmFor(
+  alarms: readonly PersistedSrmAlarm[],
+  kind: PersistedSrmAlarm["srmKind"],
+): PersistedSrmAlarm | undefined {
+  return alarms.find((alarm) => alarm.srmKind === kind);
 }
 
 function srmDeviations(

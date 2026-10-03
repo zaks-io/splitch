@@ -74,6 +74,7 @@ SQL >
             targeting_key_hash AS targeting_key_hash,
             variant AS variant,
             first_exposure_ts AS first_exposure_ts,
+            first_ingest_ts AS first_ingest_ts,
             first_exposure_ts AS window_anchor
         )) AS payload
     FROM serve_deduped_exposures
