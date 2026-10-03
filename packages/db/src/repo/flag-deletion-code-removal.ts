@@ -1,3 +1,6 @@
+import { and, eq, isNotNull, isNull, sql } from "drizzle-orm";
+import { flagChangeEvents, flags } from "../schema/index";
+import type { Db } from "./client";
 import { assertMintedScope, type TenantScope } from "./scope";
 
 /**
@@ -10,46 +13,71 @@ export type FlagDeletionCodeRemovalRecord =
   | { state: "claimed"; reference: string };
 
 /**
- * Attach the code-removal claim to the Flag deletion audit row the AFTER DELETE
- * trigger just wrote. Triggers cannot see the request body, so the Control Plane
- * patches `diff_json` only when it is still NULL (the trigger's sentinel).
+ * Statements that patch the AFTER DELETE audit row's NULL `diff_json` with the
+ * code-removal claim, then abort the batch if the Flag was deleted but the
+ * claim write missed. When the Flag still exists (Approval no-op), the guard
+ * allows the batch to complete so the caller can return not-applied.
  *
- * This is an auditable claim, not proof of repository removal.
+ * Must run in the same `db.batch` as the Flag DELETE (after Approval commit
+ * statements, which need `changes()` from that DELETE).
  */
-export function makeFlagDeletionCodeRemoval(d1: D1Database) {
-  return {
-    async recordCodeRemovalClaim(
-      scope: TenantScope,
-      flagId: string,
-      codeRemoval: FlagDeletionCodeRemovalRecord,
-    ): Promise<void> {
-      assertMintedScope(scope);
-      const diffJson = JSON.stringify({ codeRemoval });
-      const result = await d1
-        .prepare(
-          `UPDATE flag_change_events
-           SET diff_json = ?
-           WHERE seq = (
-             SELECT seq FROM (
-               SELECT seq FROM flag_change_events
-               WHERE app_id = ?
-                 AND flag_id = ?
-                 AND action = 'deleted'
-                 AND target_type = 'flag'
-                 AND environment_id IS NULL
-                 AND diff_json IS NULL
-               ORDER BY seq DESC
-               LIMIT 1
-             )
-           )`,
-        )
-        .bind(diffJson, scope.appId, flagId)
-        .run();
-      if ((result.meta.changes ?? 0) !== 1) {
-        throw new Error(
-          `flag-deletion-code-removal: expected one NULL-diff deletion audit row for Flag ${flagId} in App ${scope.appId}, updated ${result.meta.changes ?? 0}`,
-        );
-      }
-    },
-  };
+export function codeRemovalClaimBatchStatements(
+  db: Db,
+  scope: TenantScope,
+  flagId: string,
+  codeRemoval: FlagDeletionCodeRemovalRecord,
+) {
+  assertMintedScope(scope);
+  const diffJson = JSON.stringify({ codeRemoval });
+  return [
+    // Nested subquery: SQLite forbids selecting the UPDATE target in a plain
+    // FROM subquery of the same statement.
+    db
+      .update(flagChangeEvents)
+      .set({ diffJson })
+      .where(
+        eq(
+          flagChangeEvents.seq,
+          sql`(
+            SELECT seq FROM (
+              SELECT seq FROM flag_change_events
+              WHERE app_id = ${scope.appId}
+                AND flag_id = ${flagId}
+                AND action = 'deleted'
+                AND target_type = 'flag'
+                AND environment_id IS NULL
+                AND diff_json IS NULL
+              ORDER BY seq DESC
+              LIMIT 1
+            )
+          )`,
+        ),
+      ),
+    // Prefer an existence check over changes(): Approval commit statements also
+    // modify rows, and changes() would be ambiguous after those writes.
+    // json('') is only evaluated on the failing branch, which aborts the batch.
+    db
+      .select({
+        ok: sql<number>`CASE
+          WHEN EXISTS (
+            SELECT 1 FROM ${flags}
+            WHERE ${and(eq(flags.appId, scope.appId), eq(flags.id, flagId))}
+          ) THEN 1
+          WHEN EXISTS (
+            SELECT 1 FROM ${flagChangeEvents}
+            WHERE ${and(
+              eq(flagChangeEvents.appId, scope.appId),
+              eq(flagChangeEvents.flagId, flagId),
+              eq(flagChangeEvents.action, "deleted"),
+              eq(flagChangeEvents.targetType, "flag"),
+              isNull(flagChangeEvents.environmentId),
+              isNotNull(flagChangeEvents.diffJson),
+            )}
+          ) THEN 1
+          ELSE json('')
+        END`.as("ok"),
+      })
+      .from(flagChangeEvents)
+      .limit(1),
+  ] as const;
 }

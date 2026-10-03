@@ -2,16 +2,16 @@ import type { ApprovalRequest } from "@splitch/contracts";
 import { type ApprovalCommit, appScope } from "@splitch/db";
 import type { ApprovalApplicationDeps } from "./approval-application";
 import { captureFlagConfigPurgeTargets, purgeFlagConfigsKvForKey } from "./flag-config-lifecycle";
-import {
-  codeRemovalRecordFromProposal,
-  recordFlagDeletionCodeRemoval,
-} from "./flag-deletion-code-removal";
+import { codeRemovalRecordFromProposal } from "./flag-deletion-code-removal";
 
 /**
  * Deleting a Flag destroys every Environment's Configuration and targeting
  * rules for it. D1 goes first and is guarded by the Review, so a lost race
  * leaves KV untouched; purging KV first would leave a `confirm` Environment
  * unserved on a delete that never legally applied.
+ *
+ * The code-removal claim is written in the same D1 batch as the deletion audit
+ * event (inside deleteFlagCascade), before KV purge.
  */
 export async function applyFlagDelete(
   deps: ApprovalApplicationDeps,
@@ -27,24 +27,19 @@ export async function applyFlagDelete(
       error: { code: "FLAG_NOT_FOUND" as const, details: {} },
     };
   }
+  const codeRemoval = codeRemovalRecordFromProposal(request.diff.proposed);
   const environments = await deps.repo.identity.listEnvironments(appScope(request.appId));
   const purgeTargets = await captureFlagConfigPurgeTargets(deps, request.appId, flagId);
   const deleted = await deps.repo.flags.deleteFlagCascade(
     appScope(request.appId),
     flagId,
     environments.map((environment) => environment.id),
-    { approval: commit },
+    { approval: commit, codeRemoval },
   );
   if (!deleted) {
     // Nothing applied; reconciliation decides stale vs recorded failure.
     return { ok: false as const, notApplied: true as const };
   }
-  await recordFlagDeletionCodeRemoval(
-    deps.repo,
-    request.appId,
-    flagId,
-    codeRemovalRecordFromProposal(request.diff.proposed),
-  );
   await purgeFlagConfigsKvForKey(deps, request.appId, flagId, flag.key, purgeTargets);
   return { ok: true as const };
 }

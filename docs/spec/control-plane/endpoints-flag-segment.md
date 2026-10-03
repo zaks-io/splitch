@@ -194,12 +194,14 @@ Flags with no `expiresAt` never appear. The list keys on the expiry, not the cla
 
 `flag_removal_brief`: a read-only advisory brief an agent can act on in the customer's codebase.
 It returns the Flag key, its Variants, which Variant each Environment's Configuration currently
-pins (configuration-derived; `servingEvidence` is always `configuration_unverified` because ordinary
-Flag reads record no served-Variant telemetry), whether that pin is uniform across Environments, the
-lifecycle class/owner/expiry, SDK/OpenFeature call shapes to search for (derived from the real
-`@splitch/sdk` API names, not invented), and explicit caveats: splitch never writes customer code
-and has no repository evidence. When Environments disagree or Configuration does not pin a single
-Variant, `removalSafe` is false and `removalBlockers` names why. CLI: `splitch flag-removal brief`.
+serves (derived via `@splitch/evaluation-core` from that Environment's stored Configuration,
+including its own `defaultVariantId` and enabled state; `servingEvidence` is always
+`configuration_unverified` because ordinary Flag reads record no served-Variant telemetry), whether
+that outcome is uniform across Environments, the lifecycle class/owner/expiry, SDK/OpenFeature call
+shapes to search for (derived from the real `@splitch/sdk` API names, not invented), and explicit
+caveats: splitch never writes customer code and has no repository evidence. Targeting Rules, partial
+rollouts, live Experiments, and Configurations that evaluation rejects leave `removalSafe` false with
+`removalBlockers` naming why (never a substituted Variant). CLI: `splitch flag-removal brief`.
 MCP: `flag_removal_brief`.
 
 ### `POST /apps/{app_id}/flags/{flag_id}/variants`

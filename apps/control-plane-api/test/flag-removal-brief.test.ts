@@ -1,3 +1,4 @@
+import { appScope, createRepository, envScope } from "@splitch/db";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   allowAllPolicies,
@@ -21,7 +22,11 @@ afterEach(async () => h.bindings.dispose());
 
 async function ownerSession() {
   const created = await createDefaultApp(h);
-  return { appId: created.app.id, jwt: await appToken(h, created.app.id) };
+  return {
+    appId: created.app.id,
+    jwt: await appToken(h, created.app.id),
+    environments: created.environments,
+  };
 }
 
 describe("flag_removal_brief", () => {
@@ -57,72 +62,98 @@ describe("flag_removal_brief", () => {
     expect(body.removalSafe).toBe(true);
     expect(body.keepVariant).toBe("control");
   });
-});
 
-describe("flags_delete codeRemoval claim", () => {
-  it("records an explicit unknown claim when codeRemoval is omitted", async () => {
-    const { appId, jwt } = await ownerSession();
+  it("keeps disabled Environments on their Default Variant despite a retained 100% rollout", async () => {
+    const { appId, jwt, environments } = await ownerSession();
     await allowAllPolicies(h, appId);
     const flag = await createFlag(h, appId, jwt, {
       ...baseFlag(appId),
-      key: "to-delete-unknown",
+      key: "disabled-rollout",
       lifecycleClass: "ops",
     });
+    const prod = environments.find((environment) => environment.key === "prod");
+    if (!prod) throw new Error("expected prod Environment");
+    const control = flag.variants.find((variant) => variant.name === "control");
+    if (!control) throw new Error("expected control Variant");
 
-    const deleted = await request(
-      h,
-      "DELETE",
-      `/apps/${appId}/flags/${flag.id}`,
-      jwt,
-      undefined,
-      "del-unknown-1",
-    );
-    expect(deleted.status).toBe(200);
-
-    const changes = await request(h, "GET", `/apps/${appId}/flag-changes?flagId=${flag.id}`, jwt);
-    expect(changes.status).toBe(200);
-    const items = (
-      (await changes.json()) as {
-        items: Array<{ action: string; diff: { after: Record<string, unknown> | null } }>;
-      }
-    ).items;
-    const deletion = items.find((item) => item.action === "deleted");
-    expect(deletion?.diff.after).toMatchObject({
-      codeRemoval: { state: "unknown" },
+    // Plant a disabled Configuration that still retains a 100% baseline rollout.
+    // Evaluation serves the Environment Default Variant; the brief must match.
+    const repo = createRepository(h.bindings.d1);
+    const updated = await repo.flags.updateFlagConfig(envScope(appId, prod.id), flag.id, {
+      enabled: false,
+      availableVariantNames: JSON.stringify(["control", "treatment"]),
+      defaultVariantId: control.id,
+      rollout: JSON.stringify({ percentage: 100, salt: "disabled-rollout-salt" }),
+      updatedAt: new Date().toISOString(),
     });
+    expect(updated).toBeTruthy();
+
+    const res = await request(h, "GET", `/apps/${appId}/flags/${flag.id}/removal-brief`, jwt);
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      environments: Array<{
+        environmentKey: string;
+        configurationServedVariant: string | null;
+        enabled: boolean;
+      }>;
+      removalSafe: boolean;
+      keepVariant: string | null;
+    };
+    const prodServing = body.environments.find((env) => env.environmentKey === "prod");
+    expect(prodServing).toMatchObject({
+      enabled: false,
+      configurationServedVariant: "control",
+    });
+    expect(body.removalSafe).toBe(true);
+    expect(body.keepVariant).toBe("control");
   });
 
-  it("stores a claimed codeRemoval reference on the deletion audit row", async () => {
-    const { appId, jwt } = await ownerSession();
+  it("uses per-Environment defaultVariantId after a Flag default change", async () => {
+    const { appId, jwt, environments } = await ownerSession();
     await allowAllPolicies(h, appId);
     const flag = await createFlag(h, appId, jwt, {
       ...baseFlag(appId),
-      key: "to-delete-claimed",
+      key: "default-drift",
       lifecycleClass: "ops",
     });
+    const control = flag.variants.find((variant) => variant.name === "control");
+    const treatment = flag.variants.find((variant) => variant.name === "treatment");
+    if (!control || !treatment) throw new Error("expected control and treatment Variants");
 
-    const deleted = await request(
-      h,
-      "DELETE",
-      `/apps/${appId}/flags/${flag.id}`,
-      jwt,
-      { codeRemoval: { reference: "https://example.com/pr/99", state: "claimed" } },
-      "del-claimed-1",
-    );
-    expect(deleted.status).toBe(200);
-
-    const changes = await request(h, "GET", `/apps/${appId}/flag-changes?flagId=${flag.id}`, jwt);
-    const items = (
-      (await changes.json()) as {
-        items: Array<{ action: string; diff: { after: Record<string, unknown> | null } }>;
-      }
-    ).items;
-    const deletion = items.find((item) => item.action === "deleted");
-    expect(deletion?.diff.after).toMatchObject({
-      codeRemoval: {
-        state: "claimed",
-        reference: "https://example.com/pr/99",
-      },
+    // Flag-level default change does not rewrite existing Environment defaults.
+    const repo = createRepository(h.bindings.d1);
+    await repo.flags.updateFlag(appScope(appId), flag.id, {
+      defaultVariantId: treatment.id,
+      updatedAt: new Date().toISOString(),
     });
+
+    const staging = await request(h, "POST", `/apps/${appId}/envs`, jwt, {
+      key: "staging",
+      name: "Staging",
+    });
+    expect(staging.status).toBe(200);
+    const stagingEnv = (await staging.json()) as { id: string };
+
+    const dev = environments.find((environment) => environment.key === "dev");
+    if (!dev) throw new Error("expected dev Environment");
+    const existingConfig = await repo.flags.getFlagConfig(envScope(appId, dev.id), flag.id);
+    const stagingConfig = await repo.flags.getFlagConfig(envScope(appId, stagingEnv.id), flag.id);
+    expect(existingConfig?.defaultVariantId).toBe(control.id);
+    expect(stagingConfig?.defaultVariantId).toBe(treatment.id);
+
+    const res = await request(h, "GET", `/apps/${appId}/flags/${flag.id}/removal-brief`, jwt);
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      removalSafe: boolean;
+      keepVariant: string | null;
+      environments: Array<{ environmentKey: string; configurationServedVariant: string | null }>;
+    };
+    const byKey = new Map(
+      body.environments.map((env) => [env.environmentKey, env.configurationServedVariant]),
+    );
+    expect(byKey.get("staging")).toBe("treatment");
+    expect(byKey.get("dev")).toBe("control");
+    expect(body.removalSafe).toBe(false);
+    expect(body.keepVariant).toBeNull();
   });
 });

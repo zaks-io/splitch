@@ -1,4 +1,4 @@
-import type { FlagCodeRemovalClaim, PolicyChangeType } from "@splitch/contracts";
+import type { PolicyChangeType } from "@splitch/contracts";
 import type { Repository } from "@splitch/db";
 import type { HandlerArgs } from "@splitch/worker-runtime";
 import { makeOtherApprovalApplication } from "./approval-application";
@@ -15,7 +15,8 @@ import {
 } from "./flag-config-lifecycle";
 import {
   codeRemovalRecordFromBody,
-  recordFlagDeletionCodeRemoval,
+  flagsDeleteProposalInput,
+  parseFlagsDeleteBody,
 } from "./flag-deletion-code-removal";
 import { resourceNotEmpty, runningExperimentError } from "./flag-definition-errors";
 import { experimentReferencingFlag } from "./flag-definition-guards";
@@ -41,11 +42,11 @@ export async function deleteFlag(
   const loaded = await loadWritableFlag(deps, args);
   if (!loaded.ok) return loaded.response;
 
-  const body = optionalDeleteBody(args.input);
+  const body = parseFlagsDeleteBody(args.input);
   const codeRemoval = codeRemovalRecordFromBody(body);
-  // proposalInput fingerprints the claim for idempotency; proposed carries it
-  // for Review apply (ApprovalRequest has no separate proposalInput on the wire).
-  const proposalInput = { flagId: loaded.value.flag.id, codeRemoval };
+  // proposalInput fingerprints only caller-supplied claim fields; proposed
+  // always carries an explicit record for Review apply and the deletion audit.
+  const proposalInput = flagsDeleteProposalInput(loaded.value.flag.id, body);
   const proposed = { codeRemoval };
   // Idempotency key is the header the registrar already requires for this route.
   const idempotencyKey = args.request.headers.get("idempotency-key") ?? "";
@@ -97,13 +98,7 @@ export async function deleteFlag(
     loaded.value.appId,
     loaded.value.flag.id,
   );
-  await deleteFlagD1Cascade(deps, loaded.value.appId, loaded.value.flag.id);
-  await recordFlagDeletionCodeRemoval(
-    deps.repo,
-    loaded.value.appId,
-    loaded.value.flag.id,
-    codeRemoval,
-  );
+  await deleteFlagD1Cascade(deps, loaded.value.appId, loaded.value.flag.id, codeRemoval);
   await purgeFlagConfigsKvForKey(
     deps,
     loaded.value.appId,
@@ -112,15 +107,6 @@ export async function deleteFlag(
     purgeTargets,
   );
   return Response.json({ deleted: true });
-}
-
-function optionalDeleteBody(input: unknown): { codeRemoval?: FlagCodeRemovalClaim } | undefined {
-  const value = (input as { body?: unknown } | null)?.body;
-  if (value === undefined) return undefined;
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    throw new Error("control-plane-api: flags_delete body must be an object when present");
-  }
-  return value as { codeRemoval?: FlagCodeRemovalClaim };
 }
 
 /**

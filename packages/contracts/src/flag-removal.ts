@@ -41,6 +41,7 @@ const removalServingBlockers = [
   "live_experiment",
   "fractional_rollout",
   "multi_variant_targeting",
+  "evaluation_rejected",
 ] as const;
 
 export const FlagRemovalServingBlockerSchema = z.enum(removalServingBlockers);
@@ -59,6 +60,8 @@ export const FlagRemovalEnvironmentServingSchema = z
     configurationServedVariant: PersistedNameSchema.nullable(),
     servingEvidence: z.literal("configuration_unverified"),
     blockers: z.array(FlagRemovalServingBlockerSchema),
+    /** Set when evaluation-core rejects the Configuration; null otherwise. */
+    evaluationError: z.string().min(1).nullable(),
   })
   .strict();
 export type FlagRemovalEnvironmentServing = z.infer<typeof FlagRemovalEnvironmentServingSchema>;

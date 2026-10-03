@@ -27,7 +27,15 @@ export async function getFlagRemovalBrief(
   if (!flag) return flagNotFound(requestId);
 
   const environments = await deps.repo.identity.listEnvironments(scope);
+  const environmentIds = environments.map((environment) => environment.id);
   const catalogPromise = deps.repo.flags.listVariantsForFlags(scope, [flag.id]);
+  // Per-Environment defaultVariantId is stored on flag_configs and can diverge
+  // from the App-level Flag default after a later catalog change.
+  const configsPromise = deps.repo.flags.listFlagConfigsByFlagIdsAcrossEnvironments(
+    scope,
+    [flag.id],
+    environmentIds,
+  );
   let hydrated: Awaited<ReturnType<typeof hydrateFlags>>;
   try {
     hydrated = await hydrateFlags(deps, appId, [flag], catalogPromise);
@@ -47,28 +55,46 @@ export async function getFlagRemovalBrief(
     throw new Error("flag_removal_brief: hydrateFlags returned no Flag");
   }
   const definition = flagFrom(flag, (await catalogPromise).get(flag.id) ?? []);
-  const defaultVariant = definition.variants.find(
-    (variant) => variant.id === definition.defaultVariantId,
+  const defaultVariantIdByEnv = new Map(
+    (await configsPromise).map((config) => {
+      if (!config.defaultVariantId) {
+        throw new Error(
+          `flag_removal_brief: Flag Configuration ${config.id} has no defaultVariantId`,
+        );
+      }
+      return [config.environmentId, config.defaultVariantId] as const;
+    }),
   );
-  if (!defaultVariant) {
-    throw new Error(`flag_removal_brief: Flag ${flag.id} defaultVariantId names no Variant`);
-  }
   const envKeyById = new Map(environments.map((environment) => [environment.id, environment.key]));
-  const servings = hydratedFlag.configurations.map((configuration) => {
-    const environmentKey = envKeyById.get(configuration.environmentId);
-    if (!environmentKey) {
-      throw new Error(
-        `flag_removal_brief: Configuration names unknown Environment ${configuration.environmentId}`,
-      );
-    }
-    return analyzeEnvironmentServing({
-      environmentId: configuration.environmentId,
-      environmentKey,
-      configuration,
-      defaultVariantName: defaultVariant.name,
-      variants: definition.variants,
-    });
-  });
+  const servings = await Promise.all(
+    hydratedFlag.configurations.map(async (configuration) => {
+      const environmentKey = envKeyById.get(configuration.environmentId);
+      if (!environmentKey) {
+        throw new Error(
+          `flag_removal_brief: Configuration names unknown Environment ${configuration.environmentId}`,
+        );
+      }
+      const defaultVariantId = defaultVariantIdByEnv.get(configuration.environmentId);
+      if (!defaultVariantId) {
+        throw new Error(
+          `flag_removal_brief: Flag ${flag.id} has no Configuration default in Environment ${configuration.environmentId}`,
+        );
+      }
+      return analyzeEnvironmentServing({
+        appId,
+        flagKey: definition.key,
+        environmentId: configuration.environmentId,
+        environmentKey,
+        enabled: configuration.enabled,
+        defaultVariantId,
+        availableVariantNames: configuration.availableVariantNames,
+        targetingRulesCount: configuration.targetingRules.length,
+        rollout: configuration.rollout,
+        hasLiveExperiment: configuration.experiment !== null,
+        variants: definition.variants,
+      });
+    }),
+  );
   const uniformity = removalUniformity(servings);
   return Response.json(
     FlagRemovalBriefResponseSchema.parse({

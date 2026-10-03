@@ -1,37 +1,94 @@
 import type {
   FlagRemovalEnvironmentServing,
   FlagRemovalServingBlocker,
-  HydratedFlagConfiguration,
+  PercentageRollout,
   Variant,
 } from "@splitch/contracts";
+import {
+  evaluatePath,
+  type AssignmentStoreReader,
+  type FlagConfig,
+  type Provider,
+} from "@splitch/evaluation-core";
 
 /**
  * Configuration-derived "which Variant does this Environment serve?" for the
- * removal brief. Not runtime telemetry: a fractional rollout or Targeting Rule
- * fan-out means no single served Variant, and a live Experiment blocks removal.
+ * removal brief. Uses evaluation-core (same path as the evaluation API) with
+ * each Environment's stored Configuration, including its own defaultVariantId
+ * and enabled state. Not runtime telemetry.
+ *
+ * Targeting Rules and partial rollouts are never uniform: traffic can diverge
+ * by Evaluation Context. Only disabled / null / 0% / 100% baseline paths are
+ * evaluated, and an evaluation rejection is reported rather than substituted.
  */
 
-export function analyzeEnvironmentServing(input: {
+/** Key is irrelevant for 0%/100%/disabled/null paths; never used for fractional. */
+const UNIFORMITY_TARGETING_KEY = "flag-removal-brief-uniformity";
+
+export async function analyzeEnvironmentServing(input: {
+  appId: string;
+  flagKey: string;
   environmentId: string;
   environmentKey: string;
-  configuration: HydratedFlagConfiguration;
-  defaultVariantName: string;
+  enabled: boolean;
+  defaultVariantId: string;
+  availableVariantNames: readonly string[];
+  targetingRulesCount: number;
+  rollout: PercentageRollout | null;
+  hasLiveExperiment: boolean;
   variants: readonly Variant[];
-}): FlagRemovalEnvironmentServing {
-  const blockers = servingBlockers(input.configuration, input.defaultVariantName, input.variants);
-  const candidates = configurationServableVariants(
-    input.configuration,
-    input.defaultVariantName,
-    input.variants,
-  );
-  return {
+}): Promise<FlagRemovalEnvironmentServing> {
+  const blockers = structuralBlockers(input);
+  if (blockers.length > 0) {
+    return environmentServing(input, null, blockers);
+  }
+
+  const defaultVariant = input.variants.find((variant) => variant.id === input.defaultVariantId);
+  if (!defaultVariant) {
+    throw new Error(
+      `flag-removal-serving: Environment ${input.environmentId} defaultVariantId ${input.defaultVariantId} names no Variant`,
+    );
+  }
+
+  const flagConfig: FlagConfig = {
+    flagKey: input.flagKey,
+    appId: input.appId,
     environmentId: input.environmentId,
-    environmentKey: input.environmentKey,
-    enabled: input.configuration.enabled,
-    configurationServedVariant: soleCandidate(candidates, blockers),
-    servingEvidence: "configuration_unverified",
-    blockers,
+    experimentId: null,
+    enabled: input.enabled,
+    defaultVariant: defaultVariant.name,
+    variants: [...input.variants],
+    availableVariantNames: [...input.availableVariantNames],
+    targetingRules: [],
+    rollout: input.rollout,
   };
+
+  const result = await evaluatePath(
+    {
+      appId: input.appId,
+      environmentId: input.environmentId,
+      flagKey: input.flagKey,
+      evaluationContext: {
+        targetingKey: UNIFORMITY_TARGETING_KEY,
+        idType: "user",
+        attributes: {},
+      },
+    },
+    { provider: staticFlagProvider(flagConfig), assignmentStore: emptyAssignmentStore() },
+  );
+
+  if (result.kind === "error") {
+    return environmentServing(input, null, ["evaluation_rejected"], result.errorMessage);
+  }
+  if (result.variant === null) {
+    return environmentServing(
+      input,
+      null,
+      ["evaluation_rejected"],
+      "evaluation returned no Variant",
+    );
+  }
+  return environmentServing(input, result.variant, []);
 }
 
 export function removalUniformity(servings: readonly FlagRemovalEnvironmentServing[]): {
@@ -50,20 +107,40 @@ export function removalUniformity(servings: readonly FlagRemovalEnvironmentServi
   };
 }
 
-function soleCandidate(
-  candidates: ReadonlySet<string>,
+function structuralBlockers(input: {
+  targetingRulesCount: number;
+  rollout: PercentageRollout | null;
+  hasLiveExperiment: boolean;
+}): FlagRemovalServingBlocker[] {
+  const blockers: FlagRemovalServingBlocker[] = [];
+  if (input.hasLiveExperiment) blockers.push("live_experiment");
+  if (input.targetingRulesCount > 0) blockers.push("multi_variant_targeting");
+  if (isPartialRollout(input.rollout)) blockers.push("fractional_rollout");
+  return blockers;
+}
+
+function environmentServing(
+  input: { environmentId: string; environmentKey: string; enabled: boolean },
+  configurationServedVariant: string | null,
   blockers: readonly FlagRemovalServingBlocker[],
-): string | null {
-  if (blockers.length > 0 || candidates.size !== 1) return null;
-  for (const name of candidates) return name;
-  return null;
+  evaluationError: string | null = null,
+): FlagRemovalEnvironmentServing {
+  return {
+    environmentId: input.environmentId,
+    environmentKey: input.environmentKey,
+    enabled: input.enabled,
+    configurationServedVariant,
+    servingEvidence: "configuration_unverified",
+    blockers: [...blockers],
+    evaluationError,
+  };
 }
 
 function collectUniformityBlockers(servings: readonly FlagRemovalEnvironmentServing[]): string[] {
   const removalBlockers: string[] = [];
   for (const serving of servings) {
     for (const blocker of serving.blockers) {
-      removalBlockers.push(`${serving.environmentKey}: ${blockerLabel(blocker)}`);
+      removalBlockers.push(`${serving.environmentKey}: ${blockerLabel(blocker, serving)}`);
     }
     if (serving.configurationServedVariant === null && serving.blockers.length === 0) {
       removalBlockers.push(
@@ -111,112 +188,61 @@ function pinnedVariants(servings: readonly FlagRemovalEnvironmentServing[]): Set
   return names;
 }
 
-function servingBlockers(
-  configuration: HydratedFlagConfiguration,
-  defaultVariantName: string,
-  variants: readonly Variant[],
-): FlagRemovalServingBlocker[] {
-  const blockers = new Set<FlagRemovalServingBlocker>();
-  if (configuration.experiment !== null) blockers.add("live_experiment");
-  if (hasFractionalRollout(configuration)) blockers.add("fractional_rollout");
-  const candidates = configurationServableVariants(configuration, defaultVariantName, variants);
-  if (candidates.size > 1 && !blockers.has("fractional_rollout")) {
-    blockers.add("multi_variant_targeting");
-  }
-  return [...blockers];
+function isPartialRollout(rollout: PercentageRollout | null): boolean {
+  if (rollout === null) return false;
+  return rollout.percentage > 0 && rollout.percentage < 100;
 }
 
-function hasFractionalRollout(configuration: HydratedFlagConfiguration): boolean {
-  if (isFractional(configuration.rollout?.percentage ?? null)) return true;
-  return configuration.targetingRules.some((rule) =>
-    isFractional(rule.percentageRollout?.percentage ?? null),
-  );
+function staticFlagProvider(flag: FlagConfig): Provider {
+  return {
+    async getFlag(appId, environmentId, flagKey) {
+      if (
+        appId !== flag.appId ||
+        environmentId !== flag.environmentId ||
+        flagKey !== flag.flagKey
+      ) {
+        throw new Error(
+          `flag-removal-serving: Provider asked for ${appId}/${environmentId}/${flagKey}, have ${flag.appId}/${flag.environmentId}/${flag.flagKey}`,
+        );
+      }
+      return flag;
+    },
+    async getFlags() {
+      return [flag];
+    },
+    async getExperiment() {
+      throw new Error("flag-removal-serving: Experiments are blocked before evaluation");
+    },
+  };
 }
 
-function configurationServableVariants(
-  configuration: HydratedFlagConfiguration,
-  defaultVariantName: string,
-  variants: readonly Variant[],
-): Set<string> {
-  const names = baselineServableVariants(configuration, defaultVariantName, variants);
-  const byId = new Map(variants.map((variant) => [variant.id, variant.name]));
-  for (const rule of configuration.targetingRules) {
-    addRuleVariants(names, rule, byId, defaultVariantName);
-  }
-  return names;
+function emptyAssignmentStore(): AssignmentStoreReader {
+  return {
+    async getAll() {
+      return new Map();
+    },
+    async put() {
+      throw new Error("flag-removal-serving: Assignment Store writes are not used");
+    },
+    async putHashed() {
+      throw new Error("flag-removal-serving: Assignment Store writes are not used");
+    },
+  };
 }
 
-function baselineServableVariants(
-  configuration: HydratedFlagConfiguration,
-  defaultVariantName: string,
-  variants: readonly Variant[],
-): Set<string> {
-  const names = new Set<string>();
-  const rolloutPct = configuration.rollout?.percentage ?? null;
-  if (rolloutPct === null || rolloutPct === 0) {
-    names.add(defaultVariantName);
-    return names;
-  }
-  const treatment = soleNonDefault(configuration, defaultVariantName, variants);
-  if (rolloutPct === 100) {
-    names.add(treatment ?? defaultVariantName);
-    return names;
-  }
-  names.add(defaultVariantName);
-  if (treatment) names.add(treatment);
-  return names;
-}
-
-function addRuleVariants(
-  names: Set<string>,
-  rule: HydratedFlagConfiguration["targetingRules"][number],
-  byId: ReadonlyMap<string, string>,
-  defaultVariantName: string,
-): void {
-  const ruleVariant = byId.get(rule.variantId);
-  if (!ruleVariant) {
-    throw new Error(
-      `flag-removal-serving: Targeting Rule ${rule.id} names unknown Variant ${rule.variantId}`,
-    );
-  }
-  const rulePct = rule.percentageRollout?.percentage ?? null;
-  if (rulePct === null || rulePct === 100) {
-    names.add(ruleVariant);
-    return;
-  }
-  if (rulePct === 0) {
-    names.add(defaultVariantName);
-    return;
-  }
-  names.add(ruleVariant);
-  names.add(defaultVariantName);
-}
-
-function soleNonDefault(
-  configuration: HydratedFlagConfiguration,
-  defaultVariantName: string,
-  variants: readonly Variant[],
-): string | null {
-  const scope =
-    configuration.availableVariantNames.length > 0
-      ? configuration.availableVariantNames
-      : variants.map((variant) => variant.name);
-  const candidates = scope.filter((name) => name !== defaultVariantName);
-  return candidates.length === 1 ? (candidates[0] ?? null) : null;
-}
-
-function isFractional(percentage: number | null): boolean {
-  return percentage !== null && percentage > 0 && percentage < 100;
-}
-
-function blockerLabel(blocker: FlagRemovalServingBlocker): string {
+function blockerLabel(
+  blocker: FlagRemovalServingBlocker,
+  serving: FlagRemovalEnvironmentServing,
+): string {
   switch (blocker) {
     case "live_experiment":
       return "a live Experiment controls assignment";
     case "fractional_rollout":
       return "a fractional Percentage Rollout serves more than one Variant";
     case "multi_variant_targeting":
-      return "Targeting Rules can serve more than one Variant";
+      return "Targeting Rules make serving depend on Evaluation Context";
+    case "evaluation_rejected":
+      return serving.evaluationError ?? "evaluation rejected this Configuration";
     default: {
       const _exhaustive: never = blocker;
       return _exhaustive;

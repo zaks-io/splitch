@@ -1,15 +1,42 @@
-import type { FlagCodeRemovalClaim, FlagCodeRemovalRecord } from "@splitch/contracts";
-import { appScope, type Repository } from "@splitch/db";
+import {
+  DeleteFlagRequestSchema,
+  type FlagCodeRemovalClaim,
+  type FlagCodeRemovalRecord,
+} from "@splitch/contracts";
 
 /**
- * Resolve the request body claim (or explicit unknown) and persist it on the
- * Flag deletion audit row. Always records a state; never null-as-unknown.
+ * Resolve the request body claim (or explicit unknown) for audit/proposed.
+ * Always records a state; never null-as-unknown. Fingerprinting excludes an
+ * omitted claim so pre-upgrade pending Approvals stay byte-identical.
  */
 export function codeRemovalRecordFromBody(
   body: { codeRemoval?: FlagCodeRemovalClaim } | undefined,
 ): FlagCodeRemovalRecord {
   if (body?.codeRemoval !== undefined) return body.codeRemoval;
   return { state: "unknown" };
+}
+
+/** Validate and normalize an optional flags_delete body before any mutation. */
+export function parseFlagsDeleteBody(
+  input: unknown,
+): { codeRemoval?: FlagCodeRemovalClaim } | undefined {
+  const value = (input as { body?: unknown } | null)?.body;
+  if (value === undefined) return undefined;
+  return DeleteFlagRequestSchema.parse(value);
+}
+
+/**
+ * Idempotency fingerprint input. Omitted codeRemoval is absent from the hash
+ * (pre-upgrade shape). Claimed codeRemoval is included.
+ */
+export function flagsDeleteProposalInput(
+  flagId: string,
+  body: { codeRemoval?: FlagCodeRemovalClaim } | undefined,
+): Record<string, unknown> {
+  if (body?.codeRemoval !== undefined) {
+    return { flagId, codeRemoval: body.codeRemoval };
+  }
+  return { flagId };
 }
 
 export function codeRemovalRecordFromProposal(
@@ -30,13 +57,4 @@ export function codeRemovalRecordFromProposal(
     return { state: "claimed", reference: record.reference };
   }
   throw new Error("flag-deletion-code-removal: malformed codeRemoval on Approval proposed");
-}
-
-export async function recordFlagDeletionCodeRemoval(
-  repo: Repository,
-  appId: string,
-  flagId: string,
-  codeRemoval: FlagCodeRemovalRecord,
-): Promise<void> {
-  await repo.flagDeletionCodeRemoval.recordCodeRemovalClaim(appScope(appId), flagId, codeRemoval);
 }
