@@ -1,9 +1,42 @@
 import { describe, expect, it, vi } from "vitest";
 import type { MutationCtx } from "./_generated/server";
-import { initializeHandler } from "./integration_initialize";
+import { initializeHandler, installCallbackUrl } from "./integration_initialize";
 
 const canonical = "https://third-cat-295.convex.site/integrations/splitch/configuration";
 const customDomain = "https://hooks.mainstay.club/integrations/splitch/configuration";
+
+describe("installCallbackUrl", () => {
+  it.each(["active", "revoked", "pending"] as const)(
+    "reuses a canonical callback from a %s installation",
+    (state) => {
+      const derive = vi.fn(() => "https://other.convex.site/configuration");
+      expect(installCallbackUrl({ ...integration(canonical), state } as never, derive)).toBe(
+        canonical,
+      );
+      expect(derive).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([null, { ...integration(customDomain), state: "pending" }])(
+    "derives a callback for a missing or pending custom-domain installation",
+    (existing) => {
+      const derive = vi.fn(() => canonical);
+      expect(installCallbackUrl(existing as never, derive)).toBe(canonical);
+      expect(derive).toHaveBeenCalledOnce();
+    },
+  );
+
+  it.each([null, { ...integration(customDomain), state: "pending" }])(
+    "propagates derivation failure for a missing or pending custom-domain installation",
+    (existing) => {
+      const derive = vi.fn((): string => {
+        throw new Error("CONVEX_CLOUD_URL cannot identify a canonical callback");
+      });
+      expect(() => installCallbackUrl(existing as never, derive)).toThrow("CONVEX_CLOUD_URL");
+      expect(derive).toHaveBeenCalledOnce();
+    },
+  );
+});
 
 describe("initializeHandler", () => {
   it("repairs a pending callback left on a custom domain", async () => {

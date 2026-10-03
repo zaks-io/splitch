@@ -23,20 +23,20 @@ The package depends on `@splitch/sdk` for its public evaluation types and the
 `@splitch/sdk/local-evaluation` evaluator interface. Private contracts and evaluation-core modules
 never appear in the published Convex dependency graph.
 
-The component declares one required secret environment value, `SPLITCH_API_KEY`. It derives the
-mounted callback URL from both Convex automatic URLs: the canonical `CONVEX_CLOUD_URL` supplies the
-Convex-owned deployment name and `CONVEX_SITE_URL` supplies the component mount path. It converts
-only the canonical `*.convex.cloud` origin to `*.convex.site`. Custom HTTP Action domains therefore
-never widen the Control Plane callback allowlist.
+The component declares one required secret environment value, `SPLITCH_API_KEY`. On a first
+install, it derives the mounted callback URL from both Convex automatic URLs: the canonical
+`CONVEX_CLOUD_URL` supplies the Convex-owned deployment name and `CONVEX_SITE_URL` supplies the
+component mount path. It converts only the canonical `*.convex.cloud` origin to `*.convex.site`.
+Custom HTTP Action domains therefore never widen the Control Plane callback allowlist.
 
-Convex implements a custom domain for the Convex API by overriding `CONVEX_CLOUD_URL`
-([Convex custom domains](https://docs.convex.dev/production/custom-domains)), which leaves the
-component with no source for the deployment name. `install()` refuses that deployment with an error
-naming the override and the deployment setting that clears it. The component never relaxes the
-`*.convex.cloud` check and never accepts a caller-supplied origin, because either would put a
-non-`*.convex.site` origin on the path to the Control Plane allowlist. Supporting a deployment that
-custom-domains both surfaces needs an explicit deployment-name input, which this spec does not
-define.
+An existing active or revoked installation keeps its stored callback on `install()`. A pending
+installation keeps its callback when that URL is already canonical. The callback derivation is
+lazy: those upgrade calls work even after both Convex URLs have been overridden with custom
+domains or the automatic URL values are unavailable. A new installation, an install after local
+state is purged, or a pending noncanonical callback still needs the default
+`https://<deployment>.convex.cloud` URL. `install()` refuses a custom API domain in those cases
+before it writes local state or calls the Control Plane. It never accepts a caller-supplied origin
+or widens the `*.convex.site` allowlist.
 
 The component's `isCanonicalCallbackUrl` duplicates the Control Plane's allowlist predicate because
 the published package cannot depend on `@splitch/contracts`. The private

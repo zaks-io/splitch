@@ -16,12 +16,15 @@ Authorization: Bearer <apiKey>
 { installationId, callbackUrl, webhookSecret }
 ```
 
-`callbackUrl` combines the canonical deployment name from `CONVEX_CLOUD_URL` with the mounted
-component path from `CONVEX_SITE_URL`, then appends `/configuration` on the resulting HTTPS
-`*.convex.site` URL. A deployment that overrides `CONVEX_CLOUD_URL` for a custom Convex API domain
-carries no deployment name, so the component fails before it calls this endpoint rather than
-registering an origin this endpoint refuses. IP literals, credentials, query strings, fragments,
-nonstandard ports, redirects, and other hosts fail validation. Splitch excludes the request body
+On a first install, `callbackUrl` combines the canonical deployment name from
+`CONVEX_CLOUD_URL` with the mounted component path from `CONVEX_SITE_URL`, then appends
+`/configuration` on the resulting HTTPS `*.convex.site` URL. An upgrade reuses the stored
+callback for an active or revoked installation, or a pending installation with an already
+canonical callback, even when both Convex URLs now use custom domains. A new installation, an
+install after local state is purged, or repair of a pending noncanonical callback still requires
+a default `https://<deployment>.convex.cloud` cloud URL and fails before this endpoint is called
+if the cloud URL is overridden. IP literals, credentials, query strings, fragments, nonstandard
+ports, redirects, and other callback hosts fail validation. Splitch excludes the request body
 from logs, encrypts the secret under the Control Plane Worker's required 32-byte base64
 `CONVEX_WEBHOOK_KEK`, and never returns it.
 

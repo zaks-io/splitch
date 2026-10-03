@@ -35,11 +35,11 @@ export default app;`,
     },
     {
       kind: "prose",
-      text: "The component builds the callback it registers from both Convex automatic URLs: the deployment name from `CONVEX_CLOUD_URL` and the mounted path from `CONVEX_SITE_URL`. A [custom domain](https://docs.convex.dev/production/custom-domains) on HTTP Actions needs no change, because the callback still resolves to the `*.convex.site` origin Splitch accepts.",
+      text: "On a first install, the component builds the callback from the default `CONVEX_CLOUD_URL` deployment name and the mounted path from `CONVEX_SITE_URL`. A [custom domain](https://docs.convex.dev/production/custom-domains) on HTTP Actions works because the callback still resolves to the `*.convex.site` origin Splitch accepts.",
     },
     {
       kind: "prose",
-      text: "Convex implements a custom domain for the Convex API by overriding `CONVEX_CLOUD_URL`, which removes the deployment name the component reads. `install()` throws there rather than registering a callback Splitch would reject, so a deployment that overrides `CONVEX_CLOUD_URL` cannot install `@splitch/convex`. Overriding `CONVEX_SITE_URL` is fine.",
+      text: "On upgrade, `install()` reuses a canonical callback already stored by the component. Existing installations therefore keep working when both Convex URLs use custom domains. A first install, an install after local state is purged, or repair of a pending noncanonical callback still needs the default `https://<deployment>.convex.cloud` cloud URL. `install()` refuses a custom API domain in those cases before registration.",
     },
     { kind: "heading", text: "Evaluate" },
     {
