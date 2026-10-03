@@ -120,7 +120,11 @@ describe("CLI --body-json schema help coverage (SPL-309)", () => {
         "app_members_update",
         "runs_conclude",
         "conclusion_promotion_requests_create",
+<<<<<<< HEAD
         "experiment_plan",
+=======
+        "flags_delete",
+>>>>>>> 81501fd99 (test(cli): count flags_delete as a JSON-body route)
       ]),
     );
 
