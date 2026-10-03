@@ -43,6 +43,7 @@ const EXPECTED_GATES: Record<string, string> = {
   flags_list: "app:member",
   principal_flags_list: "membership-wide-read",
   expired_flags_list: "app:member",
+  flag_removal_brief: "app:member",
   flags_create: "app:admin",
   flags_get: "app:member",
   flags_update: "app:admin",

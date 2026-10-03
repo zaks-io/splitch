@@ -8,6 +8,7 @@ import { makeEventDefinitionRepo } from "./event-definitions";
 import { makeExperimentConclusionRepo } from "./experiment-conclusions";
 import { makeExperimentRepo } from "./experiments";
 import { makeFlagChangeEventRepo } from "./flag-change-events";
+import { makeFlagDeletionCodeRemoval } from "./flag-deletion-code-removal";
 import { makeFlagRepo } from "./flags";
 import { makeIdentityRepo } from "./identity";
 import { makePrivacyRepo } from "./privacy";
@@ -39,6 +40,7 @@ export function createRepository(d1: D1Database) {
     cloudflare: makeCloudflareIntegrationRepo(d1),
     sentry: makeSentryIntegrationRepo(d1),
     flagChangeEvents: makeFlagChangeEventRepo(d1, db),
+    flagDeletionCodeRemoval: makeFlagDeletionCodeRemoval(d1),
     claim: makeClaimStateRepo(d1),
     identity: makeIdentityRepo(db, d1),
     privacy: makePrivacyRepo(db, d1),

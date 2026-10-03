@@ -1030,6 +1030,18 @@ Request body (--body-json):
 
 Example:
   splitch flag-config update <flag-id-or-key> --enabled true --rollout 100 --json",
+    "flag-removal brief": "Advisory brief for removing a Flag from customer code: served Variants per Environment, SDK search shapes, and explicit caveats (read-only; never writes code).
+
+Usage:
+  splitch flag-removal brief <flag-id-or-key> [flags]
+
+Flags:
+  --app <app>  [type: string; default: SPLITCH_APP or config] App ID or slug.
+  --json       [type: boolean; default: false] Write machine-readable JSON to stdout.
+  -h, --help   [type: boolean; default: false] Show help and exit.
+
+Example:
+  splitch flag-removal brief <flag-id-or-key> --json",
     "flag-targeting-rules add": "Append one equality Targeting Rule: serve a Variant when attributes match.
 
 Usage:
@@ -1195,9 +1207,15 @@ Usage:
 
 Flags:
   --app <app>              [type: string; default: SPLITCH_APP or config] App ID or slug.
+  --body-json <json>       [type: JSON object; default: none] Request body fields; see Request body below.
   --idempotency-key <key>  [type: string; default: generated] Stable retry key for this mutation.
   --json                   [type: boolean; default: false] Write machine-readable JSON to stdout.
   -h, --help               [type: boolean; default: false] Show help and exit.
+
+Request body (--body-json):
+  codeRemoval  optional  { reference: string; state: "claimed" }
+  Example:
+    {"codeRemoval":{"reference":"reference","state":"claimed"}}
 
 Behavior:
   This DELETE route does not accept --confirm (DELETE carries no request body).
@@ -1206,7 +1224,7 @@ Behavior:
   splitch approval-request-reviews create <id> --body-json '{"action":"approve_and_apply"}'
 
 Example:
-  splitch flags delete <flag-id-or-key> --json",
+  splitch flags delete <flag-id-or-key> --body-json '{"codeRemoval":{"reference":"reference","state":"claimed"}}' --json",
     "flags get": "Get a Flag definition by canonical ID or key. Returns complete per-Environment Flag Configurations and running Experiment references for every Environment in the App by default.
 
 Usage:
@@ -2126,6 +2144,19 @@ Flags:
 
 Example:
   splitch flag-config get --help",
+    "flag-removal": "Manage flag-removal resources.
+
+Usage:
+  splitch flag-removal <action> [arguments] [flags]
+
+Commands:
+  brief           Advisory brief for removing a Flag from customer code: served Variants per Environment, SDK search shapes, and explicit caveats (read-only; never writes code).
+
+Flags:
+  -h, --help  [type: boolean; default: false] Show help and exit.
+
+Example:
+  splitch flag-removal brief --help",
     "flag-targeting-rules": "Manage flag-targeting-rules resources.
 
 Usage:
@@ -2404,6 +2435,7 @@ Resource groups:
   expired-flags
   flag-changes
   flag-config
+  flag-removal
   flag-targeting-rules
   flag-variants
   flags

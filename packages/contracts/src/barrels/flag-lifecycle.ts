@@ -11,3 +11,19 @@ export {
   type StoredFlagLifecycleClass,
   StoredFlagLifecycleClassSchema,
 } from "../leaf-schemas-flag";
+export {
+  DeleteFlagRequestSchema,
+  FLAG_REMOVAL_BRIEF_CAVEATS,
+  type DeleteFlagRequest,
+  type FlagCodeRemovalClaim,
+  type FlagCodeRemovalRecord,
+  FlagCodeRemovalClaimSchema,
+  FlagCodeRemovalRecordSchema,
+  type FlagRemovalBriefResponse,
+  type FlagRemovalEnvironmentServing,
+  type FlagRemovalServingBlocker,
+  FlagRemovalBriefResponseSchema,
+  FlagRemovalEnvironmentServingSchema,
+  FlagRemovalServingBlockerSchema,
+} from "../flag-removal";
+export { flagRemovalSdkCallShapes } from "../flag-removal-sdk-shapes";

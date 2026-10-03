@@ -141,13 +141,15 @@ three tools to exist.
 
 ### Flags
 
-| Tool           | Method | Path                         |
-| -------------- | ------ | ---------------------------- |
-| `flags_list`   | GET    | `/apps/:appId/flags`         |
-| `flags_create` | POST   | `/apps/:appId/flags`         |
-| `flags_get`    | GET    | `/apps/:appId/flags/:flagId` |
-| `flags_update` | PATCH  | `/apps/:appId/flags/:flagId` |
-| `flags_delete` | DELETE | `/apps/:appId/flags/:flagId` |
+| Tool                 | Method | Path                                       |
+| -------------------- | ------ | ------------------------------------------ |
+| `flags_list`         | GET    | `/apps/:appId/flags`                       |
+| `expired_flags_list` | GET    | `/apps/:appId/expired-flags`               |
+| `flag_removal_brief` | GET    | `/apps/:appId/flags/:flagId/removal-brief` |
+| `flags_create`       | POST   | `/apps/:appId/flags`                       |
+| `flags_get`          | GET    | `/apps/:appId/flags/:flagId`               |
+| `flags_update`       | PATCH  | `/apps/:appId/flags/:flagId`               |
+| `flags_delete`       | DELETE | `/apps/:appId/flags/:flagId`               |
 
 `flags_list` and `flags_get` default to `include=config`, so one tool call returns the Flag
 definition, Variant catalog, every requested Environment's complete Flag Configuration, and its
@@ -184,8 +186,10 @@ For `flags_list`, a caller-supplied `environmentId` without `summary` becomes th
 
 Each entry's `diff` is projected from the stored `flag_change_events.diff_json`. The export adds a
 unified text form of those same stored values for a time range, or for the stored rows that name
-two Environments (a promotion review). Deletion rows with `diff_json` NULL project
-`unavailable: true` rather than inventing a before/after.
+two Environments (a promotion review). Historical deletion rows with `diff_json` NULL project
+`unavailable: true` rather than inventing a before/after. Flag deletes after the code-removal claim
+landed store `{ codeRemoval: { state: "unknown" } | { state: "claimed", reference } }` — an
+auditable claim, not proof of repository removal.
 
 ### Targeting Rules (Flag sub-resource)
 
@@ -360,12 +364,13 @@ durable Approval Request creation and any inline Review. Review calls also requi
 Exact retries return the stored result; a key reused with a different payload fails with
 `IDEMPOTENCY_KEY_CONFLICT`.
 
-`idempotency_key` is derived from the route body schema wherever the route has one. The two catalog
-deletes have no request body, so derivation **injects** a required `idempotency_key` into their flat
-tool schema instead: a `required` route whose schema cannot express the key advertises an
-unsatisfiable call, and an impossible remedy is exactly what ADR-0036 forbids. The rule is uniform —
-every `idempotency: "required"` route exposes `idempotency_key` as a required tool input, from the
-body when there is one and by injection when there is not.
+`idempotency_key` is derived from the route body schema wherever the route has one. `flags_delete`
+accepts an optional body (`codeRemoval` claim) that does not carry the key, and
+`flag_variants_delete` still has no body, so derivation **injects** a required `idempotency_key`
+into their flat tool schema when the body cannot express it: a `required` route whose schema cannot
+express the key advertises an unsatisfiable call, and an impossible remedy is exactly what ADR-0036
+forbids. The rule is uniform — every `idempotency: "required"` route exposes `idempotency_key` as a
+required tool input, from the body when there is one and by injection when there is not.
 
 Omitting the key on a `required` route — or supplying a blank one — is refused by the client before
 any request leaves: a tool result with `isError: true` carrying the Worker's own `VALIDATION_ERROR`

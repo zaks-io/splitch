@@ -24,6 +24,7 @@ export type {
 export type { ConvexInstallationRow, ConvexInstallationWrite } from "./repo/convex-integrations";
 export type { FlagChangeEventRow } from "./repo/flag-change-events";
 export type { FlagChangeLogFilter, FlagChangeLogRow } from "./repo/flag-change-log-reads";
+export type { FlagDeletionCodeRemovalRecord } from "./repo/flag-deletion-code-removal";
 export type { ReplaceTargetingRulesResult } from "./repo/flag-config-ops";
 export type { UpdateVariantResult } from "./repo/flag-variant-approval";
 export type { RemoveVariantResult, TargetingRuleVariantRef } from "./repo/flag-variant-ops";

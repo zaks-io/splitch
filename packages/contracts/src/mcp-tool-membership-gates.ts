@@ -64,6 +64,7 @@ const MCP_TOOL_MEMBERSHIP_GATES = {
   flags_list: APP_MEMBER,
   principal_flags_list: WIDE_READ,
   expired_flags_list: APP_MEMBER,
+  flag_removal_brief: APP_MEMBER,
   flags_create: APP_ADMIN,
   flags_get: APP_MEMBER,
   flags_update: APP_ADMIN,
