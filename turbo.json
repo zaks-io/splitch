@@ -134,6 +134,9 @@
       "inputs": ["$TURBO_DEFAULT$"],
       "outputs": []
     },
+    "//#check:request-contract-compat": {
+      "cache": false
+    },
     "//#check:cli-mcp-parity": {
       "dependsOn": ["@splitch/sdk#build"],
       "inputs": [
