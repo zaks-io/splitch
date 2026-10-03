@@ -30,8 +30,9 @@ import {
  *
  * Within one `computeSequentialSrm` call, cumulative snapshots must stay
  * append-only. Across Results reads, analysis-v2 does not feed revised totals
- * into a live filtration: `checkSrmHealth` rebuilds daily first-Exposure
- * checkpoints from the current watermarked dataset and re-evaluates. Quarantine
+ * into a live filtration: `checkSrmHealth` rebuilds the Entity arrival path
+ * from the current watermarked dataset (Exposure by first_exposure_ts,
+ * activated by activation_ts) and re-evaluates after every arrival. Quarantine
  * to `__multiple__` edits that dataset; the next read's path is recomputed from
  * the cleaned rows. analysis-v2 selects this martingale for Exposure and
  * activated-population SRM via `analysisVersionPolicy`; analysis-v1 and legacy

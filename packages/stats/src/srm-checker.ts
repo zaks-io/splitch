@@ -19,6 +19,7 @@ import { resolveSrmProcedure, sequentialSrmAlongEntityPath } from "./srm-checker
 import type { SrmPathEntity } from "./srm-observation-path";
 import { expectedCountsForOutput, safeRate, sumCounts, zeroCounts } from "./srm-counts";
 import { SRM_MISMATCH_P_VALUE } from "./srm-checker-threshold";
+import { activationRowsByEntityForRun, earliestValidActivationTs } from "./srm-activated-arrival";
 
 export { SRM_MISMATCH_P_VALUE };
 
@@ -181,7 +182,7 @@ function dedupedPathEntities(input: SrmCheckerInput, variants: readonly string[]
     dedupedExposureRowsForVariant({ ...input, variant }).map((exposure) => ({
       targeting_key_hash: exposure.targeting_key_hash,
       variant: exposure.variant,
-      first_exposure_ts: exposure.first_exposure_ts,
+      arrival_ts: exposure.first_exposure_ts,
     })),
   );
 }
@@ -190,17 +191,25 @@ function activatedPathEntities(
   input: SrmCheckerInput,
   variants: readonly string[],
 ): SrmPathEntity[] {
-  return activatedExposureRows({
+  const activationRows = input.activation_rows ?? [];
+  const activationsByEntity = activationRowsByEntityForRun(input.run_id, activationRows);
+  const declared = new Set(variants);
+  const path: SrmPathEntity[] = [];
+  for (const exposure of activatedExposureRows({
     run_id: input.run_id,
     exposures: input.exposures,
-    activation_rows: input.activation_rows ?? [],
-  })
-    .filter((exposure) => variants.includes(exposure.variant))
-    .map((exposure) => ({
+    activation_rows: activationRows,
+  })) {
+    if (!declared.has(exposure.variant)) {
+      continue;
+    }
+    path.push({
       targeting_key_hash: exposure.targeting_key_hash,
       variant: exposure.variant,
-      first_exposure_ts: exposure.first_exposure_ts,
-    }));
+      arrival_ts: earliestValidActivationTs(exposure, activationsByEntity),
+    });
+  }
+  return path;
 }
 
 function countsFromPathEntities(
@@ -239,13 +248,13 @@ function multipleEntityCount(input: SrmCheckerInput): number {
 
 function srmAgainstPopulation(
   observed: Readonly<Record<string, number>>,
-  entities: readonly SrmPathEntity[],
+  entities: SrmPathEntity[],
   allocation: Readonly<Record<string, number>>,
   variants: readonly string[],
   procedure: SrmProcedure,
 ): SrmTestInternalResult {
   if (procedure === "sequential_martingale") {
-    const sequential = sequentialSrmAlongEntityPath(entities, allocation, variants);
+    const sequential = sequentialSrmAlongEntityPath(entities, allocation);
     return { ...sequential, chi2_stat: 0 };
   }
   return chiSquareAgainstAllocation(observed, allocation, variants);

@@ -47,10 +47,17 @@ export function exposureOnDay(
 }
 
 export function activationRows(exposureRows: readonly DedupeExposureRow[]): ActivationRow[] {
+  return activationRowsAt(exposureRows, SRM_TEST_ACTIVATION_TS);
+}
+
+export function activationRowsAt(
+  exposureRows: readonly DedupeExposureRow[],
+  activationTs: string,
+): ActivationRow[] {
   return exposureRows.map((row) => ({
     targeting_key_hash: row.targeting_key_hash,
     run_id: SRM_TEST_RUN_ID,
-    activation_ts: SRM_TEST_ACTIVATION_TS,
+    activation_ts: activationTs,
     counterfactual: false,
     activated: true,
   }));

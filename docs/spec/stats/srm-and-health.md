@@ -65,24 +65,26 @@ of `min(1, 1 / wealth)`, which is super-uniform under the null. `threshold_cross
 `first_cross_n` is the total Entity count at the first crossing, or null.
 
 **Observation contract (Results gate).** On every Results read, the analysis-v2 SRM gate rebuilds
-an append-only checkpoint path from the current watermarked population: one cumulative look per
-UTC day of each Entity's `first_exposure_ts`, in day order. Activated-population SRM uses the same
-path construction on the activated subset (still ordered by first Exposure time). The reported
-p-value is the running minimum along that path, so an early mismatch stays sticky when later days
-balance the totals. Within one read the path is non-decreasing by construction. The Entity set is
-exactly the pinned-watermark `StatsInput` exposures, so pinned reads stay deterministic and the
-result token stays reproducible.
+an append-only arrival path from the current watermarked population and evaluates the martingale
+after every Entity arrival (incremental log-gamma updates, O(N)). Exposure SRM orders Entities by
+`first_exposure_ts`. Activated-population SRM orders activated Entities by their earliest valid
+`activation_ts` (the time they entered the activated population), not by first Exposure. Ties at
+identical timestamps break deterministically by Entity pseudonym (`targeting_key_hash`) so pinned
+reads stay reproducible. The reported p-value is the running minimum along that path, so an early
+mismatch stays sticky when later arrivals balance the totals. This holds as long as ingestion
+before the pinned watermark is complete (the watermark contract). The Entity set is exactly the
+pinned-watermark `StatsInput` exposures (and activation rows for activated SRM).
 
 **Quarantine and revisions.** A later watermark that moves an Entity into `__multiple__` (or
-revises `first_exposure_ts`) edits the dataset. The next read recomputes the whole path from the
-cleaned rows; it does not feed a decreasing arm total into a live filtration. Primitive
-`computeSequentialSrm` still fails loud if a single call's cumulative snapshots decrease an arm
-count.
+revises `first_exposure_ts` / `activation_ts`) edits the dataset. The next read recomputes the
+whole path from the cleaned rows; it does not feed a decreasing arm total into a live filtration.
+Primitive `computeSequentialSrm` still fails loud if a single call's cumulative snapshots decrease
+an arm count.
 
 **Looks.** Wealth is a function of the sufficient statistic. The anytime p-value is the running
-minimum over submitted increment batches. Singleton increments are continuous monitoring. A
-multi-Entity day batch is one look after that day's arrivals are applied. Intra-day processing
-order is not an arrival-time claim.
+minimum after every singleton arrival in the reconstructed path. Continuous monitoring is the
+gate default; batching arrivals into larger increments is allowed for the primitive but is not
+how the Results gate rebuilds the path.
 
 ### Activated-population SRM
 

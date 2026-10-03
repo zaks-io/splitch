@@ -1,53 +1,46 @@
 import { describe, expect, it } from "vitest";
-import { buildDailyCumulativeSnapshots, type SrmPathEntity } from "./srm-observation-path";
+import {
+  compareSrmPathEntities,
+  sortEntitiesByArrival,
+  type SrmPathEntity,
+} from "./srm-observation-path";
 
-const VARIANTS = ["control", "treatment"] as const;
-
-describe("buildDailyCumulativeSnapshots", () => {
-  it("builds monotone cumulative counts by UTC first-Exposure day", () => {
+describe("SRM observation arrival order", () => {
+  it("orders by arrival timestamp then Entity pseudonym", () => {
     const entities: SrmPathEntity[] = [
-      entity("control", "c0", "2026-07-01T10:00:00.000Z"),
-      entity("treatment", "t0", "2026-07-01T12:00:00.000Z"),
-      entity("treatment", "t1", "2026-07-02T08:00:00.000Z"),
-      entity("control", "c1", "2026-07-03T01:00:00.000Z"),
+      entity("treatment", "t_late", "2026-07-01T18:00:00.000Z"),
+      entity("control", "c_b", "2026-07-01T08:00:00.000Z"),
+      entity("control", "c_a", "2026-07-01T08:00:00.000Z"),
+      entity("treatment", "t_early", "2026-07-01T09:00:00.000Z"),
     ];
 
-    expect(buildDailyCumulativeSnapshots(entities, VARIANTS)).toEqual([
-      { control: 1, treatment: 1 },
-      { control: 1, treatment: 2 },
-      { control: 2, treatment: 2 },
+    expect(sortEntitiesByArrival(entities).map((row) => row.targeting_key_hash)).toEqual([
+      "c_a",
+      "c_b",
+      "t_early",
+      "t_late",
     ]);
   });
 
-  it("dedupes the same Entity within a day without decreasing counts", () => {
-    const entities: SrmPathEntity[] = [
-      entity("control", "c0", "2026-07-01T10:00:00.000Z"),
-      entity("control", "c0", "2026-07-01T11:00:00.000Z"),
-      entity("treatment", "t0", "2026-07-01T12:00:00.000Z"),
-    ];
-
-    expect(buildDailyCumulativeSnapshots(entities, VARIANTS)).toEqual([
-      { control: 1, treatment: 1 },
-    ]);
-  });
-
-  it("fails loud on conflicting variants for one Entity on one day", () => {
+  it("fails loud on conflicting variants at the same arrival key", () => {
     expect(() =>
-      buildDailyCumulativeSnapshots(
-        [
-          entity("control", "same", "2026-07-01T10:00:00.000Z"),
-          entity("treatment", "same", "2026-07-01T11:00:00.000Z"),
-        ],
-        VARIANTS,
+      compareSrmPathEntities(
+        entity("control", "same", "2026-07-01T08:00:00.000Z"),
+        entity("treatment", "same", "2026-07-01T08:00:00.000Z"),
       ),
     ).toThrow(/conflicting variants/);
   });
+
+  it("fails loud on non-ISO arrival timestamps", () => {
+    expect(() =>
+      compareSrmPathEntities(
+        entity("control", "c0", "not-a-timestamp"),
+        entity("control", "c1", "2026-07-01T08:00:00.000Z"),
+      ),
+    ).toThrow(/arrival_ts must be an ISO timestamp/);
+  });
 });
 
-function entity(
-  variant: string,
-  targeting_key_hash: string,
-  first_exposure_ts: string,
-): SrmPathEntity {
-  return { variant, targeting_key_hash, first_exposure_ts };
+function entity(variant: string, targeting_key_hash: string, arrival_ts: string): SrmPathEntity {
+  return { variant, targeting_key_hash, arrival_ts };
 }
