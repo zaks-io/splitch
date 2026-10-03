@@ -15,6 +15,7 @@ const COMMITMENT_FIELDS = [
   "target_n_source",
   "planned_duration_days",
   "planned_duration_override_reason",
+  "pre_registration",
 ] as const;
 
 /**
@@ -64,13 +65,26 @@ export function materializeRunCommitments(row: unknown): RunCommitments {
 }
 
 /**
- * Null / absent means the Run never pre-registered. A present JSON blob that
+ * Recorded null means the Run never pre-registered. An omitted column is a
+ * pipe bug (caught via COMMITMENT_FIELDS). Empty string or a present blob that
  * fails to parse is refused rather than dropped, so a corrupted freeze cannot
  * silently become "no pre-registration".
  */
 function materializePreRegistration(raw: unknown): PreRegistration | undefined {
-  if (raw === undefined || raw === null || raw === "") return undefined;
-  const value = typeof raw === "string" ? (JSON.parse(raw) as unknown) : raw;
+  if (raw === null) return undefined;
+  if (raw === undefined || raw === "") {
+    throw new ResultsInputError(
+      "Run pre_registration is empty; expected JSON or null (never registered)",
+    );
+  }
+  let value: unknown;
+  try {
+    value = typeof raw === "string" ? (JSON.parse(raw) as unknown) : raw;
+  } catch (cause) {
+    throw new ResultsInputError(
+      `Run pre_registration is not valid JSON: ${cause instanceof Error ? cause.message : String(cause)}`,
+    );
+  }
   const parsed = PreRegistrationSchema.safeParse(value);
   if (!parsed.success) {
     throw new ResultsInputError(

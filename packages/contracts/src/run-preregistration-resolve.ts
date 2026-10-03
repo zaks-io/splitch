@@ -55,6 +55,7 @@ function validateAndFreeze(
 ): { ok: true; value: PreRegistration } | { ok: false; issues: PreRegistrationIssue[] } {
   const issues = [
     ...hypothesisIssues(intent),
+    ...shipRuleIssues(intent),
     ...primaryMetricIssues(intent, runMetricIds),
     ...metricEntryIssues(intent, runMetricIds),
   ];
@@ -80,6 +81,17 @@ function hypothesisIssues(intent: PreRegistrationIntent): PreRegistrationIssue[]
       path: ["body", "preRegistration", "hypothesis"],
       message: "hypothesis must be non-empty text",
       code: "PREREG_HYPOTHESIS_REQUIRED",
+    },
+  ];
+}
+
+function shipRuleIssues(intent: PreRegistrationIntent): PreRegistrationIssue[] {
+  if (intent.shipRule.requiredMargin > 0) return [];
+  return [
+    {
+      path: ["body", "preRegistration", "shipRule", "requiredMargin"],
+      message: "shipRule.requiredMargin must be a positive finite number",
+      code: "PREREG_SHIP_RULE_INVALID",
     },
   ];
 }

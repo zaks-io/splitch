@@ -204,10 +204,21 @@ export const StartRunRequestSchema = z
   .strict();
 export type StartRunRequest = z.infer<typeof StartRunRequestSchema>;
 
+/**
+ * Run leaf plus optional frozen pre-registration. Shared by Start / Conclude /
+ * GET Run responses so SDK parsing cannot strip a field handlers already return
+ * via `runResponse()`.
+ */
+export const RunWithPreRegistrationSchema = RunSchema.extend({
+  /** Frozen pre-registration when Start recorded one; absent otherwise. */
+  preRegistration: PreRegistrationIntentSchema.optional(),
+});
+export type RunWithPreRegistration = z.infer<typeof RunWithPreRegistrationSchema>;
+
 export const StartRunResponseSchema = z
   .object({
     experimentId: z.string(),
-    run: RunSchema,
+    run: RunWithPreRegistrationSchema,
     previousRunId: z.string().nullable(),
     approvalRequest: ApprovalRequestSchema.nullable(),
     // Present only when this request itself committed the Start (the direct
@@ -252,9 +263,7 @@ export type PatchRunRequest = z.infer<typeof PatchRunRequestSchema>;
 // second call (SPL-307).
 // ---------------------------------------------------------------------------
 
-export const RunResponseSchema = RunSchema.extend({
+export const RunResponseSchema = RunWithPreRegistrationSchema.extend({
   draftTargetingRules: z.array(TargetingRuleSchema).nullable().optional(),
-  /** Frozen pre-registration when Start recorded one; absent otherwise. */
-  preRegistration: PreRegistrationIntentSchema.optional(),
 });
 export type RunResponse = z.infer<typeof RunResponseSchema>;

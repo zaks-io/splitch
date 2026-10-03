@@ -68,10 +68,17 @@ export const PreRegistrationSchema = z
   .strict();
 export type PreRegistration = z.infer<typeof PreRegistrationSchema>;
 
-/** Start-body form (camelCase), matching targetN / plannedDurationDays. */
+/**
+ * Start-body form (camelCase), matching targetN / plannedDurationDays.
+ *
+ * Hypothesis emptiness and ship-rule margin positivity are enforced in
+ * `resolvePreRegistration` (stable PREREG_* codes). Keeping those checks out of
+ * the Zod shape lets the request boundary surface the same codes instead of a
+ * generic schema message before resolve runs.
+ */
 export const PreRegistrationIntentSchema = z
   .object({
-    hypothesis: z.string().min(1),
+    hypothesis: z.string(),
     primaryMetricId: MetricIdSchema,
     metrics: z
       .array(
@@ -95,7 +102,7 @@ export const PreRegistrationIntentSchema = z
       .min(1),
     shipRule: z
       .object({
-        requiredMargin: z.number().finite().positive(),
+        requiredMargin: z.number().finite(),
         marginScale: RopeScaleSchema,
         conflictResolution: ShipConflictResolutionSchema,
       })

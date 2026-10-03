@@ -93,6 +93,7 @@ export function rowsByPipe(): RowsByPipe {
         target_n_source: null,
         planned_duration_days: null,
         planned_duration_override_reason: null,
+        pre_registration: null,
         confidence_level: 0.95,
         horizon: "sequential",
         allocation: JSON.stringify({ control: 50, treatment: 50 }),

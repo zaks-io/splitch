@@ -112,4 +112,24 @@ describe("resolvePreRegistration", () => {
     if (result.ok) return;
     expect(codes(result.issues)).toContain("PREREG_UNKNOWN_METRIC");
   });
+
+  it("refuses an empty hypothesis with PREREG_HYPOTHESIS_REQUIRED", () => {
+    const result = resolvePreRegistration({ ...validIntent, hypothesis: "" }, RUN_METRICS);
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(codes(result.issues)).toContain("PREREG_HYPOTHESIS_REQUIRED");
+  });
+
+  it("refuses a non-positive ship margin with PREREG_SHIP_RULE_INVALID", () => {
+    const result = resolvePreRegistration(
+      {
+        ...validIntent,
+        shipRule: { ...validIntent.shipRule, requiredMargin: 0 },
+      },
+      RUN_METRICS,
+    );
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(codes(result.issues)).toContain("PREREG_SHIP_RULE_INVALID");
+  });
 });
