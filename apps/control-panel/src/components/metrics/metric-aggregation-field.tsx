@@ -63,6 +63,8 @@ function aggregationDescription(kind: MetricKind): string {
   switch (kind) {
     case "binomial":
       return "Whether each Entity produced the matching event.";
+    case "retention":
+      return "Whether each Entity returned inside a later horizon window.";
     case "count":
       return "A numeric event field summed per Entity.";
     case "revenue":

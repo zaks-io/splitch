@@ -79,6 +79,30 @@ export function MetricFactFields({
           />
         </>
       ) : null}
+      {draft.kind === "retention" ? (
+        <>
+          <MetricTextField
+            description="Milliseconds after the Conversion Window anchor when the retention window opens."
+            draft={draft}
+            label="Horizon start (ms)"
+            onEdit={edit}
+            path="horizonStartMs"
+            placeholder="0"
+            shown={shown}
+            workerError={workerMetricFieldError(mutationError, "horizonStartMs")}
+          />
+          <MetricTextField
+            description="Milliseconds after the Conversion Window anchor when the retention window closes. Exclusive."
+            draft={draft}
+            label="Horizon end (ms)"
+            onEdit={edit}
+            path="horizonEndMs"
+            placeholder="604800000"
+            shown={shown}
+            workerError={workerMetricFieldError(mutationError, "horizonEndMs")}
+          />
+        </>
+      ) : null}
     </>
   );
 }

@@ -12,6 +12,7 @@ describe("Metric editor model", () => {
   it("supports all four aggregation types with their required fields", () => {
     expect(metricKindOptions(true).map(({ kind }) => kind)).toEqual([
       "binomial",
+      "retention",
       "count",
       "revenue",
       "ratio",

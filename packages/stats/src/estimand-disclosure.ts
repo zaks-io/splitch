@@ -36,6 +36,7 @@ export function estimandDisclosure(
 function estimandLabel(metricType: MetricKind, capped: boolean): EstimandLabel {
   switch (metricType) {
     case "binomial":
+    case "retention":
       if (capped) {
         throw new Error("a Binomial Metric is never winsorized.");
       }

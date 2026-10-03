@@ -1697,7 +1697,7 @@ Credential semantics:
 
 Example:
   splitch flags verify checkout --targeting-key workspace-123 --id-type workspace --json",
-    "metrics create": "Create a Metric (binomial, count, revenue, ratio, guardrail).
+    "metrics create": "Create a Metric (binomial, count, revenue, ratio, retention, guardrail).
 
 Formats: appId: required canonical id. kind: required one of "binomial", "count", "revenue", "ratio". eventDefinitionId: optional canonical id. direction: optional one of "higher_is_better", "lower_is_better".
 
@@ -1721,7 +1721,7 @@ Request body (--body-json):
   appId                      required  string
   name                       required  string
   key                        required  string
-  kind                       required  string ("binomial" | "count" | "revenue" | "ratio")
+  kind                       required  string ("binomial" | "count" | "revenue" | "ratio" | "retention")
   eventDefinitionId          optional  string
   eventFieldName             optional  string
   numerator                  optional  { metricId: string }
@@ -1733,6 +1733,8 @@ Request body (--body-json):
   winsorizePct               optional  number | null
   cuped                      optional  boolean | null
   cupedCoverageThresholdPct  optional  number | null
+  horizonStartMs             optional  number | null
+  horizonEndMs               optional  number | null
   idempotency_key            optional  string
   Example:
     {"appId":"app_1","name":"name","key":"key","kind":"binomial"}
@@ -1811,7 +1813,7 @@ Flags:
 Request body (--body-json):
   name                       optional  string
   key                        optional  string
-  kind                       optional  string ("binomial" | "count" | "revenue" | "ratio")
+  kind                       optional  string ("binomial" | "count" | "revenue" | "ratio" | "retention")
   eventDefinitionId          optional  string | null
   eventFieldName             optional  string | null
   numerator                  optional  { metricId: string }
@@ -1823,6 +1825,8 @@ Request body (--body-json):
   winsorizePct               optional  number | null
   cuped                      optional  boolean | null
   cupedCoverageThresholdPct  optional  number | null
+  horizonStartMs             optional  number | null
+  horizonEndMs               optional  number | null
   Example:
     {"kind":"binomial"}
 
@@ -2714,7 +2718,7 @@ Usage:
 
 Commands:
   list            List Metrics in an App.
-  create          Create a Metric (binomial, count, revenue, ratio, guardrail).
+  create          Create a Metric (binomial, count, revenue, ratio, retention, guardrail).
   get             Get a Metric.
   update          Update a Metric (decision-valid edits gated by DECISION_LOCKED).
   delete          Delete a Metric (blocked if referenced by a running Experiment).

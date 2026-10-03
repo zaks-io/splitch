@@ -9,6 +9,7 @@ import { z } from "zod";
 
 const METRIC_KINDS: ReadonlyArray<{ kind: MetricKind; label: string }> = [
   { kind: "binomial", label: "Binomial" },
+  { kind: "retention", label: "Retention" },
   { kind: "count", label: "Count" },
   { kind: "revenue", label: "Revenue" },
   { kind: "ratio", label: "Ratio" },
@@ -39,6 +40,8 @@ export const MetricDraftSchema = z
     eventFieldName: z.string(),
     numeratorMetricId: z.string(),
     denominatorMetricId: z.string(),
+    horizonStartMs: z.string(),
+    horizonEndMs: z.string(),
   })
   .strict();
 
@@ -59,6 +62,8 @@ export function emptyMetricDraft(): MetricDraft {
     eventFieldName: "",
     numeratorMetricId: "",
     denominatorMetricId: "",
+    horizonStartMs: "",
+    horizonEndMs: "",
   };
 }
 
@@ -72,6 +77,8 @@ export function metricDraft(metric: Metric): MetricDraft {
     eventFieldName: metric.eventFieldName ?? "",
     numeratorMetricId: metric.numerator?.metricId ?? "",
     denominatorMetricId: metric.denominator?.metricId ?? "",
+    horizonStartMs: metric.horizonStartMs == null ? "" : String(metric.horizonStartMs),
+    horizonEndMs: metric.horizonEndMs == null ? "" : String(metric.horizonEndMs),
   };
 }
 
@@ -110,6 +117,27 @@ export function metricDraftIssues(draft: MetricDraft): MetricDraftIssue[] {
       });
     }
   }
+  issues.push(...retentionDraftIssues(draft));
+  return issues;
+}
+
+function retentionDraftIssues(draft: MetricDraft): MetricDraftIssue[] {
+  if (draft.kind !== "retention") return [];
+  const issues: MetricDraftIssue[] = [];
+  const start = parseHorizonMs(draft.horizonStartMs);
+  const end = parseHorizonMs(draft.horizonEndMs);
+  if (start === null) {
+    issues.push({ path: "horizonStartMs", message: "Enter horizonStartMs in milliseconds." });
+  }
+  if (end === null) {
+    issues.push({ path: "horizonEndMs", message: "Enter horizonEndMs in milliseconds." });
+  }
+  if (start !== null && end !== null && end <= start) {
+    issues.push({
+      path: "horizonEndMs",
+      message: "horizonEndMs must be greater than horizonStartMs.",
+    });
+  }
   return issues;
 }
 
@@ -130,6 +158,7 @@ export function metricCreateInput(appId: string, draft: MetricDraft): CreateMetr
           denominator: { metricId: draft.denominatorMetricId },
         }
       : {}),
+    ...(draft.kind === "retention" ? retentionHorizons(draft) : {}),
   };
 }
 
@@ -150,6 +179,7 @@ export function metricUpdateInput(draft: MetricDraft): PatchMetricRequest {
           denominator: { metricId: draft.denominatorMetricId },
         }
       : {}),
+    ...(draft.kind === "retention" ? retentionHorizons(draft) : {}),
   };
 }
 
@@ -167,4 +197,18 @@ function required(
   message: string,
 ): void {
   if (!value.trim()) issues.push({ path, message });
+}
+
+function parseHorizonMs(value: string): number | null {
+  if (!/^\d+$/.test(value.trim())) return null;
+  return Number(value.trim());
+}
+
+function retentionHorizons(draft: MetricDraft): { horizonStartMs: number; horizonEndMs: number } {
+  const start = parseHorizonMs(draft.horizonStartMs);
+  const end = parseHorizonMs(draft.horizonEndMs);
+  if (start === null || end === null) {
+    throw new Error("Retention Metric draft is missing a numeric horizon");
+  }
+  return { horizonStartMs: start, horizonEndMs: end };
 }

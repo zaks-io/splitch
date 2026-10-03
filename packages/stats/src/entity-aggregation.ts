@@ -1,10 +1,26 @@
 import type { MetricKind, PerEntityMetricRow } from "@splitch/contracts";
+import { isPresenceMetric } from "@splitch/contracts";
 import { dedupedExposureRowsForVariant } from "./exposure-denominator";
+import {
+  parseWatermarkMs,
+  partitionRetentionExposures,
+  retentionHorizonForMetric,
+} from "./retention-eligibility";
 import { finiteValue } from "./variance-math";
 import type { EntityAggregate, MetricArmEstimateInput } from "./variance-estimator-types";
 
-export function aggregateEntities(input: MetricArmEstimateInput): EntityAggregate[] {
-  const entities = seedExposedEntities(input);
+export function aggregateEntitiesWithEligibility(input: MetricArmEstimateInput): {
+  entities: EntityAggregate[];
+  immatureExcluded: number;
+} {
+  return seedAndFill(input);
+}
+
+function seedAndFill(input: MetricArmEstimateInput): {
+  entities: EntityAggregate[];
+  immatureExcluded: number;
+} {
+  const { entities, immatureExcluded } = seedExposedEntities(input);
   for (const row of metricRowsForInput(input)) {
     const entity = entities.get(row.targeting_key_hash);
     if (!entity) {
@@ -13,7 +29,7 @@ export function aggregateEntities(input: MetricArmEstimateInput): EntityAggregat
     applyMetricRow(entity, row, input.metric_type);
   }
 
-  return [...entities.values()];
+  return { entities: [...entities.values()], immatureExcluded };
 }
 
 /**
@@ -56,9 +72,21 @@ function exposureMs(entity: EntityAggregate): number {
   return parsed;
 }
 
-function seedExposedEntities(input: MetricArmEstimateInput): Map<string, EntityAggregate> {
+function seedExposedEntities(input: MetricArmEstimateInput): {
+  entities: Map<string, EntityAggregate>;
+  immatureExcluded: number;
+} {
+  const all = [...dedupedExposureRowsForVariant(input)];
+  const { eligible, immatureExcluded } =
+    input.metric_type === "retention"
+      ? partitionRetentionExposures(
+          all,
+          retentionHorizonForMetric(input, input.metric_id).horizon_end_ms,
+          parseWatermarkMs(input.data_watermark, input.metric_id),
+        )
+      : { eligible: all, immatureExcluded: 0 };
   const entities = new Map<string, EntityAggregate>();
-  for (const exposure of dedupedExposureRowsForVariant(input)) {
+  for (const exposure of eligible) {
     entities.set(exposure.targeting_key_hash, {
       targeting_key_hash: exposure.targeting_key_hash,
       first_exposure_ts: exposure.first_exposure_ts,
@@ -69,7 +97,7 @@ function seedExposedEntities(input: MetricArmEstimateInput): Map<string, EntityA
       cuped_adjusted: false,
     });
   }
-  return entities;
+  return { entities, immatureExcluded };
 }
 
 function metricRowsForInput(input: MetricArmEstimateInput): PerEntityMetricRow[] {
@@ -97,7 +125,7 @@ function applyMetricRow(
     return;
   }
 
-  if (metricType === "binomial") {
+  if (isPresenceMetric(metricType)) {
     entity.value = Math.max(entity.value, finiteValue(row.value, "value") > 0 ? 1 : 0);
     return;
   }

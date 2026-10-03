@@ -1,4 +1,4 @@
-import type { ArmResult, Metric } from "@splitch/contracts";
+import { isPresenceMetric, type ArmResult, type Metric } from "@splitch/contracts";
 
 /**
  * Estimate formatting for the Metric comparison. Rates read as percentages and
@@ -20,7 +20,7 @@ export function comparisonUnavailableReason(
 }
 
 export function formatComparisonEstimate(value: number, kind: Metric["kind"]): string {
-  return kind === "binomial" ? `${formatNumber(value * 100)}%` : formatNumber(value);
+  return isPresenceMetric(kind) ? `${formatNumber(value * 100)}%` : formatNumber(value);
 }
 
 export function formatAbsoluteDifference(
@@ -30,7 +30,7 @@ export function formatAbsoluteDifference(
 ): string {
   const difference = arm.point_estimate - control.point_estimate;
   const sign = difference > 0 ? "+" : "";
-  return kind === "binomial"
+  return isPresenceMetric(kind)
     ? `${sign}${formatNumber(difference * 100)} pp`
     : `${sign}${formatNumber(difference)}`;
 }

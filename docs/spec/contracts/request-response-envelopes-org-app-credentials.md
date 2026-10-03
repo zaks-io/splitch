@@ -59,20 +59,22 @@ combined with a numeric allowlist, and participate in `schemaHash`.
 
 ### CreateMetricRequest
 
-| Field                | Required | Notes                                               |
-| -------------------- | -------- | --------------------------------------------------- |
-| `appId`              | yes      | —                                                   |
-| `name`               | yes      | —                                                   |
-| `key`                | yes      | Unique per App                                      |
-| `kind`               | yes      | `'binomial' \| 'count' \| 'revenue' \| 'ratio'`     |
-| `eventDefinitionId`  | cond.    | Required except for ratio; same App                 |
-| `eventFieldName`     | cond.    | Declared top-level number field; count/revenue only |
-| `numerator`          | cond.    | Ratio only; `{ metricId }`, same App, non-Ratio     |
-| `denominator`        | cond.    | Ratio only; `{ metricId }`, same App, non-Ratio     |
-| `conversionWindowMs` | no       | Null/absent inherits Experiment default             |
-| `winsorize`          | no       | Type-specific default                               |
-| `winsorizePct`       | no       | Default 99.9                                        |
-| `description`        | no       | —                                                   |
+| Field                | Required | Notes                                                          |
+| -------------------- | -------- | -------------------------------------------------------------- |
+| `appId`              | yes      | —                                                              |
+| `name`               | yes      | —                                                              |
+| `key`                | yes      | Unique per App                                                 |
+| `kind`               | yes      | `'binomial' \| 'count' \| 'revenue' \| 'ratio' \| 'retention'` |
+| `eventDefinitionId`  | cond.    | Required except for ratio; same App                            |
+| `eventFieldName`     | cond.    | Declared top-level number field; count/revenue only            |
+| `numerator`          | cond.    | Ratio only; `{ metricId }`, same App, non-Ratio                |
+| `denominator`        | cond.    | Ratio only; `{ metricId }`, same App, non-Ratio                |
+| `horizonStartMs`     | cond.    | Retention only                                                 |
+| `horizonEndMs`       | cond.    | Retention only; greater than `horizonStartMs`                  |
+| `conversionWindowMs` | no       | Null/absent inherits Experiment default                        |
+| `winsorize`          | no       | Type-specific default                                          |
+| `winsorizePct`       | no       | Default 99.9                                                   |
+| `description`        | no       | —                                                              |
 
 ### PatchMetricRequest
 

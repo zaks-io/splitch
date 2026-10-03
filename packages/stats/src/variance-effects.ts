@@ -1,4 +1,4 @@
-import type { VarianceTechniques } from "@splitch/contracts";
+import { isPresenceMetric, type VarianceTechniques } from "@splitch/contracts";
 import type {
   MetricArmEstimate,
   MetricComparisonEstimate,
@@ -78,8 +78,8 @@ function boundarySubstitutionApplies(
     samplingVar !== null &&
     absoluteLift !== null &&
     absoluteLift !== 0 &&
-    control.metric_type === "binomial" &&
-    treatment.metric_type === "binomial" &&
+    isPresenceMetric(control.metric_type) &&
+    isPresenceMetric(treatment.metric_type) &&
     (control.sampling_var === 0 || treatment.sampling_var === 0)
   );
 }
@@ -148,8 +148,8 @@ function boundarySafeRelativeLiftSamplingVar(
 ): number {
   if (
     relativeLift === 0 ||
-    control.metric_type !== "binomial" ||
-    treatment.metric_type !== "binomial" ||
+    !isPresenceMetric(control.metric_type) ||
+    !isPresenceMetric(treatment.metric_type) ||
     control.point_estimate === null ||
     treatment.point_estimate === null ||
     control.sampling_var === null ||

@@ -53,6 +53,8 @@ async function createMetric(
     eventFieldName: prepared.value.eventFieldName,
     numeratorMetricId: prepared.value.numeratorMetricId,
     denominatorMetricId: prepared.value.denominatorMetricId,
+    horizonStartMs: prepared.value.horizonStartMs,
+    horizonEndMs: prepared.value.horizonEndMs,
     ...prepared.value.analysis,
     createdAt: nowIso(deps),
     createdBy: principal.id,

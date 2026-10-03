@@ -140,7 +140,10 @@ an Entity and never joined to Experiment analysis.
 separate from Experiment measurement.
 
 **Metric**: a fact plus an aggregation. Experiments move or guard Metrics. See
-[`apps/analysis-api/CONTEXT.md`](./apps/analysis-api/CONTEXT.md).
+[`apps/analysis-api/CONTEXT.md`](./apps/analysis-api/CONTEXT.md). A **Retention Metric** is a
+horizon-gated Binomial Metric: retained means a qualifying event in
+`[anchor + horizon_start, anchor + horizon_end)`. Kaplan-Meier survival is a separate future
+contract.
 
 **Promotion**: applying a Flag Configuration, or a Variant's availability, to a target Environment.
 The target may be the Run's own Environment or another Environment. Promote is the deployment verb.

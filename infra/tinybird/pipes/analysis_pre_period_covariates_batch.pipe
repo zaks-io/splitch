@@ -26,7 +26,7 @@ SQL >
     WHERE
         throwIf(
             metric_id = ''
-            OR metric_type NOT IN ('binomial', 'count', 'revenue')
+            OR metric_type NOT IN ('binomial', 'count', 'revenue', 'retention')
             OR event_definition_id = ''
             OR NOT JSONHas(config_json, 'cuped_lookback_ms')
             OR (metric_type IN ('count', 'revenue') AND event_field_name = ''),
@@ -77,11 +77,11 @@ SQL >
         exposures.targeting_key_hash AS targeting_key_hash,
         configs.metric_id AS metric_id,
         if(
-            configs.metric_type = 'binomial',
+            configs.metric_type IN ('binomial', 'retention'),
             toFloat64(countIf(events.event_definition_id != '') > 0),
             sum(
                 if(
-                    configs.metric_type = 'binomial',
+                    configs.metric_type IN ('binomial', 'retention'),
                     toFloat64(0),
                     toFloat64(JSONExtractRaw(events.fields, configs.event_field_name))
                 )
@@ -110,7 +110,7 @@ SQL >
         )
         AND events.accepted_at >= subtractMilliseconds(exposures.first_exposure_ts, configs.lookback_ms)
         AND events.accepted_at < exposures.first_exposure_ts
-        AND (configs.metric_type = 'binomial' OR JSONHas(events.fields, configs.event_field_name))
+        AND (configs.metric_type IN ('binomial', 'retention') OR JSONHas(events.fields, configs.event_field_name))
     GROUP BY exposures.targeting_key_hash, configs.metric_id, configs.metric_type
     ORDER BY metric_id, targeting_key_hash
 

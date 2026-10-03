@@ -1,5 +1,5 @@
 DESCRIPTION >
-    Returns pre-period covariates for one Binomial, Count, or Revenue Metric.
+    Returns pre-period covariates for one Binomial, Retention, Count, or Revenue Metric.
 
 NODE scoped_pre_period_exposures
 SQL >
@@ -23,10 +23,10 @@ SQL >
     {% if not defined(environment_id) %} {{ error('environment_id is required') }}{% end %}
     {% if not defined(event_definition_id) %} {{ error('event_definition_id is required') }}{% end %}
     {% if not defined(metric_type) %} {{ error('metric_type is required') }}{% end %}
-    {% if metric_type not in ['binomial', 'count', 'revenue'] %}
-        {{ error('metric_type must be binomial, count, or revenue') }}
+    {% if metric_type not in ['binomial', 'count', 'revenue', 'retention'] %}
+        {{ error('metric_type must be binomial, count, revenue, or retention') }}
     {% end %}
-    {% if metric_type != 'binomial' and not defined(event_field_name) %}
+    {% if metric_type not in ['binomial', 'retention'] and not defined(event_field_name) %}
         {{ error('event_field_name is required for Count and Revenue') }}
     {% end %}
     {% if not defined(from_ts) %} {{ error('from_ts is required') }}{% end %}
@@ -38,7 +38,7 @@ SQL >
         targeting_key_hash,
         entity_family_hash,
         accepted_at,
-        {% if metric_type == 'binomial' %} toFloat64(1) AS event_value
+        {% if metric_type in ['binomial', 'retention'] %} toFloat64(1) AS event_value
         {% else %} toFloat64(JSONExtractRaw(fields, {{ String(event_field_name) }})) AS event_value
         {% end %}
     FROM serve_deduped_metric_events
@@ -48,7 +48,7 @@ SQL >
         AND event_definition_id = {{ String(event_definition_id) }}
         AND accepted_at >= {{ DateTime64(from_ts) }}
         AND accepted_at < {{ DateTime64(to_ts) }}
-        {% if metric_type != 'binomial' %}
+        {% if metric_type not in ['binomial', 'retention'] %}
             AND JSONHas(fields, {{ String(event_field_name) }})
         {% end %}
 
@@ -63,7 +63,7 @@ SQL >
     SELECT
         exposures.targeting_key_hash AS targeting_key_hash,
         {{ String(metric_id) }} AS metric_id,
-        {% if metric_type == 'binomial' %}
+        {% if metric_type in ['binomial', 'retention'] %}
             toFloat64(countIf(events.event_value > 0) > 0) AS pre_period_value,
         {% else %} sum(events.event_value) AS pre_period_value,
         {% end %}

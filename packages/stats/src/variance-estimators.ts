@@ -1,7 +1,7 @@
-import type { VarianceTechniques } from "@splitch/contracts";
+import { isPresenceMetric, type VarianceTechniques } from "@splitch/contracts";
 import { applyCupedAdjustment } from "./cuped";
 import { reapplyCupedCovariate } from "./cuped-fit";
-import { aggregateEntities, lockedSample } from "./entity-aggregation";
+import { aggregateEntitiesWithEligibility, lockedSample } from "./entity-aggregation";
 import { clampSamplingVariance, mean, sampleCovariance, sampleVariance } from "./variance-math";
 import type {
   EntityAggregate,
@@ -23,9 +23,14 @@ import {
 } from "./winsorization";
 
 export function estimateMetricArm(input: MetricArmEstimateInput): MetricArmEstimate {
-  const entities = aggregateEntities(input);
+  const { entities, immatureExcluded } = aggregateEntitiesWithEligibility(input);
 
-  return estimateMetricArmFromEntities(input, entities, noVarianceTechniques(input.metric_type));
+  return estimateMetricArmFromEntities(
+    input,
+    entities,
+    noVarianceTechniques(input.metric_type),
+    immatureExcluded,
+  );
 }
 
 /**
@@ -41,9 +46,15 @@ export function estimateMetricComparisons(
   input: MetricComparisonsEstimateInput,
 ): MetricComparisonsEstimate {
   const variants = [input.control_variant, ...input.treatment_variants];
-  const entities = variants.map((variant) =>
-    lockedSample(aggregateEntities({ ...input, variant }), input.fixed_horizon_sample_size),
-  );
+  const seeded = variants.map((variant) => {
+    const { entities, immatureExcluded } = aggregateEntitiesWithEligibility({ ...input, variant });
+    return {
+      variant,
+      entities: lockedSample(entities, input.fixed_horizon_sample_size),
+      immatureExcluded,
+    };
+  });
+  const entities = seeded.map((arm) => arm.entities);
   const winsorization = computePooledWinsorization(input, entities.flat());
   const cuped = applyCupedAdjustment(
     input,
@@ -56,6 +67,7 @@ export function estimateMetricComparisons(
     variants,
     cuped.arms,
     varianceTechniquesFor(input.metric_type, winsorization, cuped),
+    seeded.map((arm) => arm.immatureExcluded),
   );
   if (winsorization === null) {
     return { ...published, winsorized: null };
@@ -78,6 +90,7 @@ export function estimateMetricComparisons(
         variants,
         uncappedCuped.arms,
         varianceTechniquesFor(input.metric_type, null, uncappedCuped),
+        seeded.map((arm) => arm.immatureExcluded),
       ),
     },
   };
@@ -88,12 +101,14 @@ function comparisonsFromArms(
   variants: readonly string[],
   adjustedArms: readonly (readonly EntityAggregate[])[],
   varianceTechniques: VarianceTechniques,
+  immatureExcluded: readonly number[],
 ): Omit<MetricComparisonsEstimate, "winsorized"> {
   const arms = variants.map((variant, index) =>
     estimateMetricArmFromEntities(
       { ...input, variant },
       armAt(adjustedArms, index, variant),
       varianceTechniques,
+      armAt(immatureExcluded, index, variant),
     ),
   );
 
@@ -145,21 +160,33 @@ function estimateMetricArmFromEntities(
   input: MetricArmEstimateInput,
   entities: readonly EntityAggregate[],
   varianceTechniques: VarianceTechniques,
+  immatureExcluded: number,
 ): MetricArmEstimate {
   const sampleSize = entities.length;
 
   if (sampleSize === 0) {
-    return armEstimate(input, sampleSize, null, null, "running", null, null, 0, varianceTechniques);
+    return armEstimate(
+      input,
+      sampleSize,
+      null,
+      null,
+      "running",
+      null,
+      null,
+      0,
+      varianceTechniques,
+      immatureExcluded,
+    );
   }
 
   if (input.metric_type === "ratio") {
-    return estimateRatioArm(input, entities, varianceTechniques);
+    return estimateRatioArm(input, entities, varianceTechniques, immatureExcluded);
   }
 
   const values = entities.map((entity) => entity.value);
   const pointEstimate = mean(values);
   const armVariance =
-    input.metric_type === "binomial" && !entities.some((entity) => entity.cuped_adjusted)
+    isPresenceMetric(input.metric_type) && !entities.some((entity) => entity.cuped_adjusted)
       ? pointEstimate * (1 - pointEstimate)
       : sampleVariance(values);
 
@@ -173,6 +200,7 @@ function estimateMetricArmFromEntities(
     null,
     0,
     varianceTechniques,
+    immatureExcluded,
   );
 }
 
@@ -180,6 +208,7 @@ function estimateRatioArm(
   input: MetricArmEstimateInput,
   entities: readonly EntityAggregate[],
   varianceTechniques: VarianceTechniques,
+  immatureExcluded: number,
 ): MetricArmEstimate {
   const nums = entities.map((entity) => entity.num_value);
   const denoms = entities.map((entity) => entity.denom_value);
@@ -199,6 +228,7 @@ function estimateRatioArm(
       denominatorMean,
       zeroDenominatorCount,
       varianceTechniques,
+      immatureExcluded,
     );
   }
 
@@ -221,6 +251,7 @@ function estimateRatioArm(
     denominatorMean,
     zeroDenominatorCount,
     varianceTechniques,
+    immatureExcluded,
   );
 }
 
@@ -234,6 +265,7 @@ function armEstimate(
   denominator_mean: number | null,
   zero_denominator_entity_count: number,
   variance_techniques: VarianceTechniques,
+  immature_excluded_n: number,
 ): MetricArmEstimate {
   return {
     variant: input.variant,
@@ -248,5 +280,6 @@ function armEstimate(
     zero_denominator_entity_count,
     delta_method: input.metric_type === "ratio",
     variance_techniques,
+    immature_excluded_n,
   };
 }

@@ -55,7 +55,7 @@ One Metric divided by another; numerator and denominator are aggregated independ
 
 `MetricType = "ratio"`
 
-Ratio Metrics reference two non-Ratio Metrics:
+Ratio Metrics reference two non-Ratio, non-Retention Metrics:
 
 ```
 {
@@ -65,6 +65,19 @@ Ratio Metrics reference two non-Ratio Metrics:
 ```
 
 **Delta-method variance is required** for Ratio Metrics (and any Metric finer than the Entity). The naive ratio-of-means variance silently understates variance and inflates false positives. That path does not exist in the engine. The stats engine receives per-Entity `(numerator, denominator)` pairs so the covariance term is recoverable — it is not recoverable after aggregation. (ADR-0015)
+
+### Retention Metric
+
+Did the Entity return in a later window? Yes (1) or no (0), among Entities whose horizon has matured.
+
+`MetricType = "retention"`
+
+Aggregation: the Binomial 0/1 fold, restricted to Metric Events in
+`[anchor + horizon_start, anchor + horizon_end)` and to Entities with
+`anchor + horizon_end <= analysis watermark`. Immature Entities are excluded from this Metric only.
+Kaplan-Meier is out of scope.
+
+Public online evidence for this exact eligibility rule is thin; it is the product contract.
 
 ### Guardrail Metric
 

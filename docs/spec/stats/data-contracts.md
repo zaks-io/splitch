@@ -43,8 +43,8 @@ Ratio inputs remain paired per Entity so the covariance term required by ADR-001
 | `targeting_key_hash` | `string`  | yes      | Matches the deduped Exposure row                                             |
 | `run_id`             | `string`  | yes      | Same Run scope                                                               |
 | `metric_id`          | `string`  | yes      | References Metric definition                                                 |
-| `metric_type`        | `enum`    | yes      | `binomial \| count \| revenue \| ratio`                                      |
-| `value`              | `number`  | yes      | Per-Entity aggregate (0/1 for binomial; sum for count/revenue)               |
+| `metric_type`        | `enum`    | yes      | `binomial \| count \| revenue \| ratio \| retention`                         |
+| `value`              | `number`  | yes      | Per-Entity aggregate (0/1 for binomial/retention; sum for count/revenue)     |
 | `num_value`          | `number`  | cond.    | Ratio numerator per-Entity sum (required when `metric_type=ratio`)           |
 | `denom_value`        | `number`  | cond.    | Ratio denominator per-Entity sum (required when `metric_type=ratio`)         |
 | `in_window`          | `boolean` | yes      | True if event fell within `[window_anchor, window_anchor + window_duration)` |
@@ -128,6 +128,9 @@ interface StatsInput {
   control_variant: string;               // locked Control Variant name
   decision_family: DecisionFamilyMember[]; // locked goal Metric × Variant × Primary Dimension family
   guardrail_decisions?: GuardrailDecision[]; // locked Guardrails; defaults to []
+  metric_conversion_windows?: { metric_id: string; window_duration_ms: number }[];
+  metric_retention_horizons?: { metric_id: string; horizon_start_ms: number; horizon_end_ms: number }[];
+  data_watermark?: string;               // required when any analyzed Metric is Retention
   exposures: DedupeExposureRow[];
   metric_values: PerEntityMetricRow[];
   pre_period_covariates?: PrePeriodRow[];

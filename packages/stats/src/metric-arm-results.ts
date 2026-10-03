@@ -9,6 +9,7 @@ import { absoluteCiForOutput } from "./absolute-ci-for-output";
 import { type CappedArmEvidence, estimandDisclosure } from "./estimand-disclosure";
 import { FixedHorizonCI } from "./fixed-horizon-ci";
 import { withFutilityVerdict } from "./metric-arm-futility";
+import { retentionEligibilityFields } from "./metric-arm-retention";
 import { withRopeVerdict } from "./metric-arm-rope";
 import { metricTypesById } from "./metric-discovery";
 import { fiellerRelativeCi } from "./relative-ci";
@@ -158,6 +159,8 @@ function comparisonsFor(
     winsorize_pct: variance?.winsorize_pct,
     cuped: variance?.cuped,
     cuped_coverage_threshold_pct: variance?.cuped_coverage_threshold_pct,
+    data_watermark: input.data_watermark,
+    metric_retention_horizons: input.metric_retention_horizons,
     // A fixed-horizon Run is decision-valid for the pre-registered sample only,
     // so the estimator analyzes the first `sample_size_locked` Entities per arm
     // and ignores whatever accrued past the lock.
@@ -183,6 +186,7 @@ function controlArmResult(arm: MetricArmEstimate): ArmResult {
     decision_valid: false,
     status: armStatusForOutput(arm),
     variance_techniques: arm.variance_techniques,
+    ...retentionEligibilityFields(arm),
   };
 }
 
@@ -212,6 +216,7 @@ function treatmentArmResult(
       decision_valid: false,
       status,
       variance_techniques: comparison.variance_techniques,
+      ...retentionEligibilityFields(comparison.treatment),
       ...absoluteCiForOutput(decisionCi),
       ...simultaneousShipMarginCiForOutput({
         statsInput: input,

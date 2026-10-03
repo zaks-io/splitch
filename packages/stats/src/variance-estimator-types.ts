@@ -5,6 +5,7 @@ import type {
   CupedMethod,
   MetricKind,
   PerEntityMetricRow,
+  StatsInput,
   VarianceTechniques,
 } from "@splitch/contracts";
 export type { CupedCovariateRow, CupedCovariateSource } from "@splitch/contracts";
@@ -18,6 +19,8 @@ export interface MetricArmEstimateInput {
   readonly variant: string;
   readonly exposures: readonly DedupeExposureRow[];
   readonly metric_values: readonly PerEntityMetricRow[];
+  readonly data_watermark?: string;
+  readonly metric_retention_horizons?: StatsInput["metric_retention_horizons"];
 }
 
 export interface MetricArmEstimate {
@@ -33,6 +36,7 @@ export interface MetricArmEstimate {
   readonly zero_denominator_entity_count: number;
   readonly delta_method: boolean;
   readonly variance_techniques: VarianceTechniques;
+  readonly immature_excluded_n?: number;
 }
 
 export interface MetricComparisonEstimateInput {
@@ -48,6 +52,8 @@ export interface MetricComparisonEstimateInput {
   readonly cuped?: boolean;
   readonly cuped_coverage_threshold_pct?: number;
   readonly pre_period_covariates?: readonly CupedCovariateRow[];
+  readonly data_watermark?: string;
+  readonly metric_retention_horizons?: StatsInput["metric_retention_horizons"];
   /**
    * Set only for a fixed-horizon Run: the pre-registered Entities-per-arm from
    * `sample_size_locked`. Each arm is truncated to its first this-many Entities

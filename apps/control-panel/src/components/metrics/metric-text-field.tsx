@@ -20,7 +20,10 @@ export function MetricTextField({
   draft: MetricDraft;
   label: string;
   onEdit: (patch: Partial<MetricDraft>) => void;
-  path: "name" | "key" | "eventDefinitionId" | "eventFieldName";
+  path: Extract<
+    keyof MetricDraft,
+    "name" | "key" | "eventDefinitionId" | "eventFieldName" | "horizonStartMs" | "horizonEndMs"
+  >;
   placeholder: string;
   shown: ReturnType<typeof metricDraftIssues>;
   workerError?: string;

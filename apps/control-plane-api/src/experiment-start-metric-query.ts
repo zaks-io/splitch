@@ -5,6 +5,7 @@ import {
 } from "@splitch/contracts";
 import { appScope, type Repository } from "@splitch/db";
 import { experimentStartInvalid } from "./experiment-errors";
+import { retentionQueryConfig } from "./experiment-start-retention-query";
 
 type MetricRow = NonNullable<Awaited<ReturnType<Repository["experiments"]["getMetric"]>>>;
 type EventDefinitionVersion = NonNullable<
@@ -76,6 +77,9 @@ function queryConfig(
   if (!row) throw new Error(`prepareStart: Metric ${metricId} was not loaded`);
   if (row.kind === "ratio") {
     return ratioQueryConfig(rows, sources, row, conversionWindowMs, targetingKeyType, requestId);
+  }
+  if (row.kind === "retention") {
+    return retentionQueryConfig(row, requestId);
   }
   if (!row.eventDefinitionId) {
     return invalidMetric(metricId, "has no Event Definition", requestId);
@@ -174,6 +178,13 @@ function ratioOperandBinding(
   }
   if (operand.kind === "ratio") {
     return invalidMetric(ratioMetricId, `${name} Metric ${operandId} is itself a Ratio`, requestId);
+  }
+  if (operand.kind === "retention") {
+    return invalidMetric(
+      ratioMetricId,
+      `${name} Metric ${operandId} cannot be a Retention Metric`,
+      requestId,
+    );
   }
   return sourceBinding(sources, operand, targetingKeyType, ratioMetricId, requestId);
 }

@@ -31,6 +31,7 @@ import {
   stringField,
 } from "./results-row-fields";
 import { materializeRunCommitments } from "./results-run-commitments";
+import { retentionStatsInputFields } from "./results-retention-horizons";
 import {
   assertAnalysisInputsPresent,
   conversionWindowsFromQueryConfig,
@@ -196,6 +197,7 @@ async function readResultsComputationFromTinybird(
     ...(metricQueryConfig.length > 0
       ? { metric_conversion_windows: conversionWindowsFromQueryConfig(metricQueryConfig) }
       : {}),
+    ...retentionStatsInputFields(metricQueryConfig, dataWatermark),
     ...(prePeriodRows.length > 0
       ? {
           pre_period_covariates: canonicalizeAnalysisRows(
