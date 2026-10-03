@@ -21,6 +21,7 @@ export const snapshot = Object.fromEntries(
     {
       method: route.method,
       path: route.path,
+      idempotency: route.idempotency,
       input: z.toJSONSchema(route.input, { io: "input", unrepresentable: "any" }),
     },
   ]),
@@ -29,8 +30,8 @@ export const snapshot = Object.fromEntries(
 
 /**
  * Evaluate a contracts `src` directory and return, per operationId, the route's
- * method, path, and the JSON Schema of its runtime request input
- * (`{ params, query, body }`) as a client must send it.
+ * method, path, Idempotency-Key mode, and the JSON Schema of its runtime request
+ * input (`{ params, query, body }`) as a client must send it.
  */
 export async function loadRequestContractSnapshot({ repoRoot, srcDir }) {
   const scratch = mkdtempSync(join(tmpdir(), "request-contract-snapshot-"));

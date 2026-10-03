@@ -1,38 +1,87 @@
 /**
  * Pure diff of two request-contract snapshots (operationId -> { method, path,
- * input JSON Schema }) for changes that make HEAD refuse a request the released
- * contract lets a client send. It walks only the JSON Schema subset zod v4's
- * `z.toJSONSchema` emits for this repo's inputs: objects, arrays, records,
- * const/enum literals, primitive types, and anyOf/oneOf unions.
+ * idempotency, input JSON Schema }) for changes that make HEAD refuse a request
+ * the released contract lets a client send. It walks the JSON Schema subset zod
+ * v4's `z.toJSONSchema` emits for this repo's inputs: objects, records, arrays,
+ * const/enum literals, primitive types, and anyOf/oneOf unions. Anything else
+ * (allOf, $ref, not, if) is reported as unsupported rather than skipped.
  */
 
 const MAX_DEPTH = 12;
 const PRIMITIVE_TYPES = new Set(["string", "number", "integer", "boolean", "null"]);
 const CONSTRAINING_KEYS = ["type", "const", "enum", "anyOf", "oneOf", "properties"];
+const UNSUPPORTED_KEYS = ["$ref", "allOf", "not", "if"];
+const PATH_PARAM = /:([A-Za-z_][A-Za-z0-9_]*)/g;
+// parseInput always builds these from the URL, so a client can never omit them.
+const RUNTIME_SUPPLIED = new Set(["params", "query"]);
 
 export function diffRequestContracts(released, head) {
   const violations = [];
   for (const [operationId, before] of Object.entries(released)) {
-    const after = head[operationId];
-    const report = (path, rule, message) => violations.push({ operationId, path, rule, message });
-    if (!after) {
-      report("(route)", "route-removed", "the route no longer exists at HEAD");
-      continue;
-    }
-    if (before.method !== after.method || before.path !== after.path) {
-      report(
-        "(route)",
-        "route-moved",
-        `${before.method} ${before.path} became ${after.method} ${after.path}`,
-      );
-    }
-    compareSchemas(before.input, after.input, "", 0, report);
+    compareRoute(before, head[operationId], (path, rule, message) =>
+      violations.push({ operationId, path, rule, message }),
+    );
   }
   return violations;
 }
 
+function compareRoute(before, after, report) {
+  if (!after) {
+    report("(route)", "route-removed", "the route no longer exists at HEAD");
+    return;
+  }
+  if (before.method !== after.method || pathShape(before.path) !== pathShape(after.path)) {
+    report(
+      "(route)",
+      "route-moved",
+      `${before.method} ${before.path} became ${after.method} ${after.path}`,
+    );
+    return;
+  }
+  if (after.idempotency === "required" && before.idempotency !== "required") {
+    report(
+      "headers.Idempotency-Key",
+      "required-added",
+      `was ${before.idempotency} in the release, required at HEAD`,
+    );
+  }
+  compareSchemas(before.input, alignPathParams(before, after), "", 0, report);
+}
+
+// Path param names never reach the wire: the client only fills in the URL. A
+// rename (:flagId -> :flagKey) is compatible, so compare by URL position.
+function pathShape(path) {
+  return path.replace(PATH_PARAM, ":");
+}
+
+function alignPathParams(before, after) {
+  const params = after.input.properties?.params;
+  if (!params?.properties) return after.input;
+  const names = [...after.path.matchAll(PATH_PARAM)].map((match) => match[1]);
+  const released = [...before.path.matchAll(PATH_PARAM)].map((match) => match[1]);
+  const rename = (name) => released[names.indexOf(name)] ?? name;
+  const aligned = {
+    ...params,
+    properties: Object.fromEntries(
+      Object.entries(params.properties).map(([name, schema]) => [rename(name), schema]),
+    ),
+    ...(params.required ? { required: params.required.map(rename) } : {}),
+  };
+  return { ...after.input, properties: { ...after.input.properties, params: aligned } };
+}
+
 function compareSchemas(before, after, path, depth, report) {
-  if (depth > MAX_DEPTH || acceptsAnything(after) || acceptsAnything(before)) return;
+  if (depth > MAX_DEPTH) return;
+  const unsupported = [before, after].flatMap(flattenUnion).find(usesUnsupportedKeyword);
+  if (unsupported) {
+    report(path, "unsupported-schema", "uses allOf/$ref/not/if, which this gate cannot compare");
+    return;
+  }
+  if (acceptsAnything(after)) return;
+  if (acceptsAnything(before)) {
+    report(path, "type-narrowed", "accepted any value in the release, HEAD constrains it");
+    return;
+  }
   const was = classify(before);
   const now = classify(after);
   compareLiterals(was, now, path, report);
@@ -60,12 +109,15 @@ function addStructured(shape, member) {
 }
 
 function flattenUnion(schema) {
+  if (!isSchema(schema)) return [];
   const members = schema.anyOf ?? schema.oneOf;
   if (Array.isArray(members)) return members.flatMap(flattenUnion);
-  if (Array.isArray(schema.type)) {
-    return schema.type.map((type) => ({ ...schema, type }));
-  }
+  if (Array.isArray(schema.type)) return schema.type.map((type) => ({ ...schema, type }));
   return [schema];
+}
+
+function usesUnsupportedKeyword(schema) {
+  return UNSUPPORTED_KEYS.some((key) => key in schema);
 }
 
 function acceptsAnything(schema) {
@@ -87,10 +139,15 @@ function acceptsPrimitive(shape, type) {
   return type === "integer" && shape.primitives.has("number");
 }
 
+function acceptsValue(schema, value) {
+  if (!isSchema(schema)) return false;
+  const shape = classify(schema);
+  return shape.literals.includes(value) || acceptsPrimitive(shape, jsonTypeOf(value));
+}
+
 function compareLiterals(was, now, path, report) {
   const lost = was.literals.filter(
-    (value) =>
-      !now.literals.some((kept) => kept === value) && !acceptsPrimitive(now, jsonTypeOf(value)),
+    (value) => !now.literals.includes(value) && !acceptsPrimitive(now, jsonTypeOf(value)),
   );
   if (lost.length > 0) {
     report(
@@ -115,24 +172,39 @@ function comparePrimitives(was, now, path, report) {
   }
 }
 
+/**
+ * Each released object variant is compared with the HEAD variant that accepts
+ * it best: among those still accepting its discriminator tag when the released
+ * union has one, otherwise among all HEAD object variants.
+ */
 function compareObjects(was, now, path, depth, report) {
   if (was.length === 0) return;
   if (now.length === 0) {
     report(path, "type-narrowed", "no longer accepts an object");
     return;
   }
-  if (was.length === 1 && now.length === 1) {
-    compareObject(was[0], now[0], path, depth, report);
-    return;
-  }
-  const key = discriminatorOf(was);
-  if (!key) return;
+  const key = was.length > 1 ? discriminatorOf(was) : undefined;
   for (const variant of was) {
-    const tag = variant.properties[key].const;
-    const match = now.find((candidate) => candidate.properties?.[key]?.const === tag);
-    if (match) compareObject(variant, match, path, depth, report);
-    else report(join(path, key), "variant-removed", `no longer accepts ${JSON.stringify(tag)}`);
+    const tag = key && variant.properties[key].const;
+    const candidates = key
+      ? now.filter((candidate) => acceptsValue(candidate.properties?.[key], tag))
+      : now;
+    if (candidates.length === 0) {
+      report(join(path, key), "variant-removed", `no longer accepts ${JSON.stringify(tag)}`);
+    } else {
+      replayClosest(variant, candidates, path, depth, report);
+    }
   }
+}
+
+function replayClosest(variant, candidates, path, depth, report) {
+  let closest;
+  for (const candidate of candidates) {
+    const found = [];
+    compareObject(variant, candidate, path, depth, (...violation) => found.push(violation));
+    if (!closest || found.length < closest.length) closest = found;
+  }
+  for (const violation of closest) report(...violation);
 }
 
 /** The property every union member pins to a distinct `const`, if one exists. */
@@ -149,21 +221,13 @@ function compareObject(before, after, path, depth, report) {
   for (const [field, schema] of Object.entries(before.properties ?? {})) {
     compareField(field, schema, after, join(path, field), depth, report);
   }
-  if (isSchema(before.additionalProperties) && isSchema(after.additionalProperties)) {
-    compareSchemas(
-      before.additionalProperties,
-      after.additionalProperties,
-      join(path, "*"),
-      depth + 1,
-      report,
-    );
-  }
+  compareOpenKeys(before, after, path, depth, report);
 }
 
 function reportNewlyRequired(before, after, path, report) {
   const wasRequired = new Set(before.required ?? []);
   for (const field of after.required ?? []) {
-    if (wasRequired.has(field)) continue;
+    if (wasRequired.has(field) || (path === "" && RUNTIME_SUPPLIED.has(field))) continue;
     report(
       join(path, field),
       "required-added",
@@ -185,6 +249,32 @@ function compareField(field, schema, after, path, depth, report) {
   }
 }
 
+/** Records and loose objects: keys beyond the declared properties. */
+function compareOpenKeys(before, after, path, depth, report) {
+  if (!isSchema(before.additionalProperties)) return;
+  const keysPath = join(path, "*");
+  if (after.additionalProperties === false) {
+    report(
+      keysPath,
+      "field-removed",
+      "accepted arbitrary keys in the release, HEAD accepts only declared keys",
+    );
+    return;
+  }
+  if (!isSchema(after.additionalProperties)) return;
+  compareSchemas(
+    before.additionalProperties,
+    after.additionalProperties,
+    keysPath,
+    depth + 1,
+    report,
+  );
+  if (isSchema(after.propertyNames)) {
+    const releasedKeys = before.propertyNames ?? { type: "string" };
+    compareSchemas(releasedKeys, after.propertyNames, join(path, "(key)"), depth + 1, report);
+  }
+}
+
 function compareArrays(was, now, path, depth, report) {
   if (was.length === 0) return;
   if (now.length === 0) {
@@ -202,40 +292,4 @@ function isSchema(value) {
 
 function join(path, field) {
   return path ? `${path}.${field}` : field;
-}
-
-/**
- * Validate the reviewed allowlist and split violations into those it excuses
- * and those still failing. Entries that excuse nothing are returned as stale so
- * the allowlist cannot silently outlive the skew it was written for.
- */
-export function applyAllowlist(violations, allowlist) {
-  const problems = validateAllowlist(allowlist);
-  const entries = Array.isArray(allowlist) ? allowlist : [];
-  const keyOf = (item) => `${item.operationId}\u0000${item.path}`;
-  const allowed = new Set(entries.map(keyOf));
-  const matched = new Set(violations.map(keyOf).filter((key) => allowed.has(key)));
-  return {
-    problems,
-    failing: violations.filter((violation) => !allowed.has(keyOf(violation))),
-    excused: violations.filter((violation) => allowed.has(keyOf(violation))),
-    stale: entries.filter((entry) => !matched.has(keyOf(entry))),
-  };
-}
-
-function validateAllowlist(entries) {
-  if (!Array.isArray(entries)) return ["allowlist must be a JSON array"];
-  const problems = [];
-  const seen = new Set();
-  entries.forEach((entry, index) => {
-    for (const field of ["operationId", "path", "reason"]) {
-      if (typeof entry?.[field] !== "string" || entry[field].trim() === "") {
-        problems.push(`entry ${index} needs a non-empty string "${field}"`);
-      }
-    }
-    const key = `${entry?.operationId} ${entry?.path}`;
-    if (seen.has(key)) problems.push(`entry ${index} duplicates ${key}`);
-    seen.add(key);
-  });
-  return problems;
 }
