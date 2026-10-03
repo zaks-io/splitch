@@ -104,7 +104,10 @@ describe("flags_delete codeRemoval claim (direct path)", () => {
       lifecycleClass: "ops",
     });
     // Without the deletion audit row, the in-batch claim UPDATE misses and aborts.
+    // Empty the audit table too: a FROM flag_change_events guard would otherwise
+    // return zero rows and silently skip ELSE json('') (retention + missing trigger).
     await h.bindings.d1.prepare("DROP TRIGGER IF EXISTS flag_change_flag_after_delete").run();
+    await h.bindings.d1.prepare("DELETE FROM flag_change_events").run();
     try {
       const deleted = await request(
         h,
@@ -270,7 +273,10 @@ describe("flags_delete codeRemoval claim (Approval apply path)", () => {
     const requestId = removed.approvalRequestId;
     expect(requestId).toBeTruthy();
 
+    // Empty audit history + missing deletion trigger: claim UPDATE hits zero rows
+    // and the scalar guard must still abort (not a silent zero-row SELECT).
     await h.d1.prepare("DROP TRIGGER IF EXISTS flag_change_flag_after_delete").run();
+    await h.d1.prepare("DELETE FROM flag_change_events").run();
     try {
       const review = await reviewRequest(h, requestId ?? "", "flag_delete_audit_fail_review");
       // Apply surfaces as APPROVAL_APPLICATION_FAILED (409); the batch rolled back.

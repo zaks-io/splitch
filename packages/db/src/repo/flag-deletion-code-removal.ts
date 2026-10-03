@@ -1,5 +1,5 @@
 import { and, eq, isNotNull, isNull, sql } from "drizzle-orm";
-import { flagChangeEvents, flags } from "../schema/index";
+import { apps, flagChangeEvents, flags } from "../schema/index";
 import type { Db } from "./client";
 import { assertMintedScope, type TenantScope } from "./scope";
 
@@ -53,9 +53,13 @@ export function codeRemovalClaimBatchStatements(
           )`,
         ),
       ),
-    // Prefer an existence check over changes(): Approval commit statements also
-    // modify rows, and changes() would be ambiguous after those writes.
-    // json('') is only evaluated on the failing branch, which aborts the batch.
+    // FROM apps (not flag_change_events): a `.from(flag_change_events).limit(1)`
+    // guard returns zero rows when retention emptied the table and the deletion
+    // trigger is missing, so ELSE json('') never runs and the Flag DELETE would
+    // commit. The App row always exists for an in-scope delete, so the CASE always
+    // evaluates. Prefer existence over changes(): Approval commit statements also
+    // modify rows before this guard, and changes() would be ambiguous after those
+    // writes. json('') is only evaluated on the failing branch, which aborts the batch.
     db
       .select({
         ok: sql<number>`CASE
@@ -77,7 +81,8 @@ export function codeRemovalClaimBatchStatements(
           ELSE json('')
         END`.as("ok"),
       })
-      .from(flagChangeEvents)
+      .from(apps)
+      .where(eq(apps.id, scope.appId))
       .limit(1),
   ] as const;
 }
