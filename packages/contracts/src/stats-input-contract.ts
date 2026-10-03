@@ -212,6 +212,19 @@ export const MetricVarianceConfigSchema = z
   .strict();
 export type MetricVarianceConfig = z.infer<typeof MetricVarianceConfigSchema>;
 
+/**
+ * Frozen Conversion Window per Metric from the Run snapshot. Optional so
+ * Control Plane can send it before Analysis consumes it; other StatsInput
+ * readers ignore it. `window_duration_ms` of 0 is unbounded.
+ */
+export const MetricConversionWindowSchema = z
+  .object({
+    metric_id: MetricIdSchema,
+    window_duration_ms: z.number().int().nonnegative(),
+  })
+  .strict();
+export type MetricConversionWindow = z.infer<typeof MetricConversionWindowSchema>;
+
 export const StatsInputSchema = z
   .object({
     run_id: z.string(),
@@ -231,6 +244,12 @@ export const StatsInputSchema = z
     decision_family: z.array(DecisionFamilyMemberSchema),
     guardrail_decisions: z.array(GuardrailDecisionSchema).default([]),
     metric_variance_config: z.array(MetricVarianceConfigSchema).default([]),
+    /**
+     * Frozen Conversion Window per Metric (Run snapshot / MetricQueryConfig).
+     * Optional and ignored by the decision engine; cohort-effect completeness
+     * filtering reads it when present.
+     */
+    metric_conversion_windows: z.array(MetricConversionWindowSchema).optional(),
     /**
      * Frozen pre-registration when the Run recorded one. Drives per-Metric
      * ropeVerdict on ArmResult; omit when Start did not pre-register.

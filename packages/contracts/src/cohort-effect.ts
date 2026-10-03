@@ -22,6 +22,11 @@ export const cohortEffectBucketStatuses = [
   "zero_variance",
   /** Ratio Metric with enough Entities but zero mean denominator. */
   "insufficient_denominator",
+  /**
+   * Sampling variance is negative after the permitted floating-point clamp.
+   * Distinct from exact-zero `zero_variance`.
+   */
+  "numerical_failure",
 ] as const;
 export const CohortEffectBucketStatusSchema = z.enum(cohortEffectBucketStatuses);
 export type CohortEffectBucketStatus = z.infer<typeof CohortEffectBucketStatusSchema>;

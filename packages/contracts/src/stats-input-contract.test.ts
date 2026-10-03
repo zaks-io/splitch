@@ -316,4 +316,19 @@ describe("StatsInputSchema", () => {
       downside_threshold_pct: -5,
     });
   });
+
+  it("accepts omitted metric_conversion_windows (Analysis-before-Control-Plane)", () => {
+    const input = StatsInputSchema.parse(statsInput);
+    expect(input.metric_conversion_windows).toBeUndefined();
+  });
+
+  it("accepts optional metric_conversion_windows from the frozen Run snapshot", () => {
+    const input = StatsInputSchema.parse({
+      ...statsInput,
+      metric_conversion_windows: [{ metric_id: "metric_1", window_duration_ms: 86_400_000 }],
+    });
+    expect(input.metric_conversion_windows).toEqual([
+      { metric_id: "metric_1", window_duration_ms: 86_400_000 },
+    ]);
+  });
 });
