@@ -10,6 +10,7 @@ import {
   PatchExperimentRequestSchema,
   StartRunRequestSchema,
 } from "./resource-envelopes-experiment";
+import { ExperimentPlanRequestSchema } from "./experiment-plan";
 import { CreateFlagRequestSchema } from "./resource-envelopes-flag";
 import {
   PatchFlagConfigRequestSchema,
@@ -35,6 +36,18 @@ describe("requestBodySchemaForOperation", () => {
   it("returns undefined for routes without a JSON body", () => {
     expect(requestBodySchemaForOperation("flags_list")).toBeUndefined();
     expect(requestBodySchemaForOperation("not_a_real_tool")).toBeUndefined();
+  });
+});
+
+describe("experiment_plan request body help", () => {
+  it("fills refine-required optionals so examples parse", () => {
+    const help = describeRequestBody(ExperimentPlanRequestSchema);
+    expect(ExperimentPlanRequestSchema.safeParse(help.example).success).toBe(true);
+    const example = help.example as Record<string, unknown>;
+    expect(example.metricKind).toBe("continuous");
+    expect(example).toHaveProperty("baselineMean");
+    expect(example).toHaveProperty("baselineVariance");
+    expect(example).toHaveProperty("mdeAbsolute");
   });
 });
 

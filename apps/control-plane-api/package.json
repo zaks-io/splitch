@@ -21,6 +21,7 @@
     "@splitch/db": "workspace:*",
     "@splitch/observability": "workspace:*",
     "@splitch/privacy": "workspace:*",
+    "@splitch/stats": "workspace:*",
     "@splitch/worker-runtime": "workspace:*",
     "hono": "^4.13.5"
   },

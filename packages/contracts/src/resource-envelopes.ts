@@ -15,6 +15,8 @@ export * from "./incoming-json-bound";
 export * from "./resource-envelopes-account";
 // biome-ignore lint/performance/noReExportAll: each source module owns a cohesive resource family
 export * from "./resource-envelopes-experiment";
+// biome-ignore lint/performance/noReExportAll: experiment_plan wire shapes sit beside Experiment envelopes
+export * from "./experiment-plan";
 // biome-ignore lint/performance/noReExportAll: each source module owns a cohesive resource family
 export * from "./resource-envelopes-flag";
 // biome-ignore lint/performance/noReExportAll: each source module owns a cohesive resource family

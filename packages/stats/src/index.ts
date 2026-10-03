@@ -15,6 +15,8 @@ export {
 } from "@splitch/contracts";
 export { computeSequentialCI, SEQUENTIAL_CI_SOURCE, SequentialCI } from "./sequential-ci";
 export { computeFixedHorizonCI, FIXED_HORIZON_CI_SOURCE, FixedHorizonCI } from "./fixed-horizon-ci";
+export { alwaysValidCriticalScale, alwaysValidInflation } from "./always-valid-inflation";
+export { planExperiment } from "./experiment-plan";
 export { analyzeStats, StatsEngine } from "./stats-engine";
 export { analysisVersionPolicy } from "./analysis-version-policy";
 export type { AnalysisVersionPolicy, SrmProcedure } from "./analysis-version-policy";
@@ -63,6 +65,14 @@ export type {
   CIWarning,
   SequentialCIOptions,
 } from "./sequential-ci";
+export type {
+  ExperimentPlanBaselineSource,
+  ExperimentPlanInput,
+  ExperimentPlanIssue,
+  ExperimentPlanMetricKind,
+  ExperimentPlanOutcome,
+  ExperimentPlanResult,
+} from "./experiment-plan";
 export type { StatsEngineOptions } from "./stats-engine";
 export type {
   DecisionFamilyArmResult,

@@ -68,6 +68,7 @@ export const CANONICAL_OPERATION_IDS = [
   "experiments_get",
   "experiments_update",
   "experiments_start",
+  "experiment_plan",
   "experiments_delete",
   // Runs
   "runs_list",

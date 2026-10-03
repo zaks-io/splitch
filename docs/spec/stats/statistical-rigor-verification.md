@@ -167,6 +167,7 @@ must account for Monte Carlo error and should be documented with the seed and it
 | Winsorization                        | Heavy-tail fixture reduces variance and keeps sample size unchanged                                                                                              |
 | SRM                                  | Biased allocation trips SRM at high probability                                                                                                                  |
 | Sequential SRM martingale            | Continuous-monitoring false-alarm rate within Monte Carlo tolerance of alpha; seeded 2% allocation drift is detected with a recorded delay                       |
+| Experiment power planner inflation   | At planned `target_n` under the stated MDE, rejection rate within Monte Carlo tolerance of planned power; seed `experiment-plan-inflation-4242`                  |
 | Activation balance                   | Treatment-affected gate trips activation-balance diagnostic                                                                                                      |
 
 Monte Carlo gates should run in two modes:
