@@ -101,6 +101,7 @@ function nullActivationPopulation(
       run_id: RUN_ID,
       variant,
       first_exposure_ts: exposureDay,
+      first_ingest_ts: exposureDay,
       window_anchor: exposureDay,
     });
 
@@ -115,6 +116,7 @@ function nullActivationPopulation(
       targeting_key_hash: entity,
       run_id: RUN_ID,
       activation_ts: activationDay,
+      activation_ingest_ts: activationDay,
       counterfactual: false,
       activated: true,
     });
@@ -125,7 +127,7 @@ function nullActivationPopulation(
 
 /**
  * Continuous-monitoring Type I check: peek at several prefixes of the activated
- * population ordered by activation_ts. Trip if any watermark fires.
+ * population ordered by activation_ingest_ts. Trip if any watermark fires.
  */
 function anyWatermarkTripsActivatedSrm(
   exposures: readonly DedupeExposureRow[],
@@ -136,8 +138,8 @@ function anyWatermarkTripsActivatedSrm(
   }
 
   const orderedActivations = [...activationRows].sort((left, right) => {
-    const leftMs = Date.parse(left.activation_ts);
-    const rightMs = Date.parse(right.activation_ts);
+    const leftMs = Date.parse(left.activation_ingest_ts);
+    const rightMs = Date.parse(right.activation_ingest_ts);
     if (leftMs !== rightMs) {
       return leftMs - rightMs;
     }
@@ -180,6 +182,7 @@ function biasedExposures(
       run_id: RUN_ID,
       variant,
       first_exposure_ts: BASE_TS,
+      first_ingest_ts: BASE_TS,
       window_anchor: BASE_TS,
     };
   });

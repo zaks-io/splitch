@@ -50,11 +50,8 @@ read this martingale: `srm_p_value` is the anytime p-value and `srm_is_mismatch`
 `threshold_crossed` at alpha 0.001. legacy-unversioned and analysis-v1 keep the chi-square
 `p < 0.001` gate. Chi-square stays the fixed-horizon diagnostic and the activation-balance test
 under every version (activation balance is equality of unknown rates, not the declared
-allocation multinomial). `analysis-v2` is defined in the exhaustive version switch but is
-**unsupported** for Start and Results: it is not in `SUPPORTED_ANALYSIS_VERSIONS`, new Runs
-freeze `analysis-v1`, and a Run frozen under v2 refuses loudly. The open blocker is an
-ingestion-ordered observation path (late ingestion with earlier event timestamps can erase an
-alarm when the path is ordered by event time).
+allocation multinomial). `analysis-v2` is **current**: it is in `SUPPORTED_ANALYSIS_VERSIONS`,
+new Runs freeze it, and Results analyzes Runs frozen under it.
 
 **Prior.** Dirichlet mean equals the declared allocation: `alpha_i = concentration * theta_i`.
 Default `concentration` is 100. Type I control from Ville's inequality does not depend on this
@@ -70,27 +67,32 @@ of `min(1, 1 / wealth)`, which is super-uniform under the null. `threshold_cross
 
 **Observation contract (Results gate).** On every Results read, the analysis-v2 SRM gate rebuilds
 an append-only arrival path from the current watermarked population and evaluates the martingale
-after every Entity arrival (incremental log-gamma updates, O(N)). Exposure SRM orders Entities by
-`first_exposure_ts`. Activated-population SRM orders activated Entities by their earliest valid
-`activation_ts` (the time they entered the activated population), not by first Exposure. Ties at
-identical timestamps break deterministically by Entity pseudonym (`targeting_key_hash`) so pinned
-reads stay reproducible. The reported p-value is the running minimum along that path, so an early
-mismatch stays sticky when later arrivals balance the totals. This holds as long as ingestion
-before the pinned watermark is complete (the watermark contract). The Entity set is exactly the
-pinned-watermark `StatsInput` exposures (and activation rows for activated SRM).
+after every Entity arrival (incremental log-gamma updates, O(N)). The filtration clock is
+**ingestion time**, not event time:
 
-**Open issue (why v2 is unsupported).** Ordering by event time is not the same as ordering by
-ingestion. A late-arriving row whose `activation_ts` / `first_exposure_ts` is earlier than rows
-already on the path can rewrite history and erase a previously sticky alarm. Until the Results
-gate has an ingestion-ordered (append-only across watermarks) observation path, `analysis-v2`
-stays out of `SUPPORTED_ANALYSIS_VERSIONS`, `CURRENT_ANALYSIS_VERSION` stays `analysis-v1`, and
-Start rejects a request for v2.
+- Exposure SRM orders Entities by `first_ingest_ts` = `min(ingest_ts)` over Exposure rows for that
+  Entity in the Run (`raw_events.ingest_ts`, stamped at Tinybird insertion with `DEFAULT now64(3)`
+  since the datasource existed; there is no pre-column Entity batch).
+- Activated-population SRM orders activated Entities by `activation_ingest_ts` = `min(ingest_ts)`
+  among valid post-Exposure Activation rows for that Entity.
+
+Ties at identical ingest timestamps break deterministically by Entity pseudonym
+(`targeting_key_hash`) so pinned reads stay reproducible. Because the path is ordered by when the
+system first saw each Entity (or Activation), a later watermark's path is an extension of an
+earlier one: a late-ingested row with an earlier `exposure_at` / `activation_ts` appends at the
+end rather than reordering history. The reported p-value is the running minimum along that path,
+so an early mismatch stays sticky when later arrivals balance the totals. This holds as long as
+ingestion before the pinned watermark is complete (the watermark contract). The Entity set is
+exactly the pinned-watermark `StatsInput` exposures (and activation rows for activated SRM).
+Missing `first_ingest_ts` / `activation_ingest_ts` fails loud; the engine never substitutes event
+time.
 
 **Quarantine and revisions.** A later watermark that moves an Entity into `__multiple__` (or
 revises `first_exposure_ts` / `activation_ts`) edits the dataset. The next read recomputes the
 whole path from the cleaned rows; it does not feed a decreasing arm total into a live filtration.
 Primitive `computeSequentialSrm` still fails loud if a single call's cumulative snapshots decrease
-an arm count.
+an arm count. Revising Variant membership can change the cleaned path; that is a dataset edit, not
+an ingest-order rewrite.
 
 **Looks.** Wealth is a function of the sufficient statistic. The anytime p-value is the running
 minimum after every singleton arrival in the reconstructed path. Continuous monitoring is the

@@ -93,6 +93,7 @@ function exposures(variant: string, count: number): DedupeExposureRow[] {
     run_id: RUN_ID,
     variant,
     first_exposure_ts: BASE_TS,
+    first_ingest_ts: BASE_TS,
     window_anchor: BASE_TS,
   }));
 }
@@ -102,6 +103,7 @@ function activationRows(exposureRows: readonly DedupeExposureRow[]): ActivationR
     targeting_key_hash: row.targeting_key_hash,
     run_id: RUN_ID,
     activation_ts: ACTIVATION_TS,
+    activation_ingest_ts: ACTIVATION_TS,
     counterfactual: false,
     activated: true,
   }));

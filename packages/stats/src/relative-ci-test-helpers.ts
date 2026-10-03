@@ -129,6 +129,7 @@ function expose(rows: Rows, variant: string, index: number): string {
     run_id: RUN_ID,
     variant,
     first_exposure_ts: TS,
+    first_ingest_ts: TS,
     window_anchor: TS,
   });
   return targetingKeyHash;

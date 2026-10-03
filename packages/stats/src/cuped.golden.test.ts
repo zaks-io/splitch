@@ -185,6 +185,7 @@ function exposures(
     run_id: RUN_ID,
     variant,
     first_exposure_ts: "2026-07-01T00:00:00.000Z",
+    first_ingest_ts: "2026-07-01T00:00:00.000Z",
     window_anchor: activated ? "2026-07-02T00:00:00.000Z" : "2026-07-01T00:00:00.000Z",
   }));
 }

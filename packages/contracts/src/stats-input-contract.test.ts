@@ -62,6 +62,7 @@ const exposureRow = {
   run_id: "run_1",
   variant: "treatment",
   first_exposure_ts: "2026-07-01T00:00:00.000Z",
+  first_ingest_ts: "2026-07-01T00:00:00.000Z",
   window_anchor: "2026-07-01T00:00:00.000Z",
   dimension_values: { country: "US" },
 };
@@ -113,6 +114,7 @@ describe("DedupeExposureRowSchema", () => {
     "run_id",
     "variant",
     "first_exposure_ts",
+    "first_ingest_ts",
     "window_anchor",
   ])("rejects a missing %s field", (field) => {
     expect(DedupeExposureRowSchema.safeParse(omitField(exposureRow, field)).success).toBe(false);
@@ -232,16 +234,21 @@ describe("ActivationRowSchema", () => {
     targeting_key_hash: "tkh_1",
     run_id: "run_1",
     activation_ts: "2026-07-01T00:05:00.000Z",
+    activation_ingest_ts: "2026-07-01T00:05:00.000Z",
     counterfactual: false,
     activated: true,
   };
 
-  it.each(["targeting_key_hash", "run_id", "activation_ts", "counterfactual", "activated"])(
-    "rejects a missing %s field",
-    (field) => {
-      expect(ActivationRowSchema.safeParse(omitField(activationRow, field)).success).toBe(false);
-    },
-  );
+  it.each([
+    "targeting_key_hash",
+    "run_id",
+    "activation_ts",
+    "activation_ingest_ts",
+    "counterfactual",
+    "activated",
+  ])("rejects a missing %s field", (field) => {
+    expect(ActivationRowSchema.safeParse(omitField(activationRow, field)).success).toBe(false);
+  });
 
   it("parses the Activation gate row fields", () => {
     const row = ActivationRowSchema.parse(activationRow);

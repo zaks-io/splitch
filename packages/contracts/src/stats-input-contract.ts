@@ -27,7 +27,12 @@ export const DedupeExposureRowSchema = z
     run_id: z.string(),
     variant: z.string(),
     first_exposure_ts: TimestampSchema,
-    /** Optional ingest clock; analysis-v1/legacy ignore, analysis-v2 requires. */
+    /**
+     * When the system first ingested any Exposure for this Entity in the Run
+     * (`min(ingest_ts)` on `raw_events`). analysis-v2 SRM orders by this;
+     * analysis-v1/legacy ignore it. Optional on the row schema for deploy
+     * compat; analysis-v2 fails loud when absent.
+     */
     first_ingest_ts: TimestampSchema.optional(),
     window_anchor: TimestampSchema,
     dimension_values: z.record(z.string(), z.string()).optional(),
@@ -83,7 +88,12 @@ export const ActivationRowSchema = z
     targeting_key_hash: z.string(),
     run_id: z.string(),
     activation_ts: TimestampSchema,
-    /** Optional eligibility clock; analysis-v1/legacy ignore, analysis-v2 requires. */
+    /**
+     * Eligibility clock for activated SRM (pairwise min of
+     * max(exposure.ingest, activation.ingest) over qualifying pairs).
+     * analysis-v1/legacy ignore it. Optional on the row schema for deploy
+     * compat; analysis-v2 fails loud when absent.
+     */
     activation_ingest_ts: TimestampSchema.optional(),
     counterfactual: z.boolean(),
     activated: z.boolean(),

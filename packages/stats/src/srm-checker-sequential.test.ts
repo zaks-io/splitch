@@ -147,27 +147,35 @@ describe("SRMChecker sequential activated path", () => {
     expect(afterBalance.srm.activated_srm_p_value).toBe(earlyOnly.srm.activated_srm_p_value);
   });
 
-  it("orders activated sequential SRM by activation_ts rather than first Exposure", () => {
+  it("orders activated sequential SRM by activation_ingest_ts rather than first Exposure", () => {
     const dayOne = "2026-07-01T00:00:00.000Z";
     const dayTwo = "2026-07-02T00:00:00.000Z";
     const control = exposuresOnDay("control", 900, dayOne);
     const treatmentEarlyExposure = exposuresOnDay("treatment", 100, dayOne);
     const treatmentLateExposure = exposuresOnDay("treatment", 800, dayTwo, 100);
-    // Activations arrive in reverse Exposure-day order: day-two Entities first.
+    // Activations are ingested in reverse Exposure-day order: day-two Entities first.
     const result = checkSrmHealth({
       run_id: RUN_ID,
       allocation: { control: 50, treatment: 50 },
       exposures: [...control, ...treatmentEarlyExposure, ...treatmentLateExposure],
       activation_rows: [
-        ...activationRowsAt(treatmentLateExposure, "2026-07-03T08:00:00.000Z"),
-        ...activationRowsAt(control, "2026-07-03T18:00:00.000Z"),
-        ...activationRowsAt(treatmentEarlyExposure, "2026-07-03T18:00:00.000Z"),
+        ...activationRowsAt(
+          treatmentLateExposure,
+          "2026-07-03T08:00:00.000Z",
+          "2026-07-03T08:00:00.000Z",
+        ),
+        ...activationRowsAt(control, "2026-07-03T18:00:00.000Z", "2026-07-03T18:00:00.000Z"),
+        ...activationRowsAt(
+          treatmentEarlyExposure,
+          "2026-07-03T18:00:00.000Z",
+          "2026-07-03T18:00:00.000Z",
+        ),
       ],
       srm_procedure: "sequential_martingale",
     });
 
     // Prefix is 800 treatment then later 900/100 control/treatment; alarm from
-    // the reverse-order activation prefix must stick.
+    // the reverse-order activation ingest prefix must stick.
     expect(result.srm.activated_srm_mismatch).toBe(true);
     expect(result.srm.activated_srm_p_value).toBeLessThan(1e-100);
   });

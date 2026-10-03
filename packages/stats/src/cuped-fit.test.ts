@@ -148,6 +148,7 @@ function arm(prefix: string, values: readonly number[]): EntityAggregate[] {
   return values.map((value, index) => ({
     targeting_key_hash: `${prefix}${index}`,
     first_exposure_ts: "2026-01-01T00:00:00Z",
+    first_ingest_ts: "2026-01-01T00:00:00Z",
     window_anchor: "2026-01-01T00:00:00Z",
     value,
     num_value: value,

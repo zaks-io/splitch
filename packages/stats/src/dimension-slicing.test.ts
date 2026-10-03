@@ -201,6 +201,7 @@ function gatedExposure(
   return {
     ...exposure(variant, targeting_key_hash),
     first_exposure_ts: FIRST_EXPOSURE_TS,
+    first_ingest_ts: FIRST_EXPOSURE_TS,
     window_anchor,
     dimension_values,
   };
@@ -214,6 +215,7 @@ function activationRow(
     targeting_key_hash,
     run_id: ENGINE_RUN_ID,
     activation_ts: ACTIVATION_TS,
+    activation_ingest_ts: ACTIVATION_TS,
     counterfactual: false,
     activated,
   };

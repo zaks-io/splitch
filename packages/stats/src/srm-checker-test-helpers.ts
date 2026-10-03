@@ -33,6 +33,7 @@ export function exposureOnDay(
   variant: string,
   targeting_key_hash: string,
   firstExposureTs: string,
+  firstIngestTs: string = firstExposureTs,
 ): DedupeExposureRow {
   return {
     app_id: "app_1",
@@ -42,8 +43,21 @@ export function exposureOnDay(
     run_id: SRM_TEST_RUN_ID,
     variant,
     first_exposure_ts: firstExposureTs,
+    first_ingest_ts: firstIngestTs,
     window_anchor: firstExposureTs,
   };
+}
+
+export function exposuresOnDayWithIngest(
+  variant: string,
+  count: number,
+  firstExposureTs: string,
+  firstIngestTs: string,
+  indexOffset = 0,
+): DedupeExposureRow[] {
+  return Array.from({ length: count }, (_, index) =>
+    exposureOnDay(variant, `${variant}_${indexOffset + index}`, firstExposureTs, firstIngestTs),
+  );
 }
 
 export function activationRows(exposureRows: readonly DedupeExposureRow[]): ActivationRow[] {
@@ -53,11 +67,13 @@ export function activationRows(exposureRows: readonly DedupeExposureRow[]): Acti
 export function activationRowsAt(
   exposureRows: readonly DedupeExposureRow[],
   activationTs: string,
+  activationIngestTs: string = activationTs,
 ): ActivationRow[] {
   return exposureRows.map((row) => ({
     targeting_key_hash: row.targeting_key_hash,
     run_id: SRM_TEST_RUN_ID,
     activation_ts: activationTs,
+    activation_ingest_ts: activationIngestTs,
     counterfactual: false,
     activated: true,
   }));

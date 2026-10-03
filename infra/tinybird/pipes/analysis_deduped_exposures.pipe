@@ -21,6 +21,7 @@ SQL >
         targeting_key_hash,
         variant,
         first_exposure_ts,
+        first_ingest_ts,
         -- The ungated anchor. The Activation gate re-anchors window_anchor to the
         -- Entity's activation_ts, but that gate is per-Run configuration held in D1
         -- (runs.activation_metric_id) which the Analysis Worker cannot read, so no

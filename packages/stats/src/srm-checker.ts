@@ -19,7 +19,10 @@ import { resolveSrmProcedure, sequentialSrmAlongEntityPath } from "./srm-checker
 import type { SrmPathEntity } from "./srm-observation-path";
 import { expectedCountsForOutput, safeRate, sumCounts, zeroCounts } from "./srm-counts";
 import { SRM_MISMATCH_P_VALUE } from "./srm-checker-threshold";
-import { activationRowsByEntityForRun, earliestValidActivationTs } from "./srm-activated-arrival";
+import {
+  activationRowsByEntityForRun,
+  earliestValidActivationIngestTs,
+} from "./srm-activated-arrival";
 
 export { SRM_MISMATCH_P_VALUE };
 
@@ -182,7 +185,7 @@ function dedupedPathEntities(input: SrmCheckerInput, variants: readonly string[]
     dedupedExposureRowsForVariant({ ...input, variant }).map((exposure) => ({
       targeting_key_hash: exposure.targeting_key_hash,
       variant: exposure.variant,
-      arrival_ts: exposure.first_exposure_ts,
+      arrival_ts: exposure.first_ingest_ts,
     })),
   );
 }
@@ -206,7 +209,7 @@ function activatedPathEntities(
     path.push({
       targeting_key_hash: exposure.targeting_key_hash,
       variant: exposure.variant,
-      arrival_ts: earliestValidActivationTs(exposure, activationsByEntity),
+      arrival_ts: earliestValidActivationIngestTs(exposure, activationsByEntity),
     });
   }
   return path;
