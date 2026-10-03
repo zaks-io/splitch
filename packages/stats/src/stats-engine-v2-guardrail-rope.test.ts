@@ -32,6 +32,7 @@ describe("StatsEngine.analyze analysis-v2 Guardrail + ROPE", () => {
           margin_scale: "absolute",
           conflict_resolution: "primary_wins",
         },
+        futility: "off",
       },
     });
 
