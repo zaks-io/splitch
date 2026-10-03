@@ -4,6 +4,7 @@ import { RELEASE_SEMVER_PATTERN } from "../release/resolve-version.mjs";
 
 const TAG_PREFIX = "cli-v";
 const NUMERIC_IDENTIFIER = /^\d+$/u;
+const REGISTRY_TIMEOUT_MS = 15_000;
 
 /** Parse a `cli-v*` tag as cli-release.yml accepts its version; build metadata is ignored. */
 function parseCliTag(tag) {
@@ -55,31 +56,53 @@ export function compareCliTags(leftTag, rightTag) {
  * only the registry says which CLI is in the wild.
  */
 export function newestCliTagOnNpm(tagNames, npmVersions) {
-  return tagNames
-    .filter((tag) => tag.startsWith(TAG_PREFIX))
+  const cliTags = tagNames.filter((tag) => tag.startsWith(TAG_PREFIX));
+  const chosen = cliTags
     .sort((left, right) => compareCliTags(right, left))
-    .find((tag) => npmVersions.has(tag.slice(TAG_PREFIX.length).split("+")[0]));
+    .find((tag) => npmVersions.has(npmVersionOf(tag)));
+  if (!chosen) return undefined;
+  // npm drops build metadata, so cli-v1.0.0+a and cli-v1.0.0+b both read as
+  // 1.0.0 and the registry cannot say which one's contracts were shipped.
+  const sameVersion = cliTags.filter((tag) => npmVersionOf(tag) === npmVersionOf(chosen));
+  if (sameVersion.length > 1) {
+    throw new Error(
+      `npm version ${npmVersionOf(chosen)} matches several tags (${sameVersion.join(", ")}); delete the ones that were never published`,
+    );
+  }
+  return chosen;
+}
+
+function npmVersionOf(tag) {
+  return tag.slice(TAG_PREFIX.length).split("+")[0];
 }
 
 /**
  * Every version of the CLI on the public npm registry. No auth and no
- * fallback: a network error or non-200 fails the gate rather than guessing.
+ * fallback: a network error, a non-200, or a stalled request or body read
+ * (one deadline covers both) fails the gate rather than guessing.
  */
-export async function fetchNpmCliVersions(fetchImpl = fetch) {
+export async function fetchNpmCliVersions(fetchImpl = fetch, timeoutMs = REGISTRY_TIMEOUT_MS) {
   const { packageName } = getReleaseTarget("cli");
   const url = `${NPM_REGISTRY}/${encodeURIComponent(packageName)}`;
-  let response;
+  const signal = AbortSignal.timeout(timeoutMs);
+  let status;
+  let body;
   try {
-    response = await fetchImpl(url, { headers: { accept: "application/vnd.npm.install-v1+json" } });
+    const response = await fetchImpl(url, {
+      headers: { accept: "application/vnd.npm.install-v1+json" },
+      signal,
+    });
+    status = response.status;
+    if (status === 200) body = await response.json();
   } catch (error) {
-    throw new Error(`npm registry lookup ${url} failed: ${error.message}`);
+    const reason = signal.aborted ? `timed out after ${timeoutMs}ms` : `failed: ${error.message}`;
+    throw new Error(`npm registry lookup ${url} ${reason}`);
   }
-  if (response.status !== 200) {
-    throw new Error(`npm registry lookup ${url} returned HTTP ${response.status}`);
+  if (status !== 200) {
+    throw new Error(`npm registry lookup ${url} returned HTTP ${status}`);
   }
-  const { versions } = await response.json();
-  if (!versions || typeof versions !== "object") {
+  if (!body?.versions || typeof body.versions !== "object") {
     throw new Error(`npm registry lookup ${url} returned no versions`);
   }
-  return new Set(Object.keys(versions));
+  return new Set(Object.keys(body.versions));
 }

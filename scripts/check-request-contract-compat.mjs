@@ -10,8 +10,10 @@
  * cli-release.yml pushes the tag while the GitHub Release is a draft, and
  * cli-publish.yml can still fail after the release is published, so neither the
  * tag nor the release says what users can install; the registry does. One
- * unauthenticated GET of the package's versions; a network error or non-200
- * fails the gate, with no fallback.
+ * unauthenticated GET of the package's versions, bounded by a 15s deadline; a
+ * network error, timeout, or non-200 fails the gate, with no fallback. npm drops
+ * `+build` metadata, so if several tags read as the chosen npm version the gate
+ * fails and names them rather than guess which one shipped.
  *
  * For every operationId in the released route registry it compares the JSON
  * Schema (zod v4 `z.toJSONSchema`, io "input") of the route's runtime input
@@ -33,6 +35,12 @@
  *
  * Limits, honestly:
  *   - Only the newest CLI on npm is checked. Older CLIs still in use are not.
+ *   - The CLI tag is a proxy. The installed CLI imports its route contracts
+ *     from `@splitch/sdk/control-plane` at runtime (a `workspace:^` dependency
+ *     resolved from npm), so the contracts it enforces come from whichever SDK
+ *     version it resolves. A cli tag and its matching sdk release usually come
+ *     from the same commit, which is why the tag stands in; SDK-version
+ *     resolution is not modeled.
  *   - Refinements, transforms, and cross-field rules (superRefine "owner is
  *     required when ...") are invisible to JSON Schema and are not checked.
  *   - Tightened string/number constraints (pattern, format, min/max, length,

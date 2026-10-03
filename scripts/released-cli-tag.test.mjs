@@ -19,6 +19,15 @@ test("picks the highest SemVer tag on npm and ignores build metadata npm drops",
   );
 });
 
+test("fails loud when build metadata makes the npm version match several tags", () => {
+  // npm shows 1.0.0 for cli-v1.0.0+published; cli-v1.0.0+draft never shipped.
+  const tags = ["cli-v0.9.0", "cli-v1.0.0+published", "cli-v1.0.0+draft"];
+  assert.throws(
+    () => newestCliTagOnNpm(tags, new Set(["0.9.0", "1.0.0"])),
+    /npm version 1\.0\.0 matches several tags \(cli-v1\.0\.0\+published, cli-v1\.0\.0\+draft\)/,
+  );
+});
+
 const respond = (status, body) => async () => ({ status, json: async () => body });
 
 test("reads every CLI version from the public npm registry", async () => {
@@ -40,6 +49,19 @@ test("fails loud on registry errors instead of falling back", async () => {
     throw new Error("getaddrinfo ENOTFOUND registry.npmjs.org");
   };
   await assert.rejects(fetchNpmCliVersions(offline), /failed: getaddrinfo ENOTFOUND/);
+});
+
+const untilAborted = (signal) =>
+  new Promise((_, reject) => signal.addEventListener("abort", () => reject(signal.reason)));
+
+test("times out a stalled registry request and a stalled body read", async () => {
+  const stalledRequest = (_url, init) => untilAborted(init.signal);
+  await assert.rejects(fetchNpmCliVersions(stalledRequest, 20), /timed out after 20ms/);
+  const stalledBody = async (_url, init) => ({
+    status: 200,
+    json: () => untilAborted(init.signal),
+  });
+  await assert.rejects(fetchNpmCliVersions(stalledBody, 20), /timed out after 20ms/);
 });
 
 test("orders prerelease identifiers by SemVer precedence, not locale order", () => {
