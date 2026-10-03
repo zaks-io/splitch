@@ -1,6 +1,6 @@
 DESCRIPTION Refreshes the deduped first-touch exposure snapshot from the raw append-only log.
 
-NODE deduped_first_touch
+NODE exposure_dedup
 SQL >
     %
     {% if not defined(copy_watermark_ts) %}
@@ -39,6 +39,156 @@ SQL >
         run_id,
         id_type,
         entity_family_hash
+
+NODE activation_candidates
+SQL >
+    %
+    {% if not defined(copy_watermark_ts) %}
+    {{error('copy_watermark_ts is required')}}
+    {% end %}
+    {{max_threads(1)}}
+    WITH toDateTime64({{DateTime64(copy_watermark_ts)}}, 3) AS copy_watermark
+    SELECT
+        app_id,
+        environment_id,
+        experiment_id,
+        run_id,
+        id_type,
+        targeting_key_hash,
+        entity_family_hash,
+        assumeNotNull(activation_ts) AS activation_ts,
+        min(ingest_ts) AS activation_ingest_ts
+    FROM raw_events
+    LEFT JOIN app_identity_generation_tombstones AS generation_tombstones
+        ON generation_tombstones.app_id = raw_events.app_id
+        AND generation_tombstones.targeting_key_version = splitByChar(':', raw_events.targeting_key_hash)[1]
+    WHERE type = 'activation'
+        AND activation_ts IS NOT NULL
+        AND ingest_ts <= copy_watermark
+        AND generation_tombstones.app_id = ''
+        AND counterfactual = 0
+    GROUP BY
+        app_id,
+        environment_id,
+        experiment_id,
+        run_id,
+        id_type,
+        targeting_key_hash,
+        entity_family_hash,
+        activation_ts
+
+NODE raw_exposure_facts
+SQL >
+    %
+    {% if not defined(copy_watermark_ts) %}
+    {{error('copy_watermark_ts is required')}}
+    {% end %}
+    {{max_threads(1)}}
+    WITH toDateTime64({{DateTime64(copy_watermark_ts)}}, 3) AS copy_watermark
+    SELECT
+        app_id,
+        environment_id,
+        experiment_id,
+        run_id,
+        id_type,
+        targeting_key_hash,
+        entity_family_hash,
+        exposure_at,
+        ingest_ts
+    FROM raw_events
+    LEFT JOIN app_identity_generation_tombstones AS generation_tombstones
+        ON generation_tombstones.app_id = raw_events.app_id
+        AND generation_tombstones.targeting_key_version = splitByChar(':', raw_events.targeting_key_hash)[1]
+    WHERE type = 'exposure'
+        AND ingest_ts <= copy_watermark
+        AND generation_tombstones.app_id = ''
+
+NODE live_eligibility
+SQL >
+    SELECT
+        facts.app_id AS app_id,
+        facts.environment_id AS environment_id,
+        facts.experiment_id AS experiment_id,
+        facts.run_id AS run_id,
+        facts.id_type AS id_type,
+        facts.entity_family_hash AS entity_family_hash,
+        min(
+            if(
+                facts.ingest_ts > candidates.activation_ingest_ts,
+                facts.ingest_ts,
+                candidates.activation_ingest_ts
+            )
+        ) AS activation_ingest_ts
+    FROM activation_candidates AS candidates
+    INNER JOIN raw_exposure_facts AS facts
+        ON facts.app_id = candidates.app_id
+        AND facts.environment_id = candidates.environment_id
+        AND facts.experiment_id = candidates.experiment_id
+        AND facts.run_id = candidates.run_id
+        AND facts.id_type = candidates.id_type
+        AND facts.targeting_key_hash = candidates.targeting_key_hash
+    WHERE facts.exposure_at < candidates.activation_ts
+    GROUP BY
+        facts.app_id,
+        facts.environment_id,
+        facts.experiment_id,
+        facts.run_id,
+        facts.id_type,
+        facts.entity_family_hash
+
+NODE previous_eligibility
+SQL >
+    SELECT
+        app_id,
+        environment_id,
+        experiment_id,
+        run_id,
+        id_type,
+        entity_family_hash,
+        activation_ingest_ts
+    FROM deduped_exposures
+    WHERE activation_ingest_ts > toDateTime64('1970-01-01 00:00:00', 3, 'UTC')
+
+NODE deduped_first_touch
+SQL >
+    SELECT
+        exposures.app_id AS app_id,
+        exposures.environment_id AS environment_id,
+        exposures.experiment_id AS experiment_id,
+        exposures.run_id AS run_id,
+        exposures.id_type AS id_type,
+        exposures.targeting_key_hash AS targeting_key_hash,
+        exposures.entity_family_hash AS entity_family_hash,
+        exposures.variant AS variant,
+        exposures.first_exposure_ts AS first_exposure_ts,
+        exposures.first_ingest_ts AS first_ingest_ts,
+        -- Sticky: keep a previously persisted eligibility clock forever. Only
+        -- Entities that have never been eligible take the live pairwise value.
+        if(
+            previous.activation_ingest_ts > toDateTime64('1970-01-01 00:00:00', 3, 'UTC'),
+            previous.activation_ingest_ts,
+            coalesce(
+                live.activation_ingest_ts,
+                toDateTime64('1970-01-01 00:00:00', 3, 'UTC')
+            )
+        ) AS activation_ingest_ts,
+        exposures.snapshot_ts AS snapshot_ts,
+        exposures.watermark_ts AS watermark_ts
+    FROM exposure_dedup AS exposures
+    LEFT JOIN previous_eligibility AS previous
+        ON previous.app_id = exposures.app_id
+        AND previous.environment_id = exposures.environment_id
+        AND previous.experiment_id = exposures.experiment_id
+        AND previous.run_id = exposures.run_id
+        AND previous.id_type = exposures.id_type
+        AND previous.entity_family_hash = exposures.entity_family_hash
+    LEFT JOIN live_eligibility AS live
+        ON live.app_id = exposures.app_id
+        AND live.environment_id = exposures.environment_id
+        AND live.experiment_id = exposures.experiment_id
+        AND live.run_id = exposures.run_id
+        AND live.id_type = exposures.id_type
+        AND live.entity_family_hash = exposures.entity_family_hash
 
 TYPE COPY
 TARGET_DATASOURCE deduped_exposures

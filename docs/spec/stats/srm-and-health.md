@@ -81,9 +81,14 @@ after every Entity arrival (incremental log-gamma updates, O(N)). The filtration
 - Activated-population SRM orders activated Entities by eligibility ingest time =
   min over qualifying raw (Exposure, Activation) pairs with `exposure_at < activation_ts` of
   `max(exposure.ingest_ts, activation.ingest_ts)`. Tinybird emits that value as
-  `activation_ingest_ts`. A late earlier Exposure that newly qualifies an Activation must append
-  at the qualifying pair's max ingest, not at `max(first_ingest_ts, activation ingest)` which can
-  back-date into an earlier path prefix.
+  `activation_ingest_ts`. The activated **row set** is still main's membership
+  (`activation_ts > first_exposure_ts` via the deduped Exposure snapshot); the eligibility clock
+  is an additional column and must not change which Entities count as activated. The Copy
+  snapshot persists the clock when an Entity first becomes eligible and never recomputes it, so
+  a later raw TTL expiry of the qualifying Exposure cannot drop the Entity or rewrite its clock.
+  A late earlier Exposure that newly qualifies an Activation must append at the qualifying pair's
+  max ingest, not at `max(first_ingest_ts, activation ingest)` which can back-date into an earlier
+  path prefix.
 
 Ties at identical ingest timestamps break deterministically by Entity pseudonym
 (`targeting_key_hash`) so pinned reads stay reproducible. Because the path is ordered by when each

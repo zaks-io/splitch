@@ -47,11 +47,10 @@ export function checkSrmHealth(input: SrmCheckerInput): SrmCheckerOutput {
   assertExposureVariantsAreDeclared(input, variants);
   const procedure = resolveSrmProcedure(input.srm_procedure);
 
-  const dedupedEntities = dedupedPathEntities(input, variants);
-  const dedupedCounts = countsFromPathEntities(dedupedEntities, variants);
+  const dedupedCounts = dedupedCountsByVariant(input, variants);
   const fullSrm = srmAgainstPopulation(
     dedupedCounts,
-    dedupedEntities,
+    () => dedupedPathEntities(input, variants),
     input.allocation,
     variants,
     procedure,
@@ -104,15 +103,14 @@ function activationDiagnostics(
     return { activatedSrm: null, activationBalance: null, activationRates: null };
   }
 
-  const activatedEntities = activatedPathEntities(input, variants);
-  const activatedCounts = countsFromPathEntities(activatedEntities, variants);
+  const activatedCounts = activatedCountsByVariant(input, variants);
   return {
     activatedSrm: activationGuardrail(
       activatedCounts,
       () =>
         srmAgainstPopulation(
           activatedCounts,
-          activatedEntities,
+          () => activatedPathEntities(input, variants),
           input.allocation,
           variants,
           procedure,
@@ -181,6 +179,40 @@ function assertExposureVariantsAreDeclared(
   }
 }
 
+function dedupedCountsByVariant(
+  input: SrmCheckerInput,
+  variants: readonly string[],
+): Record<string, number> {
+  const counts = zeroCounts(variants);
+  for (const variant of variants) {
+    counts[variant] = dedupedExposureRowsForVariant({ ...input, variant }).length;
+  }
+  return counts;
+}
+
+function activatedCountsByVariant(
+  input: SrmCheckerInput,
+  variants: readonly string[],
+): Record<string, number> {
+  const counts = zeroCounts(variants);
+  const declared = new Set(variants);
+  for (const exposure of activatedExposureRows({
+    run_id: input.run_id,
+    exposures: input.exposures,
+    activation_rows: input.activation_rows ?? [],
+  })) {
+    if (!declared.has(exposure.variant)) {
+      continue;
+    }
+    counts[exposure.variant] = (counts[exposure.variant] ?? 0) + 1;
+  }
+  return counts;
+}
+
+/**
+ * Ingest clocks are required only for the sequential (analysis-v2) path.
+ * Chi-square / v1 / legacy never reads first_ingest_ts.
+ */
 function dedupedPathEntities(input: SrmCheckerInput, variants: readonly string[]): SrmPathEntity[] {
   return variants.flatMap((variant) =>
     dedupedExposureRowsForVariant({ ...input, variant }).map((exposure) => {
@@ -198,6 +230,10 @@ function dedupedPathEntities(input: SrmCheckerInput, variants: readonly string[]
   );
 }
 
+/**
+ * Ingest clocks are required only for the sequential (analysis-v2) path.
+ * Chi-square / v1 / legacy never reads activation_ingest_ts.
+ */
 function activatedPathEntities(
   input: SrmCheckerInput,
   variants: readonly string[],
@@ -227,17 +263,6 @@ function activatedPathEntities(
   return path;
 }
 
-function countsFromPathEntities(
-  entities: readonly SrmPathEntity[],
-  variants: readonly string[],
-): Record<string, number> {
-  const counts = zeroCounts(variants);
-  for (const entity of entities) {
-    counts[entity.variant] = (counts[entity.variant] ?? 0) + 1;
-  }
-  return counts;
-}
-
 function exposureCountsByVariant(
   input: SrmCheckerInput,
   variants: readonly string[],
@@ -263,13 +288,14 @@ function multipleEntityCount(input: SrmCheckerInput): number {
 
 function srmAgainstPopulation(
   observed: Readonly<Record<string, number>>,
-  entities: SrmPathEntity[],
+  pathEntities: () => SrmPathEntity[],
   allocation: Readonly<Record<string, number>>,
   variants: readonly string[],
   procedure: SrmProcedure,
 ): SrmTestInternalResult {
   if (procedure === "sequential_martingale") {
-    const sequential = sequentialSrmAlongEntityPath(entities, allocation);
+    // Clocks are read/required only here — chi-square never builds the path.
+    const sequential = sequentialSrmAlongEntityPath(pathEntities(), allocation);
     return { ...sequential, chi2_stat: 0 };
   }
   return chiSquareAgainstAllocation(observed, allocation, variants);

@@ -22,7 +22,7 @@ SQL >
         counterfactual,
         assumeNotNull(activation_ts) AS activation_ts,
         -- Earliest physical insert among retries of this (Entity, activation_ts).
-        min(ingest_ts) AS activation_ingest_ts
+        min(ingest_ts) AS candidate_activation_ingest_ts
     FROM raw_events
     LEFT JOIN app_identity_generation_tombstones AS generation_tombstones
         ON generation_tombstones.app_id = raw_events.app_id
@@ -93,9 +93,9 @@ SQL >
 NODE exposure_facts
 SQL >
     %
-    -- Pairwise eligibility needs every raw Exposure. Snapshot-only Entities
-    -- (Copy row, no raw tail) keep one synthetic fact from deduped clocks so
-    -- the INNER JOIN below does not drop them.
+    -- Pairwise eligibility clock only. Snapshot-only Entities keep one synthetic
+    -- fact so the LEFT JOIN below can still emit a clock; membership never uses
+    -- this node (see activated_membership).
     SELECT
         run_id,
         id_type,
@@ -117,48 +117,83 @@ SQL >
         AND raw_keys.targeting_key_hash = exposures.targeting_key_hash
     WHERE raw_keys.targeting_key_hash = ''
 
-NODE earliest_post_exposure
+NODE pairwise_eligibility
 SQL >
     SELECT
         candidates.targeting_key_hash AS targeting_key_hash,
         candidates.run_id AS run_id,
-        min(candidates.activation_ts) AS activation_ts,
+        candidates.counterfactual AS counterfactual,
         -- Eligibility: min over qualifying (Exposure, Activation) pairs of
         -- max(exposure.ingest_ts, activation.ingest_ts). Deduped first_ingest_ts
         -- alone would back-date when a late earlier Exposure makes a previously
         -- non-qualifying Activation valid.
         min(
             if(
-                exposure_facts.ingest_ts > candidates.activation_ingest_ts,
+                exposure_facts.ingest_ts > candidates.candidate_activation_ingest_ts,
                 exposure_facts.ingest_ts,
-                candidates.activation_ingest_ts
+                candidates.candidate_activation_ingest_ts
             )
-        ) AS activation_ingest_ts,
+        ) AS activation_ingest_ts
+    FROM activation_candidates AS candidates
+    INNER JOIN exposure_facts
+        ON exposure_facts.run_id = candidates.run_id
+        AND exposure_facts.id_type = candidates.id_type
+        AND exposure_facts.targeting_key_hash = candidates.targeting_key_hash
+    WHERE exposure_facts.exposure_at < candidates.activation_ts
+    GROUP BY
+        candidates.targeting_key_hash,
+        candidates.run_id,
+        candidates.counterfactual
+
+NODE activated_membership
+SQL >
+    SELECT
+        candidates.targeting_key_hash AS targeting_key_hash,
+        candidates.run_id AS run_id,
+        min(candidates.activation_ts) AS activation_ts,
         candidates.counterfactual AS counterfactual,
         -- True by construction: the join below keeps only Entities that have an
         -- Activation strictly after first_exposure_ts, which is the contract's
         -- definition of `activated`. An Entity whose only candidates precede its
         -- Exposure has no valid activation_ts to report, so it is absent rather
         -- than emitted with activated = 0; the Stats Engine skips both identically.
-        toUInt8(1) AS activated
+        toUInt8(1) AS activated,
+        -- Sticky Copy clock when set; epoch means fall back to live pairwise.
+        any(exposures.activation_ingest_ts) AS persisted_activation_ingest_ts
     FROM activation_candidates AS candidates
     INNER JOIN serve_deduped_exposures AS exposures
         ON exposures.run_id = candidates.run_id
         AND exposures.id_type = candidates.id_type
         AND exposures.targeting_key_hash = candidates.targeting_key_hash
-    INNER JOIN exposure_facts
-        ON exposure_facts.run_id = candidates.run_id
-        AND exposure_facts.id_type = candidates.id_type
-        AND exposure_facts.targeting_key_hash = candidates.targeting_key_hash
     -- Reject pre-Exposure candidates BEFORE taking the minimum. Reducing first
     -- would let one early stray Activation hide a later valid one and drop the
     -- Entity out of gated analysis entirely (ADR-0012).
+    -- Membership filter is exactly main's: activation_ts > first_exposure_ts.
+    -- Pairwise exposure_facts must not filter this row set.
     WHERE candidates.activation_ts > exposures.first_exposure_ts
-        AND exposure_facts.exposure_at < candidates.activation_ts
     GROUP BY
         candidates.targeting_key_hash,
         candidates.run_id,
         candidates.counterfactual
+
+NODE earliest_post_exposure
+SQL >
+    SELECT
+        membership.targeting_key_hash AS targeting_key_hash,
+        membership.run_id AS run_id,
+        membership.activation_ts AS activation_ts,
+        if(
+            membership.persisted_activation_ingest_ts > toDateTime64('1970-01-01 00:00:00', 3, 'UTC'),
+            membership.persisted_activation_ingest_ts,
+            pairwise.activation_ingest_ts
+        ) AS activation_ingest_ts,
+        membership.counterfactual AS counterfactual,
+        membership.activated AS activated
+    FROM activated_membership AS membership
+    LEFT JOIN pairwise_eligibility AS pairwise
+        ON pairwise.targeting_key_hash = membership.targeting_key_hash
+        AND pairwise.run_id = membership.run_id
+        AND pairwise.counterfactual = membership.counterfactual
     ORDER BY targeting_key_hash
 
 TYPE ENDPOINT
