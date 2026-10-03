@@ -82,14 +82,28 @@ SQL >
         AND ingest_ts <= {{DateTime64(ingest_watermark_ts)}}
         {% end %}
 
+NODE raw_exposure_mins
+SQL >
+    SELECT
+        run_id,
+        id_type,
+        targeting_key_hash,
+        min(exposure_at) AS min_raw_exposure_at
+    FROM raw_exposure_facts
+    GROUP BY
+        run_id,
+        id_type,
+        targeting_key_hash
+
 NODE exposure_facts
 SQL >
     %
-    -- Pairwise eligibility clock only. Always include the snapshotted first-touch
-    -- fact alongside raw facts so a TTL-expired qualifying Exposure still
-    -- contributes its eligibility clock after COPY; membership never uses this
-    -- node (see activated_membership). min(max(...)) over the union is idempotent
-    -- when snapshot and raw agree.
+    -- Pairwise eligibility clock only. Membership never uses this node.
+    -- Include the snapshotted first-touch fact when raw has no rows for the
+    -- Entity, or when every surviving raw Exposure is strictly later than the
+    -- sticky first_exposure_ts (TTL expired the qualifying first-touch). Do not
+    -- always UNION serve_deduped: its first_ingest_ts can come from a different
+    -- raw row than first_exposure_ts and would forge a false eligibility pair.
     SELECT
         run_id,
         id_type,
@@ -105,6 +119,12 @@ SQL >
         exposures.first_exposure_ts AS exposure_at,
         exposures.first_ingest_ts AS ingest_ts
     FROM serve_deduped_exposures AS exposures
+    LEFT JOIN raw_exposure_mins AS raw_mins
+        ON raw_mins.run_id = exposures.run_id
+        AND raw_mins.id_type = exposures.id_type
+        AND raw_mins.targeting_key_hash = exposures.targeting_key_hash
+    WHERE raw_mins.targeting_key_hash = ''
+        OR exposures.first_exposure_ts < raw_mins.min_raw_exposure_at
 
 NODE pairwise_eligibility
 SQL >
