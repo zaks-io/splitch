@@ -88,9 +88,11 @@ describe("stale_flags_list Run lifecycle", () => {
       items: Array<{
         flag: { id: string };
         reasons: Array<{ kind: string; uniformSince?: string }>;
+        uniformServing: { state: string };
       }>;
     };
     const beforeItem = beforeBody.items.find((item) => item.flag.id === fx.flag.id);
+    expect(beforeItem?.uniformServing).toEqual({ state: "available" });
     expect(beforeItem?.reasons.map((reason) => reason.kind)).toContain("uniform_serving");
 
     const experiment = await createExperimentDraft(ctx, fx, {
@@ -141,6 +143,7 @@ describe("stale_flags_list Run lifecycle", () => {
       items: Array<{
         flag: { id: string };
         reasons: Array<{ kind: string }>;
+        uniformServing: { state: string };
       }>;
     };
     const reasonsFor = (flagId: string) =>
@@ -151,5 +154,53 @@ describe("stale_flags_list Run lifecycle", () => {
     expect(reasonsFor(fx.flag.id)).not.toContain("uniform_serving");
     // B must not inherit A's Run history; its May config is already past the 30d window.
     expect(reasonsFor(flagB.id)).toContain("uniform_serving");
+    expect(body.items.find((item) => item.flag.id === flagB.id)?.uniformServing).toEqual({
+      state: "available",
+    });
+  });
+
+  it("reports unknown uniform serving for an unlogged legacy Run ended inside the window", async () => {
+    const fx = await experimentFixture(ctx);
+    await markReleaseFlag(fx.appId, fx.flag.id);
+    await setRolloutEverywhere(fx.appId, fx.flag.id, 100, "2026-05-01T00:00:00.000Z");
+
+    const experiment = await createExperimentDraft(ctx, fx, {
+      key: "legacy-unlogged-end",
+      allocation: { control: 50, treatment: 50 },
+      salt: "legacy-unlogged-end-salt",
+    });
+    const started = (await (await startExperiment(ctx, fx, experiment.id)).json()) as StartResponse;
+    expect((await endRun(ctx, fx, started.run.id)).status).toBe(200);
+
+    // Strip Start/End change-log rows so the Run looks like a pre-trigger legacy Run.
+    await h.bindings.d1
+      .prepare(
+        `DELETE FROM flag_change_events
+         WHERE app_id = ? AND target_type = 'run'
+           AND json_extract(diff_json, '$.runId') = ?`,
+      )
+      .bind(fx.appId, started.run.id)
+      .run();
+    // End inside the 30-day window relative to Worker NOW (2026-07-02).
+    await h.bindings.d1
+      .prepare(`UPDATE runs SET ended_at = ? WHERE id = ?`)
+      .bind("2026-06-20T00:00:00.000Z", started.run.id)
+      .run();
+
+    const res = await request(ctx.h, "GET", `/apps/${fx.appId}/stale-flags`, fx.jwt);
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      items: Array<{
+        flag: { id: string };
+        reasons: Array<{ kind: string; uniformSince?: string }>;
+        uniformServing: { state: string; reason?: string };
+      }>;
+    };
+    const item = body.items.find((entry) => entry.flag.id === fx.flag.id);
+    expect(item?.uniformServing).toEqual({
+      state: "unknown",
+      reason: "run_history_unavailable",
+    });
+    expect(item?.reasons.find((reason) => reason.kind === "uniform_serving")).toBeUndefined();
   });
 });

@@ -1,17 +1,23 @@
 import {
   boundListRead,
   detectStaleReasons,
+  FLAG_UNIFORM_SERVING_HISTORY_WINDOW_DAYS,
   PercentageRolloutSchema,
   type EnvironmentConfigState,
   type StaleFlagItem,
+  type StaleFlagSignals,
 } from "@splitch/contracts";
-import { appScope } from "@splitch/db";
+import { appScope, type Repository } from "@splitch/db";
 import type { HandlerArgs } from "@splitch/worker-runtime";
 import { appNotFound, nowIso } from "./app-environment-model";
 import type { FlagDefinitionDeps } from "./flag-definition-handler-utils";
 import { flagFrom } from "./flag-definition-model";
 import { pathParam } from "./handler-input";
 import { FLAG_LIST_READ_LIMIT } from "./overview-thresholds";
+
+const MS_PER_DAY = 24 * 60 * 60 * 1000;
+
+type FlagRow = Awaited<ReturnType<Repository["flags"]["listFlagPage"]>>[number];
 
 /**
  * Configuration-state stale detection (plan 3.6). Suggest only: no archive, no
@@ -47,20 +53,57 @@ export async function listStaleFlags(
     throw new Error(`stale_flags_list: App ${appId} has no Environments`);
   }
 
+  const context = await loadStaleDetectionContext(deps.repo, scope, rows, environmentIds, now);
+  const items = rows.flatMap((row) => {
+    const item = staleItemForFlag(row, environmentIds, context, now);
+    return item ? [item] : [];
+  });
+
+  return Response.json({ items, readTruncated, readLimit, cursor });
+}
+
+type StaleDetectionContext = {
+  catalogs: Awaited<ReturnType<Repository["flags"]["listVariantsForFlags"]>>;
+  configByScope: Map<string, { enabled: boolean; rollout: string | null; updatedAt: string }>;
+  ruleCountByScope: Map<string, number>;
+  runningExperimentScopes: Set<string>;
+  runLifecycleByScope: Map<string, string>;
+  lastChangeByFlag: Map<string, string>;
+  runHistory: "available" | "unavailable";
+};
+
+async function loadStaleDetectionContext(
+  repo: Repository,
+  scope: ReturnType<typeof appScope>,
+  rows: readonly FlagRow[],
+  environmentIds: readonly string[],
+  now: string,
+): Promise<StaleDetectionContext> {
   const flagIds = rows.map((row) => row.id);
-  const [catalogs, configs, targetingRules, experiments, runLifecycleByScope, lastChangeByFlag] =
-    await Promise.all([
-      deps.repo.flags.listVariantsForFlags(scope, flagIds),
-      deps.repo.flags.listFlagConfigsByFlagIdsAcrossEnvironments(scope, flagIds, environmentIds),
-      deps.repo.flags.listTargetingRulesByFlagIdsAcrossEnvironments(scope, flagIds, environmentIds),
-      deps.repo.experiments.listRunningExperimentsForFlagsAcrossEnvironments(
-        scope,
-        flagIds,
-        environmentIds,
-      ),
-      deps.repo.flagHealth.latestRunLifecycleAtByFlagEnv(scope, flagIds, environmentIds),
-      deps.repo.flagHealth.latestChangeAtByFlagId(scope, flagIds),
-    ]);
+  const windowStartIso = new Date(
+    Date.parse(now) - FLAG_UNIFORM_SERVING_HISTORY_WINDOW_DAYS * MS_PER_DAY,
+  ).toISOString();
+  const [
+    catalogs,
+    configs,
+    targetingRules,
+    experiments,
+    runLifecycleByScope,
+    lastChangeByFlag,
+    hasInWindowLegacyRuns,
+  ] = await Promise.all([
+    repo.flags.listVariantsForFlags(scope, flagIds),
+    repo.flags.listFlagConfigsByFlagIdsAcrossEnvironments(scope, flagIds, environmentIds),
+    repo.flags.listTargetingRulesByFlagIdsAcrossEnvironments(scope, flagIds, environmentIds),
+    repo.experiments.listRunningExperimentsForFlagsAcrossEnvironments(
+      scope,
+      flagIds,
+      environmentIds,
+    ),
+    repo.flagHealth.latestRunLifecycleAtByFlagEnv(scope, flagIds, environmentIds),
+    repo.flagHealth.latestChangeAtByFlagId(scope, flagIds),
+    repo.flagHealth.hasInWindowLegacyRuns(scope, windowStartIso),
+  ]);
 
   const configByScope = new Map(
     configs.map((config) => [scopeKey(config.flagId, config.environmentId), config]),
@@ -70,48 +113,85 @@ export async function listStaleFlags(
     const key = scopeKey(rule.flagId, rule.environmentId);
     ruleCountByScope.set(key, (ruleCountByScope.get(key) ?? 0) + 1);
   }
-  const runningExperimentScopes = new Set(
-    experiments.map((experiment) => scopeKey(experiment.flagId, experiment.environmentId)),
-  );
 
-  const items: StaleFlagItem[] = [];
-  for (const row of rows) {
-    const configurations: EnvironmentConfigState[] = environmentIds.map((environmentId) => {
-      const key = scopeKey(row.id, environmentId);
-      const config = configByScope.get(key);
-      if (!config) {
-        throw new Error(
-          `stale_flags_list: Flag ${row.id} has no Configuration in Environment ${environmentId}`,
-        );
-      }
-      return {
-        environmentId,
-        enabled: config.enabled,
-        targetingRuleCount: ruleCountByScope.get(key) ?? 0,
-        rolloutPercentage: rolloutPercentage(config.rollout),
-        hasRunningExperiment: runningExperimentScopes.has(key),
-        updatedAt: config.updatedAt,
-        lastRunLifecycleAt: runLifecycleByScope.get(key) ?? null,
-      };
-    });
+  return {
+    catalogs,
+    configByScope,
+    ruleCountByScope,
+    runningExperimentScopes: new Set(
+      experiments.map((experiment) => scopeKey(experiment.flagId, experiment.environmentId)),
+    ),
+    runLifecycleByScope,
+    lastChangeByFlag,
+    runHistory: hasInWindowLegacyRuns ? "unavailable" : "available",
+  };
+}
 
-    const detected = detectStaleReasons({
-      lifecycleClass: row.lifecycleClass,
-      expiresAt: row.expiresAt,
-      flagUpdatedAt: row.updatedAt,
-      lastChangeLogAt: lastChangeByFlag.get(row.id) ?? null,
-      configurations,
-      now,
-    });
-    if (detected.reasons.length === 0) continue;
-    items.push({
-      flag: flagFrom(row, catalogs.get(row.id) ?? []),
+function staleItemForFlag(
+  row: FlagRow,
+  environmentIds: readonly string[],
+  context: StaleDetectionContext,
+  now: string,
+): StaleFlagItem | null {
+  const configurations = environmentConfigsForFlag(row.id, environmentIds, context);
+  const detected = detectStaleReasons({
+    lifecycleClass: row.lifecycleClass,
+    expiresAt: row.expiresAt,
+    flagUpdatedAt: row.updatedAt,
+    lastChangeLogAt: context.lastChangeByFlag.get(row.id) ?? null,
+    configurations,
+    now,
+    runHistory: context.runHistory,
+  });
+  if (!shouldIncludeStaleItem(detected)) return null;
+  const flag = flagFrom(row, context.catalogs.get(row.id) ?? []);
+  if (detected.uniformServing.state === "unknown") {
+    return {
+      flag,
       reasons: detected.reasons,
       servingEvidence: detected.servingEvidence,
-    });
+      uniformServing: detected.uniformServing,
+    };
   }
+  if (detected.reasons.length === 0) {
+    throw new Error(`stale_flags_list: Flag ${row.id} has available Run history but no reasons`);
+  }
+  return {
+    flag,
+    reasons: detected.reasons,
+    servingEvidence: detected.servingEvidence,
+    uniformServing: detected.uniformServing,
+  };
+}
 
-  return Response.json({ items, readTruncated, readLimit, cursor });
+function shouldIncludeStaleItem(detected: StaleFlagSignals): boolean {
+  if (detected.reasons.length > 0) return true;
+  return detected.uniformServing.state === "unknown" && detected.configAloneUniformServing;
+}
+
+function environmentConfigsForFlag(
+  flagId: string,
+  environmentIds: readonly string[],
+  context: StaleDetectionContext,
+): EnvironmentConfigState[] {
+  return environmentIds.map((environmentId) => {
+    const key = scopeKey(flagId, environmentId);
+    const config = context.configByScope.get(key);
+    if (!config) {
+      throw new Error(
+        `stale_flags_list: Flag ${flagId} has no Configuration in Environment ${environmentId}`,
+      );
+    }
+    return {
+      environmentId,
+      enabled: config.enabled,
+      targetingRuleCount: context.ruleCountByScope.get(key) ?? 0,
+      rolloutPercentage: rolloutPercentage(config.rollout),
+      hasRunningExperiment: context.runningExperimentScopes.has(key),
+      updatedAt: config.updatedAt,
+      lastRunLifecycleAt: context.runLifecycleByScope.get(key) ?? null,
+    };
+  });
 }
 
 function scopeKey(flagId: string, environmentId: string): string {

@@ -1,7 +1,11 @@
 import { and, count, eq, gte, inArray, isNotNull, lte, max, min, sql, type SQL } from "drizzle-orm";
 import { flagChangeEvents, flags } from "../schema/index";
 import type { Db } from "./client";
-import { idBatches, twoAxisIdBatches } from "./id-batches";
+import {
+  loadHasInWindowLegacyRuns,
+  loadLatestRunLifecycleAtByFlagEnv,
+} from "./flag-health-run-history";
+import { idBatches } from "./id-batches";
 import { assertMintedScope, type TenantScope, withTenantScope } from "./scope";
 
 const FLAG_SCOPE = {
@@ -121,67 +125,6 @@ function ageBucketsFromAggregateRow(
     "365d_plus": Number(row?.c365d_plus ?? 0),
   };
   return AGE_BUCKETS.map((bucket) => ({ bucket, count: counts[bucket] }));
-}
-
-/**
- * Latest Start/End instant per Flag × Environment for uniform-serving windows.
- *
- * Runs do not store `flag_id`; `experiments.flag_id` is mutable after End (PATCH
- * may reassign the Experiment). Attribution therefore uses `flag_change_events`
- * with `target_type = 'run'`, which stamp `flag_id` at Start/End from the
- * Experiment's Flag *at that instant*. Legacy Runs with no change-log row are
- * omitted (attribution unknown) — never rebound through the Experiment's
- * current `flagId`.
- */
-async function loadLatestRunLifecycleAtByFlagEnv(
-  db: Db,
-  scope: TenantScope,
-  flagIds: readonly string[],
-  environmentIds: readonly string[],
-): Promise<Map<string, string>> {
-  assertMintedScope(scope);
-  if (flagIds.length === 0 || environmentIds.length === 0) return new Map();
-  const out = new Map<string, string>();
-  const pages = await Promise.all(
-    twoAxisIdBatches(flagIds, environmentIds).map(({ first, second }) =>
-      db
-        .select({
-          flagId: flagChangeEvents.flagId,
-          environmentId: flagChangeEvents.environmentId,
-          latestChangedAt: max(flagChangeEvents.changedAt),
-        })
-        .from(flagChangeEvents)
-        .where(
-          withTenantScope(
-            CHANGE_SCOPE,
-            scope,
-            requireSql(
-              and(
-                eq(flagChangeEvents.targetType, "run"),
-                inArray(flagChangeEvents.flagId, first),
-                inArray(flagChangeEvents.environmentId, second),
-              ),
-              "run lifecycle predicate",
-            ),
-          ),
-        )
-        .groupBy(flagChangeEvents.flagId, flagChangeEvents.environmentId),
-    ),
-  );
-  for (const row of pages.flat()) {
-    if (row.environmentId === null) {
-      throw new Error(
-        `latestRunLifecycleAtByFlagEnv: Flag ${row.flagId} has a run change-log row with null environmentId`,
-      );
-    }
-    if (row.latestChangedAt === null) {
-      throw new Error(
-        `latestRunLifecycleAtByFlagEnv: Flag ${row.flagId} env ${row.environmentId} has run change-log rows but no changedAt`,
-      );
-    }
-    out.set(`${row.flagId}\0${row.environmentId}`, row.latestChangedAt);
-  }
-  return out;
 }
 
 async function loadLatestChangeAtByFlagIds(
@@ -323,6 +266,16 @@ export function makeFlagHealthReads(db: Db) {
       environmentIds: readonly string[],
     ): Promise<Map<string, string>> {
       return loadLatestRunLifecycleAtByFlagEnv(db, scope, flagIds, environmentIds);
+    },
+
+    /**
+     * True when the App has any legacy Run (no Start change-log row) that is
+     * still running or ended at/after `windowStartIso`. Callers must treat
+     * uniform serving as unknown for the App rather than falling back to
+     * Configuration timestamps.
+     */
+    hasInWindowLegacyRuns(scope: TenantScope, windowStartIso: string): Promise<boolean> {
+      return loadHasInWindowLegacyRuns(db, scope, windowStartIso);
     },
   };
 }

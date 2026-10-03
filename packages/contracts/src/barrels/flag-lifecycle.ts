@@ -11,6 +11,7 @@ export {
   type StaleReason,
   type UniformEnvironmentEvidence,
   type UniformServingMode,
+  type UniformServingSignal,
   SERVING_EVIDENCE_UNVERIFIED,
   daysBetween,
   detectStaleReasons,
@@ -22,6 +23,7 @@ export {
   FLAG_AGE_BUCKET_BOUNDS,
   FLAG_AGE_BUCKETS,
   FLAG_STALE_THRESHOLDS,
+  FLAG_UNIFORM_SERVING_HISTORY_WINDOW_DAYS,
   flagAgeBucket,
 } from "../flag-stale-thresholds";
 export { type FlagLifecycleInput, missingFlagLifecycleInputs } from "../flag-lifecycle";

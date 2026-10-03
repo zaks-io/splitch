@@ -50,6 +50,7 @@ describe("detectStaleReasons", () => {
       now: NOW,
     });
     expect(stale.servingEvidence).toBe("unverified");
+    expect(stale.uniformServing).toEqual({ state: "available" });
     expect(stale.reasons.map((reason) => reason.kind)).toContain("uniform_serving");
 
     const split = detectStaleReasons({
@@ -64,6 +65,27 @@ describe("detectStaleReasons", () => {
       now: NOW,
     });
     expect(split.reasons.map((reason) => reason.kind)).not.toContain("uniform_serving");
+  });
+
+  it("reports uniform serving as unknown when Run history is unavailable", () => {
+    const unknown = detectStaleReasons({
+      lifecycleClass: "release",
+      expiresAt: "2026-12-01T00:00:00.000Z",
+      flagUpdatedAt: "2026-05-01T00:00:00.000Z",
+      lastChangeLogAt: "2026-05-01T00:00:00.000Z",
+      configurations: [
+        env({ environmentId: "env_dev", updatedAt: "2026-05-01T00:00:00.000Z" }),
+        env({ environmentId: "env_prod", updatedAt: "2026-05-01T00:00:00.000Z" }),
+      ],
+      now: NOW,
+      runHistory: "unavailable",
+    });
+    expect(unknown.uniformServing).toEqual({
+      state: "unknown",
+      reason: "run_history_unavailable",
+    });
+    expect(unknown.configAloneUniformServing).toBe(true);
+    expect(unknown.reasons.map((reason) => reason.kind)).not.toContain("uniform_serving");
   });
 
   it("counts the uniform window from End when a Run controlled the Flag", () => {

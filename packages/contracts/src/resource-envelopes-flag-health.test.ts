@@ -37,6 +37,7 @@ describe("Flag health envelopes", () => {
             },
           ],
           servingEvidence: "unverified",
+          uniformServing: { state: "available" },
         },
       ],
       readTruncated: false,
@@ -44,6 +45,27 @@ describe("Flag health envelopes", () => {
       cursor: null,
     });
     expect(parsed.items[0]?.servingEvidence).toBe("unverified");
+    expect(parsed.items[0]?.uniformServing).toEqual({ state: "available" });
+  });
+
+  it("parses unknown uniform-serving history without a definite uniform reason", () => {
+    const parsed = StaleFlagListResponseSchema.parse({
+      items: [
+        {
+          flag: flagLeaf,
+          reasons: [],
+          servingEvidence: "unverified",
+          uniformServing: { state: "unknown", reason: "run_history_unavailable" },
+        },
+      ],
+      readTruncated: false,
+      readLimit: 200,
+      cursor: null,
+    });
+    expect(parsed.items[0]?.uniformServing).toEqual({
+      state: "unknown",
+      reason: "run_history_unavailable",
+    });
   });
 
   it("parses inventory health with named churn sources", () => {

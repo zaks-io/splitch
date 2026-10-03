@@ -55,9 +55,24 @@ export type StaleReason =
       source: "flag_change_log" | "flag_updated_at";
     };
 
+/**
+ * App-scoped uniform-serving history. Legacy Runs (no Start change-log row) leave
+ * attribution unknown; never fall back to Configuration `updatedAt` alone.
+ */
+export type UniformServingSignal =
+  | { state: "available" }
+  | { state: "unknown"; reason: "run_history_unavailable" };
+
 export type StaleFlagSignals = {
   reasons: StaleReason[];
   servingEvidence: ServingEvidence;
+  uniformServing: UniformServingSignal;
+  /**
+   * True when configuration alone (ignoring Run lifecycle) would have emitted
+   * `uniform_serving`. Used so an App with unknown Run history still surfaces
+   * those Flags as unknown rather than silently omitting them.
+   */
+  configAloneUniformServing: boolean;
 };
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
@@ -88,6 +103,9 @@ export function daysBetween(earlierIso: string, laterIso: string): number {
 /**
  * Collect typed stale reasons for one Flag. Suggest-only: never writes.
  * Always labels serving as unverified; never claims the Flag is unused.
+ *
+ * When `runHistory` is `unavailable`, never emit `uniform_serving` from
+ * Configuration timestamps alone — report `uniformServing.state: "unknown"`.
  */
 export function detectStaleReasons(input: {
   lifecycleClass: StoredFlagLifecycleClass;
@@ -98,30 +116,30 @@ export function detectStaleReasons(input: {
   lastChangeLogAt: string | null;
   configurations: readonly EnvironmentConfigState[];
   now: string;
+  /**
+   * `available` when every in-window Run in the App has a Start change-log row;
+   * `unavailable` when any legacy Run is still running or ended inside the
+   * uniform-serving history window.
+   */
+  runHistory?: "available" | "unavailable";
 }): StaleFlagSignals {
   if (input.configurations.length === 0) {
     throw new Error("detectStaleReasons: a Flag with no Environment configurations is incomplete");
   }
 
-  const reasons: StaleReason[] = [];
   const thresholds = FLAG_STALE_THRESHOLDS[input.lifecycleClass];
+  const runHistory = input.runHistory ?? "available";
+  const reasons: StaleReason[] = [];
+  const pastExpiry = tryPastExpiryReason(input.expiresAt, input.lifecycleClass, input.now);
+  if (pastExpiry) reasons.push(pastExpiry);
 
-  if (input.expiresAt !== null && Date.parse(input.expiresAt) <= Date.parse(input.now)) {
-    reasons.push({
-      kind: "past_expiry",
-      expiresAt: input.expiresAt,
-      lifecycleClass: input.lifecycleClass,
-    });
-  }
-
-  if (thresholds.uniformServingDays !== null) {
-    const uniform = tryUniformServingReason(
-      input.configurations,
-      thresholds.uniformServingDays,
-      input.now,
-    );
-    if (uniform) reasons.push(uniform);
-  }
+  const uniform = evaluateUniformServing(
+    input.configurations,
+    thresholds.uniformServingDays,
+    input.now,
+    runHistory,
+  );
+  if (uniform.detected) reasons.push(uniform.detected);
 
   if (thresholds.unchangedDays !== null) {
     const unchanged = tryUnchangedReason(
@@ -133,7 +151,52 @@ export function detectStaleReasons(input: {
     if (unchanged) reasons.push(unchanged);
   }
 
-  return { reasons, servingEvidence: SERVING_EVIDENCE_UNVERIFIED };
+  return {
+    reasons,
+    servingEvidence: SERVING_EVIDENCE_UNVERIFIED,
+    uniformServing: uniform.signal,
+    configAloneUniformServing: uniform.configAloneUniformServing,
+  };
+}
+
+function tryPastExpiryReason(
+  expiresAt: string | null,
+  lifecycleClass: StoredFlagLifecycleClass,
+  now: string,
+): StaleReason | null {
+  if (expiresAt === null || Date.parse(expiresAt) > Date.parse(now)) return null;
+  return { kind: "past_expiry", expiresAt, lifecycleClass };
+}
+
+function evaluateUniformServing(
+  configurations: readonly EnvironmentConfigState[],
+  thresholdDays: number | null,
+  now: string,
+  runHistory: "available" | "unavailable",
+): {
+  signal: UniformServingSignal;
+  detected: StaleReason | null;
+  configAloneUniformServing: boolean;
+} {
+  const signal: UniformServingSignal =
+    runHistory === "unavailable"
+      ? { state: "unknown", reason: "run_history_unavailable" }
+      : { state: "available" };
+  if (thresholdDays === null) {
+    return { signal, detected: null, configAloneUniformServing: false };
+  }
+  const configAlone = tryUniformServingReason(
+    configurations.map((config) => ({ ...config, lastRunLifecycleAt: null })),
+    thresholdDays,
+    now,
+  );
+  const detected =
+    runHistory === "available" ? tryUniformServingReason(configurations, thresholdDays, now) : null;
+  return {
+    signal,
+    detected,
+    configAloneUniformServing: configAlone !== null,
+  };
 }
 
 function tryUniformServingReason(

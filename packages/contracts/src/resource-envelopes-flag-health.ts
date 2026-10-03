@@ -46,14 +46,49 @@ export const StaleFlagReasonSchema = z.discriminatedUnion("kind", [
 ]);
 export type StaleFlagReason = z.infer<typeof StaleFlagReasonSchema>;
 
-export const StaleFlagItemSchema = z
-  .object({
-    flag: FlagResponseSchema,
-    reasons: z.array(StaleFlagReasonSchema).min(1),
-    /** Ordinary Flag reads record no served Variant; never claim unused. */
-    servingEvidence: z.literal(SERVING_EVIDENCE_UNVERIFIED),
-  })
-  .strict();
+/**
+ * App-scoped uniform-serving history. Legacy Runs with no Start change-log row
+ * make attribution unknown; the detector must not treat missing Run history as
+ * "no Run history".
+ */
+export const UniformServingSignalSchema = z.discriminatedUnion("state", [
+  z.object({ state: z.literal("available") }).strict(),
+  z
+    .object({
+      state: z.literal("unknown"),
+      reason: z.literal("run_history_unavailable"),
+    })
+    .strict(),
+]);
+
+/**
+ * A stale item either has at least one definite reason, or carries unknown
+ * uniform-serving history (so a legacy-Run App does not silently drop Flags
+ * that would have looked uniform from Configuration alone).
+ */
+export const StaleFlagItemSchema = z.union([
+  z
+    .object({
+      flag: FlagResponseSchema,
+      reasons: z.array(StaleFlagReasonSchema).min(1),
+      servingEvidence: z.literal(SERVING_EVIDENCE_UNVERIFIED),
+      uniformServing: z.object({ state: z.literal("available") }).strict(),
+    })
+    .strict(),
+  z
+    .object({
+      flag: FlagResponseSchema,
+      reasons: z.array(StaleFlagReasonSchema),
+      servingEvidence: z.literal(SERVING_EVIDENCE_UNVERIFIED),
+      uniformServing: z
+        .object({
+          state: z.literal("unknown"),
+          reason: z.literal("run_history_unavailable"),
+        })
+        .strict(),
+    })
+    .strict(),
+]);
 export type StaleFlagItem = z.infer<typeof StaleFlagItemSchema>;
 
 export const StaleFlagListResponseSchema = listResponse(StaleFlagItemSchema);

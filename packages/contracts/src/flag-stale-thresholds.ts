@@ -26,6 +26,13 @@ export const FLAG_STALE_THRESHOLDS: Record<StoredFlagLifecycleClass, FlagStaleTh
   permission: { uniformServingDays: null, unchangedDays: null },
 };
 
+/**
+ * Longest temporary-class uniform-serving window. Used when probing for legacy
+ * Runs that still affect App-wide uniform history (running, or ended inside this
+ * many days). Keep in sync with the temporary-class `uniformServingDays` above.
+ */
+export const FLAG_UNIFORM_SERVING_HISTORY_WINDOW_DAYS = 30;
+
 export const FLAG_AGE_BUCKETS = ["0_30d", "30_90d", "90_180d", "180_365d", "365d_plus"] as const;
 export type FlagAgeBucket = (typeof FLAG_AGE_BUCKETS)[number];
 

@@ -93,10 +93,12 @@ describe("stale_flags_list", () => {
         flag: { key: string };
         reasons: Array<{ kind: string }>;
         servingEvidence: string;
+        uniformServing: { state: string };
       }>;
     };
     expect(body.items.map((item) => item.flag.key)).toEqual(["full-rollout"]);
     expect(body.items[0]?.servingEvidence).toBe("unverified");
+    expect(body.items[0]?.uniformServing).toEqual({ state: "available" });
     expect(body.items[0]?.reasons.map((reason) => reason.kind)).toContain("uniform_serving");
   });
 
@@ -106,10 +108,15 @@ describe("stale_flags_list", () => {
     const res = await request(h, "GET", `/apps/${appId}/stale-flags`, jwt);
     expect(res.status).toBe(200);
     const body = (await res.json()) as {
-      items: Array<{ reasons: Array<{ kind: string }>; servingEvidence: string }>;
+      items: Array<{
+        reasons: Array<{ kind: string }>;
+        servingEvidence: string;
+        uniformServing: { state: string };
+      }>;
     };
     expect(body.items).toHaveLength(1);
     expect(body.items[0]?.servingEvidence).toBe("unverified");
+    expect(body.items[0]?.uniformServing).toEqual({ state: "available" });
     expect(body.items[0]?.reasons.map((reason) => reason.kind)).toContain("past_expiry");
   });
 });

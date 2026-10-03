@@ -204,7 +204,14 @@ this route never claims a Flag is unused. Reasons:
   threshold old (30 days for `release`, `experiment`, and `unclassified`; off
   for permanent `ops` and `permission`). A running Experiment / active Run
   blocks this signal; after End the 30-day window counts from End, not from the
-  earlier Configuration write.
+  earlier Configuration write. Run lifecycle instants come from
+  `flag_change_events` (`target_type=run`) stamped at Start/End. When any
+  legacy Run in the App (no Start change-log row) is still running or ended
+  inside that 30-day window, the item carries
+  `uniformServing: { state: "unknown", reason: "run_history_unavailable" }`
+  and never emits `uniform_serving` from Configuration timestamps alone.
+  Each item also carries `uniformServing: { state: "available" }` when Run
+  history is complete for the window.
 - `past_expiry`: `expiresAt` is at or before the Worker clock (any class that
   still carries a passed expiry).
 - `unchanged`: no Flag change-log event (falling back to definition `updatedAt`)

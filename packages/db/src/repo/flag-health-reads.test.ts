@@ -160,7 +160,6 @@ describe("flagHealth.latestChangeAtByFlagId", () => {
     await local.d1.prepare(`DELETE FROM variants WHERE flag_id = ?`).bind(historicalId).run();
     await local.d1.prepare(`DELETE FROM flags WHERE id = ?`).bind(historicalId).run();
 
-    // Leave a distinct change on the live seeded Flag so the page has a hit.
     await local.d1
       .prepare(
         `UPDATE flags SET name = 'Touched', updated_at = ?, updated_by = 'user_live' WHERE id = ?`,
@@ -200,54 +199,6 @@ describe("flagHealth.latestChangeAtByFlagId", () => {
     );
     expect(latest.size).toBe(0);
     expect(batchOrPrepareHits).toBe(0);
-  });
-});
-
-describe("flagHealth.latestRunLifecycleAtByFlagEnv", () => {
-  it("keeps End on Flag A after the Experiment is reassigned to Flag B", async () => {
-    const endAt = "2026-07-01T12:00:00.000Z";
-    const flagB = "flag_reassigned_b";
-    await insertFlag({
-      id: flagB,
-      key: "reassigned-b",
-      lifecycleClass: "release",
-      createdAt: NOW,
-    });
-
-    // End stamps a run change-log row against the Experiment's Flag at End time (A).
-    await local.d1
-      .prepare(
-        `UPDATE runs
-         SET status = 'ended', ended_at = ?, end_reason = 'reassign-test'
-         WHERE id = ?`,
-      )
-      .bind(endAt, seed.a.runId)
-      .run();
-    // Force the End change-log instant so the assertion is not tied to SQLite now.
-    await local.d1
-      .prepare(
-        `UPDATE flag_change_events
-         SET changed_at = ?
-         WHERE app_id = ? AND flag_id = ? AND target_type = 'run'
-           AND json_extract(diff_json, '$.runId') = ?`,
-      )
-      .bind(endAt, seed.a.appId, seed.a.flagId, seed.a.runId)
-      .run();
-
-    await local.d1
-      .prepare(`UPDATE experiments SET flag_id = ? WHERE id = ?`)
-      .bind(flagB, seed.a.experimentId)
-      .run();
-
-    const repo = createRepository(local.d1);
-    const lifecycle = await repo.flagHealth.latestRunLifecycleAtByFlagEnv(
-      appScope(seed.a.appId),
-      [seed.a.flagId, flagB],
-      [seed.a.environmentId],
-    );
-
-    expect(lifecycle.get(`${seed.a.flagId}\0${seed.a.environmentId}`)).toBe(endAt);
-    expect(lifecycle.has(`${flagB}\0${seed.a.environmentId}`)).toBe(false);
   });
 });
 

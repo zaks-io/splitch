@@ -132,4 +132,5 @@ export {
   StaleFlagItemSchema,
   StaleFlagListResponseSchema,
   StaleFlagReasonSchema,
+  UniformServingSignalSchema,
 } from "../resource-envelopes-flag-health";
