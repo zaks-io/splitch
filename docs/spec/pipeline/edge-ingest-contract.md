@@ -71,8 +71,10 @@ inserts the physical row. `client_timestamp` is optional; if absent,
 diagnostics degrade gracefully. Never use `client_timestamp` for first-touch ordering (clock skew
 vulnerability). Never use `ingest_ts` for first-touch ordering either; first-touch stays
 `min(exposure_at)`. Under analysis-v2, sequential SRM orders its observation path by
-`min(ingest_ts)` per Entity (`first_ingest_ts` / `activation_ingest_ts`) so late delivery appends
-rather than rewrites the filtration; that use is separate from first-touch and Conversion Windows.
+eligibility ingest time per Entity (`first_ingest_ts` for Exposure SRM;
+`max(first_ingest_ts, min(Activation ingest_ts))` emitted as `activation_ingest_ts` for activated
+SRM) so late delivery appends rather than rewrites the filtration; that use is separate from
+first-touch and Conversion Windows.
 
 ## `run_id` stamping
 

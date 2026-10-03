@@ -75,27 +75,32 @@ after every Entity arrival (incremental log-gamma updates, O(N)). The filtration
   since the datasource existed). The deduped snapshot carries the same `min(ingest_ts)` from the
   Copy Pipe. Snapshot rows written before that column existed carry the epoch DEFAULT and form
   **one initial batch**, ordered only by `targeting_key_hash`, until the next `COPY_MODE replace`
-  fills real values.
-- Activated-population SRM orders activated Entities by `activation_ingest_ts` = `min(ingest_ts)`
-  among valid post-Exposure Activation rows for that Entity.
+  fills real values. No other qualifying fact can move an Entity _into_ Exposure SRM at an earlier
+  clock: conflict / `__multiple__` resolution can only remove an Entity (or change Variant), never
+  back-date eligibility.
+- Activated-population SRM orders activated Entities by eligibility ingest time =
+  `max(first_ingest_ts, min(ingest_ts among valid post-Exposure Activation rows))`. Tinybird emits
+  that max as `activation_ingest_ts`. An Activation ingested before its qualifying Exposure must
+  not place the Entity into an earlier path prefix once the Exposure arrives.
 
 Ties at identical ingest timestamps break deterministically by Entity pseudonym
-(`targeting_key_hash`) so pinned reads stay reproducible. Because the path is ordered by when the
-system first saw each Entity (or Activation), a later watermark's path is an extension of an
-earlier one: a late-ingested row with an earlier `exposure_at` / `activation_ts` appends at the
-end rather than reordering history. The reported p-value is the running minimum along that path,
-so an early mismatch stays sticky when later arrivals balance the totals. This holds as long as
-ingestion before the pinned watermark is complete (the watermark contract). The Entity set is
-exactly the pinned-watermark `StatsInput` exposures (and activation rows for activated SRM).
-Missing `first_ingest_ts` / `activation_ingest_ts` fails loud; the engine never substitutes event
-time.
+(`targeting_key_hash`) so pinned reads stay reproducible. Because the path is ordered by when each
+Entity became eligible, a later watermark's path is an extension of an earlier one: a
+late-ingested row with an earlier `exposure_at` / `activation_ts` appends at the end rather than
+reordering history. The reported p-value is the running minimum along that path, so an early
+mismatch stays sticky when later arrivals balance the totals. This holds as long as ingestion
+before the pinned watermark is complete (the watermark contract). The Entity set is exactly the
+pinned-watermark `StatsInput` exposures (and activation rows for activated SRM). Missing
+`first_ingest_ts` / `activation_ingest_ts` fails loud; the engine never substitutes event time.
 
 **Quarantine and revisions.** A later watermark that moves an Entity into `__multiple__` (or
 revises `first_exposure_ts` / `activation_ts`) edits the dataset. The next read recomputes the
 whole path from the cleaned rows; it does not feed a decreasing arm total into a live filtration.
-Primitive `computeSequentialSrm` still fails loud if a single call's cumulative snapshots decrease
-an arm count. Revising Variant membership can change the cleaned path; that is a dataset edit, not
-an ingest-order rewrite.
+Survivors keep their original `first_ingest_ts`, so a late single-Entity conflict cannot clear a
+sticky early mismatch among the remaining population (running minimum on the recomputed path still
+holds). Primitive `computeSequentialSrm` still fails loud if a single call's cumulative snapshots
+decrease an arm count. Mass membership revisions that erase an early imbalance are dataset edits,
+not ingest-order rewrites.
 
 **Looks.** Wealth is a function of the sufficient statistic. The anytime p-value is the running
 minimum after every singleton arrival in the reconstructed path. Continuous monitoring is the

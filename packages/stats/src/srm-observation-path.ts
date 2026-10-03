@@ -3,9 +3,9 @@
  * arm (not `__multiple__`). The sequential SRM gate rebuilds its look path from
  * these rows on every Results read.
  *
- * `arrival_ts` is the ingestion clock: `first_ingest_ts` for Exposure SRM and
- * `activation_ingest_ts` for activated-population SRM. Event time
- * (`first_exposure_ts` / `activation_ts`) is not the filtration order.
+ * `arrival_ts` is the eligibility clock: `first_ingest_ts` for Exposure SRM and
+ * `max(first_ingest_ts, activation_ingest_ts)` for activated-population SRM.
+ * Event time (`first_exposure_ts` / `activation_ts`) is not the filtration order.
  */
 export interface SrmPathEntity {
   readonly targeting_key_hash: string;

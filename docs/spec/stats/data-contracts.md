@@ -197,10 +197,10 @@ and calls the engine, binding `analysis_version` from the Run Snapshot commitmen
 incrementally append to a previous `StatsInput`. Counts that look like "new Entities since last
 look" are a difference of two full recomputes, not a martingale increment stored on disk. Under
 analysis-v2 the sequential SRM gate rebuilds the Entity arrival path from the current watermarked
-`StatsInput` (Exposure by `first_ingest_ts`, activated by `activation_ingest_ts`) and evaluates the
-martingale after every arrival (running-minimum p). Sticky alarms hold while ingestion before the
-pinned watermark is complete. Pinned `dataWatermark` fixes the Entity set, so the path and result
-token stay deterministic.
+`StatsInput` (Exposure by `first_ingest_ts`, activated by
+`max(first_ingest_ts, activation_ingest_ts)`) and evaluates the martingale after every arrival
+(running-minimum p). Sticky alarms hold while ingestion before the pinned watermark is complete.
+Pinned `dataWatermark` fixes the Entity set, so the path and result token stay deterministic.
 
 ### Evidence watermark
 

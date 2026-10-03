@@ -1,40 +1,46 @@
 import type { ActivationRow, DedupeExposureRow } from "@splitch/contracts";
 
 /**
- * Earliest Activation ingestion timestamp among rows that place the Entity in
- * the activated population (`activation_ts > first_exposure_ts`). That ingest
- * instant is when the Entity enters the activated-SRM filtration.
+ * When the Entity became eligible for activated-population SRM: the later of
+ * first Exposure ingest and the earliest valid post-Exposure Activation ingest.
+ * Using Activation ingest alone would place an Entity that activated before its
+ * Exposure into an earlier path prefix once the late Exposure arrives.
  */
 export function earliestValidActivationIngestTs(
   exposure: DedupeExposureRow,
   activationRowsByEntity: ReadonlyMap<string, readonly ActivationRow[]>,
 ): string {
-  const exposureMs = timestampMs(exposure.first_exposure_ts, "first_exposure_ts");
+  const exposureEventMs = timestampMs(exposure.first_exposure_ts, "first_exposure_ts");
+  const exposureIngestMs = timestampMs(exposure.first_ingest_ts, "first_ingest_ts");
   const rows = activationRowsByEntity.get(exposure.targeting_key_hash) ?? [];
-  let earliestIngestTs: string | null = null;
-  let earliestIngestMs = Number.POSITIVE_INFINITY;
+  let earliestActivationIngestTs: string | null = null;
+  let earliestActivationIngestMs = Number.POSITIVE_INFINITY;
 
   for (const row of rows) {
     if (!row.activated) {
       continue;
     }
     const activationMs = timestampMs(row.activation_ts, "activation_ts");
-    if (activationMs <= exposureMs) {
+    if (activationMs <= exposureEventMs) {
       continue;
     }
     const ingestMs = timestampMs(row.activation_ingest_ts, "activation_ingest_ts");
-    if (ingestMs < earliestIngestMs) {
-      earliestIngestMs = ingestMs;
-      earliestIngestTs = row.activation_ingest_ts;
+    if (ingestMs < earliestActivationIngestMs) {
+      earliestActivationIngestMs = ingestMs;
+      earliestActivationIngestTs = row.activation_ingest_ts;
     }
   }
 
-  if (earliestIngestTs === null) {
+  if (earliestActivationIngestTs === null) {
     throw new Error(
       `activated SRM entity ${exposure.targeting_key_hash} has no post-Exposure activation_ingest_ts.`,
     );
   }
-  return earliestIngestTs;
+
+  if (exposureIngestMs > earliestActivationIngestMs) {
+    return exposure.first_ingest_ts;
+  }
+  return earliestActivationIngestTs;
 }
 
 /** Index activated rows for one Run; skips other Runs and inactive rows. */

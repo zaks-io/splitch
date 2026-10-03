@@ -147,7 +147,7 @@ describe("SRMChecker sequential activated path", () => {
     expect(afterBalance.srm.activated_srm_p_value).toBe(earlyOnly.srm.activated_srm_p_value);
   });
 
-  it("orders activated sequential SRM by activation_ingest_ts rather than first Exposure", () => {
+  it("orders activated sequential SRM by eligibility ingest rather than Exposure event time", () => {
     const dayOne = "2026-07-01T00:00:00.000Z";
     const dayTwo = "2026-07-02T00:00:00.000Z";
     const control = exposuresOnDay("control", 900, dayOne);

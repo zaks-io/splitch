@@ -1,9 +1,9 @@
 - name: earliest_activation_after_exposure_wins_and_pre_exposure_candidates_never_hide_it
-  description: Candidates at or before first_exposure_ts are rejected before the minimum is taken, retries collapse to one row, an Entity whose only candidate precedes its Exposure is absent, an Entity with no Exposure at all is absent, and counterfactual Activations are excluded.
+  description: Candidates at or before first_exposure_ts are rejected before the minimum is taken, retries collapse to one row, an Entity whose only candidate precedes its Exposure is absent, an Entity with no Exposure at all is absent, counterfactual Activations are excluded, and activation_ingest_ts is max(first Exposure ingest, Activation ingest) so tk_control_snapshot (Activation before Exposure ingest) uses the Exposure ingest clock.
   parameters: "app_id=app_1&environment_id=env_prod&experiment_id=exp_1&run_id=run_1"
   expected_http_status: 200
   expected_result: |
-    {"targeting_key_hash":"tk_control_snapshot","run_id":"run_1","activation_ts":"2026-07-02 00:00:00.000","activation_ingest_ts":"2026-07-02 00:00:00.000","counterfactual":0,"activated":1}
+    {"targeting_key_hash":"tk_control_snapshot","run_id":"run_1","activation_ts":"2026-07-02 00:00:00.000","activation_ingest_ts":"2026-07-04 12:00:00.000","counterfactual":0,"activated":1}
     {"targeting_key_hash":"tk_tail","run_id":"run_1","activation_ts":"2026-07-05 12:00:00.000","activation_ingest_ts":"2026-07-05 12:00:00.000","counterfactual":0,"activated":1}
 - name: sibling_run_returns_only_its_own_entities
   description: The Run scope, not the Experiment, bounds the population.
@@ -12,17 +12,17 @@
   expected_result: |
     {"targeting_key_hash":"tk_other_run","run_id":"run_2","activation_ts":"2026-07-02 00:00:00.000","activation_ingest_ts":"2026-07-02 00:00:00.000","counterfactual":0,"activated":1}
 - name: caller_watermark_includes_the_exact_activation_edge
-  description: Re-analysis keeps an Activation ingested exactly at the evidence boundary and excludes later candidates.
+  description: Re-analysis keeps an Activation ingested exactly at the evidence boundary and excludes later candidates; eligibility ingest still uses the later Exposure ingest clock.
   parameters: "app_id=app_1&environment_id=env_prod&experiment_id=exp_1&run_id=run_1&ingest_watermark_ts=2026-07-05%2000%3A00%3A00.000"
   expected_http_status: 200
   expected_result: |
-    {"targeting_key_hash":"tk_control_snapshot","run_id":"run_1","activation_ts":"2026-07-02 00:00:00.000","activation_ingest_ts":"2026-07-02 00:00:00.000","counterfactual":0,"activated":1}
+    {"targeting_key_hash":"tk_control_snapshot","run_id":"run_1","activation_ts":"2026-07-02 00:00:00.000","activation_ingest_ts":"2026-07-04 12:00:00.000","counterfactual":0,"activated":1}
 - name: activation_after_commit_and_before_delayed_receipt_is_eligible
-  description: Activation ordering uses the delayed Convex encounter time, not the later Splitch receipt time.
+  description: Activation event ordering uses the delayed Convex encounter time; eligibility ingest is max(first Exposure ingest, Activation ingest) so the earlier Activation ingest does not precede the Exposure ingest clock.
   parameters: "app_id=app_delayed&environment_id=env_prod&experiment_id=exp_delayed&run_id=run_delayed"
   expected_http_status: 200
   expected_result: |
-    {"targeting_key_hash":"tk_delayed_convex","run_id":"run_delayed","activation_ts":"2026-07-05 06:30:00.000","activation_ingest_ts":"2026-07-05 06:30:00.000","counterfactual":0,"activated":1}
+    {"targeting_key_hash":"tk_delayed_convex","run_id":"run_delayed","activation_ts":"2026-07-05 06:30:00.000","activation_ingest_ts":"2026-07-05 08:00:00.000","counterfactual":0,"activated":1}
 - name: missing_environment_id_is_rejected
   description: A required scope parameter is never defaulted; the request fails loudly rather than reading across Environments.
   parameters: "app_id=app_1&experiment_id=exp_1&run_id=run_1"

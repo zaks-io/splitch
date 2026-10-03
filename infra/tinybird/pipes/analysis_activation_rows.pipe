@@ -53,9 +53,15 @@ SQL >
         candidates.targeting_key_hash AS targeting_key_hash,
         candidates.run_id AS run_id,
         min(candidates.activation_ts) AS activation_ts,
-        -- Ingestion clock for activated SRM: when the Entity first entered the
-        -- activated population under the watermark, not the earliest event time.
-        min(candidates.activation_ingest_ts) AS activation_ingest_ts,
+        -- Eligibility clock for activated SRM: later of first Exposure ingest and
+        -- first valid Activation ingest. An Activation can land before its
+        -- qualifying Exposure; using only activation ingest would insert the
+        -- Entity into an earlier path prefix once the Exposure arrives.
+        if(
+            min(exposures.first_ingest_ts) > min(candidates.activation_ingest_ts),
+            min(exposures.first_ingest_ts),
+            min(candidates.activation_ingest_ts)
+        ) AS activation_ingest_ts,
         candidates.counterfactual AS counterfactual,
         -- True by construction: the join below keeps only Entities that have an
         -- Activation strictly after first_exposure_ts, which is the contract's
