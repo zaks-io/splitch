@@ -14,6 +14,7 @@ export function experimentStartResponse(input: {
   appId: string;
   runSnapshotShipped?: boolean;
 }) {
+  const next = emitNextAfterExperimentStart(input.appId, input.run);
   return {
     experimentId: input.experimentId,
     run: runResponse(input.run),
@@ -24,7 +25,7 @@ export function experimentStartResponse(input: {
       : {}),
     // Same snapshot the committed Run row holds (and evaluation reads).
     frozenTargetingRules: jsonArray(input.run.targetingRules),
-    next: emitNextAfterExperimentStart(input.appId, input.run),
+    ...(next !== null ? { next } : {}),
   };
 }
 

@@ -20,19 +20,6 @@ describe("mutation-next-emit", () => {
     expect(start.earliestAt).toBe("2026-10-10T00:00:00.000Z");
   });
 
-  it("refuses to invent next when planned duration is missing", () => {
-    expect(() =>
-      emitNextAfterExperimentStart("app_1", {
-        id: "run_1",
-        experimentId: "exp_1",
-        environmentId: "env_1",
-        startedAt: "2026-10-03T00:00:00.000Z",
-        plannedDurationDays: null,
-        targetN: 5000,
-      }),
-    ).toThrow(/refusing to invent/);
-  });
-
   it("emits next for fixed-horizon Starts with null targetN", () => {
     const next = emitNextAfterExperimentStart("app_1", {
       id: "run_1",

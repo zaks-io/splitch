@@ -19,8 +19,10 @@ function requireRegisteredNext(next: MutationNext): MutationNext {
 }
 
 /**
- * `next` after a committed Start. Planned duration and target_n must already be
- * frozen on the Run row — inventing either would lie about the decision floor.
+ * `next` after a committed Start. Planned duration must already be frozen on
+ * the Run — inventing one would lie about the decision floor. Pre-migration
+ * Runs (before 0035) legitimately have `plannedDurationDays` null; omit `next`
+ * rather than failing a successful Start replay.
  */
 export function emitNextAfterExperimentStart(
   appId: string,
@@ -28,14 +30,10 @@ export function emitNextAfterExperimentStart(
     RunRow,
     "id" | "experimentId" | "environmentId" | "startedAt" | "plannedDurationDays" | "targetN"
   >,
-): MutationNext {
-  // Planned duration is always frozen at Start. target_n is sequential-only;
-  // fixed-horizon Runs leave it null and still get a results-poll next.
-  if (run.plannedDurationDays === null) {
-    throw new Error(
-      `Run ${run.id} has no frozen plannedDurationDays; refusing to invent a next step`,
-    );
-  }
+): MutationNext | null {
+  // target_n is sequential-only; fixed-horizon Runs leave it null and still get
+  // a results-poll next when planned duration is present.
+  if (run.plannedDurationDays === null) return null;
   return requireRegisteredNext(
     nextAfterExperimentStart({
       appId,
