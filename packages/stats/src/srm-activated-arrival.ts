@@ -106,8 +106,8 @@ function qualifyingPairEligibilityTs(
   return exposureIngestMs >= activationIngestMs ? exposureIngestTs : activationIngestTs;
 }
 
-function requiredTimestamp(value: string | undefined, field: string): string {
-  if (value === undefined || value === "") {
+function requiredTimestamp(value: string | null | undefined, field: string): string {
+  if (value === undefined || value === null || value === "") {
     throw new Error(`${field} is required for analysis-v2 SRM eligibility.`);
   }
   return value;

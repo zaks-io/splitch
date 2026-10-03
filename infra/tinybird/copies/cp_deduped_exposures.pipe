@@ -174,7 +174,20 @@ SQL >
         exposures.id_type AS id_type,
         exposures.targeting_key_hash AS targeting_key_hash,
         exposures.entity_family_hash AS entity_family_hash,
-        exposures.variant AS variant,
+        -- Merge previous-snapshot and raw Variant evidence: once __multiple__,
+        -- always __multiple__; any disagreement becomes __multiple__. Otherwise
+        -- a quarantined Entity whose older conflicting Exposure expired would
+        -- re-enter an arm at its old ingestion time.
+        if(
+            previous.app_id != ''
+            AND (
+                previous.variant = '__multiple__'
+                OR exposures.variant = '__multiple__'
+                OR previous.variant != exposures.variant
+            ),
+            '__multiple__',
+            exposures.variant
+        ) AS variant,
         -- Sticky earliest first-exposure membership clock across raw TTL.
         if(
             previous.first_exposure_ts > epoch,

@@ -118,8 +118,27 @@ describe("SRMChecker", () => {
 
     expect(result.srm.activated_srm_p_value).toBe(0);
     expect(result.srm.activated_srm_mismatch).toBe(true);
+    expect(result.srm.srm_sequential_threshold_crossed).toBeUndefined();
+    expect(result.srm.activated_srm_sequential_threshold_crossed).toBeUndefined();
     expect(result.health.activation_rates).toEqual({ control: 0, treatment: 0 });
     expect(result.health.activation_balance_p_value).toBe(0);
     expect(result.health.activation_balance_mismatch).toBe(true);
+  });
+
+  it("marks the zero-Activation sentinel as mismatch without a sequential crossing under v2", () => {
+    const result = checkSrmHealth({
+      run_id: RUN_ID,
+      allocation: { control: 50, treatment: 50 },
+      exposures: [...exposures("control", 120), ...exposures("treatment", 120)],
+      activation_rows: [],
+      srm_procedure: "sequential_martingale",
+    });
+
+    expect(result.srm.activated_srm_mismatch).toBe(true);
+    expect(result.srm.activated_srm_p_value).toBe(0);
+    // Explicit field — never infer from p_value=0. Sentinel must not look like
+    // a durable sequential crossing even when Exposure SRM itself crossed.
+    expect(result.srm.activated_srm_sequential_threshold_crossed).toBe(false);
+    expect(typeof result.srm.srm_sequential_threshold_crossed).toBe("boolean");
   });
 });

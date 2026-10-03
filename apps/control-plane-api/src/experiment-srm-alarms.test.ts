@@ -1,7 +1,9 @@
 import {
   ANALYSIS_V1_VERSION,
   ANALYSIS_V2_VERSION,
+  createResultToken,
   evaluateExperimentDecisionGate,
+  experimentSrmDiagnostics,
   overlayPersistedSrmAlarms,
   type PersistedSrmAlarm,
   produceExperimentResults,
@@ -24,37 +26,42 @@ const DURATION = {
   dataWatermark: "2026-07-08T00:00:00.000Z",
 };
 
-describe("durable analysis-v2 SRM alarms", () => {
+function alarmRepo() {
+  const stored: Array<{
+    runId: string;
+    srmKind: PersistedSrmAlarm["srmKind"];
+    firstCrossedAt: string;
+    watermark: string;
+    pValue: number;
+    analysisVersion: string;
+  }> = [];
+  const repo = {
+    runSrmAlarms: {
+      insertIgnore: vi.fn(async (_scope, input) => {
+        if (!stored.some((row) => row.runId === input.runId && row.srmKind === input.srmKind)) {
+          stored.push({ ...input });
+        }
+      }),
+      listForRun: vi.fn(async (_scope, runId: string) =>
+        stored
+          .filter((row) => row.runId === runId)
+          .map((row) => ({
+            ...row,
+            appId: "app_1",
+            environmentId: "env_1",
+          })),
+      ),
+      deleteForRun: vi.fn(async () => undefined),
+    },
+  } as unknown as Repository;
+  return { repo, stored };
+}
+
+describe("durable analysis-v2 SRM alarms: near-threshold sticky", () => {
   it("persists the first 45/45 crossing and still blocks after quarantine lifts live p", async () => {
     const crossedP = 0.0009455653996124124;
     const quarantineP = 0.0012344881606050938;
-    const stored: Array<{
-      runId: string;
-      srmKind: PersistedSrmAlarm["srmKind"];
-      firstCrossedAt: string;
-      watermark: string;
-      pValue: number;
-      analysisVersion: string;
-    }> = [];
-    const repo = {
-      runSrmAlarms: {
-        insertIgnore: vi.fn(async (_scope, input) => {
-          if (!stored.some((row) => row.runId === input.runId && row.srmKind === input.srmKind)) {
-            stored.push({ ...input });
-          }
-        }),
-        listForRun: vi.fn(async (_scope, runId: string) =>
-          stored
-            .filter((row) => row.runId === runId)
-            .map((row) => ({
-              ...row,
-              appId: "app_1",
-              environmentId: "env_1",
-            })),
-        ),
-        deleteForRun: vi.fn(async () => undefined),
-      },
-    } as unknown as Repository;
+    const { repo } = alarmRepo();
 
     const run = {
       id: "run_near",
@@ -67,6 +74,8 @@ describe("durable analysis-v2 SRM alarms", () => {
         ...statsOutput().srm,
         srm_p_value: crossedP,
         srm_is_mismatch: true,
+        srm_sequential_threshold_crossed: true,
+        activated_srm_sequential_threshold_crossed: null,
       },
     });
     const firstRead = await syncAnalysisV2SrmAlarms(
@@ -85,6 +94,8 @@ describe("durable analysis-v2 SRM alarms", () => {
         ...statsOutput().srm,
         srm_p_value: quarantineP,
         srm_is_mismatch: false,
+        srm_sequential_threshold_crossed: false,
+        activated_srm_sequential_threshold_crossed: null,
         observed_counts: { control: 44, treatment: 45 },
         expected_counts: { control: 44.5, treatment: 44.5 },
       },
@@ -98,13 +109,24 @@ describe("durable analysis-v2 SRM alarms", () => {
     expect(secondRead).toHaveLength(1);
     expect(secondRead[0]?.firstCrossedAt).toBe(firstRead[0]?.firstCrossedAt);
     expect(secondRead[0]?.pValue).toBe(crossedP);
-    // First crossing wins: quarantine read must not overwrite.
     expect(repo.runSrmAlarms.insertIgnore).toHaveBeenCalledTimes(1);
 
     const gate = evaluateExperimentDecisionGate(quarantineStats, CONTROL, DURATION, secondRead);
     expect(gate.shipAllowed).toBe(false);
     expect(gate.blockedBy).toContain("exposure_srm");
 
+    const tokenIdentity = {
+      appId: "app_1",
+      environmentId: "env_1",
+      experimentId: "exp_1",
+      runId: run.id,
+      runConfigHash: "sha256:config",
+      analysisVersion: ANALYSIS_V2_VERSION,
+    };
+    const resultToken = await createResultToken({
+      ...tokenIdentity,
+      stats: quarantineStats,
+    });
     const produced = produceExperimentResults({
       view: "detailed",
       analysis: {
@@ -113,7 +135,7 @@ describe("durable analysis-v2 SRM alarms", () => {
         control_variant: "control",
         stats: quarantineStats,
         data_watermark: "2026-07-03T00:00:00.000Z",
-        result_token: `sha256:${"a".repeat(64)}`,
+        result_token: resultToken,
       },
       run: {
         runNumber: 1,
@@ -126,12 +148,87 @@ describe("durable analysis-v2 SRM alarms", () => {
     });
     expect(produced.state).toBe("ready");
     if (produced.state !== "ready" || produced.view !== "detailed") return;
-    expect(produced.stats.srm.srm_is_mismatch).toBe(true);
+    expect(produced.stats).toEqual(quarantineStats);
+    expect(produced.stats.srm.srm_is_mismatch).toBe(false);
     expect(produced.persisted_srm_alarms?.[0]?.firstCrossedAt).toBe(firstRead[0]?.firstCrossedAt);
     expect(produced.gate.shipAllowed).toBe(false);
     expect(produced.readiness.concludeExecutable).toBe(false);
+    expect(experimentSrmDiagnostics(produced.stats, null, secondRead).exposure.tier).toBe(
+      "confirmed",
+    );
+    expect(
+      await createResultToken({
+        ...tokenIdentity,
+        stats: produced.stats,
+      }),
+    ).toBe(resultToken);
   });
+});
 
+describe("durable analysis-v2 SRM alarms: insufficient-data sentinel", () => {
+  it("does not persist the zero-Activation insufficient-data sentinel", async () => {
+    const { repo } = alarmRepo();
+    const alarms = await syncAnalysisV2SrmAlarms(
+      repo,
+      {
+        id: "run_empty_act",
+        appId: "app_1",
+        environmentId: "env_1",
+        analysisVersion: ANALYSIS_V2_VERSION,
+      },
+      statsOutput({
+        srm: {
+          ...statsOutput().srm,
+          activated_srm_p_value: 0,
+          activated_srm_mismatch: true,
+          srm_sequential_threshold_crossed: false,
+          activated_srm_sequential_threshold_crossed: false,
+        },
+      }),
+      "2026-07-02T00:00:00.000Z",
+    );
+    expect(alarms).toEqual([]);
+    expect(repo.runSrmAlarms.insertIgnore).not.toHaveBeenCalled();
+
+    const balancedLater = await syncAnalysisV2SrmAlarms(
+      repo,
+      {
+        id: "run_empty_act",
+        appId: "app_1",
+        environmentId: "env_1",
+        analysisVersion: ANALYSIS_V2_VERSION,
+      },
+      statsOutput({
+        srm: {
+          ...statsOutput().srm,
+          activated_srm_p_value: 0.5,
+          activated_srm_mismatch: false,
+          srm_sequential_threshold_crossed: false,
+          activated_srm_sequential_threshold_crossed: false,
+        },
+      }),
+      "2026-07-03T00:00:00.000Z",
+    );
+    expect(balancedLater).toEqual([]);
+    const gate = evaluateExperimentDecisionGate(
+      statsOutput({
+        srm: {
+          ...statsOutput().srm,
+          activated_srm_p_value: 0.5,
+          activated_srm_mismatch: false,
+          srm_sequential_threshold_crossed: false,
+          activated_srm_sequential_threshold_crossed: false,
+        },
+      }),
+      CONTROL,
+      DURATION,
+      balancedLater,
+    );
+    expect(gate.blockedBy).not.toContain("activated_srm");
+  });
+});
+
+describe("durable analysis-v2 SRM alarms: analysis-v1 isolation", () => {
   it("never reads or writes alarms for analysis-v1 Runs", async () => {
     const repo = {
       runSrmAlarms: {

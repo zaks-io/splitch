@@ -190,8 +190,8 @@ function biasedExposures(
   });
 }
 
-function requiredIngestTs(value: string | undefined, field: string): string {
-  if (value === undefined || value === "") {
+function requiredIngestTs(value: string | null | undefined, field: string): string {
+  if (value === undefined || value === null || value === "") {
     throw new Error(`${field} is required for activated-SRM simulation fixtures.`);
   }
   return value;

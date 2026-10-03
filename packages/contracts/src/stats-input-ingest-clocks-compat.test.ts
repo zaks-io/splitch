@@ -78,12 +78,31 @@ describe("analysis ingest clock deploy compatibility", () => {
     expect(row.activation_ingest_ts).toBeUndefined();
   });
 
+  it("accepts Activation rows with null activation_ingest_ts (Tinybird null emission)", () => {
+    const row = ActivationRowSchema.parse({
+      ...activationRow,
+      activation_ingest_ts: null,
+    });
+
+    expect(row.activation_ingest_ts).toBeNull();
+  });
+
   it("lets analysis-v1 ignore missing ingest clocks", () => {
     expect(
       StatsInputSchema.safeParse({
         ...statsInputBase,
         analysis_version: "analysis-v1",
         activation_rows: [activationRow],
+      }).success,
+    ).toBe(true);
+  });
+
+  it("lets analysis-v1 accept null activation_ingest_ts", () => {
+    expect(
+      StatsInputSchema.safeParse({
+        ...statsInputBase,
+        analysis_version: "analysis-v1",
+        activation_rows: [{ ...activationRow, activation_ingest_ts: null }],
       }).success,
     ).toBe(true);
   });
@@ -104,6 +123,17 @@ describe("analysis ingest clock deploy compatibility", () => {
         analysis_version: "analysis-v2",
         exposures: [{ ...exposureRow, first_ingest_ts: "2026-07-01T00:00:00.000Z" }],
         activation_rows: [activationRow],
+      }).success,
+    ).toBe(false);
+  });
+
+  it("fails loud when analysis-v2 Activations carry null activation_ingest_ts", () => {
+    expect(
+      StatsInputSchema.safeParse({
+        ...statsInputBase,
+        analysis_version: "analysis-v2",
+        exposures: [{ ...exposureRow, first_ingest_ts: "2026-07-01T00:00:00.000Z" }],
+        activation_rows: [{ ...activationRow, activation_ingest_ts: null }],
       }).success,
     ).toBe(false);
   });

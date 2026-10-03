@@ -106,11 +106,15 @@ pinned-watermark `StatsInput` exposures (and activation rows for activated SRM).
 **Durable alarms and quarantine.** The running minimum over the stable ingestion-ordered path
 catches crossings between Results reads. Separately, the Control Plane persists the first observed
 v2 sequential crossing per `(run_id, exposure|activated)` in D1 `run_srm_alarms` (INSERT OR IGNORE
-on every Results or Conclude read) and ORs that row into the SRM verdict and decision gate,
-reporting `firstCrossedAt`. A persisted alarm blocks Conclude exactly like a live mismatch. v1 and
-legacy Runs never read or write the table. Privacy / App / Environment / Flag cascade deletes
-remove the rows with the Run. The residual gap is a crossing that is never read before a later
-quarantine removes it.
+on every Results or Conclude read) and ORs that row into the decision gate and diagnostics,
+reporting `firstCrossedAt` and `persisted_srm_alarms`. Returned Analysis `stats` stay
+byte-identical to the token-bound envelope — durable alarms never rewrite `stats.srm` mismatch
+flags. Persistence keys off the explicit `srm_sequential_threshold_crossed` /
+`activated_srm_sequential_threshold_crossed` fields (analysis-v2 only); the zero-Activation
+fail-closed sentinel sets `activated_srm_mismatch` without those crossing flags and must not
+persist. A persisted alarm blocks Conclude exactly like a live mismatch. v1 and legacy Runs never
+read or write the table. Privacy / App / Environment / Flag cascade deletes remove the rows with
+the Run. The residual gap is a crossing that is never read before a later quarantine removes it.
 
 A later watermark that moves an Entity into `__multiple__` (or revises `first_exposure_ts` /
 `activation_ts`) edits the dataset. The next read recomputes the whole path from the cleaned rows;
@@ -251,7 +255,9 @@ Rules:
   classifier returns `unclassified` with `evidenceConsidered`.
 - Zero Activations on a gated Run sets `activated_srm_mismatch` as a fail-closed
   sentinel, not Activation-imbalance evidence — the classifier returns
-  `unclassified` with `insufficient_evidence:zero_activations`.
+  `unclassified` with `insufficient_evidence:zero_activations`. Under analysis-v2
+  the sentinel also sets `activated_srm_sequential_threshold_crossed: false` so
+  Control Plane does not persist a durable alarm from insufficient data.
 - Reconstructing Activation counts from health rates requires matching Exposure
   denominators; a missing `deduped_counts` key fails loud rather than treating
   the denominator as zero.

@@ -3,7 +3,6 @@ import {
   type ExperimentDecisionGate,
   type PersistedSrmAlarm,
   evaluateExperimentDecisionGate,
-  overlayPersistedSrmAlarms,
 } from "./experiment-decision-gate";
 import type { PlannedDurationEvidence } from "./experiment-decision-gate-duration";
 import {
@@ -142,12 +141,13 @@ export function produceExperimentResults(
   if (input.view === "concise") {
     return { view: "concise", ...base };
   }
-  // Detailed stats match Analysis except analysis-v2 durable SRM alarm OR into
-  // mismatch flags. result_token stays hashed from the Analysis envelope.
+  // Detailed stats stay byte-identical to Analysis (result_token binding).
+  // Durable alarms apply only through the gate, diagnostics, and
+  // persisted_srm_alarms — never by rewriting stats.srm mismatch flags.
   return {
     view: "detailed",
     ...base,
-    stats: overlayPersistedSrmAlarms(input.analysis.stats, persistedSrmAlarms),
+    stats: input.analysis.stats,
   };
 }
 

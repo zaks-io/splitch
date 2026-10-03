@@ -135,15 +135,36 @@ export async function syncAnalysisV2SrmAlarms(
       srm_p_value: number;
       activated_srm_mismatch: boolean | null;
       activated_srm_p_value: number | null;
+      srm_sequential_threshold_crossed?: boolean;
+      activated_srm_sequential_threshold_crossed?: boolean | null;
     };
   },
   dataWatermark: string | undefined,
 ): Promise<readonly PersistedSrmAlarm[]> {
   if (run.analysisVersion !== ANALYSIS_V2_VERSION) return [];
+  if (
+    stats.srm.srm_sequential_threshold_crossed !== true &&
+    stats.srm.srm_sequential_threshold_crossed !== false
+  ) {
+    throw new Error(
+      "analysis-v2 Results omit srm_sequential_threshold_crossed; refuse to persist SRM alarms",
+    );
+  }
+  if (
+    stats.srm.activated_srm_mismatch !== null &&
+    stats.srm.activated_srm_sequential_threshold_crossed !== true &&
+    stats.srm.activated_srm_sequential_threshold_crossed !== false
+  ) {
+    throw new Error(
+      "analysis-v2 Results omit activated_srm_sequential_threshold_crossed; refuse to persist SRM alarms",
+    );
+  }
   const scope = envScope(run.appId, run.environmentId);
   const now = new Date().toISOString();
   const watermark = dataWatermark ?? now;
-  if (stats.srm.srm_is_mismatch) {
+  // Persist only genuine sequential crossings — never the zero-Activation
+  // insufficient-data sentinel (mismatch with sequential_threshold_crossed=false).
+  if (stats.srm.srm_sequential_threshold_crossed === true) {
     await repo.runSrmAlarms.insertIgnore(scope, {
       runId: run.id,
       srmKind: "exposure",
@@ -153,13 +174,13 @@ export async function syncAnalysisV2SrmAlarms(
       analysisVersion: ANALYSIS_V2_VERSION,
     });
   }
-  if (stats.srm.activated_srm_mismatch === true && stats.srm.activated_srm_p_value !== null) {
+  if (stats.srm.activated_srm_sequential_threshold_crossed === true) {
     await repo.runSrmAlarms.insertIgnore(scope, {
       runId: run.id,
       srmKind: "activated",
       firstCrossedAt: now,
       watermark,
-      pValue: stats.srm.activated_srm_p_value,
+      pValue: stats.srm.activated_srm_p_value ?? 0,
       analysisVersion: ANALYSIS_V2_VERSION,
     });
   }

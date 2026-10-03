@@ -82,20 +82,14 @@ SQL >
         AND ingest_ts <= {{DateTime64(ingest_watermark_ts)}}
         {% end %}
 
-NODE raw_exposure_keys
-SQL >
-    SELECT DISTINCT
-        run_id,
-        id_type,
-        targeting_key_hash
-    FROM raw_exposure_facts
-
 NODE exposure_facts
 SQL >
     %
-    -- Pairwise eligibility clock only. Snapshot-only Entities keep one synthetic
-    -- fact so the LEFT JOIN below can still emit a clock; membership never uses
-    -- this node (see activated_membership).
+    -- Pairwise eligibility clock only. Always include the snapshotted first-touch
+    -- fact alongside raw facts so a TTL-expired qualifying Exposure still
+    -- contributes its eligibility clock after COPY; membership never uses this
+    -- node (see activated_membership). min(max(...)) over the union is idempotent
+    -- when snapshot and raw agree.
     SELECT
         run_id,
         id_type,
@@ -111,11 +105,6 @@ SQL >
         exposures.first_exposure_ts AS exposure_at,
         exposures.first_ingest_ts AS ingest_ts
     FROM serve_deduped_exposures AS exposures
-    LEFT JOIN raw_exposure_keys AS raw_keys
-        ON raw_keys.run_id = exposures.run_id
-        AND raw_keys.id_type = exposures.id_type
-        AND raw_keys.targeting_key_hash = exposures.targeting_key_hash
-    WHERE raw_keys.targeting_key_hash = ''
 
 NODE pairwise_eligibility
 SQL >
@@ -178,14 +167,22 @@ SQL >
 
 NODE earliest_post_exposure
 SQL >
+    WITH toDateTime64('1970-01-01 00:00:00', 3, 'UTC') AS epoch
     SELECT
         membership.targeting_key_hash AS targeting_key_hash,
         membership.run_id AS run_id,
         membership.activation_ts AS activation_ts,
+        -- Never default a missing eligibility clock to epoch: that would look
+        -- like the start of SRM history. Emit null so analysis-v2 fails loud;
+        -- v1/legacy ignore the column. Prefer sticky Copy clock, else pairwise.
         if(
-            membership.persisted_activation_ingest_ts > toDateTime64('1970-01-01 00:00:00', 3, 'UTC'),
-            membership.persisted_activation_ingest_ts,
-            pairwise.activation_ingest_ts
+            membership.persisted_activation_ingest_ts > epoch,
+            toNullable(membership.persisted_activation_ingest_ts),
+            if(
+                pairwise.targeting_key_hash != '',
+                toNullable(pairwise.activation_ingest_ts),
+                CAST(NULL AS Nullable(DateTime64(3, 'UTC')))
+            )
         ) AS activation_ingest_ts,
         membership.counterfactual AS counterfactual,
         membership.activated AS activated

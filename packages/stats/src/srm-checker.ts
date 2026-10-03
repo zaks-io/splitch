@@ -70,6 +70,17 @@ export function checkSrmHealth(input: SrmCheckerInput): SrmCheckerOutput {
       ),
       activated_srm_p_value: activation.activatedSrm?.p_value ?? null,
       activated_srm_mismatch: activation.activatedSrm?.is_mismatch ?? null,
+      // Explicit sequential-crossing flags (analysis-v2 only). Absent on
+      // chi-square so v1/legacy result tokens stay byte-identical. Never infer
+      // a crossing from p_value=0 — the zero-Activation sentinel is mismatch
+      // without sequential_threshold_crossed.
+      ...(procedure === "sequential_martingale"
+        ? {
+            srm_sequential_threshold_crossed: fullSrm.sequential_threshold_crossed,
+            activated_srm_sequential_threshold_crossed:
+              activation.activatedSrm?.sequential_threshold_crossed ?? null,
+          }
+        : {}),
     },
     health: {
       multiple_rate: safeRate(multipleCount, sumCounts(dedupedCounts) + multipleCount),
@@ -137,7 +148,14 @@ function activationGuardrail(
   variants: readonly string[],
 ): SrmTestInternalResult {
   if (variants.every((variant) => (activatedCounts[variant] ?? 0) === 0)) {
-    return { p_value: 0, is_mismatch: true, chi2_stat: 0 };
+    // Fail-closed insufficient-data sentinel: mismatch without a sequential
+    // crossing, so Control Plane must not persist a durable alarm.
+    return {
+      p_value: 0,
+      is_mismatch: true,
+      chi2_stat: 0,
+      sequential_threshold_crossed: false,
+    };
   }
   return calculate();
 }

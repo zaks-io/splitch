@@ -91,10 +91,11 @@ export const ActivationRowSchema = z
     /**
      * Eligibility clock for activated SRM: min over qualifying raw
      * (Exposure, Activation) pairs of max(exposure.ingest, activation.ingest).
-     * analysis-v1/legacy ignore it. Optional on the row schema for deploy
-     * compat; analysis-v2 fails loud when absent.
+     * analysis-v1/legacy ignore it. Optional/nullable on the row schema for
+     * deploy compat and Tinybird null emission when no clock exists;
+     * analysis-v2 fails loud when absent or null.
      */
-    activation_ingest_ts: TimestampSchema.optional(),
+    activation_ingest_ts: TimestampSchema.nullish(),
     counterfactual: z.boolean(),
     activated: z.boolean(),
   })
@@ -269,7 +270,7 @@ export const StatsInputSchema = z
       }
     }
     for (const [index, row] of (input.activation_rows ?? []).entries()) {
-      if (row.activation_ingest_ts === undefined) {
+      if (row.activation_ingest_ts === undefined || row.activation_ingest_ts === null) {
         ctx.addIssue({
           code: "custom",
           path: ["activation_rows", index, "activation_ingest_ts"],

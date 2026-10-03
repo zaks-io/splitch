@@ -11,6 +11,8 @@ import { SRM_MISMATCH_P_VALUE } from "./srm-checker-threshold";
 export interface SrmTestResult {
   readonly p_value: number;
   readonly is_mismatch: boolean;
+  /** Genuine martingale threshold crossing; never set for empty paths. */
+  readonly sequential_threshold_crossed: boolean;
 }
 
 /**
@@ -23,7 +25,7 @@ export function sequentialSrmAlongEntityPath(
   allocation: Readonly<Record<string, number>>,
 ): SrmTestResult {
   if (entities.length === 0) {
-    return { p_value: 1, is_mismatch: false };
+    return { p_value: 1, is_mismatch: false, sequential_threshold_crossed: false };
   }
 
   sortEntitiesByArrival(entities);
@@ -44,9 +46,11 @@ export function sequentialSrmAlongEntityPath(
     increment[index] = 0;
   }
 
+  const crossed = state.minInvWealth <= SRM_MISMATCH_P_VALUE;
   return {
     p_value: state.minInvWealth,
-    is_mismatch: state.minInvWealth <= SRM_MISMATCH_P_VALUE,
+    is_mismatch: crossed,
+    sequential_threshold_crossed: crossed,
   };
 }
 

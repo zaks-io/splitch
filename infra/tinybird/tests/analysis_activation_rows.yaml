@@ -42,6 +42,12 @@
   expected_http_status: 200
   expected_result: |
     {"targeting_key_hash":"tk_ttl_repeat","run_id":"run_ttl","activation_ts":"2026-07-05 00:00:00.000","activation_ingest_ts":"2026-07-05 00:00:00.000","counterfactual":0,"activated":1}
+- name: copy_gap_recovers_eligibility_from_snapshot_fact_not_epoch
+  description: Same TTL pattern as the sticky-clock case, but the Copy snapshot has no persisted activation_ingest_ts (epoch unset). Pairwise must recover the eligibility clock from the snapshotted first-touch Exposure fact rather than emitting epoch or null; a surviving non-qualifying day-10 repeat alone would not qualify.
+  parameters: "app_id=app_ttl_copy_gap&environment_id=env_prod&experiment_id=exp_ttl_gap&run_id=run_ttl_gap"
+  expected_http_status: 200
+  expected_result: |
+    {"targeting_key_hash":"tk_ttl_gap","run_id":"run_ttl_gap","activation_ts":"2026-07-05 00:00:00.000","activation_ingest_ts":"2026-07-05 00:00:00.000","counterfactual":0,"activated":1}
 - name: missing_environment_id_is_rejected
   description: A required scope parameter is never defaulted; the request fails loudly rather than reading across Environments.
   parameters: "app_id=app_1&experiment_id=exp_1&run_id=run_1"
