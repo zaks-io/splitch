@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { CanonicalJsonSha256Schema } from "./canonical-hash";
+import { CohortEffectDiagnosticSchema } from "./cohort-effect";
 import { MetricRefSchema } from "./leaf-schemas-experiment";
 import { RunCommitmentsSchema } from "./run-commitments";
 import type { StatsInput } from "./stats-input-contract";
@@ -130,6 +131,12 @@ export const AnalysisResultsEnvelopeSchema = z.discriminatedUnion("state", [
        * Plane reading an Analysis Worker from before this field still parses.
        */
       run_commitments: RunCommitmentsSchema.optional(),
+      /**
+       * First-exposure-day cohort-effect diagnostic (plan 2.8). Optional so
+       * Control Plane can deploy before Analysis emits it; never hashed into
+       * result_token.
+       */
+      cohort_effect: CohortEffectDiagnosticSchema.optional(),
       stats: StatsOutputSchema,
     })
     .strict()
