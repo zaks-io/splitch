@@ -196,8 +196,9 @@ The Analysis Worker (`apps/analysis-api/src/results.ts`) builds one `StatsInput`
 and calls the engine, binding `analysis_version` from the Run Snapshot commitments. It does not
 incrementally append to a previous `StatsInput`. Counts that look like "new Entities since last
 look" are a difference of two full recomputes, not a martingale increment stored on disk. Under
-analysis-v2 the sequential SRM gate evaluates the martingale on the current cumulative arm counts
-as one look on the sufficient statistic.
+analysis-v2 the sequential SRM gate rebuilds daily first-Exposure cumulative checkpoints from the
+current watermarked `StatsInput` and evaluates the martingale along that path (running-minimum p).
+Pinned `dataWatermark` fixes the Entity set, so the path and result token stay deterministic.
 
 ### Evidence watermark
 
@@ -264,10 +265,12 @@ first-touch resolved.
 
 A later watermark **revises** earlier arm counts when a second Variant is ingested for an Entity
 that previously sat in one arm. The Entity leaves that arm's SRM and Metric denominators and
-appears in `multiple_count`. This is not an iid multinomial increment. A sequential SRM wealth
-process that assumed append-only arm counts would be wrong on this path. Late delivery of an
-earlier `exposure_at` can also revise `first_exposure_ts` (and therefore windows and CUPED
-lookback) without changing Variant.
+appears in `multiple_count`. This is not an iid multinomial increment across watermarks. The
+analysis-v2 SRM gate therefore does not continue a prior filtration: it rebuilds the daily
+first-Exposure path from the cleaned watermarked population and re-evaluates (see
+[srm-and-health.md](srm-and-health.md#sequential-dirichlet-multinomial-srm-analysis-v2-gate)).
+Late delivery of an earlier `exposure_at` can also revise `first_exposure_ts` (and therefore
+windows and CUPED lookback) without changing Variant; that likewise rebuilds the path.
 
 ### Activation gating (ADR-0012)
 

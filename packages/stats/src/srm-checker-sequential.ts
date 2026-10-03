@@ -1,6 +1,6 @@
 import type { SrmProcedure } from "./analysis-version-policy";
 import { computeSequentialSrm } from "./sequential-srm";
-import { sumCounts } from "./srm-counts";
+import { buildDailyCumulativeSnapshots, type SrmPathEntity } from "./srm-observation-path";
 import { SRM_MISMATCH_P_VALUE } from "./srm-checker-threshold";
 
 export interface SrmTestResult {
@@ -9,22 +9,23 @@ export interface SrmTestResult {
 }
 
 /**
- * Map cumulative arm counts through the Lindon-Malek martingale. A single
- * watermark snapshot is one look on the sufficient statistic; Ville's inequality
- * still controls Type I under continuous monitoring of that wealth process.
+ * Reconstruct the daily first-Exposure checkpoint path from the current
+ * watermarked Entities and evaluate the Lindon-Malek martingale along it.
+ * Reported p is the running minimum along that path (sticky alarm).
  */
-export function sequentialSrmAgainstAllocation(
-  observed: Readonly<Record<string, number>>,
+export function sequentialSrmAlongEntityPath(
+  entities: readonly SrmPathEntity[],
   allocation: Readonly<Record<string, number>>,
+  variants: readonly string[],
 ): SrmTestResult {
-  const totalObserved = sumCounts(observed);
-  if (totalObserved === 0) {
+  if (entities.length === 0) {
     return { p_value: 1, is_mismatch: false };
   }
 
+  const snapshots = buildDailyCumulativeSnapshots(entities, variants);
   const result = computeSequentialSrm({
     allocation,
-    observations: { mode: "cumulative", snapshots: [observed] },
+    observations: { mode: "cumulative", snapshots },
     alpha: SRM_MISMATCH_P_VALUE,
   });
   return {

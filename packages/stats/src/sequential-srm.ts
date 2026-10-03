@@ -28,11 +28,14 @@ import {
  * return nonfinite wealth (`Infinity` JSON-serializes as `null` and would erase
  * the distinction between overflow and a missing value).
  *
- * Revising earlier counts violates the contract. Moving an Entity into the
- * `__multiple__` quarantine after it was already counted in an arm is one such
- * revision. Reconciling those corrections into the filtration is a later slice.
- * analysis-v2 selects this martingale for Exposure and activated-population SRM
- * via `analysisVersionPolicy`; analysis-v1 and legacy keep chi-square.
+ * Within one `computeSequentialSrm` call, cumulative snapshots must stay
+ * append-only. Across Results reads, analysis-v2 does not feed revised totals
+ * into a live filtration: `checkSrmHealth` rebuilds daily first-Exposure
+ * checkpoints from the current watermarked dataset and re-evaluates. Quarantine
+ * to `__multiple__` edits that dataset; the next read's path is recomputed from
+ * the cleaned rows. analysis-v2 selects this martingale for Exposure and
+ * activated-population SRM via `analysisVersionPolicy`; analysis-v1 and legacy
+ * keep chi-square.
  */
 export const SEQUENTIAL_SRM_SOURCE = {
   family: "dirichlet-multinomial-mixture-martingale",

@@ -61,18 +61,28 @@ on the declared Variants. Allocation weights must be positive. Default threshold
 
 **Output.** `wealth` is the Bayes factor / e-value `O_n`. `anytime_p_value` is the running minimum
 of `min(1, 1 / wealth)`, which is super-uniform under the null. `threshold_crossed` is true once
-`anytime_p_value <= alpha` and stays true if later wealth falls (alarm persistence).
+`anytime_p_value <= alpha` and stays true if later wealth falls (alarm persistence along the path).
 `first_cross_n` is the total Entity count at the first crossing, or null.
 
-**Observation contract.** Increments are iid multinomial under a fixed allocation. Counts are
-append-only. The function fails loud if a cumulative snapshot decreases an arm count. Revising
-earlier counts, including moving an Entity into `__multiple__` after it was counted in an arm,
-violates the contract. Reconciliation of those revisions is a later slice.
+**Observation contract (Results gate).** On every Results read, the analysis-v2 SRM gate rebuilds
+an append-only checkpoint path from the current watermarked population: one cumulative look per
+UTC day of each Entity's `first_exposure_ts`, in day order. Activated-population SRM uses the same
+path construction on the activated subset (still ordered by first Exposure time). The reported
+p-value is the running minimum along that path, so an early mismatch stays sticky when later days
+balance the totals. Within one read the path is non-decreasing by construction. The Entity set is
+exactly the pinned-watermark `StatsInput` exposures, so pinned reads stay deterministic and the
+result token stays reproducible.
+
+**Quarantine and revisions.** A later watermark that moves an Entity into `__multiple__` (or
+revises `first_exposure_ts`) edits the dataset. The next read recomputes the whole path from the
+cleaned rows; it does not feed a decreasing arm total into a live filtration. Primitive
+`computeSequentialSrm` still fails loud if a single call's cumulative snapshots decrease an arm
+count.
 
 **Looks.** Wealth is a function of the sufficient statistic. The anytime p-value is the running
 minimum over submitted increment batches. Singleton increments are continuous monitoring. A
-multi-Entity batch is one look after that batch is applied. Intra-batch processing order is not
-an arrival-time claim.
+multi-Entity day batch is one look after that day's arrivals are applied. Intra-day processing
+order is not an arrival-time claim.
 
 ### Activated-population SRM
 
