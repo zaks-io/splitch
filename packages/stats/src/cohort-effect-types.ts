@@ -1,4 +1,4 @@
-import type { CohortEffectBucketId, CohortEffectDiagnostic, StatsInput } from "@splitch/contracts";
+import type { CohortEffectBucketId, StatsInput } from "@splitch/contracts";
 
 /**
  * Constants and input for the first-exposure-day cohort-effect diagnostic
