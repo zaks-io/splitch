@@ -54,7 +54,7 @@
     "access": "public"
   },
   "dependencies": {
-    "@sentry/node": "^10.75.3",
+    "@sentry/node": "^11.0.0",
     "@splitch/sdk": "workspace:^",
     "jsonc-parser": "^3.3.1",
     "open": "^11.0.4"

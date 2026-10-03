@@ -16,7 +16,7 @@
     "wrangler:types": "wrangler types src/worker-configuration.d.ts"
   },
   "dependencies": {
-    "@sentry/react": "^10.75.3",
+    "@sentry/react": "^11.0.0",
     "@splitch/cli": "workspace:*",
     "@splitch/contracts": "workspace:*",
     "@splitch/observability": "workspace:*",

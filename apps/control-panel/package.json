@@ -22,8 +22,8 @@
     "wrangler:types": "wrangler types src/worker-configuration.d.ts"
   },
   "dependencies": {
-    "@sentry/cloudflare": "^10.75.3",
-    "@sentry/react": "^10.75.3",
+    "@sentry/cloudflare": "^11.0.0",
+    "@sentry/react": "^11.0.0",
     "@splitch/contracts": "workspace:*",
     "@splitch/control-plane-sdk": "workspace:*",
     "@splitch/db": "workspace:*",

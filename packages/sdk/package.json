@@ -82,7 +82,7 @@
   },
   "devDependencies": {
     "@openfeature/server-sdk": "^1.23.0",
-    "@sentry/core": "^10.75.3",
+    "@sentry/core": "^11.0.0",
     "@splitch/contracts": "workspace:*",
     "@splitch/control-plane-sdk": "workspace:*",
     "@splitch/evaluation-core": "workspace:*",
