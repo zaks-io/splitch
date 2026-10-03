@@ -110,9 +110,12 @@ These are diagnostic slices only. They never enter the Run's BH family, change `
 independently authorize conclusion.
 
 When Results classifies an SRM root cause (see
-[srm-and-health.md](srm-and-health.md#srm-root-cause-classifier-fabijan-et-al-2019)), `autoCuts`
-feed `segment_localized` and per-day trend points feed `day_one`. The classifier never changes this
-read's response shape; it only consumes the same signals once the Results producer wires them in.
+[srm-and-health.md](srm-and-health.md#srm-root-cause-classifier-fabijan-et-al-2019)),
+`autoCuts` and per-day trend points are candidate inputs for future
+`segment_localized` / `day_one` branches. Those branches are not emitted today
+(they need per-Dimension mutually exclusive slices with multiplicity control,
+and per-day counts with a proportion-change test). The classifier never changes
+this read's response shape.
 
 ## Tenant and provenance boundary
 

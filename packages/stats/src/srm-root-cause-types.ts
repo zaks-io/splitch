@@ -3,24 +3,27 @@
  * classifier. Classification lives in `srm-root-cause.ts`.
  */
 
-export const SRM_ROOT_CAUSE_BRANCHES = [
-  "triggered_only",
-  "segment_localized",
-  "day_one",
-  "unclassified",
-] as const;
+export const SRM_ROOT_CAUSE_BRANCHES = ["triggered_only", "unclassified"] as const;
 
 export type SrmRootCauseBranch = (typeof SRM_ROOT_CAUSE_BRANCHES)[number];
 
 /**
- * Stated alpha for "slice imbalances differ beyond noise" (chi-square
- * homogeneity across Dimension cuts). Matches the SRM mismatch alpha so
- * localization is not claimed from volume-only significance differences.
+ * Fabijan branches this classifier does not emit yet. `day_one` and
+ * `segment_localized` need sounder inputs than boolean mismatch flags;
+ * `engagement_direction` and `latency_linked` need telemetry that does not
+ * exist.
  */
-export const SRM_ROOT_CAUSE_SEGMENT_HOMOGENEITY_ALPHA = 0.001;
-
-/** Branches Fabijan describes that this classifier cannot judge today. */
-export const SRM_ROOT_CAUSE_TELEMETRY_GAPS = [
+export const SRM_ROOT_CAUSE_FUTURE_BRANCHES = [
+  {
+    branch: "day_one",
+    needed:
+      "Per-day Variant counts with a proportion-change test (boolean day-mismatch flags confuse lower power with balance).",
+  },
+  {
+    branch: "segment_localized",
+    needed:
+      "Per-Dimension mutually exclusive slices with multiplicity control (overlapping cuts across Dimensions are correlated).",
+  },
   {
     branch: "engagement_direction",
     needed:
@@ -33,27 +36,6 @@ export const SRM_ROOT_CAUSE_TELEMETRY_GAPS = [
   },
 ] as const;
 
-export interface SrmRootCauseSegmentCut {
-  readonly dimensionId: string;
-  readonly dimensionValue: string;
-  readonly srmIsMismatch: boolean;
-  /**
-   * Per-Variant observed counts for this slice. Required to claim
-   * `segment_localized`; without counts the classifier can only report which
-   * slices crossed the SRM threshold.
-   */
-  readonly observedCounts?: Readonly<Record<string, number>>;
-}
-
-/**
- * First-Exposure calendar-day (or equivalent) arm counts already scored for
- * SRM. Buckets must be ordered earliest-first; this function does not sort.
- */
-export interface SrmRootCauseDayBucket {
-  readonly day: string;
-  readonly srmIsMismatch: boolean;
-}
-
 export interface SrmRootCauseInput {
   readonly exposureMismatch: boolean;
   /** `null` when the Run has no Activation gate. */
@@ -65,17 +47,6 @@ export interface SrmRootCauseInput {
    * evidence of Activation-driven imbalance.
    */
   readonly activationCount: number | null;
-  /**
-   * Dimension / Segment auto-cuts from decision-diagnostics. Omit when the
-   * producer has not fetched them; an empty list means cuts were fetched and
-   * none exist.
-   */
-  readonly segmentCuts?: readonly SrmRootCauseSegmentCut[];
-  /**
-   * Per first-Exposure-day SRM scores. Omit when trend buckets are unavailable;
-   * an empty list means the range was fetched and is empty.
-   */
-  readonly dayBuckets?: readonly SrmRootCauseDayBucket[];
 }
 
 /** Canonical operation id every branch's `nextCheck` must resolve to today. */

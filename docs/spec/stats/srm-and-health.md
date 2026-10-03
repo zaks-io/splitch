@@ -210,37 +210,35 @@ diagnostics projection). The classifier is a pure function over outputs the
 platform already produces; it does not recompute the SRM test statistic, change
 the decision gate, or enter the result token.
 
-| Branch              | When it fires                                                                                                                                                        | Next check                                                                       |
-| ------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
-| `triggered_only`    | Activated SRM mismatches, Exposure SRM does not, and activated-population count is positive                                                                          | `experiment_results_get` (inspect Activation rates / activated SRM)              |
-| `segment_localized` | Decision-diagnostics Dimension auto-cuts are present, a proper subset mismatches, and slice proportions differ beyond noise (homogeneity α = 0.001)                  | `experiment_results_get` (canonical id until decision-diagnostics is registered) |
-| `day_one`           | First-Exposure-day buckets are present, the first day mismatches, and at least one later scored day does not                                                         | `experiment_results_get` (canonical id until decision-diagnostics is registered) |
-| `unclassified`      | SRM fired but signals are absent, global, conflicting, zero-Activation fail-closed, volume-only slice significance, or a singleton mismatching day with no later day | `experiment_results_get`                                                         |
+| Branch           | When it fires                                                                                      | Next check                                                          |
+| ---------------- | -------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------- |
+| `triggered_only` | Activated SRM mismatches, Exposure SRM does not, and activated-population count is positive        | `experiment_results_get` (inspect Activation rates / activated SRM) |
+| `unclassified`   | SRM fired but signals are absent, global, conflicting, or the zero-Activation fail-closed sentinel | `experiment_results_get`                                            |
 
 Rules:
 
 - Returns nothing when neither Exposure nor activated SRM has fired.
-- Never guesses: conflicting matches (for example `triggered_only` and
-  `segment_localized` together) become `unclassified` with `evidenceConsidered`.
+- Never guesses: when the available signals do not isolate a single branch, the
+  classifier returns `unclassified` with `evidenceConsidered`.
 - Zero Activations on a gated Run sets `activated_srm_mismatch` as a fail-closed
   sentinel, not Activation-imbalance evidence — the classifier returns
   `unclassified` with `insufficient_evidence:zero_activations`.
-- `segment_localized` requires per-slice arm counts and a chi-square homogeneity
-  rejection at α = 0.001. Unequal-volume identical proportions (for example US
-  6000/4000 vs DE 60/40) report which slices crossed the SRM threshold without
-  claiming localization.
-- `segment_localized` and `day_one` require optional decision-diagnostics inputs.
-  Until that route is wired into the Results producer, those branches stay inert
-  and live Results that only have `StatsOutput` typically land on
-  `triggered_only` or `unclassified`.
+- Reconstructing Activation counts from health rates requires matching Exposure
+  denominators; a missing `deduped_counts` key fails loud rather than treating
+  the denominator as zero.
 
-### Telemetry gaps (branches omitted)
+### Future branches (omitted)
 
-Fabijan et al. also describe engagement-direction and latency-linked diagnoses.
-splitch has no per-Variant engagement intensity or Assignment/Exposure logging
-latency tied to the SRM denominator today, so those branches are **not**
-emitted. They are listed on `SRM_ROOT_CAUSE_TELEMETRY_GAPS` in `@splitch/stats`
-until that telemetry exists.
+These Fabijan branches are **not** emitted. They are listed on
+`SRM_ROOT_CAUSE_FUTURE_BRANCHES` in `@splitch/stats` until the inputs below
+exist:
+
+| Branch                 | Needed before it can ship                                                                                             |
+| ---------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| `day_one`              | Per-day Variant counts with a proportion-change test (boolean day-mismatch flags confuse lower power with balance)    |
+| `segment_localized`    | Per-Dimension mutually exclusive slices with multiplicity control (overlapping cuts across Dimensions are correlated) |
+| `engagement_direction` | Per-Variant engagement or activity intensity among Exposed Entities before the SRM window closes                      |
+| `latency_linked`       | Per-Variant Exposure or Assignment logging latency distributions tied to the same denominator                         |
 
 Reference: Fabijan, Gupchup, Gupta, Omhover, Qin, Vermeer, Dmitriev — _Diagnosing
 Sample Ratio Mismatch in Online Controlled Experiments_, KDD 2019

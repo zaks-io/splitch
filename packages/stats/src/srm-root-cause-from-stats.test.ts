@@ -50,6 +50,21 @@ describe("classifySrmRootCauseFromStats", () => {
     expect(result?.evidenceConsidered).toContain("insufficient_evidence:zero_activations");
     expect(result?.evidenceConsidered).toContain("activation_count:0");
   });
+
+  it("fails loud when activation_rates keys lack matching Exposure denominators", () => {
+    expect(() =>
+      classifySrmRootCauseFromStats(
+        statsFixture({
+          srm_is_mismatch: false,
+          activated_srm_mismatch: true,
+          activated_srm_p_value: 0.0001,
+          activation_rates: { control: 0.2, treatment: 0.6 },
+          // Missing treatment denominator — must not silently become zero.
+          deduped_counts: { control: 500 },
+        }),
+      ),
+    ).toThrow(/activation_rates keys must match deduped_counts keys/);
+  });
 });
 
 function statsFixture(overrides: {

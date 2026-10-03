@@ -6,12 +6,7 @@ import { z } from "zod";
  * this schema is what Results / diagnostics may optionally carry.
  */
 
-export const srmRootCauseBranches = [
-  "triggered_only",
-  "segment_localized",
-  "day_one",
-  "unclassified",
-] as const;
+export const srmRootCauseBranches = ["triggered_only", "unclassified"] as const;
 
 export const SrmRootCauseBranchSchema = z.enum(srmRootCauseBranches);
 
