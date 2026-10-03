@@ -1,36 +1,45 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import {
-  compareCliTags,
-  githubPublicationLookup,
-  newestPublishedCliTag,
-} from "./lib/released-cli-tag.mjs";
+import { compareCliTags, fetchNpmCliVersions, newestCliTagOnNpm } from "./lib/released-cli-tag.mjs";
 
-test("skips a newer draft tag and anchors on the newest published release", async () => {
-  const drafts = new Set(["cli-v0.8.0"]);
-  const isPublished = async (tag) => !drafts.has(tag);
+test("skips a tag whose GitHub Release is published but whose version never reached npm", () => {
+  // cli-v0.7.6 has a tag and a published release, but cli-publish failed before npm publish.
+  const tags = ["cli-v0.7.5", "cli-v0.7.6", "sdk-v9.0.0"];
+  assert.equal(newestCliTagOnNpm(tags, new Set(["0.7.4", "0.7.5"])), "cli-v0.7.5");
+  assert.equal(newestCliTagOnNpm(tags, new Set(["0.7.5", "0.7.6"])), "cli-v0.7.6");
+  assert.equal(newestCliTagOnNpm(["cli-v0.8.0"], new Set(["0.7.5"])), undefined);
+});
+
+test("picks the highest SemVer tag on npm and ignores build metadata npm drops", () => {
+  const onNpm = new Set(["0.9.9", "0.10.0", "1.0.0"]);
+  assert.equal(newestCliTagOnNpm(["cli-v0.9.9", "cli-v0.10.0"], onNpm), "cli-v0.10.0");
   assert.equal(
-    await newestPublishedCliTag(["cli-v0.7.5", "cli-v0.8.0", "sdk-v9.0.0"], isPublished),
-    "cli-v0.7.5",
+    newestCliTagOnNpm(["cli-v0.9.9", "cli-v1.0.0+build.5"], onNpm),
+    "cli-v1.0.0+build.5",
   );
-  assert.equal(await newestPublishedCliTag(["cli-v0.8.0"], isPublished), undefined);
 });
 
-test("asks about tags newest first and stops at the first published one", async () => {
-  const asked = [];
-  const isPublished = async (tag) => {
-    asked.push(tag);
-    return true;
+const respond = (status, body) => async () => ({ status, json: async () => body });
+
+test("reads every CLI version from the public npm registry", async () => {
+  let requested;
+  const fetchImpl = async (url, init) => {
+    requested = { url, accept: init.headers.accept };
+    return respond(200, { versions: { "0.7.5": {}, "0.7.6": {} } })();
   };
-  await newestPublishedCliTag(["cli-v0.7.5", "cli-v0.10.0", "cli-v0.9.9"], isPublished);
-  assert.deepEqual(asked, ["cli-v0.10.0"]);
+  assert.deepEqual([...(await fetchNpmCliVersions(fetchImpl))], ["0.7.5", "0.7.6"]);
+  assert.equal(requested.url, "https://registry.npmjs.org/%40splitch%2Fcli");
+  assert.equal(requested.accept, "application/vnd.npm.install-v1+json");
 });
 
-test("fails loud without a token instead of guessing which release is published", () => {
-  assert.throws(
-    () => githubPublicationLookup({ env: {}, originUrl: () => "git@github.com:o/r.git" }),
-    /GH_TOKEN \(or GITHUB_TOKEN\) is required/,
-  );
+test("fails loud on registry errors instead of falling back", async () => {
+  await assert.rejects(fetchNpmCliVersions(respond(503, {})), /returned HTTP 503/);
+  await assert.rejects(fetchNpmCliVersions(respond(404, {})), /returned HTTP 404/);
+  await assert.rejects(fetchNpmCliVersions(respond(200, {})), /returned no versions/);
+  const offline = async () => {
+    throw new Error("getaddrinfo ENOTFOUND registry.npmjs.org");
+  };
+  await assert.rejects(fetchNpmCliVersions(offline), /failed: getaddrinfo ENOTFOUND/);
 });
 
 test("orders prerelease identifiers by SemVer precedence, not locale order", () => {

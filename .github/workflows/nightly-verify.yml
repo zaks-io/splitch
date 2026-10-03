@@ -63,8 +63,4 @@ jobs:
       # the nightly forced run instead.
       - name: Verify (forced, no cache reads)
         timeout-minutes: 20
-        env:
-          # Read-only workflow token: check:request-contract-compat asks the
-          # Releases API which cli-v* tag is published, not merely drafted.
-          GH_TOKEN: ${{ github.token }}
         run: pnpm verify:ci "@splitch/sdk#test:consumer-smoke"

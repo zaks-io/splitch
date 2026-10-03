@@ -27,12 +27,8 @@ test("nightly verify forces execution and rewrites signed cache entries", () => 
   assert.doesNotMatch(workflow, /Install Tinybird CLI|tinybird\.co/);
 });
 
-test("nightly verify gives the request-contract gate its cli-v* tags and publication lookup", () => {
+test("nightly verify checks out the cli-v* tags the request-contract gate anchors on", () => {
   assert.match(workflow, /actions\/checkout@[0-9a-f]{40} # v[\d.]+\n\s+with:\n\s+fetch-depth: 0/);
-  assert.match(
-    workflow,
-    /- name: Verify \(forced, no cache reads\)\n(?:\s+.*\n)*?\s+GH_TOKEN: \$\{\{ github\.token \}\}\n\s+run: pnpm verify:ci/,
-  );
 });
 
 test("nightly verify is signal-only and cannot mutate anything", () => {

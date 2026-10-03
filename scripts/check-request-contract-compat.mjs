@@ -5,14 +5,13 @@
  * the newest released CLI can send must stay acceptable at HEAD. The response
  * side already tolerates skew; this guards the request side.
  *
- * Released ref: the highest-SemVer `cli-v*` git tag whose GitHub Release is
- * published (non-draft), cross-checked against apps/cli/package.json at that
- * tag. cli-release.yml pushes the tag while the release is still a draft and
- * cli-publish.yml only ships to npm on publication, so the newest tag alone can
- * be ahead of what users run. Publication is read from the GitHub Releases API
- * with GH_TOKEN (CI passes the read-only workflow token); there is no offline
- * fallback, and no npm calls. A published release whose npm publish then failed
- * still counts, which only makes the baseline newer than what users run.
+ * Released ref: the highest-SemVer `cli-v*` git tag whose version is on the
+ * public npm registry, cross-checked against apps/cli/package.json at that tag.
+ * cli-release.yml pushes the tag while the GitHub Release is a draft, and
+ * cli-publish.yml can still fail after the release is published, so neither the
+ * tag nor the release says what users can install; the registry does. One
+ * unauthenticated GET of the package's versions; a network error or non-200
+ * fails the gate, with no fallback.
  *
  * For every operationId in the released route registry it compares the JSON
  * Schema (zod v4 `z.toJSONSchema`, io "input") of the route's runtime input
@@ -33,7 +32,7 @@
  * discriminator tag when the released union has one.
  *
  * Limits, honestly:
- *   - Only the newest published release is checked. Older CLIs still in use are not.
+ *   - Only the newest CLI on npm is checked. Older CLIs still in use are not.
  *   - Refinements, transforms, and cross-field rules (superRefine "owner is
  *     required when ...") are invisible to JSON Schema and are not checked.
  *   - Tightened string/number constraints (pattern, format, min/max, length,
@@ -56,7 +55,7 @@ import {
   headContractsSrc,
   loadRequestContractSnapshot,
 } from "./lib/request-contract-snapshot.mjs";
-import { githubPublicationLookup, newestPublishedCliTag } from "./lib/released-cli-tag.mjs";
+import { fetchNpmCliVersions, newestCliTagOnNpm } from "./lib/released-cli-tag.mjs";
 
 const TAG_PREFIX = "cli-v";
 const ALLOWLIST_PATH = "scripts/request-contract-compat-allowlist.json";
@@ -91,13 +90,9 @@ async function resolveReleasedRef(repoRoot) {
       `no ${TAG_PREFIX}* tags found. CI must check out with fetch-depth: 0; locally run "git fetch --tags".`,
     );
   }
-  const isPublished = githubPublicationLookup({
-    env: process.env,
-    originUrl: () => git(["remote", "get-url", "origin"], repoRoot),
-  });
-  const tag = await newestPublishedCliTag(tags, isPublished);
+  const tag = newestCliTagOnNpm(tags, await fetchNpmCliVersions());
   if (!tag) {
-    throw new Error(`none of the local ${TAG_PREFIX}* tags has a published GitHub Release`);
+    throw new Error(`none of the local ${TAG_PREFIX}* tags has its version on npm`);
   }
   const manifest = JSON.parse(git(["show", `${tag}:apps/cli/package.json`], repoRoot));
   if (`${TAG_PREFIX}${manifest.version}` !== tag) {
@@ -155,7 +150,7 @@ async function main() {
   const { releasedRef } = parseArgs(process.argv.slice(2));
   const ref = releasedRef ?? (await resolveReleasedRef(repoRoot));
   const commit = git(["rev-parse", "--short", `${ref}^{commit}`], repoRoot);
-  const source = releasedRef ? "an explicit --released-ref" : "the newest published CLI release";
+  const source = releasedRef ? "an explicit --released-ref" : "the newest CLI on npm";
   console.log(`${LABEL}: comparing HEAD request contracts against ${ref} (${commit}), ${source}`);
 
   const released = await loadReleasedSnapshot(repoRoot, ref);

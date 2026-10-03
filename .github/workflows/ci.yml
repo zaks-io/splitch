@@ -101,9 +101,6 @@ jobs:
         timeout-minutes: 15
         env:
           USE_AFFECTED: ${{ steps.plan.outputs.use_affected }}
-          # Read-only workflow token: check:request-contract-compat asks the
-          # Releases API which cli-v* tag is published, not merely drafted.
-          GH_TOKEN: ${{ github.token }}
         run: |
           if [ "$USE_AFFECTED" = "true" ]; then
             pnpm verify:ci --affected --output-logs=new-only

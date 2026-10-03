@@ -1,4 +1,5 @@
-import { isReleasePublished } from "../release/check-release-published.mjs";
+import { NPM_REGISTRY } from "../release/check-published-version.mjs";
+import { getReleaseTarget } from "../release/constants.mjs";
 import { RELEASE_SEMVER_PATTERN } from "../release/resolve-version.mjs";
 
 const TAG_PREFIX = "cli-v";
@@ -48,39 +49,37 @@ export function compareCliTags(leftTag, rightTag) {
 }
 
 /**
- * The newest `cli-v*` tag whose GitHub Release is published. cli-release.yml
- * pushes the tag while the release is still a draft, and npm only receives the
- * CLI when cli-publish.yml runs on publication, so a draft's tag must never
- * become the baseline the published CLI is judged against.
+ * The newest `cli-v*` tag whose version users can actually install. A tag
+ * exists from the draft stage of cli-release.yml, and even a published GitHub
+ * Release precedes cli-publish.yml, which can still fail before npm publish;
+ * only the registry says which CLI is in the wild.
  */
-export async function newestPublishedCliTag(tagNames, isPublished) {
-  const newestFirst = tagNames
+export function newestCliTagOnNpm(tagNames, npmVersions) {
+  return tagNames
     .filter((tag) => tag.startsWith(TAG_PREFIX))
-    .sort((left, right) => compareCliTags(right, left));
-  for (const tag of newestFirst) {
-    if (await isPublished(tag)) return tag;
-  }
-  return undefined;
-}
-
-function repositoryFromRemote(remoteUrl) {
-  const match = /github\.com[:/]([^/]+\/[^/]+?)(?:\.git)?$/u.exec(remoteUrl);
-  if (!match) throw new Error(`cannot derive owner/repo from remote ${remoteUrl}`);
-  return match[1];
+    .sort((left, right) => compareCliTags(right, left))
+    .find((tag) => npmVersions.has(tag.slice(TAG_PREFIX.length).split("+")[0]));
 }
 
 /**
- * Publication lookup against the GitHub Releases API. There is no offline
- * fallback: without a token the gate cannot tell a published CLI from a draft.
+ * Every version of the CLI on the public npm registry. No auth and no
+ * fallback: a network error or non-200 fails the gate rather than guessing.
  */
-export function githubPublicationLookup({ env, originUrl }) {
-  const token = env.GH_TOKEN ?? env.GITHUB_TOKEN;
-  if (!token) {
-    throw new Error(
-      'GH_TOKEN (or GITHUB_TOKEN) is required to find the newest published CLI release; locally run "GH_TOKEN=$(gh auth token) pnpm check:request-contract-compat"',
-    );
+export async function fetchNpmCliVersions(fetchImpl = fetch) {
+  const { packageName } = getReleaseTarget("cli");
+  const url = `${NPM_REGISTRY}/${encodeURIComponent(packageName)}`;
+  let response;
+  try {
+    response = await fetchImpl(url, { headers: { accept: "application/vnd.npm.install-v1+json" } });
+  } catch (error) {
+    throw new Error(`npm registry lookup ${url} failed: ${error.message}`);
   }
-  const repository = env.GITHUB_REPOSITORY || repositoryFromRemote(originUrl());
-  return (tag) =>
-    isReleasePublished({ tag, repository, token, apiUrl: env.GITHUB_API_URL || undefined });
+  if (response.status !== 200) {
+    throw new Error(`npm registry lookup ${url} returned HTTP ${response.status}`);
+  }
+  const { versions } = await response.json();
+  if (!versions || typeof versions !== "object") {
+    throw new Error(`npm registry lookup ${url} returned no versions`);
+  }
+  return new Set(Object.keys(versions));
 }
