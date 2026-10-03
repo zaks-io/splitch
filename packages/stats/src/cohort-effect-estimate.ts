@@ -25,6 +25,12 @@ export type CohortContrastEstimate =
       nTreatment: number;
     }
   | {
+      kind: "numerical_failure";
+      absoluteEffect: number;
+      nControl: number;
+      nTreatment: number;
+    }
+  | {
       kind: "insufficient_denominator";
       nControl: number;
       nTreatment: number;
@@ -110,6 +116,17 @@ export function bucketFromContrast(args: {
       status: "zero_variance",
     };
   }
+  if (args.contrast.kind === "numerical_failure") {
+    return {
+      bucket: args.bucket,
+      n_control: nControl,
+      n_treatment: nTreatment,
+      absolute_effect: args.contrast.absoluteEffect,
+      absolute_ci_lower: null,
+      absolute_ci_upper: null,
+      status: "numerical_failure",
+    };
+  }
 
   const interval = fixedHorizonAbsoluteInterval(
     args.contrast.absoluteEffect,
@@ -150,6 +167,14 @@ function contrastFromComparison(
     comparison.absolute_lift_sampling_var,
   );
   if (absolute !== null) {
+    if (absolute.samplingVar < 0) {
+      return {
+        kind: "numerical_failure",
+        absoluteEffect: absolute.absoluteEffect,
+        nControl,
+        nTreatment,
+      };
+    }
     if (!(absolute.samplingVar > 0)) {
       return {
         kind: "zero_variance",

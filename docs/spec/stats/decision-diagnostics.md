@@ -141,7 +141,9 @@ reports `n_control`, `n_treatment`, absolute effect, and a fixed-horizon
 `insufficient_n` with null effect/interval. Zero sampling variance (identical
 constant outcomes, or a zero-conversion Binomial bucket) is
 `zero_variance` with a point estimate, null interval, and no novelty claim — the
-diagnostic must never fail Results. A Ratio Metric bucket with enough Entities
+diagnostic must never fail Results. Negative sampling variance after the
+permitted floating-point clamp is `numerical_failure` (not `zero_variance`). A
+Ratio Metric bucket with enough Entities
 but zero mean denominator is `insufficient_denominator` (not
 `insufficient_n`). Bucketing uses the same `analysisExposureRows` filter as the
 main analysis (Activation-gated denominator when `activation_rows` are present)
@@ -154,9 +156,16 @@ a different arm population and disagree with `arm_results`.
 
 **Novelty / trigger-day flag.** A two-sample z test compares the day-0 absolute
 effect to the effect on Entities pooled from later buckets, at
-`COHORT_EFFECT_NOVELTY_ALPHA` (0.05). The flag is `detected`, `not_detected`, or
-`insufficient_data` when either side is below the per-arm minimum. Diagnostic
-only — it never stops or Concludes a Run.
+`COHORT_EFFECT_NOVELTY_ALPHA` (0.05). Both the per-bucket effects and the
+novelty contrast include only Entities whose outcome window is complete at the
+analysis watermark: `first_exposure_ts + conversion_window_ms <= watermark`.
+The Conversion Window is the frozen Run snapshot value (`metric_query_config`
+/`metric_conversion_windows` on StatsInput). The flag is `detected`,
+`not_detected`, or `insufficient_data` when either side is below the per-arm
+minimum, when the window is missing from StatsInput, when the watermark is
+missing, or when the window is unbounded (`window_duration_ms = 0`) — those
+cases cannot equalize follow-up, so a delayed-conversion constant lift must
+not be labelled novelty. Diagnostic only — it never stops or Concludes a Run.
 
 Primary Metric resolution: `pre_registration.primary_metric_id` when frozen;
 otherwise the unique top-level `decision_family` Metric. Zero Metrics →

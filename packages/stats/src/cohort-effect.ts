@@ -10,6 +10,7 @@ import {
   assertKnownBuckets,
   exposuresInBucket,
   exposuresInLaterBuckets,
+  exposuresWithCompleteOutcomeWindow,
 } from "./cohort-effect-buckets";
 import {
   bucketFromContrast,
@@ -57,6 +58,15 @@ export function computeCohortEffect(input: CohortEffectComputeInput): CohortEffe
     exposures: input.statsInput.exposures,
     activation_rows: input.statsInput.activation_rows,
   });
+  const completeWindow = completeOutcomeWindowFilter(input, primary.metricId);
+  const cohortExposures =
+    completeWindow === null
+      ? analysisExposures
+      : exposuresWithCompleteOutcomeWindow(
+          analysisExposures,
+          completeWindow.windowDurationMs,
+          completeWindow.analysisWatermark,
+        );
 
   const allocatedTreatments = allocatedTreatmentVariants(
     input.statsInput.allocation,
@@ -66,7 +76,7 @@ export function computeCohortEffect(input: CohortEffectComputeInput): CohortEffe
   // One all-arm fit per cohort population (each bucket + later pool), then
   // project onto locked-family Treatments — same Control baseline as arm_results.
   const bucketContrasts = assertKnownBuckets().map((bucket) => {
-    const exposures = exposuresInBucket(analysisExposures, input.runStartedAt, bucket);
+    const exposures = exposuresInBucket(cohortExposures, input.runStartedAt, bucket);
     return {
       bucket,
       exposures,
@@ -81,7 +91,7 @@ export function computeCohortEffect(input: CohortEffectComputeInput): CohortEffe
     };
   });
 
-  const laterExposures = exposuresInLaterBuckets(analysisExposures, input.runStartedAt);
+  const laterExposures = exposuresInLaterBuckets(cohortExposures, input.runStartedAt);
   const laterContrasts = contrastsForCohortPopulation({
     statsInput: input.statsInput,
     metricId: primary.metricId,
@@ -105,6 +115,7 @@ export function computeCohortEffect(input: CohortEffectComputeInput): CohortEffe
       laterContrasts,
       alpha,
       minArmN,
+      noveltyComparable: completeWindow !== null,
     }),
   );
 
@@ -137,6 +148,7 @@ function comparisonForTreatment(args: {
   laterContrasts: Map<string, CohortContrastEstimate | null>;
   alpha: number;
   minArmN: number;
+  noveltyComparable: boolean;
 }): CohortEffectComparison {
   const buckets = args.bucketContrasts.map((entry) =>
     bucketFromContrast({
@@ -152,13 +164,37 @@ function comparisonForTreatment(args: {
   return {
     treatment_variant: args.treatmentVariant,
     buckets,
-    novelty: classifyCohortNovelty({
-      earliest: noveltyFromContrast(args.day0Contrasts.get(args.treatmentVariant) ?? null),
-      laterPooled: noveltyFromContrast(args.laterContrasts.get(args.treatmentVariant) ?? null),
-      alpha: args.alpha,
-      minArmN: args.minArmN,
-    }),
+    novelty: args.noveltyComparable
+      ? classifyCohortNovelty({
+          earliest: noveltyFromContrast(args.day0Contrasts.get(args.treatmentVariant) ?? null),
+          laterPooled: noveltyFromContrast(args.laterContrasts.get(args.treatmentVariant) ?? null),
+          alpha: args.alpha,
+          minArmN: args.minArmN,
+        })
+      : { flag: "insufficient_data", alpha: args.alpha },
   };
+}
+
+/**
+ * Finite Conversion Window plus analysis watermark: novelty and bucket effects
+ * compare only Entities whose outcome window is complete. Missing window,
+ * missing watermark, or unbounded (`0`) cannot equalize follow-up.
+ */
+function completeOutcomeWindowFilter(
+  input: CohortEffectComputeInput,
+  metricId: string,
+): { windowDurationMs: number; analysisWatermark: string } | null {
+  const windowDurationMs = input.statsInput.metric_conversion_windows?.find(
+    (window) => window.metric_id === metricId,
+  )?.window_duration_ms;
+  if (
+    windowDurationMs === undefined ||
+    windowDurationMs <= 0 ||
+    input.analysisWatermark === undefined
+  ) {
+    return null;
+  }
+  return { windowDurationMs, analysisWatermark: input.analysisWatermark };
 }
 
 type UnavailableDiagnostic = {

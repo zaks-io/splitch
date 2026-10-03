@@ -11,6 +11,9 @@ import { ANALYSIS_V1_VERSION } from "@splitch/contracts";
 import { MS_PER_DAY } from "./cohort-effect-types";
 
 export const COHORT_RUN_START = "2026-07-01T00:00:00.000Z";
+/** Watermark after day-10 arrivals plus a 1-day Conversion Window. */
+export const COHORT_ANALYSIS_WATERMARK = "2026-07-12T00:00:00.000Z";
+const COHORT_CONVERSION_WINDOW_MS = MS_PER_DAY;
 const COHORT_RUN_ID = "run_cohort_effect";
 
 export interface CohortEntitySpec {
@@ -33,6 +36,8 @@ export interface CohortStatsInputOptions {
   readonly allocation?: Readonly<Record<string, number>>;
   /** Defaults to every non-control Variant present in `entities`. */
   readonly decisionFamilyVariants?: readonly string[];
+  /** Frozen Conversion Window; omit to leave novelty `insufficient_data`. */
+  readonly metricConversionWindows?: StatsInput["metric_conversion_windows"];
 }
 
 export function cohortStatsInput(
@@ -67,7 +72,17 @@ export function cohortStatsInput(
     ...(options.prePeriodCovariates !== undefined
       ? { pre_period_covariates: [...options.prePeriodCovariates] }
       : {}),
+    ...(options.metricConversionWindows !== undefined
+      ? { metric_conversion_windows: [...options.metricConversionWindows] }
+      : {}),
   };
+}
+
+export function cohortConversionWindows(
+  metricId = "conversion",
+  windowDurationMs = COHORT_CONVERSION_WINDOW_MS,
+): NonNullable<StatsInput["metric_conversion_windows"]> {
+  return [{ metric_id: metricId, window_duration_ms: windowDurationMs }];
 }
 
 /** Balanced arms: `perArm` Entities per variant in each listed day offset. */

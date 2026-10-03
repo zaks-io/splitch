@@ -27,6 +27,7 @@ export function readyAnalysisEnvelope(args: {
     cohort_effect: computeCohortEffect({
       statsInput: args.statsInput,
       runStartedAt: args.runStartedAt,
+      analysisWatermark: args.evidence.data_watermark,
     }),
     stats: args.stats,
   };

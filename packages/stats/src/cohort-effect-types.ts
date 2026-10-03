@@ -28,6 +28,12 @@ export interface CohortEffectComputeInput {
   readonly statsInput: StatsInput;
   /** ISO Run start used as day-0 origin for first_exposure bucketing. */
   readonly runStartedAt: string;
+  /**
+   * Inclusive analysis evidence watermark. Required (with a finite Conversion
+   * Window) to restrict bucket and novelty denominators to complete outcome
+   * windows.
+   */
+  readonly analysisWatermark?: string;
   readonly noveltyAlpha?: number;
   readonly minArmN?: number;
 }

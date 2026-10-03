@@ -33,6 +33,7 @@ import {
 import { materializeRunCommitments } from "./results-run-commitments";
 import {
   assertAnalysisInputsPresent,
+  conversionWindowsFromQueryConfig,
   materializeMetricQueryConfig,
   materializeRunInput,
 } from "./results-run-input";
@@ -192,6 +193,9 @@ async function readResultsComputationFromTinybird(
     ...commitmentStatsBindings(commitments),
     exposures,
     metric_values,
+    ...(metricQueryConfig.length > 0
+      ? { metric_conversion_windows: conversionWindowsFromQueryConfig(metricQueryConfig) }
+      : {}),
     ...(prePeriodRows.length > 0
       ? {
           pre_period_covariates: canonicalizeAnalysisRows(

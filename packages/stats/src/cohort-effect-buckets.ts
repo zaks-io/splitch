@@ -43,6 +43,22 @@ export function exposuresInLaterBuckets(
   });
 }
 
+/**
+ * Keep Entities whose Conversion Window has fully elapsed by the analysis
+ * watermark: first_exposure_ts + window_duration_ms <= watermark.
+ */
+export function exposuresWithCompleteOutcomeWindow(
+  exposures: readonly DedupeExposureRow[],
+  windowDurationMs: number,
+  analysisWatermark: string,
+): DedupeExposureRow[] {
+  const watermarkMs = timestampMs(analysisWatermark, "analysisWatermark");
+  return exposures.filter((exposure) => {
+    const exposureMs = timestampMs(exposure.first_exposure_ts, "first_exposure_ts");
+    return exposureMs + windowDurationMs <= watermarkMs;
+  });
+}
+
 export function assertKnownBuckets(): readonly CohortEffectBucketId[] {
   return COHORT_EFFECT_BUCKET_IDS;
 }

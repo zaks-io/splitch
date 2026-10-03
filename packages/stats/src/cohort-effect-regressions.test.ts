@@ -51,6 +51,27 @@ describe("cohort effect zero-variance / denominator", () => {
       n_treatment: 40,
     });
   });
+
+  it("labels Ratio floating-point negative sampling variance as numerical_failure", () => {
+    const diagnostic = computeCohortEffect({
+      statsInput: cohortStatsInput(negativeVarianceRatioEntities(40), {
+        metricId: "ratio_metric",
+        metricType: "ratio",
+      }),
+      runStartedAt: COHORT_RUN_START,
+      minArmN: 30,
+    });
+    expect(diagnostic.state).toBe("ready");
+    if (diagnostic.state !== "ready") throw new Error("expected ready");
+    expect(diagnostic.comparisons[0]?.buckets[0]).toMatchObject({
+      status: "numerical_failure",
+      absolute_ci_lower: null,
+      absolute_ci_upper: null,
+      n_control: 40,
+      n_treatment: 40,
+    });
+    expect(diagnostic.comparisons[0]?.novelty.flag).toBe("insufficient_data");
+  });
 });
 
 describe("cohort effect activation denominator", () => {
@@ -205,6 +226,13 @@ function constantBinomialEntities(perArm: number, value: number): CohortEntitySp
 
 function zeroDenominatorRatioEntities(perArm: number): CohortEntitySpec[] {
   return armPairEntities(perArm, () => ({ value: 0, numValue: 0, denomValue: 0 }));
+}
+
+function negativeVarianceRatioEntities(perArm: number): CohortEntitySpec[] {
+  return armPairEntities(perArm, (_variant, index) => {
+    const denomValue = 1 + (index % 3);
+    return { value: 10_000 * denomValue, numValue: 10_000 * denomValue, denomValue };
+  });
 }
 
 function countEntitiesWithOutlier(): CohortEntitySpec[] {

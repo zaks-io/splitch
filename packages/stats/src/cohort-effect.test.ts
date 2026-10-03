@@ -1,7 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { computeCohortEffect } from "./cohort-effect";
 import { exposureDayBucket } from "./cohort-effect-buckets";
-import { balancedEntities, COHORT_RUN_START, cohortStatsInput } from "./cohort-effect-cases";
+import {
+  balancedEntities,
+  COHORT_ANALYSIS_WATERMARK,
+  COHORT_RUN_START,
+  cohortConversionWindows,
+  cohortStatsInput,
+} from "./cohort-effect-cases";
 import { fixedHorizonAbsoluteInterval } from "./cohort-effect-estimate";
 import { classifyCohortNovelty } from "./cohort-effect-novelty";
 import { COHORT_EFFECT_MIN_ARM_N, COHORT_EFFECT_NOVELTY_ALPHA } from "./cohort-effect-types";
@@ -101,8 +107,11 @@ describe("computeCohortEffect", () => {
       ...balancedEntities([10], 40, 0.2, 0.21),
     ];
     const diagnostic = computeCohortEffect({
-      statsInput: cohortStatsInput(entities),
+      statsInput: cohortStatsInput(entities, {
+        metricConversionWindows: cohortConversionWindows(),
+      }),
       runStartedAt: COHORT_RUN_START,
+      analysisWatermark: COHORT_ANALYSIS_WATERMARK,
       minArmN: 30,
     });
     expect(diagnostic.state).toBe("ready");
@@ -138,5 +147,53 @@ describe("computeCohortEffect", () => {
       expect(bucket.absolute_effect).toBeNull();
     }
     expect(diagnostic.comparisons[0]?.novelty.flag).toBe("insufficient_data");
+  });
+
+  it("returns insufficient_data novelty when the Conversion Window is unknown", () => {
+    const entities = [
+      ...balancedEntities([0], 40, 0.2, 0.5),
+      ...balancedEntities([3], 40, 0.2, 0.22),
+    ];
+    const diagnostic = computeCohortEffect({
+      statsInput: cohortStatsInput(entities),
+      runStartedAt: COHORT_RUN_START,
+      analysisWatermark: COHORT_ANALYSIS_WATERMARK,
+      minArmN: 30,
+    });
+    expect(diagnostic.state).toBe("ready");
+    if (diagnostic.state !== "ready") throw new Error("expected ready");
+    expect(diagnostic.comparisons[0]?.novelty.flag).toBe("insufficient_data");
+  });
+
+  it("drops Entities whose Conversion Window is still open at the watermark", () => {
+    const entities = [
+      ...balancedEntities([0], 40, 0.2, 0.4),
+      ...balancedEntities([5], 40, 0.05, 0.1),
+    ];
+    const diagnostic = computeCohortEffect({
+      statsInput: cohortStatsInput(entities, {
+        metricConversionWindows: cohortConversionWindows("conversion", 7 * 86_400_000),
+      }),
+      runStartedAt: COHORT_RUN_START,
+      analysisWatermark: "2026-07-11T00:00:00.000Z",
+      minArmN: 30,
+    });
+    expect(diagnostic.state).toBe("ready");
+    if (diagnostic.state !== "ready") throw new Error("expected ready");
+    const comparison = diagnostic.comparisons[0];
+    if (comparison === undefined) throw new Error("expected comparison");
+    expect(comparison.buckets[0]).toMatchObject({
+      bucket: "day_0",
+      n_control: 40,
+      n_treatment: 40,
+      status: "ready",
+    });
+    expect(comparison.buckets[1]).toMatchObject({
+      bucket: "days_1_6",
+      n_control: 0,
+      n_treatment: 0,
+      status: "insufficient_n",
+    });
+    expect(comparison.novelty.flag).toBe("insufficient_data");
   });
 });
