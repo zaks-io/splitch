@@ -33,6 +33,10 @@ export async function proveStickyCopyClocksAfterExpiry(cwd, shiftMs, fail) {
     fail(`tk_conflict must start as __multiple__; got ${beforeVariants.tk_conflict}`);
   }
 
+  // Fixture clocks are shifted by stageTinybirdProject; the Copy watermark must
+  // shift with them or surviving raw Variants fall outside the window and
+  // previous_only membership would keep the pre-quarantine arm.
+  const copyWatermark = formatCopyWatermark(shiftMs(Date.parse("2026-07-12T00:00:00Z")));
   await run(
     "tb",
     [
@@ -44,7 +48,7 @@ export async function proveStickyCopyClocksAfterExpiry(cwd, shiftMs, fail) {
       "--mode",
       "replace",
       "--param",
-      "copy_watermark_ts=2026-07-12 00:00:00.000",
+      `copy_watermark_ts=${copyWatermark}`,
     ],
     cwd,
   );
@@ -127,4 +131,10 @@ async function queryVariantEvidence(cwd, fail) {
   } catch {
     fail("deduped_exposures Variant quarantine query returned invalid JSON");
   }
+}
+
+function formatCopyWatermark(ms) {
+  const iso = new Date(ms).toISOString();
+  // Tinybird DateTime64 params use "YYYY-MM-DD HH:mm:ss.SSS".
+  return `${iso.slice(0, 10)} ${iso.slice(11, 23)}`;
 }
