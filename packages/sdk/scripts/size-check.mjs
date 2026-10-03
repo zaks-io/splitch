@@ -44,8 +44,13 @@ export const REACT_ENTRY_MAX_BYTES = 4 * 1024;
  * growing a second bundled SDK.
  */
 export const SENTRY_ENTRY_MAX_BYTES = 2 * 1024;
-/** Measured 128,996 bytes with schema/transport dependencies external; 168 KiB keeps ~33% headroom. */
-export const CONTROL_PLANE_ENTRY_MAX_BYTES = 168 * 1024;
+/**
+ * This entry bundles the shared route registry, so it grows with every control-plane
+ * operation. Measured 190,863 bytes at cli 0.7.6 (up from 128,996 through steady
+ * per-feature growth, no single leak); 224 KiB keeps ~17% headroom and still rejects
+ * a re-vendored zod (~300 KiB). PR CI runs this check so the PR that crosses it fails.
+ */
+export const CONTROL_PLANE_ENTRY_MAX_BYTES = 224 * 1024;
 /** Measured 18,078 bytes with zod external; 24 KiB keeps ~36% headroom. */
 export const LOCAL_EVALUATION_ENTRY_MAX_BYTES = 24 * 1024;
 

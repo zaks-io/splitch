@@ -73,7 +73,7 @@ in this config; refresh them from Linear during each workflow run.
 - CI gate: `.github/workflows/ci.yml` job `Verify` runs `pnpm secrets:range` and
   then affected `pnpm verify:ci` (`format:check`, `lint`, `typecheck`, `knip`,
   `depcruise`, `spec:lint`, `test:scripts`, `test`, `stats:golden`, `stats:property`,
-  `build`). The Tinybird and D1 validators are conditional steps inside the same
+  `build`, and the SDK bundle-size `size:check`). The Tinybird and D1 validators are conditional steps inside the same
   job, each gated on `scripts/plan-ci-verification.mjs` outputs so it no-ops
   unless its inputs changed. A lockfile bump revalidates D1 (it shells out to
   `pnpm exec wrangler`) but not Tinybird (`tb` is curl-installed and the

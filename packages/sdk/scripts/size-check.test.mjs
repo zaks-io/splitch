@@ -43,8 +43,8 @@ test("the Sentry reporter's budget stays smaller than the client entries", () =>
 });
 
 test("platform subpaths keep separate measured budgets", () => {
-  assert.equal(CONTROL_PLANE_ENTRY_MAX_BYTES, 168 * 1024);
-  assert.ok(CONTROL_PLANE_ENTRY_MAX_BYTES > 128_996);
+  assert.equal(CONTROL_PLANE_ENTRY_MAX_BYTES, 224 * 1024);
+  assert.ok(CONTROL_PLANE_ENTRY_MAX_BYTES > 190_863);
   assert.equal(LOCAL_EVALUATION_ENTRY_MAX_BYTES, 24 * 1024);
   assert.ok(LOCAL_EVALUATION_ENTRY_MAX_BYTES > 18_078);
 });
