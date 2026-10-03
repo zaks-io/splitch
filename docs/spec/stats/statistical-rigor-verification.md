@@ -158,6 +158,7 @@ must account for Monte Carlo error and should be documented with the seed and it
 | Fixed-horizon no peeking             | Type I error near alpha at the locked sample size                                                                                                                |
 | Sequential repeated looks            | Type I error near alpha under arbitrary looks                                                                                                                    |
 | Fieller relative coverage            | Time-uniform coverage of the published relative interval near alpha; see ADR-0015                                                                                |
+| One-sided Guardrail false-safety     | On known-harmful contrast (true δ < 0), ever-safe rate ≤ alpha within Monte Carlo tolerance; Prop. B.1 golden matches the formula (analysis-v2 / C4)             |
 | Naive repeated fixed-horizon peeking | Fails in a control test, proving the harness can detect inflation                                                                                                |
 | BH FDR                               | False discovery proportion controlled near configured q across Metric families                                                                                   |
 | BH-G under stopping                  | Stop-at-first-crossing, correlated goal Metrics sharing Control, mixed nulls; BH-G FDR within Monte Carlo tolerance of alpha; BH and BH-G FDR and power recorded |

@@ -22,6 +22,39 @@ describe("StatsEngine.analyze analysis_version dispatch", () => {
     expect(v2.srm.srm_is_mismatch).toBe(true);
     expect(v2.srm.srm_p_value).not.toBe(v1.srm.srm_p_value);
   });
+
+  it("keeps v1 Fieller Guardrail breach and switches v2 to one-sided contrast semantics", async () => {
+    // Harmful Treatment on a locked relative Guardrail: v1 fires on Fieller
+    // lower < threshold; v2 requires the one-sided upper contrast bound < 0.
+    const shared = {
+      controlN: 400,
+      treatmentN: 400,
+      controlConversions: 200,
+      treatmentConversions: 80,
+      includeGuardrail: true,
+      horizon: "sequential" as const,
+    };
+    const v1 = await analyzeStats(
+      binomialStatsInput({ ...shared, analysisVersion: "analysis-v1" }),
+    );
+    const v2 = await analyzeStats(
+      binomialStatsInput({ ...shared, analysisVersion: "analysis-v2" }),
+    );
+
+    expect(v1.guardrail_results[0]?.is_breached).toBe(true);
+    expect(v1.guardrail_results[0]?.breach_reason).toMatch(/CI lower bound/);
+    expect(v2.guardrail_results[0]?.is_breached).toBe(true);
+    expect(v2.guardrail_results[0]?.breach_reason).toMatch(/one-sided contrast upper bound/);
+    // Reporting intervals on arm_results stay Fieller under both versions.
+    const v1Arm = v1.arm_results.find(
+      (arm) => arm.metric_id === "guardrail_conversion" && arm.variant === "treatment",
+    );
+    const v2Arm = v2.arm_results.find(
+      (arm) => arm.metric_id === "guardrail_conversion" && arm.variant === "treatment",
+    );
+    expect(v2Arm?.ci_lower).toBe(v1Arm?.ci_lower);
+    expect(v2Arm?.ci_upper).toBe(v1Arm?.ci_upper);
+  });
 });
 
 describe("StatsEngine.analyze", () => {

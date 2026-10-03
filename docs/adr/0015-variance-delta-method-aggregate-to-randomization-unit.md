@@ -162,8 +162,48 @@ Those are the fail-loud answers; the audit did not find a NaN or a silent defaul
 means stay defined as `(T / C - 1) * 100` (here Control −12 and Treatment −9 yield −25%, while
 absolute lift is +3). Read those Runs on absolute lift when the percentage sign is easy to misread.
 
-Replacement remains reserved for a later demonstrated failure (C4's one-sided bound still depends
-on this inversion).
+Replacement remains reserved for a later demonstrated failure. C4's one-sided Guardrail bound
+(below) uses the arm means and variance components from the same absolute path; it does not
+replace the Fieller reporting interval on `arm_results`.
+
+## Amendment: one-sided Guardrail bound (C4, analysis-v2)
+
+Plan item 0.8. Two-sided Fieller Guardrail checks are conservative for a one-sided safety claim,
+not invalid. analysis-v2 switches Guardrail decisions to a one-sided always-valid bound;
+legacy-unversioned and analysis-v1 keep the two-sided Fieller rule above so their result tokens
+stay byte-identical. `SUPPORTED_ANALYSIS_VERSIONS` / `CURRENT_ANALYSIS_VERSION` are unchanged:
+v2 remains defined but unsupported for Start until its observation-path slice lands.
+
+### Bound
+
+For locked margin `m = downside_threshold_pct / 100`, the contrast is
+`δ = T − (1 + m) C` with `Var(δ) = v_T + (1 + m)² v_C`. The lower and upper one-sided bounds use
+Waudby-Smith et al. Proposition B.1 at level `alpha` (not `alpha/2`), with mixture scale
+
+```
+sqrt( 2(1 + nρ²)/(nρ²) · log(1 + sqrt(1 + nρ²)/(2α)) )
+```
+
+and `ρ` tuned at `2α` (paper §B.2). This is not the two-sided bound at doubled alpha: the
+additive 1 inside the log is required. Fixed-horizon Runs under v2 use the one-sided normal
+critical value `z_{1−α}` on the same contrast.
+
+### Breach semantics
+
+| Verdict   | Condition   | `is_breached` | Meaning                                          |
+| --------- | ----------- | ------------- | ------------------------------------------------ |
+| safe      | `L > 0`     | `false`       | Established non-inferiority at the locked margin |
+| breach    | `U < 0`     | `true`        | Affirmative evidence of harm past the margin     |
+| undecided | `L ≤ 0 ≤ U` | `null`        | Neither claim established                        |
+
+**Breach means affirmative harm**, not failure to establish safety. That is a deliberate
+semantic change from analysis-v1's `ci_lower < threshold` rule, which fired on wide
+uninformative intervals. False-safety (`P(safe | true δ < 0)`) is the Type I rate Proposition
+B.1 controls; the seeded known-harmful simulation (`pnpm stats:simulation`, seed `424242`)
+keeps the ever-safe rate within `alpha + monteCarloTolerance`.
+
+`arm_results` relative intervals remain Fieller under every version. Only
+`guardrail_results` under analysis-v2 read the one-sided contrast.
 
 ## Sources
 

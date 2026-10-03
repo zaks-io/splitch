@@ -19,8 +19,18 @@ export { alwaysValidCriticalScale, alwaysValidInflation } from "./always-valid-i
 export { planExperiment } from "./experiment-plan";
 export { analyzeStats, StatsEngine } from "./stats-engine";
 export { analysisVersionPolicy } from "./analysis-version-policy";
-export type { AnalysisVersionPolicy, SrmProcedure } from "./analysis-version-policy";
+export type {
+  AnalysisVersionPolicy,
+  GuardrailBoundProcedure,
+  SrmProcedure,
+} from "./analysis-version-policy";
 export { applyGuardrailBoundChecks } from "./guardrail-bound-check";
+export { evaluateOneSidedGuardrail } from "./guardrail-one-sided";
+export {
+  normalMixtureOneSidedBoundary,
+  normalMixtureOneSidedScale,
+  rhoSquaredForOneSidedTargetN,
+} from "./normal-mixture-one-sided";
 export { applyDecisionFamilyCorrection } from "./decision-family-fdr";
 export {
   FAMILY_CORRECTION_PROCEDURES,

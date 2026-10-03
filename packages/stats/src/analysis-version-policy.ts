@@ -6,10 +6,12 @@ import {
 import type { FamilyCorrectionProcedure } from "./family-correction";
 
 export type SrmProcedure = "chi_square" | "sequential_martingale";
+export type GuardrailBoundProcedure = "two_sided_relative" | "one_sided_contrast";
 
 export interface AnalysisVersionPolicy {
   readonly srm: SrmProcedure;
   readonly familyCorrection: FamilyCorrectionProcedure;
+  readonly guardrailBound: GuardrailBoundProcedure;
 }
 
 /**
@@ -22,6 +24,10 @@ export interface AnalysisVersionPolicy {
  * both marginals are superuniform; the ADR-0014 stop simulation asserts BH-G's
  * FDR, which is the procedure v2 freezes.
  *
+ * analysis-v2 also selects the Proposition B.1 one-sided Guardrail contrast
+ * (C4). legacy and analysis-v1 keep the two-sided Fieller relative lower bound
+ * so their result tokens stay byte-identical.
+ *
  * analysis-v2 remains defined here for unit tests, but it is not in
  * SUPPORTED_ANALYSIS_VERSIONS until an ingestion-ordered observation path lands.
  */
@@ -29,9 +35,17 @@ export function analysisVersionPolicy(version: string): AnalysisVersionPolicy {
   switch (version) {
     case LEGACY_ANALYSIS_VERSION:
     case ANALYSIS_V1_VERSION:
-      return { srm: "chi_square", familyCorrection: "bh" };
+      return {
+        srm: "chi_square",
+        familyCorrection: "bh",
+        guardrailBound: "two_sided_relative",
+      };
     case ANALYSIS_V2_VERSION:
-      return { srm: "sequential_martingale", familyCorrection: "bh_g" };
+      return {
+        srm: "sequential_martingale",
+        familyCorrection: "bh_g",
+        guardrailBound: "one_sided_contrast",
+      };
     default:
       throw new Error(
         `unsupported analysis_version ${JSON.stringify(version)}; known: ${[
