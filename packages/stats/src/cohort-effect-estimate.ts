@@ -121,7 +121,9 @@ export function bucketFromContrast(args: {
       bucket: args.bucket,
       n_control: nControl,
       n_treatment: nTreatment,
-      absolute_effect: args.contrast.absoluteEffect,
+      absolute_effect: Number.isFinite(args.contrast.absoluteEffect)
+        ? args.contrast.absoluteEffect
+        : null,
       absolute_ci_lower: null,
       absolute_ci_upper: null,
       status: "numerical_failure",
@@ -162,56 +164,76 @@ function contrastFromComparison(
 ): CohortContrastEstimate | null {
   const nControl = comparison.control.sample_size_n;
   const nTreatment = comparison.treatment.sample_size_n;
+  if (hasNonFiniteAbsolute(comparison)) {
+    return numericalFailure(comparison.absolute_lift ?? Number.NaN, nControl, nTreatment);
+  }
   const absolute = absoluteContrast(
     comparison.absolute_lift,
     comparison.absolute_lift_sampling_var,
   );
   if (absolute !== null) {
-    if (absolute.samplingVar < 0) {
-      return {
-        kind: "numerical_failure",
-        absoluteEffect: absolute.absoluteEffect,
-        nControl,
-        nTreatment,
-      };
-    }
-    if (!(absolute.samplingVar > 0)) {
-      return {
-        kind: "zero_variance",
-        absoluteEffect: absolute.absoluteEffect,
-        nControl,
-        nTreatment,
-      };
-    }
+    return contrastFromFiniteAbsolute(absolute, nControl, nTreatment);
+  }
+  if (isInsufficientDenominator(comparison)) {
+    return { kind: "insufficient_denominator", nControl, nTreatment };
+  }
+  return null;
+}
+
+function hasNonFiniteAbsolute(comparison: MetricComparisonEstimate): boolean {
+  return (
+    (comparison.absolute_lift !== null && !Number.isFinite(comparison.absolute_lift)) ||
+    (comparison.absolute_lift_sampling_var !== null &&
+      !Number.isFinite(comparison.absolute_lift_sampling_var))
+  );
+}
+
+function isInsufficientDenominator(comparison: MetricComparisonEstimate): boolean {
+  return (
+    comparison.status === "insufficient_denominator" ||
+    comparison.control.status === "insufficient_denominator" ||
+    comparison.treatment.status === "insufficient_denominator"
+  );
+}
+
+function contrastFromFiniteAbsolute(
+  absolute: { absoluteEffect: number; samplingVar: number },
+  nControl: number,
+  nTreatment: number,
+): CohortContrastEstimate {
+  if (absolute.samplingVar < 0) {
+    return numericalFailure(absolute.absoluteEffect, nControl, nTreatment);
+  }
+  if (!(absolute.samplingVar > 0)) {
     return {
-      kind: "estimated",
+      kind: "zero_variance",
       absoluteEffect: absolute.absoluteEffect,
-      samplingVar: absolute.samplingVar,
       nControl,
       nTreatment,
     };
   }
+  return {
+    kind: "estimated",
+    absoluteEffect: absolute.absoluteEffect,
+    samplingVar: absolute.samplingVar,
+    nControl,
+    nTreatment,
+  };
+}
 
-  if (
-    comparison.status === "insufficient_denominator" ||
-    comparison.control.status === "insufficient_denominator" ||
-    comparison.treatment.status === "insufficient_denominator"
-  ) {
-    return { kind: "insufficient_denominator", nControl, nTreatment };
-  }
-  return null;
+function numericalFailure(
+  absoluteEffect: number,
+  nControl: number,
+  nTreatment: number,
+): CohortContrastEstimate {
+  return { kind: "numerical_failure", absoluteEffect, nControl, nTreatment };
 }
 
 function absoluteContrast(
   absoluteLift: number | null,
   samplingVar: number | null,
 ): { absoluteEffect: number; samplingVar: number } | null {
-  if (
-    absoluteLift === null ||
-    samplingVar === null ||
-    !Number.isFinite(absoluteLift) ||
-    !Number.isFinite(samplingVar)
-  ) {
+  if (absoluteLift === null || samplingVar === null) {
     return null;
   }
   return { absoluteEffect: absoluteLift, samplingVar };

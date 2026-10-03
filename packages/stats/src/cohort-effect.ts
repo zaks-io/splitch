@@ -27,6 +27,7 @@ import {
 } from "./cohort-effect-types";
 import { analysisExposureRows } from "./exposure-denominator";
 import { metricTypesById } from "./metric-discovery";
+import { activationRowsByEntityForRun } from "./srm-activated-arrival";
 
 /**
  * Effect by first-exposure-day bucket for the primary Metric, plus a novelty
@@ -59,6 +60,10 @@ export function computeCohortEffect(input: CohortEffectComputeInput): CohortEffe
     activation_rows: input.statsInput.activation_rows,
   });
   const completeWindow = completeOutcomeWindowFilter(input, primary.metricId);
+  const activationsByEntity =
+    input.statsInput.activation_rows === undefined
+      ? undefined
+      : activationRowsByEntityForRun(input.statsInput.run_id, input.statsInput.activation_rows);
   const cohortExposures =
     completeWindow === null
       ? analysisExposures
@@ -66,6 +71,7 @@ export function computeCohortEffect(input: CohortEffectComputeInput): CohortEffe
           analysisExposures,
           completeWindow.windowDurationMs,
           completeWindow.analysisWatermark,
+          activationsByEntity,
         );
 
   const allocatedTreatments = allocatedTreatmentVariants(

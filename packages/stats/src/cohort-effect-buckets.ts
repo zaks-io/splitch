@@ -1,5 +1,6 @@
-import type { CohortEffectBucketId, DedupeExposureRow } from "@splitch/contracts";
+import type { ActivationRow, CohortEffectBucketId, DedupeExposureRow } from "@splitch/contracts";
 import { COHORT_EFFECT_BUCKET_IDS, MS_PER_DAY } from "./cohort-effect-types";
+import { earliestValidActivationTs } from "./srm-activated-arrival";
 
 /**
  * Map an Entity's first_exposure_ts into a day bucket relative to Run start.
@@ -45,17 +46,23 @@ export function exposuresInLaterBuckets(
 
 /**
  * Keep Entities whose Conversion Window has fully elapsed by the analysis
- * watermark: first_exposure_ts + window_duration_ms <= watermark.
+ * watermark. Ungated Runs anchor on first Exposure; gated Runs use the
+ * Entity's earliest valid Activation — the same Conversion Window start the
+ * main analysis uses. Bucket grouping still uses first Exposure.
  */
 export function exposuresWithCompleteOutcomeWindow(
   exposures: readonly DedupeExposureRow[],
   windowDurationMs: number,
   analysisWatermark: string,
+  activationsByEntity?: ReadonlyMap<string, readonly ActivationRow[]>,
 ): DedupeExposureRow[] {
   const watermarkMs = timestampMs(analysisWatermark, "analysisWatermark");
   return exposures.filter((exposure) => {
-    const exposureMs = timestampMs(exposure.first_exposure_ts, "first_exposure_ts");
-    return exposureMs + windowDurationMs <= watermarkMs;
+    const anchorMs =
+      activationsByEntity === undefined
+        ? timestampMs(exposure.first_exposure_ts, "first_exposure_ts")
+        : timestampMs(earliestValidActivationTs(exposure, activationsByEntity), "activation_ts");
+    return anchorMs + windowDurationMs <= watermarkMs;
   });
 }
 

@@ -142,7 +142,8 @@ reports `n_control`, `n_treatment`, absolute effect, and a fixed-horizon
 constant outcomes, or a zero-conversion Binomial bucket) is
 `zero_variance` with a point estimate, null interval, and no novelty claim — the
 diagnostic must never fail Results. Negative sampling variance after the
-permitted floating-point clamp is `numerical_failure` (not `zero_variance`). A
+permitted floating-point clamp, or a non-finite estimate or variance, is
+`numerical_failure` (not `zero_variance` or `insufficient_n`). A
 Ratio Metric bucket with enough Entities
 but zero mean denominator is `insufficient_denominator` (not
 `insufficient_n`). Bucketing uses the same `analysisExposureRows` filter as the
@@ -158,7 +159,10 @@ a different arm population and disagree with `arm_results`.
 effect to the effect on Entities pooled from later buckets, at
 `COHORT_EFFECT_NOVELTY_ALPHA` (0.05). Both the per-bucket effects and the
 novelty contrast include only Entities whose outcome window is complete at the
-analysis watermark: `first_exposure_ts + conversion_window_ms <= watermark`.
+analysis watermark: Conversion Window start + `conversion_window_ms <= watermark`.
+Ungated Runs start the window at first Exposure; gated Runs start it at the
+Entity's earliest valid Activation (the same Conversion Window anchor the main
+analysis uses). Bucket grouping stays first-exposure-day vs Run start.
 The Conversion Window is the frozen Run snapshot value (`metric_query_config`
 /`metric_conversion_windows` on StatsInput). The flag is `detected`,
 `not_detected`, or `insufficient_data` when either side is below the per-arm

@@ -118,14 +118,20 @@ function entityKey(entity: Pick<CohortEntitySpec, "variant" | "dayOffset" | "ind
 
 export function activationForEntities(
   entities: readonly CohortEntitySpec[],
-  options: { readonly activatedIndexes?: ReadonlySet<number>; readonly activateAll?: boolean } = {},
+  options: {
+    readonly activatedIndexes?: ReadonlySet<number>;
+    readonly activateAll?: boolean;
+    /** Days after first Exposure; default is a 0.01-day post-Exposure Activation. */
+    readonly delayDays?: number;
+  } = {},
 ): ActivationRow[] {
+  const delayDays = options.delayDays ?? 0.01;
   return entities
     .filter((entity) => options.activateAll === true || options.activatedIndexes?.has(entity.index))
     .map((entity) => ({
       targeting_key_hash: entityKey(entity),
       run_id: COHORT_RUN_ID,
-      activation_ts: isoDaysAfter(COHORT_RUN_START, entity.dayOffset + 0.01),
+      activation_ts: isoDaysAfter(COHORT_RUN_START, entity.dayOffset + delayDays),
       counterfactual: false,
       activated: true,
     }));
