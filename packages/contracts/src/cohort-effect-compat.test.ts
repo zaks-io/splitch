@@ -89,7 +89,7 @@ describe("cohort_effect deploy compatibility", () => {
     expect(diagnostic).toEqual({ state: "unavailable", reason: "insufficient_entities" });
   });
 
-  it.each(["zero_variance", "insufficient_denominator"] as const)(
+  it.each(["zero_variance", "insufficient_denominator", "numerical_failure"] as const)(
     "accepts a %s bucket with no interval",
     (status) => {
       const bucket = {
