@@ -187,8 +187,30 @@ sequence, an absolute-scale verdict is valid at any look (Kruschke 2018).
 Non-finite bounds, an inverted interval (`lower > upper`), or a non-positive-width ROPE
 (`ropeLower >= ropeUpper`) throw. A point interval (`lower === upper`) is allowed.
 
-Scorecard rendering of trust checks and the ship recommendation that consumes the locked ship rule
-are plan item 2.4 and are out of scope here.
+## Ship recommendation (plan 2.4)
+
+When a Run froze a pre-registration, the Control Plane result producer emits
+`recommendation: { verdict, because }`. Verdicts are `ship`, `do_not_ship`,
+`keep_running`, or `invalid`. `because` is one sentence naming the deciding fact
+with numbers and no internal ids. Runs without a pre-registration omit
+`recommendation` and set `recommendationUnavailable: "no_pre_registration"`.
+
+Precedence (first matching row wins):
+
+| Order | Condition                                                                                   | Outcome                                            |
+| ----- | ------------------------------------------------------------------------------------------- | -------------------------------------------------- |
+| 1     | No pre-registration                                                                         | `recommendationUnavailable: "no_pre_registration"` |
+| 2     | Trust/health gate fail (Control identity, SRM, activation balance, engine, decision family) | `invalid`                                          |
+| 3     | Gate not ready (`underpowered` or `planned_duration`)                                       | `keep_running`                                     |
+| 4     | Primary Metric harmful in the desirable direction, or any Guardrail `is_breached: true`     | `do_not_ship`                                      |
+| 5     | Primary Metric undecided (interval has not cleared the required margin)                     | `keep_running`                                     |
+| 6     | Primary Metric beneficial per the ship rule's required margin, and no Guardrail breached    | `ship`                                             |
+
+Absolute margins use the absolute decision interval (`absolute_ci_*` on Treatment
+arms, stripped from the result token). Relative margins use the published relative
+CI (percent) against a fractional `required_margin`. Missing absolute bounds with
+an absolute ship rule yield `recommendationUnavailable: "absolute_interval_unavailable"`
+rather than a guessed verdict.
 
 ## Futility verdict (MDE exclusion, advisory)
 
@@ -289,9 +311,11 @@ handles (`run_id`, `run_number`, `run_status`, `control`, `control_variant`, `da
 the detailed member. Released CLI 0.7.5 and SDK 0.9.1 tolerate unknown additive fields; existing
 field names and Analysis enums are not renamed or extended.
 
-Ship / do-not-ship recommendation copy is intentionally absent until the ship policy is locked at
-Run Start (Phase 2.4). The panel Experiment Results read calls the same producer and maps into its
-camelCase projection; it does not re-derive the gate.
+After `reasons`, ready responses carry `recommendation` or `recommendationUnavailable` (plan 2.4).
+Concise omits `stats` unless the caller sets `includeExploratory: true` (exploratory statistics
+opt-in; detailed always includes full stats). The recommendation is never hashed into
+`result_token`. The panel Experiment Results read calls the same producer and maps into its
+camelCase projection; it does not re-derive the gate or the recommendation.
 
 ## Sources
 

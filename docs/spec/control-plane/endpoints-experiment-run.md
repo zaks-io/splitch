@@ -159,8 +159,8 @@ ship rule (`requiredMargin`, `marginScale`, `conflictResolution`: `primary_wins`
 It is immutable after Start. Omitting `preRegistration` leaves Start behavior unchanged for existing
 clients. Making a plan mandatory with an override is a later product decision. Validation failures
 carry stable issue codes (`PREREG_*`) under `VALIDATION_ERROR`. The frozen value is exposed on Run
-reads (`preRegistration`) and on ready results (`run_commitments.pre_registration`). Scorecard trust
-checks and the ship recommendation (plan 2.4) are out of scope for this slice.
+reads (`preRegistration`) and on ready results (`run_commitments.pre_registration`). The ship
+recommendation (plan 2.4) is computed by the shared results producer from this freeze.
 `reason` is an optional human note capturing _intent_ for the new Run ("testing higher exposure to
 v2"). It is stored as the Run's `start_reason` and surfaced by the Run-history timeline alongside the
 **derived** assignment-config diff from the prior Run (the timeline never depends on it being present —

@@ -11,6 +11,11 @@ export const ResultsSelectorSchema = z
     runId: z.string().optional(),
     /** Concise returns the verdict block only; detailed (default) keeps full stats. */
     view: ExperimentResultsViewSchema.optional(),
+    /**
+     * Concise mode omits stats by default. Set true to attach stats (including
+     * exploratory Metric p-values) on concise; detailed already includes them.
+     */
+    includeExploratory: z.boolean().optional(),
   })
   .strict();
 

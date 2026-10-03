@@ -5,6 +5,7 @@ import type {
   StatsInput,
   StatsResultStatus,
 } from "@splitch/contracts";
+import { absoluteCiForOutput } from "./absolute-ci-for-output";
 import { type CappedArmEvidence, estimandDisclosure } from "./estimand-disclosure";
 import { FixedHorizonCI } from "./fixed-horizon-ci";
 import { withFutilityVerdict } from "./metric-arm-futility";
@@ -210,6 +211,7 @@ function treatmentArmResult(
       decision_valid: false,
       status,
       variance_techniques: comparison.variance_techniques,
+      ...absoluteCiForOutput(decisionCi),
     },
     {
       preRegistration: input.pre_registration,

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { reachedDuration, stats } from "./experiment-decision-gate-test-fixtures";
+import { armResult, reachedDuration, stats } from "./experiment-decision-gate-test-fixtures";
 import { produceExperimentResults } from "./experiment-results-producer";
 import { ExperimentResultsResponseSchema } from "./experiment-results-response";
 import type { AnalysisResultsEnvelope } from "./stats-result-contract";
@@ -43,15 +43,17 @@ describe("produceExperimentResults", () => {
     expect(parsed.state).toBe("ready");
     if (parsed.state !== "ready" || parsed.view !== "detailed")
       throw new Error("expected detailed");
-    expect(Object.keys(parsed).slice(0, 5)).toEqual([
+    expect(Object.keys(parsed).slice(0, 6)).toEqual([
       "view",
       "state",
       "readiness",
       "blockedBy",
       "reasons",
+      "recommendationUnavailable",
     ]);
     expect(parsed.readiness).toEqual({ statistical: true, concludeExecutable: true });
     expect(parsed.blockedBy).toEqual([]);
+    expect(parsed.recommendationUnavailable).toBe("no_pre_registration");
     expect(parsed.stats).toEqual(readyAnalysis().stats);
   });
 
@@ -83,8 +85,28 @@ describe("produceExperimentResults", () => {
       run_id: "run_1",
       result_token: expect.stringMatching(/^sha256:/),
       data_watermark: "2026-07-08T00:00:00.000Z",
+      recommendationUnavailable: "no_pre_registration",
     });
     expect(parsed).not.toHaveProperty("stats");
+  });
+
+  it("attaches stats on concise only when includeExploratory is set", () => {
+    const analysis = readyAnalysis();
+    const produced = produceExperimentResults({
+      view: "concise",
+      analysis,
+      run,
+      canConclude: true,
+      includeExploratory: true,
+    });
+    expect(ExperimentResultsResponseSchema.parse(produced)).toMatchObject({
+      view: "concise",
+      state: "ready",
+    });
+    if (produced.state !== "ready" || produced.view !== "concise") {
+      throw new Error("expected concise ready");
+    }
+    expect(produced.stats).toBe(analysis.stats);
   });
 
   it("separates statistical readiness from concludeExecutable lifecycle and permission", () => {
@@ -159,6 +181,58 @@ describe("produceExperimentResults", () => {
       control: control,
     });
     expect(produced).not.toHaveProperty("stats");
+  });
+});
+
+describe("produceExperimentResults ship recommendation", () => {
+  it("surfaces do_not_ship for a lower_is_better primary with a positive lift", () => {
+    const produced = produceExperimentResults({
+      view: "detailed",
+      analysis: readyAnalysis({
+        run_commitments: {
+          analysis_version_source: "frozen",
+          analysis_version: "analysis-v1",
+          target_n: 5000,
+          target_n_source: "default",
+          planned_duration_days: 7,
+          planned_duration_override_reason: null,
+          pre_registration: {
+            hypothesis: "Treatment lowers latency",
+            primary_metric_id: "checkout-conversion",
+            metrics: [
+              {
+                metric_id: "checkout-conversion",
+                desirability: "lower_is_better",
+              },
+            ],
+            ship_rule: {
+              required_margin: 0.02,
+              margin_scale: "absolute",
+              conflict_resolution: "primary_wins",
+            },
+          },
+        },
+        stats: stats({
+          arm_results: [
+            armResult({
+              absolute_ci_lower: 0.02,
+              absolute_ci_upper: 0.06,
+              ci_lower: 4,
+              ci_upper: 12,
+              relative_lift_pct: 8,
+            }),
+          ],
+        }),
+      }),
+      run,
+      canConclude: true,
+    });
+    expect(ExperimentResultsResponseSchema.parse(produced)).toMatchObject({
+      recommendation: {
+        verdict: "do_not_ship",
+        because: expect.stringMatching(/positive lift/),
+      },
+    });
   });
 });
 

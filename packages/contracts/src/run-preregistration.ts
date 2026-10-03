@@ -7,8 +7,8 @@ import { MetricDirectionSchema, MetricRefSchema } from "./leaf-schemas-experimen
  * and an opt-in futility mode (plan 2.12).
  *
  * Optional on Start: omitting it leaves existing clients unchanged. Once frozen
- * it is immutable. Scorecard trust checks and the ship recommendation (plan 2.4)
- * read this object later; this slice freezes and surfaces it.
+ * it is immutable. The ship recommendation (plan 2.4) and futility verdict
+ * (plan 2.12) read this object from `run_commitments.pre_registration`.
  */
 
 const MetricIdSchema = MetricRefSchema.shape.metricId;

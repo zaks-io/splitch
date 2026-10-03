@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ArmResultSchema } from "./stats-result-contract";
+import { ArmResultSchema } from "./stats-result-arm";
 
 /**
  * Deploy-order compat: Analysis can emit absolute/simultaneous CI arm fields
