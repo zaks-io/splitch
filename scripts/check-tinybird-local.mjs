@@ -47,7 +47,6 @@ try {
   await resetTinybirdLocal(projectDir, tokens);
   await run("tb", ["--no-version-warning", "build"], projectDir);
   await proveExposureAtCompatibility(projectDir, staged.shiftMs);
-  await proveStickyCopyClocksAfterExpiry(projectDir, staged.shiftMs, fail);
   await proveAnalysisScopePredicates(
     tinybirdRoot,
     (sql) => output("tb", ["--no-version-warning", "--output", "json", "sql", sql], projectDir),
@@ -56,6 +55,10 @@ try {
   if (hasTinybirdTests(testsDir)) {
     await run("tb", ["--no-version-warning", "test", "run"], projectDir);
   }
+  // COPY_MODE replace rewrites the whole deduped_exposures snapshot. Run after
+  // fixture tests so the replace cannot change Variant quarantine / membership
+  // that analysis_* yaml expectations pin to the staged fixtures.
+  await proveStickyCopyClocksAfterExpiry(projectDir, staged.shiftMs, fail);
 } finally {
   await removeTinybirdLocal(projectDir);
   lock.release();
