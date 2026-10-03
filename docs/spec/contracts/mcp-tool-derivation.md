@@ -450,6 +450,20 @@ App/Environment in the transport session (see [../control-plane/mcp-and-cli-surf
 server restart. Drift between "what the tool says it accepts" and "what the Worker enforces" is
 impossible by construction — both consume the same Zod source.
 
+## Tool descriptions
+
+Every derived tool description is composed from the registry, never from generated MCP files:
+
+- **Formats.** Top-level id, timestamp, and enum arguments, including selector wording already on
+  the Zod field (canonical `app_...` / slug, ISO-8601 instants with offset, enum values).
+- **Terms.** Any curated CONTEXT.md glossary noun the narrative uses is defined in a `Terms:`
+  section with that glossary's wording.
+- **Example arguments.** Every mutating tool includes one JSON arguments object that parses
+  against the derived input schema.
+
+A contract test in `@splitch/contracts` fails when a mutating route lacks the example or a
+description uses a curated term without defining it.
+
 **Deletion test:** 2 real adapters already exist (MCP server and CLI), both deriving from the same
 contract package. Single-implementation boundary does not apply.
 

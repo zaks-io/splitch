@@ -33,6 +33,7 @@ import {
 import type { McpFaultReporter } from "./mcp-fault";
 import { invalidToolArgumentsError } from "./mcp-local-errors";
 import type { OperationSdk, OperationSdkResolver } from "./mcp-operation-sdks";
+import { resultsFieldsResourceLink } from "./mcp-results-docs";
 import {
   type McpSessionContextValidator,
   type McpSessionStore,
@@ -110,7 +111,12 @@ export async function callTool(
     assertHydratedFlagResult(call.name, operationInput, result);
     return recordToolResult(
       fault.span,
-      jsonRpcResult(id, result.ok ? toolResult(result.data) : errorToolResult(result.error)),
+      jsonRpcResult(
+        id,
+        result.ok
+          ? toolResult(result.data, { operationId: call.name })
+          : errorToolResult(result.error),
+      ),
     );
   } catch (error) {
     return toolCallFailure(id, error, fault);
@@ -239,9 +245,16 @@ function errorToolResult(error: { readonly code: ErrorCode }): Record<string, un
   return toolResult(presentErrorResponse(error), { isError: true });
 }
 
-function toolResult(value: unknown, options: { isError?: boolean } = {}): Record<string, unknown> {
+function toolResult(
+  value: unknown,
+  options: { isError?: boolean; operationId?: string } = {},
+): Record<string, unknown> {
+  const link =
+    options.isError === true || !options.operationId
+      ? undefined
+      : resultsFieldsResourceLink(options.operationId);
   return {
-    content: [{ type: "text", text: JSON.stringify(value) }],
+    content: [{ type: "text", text: JSON.stringify(value) }, ...(link ? [link] : [])],
     structuredContent: value,
     ...(options.isError ? { isError: true } : {}),
   };

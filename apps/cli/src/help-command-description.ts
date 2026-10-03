@@ -20,3 +20,10 @@ export function commandDescription(command: CliCommandDefinition): string {
   }
   return toolByOperation.get(command.operationId)?.description ?? `Run ${command.operationId}.`;
 }
+
+/** Group listings stay one narrative; Formats/Terms/examples live on `--help`. */
+export function commandDescriptionBrief(command: CliCommandDefinition): string {
+  const description = commandDescription(command);
+  const formatsAt = description.indexOf("\n\nFormats:");
+  return formatsAt === -1 ? description : description.slice(0, formatsAt);
+}
