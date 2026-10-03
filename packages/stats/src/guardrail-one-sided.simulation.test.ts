@@ -153,7 +153,7 @@ function runContrastLowerCoverage(args: {
     // Wrong-sign establishment is charged to the α/2 Control piece.
     if (Math.sign(draw.controlEstimate) !== Math.sign(args.trueControl)) continue;
     signEstablished += 1;
-    if (result.lower > trueContrast) contrastMisses += 1;
+    if (finiteLower(result.lower) > trueContrast) contrastMisses += 1;
   }
 
   return {
@@ -323,4 +323,9 @@ function lookVerdict(
     target_n,
     horizon: "sequential",
   }).verdict;
+}
+
+function finiteLower(lower: number | null): number {
+  if (lower === null) throw new Error("simulation draw produced zero contrast variance");
+  return lower;
 }

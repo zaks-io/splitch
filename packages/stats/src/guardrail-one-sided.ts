@@ -22,8 +22,9 @@ export interface OneSidedGuardrailBound {
   /** Oriented contrast: sign(C) · (T̂ − (1 + margin) Ĉ). Unoriented when sign is open. */
   readonly contrastEstimate: number;
   readonly contrastVar: number;
-  readonly lower: number;
-  readonly upper: number;
+  /** Null when the contrast has zero variance (e.g. a -100% margin with constant Treatment values). */
+  readonly lower: number | null;
+  readonly upper: number | null;
   readonly verdict: GuardrailVerdict;
   /** Whether Control's two-sided always-valid interval at α/2 excluded 0. */
   readonly controlSignEstablished: boolean;
@@ -69,8 +70,21 @@ export function evaluateOneSidedGuardrail(
   const weight = 1 + input.margin;
   const rawContrast = input.treatmentEstimate - weight * input.controlEstimate;
   const contrastVar = input.treatmentVar + weight ** 2 * input.controlVar;
-  if (!(contrastVar > 0) || !Number.isFinite(contrastVar)) {
-    throw new Error("guardrail contrast variance must be finite and positive.");
+  if (!Number.isFinite(contrastVar) || contrastVar < 0) {
+    throw new Error("guardrail contrast variance must be finite and non-negative.");
+  }
+  // A -100% margin zeroes the Control weight, so constant Treatment values leave
+  // no sampling variance to bound; the Guardrail stays unevaluated rather than
+  // aborting the whole analysis.
+  if (contrastVar === 0) {
+    return {
+      contrastEstimate: rawContrast,
+      contrastVar,
+      lower: null,
+      upper: null,
+      verdict: "undecided",
+      controlSignEstablished: false,
+    };
   }
 
   const controlSign = identifiedControlSign(input, alphaHalf);

@@ -40,7 +40,7 @@ describe("one-sided guardrail contrast golden fixtures", () => {
     expect(result.upper).toBeCloseTo(expected.upper, 15);
     // Wide arm variances leave 0 inside [L, U]: formula match, not a safety claim.
     expect(result.verdict).toBe("undecided");
-    expect(Math.abs(result.lower - expected.lower)).toBeLessThanOrEqual(GOLDEN_TOLERANCE);
+    expect(Math.abs(nonNull(result.lower) - expected.lower)).toBeLessThanOrEqual(GOLDEN_TOLERANCE);
   });
 
   it("classifies breach, safe, and undecided from the contrast bounds", () => {
@@ -170,4 +170,9 @@ function expectedSequentialBound(input: {
     upper: contrastEstimate + contrastBoundary,
     controlSignEstablished: input.controlEstimate - controlHalfWidth > 0,
   };
+}
+
+function nonNull(value: number | null): number {
+  if (value === null) throw new Error("expected a finite guardrail bound");
+  return value;
 }
