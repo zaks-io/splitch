@@ -732,10 +732,10 @@ Request body (--body-json):
   guardrailBreachAbsolute        optional  number
   guardrailBreachRelative        optional  number
   Example:
-    {"metricKind":"continuous","armCount":33,"expectedDailyEligibleEntities":1,"baselineMean":1,"baselineVariance":1,"mdeAbsolute":1}
+    {"metricKind":"continuous","armCount":33,"expectedDailyEligibleEntities":0.000001,"baselineMean":1,"baselineVariance":1,"mdeAbsolute":1}
 
 Example:
-  splitch experiment plan --body-json '{"metricKind":"continuous","armCount":33,"expectedDailyEligibleEntities":1,"baselineMean":1,"baselineVariance":1,"mdeAbsolute":1}' --json",
+  splitch experiment plan --body-json '{"metricKind":"continuous","armCount":33,"expectedDailyEligibleEntities":0.000001,"baselineMean":1,"baselineVariance":1,"mdeAbsolute":1}' --json",
     "experiment-results get": "Get an Experiment's results: readiness, blockedBy, and reasons first; detailed stats by default; view=concise for the verdict block only. States: ready, no_data (names the missing input), or no_run (names Start).
 
 Usage:

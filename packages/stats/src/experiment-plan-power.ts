@@ -5,6 +5,18 @@ import { normalMixtureScale, rhoSquaredForTargetN } from "./sequential-ci";
 /** Same ceiling the response contract enforces via Zod `.int()` (safe integers). */
 export const EXPERIMENT_PLAN_MAX_SAFE_COUNT = Number.MAX_SAFE_INTEGER;
 
+/**
+ * Minimum Entities per arm for the planner's normal approximation. Below this,
+ * theoretical power (and SequentialCI with estimated variance) is not trusted.
+ */
+const EXPERIMENT_PLAN_MIN_PER_ARM_N = 10;
+
+/**
+ * Minimum expected binomial successes and failures per arm under each planned
+ * rate (classic np / n(1-p) ≥ 10 rule) before the normal approximation applies.
+ */
+const EXPERIMENT_PLAN_MIN_BINOMIAL_EXPECTED_COUNT = 10;
+
 export function armAt(values: readonly number[], index: number): number {
   const value = values[index];
   if (value === undefined) {
@@ -128,4 +140,78 @@ export function minComparisonPower(args: {
   effectAbsolute: number;
 }): number {
   return Math.min(...comparisonPowersForPlan(args));
+}
+
+/**
+ * Refuse plans outside the asymptotic regime the normal power approximation
+ * (and the engine's estimated-variance SequentialCI) supports. Continuous Metrics
+ * need at least {@link EXPERIMENT_PLAN_MIN_PER_ARM_N} per arm; binomial Metrics
+ * also need ≥ {@link EXPERIMENT_PLAN_MIN_BINOMIAL_EXPECTED_COUNT} expected
+ * successes and failures under both the Control and treatment rates.
+ */
+export function validateAsymptoticSampleSize(args: {
+  metricKind: "continuous" | "binomial";
+  baselineMean: number;
+  mdeAbsolute: number;
+  nPerArm: readonly number[];
+  issuePath: readonly string[];
+}): ExperimentPlanIssue[] {
+  for (let index = 0; index < args.nPerArm.length; index += 1) {
+    const n = armAt(args.nPerArm, index);
+    if (n < EXPERIMENT_PLAN_MIN_PER_ARM_N) {
+      return [
+        {
+          path: args.issuePath,
+          message:
+            `Plan sample size is below the supported asymptotic regime ` +
+            `(need at least ${EXPERIMENT_PLAN_MIN_PER_ARM_N} Entities per arm; ` +
+            `arm ${index} has ${n}).`,
+        },
+      ];
+    }
+  }
+
+  if (args.metricKind !== "binomial") return [];
+
+  const controlRate = args.baselineMean;
+  const treatmentRate = controlRate + args.mdeAbsolute;
+  const rates = [controlRate, treatmentRate] as const;
+  for (let index = 0; index < args.nPerArm.length; index += 1) {
+    const n = armAt(args.nPerArm, index);
+    // Control arm is checked under the baseline rate; every treatment under p1.
+    const rate = index === 0 ? rates[0] : rates[1];
+    const expectedSuccesses = n * rate;
+    const expectedFailures = n * (1 - rate);
+    if (
+      expectedSuccesses < EXPERIMENT_PLAN_MIN_BINOMIAL_EXPECTED_COUNT ||
+      expectedFailures < EXPERIMENT_PLAN_MIN_BINOMIAL_EXPECTED_COUNT
+    ) {
+      return [
+        {
+          path: args.issuePath,
+          message:
+            `Plan sample size is below the supported asymptotic regime for binomial Metrics ` +
+            `(need n·p ≥ ${EXPERIMENT_PLAN_MIN_BINOMIAL_EXPECTED_COUNT} and ` +
+            `n·(1-p) ≥ ${EXPERIMENT_PLAN_MIN_BINOMIAL_EXPECTED_COUNT} under both Control and ` +
+            `treatment rates; arm ${index} at rate ${rate} has n·p=${expectedSuccesses} and ` +
+            `n·(1-p)=${expectedFailures}).`,
+        },
+      ];
+    }
+  }
+  return [];
+}
+
+/** Calendar days until every arm reaches its planned n under the traffic split. */
+export function expectedDurationDaysForSplit(args: {
+  nPerArm: readonly number[];
+  trafficSplit: readonly number[];
+  expectedDailyEligibleEntities: number;
+}): number {
+  let maxDays = 0;
+  for (let index = 0; index < args.nPerArm.length; index += 1) {
+    const dailyShare = args.expectedDailyEligibleEntities * armAt(args.trafficSplit, index);
+    maxDays = Math.max(maxDays, armAt(args.nPerArm, index) / dailyShare);
+  }
+  return Math.ceil(maxDays);
 }

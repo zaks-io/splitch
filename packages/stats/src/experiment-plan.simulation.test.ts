@@ -4,6 +4,9 @@ import { planExperiment } from "./experiment-plan";
 import { monteCarloTolerance } from "./sequential-ci-simulation";
 import { SequentialCI } from "./sequential-ci";
 import { seededNormal } from "./simulation-null-draws";
+import { comparisonEstimate } from "./variance-effects";
+import type { MetricArmEstimate } from "./variance-estimator-types";
+import { noVarianceTechniques } from "./winsorization";
 
 /**
  * Predeclared seeds and Monte Carlo tolerance for the always-valid inflation
@@ -183,12 +186,29 @@ function runBernoulliPowerTrials(args: {
   for (let iteration = 0; iteration < PLANNER_SIM_ITERATIONS; iteration += 1) {
     const successesC = binomialCount(args.nControl, args.baselineRate, uniform);
     const successesT = binomialCount(args.nTreatment, args.treatmentRate, uniform);
+    const control = binomialArmEstimate("control", args.nControl, successesC);
+    const treatment = binomialArmEstimate("treatment", args.nTreatment, successesT);
+    const comparison = comparisonEstimate(
+      {
+        run_id: "run_experiment_plan_binomial_sim",
+        metric_id: "conversion",
+        metric_type: "binomial",
+        control_variant: "control",
+        treatment_variant: "treatment",
+        exposures: [],
+        metric_values: [],
+      },
+      control,
+      treatment,
+      noVarianceTechniques("binomial"),
+    );
+    if (comparison.absolute_lift === null || comparison.absolute_lift_sampling_var === null) {
+      continue;
+    }
     const result = adapter.compute({
-      estimate: successesT / args.nTreatment - successesC / args.nControl,
-      // Theoretical SE under the planned alternative matches the sizing model.
-      sampling_var:
-        (args.baselineRate * (1 - args.baselineRate)) / args.nControl +
-        (args.treatmentRate * (1 - args.treatmentRate)) / args.nTreatment,
+      estimate: comparison.absolute_lift,
+      // Engine path: estimated per-arm variance with Agresti-Caffo on boundaries.
+      sampling_var: comparison.absolute_lift_sampling_var,
       n_t: args.nTreatment,
       n_c: args.nControl,
       alpha: PLANNER_SIM_ALPHA,
@@ -200,6 +220,25 @@ function runBernoulliPowerTrials(args: {
   }
 
   return rejections / PLANNER_SIM_ITERATIONS;
+}
+
+function binomialArmEstimate(variant: string, n: number, successes: number): MetricArmEstimate {
+  const rate = successes / n;
+  const armVariance = rate * (1 - rate);
+  return {
+    variant,
+    metric_id: "conversion",
+    metric_type: "binomial",
+    sample_size_n: n,
+    point_estimate: rate,
+    sampling_var: armVariance / n,
+    status: "ready",
+    arm_variance: armVariance,
+    denominator_mean: null,
+    zero_denominator_entity_count: 0,
+    delta_method: false,
+    variance_techniques: noVarianceTechniques("binomial"),
+  };
 }
 
 /** Exact Binomial(n, p) via Bernoulli trials (n is a few thousand in these gates). */

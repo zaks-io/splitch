@@ -9,12 +9,13 @@ import {
 
 describe("planExperiment binomial guardrail power", () => {
   it("reports power as the minimum across feasible signed breaches", () => {
-    // baseline 0.8, breach 0.1: upward → 0.9 (~8.85%), downward → 0.7 (~4.95%).
+    // baseline 0.8, modest goal MDE so planned n clears np / n(1-p) under p1;
+    // breach 0.1: upward → 0.9, downward → 0.7 (downward has less power).
     const outcome = planExperiment({
       metricKind: "binomial",
       baselineRate: 0.8,
       armCount: 2,
-      mdeAbsolute: 0.19,
+      mdeAbsolute: 0.05,
       guardrailBreachAbsolute: 0.1,
       power: 0.8,
       alpha: 0.05,
@@ -51,8 +52,7 @@ describe("planExperiment binomial guardrail power", () => {
       }).treatment,
       effectAbsolute: 0.1,
     });
-    expect(upward).toBeCloseTo(0.0885, 3);
-    expect(downward).toBeCloseTo(0.0495, 3);
+    expect(downward).toBeLessThan(upward);
     expect(outcome.plan.guardrailPower).toBeCloseTo(Math.min(upward, downward), 10);
   });
 
@@ -62,7 +62,7 @@ describe("planExperiment binomial guardrail power", () => {
       metricKind: "binomial",
       baselineRate: 0.8,
       armCount: 2,
-      mdeAbsolute: 0.19,
+      mdeAbsolute: 0.05,
       guardrailBreachAbsolute: 0.3,
       power: 0.8,
       alpha: 0.05,

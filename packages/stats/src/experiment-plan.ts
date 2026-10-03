@@ -2,13 +2,14 @@ import { alwaysValidInflation } from "./always-valid-inflation";
 import { solveBinomialMdeAtFixedSize } from "./experiment-plan-binomial-mde";
 import { computeGuardrailPower } from "./experiment-plan-guardrail";
 import { validatePlanOutputs } from "./experiment-plan-outputs";
-import type {
-  ExperimentPlanInput,
-  ExperimentPlanOutcome,
-  ExperimentPlanResult,
-} from "./experiment-plan-types";
+import type { ExperimentPlanInput, ExperimentPlanOutcome } from "./experiment-plan-types";
 import { validatePlanInput } from "./experiment-plan-validate";
-import { armVariances, EXPERIMENT_PLAN_MAX_SAFE_COUNT } from "./experiment-plan-power";
+import {
+  armVariances,
+  expectedDurationDaysForSplit,
+  EXPERIMENT_PLAN_MAX_SAFE_COUNT,
+  validateAsymptoticSampleSize,
+} from "./experiment-plan-power";
 import { fixedHorizonControlN, mdeAtFixedSize, sizeAlwaysValidArms } from "./experiment-plan-size";
 import { inverseNormalCdf } from "./normal-distribution";
 
@@ -89,6 +90,7 @@ export function planExperiment(input: ExperimentPlanInput): ExperimentPlanOutcom
     buildPlan({
       input,
       baseline,
+      split,
       alpha,
       power,
       inflation,
@@ -195,6 +197,7 @@ function finishFixedSizePlan(args: {
     buildPlan({
       input: args.input,
       baseline: args.baseline,
+      split: args.split,
       alpha: args.alpha,
       power: args.power,
       inflation: args.inflation,
@@ -210,17 +213,19 @@ function finishFixedSizePlan(args: {
   );
 }
 
-function finalizePlan(plan: ExperimentPlanResult): ExperimentPlanOutcome {
-  const issues = validatePlanOutputs(plan);
+function finalizePlan(outcome: ExperimentPlanOutcome): ExperimentPlanOutcome {
+  if (!outcome.ok) return outcome;
+  const issues = validatePlanOutputs(outcome.plan);
   if (issues.length > 0) {
     return { ok: false, issues };
   }
-  return { ok: true, plan };
+  return outcome;
 }
 
 function buildPlan(args: {
   input: ExperimentPlanInput;
   baseline: { mean: number; variance: number };
+  split: readonly number[];
   alpha: number;
   power: number;
   inflation: number;
@@ -232,37 +237,60 @@ function buildPlan(args: {
   comparisonPowers: readonly number[];
   varianceControl: number;
   varianceTreatment: number;
-}): ExperimentPlanResult {
-  const totalEntities = args.nPerArm.reduce((sum, n) => sum + n, 0);
-  const expectedDurationDays = Math.ceil(totalEntities / args.input.expectedDailyEligibleEntities);
+}): ExperimentPlanOutcome {
+  const asymptoticIssues = validateAsymptoticSampleSize({
+    metricKind: args.input.metricKind,
+    baselineMean: args.baseline.mean,
+    mdeAbsolute: args.mdeAbsolute,
+    nPerArm: args.nPerArm,
+    issuePath: objectiveIssuePath(args.input),
+  });
+  if (asymptoticIssues.length > 0) {
+    return { ok: false, issues: asymptoticIssues };
+  }
+
+  const expectedDurationDays = expectedDurationDaysForSplit({
+    nPerArm: args.nPerArm,
+    trafficSplit: args.split,
+    expectedDailyEligibleEntities: args.input.expectedDailyEligibleEntities,
+  });
   const mdeRelative =
     args.baseline.mean === 0 ? null : args.mdeAbsolute / Math.abs(args.baseline.mean);
 
   return {
-    fixedHorizonNPerArm: args.fixedHorizonNPerArm,
-    alwaysValidInflation: args.inflation,
-    nPerArm: args.nPerArm,
-    targetN: args.targetN,
-    expectedDurationDays,
-    mdeAbsolute: args.mdeAbsolute,
-    mdeRelative,
-    alpha: args.alpha,
-    power: args.power,
-    comparisonPowers: args.comparisonPowers,
-    guardrailPower: computeGuardrailPower({
-      input: args.input,
-      baseline: args.baseline,
+    ok: true,
+    plan: {
+      fixedHorizonNPerArm: args.fixedHorizonNPerArm,
+      alwaysValidInflation: args.inflation,
       nPerArm: args.nPerArm,
       targetN: args.targetN,
+      expectedDurationDays,
+      mdeAbsolute: args.mdeAbsolute,
+      mdeRelative,
       alpha: args.alpha,
-      varianceControl: args.varianceControl,
-    }),
-    baselineMean: args.baseline.mean,
-    baselineVariance: args.baseline.variance,
-    // History lookup is not wired in this slice; callers must supply baselines.
-    baselineSource: "caller",
-    mode: args.mode,
+      power: args.power,
+      comparisonPowers: args.comparisonPowers,
+      guardrailPower: computeGuardrailPower({
+        input: args.input,
+        baseline: args.baseline,
+        nPerArm: args.nPerArm,
+        targetN: args.targetN,
+        alpha: args.alpha,
+        varianceControl: args.varianceControl,
+      }),
+      baselineMean: args.baseline.mean,
+      baselineVariance: args.baseline.variance,
+      // History lookup is not wired in this slice; callers must supply baselines.
+      baselineSource: "caller",
+      mode: args.mode,
+    },
   };
+}
+
+function objectiveIssuePath(input: ExperimentPlanInput): readonly string[] {
+  if (input.fixedSampleSizePerArm !== undefined) return ["fixedSampleSizePerArm"];
+  if (input.mdeAbsolute !== undefined) return ["mdeAbsolute"];
+  return ["mdeRelative"];
 }
 
 function resolveBaseline(input: ExperimentPlanInput): { mean: number; variance: number } {
