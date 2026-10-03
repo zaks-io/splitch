@@ -25,6 +25,7 @@ export default defineSchema({
     snapshotVersion: v.optional(v.number()),
     syncRecoveryJobId: v.optional(v.id("_scheduled_functions")),
     syncRecoveryVersion: v.optional(v.number()),
+    syncOverdueVersion: v.optional(v.number()),
     recoveryAdoptionJobId: v.optional(v.id("_scheduled_functions")),
     recoveryGeneration: v.optional(v.number()),
     retentionJobId: v.optional(v.id("_scheduled_functions")),

@@ -87,8 +87,9 @@ D1 is the authoritative source. KV is a read-replica cache.
   (ADR-0019).
 - **D1 succeeds, Convex delivery fails:** config remains committed. The durable delivery row retries
   independently; installation health shows the complete latest bounded `DeliveryErrorEnvelope`.
-  The component keeps its last validated snapshot until a newer version is announced, then fails
-  loud until pull catches up.
+  The component keeps its last validated snapshot until a newer version is announced, serves it
+  as `STALE` for up to five seconds while pull catches up, then fails loud with `ERROR` until a
+  current snapshot commits.
 
 Flag Configuration reads **always** obtain an authoritative D1 snapshot through the Config Store DO
 on cold start, cache miss, or reconnect. A version below the latest nudge fails with `STALE`; it is

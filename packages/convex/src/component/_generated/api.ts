@@ -11,6 +11,7 @@
 import type * as crypto from "../crypto.js";
 import type * as delivery_policy from "../delivery_policy.js";
 import type * as evaluation from "../evaluation.js";
+import type * as evaluation_details from "../evaluation_details.js";
 import type * as evaluation_state from "../evaluation_state.js";
 import type * as exposure_batch from "../exposure_batch.js";
 import type * as exposure_delivery from "../exposure_delivery.js";
@@ -21,6 +22,7 @@ import type * as integration_cleanup from "../integration_cleanup.js";
 import type * as integration_recovery from "../integration_recovery.js";
 import type * as integration_remote from "../integration_remote.js";
 import type * as integration_state from "../integration_state.js";
+import type * as integration_sync from "../integration_sync.js";
 import type * as metric_event from "../metric_event.js";
 import type * as metric_event_delivery from "../metric_event_delivery.js";
 import type * as metric_event_state from "../metric_event_state.js";
@@ -39,6 +41,7 @@ const fullApi: ApiFromModules<{
   crypto: typeof crypto;
   delivery_policy: typeof delivery_policy;
   evaluation: typeof evaluation;
+  evaluation_details: typeof evaluation_details;
   evaluation_state: typeof evaluation_state;
   exposure_batch: typeof exposure_batch;
   exposure_delivery: typeof exposure_delivery;
@@ -49,6 +52,7 @@ const fullApi: ApiFromModules<{
   integration_recovery: typeof integration_recovery;
   integration_remote: typeof integration_remote;
   integration_state: typeof integration_state;
+  integration_sync: typeof integration_sync;
   metric_event: typeof metric_event;
   metric_event_delivery: typeof metric_event_delivery;
   metric_event_state: typeof metric_event_state;

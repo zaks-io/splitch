@@ -10,6 +10,8 @@ import { ensureRetentionScheduled } from "./retention";
 const ADOPTION_BATCH_SIZE = 25;
 export const RECOVERY_GENERATION = 2;
 export const SYNC_RECOVERY_DELAY_MS = 60_000;
+// Matches the five-second Evaluation propagation contract in docs/spec/platform/config-store.md.
+export const SYNC_DEADLINE_MS = 5_000;
 
 export const adoptExistingWork = internalMutation({
   args: { generation: v.number() },
@@ -34,6 +36,7 @@ export async function activateHandler(
     { ...integration, announcedVersion, state: "active" },
     SYNC_RECOVERY_DELAY_MS,
   );
+  await scheduleSyncDeadline(ctx, { ...integration, announcedVersion });
   await ensureRetentionScheduled(ctx);
   await scheduleRecoveryAdoption(ctx, { ...integration, state: "active" });
 }
@@ -160,6 +163,36 @@ export async function scheduleSyncRecovery(
     syncRecoveryJobId: jobId,
     syncRecoveryVersion: integration.announcedVersion,
   });
+}
+
+export const markSyncOverdue = internalMutation({
+  args: { environmentVersion: v.number() },
+  returns: v.null(),
+  handler: markSyncOverdueHandler,
+});
+
+// Queries never read the clock, so the grace ends with this scheduled write; writing the
+// integration row re-runs every subscribed evaluation query at the deadline.
+export async function scheduleSyncDeadline(
+  ctx: MutationCtx,
+  integration: Doc<"integrations">,
+): Promise<void> {
+  if ((integration.snapshotVersion ?? -1) >= integration.announcedVersion) return;
+  await ctx.scheduler.runAfter(SYNC_DEADLINE_MS, internal.integration_recovery.markSyncOverdue, {
+    environmentVersion: integration.announcedVersion,
+  });
+}
+
+// Overdue persists until a current snapshot commits, so a newer announcement cannot reopen the
+// grace while pulls keep failing.
+export async function markSyncOverdueHandler(
+  ctx: MutationCtx,
+  args: { environmentVersion: number },
+): Promise<void> {
+  const integration = await currentIntegration(ctx);
+  if (integration?.state !== "active" || integration.syncOverdueVersion !== undefined) return;
+  if ((integration.snapshotVersion ?? -1) >= args.environmentVersion) return;
+  await ctx.db.patch(integration._id, { syncOverdueVersion: args.environmentVersion });
 }
 
 export async function scheduleRecoveryAdoption(
