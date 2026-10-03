@@ -50,8 +50,11 @@ read this martingale: `srm_p_value` is the anytime p-value and `srm_is_mismatch`
 `threshold_crossed` at alpha 0.001. legacy-unversioned and analysis-v1 keep the chi-square
 `p < 0.001` gate. Chi-square stays the fixed-horizon diagnostic and the activation-balance test
 under every version (activation balance is equality of unknown rates, not the declared
-allocation multinomial). `analysis-v2` is **current**: it is in `SUPPORTED_ANALYSIS_VERSIONS`,
-new Runs freeze it, and Results analyzes Runs frozen under it.
+allocation multinomial). `analysis-v2` is defined in the exhaustive version switch but is
+**unsupported** for Start and Results: it is not in `SUPPORTED_ANALYSIS_VERSIONS`, new Runs
+freeze `analysis-v1`, and a Run frozen under v2 refuses loudly. The remaining blockers are
+sticky Copy clocks across raw TTL and a durable per-Run SRM alarm that survives quarantine /
+membership edits (running-minimum p-value alone is not enough when the rebuilt path changes).
 
 **Prior.** Dirichlet mean equals the declared allocation: `alpha_i = concentration * theta_i`.
 Default `concentration` is 100. Type I control from Ville's inequality does not depend on this

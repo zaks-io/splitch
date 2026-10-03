@@ -84,12 +84,16 @@ describe("runDecisionSpecFromBody", () => {
     });
   });
 
-  it("accepts analysis_version analysis-v2 now that it is supported", () => {
+  it('rejects analysis_version "analysis-v2" with a structured validation error', async () => {
     const result = runDecisionSpecFromBody({ analysis_version: "analysis-v2" }, REQUEST_ID);
 
-    expect(result.ok).toBe(true);
-    if (!result.ok) return;
-    expect(runCommitmentColumns(result.value).analysisVersion).toBe(CURRENT_ANALYSIS_VERSION);
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.response.status).toBe(400);
+    const body = await errorBody(result.response);
+    expect(body.code).toBe("VALIDATION_ERROR");
+    expect(body.details.issues[0]?.path).toEqual(["body", "analysis_version"]);
+    expect(body.details.issues[0]?.message).toMatch(/analysis-v2/);
   });
 
   it("rejects an unknown analysis_version with a structured validation error", async () => {

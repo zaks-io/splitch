@@ -4,7 +4,6 @@ import {
   AnalysisResultsEnvelopeSchema,
   CURRENT_ANALYSIS_VERSION,
   canonicalHash,
-  createResultToken,
   type ErrorResponse,
   resultTokenStats,
 } from "@splitch/contracts";
@@ -115,28 +114,15 @@ describe("analysis version and Run commitments (ADR-0059)", () => {
     });
   });
 
-  it("analyzes a Run frozen under analysis-v2 and binds its token to that version", async () => {
-    const envelope = await readyEnvelope(withRunFields(committedFieldsFor(ANALYSIS_V2_VERSION)));
+  it("refuses a Run frozen under analysis-v2 exactly like an unknown version", async () => {
+    const { app } = makeResultsHarness(withRunFields(committedFieldsFor(ANALYSIS_V2_VERSION)));
 
-    expect(CURRENT_ANALYSIS_VERSION).toBe(ANALYSIS_V2_VERSION);
-    expect(envelope.run_commitments).toEqual({
-      analysis_version_source: "frozen",
-      ...committedFieldsFor(ANALYSIS_V2_VERSION),
-    });
-    expect(envelope.result_token).toBe(
-      await createResultToken({
-        appId: APP_ID,
-        environmentId: ENVIRONMENT_ID,
-        experimentId: EXPERIMENT_ID,
-        runId: RUN_ID,
-        runConfigHash: RUN_CONFIG_HASH,
-        analysisVersion: ANALYSIS_V2_VERSION,
-        stats: envelope.stats,
-      }),
-    );
-    // Balanced fixture: sequential and chi-square agree on no mismatch, but the
-    // anytime p-value is not the chi-square p-value.
-    expect(envelope.stats.srm.srm_is_mismatch).toBe(false);
+    const response = await app.request(`${RESULTS_PATH}?runId=${RUN_ID}`, resultsAuthInit("GET"));
+    const error = (await response.json()) as ErrorResponse;
+
+    expect(response.status).toBe(400);
+    expect(JSON.stringify(error)).toContain(ANALYSIS_V2_VERSION);
+    expect(CURRENT_ANALYSIS_VERSION).toBe(ANALYSIS_V1_VERSION);
   });
 
   it("reports a caller target and a labeled duration override", async () => {

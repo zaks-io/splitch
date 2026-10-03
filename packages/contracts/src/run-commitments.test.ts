@@ -71,9 +71,12 @@ describe("result token analysis version (ADR-0059)", () => {
   });
 
   it("supports every named version this deployment can analyze", () => {
-    expect(SUPPORTED_ANALYSIS_VERSIONS).toEqual(["analysis-v1", "analysis-v2"]);
+    // analysis-v2 stays defined in the exhaustive switch but is unsupported
+    // until sticky Copy clocks and durable SRM alarm persistence land (ADR-0059).
+    expect(SUPPORTED_ANALYSIS_VERSIONS).toEqual(["analysis-v1"]);
     expect(SUPPORTED_ANALYSIS_VERSIONS).toContain(CURRENT_ANALYSIS_VERSION);
-    expect(CURRENT_ANALYSIS_VERSION).toBe("analysis-v2");
+    expect(SUPPORTED_ANALYSIS_VERSIONS).not.toContain("analysis-v2");
+    expect(CURRENT_ANALYSIS_VERSION).toBe("analysis-v1");
   });
 });
 

@@ -83,20 +83,21 @@ Worker rolled back below a Run's version refuses that Run until it is rolled for
 Dispatch is one exhaustive switch over known versions. Unknown versions refuse. There is no
 silent fallthrough to the newest.
 
-| Version              | SRM gate (Exposure and activated)           | Family correction | Guardrail bound                   | Notes                                                                                                                                                                                        |
-| -------------------- | ------------------------------------------- | ----------------- | --------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `legacy-unversioned` | Chi-square, mismatch at p < 0.001           | BH                | Two-sided Fieller relative lower  | Compatibility implementation as of versioning start; token omits `analysisVersion`                                                                                                           |
-| `analysis-v1`        | Chi-square, mismatch at p < 0.001           | BH                | Two-sided Fieller relative lower  | First frozen version; same estimators as legacy. Remains supported for Runs frozen under it                                                                                                  |
-| `analysis-v2`        | Sequential Dirichlet-multinomial martingale | BH-G              | Prop. B.1 one-sided contrast (C4) | **Current** for new Runs. Observation path ordered by eligibility ingest (`first_ingest_ts` / pairwise activation eligibility) append-only across watermarks; running-minimum p-value sticks |
+| Version              | SRM gate (Exposure and activated)           | Family correction | Guardrail bound                   | Notes                                                                                                                                                                                 |
+| -------------------- | ------------------------------------------- | ----------------- | --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `legacy-unversioned` | Chi-square, mismatch at p < 0.001           | BH                | Two-sided Fieller relative lower  | Compatibility implementation as of versioning start; token omits `analysisVersion`                                                                                                    |
+| `analysis-v1`        | Chi-square, mismatch at p < 0.001           | BH                | Two-sided Fieller relative lower  | First frozen version; same estimators as legacy. **Current** for new Runs                                                                                                             |
+| `analysis-v2`        | Sequential Dirichlet-multinomial martingale | BH-G              | Prop. B.1 one-sided contrast (C4) | Defined in the exhaustive switch, **unsupported** for Start and Results until sticky Copy clocks across raw TTL and a durable per-Run SRM alarm survive quarantine / membership edits |
 
 Activation-rate balance stays chi-square under every version until a sequential equality-of-rates
 test is chosen. analysis-v2 selects BH-G (Johari, Pekelis, Walsh Proposition C.3) for arbitrary
 dependence and an arbitrary stopping time; plain BH can exceed alpha under a two-null adversarial
 distribution even when both marginals are superuniform. analysis-v2 also selects the one-sided
-Guardrail contrast (ADR-0015 C4 amendment). `SUPPORTED_ANALYSIS_VERSIONS` is `analysis-v1` and
-`analysis-v2`. `CURRENT_ANALYSIS_VERSION` is `analysis-v2`. The SRM filtration uses Tinybird's
-existing `raw_events.ingest_ts` (pairwise eligibility for activated SRM), not event time, so a late
-row with an earlier `exposure_at` / `activation_ts` appends rather than rewriting history.
+Guardrail contrast (ADR-0015 C4 amendment). `SUPPORTED_ANALYSIS_VERSIONS` omits `analysis-v2`:
+Start rejects a request for it with a structured validation error, and any Run frozen under it
+refuses loudly like an unknown version. The v2 code paths (ingestion-ordered filtration via
+`first_ingest_ts` / pairwise activation eligibility, BH-G, one-sided Guardrail) stay in the
+switch for unit tests. Making v2 current requires durable alarm state beyond a rebuilt path.
 
 ## Sources
 

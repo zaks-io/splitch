@@ -318,7 +318,9 @@ Dependence and stopping:
   aggregate. Johari, Pekelis, Walsh Theorem 7.3 gives FDR control for BH over always-valid p-values
   only under a restricted stopping class and independence. Proposition C.3 gives FDR control for
   BH-G under an arbitrary stopping time and arbitrary dependence.
-- Production-supported versions: legacy and analysis-v1 use BH; analysis-v2 (current) uses BH-G.
+- Production-supported versions (legacy and analysis-v1) use BH. analysis-v2 selects BH-G in the
+  exhaustive switch but remains unsupported for Start/Results until sticky Copy clocks and
+  durable SRM alarm persistence land.
 
 ## Failure contracts
 
