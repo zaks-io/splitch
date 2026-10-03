@@ -210,14 +210,19 @@ function flagLifecycleHelp(defaultValue: string): HelpFlag[] {
       "--lifecycle-class <class>",
       "ops | permission | release | experiment",
       defaultValue,
-      "Why the Flag exists. Required on create; release and experiment Flags also need --owner and --expires-at.",
+      "Why the Flag exists. Defaults to release on create; use ops for a kill switch or permission for an entitlement gate (both permanent).",
     ),
-    flag("--owner <owner>", "string", defaultValue, "Person or team that removes the Flag."),
+    flag(
+      "--owner <owner>",
+      "string",
+      defaultValue,
+      "Person or team that removes the Flag. Release and experiment Flags default to you.",
+    ),
     flag(
       "--expires-at <date-time>",
       "ISO 8601 date-time",
       defaultValue,
-      "When the Flag is due for removal; expired Flags appear in splitch expired-flags list.",
+      "When the Flag is due for removal (release defaults to 90 days, experiment to 30); expired Flags appear in splitch expired-flags list. On update, none clears it.",
     ),
   ];
 }
