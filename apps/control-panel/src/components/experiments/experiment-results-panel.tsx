@@ -29,7 +29,6 @@ import type { ComparisonMetric } from "#lib/experiments/metric-comparison-rows";
  */
 export function ExperimentResultsPanel({
   appId,
-  canConclude,
   environments,
   flagId,
   environmentId,
@@ -38,7 +37,6 @@ export function ExperimentResultsPanel({
   run,
 }: {
   appId: string;
-  canConclude: boolean;
   environments: readonly { environmentId: string; env: string }[];
   flagId: string;
   environmentId: string;
@@ -50,7 +48,6 @@ export function ExperimentResultsPanel({
   return (
     <ExperimentResultsForRun
       appId={appId}
-      canConclude={canConclude}
       environments={environments}
       flagId={flagId}
       environmentId={environmentId}
@@ -63,7 +60,6 @@ export function ExperimentResultsPanel({
 
 function ExperimentResultsForRun({
   appId,
-  canConclude,
   environments,
   flagId,
   environmentId,
@@ -72,7 +68,6 @@ function ExperimentResultsForRun({
   run,
 }: {
   appId: string;
-  canConclude: boolean;
   environments: readonly { environmentId: string; env: string }[];
   flagId: string;
   environmentId: string;
@@ -100,7 +95,6 @@ function ExperimentResultsForRun({
   return (
     <>
       <ExperimentResults
-        canConclude={canConclude}
         onConclude={() => setConcluding(true)}
         metrics={metrics}
         results={data}

@@ -38,7 +38,6 @@ function unresolvableHtml() {
   const stats = statsWithAnalysisControl();
   return renderToStaticMarkup(
     <ExperimentResults
-      canConclude={true}
       onConclude={() => {}}
       metrics={metricsFixture()}
       run={runFixture()}
@@ -121,7 +120,6 @@ describe("ExperimentResults with an Analysis Control disagreement", () => {
   function disagreementHtml() {
     return renderToStaticMarkup(
       <ExperimentResults
-        canConclude={true}
         onConclude={() => {}}
         metrics={metricsFixture()}
         run={runFixture({

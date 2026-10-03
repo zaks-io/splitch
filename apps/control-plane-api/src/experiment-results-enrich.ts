@@ -71,13 +71,13 @@ export function enrichAnalysisResultsResponse(
   options: { view: ExperimentResultsView; canConclude: boolean },
 ): ExperimentResultsResponse {
   const analysis = AnalysisResultsEnvelopeSchema.parse(analysisBody);
+  // Callers only reach enrich after D1 resolved a Run. Analysis no_run here is a
+  // contract violation (drafts are finished before the hop); masking it as
+  // START_A_RUN would tell clients the Experiment never started.
   if (analysis.state === "no_run") {
-    return produceExperimentResults({
-      view: options.view,
-      analysis,
-      run: null,
-      canConclude: options.canConclude,
-    });
+    throw new Error(
+      "analysis answered no_run; Control Plane resolves draft Experiments before the hop",
+    );
   }
   if (analysis.run_id !== run.id) {
     throw new Error(`analysis answered for Run ${analysis.run_id}, not Run ${run.id}`);

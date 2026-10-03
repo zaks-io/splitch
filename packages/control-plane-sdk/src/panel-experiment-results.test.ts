@@ -83,15 +83,19 @@ const legacyDuration = {
 
 function readyEnvelope() {
   const stats = statsOutput();
+  const gate = evaluateExperimentDecisionGate(stats, frozenControl, legacyDuration);
   return {
     state: "ready" as const,
     runId: "run_1",
     runNumber: 1,
     runStatus: "running" as const,
     control: frozenControl,
+    readiness: { statistical: gate.shipAllowed, concludeExecutable: false },
+    blockedBy: gate.blockedBy,
+    reasons: [],
     stats,
     srm: experimentSrmDiagnostics(stats),
-    gate: evaluateExperimentDecisionGate(stats, frozenControl, legacyDuration),
+    gate,
     significance: experimentSignificanceDisplays(stats),
   };
 }
@@ -103,6 +107,9 @@ function noDataEnvelope() {
     runNumber: 1,
     runStatus: "running" as const,
     control: frozenControl,
+    readiness: { statistical: false, concludeExecutable: false },
+    blockedBy: [],
+    reasons: ["No Metric Events have been observed for this Run yet."],
     missing: "metric_events" as const,
   };
 }
@@ -122,11 +129,20 @@ describe("PanelExperimentResultsOutputSchema contract pins (SPL-305)", () => {
     expect(PanelExperimentResultsOutputSchema.safeParse(withoutToken).success).toBe(false);
   });
 
-  it("rejects a no_run envelope that omits recommendedAction", () => {
+  it("rejects a no_run envelope that omits recommendedAction or readiness", () => {
     expect(PanelExperimentResultsOutputSchema.safeParse({ state: "no_run" }).success).toBe(false);
     expect(
       PanelExperimentResultsOutputSchema.safeParse({
         state: "no_run",
+        recommendedAction: "START_A_RUN",
+      }).success,
+    ).toBe(false);
+    expect(
+      PanelExperimentResultsOutputSchema.safeParse({
+        state: "no_run",
+        readiness: { statistical: false, concludeExecutable: false },
+        blockedBy: [],
+        reasons: ["No Run has been Started for this Experiment. Call experiments_start."],
         recommendedAction: "START_A_RUN",
       }).success,
     ).toBe(true);

@@ -1,5 +1,7 @@
 import {
+  DecisionGateCheckIdSchema,
   ExperimentDecisionGateSchema,
+  ExperimentResultsReadinessSchema,
   ExperimentSignificanceDisplaysSchema,
   ExperimentSrmDiagnosticsSchema,
   FrozenControlIdentitySchema,
@@ -17,6 +19,13 @@ export interface PanelExperimentResultsInput {
 
 /** Same missing-input names Analysis answers with on `state: "no_data"`. */
 const PanelResultsMissingInputSchema = z.enum(["exposures", "metric_events"]);
+
+/** Shared producer readiness fields; Panel renders them and never re-derives. */
+const producerReadinessFields = {
+  readiness: ExperimentResultsReadinessSchema,
+  blockedBy: z.array(DecisionGateCheckIdSchema),
+  reasons: z.array(z.string()),
+} as const;
 
 /**
  * The Results payload the Control Panel renders.
@@ -39,6 +48,7 @@ const readyFields = {
    * the frozen Control identity visible beside the arm the Analysis measured against.
    */
   control: FrozenControlIdentitySchema,
+  ...producerReadinessFields,
   stats: StatsOutputSchema,
   srm: ExperimentSrmDiagnosticsSchema,
   gate: ExperimentDecisionGateSchema,
@@ -72,12 +82,14 @@ export const PanelExperimentResultsOutputSchema = z.union([
       runNumber: z.number().int().min(1),
       runStatus: z.enum(["running", "ended"]),
       control: FrozenControlIdentitySchema,
+      ...producerReadinessFields,
       missing: PanelResultsMissingInputSchema,
     })
     .strict(),
   z
     .object({
       state: z.literal("no_run"),
+      ...producerReadinessFields,
       recommendedAction: z.literal("START_A_RUN"),
     })
     .strict(),

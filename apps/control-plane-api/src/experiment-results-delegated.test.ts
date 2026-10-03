@@ -169,9 +169,35 @@ describe("experiment results Experiment vs Run resolution (SPL-305)", () => {
   });
 });
 
+const COMPLETE_EVIDENCE = {
+  data_watermark: "2026-09-08T18:00:00.000Z",
+  result_token: `sha256:${"a".repeat(64)}`,
+} as const;
+
 describe("experiment results concludeExecutable matches runs_conclude guards", () => {
+  it("is true for an App admin when evidence and gate are otherwise complete", async () => {
+    const analysis = binding(
+      [],
+      Response.json(analysisEnvelope("run_7", statsOutput(), COMPLETE_EVIDENCE)),
+    );
+    const response = await createApp(deps({ bindings: { "analysis-api": analysis } })).request(
+      RESULTS_PATH,
+      { headers: { authorization: "Bearer stub" } },
+    );
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      readiness: { statistical: true, concludeExecutable: true },
+      data_watermark: COMPLETE_EVIDENCE.data_watermark,
+      result_token: COMPLETE_EVIDENCE.result_token,
+    });
+  });
+
   it("is false for a membership-wide-read token even when live role is admin", async () => {
-    const analysis = binding([], Response.json(analysisEnvelope("run_7", statsOutput())));
+    const analysis = binding(
+      [],
+      Response.json(analysisEnvelope("run_7", statsOutput(), COMPLETE_EVIDENCE)),
+    );
     const response = await createApp(
       deps({
         bindings: { "analysis-api": analysis },
@@ -182,11 +208,16 @@ describe("experiment results concludeExecutable matches runs_conclude guards", (
     expect(response.status).toBe(200);
     expect(await response.json()).toMatchObject({
       readiness: { concludeExecutable: false },
+      data_watermark: COMPLETE_EVIDENCE.data_watermark,
+      result_token: COMPLETE_EVIDENCE.result_token,
     });
   });
 
   it("is false when the principal lacks App admin/owner scopes", async () => {
-    const analysis = binding([], Response.json(analysisEnvelope("run_7", statsOutput())));
+    const analysis = binding(
+      [],
+      Response.json(analysisEnvelope("run_7", statsOutput(), COMPLETE_EVIDENCE)),
+    );
     const response = await createApp(
       deps({
         bindings: { "analysis-api": analysis },
@@ -201,6 +232,24 @@ describe("experiment results concludeExecutable matches runs_conclude guards", (
     expect(response.status).toBe(200);
     expect(await response.json()).toMatchObject({
       readiness: { concludeExecutable: false },
+      data_watermark: COMPLETE_EVIDENCE.data_watermark,
+      result_token: COMPLETE_EVIDENCE.result_token,
     });
+  });
+});
+
+describe("experiment results Analysis no_run after Run resolution", () => {
+  it("fails loud instead of returning START_A_RUN when a Run was already resolved", async () => {
+    const analysis = binding(
+      [],
+      Response.json({ state: "no_run", recommended_action: "START_A_RUN" }),
+    );
+    const response = await createApp(deps({ bindings: { "analysis-api": analysis } })).request(
+      RESULTS_PATH,
+      { headers: { authorization: "Bearer stub" } },
+    );
+
+    expect(response.status).toBe(500);
+    expect(await response.json()).toMatchObject({ code: "INTERNAL_SERVER_ERROR" });
   });
 });

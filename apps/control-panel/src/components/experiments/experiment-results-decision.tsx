@@ -25,7 +25,7 @@ import { RAIL_NODE_TOP, railOffset } from "./experiment-results-arms";
 
 export function ExperimentResultsDecision({
   baseline,
-  canConclude,
+  concludeExecutable,
   evidenceAvailable,
   onConclude,
   control,
@@ -36,7 +36,8 @@ export function ExperimentResultsDecision({
   variantOrder,
 }: {
   baseline: string;
-  canConclude: boolean;
+  /** Producer readiness: live membership + evidence + lifecycle, not page-scope role. */
+  concludeExecutable: boolean;
   evidenceAvailable: boolean;
   onConclude: () => void;
   control: FrozenControlIdentity;
@@ -76,7 +77,7 @@ export function ExperimentResultsDecision({
             <GateSummary gate={gate} />
           </div>
           <ConcludeAction
-            canConclude={canConclude}
+            concludeExecutable={concludeExecutable}
             evidenceAvailable={evidenceAvailable}
             onConclude={onConclude}
             runStatus={runStatus}
@@ -229,26 +230,29 @@ function GateSummary({ gate }: { gate: ExperimentDecisionGate }) {
 }
 
 function ConcludeAction({
-  canConclude,
+  concludeExecutable,
   evidenceAvailable,
   onConclude,
   runStatus,
   shipAllowed,
 }: {
-  canConclude: boolean;
+  concludeExecutable: boolean;
   evidenceAvailable: boolean;
   onConclude: () => void;
   runStatus: "running" | "ended";
   shipAllowed: boolean;
 }) {
+  // Same copy order as before; permission is the residual when every other
+  // local check is clear but the producer still refuses Conclude.
   let reason: string | null = null;
   if (runStatus === "ended") reason = "This Run has ended.";
-  else if (!canConclude) reason = "An App owner or admin can Conclude this Run.";
-  else if (!shipAllowed) reason = "Resolve the failing checks below before concluding this Run.";
+  else if (!concludeExecutable && shipAllowed && evidenceAvailable) {
+    reason = "An App owner or admin can Conclude this Run.";
+  } else if (!shipAllowed) reason = "Resolve the failing checks below before concluding this Run.";
   else if (!evidenceAvailable) reason = "Refresh Results to load the evidence for this decision.";
   return (
     <div className="grid justify-items-end gap-1">
-      <Button disabled={reason !== null} onClick={onConclude} type="button">
+      <Button disabled={!concludeExecutable} onClick={onConclude} type="button">
         Conclude Run
       </Button>
       {reason ? <p className="text-muted-foreground text-xs">{reason}</p> : null}

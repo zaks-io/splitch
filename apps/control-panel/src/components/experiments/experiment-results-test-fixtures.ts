@@ -219,27 +219,34 @@ export function resultsFixture(
   overrides: Partial<PanelExperimentResultsReady> = {},
 ): PanelExperimentResultsReady {
   const { dataWatermark, resultToken, ...fields } = overrides;
+  const gate =
+    overrides.gate ??
+    evaluateExperimentDecisionGate(stats, overrides.control ?? frozenControl(), {
+      plannedDurationDays: null,
+      overrideReason: null,
+      runStartedAt: "2026-07-01T00:00:00.000Z",
+      dataWatermark: null,
+    });
   const result = {
     state: "ready" as const,
     runId: "run_2",
     runNumber: 2,
     runStatus: "running" as const,
     control: frozenControl(),
+    readiness: { statistical: gate.shipAllowed, concludeExecutable: false },
+    blockedBy: gate.blockedBy,
+    reasons: [] as string[],
     stats,
     srm: experimentSrmDiagnostics(stats),
     // A legacy Run, so the planned-duration check stays out of these Panel cases.
-    gate: evaluateExperimentDecisionGate(stats, overrides.control ?? frozenControl(), {
-      plannedDurationDays: null,
-      overrideReason: null,
-      runStartedAt: "2026-07-01T00:00:00.000Z",
-      dataWatermark: null,
-    }),
+    gate,
     significance: experimentSignificanceDisplays(stats),
     ...fields,
   };
   if (dataWatermark === undefined && resultToken === undefined) return result;
-  if (dataWatermark === undefined || resultToken === undefined)
+  if (dataWatermark === undefined || resultToken === undefined) {
     throw new Error("Incomplete fixture evidence");
+  }
   return { ...result, dataWatermark, resultToken };
 }
 
@@ -252,6 +259,9 @@ export function resultsNoDataFixture(
     runNumber: 2,
     runStatus: "running",
     control: frozenControl(),
+    readiness: { statistical: false, concludeExecutable: false },
+    blockedBy: [],
+    reasons: ["No Metric Events have been observed for this Run yet."],
     missing: "metric_events",
     ...overrides,
   };

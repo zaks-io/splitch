@@ -262,8 +262,13 @@ export async function panelExperimentResults(
  * camelCase projection. Visual treatment stays in the Panel; verdict math does not.
  */
 function panelFromProducer(produced: ExperimentResultsResponse): PanelExperimentResultsOutput {
+  const readiness = {
+    readiness: produced.readiness,
+    blockedBy: produced.blockedBy,
+    reasons: produced.reasons,
+  };
   if (produced.state === "no_run") {
-    return { state: "no_run", recommendedAction: "START_A_RUN" };
+    return { state: "no_run", ...readiness, recommendedAction: "START_A_RUN" };
   }
   if (produced.state === "no_data") {
     return {
@@ -272,6 +277,7 @@ function panelFromProducer(produced: ExperimentResultsResponse): PanelExperiment
       runNumber: produced.run_number,
       runStatus: produced.run_status,
       control: produced.control,
+      ...readiness,
       missing: produced.missing,
     };
   }
@@ -284,6 +290,7 @@ function panelFromProducer(produced: ExperimentResultsResponse): PanelExperiment
     runNumber: produced.run_number,
     runStatus: produced.run_status,
     control: produced.control,
+    ...readiness,
     stats: produced.stats,
     srm: experimentSrmDiagnostics(produced.stats),
     gate: produced.gate,

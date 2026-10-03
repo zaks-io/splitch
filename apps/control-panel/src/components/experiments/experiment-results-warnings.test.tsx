@@ -15,7 +15,6 @@ describe("ExperimentResults warning states", () => {
   it("keeps every Guardrail breach visible while its station is collapsed", () => {
     const html = renderToStaticMarkup(
       <ExperimentResults
-        canConclude={true}
         onConclude={() => {}}
         metrics={metricsFixture()}
         run={runFixture()}
@@ -35,7 +34,6 @@ describe("ExperimentResults warning states", () => {
   it("never hides the numbers behind a firing SRM warning", () => {
     const html = renderToStaticMarkup(
       <ExperimentResults
-        canConclude={true}
         onConclude={() => {}}
         metrics={metricsFixture()}
         run={runFixture()}
@@ -60,7 +58,6 @@ describe("ExperimentResults warning states", () => {
   it("shows the gate's failing check without expanding a station", () => {
     const html = renderToStaticMarkup(
       <ExperimentResults
-        canConclude={true}
         onConclude={() => {}}
         metrics={metricsFixture()}
         run={runFixture()}
@@ -78,7 +75,6 @@ describe("ExperimentResults warning states", () => {
   it("blocks the ship action naming the underpowered Metric, numbers still shown", () => {
     const html = renderToStaticMarkup(
       <ExperimentResults
-        canConclude={true}
         onConclude={() => {}}
         metrics={metricsFixture()}
         run={runFixture()}
@@ -96,7 +92,6 @@ describe("ExperimentResults warning states", () => {
   it("names the Worker as the source of the refusal", () => {
     const html = renderToStaticMarkup(
       <ExperimentResults
-        canConclude={true}
         onConclude={() => {}}
         metrics={metricsFixture()}
         run={runFixture()}
@@ -134,7 +129,6 @@ describe("ExperimentResults warning states", () => {
     });
     const html = renderToStaticMarkup(
       <ExperimentResults
-        canConclude={true}
         onConclude={() => {}}
         metrics={metricsFixture()}
         run={runFixture()}
@@ -152,7 +146,6 @@ describe("Conclusion evidence", () => {
   it("requires decision evidence before offering Conclude", () => {
     const html = renderToStaticMarkup(
       <ExperimentResults
-        canConclude={true}
         onConclude={() => {}}
         metrics={metricsFixture()}
         run={runFixture()}
