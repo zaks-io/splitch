@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { StoredFlagLifecycleClassSchema, VariantSchema } from "./leaf-schemas-flag";
-import { PersistedDescriptionSchema, PersistedNameSchema } from "./persisted-field-limits";
+import { PersistedDescriptionSchema } from "./persisted-field-limits";
 
 /**
  * Flag removal brief and the optional code-removal claim on flags_delete.
@@ -55,9 +55,10 @@ export const FlagRemovalEnvironmentServingSchema = z
     /**
      * Configuration-derived Variant this Environment would keep when a single
      * Variant is determined. Null when configuration does not pin one. Not
-     * runtime telemetry.
+     * runtime telemetry. Permissive like VariantSchema.name so retained
+     * over-limit storage leaves stay readable (write bounds stay on writes).
      */
-    configurationServedVariant: PersistedNameSchema.nullable(),
+    configurationServedVariant: VariantSchema.shape.name.nullable(),
     servingEvidence: z.literal("configuration_unverified"),
     blockers: z.array(FlagRemovalServingBlockerSchema),
     /** Set when evaluation-core rejects the Configuration; null otherwise. */
@@ -77,7 +78,7 @@ export const FlagRemovalBriefResponseSchema = z
     environments: z.array(FlagRemovalEnvironmentServingSchema),
     uniformAcrossEnvironments: z.boolean(),
     /** Variant to keep in customer code when removal is configuration-safe. */
-    keepVariant: PersistedNameSchema.nullable(),
+    keepVariant: VariantSchema.shape.name.nullable(),
     removalSafe: z.boolean(),
     removalBlockers: z.array(z.string().min(1)),
     /** Real SDK / OpenFeature call shapes from packages/sdk, with this Flag key. */

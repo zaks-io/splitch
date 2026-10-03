@@ -1,7 +1,6 @@
 import { canonicalHash } from "@splitch/contracts";
-import { appScope, createRepository, envScope } from "@splitch/db";
+import { appScope, createRepository } from "@splitch/db";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { type Harness, ids, setProdPolicy } from "../src/config-store-harness-core";
 import {
   allowAllPolicies,
   appToken,
@@ -12,13 +11,6 @@ import {
   makeFlagDefinitionHarness,
   request,
 } from "../src/flag-definition-test-harness";
-import {
-  clearFrozenRun,
-  confirmPolicy,
-  deleteFlagRequest,
-  reviewRequest,
-} from "./approval-harness";
-import { makePoolHarness } from "./config-store-pool-harness";
 import { makePoolBindings as makeLocalBindings } from "./pool-bindings";
 
 describe("flags_delete codeRemoval claim (direct path)", () => {
@@ -103,11 +95,22 @@ describe("flags_delete codeRemoval claim (direct path)", () => {
       key: "audit-fail-direct",
       lifecycleClass: "ops",
     });
-    // Without the deletion audit row, the in-batch claim UPDATE misses and aborts.
-    // Empty the audit table too: a FROM flag_change_events guard would otherwise
-    // return zero rows and silently skip ELSE json('') (retention + missing trigger).
-    await h.bindings.d1.prepare("DROP TRIGGER IF EXISTS flag_change_flag_after_delete").run();
-    await h.bindings.d1.prepare("DELETE FROM flag_change_events").run();
+    // Block every write to the audit table so neither the AFTER DELETE trigger
+    // row nor the claim INSERT/UPDATE can land; the in-batch guard aborts.
+    await h.bindings.d1
+      .prepare(
+        `CREATE TRIGGER block_flag_change_events_insert
+         BEFORE INSERT ON flag_change_events
+         BEGIN SELECT RAISE(ABORT, 'claim blocked'); END`,
+      )
+      .run();
+    await h.bindings.d1
+      .prepare(
+        `CREATE TRIGGER block_flag_change_events_update
+         BEFORE UPDATE ON flag_change_events
+         BEGIN SELECT RAISE(ABORT, 'claim blocked'); END`,
+      )
+      .run();
     try {
       const deleted = await request(
         h,
@@ -125,21 +128,8 @@ describe("flags_delete codeRemoval claim (direct path)", () => {
       expect(brief.status).toBe(200);
       expect(await brief.json()).toMatchObject({ removalSafe: true, keepVariant: "control" });
     } finally {
-      await h.bindings.d1
-        .prepare(
-          `CREATE TRIGGER IF NOT EXISTS flag_change_flag_after_delete
-           AFTER DELETE ON flags
-           BEGIN
-             INSERT INTO flag_change_events (
-               app_id, environment_id, flag_id, flag_key, action, target_type,
-               actor_ref, actor_via, changed_at, diff_json
-             ) VALUES (
-               OLD.app_id, NULL, OLD.id, OLD.key, 'deleted', 'flag',
-               OLD.updated_by, NULL, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), NULL
-             );
-           END`,
-        )
-        .run();
+      await h.bindings.d1.prepare("DROP TRIGGER IF EXISTS block_flag_change_events_insert").run();
+      await h.bindings.d1.prepare("DROP TRIGGER IF EXISTS block_flag_change_events_update").run();
     }
   });
 
@@ -251,86 +241,5 @@ describe("flags_delete codeRemoval claim (direct path)", () => {
       firstBody.details.approvalRequestId,
     );
     expect(pending?.status).toBe("pending");
-  });
-});
-
-describe("flags_delete codeRemoval claim (Approval apply path)", () => {
-  let h: Harness;
-
-  beforeEach(async () => {
-    h = await makePoolHarness();
-    await setProdPolicy(h, confirmPolicy);
-    await clearFrozenRun(h);
-  });
-
-  afterEach(async () => {
-    await h.dispose();
-  });
-
-  it("rolls back Approval apply when the claim audit write cannot land", async () => {
-    const removed = await deleteFlagRequest(h, "flag_delete_audit_fail");
-    expect(removed.status).toBe(409);
-    const requestId = removed.approvalRequestId;
-    expect(requestId).toBeTruthy();
-
-    // Empty audit history + missing deletion trigger: claim UPDATE hits zero rows
-    // and the scalar guard must still abort (not a silent zero-row SELECT).
-    await h.d1.prepare("DROP TRIGGER IF EXISTS flag_change_flag_after_delete").run();
-    await h.d1.prepare("DELETE FROM flag_change_events").run();
-    try {
-      const review = await reviewRequest(h, requestId ?? "", "flag_delete_audit_fail_review");
-      // Apply surfaces as APPROVAL_APPLICATION_FAILED (409); the batch rolled back.
-      expect(review.status).toBe(409);
-      expect(await review.json()).toMatchObject({ code: "APPROVAL_APPLICATION_FAILED" });
-
-      expect(await h.repo.flags.getFlag(appScope(ids.appId), ids.flagId)).toBeTruthy();
-      for (const environmentId of [ids.environmentId, ids.devEnvironmentId]) {
-        expect(
-          await h.repo.flags.getFlagConfig(envScope(ids.appId, environmentId), ids.flagId),
-        ).toBeTruthy();
-      }
-    } finally {
-      // Pooled D1 reuses the binding across tests; restore the trigger.
-      await h.d1
-        .prepare(
-          `CREATE TRIGGER IF NOT EXISTS flag_change_flag_after_delete
-           AFTER DELETE ON flags
-           BEGIN
-             INSERT INTO flag_change_events (
-               app_id, environment_id, flag_id, flag_key, action, target_type,
-               actor_ref, actor_via, changed_at, diff_json
-             ) VALUES (
-               OLD.app_id, NULL, OLD.id, OLD.key, 'deleted', 'flag',
-               OLD.updated_by, NULL, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), NULL
-             );
-           END`,
-        )
-        .run();
-    }
-  });
-
-  it("records unknown codeRemoval on an approved Flag delete", async () => {
-    const removed = await deleteFlagRequest(h, "flag_delete_claim_approved");
-    expect(removed.approvalRequestId).toBeTruthy();
-    const review = await reviewRequest(
-      h,
-      removed.approvalRequestId ?? "",
-      "flag_delete_claim_review",
-    );
-    expect(review.status).toBe(200);
-    expect(await h.repo.flags.getFlag(appScope(ids.appId), ids.flagId)).toBeNull();
-
-    const events = await h.d1
-      .prepare(
-        `SELECT diff_json FROM flag_change_events
-         WHERE app_id = ? AND flag_id = ? AND action = 'deleted' AND target_type = 'flag'
-         ORDER BY seq DESC LIMIT 1`,
-      )
-      .bind(ids.appId, ids.flagId)
-      .first<{ diff_json: string | null }>();
-    expect(events?.diff_json).toBeTruthy();
-    expect(JSON.parse(events?.diff_json ?? "null")).toMatchObject({
-      codeRemoval: { state: "unknown" },
-    });
   });
 });

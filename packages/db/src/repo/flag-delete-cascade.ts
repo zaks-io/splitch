@@ -64,7 +64,7 @@ export function makeDeleteFlagCascade(db: Db, flagInScope: FlagInScope) {
       ...(approval
         ? [appliedReviewInsert(db, scope, approval), appliedRequestUpdate(db, scope, approval)]
         : []),
-      ...codeRemovalClaimBatchStatements(db, scope, flagId, codeRemoval),
+      ...codeRemovalClaimBatchStatements(db, scope, flag, codeRemoval),
     ];
     await db.batch(batch as unknown as Parameters<Db["batch"]>[0]);
     return approval ? (await flagInScope(scope, flagId)) === null : true;
