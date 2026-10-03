@@ -86,9 +86,7 @@ export function balancedEntities(
   return entities;
 }
 
-export function entityKey(
-  entity: Pick<CohortEntitySpec, "variant" | "dayOffset" | "index">,
-): string {
+function entityKey(entity: Pick<CohortEntitySpec, "variant" | "dayOffset" | "index">): string {
   return `${entity.variant}_${entity.dayOffset}_${entity.index}`;
 }
 
