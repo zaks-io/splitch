@@ -5,7 +5,7 @@ import { action, env, internalAction, internalMutation, internalQuery } from "./
 import { canonicalCallbackUrl } from "./callback_url";
 import { randomSecret } from "./crypto";
 import { purgeBatchHandler, revokeLocalHandler, uninstallHandler } from "./integration_cleanup";
-import { initializeHandler } from "./integration_initialize";
+import { initializeHandler, installCallbackUrl } from "./integration_initialize";
 import { activateHandler, recoverSyncHandler } from "./integration_recovery";
 import {
   installRejected,
@@ -61,13 +61,16 @@ export const install = action({
     environmentVersion: number;
     status: "active" | "revoked";
   }> => {
-    const cloudUrl = process.env.CONVEX_CLOUD_URL;
-    if (!cloudUrl) throw new Error("CONVEX_CLOUD_URL is required to install @splitch/convex");
-    const siteUrl = process.env.CONVEX_SITE_URL;
-    if (!siteUrl) throw new Error("CONVEX_SITE_URL is required to install @splitch/convex");
     const endpoint = normalizedEndpoint(env.SPLITCH_ENDPOINT ?? DEFAULT_ENDPOINT);
     const headers = requestHeaders();
-    const callbackUrl = canonicalCallbackUrl(cloudUrl, siteUrl);
+    const existing = await ctx.runQuery(internal.integration.get, {});
+    const callbackUrl = installCallbackUrl(existing, () => {
+      const cloudUrl = process.env.CONVEX_CLOUD_URL;
+      if (!cloudUrl) throw new Error("CONVEX_CLOUD_URL is required to install @splitch/convex");
+      const siteUrl = process.env.CONVEX_SITE_URL;
+      if (!siteUrl) throw new Error("CONVEX_SITE_URL is required to install @splitch/convex");
+      return canonicalCallbackUrl(cloudUrl, siteUrl);
+    });
     const initialized = await ctx.runMutation(internal.integration.initialize, {
       installationId: crypto.randomUUID(),
       webhookSecret: randomSecret(),

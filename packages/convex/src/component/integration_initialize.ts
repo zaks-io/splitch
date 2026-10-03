@@ -1,3 +1,4 @@
+import type { Doc } from "./_generated/dataModel";
 import type { MutationCtx } from "./_generated/server";
 import { isCanonicalCallbackUrl } from "./callback_url";
 import { CURRENT_KEY } from "./integration_state";
@@ -10,14 +11,21 @@ interface InitializeArgs {
   endpoint: string;
 }
 
+function needsCallbackRepair(existing: Doc<"integrations">): boolean {
+  return existing.state === "pending" && !isCanonicalCallbackUrl(existing.callbackUrl);
+}
+
+export function installCallbackUrl(
+  existing: Doc<"integrations"> | null,
+  derive: () => string,
+): string {
+  return existing && !needsCallbackRepair(existing) ? existing.callbackUrl : derive();
+}
+
 export async function initializeHandler(ctx: MutationCtx, args: InitializeArgs) {
   const existing = await currentIntegration(ctx);
   if (existing) {
-    if (
-      existing.state === "pending" &&
-      existing.callbackUrl !== args.callbackUrl &&
-      !isCanonicalCallbackUrl(existing.callbackUrl)
-    ) {
+    if (needsCallbackRepair(existing) && existing.callbackUrl !== args.callbackUrl) {
       await ctx.db.patch(existing._id, { callbackUrl: args.callbackUrl });
       return currentIntegration(ctx);
     }

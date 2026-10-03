@@ -38,17 +38,17 @@ Keep the API Key in [Convex environment variables](https://docs.convex.dev/produ
 It stays in the deployment environment and must never reach browser code. The configuration callback
 is served at `/integrations/splitch/configuration`.
 
-The component builds the callback it registers from both Convex automatic URLs: the deployment name
-from `CONVEX_CLOUD_URL` and the mounted path from `CONVEX_SITE_URL`. A
-[custom domain](https://docs.convex.dev/production/custom-domains) on HTTP Actions needs no change,
-because the callback still resolves to the `*.convex.site` origin Splitch accepts.
+On a first install, the component builds the callback from both Convex automatic URLs: the
+deployment name from `CONVEX_CLOUD_URL` and the mounted path from `CONVEX_SITE_URL`. It
+registers a canonical `*.convex.site` origin, even when HTTP Actions use a custom domain.
+The cloud URL must be the default `https://<deployment>.convex.cloud` URL for this derivation.
 
-Convex implements a custom domain for the Convex API by overriding `CONVEX_CLOUD_URL`, which removes
-the deployment name the component reads. `install()` throws there rather than registering a callback
-Splitch would reject, so a deployment that overrides `CONVEX_CLOUD_URL` cannot install
-`@splitch/convex`. Overriding `CONVEX_SITE_URL` is fine. Because `install()` is also the upgrade
-entrypoint, a deployment that adds the override after installing meets this on its next upgrade
-rather than on a first install.
+On an upgrade, `install()` reuses the callback already stored with an active or revoked
+installation, or a pending installation whose callback is canonical. This lets an existing
+installation continue to upgrade after both Convex URLs are changed to custom domains. A first
+install, an install after local state is purged, or repair of a pending noncanonical callback
+still needs the default cloud URL. `install()` refuses those cases if `CONVEX_CLOUD_URL` uses a
+custom domain, rather than registering a callback Splitch would reject.
 
 The component also accepts an optional `SPLITCH_ENDPOINT` to point at a non-production splitch edge;
 it defaults to `https://edge.splitch.dev`.
