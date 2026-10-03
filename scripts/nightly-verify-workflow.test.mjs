@@ -27,6 +27,10 @@ test("nightly verify forces execution and rewrites signed cache entries", () => 
   assert.doesNotMatch(workflow, /Install Tinybird CLI|tinybird\.co/);
 });
 
+test("nightly verify checks out the cli-v* tags the request-contract gate anchors on", () => {
+  assert.match(workflow, /actions\/checkout@[0-9a-f]{40} # v[\d.]+\n\s+with:\n\s+fetch-depth: 0/);
+});
+
 test("nightly verify is signal-only and cannot mutate anything", () => {
   assert.match(workflow, /permissions:\n {2}contents: read/);
   assert.doesNotMatch(workflow, /deploy|secrets: inherit|CLOUDFLARE_API_TOKEN/);
