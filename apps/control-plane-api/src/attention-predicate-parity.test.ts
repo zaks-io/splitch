@@ -6,10 +6,10 @@ import { makeAttentionRollupHandler } from "./attention-rollup";
 import { panelExperimentsList } from "./panel-experiments";
 import {
   analysisEnvelope,
+  statsOutput as buildStatsOutput,
   experimentRow,
   type PanelExperimentIds,
   runRow,
-  statsOutput as buildStatsOutput,
 } from "./panel-experiments-test-fixtures";
 
 const APP_ID = "app_parity";
@@ -126,7 +126,12 @@ function panelExperimentsRepo(): Repository {
     experiments: {
       listExperiments: vi.fn(async () => [experimentRow(ids)]),
       getExperiment: vi.fn(async () => experimentRow(ids)),
+      getRun: vi.fn(async () => runRow(ids, 2)),
       listRunsForExperiment: vi.fn(async () => [runRow(ids, 1), runRow(ids, 2)]),
+    },
+    runSrmAlarms: {
+      listForRun: vi.fn(async () => []),
+      insertIgnore: vi.fn(async () => undefined),
     },
   } as unknown as Repository;
 }

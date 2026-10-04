@@ -6,7 +6,6 @@ import {
   installed as installedAt,
   snapshotAt,
 } from "../testing/fake-convex-test-helpers";
-import { canonicalJson, sha256Hex } from "./crypto";
 import { evaluateHandler, peekHandler } from "./evaluation";
 import { activateHandler, markSyncOverdueHandler, SYNC_DEADLINE_MS } from "./integration_recovery";
 import { announceHandler, commitSnapshotHandler } from "./integration_sync";
@@ -38,34 +37,36 @@ describe("Convex sync grace", () => {
     });
   });
 
-  it("persists one Exposure from the held Run across idempotent evaluate retries", async () => {
+  it("leaves a fresh Entity unclaimed until the announced Run snapshot commits", async () => {
     const convex = installed(7);
     await announce(convex, 8);
 
     const first = await evaluateHandler(convex.ctx, { ...args, idempotencyKey: "once" });
     const retry = await evaluateHandler(convex.ctx, { ...args, idempotencyKey: "once" });
 
-    expect(first.reason).toBe("STALE");
+    expect(first).toMatchObject({ reason: "ERROR", errorCode: "PROVIDER_NOT_READY" });
     expect(retry).toEqual(first);
-    const outbox = convex.rows("exposureOutbox");
-    expect(outbox).toHaveLength(1);
-    expect(outbox[0]).toMatchObject({ runId: "run_1", variantName: first.variantName });
-    const heldFingerprint = await sha256Hex(
-      canonicalJson({
-        flagKey: args.flagKey,
-        context: args.context,
-        defaultValue: args.defaultValue,
-        snapshotVersion: 7,
-      }),
-    );
-    expect(convex.rows("evaluationClaims")).toEqual([
-      expect.objectContaining({ idempotencyKey: "once", fingerprint: heldFingerprint }),
-    ]);
+    expect(convex.rows("exposureOutbox")).toHaveLength(0);
+    expect(convex.rows("evaluationClaims")).toHaveLength(0);
+    expect(convex.rows("assignments")).toHaveLength(0);
 
-    await convex.advance(SYNC_DEADLINE_MS);
-    const overdueRetry = await evaluateHandler(convex.ctx, { ...args, idempotencyKey: "once" });
-    expect(overdueRetry).toEqual(first);
-    expect(convex.rows("exposureOutbox")).toHaveLength(1);
+    const next = snapshotAt(8);
+    next.experiments = next.experiments.map((experiment) => ({
+      ...experiment,
+      liveRunId: "run_2",
+    }));
+    next.runs = next.runs.map((run) => ({ ...run, id: "run_2", configHash: "sha256:run-2" }));
+    await commitSnapshotHandler(convex.ctx, { payload: JSON.stringify(next) });
+    const fresh = await evaluateHandler(convex.ctx, { ...args, idempotencyKey: "once" });
+    const replay = await evaluateHandler(convex.ctx, { ...args, idempotencyKey: "once" });
+    expect(fresh.reason).toBe("SPLIT");
+    expect(replay).toEqual(fresh);
+    expect(convex.rows("exposureOutbox")).toEqual([
+      expect.objectContaining({ runId: "run_2", variantName: fresh.variantName }),
+    ]);
+    expect(convex.rows("assignments")).toEqual([
+      expect.objectContaining({ runId: "run_2", variant: fresh.variantName }),
+    ]);
   });
 
   it("fails loud with the Default Variant once the deadline passes behind", async () => {
@@ -91,6 +92,39 @@ describe("Convex sync grace", () => {
     expect(convex.rows("evaluationClaims")).toHaveLength(0);
     expect(convex.rows("exposureOutbox")).toHaveLength(0);
   });
+
+  it("continues serving an existing holdover during grace without another Exposure", async () => {
+    const convex = installed(7);
+    const first = await evaluateHandler(convex.ctx, { ...args, idempotencyKey: "before" });
+    await announce(convex, 8);
+    const held = await evaluateHandler(convex.ctx, { ...args, idempotencyKey: "during" });
+    expect(held).toEqual({ value: first.value, variantName: first.variantName, reason: "STALE" });
+    expect(convex.rows("assignments")).toHaveLength(1);
+    expect(convex.rows("exposureOutbox")).toHaveLength(1);
+  });
+
+  it("allows a non-exposing Flag evaluation during grace", async () => {
+    const convex = installed(7);
+    const snapshot = snapshotAt(7);
+    await commitSnapshotHandler(convex.ctx, {
+      payload: JSON.stringify({
+        ...snapshot,
+        flags: snapshot.flags.map((flag) => ({ ...flag, experimentId: null })),
+        experiments: [],
+        runs: [],
+      }),
+    });
+    await announce(convex, 8);
+    const result = await evaluateHandler(convex.ctx, { ...args, idempotencyKey: "flag-only" });
+    expect(result.reason).toBe("STALE");
+    expect(convex.rows("assignments")).toHaveLength(0);
+    expect(convex.rows("exposureOutbox")).toHaveLength(0);
+  });
+});
+
+describe("Convex sync grace recovery", () => {
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => vi.useRealTimers());
 
   it("keeps the deadline a no-op when the snapshot commits in time", async () => {
     const convex = installed(7);
