@@ -91,6 +91,7 @@ export function workerSentryOptions(
     environment: secrets.environment,
     release: env.SENTRY_RELEASE,
     tracesSampleRate: 1,
+    propagateTraceparent: true,
     enableRpcTracePropagation: true,
     /**
      * Sentry continues an incoming trace from `sentry-trace`/`baggage` by default,

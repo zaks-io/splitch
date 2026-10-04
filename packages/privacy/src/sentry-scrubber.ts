@@ -79,6 +79,7 @@ export function scrubSentryEvent<T extends SentryEventLike>(
 function scrubEventField(key: string, value: unknown, options: ScrubOptions): unknown {
   if (ALLOWED_TOP_LEVEL_KEYS.has(key)) return value;
   if (key === "user") return scrubUser(value, options);
+  if (key === "contexts") return scrubContexts(value, options, false);
   return scrubValue(value, options);
 }
 
@@ -225,7 +226,7 @@ export function scrubSentryTransaction<T extends SentryEventLike>(
     if (ALLOWED_TRANSACTION_KEYS.has(key)) {
       output[key] = value;
     } else if (key === "contexts") {
-      output[key] = scrubTransactionContexts(value, options);
+      output[key] = scrubContexts(value, options, true);
     } else {
       output[key] = scrubEventField(key, value, options);
     }
@@ -234,17 +235,27 @@ export function scrubSentryTransaction<T extends SentryEventLike>(
 }
 
 /**
- * Only `contexts.trace` went through `beforeSendSpan`. Sibling contexts
- * (`response`, `runtime`, anything an integration adds later) never did, so they
- * take the ordinary scrub.
+ * Transaction trace contexts already passed through `beforeSendSpan`; error
+ * trace contexts need the same structural allow-list so PII value patterns do
+ * not corrupt trace IDs. Sibling contexts still take the ordinary scrub.
  */
-function scrubTransactionContexts(contexts: unknown, options: ScrubOptions): unknown {
+function scrubContexts(
+  contexts: unknown,
+  options: ScrubOptions,
+  traceAlreadyScrubbed: boolean,
+): unknown {
   if (typeof contexts !== "object" || contexts === null || Array.isArray(contexts)) {
     return scrubValue(contexts, options);
   }
   const output: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(contexts as Record<string, unknown>)) {
-    output[key] = key === "trace" ? value : scrubValue(value, options);
+    if (key === "trace" && typeof value === "object" && value !== null && !Array.isArray(value)) {
+      output[key] = traceAlreadyScrubbed
+        ? value
+        : scrubSentrySpan(value as SentryEventLike, options);
+    } else {
+      output[key] = scrubValue(value, options);
+    }
   }
   return output;
 }
