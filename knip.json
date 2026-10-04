@@ -1,6 +1,6 @@
 {
   "$schema": "https://unpkg.com/knip@6/schema.json",
-  "ignoreBinaries": ["gitleaks", "tb"],
+  "ignoreBinaries": ["gitleaks", "tb", "tailscale"],
   "ignoreDependencies": ["cloudflare"],
   "stryker": {
     "config": ["stryker.base.mjs", "packages/*/stryker.config.mjs"]
