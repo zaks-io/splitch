@@ -130,10 +130,13 @@ export const completeCheckout = mutation({
 call falls back to; a resolution that could not be computed reports `reason: "ERROR"` with its
 `errorCode` rather than returning a plausible value.
 
-When Splitch announces a newer configuration version, evaluation keeps serving the last synced
-snapshot with `reason: "STALE"` for up to five seconds while the component pulls the new one. If the
-pull has not landed by then, results report `reason: "ERROR"` with `errorCode: "PROVIDER_NOT_READY"`
-and the Default Variant until it does. Evaluation never throws because a sync is in progress.
+When Splitch announces a newer configuration version, peeks and existing holdovers keep serving the
+last synced snapshot with `reason: "STALE"` for up to five seconds while the component pulls the new
+one. A fresh live-Run evaluation reports `reason: "ERROR"` with `errorCode: "PROVIDER_NOT_READY"`
+until sync completes: the old Run may already have ended. That refusal writes no assignment or
+Exposure, so the same idempotency key can retry safely. If the pull has not landed by the deadline,
+new evaluations also return the Default Variant with the same error. Evaluation never throws
+because a sync is in progress.
 
 ## Metric Events
 

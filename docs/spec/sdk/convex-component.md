@@ -191,11 +191,14 @@ Action never replaces good state with a partial or older snapshot.
 
 When `snapshot.environmentVersion < announcedVersion`, evaluation never throws:
 
-- **Sync grace.** Until the deadline below, `peek` and `evaluate` serve the last validated
-  snapshot's real Variant with `reason: STALE`. `evaluate` persists Exposures from the held snapshot
-  as usual, because they record what was actually served, and its idempotency fingerprint carries
-  the held `snapshotVersion`. An idempotent replay while the snapshot is behind keeps its Variant
-  and single Exposure and reports `STALE`.
+- **Sync grace.** Until the deadline below, `peek` serves the last validated snapshot's real Variant
+  with `reason: STALE`. `evaluate` may replay an existing holdover or idempotency claim, and may
+  resolve a Flag without creating an Exposure, with the same stale diagnostic. A fresh live-Run
+  Assignment instead returns the caller's Default Variant with `reason: ERROR` and
+  `errorCode: PROVIDER_NOT_READY`: the announced change may have ended the held Run, so its
+  commit-time Exposure would be permanently refused by Run-window validation. This refusal stores
+  no holdover, idempotency claim, or Exposure; the same key can retry after sync. An idempotent
+  replay while the snapshot is behind keeps its Variant and single Exposure and reports `STALE`.
 - **Sync overdue.** Five seconds after an announcement or activation, a scheduled Mutation scoped to
   that installation and version marks the installation sync-overdue if the snapshot is still behind
   that version.

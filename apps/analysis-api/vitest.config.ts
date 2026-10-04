@@ -35,6 +35,7 @@ export default defineConfig({
     ],
   },
   test: {
+    setupFiles: ["./src/test-clock.ts"],
     include: ["src/**/*.{test,spec}.ts"],
     passWithNoTests: true,
   },
