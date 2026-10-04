@@ -140,6 +140,22 @@ Selector notes, from Sentry's advanced data scrubbing docs:
 The org-level "Require Data Scrubber", "Require Using Default Scrubbers", and "Prevent Storing of IP
 Addresses" toggles are off because they would apply to every project in the `zaksio` org.
 
+## Cloudflare telemetry export
+
+All eight hosted Splitch Workers export native traces to `axiom-traces` and
+`sentry-splitch-traces`, and native logs to `axiom-logs`. Declare these destination names in each
+Worker's local, shared-preview, and production Wrangler configuration so a deployment preserves the
+routing. Endpoint URLs and authentication headers belong to the account-level Cloudflare destinations;
+Worker configuration contains only destination names.
+
+Native Cloudflare telemetry does not pass through the application Sentry scrubber. Set
+`observability.redact_query_string: true` on every target to remove query strings from native request
+URLs before export. Keep both signals enabled, their existing sampling rate of `1`, and
+`persist: false` so Cloudflare does not also retain them.
+
+See [Cloudflare OpenTelemetry export](https://developers.cloudflare.com/workers/observability/exporting-opentelemetry-data/)
+and [Worker settings](https://developers.cloudflare.com/api/resources/workers/subresources/scripts/subresources/settings/methods/edit/).
+
 ## Axiom structured logs
 
 Axiom receives structured log events (request traces, query patterns, error counts). Rules:

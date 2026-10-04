@@ -19,6 +19,7 @@ const WORKER_WRANGLER_PATHS = {
 
 const OBSERVABILITY_TARGETS = ["local", "shared-preview", "production"] as const;
 const AXIOM_TRACE_DESTINATION = "axiom-traces";
+const SENTRY_TRACE_DESTINATION = "sentry-splitch-traces";
 const AXIOM_LOG_DESTINATION = "axiom-logs";
 const SENTRY_DSN =
   "https://3ab6a31eedba4a3aff8720d2b4442368@o4509987229859840.ingest.us.sentry.io/4511677909762048";
@@ -42,6 +43,7 @@ const WORKER_SECRET_SYNC_NAMES = [
 interface WranglerTarget {
   upload_source_maps?: boolean;
   observability?: {
+    redact_query_string?: boolean;
     traces?: {
       enabled?: boolean;
       destinations?: string[];
@@ -172,15 +174,19 @@ describe("Worker Wrangler Cloudflare Observability destinations", () => {
     const config = readWranglerConfig(join(repoRoot, wranglerPath));
 
     it.each(wranglerTargets(config))(
-      `${surfaceId} exports %s telemetry to Axiom destinations`,
+      `${surfaceId} exports %s traces to Axiom and Splitch Sentry, and logs to Axiom`,
       (_target, target) => {
+        expect(target?.observability?.redact_query_string).toBe(true);
         expect(target?.observability?.traces?.enabled).toBe(true);
-        expect(target?.observability?.traces?.destinations).toContain(AXIOM_TRACE_DESTINATION);
+        expect(target?.observability?.traces?.destinations).toEqual([
+          AXIOM_TRACE_DESTINATION,
+          SENTRY_TRACE_DESTINATION,
+        ]);
         expect(target?.observability?.traces?.persist).toBe(false);
         expect(target?.observability?.traces?.head_sampling_rate).toBe(1);
 
         expect(target?.observability?.logs?.enabled).toBe(true);
-        expect(target?.observability?.logs?.destinations).toContain(AXIOM_LOG_DESTINATION);
+        expect(target?.observability?.logs?.destinations).toEqual([AXIOM_LOG_DESTINATION]);
         expect(target?.observability?.logs?.persist).toBe(false);
         expect(target?.observability?.logs?.head_sampling_rate).toBe(1);
       },
