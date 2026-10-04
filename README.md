@@ -300,6 +300,7 @@ from `package.json`).
 pnpm install
 pnpm dev            # every Worker (wrangler) and frontend (vite), in parallel
 pnpm dev:api        # just the API Workers and the MCP server
+pnpm dev:panel      # a seeded, sign-in-ready Control Panel at http://127.0.0.1:18800 (no WorkOS)
 pnpm test           # the full test suite
 pnpm verify:push    # the push gate (lint, typecheck, knip, format, secrets, D1 migrations, Tinybird)
 ```
