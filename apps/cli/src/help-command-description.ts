@@ -1,5 +1,6 @@
 import { deriveMcpTools } from "@splitch/sdk/control-plane";
 import type { CliCommandDefinition } from "./command-registry.js";
+import { personalAccessTokenDescription } from "./personal-access-token-help.js";
 
 export const toolByOperation = new Map(deriveMcpTools().map((tool) => [tool.name, tool]));
 
@@ -18,7 +19,11 @@ export function commandDescription(command: CliCommandDefinition): string {
   if (command.kind === "flag_targeting_rules_add") {
     return "Append one equality Targeting Rule: serve a Variant when attributes match.";
   }
-  return toolByOperation.get(command.operationId)?.description ?? `Run ${command.operationId}.`;
+  return (
+    personalAccessTokenDescription(command.operationId) ??
+    toolByOperation.get(command.operationId)?.description ??
+    `Run ${command.operationId}.`
+  );
 }
 
 /** Group listings stay one narrative; Formats/Terms/examples live on `--help`. */

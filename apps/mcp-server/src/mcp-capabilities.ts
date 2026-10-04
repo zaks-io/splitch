@@ -1,5 +1,6 @@
 import {
   deriveMcpTools,
+  getRoute,
   getRouteMembershipGate,
   membershipGatePatterns,
   scopeSatisfiesMembershipGate,
@@ -7,6 +8,12 @@ import {
 export interface McpEffectiveAuthority {
   readonly scopes: readonly string[];
   readonly membershipWideRead: boolean;
+  /** Present for a Personal Access Token: mutations are limited to its write grants. */
+  readonly personalAccessToken?: {
+    readonly id: string;
+    readonly writeScopes: readonly string[];
+    readonly writeAll: boolean;
+  };
 }
 
 interface McpToolCapability {
@@ -17,6 +24,7 @@ interface McpToolCapability {
 
 interface McpCapabilitiesResource {
   readonly scopes: readonly string[];
+  readonly personalAccessToken?: McpEffectiveAuthority["personalAccessToken"];
   readonly tools: readonly McpToolCapability[];
 }
 
@@ -25,7 +33,7 @@ export function buildCapabilitiesResource(
 ): McpCapabilitiesResource {
   const tools = deriveMcpTools().map((tool) => {
     const gate = membershipGatePatterns(getRouteMembershipGate(tool.name));
-    const scopeGrants = authority.scopes.filter((scope) =>
+    const scopeGrants = grantingScopes(authority, tool.name).filter((scope) =>
       gate.some((pattern) => scopeSatisfiesMembershipGate(scope, pattern)),
     );
     return {
@@ -37,5 +45,24 @@ export function buildCapabilitiesResource(
           : scopeGrants,
     };
   });
-  return { scopes: [...authority.scopes], tools };
+  return {
+    scopes: [...authority.scopes],
+    ...(authority.personalAccessToken
+      ? { personalAccessToken: authority.personalAccessToken }
+      : {}),
+    tools,
+  };
+}
+
+/**
+ * The scopes that may grant one tool. A Personal Access Token's mutating calls
+ * are narrowed to its write grants, and a mutation naming no Organization or App
+ * needs a read-write `all` grant, so the resource must not advertise more.
+ */
+function grantingScopes(authority: McpEffectiveAuthority, toolName: string): readonly string[] {
+  const token = authority.personalAccessToken;
+  const route = getRoute(toolName);
+  if (!token || route?.effects.mutates === false) return authority.scopes;
+  const targeted = /:(orgId|appId)\b/.test(route?.path ?? "");
+  return targeted || token.writeAll ? token.writeScopes : [];
 }

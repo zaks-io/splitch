@@ -11,6 +11,7 @@ import { makeFlagChangeEventRepo } from "./flag-change-events";
 import { makeFlagHealthReads } from "./flag-health-reads";
 import { makeFlagRepo } from "./flags";
 import { makeIdentityRepo } from "./identity";
+import { makePersonalAccessTokenRepo } from "./personal-access-tokens";
 import { makePrivacyRepo } from "./privacy";
 import { makeRunSrmAlarmRepo } from "./run-srm-alarms";
 import { makeSentryIntegrationRepo } from "./sentry-integrations";
@@ -44,6 +45,7 @@ export function createRepository(d1: D1Database) {
     flagChangeEvents: makeFlagChangeEventRepo(d1, db),
     claim: makeClaimStateRepo(d1),
     identity: makeIdentityRepo(db, d1),
+    personalAccessTokens: makePersonalAccessTokenRepo(db),
     privacy: makePrivacyRepo(db, d1),
     approvals: makeApprovalRepo(db, d1),
     runSrmAlarms: makeRunSrmAlarmRepo(db, d1),

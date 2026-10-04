@@ -1,7 +1,7 @@
 import {
   accessTokenIssuedAt,
   type AuthDoor,
-  AuthDoorSchema,
+  accessTokenAuthDoorFromClaim,
   isCanonicalHeldScopes,
   type McpDelegationActor,
 } from "@splitch/contracts";
@@ -20,6 +20,10 @@ export interface McpAccessTokenActor {
   authDoor: AuthDoor;
   demoExpiresAt?: string;
   issuedAt?: number;
+  /** Set only for a Personal Access Token; the Control Plane re-reads its grants. */
+  personalAccessTokenId?: string;
+  /** SHA-256 hex of the presented PAT secret; checked against the D1 row. */
+  personalAccessTokenHash?: string;
 }
 
 interface Jwks {
@@ -40,6 +44,12 @@ export function delegationActor(actor: McpAccessTokenActor): McpDelegationActor 
     scopes: actor.scopes,
     authDoor: actor.authDoor,
     ...(actor.liveMembership ? { liveMembership: true } : {}),
+    ...(actor.personalAccessTokenId && actor.personalAccessTokenHash
+      ? {
+          personalAccessTokenId: actor.personalAccessTokenId,
+          personalAccessTokenHash: actor.personalAccessTokenHash,
+        }
+      : {}),
   };
 }
 
@@ -192,8 +202,7 @@ function actorFromClaims(
 function transportFromClaims(
   claims: Record<string, unknown>,
 ): Pick<McpAccessTokenActor, "authDoor" | "demoExpiresAt"> | null {
-  const parsed = AuthDoorSchema.safeParse(claims.auth_door);
-  const authDoor = parsed.success ? parsed.data : "anonymous";
+  const authDoor = accessTokenAuthDoorFromClaim(claims.auth_door);
   const demoExpiresAt =
     typeof claims.demo_expires_at === "string" && claims.demo_expires_at.length > 0
       ? claims.demo_expires_at

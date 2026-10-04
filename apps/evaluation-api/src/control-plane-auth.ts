@@ -1,7 +1,7 @@
 import {
   accessTokenIssuedAt,
   type AuthDoor,
-  AuthDoorSchema,
+  accessTokenAuthDoorFromClaim,
   readAccessTokenRevocation,
 } from "@splitch/contracts";
 import { type AuthResolver, remoteJwksSignatureVerifier } from "@splitch/worker-runtime";
@@ -160,7 +160,7 @@ function evaluationActorFromClaims(
   return {
     sub: payload.sub,
     scopes: Array.isArray(payload.scopes) ? payload.scopes.filter(isString) : [],
-    authDoor: AuthDoorSchema.safeParse(payload.auth_door).data ?? "anonymous",
+    authDoor: accessTokenAuthDoorFromClaim(payload.auth_door),
     ...accessTokenIssuedAt(payload),
   };
 }

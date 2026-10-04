@@ -26,6 +26,11 @@ export interface ParsedGlobalFlags {
   readonly rollout?: number | null;
   readonly idempotencyKey?: string;
   readonly outputFile?: string;
+  /** Personal Access Token grants, `<all|org:org_…|app:app_…>:<role>:<read|read-write>`. */
+  readonly grant: readonly string[];
+  readonly secretFormat?: string;
+  readonly envVar?: string;
+  readonly append: boolean;
   readonly when: readonly string[];
   readonly serve?: string;
   readonly wranglerEnv?: string;
@@ -46,7 +51,7 @@ export interface ParsedInvocation {
 
 const META_COMMANDS = new Set(["login", "logout", "use", "context", "health"]);
 
-const BOOLEAN_FLAGS = new Set(["json", "confirm", "help", "dryRun", "force", "summary"]);
+const BOOLEAN_FLAGS = new Set(["json", "confirm", "help", "dryRun", "force", "summary", "append"]);
 
 /**
  * Every flag the CLI reads, keyed as it appears after `toCamel`.
@@ -78,12 +83,15 @@ const KNOWN_FLAGS = new Set([
   "rollout",
   "idempotencyKey",
   "outputFile",
+  "grant",
+  "secretFormat",
+  "envVar",
   "when",
   "serve",
   "wranglerEnv",
 ]);
 
-const REPEATABLE_FLAGS = new Set(["when"]);
+const REPEATABLE_FLAGS = new Set(["when", "grant"]);
 
 type ParsedFlagValue = string | boolean | string[];
 
@@ -251,6 +259,10 @@ function toParsedFlags(
     rollout: parseRolloutFlag(flags.rollout),
     idempotencyKey: stringFlag(flags.idempotencyKey),
     outputFile: stringFlag(flags.outputFile),
+    grant: Array.isArray(flags.grant) ? flags.grant : [],
+    secretFormat: stringFlag(flags.secretFormat),
+    envVar: stringFlag(flags.envVar),
+    append: Boolean(flags.append),
     when: Array.isArray(flags.when) ? flags.when : [],
     serve: stringFlag(flags.serve),
     wranglerEnv: stringFlag(flags.wranglerEnv),

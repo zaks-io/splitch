@@ -52,6 +52,17 @@ export interface Principal {
   /** Membership scopes were resolved live after a signed MCP delegation was validated. */
   liveMembership?: true;
   /**
+   * Present when a Personal Access Token authenticated the MCP call. `scopes`
+   * above are its read authority (live membership clamped by its grants). The
+   * guard narrows a mutating operation to `writeScopes`, and a mutation that
+   * names no Organization or App in its path additionally needs `writeAll`.
+   */
+  personalAccessToken?: {
+    id: string;
+    writeScopes: readonly string[];
+    writeAll: boolean;
+  };
+  /**
    * Which door minted this credential, when the auth kind carries one. `null`
    * for kinds with no door concept (public, Client Key, API Key) — those are
    * never provisional, so a handler asking "is this principal provisional?"

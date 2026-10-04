@@ -84,10 +84,31 @@ export function publicSurfaceFor(route: Pick<RouteContract, "auth">): PublicSurf
  * principal is unclaimed. Authorization that must distinguish "authenticated"
  * from "merely reachable" branches on this, not on scopes (a provisional
  * principal holds real Org scopes for its own demo workspace).
+ *
+ * `personal_access_token` is never a JWT claim: only the MCP Worker's Personal
+ * Access Token verifier produces it, and only on a live-membership delegation
+ * that names the token id.
  */
-export const authDoors = ["id_jag", "anonymous", "device_flow", "client_credentials"] as const;
+export const authDoors = [
+  "id_jag",
+  "anonymous",
+  "device_flow",
+  "client_credentials",
+  "personal_access_token",
+] as const;
 export const AuthDoorSchema = z.enum(authDoors);
 export type AuthDoor = z.infer<typeof AuthDoorSchema>;
+
+/**
+ * The door a signed access-token JWT claims, failing CLOSED to the provisional
+ * door. No issuer mints `personal_access_token` as a JWT claim (only the MCP
+ * PAT verifier produces that door), so a JWT carrying it is read the same as an
+ * unrecognized door.
+ */
+export function accessTokenAuthDoorFromClaim(claim: unknown): AuthDoor {
+  const parsed = AuthDoorSchema.safeParse(claim);
+  return parsed.success && parsed.data !== "personal_access_token" ? parsed.data : "anonymous";
+}
 
 export function isProvisionalAuthDoor(door: AuthDoor | null): boolean {
   return door === "anonymous";

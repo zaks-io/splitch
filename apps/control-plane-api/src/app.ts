@@ -40,6 +40,7 @@ import { mountLiveUpdateRoute } from "./live-updates";
 import { makeMetricSegmentHandlers } from "./metric-segment-handlers";
 import type { MemberProfileResolver } from "./org-handlers";
 import { makePathSelectorResolver } from "./path-selector-resolution";
+import { mountPersonalAccessTokenRoutes } from "./personal-access-token-handlers";
 import { getPrincipalCapabilities } from "./principal-capabilities-handler";
 import { controlPlaneRoute } from "./routes";
 import type { SentryHandlerDeps } from "./sentry-handlers";
@@ -80,6 +81,8 @@ export interface AppDeps {
   rateLimiter: RateLimiter;
   repo: Repository;
   credentialStore?: KVNamespace;
+  /** SESSION_STORE; the MCP Worker authenticates Personal Access Tokens from it. */
+  personalAccessTokenStore?: KVNamespace;
   credentialCacheWriter?: CredentialCacheWriterAccess;
   configStore?: ConfigStoreAccess;
   eventDefinitionStore?: KVNamespace;
@@ -286,6 +289,14 @@ export function createApp(deps: AppDeps): Hono {
   registrar.mount(app, controlPlaneRoute("api_keys_list"), credentialHandlers.listApiKeys);
   registrar.mount(app, controlPlaneRoute("api_keys_create"), credentialHandlers.createApiKey);
   registrar.mount(app, controlPlaneRoute("api_keys_revoke"), credentialHandlers.revokeApiKey);
+  if (deps.door !== "binding") {
+    // Public bearer door only: the MCP and panel bindings never mount PAT
+    // management, so a Personal Access Token can never mint or widen another.
+    mountPersonalAccessTokenRoutes(app, registrar, {
+      repo: deps.repo,
+      ...(deps.personalAccessTokenStore ? { store: deps.personalAccessTokenStore } : {}),
+    });
+  }
   mountEntityPrivacyRoutes(app, registrar, {
     repo: deps.repo,
     entityPrivacy: deps.entityPrivacy,

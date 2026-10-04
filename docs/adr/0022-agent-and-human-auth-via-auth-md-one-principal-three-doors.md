@@ -1,6 +1,54 @@
 # Agent and human auth via the auth.md protocol: one principal, three doors, splitch as resource server
 
-**Status:** accepted; amended 2026-07-19
+**Status:** accepted; amended 2026-07-19, 2026-08-28, 2026-08-31, 2026-10-03
+
+## 2026-10-03 amendment: Personal Access Tokens for the remote MCP server
+
+Browser OAuth cannot complete on a remote server or sandbox that has no browser
+and no reachable loopback, and an hour-long access token cannot sit in an MCP
+client's static `Authorization` header. A **Personal Access Token (PAT)** fills
+that gap without creating a second principal class.
+
+- **One user, never a service account.** A PAT belongs to exactly one WorkOS
+  User. Its authority is that user's LIVE Organization and App membership,
+  intersected with the token's own grants on every request. A grant names a
+  target (`all`, one Organization, or one App), a role ceiling, and `read` or
+  `read-write` access. A grant never adds a membership or raises a role.
+- **MCP only.** Only the MCP Worker accepts a PAT. It authenticates the secret
+  against a SESSION_STORE entry, then delegates with the token id and the
+  `personal_access_token` door. The Control Plane re-reads the D1 row on every
+  delegated call, so a revoked, expired, or narrowed token takes effect on its
+  next use. The Control Plane API and Auth API never accept a PAT as a bearer,
+  and no issuer mints that door as a JWT claim.
+- **Managed by a human session, never by MCP.** Create, update, rotate, and
+  revoke are CLI-only Control Plane routes on the public bearer door. They derive
+  no MCP tool and are not mounted on the MCP binding, so a PAT can never mint,
+  widen, or extend a PAT.
+- **The secret is surfaced once and never printed.** The CLI writes it to a 0600
+  file (optionally appended to an env file) and prints metadata only, so an agent
+  can operate tokens without reading one.
+- **Expiry is the user's choice.** The default is 90 days. A token that never
+  expires must be asked for explicitly, and it is always labelled in list
+  output.
+- **Independent of CLI sessions.** Logging out of the CLI does not revoke PATs.
+  The session revocation marker covers hour-long access tokens and would only
+  suspend a long-lived PAT temporarily. A PAT is revoked on its own, durably in
+  D1 (`splitch tokens revoke` or `splitch tokens revoke-all`).
+
+**Accepted risk: a session token can mint a broad PAT.** Grants are checked
+against the user's live membership, not against the scopes of the Control Plane
+access token that creates them. A one-hour, App-bound CLI token can therefore
+create an `all` grant that never expires. Control Plane access tokens live only
+in the CLI credential store, next to the refresh token that can already rebind
+to any membership, so stealing one usually means stealing both. Closing this
+fully needs a step-up ("sudo") credential for PAT management from Auth API. That
+is deferred, and this paragraph records the decision until it lands.
+
+This narrows the earlier rejection of "a raw API key from the agent flow". That
+rejection protected two properties: every action ties to a real, revocable user,
+and the agent credential stays distinct from the SDK API Key. A PAT keeps both. It
+is user-bound, individually and collectively revocable, clamped to live
+membership, and never valid on the data plane.
 
 ## 2026-08-31 amendment: AuthKit is the browser OAuth authorization server
 

@@ -2314,6 +2314,122 @@ Flags:
 
 Example:
   splitch stale-flags list --json",
+    "tokens create": "Create a Personal Access Token for connecting the MCP server without browser sign-in. The secret is written to --output-file and never printed.
+
+Usage:
+  splitch tokens create [flags]
+
+Flags:
+  --name <name>                 [type: string; default: required] Label for the token, e.g. the machines it serves.
+  --grant <target:role:access>  [type: string (repeatable); default: required] What the token may reach. Target: all, org:<org id>, or app:<app id>. Role ceiling: member, admin, or owner (never above your own). Access: read or read-write. Repeat for more targets; on update the list replaces the current grants.
+  --expires-at <when>           [type: never | <days>d | ISO 8601 date; default: 90d] When the token stops working. never means it does not expire.
+  --output-file <path>          [type: string; default: required] File that receives the secret (mode 0600). The secret is never printed.
+  --secret-format <format>      [type: env | raw; default: env] env writes NAME=secret for env files and env injection; raw writes the bare secret.
+  --env-var <name>              [type: string; default: SPLITCH_MCP_TOKEN] Variable name for --secret-format env.
+  --append                      [type: boolean; default: false] Add the env line to an existing file (which must not be readable by other users); creates the file if missing.
+  --force                       [type: boolean; default: false] Overwrite an existing file, or with --append replace an existing definition of the variable.
+  --body-json <json>            [type: JSON object; default: none] Request body fields; see Request body below.
+  --json                        [type: boolean; default: false] Write machine-readable JSON to stdout.
+  -h, --help                    [type: boolean; default: false] Show help and exit.
+
+Request body (--body-json):
+  name       required  string
+  grants     required  { target: string; role: string ("owner" | "admin" | "member"); access: string ("read" | "read-write") }[]
+  expiresAt  optional  string | null
+  Example:
+    {"name":"name","grants":[{"target":"all","role":"owner","access":"read"}]}
+
+Credential semantics:
+  A Personal Access Token works only with the MCP server, never with this CLI. Its reach is your live membership, limited by its grants.
+
+Example:
+  splitch tokens create --name sandboxes --grant app:app_123:admin:read-write --expires-at never --output-file ~/.config/splitch/mcp.env --append --json",
+    "tokens list": "List your Personal Access Tokens for the MCP server: names, grants, expiry, and status. Secrets are never shown.
+
+Usage:
+  splitch tokens list [flags]
+
+Flags:
+  --json      [type: boolean; default: false] Write machine-readable JSON to stdout.
+  -h, --help  [type: boolean; default: false] Show help and exit.
+
+Credential semantics:
+  A Personal Access Token works only with the MCP server, never with this CLI. Its reach is your live membership, limited by its grants.
+
+Example:
+  splitch tokens list --json",
+    "tokens revoke": "Revoke a Personal Access Token. Its next use is refused.
+
+Usage:
+  splitch tokens revoke <token-id> [flags]
+
+Flags:
+  --json      [type: boolean; default: false] Write machine-readable JSON to stdout.
+  -h, --help  [type: boolean; default: false] Show help and exit.
+
+Credential semantics:
+  A Personal Access Token works only with the MCP server, never with this CLI. Its reach is your live membership, limited by its grants.
+
+Example:
+  splitch tokens revoke <token-id> --json",
+    "tokens revoke-all": "Revoke every active Personal Access Token you own.
+
+Usage:
+  splitch tokens revoke-all [flags]
+
+Flags:
+  --json      [type: boolean; default: false] Write machine-readable JSON to stdout.
+  -h, --help  [type: boolean; default: false] Show help and exit.
+
+Credential semantics:
+  A Personal Access Token works only with the MCP server, never with this CLI. Its reach is your live membership, limited by its grants.
+
+Example:
+  splitch tokens revoke-all --json",
+    "tokens rotate": "Replace a Personal Access Token's secret. The old secret stops working; the new one is written to --output-file and never printed.
+
+Usage:
+  splitch tokens rotate <token-id> [flags]
+
+Flags:
+  --output-file <path>      [type: string; default: required] File that receives the secret (mode 0600). The secret is never printed.
+  --secret-format <format>  [type: env | raw; default: env] env writes NAME=secret for env files and env injection; raw writes the bare secret.
+  --env-var <name>          [type: string; default: SPLITCH_MCP_TOKEN] Variable name for --secret-format env.
+  --append                  [type: boolean; default: false] Add the env line to an existing file (which must not be readable by other users); creates the file if missing.
+  --force                   [type: boolean; default: false] Overwrite an existing file, or with --append replace an existing definition of the variable.
+  --json                    [type: boolean; default: false] Write machine-readable JSON to stdout.
+  -h, --help                [type: boolean; default: false] Show help and exit.
+
+Credential semantics:
+  A Personal Access Token works only with the MCP server, never with this CLI. Its reach is your live membership, limited by its grants.
+
+Example:
+  splitch tokens rotate <token-id> --output-file ~/.config/splitch/mcp.env --append --force --json",
+    "tokens update": "Rename a Personal Access Token or replace its grants or expiry. Takes effect on its next use; the secret is unchanged.
+
+Usage:
+  splitch tokens update <token-id> [flags]
+
+Flags:
+  --name <name>                 [type: string; default: current value] New label for the token.
+  --grant <target:role:access>  [type: string (repeatable); default: current value] What the token may reach. Target: all, org:<org id>, or app:<app id>. Role ceiling: member, admin, or owner (never above your own). Access: read or read-write. Repeat for more targets; on update the list replaces the current grants.
+  --expires-at <when>           [type: never | <days>d | ISO 8601 date; default: current value] When the token stops working. never means it does not expire.
+  --body-json <json>            [type: JSON object; default: none] Request body fields; see Request body below.
+  --json                        [type: boolean; default: false] Write machine-readable JSON to stdout.
+  -h, --help                    [type: boolean; default: false] Show help and exit.
+
+Request body (--body-json):
+  name       optional  string
+  grants     optional  { target: string; role: string ("owner" | "admin" | "member"); access: string ("read" | "read-write") }[]
+  expiresAt  optional  string | null
+  Example:
+    {"name":"name"}
+
+Credential semantics:
+  A Personal Access Token works only with the MCP server, never with this CLI. Its reach is your live membership, limited by its grants.
+
+Example:
+  splitch tokens update <token-id> --grant all:member:read --expires-at 30d --json",
   },
   "groups": {
     "api-keys": "Manage api-keys resources.
@@ -2848,6 +2964,24 @@ Flags:
 
 Example:
   splitch stale-flags list --help",
+    "tokens": "Manage tokens resources.
+
+Usage:
+  splitch tokens <action> [arguments] [flags]
+
+Commands:
+  list            List your Personal Access Tokens for the MCP server: names, grants, expiry, and status. Secrets are never shown.
+  create          Create a Personal Access Token for connecting the MCP server without browser sign-in. The secret is written to --output-file and never printed.
+  update          Rename a Personal Access Token or replace its grants or expiry. Takes effect on its next use; the secret is unchanged.
+  rotate          Replace a Personal Access Token's secret. The old secret stops working; the new one is written to --output-file and never printed.
+  revoke          Revoke a Personal Access Token. Its next use is refused.
+  revoke-all      Revoke every active Personal Access Token you own.
+
+Flags:
+  -h, --help  [type: boolean; default: false] Show help and exit.
+
+Example:
+  splitch tokens list --help",
   },
   "meta": {
     "context": "Show the logged-in principal and the resolved App and Environment.
@@ -2967,6 +3101,7 @@ Resource groups:
   sentry-installations
   sentry-secret-rotations
   stale-flags
+  tokens
 
 Flags:
   -v, --version  [type: boolean; default: false] Show the installed CLI version and exit.

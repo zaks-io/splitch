@@ -2,8 +2,11 @@ import type { CliCommandDefinition } from "./command-registry.js";
 import { commandHelpArguments } from "./command-positionals.js";
 import { bodyJsonExampleFlag } from "./help-body-json.js";
 import { oneTimeSecretDescriptor } from "./one-time-secret-output.js";
+import { personalAccessTokenExample } from "./personal-access-token-help.js";
 
 export function commandExample(command: CliCommandDefinition): string {
+  const tokenExample = personalAccessTokenExample(command.operationId);
+  if (tokenExample) return tokenExample;
   const simpleExample = simpleCommandExample(command);
   if (simpleExample) return simpleExample;
   if (command.kind === "flags_verify")

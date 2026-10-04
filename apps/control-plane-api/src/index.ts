@@ -44,6 +44,7 @@ import { makeCachedJwksVerifier } from "./jwks-verify";
 import { PanelDelegationReplayDurableObject } from "./panel-delegation-replay-do";
 import { repositoryForPanelRequest } from "./panel-request-repository";
 import { runControlPlaneScheduled } from "./scheduled";
+import { makePersonalAccessTokenAuthorityResolver } from "./personal-access-token-store";
 import { makeSessionStore } from "./session-store";
 import {
   handleSignedControlPanelRequest,
@@ -217,6 +218,11 @@ async function handleRequest(
               surface: "control-plane-api",
               secret: requiredMcpDelegationSecret(env.MCP_CONTROL_PLANE_DELEGATION_SECRET),
               resolveLiveScopes: (userId) => resolveMcpMembershipScopes(membershipAccess, userId),
+              resolvePersonalAccessToken: makePersonalAccessTokenAuthorityResolver({
+                repo,
+                membershipAccess,
+                nowMs: Date.now,
+              }),
               replayGuard: makeDurableMcpDelegationReplayGuard(
                 requiredMcpReplayBinding(env.MCP_DELEGATION_REPLAY),
               ),

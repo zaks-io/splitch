@@ -1,5 +1,6 @@
 import { SplitchCliError } from "./errors.js";
 import type { ParsedGlobalFlags } from "./parse-args.js";
+import { PERSONAL_ACCESS_TOKEN_OPERATIONS } from "./personal-access-token-input.js";
 
 const LIFECYCLE_OPERATIONS = new Set(["flags_create", "flags_update"]);
 
@@ -14,6 +15,8 @@ export function applyFlagLifecycleFlags(
   flags: ParsedGlobalFlags,
   input: Record<string, unknown>,
 ): void {
+  // `tokens create|update` read `--expires-at` themselves (`never`, `90d`, a date).
+  if (PERSONAL_ACCESS_TOKEN_OPERATIONS.has(operationId)) return;
   const given = {
     lifecycleClass: flags.lifecycleClass,
     owner: flags.owner,

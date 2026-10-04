@@ -45,6 +45,7 @@ export async function handleControlPlaneAppRequest(input: {
     ),
     repo,
     credentialStore: env.CREDENTIAL_STORE,
+    personalAccessTokenStore: env.SESSION_STORE,
     credentialCacheWriter: durableCredentialCacheWriterAccess(env.CREDENTIAL_CACHE_WRITER),
     configStore,
     eventDefinitionStore: env.CONFIG_STORE,

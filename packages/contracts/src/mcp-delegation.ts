@@ -4,6 +4,7 @@ import {
   type PublicSurface,
   publicSurfaceFor,
 } from "./route-contract";
+import { personalAccessTokenFields, personalAccessTokenShapeValid } from "./mcp-delegation-pat";
 import { getRoute } from "./route-registry";
 
 export const MCP_DELEGATION_HEADER = "x-splitch-mcp-delegation";
@@ -25,6 +26,18 @@ export interface McpDelegationActor {
    * door-gated routes indistinguishable from an identified one.
    */
   authDoor: AuthDoor;
+  /**
+   * The Personal Access Token that authenticated the MCP request. Present iff
+   * `authDoor` is `personal_access_token`; the receiving surface re-reads the
+   * token row and clamps live membership by its grants.
+   */
+  personalAccessTokenId?: string;
+  /**
+   * SHA-256 hex of the presented PAT secret (what D1 stores, never the secret).
+   * The receiving surface requires it to equal the row's current hash, so a
+   * rotated-out secret is refused immediately rather than once KV converges.
+   */
+  personalAccessTokenHash?: string;
 }
 
 export interface McpDelegationReplayGuard {
@@ -60,6 +73,8 @@ interface McpDelegationCredential {
   scopes: string[];
   liveMembership?: true;
   authDoor: AuthDoor;
+  personalAccessTokenId?: string;
+  personalAccessTokenHash?: string;
   method: string;
   target: string;
   bodySha256: string;
@@ -80,6 +95,11 @@ export async function createMcpDelegationHeader(options: {
   if (options.actor.liveMembership && options.actor.scopes.length > 0) {
     throw new Error("contracts: live MCP membership delegation cannot carry scopes");
   }
+  if (!personalAccessTokenShapeValid(options.actor)) {
+    throw new Error(
+      "contracts: a personal_access_token delegation must be live and name exactly its token id and hash",
+    );
+  }
   const route = getRoute(options.operationId);
   if (!route)
     throw new Error(`contracts: unknown MCP delegation operation "${options.operationId}"`);
@@ -94,6 +114,7 @@ export async function createMcpDelegationHeader(options: {
     scopes: [...options.actor.scopes],
     ...(options.actor.liveMembership ? { liveMembership: true } : {}),
     authDoor: options.actor.authDoor,
+    ...personalAccessTokenFields(options.actor),
     method: options.request.method,
     target: requestTarget(options.request),
     bodySha256: await requestBodySha256(options.request),
@@ -152,11 +173,16 @@ export async function parseMcpDelegation(options: {
   ) {
     return null;
   }
+  return actorFromCredential(credential);
+}
+
+function actorFromCredential(credential: McpDelegationCredential): McpDelegationActor {
   return {
     subject: credential.subject,
     scopes: credential.scopes,
     ...(credential.liveMembership ? { liveMembership: true } : {}),
     authDoor: credential.authDoor,
+    ...personalAccessTokenFields(credential),
   };
 }
 
@@ -235,6 +261,7 @@ function decodeCredential(encoded: string): McpDelegationCredential | null {
       (value.liveMembership !== undefined && value.liveMembership !== true) ||
       (value.liveMembership === true && value.scopes.length !== 0) ||
       !AuthDoorSchema.safeParse(value.authDoor).success ||
+      !personalAccessTokenShapeValid(value) ||
       typeof value.method !== "string" ||
       typeof value.target !== "string" ||
       typeof value.bodySha256 !== "string" ||

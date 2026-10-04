@@ -6,6 +6,7 @@ import { type ApiRouteContract, jsonMediaTypeSchema } from "./openapi-route";
 import { IdempotencyKeySchema } from "./persisted-field-limits";
 import { mcpReversibilityMeta, mcpToolAnnotations } from "./route-effects";
 import { routeRegistry } from "./route-registry";
+import { personalAccessTokenOperationIds } from "./routes/routes-personal-access-tokens";
 
 /**
  * MCP tool-schema derivation from THE single route registry (ADR-0023/0025). One
@@ -71,6 +72,12 @@ export const unavailableControlPlaneOperationIds = [
 
 const UNAVAILABLE_CONTROL_PLANE_OPERATIONS = new Set<string>(unavailableControlPlaneOperationIds);
 const INTERNAL_CONTROL_PLANE_OPERATIONS = new Set<string>(["principal_capabilities_get"]);
+/**
+ * Personal Access Token management is a human/CLI act: an MCP credential must
+ * never mint, widen, extend, or rotate a PAT, so these routes derive no tool.
+ * The Control Plane also never mounts them on its MCP binding door.
+ */
+const CLI_ONLY_CONTROL_PLANE_OPERATIONS = new Set<string>(personalAccessTokenOperationIds);
 
 export type UnavailableControlPlaneOperationId =
   (typeof unavailableControlPlaneOperationIds)[number];
@@ -79,7 +86,8 @@ export function isMcpToolRoute(route: ApiRouteContract): boolean {
   return (
     route.auth === MCP_AUTH_KIND &&
     !UNAVAILABLE_CONTROL_PLANE_OPERATIONS.has(route.operationId) &&
-    !INTERNAL_CONTROL_PLANE_OPERATIONS.has(route.operationId)
+    !INTERNAL_CONTROL_PLANE_OPERATIONS.has(route.operationId) &&
+    !CLI_ONLY_CONTROL_PLANE_OPERATIONS.has(route.operationId)
   );
 }
 

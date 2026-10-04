@@ -169,6 +169,9 @@ const EXAMPLE_STRINGS: Readonly<Record<string, string>> = {
   idempotency_key: "idem-1",
   targetingKey: "userId",
   targetingKeyType: "user",
+  // Personal Access Token grant target; a canonical `app:app_…` id would be an
+  // invented placeholder, while `all` is a real, copy-pasteable value.
+  target: "all",
 };
 
 /**

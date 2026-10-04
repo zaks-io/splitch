@@ -18,6 +18,7 @@ const RESET_TABLES = [
   "approval_requests",
   "api_keys",
   "client_keys",
+  "personal_access_tokens",
   "run_srm_alarms",
   "runs",
   "privacy_jobs",

@@ -148,10 +148,37 @@ const CLOUDFLARE_COMMANDS: readonly CliCommandDefinition[] = [
   },
 ];
 
+/**
+ * Personal Access Token management: ordinary authenticated Control Plane calls,
+ * but CLI-only (no MCP tool derives from them), so they are listed here rather
+ * than derived. create/rotate return a once-only secret the CLI writes to a
+ * file and never prints.
+ */
+const PERSONAL_ACCESS_TOKEN_OPERATIONS = [
+  "personal_access_tokens_list",
+  "personal_access_tokens_create",
+  "personal_access_tokens_update",
+  "personal_access_tokens_rotate",
+  "personal_access_tokens_revoke",
+  "personal_access_tokens_revoke_all",
+] as const;
+
+const TOKEN_COMMANDS: readonly CliCommandDefinition[] = PERSONAL_ACCESS_TOKEN_OPERATIONS.map(
+  (operationId) => ({
+    operationId,
+    path: CLI_PRESENTATION_ALIAS_PATHS[operationId],
+    needsApp: false,
+    needsEnvironment: false,
+    supportsConfirm: false,
+    kind: "api" as const,
+  }),
+);
+
 export const CLI_COMMANDS: readonly CliCommandDefinition[] = [
   ...API_COMMANDS,
   ...PRESENTATION_ALIASES,
   ...CLOUDFLARE_COMMANDS,
+  ...TOKEN_COMMANDS,
 ];
 
 export const META_COMMANDS = ["login", "logout", "use", "context", "health"] as const;

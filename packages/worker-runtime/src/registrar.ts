@@ -8,6 +8,7 @@ import { type Principal, PUBLIC_PRINCIPAL } from "./principal";
 import { checkIdempotency } from "./steps/idempotency";
 import { resolvePrincipal } from "./steps/resolve-principal";
 import { applyRateLimit } from "./steps/rate-limit-step";
+import { narrowPersonalAccessTokenForRoute } from "./steps/personal-access-token-write";
 import { enforceScopes } from "./steps/scopes";
 import { emptyError, renderError } from "./respond";
 import { resolveRequestId } from "./request-id";
@@ -118,7 +119,16 @@ async function runGuard<Input extends z.ZodTypeAny, Output extends z.ZodTypeAny>
     if (!principalResult.ok) {
       return fail(principalResult.error);
     }
-    const principal = principalResult.principal;
+    // Step 4b: a Personal Access Token mutating call sees only its write grants.
+    const narrowed = narrowPersonalAccessTokenForRoute(
+      contract,
+      principalResult.principal,
+      c.req.param(),
+    );
+    if (!narrowed.ok) {
+      return fail(narrowed.error);
+    }
+    const principal = narrowed.principal;
 
     // Step 5: rate-limit class (before scopes; fails closed on missing/throwing binding).
     const rateLimited = await applyRateLimit(contract, deps, request, principal);

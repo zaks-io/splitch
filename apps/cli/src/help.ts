@@ -132,6 +132,11 @@ function credentialNotes(command: CliCommandDefinition): string[] {
       "Client Key is public and safe for untrusted clients; flags verify fetches it automatically.",
     ];
   }
+  if (group === "tokens") {
+    return [
+      "A Personal Access Token works only with the MCP server, never with this CLI. Its reach is your live membership, limited by its grants.",
+    ];
+  }
   if (group === "api-keys") {
     return [
       "API Key is secret and server-side only; creation writes it once to --output-file and it cannot be read back.",

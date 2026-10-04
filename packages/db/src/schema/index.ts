@@ -33,4 +33,5 @@ export {
   convexInstallations,
   sentryInstallations,
 } from "./integrations";
+export { personalAccessTokens } from "./personal-access-tokens";
 export { entityDeletions, privacyJobs, privacyRequests } from "./privacy";

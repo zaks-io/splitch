@@ -15,6 +15,7 @@ import { SplitchCliError, writeCliError } from "./errors.js";
 import { executeEnvPolicyGet, executeEnvPolicySet } from "./execute-env-policy.js";
 import { consoleIo, emit, withJsonMode } from "./execute-io.js";
 import {
+  callOperationQuietly,
   executeApiOperation,
   executeFlagsVerify,
   handleExecutionError,
@@ -29,6 +30,11 @@ import { commandFlags, metaFlags } from "./help-flags.js";
 import { buildOperationInput } from "./operation-input.js";
 import type { ParsedInvocation } from "./parse-args.js";
 import { oneTimeSecretDescriptor, writeOneTimeSecret } from "./one-time-secret-output.js";
+import { returnsPersonalAccessTokenSecret } from "./personal-access-token-input.js";
+import {
+  personalAccessTokenSecretTarget,
+  writePersonalAccessTokenSecret,
+} from "./personal-access-token-secret.js";
 
 export type { CliDeps, CliResult } from "./execute-types.js";
 
@@ -174,6 +180,15 @@ async function executeCommand(
   } catch (error) {
     return handleInputError(error, io);
   }
+  if (returnsPersonalAccessTokenSecret(scopedCommand.operationId)) {
+    return executePersonalAccessTokenSecretOperation(
+      scopedCommand.operationId,
+      input,
+      invocation,
+      deps,
+      io,
+    );
+  }
   const outputFile = invocation.flags.outputFile;
   const descriptor = oneTimeSecretDescriptor(scopedCommand.operationId);
   return executeApiOperation(
@@ -185,6 +200,24 @@ async function executeCommand(
     outputFile && descriptor
       ? (data) => writeOneTimeSecret(data, outputFile, descriptor)
       : undefined,
+  );
+}
+
+/** `tokens create|rotate`: the once-only secret goes to a file, never to output. */
+function executePersonalAccessTokenSecretOperation(
+  operationId: string,
+  input: Record<string, unknown>,
+  invocation: ParsedInvocation,
+  deps: CliDeps,
+  io: CliIo,
+): Promise<CliResult> {
+  // Usage validation already proved the target; re-derive it typed.
+  const target = personalAccessTokenSecretTarget(invocation.flags);
+  if ("code" in target) throw new SplitchCliError(target);
+  return executeApiOperation(operationId, input, invocation, deps, io, (data) =>
+    writePersonalAccessTokenSecret(data, target, (tokenId) =>
+      callOperationQuietly("personal_access_tokens_revoke", { tokenId }, deps),
+    ),
   );
 }
 

@@ -113,6 +113,14 @@ function scopedDelegationActor(
     // narrowable: it says who the caller is, not what they may reach.
     authDoor: actor.authDoor,
     ...(actor.liveMembership ? { liveMembership: true } : {}),
+    // Identifies the credential, not its reach: the receiving surface re-reads
+    // the token's grants, so it travels unnarrowed with the door.
+    ...(actor.personalAccessTokenId && actor.personalAccessTokenHash
+      ? {
+          personalAccessTokenId: actor.personalAccessTokenId,
+          personalAccessTokenHash: actor.personalAccessTokenHash,
+        }
+      : {}),
     scopes:
       targets.length === 0
         ? actor.scopes

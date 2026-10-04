@@ -1,0 +1,33 @@
+// biome-ignore-all lint/performance/noBarrelFile: internal sub-barrel of ../index.ts, which stays the only supported import path for these symbols
+
+// Personal Access Tokens: the MCP-only, user-bound credential and its grant model.
+export {
+  CreatePersonalAccessTokenRequestSchema,
+  isPersonalAccessTokenSecret,
+  PERSONAL_ACCESS_TOKEN_DEFAULT_TTL_DAYS,
+  PERSONAL_ACCESS_TOKEN_FINGERPRINT_LENGTH,
+  PERSONAL_ACCESS_TOKEN_ID_PATTERN,
+  PERSONAL_ACCESS_TOKEN_MAX_ACTIVE,
+  PERSONAL_ACCESS_TOKEN_MAX_GRANTS,
+  PERSONAL_ACCESS_TOKEN_SECRET_PATTERN,
+  PERSONAL_ACCESS_TOKEN_SECRET_PREFIX,
+  type PersonalAccessToken,
+  type PersonalAccessTokenAccess,
+  PersonalAccessTokenAccessSchema,
+  type PersonalAccessTokenAuthority,
+  type PersonalAccessTokenCache,
+  PersonalAccessTokenCacheSchema,
+  type PersonalAccessTokenGrant,
+  PersonalAccessTokenGrantSchema,
+  PersonalAccessTokenGrantsSchema,
+  PersonalAccessTokenIdSchema,
+  PersonalAccessTokenSchema,
+  PersonalAccessTokenSecretResponseSchema,
+  personalAccessTokenAccessLevels,
+  personalAccessTokenAuthority,
+  personalAccessTokenCacheKey,
+  personalAccessTokenExpired,
+  RevokeAllPersonalAccessTokensResponseSchema,
+  UpdatePersonalAccessTokenRequestSchema,
+  userRoleCovers,
+} from "../personal-access-tokens";

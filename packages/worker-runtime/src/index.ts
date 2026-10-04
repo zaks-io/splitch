@@ -19,7 +19,10 @@ export type {
   RegistrarDeps,
   ResolvableAuthKind,
 } from "./deps";
-export { makeMcpDelegationAuthResolver } from "./mcp-delegation-auth";
+export {
+  makeMcpDelegationAuthResolver,
+  type PersonalAccessTokenResolver,
+} from "./mcp-delegation-auth";
 export type { McpDelegationReplayDurableObjectNamespace } from "./mcp-delegation-replay";
 export {
   McpDelegationReplayDurableObject,

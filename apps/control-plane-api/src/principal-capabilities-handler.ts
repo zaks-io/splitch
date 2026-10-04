@@ -8,6 +8,16 @@ export function getPrincipalCapabilities({ principal }: HandlerArgs<unknown>): R
     membershipWideRead:
       principal.liveMembership === true ||
       principal.authorization === MEMBERSHIP_WIDE_READ_AUTHORIZATION,
+    // Lets an agent diagnose its Personal Access Token without ever reading it.
+    ...(principal.personalAccessToken
+      ? {
+          personalAccessToken: {
+            id: principal.personalAccessToken.id,
+            writeScopes: [...principal.personalAccessToken.writeScopes],
+            writeAll: principal.personalAccessToken.writeAll,
+          },
+        }
+      : {}),
   });
 }
 

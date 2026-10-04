@@ -1,5 +1,6 @@
 import { z } from "@hono/zod-openapi";
 import { HeldScopeSchema } from "../held-scope";
+import { PersonalAccessTokenIdSchema } from "../personal-access-tokens";
 import { OrganizationMemberSchema } from "../leaf-schemas-runtime";
 import { type ApiRouteContract, defineApiRoute } from "../openapi-route";
 import {
@@ -38,6 +39,19 @@ const PrincipalCapabilitiesResponse = z
   .object({
     scopes: z.array(HeldScopeSchema),
     membershipWideRead: z.boolean(),
+    /**
+     * Present when a Personal Access Token authenticated the call. `scopes`
+     * above are its read authority; mutations are limited to `writeScopes`, and
+     * a mutation with no Organization or App in its path needs `writeAll`.
+     */
+    personalAccessToken: z
+      .object({
+        id: PersonalAccessTokenIdSchema,
+        writeScopes: z.array(HeldScopeSchema),
+        writeAll: z.boolean(),
+      })
+      .strict()
+      .optional(),
   })
   .strict();
 const MemberListResponse = listResponse(OrganizationMemberSchema);

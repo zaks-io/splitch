@@ -5,6 +5,7 @@ import { KILL_SWITCH_OFF_EXEMPTION } from "./kill-switch-off-exemption";
 import { deriveMcpTools, isMcpToolRoute } from "./mcp-tools";
 import { jsonMediaTypeSchema } from "./openapi-route";
 import { getRoute, routeRegistry } from "./route-registry";
+import { personalAccessTokenOperationIds } from "./routes/routes-personal-access-tokens";
 
 /**
  * MCP tools are derived from the registry and proven HERE — never committed. The
@@ -21,6 +22,7 @@ const toolNames = new Set(tools.map((tool) => tool.name));
 // leaking into the tool set fails loudly here.
 const NON_TOOL_OPERATION_IDS = [
   "principal_capabilities_get",
+  ...personalAccessTokenOperationIds,
   "sdk_evaluate",
   "sdk_cached_evaluation_telemetry",
   "sdk_peek",

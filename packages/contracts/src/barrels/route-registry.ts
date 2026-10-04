@@ -35,6 +35,7 @@ export {
   httpMethods,
   IdempotencyModeSchema,
   idempotencyModes,
+  accessTokenAuthDoorFromClaim,
   isProvisionalAuthDoor,
   publicSurfaceFor,
   publicSurfaces,
@@ -57,5 +58,9 @@ export {
   routesDelegatedBy,
   routesDelegatedTo,
   routesMountedBy,
+  routesMountedOnBindingsBy,
   routesSurfacedBy,
 } from "../route-registry";
+// Personal Access Tokens are a route-auth concept: the MCP-only door and its grants.
+// biome-ignore lint/performance/noReExportAll: grouped sub-barrel, re-exported through ../index.ts
+export * from "./personal-access-tokens";

@@ -3,6 +3,7 @@ import { commandHasBodyJson } from "./help-body-json.js";
 import { toolByOperation } from "./help-command-description.js";
 import { deleteModeHelpFlags } from "./help-delete-flags.js";
 import { oneTimeSecretDescriptor } from "./one-time-secret-output.js";
+import { personalAccessTokenHelpFlags } from "./personal-access-token-help.js";
 import { queryHelpFlags } from "./query-flags.js";
 
 export interface HelpFlag {
@@ -146,6 +147,8 @@ function operationFlags(command: CliCommandDefinition): HelpFlag[] {
       ),
     ];
   }
+  const tokenFlags = personalAccessTokenHelpFlags(command.operationId);
+  if (tokenFlags.length > 0) return tokenFlags;
   switch (command.operationId) {
     case "flags_list":
     case "flags_get":

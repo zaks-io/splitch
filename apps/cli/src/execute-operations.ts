@@ -222,6 +222,25 @@ export async function executeApiOperation(
   }
 }
 
+/**
+ * Run one operation with the session's credentials and report only whether it
+ * succeeded. For cleanup after a partial failure, where the caller already has
+ * an error to raise and the outcome only changes its remediation text.
+ */
+export async function callOperationQuietly(
+  operationId: string,
+  input: Record<string, unknown>,
+  deps: CliDeps,
+): Promise<boolean> {
+  const route = requireOperationRoute(operationId);
+  const result = await withAuthorizationRetry(deps, async (authorization) => {
+    const sdk = sdkForRoute(createOperationSdks(deps), route);
+    const response = await sdk.callOperationById(operationId, input, { authorization });
+    return { status: response.ok ? 200 : response.status, value: response };
+  });
+  return result.ok;
+}
+
 function requireOperationRoute(operationId: string): NonNullable<ReturnType<typeof getRoute>> {
   const route = getRoute(operationId);
   if (route) return route;

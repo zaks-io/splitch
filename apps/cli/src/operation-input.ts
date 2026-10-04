@@ -12,6 +12,7 @@ import { applyFlagsCreateConvenienceFields } from "./flag-create-input.js";
 import { applyFlagLifecycleFlags } from "./flag-lifecycle-input.js";
 import { applyOperationIdempotencyInput } from "./operation-idempotency-input.js";
 import type { ParsedGlobalFlags, ParsedInvocation } from "./parse-args.js";
+import { applyPersonalAccessTokenFields } from "./personal-access-token-input.js";
 import { applyByFlag, applyRouteQueryFlags } from "./query-flags.js";
 
 const TOOL_BY_OPERATION = new Map(deriveMcpTools().map((tool) => [tool.name, tool]));
@@ -196,6 +197,7 @@ function applyCommandSpecificFields(
       input.evaluationContext,
     );
   }
+  applyPersonalAccessTokenFields(command.operationId, invocation.flags, input);
   if (command.operationId === "flags_create") {
     applyFlagsCreateConvenienceFields(input, {
       key: invocation.flags.key,

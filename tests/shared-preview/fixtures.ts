@@ -186,6 +186,38 @@ class SmokeClient {
     return (await response.json()) as T;
   }
 
+  async controlPlaneSend<T>(
+    token: string,
+    method: "POST" | "PATCH",
+    path: string,
+    body?: unknown,
+  ): Promise<T> {
+    const response = await this.request.fetch(`${this.config.controlPlaneBaseUrl}${path}`, {
+      method,
+      headers: { authorization: `Bearer ${token}` },
+      ...(body === undefined ? {} : { data: body }),
+    });
+    await expect(response, `Control Plane ${method} ${path}`).toBeOK();
+    return (await response.json()) as T;
+  }
+
+  /** One raw tools/call, for asserting refusals at either the transport or the tool. */
+  async callToolRaw(
+    token: string,
+    name: string,
+    args: Record<string, unknown>,
+  ): Promise<APIResponse> {
+    return this.request.post(`${this.config.mcpBaseUrl}/mcp`, {
+      data: {
+        jsonrpc: "2.0",
+        id: `${name}-raw-smoke`,
+        method: "tools/call",
+        params: { name, arguments: args },
+      },
+      headers: { authorization: `Bearer ${token}` },
+    });
+  }
+
   uniqueKey(prefix: string): string {
     const suffix = Math.random().toString(36).slice(2, 8);
     return `${prefix}-${this.config.runId}-${suffix}`.toLowerCase();
