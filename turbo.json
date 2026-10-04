@@ -113,7 +113,12 @@
     "dev": {
       "dependsOn": ["^build"],
       "cache": false,
-      "persistent": true
+      "persistent": true,
+      "passThroughEnv": [
+        "SPLITCH_LOCAL_DEV_FLEET",
+        "SPLITCH_LOCAL_DEV_GATEWAY_PORT",
+        "SPLITCH_LOCAL_E2E_RUN_ID"
+      ]
     },
     "lint": {
       "outputs": []

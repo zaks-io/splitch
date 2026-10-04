@@ -301,6 +301,7 @@ pnpm install
 pnpm dev            # every Worker (wrangler) and frontend (vite), in parallel
 pnpm dev:api        # just the API Workers and the MCP server
 pnpm dev:panel      # a seeded, sign-in-ready Control Panel at http://127.0.0.1:18800 (no WorkOS)
+pnpm dev:panel --full --share # all API Workers, plus an HTTPS sandbox preview
 pnpm test           # the full test suite
 pnpm verify:push    # the push gate (lint, typecheck, knip, format, secrets, D1 migrations, Tinybird)
 ```
@@ -310,6 +311,26 @@ Lefthook runs `verify:commit` on commit and `verify:push` on push; see
 hooks need [`gitleaks`](https://github.com/gitleaks/gitleaks) on your `PATH`, and
 `verify:push` also needs the Tinybird CLI (`tb`) with Docker for its Tinybird Local tests.
 CI runs the larger `verify:ci` gate.
+
+`dev:panel --full` hosts the Control Panel and all six API Workers in one local
+Cloudflare runtime. They share D1, KV, Durable Objects and Queues without separate
+processes competing for the same SQLite files. Sign in at `/__dev/login` as an
+Owner, Member or Newcomer. For API requests, use
+`http://127.0.0.1:18800/__dev/services/<service>` where `<service>` is
+`control-plane`, `analysis`, `evaluation`, `event-ingest`, `auth` or `mcp`.
+`--full` also exposes the usual loopback API ports through lightweight proxies.
+`--share` uses the sandbox's `sbx-preview` helper and prints its HTTPS URL.
+
+This mode uses fixture identity sessions and a local analytics HTTP fixture;
+it does not call WorkOS or hosted Tinybird. Analytics fixtures are deterministic,
+so newly ingested events do not change the displayed Experiment Results. Run
+`pnpm tinybird:local` to validate the real Tinybird datasources and Pipes using
+Docker. That validator owns a machine-wide, temporary Tinybird Local container;
+it stops and removes the container after validation.
+
+Panel state resets on startup. The fleet still uses fixed internal ports and
+shares its state directory with the panel E2E suite, so run one fleet or panel
+E2E suite at a time per sandbox. `--port` changes only the sign-in gateway port.
 
 To point the CLI at a local stack instead of hosted splitch:
 
