@@ -6,9 +6,10 @@
   "compatibility_flags": ["nodejs_compat"],
   "upload_source_maps": true,
   "observability": {
+    "redact_query_string": true,
     "traces": {
       "enabled": true,
-      "destinations": ["axiom-traces"],
+      "destinations": ["axiom-traces", "sentry-splitch-traces"],
       "persist": false,
       "head_sampling_rate": 1
     },
@@ -50,9 +51,10 @@
       "name": "splitch-mcp-server-shared-preview",
       "workers_dev": false,
       "observability": {
+        "redact_query_string": true,
         "traces": {
           "enabled": true,
-          "destinations": ["axiom-traces"],
+          "destinations": ["axiom-traces", "sentry-splitch-traces"],
           "persist": false,
           "head_sampling_rate": 1
         },
@@ -90,9 +92,10 @@
       "name": "splitch-mcp-server",
       "workers_dev": false,
       "observability": {
+        "redact_query_string": true,
         "traces": {
           "enabled": true,
-          "destinations": ["axiom-traces"],
+          "destinations": ["axiom-traces", "sentry-splitch-traces"],
           "persist": false,
           "head_sampling_rate": 1
         },
