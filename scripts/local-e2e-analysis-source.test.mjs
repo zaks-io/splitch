@@ -23,12 +23,16 @@ test("serves authenticated deterministic Tinybird rows and local JWT evidence", 
   const token = await fetch(`${base}/token`).then((response) => response.json());
   assert.equal(typeof token.accessToken, "string");
   assert.equal(token.accessToken.split(".").length, 3);
+  const claims = JSON.parse(Buffer.from(token.accessToken.split(".")[1], "base64url"));
+  assert.equal(claims.typ, "access_token");
+  assert.equal(claims.auth_door, "device_flow");
 
   const rows = await fetch(
     `${base}/v0/pipes/analysis_run_inputs.json?app_id=app_checkout_e2e&environment_id=env_checkout_prod_e2e&experiment_id=experiment_checkout_prod_e2e`,
     { headers: { authorization: "Bearer local-e2e-tinybird-read-token" } },
   ).then((response) => response.json());
   assert.equal(rows.data[0]?.run_id, "run_checkout_prod_e2e");
+  assert.equal(rows.data[0]?.pre_registration, null);
   assert.match(rows.data[0]?.config_hash, /^sha256:[0-9a-f]{64}$/);
   assert.equal(rows.data[0]?.data_watermark, "2026-07-20T00:00:00.000Z");
 

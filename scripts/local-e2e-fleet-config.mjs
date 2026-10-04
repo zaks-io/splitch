@@ -6,12 +6,17 @@ export const localBindings = {
   TINYBIRD_APPROVAL_ARCHIVE_WRITE_TOKEN: "local-e2e-tinybird-read-token",
   TINYBIRD_APPROVAL_ARCHIVE_READ_TOKEN: "local-e2e-tinybird-read-token",
   TINYBIRD_RUN_SNAPSHOT_TOKEN: "local-e2e-tinybird-read-token",
+  TINYBIRD_READ_TOKEN: "local-e2e-tinybird-read-token",
+  TINYBIRD_COPY_TOKEN: "local-e2e-tinybird-copy-token",
+  TINYBIRD_DELETE_TOKEN: "local-e2e-tinybird-delete-token",
+  TINYBIRD_INGEST_TOKEN: "local-e2e-tinybird-read-token",
+  SPLITCH_EVENT_INGEST_TOKEN: "local-e2e-event-ingest-token",
   WORKOS_API_KEY: "local-e2e-workos-api-key",
   WORKOS_CLIENT_ID: "local-e2e-workos-client-id",
 };
 
-export function localE2eWorkers(persistPath) {
-  return [
+export function localE2eWorkers(persistPath, { full = false } = {}) {
+  const workers = [
     {
       name: "analysis-source",
       origin: "http://127.0.0.1:18788",
@@ -107,4 +112,7 @@ export function localE2eWorkers(persistPath) {
       },
     },
   ];
+  return full
+    ? workers.filter((worker) => ["analysis-source", "control-panel"].includes(worker.name))
+    : workers;
 }

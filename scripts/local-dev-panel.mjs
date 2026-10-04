@@ -18,6 +18,7 @@
  * Usage:
  *   pnpm dev:panel                 # http://127.0.0.1:18800
  *   pnpm dev:panel --share         # also publish over HTTPS on the tailnet
+ *   pnpm dev:panel --full --share  # all API Workers in one local runtime
  *   pnpm dev:panel --port 18900
  *
  * State lives in test-results/control-panel-e2e-state and is wiped on every
@@ -26,13 +27,13 @@
  */
 
 import { spawn, spawnSync } from "node:child_process";
-import { createHash, randomBytes } from "node:crypto";
+import { createHash, generateKeyPairSync, randomBytes } from "node:crypto";
 import { createWriteStream, mkdirSync } from "node:fs";
 import { createServer, request as httpRequest } from "node:http";
 import { connect } from "node:net";
-import { hostname } from "node:os";
 import { resolve } from "node:path";
 import { parseArgs } from "node:util";
+import { sandboxPreview, startServiceProxies } from "./local-dev-runtime.mjs";
 import {
   localE2eMemberSession,
   localE2eNewcomerSession,
@@ -166,7 +167,7 @@ export function rewriteLocation(location) {
   return location;
 }
 
-function proxy(req, res) {
+function proxy(req, res, service = "") {
   const url = new URL(req.url ?? "/", "http://gateway");
   if (url.pathname.startsWith("/__dev/login")) {
     try {
@@ -182,7 +183,12 @@ function proxy(req, res) {
     return;
   }
   const upstream = httpRequest(
-    { ...PANEL, method: req.method, path: req.url, headers: upstreamHeaders(req) },
+    {
+      ...PANEL,
+      method: req.method,
+      path: service ? `/__dev/services/${service}${req.url}` : req.url,
+      headers: upstreamHeaders(req),
+    },
     (upstreamRes) => {
       const headers = { ...upstreamRes.headers };
       if (headers.location) headers.location = rewriteLocation(headers.location);
@@ -229,19 +235,12 @@ async function waitForFleet(runId, fleet) {
   throw new Error(`fleet did not become healthy in 180s; see ${logPath}`);
 }
 
-function tailscaleServe(port, enable) {
-  const args = enable
-    ? ["tailscale", "serve", "--bg", `--https=${port}`, `http://127.0.0.1:${port}`]
-    : ["tailscale", "serve", `--https=${port}`, "off"];
-  const result = spawnSync("sudo", args, { encoding: "utf8" });
-  if (result.status !== 0 && enable) throw new Error(`tailscale serve failed\n${result.stderr}`);
-}
-
 async function main() {
   const { values } = parseArgs({
     options: {
       port: { type: "string", default: "18800" },
       share: { type: "boolean", default: false },
+      full: { type: "boolean", default: false },
     },
   });
   const port = Number(values.port);
@@ -270,38 +269,77 @@ async function main() {
   console.log(`local-dev-panel: booting the seeded fleet (log: ${logPath})`);
   const fleet = spawn("node", ["scripts/local-e2e-fleet.mjs", runId], {
     cwd: repoRoot,
+    detached: process.platform !== "win32",
+    env: {
+      ...process.env,
+      SPLITCH_LOCAL_DEV_FLEET: String(values.full),
+      SPLITCH_LOCAL_DEV_GATEWAY_PORT: String(port),
+      ...(values.full
+        ? {
+            ACCESS_TOKEN_SECRET: JSON.stringify({
+              ...generateKeyPairSync("rsa", { modulusLength: 2048 }).privateKey.export({
+                format: "jwk",
+              }),
+              kid: "local-e2e-analysis",
+            }),
+          }
+        : {}),
+    },
     stdio: ["ignore", "pipe", "pipe"],
   });
   fleet.stdout.pipe(log);
   fleet.stderr.pipe(log);
 
   let shared = false;
+  const stopFleet = () => {
+    if (process.platform === "win32") fleet.kill("SIGTERM");
+    else {
+      try {
+        process.kill(-fleet.pid, "SIGTERM");
+      } catch (error) {
+        if (error.code !== "ESRCH") throw error;
+      }
+    }
+  };
+  const cleanup = () => {
+    if (shared) {
+      shared = false;
+      sandboxPreview(port, false);
+    }
+    stopFleet();
+  };
   const shutdown = () => {
-    if (shared) tailscaleServe(port, false);
-    fleet.kill("SIGTERM");
+    cleanup();
     process.exit(0);
   };
   process.once("SIGINT", shutdown);
   process.once("SIGTERM", shutdown);
+  process.once("SIGHUP", shutdown);
+  process.once("exit", cleanup);
   fleet.once("exit", (code) => {
+    cleanup();
     console.error(`local-dev-panel: fleet exited (${code}); see ${logPath}`);
-    if (shared) tailscaleServe(port, false);
     process.exit(1);
   });
 
-  await waitForFleet(runId, fleet);
-  const gateway = createServer(proxy);
-  gateway.on("upgrade", proxyUpgrade);
-  await new Promise((done) => gateway.listen(port, "127.0.0.1", done));
-  console.log(`local-dev-panel: ready at http://127.0.0.1:${port}/__dev/login`);
+  try {
+    await waitForFleet(runId, fleet);
+    if (values.full) await startServiceProxies(proxy, PANEL_ORIGIN);
+    const gateway = createServer(proxy);
+    gateway.on("upgrade", proxyUpgrade);
+    await new Promise((done, reject) => {
+      gateway.once("error", reject);
+      gateway.listen(port, "127.0.0.1", done);
+    });
+    console.log(`local-dev-panel: ready at http://127.0.0.1:${port}/__dev/login`);
 
-  if (values.share) {
-    tailscaleServe(port, true);
-    shared = true;
-    const host = spawnSync("tailscale", ["status", "--json"], { encoding: "utf8" });
-    const dnsName = host.status === 0 ? JSON.parse(host.stdout).Self?.DNSName : undefined;
-    const name = dnsName ? dnsName.replace(/\.$/, "") : `${hostname()}.<tailnet>.ts.net`;
-    console.log(`local-dev-panel: shared at https://${name}:${port}/__dev/login`);
+    if (values.share) {
+      sandboxPreview(port, true);
+      shared = true;
+    }
+  } catch (error) {
+    cleanup();
+    throw error;
   }
 }
 
