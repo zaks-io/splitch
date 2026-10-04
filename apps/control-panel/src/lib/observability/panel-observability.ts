@@ -81,6 +81,7 @@ export function createControlPanelSentryOptions(
     environment: secrets.environment,
     release: env.SENTRY_RELEASE,
     tracesSampleRate: 1,
+    propagateTraceparent: true,
     tracePropagationTargets: [/^\/_serverFn\//],
     beforeSend,
   };

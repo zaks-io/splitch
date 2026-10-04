@@ -137,6 +137,10 @@ to the change's commit range rather than the whole tree. It is a separate step (
 
 Knip is required in commit, pre-push, and CI gates.
 
+Point the Lefthook plugin at `lefthook.yml` so generated hook paths outside a linked worktree do not
+break entry discovery. Scope `stryker.base.mjs` to the root workspace; package workspaces use the
+Stryker plugin's default config discovery.
+
 - Let Knip infer pnpm workspaces unless a package needs an explicit override; config hints are errors.
 - Fix Knip findings in this order: unused files, unresolved imports, unused exports, unused
   dependencies.

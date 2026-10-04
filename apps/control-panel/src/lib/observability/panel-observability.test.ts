@@ -187,6 +187,7 @@ describe("control-panel Sentry PII scrubbing", () => {
     });
 
     expect(options.tracesSampleRate).toBe(1);
+    expect(options.propagateTraceparent).toBe(true);
     expect(options.tracePropagationTargets).toHaveLength(1);
     expect(options.tracePropagationTargets[0]?.test("/_serverFn/function-id")).toBe(true);
     expect(options.tracePropagationTargets[0]?.test("https://api.example.com/data")).toBe(false);

@@ -2,8 +2,8 @@
   "$schema": "https://unpkg.com/knip@6/schema.json",
   "ignoreBinaries": ["gitleaks", "tb", "tailscale"],
   "ignoreDependencies": ["cloudflare"],
-  "stryker": {
-    "config": ["stryker.base.mjs", "packages/*/stryker.config.mjs"]
+  "lefthook": {
+    "config": ["lefthook.yml"]
   },
   "ignore": [".agents/**", "fixtures/convex-sdk-consumer/**", "fixtures/ssr-sdk-consumer/**"],
   "workspaces": {
@@ -13,7 +13,10 @@
         "scripts/lib/repo-file-sweep.d.mts",
         "scripts/release/constants.mjs",
         "fixtures/external-dark-launch-product/resolve.mjs"
-      ]
+      ],
+      "stryker": {
+        "config": ["stryker.base.mjs"]
+      }
     },
     "apps/control-panel": {
       "vite": false
