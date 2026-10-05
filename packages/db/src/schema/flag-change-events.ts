@@ -59,6 +59,7 @@ export const flagChangeEvents = sqliteTable(
     diffJson: text("diff_json"),
   },
   (table) => [
+    index("flag_change_events_app_seq_idx").on(table.appId, table.seq),
     index("flag_change_events_scope_seq_idx").on(table.appId, table.environmentId, table.seq),
     index("flag_change_events_changed_at_idx").on(table.changedAt),
   ],
