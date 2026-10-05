@@ -16,7 +16,7 @@ gates, environment safety).
 
 In a fresh Git worktree, run `pnpm worktree:setup` before anything else. It
 installs dependencies and git hooks and copies the gitignored `.env.local` from
-the main checkout.
+the main checkout when available. A failed env copy warns and does not block setup.
 
 ## Workflow skills
 

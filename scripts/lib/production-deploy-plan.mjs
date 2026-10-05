@@ -174,6 +174,7 @@ function isNonDeployableChange(path) {
     path === "scripts/lib/cli-mcp-contract-exceptions.ts" ||
     path === "scripts/lib/production-deploy-plan.mjs" ||
     path === "scripts/plan-ci-verification.mjs" ||
+    path === "scripts/setup-worktree.sh" ||
     path.endsWith(".test.mjs") ||
     path === "LICENSE" ||
     (!path.includes("/") && path.endsWith(".md")) ||

@@ -15,6 +15,7 @@ test("documentation and non-deployable application changes skip production mutat
       "docs/spec/platform/deployment-pipeline.md",
       "docs/spec/quickstart.md",
       ".github/workflows/deploy-production.yml",
+      "scripts/setup-worktree.sh",
     ]),
     {
       d1: false,
