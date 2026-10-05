@@ -135,15 +135,22 @@ production approval, compare D1 query count, rows read/written, overload errors,
 delivery age and successful acknowledgments under the same observation window.
 Separate SQL execution duration from end-to-end D1 binding latency.
 
-## Done
+## Validation completed
 
-- Real D1 tests prove the constant claim budget and lease/retry/version invariants.
-- Idle-installation selection and Organization isolation pass regression tests.
+- Real D1 tests passed the constant claim budget and lease/retry/version invariants.
+- Idle-installation selection and Organization isolation passed regression tests.
 - The additive migration and declared schema agree, and query plans use the indexes.
-- Required local checks, a local cross-review and current-head hosted review pass.
-- A deployed non-production proof exercises the changed claims and verifies a
-  signed webhook received and acknowledged over HTTP against a real D1 database.
-- Production promotion and installation recovery have explicit approval.
+- Required local checks, a fresh local cross-review and GitHub CI passed.
+- CodeRabbit reviewed the runtime and index changes without code findings.
+- The deployed non-production proof exercised the changed claims and verified
+  signed webhooks received and acknowledged over HTTPS against a real D1 database.
+
+## Pending release
+
+- Explicit approval to merge and promote to production. Merging starts production
+  deployment through the existing pipeline.
+- Production measurements of query load, overload errors and delivery age.
+- Diagnosis and owner-assisted recovery of the two blocked Convex installations.
 
 ## Sources
 
