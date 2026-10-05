@@ -1,3 +1,4 @@
+import { ConvexInstallationStatusSchema } from "@splitch/contracts";
 import type { Repository } from "@splitch/db";
 import { describe, expect, it, vi } from "vitest";
 import { encryptConvexSecret, signConvexWebhook } from "./convex-secret";
@@ -77,6 +78,7 @@ describe("Convex config webhook dispatch", () => {
     expect(consoleError).toHaveBeenCalledWith("convex_webhook_delivery_preparation_failed", {
       deliveryId: "00000000-0000-4000-8000-000000000002",
       code: "DELIVERY_PREPARATION_FAILED",
+      causeName: "Error",
     });
     consoleError.mockRestore();
     expect(finishes).toEqual(
@@ -133,6 +135,42 @@ describe("Convex config webhook dispatch", () => {
         "00000000-0000-4000-8000-000000000002",
       ]),
     );
+  });
+});
+
+describe("Convex preparation diagnostics", () => {
+  it("records the exception type for an unreadable secret without logging secret material", async () => {
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const { repo, finishes } = await fixture("{}");
+    const differentKey = "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=";
+    const fetcher = vi.fn(async () => new Response(null, { status: 202 }));
+
+    await dispatchConvexWebhooks({ repo, webhookKek: differentKey, fetcher, now: () => NOW });
+
+    expect(fetcher).not.toHaveBeenCalled();
+    expect(consoleError).toHaveBeenCalledWith("convex_webhook_delivery_preparation_failed", {
+      deliveryId: "00000000-0000-4000-8000-000000000001",
+      code: "DELIVERY_PREPARATION_FAILED",
+      causeName: "OperationError",
+    });
+    expect(finishes[0]).toMatchObject({
+      state: "pending",
+      errorJson: JSON.stringify({
+        kind: "internal",
+        code: "DELIVERY_PREPARATION_FAILED",
+        occurredAt: NOW.toISOString(),
+      }),
+    });
+    expect(
+      ConvexInstallationStatusSchema.shape.latestDeliveryError.parse(
+        JSON.parse(finishes[0]?.errorJson as string),
+      ),
+    ).toEqual({
+      kind: "internal",
+      code: "DELIVERY_PREPARATION_FAILED",
+      occurredAt: NOW.toISOString(),
+    });
+    consoleError.mockRestore();
   });
 });
 

@@ -47,10 +47,18 @@ async function deliverSafely(
   let webhook: WebhookPost;
   try {
     webhook = await prepareWebhook(deps, delivery, now);
-  } catch {
+  } catch (cause) {
+    const causeName =
+      cause instanceof Error &&
+      ["Error", "OperationError", "DataError", "InvalidCharacterError", "TypeError"].includes(
+        cause.name,
+      )
+        ? cause.name
+        : "UnknownError";
     console.error("convex_webhook_delivery_preparation_failed", {
       deliveryId: delivery.deliveryId,
       code: "DELIVERY_PREPARATION_FAILED",
+      causeName,
     });
     await finishFailure(deps, delivery, leaseOwner, now, true, {
       kind: "internal",

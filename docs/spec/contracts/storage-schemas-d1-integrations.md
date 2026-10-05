@@ -53,6 +53,11 @@ logical nudges for one installation. The serialized body is immutable after inse
 is computed at each attempt with the installation's current secret, so rotation does not strand
 pending rows.
 
+Scheduler indexes cover `(state, next_attempt_at, lease_expires_at)` for pending work and
+`(state, lease_expires_at)` for expired leases. The same indexes apply to
+`cloudflare_config_deliveries`. Organization-scoped Sentry dispatch reads the Flag change log through
+`(app_id, seq)` so consumed history does not need to be scanned again.
+
 `DeliveryErrorEnvelope` is the complete persisted diagnostic shape:
 
 ```text
@@ -87,6 +92,12 @@ stored completely rather than truncated.
   registration, a `404` retries and every retry runs on the next dispatcher tick.
 - A successful newer Environment version suppresses older pending rows for the same installation;
   an already leased older delivery may finish and is harmless because the component version-gates it.
+- A bounded delivery claim uses one transactional D1 batch containing the lease update and joined
+  payload read. Active installation eligibility is checked before the limit. Concurrent claims
+  cannot acquire the same unexpired lease.
+- Convex installation health updates require an active installation and the owned delivery lease.
+  The health update precedes lease release in the same transaction, so stale or revoked completions
+  change neither row. Completion transactions remain independent across deliveries.
 - Delivery never holds the config transaction open and never rolls back committed config.
 - App deletion suppresses pending or leased rows before integration revocation. Retried workers
   re-check suppression after acquiring a lease and before sending.
@@ -102,6 +113,7 @@ stored completely rather than truncated.
 
 ## Sources
 
+- [D1 transactional batch API](https://developers.cloudflare.com/d1/worker-api/d1-database/#batch)
 - [ADR-0049](../../adr/0049-convex-local-evaluation-uses-nudge-pull-sync-and-transactional-exposure-delivery.md)
 - [convex-integration-api.md](../sdk/convex-integration-api.md)
 - [privacy-data-lifecycle.md](../platform/privacy-data-lifecycle.md)

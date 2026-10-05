@@ -1,4 +1,5 @@
 import {
+  claimDueCloudflareDeliveries,
   type CloudflareDeliveryFinish,
   finishCloudflareDelivery,
   retryTerminalCloudflareDelivery,
@@ -179,50 +180,7 @@ export function makeCloudflareIntegrationRepo(d1: D1Database) {
       leaseExpiresAt: string,
       limit: number,
     ): Promise<CloudflareDeliveryRow[]> {
-      const due = await d1
-        .prepare(`SELECT delivery.delivery_id AS deliveryId
-        FROM cloudflare_config_deliveries delivery
-        WHERE ((delivery.state = 'pending' AND delivery.next_attempt_at <= ?)
-          OR (delivery.state = 'leased' AND delivery.lease_expires_at <= ?))
-          AND delivery.environment_version = (
-            SELECT MAX(candidate.environment_version)
-            FROM cloudflare_config_deliveries candidate
-            WHERE candidate.installation_id = delivery.installation_id
-              AND candidate.state IN ('pending', 'leased')
-          )
-        ORDER BY next_attempt_at LIMIT ?`)
-        .bind(now, now, limit)
-        .all<{ deliveryId: string }>();
-      const claimed: CloudflareDeliveryRow[] = [];
-      for (const candidate of due.results) {
-        const result = await d1
-          .prepare(`UPDATE cloudflare_config_deliveries
-          SET state = 'leased', lease_owner = ?, lease_expires_at = ? WHERE delivery_id = ?
-          AND ((state = 'pending' AND next_attempt_at <= ?)
-            OR (state = 'leased' AND lease_expires_at <= ?))`)
-          .bind(leaseOwner, leaseExpiresAt, candidate.deliveryId, now, now)
-          .run();
-        if (!result.meta.changes) continue;
-        const row = await d1
-          .prepare(`SELECT delivery.delivery_id AS deliveryId,
-          delivery.installation_id AS installationId, delivery.app_id AS appId,
-          delivery.environment_id AS environmentId, installation.endpoint AS endpoint,
-          installation.secret_ciphertext AS secretCiphertext,
-          installation.secret_key_version AS secretKeyVersion,
-          delivery.environment_version AS environmentVersion,
-          delivery.attempt_count AS attemptCount,
-          installation.last_applied_version AS lastAppliedVersion,
-          installation.created_at AS registeredAt
-          FROM cloudflare_config_deliveries delivery
-          JOIN cloudflare_installations installation
-            ON installation.installation_id = delivery.installation_id
-          WHERE delivery.delivery_id = ? AND delivery.lease_owner = ?
-            AND installation.status = 'active'`)
-          .bind(candidate.deliveryId, leaseOwner)
-          .first<CloudflareDeliveryRow>();
-        if (row) claimed.push(row);
-      }
-      return claimed;
+      return claimDueCloudflareDeliveries(d1, now, leaseOwner, leaseExpiresAt, limit);
     },
 
     async finishDelivery(

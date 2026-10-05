@@ -130,6 +130,7 @@ export const configWebhookDeliveries = sqliteTable(
       table.installationId,
       table.environmentVersion,
     ),
+    index("config_webhook_delivery_expiry_idx").on(table.state, table.leaseExpiresAt),
     index("config_webhook_delivery_lease_idx").on(
       table.state,
       table.nextAttemptAt,
@@ -202,6 +203,7 @@ export const cloudflareConfigDeliveries = sqliteTable(
       table.installationId,
       table.environmentVersion,
     ),
+    index("cloudflare_config_delivery_expiry_idx").on(table.state, table.leaseExpiresAt),
     index("cloudflare_config_delivery_lease_idx").on(
       table.state,
       table.nextAttemptAt,

@@ -1,5 +1,58 @@
+import type { CloudflareDeliveryRow } from "./cloudflare-integrations";
 import type { EnvScope } from "./scope";
 import { assertMintedScope } from "./scope";
+
+export async function claimDueCloudflareDeliveries(
+  d1: D1Database,
+  now: string,
+  leaseOwner: string,
+  leaseExpiresAt: string,
+  limit: number,
+): Promise<CloudflareDeliveryRow[]> {
+  if (!Number.isInteger(limit) || limit < 1)
+    throw new Error("Cloudflare delivery claim limit must be a positive integer");
+  const [leased, claimed] = await d1.batch<CloudflareDeliveryRow>([
+    d1
+      .prepare(`UPDATE cloudflare_config_deliveries
+        SET state = 'leased', lease_owner = ?, lease_expires_at = ?
+        WHERE delivery_id IN (
+          SELECT delivery.delivery_id FROM cloudflare_config_deliveries delivery
+          JOIN cloudflare_installations installation
+            ON installation.installation_id = delivery.installation_id
+          WHERE installation.status = 'active'
+            AND ((delivery.state = 'pending' AND delivery.next_attempt_at <= ?)
+              OR (delivery.state = 'leased' AND delivery.lease_expires_at <= ?))
+            AND NOT EXISTS (
+              SELECT 1 FROM cloudflare_config_deliveries newer
+              WHERE newer.installation_id = delivery.installation_id
+                AND newer.environment_version > delivery.environment_version
+                AND newer.state IN ('pending', 'leased')
+            )
+          ORDER BY delivery.next_attempt_at, delivery.delivery_id LIMIT ?
+        ) RETURNING delivery_id AS deliveryId`)
+      .bind(leaseOwner, leaseExpiresAt, now, now, limit),
+    d1
+      .prepare(`SELECT delivery.delivery_id AS deliveryId,
+        delivery.installation_id AS installationId, delivery.app_id AS appId,
+        delivery.environment_id AS environmentId, installation.endpoint AS endpoint,
+        installation.secret_ciphertext AS secretCiphertext,
+        installation.secret_key_version AS secretKeyVersion,
+        delivery.environment_version AS environmentVersion,
+        delivery.attempt_count AS attemptCount,
+        installation.last_applied_version AS lastAppliedVersion,
+        installation.created_at AS registeredAt
+        FROM cloudflare_config_deliveries delivery JOIN cloudflare_installations installation
+          ON installation.installation_id = delivery.installation_id
+        WHERE delivery.state = 'leased' AND delivery.lease_owner = ?
+          AND installation.status = 'active'
+        ORDER BY delivery.next_attempt_at, delivery.delivery_id`)
+      .bind(leaseOwner),
+  ]);
+  if (!leased || !claimed)
+    throw new Error("Cloudflare delivery claim: D1 batch did not return both statement results");
+  const updatedIds = new Set(leased.results.map((row) => row.deliveryId));
+  return claimed.results.filter((row) => updatedIds.has(row.deliveryId));
+}
 
 export interface CloudflareDeliveryFinish {
   state: "delivered" | "pending" | "terminal";
