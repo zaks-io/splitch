@@ -3,6 +3,11 @@ import {
   claimDueConvexDeliveries,
   finishConvexDelivery,
 } from "./convex-deliveries";
+import {
+  type ConvexPreparationFailure,
+  deferConvexPreparationFailure,
+} from "./convex-preparation-backoff";
+import { type DeliveryRetentionInput, pruneConvexDeliveries } from "./delivery-retention";
 import { listPushInstallations, listPushInstallationsByIds } from "./push-installation-list";
 import type { EnvScope } from "./scope";
 import { assertMintedScope } from "./scope";
@@ -134,7 +139,7 @@ export function makeConvexIntegrationRepo(d1: D1Database) {
       await d1
         .prepare(`UPDATE convex_installations SET
           secret_ciphertext = ?, secret_key_version = ?, secret_fingerprint = ?,
-          last_rotation_id = ?, last_rotation_fingerprint = ?, updated_at = ?
+          last_rotation_id = ?, last_rotation_fingerprint = ?, updated_at = ?, preparation_retry_at = NULL
           WHERE app_id = ? AND environment_id = ? AND installation_id = ? AND status = 'active'`)
         .bind(
           input.secretCiphertext,
@@ -202,6 +207,18 @@ export function makeConvexIntegrationRepo(d1: D1Database) {
       input: ConvexDeliveryFinish,
     ): Promise<void> {
       await finishConvexDelivery(d1, deliveryId, leaseOwner, input);
+    },
+
+    deferPreparationFailure(
+      installationId: string,
+      leaseOwner: string,
+      input: ConvexPreparationFailure,
+    ) {
+      return deferConvexPreparationFailure(d1, installationId, leaseOwner, input);
+    },
+
+    pruneDeliveries(input: DeliveryRetentionInput) {
+      return pruneConvexDeliveries(d1, input);
     },
   };
 }

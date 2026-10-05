@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { createRepository } from "../index";
+import { appScope, createRepository } from "../index";
 import {
   claim,
   DELIVERY_PROVIDERS,
@@ -147,6 +147,35 @@ describe.each(DELIVERY_PROVIDERS)("%s delivery claims", (provider) => {
 });
 
 describe("provider-specific delivery claim contracts", () => {
+  it("scopes immediate Cloudflare work to one App, including expired leases", async () => {
+    await insertInstallation(local.d1, seed, "cloudflare", "a");
+    await insertDelivery(local.d1, seed, "cloudflare", "a");
+    await insertInstallation(local.d1, seed, "cloudflare", "b", "b");
+    await insertDelivery(local.d1, seed, "cloudflare", "b");
+    await local.d1
+      .prepare(
+        "UPDATE cloudflare_config_deliveries SET app_id = ?, environment_id = ? WHERE installation_id = 'b'",
+      )
+      .bind(seed.b.appId, seed.b.environmentId)
+      .run();
+    const observed = observeD1(local.d1);
+    const repo = createRepository(observed.database);
+    const scoped = () =>
+      repo.cloudflare.claimDueDeliveries(NOW, "scoped", LATER, 25, appScope(seed.a.appId));
+    expect((await scoped()).map((row) => row.installationId)).toEqual(["a"]);
+    expect(observed.batches).toEqual([2]);
+    await local.d1
+      .prepare(
+        "UPDATE cloudflare_config_deliveries SET lease_expires_at = ? WHERE installation_id = 'a'",
+      )
+      .bind(NOW)
+      .run();
+    expect((await scoped()).map((row) => row.installationId)).toEqual(["a"]);
+    expect((await claim(repo, "cloudflare", "cron")).map((row) => row.installationId)).toEqual([
+      "b",
+    ]);
+  });
+
   it("claims the immutable Convex body with the installation's current secret", async () => {
     await insertInstallation(local.d1, seed, "convex", "convex");
     const inserted = await insertDelivery(local.d1, seed, "convex", "convex");
@@ -170,16 +199,19 @@ describe("provider-specific delivery claim contracts", () => {
     ]);
   });
 
-  it("blocks an older Cloudflare delivery while a newer pending version is backed off", async () => {
-    await insertInstallation(local.d1, seed, "cloudflare", "cloudflare");
-    await insertDelivery(local.d1, seed, "cloudflare", "cloudflare", 1);
-    await insertDelivery(local.d1, seed, "cloudflare", "cloudflare", 2, LATER);
-    const repo = createRepository(local.d1);
-    expect(await claim(repo, "cloudflare", "early")).toEqual([]);
-    const rows = await claim(repo, "cloudflare", "due", 25, LATER, "2026-08-25T00:06:00.000Z");
-    expect(rows.map((row) => row.environmentVersion)).toEqual([2]);
-    expect(await claim(repo, "cloudflare", "older", 25, LATER)).toEqual([]);
-  });
+  it.each(DELIVERY_PROVIDERS)(
+    "blocks an older %s delivery while a newer pending version is backed off",
+    async (provider) => {
+      await insertInstallation(local.d1, seed, provider, "backoff");
+      await insertDelivery(local.d1, seed, provider, "backoff", 1);
+      await insertDelivery(local.d1, seed, provider, "backoff", 2, LATER);
+      const repo = createRepository(local.d1);
+      expect(await claim(repo, provider, "early")).toEqual([]);
+      const rows = await claim(repo, provider, "due", 25, LATER, "2026-08-25T00:06:00.000Z");
+      expect(rows.map((row) => row.environmentVersion)).toEqual([2]);
+      expect(await claim(repo, provider, "older", 25, LATER)).toEqual([]);
+    },
+  );
 
   it("ignores completed newer Cloudflare versions when choosing outstanding work", async () => {
     await insertInstallation(local.d1, seed, "cloudflare", "cloudflare");

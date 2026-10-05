@@ -90,6 +90,7 @@ export async function insertDeliveries(
 
 export function observeD1(d1: D1Database) {
   const batches: number[] = [];
+  const batchRowsRead: number[][] = [];
   const queries: Array<{ sql: string; values: unknown[] }> = [];
   let directCalls = 0;
   function watchStatement(
@@ -123,13 +124,15 @@ export function observeD1(d1: D1Database) {
           return watchStatement(target.prepare(sql), query);
         };
       if (property === "batch")
-        return (statements: D1PreparedStatement[]) => {
+        return async (statements: D1PreparedStatement[]) => {
           batches.push(statements.length);
-          return target.batch(statements);
+          const results = await target.batch(statements);
+          batchRowsRead.push(results.map((result) => result.meta.rows_read));
+          return results;
         };
       const value = Reflect.get(target, property, receiver);
       return typeof value === "function" ? value.bind(target) : value;
     },
   });
-  return { database, batches, queries, directCalls: () => directCalls };
+  return { database, batches, batchRowsRead, queries, directCalls: () => directCalls };
 }

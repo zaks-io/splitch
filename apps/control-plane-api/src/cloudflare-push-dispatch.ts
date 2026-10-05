@@ -1,4 +1,4 @@
-import type { Repository } from "@splitch/db";
+import type { Repository, TenantScope } from "@splitch/db";
 import { envScope } from "@splitch/db";
 import { decryptIntegrationSecret, signIntegrationPayload } from "./integration-secret";
 import { buildIntegrationSnapshot } from "./integration-snapshot";
@@ -18,6 +18,7 @@ export interface CloudflarePushDispatchDeps {
   fetcher?: typeof fetch;
   now?: () => Date;
   leaseOwner?: () => string;
+  scope?: TenantScope;
 }
 
 export async function dispatchCloudflarePushes(deps: CloudflarePushDispatchDeps): Promise<number> {
@@ -28,6 +29,7 @@ export async function dispatchCloudflarePushes(deps: CloudflarePushDispatchDeps)
     leaseOwner,
     new Date(now.getTime() + LEASE_MS).toISOString(),
     BATCH_SIZE,
+    deps.scope,
   );
   const snapshots = new Map<string, ReturnType<typeof buildStableSnapshot>>();
   const settled = await Promise.allSettled(

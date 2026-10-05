@@ -162,3 +162,61 @@ Separate SQL execution duration from end-to-end D1 binding latency.
 - [Integration storage and delivery contract](../spec/contracts/storage-schemas-d1-integrations.md)
 - [Convex delivery contract](../adr/0049-convex-local-evaluation-uses-nudge-pull-sync-and-transactional-exposure-delivery.md)
 - [Flag log and Sentry cursor contract](../adr/0051-the-flag-change-log-is-both-the-audit-record-and-the-integration-outbox.md)
+
+## Follow-up remediation, October 5
+
+[SPL-695](https://linear.app/zaks-io/issue/SPL-695/bound-integration-delivery-failures-and-enforce-30-day-retention)
+adds newest-only Convex claims, installation preparation cooldown, App-scoped immediate Cloudflare
+claims and the existing 30-day delivery retention contract. These changes require an approved
+release and migrations 0040/0041 before production use.
+
+Convex preparation failure now contributes at most one candidate per installation and defers
+that installation for 30 minutes. This fixed delay keeps the existing maximum recovery delay,
+while eliminating the multiplicative retry work from hundreds of historical rows. Scoped secret
+rotation clears the delay immediately. The failure transaction compares claimed ciphertext and
+key version, so a stale worker cannot delay a repaired installation. Missing or malformed KEK
+configuration fails before acquiring leases. Healthy acknowledgments remain independent.
+
+Claims start from cooldown-eligible active installations and use a partial outstanding-version
+index to select one row per installation. A real D1 regression measures identical claim rows read
+before and after a blocked installation grows from one to 300 pending versions. Pending history
+is preserved until successful acknowledgment, avoiding premature retention aging during failure.
+
+Only the newest outstanding Convex version is sent. A successful owned acknowledgment suppresses
+older pending versions and abandoned expired leases, preserving unexpired leases. Terminal responses do not suppress older versions; those remain eligible
+under the existing delivery contract. The scheduler emits separate claimed, received-2xx,
+receiver-rejected, transport-failed and preparation-failed-installation counts. A received 2xx
+counter records receiver response, not proof that D1 acknowledgment committed.
+
+Completion triggers stamp both outboxes and clear the timestamp on rearm. Known delivered times
+survive migration; unknown legacy terminal and suppressed completion times start a new 30-day
+window. The daily 08:00 UTC job deletes at most 1,000 completed rows per provider. Pending and
+leased rows are preserved. Reaching either deletion budget emits a warning and a fault report,
+so a saturated backlog cannot grow silently; retained history may exceed 30 days until capacity
+is adjusted. Cloudflare re-registration recreates the current-version row if
+retention removed it, preserving setup recovery.
+
+A local HTTPS proof used the actual migrated D1 repository and dispatcher with a signature-checking
+receiver. One broken installation with 300 outstanding versions occupied one claim slot while a
+healthy sibling completed. A second tick before cooldown expiry claimed zero. Scoped repair then
+delivered version 300, verified the signature and suppressed 299 older rows. Both actual HTTPS
+receipts were checked. This proves recovery correctness, not production throughput.
+
+Before the first production pruning run, use count-only queries with the intended cutoff:
+
+```sql
+SELECT state, COUNT(*) AS eligible
+FROM config_webhook_deliveries INDEXED BY config_webhook_delivery_completed_idx
+WHERE state IN ('delivered', 'terminal', 'suppressed') AND completed_at < ?
+GROUP BY state;
+SELECT state, COUNT(*) AS eligible
+FROM cloudflare_config_deliveries INDEXED BY cloudflare_config_delivery_completed_idx
+WHERE state IN ('delivered', 'terminal', 'suppressed') AND completed_at < ?
+GROUP BY state;
+```
+
+Bind the proposed scheduled run time minus 30 days. Before migration, only delivered rows with
+known timestamps can be initially eligible; legacy failures wait 30 days from migration. Production
+release and permanent pruning need explicit approval. Recover affected secrets through the owning
+installation's existing authenticated rotation operation and matching receiver update. Never
+replace the shared KEK or patch ciphertext as a shortcut.
