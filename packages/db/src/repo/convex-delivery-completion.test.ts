@@ -30,6 +30,125 @@ async function snapshot() {
   return JSON.stringify({ installation, delivery });
 }
 
+describe("Convex acknowledgment suppression", () => {
+  it("claims the newest version and suppresses only older pending work after acknowledgment", async () => {
+    await repo.convex.finishDelivery(deliveryId, "owner", { state: "pending", now: NOW });
+    await insertDelivery(local.d1, seed, "convex", "installation", 0);
+    const newest = await insertDelivery(local.d1, seed, "convex", "installation", 2);
+    expect(await claim(repo, "convex", "newest-owner")).toEqual([
+      expect.objectContaining({ deliveryId: newest.deliveryId, environmentVersion: 2 }),
+    ]);
+    const newer = await insertDelivery(local.d1, seed, "convex", "installation", 3);
+    await insertInstallation(local.d1, seed, "convex", "sibling");
+    const sibling = await insertDelivery(local.d1, seed, "convex", "sibling", 0);
+    const started = Date.now();
+
+    await repo.convex.finishDelivery(newest.deliveryId, "newest-owner", {
+      state: "delivered",
+      now: NOW,
+    });
+
+    const rows = await completionRows();
+    const suppressed = rows.filter((row) => row.state === "suppressed");
+    expect(suppressed.map((row) => row.delivery_id)).toEqual(["installation_0", deliveryId]);
+    for (const row of suppressed) {
+      expect(Date.parse(row.completed_at ?? "")).toBeGreaterThanOrEqual(started - 1_000);
+    }
+    expect(rows.find((row) => row.delivery_id === newest.deliveryId)).toMatchObject({
+      state: "delivered",
+      completed_at: NOW,
+    });
+    for (const id of [newer.deliveryId, sibling.deliveryId]) {
+      expect(rows.find((row) => row.delivery_id === id)).toMatchObject({
+        state: "pending",
+        completed_at: null,
+      });
+    }
+  });
+
+  it.each(["stale", "revoked"] as const)(
+    "cannot suppress older pending rows on a %s acknowledgment",
+    async (condition) => {
+      await insertDelivery(local.d1, seed, "convex", "installation", 0);
+      if (condition === "revoked") {
+        await local.d1
+          .prepare(
+            "UPDATE convex_installations SET status = 'revoked' WHERE installation_id = 'installation'",
+          )
+          .run();
+      }
+      const before = await completionRows();
+      const health = await snapshot();
+      await repo.convex.finishDelivery(
+        deliveryId,
+        condition === "stale" ? "stale-owner" : "owner",
+        {
+          state: "delivered",
+          now: LATER,
+        },
+      );
+      expect(await completionRows()).toEqual(before);
+      expect(await snapshot()).toBe(health);
+      expect(before.find((row) => row.delivery_id === "installation_0")).toMatchObject({
+        state: "pending",
+        completed_at: null,
+      });
+    },
+  );
+});
+
+describe("Convex expired-lease supersession", () => {
+  it("suppresses an abandoned older lease after a newer version succeeds", async () => {
+    const newer = await insertDelivery(local.d1, seed, "convex", "installation", 2);
+    const claimed = await claim(repo, "convex", "recovery", 25, LATER, "2026-08-25T00:06:00.000Z");
+    expect(claimed.map((row) => row.deliveryId)).toEqual([newer.deliveryId]);
+    await repo.convex.finishDelivery(newer.deliveryId, "recovery", {
+      state: "delivered",
+      now: LATER,
+    });
+    expect(
+      await local.d1
+        .prepare(
+          "SELECT state, lease_owner, lease_expires_at, completed_at FROM config_webhook_deliveries WHERE delivery_id = ?",
+        )
+        .bind(deliveryId)
+        .first(),
+    ).toMatchObject({
+      state: "suppressed",
+      lease_owner: null,
+      lease_expires_at: null,
+      completed_at: expect.any(String),
+    });
+    expect(await claim(repo, "convex", "after", 25, LATER)).toEqual([]);
+    const before = await snapshot();
+    await repo.convex.finishDelivery(deliveryId, "owner", {
+      state: "terminal",
+      now: LATER,
+      errorJson: '{"code":"STALE"}',
+    });
+    expect(await snapshot()).toBe(before);
+  });
+
+  it("preserves an older lease that is still in flight", async () => {
+    const older = await insertDelivery(local.d1, seed, "convex", "installation", 0);
+    await local.d1
+      .prepare(
+        "UPDATE config_webhook_deliveries SET state = 'leased', lease_owner = 'legacy', lease_expires_at = ? WHERE delivery_id = ?",
+      )
+      .bind(LATER, older.deliveryId)
+      .run();
+    await repo.convex.finishDelivery(deliveryId, "owner", { state: "delivered", now: NOW });
+    expect(
+      await local.d1
+        .prepare(
+          "SELECT state, lease_owner, completed_at FROM config_webhook_deliveries WHERE delivery_id = ?",
+        )
+        .bind(older.deliveryId)
+        .first(),
+    ).toEqual({ state: "leased", lease_owner: "legacy", completed_at: null });
+  });
+});
+
 describe("Convex delivery completion", () => {
   it("records an owned acknowledgment before releasing its lease", async () => {
     await repo.convex.finishDelivery(deliveryId, "owner", { state: "delivered", now: NOW });
@@ -150,3 +269,11 @@ describe("Convex delivery completion", () => {
     }
   });
 });
+
+async function completionRows() {
+  const rows = await local.d1
+    .prepare(`SELECT delivery_id, state, completed_at
+    FROM config_webhook_deliveries ORDER BY delivery_id`)
+    .all<{ delivery_id: string; state: string; completed_at: string | null }>();
+  return rows.results;
+}

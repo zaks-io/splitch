@@ -1,4 +1,4 @@
-import type { Repository } from "@splitch/db";
+import { appScope, type Repository } from "@splitch/db";
 import { createPerformanceSpanRecorder } from "@splitch/observability/performance-spans";
 import {
   createWorkerFaultReporter,
@@ -31,11 +31,15 @@ export async function handleControlPlaneAppRequest(input: {
   delegated: boolean;
 }): Promise<Response> {
   const { request, env, ctx, authResolver, repo, door, delegated } = input;
+  let resolvedAppId: string | undefined;
   const configStore = durableConfigStoreAccess(env.CONFIG_STORE_WRITER, env.CONFIG_STORE, {
     repo,
     waitUntil: (promise) => ctx.waitUntil(promise),
   });
   const app = createApp({
+    onResolvedApp: (appId) => {
+      resolvedAppId = appId;
+    },
     door,
     apiVersion: () => apiDocumentVersion(env),
     authResolver,
@@ -100,10 +104,11 @@ export async function handleControlPlaneAppRequest(input: {
   });
 
   const response = await app.fetch(request, env);
-  if (response.ok && request.method !== "GET" && request.method !== "HEAD") {
+  if (response.ok && resolvedAppId && request.method !== "GET" && request.method !== "HEAD") {
     ctx.waitUntil(
       dispatchCloudflarePushes({
         repo,
+        scope: appScope(resolvedAppId),
         secretKek: env.INTEGRATION_SECRET_KEK,
         secretKeyVersion: env.INTEGRATION_SECRET_KEY_VERSION,
       }).catch((error) => {

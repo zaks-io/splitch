@@ -103,10 +103,12 @@ export interface AppDeps {
   convex?: Omit<ConvexHandlerDeps, "repo">;
   cloudflare?: Omit<CloudflareHandlerDeps, "repo">;
   sentry?: Omit<SentryHandlerDeps, "repo">;
+  onResolvedApp?: (appId: string) => void;
 }
 
 /** Build the registrar bound to this Worker's control-plane-token resolver. */
 export function controlPlaneRegistrar(deps: AppDeps): Registrar {
+  const resolveInput = makePathSelectorResolver(deps.repo);
   const registrarDeps: RegistrarDeps = {
     authResolvers: {
       "control-plane-token": deps.authResolver,
@@ -115,7 +117,14 @@ export function controlPlaneRegistrar(deps: AppDeps): Registrar {
         : {}),
     },
     rateLimiter: deps.rateLimiter,
-    authenticatedInputResolver: makePathSelectorResolver(deps.repo),
+    authenticatedInputResolver: async (args) => {
+      const result = await resolveInput(args);
+      if (result.ok) {
+        const appId = result.params.appId ?? result.principal.appId;
+        if (appId) deps.onResolvedApp?.(appId);
+      }
+      return result;
+    },
     defaultHeaders: deps.defaultHeaders,
     observability: deps.observability,
   };

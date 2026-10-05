@@ -1,11 +1,12 @@
 import {
-  claimDueCloudflareDeliveries,
   type CloudflareDeliveryFinish,
+  claimDueCloudflareDeliveries,
   finishCloudflareDelivery,
   retryTerminalCloudflareDelivery,
 } from "./cloudflare-deliveries";
+import { type DeliveryRetentionInput, pruneCloudflareDeliveries } from "./delivery-retention";
 import { listPushInstallations, listPushInstallationsByIds } from "./push-installation-list";
-import type { EnvScope } from "./scope";
+import type { EnvScope, TenantScope } from "./scope";
 import { assertMintedScope } from "./scope";
 
 export interface CloudflareInstallationWrite {
@@ -50,6 +51,9 @@ export interface CloudflareDeliveryRow {
 
 export function makeCloudflareIntegrationRepo(d1: D1Database) {
   return {
+    pruneDeliveries(input: DeliveryRetentionInput) {
+      return pruneCloudflareDeliveries(d1, input);
+    },
     async environmentVersion(scope: EnvScope): Promise<number> {
       assertMintedScope(scope);
       const row = await d1
@@ -179,8 +183,9 @@ export function makeCloudflareIntegrationRepo(d1: D1Database) {
       leaseOwner: string,
       leaseExpiresAt: string,
       limit: number,
+      scope?: TenantScope,
     ): Promise<CloudflareDeliveryRow[]> {
-      return claimDueCloudflareDeliveries(d1, now, leaseOwner, leaseExpiresAt, limit);
+      return claimDueCloudflareDeliveries(d1, now, leaseOwner, leaseExpiresAt, limit, scope);
     },
 
     async finishDelivery(

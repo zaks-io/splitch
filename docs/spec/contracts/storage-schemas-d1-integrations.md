@@ -18,6 +18,7 @@ create its webhook deliveries in the same D1 transaction. They contain no raw AP
 | `last_delivered_version`     | INTEGER | no       | Most recent acknowledged Environment version               |
 | `last_delivered_at`          | TEXT    | no       | ISO 8601 acknowledgement time                              |
 | `latest_delivery_error_json` | TEXT    | no       | Latest bounded `DeliveryErrorEnvelope`                     |
+| `preparation_retry_at`       | TEXT    | no       | Convex installation preparation cooldown eligibility       |
 | `created_at`                 | TEXT    | yes      | ISO 8601                                                   |
 | `updated_at`                 | TEXT    | yes      | ISO 8601                                                   |
 | `revoked_at`                 | TEXT    | no       | ISO 8601                                                   |
@@ -31,31 +32,38 @@ rotation rewraps ciphertext without changing the underlying secret. No read path
 
 ## `config_webhook_deliveries`
 
-| Column                | Type    | Required | Meaning                                                       |
-| --------------------- | ------- | -------- | ------------------------------------------------------------- |
-| `delivery_id`         | TEXT PK | yes      | Retry-stable UUID                                             |
-| `installation_id`     | TEXT FK | yes      | Destination installation                                      |
-| `app_id`              | TEXT FK | yes      | Denormalized deletion and lease scope                         |
-| `environment_id`      | TEXT FK | yes      | Denormalized config scope                                     |
-| `environment_version` | INTEGER | yes      | Monotonic committed version                                   |
-| `body_json`           | TEXT    | yes      | Exact strict `ConfigChanged` JSON body, with no config values |
-| `state`               | TEXT    | yes      | `pending`, `leased`, `delivered`, `terminal`, or `suppressed` |
-| `attempt_count`       | INTEGER | yes      | Starts at zero                                                |
-| `next_attempt_at`     | TEXT    | yes      | ISO 8601 retry eligibility                                    |
-| `lease_owner`         | TEXT    | no       | Current dispatcher owner                                      |
-| `lease_expires_at`    | TEXT    | no       | Expired leases are reclaimable                                |
-| `last_error_json`     | TEXT    | no       | Latest bounded `DeliveryErrorEnvelope`                        |
-| `created_at`          | TEXT    | yes      | ISO 8601 config commit time                                   |
-| `delivered_at`        | TEXT    | no       | ISO 8601 successful acknowledgement time                      |
+| Column                | Type    | Required | Meaning                                                        |
+| --------------------- | ------- | -------- | -------------------------------------------------------------- |
+| `delivery_id`         | TEXT PK | yes      | Retry-stable UUID                                              |
+| `installation_id`     | TEXT FK | yes      | Destination installation                                       |
+| `app_id`              | TEXT FK | yes      | Denormalized deletion and lease scope                          |
+| `environment_id`      | TEXT FK | yes      | Denormalized config scope                                      |
+| `environment_version` | INTEGER | yes      | Monotonic committed version                                    |
+| `body_json`           | TEXT    | yes      | Exact strict `ConfigChanged` JSON body, with no config values  |
+| `state`               | TEXT    | yes      | `pending`, `leased`, `delivered`, `terminal`, or `suppressed`  |
+| `attempt_count`       | INTEGER | yes      | Starts at zero                                                 |
+| `next_attempt_at`     | TEXT    | yes      | ISO 8601 retry eligibility                                     |
+| `lease_owner`         | TEXT    | no       | Current dispatcher owner                                       |
+| `lease_expires_at`    | TEXT    | no       | Expired leases are reclaimable                                 |
+| `last_error_json`     | TEXT    | no       | Latest bounded `DeliveryErrorEnvelope`                         |
+| `created_at`          | TEXT    | yes      | ISO 8601 config commit time                                    |
+| `delivered_at`        | TEXT    | no       | ISO 8601 successful acknowledgement time                       |
+| `completed_at`        | TEXT    | no       | UTC completion time for delivered, terminal or suppressed rows |
 
 Unique `(installation_id, environment_version)` prevents one committed version from creating two
 logical nudges for one installation. The serialized body is immutable after insert. The signature
 is computed at each attempt with the installation's current secret, so rotation does not strand
-pending rows.
+pending rows. Scoped secret rotation also clears the installation preparation cooldown.
 
 Scheduler indexes cover `(state, next_attempt_at, lease_expires_at)` for pending work and
 `(state, lease_expires_at)` for expired leases. The same indexes apply to
-`cloudflare_config_deliveries`. Organization-scoped Sentry dispatch reads the Flag change log through
+`cloudflare_config_deliveries`. Convex installation lease exclusion uses
+`(installation_id, state, lease_expires_at)`. Convex claims start from active cooldown-eligible
+installations using `(status, preparation_retry_at)`, then select the newest outstanding version
+through a partial `(installation_id, environment_version)` index. Blocked pending history does not
+contribute to the due-row scan. Immediate Cloudflare scans use
+`(app_id, state, next_attempt_at, lease_expires_at)`. Both delivery tables have
+a partial `completed_at` index for delivered, terminal and suppressed rows. Organization-scoped Sentry dispatch reads the Flag change log through
 `(app_id, seq)` so consumed history does not need to be scanned again.
 
 `DeliveryErrorEnvelope` is the complete persisted diagnostic shape:
@@ -81,17 +89,24 @@ stored completely rather than truncated.
 - A successful config mutation inserts one row for every active installation in the same D1
   transaction as the config change. A transaction that rolls back creates no delivery.
 - Dispatch starts immediately after commit and is also recoverable by the Control Plane Worker's
-  once-per-minute scheduled lease scanner.
+  once-per-minute scheduled lease scanner. Immediate Cloudflare scans use the authenticated
+  resolved App, including credential-bound registration; the recovery cron remains global.
 - One delivery's preparation or transport failure is isolated from every other claimed delivery. A
   preparation failure records the delivery ID and bounded error envelope before releasing its lease;
   healthy siblings still complete and acknowledge their responses.
+- Convex claims select only the newest pending or leased version per installation and exclude
+  installations with an unexpired delivery lease. A preparation failure defers the installation
+  for 30 minutes, preserving pending work and allowing other installations to claim slots.
+  Scoped secret rotation clears the cooldown. A stale worker with an old ciphertext or key version
+  cannot defer the repaired installation. Missing or malformed KEK configuration fails before claims.
 - Transient transport, `408`, `429`, and `5xx` failures retry after `5s`, `30s`, `2m`, `10m`, then
-  `30m` with up to 20% jitter on every capped retry. A claim lease lasts 60 seconds. Other `4xx`
+  `30m` with up to 20% jitter on every capped retry. Cloudflare claim leases last 60 seconds; Convex claim leases last 30 seconds. Other `4xx`
   responses are terminal until the installation is repaired or replaced, except a Cloudflare
   installation's first setup: until it first applies a version, and within 10 minutes of its
   registration, a `404` retries and every retry runs on the next dispatcher tick.
-- A successful newer Environment version suppresses older pending rows for the same installation;
-  an already leased older delivery may finish and is harmless because the component version-gates it.
+- A successful newer Environment version suppresses older pending rows and expired older leases
+  for the same installation. An unexpired older lease may finish and is harmless because the
+  component version-gates it.
 - A bounded delivery claim uses one transactional D1 batch containing the lease update and joined
   payload read. Active installation eligibility is checked before the limit. Concurrent claims
   cannot acquire the same unexpired lease.
@@ -102,7 +117,15 @@ stored completely rather than truncated.
 - App deletion suppresses pending or leased rows before integration revocation. Retried workers
   re-check suppression after acquiring a lease and before sending.
 - Delivered rows retain for 30 days. Terminal and suppressed rows retain the complete bounded
-  non-secret diagnostic envelope for 30 days. A pending or leased row is never expired.
+  non-secret diagnostic envelope for 30 days after completion. A pending or leased row is never expired.
+  State-transition triggers stamp `completed_at` in canonical UTC and clear it when a row is rearmed.
+  Migration backfill uses known `delivered_at` for delivered rows; legacy terminal/suppressed rows
+  with unknown completion times receive migration time and a full new retention window.
+  The daily 08:00 UTC job atomically deletes at most 1,000 rows per provider strictly older than
+  the 30-day cutoff. Cloudflare re-registration recreates a missing current-version row after
+  retention, or rearms its terminal row and clears prior delivery diagnostics. Reaching the daily
+  deletion budget emits a warning and fault report; older rows can be retained longer while a
+  saturated backlog awaits capacity adjustment.
 
 ## Done
 
