@@ -1,6 +1,12 @@
 import { cloudflareWebAnalyticsScripts } from "@splitch/observability/cloudflare-web-analytics";
 import { themeInitScript } from "@splitch/ui/components/theme-toggle";
-import { createRootRoute, HeadContent, Outlet, Scripts } from "@tanstack/react-router";
+import {
+  createRootRoute,
+  HeadContent,
+  Outlet,
+  Scripts,
+  trimPathRight,
+} from "@tanstack/react-router";
 import type { ReactNode } from "react";
 import { SiteFooter } from "../components/site-footer";
 import { SiteHeader } from "../components/site-header";
@@ -8,7 +14,7 @@ import { DOCS_ORIGIN } from "../docs/site";
 import appCss from "../styles/app.css?url";
 
 /**
- * Only the page-independent half of Open Graph lives here. Every route sets its
+ * Shared Open Graph defaults and the active page URL live here. Every route sets its
  * own `title` and `description`, and unfurlers fall back to those when `og:title`
  * and `og:description` are absent. Declaring the homepage's copy at the root
  * would instead stamp it onto every docs page.
@@ -27,32 +33,40 @@ const openGraphMeta = [
 ];
 
 export const Route = createRootRoute({
-  head: () => ({
-    meta: [
-      { charSet: "utf-8" },
-      { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "splitch · feature flags and experiments, built for agents" },
-      {
-        name: "description",
-        content:
-          "Toggle features without redeploying your app. Compare models and product changes using user feedback. Manage Flags and Experiments through the CLI or MCP.",
-      },
-      ...openGraphMeta,
-    ],
-    links: [
-      { rel: "stylesheet", href: appCss },
-      { rel: "icon", href: "/favicon.ico", sizes: "32x32 16x16" },
-      { rel: "apple-touch-icon", href: "/apple-touch-icon.png" },
-      { rel: "manifest", href: "/site.webmanifest" },
-    ],
-    scripts: [
-      { children: themeInitScript },
-      ...cloudflareWebAnalyticsScripts({
-        platformTarget: import.meta.env.VITE_SPLITCH_PLATFORM_TARGET,
-        siteToken: import.meta.env.VITE_CLOUDFLARE_WEB_ANALYTICS_TOKEN,
-      }),
-    ],
-  }),
+  head: ({ matches }) => {
+    const page = matches.at(-1);
+    if (!page) throw new Error("Cannot declare canonical metadata without an active route");
+    const canonicalUrl = new URL(trimPathRight(page.pathname), DOCS_ORIGIN).href;
+
+    return {
+      meta: [
+        { charSet: "utf-8" },
+        { name: "viewport", content: "width=device-width, initial-scale=1" },
+        { title: "splitch · feature flags and experiments, built for agents" },
+        {
+          name: "description",
+          content:
+            "Toggle features without redeploying your app. Compare models and product changes using user feedback. Manage Flags and Experiments through the CLI or MCP.",
+        },
+        ...openGraphMeta,
+        { property: "og:url", content: canonicalUrl },
+      ],
+      links: [
+        { rel: "canonical", href: canonicalUrl },
+        { rel: "stylesheet", href: appCss },
+        { rel: "icon", href: "/favicon.ico", sizes: "32x32 16x16" },
+        { rel: "apple-touch-icon", href: "/apple-touch-icon.png" },
+        { rel: "manifest", href: "/site.webmanifest" },
+      ],
+      scripts: [
+        { children: themeInitScript },
+        ...cloudflareWebAnalyticsScripts({
+          platformTarget: import.meta.env.VITE_SPLITCH_PLATFORM_TARGET,
+          siteToken: import.meta.env.VITE_CLOUDFLARE_WEB_ANALYTICS_TOKEN,
+        }),
+      ],
+    };
+  },
   shellComponent: RootDocument,
   component: RootLayout,
 });
