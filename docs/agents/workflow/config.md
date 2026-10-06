@@ -86,9 +86,9 @@ in this config; refresh them from Linear during each workflow run.
 - Separate hosted checks: `Control Panel E2E` runs the local full-stack
   Playwright harness weekly in the `e2e` workflow and on manual dispatch while
   SPL-181 is open; a red run is signal-only. The stats
-  simulation runs only nightly in `stats-simulation-audit` (`--mode=audit`);
-  there is no per-push smoke, and no standalone `Spec Lint` job (`spec:lint`
-  lives inside `Verify`).
+  full simulation audit runs on manual dispatch in `stats-simulation-audit` (`--mode=audit`);
+  regular `@splitch/stats` tests include simulation files at smoke settings. There is no
+  standalone `Spec Lint` job (`spec:lint` lives inside `Verify`).
 - Commit gate: Lefthook runs `node scripts/check-file-size.mjs` and
   `CI=true pnpm verify:commit` (one parallel Turbo graph: `knip`,
   `format:check`, `lint`, `typecheck`, `secrets:staged`).

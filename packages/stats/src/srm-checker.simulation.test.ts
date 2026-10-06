@@ -39,7 +39,8 @@ describe("SRMChecker simulation smoke", () => {
   });
 
   it("keeps delayed reverse-order activation false alarms within alpha plus Monte Carlo tolerance", {
-    timeout: 120_000,
+    // The 1,000-iteration audit took 123s on CI; retain the full sample with headroom.
+    timeout: 300_000,
   }, () => {
     const iterations = Number.parseInt(
       process.env.SPLITCH_STATS_SIMULATION_ITERATIONS ?? "300",
