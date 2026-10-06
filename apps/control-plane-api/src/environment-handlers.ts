@@ -19,12 +19,13 @@ import {
   clientKeyResponse,
   provisionClientKey,
 } from "./client-key-provisioning";
+import { EnvironmentExposureStatusCleanupError } from "./environment-exposure-status-cleanup";
 import {
   initializeFlagConfigsForEnvironment,
   rollbackCreatedEnvironment,
 } from "./flag-config-lifecycle";
 import { objectBody, pathParam } from "./handler-input";
-import { EnvironmentExposureStatusCleanupError } from "./environment-exposure-status-cleanup";
+import { resolvedEnvironment } from "./resolved-environment";
 
 export function makeEnvironmentHandlers(deps: AppEnvironmentDeps) {
   return {
@@ -84,7 +85,11 @@ export function makeEnvironmentHandlers(deps: AppEnvironmentDeps) {
     async getEnvironment({ input, requestId }: HandlerArgs<unknown>): Promise<Response> {
       const appId = pathParam(input, "appId");
       const environmentId = pathParam(input, "environmentId");
-      const environment = await deps.repo.identity.getEnvironment(appScope(appId), environmentId);
+      const resolved = resolvedEnvironment(input, appId, environmentId);
+      const environment =
+        resolved === undefined
+          ? await deps.repo.identity.getEnvironment(appScope(appId), environmentId)
+          : resolved;
       if (!environment) return appNotFound(requestId);
       return Response.json(environmentResponse(environment));
     },
