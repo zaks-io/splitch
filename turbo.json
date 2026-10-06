@@ -3,6 +3,7 @@
   "globalDependencies": ["biome.json", "tsconfig.base.json"],
   "globalEnv": ["CI", "NODE_ENV"],
   "globalPassThroughEnv": [
+    "VITEST_MAX_WORKERS",
     "GITHUB_RUN_ID",
     "SPLITCH_SMOKE_APP_ID",
     "SPLITCH_SMOKE_CLIENT_ID",
