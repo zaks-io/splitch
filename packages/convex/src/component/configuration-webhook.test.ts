@@ -139,7 +139,10 @@ describe("Convex configuration webhook body bound", () => {
 function webhookDeps() {
   return {
     nowSeconds: () => Number(TIMESTAMP),
-    getIntegration: vi.fn(async () => ({ webhookSecret: SECRET })),
+    getIntegration: vi.fn(async () => ({
+      installationId: "f35d40f3-e178-4e5c-a45b-251790247fd1",
+      webhookSecret: SECRET,
+    })),
     announce: vi.fn(async () => {}),
   };
 }

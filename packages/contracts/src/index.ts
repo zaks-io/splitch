@@ -6,8 +6,12 @@ export {
 } from "./access-token-authorization";
 export type { ApprovalRequestId, ApprovalReviewId } from "./approval-identifiers";
 export { ApprovalRequestIdSchema, ApprovalReviewIdSchema } from "./approval-identifiers";
+// biome-ignore lint/performance/noReExportAll: configuration snapshot and callback contracts are grouped by domain
+export * from "./barrels/configuration";
 // biome-ignore lint/performance/noReExportAll: package entry point exposes the grouped conclusion contract
 export * from "./barrels/experiment-conclusion";
+// biome-ignore lint/performance/noReExportAll: the D9 lifecycle vocabulary lives in barrels/flag-lifecycle.ts
+export * from "./barrels/flag-lifecycle";
 // biome-ignore lint/performance/noReExportAll: package entry point intentionally exposes the grouped CLI/MCP parity-skin API
 export * from "./barrels/parity-skins";
 // biome-ignore lint/performance/noReExportAll: package entry point intentionally exposes the grouped route registry API
@@ -18,8 +22,6 @@ export * from "./barrels/stats-contracts";
 export * from "./barrels/storage-contracts";
 // biome-ignore lint/performance/noReExportAll: curated wire envelopes live in barrels/wire-envelopes.ts
 export * from "./barrels/wire-envelopes";
-// biome-ignore lint/performance/noReExportAll: the D9 lifecycle vocabulary lives in barrels/flag-lifecycle.ts
-export * from "./barrels/flag-lifecycle";
 export { type CanonicalJsonSha256, CanonicalJsonSha256Schema } from "./canonical-hash";
 export { CanonicalJsonInputError, canonicalHash, canonicalJson } from "./canonical-json";
 export {
@@ -42,17 +44,14 @@ export {
 } from "./client-origin";
 // biome-ignore lint/performance/noReExportAll: package entry point intentionally exposes the grouped Cloudflare integration contract
 export * from "./cloudflare-integration";
-export {
-  CONFIG_SNAPSHOT_SCHEMA_VERSION,
-  type ConfigSnapshot,
-  ConfigSnapshotSchema,
-} from "./config-snapshot";
 export { CONTROL_PANEL_DELEGATION_HEADER, PANEL_API_KEY_SCOPES } from "./control-panel-binding";
 // biome-ignore lint/performance/noReExportAll: package entry point intentionally exposes the grouped Convex integration contract
 export * from "./convex-integration";
 export { CREDENTIAL_CACHE_BACKFILL_CHECKPOINT_VERSION } from "./credential-cache-backfill";
 export type { DeltaNudge, DeltaNudgeEntity } from "./delta-nudge";
 export { DeltaNudgeEntitySchema, DeltaNudgeSchema, deltaNudgeEntities } from "./delta-nudge";
+// biome-ignore lint/performance/noReExportAll: outcome class lives beside the error envelope exports
+export * from "./error-outcome";
 export { errorStatusByCode, httpStatusForError } from "./error-status";
 export type { ErrorCode, ErrorResponse, PolicyChangeType, RecommendedAction } from "./errors";
 export {
@@ -65,8 +64,6 @@ export {
   RecommendedActionSchema,
   recommendedActions,
 } from "./errors";
-// biome-ignore lint/performance/noReExportAll: outcome class lives beside the error envelope exports
-export * from "./error-outcome";
 // biome-ignore lint/performance/noReExportAll: Event Definition and Metric Event exports are grouped by domain
 export * from "./events";
 // biome-ignore lint/performance/noReExportAll: package entry point intentionally exposes the grouped rigor API
@@ -115,7 +112,6 @@ export {
   RunStatusSchema,
   runStatuses,
 } from "./leaf-schemas-experiment";
-export { applyMetricHorizonRefine, metricHorizonIssue } from "./leaf-schemas-metric-horizon";
 export type {
   Condition,
   ConditionOperator,
@@ -137,6 +133,7 @@ export {
   TargetingRuleSchema,
   VariantSchema,
 } from "./leaf-schemas-flag";
+export { applyMetricHorizonRefine, metricHorizonIssue } from "./leaf-schemas-metric-horizon";
 export {
   type APIKey,
   APIKeySchema,

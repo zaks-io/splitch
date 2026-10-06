@@ -2,7 +2,7 @@ import { ConvexInstallationSchema, parseResponseBody } from "@splitch/sdk/local-
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import { action, env, internalAction, internalMutation, internalQuery } from "./_generated/server";
-import { canonicalCallbackUrl } from "./callback_url";
+import { configurationCallbackUrl } from "./callback_url";
 import { randomSecret } from "./crypto";
 import { purgeBatchHandler, revokeLocalHandler, uninstallHandler } from "./integration_cleanup";
 import { initializeHandler, installCallbackUrl } from "./integration_initialize";
@@ -65,11 +65,9 @@ export const install = action({
     const headers = requestHeaders();
     const existing = await ctx.runQuery(internal.integration.get, {});
     const callbackUrl = installCallbackUrl(existing, () => {
-      const cloudUrl = process.env.CONVEX_CLOUD_URL;
-      if (!cloudUrl) throw new Error("CONVEX_CLOUD_URL is required to install @splitch/convex");
       const siteUrl = process.env.CONVEX_SITE_URL;
       if (!siteUrl) throw new Error("CONVEX_SITE_URL is required to install @splitch/convex");
-      return canonicalCallbackUrl(cloudUrl, siteUrl);
+      return configurationCallbackUrl(siteUrl);
     });
     const initialized = await ctx.runMutation(internal.integration.initialize, {
       installationId: crypto.randomUUID(),
@@ -87,6 +85,7 @@ export const install = action({
         installationId: initialized.installationId,
         callbackUrl: initialized.callbackUrl,
         webhookSecret: initialized.webhookSecret,
+        callbackVerification: "hmac-sha256",
       }),
       redirect: "error",
     });

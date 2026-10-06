@@ -1,7 +1,11 @@
 import type { Repository } from "@splitch/db";
+import {
+  configurationCallbackDestinationError,
+  postConfigurationCallback,
+} from "./configuration-callback-transport";
 import { decryptConvexSecret, signConvexWebhook } from "./convex-secret";
 import { validateIntegrationSecretKey } from "./integration-secret";
-import { describeCause, postWebhook, retryDelayMs, type WebhookPost } from "./webhook-transport";
+import { describeCause, retryDelayMs, type WebhookPost } from "./webhook-transport";
 
 const LEASE_MS = 30_000;
 const BATCH_SIZE = 25;
@@ -143,7 +147,17 @@ async function deliverOne(
   webhook: WebhookPost,
   summary: ConvexDispatchSummary,
 ): Promise<void> {
-  const result = await postWebhook(webhook);
+  const destinationError = configurationCallbackDestinationError(webhook.url);
+  if (destinationError) {
+    summary.receiverRejected += 1;
+    await finishFailure(deps, delivery, leaseOwner, now, false, {
+      kind: "internal",
+      code: "CALLBACK_DESTINATION_REJECTED",
+      occurredAt: now.toISOString(),
+    });
+    return;
+  }
+  const result = await postConfigurationCallback(webhook);
 
   if (result.outcome === "transport-failed") {
     summary.transportFailures += 1;
