@@ -1,5 +1,8 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
+import ts from "typescript";
+import { LOCAL_E2E_ANALYSIS_INPUTS } from "./local-e2e-analysis-inputs.mjs";
 import { createAnalysisSourceServer } from "./local-e2e-analysis-source.mjs";
 
 test("serves authenticated deterministic Tinybird rows and local JWT evidence", async (context) => {
@@ -50,4 +53,54 @@ test("serves authenticated deterministic Tinybird rows and local JWT evidence", 
     }),
   }).then((response) => response.json());
   assert.equal(metricRows.data.length, 675);
+});
+
+test("every fixture Run supplies the Analysis Worker's required commitment columns", async (context) => {
+  const workerUrl = new URL("../apps/analysis-api/src/results-run-commitments.ts", import.meta.url);
+  const worker = ts.createSourceFile(
+    workerUrl.pathname,
+    readFileSync(workerUrl, "utf8"),
+    ts.ScriptTarget.Latest,
+    true,
+  );
+  const declaration = worker.statements
+    .filter(ts.isVariableStatement)
+    .flatMap((statement) => statement.declarationList.declarations)
+    .find((item) => ts.isIdentifier(item.name) && item.name.text === "COMMITMENT_FIELDS");
+  assert.ok(declaration?.initializer, "Worker required commitment columns must be declared");
+  assert.ok(ts.isAsExpression(declaration.initializer));
+  const fields = declaration.initializer.expression;
+  assert.ok(ts.isArrayLiteralExpression(fields));
+  assert.ok(fields.elements.length > 0);
+  const requiredColumns = fields.elements.map((field) => {
+    assert.ok(ts.isStringLiteral(field), "required commitment columns must be string literals");
+    return field.text;
+  });
+
+  const server = createAnalysisSourceServer("fixture-commitment-columns-test");
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  context.after(() => server.close());
+  const address = server.address();
+  assert.ok(address && typeof address !== "string");
+
+  for (const fixture of LOCAL_E2E_ANALYSIS_INPUTS) {
+    const params = new URLSearchParams({
+      app_id: fixture.appId,
+      environment_id: fixture.environmentId,
+      experiment_id: fixture.experimentId,
+      run_id: fixture.runId,
+    });
+    const response = await fetch(
+      `http://127.0.0.1:${address.port}/v0/pipes/analysis_run_inputs.json?${params}`,
+      { headers: { authorization: "Bearer local-e2e-tinybird-read-token" } },
+    );
+    assert.equal(response.status, 200);
+    const { data } = await response.json();
+    assert.equal(data.length, 1, `missing fixture Run ${fixture.runId}`);
+    assert.equal(data[0].run_id, fixture.runId);
+    for (const column of requiredColumns) {
+      assert.ok(Object.hasOwn(data[0], column), `${fixture.runId} omitted ${column}`);
+      assert.equal(data[0][column], null, `${fixture.runId} must retain legacy ${column}`);
+    }
+  }
 });
