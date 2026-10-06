@@ -38,17 +38,23 @@ Keep the API Key in [Convex environment variables](https://docs.convex.dev/produ
 It stays in the deployment environment and must never reach browser code. The configuration callback
 is served at `/integrations/splitch/configuration`.
 
-On a first install, the component builds the callback from both Convex automatic URLs: the
-deployment name from `CONVEX_CLOUD_URL` and the mounted path from `CONVEX_SITE_URL`. It
-registers a canonical `*.convex.site` origin, even when HTTP Actions use a custom domain.
-The cloud URL must be the default `https://<deployment>.convex.cloud` URL for this derivation.
+On a first install, the component uses the actual `CONVEX_SITE_URL`, preserves the component mount
+path, and appends `/configuration`. This works with the default `*.convex.site` domain and
+[custom HTTP Actions domains](https://docs.convex.dev/production/custom-domains), including when
+both Convex URLs use custom domains. No additional domain setting is needed.
 
-On an upgrade, `install()` reuses the callback already stored with an active or revoked
-installation, or a pending installation whose callback is canonical. This lets an existing
-installation continue to upgrade after both Convex URLs are changed to custom domains. A first
-install, an install after local state is purged, or repair of a pending noncanonical callback
-still needs the default cloud URL. `install()` refuses those cases if `CONVEX_CLOUD_URL` uses a
-custom domain, rather than registering a callback Splitch would reject.
+The callback must use HTTPS on port 443 with a public DNS hostname and no credentials, query
+string, or fragment. IP literals, private hostnames, and Splitch's own services are rejected.
+Before creating the remote installation, Splitch sends a signed challenge to the callback and
+requires proof that the receiver holds this installation's current webhook secret. The challenge
+does not announce a configuration version or schedule a sync. Redirects are not followed.
+
+On upgrade, `install()` keeps the stored callback for an active or revoked installation, and for
+any pending installation with a valid callback, including a custom domain. It derives a fresh
+callback only for a new installation or to repair an invalid pending callback. Missing or invalid
+`CONVEX_SITE_URL` fails before local initialization or remote registration when derivation is
+required. An exact remote retry returns the stored installation and status without another
+challenge. Reusing the installation ID with a different callback or secret fails.
 
 The component also accepts an optional `SPLITCH_ENDPOINT` to point at a non-production splitch edge;
 it defaults to `https://edge.splitch.dev`.

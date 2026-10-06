@@ -4,21 +4,26 @@ import { initializeHandler, installCallbackUrl } from "./integration_initialize"
 
 const canonical = "https://third-cat-295.convex.site/integrations/splitch/configuration";
 const customDomain = "https://hooks.mainstay.club/integrations/splitch/configuration";
+const invalidCallback = "http://hooks.mainstay.club/integrations/splitch/configuration";
 
 describe("installCallbackUrl", () => {
-  it.each(["active", "revoked", "pending"] as const)(
-    "reuses a canonical callback from a %s installation",
-    (state) => {
-      const derive = vi.fn(() => "https://other.convex.site/configuration");
-      expect(installCallbackUrl({ ...integration(canonical), state } as never, derive)).toBe(
-        canonical,
-      );
-      expect(derive).not.toHaveBeenCalled();
-    },
-  );
+  it.each([
+    ["active", canonical],
+    ["revoked", canonical],
+    ["pending", canonical],
+    ["active", customDomain],
+    ["revoked", customDomain],
+    ["pending", customDomain],
+  ] as const)("reuses a valid %s installation callback %s", (state, callbackUrl) => {
+    const derive = vi.fn(() => "https://other.convex.site/configuration");
+    expect(installCallbackUrl({ ...integration(callbackUrl), state } as never, derive)).toBe(
+      callbackUrl,
+    );
+    expect(derive).not.toHaveBeenCalled();
+  });
 
-  it.each([null, { ...integration(customDomain), state: "pending" }])(
-    "derives a callback for a missing or pending custom-domain installation",
+  it.each([null, { ...integration(invalidCallback), state: "pending" }])(
+    "derives a callback for a missing or invalid pending installation",
     (existing) => {
       const derive = vi.fn(() => canonical);
       expect(installCallbackUrl(existing as never, derive)).toBe(canonical);
@@ -26,21 +31,21 @@ describe("installCallbackUrl", () => {
     },
   );
 
-  it.each([null, { ...integration(customDomain), state: "pending" }])(
-    "propagates derivation failure for a missing or pending custom-domain installation",
+  it.each([null, { ...integration(invalidCallback), state: "pending" }])(
+    "propagates derivation failure for a missing or invalid pending installation",
     (existing) => {
       const derive = vi.fn((): string => {
-        throw new Error("CONVEX_CLOUD_URL cannot identify a canonical callback");
+        throw new Error("CONVEX_SITE_URL is required");
       });
-      expect(() => installCallbackUrl(existing as never, derive)).toThrow("CONVEX_CLOUD_URL");
+      expect(() => installCallbackUrl(existing as never, derive)).toThrow("CONVEX_SITE_URL");
       expect(derive).toHaveBeenCalledOnce();
     },
   );
 });
 
 describe("initializeHandler", () => {
-  it("repairs a pending callback left on a custom domain", async () => {
-    const { ctx, patch } = fakeContext(integration(customDomain));
+  it("repairs an invalid pending callback", async () => {
+    const { ctx, patch } = fakeContext(integration(invalidCallback));
 
     const result = await initializeHandler(ctx, args());
 
@@ -48,13 +53,16 @@ describe("initializeHandler", () => {
     expect(result?.callbackUrl).toBe(canonical);
   });
 
-  it("retains canonical pending installation content for exact retries", async () => {
-    const existing = integration(canonical);
-    const { ctx, patch } = fakeContext(existing);
+  it.each([canonical, customDomain])(
+    "retains valid pending installation content for exact retries at %s",
+    async (callbackUrl) => {
+      const existing = integration(callbackUrl);
+      const { ctx, patch } = fakeContext(existing);
 
-    await expect(initializeHandler(ctx, args())).resolves.toBe(existing);
-    expect(patch).not.toHaveBeenCalled();
-  });
+      await expect(initializeHandler(ctx, args())).resolves.toBe(existing);
+      expect(patch).not.toHaveBeenCalled();
+    },
+  );
 
   it("inserts the canonical callback when no installation exists", async () => {
     const { ctx, patch } = fakeContext(null);
