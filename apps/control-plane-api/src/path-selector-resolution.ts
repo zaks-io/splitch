@@ -7,11 +7,13 @@ import {
   appAccessCovers,
   type Principal,
 } from "@splitch/worker-runtime";
+import type { EnvironmentRow } from "./app-environment-model";
 import {
   environmentSelectorFromInput,
   environmentSelectorsFromInput,
   withResolvedInput,
 } from "./path-selector-input-rewrite";
+import { recordResolvedEnvironment } from "./resolved-environment";
 import { membershipClaimsInScopes } from "./scope-binding";
 
 const APP_ID_PREFIX = "app_";
@@ -89,15 +91,19 @@ export async function resolveControlPlanePathSelectors(
   if (!flag.ok) return flag;
   assignResolved(resolvedParams, "flagId", flag.flagId);
 
+  const resolvedInput = withResolvedInput(
+    input,
+    params,
+    resolvedParams,
+    environments.environmentIds,
+    queryEnvironment.environmentId,
+  );
+  if (contract.id === "environments_get" && environment.row !== undefined) {
+    recordResolvedEnvironment(resolvedInput, environment.row);
+  }
   return {
     ok: true,
-    input: withResolvedInput(
-      input,
-      params,
-      resolvedParams,
-      environments.environmentIds,
-      queryEnvironment.environmentId,
-    ),
+    input: resolvedInput,
     params: resolvedParams,
     principal: resolvedPrincipal,
   };
@@ -146,22 +152,23 @@ async function resolveEnvironment(
   forceCanonicalId: boolean,
   requireMatch = false,
   notFoundCode: "APP_NOT_FOUND" | "ENVIRONMENT_NOT_FOUND" = "APP_NOT_FOUND",
-): Promise<{ ok: true; environmentId?: string } | { ok: false; error: ErrorResponse }> {
+): Promise<
+  | { ok: true; environmentId?: string; row?: EnvironmentRow | null }
+  | { ok: false; error: ErrorResponse }
+> {
   if (selector === undefined) return { ok: true };
   if (!appId?.startsWith(APP_ID_PREFIX)) return failure("APP_NOT_FOUND", "app not found");
   if (forceCanonicalId && selector.startsWith(ENVIRONMENT_ID_PREFIX)) return { ok: true };
   // Legacy keys can have the same `env_` shape as canonical IDs. One scoped OR
   // query is required to detect that collision without silently choosing a
   // plausible wrong Environment; it also avoids the old two-read ID-miss path.
-  // The default canonical-ID path still costs this resolver read plus the
-  // handler's read of the same row. SPL-541 accepts that cost so collision
-  // detection remains unconditional.
+  // The full row is carried to Environment GET so it can reuse this read.
   const candidates = await repo.identity.findEnvironmentSelectorCandidates(
     appScope(appId),
     selector,
   );
   if (candidates.length === 0 && selector.startsWith(ENVIRONMENT_ID_PREFIX) && !requireMatch) {
-    return { ok: true };
+    return { ok: true, row: null };
   }
   if (candidates.length > 1) {
     return {
@@ -169,7 +176,13 @@ async function resolveEnvironment(
       error: {
         code: "SELECTOR_AMBIGUOUS",
         message: `Environment selector "${selector}" matches more than one Environment`,
-        details: { candidates, recommendedAction: "USE_CANONICAL_ID" },
+        details: {
+          candidates: candidates.map(({ environmentId, environmentKey }) => ({
+            environmentId,
+            environmentKey,
+          })),
+          recommendedAction: "USE_CANONICAL_ID",
+        },
       },
     };
   }
@@ -182,6 +195,7 @@ async function resolveEnvironment(
     ? {
         ok: true,
         environmentId: environment.environmentId,
+        row: environment.environment,
       }
     : failure(
         notFoundCode,
