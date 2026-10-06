@@ -12,7 +12,8 @@ const SIMULATION_ALPHA = 0.05;
 const AUDIT_LOOKS = [20, 35, 55, 80, 120, 180, 260, 380, 520, 700, 950, 1_250] as const;
 const SMOKE_LOOKS = [20, 50, 100, 200, 400] as const;
 
-describe("SequentialCI audit simulation", () => {
+// Audit repeated looks took 9.5s on CI; leave headroom for runner variability.
+describe("SequentialCI audit simulation", { timeout: 60_000 }, () => {
   const mode = process.env.SPLITCH_STATS_SIMULATION_MODE === "audit" ? "audit" : "smoke";
   const seed = process.env.SPLITCH_STATS_SIMULATION_SEED ?? "424242";
   const iterations = Number.parseInt(process.env.SPLITCH_STATS_SIMULATION_ITERATIONS ?? "300", 10);
