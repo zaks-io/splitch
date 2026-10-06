@@ -5,6 +5,10 @@ import {
   type ResolutionReason,
   type Variant,
 } from "@splitch/contracts";
+import {
+  noopPerformanceSpanRecorder,
+  type PerformanceSpanRecorder,
+} from "@splitch/observability/performance-spans";
 import { type HandlerArgs, type Principal, renderError } from "@splitch/worker-runtime";
 import {
   admittedEvaluatePathDeps,
@@ -27,19 +31,33 @@ interface CredentialScope {
 }
 
 export function makeVerifyHandler(
-  deps: EvaluatePathDeps & { exposureAssembly: ExposureAssemblyDeps },
+  deps: EvaluatePathDeps & {
+    exposureAssembly: ExposureAssemblyDeps;
+    spans?: PerformanceSpanRecorder;
+  },
 ) {
   return async ({ input, principal, requestId }: HandlerArgs<unknown>): Promise<Response> => {
     const parsed = evaluationRouteInput(input);
     const scope = credentialScope(principal, parsed.body.appId);
     if (!scope.ok) return renderError(scope.error, { requestId });
-    const admitted = await tryAdmitAppIdentity(deps.exposureAssembly.saltStore, scope.value.appId);
+    const spans = deps.spans ?? noopPerformanceSpanRecorder;
+    const provider = new CapturingProvider(deps.provider);
+    // Configuration has no identity data. Assignment access stays behind admission.
+    void spans
+      .record({ name: "Verify flag configuration", op: "function" }, () =>
+        provider.prefetchFlag(scope.value.appId, scope.value.environmentId, parsed.body.flagKey),
+      )
+      .catch(() => {});
+    const admitted = await spans.record({ name: "Verify identity admission", op: "auth" }, () =>
+      tryAdmitAppIdentity(deps.exposureAssembly.saltStore, scope.value.appId),
+    );
     if (!admitted.ok) return renderError(admitted.error, { requestId });
 
     const evaluated = await verifyWithCapture(
       parsed.body,
       scope.value,
       admittedEvaluatePathDeps(deps, admitted.admission),
+      provider,
     );
     const stale = await appIdentityAdmissionValidationError(admitted.admission);
     if (stale !== null) return renderError(stale, { requestId });
@@ -75,8 +93,8 @@ async function verifyWithCapture(
   body: DataPlaneEvaluateRequest,
   scope: CredentialScope,
   deps: EvaluatePathDeps,
+  provider: CapturingProvider,
 ) {
-  const provider = new CapturingProvider(deps.provider);
   const output = await verify(
     {
       appId: scope.appId,
