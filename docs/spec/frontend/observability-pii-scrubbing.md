@@ -53,6 +53,36 @@ See [Sentry W3C propagation](https://docs.sentry.io/concepts/otlp/sentry-with-ot
 [Sentry Cloudflare options](https://docs.sentry.io/platforms/javascript/guides/cloudflare/configuration/options/#propagateTraceparent),
 and [Cloudflare trace limitations](https://developers.cloudflare.com/workers/observability/traces/known-limitations/).
 
+## Evaluation response latency
+
+Cloudflare native invocation duration includes post-response `waitUntil` work. Evaluation pins its
+configuration WebSocket this way, so a successful response taking about one second can produce a
+native invocation lasting about 31 seconds. Preserve the pin: it keeps configuration invalidation
+working across requests.
+
+The evaluation Worker annotates the native root with `sentry.op:function.cloudflare.invocation`.
+Sentry's OTLP conversion preserves custom attributes, and its normalization keeps an explicit
+`sentry.op` instead of inferring `http.server`. The SDK response root retains `http.server` and
+`auto.http.cloudflare`. Both root and child SDK spans receive `resource.service.name` from the
+closed Worker vocabulary after privacy scrubbing, with `-shared-preview` on that target.
+
+For response-latency views and alerts, use `span.op:http.server span.origin:auto.http.cloudflare`.
+For native traces in Axiom, use `attributes.custom["cloudflare.response.time_to_first_byte_ms"]`.
+Keep native invocation duration available for background-work diagnosis. After deploying a change,
+confirm the operations, service names and latency queries against newly ingested spans; historical
+spans retain their original classification.
+
+Verify starts Flag Configuration loading alongside App identity admission. The request-local
+CapturingProvider shares that read with the evaluator. Configuration still subscribes before reading
+the authoritative snapshot; Assignment access and the final identity-generation check still follow
+successful admission. `Verify flag configuration` and `Verify identity admission` spans expose the
+overlap without recording request attributes.
+
+Sources: [Cloudflare custom span attributes](https://developers.cloudflare.com/workers/observability/traces/custom-spans/),
+[Cloudflare waitUntil lifetime](https://developers.cloudflare.com/workers/runtime-apis/context/#waituntil),
+[Sentry OTLP attribute conversion](https://github.com/getsentry/relay/blob/master/relay-spans/src/otel_to_sentry_v2.rs),
+and [Sentry operation normalization](https://github.com/getsentry/relay/blob/master/relay-event-normalization/src/eap/mod.rs).
+
 ## Expected domain failures: breadcrumb only
 
 403 and 404 responses from loaders or the read API are **not** Sentry error events. They are

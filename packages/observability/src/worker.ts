@@ -127,10 +127,19 @@ export function workerSentryOptions(
      * protocol attributes. Without this hook that entire payload bypasses the
      * redaction contract the event path enforces.
      */
-    beforeSendSpan(span: SentrySpanJson) {
-      return scrubbedBeforeSendSpan(
+    beforeSendSpan(span: SentrySpanJson): SentrySpanJson {
+      const scrubbed = scrubbedBeforeSendSpan(
         span as unknown as SentryEventLike,
       ) as unknown as SentrySpanJson;
+      // Attribute SDK response spans to the same service as the native export.
+      // This value comes only from our closed surface vocabulary, never a request.
+      scrubbed.data = {
+        ...scrubbed.data,
+        "resource.service.name": `splitch-${options.surface}${
+          env.SPLITCH_PLATFORM_TARGET === "shared-preview" ? "-shared-preview" : ""
+        }`,
+      };
+      return scrubbed;
     },
     /**
      * `beforeSendSpan` only reaches the span slice of a transaction event. The
@@ -164,6 +173,11 @@ export function wrapWorkerHandler<E extends WorkerEnv, QueueMessage = unknown>(
       env: E,
       ctx: ExecutionContext,
     ) {
+      // Native invocations include the live socket's post-response waitUntil.
+      // Keep them searchable without treating that lifetime as HTTP latency.
+      if (options.surface === "evaluation-api") {
+        ctx.tracing?.getActiveSpan?.()?.setAttribute("sentry.op", "function.cloudflare.invocation");
+      }
       const transportRedirect = productionHttpsRedirect(request, env);
       if (transportRedirect) return transportRedirect;
       if (!env.SENTRY_DSN) {
