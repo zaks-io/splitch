@@ -61,7 +61,7 @@ describe("configuration callback destinations", () => {
   });
 
   it.each([
-    "https://splitch.dev/configuration",
+    new URL("/configuration", "https://splitch.dev").href,
     "https://api.splitch.dev/configuration",
     "https://api.preview.splitch.dev/configuration",
     "https://splitch-control-plane-api.account.workers.dev/configuration",
