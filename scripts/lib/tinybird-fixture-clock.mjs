@@ -1,4 +1,12 @@
-import { cpSync, existsSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import {
+  cpSync,
+  existsSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -20,16 +28,21 @@ export function stageTinybirdProject({ configPath, root, now }) {
   const offsetDays = fixtureOffsetDays(join(root, "fixtures"), now);
   assertFixturesOutliveTtl(root, offsetDays, now);
   const dir = mkdtempSync(join(tmpdir(), "splitch-tinybird-local-"));
-  const stagedRoot = join(dir, root);
-  cpSync(configPath, join(dir, configPath));
-  cpSync(root, stagedRoot, { recursive: true });
-  for (const folder of ["fixtures", "tests"]) {
-    for (const file of readdirSync(join(stagedRoot, folder))) {
-      const path = join(stagedRoot, folder, file);
-      writeFileSync(path, shiftDates(readFileSync(path, "utf8"), offsetDays));
+  try {
+    const stagedRoot = join(dir, root);
+    cpSync(configPath, join(dir, configPath));
+    cpSync(root, stagedRoot, { recursive: true });
+    for (const folder of ["fixtures", "tests"]) {
+      for (const file of readdirSync(join(stagedRoot, folder))) {
+        const path = join(stagedRoot, folder, file);
+        writeFileSync(path, shiftDates(readFileSync(path, "utf8"), offsetDays));
+      }
     }
+    return { dir, offsetDays, shiftMs: (ms) => ms + offsetDays * DAY_MS };
+  } catch (error) {
+    rmSync(dir, { recursive: true, force: true });
+    throw error;
   }
-  return { dir, offsetDays, shiftMs: (ms) => ms + offsetDays * DAY_MS };
 }
 
 export function shiftDates(text, offsetDays) {
