@@ -8,26 +8,17 @@ const env = {
   SPLITCH_PLATFORM_TARGET: "production",
 };
 
-interface RecordedSpan {
-  description: string;
-  span_id: string;
-  parent_span_id: string;
-  trace_id: string;
-  timestamp: number;
-  start_timestamp: number;
-  status: string;
-  data: Record<string, unknown>;
-}
+type RecordedSpan = Omit<
+  Parameters<NonNullable<import("@sentry/cloudflare").CloudflareOptions["beforeSendSpan"]>>[0],
+  "attributes"
+> & {
+  attributes: Record<string, { value: unknown }>;
+};
 
-interface RecordedTransaction {
-  contexts: { trace: { trace_id: string; span_id: string; data: Record<string, unknown> } };
-  spans: RecordedSpan[];
-}
-
-async function recordTransaction(run: () => Promise<void>): Promise<RecordedTransaction> {
+async function recordSpans(run: () => Promise<void>): Promise<RecordedSpan[]> {
   const Sentry = await loadSentry();
   Sentry.setAsyncLocalStorageAsyncContextStrategy();
-  const transactions: RecordedTransaction[] = [];
+  const spans: RecordedSpan[] = [];
   const client = new Sentry.CloudflareClient({
     ...workerSentryOptions(env, { surface: "event-ingest-api" }, Sentry),
     integrations: [],
@@ -35,7 +26,8 @@ async function recordTransaction(run: () => Promise<void>): Promise<RecordedTran
     transport: () => ({
       async send(envelope) {
         for (const [header, payload] of envelope[1]) {
-          if (header.type === "transaction") transactions.push(payload as RecordedTransaction);
+          expect(header.type).not.toBe("transaction");
+          if (header.type === "span") spans.push(...(payload as { items: RecordedSpan[] }).items);
         }
         return { statusCode: 200 };
       },
@@ -49,10 +41,8 @@ async function recordTransaction(run: () => Promise<void>): Promise<RecordedTran
       await Sentry.startSpan({ name: "test request", op: "http.server" }, run);
     });
     await client.flush();
-    expect(transactions).toHaveLength(1);
-    const transaction = transactions[0];
-    if (!transaction) throw new Error("Sentry did not export the transaction");
-    return transaction;
+    expect(spans.length).toBeGreaterThan(0);
+    return spans;
   } finally {
     await client.close();
   }
@@ -61,7 +51,7 @@ async function recordTransaction(run: () => Promise<void>): Promise<RecordedTran
 describe("performance span export", () => {
   it("exports nested and concurrent stages with intact trace links and scrubbed attributes", async () => {
     const recorder = createPerformanceSpanRecorder(env);
-    const transaction = await recordTransaction(async () => {
+    const spans = await recordSpans(async () => {
       await recorder.record({ name: "Ingest evaluation commit", op: "function" }, async () => {
         await Promise.all(
           ["identity", "lookup"].map((stage) =>
@@ -77,28 +67,28 @@ describe("performance span export", () => {
         );
       });
     });
-    const parent = transaction.spans.find(
-      (span) => span.description === "Ingest evaluation commit",
-    );
-    expect(transaction.contexts.trace.data["resource.service.name"]).toBe(
-      "splitch-event-ingest-api",
-    );
-    expect(parent?.data["resource.service.name"]).toBe("splitch-event-ingest-api");
-    expect(parent?.parent_span_id).toBe(transaction.contexts.trace.span_id);
+    const root = spans.find((span) => span.is_segment);
+    const parent = spans.find((span) => span.name === "Ingest evaluation commit");
+    expect(spans).toHaveLength(4);
+    expect(root).toBeDefined();
+    expect(parent).toBeDefined();
+    expect(root?.attributes["resource.service.name"]?.value).toBe("splitch-event-ingest-api");
+    expect(parent?.attributes["resource.service.name"]?.value).toBe("splitch-event-ingest-api");
+    expect(parent?.parent_span_id).toBe(root?.span_id);
     for (const stage of ["identity", "lookup"]) {
-      const child = transaction.spans.find((span) => span.description === `Ingest ${stage}`);
+      const child = spans.find((span) => span.name === `Ingest ${stage}`);
       expect(child).toMatchObject({
         parent_span_id: parent?.span_id,
-        trace_id: transaction.contexts.trace.trace_id,
-        data: { "auth.result": "ok", targetingKey: "[Redacted]" },
+        trace_id: root?.trace_id,
+        attributes: { "auth.result": { value: "ok" }, targetingKey: { value: "[Redacted]" } },
       });
     }
-    expect(JSON.stringify(transaction)).not.toContain("private@example.com");
+    expect(JSON.stringify(spans)).not.toContain("private@example.com");
   });
 
   it("exports a finished error span and preserves the original rejection", async () => {
     const fault = new Error("storage unavailable");
-    const transaction = await recordTransaction(async () => {
+    const spans = await recordSpans(async () => {
       await expect(
         createPerformanceSpanRecorder(env).record(
           { name: "Ingest outbox seal", op: "rpc.client" },
@@ -108,8 +98,9 @@ describe("performance span export", () => {
         ),
       ).rejects.toBe(fault);
     });
-    const span = transaction.spans.find((item) => item.description === "Ingest outbox seal");
-    expect(span?.status).toBe("internal_error");
-    expect(span?.timestamp).toBeGreaterThanOrEqual(span?.start_timestamp ?? Infinity);
+    const span = spans.find((item) => item.name === "Ingest outbox seal");
+    expect(span?.status).toBe("error");
+    expect(span?.attributes["sentry.status.message"]?.value).toBe("internal_error");
+    expect(span?.end_timestamp).toBeGreaterThanOrEqual(span?.start_timestamp ?? Infinity);
   });
 });

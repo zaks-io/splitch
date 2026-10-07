@@ -69,6 +69,7 @@ export function scrubSentryEvent<T extends SentryEventLike>(
   event: T,
   options: ScrubOptions = {},
 ): T {
+  assertSentryEventType(event);
   const output: SentryEventLike = {};
   for (const [key, value] of Object.entries(event)) {
     output[key] = scrubEventField(key, value, options);
@@ -79,7 +80,7 @@ export function scrubSentryEvent<T extends SentryEventLike>(
 function scrubEventField(key: string, value: unknown, options: ScrubOptions): unknown {
   if (ALLOWED_TOP_LEVEL_KEYS.has(key)) return value;
   if (key === "user") return scrubUser(value, options);
-  if (key === "contexts") return scrubContexts(value, options, false);
+  if (key === "contexts") return scrubContexts(value, options);
   return scrubValue(value, options);
 }
 
@@ -88,7 +89,7 @@ function scrubEventField(key: string, value: unknown, options: ScrubOptions): un
  * SDK vocabulary. Everything NOT in this set is scrubbed, mirroring the event
  * strategy above.
  *
- * `description` is deliberately ABSENT. A span name is closed-vocabulary only for
+ * `name` is deliberately ABSENT. A span name is closed-vocabulary only for
  * the spans we build by hand; an auto-instrumented fetch span is named after its
  * URL, and a Control Plane URL can carry a Targeting Key in a path or query
  * segment. Scrubbing it costs nothing for our own names (they match no PII
@@ -103,6 +104,7 @@ const ALLOWED_SPAN_KEYS = new Set<string>([
   "is_segment",
   "start_timestamp",
   "timestamp",
+  "end_timestamp",
   "exclusive_time",
   "op",
   "origin",
@@ -123,6 +125,17 @@ const ALLOWED_SPAN_KEYS = new Set<string>([
  * fallthrough here redacts them if anyone ever adds them back.
  */
 const ALLOWED_SPAN_ATTRIBUTE_KEYS = new Set<string>([
+  "sentry.segment.id",
+  "sentry.environment",
+  "sentry.release",
+  "sentry.sdk.name",
+  "sentry.sdk.version",
+  "sentry.sdk.integrations",
+  "sentry.trace_lifecycle",
+  "sentry.op",
+  "sentry.origin",
+  "sentry.status.message",
+  "db.system.name",
   "mcp.method.name",
   "mcp.tool.name",
   "mcp.resource.uri",
@@ -154,22 +167,30 @@ function scrubSpanAttributes(data: unknown, options: ScrubOptions): unknown {
     return scrubValue(data, options);
   }
   const output: Record<string, unknown> = {};
+  const isHttpClient = (data as Record<string, unknown>)["sentry.op"] === "http.client";
   for (const [key, value] of Object.entries(data as Record<string, unknown>)) {
-    if (ALLOWED_SPAN_ATTRIBUTE_KEYS.has(key)) {
-      output[key] = value;
-    } else {
-      // Sentry's fetch integration records full URLs and query strings under
-      // several evolving attribute names. Fail closed for every attribute that
-      // has not been explicitly vouched for above.
-      output[key] = REDACTED;
-    }
+    output[key] = scrubSpanAttribute(key, value, isHttpClient, options);
   }
   return output;
 }
 
+function scrubSpanAttribute(
+  key: string,
+  value: unknown,
+  isHttpClient: boolean,
+  options: ScrubOptions,
+): unknown {
+  if (ALLOWED_SPAN_ATTRIBUTE_KEYS.has(key)) return value;
+  if (key === "sentry.segment.name") return isHttpClient ? REDACTED : scrubValue(value, options);
+  // Sentry's fetch integration records full URLs and query strings under
+  // several evolving attribute names. Fail closed for every attribute that
+  // has not been explicitly vouched for above.
+  return REDACTED;
+}
+
 /**
  * Scrub a Sentry span payload — the `beforeSendSpan` body, which the SDK invokes
- * for the transaction and every child span.
+ * as each streamed span finishes.
  *
  * This exists because `beforeSend` covers ERROR events only. With
  * `tracesSampleRate: 1` every Worker ships spans, so without this hook the whole
@@ -178,81 +199,40 @@ function scrubSpanAttributes(data: unknown, options: ScrubOptions): unknown {
 export function scrubSentrySpan<T extends SentryEventLike>(span: T, options: ScrubOptions = {}): T {
   const output: SentryEventLike = {};
   for (const [key, value] of Object.entries(span)) {
-    if (ALLOWED_SPAN_KEYS.has(key)) {
-      output[key] = value;
-    } else if (key === "data") {
-      output[key] = scrubSpanAttributes(value, options);
-    } else if (key === "description" && span.op === "http.client") {
-      output[key] = REDACTED;
-    } else {
-      output[key] = scrubValue(value, options);
-    }
+    output[key] = scrubSpanField(span, key, value, options);
   }
   return output as T;
 }
 
-/**
- * Transaction-event keys `beforeSendSpan` already covered, or that are pure trace
- * structure. The SDK runs `beforeSendSpan` FIRST and hands it both
- * `contexts.trace` (round-tripped through `convertTransactionEventToSpanJson`)
- * and every entry in `spans` (@sentry/core `client.js` `processBeforeSend`), so
- * re-scrubbing them here would corrupt trace ids and redact the very attributes
- * the span allow-list just vouched for.
- */
-const ALLOWED_TRANSACTION_KEYS = new Set<string>([
-  "type",
-  "start_timestamp",
-  "measurements",
-  "spans",
-]);
-
-/**
- * Scrub a Sentry transaction event — the `beforeSendTransaction` body.
- *
- * `beforeSend` fires for ERROR events only, and `beforeSendSpan` sees only the
- * span slice of a transaction. Everything else on the transaction envelope is
- * unhooked: `requestDataIntegration` is a default integration in
- * `@sentry/cloudflare` and attaches `request` — Authorization header, cookies,
- * and query string — to transactions too, alongside `breadcrumbs`, `tags`, and
- * `extra`. Without this hook that payload bypasses the redaction contract the
- * event path enforces (ADR-0032).
- */
-export function scrubSentryTransaction<T extends SentryEventLike>(
-  event: T,
-  options: ScrubOptions = {},
-): T {
-  const output: SentryEventLike = {};
-  for (const [key, value] of Object.entries(event)) {
-    if (ALLOWED_TRANSACTION_KEYS.has(key)) {
-      output[key] = value;
-    } else if (key === "contexts") {
-      output[key] = scrubContexts(value, options, true);
-    } else {
-      output[key] = scrubEventField(key, value, options);
-    }
-  }
-  return output as T;
-}
-
-/**
- * Transaction trace contexts already passed through `beforeSendSpan`; error
- * trace contexts need the same structural allow-list so PII value patterns do
- * not corrupt trace IDs. Sibling contexts still take the ordinary scrub.
- */
-function scrubContexts(
-  contexts: unknown,
+function scrubSpanField(
+  span: SentryEventLike,
+  key: string,
+  value: unknown,
   options: ScrubOptions,
-  traceAlreadyScrubbed: boolean,
 ): unknown {
+  if (ALLOWED_SPAN_KEYS.has(key)) return value;
+  if (key === "attributes" || key === "data") return scrubSpanAttributes(value, options);
+  const op = (span.attributes as Record<string, unknown> | undefined)?.["sentry.op"] ?? span.op;
+  if ((key === "name" || key === "description") && op === "http.client") return REDACTED;
+  return scrubValue(value, options);
+}
+
+/** Reject the retired transaction envelope before it can bypass span scrubbing. */
+export function assertSentryEventType(event: SentryEventLike): void {
+  if (event.type === "transaction") {
+    throw new Error("privacy: Sentry transaction events are unsupported; use streamed spans");
+  }
+}
+
+/** Error trace contexts retain the static trace shape, including `data`. */
+function scrubContexts(contexts: unknown, options: ScrubOptions): unknown {
   if (typeof contexts !== "object" || contexts === null || Array.isArray(contexts)) {
     return scrubValue(contexts, options);
   }
   const output: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(contexts as Record<string, unknown>)) {
     if (key === "trace" && typeof value === "object" && value !== null && !Array.isArray(value)) {
-      output[key] = traceAlreadyScrubbed
-        ? value
-        : scrubSentrySpan(value as SentryEventLike, options);
+      output[key] = scrubSentrySpan(value as SentryEventLike, options);
     } else {
       output[key] = scrubValue(value, options);
     }

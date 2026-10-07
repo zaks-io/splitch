@@ -9,7 +9,8 @@ import {
   createScrubbedEmitter,
   createSentryBeforeSend,
   createSentryBeforeSendSpan,
-  createSentryBeforeSendTransaction,
+  SENTRY_DATA_COLLECTION,
+  sentryPrivacyIntegration,
   type ScrubbedEmitter,
   secretsFromEnv,
 } from "./emitter.js";
@@ -31,9 +32,6 @@ type WorkerEnv = {
 type SentryErrorEvent = import("@sentry/cloudflare").ErrorEvent;
 type SentrySpanJson = Parameters<
   NonNullable<import("@sentry/cloudflare").CloudflareOptions["beforeSendSpan"]>
->[0];
-type SentryTransactionEvent = Parameters<
-  NonNullable<import("@sentry/cloudflare").CloudflareOptions["beforeSendTransaction"]>
 >[0];
 
 export interface WorkerObservabilityOptions {
@@ -83,16 +81,15 @@ export function workerSentryOptions(
   const secrets = secretsFromEnv(env);
   const scrubbedBeforeSend = createSentryBeforeSend({ surface: options.surface });
   const scrubbedBeforeSendSpan = createSentryBeforeSendSpan({ surface: options.surface });
-  const scrubbedBeforeSendTransaction = createSentryBeforeSendTransaction({
-    surface: options.surface,
-  });
   return {
     dsn: secrets.sentryDsn,
     environment: secrets.environment,
     release: env.SENTRY_RELEASE,
     tracesSampleRate: 1,
     propagateTraceparent: true,
-    enableRpcTracePropagation: true,
+    rpcTracePropagationBindings: [/.*/],
+    traceLifecycle: "stream" as const,
+    dataCollection: SENTRY_DATA_COLLECTION,
     /**
      * Sentry continues an incoming trace from `sentry-trace`/`baggage` by default,
      * including one supplied by a stranger. Every Worker here is reachable from the
@@ -116,41 +113,27 @@ export function workerSentryOptions(
      * carry a duplicate of its own payload. The row already reaches Sentry as
      * `extra`, so the breadcrumb is pure duplication.
      */
-    integrations: (defaults: { name: string }[]) => defaults.filter((i) => i.name !== "Console"),
+    integrations: (defaults: { name: string }[]) => [
+      ...defaults.filter((i) => i.name !== "Console"),
+      sentryPrivacyIntegration(),
+    ],
     beforeSend(event: SentryErrorEvent) {
       return scrubbedBeforeSend(event as unknown as SentryEventLike) as unknown as SentryErrorEvent;
     },
-    /**
-     * `beforeSend` covers ERROR events only. With `tracesSampleRate: 1` above,
-     * every request also ships a transaction and its child spans -- auto-
-     * instrumented fetch spans carry the outbound URL, and our MCP spans carry
-     * protocol attributes. Without this hook that entire payload bypasses the
-     * redaction contract the event path enforces.
-     */
+    /** Streamed root and child spans need scrubbing independently of error events. */
     beforeSendSpan(span: SentrySpanJson): SentrySpanJson {
       const scrubbed = scrubbedBeforeSendSpan(
         span as unknown as SentryEventLike,
       ) as unknown as SentrySpanJson;
       // Attribute SDK response spans to the same service as the native export.
       // This value comes only from our closed surface vocabulary, never a request.
-      scrubbed.data = {
-        ...scrubbed.data,
+      scrubbed.attributes = {
+        ...scrubbed.attributes,
         "resource.service.name": `splitch-${options.surface}${
           env.SPLITCH_PLATFORM_TARGET === "shared-preview" ? "-shared-preview" : ""
         }`,
       };
       return scrubbed;
-    },
-    /**
-     * `beforeSendSpan` only reaches the span slice of a transaction event. The
-     * envelope around it -- `request` (Authorization header, cookies, query
-     * string, courtesy of the default `requestDataIntegration`), `breadcrumbs`,
-     * `tags`, `extra` -- has no hook of its own, so it needs the event scrubber.
-     */
-    beforeSendTransaction(event: SentryTransactionEvent) {
-      return scrubbedBeforeSendTransaction(
-        event as unknown as SentryEventLike,
-      ) as unknown as SentryTransactionEvent;
     },
   };
 }
@@ -388,7 +371,7 @@ export function workerEmitter(
   options: WorkerObservabilityOptions,
   hooks: Pick<
     Parameters<typeof createScrubbedEmitter>[0],
-    "onSentryEvent" | "onSentrySpan" | "onSentryTransaction" | "onStructuredLogEvents"
+    "onSentryEvent" | "onSentrySpan" | "onStructuredLogEvents"
   > = {},
 ): ScrubbedEmitter {
   return createScrubbedEmitter({

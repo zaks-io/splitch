@@ -3,7 +3,7 @@ import {
   type SentryEventLike,
   scrubSentryEvent,
   scrubSentrySpan,
-  scrubSentryTransaction,
+  assertSentryEventType,
   scrubValue,
 } from "@splitch/privacy";
 import { OBSERVABILITY_SCRUB_OPTIONS } from "./scrub-options.js";
@@ -22,8 +22,6 @@ export interface ScrubbedEmitterConfig extends ObservabilitySecrets {
   readonly onSentryEvent?: (event: SentryEventLike) => void;
   /** Test hook: invoked with the scrubbed Sentry span immediately before emit. */
   readonly onSentrySpan?: (span: SentryEventLike) => void;
-  /** Test hook: invoked with the scrubbed Sentry transaction immediately before emit. */
-  readonly onSentryTransaction?: (event: SentryEventLike) => void;
   /** Test hook: invoked with scrubbed structured log rows immediately before emit. */
   readonly onStructuredLogEvents?: (events: Record<string, unknown>[]) => void;
   /** When set, delivers scrubbed exceptions to the surface Sentry client. */
@@ -33,7 +31,6 @@ export interface ScrubbedEmitterConfig extends ObservabilitySecrets {
 export interface ScrubbedEmitter {
   readonly beforeSend: (event: SentryEventLike) => SentryEventLike;
   readonly beforeSendSpan: (span: SentryEventLike) => SentryEventLike;
-  readonly beforeSendTransaction: (event: SentryEventLike) => SentryEventLike;
   captureException(error: unknown, extra?: Record<string, unknown>): void;
   log(level: LogLevel, message: string, fields?: Record<string, unknown>): void;
 }
@@ -57,16 +54,9 @@ export function createScrubbedEmitter(config: ScrubbedEmitterConfig): ScrubbedEm
     return scrubbed;
   };
 
-  const beforeSendTransaction = (event: SentryEventLike): SentryEventLike => {
-    const scrubbed = scrubSentryTransaction(event, scrubOptions);
-    config.onSentryTransaction?.(scrubbed);
-    return scrubbed;
-  };
-
   return {
     beforeSend,
     beforeSendSpan,
-    beforeSendTransaction,
     captureException(error, extra = {}) {
       const scrubbedExtra = scrubValue(extra, scrubOptions) as Record<string, unknown>;
       beforeSend({
@@ -107,12 +97,13 @@ export function createSentryBeforeSend(
 
 export function createSentryBeforeSendSpan(
   config: Pick<ScrubbedEmitterConfig, "surface" | "scrubOptions" | "onSentrySpan">,
-): (span: SentryEventLike) => SentryEventLike {
-  return createScrubbedEmitter({
+): <T extends object>(span: T) => T {
+  const emitter = createScrubbedEmitter({
     surface: config.surface,
     scrubOptions: config.scrubOptions,
     onSentrySpan: config.onSentrySpan,
-  }).beforeSendSpan;
+  });
+  return <T extends object>(span: T): T => emitter.beforeSendSpan(span as SentryEventLike) as T;
 }
 
 export function secretsFromEnv(env: {
@@ -125,12 +116,28 @@ export function secretsFromEnv(env: {
   };
 }
 
-export function createSentryBeforeSendTransaction(
-  config: Pick<ScrubbedEmitterConfig, "surface" | "scrubOptions" | "onSentryTransaction">,
-): (event: SentryEventLike) => SentryEventLike {
-  return createScrubbedEmitter({
-    surface: config.surface,
-    scrubOptions: config.scrubOptions,
-    onSentryTransaction: config.onSentryTransaction,
-  }).beforeSendTransaction;
+/** Disable automatic payload collection; explicit events and spans still use scrubbers. */
+export const SENTRY_DATA_COLLECTION = {
+  userInfo: false,
+  cookies: false,
+  httpHeaders: false,
+  httpBodies: [],
+  urlQueryParams: false,
+  genAI: { inputs: false, outputs: false },
+  graphQL: { document: false, variables: false },
+  databaseQueryData: false,
+  queues: false,
+  stackFrameVariables: false,
+  frameContextLines: 0,
+} satisfies NonNullable<import("@sentry/cloudflare").CloudflareOptions["dataCollection"]>;
+
+/** Event processors also see transactions, which bypass Sentry's error-only hook. */
+export function sentryPrivacyIntegration() {
+  return {
+    name: "SplitchPrivacy",
+    processEvent<T extends object>(event: T): T {
+      assertSentryEventType(event as SentryEventLike);
+      return event;
+    },
+  };
 }

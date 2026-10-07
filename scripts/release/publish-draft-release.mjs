@@ -92,6 +92,9 @@ const releaseNotes = [
   `- SHA-256: \`${releaseManifest.sha256}\``,
   "",
   `This draft was prepared by the manual \`${targetKey}-release\` workflow. Publishing the GitHub Release is handled by a separate trusted-publish workflow.`,
+  ...(targetKey === "sdk"
+    ? ["", readFileSync(join(repoRoot, "packages/sdk/RELEASE_NOTES.md"), "utf8").trim()]
+    : []),
 ].join("\n");
 
 if (!existing.exists) {

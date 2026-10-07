@@ -1,4 +1,10 @@
-import { createSentryBeforeSend, secretsFromEnv } from "@splitch/observability/emitter";
+import {
+  createSentryBeforeSend,
+  createSentryBeforeSendSpan,
+  SENTRY_DATA_COLLECTION,
+  sentryPrivacyIntegration,
+  secretsFromEnv,
+} from "@splitch/observability/emitter";
 import { SESSION_COOKIE_NAME } from "#lib/sessions/session";
 
 type BoundaryTier = "app" | "section" | "widget";
@@ -81,6 +87,10 @@ export function createControlPanelSentryOptions(
     environment: secrets.environment,
     release: env.SENTRY_RELEASE,
     tracesSampleRate: 1,
+    dataCollection: SENTRY_DATA_COLLECTION,
+    traceLifecycle: "stream" as const,
+    integrations: [sentryPrivacyIntegration()],
+    beforeSendSpan: createSentryBeforeSendSpan({ surface: "control-panel" }),
     propagateTraceparent: true,
     tracePropagationTargets: [/^\/_serverFn\//],
     beforeSend,
