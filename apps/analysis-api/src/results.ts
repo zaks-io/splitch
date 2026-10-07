@@ -22,7 +22,9 @@ import {
   ResultsNotFoundError,
 } from "./results-errors";
 import { assertMetricQueryCoverage } from "./results-metric-query";
+import { assertOutcomeHistoryRetained } from "./results-outcome-retention";
 import { commitmentStatsBindings, frozenAnalysisVersion } from "./results-preregistration";
+import { retentionStatsInputFields } from "./results-retention-horizons";
 import {
   booleanField,
   jsonField,
@@ -31,7 +33,6 @@ import {
   stringField,
 } from "./results-row-fields";
 import { materializeRunCommitments } from "./results-run-commitments";
-import { retentionStatsInputFields } from "./results-retention-horizons";
 import {
   assertAnalysisInputsPresent,
   conversionWindowsFromQueryConfig,
@@ -177,6 +178,9 @@ async function readResultsComputationFromTinybird(
     activationGated,
     hasAnalyzedMetrics,
   });
+  // Check physical read time, after the queries: even historical/pinned reads
+  // cannot reconstruct expired outcomes from a retained Exposure denominator.
+  assertOutcomeHistoryRetained({ exposures, hasAnalyzedMetrics, activationGated, now: Date.now() });
   const metric_values = canonicalizeAnalysisRows(metricRows.map(materializeMetricRow));
   assertAnalysisInputsPresent({
     run_id: run.run_id,

@@ -231,6 +231,15 @@ export async function syncAnalysisV2SrmAlarms(
   if (run.analysisVersion !== ANALYSIS_V2_VERSION) return [];
   assertSequentialCrossingFlags(stats.srm);
   await persistSequentialCrossings(repo, run, stats.srm, dataWatermark, new Date().toISOString());
+  return readAnalysisV2SrmAlarms(repo, run);
+}
+
+/** Missing live Analysis rows never clear a previously persisted v2 alarm. */
+export async function readAnalysisV2SrmAlarms(
+  repo: Repository,
+  run: { id: string; appId: string; environmentId: string; analysisVersion: string | null },
+): Promise<readonly PersistedSrmAlarm[]> {
+  if (run.analysisVersion !== ANALYSIS_V2_VERSION) return [];
   const rows = await repo.runSrmAlarms.listForRun(envScope(run.appId, run.environmentId), run.id);
   return rows.map((row) => ({
     srmKind: row.srmKind,

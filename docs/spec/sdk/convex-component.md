@@ -24,35 +24,34 @@ The package depends on `@splitch/sdk` for its public evaluation types and the
 never appear in the published Convex dependency graph.
 
 The component declares one required secret environment value, `SPLITCH_API_KEY`. On a first
-install, it derives the mounted callback URL from both Convex automatic URLs: the canonical
-`CONVEX_CLOUD_URL` supplies the Convex-owned deployment name and `CONVEX_SITE_URL` supplies the
-component mount path. It converts only the canonical `*.convex.cloud` origin to `*.convex.site`.
-Custom HTTP Action domains therefore never widen the Control Plane callback allowlist.
+install, it uses the actual `CONVEX_SITE_URL`, preserves the component mount path, and appends
+`/configuration`. The HTTP Actions domain may be the default `*.convex.site` domain or a custom
+public DNS domain. No additional domain setting is needed. The shared
+`configurationCallbackUrlError` predicate comes from `@splitch/sdk/local-evaluation`, so the
+published component and Control Plane use the same URL validation contract.
 
 An existing active or revoked installation keeps its stored callback on `install()`. A pending
-installation keeps its callback when that URL is already canonical. The callback derivation is
-lazy: those upgrade calls work even after both Convex URLs have been overridden with custom
-domains or the automatic URL values are unavailable. A new installation, an install after local
-state is purged, or a pending noncanonical callback still needs the default
-`https://<deployment>.convex.cloud` URL. `install()` refuses a custom API domain in those cases
-before it writes local state or calls the Control Plane. It never accepts a caller-supplied origin
-or widens the `*.convex.site` allowlist.
+installation keeps any valid stored callback, including a custom domain. Callback derivation is
+lazy, so these retries do not need `CONVEX_SITE_URL`. Only a new installation or repair of an
+invalid pending callback derives a URL. Missing or invalid `CONVEX_SITE_URL` fails before local
+initialization or remote registration when derivation is required. Repair preserves the
+installation ID and secret; valid pending state remains byte-for-byte retry-safe.
 
-The component's `isCanonicalCallbackUrl` duplicates the Control Plane's allowlist predicate because
-the published package cannot depend on `@splitch/contracts`. The private
-`apps/control-plane-api/src/convex-callback-allowlist-pin.test.ts` drives both copies with one
-adversarial table and fails when they disagree.
+`install()` generates and privately stores the installation ID and webhook secret, registers them
+through the API-Key-only [Convex integration API](./convex-integration-api.md), and performs the
+first full sync. It advertises `callbackVerification: "hmac-sha256"`. Before inserting a new remote
+installation, Splitch requires a signed `callback.verify` challenge response proving possession
+of that installation's current secret. The receiver checks the installation ID and returns `204`
+with a `Splitch-Callback-Proof` header; it never announces a version or schedules sync for this
+challenge. Missing or malformed credentials fail before any integration or config row is written.
+That Key needs only `data-plane:evaluate`; Metric Events go directly through `@splitch/sdk` with a
+separately scoped write credential.
 
-`install()` generates
-and privately stores the installation ID and webhook secret, registers them through the API-Key-only
-[Convex integration API](./convex-integration-api.md), and performs the first full sync. Missing or
-malformed credentials fail before any integration or config row is written. That Key needs only
-`data-plane:evaluate`; Metric Events go directly through `@splitch/sdk` with a separately scoped
-write credential.
-
-An installation left pending by the former custom-domain callback behavior repairs that local
-callback on the next `install()` call before retrying registration. An already canonical pending
-installation retains its original content so an ambiguous remote outcome remains exactly retry-safe.
+An exact remote registration retry keeps its stored callback, secret, and active or revoked status
+without another challenge. Reusing an installation ID with different callback or secret content
+fails `IDEMPOTENCY_KEY_CONFLICT`. Clients that omit the verification capability retain the legacy
+`*.convex.site` registration rule. URL validation, receiver proof, and outbound transport limits
+are specified in [callback receiver verification](./convex-integration-api.md#callback-receiver-verification).
 
 `install()` is an exact-retry-safe upgrade entrypoint as well as the initial installation call.
 After a package upgrade, rerunning it resumes stale configuration sync, schedules retention for
@@ -191,11 +190,14 @@ Action never replaces good state with a partial or older snapshot.
 
 When `snapshot.environmentVersion < announcedVersion`, evaluation never throws:
 
-- **Sync grace.** Until the deadline below, `peek` and `evaluate` serve the last validated
-  snapshot's real Variant with `reason: STALE`. `evaluate` persists Exposures from the held snapshot
-  as usual, because they record what was actually served, and its idempotency fingerprint carries
-  the held `snapshotVersion`. An idempotent replay while the snapshot is behind keeps its Variant
-  and single Exposure and reports `STALE`.
+- **Sync grace.** Until the deadline below, `peek` serves the last validated snapshot's real Variant
+  with `reason: STALE`. `evaluate` may replay an existing holdover or idempotency claim, and may
+  resolve a Flag without creating an Exposure, with the same stale diagnostic. A fresh live-Run
+  Assignment instead returns the caller's Default Variant with `reason: ERROR` and
+  `errorCode: PROVIDER_NOT_READY`: the announced change may have ended the held Run, so its
+  commit-time Exposure would be permanently refused by Run-window validation. This refusal stores
+  no holdover, idempotency claim, or Exposure; the same key can retry after sync. An idempotent
+  replay while the snapshot is behind keeps its Variant and single Exposure and reports `STALE`.
 - **Sync overdue.** Five seconds after an announcement or activation, a scheduled Mutation scoped to
   that installation and version marks the installation sync-overdue if the snapshot is still behind
   that version.

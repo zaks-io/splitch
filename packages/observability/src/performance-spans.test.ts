@@ -20,7 +20,7 @@ interface RecordedSpan {
 }
 
 interface RecordedTransaction {
-  contexts: { trace: { trace_id: string; span_id: string } };
+  contexts: { trace: { trace_id: string; span_id: string; data: Record<string, unknown> } };
   spans: RecordedSpan[];
 }
 
@@ -80,6 +80,10 @@ describe("performance span export", () => {
     const parent = transaction.spans.find(
       (span) => span.description === "Ingest evaluation commit",
     );
+    expect(transaction.contexts.trace.data["resource.service.name"]).toBe(
+      "splitch-event-ingest-api",
+    );
+    expect(parent?.data["resource.service.name"]).toBe("splitch-event-ingest-api");
     expect(parent?.parent_span_id).toBe(transaction.contexts.trace.span_id);
     for (const stage of ["identity", "lookup"]) {
       const child = transaction.spans.find((span) => span.description === `Ingest ${stage}`);

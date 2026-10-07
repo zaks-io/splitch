@@ -15,6 +15,7 @@ test("documentation and non-deployable application changes skip production mutat
       "docs/spec/platform/deployment-pipeline.md",
       "docs/spec/quickstart.md",
       ".github/workflows/deploy-production.yml",
+      "scripts/setup-worktree.sh",
     ]),
     {
       d1: false,
@@ -26,6 +27,57 @@ test("documentation and non-deployable application changes skip production mutat
       workers: false,
     },
   );
+});
+
+test("colocated TypeScript tests never select production phases", () => {
+  for (const path of [
+    "apps/control-plane-api/src/path-selector-resolution.test.ts",
+    "apps/analysis-api/src/results.test.ts",
+    "packages/stats/src/sequential-ci.simulation.test.ts",
+    "packages/db/src/repo/identity-selector-reads.test.ts",
+  ]) {
+    const plan = classifyProductionChanges([path]);
+    assert.equal(plan.shouldDeploy, false, path);
+    assert.deepEqual(plan.workerPackages, [], path);
+    assert.deepEqual([plan.tinybird, plan.d1, plan.workers], [false, false, false], path);
+  }
+});
+
+test("the reported stats simulation PR skips deployment while runtime changes still deploy", () => {
+  const paths = [
+    ".github/workflows/stats-simulation-audit.yml",
+    "docs/agents/workflow/config.md",
+    "docs/spec/stats/statistical-rigor-verification.md",
+    "packages/stats/src/sequential-ci.simulation.test.ts",
+    "packages/stats/src/srm-checker.simulation.test.ts",
+    "packages/stats/vitest.simulation.config.ts",
+  ];
+  const testsOnly = classifyProductionChanges(paths);
+  assert.equal(testsOnly.shouldDeploy, false);
+  assert.deepEqual(testsOnly.workerPackages, []);
+  assert.deepEqual(testsOnly.unknownPaths, []);
+  assert.deepEqual([testsOnly.tinybird, testsOnly.d1, testsOnly.workers], [false, false, false]);
+
+  for (const runtimePath of [
+    "packages/stats/src/sequential-ci.ts",
+    "apps/analysis-api/src/index.ts",
+    "apps/control-plane-api/src/index.ts",
+  ]) {
+    const plan = classifyProductionChanges([...paths, runtimePath]);
+    assert.equal(plan.shouldDeploy, true, runtimePath);
+    assert.equal(plan.workers, true, runtimePath);
+    assert.deepEqual(
+      plan.workerPackages,
+      runtimePath.startsWith("packages/")
+        ? ["@splitch/analysis-api", "@splitch/control-plane-api"]
+        : [
+            runtimePath.includes("analysis-api")
+              ? "@splitch/analysis-api"
+              : "@splitch/control-plane-api",
+          ],
+    );
+    assert.deepEqual([plan.tinybird, plan.d1], [false, false]);
+  }
 });
 
 /**

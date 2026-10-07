@@ -6,9 +6,10 @@
   "compatibility_flags": ["nodejs_compat"],
   "upload_source_maps": true,
   "observability": {
+    "redact_query_string": true,
     "traces": {
       "enabled": true,
-      "destinations": ["axiom-traces"],
+      "destinations": ["axiom-traces", "sentry-splitch-traces"],
       "persist": false,
       "head_sampling_rate": 1
     },
@@ -174,9 +175,10 @@
       "name": "splitch-event-ingest-api-shared-preview",
       "workers_dev": false,
       "observability": {
+        "redact_query_string": true,
         "traces": {
           "enabled": true,
-          "destinations": ["axiom-traces"],
+          "destinations": ["axiom-traces", "sentry-splitch-traces"],
           "persist": false,
           "head_sampling_rate": 1
         },
@@ -342,9 +344,10 @@
       "name": "splitch-event-ingest-api",
       "workers_dev": false,
       "observability": {
+        "redact_query_string": true,
         "traces": {
           "enabled": true,
-          "destinations": ["axiom-traces"],
+          "destinations": ["axiom-traces", "sentry-splitch-traces"],
           "persist": false,
           "head_sampling_rate": 1
         },

@@ -20,14 +20,68 @@ The `appId` tag is set by the loader after `requireAppAccess` succeeds, not at s
 
 Trace context propagates across these hops:
 
-| Hop                          | Mechanism                                                                                |
-| ---------------------------- | ---------------------------------------------------------------------------------------- |
-| SSR loader → read API        | `traceparent` / `sentry-trace` HTTP header injected by the TanStack Start server handler |
-| Client-side fetch → read API | `traceparent` header on every `hc` client request                                        |
-| Panel Worker → DO            | Carried internally by the Worker runtime                                                 |
+| Hop                                    | Mechanism                                                                                     |
+| -------------------------------------- | --------------------------------------------------------------------------------------------- |
+| Browser → panel server function        | Sentry browser tracing adds `sentry-trace`, `baggage`, and W3C `traceparent` to `/_serverFn/` |
+| Panel Worker → Control Plane API       | The service-binding transport explicitly replaces all three headers with the active context   |
+| Wrapped Worker → service-binding fetch | Sentry instruments the binding and propagates `sentry-trace` and `baggage`                    |
+| Wrapped Worker → outbound HTTP fetch   | Sentry adds all three headers to instrumented outbound fetches                                |
 
-A panel error and its backend cause appear as one trace in Sentry. The read API Workers must
-accept and continue the incoming trace context.
+Set `propagateTraceparent: true` in the shared Worker and browser options. Preserve browser
+`tracePropagationTargets` restricted to same-origin server functions. Keep the existing sampling rate
+of `1` on both SDK and native traces. Worker `strictTraceContinuation` remains enabled, so traces
+from a different Sentry organization start a new trace. This check is a telemetry policy, not
+authentication: incoming baggage is caller-controlled.
+
+The pinned `@sentry/cloudflare` SDK continues incoming HTTP traces from `sentry-trace` and `baggage`.
+It does not continue from `traceparent` alone. W3C propagation enables compatible downstream services
+to join the application trace, but does not by itself merge Cloudflare native and Sentry SDK traces.
+
+Error-event `contexts.trace` must preserve structural trace fields, including `trace_id`, `span_id`,
+and `parent_span_id`, using the span scrubber's allow-list. Apply the normal scrubber to unknown trace
+fields and sibling contexts. Otherwise valid hexadecimal IDs containing digit sequences can be
+mistaken for phone numbers and lose their trace association.
+Error-event trace attributes use the same strict attribute allow-list as transaction spans.
+
+Current limitations: unwrapped WorkerEntrypoint RPC and Durable Object receivers do not continue SDK
+traces. Queue instrumentation records publish and batch-processing spans without carrying trace
+context in the message body. Alarms start independent traces; durable causal links require an explicit
+persisted contract. These paths must not be described as a complete application trace. Cloudflare
+native tracing supplies platform visibility through its separate export.
+
+See [Sentry W3C propagation](https://docs.sentry.io/concepts/otlp/sentry-with-otel/),
+[Sentry Cloudflare options](https://docs.sentry.io/platforms/javascript/guides/cloudflare/configuration/options/#propagateTraceparent),
+and [Cloudflare trace limitations](https://developers.cloudflare.com/workers/observability/traces/known-limitations/).
+
+## Evaluation response latency
+
+Cloudflare native invocation duration includes post-response `waitUntil` work. Evaluation pins its
+configuration WebSocket this way, so a successful response taking about one second can produce a
+native invocation lasting about 31 seconds. Preserve the pin: it keeps configuration invalidation
+working across requests.
+
+The evaluation Worker annotates the native root with `sentry.op:function.cloudflare.invocation`.
+Sentry's OTLP conversion preserves custom attributes, and its normalization keeps an explicit
+`sentry.op` instead of inferring `http.server`. The SDK response root retains `http.server` and
+`auto.http.cloudflare`. Both root and child SDK spans receive `resource.service.name` from the
+closed Worker vocabulary after privacy scrubbing, with `-shared-preview` on that target.
+
+For response-latency views and alerts, use `span.op:http.server span.origin:auto.http.cloudflare`.
+For native traces in Axiom, use `attributes.custom["cloudflare.response.time_to_first_byte_ms"]`.
+Keep native invocation duration available for background-work diagnosis. After deploying a change,
+confirm the operations, service names and latency queries against newly ingested spans; historical
+spans retain their original classification.
+
+Verify starts Flag Configuration loading alongside App identity admission. The request-local
+CapturingProvider shares that read with the evaluator. Configuration still subscribes before reading
+the authoritative snapshot; Assignment access and the final identity-generation check still follow
+successful admission. `Verify flag configuration` and `Verify identity admission` spans expose the
+overlap without recording request attributes.
+
+Sources: [Cloudflare custom span attributes](https://developers.cloudflare.com/workers/observability/traces/custom-spans/),
+[Cloudflare waitUntil lifetime](https://developers.cloudflare.com/workers/runtime-apis/context/#waituntil),
+[Sentry OTLP attribute conversion](https://github.com/getsentry/relay/blob/master/relay-spans/src/otel_to_sentry_v2.rs),
+and [Sentry operation normalization](https://github.com/getsentry/relay/blob/master/relay-event-normalization/src/eap/mod.rs).
 
 ## Expected domain failures: breadcrumb only
 
@@ -139,6 +193,22 @@ Selector notes, from Sentry's advanced data scrubbing docs:
 
 The org-level "Require Data Scrubber", "Require Using Default Scrubbers", and "Prevent Storing of IP
 Addresses" toggles are off because they would apply to every project in the `zaksio` org.
+
+## Cloudflare telemetry export
+
+All eight hosted Splitch Workers export native traces to `axiom-traces` and
+`sentry-splitch-traces`, and native logs to `axiom-logs`. Declare these destination names in each
+Worker's local, shared-preview, and production Wrangler configuration so a deployment preserves the
+routing. Endpoint URLs and authentication headers belong to the account-level Cloudflare destinations;
+Worker configuration contains only destination names.
+
+Native Cloudflare telemetry does not pass through the application Sentry scrubber. Set
+`observability.redact_query_string: true` on every target to remove query strings from native request
+URLs before export. Keep both signals enabled, their existing sampling rate of `1`, and
+`persist: false` so Cloudflare does not also retain them.
+
+See [Cloudflare OpenTelemetry export](https://developers.cloudflare.com/workers/observability/exporting-opentelemetry-data/)
+and [Worker settings](https://developers.cloudflare.com/api/resources/workers/subresources/scripts/subresources/settings/methods/edit/).
 
 ## Axiom structured logs
 

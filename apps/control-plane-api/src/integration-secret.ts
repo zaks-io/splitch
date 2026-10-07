@@ -68,6 +68,10 @@ export async function signIntegrationPayload(secret: string, value: string): Pro
   return hmacHex(encoder.encode(secret), value);
 }
 
+export function validateIntegrationSecretKey(value: string | undefined, keyName: string): void {
+  requiredKey(value, keyName);
+}
+
 function requiredKey(value: string | undefined, keyName: string): Uint8Array {
   if (!value) throw new Error(`${keyName} is required`);
   const decoded = Uint8Array.from(atob(value), (character) => character.charCodeAt(0));

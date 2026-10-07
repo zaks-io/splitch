@@ -23,11 +23,13 @@ export const convexInstallations = sqliteTable(
     lastDeliveredVersion: integer("last_delivered_version"),
     lastDeliveredAt: text("last_delivered_at"),
     latestDeliveryErrorJson: text("latest_delivery_error_json"),
+    preparationRetryAt: text("preparation_retry_at"),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
     revokedAt: text("revoked_at"),
   },
   (table) => [
+    index("convex_installations_preparation_due_idx").on(table.status, table.preparationRetryAt),
     index("convex_installations_scope_status_idx").on(
       table.appId,
       table.environmentId,
@@ -124,12 +126,25 @@ export const configWebhookDeliveries = sqliteTable(
     lastErrorJson: text("last_error_json"),
     createdAt: createdAt(),
     deliveredAt: text("delivered_at"),
+    completedAt: text("completed_at"),
   },
   (table) => [
     uniqueIndex("config_webhook_delivery_installation_version_unique").on(
       table.installationId,
       table.environmentVersion,
     ),
+    index("config_webhook_delivery_outstanding_idx")
+      .on(table.installationId, table.environmentVersion)
+      .where(sql`${table.state} IN ('pending', 'leased')`),
+    index("config_webhook_delivery_expiry_idx").on(table.state, table.leaseExpiresAt),
+    index("config_webhook_delivery_installation_lease_idx").on(
+      table.installationId,
+      table.state,
+      table.leaseExpiresAt,
+    ),
+    index("config_webhook_delivery_completed_idx")
+      .on(table.completedAt)
+      .where(sql`${table.state} IN ('delivered', 'terminal', 'suppressed')`),
     index("config_webhook_delivery_lease_idx").on(
       table.state,
       table.nextAttemptAt,
@@ -196,12 +211,23 @@ export const cloudflareConfigDeliveries = sqliteTable(
     lastErrorJson: text("last_error_json"),
     createdAt: createdAt(),
     deliveredAt: text("delivered_at"),
+    completedAt: text("completed_at"),
   },
   (table) => [
     uniqueIndex("cloudflare_config_delivery_installation_version_unique").on(
       table.installationId,
       table.environmentVersion,
     ),
+    index("cloudflare_config_delivery_app_due_idx").on(
+      table.appId,
+      table.state,
+      table.nextAttemptAt,
+      table.leaseExpiresAt,
+    ),
+    index("cloudflare_config_delivery_expiry_idx").on(table.state, table.leaseExpiresAt),
+    index("cloudflare_config_delivery_completed_idx")
+      .on(table.completedAt)
+      .where(sql`${table.state} IN ('delivered', 'terminal', 'suppressed')`),
     index("cloudflare_config_delivery_lease_idx").on(
       table.state,
       table.nextAttemptAt,

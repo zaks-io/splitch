@@ -1,10 +1,14 @@
 import { boundListRead, LIST_READ_LIMIT } from "@splitch/contracts";
 import type { Repository } from "@splitch/db";
-import { envScope } from "@splitch/db";
 import type { HandlerArgs, RouteHandler } from "@splitch/worker-runtime";
 import { renderError } from "@splitch/worker-runtime";
 import { requireAppAdmin } from "./app-authz";
-import { convexInstallationStatusResponse, convexScope } from "./convex-installation-response";
+import { makeConvexInstallationCreateHandler } from "./convex-installation-create";
+import {
+  convexInstallationStatusResponse,
+  convexPrincipalScope,
+  convexScope,
+} from "./convex-installation-response";
 import { encryptConvexSecret } from "./convex-secret";
 import { buildConvexSnapshot } from "./convex-snapshot";
 import { pathParam } from "./handler-input";
@@ -14,11 +18,9 @@ export interface ConvexHandlerDeps {
   webhookKek?: string;
   webhookKeyVersion?: string;
   now?: () => Date;
+  fetcher?: typeof fetch;
 }
 
-interface CreateInput {
-  body: { installationId: string; callbackUrl: string; webhookSecret: string };
-}
 interface InstallationInput {
   params: { installationId: string };
 }
@@ -38,53 +40,10 @@ export function makeConvexHandlers(deps: ConvexHandlerDeps) {
     panelList: makePanelListHandler(deps),
     panelRemove: makePanelRemoveHandler(deps, now),
 
-    create: (async ({ input, principal, requestId }: HandlerArgs<CreateInput>) => {
-      const scope = principalScope(principal, requestId);
-      if (scope instanceof Response) return scope;
-      const callbackError = validateCallbackUrl(input.body.callbackUrl, requestId);
-      if (callbackError) return callbackError;
-      const encrypted = await encryptConvexSecret(
-        input.body.webhookSecret,
-        deps.webhookKek,
-        deps.webhookKeyVersion,
-      );
-      const existing = await deps.repo.convex.getInstallation(scope, input.body.installationId);
-      if (
-        existing &&
-        (existing.callbackUrl !== input.body.callbackUrl ||
-          existing.secretFingerprint !== encrypted.fingerprint)
-      ) {
-        return renderError(
-          {
-            code: "IDEMPOTENCY_KEY_CONFLICT",
-            message: "installationId was reused with different installation content",
-            details: { scope: "convex_installation", idempotencyKey: input.body.installationId },
-          },
-          { requestId },
-        );
-      }
-      const row =
-        existing ??
-        (await deps.repo.convex.createInstallation(scope, {
-          installationId: input.body.installationId,
-          callbackUrl: input.body.callbackUrl,
-          secretCiphertext: encrypted.ciphertext,
-          secretKeyVersion: encrypted.keyVersion,
-          secretFingerprint: encrypted.fingerprint,
-          now: now().toISOString(),
-        }));
-      const environmentVersion = await deps.repo.convex.environmentVersion(scope);
-      return Response.json({
-        installationId: row.installationId,
-        appId: scope.appId,
-        environmentId: scope.environmentId,
-        environmentVersion,
-        status: row.status,
-      });
-    }) satisfies RouteHandler<CreateInput>,
+    create: makeConvexInstallationCreateHandler(deps, now),
 
     get: (async ({ input, principal, requestId }: HandlerArgs<InstallationInput>) => {
-      const scope = principalScope(principal, requestId);
+      const scope = convexPrincipalScope(principal, requestId);
       if (scope instanceof Response) return scope;
       const [row, environmentVersion, health] = await Promise.all([
         deps.repo.convex.getInstallation(scope, input.params.installationId),
@@ -98,7 +57,7 @@ export function makeConvexHandlers(deps: ConvexHandlerDeps) {
     }) satisfies RouteHandler<InstallationInput>,
 
     remove: (async ({ input, principal, requestId }: HandlerArgs<InstallationInput>) => {
-      const scope = principalScope(principal, requestId);
+      const scope = convexPrincipalScope(principal, requestId);
       if (scope instanceof Response) return scope;
       await deps.repo.convex.revokeInstallation(
         scope,
@@ -110,7 +69,7 @@ export function makeConvexHandlers(deps: ConvexHandlerDeps) {
 
     // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: Rotation keeps its idempotency comparison and write in one auditable handler.
     rotate: (async ({ input, principal, requestId }: HandlerArgs<RotationInput>) => {
-      const scope = principalScope(principal, requestId);
+      const scope = convexPrincipalScope(principal, requestId);
       if (scope instanceof Response) return scope;
       const existing = await deps.repo.convex.getInstallation(scope, input.params.installationId);
       if (existing?.status !== "active") return notFound(requestId);
@@ -152,7 +111,7 @@ export function makeConvexHandlers(deps: ConvexHandlerDeps) {
     }) satisfies RouteHandler<RotationInput>,
 
     snapshot: (async ({ principal, request, requestId }) => {
-      const scope = principalScope(principal, requestId);
+      const scope = convexPrincipalScope(principal, requestId);
       if (scope instanceof Response) return scope;
       const snapshot = await buildConvexSnapshot(deps.repo, scope);
       const etag = `"${snapshot.environmentVersion}"`;
@@ -216,55 +175,6 @@ function makePanelRemoveHandler(
     );
     return new Response(null, { status: 204 });
   };
-}
-
-function principalScope(principal: HandlerArgs<unknown>["principal"], requestId: string) {
-  if (!principal.appId || !principal.environmentId) {
-    return renderError(
-      { code: "FORBIDDEN", message: "API Key is not bound to an App and Environment", details: {} },
-      { requestId },
-    );
-  }
-  return envScope(principal.appId, principal.environmentId);
-}
-
-// `".convex.site".endsWith(".convex.site")` is true, so a bare suffix check admits hosts whose
-// deployment label is empty. Those never resolve, but they read as canonical.
-function hasDeploymentLabel(hostname: string, suffix: string): boolean {
-  if (!hostname.endsWith(suffix)) return false;
-  const label = hostname.slice(0, -suffix.length);
-  return label.length > 0 && !label.endsWith(".");
-}
-
-// The published `@splitch/convex` component keeps its own copy of this rule because it cannot
-// depend on the private tree. `convex-callback-allowlist-pin.test.ts` fails if the two drift.
-export function isConvexCallbackUrl(value: string): boolean {
-  const url = new URL(value);
-  return (
-    url.protocol === "https:" &&
-    hasDeploymentLabel(url.hostname, ".convex.site") &&
-    !url.username &&
-    !url.password &&
-    !url.port &&
-    !url.search &&
-    !url.hash &&
-    url.pathname.endsWith("/configuration")
-  );
-}
-
-function validateCallbackUrl(value: string, requestId: string): Response | null {
-  return isConvexCallbackUrl(value)
-    ? null
-    : renderError(
-        {
-          code: "VALIDATION_ERROR",
-          message: "callbackUrl must be an HTTPS *.convex.site configuration endpoint",
-          details: {
-            issues: [{ path: ["body", "callbackUrl"], message: "invalid Convex callback URL" }],
-          },
-        },
-        { requestId },
-      );
 }
 
 function notFound(requestId: string): Response {

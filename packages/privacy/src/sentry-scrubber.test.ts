@@ -23,6 +23,39 @@ describe("scrubSentryEvent allow-list traversal", () => {
     expect(scrubbed.transaction).toBe("GET /x");
   });
 
+  it("preserves error trace identity while scrubbing trace attributes and sibling contexts", () => {
+    const trace = {
+      trace_id: "0123456789abcdef0123456789abcdef",
+      span_id: "0123456789012345",
+      parent_span_id: "1234567890123456",
+      op: "http.server",
+      data: { "http.request.method": "GET", targetingKey: "customer-secret" },
+      futureField: { email: "leak@evil.com" },
+    };
+    const scrubbed = scrubSentryEvent({
+      contexts: { trace, custom: { targetingKey: "customer-secret", email: "leak@evil.com" } },
+    });
+
+    expect(scrubbed.contexts.trace).toEqual({
+      ...trace,
+      data: { "http.request.method": "GET", targetingKey: "[Redacted]" },
+      futureField: { email: "[Redacted]" },
+    });
+    expect(scrubbed.contexts.custom).toEqual({
+      targetingKey: "[Redacted]",
+      email: "[Redacted]",
+    });
+    expect(trace.data.targetingKey).toBe("customer-secret");
+  });
+
+  it.each([null, "email@evil.com", ["email@evil.com"]])(
+    "scrubs malformed trace contexts: %j",
+    (trace) => {
+      const scrubbed = scrubSentryEvent({ contexts: { trace } });
+      expect(JSON.stringify(scrubbed)).not.toContain("email@evil.com");
+    },
+  );
+
   it("scrubs PII inside tags while preserving safe operational tags", () => {
     const scrubbed = scrubSentryEvent(
       {

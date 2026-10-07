@@ -55,6 +55,27 @@ describe("identity selector reads", () => {
     await expect(repo.identity.getEnvironmentByKey(alpha, "victim-only")).resolves.toBeNull();
   });
 
+  it("carries the full scoped row with a single Environment selector", async () => {
+    await seedSelectorGraph(local.d1);
+    const candidates = await repo.identity.findEnvironmentSelectorCandidates(
+      appScope("app_alpha"),
+      "env_alpha_production",
+    );
+    expect(candidates).toEqual([
+      {
+        environmentId: "env_alpha_production",
+        environmentKey: "production",
+        environment: await repo.identity.getEnvironment(
+          appScope("app_alpha"),
+          "env_alpha_production",
+        ),
+      },
+    ]);
+    expect(
+      await repo.identity.findEnvironmentSelectorCandidates(appScope("app_alpha"), "victim-only"),
+    ).toEqual([]);
+  });
+
   it("finds candidates for every Environment selector in one query", async () => {
     await seedSelectorGraph(local.d1);
     let prepared = 0;

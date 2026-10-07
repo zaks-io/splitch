@@ -61,15 +61,93 @@ describe("Cloudflare installation registration", () => {
     expect((await register()).status).toBe(200);
     await d1
       .prepare(
-        "UPDATE cloudflare_config_deliveries SET state = 'terminal' WHERE installation_id = ?",
+        `UPDATE cloudflare_config_deliveries SET state = 'terminal', attempt_count = 9,
+         last_error_json = '{"kind":"http","code":"HTTP_STATUS","httpStatus":404}',
+         lease_owner = 'old-owner', lease_expires_at = ?, delivered_at = ?
+         WHERE installation_id = ?`,
       )
-      .bind(INSTALLATION_ID)
+      .bind(NOW, NOW, INSTALLATION_ID)
       .run();
+    const before = await currentDelivery();
+    expect(before.completed_at).not.toBeNull();
 
     expect((await register()).status).toBe(200);
 
     await expect(
       repo.cloudflare.deliveryHealth(scope, INSTALLATION_ID, Date.parse(NOW)),
     ).resolves.toMatchObject({ pendingCount: 1, terminalCount: 0 });
+    expect(await currentDelivery()).toMatchObject({
+      delivery_id: before.delivery_id,
+      state: "pending",
+      attempt_count: 0,
+      next_attempt_at: NOW,
+      completed_at: null,
+      last_error_json: null,
+      delivered_at: null,
+      lease_owner: null,
+      lease_expires_at: null,
+    });
+  });
+
+  it("recreates the current-version delivery when setup reruns after terminal retention", async () => {
+    const scope = envScope(ALPHA.appId, ENVIRONMENT_ID);
+    expect((await register()).status).toBe(200);
+    const before = await currentDelivery();
+    await d1
+      .prepare(`UPDATE cloudflare_config_deliveries SET state = 'terminal'
+      WHERE delivery_id = ?`)
+      .bind(before.delivery_id)
+      .run();
+    await d1
+      .prepare(`UPDATE cloudflare_config_deliveries SET completed_at = ?
+      WHERE delivery_id = ?`)
+      .bind("2026-08-01T00:00:00.000Z", before.delivery_id)
+      .run();
+    expect(
+      await repo.cloudflare.pruneDeliveries({
+        completedBefore: "2026-09-01T00:00:00.000Z",
+        limit: 100,
+      }),
+    ).toBe(1);
+    expect(
+      await repo.cloudflare.deliveryHealth(scope, INSTALLATION_ID, Date.parse(NOW)),
+    ).toMatchObject({ pendingCount: 0, terminalCount: 0 });
+
+    expect((await register()).status).toBe(200);
+
+    const restored = await currentDelivery();
+    expect(restored.delivery_id).not.toBe(before.delivery_id);
+    expect(restored).toMatchObject({
+      environment_version: before.environment_version,
+      state: "pending",
+      attempt_count: 0,
+      next_attempt_at: NOW,
+      completed_at: null,
+      last_error_json: null,
+    });
+    const claimed = await repo.cloudflare.claimDueDeliveries(NOW, "recovered-owner", NOW, 25);
+    expect(claimed).toEqual([expect.objectContaining({ deliveryId: restored.delivery_id })]);
+    expect((await register()).status).toBe(200);
+    expect(await currentDelivery()).toMatchObject({
+      delivery_id: restored.delivery_id,
+      state: "leased",
+      lease_owner: "recovered-owner",
+    });
   });
 });
+
+async function currentDelivery() {
+  const rows = await d1
+    .prepare(`SELECT * FROM cloudflare_config_deliveries
+    WHERE installation_id = ?`)
+    .bind(INSTALLATION_ID)
+    .all<{
+      delivery_id: string;
+      environment_version: number;
+      completed_at: string | null;
+    }>();
+  expect(rows.results).toHaveLength(1);
+  const row = rows.results[0];
+  if (!row) throw new Error("Missing current-version delivery");
+  return row;
+}

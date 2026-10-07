@@ -51,6 +51,8 @@ export default defineConfig({
         test: {
           name: "event-ingest-seam",
           include: ["src/exposures-seam.test.ts"],
+          // Cold Worker imports share the setup budget used by the unit project.
+          hookTimeout: 30_000,
         },
       },
       {

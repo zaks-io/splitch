@@ -5,14 +5,14 @@ call an Experiment Run result decision-valid.
 
 ## Gate levels
 
-| Gate               | Runs when          | Purpose                                                             |
-| ------------------ | ------------------ | ------------------------------------------------------------------- |
-| `stats:unit`       | local and CI       | Fast deterministic tests for math and contracts                     |
-| `stats:golden`     | CI                 | Fixed fixtures with exact expected outputs                          |
-| `stats:property`   | CI                 | Metamorphic tests over generated inputs                             |
-| `stats:simulation` | nightly or full CI | Seeded Monte Carlo checks for false positives and power pathologies |
-| `stats:audit`      | on demand          | End-to-end coverage and error-rate audit of the assembled engine    |
-| `spec:lint`        | local and CI       | Blocks terminology/formula drift in docs/specs                      |
+| Gate               | Runs when                 | Purpose                                                             |
+| ------------------ | ------------------------- | ------------------------------------------------------------------- |
+| `stats:unit`       | local and CI              | Fast deterministic tests for math and contracts                     |
+| `stats:golden`     | CI                        | Fixed fixtures with exact expected outputs                          |
+| `stats:property`   | CI                        | Metamorphic tests over generated inputs                             |
+| `stats:simulation` | CI smoke, on demand audit | Seeded Monte Carlo checks for false positives and power pathologies |
+| `stats:audit`      | on demand                 | End-to-end coverage and error-rate audit of the assembled engine    |
+| `spec:lint`        | local and CI              | Blocks terminology/formula drift in docs/specs                      |
 
 These names are package scripts and CI jobs. Math slices add their own fixtures to the matching gate.
 
@@ -176,7 +176,15 @@ must account for Monte Carlo error and should be documented with the seed and it
 Monte Carlo gates should run in two modes:
 
 - **Smoke mode:** low iteration count in regular CI to catch obvious regressions.
-- **Audit mode:** higher iteration count nightly or before a stats-engine release.
+- **Audit mode:** higher iteration count on demand or before a stats-engine release.
+
+Run the full audit with `pnpm --filter @splitch/stats run stats:simulation -- --mode=audit`,
+or manually dispatch the `stats-simulation-audit` workflow. It has no scheduled trigger.
+The simulation config uses one worker to avoid CPU contention on the 2-vCPU hosted runner.
+The audit retains seed `424242`, 1,000 iterations and the existing statistical bounds.
+Sequential CI tests have a 60-second limit and delayed-activation SRM has a 300-second limit,
+based on observed hosted runtimes of 9.5 seconds and 123 seconds respectively. The workflow
+still has a 20-minute limit for the complete job.
 
 ## Spec lint
 

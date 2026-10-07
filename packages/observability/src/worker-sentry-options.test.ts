@@ -29,6 +29,7 @@ describe("workerSentryOptions", () => {
       release: "splitch-auth-api@abc123",
       enableRpcTracePropagation: true,
       tracesSampleRate: 1,
+      propagateTraceparent: true,
     });
   });
 
@@ -80,6 +81,25 @@ describe("workerSentryOptions", () => {
     expect(scrubbed.op).toBe("mcp.server");
     expect(scrubbed.data["mcp.tool.name"]).toBe("flags_list");
     expect(JSON.stringify(scrubbed).includes("leak@evil.com")).toBe(false);
+  });
+
+  it.each([
+    ["production", "splitch-evaluation-api"],
+    ["shared-preview", "splitch-evaluation-api-shared-preview"],
+  ])("attributes SDK response spans to the %s service", (target, service) => {
+    const options = workerSentryOptions(
+      { SENTRY_DSN: "https://example@sentry.io/1", SPLITCH_PLATFORM_TARGET: target },
+      { surface: "evaluation-api" },
+      mockSentryModule(),
+    );
+    const scrubbed = options.beforeSendSpan({
+      op: "http.server",
+      data: { "resource.service.name": "customer@example.com", targetingKey: "private-id" },
+    } as never);
+
+    expect(scrubbed.data).toMatchObject({ "resource.service.name": service });
+    expect(JSON.stringify(scrubbed)).not.toContain("customer@example.com");
+    expect(JSON.stringify(scrubbed)).not.toContain("private-id");
   });
   /**
    * `beforeSendSpan` runs first and covers `contexts.trace` and `spans`; the rest

@@ -1,5 +1,18 @@
 import type { ConvexInstallationRow } from "@splitch/db";
 import { envScope } from "@splitch/db";
+import { type HandlerArgs, renderError } from "@splitch/worker-runtime";
+
+export function convexPrincipalScope(
+  principal: HandlerArgs<unknown>["principal"],
+  requestId: string,
+) {
+  if (!principal.appId || !principal.environmentId)
+    return renderError(
+      { code: "FORBIDDEN", message: "API Key is not bound to an App and Environment", details: {} },
+      { requestId },
+    );
+  return envScope(principal.appId, principal.environmentId);
+}
 
 interface DeliveryHealth {
   pendingCount: number;

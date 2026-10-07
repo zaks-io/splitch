@@ -1,90 +1,40 @@
 import { describe, expect, it } from "vitest";
-import { canonicalCallbackUrl, isCanonicalCallbackUrl } from "./callback_url";
+import { configurationCallbackUrl } from "./callback_url";
 
-const CLOUD = "https://third-cat-295.convex.cloud";
-const SITE = "https://hooks.mainstay.club/integrations/splitch";
-const SITE_REFUSAL = "CONVEX_SITE_URL must be an HTTPS URL containing the component mount path";
-
-describe("canonicalCallbackUrl", () => {
-  it("preserves the component mount path on the canonical Convex site origin", () => {
-    expect(canonicalCallbackUrl(CLOUD, SITE)).toBe(
-      "https://third-cat-295.convex.site/integrations/splitch/configuration",
-    );
-  });
-
-  it("mounts at the root when CONVEX_SITE_URL carries no path", () => {
-    expect(canonicalCallbackUrl(CLOUD, "https://hooks.mainstay.club")).toBe(
-      "https://third-cat-295.convex.site/configuration",
-    );
-  });
-
-  // One row per guard in `cloudUrlViolation`: deleting any single check has to fail here.
+describe("configurationCallbackUrl", () => {
   it.each([
-    ["plaintext scheme", "http://third-cat-295.convex.cloud", "uses the http: scheme"],
-    ["opaque origin", "data:text/plain,convex", "uses the data: scheme"],
-    ["custom API domain", "https://api.mainstay.club", "points at https://api.mainstay.club"],
-    ["empty deployment label", "https://.convex.cloud", "points at https://.convex.cloud"],
+    ["https://third-cat-295.convex.site", "https://third-cat-295.convex.site/configuration"],
+    ["https://hooks.mainstay.club", "https://hooks.mainstay.club/configuration"],
     [
-      "empty inner label",
-      "https://third-cat-295..convex.cloud",
-      "points at https://third-cat-295..convex.cloud",
+      "https://hooks.mainstay.club/integrations/splitch",
+      "https://hooks.mainstay.club/integrations/splitch/configuration",
     ],
-    ["username only", "https://user@third-cat-295.convex.cloud", "carries embedded credentials"],
-    ["password only", "https://:pass@third-cat-295.convex.cloud", "carries embedded credentials"],
     [
-      "username and password",
-      "https://user:pass@third-cat-295.convex.cloud",
-      "carries embedded credentials",
+      "https://hooks.mainstay.club/integrations/splitch/",
+      "https://hooks.mainstay.club/integrations/splitch/configuration",
     ],
-    ["nonstandard port", "https://third-cat-295.convex.cloud:8443", "pins port 8443"],
-    ["path", "https://third-cat-295.convex.cloud/integrations/splitch", "carries a path"],
-    ["query string", "https://third-cat-295.convex.cloud/?target=other", "carries a query string"],
-    ["fragment", "https://third-cat-295.convex.cloud/#other", "carries a fragment"],
-  ])("refuses an overridden CONVEX_CLOUD_URL that %s", (_label, cloudUrl, violation) => {
-    expect(() => canonicalCallbackUrl(cloudUrl, SITE)).toThrow(
-      `CONVEX_CLOUD_URL ${violation}, so it is not the default https://<deployment>.convex.cloud`,
-    );
-  });
-
-  it("points the operator at the setting that clears the override", () => {
-    expect(() => canonicalCallbackUrl("https://api.mainstay.club", SITE)).toThrow(
-      /Override Environment Variables and rerun install/,
-    );
-  });
-
-  it("keeps a pasted credential out of the refusal", () => {
-    expect(() => canonicalCallbackUrl("https://user:hunter2@api.mainstay.club", SITE)).toThrow(
-      expect.not.stringContaining("hunter2"),
-    );
-  });
-
-  // One row per guard on the site URL.
-  it.each([
-    ["plaintext scheme", "http://hooks.mainstay.club/integrations/splitch"],
-    ["username only", "https://user@hooks.mainstay.club/integrations/splitch"],
-    ["password only", "https://:pass@hooks.mainstay.club/integrations/splitch"],
-    ["nonstandard port", "https://hooks.mainstay.club:8443/integrations/splitch"],
-    ["query string", "https://hooks.mainstay.club/integrations/splitch?target=other"],
-    ["fragment", "https://hooks.mainstay.club/integrations/splitch#other"],
-  ])("refuses a CONVEX_SITE_URL that carries a %s", (_label, siteUrl) => {
-    expect(() => canonicalCallbackUrl(CLOUD, siteUrl)).toThrow(SITE_REFUSAL);
-  });
-});
-
-describe("isCanonicalCallbackUrl", () => {
-  it("accepts the canonical Convex configuration endpoint", () => {
-    expect(
-      isCanonicalCallbackUrl(
-        "https://third-cat-295.convex.site/integrations/splitch/configuration",
-      ),
-    ).toBe(true);
+  ])("preserves the HTTP Actions origin and mount path of %s", (siteUrl, expected) => {
+    expect(configurationCallbackUrl(siteUrl)).toBe(expected);
   });
 
   it.each([
-    ["a custom domain", "https://hooks.mainstay.club/integrations/splitch/configuration"],
-    ["an empty deployment label", "https://.convex.site/configuration"],
-    ["a malformed value", "not a URL"],
-  ])("refuses %s", (_label, value) => {
-    expect(isCanonicalCallbackUrl(value)).toBe(false);
+    "not a URL",
+    "http://hooks.mainstay.club/integrations/splitch",
+    "https://user:pass@hooks.mainstay.club/integrations/splitch",
+    "https://hooks.mainstay.club:8443/integrations/splitch",
+    "https://hooks.mainstay.club/integrations/splitch?target=other",
+    "https://hooks.mainstay.club/integrations/splitch#other",
+    "https://localhost/integrations/splitch",
+    "https://127.0.0.1/integrations/splitch",
+    "https://[::1]/integrations/splitch",
+    "https://third-cat-295..convex.site/integrations/splitch",
+  ])("rejects an unsafe HTTP Actions URL %s", (siteUrl) => {
+    expect(() => configurationCallbackUrl(siteUrl)).toThrow("CONVEX_SITE_URL");
+  });
+
+  it("keeps credentials out of parse and validation errors", () => {
+    for (const siteUrl of ["https://user:pass@", "https://user:pass@hooks.mainstay.club"]) {
+      expect(() => configurationCallbackUrl(siteUrl)).toThrow(expect.not.stringContaining("pass@"));
+    }
   });
 });

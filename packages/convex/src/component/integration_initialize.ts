@@ -1,6 +1,6 @@
+import { configurationCallbackUrlError } from "@splitch/sdk/local-evaluation";
 import type { Doc } from "./_generated/dataModel";
 import type { MutationCtx } from "./_generated/server";
-import { isCanonicalCallbackUrl } from "./callback_url";
 import { CURRENT_KEY } from "./integration_state";
 
 interface InitializeArgs {
@@ -12,7 +12,9 @@ interface InitializeArgs {
 }
 
 function needsCallbackRepair(existing: Doc<"integrations">): boolean {
-  return existing.state === "pending" && !isCanonicalCallbackUrl(existing.callbackUrl);
+  return (
+    existing.state === "pending" && configurationCallbackUrlError(existing.callbackUrl) !== null
+  );
 }
 
 export function installCallbackUrl(

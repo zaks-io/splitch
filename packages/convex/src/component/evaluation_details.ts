@@ -35,6 +35,22 @@ export function syncOverdueDetails(
   };
 }
 
+export function syncExposureBlockedDetails(
+  runtime: { snapshot: ConvexConfigSnapshot; integration: { announcedVersion: number } },
+  defaultValue: VariantValue,
+): ResolutionDetails {
+  return {
+    value: defaultValue,
+    variantName: null,
+    reason: "ERROR",
+    errorCode: "PROVIDER_NOT_READY",
+    errorMessage:
+      `@splitch/convex snapshot ${runtime.snapshot.environmentVersion} is behind announced ` +
+      `version ${runtime.integration.announcedVersion}; retry after sync before creating a ` +
+      "fresh Exposure, because the held Run may have ended",
+  };
+}
+
 function detailsFor(
   snapshot: ConvexConfigSnapshot,
   flagKey: string,

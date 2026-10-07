@@ -8,11 +8,12 @@ import { runApprovalRequestArchival } from "./approval-archive";
 import { approvalArchiveStoreFromEnv } from "./approval-archive-tinybird";
 import { dispatchCloudflarePushes } from "./cloudflare-push-dispatch";
 import { dispatchConvexWebhooks } from "./convex-webhook-dispatch";
+import { runDeliveryRetention } from "./delivery-retention";
 import { purgeExpiredPrivacyArtifacts, reconcilePrivacyJobs } from "./entity-privacy-jobs";
 import type { ControlPlaneApiEnv } from "./env";
+import { FLAG_CHANGE_LOG_RETENTION_MS } from "./flag-change-log-retention";
 import { runCredentialCacheBackfill } from "./internal-routes";
 import { deleteOrphanedPrivacyExports } from "./privacy-export-cleanup";
-import { FLAG_CHANGE_LOG_RETENTION_MS } from "./flag-change-log-retention";
 import { dispatchSentryWebhooks } from "./sentry-webhook-dispatch";
 
 const service = "splitch-control-plane-api";
@@ -39,6 +40,7 @@ export function runControlPlaneScheduled(
   ctx.waitUntil(env.EVENT_INGEST_API.adoptMetricEventClaimRetention());
   ctx.waitUntil(runApprovalArchive(env, event, ctx));
   ctx.waitUntil(runFlagChangeLogRetention(env, event, ctx));
+  ctx.waitUntil(runDeliveryRetention(env, event, ctx));
 }
 
 async function runCloudflarePushDispatch(
@@ -145,6 +147,12 @@ async function runConvexWebhookDispatch(
     webhookKek: env.CONVEX_WEBHOOK_KEK,
     webhookKeyVersion: env.CONVEX_WEBHOOK_KEY_VERSION,
     now: () => new Date(event.scheduledTime),
+    onDispatch: (summary) =>
+      workerEmitter(env, workerObservabilityWithWaitUntil("control-plane-api", ctx)).log(
+        "info",
+        "convex-webhook-dispatch-outcomes",
+        { service, job: "convex-webhook-dispatch", ...summary },
+      ),
   });
   workerEmitter(env, workerObservabilityWithWaitUntil("control-plane-api", ctx)).log(
     "info",

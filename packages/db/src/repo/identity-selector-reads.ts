@@ -42,11 +42,14 @@ export function makeIdentitySelectorReads(db: Db) {
     findEnvironmentSelectorCandidates(
       scope: TenantScope,
       selector: string,
-    ): Promise<EnvironmentSelectorCandidate[]> {
+    ): Promise<
+      Array<EnvironmentSelectorCandidate & { environment: typeof environments.$inferSelect }>
+    > {
       return db
         .select({
           environmentId: environments.id,
           environmentKey: environments.key,
+          environment: environments,
         })
         .from(environments)
         .where(

@@ -74,6 +74,13 @@ describe("Convex integration D1 transaction", () => {
         environmentVersion: 2,
       });
 
+      const delivered = deliveries[0];
+      if (!delivered) throw new Error("Expected the committed config delivery");
+      await repo.convex.finishDelivery(delivered.deliveryId, "lease_1", {
+        state: "delivered",
+        now: "2099-01-01T00:00:01.000Z",
+      });
+
       await local.d1
         .prepare(
           "INSERT INTO variants (id, flag_id, name, value, created_at) VALUES (?, ?, ?, ?, ?)",

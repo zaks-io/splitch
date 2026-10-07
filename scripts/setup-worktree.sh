@@ -11,10 +11,13 @@ here="$(git rev-parse --show-toplevel)"
 # place a human has filled in local env.
 main="$(git worktree list --porcelain | sed -n '1s/^worktree //p')"
 
-# Copied, not symlinked, so a worktree cannot rewrite the main checkout's env.
+# Optional copy, not a symlink, so a worktree cannot rewrite the main checkout's env.
 if [ "$here" != "$main" ] && [ -e "$main/.env.local" ] && [ ! -e "$here/.env.local" ]; then
-  cp -p "$main/.env.local" "$here/.env.local"
-  echo "setup-worktree: copied .env.local from the main checkout"
+  if cp -p "$main/.env.local" "$here/.env.local"; then
+    echo "setup-worktree: copied .env.local from the main checkout"
+  else
+    echo "setup-worktree: warning: could not copy optional .env.local; continuing setup" >&2
+  fi
 fi
 
 cd "$here"

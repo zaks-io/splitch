@@ -4,6 +4,7 @@ import { install } from "./integration";
 import { initializeHandler } from "./integration_initialize";
 
 const callbackUrl = "https://dashing-rook-238.convex.site/integrations/splitch/configuration";
+const customCallbackUrl = "https://gateway.chat.zaks.io/integrations/splitch/configuration";
 const installationId = "f35d40f3-e178-4e5c-a45b-251790247fd1";
 const existing = {
   _id: "integration_id",
@@ -34,117 +35,135 @@ afterEach(() => {
 
 describe("install", () => {
   it.each([
-    ["both custom URLs", "https://api.chat.zaks.io", "https://gateway.chat.zaks.io"],
-    ["missing automatic URLs", undefined, undefined],
-  ])("reuses the stored canonical callback with %s", async (_label, cloudUrl, siteUrl) => {
-    vi.stubEnv("CONVEX_CLOUD_URL", cloudUrl);
-    vi.stubEnv("CONVEX_SITE_URL", siteUrl);
-    vi.stubEnv("SPLITCH_API_KEY", "test_key");
-    const fetch = vi
-      .fn()
-      .mockResolvedValueOnce(Response.json(installed))
-      .mockResolvedValueOnce(new Response(null, { status: 304 }));
-    vi.stubGlobal("fetch", fetch);
-    const runMutation = vi.fn().mockResolvedValueOnce(existing).mockResolvedValueOnce(null);
-    const runQuery = vi.fn().mockResolvedValue(existing);
+    ["active", callbackUrl],
+    ["revoked", callbackUrl],
+    ["pending", callbackUrl],
+    ["active", customCallbackUrl],
+    ["revoked", customCallbackUrl],
+    ["pending", customCallbackUrl],
+  ])("reuses a stored %s callback %s without automatic URLs", async (state, storedCallbackUrl) => {
+    vi.stubEnv("CONVEX_CLOUD_URL", undefined);
+    vi.stubEnv("CONVEX_SITE_URL", undefined);
+    const setup = installContext({ ...existing, state, callbackUrl: storedCallbackUrl });
 
-    await expect(
-      install._handler({ runMutation, runQuery } as unknown as ActionCtx, {}),
-    ).resolves.toEqual(installed);
+    await expect(install._handler(setup.ctx, {})).resolves.toEqual(installed);
 
-    expect(runMutation).toHaveBeenCalledTimes(2);
-    expect(runMutation.mock.calls[0]?.[1]).toMatchObject({ callbackUrl });
-    expect(fetch).toHaveBeenCalledTimes(2);
-    const request = fetch.mock.calls[0]?.[1] as RequestInit;
-    expect(JSON.parse(request.body as string)).toMatchObject({
+    expect(setup.patch).not.toHaveBeenCalled();
+    expect(registrationBody(setup.fetch)).toEqual({
       installationId,
-      callbackUrl,
+      callbackUrl: storedCallbackUrl,
+      webhookSecret: existing.webhookSecret,
+      callbackVerification: "hmac-sha256",
+    });
+  });
+
+  it("repairs an invalid pending callback using the current custom HTTP Actions URL", async () => {
+    vi.stubEnv("CONVEX_CLOUD_URL", undefined);
+    vi.stubEnv("CONVEX_SITE_URL", "https://gateway.chat.zaks.io/integrations/splitch");
+    const setup = installContext({
+      ...existing,
+      state: "pending",
+      callbackUrl: "http://old.example/configuration",
+    });
+
+    await expect(install._handler(setup.ctx, {})).resolves.toEqual(installed);
+
+    expect(setup.patch).toHaveBeenCalledWith(existing._id, { callbackUrl: customCallbackUrl });
+    expect(registrationBody(setup.fetch)).toMatchObject({
+      installationId,
+      callbackUrl: customCallbackUrl,
       webhookSecret: existing.webhookSecret,
     });
   });
 
-  it("refuses to repair a pending noncanonical callback with a custom cloud URL", async () => {
-    vi.stubEnv("CONVEX_CLOUD_URL", "https://api.chat.zaks.io");
-    vi.stubEnv("CONVEX_SITE_URL", "https://gateway.chat.zaks.io/integrations/splitch");
-    vi.stubEnv("SPLITCH_API_KEY", "test_key");
-    const runMutation = vi.fn();
-    const fetch = vi.fn();
-    vi.stubGlobal("fetch", fetch);
+  it.each([callbackUrl, customCallbackUrl])(
+    "keeps a valid pending callback %s when automatic URL changes",
+    async (storedCallbackUrl) => {
+      vi.stubEnv("CONVEX_SITE_URL", "https://other.example/integrations/splitch");
+      const setup = installContext({
+        ...existing,
+        state: "pending",
+        callbackUrl: storedCallbackUrl,
+      });
 
-    await expect(
-      install._handler(
-        {
-          runMutation,
-          runQuery: vi.fn().mockResolvedValue({
-            ...existing,
-            state: "pending",
-            callbackUrl: "https://gateway.chat.zaks.io/integrations/splitch/configuration",
-          }),
-        } as unknown as ActionCtx,
-        {},
-      ),
-    ).rejects.toThrow("CONVEX_CLOUD_URL");
+      await install._handler(setup.ctx, {});
 
-    expect(runMutation).not.toHaveBeenCalled();
-    expect(fetch).not.toHaveBeenCalled();
-  });
+      expect(setup.patch).not.toHaveBeenCalled();
+      expect(registrationBody(setup.fetch).callbackUrl).toBe(storedCallbackUrl);
+    },
+  );
+});
 
-  it("repairs a pending noncanonical callback before registration", async () => {
-    vi.stubEnv("CONVEX_CLOUD_URL", "https://dashing-rook-238.convex.cloud");
-    vi.stubEnv("CONVEX_SITE_URL", "https://gateway.chat.zaks.io/integrations/splitch");
-    vi.stubEnv("SPLITCH_API_KEY", "test_key");
-    const pending = {
-      ...existing,
-      state: "pending",
-      callbackUrl: "https://gateway.chat.zaks.io/integrations/splitch/configuration",
-    };
-    const patch = vi.fn(async (_id: string, fields: Record<string, unknown>) => {
-      Object.assign(pending, fields);
-    });
-    const mutationCtx = {
-      db: {
-        query: () => ({ withIndex: () => ({ unique: async () => pending }) }),
-        patch,
-      },
-    } as unknown as MutationCtx;
-    const runMutation = vi
-      .fn()
-      .mockImplementationOnce((_reference, args) => initializeHandler(mutationCtx, args))
-      .mockResolvedValueOnce(null);
-    const runQuery = vi.fn().mockImplementation(async () => pending);
-    const fetch = vi
-      .fn()
-      .mockResolvedValueOnce(Response.json(installed))
-      .mockResolvedValueOnce(new Response(null, { status: 304 }));
-    vi.stubGlobal("fetch", fetch);
+describe("fresh install", () => {
+  it.each([
+    ["https://dashing-rook-238.convex.site/integrations/splitch", callbackUrl],
+    ["https://gateway.chat.zaks.io/integrations/splitch", customCallbackUrl],
+  ])(
+    "registers the actual HTTP Actions URL %s without CONVEX_CLOUD_URL",
+    async (siteUrl, expectedCallback) => {
+      vi.stubEnv("CONVEX_CLOUD_URL", undefined);
+      vi.stubEnv("CONVEX_SITE_URL", siteUrl);
+      const setup = installContext(null);
 
-    await expect(
-      install._handler({ runMutation, runQuery } as unknown as ActionCtx, {}),
-    ).resolves.toEqual(installed);
+      await expect(install._handler(setup.ctx, {})).resolves.toEqual(installed);
 
-    expect(patch).toHaveBeenCalledWith(existing._id, { callbackUrl });
-    expect(pending.callbackUrl).toBe(callbackUrl);
-    expect(runMutation.mock.calls[0]?.[1]).toMatchObject({ callbackUrl });
-    const request = fetch.mock.calls[0]?.[1] as RequestInit;
-    expect(JSON.parse(request.body as string).callbackUrl).toBe(callbackUrl);
-  });
+      expect(setup.insert).toHaveBeenCalledOnce();
+      expect(registrationBody(setup.fetch)).toMatchObject({
+        callbackUrl: expectedCallback,
+        callbackVerification: "hmac-sha256",
+      });
+    },
+  );
 
-  it("refuses a fresh install with two custom domains before initialization", async () => {
-    vi.stubEnv("CONVEX_CLOUD_URL", "https://api.chat.zaks.io");
-    vi.stubEnv("CONVEX_SITE_URL", "https://gateway.chat.zaks.io");
-    vi.stubEnv("SPLITCH_API_KEY", "test_key");
-    const runMutation = vi.fn();
-    const fetch = vi.fn();
-    vi.stubGlobal("fetch", fetch);
+  it.each([
+    undefined,
+    "http://gateway.chat.zaks.io/integrations/splitch",
+    "https://127.0.0.1/integrations/splitch",
+  ])("rejects a missing or invalid HTTP Actions URL %s before initialization", async (siteUrl) => {
+    vi.stubEnv("CONVEX_SITE_URL", siteUrl);
+    const setup = installContext(null);
 
-    await expect(
-      install._handler(
-        { runMutation, runQuery: vi.fn().mockResolvedValue(null) } as unknown as ActionCtx,
-        {},
-      ),
-    ).rejects.toThrow("CONVEX_CLOUD_URL");
+    await expect(install._handler(setup.ctx, {})).rejects.toThrow("CONVEX_SITE_URL");
 
-    expect(runMutation).not.toHaveBeenCalled();
-    expect(fetch).not.toHaveBeenCalled();
+    expect(setup.runMutation).not.toHaveBeenCalled();
+    expect(setup.fetch).not.toHaveBeenCalled();
   });
 });
+
+function registrationBody(fetch: ReturnType<typeof vi.fn>) {
+  const request = fetch.mock.calls[0]?.[1] as RequestInit;
+  return JSON.parse(request.body as string);
+}
+
+function installContext(initial: typeof existing | null) {
+  vi.stubEnv("SPLITCH_API_KEY", "test_key");
+  let row = initial;
+  const query = () => ({ withIndex: () => ({ unique: async () => row }) });
+  const patch = vi.fn(async (_id: string, fields: Record<string, unknown>) => {
+    if (!row) throw new Error("installation missing");
+    row = { ...row, ...fields };
+  });
+  const insert = vi.fn(async (_table: string, fields: Record<string, unknown>) => {
+    row = { ...existing, ...fields };
+  });
+  const mutationCtx = { db: { query, patch, insert } } as unknown as MutationCtx;
+  const runMutation = vi
+    .fn()
+    .mockImplementationOnce((_reference, args) => initializeHandler(mutationCtx, args))
+    .mockImplementationOnce(async () => {
+      if (!row) throw new Error("installation missing");
+      row = { ...row, state: "active" };
+    });
+  const fetch = vi
+    .fn()
+    .mockResolvedValueOnce(Response.json(installed))
+    .mockResolvedValueOnce(new Response(null, { status: 304 }));
+  vi.stubGlobal("fetch", fetch);
+  return {
+    ctx: { runMutation, runQuery: vi.fn(async () => row) } as unknown as ActionCtx,
+    runMutation,
+    patch,
+    insert,
+    fetch,
+  };
+}
