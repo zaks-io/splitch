@@ -20,6 +20,8 @@ Door A: ID-JAG   ──┐
 Door B: Anonymous ─┼──► /oauth2/token ──► resource-bound access token ──► resource verification
 Door C: Device flow┘
 
+Personal Access Token ──► MCP Worker (SESSION_STORE) ──► live membership ∩ grants at the Control Plane
+
 Shared-preview smoke client_credentials ──► /oauth2/token ──► scoped smoke access token
 ```
 
@@ -252,6 +254,14 @@ from D1 and runs the existing route scope and co-scope gates. This keeps
 membership lists out of headers, avoids the carried-scope count limit, and
 prevents a provider token from carrying stale or invented Splitch tenant
 authority.
+
+## Personal Access Tokens (headless MCP)
+
+A user-bound, MCP-only credential for machines that cannot finish browser OAuth. It is not a new
+principal: the MCP Worker authenticates the secret, delegates with the `personal_access_token` door
+and the token id, and the Control Plane clamps the user's live membership by the token's grants on
+every call. Shape, grants, routes, and CLI behavior are in
+[personal-access-tokens.md](personal-access-tokens.md).
 
 ## Shared-preview smoke grant: client_credentials
 

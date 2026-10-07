@@ -62,6 +62,7 @@ const handler = {
       controlPlaneFetch: serviceBindingFetch(env.CONTROL_PLANE_API),
       controlPlaneDelegationSecret: env.MCP_CONTROL_PLANE_DELEGATION_SECRET,
       revocations: kvRevocations(requiredSessionStore(env.SESSION_STORE)),
+      personalAccessTokens: requiredSessionStore(env.SESSION_STORE),
       sessionStore: durableMcpSessionStore(env.MCP_SESSIONS),
       spans: createMcpSpanRecorder(env),
       reportFault: mcpFaultReporter(observability, traceId),

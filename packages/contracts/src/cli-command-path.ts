@@ -49,6 +49,10 @@ export function cliCommandPath(operationId: string): readonly string[] {
  * derived command path. They belong here anyway — the Environment settings card
  * teaches `splitch cloudflare setup` in its empty state, and a command the panel
  * types by hand is exactly the divergence this map exists to prevent.
+ *
+ * The `personal_access_tokens_*` entries are likewise the CLI's sole paths: PAT
+ * management derives no MCP tool by design (an MCP credential must never mint a
+ * PAT), and `splitch tokens …` reads better than the derived resource name.
  */
 export const CLI_PRESENTATION_ALIAS_PATHS = {
   principal_flags_list: ["flags", "list"],
@@ -58,6 +62,12 @@ export const CLI_PRESENTATION_ALIAS_PATHS = {
   cloudflare_installations_create: ["cloudflare", "setup"],
   cloudflare_installations_get: ["cloudflare", "status"],
   cloudflare_installations_delete: ["cloudflare", "remove"],
+  personal_access_tokens_list: ["tokens", "list"],
+  personal_access_tokens_create: ["tokens", "create"],
+  personal_access_tokens_update: ["tokens", "update"],
+  personal_access_tokens_rotate: ["tokens", "rotate"],
+  personal_access_tokens_revoke: ["tokens", "revoke"],
+  personal_access_tokens_revoke_all: ["tokens", "revoke-all"],
 } as const satisfies Record<string, readonly string[]>;
 
 export type CliPresentationAliasOperationId = keyof typeof CLI_PRESENTATION_ALIAS_PATHS;

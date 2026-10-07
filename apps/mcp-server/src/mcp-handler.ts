@@ -16,6 +16,10 @@ import {
 import type { McpEffectiveAuthority } from "./mcp-capabilities";
 import { localMcpFaultReporter, type McpFaultReporter } from "./mcp-fault";
 import { createControlPlaneOperationSdk, type OperationSdkResolver } from "./mcp-operation-sdks";
+import {
+  looksLikePersonalAccessToken,
+  verifyPersonalAccessToken,
+} from "./mcp-personal-access-token";
 import { PROMPT_DEFINITIONS } from "./mcp-prompt-types";
 import { getMcpPromptRpc, listMcpPrompts } from "./mcp-prompts";
 import { readJsonRpcRequest } from "./mcp-request";
@@ -56,6 +60,8 @@ export interface McpServerRequestOptions {
   readonly sessionContextValidator?: McpSessionContextValidator;
   readonly tokenVerifier?: McpAccessTokenVerifier;
   readonly revocations?: McpRevocationReader;
+  /** SESSION_STORE: Personal Access Token entries written by the Control Plane. */
+  readonly personalAccessTokens?: Pick<KVNamespace, "get">;
   readonly fetchAuthMarkdown?: (authBaseUrl: string) => Promise<string>;
   readonly now?: () => number;
   readonly spans?: McpSpanRecorder;
@@ -68,11 +74,20 @@ export async function handleMcpServerRequest(options: McpServerRequestOptions): 
   const transportResponse = await routeTransportRequest({
     ...options,
     authenticateBearer: async (authorization, audience) => {
-      actor = await verifier.verify(
-        authorization,
-        audience,
-        Math.floor((options.now?.() ?? Date.now()) / 1000),
-      );
+      const nowMs = options.now?.() ?? Date.now();
+      if (looksLikePersonalAccessToken(authorization)) {
+        // A PAT is not a session token: CLI logout's session-revocation marker
+        // does not apply to it. It is revoked on its own, durably, in D1.
+        const verified = await verifyPersonalAccessToken(
+          requiredPersonalAccessTokenStore(options.personalAccessTokens),
+          authorization,
+          nowMs,
+        );
+        if (!verified.ok) return { refused: verified.description };
+        actor = verified.actor;
+        return actor.subject;
+      }
+      actor = await verifier.verify(authorization, audience, Math.floor(nowMs / 1000));
       if (
         actor &&
         (await requiredRevocations(options.revocations).isRevoked(actor.subject, actor.issuedAt))
@@ -125,6 +140,14 @@ function defaultTokenVerifier(options: McpServerRequestOptions): McpAccessTokenV
     profile: "authkit",
     ...(options.oauthJwksUrl ? { jwksUrl: options.oauthJwksUrl } : {}),
   });
+}
+
+function requiredPersonalAccessTokenStore(
+  store: Pick<KVNamespace, "get"> | undefined,
+): Pick<KVNamespace, "get"> {
+  if (!store)
+    throw new Error("mcp-server: SESSION_STORE personal access token binding is required");
+  return store;
 }
 
 function requiredRevocations(revocations: McpRevocationReader | undefined): McpRevocationReader {

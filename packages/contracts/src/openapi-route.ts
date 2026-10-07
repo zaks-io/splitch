@@ -54,6 +54,8 @@ export interface ApiRouteRequest {
   runtimeBody?: z.ZodTypeAny;
 }
 
+type RouteExposure = "public" | "mcp-binding" | "public-bearer";
+
 export interface DefineApiRouteInput {
   /** Stable, explicit, UNIQUE `resource_operation` snake_case id (MCP tool name). */
   operationId: string;
@@ -62,8 +64,12 @@ export interface DefineApiRouteInput {
   /** Hono path; co-scope params are `:appId` / `:environmentId` (ADR-0027). */
   path: string;
   summary: string;
-  /** Which HTTP door may mount this route. Defaults to the public credential surface. */
-  exposure?: "public" | "mcp-binding";
+  /**
+   * Which HTTP door may mount this route. Defaults to the public credential
+   * surface. `public-bearer` is public-door ONLY: never mounted on a service
+   * binding (MCP or panel), for operations a delegated caller must never reach.
+   */
+  exposure?: RouteExposure;
   request?: ApiRouteRequest;
   /** The 200 response body Zod schema. */
   response: z.ZodTypeAny;
@@ -99,7 +105,7 @@ export interface ApiRouteContract<
 > extends RouteContract<Input, Output> {
   operationId: string;
   summary: string;
-  exposure: "public" | "mcp-binding";
+  exposure: RouteExposure;
   effects: RouteEffects;
   /** The @hono/zod-openapi route definition derived from the same schemas. */
   openapi: RouteConfig;

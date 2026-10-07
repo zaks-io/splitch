@@ -1,6 +1,7 @@
 import {
   type McpDelegationActor,
   type McpDelegationReplayGuard,
+  type PersonalAccessTokenAuthority,
   type PublicSurface,
   parseMcpDelegation,
 } from "@splitch/contracts";
@@ -19,11 +20,64 @@ export function makeMcpDelegationAuthResolver(options: {
   secret: string;
   replayGuard: McpDelegationReplayGuard;
   resolveLiveScopes?: (subject: string) => Promise<string[]>;
+  /** Required on a surface that accepts Personal Access Token delegations. */
+  resolvePersonalAccessToken?: PersonalAccessTokenResolver;
 }): AuthResolver {
   return async (request) => {
     const actor = await parseMcpDelegation({ request, ...options });
     if (!actor) return { ok: false, reason: "UNAUTHORIZED" };
+    if (actor.personalAccessTokenId && actor.personalAccessTokenHash) {
+      return personalAccessTokenPrincipal(
+        actor,
+        { tokenId: actor.personalAccessTokenId, tokenHash: actor.personalAccessTokenHash },
+        options.resolvePersonalAccessToken,
+      );
+    }
     return { ok: true, principal: await principalFromActor(actor, options.resolveLiveScopes) };
+  };
+}
+
+/**
+ * Re-read a Personal Access Token and clamp live membership by its grants.
+ * Returns null when the token is unknown, revoked, expired, rotated (the hash no
+ * longer matches), or not owned by the delegation subject.
+ */
+export type PersonalAccessTokenResolver = (token: {
+  subject: string;
+  tokenId: string;
+  tokenHash: string;
+}) => Promise<PersonalAccessTokenAuthority | null>;
+
+async function personalAccessTokenPrincipal(
+  actor: McpDelegationActor,
+  token: { tokenId: string; tokenHash: string },
+  resolve: PersonalAccessTokenResolver | undefined,
+): Promise<Awaited<ReturnType<AuthResolver>>> {
+  if (!resolve) {
+    throw new Error("worker-runtime: Personal Access Token resolver is required");
+  }
+  const authority = await resolve({ subject: actor.subject, ...token });
+  if (!authority) {
+    return {
+      ok: false,
+      reason: "CREDENTIAL_REVOKED",
+      error: {
+        code: "CREDENTIAL_REVOKED",
+        message: "personal access token is revoked, rotated, expired, or unknown",
+        details: {},
+      },
+    };
+  }
+  return {
+    ok: true,
+    principal: {
+      ...principalFromScopes(actor, authority.scopes),
+      personalAccessToken: {
+        id: token.tokenId,
+        writeScopes: authority.writeScopes,
+        writeAll: authority.writeAll,
+      },
+    },
   };
 }
 
@@ -31,16 +85,29 @@ async function principalFromActor(
   actor: McpDelegationActor,
   resolveLiveScopes: ((subject: string) => Promise<string[]>) | undefined,
 ): Promise<Principal> {
-  const scopes = await actorScopes(actor, resolveLiveScopes);
+  return principalFromScopes(actor, await actorScopes(actor, resolveLiveScopes));
+}
+
+function principalFromScopes(actor: McpDelegationActor, scopes: readonly string[]): Principal {
   return {
     kind: "control-plane-token",
     id: actor.subject,
     scopes,
-    orgId: soleId(idsInScopes(scopes, ORG_SCOPE)),
-    appId: soleId(idsInScopes(scopes, APP_SCOPE)),
+    ...scopeBinding(scopes),
     environmentId: null,
     authDoor: actor.authDoor,
     ...(actor.liveMembership ? { liveMembership: true } : {}),
+  };
+}
+
+/** The single Org/App a scope set names, or null on an axis it names zero or many of. */
+export function scopeBinding(scopes: readonly string[]): {
+  orgId: string | null;
+  appId: string | null;
+} {
+  return {
+    orgId: soleId(idsInScopes(scopes, ORG_SCOPE)),
+    appId: soleId(idsInScopes(scopes, APP_SCOPE)),
   };
 }
 

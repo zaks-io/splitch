@@ -28,6 +28,7 @@ access tokens exist only in isolated unit-test fixtures; they are not the local 
   iat: number,
   scopes: string[],        // e.g. ["app:app_abc123:admin"]
   auth_door: string,       // "id_jag" | "anonymous" | "device_flow" | "client_credentials"
+                           // (never "personal_access_token": a JWT claiming it reads as anonymous)
   authorization?: "membership-wide-read"
 }
 ```
@@ -230,3 +231,12 @@ deploying, and missing secrets or replay bindings fail closed.
 - [../../adr/0028-variant-catalog-is-app-level-availability-is-per-environment-promotion-moves-config.md](../../adr/0028-variant-catalog-is-app-level-availability-is-per-environment-promotion-moves-config.md)
 - [../../adr/0029-environment-policy-configurable-per-change-type-confirmation-gates.md](../../adr/0029-environment-policy-configurable-per-change-type-confirmation-gates.md)
 - [../platform/privacy-data-lifecycle.md](../platform/privacy-data-lifecycle.md)
+
+## Personal Access Token authority
+
+A Personal Access Token is not a JWT and is accepted only by the MCP Worker. The MCP Control Plane
+door resolves its principal from the D1 token row: the owner's live Organization and App memberships,
+kept only where a grant covers them, at min(live role, grant ceiling). Mutating operations narrow
+that principal to the `read-write` grants before selector binding and co-scope. A path-less mutation
+additionally needs a `read-write` `all` grant. PAT management routes are mounted on the public bearer
+door only. See [personal-access-tokens.md](personal-access-tokens.md).

@@ -37,6 +37,26 @@ The CLI ships on npm as [`@splitch/cli`](https://www.npmjs.com/package/@splitch/
 The three doors are detailed in the `splitch://auth` MCP resource. After auth, `splitch://capabilities`
 (or `splitch context`) shows exactly what your token can do.
 
+### Headless machines and many sandboxes: Personal Access Tokens
+
+When the MCP client runs where browser sign-in cannot complete (a remote server, a sandbox), create a
+Personal Access Token once from any machine where you are logged in. The secret goes straight into a
+file and is never printed:
+
+```bash
+splitch tokens create --name sandboxes \
+  --grant app:<app id>:admin:read-write \
+  --expires-at never \
+  --output-file ~/.config/splitch/mcp.env --append
+```
+
+Inject `SPLITCH_MCP_TOKEN` into each machine's environment, and point the MCP client at it, for
+example `claude mcp add --transport http splitch https://mcp.splitch.dev/mcp --header
+"Authorization: Bearer $SPLITCH_MCP_TOKEN"`. Narrow or widen it later with `splitch tokens update`.
+Grants apply on the next call, with no secret to redistribute. `splitch tokens rotate` and
+`splitch tokens revoke` handle compromise. The token's effective authority is visible to the agent
+through `splitch://capabilities`.
+
 > **Anonymous door is a demo.** It is the fastest self-serve start (no human approval needed) but the
 > Org carries `demo_expires_at = now + 24h`. To keep your work, claim it (verify an email) before it
 > expires. `splitch://active-context` surfaces `demo_expires_at` so an agent can see the deadline and

@@ -44,6 +44,10 @@ export type {
 export { createRepository } from "./repo/index";
 export type { EnvScope, MultiAppScope, TenantScope } from "./repo/scope";
 export { appScope, envScope, multiAppScope } from "./repo/scope";
+export type {
+  PersonalAccessTokenPatch,
+  PersonalAccessTokenRow,
+} from "./repo/personal-access-tokens";
 export type { ScopedTable } from "./repo/scoped-table";
 export type { SentryInstallationRow, SentryInstallationWrite } from "./repo/sentry-integrations";
 
@@ -72,6 +76,7 @@ export {
   metrics,
   organizations,
   orgMemberships,
+  personalAccessTokens,
   privacyRequests,
   runs,
   runSrmAlarms,

@@ -11,6 +11,7 @@ import { convexRoutes } from "./routes/routes-convex";
 import { credentialRoutes } from "./routes/routes-credentials";
 import { dataPlaneRoutes } from "./routes/routes-data-plane";
 import { ofrepRoutes } from "./routes/routes-ofrep";
+import { personalAccessTokenRoutes } from "./routes/routes-personal-access-tokens";
 import { eventDefinitionRoutes } from "./routes/routes-event-definitions";
 import { experimentRoutes } from "./routes/routes-experiments";
 import { flagChangeRoutes } from "./routes/routes-flag-changes";
@@ -91,6 +92,7 @@ export const routeRegistry = assertRegistry([
   ...eventDefinitionRoutes,
   ...experimentRoutes,
   ...credentialRoutes,
+  ...personalAccessTokenRoutes,
   ...cloudflareRoutes,
   ...convexRoutes,
   ...sentryRoutes,
@@ -139,8 +141,18 @@ export function routesMountedBy(worker: RouteOwner): readonly ApiRouteContract[]
  */
 export function routesSurfacedBy(worker: RouteOwner): readonly ApiRouteContract[] {
   return routeRegistry.filter(
-    (route) => route.exposure === "public" && publicSurfaceFor(route) === worker,
+    (route) =>
+      (route.exposure === "public" || route.exposure === "public-bearer") &&
+      publicSurfaceFor(route) === worker,
   );
+}
+
+/**
+ * Every route a Worker mounts behind a service binding (MCP or panel): the whole
+ * Worker minus `public-bearer` routes, which a delegated caller must never reach.
+ */
+export function routesMountedOnBindingsBy(worker: RouteOwner): readonly ApiRouteContract[] {
+  return routesMountedBy(worker).filter((route) => route.exposure !== "public-bearer");
 }
 
 /** Routes an owning Worker answers only through a named service-binding entrypoint. */

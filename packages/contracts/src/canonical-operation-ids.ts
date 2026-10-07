@@ -100,6 +100,13 @@ export const CANONICAL_OPERATION_IDS = [
   "api_keys_list",
   "api_keys_create",
   "api_keys_revoke",
+  // Personal Access Tokens (CLI-only; never MCP tools)
+  "personal_access_tokens_list",
+  "personal_access_tokens_create",
+  "personal_access_tokens_update",
+  "personal_access_tokens_rotate",
+  "personal_access_tokens_revoke",
+  "personal_access_tokens_revoke_all",
   // Convex integration data plane (API Key only, not MCP tools)
   "convex_installations_create",
   "convex_installations_get",

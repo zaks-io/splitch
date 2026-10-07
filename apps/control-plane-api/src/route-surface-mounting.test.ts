@@ -1,4 +1,8 @@
-import { mountedOperationIds, routesMountedBy, routesSurfacedBy } from "@splitch/contracts";
+import {
+  mountedOperationIds,
+  routesMountedOnBindingsBy,
+  routesSurfacedBy,
+} from "@splitch/contracts";
 import type { Repository } from "@splitch/db";
 import type { AuthResolver, RateLimiter } from "@splitch/worker-runtime";
 import { describe, expect, it } from "vitest";
@@ -16,7 +20,11 @@ import { createApp } from "./app";
  */
 describe("control-plane-api mounts exactly the routes addressed at its hostname", () => {
   it("mounts every control-plane-token route, including the ones another Worker executes", () => {
-    const expected = routesMountedBy("control-plane-api").map((route) => route.operationId);
+    // `public-bearer` routes (Personal Access Token management) are the one
+    // exception: no service binding may answer them.
+    const expected = routesMountedOnBindingsBy("control-plane-api").map(
+      (route) => route.operationId,
+    );
 
     expect([...mountedOperationIds(createApp(stubDeps()).routes)].sort()).toEqual(
       [...expected].sort(),

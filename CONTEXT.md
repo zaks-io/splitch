@@ -156,6 +156,11 @@ client code. See [`packages/sdk/CONTEXT.md`](./packages/sdk/CONTEXT.md).
 **API Key**: the secret server-side SDK key. Never ship it to a browser or read back an existing
 value after creation.
 
+**Personal Access Token**: a long-lived, revocable secret that lets an agent connect to the remote
+MCP server without browser sign-in. It acts as the user who created it, limited to its grants and to
+that user's current memberships. It works only with the MCP server, is never an SDK credential,
+and is created, rotated, and revoked from the CLI (`splitch tokens`).
+
 ## Relationships
 
 - Organization owns Apps and has Users as members.

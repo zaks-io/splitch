@@ -8,6 +8,16 @@ import type { McpSessionStore } from "./mcp-session-context";
 import { McpSessionNotFoundError } from "./mcp-session-store";
 
 const protectedResourcePath = "/.well-known/oauth-protected-resource";
+
+/**
+ * Resolves a bearer to its subject. `null` is an ordinary failed credential; a
+ * `refused` description is surfaced to the client so an agent holding a
+ * Personal Access Token learns WHY (revoked, expired, unknown) and what to do.
+ */
+export type BearerAuthenticator = (
+  authorization: string,
+  audience: string,
+) => Promise<string | null | { refused: string }>;
 const defaultAuthBaseUrl = "http://localhost:8791";
 
 export async function routeTransportRequest(options: {
@@ -18,7 +28,7 @@ export async function routeTransportRequest(options: {
   authBaseUrl?: string;
   oauthAuthorizationServer?: string;
   sessionStore?: McpSessionStore;
-  authenticateBearer?: (authorization: string, audience: string) => Promise<string | null>;
+  authenticateBearer?: BearerAuthenticator;
 }): Promise<Response | undefined> {
   const url = new URL(options.request.url);
   if (isHealthRequest(options.request, url)) {
@@ -54,7 +64,7 @@ export async function routeTransportRequest(options: {
 async function authenticateRequest(
   options: {
     request: Request;
-    authenticateBearer?: (authorization: string, audience: string) => Promise<string | null>;
+    authenticateBearer?: BearerAuthenticator;
   },
   url: URL,
 ): Promise<{ ok: true; subject?: string } | { ok: false; response: Response }> {
@@ -65,6 +75,9 @@ async function authenticateRequest(
   const authorization = bearerAuthorization(options.request);
   if (!authorization) return { ok: false, response: unauthorizedResponse(url) };
   const subject = await options.authenticateBearer(authorization, protectedResource(url));
+  if (subject !== null && typeof subject === "object") {
+    return { ok: false, response: unauthorizedResponse(url, subject.refused) };
+  }
   if (!subject) return { ok: false, response: unauthorizedResponse(url) };
   return { ok: true, subject };
 }
@@ -113,14 +126,20 @@ function bearerAuthorization(request: Request): string | null {
   return header.slice("Bearer ".length).trim().length > 0 ? header : null;
 }
 
-function unauthorizedResponse(url: URL): Response {
+function unauthorizedResponse(url: URL, refused?: string): Response {
   const headers = corsHeaders();
   const resourcePath = url.pathname === "/" ? "" : url.pathname;
+  const challenge = `Bearer realm="splitch", resource_metadata="${url.origin}${protectedResourcePath}${resourcePath}"`;
   headers.set(
     "www-authenticate",
-    `Bearer realm="splitch", resource_metadata="${url.origin}${protectedResourcePath}${resourcePath}"`,
+    refused
+      ? `${challenge}, error="invalid_token", error_description="${refused.replace(/["\\]/g, "")}"`
+      : challenge,
   );
-  return new Response("Unauthorized", { status: 401, headers });
+  return new Response(refused ? `Unauthorized: ${refused}` : "Unauthorized", {
+    status: 401,
+    headers,
+  });
 }
 
 function protectedResource(url: URL): string {

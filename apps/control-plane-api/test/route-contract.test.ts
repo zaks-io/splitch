@@ -108,8 +108,9 @@ afterEach(async () => h.bindings.dispose());
 
 describe("control-plane route contract", () => {
   it("mounts every implemented Control Plane route", () => {
+    // This harness is the binding door, which never mounts `public-bearer` routes.
     const expected = routeRegistry
-      .filter((route) => route.owner === "control-plane-api")
+      .filter((route) => route.owner === "control-plane-api" && route.exposure !== "public-bearer")
       .map((route) => `${route.method} ${route.path}`)
       .sort();
     const mounted = (h.app as unknown as { routes: Array<{ method: string; path: string }> }).routes

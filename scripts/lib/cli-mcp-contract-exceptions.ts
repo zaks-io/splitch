@@ -228,6 +228,48 @@ export const CLI_MCP_CONTRACT_EXCEPTIONS = [
     reason: "Convex Component Exposure delivery data-plane operation",
   },
   {
+    operationId: "personal_access_tokens_list",
+    cli: true,
+    mcp: false,
+    reason:
+      "Personal Access Token management is a human CLI act; an MCP credential must never mint, widen, or extend a PAT",
+  },
+  {
+    operationId: "personal_access_tokens_create",
+    cli: true,
+    mcp: false,
+    reason:
+      "Personal Access Token management is a human CLI act; an MCP credential must never mint, widen, or extend a PAT",
+  },
+  {
+    operationId: "personal_access_tokens_update",
+    cli: true,
+    mcp: false,
+    reason:
+      "Personal Access Token management is a human CLI act; an MCP credential must never mint, widen, or extend a PAT",
+  },
+  {
+    operationId: "personal_access_tokens_rotate",
+    cli: true,
+    mcp: false,
+    reason:
+      "Personal Access Token management is a human CLI act; an MCP credential must never mint, widen, or extend a PAT",
+  },
+  {
+    operationId: "personal_access_tokens_revoke",
+    cli: true,
+    mcp: false,
+    reason:
+      "Personal Access Token management is a human CLI act; an MCP credential must never mint, widen, or extend a PAT",
+  },
+  {
+    operationId: "personal_access_tokens_revoke_all",
+    cli: true,
+    mcp: false,
+    reason:
+      "Personal Access Token management is a human CLI act; an MCP credential must never mint, widen, or extend a PAT",
+  },
+  {
     operationId: "cloudflare_installations_create",
     cli: true,
     mcp: false,

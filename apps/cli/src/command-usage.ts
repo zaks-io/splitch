@@ -9,6 +9,8 @@ import { validateFlagTargetingRulesAddUsage } from "./flag-targeting-rules-add-i
 import { advertisedLongFlags, type HelpFlag } from "./help-flags.js";
 import { oneTimeSecretDescriptor, oneTimeSecretOutputPathError } from "./one-time-secret-output.js";
 import type { ParsedInvocation } from "./parse-args.js";
+import { returnsPersonalAccessTokenSecret } from "./personal-access-token-input.js";
+import { personalAccessTokenSecretTarget } from "./personal-access-token-secret.js";
 
 export function validateAdvertisedFlags(
   invocation: ParsedInvocation,
@@ -75,6 +77,9 @@ function validateOneTimeSecretUsage(
   body: Record<string, unknown> | undefined,
   io: CliIo,
 ): CliResult | null {
+  if (returnsPersonalAccessTokenSecret(command.operationId)) {
+    return validatePersonalAccessTokenSecretUsage(invocation, io);
+  }
   const descriptor = oneTimeSecretDescriptor(command.operationId);
   if (!descriptor) {
     if (!invocation.flags.outputFile) return null;
@@ -106,6 +111,16 @@ function validateOneTimeSecretUsage(
     causeSummary: "webhookSecret is not accepted in CLI --body-json",
     remediation: "Remove webhookSecret and let Splitch mint it into --output-file",
   });
+  return { exitCode: EXIT_USAGE };
+}
+
+function validatePersonalAccessTokenSecretUsage(
+  invocation: ParsedInvocation,
+  io: CliIo,
+): CliResult | null {
+  const target = personalAccessTokenSecretTarget(invocation.flags);
+  if (!("code" in target)) return null;
+  writeCliError(io, target);
   return { exitCode: EXIT_USAGE };
 }
 

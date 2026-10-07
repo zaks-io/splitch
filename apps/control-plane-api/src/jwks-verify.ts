@@ -1,7 +1,7 @@
 import {
   type AccessTokenAuthorization,
   type AuthDoor,
-  AuthDoorSchema,
+  accessTokenAuthDoorFromClaim,
   accessTokenAuthorizationFromClaim,
   accessTokenIssuedAt,
 } from "@splitch/contracts";
@@ -231,8 +231,7 @@ function validAuthorization(
 
 /** Fail CLOSED: anything but a recognized door reads as the provisional one. */
 function authDoorFromClaim(claim: unknown): AuthDoor {
-  const parsed = AuthDoorSchema.safeParse(claim);
-  return parsed.success ? parsed.data : "anonymous";
+  return accessTokenAuthDoorFromClaim(claim);
 }
 
 /**
