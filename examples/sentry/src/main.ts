@@ -11,6 +11,19 @@ import { sentryResolutionReporter } from "@splitch/sdk/sentry";
  */
 Sentry.init({
   dsn: required("SENTRY_DSN"),
+  dataCollection: {
+    userInfo: false,
+    cookies: false,
+    httpHeaders: false,
+    httpBodies: [],
+    urlQueryParams: false,
+    genAI: { inputs: false, outputs: false },
+    graphQL: { document: false, variables: false },
+    databaseQueryData: false,
+    queues: false,
+    stackFrameVariables: false,
+    frameContextLines: 0,
+  },
   integrations: [Sentry.featureFlagsIntegration()],
 });
 

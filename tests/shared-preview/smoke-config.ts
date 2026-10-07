@@ -1,4 +1,6 @@
+import { fileURLToPath } from "node:url";
 import { requireFullCommitSha } from "../../scripts/lib/shared-preview-deployment-evidence.mjs";
+import { parseWranglerConfigFile } from "../../scripts/lib/wrangler-config.mjs";
 
 export interface HealthRoute {
   readonly surface: string;
@@ -13,6 +15,7 @@ export interface SmokeConfig {
   readonly expectedCommitSha: string;
   readonly healthRoutes: readonly HealthRoute[];
   readonly mcpBaseUrl: string;
+  readonly mcpAuthorizationServer: string;
   readonly mcpProtectedResource: string;
   readonly panelBaseUrl: string;
   readonly runId: string;
@@ -47,6 +50,7 @@ export function readSmokeConfig(): SmokeConfig {
     ),
     healthRoutes: healthRoutes(),
     mcpBaseUrl,
+    mcpAuthorizationServer: mcpAuthorizationServer(),
     mcpProtectedResource: `${mcpBaseUrl}/mcp`,
     panelBaseUrl: originUrl("SPLITCH_SMOKE_PANEL_BASE_URL", "https://app.preview.splitch.dev"),
     runId: runId(),
@@ -59,6 +63,19 @@ export function readSmokeConfig(): SmokeConfig {
     smokeOrgId: process.env.SPLITCH_SMOKE_ORG_ID ?? "org_shared_preview_smoke",
     smokeOrgSlug: process.env.SPLITCH_SMOKE_ORG_SLUG ?? "org_shared_preview_smoke",
   };
+}
+
+function mcpAuthorizationServer(): string {
+  const config = parseWranglerConfigFile(
+    fileURLToPath(new URL("../../apps/mcp-server/wrangler.jsonc", import.meta.url)),
+  );
+  const issuer = config.env?.["shared-preview"]?.vars?.MCP_OAUTH_AUTHORIZATION_SERVER;
+  if (typeof issuer !== "string" || !issuer) {
+    throw new Error(
+      "shared-preview MCP_OAUTH_AUTHORIZATION_SERVER is required for smoke discovery",
+    );
+  }
+  return new URL(issuer).origin;
 }
 
 /**

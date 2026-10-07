@@ -27,7 +27,8 @@ describe("workerSentryOptions", () => {
     ).toMatchObject({
       environment: "production",
       release: "splitch-auth-api@abc123",
-      enableRpcTracePropagation: true,
+      rpcTracePropagationBindings: [/.*/],
+      traceLifecycle: "stream",
       tracesSampleRate: 1,
       propagateTraceparent: true,
     });
@@ -45,7 +46,7 @@ describe("workerSentryOptions", () => {
     // would attach the console line as a breadcrumb on that very event.
     const kept = options.integrations([{ name: "Console" }, { name: "Dedupe" }]);
 
-    expect(kept.map((i) => i.name)).toEqual(["Dedupe"]);
+    expect(kept.map((i) => i.name)).toEqual(["Dedupe", "SplitchPrivacy"]);
   });
 
   /**
@@ -73,13 +74,16 @@ describe("workerSentryOptions", () => {
     );
 
     const scrubbed = options.beforeSendSpan?.({
-      op: "mcp.server",
-      description: "tools/call flags_list",
-      data: { "mcp.tool.name": "flags_list", "mcp.request.argument.email": "leak@evil.com" },
-    } as never) as unknown as { op: string; data: Record<string, unknown> };
+      name: "tools/call flags_list",
+      attributes: {
+        "sentry.op": "mcp.server",
+        "mcp.tool.name": "flags_list",
+        "mcp.request.argument.email": "leak@evil.com",
+      },
+    } as never) as unknown as { attributes: Record<string, unknown> };
 
-    expect(scrubbed.op).toBe("mcp.server");
-    expect(scrubbed.data["mcp.tool.name"]).toBe("flags_list");
+    expect(scrubbed.attributes["sentry.op"]).toBe("mcp.server");
+    expect(scrubbed.attributes["mcp.tool.name"]).toBe("flags_list");
     expect(JSON.stringify(scrubbed).includes("leak@evil.com")).toBe(false);
   });
 
@@ -93,34 +97,49 @@ describe("workerSentryOptions", () => {
       mockSentryModule(),
     );
     const scrubbed = options.beforeSendSpan({
-      op: "http.server",
-      data: { "resource.service.name": "customer@example.com", targetingKey: "private-id" },
+      attributes: { "resource.service.name": "customer@example.com", targetingKey: "private-id" },
     } as never);
 
-    expect(scrubbed.data).toMatchObject({ "resource.service.name": service });
+    expect(scrubbed.attributes).toMatchObject({ "resource.service.name": service });
     expect(JSON.stringify(scrubbed)).not.toContain("customer@example.com");
     expect(JSON.stringify(scrubbed)).not.toContain("private-id");
   });
-  /**
-   * `beforeSendSpan` runs first and covers `contexts.trace` and `spans`; the rest
-   * of the transaction envelope has no hook of its own, and `beforeSend` fires
-   * for error events only.
-   */
-  it("scrubs the transaction envelope the span hook never reaches", () => {
-    const options = workerSentryOptions(
-      { SENTRY_DSN: "https://example@sentry.io/1" },
-      { surface: "mcp-server" },
-      mockSentryModule(),
-    );
+  it("rejects transaction events in the event processor that Sentry runs for every event type", () => {
+    const options = workerSentryOptions({}, { surface: "mcp-server" }, mockSentryModule());
+    const privacy = options
+      .integrations([])
+      .find((integration) => integration.name === "SplitchPrivacy");
+    expect(privacy).toBeDefined();
+    expect(() =>
+      (privacy as ReturnType<typeof import("./emitter.js").sentryPrivacyIntegration>).processEvent({
+        type: "transaction",
+      }),
+    ).toThrow("Sentry transaction events are unsupported");
+  });
 
-    const scrubbed = options.beforeSendTransaction?.({
-      type: "transaction",
-      contexts: { trace: { trace_id: "aabbccddeeff00112233445566778899" } },
-      request: { headers: { authorization: "Bearer leak-token" } },
-    } as never) as unknown as { contexts: { trace: { trace_id: string } } };
-
-    expect(scrubbed.contexts.trace.trace_id).toBe("aabbccddeeff00112233445566778899");
-    expect(JSON.stringify(scrubbed).includes("leak-token")).toBe(false);
+  it.each([
+    "control-plane-api",
+    "evaluation-api",
+    "event-ingest-api",
+    "analysis-api",
+    "auth-api",
+    "control-panel",
+    "marketing",
+    "mcp-server",
+  ] as const)("disables automatic sensitive collection for %s", (surface) => {
+    expect(workerSentryOptions({}, { surface }, mockSentryModule()).dataCollection).toEqual({
+      userInfo: false,
+      cookies: false,
+      httpHeaders: false,
+      httpBodies: [],
+      urlQueryParams: false,
+      genAI: { inputs: false, outputs: false },
+      graphQL: { document: false, variables: false },
+      databaseQueryData: false,
+      queues: false,
+      stackFrameVariables: false,
+      frameContextLines: 0,
+    });
   });
 });
 

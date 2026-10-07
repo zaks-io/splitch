@@ -1,5 +1,8 @@
-import { describe, expect, it } from "vitest";
-import { clientSentryEnv } from "#lib/observability/panel-sentry-client";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import {
+  clientSentryEnv,
+  initControlPanelClientSentry,
+} from "#lib/observability/panel-sentry-client";
 
 describe("control-panel client Sentry env", () => {
   it("uses public Vite Sentry values injected into the browser bundle", () => {
@@ -30,4 +33,45 @@ describe("control-panel client Sentry env", () => {
       SPLITCH_PLATFORM_TARGET: "development",
     });
   });
+});
+
+const { init } = vi.hoisted(() => ({ init: vi.fn() }));
+vi.mock("@sentry/react", () => ({
+  init,
+  tanstackRouterBrowserTracingIntegration: () => ({ name: "BrowserTracing" }),
+}));
+afterEach(() => {
+  vi.unstubAllGlobals();
+  vi.unstubAllEnvs();
+});
+
+it("keeps the privacy options when the browser tracing integration is installed", async () => {
+  vi.stubGlobal("window", {});
+  vi.stubEnv("VITE_SENTRY_DSN", "https://public@example.ingest.sentry.io/1");
+  await initControlPanelClientSentry({} as never);
+  expect(init).toHaveBeenCalledOnce();
+  const options = init.mock.calls[0]?.[0];
+  expect(options.dataCollection).toEqual({
+    userInfo: false,
+    cookies: false,
+    httpHeaders: false,
+    httpBodies: [],
+    urlQueryParams: false,
+    genAI: { inputs: false, outputs: false },
+    graphQL: { document: false, variables: false },
+    databaseQueryData: false,
+    queues: false,
+    stackFrameVariables: false,
+    frameContextLines: 0,
+  });
+  expect(options.integrations.map((integration: { name: string }) => integration.name)).toEqual([
+    "SplitchPrivacy",
+    "BrowserTracing",
+  ]);
+  expect(
+    options.beforeSendSpan({
+      name: "GET https://upstream.test?cohort=private",
+      attributes: { "sentry.op": "http.client" },
+    }).name,
+  ).toBe("[Redacted]");
 });

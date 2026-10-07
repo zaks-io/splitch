@@ -228,6 +228,7 @@ jobs:
         if: always()
         continue-on-error: true
         env:
+          SPLITCH_DEPLOY_OUTCOME: ${{ steps.deploy.outcome }}
           SPLITCH_SEED_OUTCOME: ${{ steps.seed.outcome }}
           SPLITCH_SMOKE_OUTCOME: ${{ steps.smoke.outcome }}
           SPLITCH_DARK_LAUNCH_OUTCOME: ${{ steps.dark_launch.outcome }}

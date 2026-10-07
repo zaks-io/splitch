@@ -147,6 +147,12 @@ describe("scrubSentryEvent allow-list traversal", () => {
     expect(serialized.includes("end-user-canary")).toBe(false);
   });
 
+  it("rejects a transaction envelope rather than bypassing the streamed span policy", () => {
+    expect(() =>
+      scrubSentryEvent({ type: "transaction", extra: { targetingKey: "private" } }),
+    ).toThrow("Sentry transaction events are unsupported");
+  });
+
   it("does not throw on a minimal event", () => {
     expect(() => scrubSentryEvent({})).not.toThrow();
   });
@@ -158,23 +164,52 @@ describe("scrubSentrySpan allow-list traversal", () => {
       span_id: "0f1e2d3c4b5a6978",
       parent_span_id: "1122334455667788",
       trace_id: "8877665544332211aabbccddeeff0011",
-      op: "mcp.server",
-      origin: "manual",
+      attributes: { "sentry.op": "mcp.server", "sentry.origin": "manual" },
+      is_segment: true,
       status: "ok",
       start_timestamp: 1,
-      timestamp: 2,
+      end_timestamp: 2,
     });
 
     expect(scrubbed.span_id).toBe("0f1e2d3c4b5a6978");
     expect(scrubbed.trace_id).toBe("8877665544332211aabbccddeeff0011");
-    expect(scrubbed.op).toBe("mcp.server");
+    expect(scrubbed.attributes["sentry.op"]).toBe("mcp.server");
+    expect(scrubbed.is_segment).toBe(true);
     expect(scrubbed.status).toBe("ok");
-    expect(scrubbed.timestamp).toBe(2);
+    expect(scrubbed.end_timestamp).toBe(2);
+  });
+
+  it("preserves required streamed protocol attributes while scrubbing segment names", () => {
+    const attributes = {
+      "sentry.segment.id": "0123456789012345",
+      "sentry.segment.name": "GET",
+      "sentry.environment": "shared-preview",
+      "sentry.release": "splitch-control-panel@abc123",
+      "sentry.sdk.name": "sentry.javascript.cloudflare",
+      "sentry.sdk.version": "11.4.0",
+      "sentry.sdk.integrations": ["SplitchPrivacy"],
+      "sentry.trace_lifecycle": "stream",
+    };
+    expect(scrubSentrySpan({ attributes }).attributes).toEqual(attributes);
+    expect(
+      scrubSentrySpan({
+        attributes: { ...attributes, "sentry.segment.name": "error leak@evil.com" },
+      }).attributes["sentry.segment.name"],
+    ).not.toContain("leak@evil.com");
+    expect(
+      scrubSentrySpan({
+        attributes: {
+          ...attributes,
+          "sentry.op": "http.client",
+          "sentry.segment.name": "GET https://upstream.test?cohort=private",
+        },
+      }).attributes["sentry.segment.name"],
+    ).toBe("[Redacted]");
   });
 
   it("preserves the MCP attribute set verbatim", () => {
     const scrubbed = scrubSentrySpan({
-      data: {
+      attributes: {
         "mcp.method.name": "tools/call",
         "mcp.tool.name": "flags_list",
         "mcp.resource.uri": "splitch://quickstart",
@@ -186,7 +221,7 @@ describe("scrubSentrySpan allow-list traversal", () => {
       },
     });
 
-    expect(scrubbed.data).toEqual({
+    expect(scrubbed.attributes).toEqual({
       "mcp.method.name": "tools/call",
       "mcp.tool.name": "flags_list",
       "mcp.resource.uri": "splitch://quickstart",
@@ -199,7 +234,7 @@ describe("scrubSentrySpan allow-list traversal", () => {
   });
 
   it("preserves only payload-free performance attributes verbatim", () => {
-    const data = {
+    const attributes = {
       "db.system": "tinybird",
       "db.operation.name": "read",
       "db.response.returned_rows": 4,
@@ -218,9 +253,11 @@ describe("scrubSentrySpan allow-list traversal", () => {
       "auth.result": "ok",
     };
 
-    expect(scrubSentrySpan({ data }).data).toEqual(data);
+    expect(scrubSentrySpan({ attributes }).attributes).toEqual(attributes);
   });
+});
 
+describe("scrubSentrySpan redaction", () => {
   /**
    * The dotted attribute keys Sentry's own MCP instrumentation would emit if it
    * were ever turned on. `normalize()` folds `_` and `-` but not `.`, so the PII
@@ -229,41 +266,40 @@ describe("scrubSentrySpan allow-list traversal", () => {
    */
   it("redacts a PII-named attribute even under a dotted key", () => {
     const scrubbed = scrubSentrySpan({
-      data: {
+      attributes: {
         "mcp.request.argument.targetingKey": "tk-secret",
         "mcp.request.argument.email": "leak@evil.com",
         "mcp.tool.result.content": [{ text: "tk-secret" }],
       },
     });
 
-    const data = scrubbed.data as Record<string, unknown>;
-    expect(data["mcp.request.argument.targetingKey"]).toBe("[Redacted]");
-    expect(data["mcp.request.argument.email"]).toBe("[Redacted]");
+    const attributes = scrubbed.attributes as Record<string, unknown>;
+    expect(attributes["mcp.request.argument.targetingKey"]).toBe("[Redacted]");
+    expect(attributes["mcp.request.argument.email"]).toBe("[Redacted]");
     expect(JSON.stringify(scrubbed).includes("tk-secret")).toBe(false);
     expect(JSON.stringify(scrubbed).includes("leak@evil.com")).toBe(false);
   });
 
   it("redacts a dotted attribute whose PII name is not the whole key", () => {
     const scrubbed = scrubSentrySpan({
-      data: {
+      attributes: {
         "http.request.header.authorization": "Bearer leak-token",
         "url.query.targetingKey": "tk-secret",
         "http.response.status_code": 200,
       },
     });
 
-    const data = scrubbed.data as Record<string, unknown>;
-    expect(data["http.request.header.authorization"]).toBe("[Redacted]");
-    expect(data["url.query.targetingKey"]).toBe("[Redacted]");
-    expect(data["http.response.status_code"]).toBe(200);
+    const attributes = scrubbed.attributes as Record<string, unknown>;
+    expect(attributes["http.request.header.authorization"]).toBe("[Redacted]");
+    expect(attributes["url.query.targetingKey"]).toBe("[Redacted]");
+    expect(attributes["http.response.status_code"]).toBe(200);
   });
 
   it("redacts auto-instrumented fetch URLs even when their IDs do not match PII patterns", () => {
     const scrubbed = scrubSentrySpan({
-      op: "http.client",
-      description:
-        "GET https://api.tinybird.co/v0/pipes/results.json?app_id=app_123&environment_id=env_456",
-      data: {
+      name: "GET https://api.tinybird.co/v0/pipes/results.json?app_id=app_123&environment_id=env_456",
+      attributes: {
+        "sentry.op": "http.client",
         url: "https://api.tinybird.co/v0/pipes/results.json?app_id=app_123&environment_id=env_456",
         "http.url":
           "https://api.tinybird.co/v0/pipes/results.json?app_id=app_123&environment_id=env_456",
@@ -277,14 +313,14 @@ describe("scrubSentrySpan allow-list traversal", () => {
 
     expect(JSON.stringify(scrubbed).includes("app_123")).toBe(false);
     expect(JSON.stringify(scrubbed).includes("env_456")).toBe(false);
-    expect(scrubbed.description).toBe("[Redacted]");
-    expect((scrubbed.data as Record<string, unknown>)["http.request.method"]).toBe("GET");
+    expect(scrubbed.name).toBe("[Redacted]");
+    expect((scrubbed.attributes as Record<string, unknown>)["http.request.method"]).toBe("GET");
   });
 
-  it("keeps the closed-vocabulary description of a non-HTTP manual span", () => {
-    expect(scrubSentrySpan({ op: "db.query", description: "tinybird.pipe.read" }).description).toBe(
-      "tinybird.pipe.read",
-    );
+  it("keeps the closed-vocabulary name of a non-HTTP manual span", () => {
+    expect(
+      scrubSentrySpan({ attributes: { "sentry.op": "db.query" }, name: "tinybird.pipe.read" }).name,
+    ).toBe("tinybird.pipe.read");
   });
 
   it("scrubs an unknown future span field by default", () => {

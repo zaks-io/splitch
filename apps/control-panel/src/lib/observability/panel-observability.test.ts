@@ -186,6 +186,26 @@ describe("control-panel Sentry PII scrubbing", () => {
       SPLITCH_PLATFORM_TARGET: "production",
     });
 
+    expect(options.dataCollection).toEqual({
+      userInfo: false,
+      cookies: false,
+      httpHeaders: false,
+      httpBodies: [],
+      urlQueryParams: false,
+      genAI: { inputs: false, outputs: false },
+      graphQL: { document: false, variables: false },
+      databaseQueryData: false,
+      queues: false,
+      stackFrameVariables: false,
+      frameContextLines: 0,
+    });
+    expect(options.traceLifecycle).toBe("stream");
+    expect(
+      options.beforeSendSpan({
+        name: "GET https://upstream.test?cohort=private",
+        attributes: { "sentry.op": "http.client" },
+      }).name,
+    ).toBe("[Redacted]");
     expect(options.tracesSampleRate).toBe(1);
     expect(options.propagateTraceparent).toBe(true);
     expect(options.tracePropagationTargets).toHaveLength(1);

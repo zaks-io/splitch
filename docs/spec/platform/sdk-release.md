@@ -108,6 +108,13 @@ first-ever version until the stable publish repoints it. Record that state inste
 around it. Then configure and verify the package's trusted publisher, revoke temporary access,
 disallow token publishing, and continue through the normal draft flow.
 
+## SDK release notes
+
+`packages/sdk/RELEASE_NOTES.md` holds the customer-facing notes for the next SDK release.
+The existing `sdk-release` draft preparation appends that file to its artifact and provenance
+notes. Replace the previous notes when preparing the next SDK version, add each contract change, and
+review the file before publishing the draft.
+
 ## Stable release checklist
 
 Use this only after a human approves the package release.

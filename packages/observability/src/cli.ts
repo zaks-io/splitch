@@ -1,6 +1,13 @@
 // biome-ignore lint/performance/noNamespaceImport: @sentry/node documents namespace import for init APIs
 import * as Sentry from "@sentry/node";
-import { createScrubbedEmitter, createSentryBeforeSend, secretsFromEnv } from "./emitter.js";
+import {
+  createScrubbedEmitter,
+  createSentryBeforeSend,
+  createSentryBeforeSendSpan,
+  SENTRY_DATA_COLLECTION,
+  sentryPrivacyIntegration,
+  secretsFromEnv,
+} from "./emitter.js";
 import type { SentryEventLike } from "@splitch/privacy";
 
 let initialized = false;
@@ -30,8 +37,13 @@ export function initCliObservability(
     Sentry.init({
       dsn: secrets.sentryDsn,
       environment: secrets.environment,
-      integrations: (integrations) =>
-        integrations.filter((integration) => integration.name !== "OnUnhandledRejection"),
+      dataCollection: SENTRY_DATA_COLLECTION,
+      traceLifecycle: "stream",
+      beforeSendSpan: createSentryBeforeSendSpan({ surface: "cli" }),
+      integrations: (integrations) => [
+        ...integrations.filter((integration) => integration.name !== "OnUnhandledRejection"),
+        sentryPrivacyIntegration(),
+      ],
       beforeSend(event) {
         return scrubbedBeforeSend(event as unknown as SentryEventLike) as unknown as typeof event;
       },

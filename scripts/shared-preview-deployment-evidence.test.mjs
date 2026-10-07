@@ -185,6 +185,7 @@ test("shared-preview deploy keeps every post-deploy smoke phase non-blocking", (
   assert.match(deployJob, /SPLITCH_PANEL_BROWSER_OUTCOME: \$\{\{ steps\.browser\.outcome \}\}/);
   assert.match(deployJob, /SPLITCH_PANEL_SEED_OUTCOME: \$\{\{ steps\.panel_seed\.outcome \}\}/);
   assert.match(deployJob, /SPLITCH_PANEL_SMOKE_OUTCOME: \$\{\{ steps\.panel_smoke\.outcome \}\}/);
+  assert.match(deployJob, /SPLITCH_DEPLOY_OUTCOME: \$\{\{ steps\.deploy\.outcome \}\}/);
   assert.match(deployJob, /steps\.panel_smoke\.outcome == 'failure'/);
   assert.match(
     deployJob,
