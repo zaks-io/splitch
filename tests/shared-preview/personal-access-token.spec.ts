@@ -21,9 +21,8 @@ test.describe("shared-preview Personal Access Token", () => {
       },
     );
     const pat = created.secret;
-    expect(pat).toMatch(/^spl_pat_[0-9a-f]{64}$/);
-
     try {
+      expect(/^spl_pat_[0-9a-f]{64}$/.test(pat), "created PAT secret is valid").toBe(true);
       const app = await smoke.callTool<Record<string, unknown>>(pat, "apps_get", {
         appId: smoke.config.smokeAppId,
       });
@@ -46,8 +45,8 @@ test.describe("shared-preview Personal Access Token", () => {
     // before the MCP Worker's KV entry converges: either the transport rejects
     // the secret (401) or the delegated call is refused as revoked.
     const response = await smoke.callToolRaw(pat, "apps_get", { appId: smoke.config.smokeAppId });
-    if (response.status() === 401) {
-      expect(response.headers()["www-authenticate"]).toContain('error="invalid_token"');
+    if (response.status === 401) {
+      expect(response.headers.get("www-authenticate")).toContain('error="invalid_token"');
     } else {
       expect(JSON.stringify(await response.json())).toContain("CREDENTIAL_REVOKED");
     }

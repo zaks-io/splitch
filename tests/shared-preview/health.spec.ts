@@ -8,7 +8,7 @@ test.describe("shared-preview health", () => {
     smokeConfig,
     smoke,
   }) => {
-    const observations = [];
+    const observations: Awaited<ReturnType<typeof smoke.assertHealth>>[] = [];
     for (const route of smokeConfig.healthRoutes) {
       await test.step(route.surface, async () => {
         observations.push(await smoke.assertHealth(route));

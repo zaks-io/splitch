@@ -230,6 +230,14 @@ Shared-preview smoke is the first proof that hosted bindings are correct. Each s
 include the URL, expected `platformTarget = "shared-preview"`, deployed commit SHA, migration list,
 Tinybird Branch, and which routes were exercised.
 
+The API smoke authenticates directly to the Control Plane with the preview-only
+`client_credentials` grant. For MCP, each authenticated test mints one short-lived Personal Access
+Token with that Control Plane token, then revokes it in teardown even after a failure. Hosted MCP
+verifies WorkOS AuthKit JWTs on its OAuth door and does not accept the Splitch-issued smoke JWT.
+The PAT grants read-write admin access only to the seeded smoke Organization and its Apps, covering
+App creation and Flag mutations. API traces are disabled to keep PAT secrets out of artifacts.
+See [the shared-preview smoke grant](../control-plane/auth-doors.md#shared-preview-smoke-grant-client_credentials).
+
 ### Control Panel golden path
 
 The API smoke proves the machine surfaces; it cannot prove a human can use the product. The panel

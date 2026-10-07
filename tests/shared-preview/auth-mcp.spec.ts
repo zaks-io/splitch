@@ -59,8 +59,8 @@ test.describe("shared-preview auth and MCP", () => {
     await smoke.assertFixtureTurnstileRejected();
   });
 
-  test("MCP lists agent tools from route contracts", async ({ accessToken, smoke }) => {
-    const tools = await smoke.listTools(accessToken);
+  test("MCP lists agent tools from route contracts", async ({ mcpPersonalAccessToken, smoke }) => {
+    const tools = await smoke.listTools(mcpPersonalAccessToken);
     const names = tools.map((tool) => tool.name);
 
     expect(names).toContain("apps_create");
@@ -78,11 +78,11 @@ test.describe("shared-preview auth and MCP", () => {
     expect(response.headers()["www-authenticate"]).toContain("resource_metadata=");
   });
 
-  test("MCP-audience smoke token reaches Control Plane through delegation", async ({
-    accessToken,
+  test("MCP Personal Access Token reaches Control Plane through delegation", async ({
+    mcpPersonalAccessToken,
     smoke,
   }) => {
-    const app = await smoke.callTool<Record<string, unknown>>(accessToken, "apps_get", {
+    const app = await smoke.callTool<Record<string, unknown>>(mcpPersonalAccessToken, "apps_get", {
       appId: smoke.config.smokeAppId,
     });
 

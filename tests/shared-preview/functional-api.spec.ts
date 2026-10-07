@@ -24,7 +24,7 @@ interface ApprovalRequired {
 
 test.describe("shared-preview functional API workflow", () => {
   test("creates an App and provisions Environments plus Client Keys", async ({
-    accessToken,
+    mcpPersonalAccessToken,
     smoke,
   }) => {
     const key = smoke.uniqueKey("playwright-smoke-app");
@@ -33,7 +33,7 @@ test.describe("shared-preview functional API workflow", () => {
       app: App;
       environments: Environment[];
       clientKeys: { environmentId: string; isOriginOpen: boolean }[];
-    }>(accessToken, "apps_create", {
+    }>(mcpPersonalAccessToken, "apps_create", {
       orgId: smoke.config.smokeOrgId,
       name: `Playwright Smoke ${key}`,
       key,
@@ -48,14 +48,14 @@ test.describe("shared-preview functional API workflow", () => {
   });
 
   test("round-trips Flag definition CRUD on the seeded smoke App", async ({
-    accessToken,
+    mcpPersonalAccessToken,
     smoke,
   }) => {
     let createdFlag: Flag | undefined;
 
     try {
       const key = smoke.uniqueKey("playwright-smoke-flag");
-      createdFlag = await smoke.callTool<Flag>(accessToken, "flags_create", {
+      createdFlag = await smoke.callTool<Flag>(mcpPersonalAccessToken, "flags_create", {
         appId: smoke.config.smokeAppId,
         name: "Playwright smoke flag",
         key,
@@ -71,13 +71,13 @@ test.describe("shared-preview functional API workflow", () => {
 
       expect(createdFlag).toMatchObject({ appId: smoke.config.smokeAppId, key });
 
-      const fetched = await smoke.callTool<Flag>(accessToken, "flags_get", {
+      const fetched = await smoke.callTool<Flag>(mcpPersonalAccessToken, "flags_get", {
         appId: smoke.config.smokeAppId,
         flagId: createdFlag.id,
       });
       expect(fetched.variants.map((variant) => variant.name)).toEqual(["control", "treatment"]);
 
-      const updated = await smoke.callTool<Flag>(accessToken, "flags_update", {
+      const updated = await smoke.callTool<Flag>(mcpPersonalAccessToken, "flags_update", {
         appId: smoke.config.smokeAppId,
         flagId: createdFlag.id,
         name: "Playwright smoke flag updated",
@@ -88,7 +88,7 @@ test.describe("shared-preview functional API workflow", () => {
     } finally {
       if (createdFlag) {
         const approval = await smoke.callToolExpectError<ApprovalRequired>(
-          accessToken,
+          mcpPersonalAccessToken,
           "flags_delete",
           {
             appId: smoke.config.smokeAppId,
@@ -98,7 +98,7 @@ test.describe("shared-preview functional API workflow", () => {
         );
         expect(approval).toMatchObject({ code: "APPROVAL_REVIEW_REQUIRED" });
 
-        await smoke.callTool(accessToken, "approval_request_reviews_create", {
+        await smoke.callTool(mcpPersonalAccessToken, "approval_request_reviews_create", {
           appId: smoke.config.smokeAppId,
           id: approval.details.approvalRequestId,
           action: "approve_and_apply",
@@ -109,10 +109,10 @@ test.describe("shared-preview functional API workflow", () => {
   });
 
   test("updates seeded Flag Configuration and dry-runs Evaluation", async ({
-    accessToken,
+    mcpPersonalAccessToken,
     smoke,
   }) => {
-    const flag = await smoke.callTool<Flag>(accessToken, "flags_get", {
+    const flag = await smoke.callTool<Flag>(mcpPersonalAccessToken, "flags_get", {
       appId: smoke.config.smokeAppId,
       flagId: smoke.config.smokeFlagId,
     });
@@ -124,7 +124,7 @@ test.describe("shared-preview functional API workflow", () => {
       enabled: boolean;
       availableVariantNames: string[];
       approvalRequest: unknown | null;
-    }>(accessToken, "flag_config_update", {
+    }>(mcpPersonalAccessToken, "flag_config_update", {
       appId: smoke.config.smokeAppId,
       environmentId: smoke.config.smokeEnvironmentId,
       flagId: smoke.config.smokeFlagId,
@@ -140,7 +140,7 @@ test.describe("shared-preview functional API workflow", () => {
       availableVariantNames: ["control", "treatment"],
     });
 
-    await smoke.callTool(accessToken, "flag_targeting_rules_replace", {
+    await smoke.callTool(mcpPersonalAccessToken, "flag_targeting_rules_replace", {
       appId: smoke.config.smokeAppId,
       environmentId: smoke.config.smokeEnvironmentId,
       flagId: smoke.config.smokeFlagId,
@@ -158,7 +158,7 @@ test.describe("shared-preview functional API workflow", () => {
     });
 
     const evaluation = await smoke.callTool<Record<string, unknown>>(
-      accessToken,
+      mcpPersonalAccessToken,
       "flags_test_eval",
       {
         appId: smoke.config.smokeAppId,

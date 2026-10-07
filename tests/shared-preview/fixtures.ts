@@ -18,7 +18,7 @@ interface ToolResult {
 }
 
 interface SmokeFixtures {
-  readonly accessToken: string;
+  readonly mcpPersonalAccessToken: string;
   readonly controlPlaneAccessToken: string;
   readonly smoke: SmokeClient;
   readonly smokeConfig: SmokeConfig;
@@ -31,8 +31,33 @@ export const test = base.extend<SmokeFixtures>({
   smoke: async ({ request, smokeConfig }, use) => {
     await use(new SmokeClient(request, smokeConfig));
   },
-  accessToken: async ({ smoke }, use) => {
-    await use(await smoke.mcpClientCredentialsToken());
+  mcpPersonalAccessToken: async ({ controlPlaneAccessToken, smoke }, use) => {
+    const created = await smoke.controlPlaneSend<{ token: { id: string }; secret: string }>(
+      controlPlaneAccessToken,
+      "POST",
+      "/personal-access-tokens",
+      {
+        name: smoke.uniqueKey("pat-mcp-smoke"),
+        // App creation needs Org admin; this also covers Flag admin in its Apps.
+        grants: [{ target: `org:${smoke.config.smokeOrgId}`, role: "admin", access: "read-write" }],
+        expiresAt: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
+      },
+    );
+    try {
+      expect(/^pat_[0-9a-f]{32}$/.test(created.token.id), "created PAT id is valid").toBe(true);
+      // Assert the shape without printing the secret on failure.
+      expect(/^spl_pat_[0-9a-f]{64}$/.test(created.secret), "created PAT secret is valid").toBe(
+        true,
+      );
+      await use(created.secret);
+    } finally {
+      const revoked = await smoke.controlPlaneSend<{ revokedAt: string | null }>(
+        controlPlaneAccessToken,
+        "POST",
+        `/personal-access-tokens/${created.token.id}/revoke`,
+      );
+      expect(revoked.revokedAt, "smoke PAT was revoked").toEqual(expect.any(String));
+    }
   },
   controlPlaneAccessToken: async ({ smoke }, use) => {
     await use(await smoke.clientCredentialsToken());
@@ -75,7 +100,7 @@ class SmokeClient {
   async deviceAuthorization(): Promise<Record<string, unknown>> {
     const response = await this.request.post(
       `${this.config.authBaseUrl}/oauth2/device_authorization`,
-      { form: deviceAuthorizationRequestForApp(this.config.smokeAppId) },
+      { form: { ...deviceAuthorizationRequestForApp(this.config.smokeAppId) } },
     );
     await expect(response, "WorkOS device authorization").toBeOK();
     return (await response.json()) as Record<string, unknown>;
@@ -85,25 +110,24 @@ class SmokeClient {
     if (!this.config.smokeClientSecret) {
       throw new Error("SPLITCH_SMOKE_CLIENT_SECRET is required for shared-preview smoke");
     }
-    const response = await this.request.post(`${this.config.authBaseUrl}/oauth2/token`, {
-      form: {
+    const response = await this.requestWithCredentials(`${this.config.authBaseUrl}/oauth2/token`, {
+      method: "POST",
+      body: new URLSearchParams({
         grant_type: "client_credentials",
         client_id: this.config.smokeClientId,
         client_secret: this.config.smokeClientSecret,
         ...(resource ? { resource } : {}),
-      },
+      }),
     });
-    await expect(response, "smoke client_credentials token").toBeOK();
+    expect(response.ok, `smoke client_credentials token: HTTP ${response.status}`).toBe(true);
     const body = (await response.json()) as Record<string, unknown>;
     expect(body.token_type).toBe("Bearer");
-    expect(typeof body.access_token).toBe("string");
-    expect(String(body.access_token).split(".")).toHaveLength(3);
+    expect(
+      typeof body.access_token === "string" && body.access_token.split(".").length === 3,
+      "smoke access token is a JWT",
+    ).toBe(true);
     expect(body.expires_in).toEqual(expect.any(Number));
     return String(body.access_token);
-  }
-
-  async mcpClientCredentialsToken(): Promise<string> {
-    return this.clientCredentialsToken(this.config.mcpProtectedResource);
   }
 
   async mcpProtectedResourceMetadata(): Promise<Record<string, unknown>> {
@@ -179,10 +203,14 @@ class SmokeClient {
   }
 
   async controlPlaneGet<T>(token: string, path: string): Promise<T> {
-    const response = await this.request.get(`${this.config.controlPlaneBaseUrl}${path}`, {
-      headers: { authorization: `Bearer ${token}` },
-    });
-    await expect(response, `Control Plane GET ${path}`).toBeOK();
+    const response = await this.requestWithCredentials(
+      `${this.config.controlPlaneBaseUrl}${path}`,
+      {
+        method: "GET",
+        headers: { authorization: `Bearer ${token}` },
+      },
+    );
+    expect(response.ok, `Control Plane GET ${path}: HTTP ${response.status}`).toBe(true);
     return (await response.json()) as T;
   }
 
@@ -192,28 +220,28 @@ class SmokeClient {
     path: string,
     body?: unknown,
   ): Promise<T> {
-    const response = await this.request.fetch(`${this.config.controlPlaneBaseUrl}${path}`, {
-      method,
-      headers: { authorization: `Bearer ${token}` },
-      ...(body === undefined ? {} : { data: body }),
-    });
-    await expect(response, `Control Plane ${method} ${path}`).toBeOK();
+    const response = await this.requestWithCredentials(
+      `${this.config.controlPlaneBaseUrl}${path}`,
+      {
+        method,
+        headers: { authorization: `Bearer ${token}` },
+        ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+      },
+    );
+    expect(response.ok, `Control Plane ${method} ${path}: HTTP ${response.status}`).toBe(true);
     return (await response.json()) as T;
   }
 
   /** One raw tools/call, for asserting refusals at either the transport or the tool. */
-  async callToolRaw(
-    token: string,
-    name: string,
-    args: Record<string, unknown>,
-  ): Promise<APIResponse> {
-    return this.request.post(`${this.config.mcpBaseUrl}/mcp`, {
-      data: {
+  async callToolRaw(token: string, name: string, args: Record<string, unknown>): Promise<Response> {
+    return this.requestWithCredentials(`${this.config.mcpBaseUrl}/mcp`, {
+      method: "POST",
+      body: JSON.stringify({
         jsonrpc: "2.0",
         id: `${name}-raw-smoke`,
         method: "tools/call",
         params: { name, arguments: args },
-      },
+      }),
       headers: { authorization: `Bearer ${token}` },
     });
   }
@@ -242,15 +270,32 @@ class SmokeClient {
     return envelope.result as ToolResult;
   }
 
+  private async requestWithCredentials(url: string, options: RequestInit): Promise<Response> {
+    const headers = new Headers(base.info().project.use.extraHTTPHeaders);
+    new Headers(options.headers).forEach((value, key) => {
+      headers.set(key, value);
+    });
+    if (typeof options.body === "string") headers.set("content-type", "application/json");
+    try {
+      // Native fetch keeps credentials out of Playwright API steps and report artifacts.
+      return await fetch(url, { ...options, headers, signal: AbortSignal.timeout(30_000) });
+    } catch {
+      throw new Error(
+        `Smoke request to ${new URL(url).pathname} failed before receiving a response`,
+      );
+    }
+  }
+
   private async mcpRequest(
     body: Record<string, unknown>,
     token?: string,
   ): Promise<JsonRpcEnvelope> {
-    const response = await this.request.post(`${this.config.mcpBaseUrl}/mcp`, {
-      data: body,
+    const response = await this.requestWithCredentials(`${this.config.mcpBaseUrl}/mcp`, {
+      method: "POST",
+      body: JSON.stringify(body),
       headers: token ? { authorization: `Bearer ${token}` } : undefined,
     });
-    await expect(response, "MCP JSON-RPC").toBeOK();
+    expect(response.ok, `MCP JSON-RPC: HTTP ${response.status}`).toBe(true);
     const envelope = (await response.json()) as JsonRpcEnvelope;
     expect(envelope.jsonrpc).toBe("2.0");
     return envelope;
