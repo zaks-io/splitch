@@ -291,11 +291,24 @@ The grant is advertised in OAuth discovery only while enabled.
 5. Mint a short-lived resource-bound access token with `auth_door = "client_credentials"`. The
    Control Plane is the default resource; an explicitly requested MCP resource must exactly match the
    configured MCP origin or its `/mcp` endpoint.
-6. Every runtime target uses the RS256/JWKS trust contract in
+6. The Control Plane verifies the Splitch access token with the RS256/JWKS trust contract in
    [access-control-matrix.md](access-control-matrix.md). No refresh token is issued.
+7. For MCP smoke, use the Control Plane token to create a one-hour Personal Access Token through
+   `POST /personal-access-tokens`. The test-scoped PAT has one `org:<smoke org id>` grant with
+   `role: admin` and `access: read-write`. App creation and Flag mutations require admin; the
+   Organization grant covers the seeded App, so no additional App or `all` grant is needed.
+8. Call MCP with the PAT. Hosted MCP verifies WorkOS AuthKit JWTs on its OAuth door, so a
+   Splitch-issued `client_credentials` JWT, even with an MCP audience, is not an MCP credential.
+   The PAT door delegates to the Control Plane with `authDoor: personal_access_token`, where live
+   membership and PAT grants bound authority.
+9. Revoke the PAT with the Control Plane token in fixture teardown, including after test failures.
+   Failed revocation fails the test. API traces are disabled because they capture the PAT secret
+   and bearer headers.
 
 This grant is not a production user or agent auth path. It exists to validate the hosted
-Auth API to Control Plane trust contract with a seeded smoke Organization/App.
+Auth API to Control Plane trust contract and PAT-authenticated MCP delegation with a seeded smoke
+Organization/App. PAT management accepts this preview-only smoke door; see
+[personal-access-tokens.md](personal-access-tokens.md).
 
 ## Sources
 

@@ -166,6 +166,8 @@
         ".github/workflows/**",
         ".github/actions/**",
         "apps/control-panel/playwright.config.ts",
+        "tests/shared-preview/**",
+        "apps/auth-api/src/device-authorization-contract.ts",
         "apps/analysis-api/src/results-run-commitments.ts",
         "package.json"
       ],

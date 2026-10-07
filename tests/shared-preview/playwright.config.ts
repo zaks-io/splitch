@@ -41,7 +41,8 @@ export default defineConfig({
   // Split so the API smoke keeps running with no browser installed. Only the panel
   // project needs Chromium, and only its workflow step pays for installing it.
   projects: [
-    { name: "api", testIgnore: "panel-*.spec.ts" },
+    // API traces record PAT mint responses and bearer headers, including on failure.
+    { name: "api", testIgnore: "panel-*.spec.ts", use: { trace: "off" } },
     {
       name: "panel",
       testMatch: "panel-*.spec.ts",
