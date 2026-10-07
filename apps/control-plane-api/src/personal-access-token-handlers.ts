@@ -1,7 +1,6 @@
 import {
   boundListRead,
   type ErrorResponse,
-  isProvisionalAuthDoor,
   LIST_READ_LIMIT,
   PERSONAL_ACCESS_TOKEN_DEFAULT_TTL_DAYS,
   PERSONAL_ACCESS_TOKEN_MAX_ACTIVE,
@@ -57,9 +56,9 @@ function makePersonalAccessTokenHandlers(deps: PersonalAccessTokenHandlerDeps) {
     },
 
     async create({ input, principal, requestId }: HandlerArgs<unknown>): Promise<Response> {
-      const store = requireStore(deps.store);
-      const refused = provisionalRefusal(principal);
+      const refused = personalAccessTokenManagementRefusal(principal);
       if (refused) return renderError(refused, { requestId });
+      const store = requireStore(deps.store);
       const body = objectBody(input);
       const grants = body.grants as PersonalAccessTokenGrant[];
       const nowMs = now();
@@ -101,6 +100,8 @@ function makePersonalAccessTokenHandlers(deps: PersonalAccessTokenHandlerDeps) {
     },
 
     async update({ input, principal, requestId }: HandlerArgs<unknown>): Promise<Response> {
+      const refused = personalAccessTokenManagementRefusal(principal);
+      if (refused) return renderError(refused, { requestId });
       const store = requireStore(deps.store);
       const body = objectBody(input);
       const nowMs = now();
@@ -120,6 +121,8 @@ function makePersonalAccessTokenHandlers(deps: PersonalAccessTokenHandlerDeps) {
     },
 
     async rotate({ input, principal, requestId }: HandlerArgs<unknown>): Promise<Response> {
+      const refused = personalAccessTokenManagementRefusal(principal);
+      if (refused) return renderError(refused, { requestId });
       const store = requireStore(deps.store);
       const tokenId = pathParam(input, "tokenId");
       const current = await tokens.getForUser(principal.id, tokenId);
@@ -261,10 +264,12 @@ async function grantProblems(
   return null;
 }
 
-function provisionalRefusal(principal: Principal): ErrorResponse | null {
-  if (!isProvisionalAuthDoor(principal.authDoor)) return null;
+function personalAccessTokenManagementRefusal(principal: Principal): ErrorResponse | null {
+  if (principal.authDoor === "device_flow" || principal.authDoor === "client_credentials") {
+    return null;
+  }
   return forbidden(
-    "a provisional (unclaimed) account cannot create personal access tokens; complete the claim ceremony first",
+    "creating, updating, or rotating personal access tokens requires device_flow or client_credentials authentication; sign in with splitch login",
   );
 }
 

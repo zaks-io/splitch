@@ -32,8 +32,12 @@ At create and update, an `org:` or `app:` grant must name a membership the calle
 ceiling at or below the caller's live role. `all` is checked at use time.
 
 Grants are checked against live membership, not against the scopes of the access token that creates
-them. That is an accepted risk, recorded in the ADR amendment, until PAT management requires a step-up
-credential.
+or updates them. The accepted residual risk is bounded to the CLI `device_flow` door and the
+shared-preview-only `client_credentials` smoke grant. An App-bound CLI token can still mint an `all`,
+never-expiring PAT. Its access token lives next to the refresh token in the CLI credential store.
+Creating, updating, and rotating PATs explicitly allow only those two doors. Un-pausing ID-JAG or
+adding a door does not silently grant PAT management; missing and unknown doors are also refused.
+A step-up credential from Auth API remains the deferred full fix, as recorded in the ADR amendment.
 
 At use time, the Control Plane resolves the owner's live memberships and keeps only those a grant
 covers, at the clamped role. That set is the principal's read authority. On an operation whose
@@ -66,8 +70,12 @@ with `update` first.
 ## Routes
 
 CLI-only Control Plane routes on the public bearer door, keyed by the calling user. They derive no MCP
-tool and are never mounted on the MCP or panel bindings. A provisional (unclaimed) principal cannot
-create one.
+tool and are never mounted on the MCP or panel bindings. Create, update, and rotate require
+`device_flow` or `client_credentials` authentication. Every other door gets `FORBIDDEN` with guidance
+to sign in with `splitch login`. List, revoke, and revoke-all remain available to any authenticated
+door of the owning user. Listing returns metadata only, and revocation reduces authority, so this
+allow-list must never block credential cleanup. A PAT secret remains invalid as a Control Plane
+bearer.
 
 | operation                           | method + path                                  | returns                    |
 | ----------------------------------- | ---------------------------------------------- | -------------------------- |

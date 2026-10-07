@@ -35,14 +35,22 @@ that gap without creating a second principal class.
   suspend a long-lived PAT temporarily. A PAT is revoked on its own, durably in
   D1 (`splitch tokens revoke` or `splitch tokens revoke-all`).
 
-**Accepted risk: a session token can mint a broad PAT.** Grants are checked
-against the user's live membership, not against the scopes of the Control Plane
-access token that creates them. A one-hour, App-bound CLI token can therefore
-create an `all` grant that never expires. Control Plane access tokens live only
-in the CLI credential store, next to the refresh token that can already rebind
-to any membership, so stealing one usually means stealing both. Closing this
-fully needs a step-up ("sudo") credential for PAT management from Auth API. That
-is deferred, and this paragraph records the decision until it lands.
+**Accepted risk: a CLI device-flow token can mint a broad PAT.** Grants are
+checked against the user's live membership, not against the scopes of the
+Control Plane access token that creates or updates them. Creating, updating,
+and rotating PATs explicitly allow only `device_flow` and `client_credentials`.
+The latter is the shared-preview-only smoke grant. Every other door, including
+missing or unknown doors, is refused. Un-pausing ID-JAG or adding a door does
+not silently grant PAT management. Listing and revocation remain available to
+any authenticated door of the owning user so credential cleanup is never
+blocked by this allow-list.
+
+The residual risk is bounded to the CLI device-flow door and the preview-only
+smoke grant. A one-hour, App-bound CLI token can still create an `all` grant that
+never expires. Device-flow access tokens live in the CLI credential store,
+next to the refresh token that can already rebind to any membership, so stealing
+one usually means stealing both. Closing this fully needs a step-up ("sudo")
+credential for PAT management from Auth API. That remains deferred.
 
 This narrows the earlier rejection of "a raw API key from the agent flow". That
 rejection protected two properties: every action ties to a real, revocable user,
