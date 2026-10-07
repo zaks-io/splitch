@@ -38,11 +38,14 @@ test("shared-preview MCP PAT fixture mints once and revokes on success and failu
       await mkdir(artifactsRoot, { recursive: true });
       const directory = await mkdtemp(resolve(artifactsRoot, "pat-fixture-"));
       try {
+        // On GitHub Actions Playwright embeds the PR diff in report metadata by default, and this
+        // file's fixture secrets are in that diff, so the leak assertions would scan our own source.
         await writeFile(
           resolve(directory, "playwright.config.ts"),
           `
 import config from "../../tests/shared-preview/playwright.config";
 export default { ...config, testDir: ${JSON.stringify(directory)}, retries: 0,
+  captureGitInfo: { commit: false, diff: false },
   reporter: [["line"], ["json", { outputFile: ${JSON.stringify(resolve(directory, "report.json"))} }]], outputDir: ${JSON.stringify(resolve(directory, "results"))},
   projects: config.projects?.filter(project => project.name === "api") };
 `,
