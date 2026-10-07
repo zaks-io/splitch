@@ -200,6 +200,7 @@ HoldoverWriteOutboxDurableObject.prototype.fetch = async function (request) {
   }
   if (url.pathname === "/__test/alarm" && request.method === "POST") {
     const scheduledAt = await this.ctx.storage.getAlarm();
+    await this.ctx.storage.deleteAlarm();
     const originalDateNow = Date.now;
     if (scheduledAt !== null) Date.now = () => scheduledAt;
     try {

@@ -319,6 +319,12 @@ Metric Event rows and states, but immutable version records remain while any ret
 them. Both TTL expressions use the same full `server_received_at` timestamp, so state cannot expire
 earlier because of date truncation.
 
+Sticky Exposure membership used for SRM may outlive those outcomes. A Results read that needs
+Metric Events or Activations refuses a selected population containing an unquarantined Exposure
+outside the physical 90-day outcome retention window. It must not drop those Entities or turn
+expired outcomes into zeros. The check uses current read time, including the datasource TTL's
+second truncation; a pinned historical data watermark cannot recover facts already expired.
+
 ## Web Event retention
 
 The raw `web_events` datasource and `deduped_web_events_state` have matching independent default

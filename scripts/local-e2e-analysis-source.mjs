@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { createSign, generateKeyPairSync } from "node:crypto";
+import { createPrivateKey, createPublicKey, createSign, generateKeyPairSync } from "node:crypto";
 import { createServer } from "node:http";
 import { resolve } from "node:path";
 import { LOCAL_E2E_ANALYSIS_INPUTS } from "./local-e2e-analysis-inputs.mjs";
@@ -9,7 +9,11 @@ const origin = "http://127.0.0.1:18788";
 const audience = "http://127.0.0.1:18790";
 const keyId = "local-e2e-analysis";
 const readToken = "local-e2e-tinybird-read-token";
-const { privateKey, publicKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
+const fullFleet = process.env.SPLITCH_LOCAL_DEV_FLEET === "true";
+const privateKey = fullFleet
+  ? createPrivateKey({ key: JSON.parse(process.env.ACCESS_TOKEN_SECRET), format: "jwk" })
+  : generateKeyPairSync("rsa", { modulusLength: 2048 }).privateKey;
+const publicKey = createPublicKey(privateKey);
 const publicJwk = { ...publicKey.export({ format: "jwk" }), alg: "RS256", kid: keyId, use: "sig" };
 
 export function createAnalysisSourceServer(runId = "local-e2e") {
@@ -96,6 +100,7 @@ function pipeRows(pipeName, params) {
         target_n_source: null,
         planned_duration_days: null,
         planned_duration_override_reason: null,
+        pre_registration: null,
       },
     ];
   }
@@ -131,8 +136,10 @@ function analysisAccessToken() {
   const header = base64Url(JSON.stringify({ alg: "RS256", kid: keyId, typ: "JWT" }));
   const payload = base64Url(
     JSON.stringify({
-      iss: origin,
+      iss: fullFleet ? "http://localhost:8791" : origin,
       aud: audience,
+      typ: "access_token",
+      auth_door: "device_flow",
       sub: "user_local_member_e2e",
       scopes: ["app:app_checkout_e2e:member"],
       iat: now,

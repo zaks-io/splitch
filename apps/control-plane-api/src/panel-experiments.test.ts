@@ -272,8 +272,13 @@ function repository(
       },
       listExperiments: vi.fn(async () => [experimentRow(ids)]),
       getExperiment: vi.fn(async () => experimentRow(ids)),
+      getRun: vi.fn(async () => runRow(ids, 2)),
       listRunsForExperiment: vi.fn(async () => [runRow(ids, 1), runRow(ids, 2)]),
       listExperimentIdsWithRuns: vi.fn(async () => []),
+    },
+    runSrmAlarms: {
+      listForRun: vi.fn(async () => []),
+      insertIgnore: vi.fn(async () => undefined),
     },
   } as unknown as Repository;
 }

@@ -1,8 +1,8 @@
 import { existsSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { proveAnalysisScopePredicates } from "./lib/tinybird-analysis-scope-proof.mjs";
-import { stageTinybirdProject } from "./lib/tinybird-fixture-clock.mjs";
 import { assertEnvironmentExposureStatusContract } from "./lib/tinybird-exposure-status-contract.mjs";
+import { stageTinybirdProject } from "./lib/tinybird-fixture-clock.mjs";
 import { assertPromotedForwardQueriesRemoved } from "./lib/tinybird-forward-query-cleanup-contract.mjs";
 import { assertMetricStubsRetiredWhenMetricEventsExist } from "./lib/tinybird-metric-stub-tripwire.mjs";
 import { output, quietExitCode, quietExitCodeWithInput, run } from "./lib/tinybird-process.mjs";
@@ -33,7 +33,17 @@ const staged = stageTinybirdProject({
 });
 const projectDir = staged.dir;
 // fail() exits the process mid-run, which skips any finally block.
-process.on("exit", () => rmSync(projectDir, { recursive: true, force: true }));
+const cleanup = () => rmSync(projectDir, { recursive: true, force: true });
+process.on("exit", cleanup);
+for (const signal of ["SIGINT", "SIGTERM"]) {
+  const terminate = () => {
+    cleanup();
+    // Restore default termination so callers still observe the original signal.
+    process.removeListener(signal, terminate);
+    process.kill(process.pid, signal);
+  };
+  process.on(signal, terminate);
+}
 console.log(
   `tinybird:local: fixture and test dates shifted ${staged.offsetDays} days so ENGINE_TTL keeps every fixture row`,
 );

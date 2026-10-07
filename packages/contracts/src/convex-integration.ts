@@ -20,6 +20,7 @@ export const ConvexInstallationCreateRequestSchema = z
     installationId: UuidSchema,
     callbackUrl: z.url(),
     webhookSecret: z.string().min(43).max(128),
+    callbackVerification: z.literal("hmac-sha256").optional(),
   })
   .strict();
 
@@ -49,6 +50,7 @@ export const ConvexInstallationStatusSchema = ConvexInstallationSchema.extend({
         "TLS_ERROR",
         "HTTP_STATUS",
         "DELIVERY_PREPARATION_FAILED",
+        "CALLBACK_DESTINATION_REJECTED",
       ]),
       httpStatus: z.number().int().min(100).max(599).optional(),
       retryAfterMs: z.number().int().nonnegative().optional(),

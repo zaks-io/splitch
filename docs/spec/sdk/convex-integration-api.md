@@ -13,20 +13,29 @@ in its private component tables, then calls:
 POST /api/integrations/convex/installations
 Authorization: Bearer <apiKey>
 
-{ installationId, callbackUrl, webhookSecret }
+{ installationId, callbackUrl, webhookSecret, callbackVerification?: "hmac-sha256" }
 ```
 
-On a first install, `callbackUrl` combines the canonical deployment name from
-`CONVEX_CLOUD_URL` with the mounted component path from `CONVEX_SITE_URL`, then appends
-`/configuration` on the resulting HTTPS `*.convex.site` URL. An upgrade reuses the stored
-callback for an active or revoked installation, or a pending installation with an already
-canonical callback, even when both Convex URLs now use custom domains. A new installation, an
-install after local state is purged, or repair of a pending noncanonical callback still requires
-a default `https://<deployment>.convex.cloud` cloud URL and fails before this endpoint is called
-if the cloud URL is overridden. IP literals, credentials, query strings, fragments, nonstandard
-ports, redirects, and other callback hosts fail validation. Splitch excludes the request body
-from logs, encrypts the secret under the Control Plane Worker's required 32-byte base64
-`CONVEX_WEBHOOK_KEK`, and never returns it.
+On a first install, `callbackUrl` uses the actual `CONVEX_SITE_URL`, preserves the mounted path,
+and appends `/configuration`. The component supports the default `*.convex.site` domain and custom
+HTTP Actions domains without an additional origin setting. An upgrade keeps the stored callback
+for an active or revoked installation, and for a pending installation with any valid callback,
+including a custom domain. Only a new installation or repair of an invalid pending callback
+requires URL derivation. Missing or invalid `CONVEX_SITE_URL` then fails before local initialization
+or this endpoint is called.
+
+The callback must use HTTPS on port 443, have a public DNS hostname, and end in `/configuration`.
+Credentials, query strings, fragments, IP literals, single-label hosts, and private or reserved
+DNS suffixes are rejected. The Control Plane also rejects `splitch.dev`, its subdomains, and its
+own `splitch-control-plane-api` Workers domains. The same destination validation applies to
+registration, receiver verification, and every configuration delivery.
+
+A request with `callbackVerification: "hmac-sha256"` must complete
+[receiver verification](#callback-receiver-verification) before a new installation is inserted.
+This permits provider-neutral public HTTPS callbacks. A request without the capability retains
+the legacy `*.convex.site` hostname rule and does not send a challenge. Splitch excludes the
+request body from logs, encrypts the secret under the Control Plane Worker's required 32-byte
+base64 `CONVEX_WEBHOOK_KEK`, and never returns it.
 
 Installation requires both `data-plane:evaluate` and `data-plane:write`, unlike every other route
 here. The Key mounted at install is the Component's only credential, and it authenticates Metric
@@ -34,15 +43,61 @@ Event delivery as well as evaluation. Delivery happens after the caller's Mutati
 an evaluate-only Key would let `track()` return a receipt and then send every Metric Event terminal,
 unobserved. Install refuses it with `INSUFFICIENT_SCOPES` instead, while a human is watching.
 
-An exact retry returns the existing installation. Reusing `installationId` with a different
-callback or secret fails `IDEMPOTENCY_KEY_CONFLICT`. The response is:
+An exact retry returns the existing installation without a new challenge and preserves its active
+or revoked status. Reusing `installationId` with a different callback or secret fails
+`IDEMPOTENCY_KEY_CONFLICT` before verification. The response is:
 
 ```text
-{ installationId, appId, environmentId, environmentVersion, status: "active" }
+{ installationId, appId, environmentId, environmentVersion, status: "active" | "revoked" }
 ```
 
 The component then pulls the snapshot. Installation is not complete locally until that snapshot is
 validated and committed.
+
+## Callback receiver verification
+
+For a new installation that advertises the verification capability, Splitch creates a fresh UUID
+challenge and posts this exact JSON shape to the callback:
+
+```text
+{ type: "callback.verify", installationId: <UUID>, challenge: <UUID> }
+
+Splitch-Timestamp: <unix-seconds>
+Splitch-Signature: v1=<hex HMAC-SHA256(timestamp + "." + exact-body)>
+```
+
+The request uses the proposed webhook secret and carries no API Key or configuration payload.
+The receiver authenticates the exact body bytes, permits at most five minutes of clock skew, and
+requires the challenge's installation ID to match its locally stored installation. Only the current
+secret can authenticate a challenge, even during rotation; the previous secret is accepted only
+for ordinary configuration nudges. The receiver returns:
+
+```text
+HTTP 204
+Splitch-Callback-Proof: <hex HMAC-SHA256("callback.verify:" + installationId + ":" + challenge)>
+```
+
+Splitch compares this independent proof in constant time. A `2xx` response without the correct proof
+fails verification. The challenge never raises the announced Environment version, claims a delivery
+ID, or schedules configuration sync. A missing or invalid proof, redirect, or other permanent
+receiver rejection returns `VALIDATION_ERROR`; transport failures, `429`, and `5xx` return
+`SERVICE_UNAVAILABLE` so the component can retry. No remote installation row is written on failure.
+An exact retry of an already stored installation does not need a reachable receiver.
+
+Verification and configuration deliveries use a five-second timeout and `redirect: "manual"`.
+Redirect responses fail rather than changing the destination. The Cloudflare Workers runtime
+[enforces public outbound destinations at connection time](https://developers.cloudflare.com/workers/reference/security-model/),
+including after DNS resolution and rebinding. Splitch denies its own domains because Workers'
+own-zone origin exception would otherwise permit a private zone origin. DNS safety depends on this
+Workers enforcement; hostname syntax checks alone do not enforce it in another runtime.
+
+## Release order
+
+Deploy the Control Plane support first, then release the SDK containing the shared callback
+contracts, then release the Convex component that advertises the verification capability. This
+keeps old components compatible while the server adopts verification and ensures the released
+component can import its SDK dependency. Production deployment and package publication require
+the applicable release approval; this order does not authorize either action.
 
 ## Configuration snapshot
 
@@ -95,12 +150,14 @@ Splitch-Signature: v1=<hex HMAC-SHA256(timestamp + "." + exact-body)>
 ```
 
 The receiver compares the signature in constant time, permits at most five minutes of clock skew,
-and claims `deliveryId` before scheduling sync. Splitch follows no redirects. A non-2xx response or
+and claims `deliveryId` before scheduling sync. Splitch follows no redirects and applies the same
+five-second timeout and destination restrictions as receiver verification. A non-2xx response or
 transport failure enters durable retry; only `2xx` completes the delivery.
 
 ## Non-goals
 
-- General outbound webhooks, custom destinations, or user-authored payload templates.
+- General outbound webhooks or user-authored payload templates. Custom domains are supported only
+  for verified configuration receivers.
 - Creating or rotating an installation, or reading its configuration snapshot, with a control-plane
   token. A control-plane token may list and revoke installations through the operator door.
 - Calling any Convex integration route with a Client Key.
@@ -110,13 +167,17 @@ transport failure enters durable retry; only `2xx` completes the delivery.
 
 - Contract and local Worker smoke tests cover every route, credential tier, scope injection, retry,
   conflict, callback validation, redaction, ETag, revocation, and missing installation.
+- Receiver fixtures prove current-secret verification, installation ID matching, independent proof,
+  rejection without a remote insert, and exact retries without a challenge or status change.
 - Webhook fixtures prove exact-byte signing, constant-time verification, timestamp bounds, replay
-  rejection, no redirects, and complete retention of the bounded allowlisted error envelope.
+  rejection, no redirects, five-second transport bounds, callback destination restrictions, and
+  complete retention of the bounded allowlisted error envelope.
 - A live preview component installs, pulls, rotates, reports status, receives a change, and uninstalls.
 
 ## Sources
 
 - [ADR-0049](../../adr/0049-convex-local-evaluation-uses-nudge-pull-sync-and-transactional-exposure-delivery.md)
 - [LaunchDarkly webhook signing](https://launchdarkly.com/docs/fed-docs/api/webhooks#signing-the-webhook)
+- [Cloudflare Workers security model](https://developers.cloudflare.com/workers/reference/security-model/)
 - [Convex component HTTP routes](https://docs.convex.dev/components/authoring#http-actions)
 - [error-responses.md](../contracts/error-responses.md)

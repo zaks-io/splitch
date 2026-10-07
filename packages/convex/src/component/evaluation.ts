@@ -15,7 +15,12 @@ import {
   query,
 } from "./_generated/server";
 import { canonicalJson, sha256Hex } from "./crypto";
-import { servedDetails, staleDetails, syncOverdueDetails } from "./evaluation_details";
+import {
+  servedDetails,
+  staleDetails,
+  syncExposureBlockedDetails,
+  syncOverdueDetails,
+} from "./evaluation_details";
 import {
   localTargetingKeyHash,
   persistExposure,
@@ -102,7 +107,22 @@ export async function evaluateHandler(
   }
   // No claim is stored: nothing was served, so a retry after the sync recovers must evaluate fresh.
   if (runtime.kind === "overdue") return syncOverdueDetails(runtime, args.defaultValue);
+  return evaluateFresh(ctx, args, runtime, fingerprint);
+}
+
+async function evaluateFresh(
+  ctx: MutationCtx,
+  args: EvaluateArgs & { idempotencyKey: string },
+  runtime: ReadyRuntime,
+  fingerprint: string,
+): Promise<ResolutionDetails> {
   const result = await evaluateHeld(runtime, args);
+  // The announcement may be a Run End or restart. A new Exposure at this
+  // commit time could be refused permanently by the held Run's endedAt bound.
+  // Leave no claim or holdover, so this same key can evaluate the fresh snapshot.
+  if (runtime.syncing && result.exposure) {
+    return syncExposureBlockedDetails(runtime, args.defaultValue);
+  }
   const details = servedDetails(runtime, args, result);
   if (result.exposure) await persistExposure(ctx, args, runtime, result.exposure, fingerprint);
   await ctx.db.insert("evaluationClaims", {

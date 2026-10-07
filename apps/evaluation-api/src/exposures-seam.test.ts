@@ -1,7 +1,7 @@
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { CURRENT_KV_SCHEMA_VERSION, experimentConfigKey, runConfigKey } from "@splitch/contracts";
-import { describe, expect, it, vi } from "vitest";
+import { beforeAll, describe, expect, it, vi } from "vitest";
 import type { AssembledExposure } from "./evaluate/exposure-assembly";
 import { makeHttpExposureIngestSink } from "./exposure-redemption";
 import { EXPOSURE_ID_A, exposuresInit, mintTicket, PATH } from "./exposures-test-fixtures";
@@ -19,10 +19,15 @@ import {
  * boundary. Dynamic import keeps deploy-unit boundaries for production code.
  */
 describe("POST /api/sdk/exposures: real Event Ingest seam", () => {
+  let eventIngest: Awaited<ReturnType<typeof loadEventIngestWorker>>;
+
+  beforeAll(async () => {
+    eventIngest = await loadEventIngestWorker();
+  });
+
   it("accepts a batch whose sealed Exposure queues via /api/internal/exposures", async () => {
     const tinybird = mockTinybirdFetch();
     const rawEventsQueue = mockRawEventsQueue();
-    const eventIngest = await loadEventIngestWorker();
     const env = makeEventIngestEnv(rawEventsQueue);
     const ctx = new TestExecutionContext();
     const httpSink = makeHttpExposureIngestSink({

@@ -3,6 +3,7 @@
   "globalDependencies": ["biome.json", "tsconfig.base.json"],
   "globalEnv": ["CI", "NODE_ENV"],
   "globalPassThroughEnv": [
+    "VITEST_MAX_WORKERS",
     "GITHUB_RUN_ID",
     "SPLITCH_SMOKE_APP_ID",
     "SPLITCH_SMOKE_CLIENT_ID",
@@ -113,13 +114,22 @@
     "dev": {
       "dependsOn": ["^build"],
       "cache": false,
-      "persistent": true
+      "persistent": true,
+      "passThroughEnv": [
+        "SPLITCH_LOCAL_DEV_FLEET",
+        "SPLITCH_LOCAL_DEV_GATEWAY_PORT",
+        "SPLITCH_LOCAL_E2E_RUN_ID"
+      ]
     },
     "lint": {
       "outputs": []
     },
     "test": {
       "dependsOn": ["^build"],
+      "outputs": []
+    },
+    "@splitch/analysis-api#test": {
+      "dependsOn": ["^build", "//#test:scripts"],
       "outputs": []
     },
     "//#format:check": {
@@ -156,6 +166,7 @@
         ".github/workflows/**",
         ".github/actions/**",
         "apps/control-panel/playwright.config.ts",
+        "apps/analysis-api/src/results-run-commitments.ts",
         "package.json"
       ],
       "outputs": []
@@ -467,7 +478,7 @@
     },
     "@splitch/control-plane-api#test": {
       "dependsOn": ["^build"],
-      "inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/packages/convex/src/component/callback_url.ts"],
+      "inputs": ["$TURBO_DEFAULT$"],
       "outputs": []
     },
     "@splitch/stats#test": {

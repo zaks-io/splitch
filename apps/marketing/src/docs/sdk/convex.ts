@@ -35,11 +35,15 @@ export default app;`,
     },
     {
       kind: "prose",
-      text: "On a first install, the component builds the callback from the default `CONVEX_CLOUD_URL` deployment name and the mounted path from `CONVEX_SITE_URL`. A [custom domain](https://docs.convex.dev/production/custom-domains) on HTTP Actions works because the callback still resolves to the `*.convex.site` origin Splitch accepts.",
+      text: "On a first install, the component uses the actual `CONVEX_SITE_URL`, preserves the component mount path, and appends `/configuration`. The default `*.convex.site` domain and [custom HTTP Actions domains](https://docs.convex.dev/production/custom-domains) both work, including when both Convex URLs use custom domains. No additional domain setting is needed.",
     },
     {
       kind: "prose",
-      text: "On upgrade, `install()` reuses a canonical callback already stored by the component. Existing installations therefore keep working when both Convex URLs use custom domains. A first install, an install after local state is purged, or repair of a pending noncanonical callback still needs the default `https://<deployment>.convex.cloud` cloud URL. `install()` refuses a custom API domain in those cases before registration.",
+      text: "The callback must use HTTPS on port 443 with a public DNS hostname and no credentials, query string, or fragment. IP literals, private hostnames, and Splitch's own services are rejected. Before creating a new remote installation, Splitch sends a signed challenge and requires proof that the callback holds this installation's current webhook secret. The challenge does not announce configuration or schedule a sync. Redirects are not followed.",
+    },
+    {
+      kind: "prose",
+      text: "On upgrade, `install()` keeps the stored callback for an active or revoked installation, and for any pending installation with a valid callback, including a custom domain. Only a new installation or repair of an invalid pending callback derives a URL. Missing or invalid `CONVEX_SITE_URL` fails before initialization or registration when derivation is required. An exact remote retry preserves the stored status without another challenge; a different callback or secret for the same installation ID fails.",
     },
     { kind: "heading", text: "Evaluate" },
     {

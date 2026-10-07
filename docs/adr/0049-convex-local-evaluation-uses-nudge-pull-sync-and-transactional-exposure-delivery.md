@@ -1,6 +1,6 @@
 # Convex local evaluation uses nudge-pull sync and transactional Exposure delivery
 
-**Status:** accepted; amended 2026-10-03
+**Status:** accepted; amended 2026-10-06
 
 Convex queries and mutations cannot call third-party APIs. The current `@splitch/sdk` guidance
 therefore evaluates in an Action before calling a mutation. That is usable for Flags, but it is the
@@ -47,6 +47,14 @@ does not send evaluation events from queries.
 7. **Local reads consume zero Evaluations.** This follows ADR-0033's existing cached/local rule.
    Configuration sync and Exposure delivery are not billable Evaluation calls.
 
+8. **Configuration callbacks use the actual mounted HTTP Actions URL.** The component appends
+   `/configuration` to `CONVEX_SITE_URL` and preserves the mounted path, including custom domains.
+   New components advertise `callbackVerification: "hmac-sha256"`; Splitch verifies a signed
+   installation-scoped challenge and an independent HMAC proof before inserting a new installation.
+   Challenges use only the current secret and never announce configuration. Clients without the
+   capability keep the legacy `*.convex.site` rule. Exact retries preserve the stored callback,
+   secret, and active or revoked status without another challenge.
+
 ## Considered options
 
 - **Evaluate in an Action, then mutate** was rejected as the final integration because mutation
@@ -73,6 +81,12 @@ does not send evaluation events from queries.
   separately resumes stale configuration sync. The component registers no cron jobs.
 - Splitch needs an API-Key installation/config-snapshot surface, encrypted webhook-secret custody,
   a durable webhook delivery outbox, and a server Exposure endpoint.
+- Callback registration and delivery require public DNS HTTPS destinations on port 443, reject
+  credentials, queries, fragments, IP literals, private suffixes, and Splitch's own services, and
+  never follow redirects. A five-second transport timeout bounds verification and delivery.
+  Cloudflare Workers enforces public egress after DNS resolution; Splitch's domain denial closes
+  its own-zone origin exception. Deploy server support before the SDK release, then release the
+  Convex component. Production deployment and publication remain separately approved actions.
 - `raw_events` gains additive `exposure_at`; existing producers populate it from
   `server_received_at`, so old behavior is preserved while the trusted Convex source can retain the
   actual encounter time.
@@ -88,6 +102,7 @@ does not send evaluation events from queries.
 
 ## Sources
 
+- [Cloudflare Workers security model](https://developers.cloudflare.com/workers/reference/security-model/)
 - [Convex Components](https://docs.convex.dev/components/authoring)
 - [Convex transaction composition](https://docs.convex.dev/components/using)
 - [Convex scheduled functions](https://docs.convex.dev/scheduling/scheduled-functions)

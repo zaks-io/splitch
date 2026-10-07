@@ -9,6 +9,7 @@ import {
   readViteWorkerConfig,
   resolveViteSentryRelease,
 } from "../../scripts/lib/vite-worker-sentry-config";
+import { localDevCloudflareConfig } from "./local-dev-cloudflare";
 
 const wranglerConfig = readViteWorkerConfig(
   resolve(import.meta.dirname, "wrangler.jsonc"),
@@ -27,6 +28,7 @@ export default defineConfig(({ mode }) => {
     cloudflareEnvironment ??
     wranglerConfig.vars.SPLITCH_PLATFORM_TARGET ??
     mode;
+  const localFleet = localDevCloudflareConfig(localE2eRunId, platformTarget, isHostedWorkerBuild);
 
   return {
     server: {
@@ -40,8 +42,10 @@ export default defineConfig(({ mode }) => {
     plugins: [
       tailwindcss(),
       cloudflare({
+        ...localFleet,
         config:
-          localE2eRunId || isHostedWorkerBuild
+          localFleet?.config ??
+          (localE2eRunId || isHostedWorkerBuild
             ? (config) => {
                 if (isHostedWorkerBuild) {
                   // The deploy wrapper uploads these runtime values from the source config.
@@ -59,7 +63,7 @@ export default defineConfig(({ mode }) => {
                 }
                 return undefined;
               }
-            : undefined,
+            : undefined),
         persistState: process.env.SPLITCH_LOCAL_E2E_PERSIST_PATH
           ? { path: process.env.SPLITCH_LOCAL_E2E_PERSIST_PATH }
           : true,

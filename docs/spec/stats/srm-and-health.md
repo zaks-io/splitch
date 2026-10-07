@@ -106,7 +106,7 @@ pinned-watermark `StatsInput` exposures (and activation rows for activated SRM).
 **Durable alarms and quarantine.** The running minimum over the stable ingestion-ordered path
 catches crossings between Results reads. Separately, the Control Plane persists the first observed
 v2 sequential crossing per `(run_id, exposure|activated)` in D1 `run_srm_alarms` (INSERT OR IGNORE
-on every Results or Conclude read) and ORs that row into the decision gate and diagnostics,
+on every Results, Conclude, or Experiment list health read) and ORs that row into the decision gate and diagnostics,
 reporting `firstCrossedAt` and `persisted_srm_alarms`. Returned Analysis `stats` stay
 byte-identical to the token-bound envelope — durable alarms never rewrite `stats.srm` mismatch
 flags. Persistence keys off the explicit `srm_sequential_threshold_crossed` /

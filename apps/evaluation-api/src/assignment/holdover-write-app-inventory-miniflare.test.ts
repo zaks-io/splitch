@@ -235,6 +235,7 @@ describe("HoldoverWriteAppInventoryDurableObject deletion alarm recovery", () =>
   it("keeps accepted work alarm-recheckable across KV delete failure and stale visibility", async () => {
     mf = await miniflareWithInventoryAndOutbox({
       registerFailsRemaining: 0,
+      nowMs: Date.now() + 86_400_000,
       writerPutFailsRemaining: 1,
       cancelKvDeleteFailsRemaining: 1,
       staleSuppressionReadsRemaining: 1,
@@ -251,6 +252,8 @@ describe("HoldoverWriteAppInventoryDurableObject deletion alarm recovery", () =>
     const outboxStub = outboxNs.get(outboxNs.idFromName(holdoverWriteOutboxName(PUT)));
 
     await expect(coordinator.ensure(PUT)).resolves.toEqual({ status: "owned" });
+    // Outlast the real 1s retry to prove it cannot consume the injected stale read.
+    await new Promise((resolve) => setTimeout(resolve, 1_100));
     await inventory.beginDeletion(PUT.appId, GENERATION_ID, 9_000);
     await expect(inventory.cancelDeletion(PUT.appId, GENERATION_ID)).rejects.toThrow(/HTTP 400/u);
     expect(await (await outboxStub.fetch("https://outbox.local/status")).json()).toMatchObject({

@@ -6,14 +6,14 @@ import { appScope, envScope, type Repository } from "@splitch/db";
 import type { PerformanceSpanRecorder } from "@splitch/observability/performance-spans";
 import { fetchAnalysis } from "./analysis-binding";
 import { analysisResultsRequest } from "./analysis-results-request";
+import { experimentNotFound, runNotFound } from "./experiment-errors";
+import { runningExperimentHealth } from "./experiment-health";
+import { experimentResponse, jsonArray, jsonObject } from "./experiment-model";
 import {
   canConcludeWithRole,
   enrichAnalysisResultsResponse,
   produceNoRunResults,
 } from "./experiment-results-enrich";
-import { experimentNotFound, runNotFound } from "./experiment-errors";
-import { runningExperimentHealth } from "./experiment-health";
-import { experimentResponse, jsonArray, jsonObject } from "./experiment-model";
 import { metricResponse } from "./metric-segment-shared";
 import { panelFromProducer } from "./panel-experiment-results-map";
 import { panelScopeAccessError } from "./panel-scope-access";
@@ -80,7 +80,13 @@ export async function panelExperimentsList(
         // in the creation flow. Counted only for drafts: every other status has
         // a Run by definition.
         hasRuns: experiment.status === "draft" ? experimentIdsWithRuns.has(experiment.id) : true,
-        health: await runningExperimentHealth(deps.analysis, input.actorId, experiment, deps.spans),
+        health: await runningExperimentHealth(
+          deps.repo,
+          deps.analysis,
+          input.actorId,
+          experiment,
+          deps.spans,
+        ),
       };
     }),
   );

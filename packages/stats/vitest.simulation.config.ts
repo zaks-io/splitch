@@ -9,6 +9,8 @@ export default defineConfig({
   },
   test: {
     include: ["src/**/*.simulation.test.ts"],
+    // CPU-bound Monte Carlo loops need predictable runtimes on the 2-vCPU audit runner.
+    maxWorkers: 1,
     passWithNoTests: true,
   },
 });

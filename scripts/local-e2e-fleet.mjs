@@ -21,7 +21,9 @@ import { createSupervisor } from "./local-e2e-fleet-supervisor.mjs";
 
 const repoRoot = resolve(import.meta.dirname, "..");
 const persistPath = resolve(repoRoot, "test-results/control-panel-e2e-state");
-const workers = localE2eWorkers(persistPath);
+const workers = localE2eWorkers(persistPath, {
+  full: process.env.SPLITCH_LOCAL_DEV_FLEET === "true",
+});
 const faultTracker = createFaultTracker();
 
 export async function waitForHealth(
@@ -186,15 +188,21 @@ function launchWorker(worker, runId, tracker = faultTracker) {
     worker.name === "control-plane-api"
       ? [...worker.args, "--var", `SPLITCH_LOCAL_E2E_RUN_ID:${runId}`]
       : worker.args;
+  const env = {
+    ...process.env,
+    ...localBindings,
+    ...worker.env,
+    CI: "true",
+    SPLITCH_LOCAL_E2E_RUN_ID: runId,
+  };
+  if (process.env.SPLITCH_LOCAL_DEV_FLEET === "true") {
+    // Each auxiliary Worker supplies its own identity-provider fixture config.
+    delete env.WORKOS_API_KEY;
+    delete env.WORKOS_CLIENT_ID;
+  }
   const child = spawn(worker.command, args, {
     cwd: repoRoot,
-    env: {
-      ...process.env,
-      ...localBindings,
-      ...worker.env,
-      CI: "true",
-      SPLITCH_LOCAL_E2E_RUN_ID: runId,
-    },
+    env,
     // SPL-181: piped rather than inherited so the harness can watch for the
     // miniflare D1 crash signature. Output is still echoed verbatim.
     stdio: ["ignore", "pipe", "pipe"],

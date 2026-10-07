@@ -3,6 +3,7 @@ import { bundleHoldoverWriteInventoryAndOutboxWorker } from "./holdover-write-mi
 
 export interface HoldoverWriteMiniflareOptions {
   registerFailsRemaining: number;
+  nowMs?: number;
   suppressPutFailsRemaining?: number;
   cancelStatePutFailsRemaining?: number;
   cancelKvDeleteFailsRemaining?: number;
@@ -29,9 +30,11 @@ export interface DeadlockBarrierStatus {
 }
 
 export function miniflareWithInventoryAndOutbox(options: HoldoverWriteMiniflareOptions): Miniflare {
+  // A future fixed clock keeps real alarms from racing manually driven recovery.
+  const clock = options.nowMs === undefined ? "" : `Date.now = () => ${options.nowMs};\n`;
   return new Miniflare({
     modules: true,
-    script: bundleHoldoverWriteInventoryAndOutboxWorker(options),
+    script: clock + bundleHoldoverWriteInventoryAndOutboxWorker(options),
     compatibilityDate: "2026-06-21",
     compatibilityFlags: ["nodejs_compat"],
     kvNamespaces: { ASSIGNMENTS_KV: "assignments" },

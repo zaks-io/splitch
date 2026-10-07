@@ -41,6 +41,7 @@ export interface WebhookPost {
   body: string;
   headers: Record<string, string>;
   fetcher?: typeof fetch;
+  signal?: AbortSignal;
 }
 
 /**
@@ -56,6 +57,7 @@ export async function postWebhook(request: WebhookPost): Promise<WebhookPostResu
       headers: request.headers,
       body: request.body,
       redirect: "manual",
+      signal: request.signal,
     });
   } catch (cause) {
     return { outcome: "transport-failed", cause };

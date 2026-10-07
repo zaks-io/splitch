@@ -1,3 +1,13 @@
+import {
+  type ConvexDeliveryFinish,
+  claimDueConvexDeliveries,
+  finishConvexDelivery,
+} from "./convex-deliveries";
+import {
+  type ConvexPreparationFailure,
+  deferConvexPreparationFailure,
+} from "./convex-preparation-backoff";
+import { type DeliveryRetentionInput, pruneConvexDeliveries } from "./delivery-retention";
 import { listPushInstallations, listPushInstallationsByIds } from "./push-installation-list";
 import type { EnvScope } from "./scope";
 import { assertMintedScope } from "./scope";
@@ -129,7 +139,7 @@ export function makeConvexIntegrationRepo(d1: D1Database) {
       await d1
         .prepare(`UPDATE convex_installations SET
           secret_ciphertext = ?, secret_key_version = ?, secret_fingerprint = ?,
-          last_rotation_id = ?, last_rotation_fingerprint = ?, updated_at = ?
+          last_rotation_id = ?, last_rotation_fingerprint = ?, updated_at = ?, preparation_retry_at = NULL
           WHERE app_id = ? AND environment_id = ? AND installation_id = ? AND status = 'active'`)
         .bind(
           input.secretCiphertext,
@@ -188,77 +198,27 @@ export function makeConvexIntegrationRepo(d1: D1Database) {
       leaseExpiresAt: string,
       limit: number,
     ): Promise<ConfigWebhookDeliveryRow[]> {
-      const due = await d1
-        .prepare(`SELECT delivery_id AS deliveryId FROM config_webhook_deliveries
-        WHERE (state = 'pending' AND next_attempt_at <= ?) OR (state = 'leased' AND lease_expires_at <= ?)
-        ORDER BY next_attempt_at ASC LIMIT ?`)
-        .bind(now, now, limit)
-        .all<{ deliveryId: string }>();
-      const claimed: ConfigWebhookDeliveryRow[] = [];
-      for (const candidate of due.results) {
-        const result = await d1
-          .prepare(`UPDATE config_webhook_deliveries SET state = 'leased', lease_owner = ?, lease_expires_at = ?
-          WHERE delivery_id = ? AND ((state = 'pending' AND next_attempt_at <= ?) OR (state = 'leased' AND lease_expires_at <= ?))`)
-          .bind(leaseOwner, leaseExpiresAt, candidate.deliveryId, now, now)
-          .run();
-        if (!result.meta.changes) continue;
-        const row = await d1
-          .prepare(`SELECT delivery.delivery_id AS deliveryId, delivery.installation_id AS installationId,
-          installation.callback_url AS callbackUrl, installation.secret_ciphertext AS secretCiphertext,
-          installation.secret_key_version AS secretKeyVersion, delivery.environment_version AS environmentVersion,
-          delivery.body_json AS bodyJson, delivery.attempt_count AS attemptCount
-          FROM config_webhook_deliveries delivery JOIN convex_installations installation
-          ON installation.installation_id = delivery.installation_id
-          WHERE delivery.delivery_id = ? AND delivery.lease_owner = ? AND installation.status = 'active'`)
-          .bind(candidate.deliveryId, leaseOwner)
-          .first<ConfigWebhookDeliveryRow>();
-        if (row) claimed.push(row);
-      }
-      return claimed;
+      return claimDueConvexDeliveries(d1, now, leaseOwner, leaseExpiresAt, limit);
     },
 
-    // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: One atomic completion maps delivery state into both outbox and installation health.
     async finishDelivery(
       deliveryId: string,
       leaseOwner: string,
-      input: {
-        state: "delivered" | "pending" | "terminal";
-        now: string;
-        nextAttemptAt?: string;
-        errorJson?: string;
-      },
+      input: ConvexDeliveryFinish,
     ): Promise<void> {
-      const delivered = input.state === "delivered";
-      await d1.batch([
-        d1
-          .prepare(`UPDATE config_webhook_deliveries SET state = ?, attempt_count = attempt_count + 1,
-          next_attempt_at = COALESCE(?, next_attempt_at), last_error_json = ?, delivered_at = ?,
-          lease_owner = NULL, lease_expires_at = NULL WHERE delivery_id = ? AND lease_owner = ?`)
-          .bind(
-            input.state,
-            input.nextAttemptAt ?? null,
-            input.errorJson ?? null,
-            delivered ? input.now : null,
-            deliveryId,
-            leaseOwner,
-          ),
-        d1
-          .prepare(`UPDATE convex_installations SET
-          last_delivered_version = CASE WHEN ? THEN MAX(COALESCE(last_delivered_version, 0), (SELECT environment_version FROM config_webhook_deliveries WHERE delivery_id = ?)) ELSE last_delivered_version END,
-          last_delivered_at = CASE WHEN ? THEN ? ELSE last_delivered_at END,
-          latest_delivery_error_json = CASE WHEN ? THEN NULL ELSE ? END,
-          updated_at = ? WHERE installation_id = (SELECT installation_id FROM config_webhook_deliveries WHERE delivery_id = ?)`)
-          .bind(
-            delivered ? 1 : 0,
-            deliveryId,
-            delivered ? 1 : 0,
-            input.now,
-            delivered ? 1 : 0,
-            input.errorJson ?? null,
-            input.now,
-            deliveryId,
-          ),
-      ]);
+      await finishConvexDelivery(d1, deliveryId, leaseOwner, input);
+    },
+
+    deferPreparationFailure(
+      installationId: string,
+      leaseOwner: string,
+      input: ConvexPreparationFailure,
+    ) {
+      return deferConvexPreparationFailure(d1, installationId, leaseOwner, input);
+    },
+
+    pruneDeliveries(input: DeliveryRetentionInput) {
+      return pruneConvexDeliveries(d1, input);
     },
   };
 }
