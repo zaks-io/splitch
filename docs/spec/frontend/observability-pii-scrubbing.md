@@ -160,6 +160,31 @@ beforeSend(event) {
 can break schema validation in Sentry ingest). The function must recurse through `extra`,
 `contexts`, `breadcrumbs.values[].data`, and stringified exception messages.
 
+### Sentry v11 collection and streamed spans
+
+Every Sentry init explicitly disables automatic user information, cookies, HTTP headers and
+bodies, URL query parameters, AI inputs and outputs, GraphQL documents and variables, database
+query data, queue arguments, stack-frame variables, and source context lines. Explicit operator
+`setUser({ id })` still works for error events and passes through the existing operator allow-list.
+
+Use `traceLifecycle: "stream"` so a runtime environment variable cannot select the retired
+transaction path. `beforeSendSpan` scrubs each root and child span using `name` and `attributes`.
+The attribute allow-list retains protocol and performance metadata, including Sentry segment IDs,
+environment, release, SDK identity and trace lifecycle. Segment names use string scrubbing and are
+redacted on outbound HTTP spans. Unknown attributes are redacted. An outbound `http.client` span's entire `name` is redacted, including URLs whose query
+values do not match a PII pattern. Error trace contexts retain Sentry's static `data` shape and
+still pass through the same strict attribute scrubber. A privacy event processor rejects
+transaction events before Sentry's error-only hook can be bypassed.
+
+`rpcTracePropagationBindings: [/.*/]` preserves RPC propagation across all bindings. All eight
+Worker configurations already include `nodejs_compat`, which v11 requires.
+
+See the [Sentry v10 to v11 migration guide](https://docs.sentry.io/platforms/javascript/migration/v10-to-v11/).
+After an approved merge and shared-preview deployment, inspect a Worker request with an outbound
+fetch in Sentry. Confirm the streamed span name and attributes are scrubbed and the server-side
+sensitive-field rule fires on the first applicable real error event. That dashboard verification
+and the org's Allow Shared Issues decision remain owner tasks.
+
 ### What is NOT scrubbed
 
 - `userId` (the splitch user/operator ID — not the customer's end-user ID)

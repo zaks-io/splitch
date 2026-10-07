@@ -1,3 +1,4 @@
+import { runInNewContext } from "node:vm";
 import { describe, expect, it } from "vitest";
 import { llmsTxt, sdkTopicMarkdown } from "../markdown";
 import { markdownSlug } from "../serve-markdown";
@@ -7,6 +8,7 @@ import { evaluateAllTopic } from "./evaluate-all";
 import { findSdkTopic, sdkGuideTopics, sdkIntegrationTopics, sdkTopics } from "./index";
 import { reactTopic } from "./react";
 import { failuresTopic, methodsTopic } from "./semantics";
+import { sentryTopic } from "./sentry";
 import { credentialsTopic, installTopic } from "./setup";
 
 const addedSlugs = [
@@ -138,5 +140,34 @@ describe("SDK topic routes", () => {
     expect(react).not.toContain('apiKey: "sk_..."');
     expect(bootstrap).toContain('apiKey: "sk_..."');
     expect(bootstrap).toContain('clientKey: "pk_..."');
+  });
+});
+
+it("documents restrictive Sentry v11 collection options", () => {
+  const block = sentryTopic.blocks.find(
+    (block) => block.kind === "code" && block.code.includes("Sentry.init"),
+  );
+  if (block?.kind !== "code") throw new Error("Sentry init example is missing");
+  let options: Record<string, unknown> | undefined;
+  runInNewContext(block.code.split("const splitch")[0]?.replace(/^import .*$/gm, "") ?? "", {
+    Sentry: {
+      init: (value: Record<string, unknown>) => {
+        options = value;
+      },
+      featureFlagsIntegration: () => ({}),
+    },
+  });
+  expect(options?.dataCollection).toEqual({
+    userInfo: false,
+    cookies: false,
+    httpHeaders: false,
+    httpBodies: [],
+    urlQueryParams: false,
+    genAI: { inputs: false, outputs: false },
+    graphQL: { document: false, variables: false },
+    databaseQueryData: false,
+    queues: false,
+    stackFrameVariables: false,
+    frameContextLines: 0,
   });
 });

@@ -82,7 +82,8 @@
   },
   "devDependencies": {
     "@openfeature/server-sdk": "^1.23.0",
-    "@sentry/core": "^10.75.3",
+    "@sentry/core": "^11.4.0",
+    "@sentry/core-v10": "npm:@sentry/core@10.75.3",
     "@splitch/contracts": "workspace:*",
     "@splitch/control-plane-sdk": "workspace:*",
     "@splitch/evaluation-core": "workspace:*",
@@ -94,7 +95,7 @@
   },
   "peerDependencies": {
     "@openfeature/server-sdk": "^1.23.0",
-    "@sentry/core": "^10.0.0",
+    "@sentry/core": "^10.0.0 || ^11.0.0",
     "react": "^18.0.0 || ^19.0.0"
   },
   "peerDependenciesMeta": {

@@ -1,4 +1,10 @@
-import { createSentryBeforeSend, secretsFromEnv } from "@splitch/observability/emitter";
+import {
+  createSentryBeforeSend,
+  createSentryBeforeSendSpan,
+  SENTRY_DATA_COLLECTION,
+  sentryPrivacyIntegration,
+  secretsFromEnv,
+} from "@splitch/observability/emitter";
 import { createRouter } from "@tanstack/react-router";
 import { routeTree } from "./routeTree.gen";
 
@@ -20,7 +26,13 @@ export async function getRouter() {
         environment: secrets.environment,
         release: import.meta.env.VITE_SENTRY_RELEASE,
         tracesSampleRate: 1,
-        integrations: [Sentry.tanstackRouterBrowserTracingIntegration(router)],
+        dataCollection: SENTRY_DATA_COLLECTION,
+        traceLifecycle: "stream",
+        beforeSendSpan: createSentryBeforeSendSpan({ surface: "marketing" }),
+        integrations: [
+          sentryPrivacyIntegration(),
+          Sentry.tanstackRouterBrowserTracingIntegration(router),
+        ],
         beforeSend: createSentryBeforeSend({ surface: "marketing" }),
       } as unknown as Parameters<typeof Sentry.init>[0]);
     }

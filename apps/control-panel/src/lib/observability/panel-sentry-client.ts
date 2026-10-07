@@ -26,7 +26,10 @@ export async function initControlPanelClientSentry(router: AnyRouter): Promise<v
     init: (options) => {
       Sentry.init({
         ...options,
-        integrations: [Sentry.tanstackRouterBrowserTracingIntegration(router)],
+        integrations: [
+          ...options.integrations,
+          Sentry.tanstackRouterBrowserTracingIntegration(router),
+        ],
       } as unknown as Parameters<typeof Sentry.init>[0]);
     },
     setTag: (key, value) => {

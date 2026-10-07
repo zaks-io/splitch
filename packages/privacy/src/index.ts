@@ -87,6 +87,6 @@ export type { KeyVersion, SaltStore } from "./salt-store";
 export type { ScrubOptions } from "./scrubber";
 export { scrubValue } from "./scrubber";
 export type { SentryEventLike } from "./sentry-scrubber";
-export { scrubSentryEvent, scrubSentrySpan, scrubSentryTransaction } from "./sentry-scrubber";
+export { assertSentryEventType, scrubSentryEvent, scrubSentrySpan } from "./sentry-scrubber";
 export type { ValuePatternOptions } from "./value-patterns";
 export { redactValuePatterns } from "./value-patterns";

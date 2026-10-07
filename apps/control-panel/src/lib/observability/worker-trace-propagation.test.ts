@@ -22,6 +22,14 @@ type CapturedEvent = {
 
 let mf: Miniflare;
 const events: CapturedEvent[] = [];
+type RecordedSpan = {
+  span_id: string;
+  name: string;
+  trace_id: string;
+  attributes: Record<string, { value: unknown }>;
+};
+const spans: RecordedSpan[] = [];
+const envelopes: string[] = [];
 
 beforeAll(async () => {
   const bundle = await build({
@@ -40,7 +48,7 @@ beforeAll(async () => {
             };
             if (env.ROLE === "downstream") {
               Sentry.captureMessage("trace propagation probe");
-              const outbound = await fetch("${probeOrigin}/headers");
+              const outbound = await fetch("${probeOrigin}/headers?cohort=private-canary&targetingKey=tk-worker-canary");
               return Response.json({ downstream: context, outbound: await outbound.json() });
             }
             const response = await env.DOWNSTREAM.fetch(new Request("https://downstream.test/probe"));
@@ -67,7 +75,12 @@ beforeAll(async () => {
         script,
         compatibilityDate: "2026-07-30",
         compatibilityFlags: ["nodejs_compat"],
-        bindings: { SENTRY_DSN: DSN, ROLE: "upstream", SPLITCH_PLATFORM_TARGET: "test" },
+        bindings: {
+          SENTRY_RELEASE: "splitch-control-panel@test",
+          SENTRY_DSN: DSN,
+          ROLE: "upstream",
+          SPLITCH_PLATFORM_TARGET: "test",
+        },
         serviceBindings: { DOWNSTREAM: "downstream" },
         outboundService: captureOutbound,
       },
@@ -77,7 +90,12 @@ beforeAll(async () => {
         script,
         compatibilityDate: "2026-07-30",
         compatibilityFlags: ["nodejs_compat"],
-        bindings: { SENTRY_DSN: DSN, ROLE: "downstream", SPLITCH_PLATFORM_TARGET: "test" },
+        bindings: {
+          SENTRY_RELEASE: "splitch-control-panel@test",
+          SENTRY_DSN: DSN,
+          ROLE: "downstream",
+          SPLITCH_PLATFORM_TARGET: "test",
+        },
         outboundService: captureOutbound,
       },
     ],
@@ -100,8 +118,11 @@ async function captureOutbound(request: Request): Promise<Response> {
   if (new URL(request.url).hostname !== "o123.ingest.sentry.io") {
     throw new Error(`unexpected outbound request: ${request.url}`);
   }
-  for (const line of (await request.text()).split("\n").filter(Boolean)) {
-    const payload = JSON.parse(line) as CapturedEvent;
+  const envelope = await request.text();
+  envelopes.push(envelope);
+  for (const line of envelope.split("\n").filter(Boolean)) {
+    const payload = JSON.parse(line) as CapturedEvent & { items?: RecordedSpan[] };
+    if (payload.items) spans.push(...payload.items);
     if (payload.contexts?.trace) events.push(payload);
   }
   return new Response("{}", { status: 200 });
@@ -128,6 +149,35 @@ describe("Worker distributed tracing in the Workers runtime", () => {
     expect(sampled).toBe("1");
     expect(result.outbound.traceparent).toBe(`00-${TRACE_ID}-${outboundSpanId}-01`);
     expect(result.outbound.baggage).toContain("sentry-org_id=123");
+    await expect
+      .poll(() => spans.some((span) => span.attributes["sentry.op"]?.value === "http.client"), {
+        timeout: 5_000,
+      })
+      .toBe(true);
+    const outboundSpan = spans.find(
+      (span) => span.attributes["sentry.op"]?.value === "http.client",
+    );
+    expect(outboundSpan).toMatchObject({ name: "[Redacted]", trace_id: TRACE_ID });
+    expect(outboundSpan?.attributes["resource.service.name"]?.value).toBe("splitch-control-panel");
+    const root = spans.find((span) => span.span_id === result.downstream.span_id);
+    expect(root).toBeDefined();
+    for (const span of [root, outboundSpan]) {
+      expect(span?.attributes).toMatchObject({
+        "sentry.segment.id": { value: result.downstream.span_id },
+        "sentry.environment": { value: "test" },
+        "sentry.release": { value: "splitch-control-panel@test" },
+        "sentry.sdk.name": { value: "sentry.javascript.cloudflare" },
+        "sentry.sdk.version": { value: "11.4.0" },
+        "sentry.trace_lifecycle": { value: "stream" },
+      });
+    }
+    expect(root?.attributes["sentry.segment.name"]?.value).toBe("GET");
+    expect(outboundSpan?.attributes["sentry.segment.name"]?.value).toBe("[Redacted]");
+    expect(root?.attributes["sentry.sdk.integrations"]?.value).toContain("SplitchPrivacy");
+
+    expect(JSON.stringify(envelopes)).not.toContain("private-canary");
+    expect(JSON.stringify(envelopes)).not.toContain("tk-worker-canary");
+
     await expect
       .poll(
         () =>

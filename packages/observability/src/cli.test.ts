@@ -44,6 +44,21 @@ describe("initCliObservability", () => {
 
     expect(init).toHaveBeenCalledTimes(1);
     expect(init.mock.calls[0]?.[0]).toMatchObject({
+      dataCollection: {
+        userInfo: false,
+        cookies: false,
+        httpHeaders: false,
+        httpBodies: [],
+        urlQueryParams: false,
+        genAI: { inputs: false, outputs: false },
+        graphQL: { document: false, variables: false },
+        databaseQueryData: false,
+        queues: false,
+        stackFrameVariables: false,
+        frameContextLines: 0,
+      },
+      traceLifecycle: "stream",
+      beforeSendSpan: expect.any(Function),
       integrations: expect.any(Function),
     });
     const integrations = init.mock.calls[0]?.[0] as {
@@ -51,7 +66,10 @@ describe("initCliObservability", () => {
     };
     expect(
       integrations.integrations([{ name: "OnUnhandledRejection" }, { name: "InboundFilters" }]),
-    ).toEqual([{ name: "InboundFilters" }]);
+    ).toEqual([
+      { name: "InboundFilters" },
+      { name: "SplitchPrivacy", processEvent: expect.any(Function) },
+    ]);
     expect(captureException).toHaveBeenCalledWith(error, {
       extra: { command: "health", endpoint: "http://localhost:8787" },
       tags: { surface: "cli" },

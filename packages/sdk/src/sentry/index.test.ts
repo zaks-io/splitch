@@ -1,4 +1,5 @@
 import {
+  SDK_VERSION,
   Client,
   type ClientOptions,
   createTransport,
@@ -55,10 +56,16 @@ function details(overrides: Partial<SdkResolutionDetails> = {}): SdkResolutionDe
 }
 
 afterEach(() => {
-  getCurrentScope().clear();
+  getCurrentScope().setContext("flags", null);
+  setCurrentClient(undefined);
 });
 
 describe("sentryResolutionReporter", () => {
+  it("loads the Sentry major selected by the Vitest project", () => {
+    const major = import.meta.env.MODE === "sentry-v10" ? "10" : "11";
+    expect(SDK_VERSION.split(".")[0]).toBe(major);
+  });
+
   it("records a boolean resolution under the flag key", () => {
     installSentry();
     sentryResolutionReporter()("checkout-v2", details({ value: false }));
