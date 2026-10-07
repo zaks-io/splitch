@@ -10,13 +10,31 @@ if (mode !== "reset" && mode !== "smoke") {
 }
 
 try {
-  process.stdout.write(renderSummary(summaryInput(mode)));
+  const input = summaryInput(mode);
+  for (const phase of failedPhases(input)) {
+    console.error(
+      `::error title=Shared preview smoke failed::${phase} failed; deployment outcome: ${input.deployOutcome}. See the job summary and smoke report.`,
+    );
+  }
+  process.stdout.write(renderSummary(input));
 } catch (error) {
   fail(error instanceof Error ? error.message : String(error));
 }
 
 export function renderSummary(input) {
-  const lines = [`## Shared preview ${input.mode}`, "", `- Workflow ref: \`${input.ref}\``];
+  const failures = failedPhases(input);
+  const lines = [`## Shared preview ${input.mode}${failures.length ? " failed" : ""}`, ""];
+  if (failures.length) {
+    lines.push(`Failed phases: ${failures.join(", ")}.`, "");
+    const skipped = smokePhases(input)
+      .filter(([, outcome]) => outcome === "skipped")
+      .map(([phase]) => phase);
+    if (skipped.length) lines.push(`Skipped phases: ${skipped.join(", ")}.`, "");
+  }
+  lines.push(`- Workflow ref: \`${input.ref}\``);
+  if (input.mode === "smoke") {
+    lines.push(`- Deployment outcome: \`${input.deployOutcome}\``);
+  }
   if (input.mode === "reset") {
     lines.push(`- Reset outcome: \`${input.resetOutcome}\``);
     lines.push(`- Smoke outcome: \`${input.smokeOutcome}\``);
@@ -57,6 +75,27 @@ export function renderSummary(input) {
   return `${lines.join("\n")}\n`;
 }
 
+function smokePhases(input) {
+  if (input.mode !== "smoke") return [];
+  return [
+    ["Seed", input.seedOutcome],
+    ["API smoke", input.smokeOutcome],
+    ["Dark-launch", input.darkLaunchOutcome],
+    ["Safe-delivery", input.safeDeliveryOutcome],
+    ["Panel browser install", input.panelBrowserOutcome],
+    ["Panel login seed", input.panelSeedOutcome],
+    ["Panel golden path", input.panelSmokeOutcome],
+    ["Cleanup", input.cleanupOutcome],
+    ["Failure artifact", input.artifactOutcome],
+  ];
+}
+
+function failedPhases(input) {
+  return smokePhases(input)
+    .filter(([, outcome]) => outcome === "failure")
+    .map(([phase]) => phase);
+}
+
 function summaryInput(summaryMode) {
   const ref = requireFullCommitSha(
     process.env.SPLITCH_WORKFLOW_REF ?? process.env.SPLITCH_DEPLOYED_COMMIT_SHA,
@@ -72,6 +111,7 @@ function summaryInput(summaryMode) {
   return {
     mode: summaryMode,
     ref,
+    deployOutcome: stepOutcome("DEPLOY"),
     resetOutcome: stepOutcome("RESET"),
     seedOutcome: stepOutcome("SEED"),
     smokeOutcome,
