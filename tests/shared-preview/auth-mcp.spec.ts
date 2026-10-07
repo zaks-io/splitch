@@ -32,7 +32,8 @@ test.describe("shared-preview auth and MCP", () => {
     const metadata = await smoke.mcpProtectedResourceMetadata();
     expect(metadata).toMatchObject({
       resource: smoke.config.mcpProtectedResource,
-      authorization_servers: [smoke.config.authBaseUrl],
+      authorization_servers: [smoke.config.mcpAuthorizationServer],
+      bearer_methods_supported: ["header"],
     });
   });
 
