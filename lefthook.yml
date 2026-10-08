@@ -6,10 +6,18 @@ pre-commit:
     binary-assets:
       run: node scripts/check-binary-assets.mjs
     verify-commit:
+      # Hooks run on shared sandboxes beside other agents; cap Turbo tasks and
+      # nested Vitest pools instead of claiming every core (matches ci.yml).
+      env:
+        TURBO_CONCURRENCY: "2"
+        VITEST_MAX_WORKERS: "2"
       run: CI=true pnpm verify:commit
 
 pre-push:
   parallel: false
   commands:
     verify-push:
+      env:
+        TURBO_CONCURRENCY: "2"
+        VITEST_MAX_WORKERS: "2"
       run: CI=true pnpm verify:push

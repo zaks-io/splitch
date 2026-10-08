@@ -110,6 +110,8 @@ an explicit command described in [agent-verification.md](./agent-verification.md
   migrations, and Tinybird Local validation.
 - Skip only hosted smoke checks, shared-preview deploy/reset, production deploy, rollback, and other
   remote-state mutations.
+- Both hooks set `TURBO_CONCURRENCY=2` and `VITEST_MAX_WORKERS=2` (the CI budget) so a hook on a
+  shared machine leaves capacity for other agents.
 - Use Turborepo remote cache when `TURBO_TOKEN`, `TURBO_TEAM`, and
   `TURBO_REMOTE_CACHE_SIGNATURE_KEY` are available. Remote cache artifact signing is enabled, and
   local cache is still valid when those values are absent.
