@@ -67,6 +67,12 @@ in this config; refresh them from Linear during each workflow run.
   `sharp`, and `workerd`.
 - Install: `pnpm install`
 - Lockfile: `pnpm-lock.yaml`
+- Shared sandbox resource limits: `turbo.json` defaults to at most two concurrent
+  tasks, including the commit and push gates. Root test, CI verification, and
+  stats unit/golden/property/audit commands cap Vitest at two workers per process;
+  stats simulation retains its one-worker limit. `test:scripts` runs at most two
+  Node test files concurrently. Direct workspace Vitest commands should use
+  `--maxWorkers=2`. The deprecated Turbo `--parallel` flag ignores its task limit.
 - Full local pre-push gate: `pnpm verify:push` (one parallel Turbo graph:
   `knip`, `format:check`, `lint`, `typecheck`, `secrets:range`,
   `tinybird:local`, `d1:migrate:local`, `d1:migrate:populated`).
