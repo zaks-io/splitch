@@ -117,7 +117,10 @@ test("the required Verify check gates merges on high and critical dependency adv
   const verifyCi = manifest.scripts?.["verify:ci"];
 
   assert.equal(typeof verifyCi, "string");
-  assert.match(verifyCi, /^pnpm audit --audit-level=high && turbo run /);
+  assert.match(
+    verifyCi,
+    /^pnpm audit --audit-level=high && (?:VITEST_MAX_WORKERS=\d+ )?turbo run /,
+  );
   assert.match(verifyJob, /pnpm verify:ci --affected --output-logs=new-only/);
   assert.match(verifyJob, /pnpm verify:ci --output-logs=new-only/);
 });
