@@ -298,10 +298,10 @@ from `package.json`).
 
 ```bash
 pnpm install
-pnpm dev            # every Worker (wrangler) and frontend (vite), in parallel
+pnpm dev:panel      # seeded, sign-in-ready Control Panel plus every API Worker at http://127.0.0.1:18800 (no WorkOS)
+pnpm dev:panel --share # the same, plus an HTTPS sandbox preview
+pnpm dev            # every Worker (wrangler) and frontend (vite) as separate processes, in parallel
 pnpm dev:api        # just the API Workers and the MCP server
-pnpm dev:panel      # a seeded, sign-in-ready Control Panel at http://127.0.0.1:18800 (no WorkOS)
-pnpm dev:panel --full --share # all API Workers, plus an HTTPS sandbox preview
 pnpm test           # the full test suite
 pnpm verify:push    # the push gate (lint, typecheck, knip, format, secrets, D1 migrations, Tinybird)
 ```
@@ -312,14 +312,22 @@ hooks need [`gitleaks`](https://github.com/gitleaks/gitleaks) on your `PATH`, an
 `verify:push` also needs the Tinybird CLI (`tb`) with Docker for its Tinybird Local tests.
 CI runs the larger `verify:ci` gate.
 
-`dev:panel --full` hosts the Control Panel and all six API Workers in one local
+`dev:panel` hosts the Control Panel and all six API Workers in one local
 Cloudflare runtime. They share D1, KV, Durable Objects and Queues without separate
 processes competing for the same SQLite files. Sign in at `/__dev/login` as an
 Owner, Member or Newcomer. For API requests, use
 `http://127.0.0.1:18800/__dev/services/<service>` where `<service>` is
 `control-plane`, `analysis`, `evaluation`, `event-ingest`, `auth` or `mcp`.
-`--full` also exposes the usual loopback API ports through lightweight proxies.
+It also exposes the usual loopback API ports through lightweight proxies.
 `--share` uses the sandbox's `sbx-preview` helper and prints its HTTPS URL.
+
+Prefer `dev:panel` when you need more than one Worker. It holds the whole stack in
+about 2.5 GiB, while `pnpm dev` starts a Wrangler, esbuild and two workerd processes
+per Worker and needs roughly 8 GiB. Vite dev servers run through
+[`scripts/vite-dev.mjs`](scripts/vite-dev.mjs), which caps Rolldown's native thread
+pools and asks workerd's V8 to favor memory. Set `ROLLDOWN_WORKER_THREADS`,
+`RAYON_NUM_THREADS`, `MIMALLOC_PURGE_DELAY` or `MINIFLARE_WORKERD_V8_FLAGS` yourself
+to override them.
 
 This mode uses fixture identity sessions and a local analytics HTTP fixture;
 it does not call WorkOS or hosted Tinybird. Analytics fixtures are deterministic,

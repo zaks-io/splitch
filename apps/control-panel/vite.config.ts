@@ -42,6 +42,8 @@ export default defineConfig(({ mode }) => {
     plugins: [
       tailwindcss(),
       cloudflare({
+        // `pnpm dev` starts every dev server at once; probing for 9229 races.
+        inspectorPort: 0,
         ...localFleet,
         config:
           localFleet?.config ??
