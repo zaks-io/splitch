@@ -8,7 +8,7 @@
     "clean": "rm -rf dist coverage",
     "deploy": "node ../../scripts/deploy-worker-with-sentry.mjs",
     "deploy:dry-run": "node ../../scripts/deploy-worker-with-sentry.mjs --dry-run",
-    "dev": "wrangler dev --local --port 8789 --show-interactive-dev-session=false",
+    "dev": "wrangler dev --local --port 8789 --inspector-port 0 --show-interactive-dev-session=false",
     "lint": "biome lint src",
     "test": "vitest run --passWithNoTests",
     "typecheck": "pnpm wrangler:types:check && tsc -p tsconfig.json --noEmit",

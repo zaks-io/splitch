@@ -36,7 +36,8 @@ export default defineConfig(({ mode }) => {
     },
     plugins: [
       tailwindcss(),
-      cloudflare({ viteEnvironment: { name: "ssr" } }),
+      // `pnpm dev` starts every dev server at once; probing for 9229 races.
+      cloudflare({ inspectorPort: 0, viteEnvironment: { name: "ssr" } }),
       tanstackStart({
         prerender: {
           enabled: true,

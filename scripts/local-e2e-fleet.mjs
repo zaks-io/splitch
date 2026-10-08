@@ -15,7 +15,7 @@ import {
   localE2eSession,
   memberProfileKey,
 } from "./local-e2e-fixtures.mjs";
-import { localBindings, localE2eWorkers } from "./local-e2e-fleet-config.mjs";
+import { localBindings, localE2eWorkers, wranglerBin } from "./local-e2e-fleet-config.mjs";
 import { createFaultTracker, describeFault } from "./local-e2e-fleet-faults.mjs";
 import { createSupervisor } from "./local-e2e-fleet-supervisor.mjs";
 
@@ -118,7 +118,7 @@ function listen(server, port = 18799) {
 }
 
 function runWrangler(args) {
-  const result = spawnSync("pnpm", ["exec", "wrangler", ...args], {
+  const result = spawnSync(process.execPath, [wranglerBin, ...args], {
     cwd: repoRoot,
     encoding: "utf8",
     env: { ...process.env, CI: "true" },
@@ -201,7 +201,7 @@ function launchWorker(worker, runId, tracker = faultTracker) {
     delete env.WORKOS_CLIENT_ID;
   }
   const child = spawn(worker.command, args, {
-    cwd: repoRoot,
+    cwd: worker.cwd ?? repoRoot,
     env,
     // SPL-181: piped rather than inherited so the harness can watch for the
     // miniflare D1 crash signature. Output is still echoed verbatim.

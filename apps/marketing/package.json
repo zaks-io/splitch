@@ -8,7 +8,7 @@
     "clean": "rm -rf dist coverage .output .wrangler",
     "deploy": "node ../../scripts/deploy-vite-worker-with-sentry.mjs",
     "deploy:dry-run": "node ../../scripts/deploy-vite-worker-with-sentry.mjs --dry-run",
-    "dev": "vite dev --host 127.0.0.1 --port 8794",
+    "dev": "node ../../scripts/vite-dev.mjs dev --host 127.0.0.1 --port 8794",
     "lint": "biome lint src vite.config.ts vitest.config.ts",
     "preview": "vite preview --host 127.0.0.1 --port 8794",
     "test": "vitest run --passWithNoTests",

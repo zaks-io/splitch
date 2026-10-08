@@ -1,3 +1,17 @@
+import { readFileSync } from "node:fs";
+import { createRequire } from "node:module";
+import { dirname, resolve } from "node:path";
+
+const repoRoot = resolve(import.meta.dirname, "..");
+const wranglerManifest = createRequire(import.meta.url).resolve("wrangler/package.json");
+
+// Run with `process.execPath` rather than through `pnpm exec`, whose wrapper
+// process stays resident for the life of each Worker at ~100 MiB apiece.
+export const wranglerBin = resolve(
+  dirname(wranglerManifest),
+  JSON.parse(readFileSync(wranglerManifest, "utf8")).bin.wrangler,
+);
+
 export const localBindings = {
   CONTROL_PANEL_DELEGATION_SECRET: "local-control-panel-delegation-secret",
   SENTRY_DSN: "",
@@ -26,10 +40,9 @@ export function localE2eWorkers(persistPath, { full = false } = {}) {
     {
       name: "analysis-api",
       origin: "http://127.0.0.1:8790",
-      command: "pnpm",
+      command: process.execPath,
       args: [
-        "exec",
-        "wrangler",
+        wranglerBin,
         "dev",
         "--config",
         "apps/analysis-api/wrangler.jsonc",
@@ -60,10 +73,9 @@ export function localE2eWorkers(persistPath, { full = false } = {}) {
     {
       name: "control-plane-api",
       origin: "http://127.0.0.1:18790",
-      command: "pnpm",
+      command: process.execPath,
       args: [
-        "exec",
-        "wrangler",
+        wranglerBin,
         "dev",
         "--config",
         "apps/control-plane-api/wrangler.jsonc",
@@ -94,18 +106,16 @@ export function localE2eWorkers(persistPath, { full = false } = {}) {
     {
       name: "control-panel",
       origin: "http://127.0.0.1:18793",
-      command: "pnpm",
+      command: process.execPath,
       args: [
-        "--filter",
-        "@splitch/control-panel",
-        "exec",
-        "vite",
+        resolve(repoRoot, "scripts/vite-dev.mjs"),
         "dev",
         "--host",
         "127.0.0.1",
         "--port",
         "18793",
       ],
+      cwd: resolve(repoRoot, "apps/control-panel"),
       env: {
         ...localBindings,
         SPLITCH_LOCAL_E2E_PERSIST_PATH: persistPath,

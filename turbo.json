@@ -119,7 +119,11 @@
       "passThroughEnv": [
         "SPLITCH_LOCAL_DEV_FLEET",
         "SPLITCH_LOCAL_DEV_GATEWAY_PORT",
-        "SPLITCH_LOCAL_E2E_RUN_ID"
+        "SPLITCH_LOCAL_E2E_RUN_ID",
+        "ROLLDOWN_WORKER_THREADS",
+        "RAYON_NUM_THREADS",
+        "MIMALLOC_PURGE_DELAY",
+        "MINIFLARE_WORKERD_V8_FLAGS"
       ]
     },
     "lint": {
@@ -214,7 +218,13 @@
     "test:e2e": {
       "dependsOn": ["^build"],
       "cache": false,
-      "env": ["SPLITCH_PLATFORM_TARGET"]
+      "env": ["SPLITCH_PLATFORM_TARGET"],
+      "passThroughEnv": [
+        "ROLLDOWN_WORKER_THREADS",
+        "RAYON_NUM_THREADS",
+        "MIMALLOC_PURGE_DELAY",
+        "MINIFLARE_WORKERD_V8_FLAGS"
+      ]
     },
     "stats:unit": {
       "dependsOn": ["^build"],

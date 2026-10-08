@@ -2,8 +2,9 @@
 /**
  * A throwaway, signed-in Control Panel for agents and humans to look at.
  *
- * Boots the seeded local E2E fleet (D1 + KV fixtures, fake WorkOS credentials)
- * and puts a dev-login gateway in front of the panel:
+ * Boots the seeded local fleet (D1 + KV fixtures, fake WorkOS credentials) with
+ * the Control Panel and all six API Workers in one local Cloudflare runtime, and
+ * puts a dev-login gateway in front of the panel:
  *
  *   /__dev/login            pick a fixture persona
  *   /__dev/login/<persona>  mint a fresh session for it, set `__session`, redirect
@@ -18,7 +19,6 @@
  * Usage:
  *   pnpm dev:panel                 # http://127.0.0.1:18800
  *   pnpm dev:panel --share         # also publish over HTTPS on the tailnet
- *   pnpm dev:panel --full --share  # all API Workers in one local runtime
  *   pnpm dev:panel --port 18900
  *
  * State lives in test-results/control-panel-e2e-state and is wiped on every
@@ -33,12 +33,14 @@ import { createServer, request as httpRequest } from "node:http";
 import { connect } from "node:net";
 import { resolve } from "node:path";
 import { parseArgs } from "node:util";
+import { localDevServices } from "../apps/control-panel/local-dev-cloudflare.ts";
 import { sandboxPreview, startServiceProxies } from "./local-dev-runtime.mjs";
 import {
   localE2eMemberSession,
   localE2eNewcomerSession,
   localE2eSession,
 } from "./local-e2e-fixtures.mjs";
+import { wranglerBin } from "./local-e2e-fleet-config.mjs";
 
 const repoRoot = resolve(import.meta.dirname, "..");
 const persistPath = resolve(repoRoot, "test-results/control-panel-e2e-state");
@@ -48,8 +50,7 @@ const PANEL_ORIGIN = `http://${PANEL.host}:${PANEL.port}`;
 const SESSION_SECONDS = 24 * 60 * 60;
 const FLEET_PACKAGES = [
   "@splitch/control-panel",
-  "@splitch/control-plane-api",
-  "@splitch/analysis-api",
+  ...Object.values(localDevServices).map(([, app]) => `@splitch/${app}`),
 ];
 
 const PERSONAS = {
@@ -75,10 +76,9 @@ function mintSession(persona) {
   const key = `session:${createHash("sha256").update(token).digest("hex")}`;
   const value = persona.session(Math.floor(Date.now() / 1000) + SESSION_SECONDS);
   const result = spawnSync(
-    "pnpm",
+    process.execPath,
     [
-      "exec",
-      "wrangler",
+      wranglerBin,
       "kv",
       "key",
       "put",
@@ -240,7 +240,6 @@ async function main() {
     options: {
       port: { type: "string", default: "18800" },
       share: { type: "boolean", default: false },
-      full: { type: "boolean", default: false },
     },
   });
   const port = Number(values.port);
@@ -272,18 +271,14 @@ async function main() {
     detached: process.platform !== "win32",
     env: {
       ...process.env,
-      SPLITCH_LOCAL_DEV_FLEET: String(values.full),
+      SPLITCH_LOCAL_DEV_FLEET: "true",
       SPLITCH_LOCAL_DEV_GATEWAY_PORT: String(port),
-      ...(values.full
-        ? {
-            ACCESS_TOKEN_SECRET: JSON.stringify({
-              ...generateKeyPairSync("rsa", { modulusLength: 2048 }).privateKey.export({
-                format: "jwk",
-              }),
-              kid: "local-e2e-analysis",
-            }),
-          }
-        : {}),
+      ACCESS_TOKEN_SECRET: JSON.stringify({
+        ...generateKeyPairSync("rsa", { modulusLength: 2048 }).privateKey.export({
+          format: "jwk",
+        }),
+        kid: "local-e2e-analysis",
+      }),
     },
     stdio: ["ignore", "pipe", "pipe"],
   });
@@ -324,7 +319,7 @@ async function main() {
 
   try {
     await waitForFleet(runId, fleet);
-    if (values.full) await startServiceProxies(proxy, PANEL_ORIGIN);
+    await startServiceProxies(proxy, PANEL_ORIGIN);
     const gateway = createServer(proxy);
     gateway.on("upgrade", proxyUpgrade);
     await new Promise((done, reject) => {
