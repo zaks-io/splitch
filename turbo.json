@@ -1,5 +1,6 @@
 {
   "$schema": "https://turbo.build/schema.json",
+  "concurrency": "2",
   "globalDependencies": ["biome.json", "tsconfig.base.json"],
   "globalEnv": ["CI", "NODE_ENV"],
   "globalPassThroughEnv": [
