@@ -14,7 +14,7 @@ export const Route = createFileRoute("/quickstart")({
       {
         name: "description",
         content:
-          "Set up and verify a feature flag with the splitch CLI. Coding agents can follow the same steps.",
+          "Create a feature flag in dev and turn it on in prod with the splitch CLI and SDK. Coding agents can follow the same steps.",
       },
     ],
   }),
@@ -58,8 +58,8 @@ function QuickstartRoute() {
 
         <footer className="grid gap-4 border-border border-t pt-8">
           <p className="max-w-2xl text-muted-foreground text-sm leading-relaxed">
-            Verify checks your Flag without recording an Exposure. After connecting the SDK,
-            evaluate the Flag in your app to record its first Exposure.
+            Your Flag is now enabled in prod. Verify never records an Exposure. SDK evaluations
+            record Exposures only while an Experiment Run is live.
           </p>
           <div className="flex flex-wrap items-center gap-5">
             <Button render={<a href="/docs" />}>Read the docs</Button>
