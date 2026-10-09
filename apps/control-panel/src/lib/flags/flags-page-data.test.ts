@@ -1,3 +1,4 @@
+import { flagResourceFixture } from "@splitch/contracts/testing";
 import type { FlagConfigGetOutput, FlagsClient } from "@splitch/control-plane-sdk";
 import { describe, expect, it, vi } from "vitest";
 import { readFlagsPage } from "#lib/flags/flags-page-data";
@@ -111,21 +112,20 @@ function flagsClient(
         ...bound,
         items: [
           {
-            id: "flag_checkout",
-            appId: "app_checkout",
-            key: "new-checkout",
-            name: "New Checkout",
-            schema: { type: "boolean" },
-            variants: [
-              { id: "var_disabled", name: "disabled", value: false },
-              { id: "var_enabled", name: "enabled", value: true },
-            ],
-            defaultVariantId: "var_disabled",
-            lifecycleClass: "unclassified" as const,
-            owner: null,
-            expiresAt: null,
-            createdAt: "2026-07-18T00:00:00.000Z",
-            updatedAt: "2026-07-18T00:00:00.000Z",
+            ...flagResourceFixture({
+              id: "flag_checkout",
+              appId: "app_checkout",
+              key: "new-checkout",
+              name: "New Checkout",
+              schema: { type: "boolean" },
+              variants: [
+                { id: "var_disabled", name: "disabled", value: false },
+                { id: "var_enabled", name: "enabled", value: true },
+              ],
+              defaultVariantId: "var_disabled",
+              createdAt: "2026-07-18T00:00:00.000Z",
+              updatedAt: "2026-07-18T00:00:00.000Z",
+            }),
             ...(config(input.environmentId)
               ? {
                   flagConfiguration: listConfig(config(input.environmentId) as FlagConfigGetOutput),

@@ -1,3 +1,4 @@
+import { experimentResourceFixture } from "@splitch/contracts/testing";
 import { describe, expect, it } from "vitest";
 import {
   ExperimentSchema,
@@ -5,26 +6,20 @@ import {
   experimentStatuses,
 } from "./leaf-schemas-experiment";
 
-const validExperiment = {
+const validExperiment = experimentResourceFixture({
   id: "exp_1",
   appId: "app_1",
+  flagId: "flag_1",
   environmentId: "env_prod",
   key: "checkout-redesign",
-  flagId: "flag_1",
   name: "Checkout Redesign",
-  status: "draft" as const,
-  targetingKey: "userId",
-  targetingKeyType: "user",
-  confidenceLevel: 0.95,
-  defaultVariantId: "var_1",
   metrics: [{ metricId: "metric_goal" }],
   guardrailMetrics: [{ metricId: "metric_guard" }],
   conversionWindowMs: 86_400_000,
   dimensions: ["country", "plan"],
-  liveRunId: null,
   createdAt: "2024-01-01T00:00:00Z",
   updatedAt: "2024-01-02T00:00:00Z",
-};
+});
 
 describe("ExperimentStatusSchema", () => {
   it("accepts every declared status", () => {

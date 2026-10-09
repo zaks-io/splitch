@@ -139,6 +139,9 @@ importers:
         specifier: ^11.0.4
         version: 11.0.4
     devDependencies:
+      '@splitch/contracts':
+        specifier: workspace:*
+        version: link:../../packages/contracts
       '@splitch/db':
         specifier: workspace:*
         version: link:../../packages/db

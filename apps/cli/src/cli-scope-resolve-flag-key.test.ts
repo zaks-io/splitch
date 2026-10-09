@@ -1,4 +1,5 @@
 import { writeFile } from "node:fs/promises";
+import { flagResourceFixture } from "@splitch/contracts/testing";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { runCli } from "./cli.js";
 import { EXIT_OK } from "./exit-codes.js";
@@ -11,18 +12,15 @@ afterEach(async () => {
 });
 
 const hydratedFlag = {
-  id: "flag_checkout_banner",
-  appId: "app_1",
-  key: "checkout-banner",
-  name: "Checkout banner",
-  schema: null,
-  variants: [{ id: "var_on", name: "on", value: true }],
-  defaultVariantId: "var_on",
-  lifecycleClass: "unclassified" as const,
-  owner: null,
-  expiresAt: null,
-  createdAt: "2026-07-03T00:00:00.000Z",
-  updatedAt: "2026-07-03T00:00:00.000Z",
+  ...flagResourceFixture({
+    appId: "app_1",
+    id: "flag_checkout_banner",
+    key: "checkout-banner",
+    name: "Checkout banner",
+    schema: null,
+    variants: [{ id: "var_on", name: "on", value: true }],
+    defaultVariantId: "var_on",
+  }),
   configurations: [
     {
       environmentId: "env_1",

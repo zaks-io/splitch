@@ -1,3 +1,4 @@
+import { flagResourceFixture } from "@splitch/contracts/testing";
 import type { ErrorResponse } from "@splitch/sdk/control-plane";
 import { recordFetchRequest } from "./fetch-recording.js";
 
@@ -60,20 +61,17 @@ export const flagListPage = {
   readLimit: 200,
   cursor: null,
   items: [
-    {
-      id: "flag_checkout",
-      appId: "app_local",
+    flagResourceFixture({
       key: "checkout",
       name: "Checkout",
+      id: "flag_checkout",
+      appId: "app_local",
       schema: null,
       variants: [{ id: "var_on", name: "on", value: true }],
       defaultVariantId: "var_on",
-      lifecycleClass: "unclassified" as const,
-      owner: null,
-      expiresAt: null,
       createdAt: timestamp,
       updatedAt: timestamp,
-    },
+    }),
   ],
 };
 

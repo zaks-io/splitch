@@ -1,7 +1,8 @@
 const TEST_ONLY_SOURCES = [
   "\\.test\\.[cm]?[jt]sx?$",
   "/(?:test|tests)/",
-  "-fixture\\.[cm]?[jt]sx?$",
+  "(?:^|/|-)test-fixtures\\.[cm]?[jt]sx?$",
+  "-fixtures?\\.[cm]?[jt]sx?$",
   "-local-harness\\.[cm]?[jt]sx?$",
   "/test-bindings-pool\\.[cm]?[jt]sx?$",
 ];
@@ -70,7 +71,15 @@ module.exports = {
       from: { path: "^(apps/cli|packages/convex)/src/" },
       to: {
         path: "^(packages/(contracts|control-plane-sdk|evaluation-core)/|@splitch/(contracts|control-plane-sdk|evaluation-core)(/|$))",
+        pathNot: "^(packages/contracts/src/testing/|@splitch/contracts/testing$)",
       },
+    },
+    {
+      name: "contracts-testing-is-test-only",
+      severity: "error",
+      comment: "Schema-checked wire fixtures must never enter runtime or published interfaces.",
+      from: { pathNot: [...TEST_ONLY_SOURCES, "^packages/contracts/src/testing/"] },
+      to: { path: "^(packages/contracts/src/testing/|@splitch/contracts/testing$)" },
     },
     {
       name: "ui-stays-domain-free",

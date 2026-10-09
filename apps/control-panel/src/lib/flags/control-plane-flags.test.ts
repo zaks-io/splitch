@@ -1,10 +1,11 @@
+import { flagResourceFixture } from "@splitch/contracts/testing";
 import {
   CONTROL_PANEL_DELEGATION_HEADER,
   verifyControlPanelDelegation,
 } from "@splitch/control-plane-sdk/control-panel-identity";
 import { describe, expect, it, vi } from "vitest";
-import { createControlPanelFlagsClient } from "#lib/shared/control-plane-apps";
 import { booleanPresetDraft, flagCreateInput } from "#lib/flags/create-flag-model";
+import { createControlPanelFlagsClient } from "#lib/shared/control-plane-apps";
 
 const TOKEN_HASH = "b".repeat(64);
 const DELEGATION_SECRET = "test-control-panel-delegation-secret-1234";
@@ -199,7 +200,7 @@ describe("Control Panel flag_get transport", () => {
 });
 
 function createdFlag() {
-  return {
+  return flagResourceFixture({
     id: "flag_checkout",
     appId: "app_checkout",
     key: "new-checkout",
@@ -210,10 +211,7 @@ function createdFlag() {
       { id: "var_enabled", name: "enabled", value: true },
     ],
     defaultVariantId: "var_disabled",
-    lifecycleClass: "unclassified" as const,
-    owner: null,
-    expiresAt: null,
     createdAt: "2026-07-18T00:00:00.000Z",
     updatedAt: "2026-07-18T00:00:00.000Z",
-  };
+  });
 }

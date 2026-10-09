@@ -16,6 +16,10 @@
     "./client-app": {
       "types": "./src/control-plane-client-app.ts",
       "default": "./src/control-plane-client-app.ts"
+    },
+    "./testing": {
+      "types": "./src/testing/index.ts",
+      "default": "./src/testing/index.ts"
     }
   },
   "files": [

@@ -1,4 +1,5 @@
 import { writeFile } from "node:fs/promises";
+import { flagResourceFixture } from "@splitch/contracts/testing";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { runCli } from "./cli.js";
 import { EXIT_API, EXIT_OK } from "./exit-codes.js";
@@ -239,18 +240,17 @@ function principalFlag(
   flagKey: string,
 ) {
   return {
-    id: flagId,
-    appId,
-    key: flagKey,
-    name: flagKey,
-    schema: null,
-    variants: [{ id: `var_${flagId}`, name: "control", value: false }],
-    defaultVariantId: `var_${flagId}`,
-    lifecycleClass: "unclassified" as const,
-    owner: null,
-    expiresAt: null,
-    createdAt: timestamp,
-    updatedAt: timestamp,
+    ...flagResourceFixture({
+      id: flagId,
+      appId,
+      key: flagKey,
+      name: flagKey,
+      schema: null,
+      variants: [{ id: `var_${flagId}`, name: "control", value: false }],
+      defaultVariantId: `var_${flagId}`,
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    }),
     org: { id: orgId, slug: orgSlug },
     app: { id: appId, key: appKey },
     configurations: [

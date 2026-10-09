@@ -1,3 +1,4 @@
+import { flagResourceFixture } from "@splitch/contracts/testing";
 import type { FlagsClient } from "@splitch/control-plane-sdk";
 import { describe, expect, it, vi } from "vitest";
 import {
@@ -190,21 +191,20 @@ function catalog(environmentId: string) {
 
 function definition(id: string, key: string, flagConfiguration: ReturnType<typeof config> | null) {
   return {
-    id,
-    appId: "app_checkout",
-    key,
-    name: key,
-    schema: { type: "boolean" as const },
-    variants: [
-      { id: "var_disabled", name: "disabled", value: false },
-      { id: "var_enabled", name: "enabled", value: true },
-    ],
-    defaultVariantId: "var_disabled",
-    lifecycleClass: "unclassified" as const,
-    owner: null,
-    expiresAt: null,
-    createdAt: "2026-08-21T00:00:00.000Z",
-    updatedAt: "2026-08-21T00:00:00.000Z",
+    ...flagResourceFixture({
+      id,
+      appId: "app_checkout",
+      key,
+      name: key,
+      schema: { type: "boolean" as const },
+      variants: [
+        { id: "var_disabled", name: "disabled", value: false },
+        { id: "var_enabled", name: "enabled", value: true },
+      ],
+      defaultVariantId: "var_disabled",
+      createdAt: "2026-08-21T00:00:00.000Z",
+      updatedAt: "2026-08-21T00:00:00.000Z",
+    }),
     ...(flagConfiguration ? { flagConfiguration } : {}),
   };
 }

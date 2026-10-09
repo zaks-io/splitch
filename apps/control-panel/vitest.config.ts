@@ -4,6 +4,7 @@ import { defineConfig } from "vitest/config";
 export default defineConfig({
   resolve: {
     alias: [
+      sourceAlias("@splitch/contracts/testing", "../../packages/contracts/src/testing/index.ts"),
       sourceAlias("@splitch/contracts/route-types", "../../packages/contracts/src/route-types.ts"),
       sourceAlias("@splitch/contracts", "../../packages/contracts/src/index.ts"),
       sourceSubpathAlias("control-plane-sdk"),

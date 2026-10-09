@@ -1,23 +1,15 @@
-/**
- * The `flags_list` response body the MCP tests hand back from a fake upstream.
- *
- * Shared because it is a wire CONTRACT, not per-test data: every field the
- * Control Plane's bounded Flag list returns has to be here or the SDK rejects
- * the body, and two copies drift the moment the envelope grows a field.
- */
-export const flagDefinition = {
-  id: "flag_checkout",
-  appId: "app_local",
+import { flagResourceFixture } from "@splitch/contracts/testing";
+// Keep MCP-specific values here; the canonical builder owns required wire fields.
+export const flagDefinition = flagResourceFixture({
   key: "checkout",
   name: "Checkout",
+  id: "flag_checkout",
+  appId: "app_local",
   variants: [{ id: "var_on", name: "on", value: true }],
   defaultVariantId: "var_on",
-  lifecycleClass: "unclassified" as const,
-  owner: null,
-  expiresAt: null,
   createdAt: "2026-07-18T00:00:00.000Z",
   updatedAt: "2026-07-18T00:00:00.000Z",
-};
+});
 
 export const flagPage = {
   readTruncated: false,

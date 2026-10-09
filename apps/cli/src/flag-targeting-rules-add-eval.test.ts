@@ -1,4 +1,5 @@
 import { writeFile } from "node:fs/promises";
+import { flagResourceFixture } from "@splitch/contracts/testing";
 import type { TargetingRule } from "@splitch/sdk/control-plane";
 import { evaluatePath } from "@splitch/sdk/local-evaluation";
 import { afterEach, describe, expect, it } from "vitest";
@@ -22,7 +23,7 @@ function flagsGetStub() {
     match: (request: { method: string; url: string }) =>
       request.method === "GET" && new URL(request.url).pathname === "/apps/app_1/flags/flag_1",
     status: 200,
-    body: {
+    body: flagResourceFixture({
       id: "flag_1",
       appId: "app_1",
       key: "flag-1",
@@ -30,12 +31,7 @@ function flagsGetStub() {
       schema: { type: "boolean" },
       variants: VARIANTS,
       defaultVariantId: "var_off",
-      lifecycleClass: "unclassified" as const,
-      owner: null,
-      expiresAt: null,
-      createdAt: "2026-07-03T00:00:00.000Z",
-      updatedAt: "2026-07-03T00:00:00.000Z",
-    },
+    }),
   };
 }
 

@@ -1,7 +1,8 @@
+import { flagResourceFixture } from "@splitch/contracts/testing";
 import { describe, expect, it, vi } from "vitest";
 import { createControlPlaneSdk } from "./index";
 
-const flag = {
+const flag = flagResourceFixture({
   id: "flag_checkout",
   appId: "app_a",
   key: "new-checkout",
@@ -9,12 +10,9 @@ const flag = {
   schema: null,
   variants: [{ id: "var_off", name: "off", value: false }],
   defaultVariantId: "var_off",
-  lifecycleClass: "unclassified" as const,
-  owner: null,
-  expiresAt: null,
   createdAt: "2026-07-18T00:00:00.000Z",
   updatedAt: "2026-07-18T00:00:00.000Z",
-};
+});
 
 function flagsSdk(response: () => Response = () => Response.json(flag)) {
   const requests: Request[] = [];

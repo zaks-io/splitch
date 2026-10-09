@@ -1,3 +1,4 @@
+import { flagResourceFixture } from "@splitch/contracts/testing";
 import { describe, expect, it } from "vitest";
 import { parseResponseTolerantly } from "./parse-response-tolerantly";
 import {
@@ -5,19 +6,14 @@ import {
   PrincipalFlagListReadResponseSchema,
 } from "./resource-envelopes-flag";
 
-const flag = {
-  id: "flag_checkout",
-  appId: "app_local",
+const flag = flagResourceFixture({
   key: "checkout",
   name: "Checkout",
+  id: "flag_checkout",
+  appId: "app_local",
   variants: [{ id: "var_on", name: "on", value: true }],
   defaultVariantId: "var_on",
-  lifecycleClass: "unclassified" as const,
-  owner: null,
-  expiresAt: null,
-  createdAt: "2026-07-03T00:00:00.000Z",
-  updatedAt: "2026-07-03T00:00:00.000Z",
-};
+});
 const scope = { org: { id: "org_1", slug: "acme" }, app: { id: "app_local", key: "shop" } };
 const configuration = {
   environmentId: "env_prod",
