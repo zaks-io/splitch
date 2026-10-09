@@ -67,8 +67,8 @@
 
   --color-info-500: var(--color-brand-control-500);
 
-  /* Type. Söhne is the licensed target; Inter Variable (opsz) is the live fallback. */
-  --font-display: "Söhne", "Inter Variable", "Inter", system-ui, sans-serif;
+  /* Type. Inter Variable (opsz) ships today; licensed Söhne can return once self-hosted. */
+  --font-display: "Inter Variable", "Inter", system-ui, sans-serif;
   --font-sans: "Inter Variable", "Inter", system-ui, -apple-system, sans-serif;
   --font-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", "Menlo", monospace;
 

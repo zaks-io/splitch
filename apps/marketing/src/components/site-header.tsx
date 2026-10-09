@@ -21,8 +21,8 @@ const links = [
 
 export function SiteHeader() {
   return (
-    <header className="sticky top-0 z-40 border-border border-b bg-background/90 backdrop-blur">
-      <div className="mx-auto flex h-14 w-full max-w-6xl items-center justify-between gap-4 px-4 sm:px-6">
+    <header className="sticky top-0 z-40 border-border border-b bg-background/90 px-4 backdrop-blur sm:px-6">
+      <div className="mx-auto flex h-14 w-full max-w-6xl items-center justify-between gap-4">
         <div className="flex shrink-0 items-center gap-2">
           <a aria-label="splitch home" href="/">
             <BrandMark />

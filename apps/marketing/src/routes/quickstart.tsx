@@ -5,6 +5,7 @@ import { CodeSnippet } from "../components/code-snippet";
 import { QuickstartRecovery } from "../components/quickstart-recovery";
 import { QuickstartSteps } from "../components/quickstart-steps";
 import { SPLITCH_SKILL_SOURCE } from "../docs/code-agents";
+import { quickstartIntro } from "../docs/quickstart";
 
 export const Route = createFileRoute("/quickstart")({
   head: () => ({
@@ -13,7 +14,7 @@ export const Route = createFileRoute("/quickstart")({
       {
         name: "description",
         content:
-          "Zero to a resolving Flag with the splitch CLI. Agents get the same sequence in-band over MCP.",
+          "Create a feature flag in dev and turn it on in prod with the splitch CLI and SDK. Coding agents can follow the same steps.",
       },
     ],
   }),
@@ -27,22 +28,18 @@ function QuickstartRoute() {
         <header className="grid gap-4">
           <p className="flex items-center gap-2">
             <Badge variant="outline">Quickstart</Badge>
-            <Badge variant="outline">
-              <span className="font-mono">splitch://quickstart</span>
-            </Badge>
           </p>
           <h1 className="text-balance font-bold font-display text-4xl text-foreground tracking-tight sm:text-5xl">
             Zero to a resolving Flag<span className="text-arm-control">.</span>
           </h1>
           <p className="max-w-2xl text-lg text-muted-foreground leading-relaxed">
-            This page walks the CLI path, and every step ends on a verify round-trip.
+            {quickstartIntro}
           </p>
           <div className="grid max-w-2xl gap-2 rounded-lg border border-border bg-muted p-4">
             <p className="font-medium text-foreground text-sm">Building with a coding agent?</p>
             <p className="text-muted-foreground text-sm leading-relaxed">
-              Install the Splitch skill in the consumer repository. Codex, Claude Code, and OpenCode
-              will use the CLI and its stable JSON output instead of operating the Control Panel in
-              a browser.
+              Install the splitch skill in your repository. Codex, Claude Code, and OpenCode can
+              follow these steps with the CLI and read its JSON output.
             </p>
             <CodeSnippet code={`npx skills add ${SPLITCH_SKILL_SOURCE}`} />
             <p className="text-muted-foreground text-sm leading-relaxed">
@@ -50,15 +47,10 @@ function QuickstartRoute() {
             </p>
             <CodeSnippet code="claude mcp add --transport http splitch https://mcp.splitch.dev" />
             <p className="text-muted-foreground text-sm leading-relaxed">
-              Your agent calls that endpoint and signs in on its first tool call, so there is no key
-              to copy.
+              Sign in in your browser when your agent connects. In Claude Code, run /mcp if it does
+              not prompt. There is no key to copy.
             </p>
           </div>
-          <CodeSnippet
-            code={`authenticate → pick an Org → create an App (dev+prod Envs auto-provisioned)
-            → select the dev Environment → get a Client Key → create a Flag
-            → enable + rollout → VERIFY (reason SPLIT) → wire the SDK → first real Exposure`}
-          />
         </header>
 
         <QuickstartSteps />
@@ -66,8 +58,8 @@ function QuickstartRoute() {
 
         <footer className="grid gap-4 border-border border-t pt-8">
           <p className="max-w-2xl text-muted-foreground text-sm leading-relaxed">
-            Verify proves wiring; the first real evaluate proves the integration. Onboarding is done
-            at the first real Exposure.
+            Your Flag is now enabled in prod. Verify never records an Exposure. SDK evaluations
+            record Exposures only while an Experiment Run is live.
           </p>
           <div className="flex flex-wrap items-center gap-5">
             <Button render={<a href="/docs" />}>Read the docs</Button>

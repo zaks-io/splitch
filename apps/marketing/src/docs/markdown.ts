@@ -14,7 +14,7 @@ import {
   surfaceLabels,
 } from "./errors";
 import { flagsDoc } from "./flags";
-import { quickstartRecoveries, quickstartSteps } from "./quickstart";
+import { quickstartIntro, quickstartRecoveries, quickstartSteps } from "./quickstart";
 import { type SdkTopic, sdkGuideTopics, sdkIntegrationTopics } from "./sdk";
 import { DOCS_ORIGIN, docsPath } from "./site";
 
@@ -64,7 +64,7 @@ export function quickstartMarkdown(): string {
     .join("\n");
   return [
     "# Zero to a resolving Flag",
-    "This quickstart walks the CLI path, and every step ends on a verify round-trip.",
+    quickstartIntro,
     ...steps,
     `## When a step fails\n\n| You hit | It means | Do |\n| --- | --- | --- |\n${recoveries}`,
     `Source: ${DOCS_ORIGIN}/quickstart`,

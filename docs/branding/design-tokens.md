@@ -230,7 +230,7 @@ that this is a tool built by and for engineers.
 
 | token            | stack                                                             | role                                         |
 | ---------------- | ----------------------------------------------------------------- | -------------------------------------------- |
-| `--font-display` | `"Söhne", "Inter Variable", "Inter", system-ui, sans-serif`       | headings, hero, large numerals               |
+| `--font-display` | `"Inter Variable", "Inter", system-ui, sans-serif`                | headings, hero, large numerals               |
 | `--font-sans`    | `"Inter Variable", "Inter", system-ui, -apple-system, sans-serif` | body, UI labels, controls                    |
 | `--font-mono`    | `"IBM Plex Mono", ui-monospace, "SFMono-Regular", monospace`      | **keys, code, IDs, metrics, CLI, plot axes** |
 
@@ -240,10 +240,10 @@ webfonts (`@fontsource-variable/inter` with the `opsz` axis, and
 Variable's optical-sizing axis (`font-optical-sizing: auto` on `body`) renders
 the display cut automatically at heading sizes — no separate Display file.
 
-**Licensing note.** Söhne is commercial (Klim). Until licensed, the display
-stack resolves to Inter Variable tightened (see tracking below) — the token name
-stays `--font-display` so swapping the licensed face later is a one-line change,
-no component edits. IBM Plex Mono and Inter are OFL/SIL, free to ship.
+**Licensing note.** Söhne is commercial (Klim). The display stack uses Inter Variable
+with tight tracking. The licensed face can return once it is self-hosted. The token
+name stays `--font-display`, so adding it later requires no component edits. IBM
+Plex Mono and Inter are OFL/SIL, free to ship.
 
 ### 3.2 The mono is doing real work
 
