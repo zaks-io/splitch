@@ -3,7 +3,6 @@ import { type EnvScope, envScope } from "@splitch/db";
 import { promotionFreeze } from "./config-store-freeze";
 import { writeFlagConfigSnapshot } from "./config-store-snapshot-write";
 import {
-  buildSnapshotFromD1,
   type ConfigStoreRuntimeDeps,
   type FlagConfigWriteResult,
   flagConfigResult,
@@ -16,6 +15,7 @@ import {
   type Snapshot,
   targetingRuleRows,
 } from "./config-store-shared";
+import { buildSnapshotFromD1 } from "./config-store-snapshot-build";
 import { targetingRulePersistFailure } from "./config-store-targeting-rules";
 import { baselineIsUnresolvable, mintSalt } from "./flag-config-rollout";
 import { SegmentNotFoundError } from "./targeting-rule-resolution";

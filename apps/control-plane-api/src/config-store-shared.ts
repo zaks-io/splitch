@@ -1,17 +1,12 @@
 import {
   DeltaNudgeSchema,
-  ExperimentConfigKVSchema,
-  FlagConfigKVSchema,
   flagConfigKey,
-  type ResolvedTargetingRule,
-  RunConfigKVSchema,
   type TargetingRule,
-  TargetingRuleSchema,
   type Variant,
 } from "@splitch/contracts";
-import { appScope, type EnvScope, type Repository } from "@splitch/db";
-import { activationBindingsForExperiment } from "./config-store-activation-bindings";
+import { appScope, type EnvScope } from "@splitch/db";
 import { parseFlagConfigEnvelope, writeSnapshot } from "./config-store-kv";
+import { buildSnapshotFromD1 } from "./config-store-snapshot-build";
 import type {
   ApplyApprovedFlagConfigInput,
   ConfigStoreDeps,
@@ -24,8 +19,6 @@ import type {
   ReplaceTargetingRulesInput,
   Snapshot,
 } from "./config-store-types";
-import { parseStoredRollout } from "./flag-config-rollout";
-import { requireResolvedTargetingRules, resolveTargetingRules } from "./targeting-rule-resolution";
 
 export type {
   ApplyApprovedFlagConfigInput,
@@ -85,101 +78,6 @@ export async function readFlagConfigPurgeTarget(
   if (!flag) return null;
 
   return { experimentIds: experiments.map((experiment) => experiment.id) };
-}
-
-export async function buildSnapshotFromD1(
-  repo: Repository,
-  scope: EnvScope,
-  flagId: string,
-): Promise<Snapshot | null> {
-  return buildSnapshot(
-    repo,
-    scope,
-    flagId,
-    repo.experiments.findRunningExperimentForFlag(scope, flagId),
-  );
-}
-
-export async function buildExperimentSnapshotFromD1(
-  repo: Repository,
-  scope: EnvScope,
-  experimentId: string,
-): Promise<Snapshot | null> {
-  const experiment = await repo.experiments.getExperiment(scope, experimentId);
-  if (!experiment) return null;
-  return buildSnapshot(repo, scope, experiment.flagId, Promise.resolve(experiment));
-}
-
-async function buildSnapshot(
-  repo: Repository,
-  scope: EnvScope,
-  flagId: string,
-  experimentResult: Promise<Awaited<ReturnType<Repository["experiments"]["getExperiment"]>>>,
-): Promise<Snapshot | null> {
-  const [experiment, inputs, authoringRows] = await Promise.all([
-    experimentResult,
-    loadFlagConfigWriteContext(repo, scope, flagId),
-    repo.flags.listTargetingRules(scope, flagId),
-  ]);
-  if (!inputs) return null;
-  const { flag, config, variants } = inputs;
-
-  const authoringTargetingRules = authoringRows.map(toTargetingRule);
-  const [resolution, run] = await Promise.all([
-    resolveTargetingRules(repo, scope.appId, authoringTargetingRules),
-    experiment?.liveRunId
-      ? repo.experiments.getRun(scope, experiment.liveRunId)
-      : Promise.resolve(null),
-  ]);
-  const resolved = requireResolvedTargetingRules(resolution);
-  if (experiment?.liveRunId && !run) {
-    throw new Error("config-store: experiment liveRunId points at no Run");
-  }
-  const activationBindings = await activationBindingsForExperiment(repo, scope, experiment);
-
-  return {
-    flag: FlagConfigKVSchema.parse({
-      id: flag.id,
-      key: flag.key,
-      environmentId: scope.environmentId,
-      experimentId: experiment?.status === "running" ? experiment.id : null,
-      enabled: config.enabled,
-      defaultVariantId: requiredString(config.defaultVariantId, "defaultVariantId"),
-      variants,
-      availableVariantNames: JSON.parse(config.availableVariantNames) as string[],
-      targetingRules: resolved,
-      rollout: parseStoredRollout(config.rollout),
-      updatedAt: config.updatedAt,
-    }),
-    authoringTargetingRules,
-    experiment: experimentConfig(scope, experiment),
-    controllingExperiment:
-      experiment?.status === "running" ? { id: experiment.id, name: experiment.name } : null,
-    run: runConfig(run),
-    activationBindings,
-    version: config.version,
-  };
-}
-
-export async function loadFlagConfigWriteContext(
-  repo: Repository,
-  scope: EnvScope,
-  flagId: string,
-) {
-  const [flag, config, variantCatalogs] = await Promise.all([
-    repo.flags.getFlag(appScope(scope.appId), flagId),
-    repo.flags.getFlagConfig(scope, flagId),
-    repo.flags.listVariantsForFlags(appScope(scope.appId), [flagId]),
-  ]);
-  if (!flag || !config) return null;
-  const variantRows = variantCatalogs.get(flagId) ?? [];
-  const variants = variantRows.map((v) => ({
-    id: v.id,
-    name: v.name,
-    value: JSON.parse(v.value) as Variant["value"],
-    ...(v.description ? { description: v.description } : {}),
-  }));
-  return { flag, config, variants };
 }
 
 /**
@@ -261,53 +159,4 @@ export function missingRuleVariantNames(
 
 export function json(value: unknown): string {
   return JSON.stringify(value);
-}
-
-function experimentConfig(
-  scope: EnvScope,
-  experiment: Awaited<ReturnType<Repository["experiments"]["findRunningExperimentForFlag"]>>,
-) {
-  if (!experiment) return null;
-  return ExperimentConfigKVSchema.parse({
-    id: experiment.id,
-    environmentId: scope.environmentId,
-    flagId: experiment.flagId,
-    targetingKey: experiment.targetingKeyField,
-    targetingKeyType: experiment.targetingKeyType,
-    status: experiment.status,
-    liveRunId: experiment.liveRunId,
-  });
-}
-
-function runConfig(run: Awaited<ReturnType<Repository["experiments"]["getRun"]>>) {
-  if (!run) return null;
-  return RunConfigKVSchema.parse({
-    id: run.id,
-    experimentId: run.experimentId,
-    salt: run.salt,
-    allocation: JSON.parse(run.allocation) as Record<string, number>,
-    variantSet: JSON.parse(run.variantSet) as Variant[],
-    targetingRules: JSON.parse(run.targetingRules) as ResolvedTargetingRule[],
-    configHash: run.configHash,
-    startedAt: run.startedAt,
-  });
-}
-
-export function toTargetingRule(
-  rule: Awaited<ReturnType<Repository["flags"]["listTargetingRules"]>>[number],
-) {
-  return TargetingRuleSchema.parse({
-    id: rule.id,
-    flagId: rule.flagId,
-    priority: rule.priority,
-    conditions: JSON.parse(rule.conditions),
-    ...(rule.segmentId ? { segmentId: rule.segmentId } : {}),
-    variantId: requiredString(rule.variantId, "variantId"),
-    ...(rule.percentageRollout ? { percentageRollout: JSON.parse(rule.percentageRollout) } : {}),
-  });
-}
-
-function requiredString(value: string | null, name: string): string {
-  if (!value) throw new Error(`config-store: missing ${name}`);
-  return value;
 }

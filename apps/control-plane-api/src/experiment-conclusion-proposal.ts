@@ -1,7 +1,8 @@
 import type { ApprovalPolicyContext, PolicyChangeType } from "@splitch/contracts";
 import { appScope, envScope, type Repository } from "@splitch/db";
 import { approvalTargetVersion, environmentPolicyContexts } from "./approval-target";
-import { buildSnapshotFromD1, responseFromSnapshot } from "./config-store-shared";
+import { responseFromSnapshot } from "./config-store-shared";
+import { buildSnapshotFromD1 } from "./config-store-snapshot-build";
 import type { FlagConfigResult } from "./config-store-types";
 import { validationErrors } from "./flag-definition-errors";
 import { flagConfigNotFound } from "./flag-config-errors";

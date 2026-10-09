@@ -5,12 +5,11 @@ import { writeFlagConfigSnapshot } from "./config-store-snapshot-write";
 import {
   type ConfigStoreRuntimeDeps,
   type FlagConfigWriteResult,
-  loadFlagConfigWriteContext,
   missingRuleVariantNames,
   type ReplaceTargetingRulesInput,
   targetingRuleRows,
-  toTargetingRule,
 } from "./config-store-shared";
+import { loadFlagConfigWriteContext, toTargetingRule } from "./config-store-snapshot-build";
 import { normalizeTargetingRuleRollouts } from "./flag-config-rollout";
 import { resolveTargetingRules } from "./targeting-rule-resolution";
 

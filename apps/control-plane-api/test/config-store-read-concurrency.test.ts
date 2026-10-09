@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { startSeededExperiment } from "../src/config-store-fixture-data";
 import type { Harness } from "../src/config-store-harness-core";
 import { ids } from "../src/config-store-harness-core";
-import { buildSnapshotFromD1 } from "../src/config-store-shared";
+import { buildSnapshotFromD1 } from "../src/config-store-snapshot-build";
 import { makePoolHarness as makeHarness } from "./config-store-pool-harness";
 
 let h: Harness;

@@ -1,6 +1,7 @@
 import type { envScope, Repository } from "@splitch/db";
 import type { ConfigStoreWriter } from "./config-store";
-import { buildSnapshotFromD1, responseFromSnapshot } from "./config-store-shared";
+import { responseFromSnapshot } from "./config-store-shared";
+import { buildSnapshotFromD1 } from "./config-store-snapshot-build";
 import { SegmentNotFoundError } from "./targeting-rule-resolution";
 
 type ReadInput = Parameters<ConfigStoreWriter["readFlagConfig"]>[0];

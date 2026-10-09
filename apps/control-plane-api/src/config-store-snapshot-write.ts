@@ -1,11 +1,8 @@
 import { type EnvScope, envScope } from "@splitch/db";
 import { catchConfigStoreFailure } from "./config-store-failure";
 import { writeSnapshot } from "./config-store-kv";
-import {
-  buildExperimentSnapshotFromD1,
-  buildSnapshotFromD1,
-  flagConfigResult,
-} from "./config-store-shared";
+import { flagConfigResult } from "./config-store-shared";
+import { buildExperimentSnapshotFromD1, buildSnapshotFromD1 } from "./config-store-snapshot-build";
 import type { FlagConfigResyncInput } from "./config-store-snapshot-maintenance";
 import type { ConfigStoreRuntimeDeps, FlagConfigWriteResult, Snapshot } from "./config-store-types";
 
