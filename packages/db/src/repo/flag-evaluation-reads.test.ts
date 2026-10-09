@@ -6,6 +6,9 @@ import { seedSiblingEnvironment, seedTwoTenants } from "./test-seed";
 const NOW = "2026-01-01T00:00:00.000Z";
 const SIBLING_ENVIRONMENT_ID = "env_a_sibling";
 const MOVED_FLAG_ID = "flag_a_moved";
+// App B also holds a Flag under App A's key, so a child read that lost its App
+// predicate would pull B's rows instead of being masked by a null parent lookup.
+const SAME_KEY_FLAG_ID = "flag_b_same_key";
 
 let local: LocalD1;
 let repo: ReturnType<typeof createRepository>;
@@ -20,6 +23,7 @@ beforeAll(async () => {
     await seedConfiguration(tenant.appId, tenant.environmentId, tenant.flagId, tenant.variantId);
   }
   await seedConfiguration(seed.a.appId, SIBLING_ENVIRONMENT_ID, seed.a.flagId, seed.a.variantId);
+  await seedSameKeyFlag();
   await local.d1
     .prepare("UPDATE experiments SET status = 'running' WHERE app_id = ? AND id = ?")
     .bind(seed.a.appId, seed.a.experimentId)
@@ -66,6 +70,28 @@ describe("readFlagSnapshotInputsByKey", () => {
       targetingRules: [{ id: ruleId(SIBLING_ENVIRONMENT_ID) }],
       runningExperiment: null,
     });
+  });
+
+  it("reads only its own App's Flag when another App holds the same key", async () => {
+    const [a, b] = await Promise.all([
+      repo.flagEvaluation.readFlagSnapshotInputsByKey(
+        envScope(seed.a.appId, seed.a.environmentId),
+        seed.a.flagKey,
+      ),
+      repo.flagEvaluation.readFlagSnapshotInputsByKey(
+        envScope(seed.b.appId, seed.b.environmentId),
+        seed.a.flagKey,
+      ),
+    ]);
+
+    expect(a).toMatchObject({ flag: { id: seed.a.flagId } });
+    expect(b).toMatchObject({ flag: { id: SAME_KEY_FLAG_ID } });
+    expect(a !== null && a !== "moved" && a.variants.map((variant) => variant.id)).toEqual([
+      seed.a.variantId,
+    ]);
+    expect(b !== null && b !== "moved" && b.variants.map((variant) => variant.id)).toEqual([
+      "var_b_same_key",
+    ]);
   });
 
   it("issues all five reads before any completes", async () => {
@@ -120,7 +146,10 @@ async function seedConfiguration(
     updatedAt: NOW,
   });
   await repo.flags.targetingRules.insert(scope, {
-    id: flagId === MOVED_FLAG_ID ? `rule_${MOVED_FLAG_ID}` : ruleId(environmentId),
+    id:
+      flagId === seed.a.flagId || flagId === seed.b.flagId
+        ? ruleId(environmentId)
+        : `rule_${flagId}`,
     appId,
     environmentId,
     flagId,
@@ -130,6 +159,25 @@ async function seedConfiguration(
     createdAt: NOW,
     updatedAt: NOW,
   });
+}
+
+async function seedSameKeyFlag(): Promise<void> {
+  await repo.flags.flags.insert(appScope(seed.b.appId), {
+    lifecycleClass: "ops",
+    id: SAME_KEY_FLAG_ID,
+    appId: seed.b.appId,
+    key: seed.a.flagKey,
+    name: "B's Flag under A's key",
+    createdAt: NOW,
+    updatedAt: NOW,
+  });
+  await repo.flags.addVariant(appScope(seed.b.appId), SAME_KEY_FLAG_ID, {
+    id: "var_b_same_key",
+    name: "control",
+    value: '"control"',
+    createdAt: NOW,
+  });
+  await seedConfiguration(seed.b.appId, seed.b.environmentId, SAME_KEY_FLAG_ID, "var_b_same_key");
 }
 
 async function seedMovedFlag(): Promise<void> {
