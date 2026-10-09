@@ -8,7 +8,7 @@ const notes = [
   },
   {
     term: "The fix is in the error",
-    body: "Each refusal carries a stable code, the next command, and a docs link, so your agent can act without guessing.",
+    body: "CLI errors come back as JSON with a stable code, remediation guidance, and a docs link, so your agent can act without guessing.",
   },
   {
     term: "Your permissions, no more",
@@ -23,11 +23,11 @@ export function AgentSection() {
         <div className="min-w-0 lg:order-2">
           <div className="grid gap-4">
             <h2 className="text-balance font-bold font-display text-3xl text-foreground tracking-tight sm:text-4xl">
-              Every refusal says what to do next.
+              Refusals your agent can act on.
             </h2>
             <p className="text-muted-foreground text-lg leading-relaxed">
-              When a change is gated, your agent gets JSON with a code, the fix, and a link to the
-              docs.
+              When a change is gated, your agent gets a stable code and a pending request it can
+              review.
             </p>
           </div>
 

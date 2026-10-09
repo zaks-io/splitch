@@ -2,15 +2,15 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@splitch/ui/components
 import { SPLITCH_SKILL_SOURCE } from "../docs/code-agents";
 import { CodeSnippet } from "./code-snippet";
 
-/* MCP leads because it is the agent's primary door (ADR-0023): one line, and the
-   agent signs in on its first tool call. Shell comments carry the captions so the
+/* MCP leads because it is the agent's primary door (ADR-0023): one line, then a
+   browser sign-in when the client connects. Shell comments carry the captions so the
    copied text still runs. */
 const installPaths = [
   {
     value: "mcp",
     label: "MCP",
     code: `claude mcp add --transport http splitch https://mcp.splitch.dev
-# Your agent signs in on its first tool call. No key to copy.`,
+# Sign in in your browser when prompted (or run /mcp). No key to copy.`,
   },
   {
     value: "skill",

@@ -18,8 +18,7 @@ export function CtaSection() {
               Put your next change behind a Flag<span className="text-arm-treatment">.</span>
             </h2>
             <p className="text-muted-foreground text-lg leading-relaxed">
-              Create a Flag, verify it in dev, then turn it on in prod. The quickstart walks every
-              step and checks each one.
+              The quickstart goes from install to a verified Flag and checks every step.
             </p>
           </div>
 
