@@ -1,30 +1,31 @@
 import { Button } from "@splitch/ui/components/button";
-import { CodeSnippet } from "./code-snippet";
+import { devSession } from "../content/agent-session";
+import { CliTranscript } from "./cli-transcript";
+import { InstallTabs } from "./install-tabs";
 import { SectionEyebrow } from "./section-eyebrow";
-import { SplitVisual } from "./split-visual";
 
 export function HeroSection() {
   return (
-    <section className="px-4 py-16 sm:px-6 sm:py-20 lg:py-24">
-      <div className="mx-auto grid w-full max-w-6xl items-center gap-12 lg:grid-cols-[minmax(0,1.05fr)_minmax(360px,0.95fr)]">
-        <div className="grid gap-7">
-          <SectionEyebrow>Feature flags and experiments, built for agents</SectionEyebrow>
+    <section className="px-4 py-14 sm:px-6 sm:py-20">
+      <div className="mx-auto grid w-full max-w-6xl items-center gap-12 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)] lg:gap-14">
+        <div className="grid min-w-0 gap-7">
+          <SectionEyebrow>Built for coding agents</SectionEyebrow>
 
-          <h1 className="max-w-2xl text-balance font-bold font-display text-4xl text-foreground tracking-tight sm:text-5xl lg:text-6xl">
-            Control what ships<span className="text-arm-control">.</span> Learn what works
-            <span className="text-arm-treatment">.</span>
+          <h1 className="text-balance font-bold font-display text-4xl text-foreground tracking-tight sm:text-5xl xl:text-[3.5rem] xl:leading-[1.05]">
+            <span className="lg:block">
+              Control what ships<span className="text-arm-control">.</span>
+            </span>{" "}
+            <span className="lg:block">
+              Learn what works<span className="text-arm-treatment">.</span>
+            </span>
           </h1>
 
           <p className="max-w-lg text-lg text-muted-foreground leading-relaxed">
-            Turn features on or off without redeploying your app. Run A/B experiments to measure how
-            changes affect your users. Your coding agent can manage both through the CLI.
+            Feature flags and A/B experiments your coding agent can create, promote, and measure end
+            to end.
           </p>
 
-          <CodeSnippet
-            code={`npm install --global @splitch/cli
-splitch login
-splitch context --json`}
-          />
+          <InstallTabs />
 
           <div className="flex flex-wrap items-center gap-5">
             <Button render={<a href="/quickstart" />} size="lg">
@@ -32,14 +33,14 @@ splitch context --json`}
             </Button>
             <a
               className="font-medium text-muted-foreground text-sm underline underline-offset-4 hover:text-foreground"
-              href="#agents"
+              href="/docs/code-agents"
             >
-              Use your coding agent
+              Read the agent guide
             </a>
           </div>
         </div>
 
-        <SplitVisual />
+        <CliTranscript session={devSession} />
       </div>
     </section>
   );
