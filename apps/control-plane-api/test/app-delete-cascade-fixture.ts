@@ -1,21 +1,19 @@
 import { appScope, createRepository, envScope } from "@splitch/db";
-import type { RateLimiter } from "@splitch/worker-runtime";
+import { flagRow } from "@splitch/db/testing";
 import type { Hono } from "hono";
 import { expect } from "vitest";
-import { createApp } from "../src/app";
-import { makeControlPlaneAuthResolver } from "../src/auth-resolver";
 import { type FixtureSigner, makeFixtureSigner } from "../src/fixture-signer";
-import { makeJwksVerifier } from "../src/jwks-verify";
-import { makeSessionStore } from "../src/session-store";
+import { makeTestApp as createApp } from "../src/test-app-fixture";
+import { AUDIENCE, ISSUER } from "../src/test-constants";
 import type { LocalBindings } from "../src/test-fixtures";
 import { seedOrgApp, seedOrgMember } from "../src/test-seeds";
-import { makePoolBindings as makeLocalBindings } from "./pool-bindings";
 import { noOpExposureStatusCleanup } from "./exposure-status-cleanup-fixture";
 import { noOpHoldoverWriteOutboxCleanup } from "./holdover-write-outbox-cleanup-fixture";
+import { makePoolBindings as makeLocalBindings } from "./pool-bindings";
 
 /** SPL-326 cascade test fixture: two distinct Organizations + App delete helpers. */
 
-export const AUDIENCE = "https://cp.splitch.test";
+export { AUDIENCE };
 export const NOW_MS = Date.UTC(2026, 7, 5, 12, 0, 0);
 export const NOW_ISO = new Date(NOW_MS).toISOString();
 
@@ -39,7 +37,6 @@ export const OTHER = {
 export const OWNER = "user_app_delete_cascade_owner";
 export const OTHER_OWNER = "user_app_delete_cascade_other";
 
-const allowLimiter: RateLimiter = () => ({ limited: false });
 const nowSeconds = () => Math.floor(NOW_MS / 1000);
 
 export interface CascadeHarness {
@@ -118,15 +115,18 @@ async function seedCascadeChildren(
   const repo = createRepository(d1);
   const flagId = `flag_cascade_${suffix}`;
   const segmentId = `segment_cascade_${suffix}`;
-  await repo.flags.flags.insert(appScope(appId), {
-    lifecycleClass: "ops",
-    id: flagId,
-    appId,
-    key: `cascade-${suffix}`,
-    name: "Cascade flag",
-    createdAt: NOW_ISO,
-    updatedAt: NOW_ISO,
-  });
+  await repo.flags.flags.insert(
+    appScope(appId),
+    flagRow({
+      lifecycleClass: "ops",
+      id: flagId,
+      appId,
+      key: `cascade-${suffix}`,
+      name: "Cascade flag",
+      createdAt: NOW_ISO,
+      updatedAt: NOW_ISO,
+    }),
+  );
   await repo.flags.flagConfigs.insert(envScope(appId, environmentId), {
     id: `cfg_cascade_${suffix}`,
     appId,
@@ -222,24 +222,17 @@ async function seedCascadePrivacy(
 export async function makeCascadeHarness(): Promise<CascadeHarness> {
   const bindings = await makeLocalBindings();
   const signer = await makeFixtureSigner();
-  const verifier = makeJwksVerifier({
-    issuer: "https://auth.splitch.test",
-    fetchJwks: async () => signer.jwks,
-    controlPlaneAudience: AUDIENCE,
-  });
+
   const app = createApp({
-    authResolver: makeControlPlaneAuthResolver({
-      verifier,
-      sessions: makeSessionStore(bindings.kv),
-      membershipAccess: {
-        authorize: async () => true,
-        resolve: async () => {
-          throw new Error("test fixture has no wide membership resolver");
-        },
+    signer: signer,
+    sessions: bindings.kv,
+    membershipAccess: {
+      authorize: async () => true,
+      resolve: async () => {
+        throw new Error("test fixture has no wide membership resolver");
       },
-      now: () => NOW_MS,
-    }),
-    rateLimiter: allowLimiter,
+    },
+    now: () => NOW_MS,
     repo: createRepository(bindings.d1),
     credentialStore: bindings.credentialKv,
     exposureStatusCleanup: noOpExposureStatusCleanup,
@@ -254,7 +247,7 @@ export async function makeCascadeHarness(): Promise<CascadeHarness> {
     async appToken(appId, userId = OWNER) {
       return signer.sign({
         sub: userId,
-        iss: "https://auth.splitch.test",
+        iss: ISSUER,
         aud: AUDIENCE,
         iat: nowSeconds(),
         exp: nowSeconds() + 3600,
@@ -264,7 +257,7 @@ export async function makeCascadeHarness(): Promise<CascadeHarness> {
     async createDefaultApp(suffix) {
       const jwt = await signer.sign({
         sub: OWNER,
-        iss: "https://auth.splitch.test",
+        iss: ISSUER,
         aud: AUDIENCE,
         iat: nowSeconds(),
         exp: nowSeconds() + 3600,

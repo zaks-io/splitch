@@ -1,18 +1,17 @@
 import { createRepository } from "@splitch/db";
-import type { RateLimiter } from "@splitch/worker-runtime";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { createApp } from "../src/app";
 import { makeControlPlaneAuthResolver } from "../src/auth-resolver";
 import type { EntityPrivacyLedgerInput } from "../src/config-store-app-identity-ledger";
 import { type FixtureSigner, makeFixtureSigner } from "../src/fixture-signer";
 import { makeJwksVerifier } from "../src/jwks-verify";
 import { appAdminScope } from "../src/scope-binding";
 import { makeSessionStore } from "../src/session-store";
+import { makeTestApp as createApp } from "../src/test-app-fixture";
+import { AUDIENCE, allowLimiter, ISSUER } from "../src/test-constants";
 import type { LocalBindings } from "../src/test-fixtures";
 import { seedOrgApp } from "../src/test-seeds";
 import { makePoolBindings as makeLocalBindings } from "./pool-bindings";
 
-const AUDIENCE = "https://cp.splitch.test";
 const NOW_MS = Date.UTC(2026, 6, 18, 12, 0, 0);
 const NOW_ISO = "2026-07-18T12:00:00.000Z";
 const PRIMARY = {
@@ -24,7 +23,6 @@ const PRIMARY = {
 };
 const APP_ADMIN = "user_entity_privacy_admin";
 const RAW_TARGETING_KEY = "subject_entity_privacy";
-const allowLimiter: RateLimiter = () => ({ limited: false });
 
 // biome-ignore lint/complexity/noExcessiveLinesPerFunction: One pooled Worker fixture proves the complete intake and tenant boundary.
 describe("entity privacy delete route availability", () => {
@@ -60,7 +58,7 @@ describe("entity privacy delete route availability", () => {
     const app = createApp({
       authResolver: makeControlPlaneAuthResolver({
         verifier: makeJwksVerifier({
-          issuer: "https://auth.splitch.test",
+          issuer: ISSUER,
           fetchJwks: async () => signer.jwks,
           controlPlaneAudience: AUDIENCE,
         }),
@@ -184,7 +182,7 @@ describe("entity privacy delete route availability", () => {
 
     const jwt = await signer.sign({
       sub: APP_ADMIN,
-      iss: "https://auth.splitch.test",
+      iss: ISSUER,
       aud: AUDIENCE,
       iat: Math.floor(NOW_MS / 1000),
       exp: Math.floor(NOW_MS / 1000) + 3600,
@@ -268,7 +266,7 @@ describe("entity privacy delete route availability", () => {
 
     const outsiderJwt = await signer.sign({
       sub: "user_other_tenant",
-      iss: "https://auth.splitch.test",
+      iss: ISSUER,
       aud: AUDIENCE,
       iat: Math.floor(NOW_MS / 1000),
       exp: Math.floor(NOW_MS / 1000) + 3600,

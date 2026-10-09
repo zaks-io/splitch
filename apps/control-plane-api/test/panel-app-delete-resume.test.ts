@@ -7,8 +7,8 @@ import { appScope, createRepository } from "@splitch/db";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import type { ControlPlaneApiEnv } from "../src/env.js";
 import { SignedControlPanelEntrypoint } from "../src/index.js";
+import { AUDIENCE } from "../src/test-constants";
 
-const AUDIENCE = "https://cp.splitch.test";
 const DELEGATION_SECRET = "test-control-panel-delegation-secret-1234";
 const APP_ID = "app_panel_delete_resume";
 const ORG_ID = "org_panel_delete_resume";

@@ -1,4 +1,5 @@
 import { appScope, envScope, type Repository } from "@splitch/db";
+import { flagRow } from "@splitch/db/testing";
 import { ids, NOW } from "./config-store-fixture-data";
 
 /** Row seeding for the attention-rollup suites: bulk fan-out, corrupt rows, second Organization. */
@@ -77,16 +78,19 @@ export async function seedOtherOrganization(repo: Repository) {
     createdAt: NOW,
     updatedAt: NOW,
   });
-  await repo.flags.flags.insert(scope, {
-    lifecycleClass: "ops",
-    id: flagId,
-    appId,
-    key: "other-org-flag",
-    name: "Other Organization flag",
-    defaultVariantId: "var_other_control",
-    createdAt: NOW,
-    updatedAt: NOW,
-  });
+  await repo.flags.flags.insert(
+    scope,
+    flagRow({
+      lifecycleClass: "ops",
+      id: flagId,
+      appId,
+      key: "other-org-flag",
+      name: "Other Organization flag",
+      defaultVariantId: "var_other_control",
+      createdAt: NOW,
+      updatedAt: NOW,
+    }),
+  );
   await repo.flags.addVariant(scope, flagId, {
     id: "var_other_control",
     name: "control",

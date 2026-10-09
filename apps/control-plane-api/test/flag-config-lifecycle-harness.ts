@@ -9,6 +9,7 @@ import {
   NOW_ISO,
   request,
 } from "../src/flag-definition-test-harness";
+import { ISSUER } from "../src/test-constants";
 import { resetOrganizationGraph, seedOrgApp, seedOrgMember } from "../src/test-seeds";
 import { makePoolBindingsWithConfig, type PoolBindingsWithConfig } from "./pool-bindings";
 
@@ -99,7 +100,7 @@ export async function countFlagConfigs(
 export async function lifecycleOrgToken(h: LifecycleHarness): Promise<string> {
   return h.signer.sign({
     sub: LIFECYCLE_OWNER,
-    iss: "https://auth.splitch.test",
+    iss: ISSUER,
     aud: "https://cp.splitch.test",
     iat: Math.floor(Date.parse(NOW_ISO) / 1000),
     exp: Math.floor(Date.parse(NOW_ISO) / 1000) + 3600,
@@ -110,7 +111,7 @@ export async function lifecycleOrgToken(h: LifecycleHarness): Promise<string> {
 export async function lifecycleAppToken(h: LifecycleHarness, appId: string): Promise<string> {
   return h.signer.sign({
     sub: LIFECYCLE_OWNER,
-    iss: "https://auth.splitch.test",
+    iss: ISSUER,
     aud: "https://cp.splitch.test",
     iat: Math.floor(Date.parse(NOW_ISO) / 1000),
     exp: Math.floor(Date.parse(NOW_ISO) / 1000) + 3600,

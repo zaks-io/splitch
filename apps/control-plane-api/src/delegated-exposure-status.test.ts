@@ -1,12 +1,9 @@
 import type { Repository } from "@splitch/db";
-import {
-  type AuthResolver,
-  DELEGATED_IDENTITY_HEADER,
-  type RateLimiter,
-} from "@splitch/worker-runtime";
+import { type AuthResolver, DELEGATED_IDENTITY_HEADER } from "@splitch/worker-runtime";
 import { describe, expect, it } from "vitest";
-import { createApp } from "./app";
 import type { DelegationBindings } from "./delegated-routes";
+import { makeTestApp as createApp } from "./test-app-fixture";
+import { allowLimiter as rateLimiter } from "./test-constants";
 
 const STATUS_PATH = "/apps/app_1/envs/env_1/exposure-status";
 
@@ -58,7 +55,6 @@ function deps(forwarded: Request[], missing?: "org" | "app") {
       authDoor: "device_flow" as const,
     },
   });
-  const rateLimiter: RateLimiter = () => ({ limited: false });
   const delegationBindings: DelegationBindings = {
     "analysis-api": {
       fetch: async (input: RequestInfo | URL, init?: RequestInit) => {

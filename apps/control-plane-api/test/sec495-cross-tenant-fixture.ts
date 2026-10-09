@@ -1,9 +1,6 @@
 import { env } from "cloudflare:workers";
 import { appScope, createRepository, envScope, type Repository } from "@splitch/db";
-import type { RateLimiter } from "@splitch/worker-runtime";
 import type { Hono } from "hono";
-import { createApp } from "../src/app";
-import { makeControlPlaneAuthResolver } from "../src/auth-resolver";
 import { type ConfigStoreDeps, type ConfigStoreWriter, makeConfigStore } from "../src/config-store";
 import {
   type ConfigStoreAccess,
@@ -12,14 +9,12 @@ import {
 } from "../src/config-store-access";
 import { makeDurableSnapshotRevisionAllocator } from "../src/config-store-snapshot-revision";
 import { type FixtureSigner, makeFixtureSigner } from "../src/fixture-signer";
-import { makeJwksVerifier } from "../src/jwks-verify";
 import { appAdminScope } from "../src/scope-binding";
-import { makeSessionStore } from "../src/session-store";
+import { makeTestApp as createApp } from "../src/test-app-fixture";
+import { AUDIENCE, ISSUER } from "../src/test-constants";
 import { resetOrganizationGraph } from "../src/test-seeds";
 import { seedSecurityTenants, type Tenant } from "./sec495-cross-tenant-seed";
 
-const AUDIENCE = "https://cp.splitch.test";
-const ISSUER = "https://auth.splitch.test";
 const NOW = "2026-07-01T20:00:00.000Z";
 const NOW_MS = Date.parse(NOW);
 
@@ -27,8 +22,6 @@ let d1: D1Database;
 let kv: KVNamespace;
 let repo: Repository;
 let signer: FixtureSigner;
-
-const allowLimiter: RateLimiter = () => ({ limited: false });
 
 export async function setupSecurityFixture(): Promise<void> {
   d1 = env.DB;
@@ -95,17 +88,10 @@ export function makeWorld(
       : {}),
   });
   const app = createApp({
-    authResolver: makeControlPlaneAuthResolver({
-      verifier: makeJwksVerifier({
-        issuer: ISSUER,
-        fetchJwks: async () => signer.jwks,
-        controlPlaneAudience: AUDIENCE,
-      }),
-      sessions: makeSessionStore({ get: async () => null } as unknown as KVNamespace),
-      membershipAccess: { authorize: async () => true },
-      now: () => NOW_MS,
-    }),
-    rateLimiter: allowLimiter,
+    signer: signer,
+    sessions: { get: async () => null } as unknown as KVNamespace,
+    membershipAccess: { authorize: async () => true },
+    now: () => NOW_MS,
     repo,
     configStore: access,
   });

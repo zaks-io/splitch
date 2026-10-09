@@ -1,13 +1,13 @@
 import type { ErrorResponse } from "@splitch/contracts";
 import { appScope, createRepository } from "@splitch/db";
-import type { RateLimiter } from "@splitch/worker-runtime";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { createApp } from "../src/app";
 import { makeControlPlaneAuthResolver } from "../src/auth-resolver";
 import { type FixtureSigner, makeFixtureSigner } from "../src/fixture-signer";
 import { makeJwksVerifier } from "../src/jwks-verify";
 import { appAdminScope } from "../src/scope-binding";
 import { makeSessionStore } from "../src/session-store";
+import { makeTestApp as createApp } from "../src/test-app-fixture";
+import { AUDIENCE, allowLimiter, ISSUER } from "../src/test-constants";
 import type { LocalBindings } from "../src/test-fixtures";
 import {
   resetOrganizationGraph,
@@ -25,7 +25,6 @@ import { makePoolBindings as makeLocalBindings } from "./pool-bindings";
  * closed without leaking whether the App exists.
  */
 
-const AUDIENCE = "https://cp.splitch.test";
 const NOW_MS = Date.UTC(2026, 7, 27, 12, 0, 0);
 const nowSeconds = () => Math.floor(NOW_MS / 1000);
 
@@ -47,8 +46,6 @@ const ANALYTICS = {
 const ALICE = "user_membership_revocation_alice";
 const BOB = "user_membership_revocation_bob";
 const ENV = "env_membership_revocation_pay";
-
-const allowLimiter: RateLimiter = () => ({ limited: false });
 
 interface Harness {
   app: ReturnType<typeof createApp>;
@@ -79,7 +76,7 @@ beforeEach(async () => {
   const app = createApp({
     authResolver: makeControlPlaneAuthResolver({
       verifier: makeJwksVerifier({
-        issuer: "https://auth.splitch.test",
+        issuer: ISSUER,
         fetchJwks: async () => signer.jwks,
         controlPlaneAudience: AUDIENCE,
       }),
@@ -104,7 +101,7 @@ function token(
 ): Promise<string> {
   return h.signer.sign({
     sub,
-    iss: "https://auth.splitch.test",
+    iss: ISSUER,
     aud: AUDIENCE,
     iat: nowSeconds(),
     exp: nowSeconds() + 3600,
@@ -206,7 +203,7 @@ describe("bearer token live membership recheck", () => {
     const app = createApp({
       authResolver: makeControlPlaneAuthResolver({
         verifier: makeJwksVerifier({
-          issuer: "https://auth.splitch.test",
+          issuer: ISSUER,
           fetchJwks: async () => h.signer.jwks,
           controlPlaneAudience: AUDIENCE,
         }),
@@ -233,7 +230,7 @@ describe("bearer token live membership recheck", () => {
     const app = createApp({
       authResolver: makeControlPlaneAuthResolver({
         verifier: makeJwksVerifier({
-          issuer: "https://auth.splitch.test",
+          issuer: ISSUER,
           fetchJwks: async () => h.signer.jwks,
           controlPlaneAudience: AUDIENCE,
         }),

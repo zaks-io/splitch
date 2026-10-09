@@ -2,6 +2,7 @@ import { Miniflare } from "miniflare";
 import { afterEach, describe, expect, it } from "vitest";
 import { appScope, createRepository } from "./index";
 import { applySchema, migrationFileStatements, migrationStatementsThrough } from "./repo/test-d1";
+import { flagRow } from "./testing";
 
 let mf: Miniflare | undefined;
 
@@ -76,21 +77,25 @@ describe("listExpiredFlagPage", () => {
     const d1 = await d1Through(LIFECYCLE_MIGRATION);
     const repo = createRepository(d1);
     const scope = appScope("app_lifecycle");
-    const flag = (id: string, expiresAt: string | null) => ({
-      id,
-      appId: "app_lifecycle",
-      key: id.replaceAll("_", "-"),
-      name: id,
-      lifecycleClass: "release" as const,
-      owner: "checkout-team",
-      expiresAt,
-      createdAt: NOW,
-      updatedAt: NOW,
-    });
+    const flag = (id: string, expiresAt: string | null) =>
+      flagRow({
+        id,
+        appId: "app_lifecycle",
+        key: id.replaceAll("_", "-"),
+        name: id,
+        lifecycleClass: "release" as const,
+        owner: "checkout-team",
+        expiresAt,
+        createdAt: NOW,
+        updatedAt: NOW,
+      });
     await repo.flags.flags.insert(scope, flag("flag_recent", "2026-03-01T00:00:00.000Z"));
     await repo.flags.flags.insert(scope, flag("flag_overdue", "2026-02-01T00:00:00.000Z"));
     await repo.flags.flags.insert(scope, flag("flag_future", "2026-09-01T00:00:00.000Z"));
-    await repo.flags.flags.insert(scope, { ...flag("flag_ops", null), lifecycleClass: "ops" });
+    await repo.flags.flags.insert(
+      scope,
+      flagRow({ ...flag("flag_ops", null), lifecycleClass: "ops" }),
+    );
 
     const expired = await repo.flags.listExpiredFlagPage(scope, "2026-06-01T00:00:00.000Z", 10);
 
@@ -106,15 +111,18 @@ describe("updateFlag lifecycle compare-and-set", () => {
     const d1 = await d1Through(LIFECYCLE_MIGRATION);
     const repo = createRepository(d1);
     const scope = appScope("app_lifecycle");
-    await repo.flags.flags.insert(scope, {
-      id: "flag_cas",
-      appId: "app_lifecycle",
-      key: "flag-cas",
-      name: "CAS",
-      lifecycleClass: "ops",
-      createdAt: NOW,
-      updatedAt: NOW,
-    });
+    await repo.flags.flags.insert(
+      scope,
+      flagRow({
+        id: "flag_cas",
+        appId: "app_lifecycle",
+        key: "flag-cas",
+        name: "CAS",
+        lifecycleClass: "ops",
+        createdAt: NOW,
+        updatedAt: NOW,
+      }),
+    );
     const stale = { lifecycleClass: "ops" as const, owner: null, expiresAt: null };
     await repo.flags.updateFlag(scope, "flag_cas", {
       lifecycleClass: "release",

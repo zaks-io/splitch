@@ -1,4 +1,5 @@
 import { appScope, createRepository, envScope, type Repository } from "@splitch/db";
+import { flagRow } from "@splitch/db/testing";
 
 export const NOW = "2026-07-01T20:00:00.000Z";
 export const NOW_MS = Date.parse(NOW);
@@ -77,16 +78,19 @@ export async function seedConfigGraph(d1: D1Database): Promise<void> {
     createdAt: NOW,
     updatedAt: NOW,
   });
-  await repo.flags.flags.insert(aScope, {
-    lifecycleClass: "ops",
-    id: ids.flagId,
-    appId: ids.appId,
-    key: ids.flagKey,
-    name: "Checkout redesign",
-    defaultVariantId: ids.controlVariantId,
-    createdAt: NOW,
-    updatedAt: NOW,
-  });
+  await repo.flags.flags.insert(
+    aScope,
+    flagRow({
+      lifecycleClass: "ops",
+      id: ids.flagId,
+      appId: ids.appId,
+      key: ids.flagKey,
+      name: "Checkout redesign",
+      defaultVariantId: ids.controlVariantId,
+      createdAt: NOW,
+      updatedAt: NOW,
+    }),
+  );
   await repo.flags.addVariant(aScope, ids.flagId, {
     id: ids.controlVariantId,
     name: "control",

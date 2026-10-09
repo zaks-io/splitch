@@ -1,7 +1,9 @@
 import { appScope, createRepository, envScope } from "@splitch/db";
+import { flagRow } from "@splitch/db/testing";
 import { expect } from "vitest";
 import type { Harness } from "../src/config-store-harness-core";
 import { appAdminScope } from "../src/scope-binding";
+import { ISSUER } from "../src/test-constants";
 import { seedAppMember } from "../src/test-seeds";
 import { confirmPolicy } from "./approval-harness";
 
@@ -57,16 +59,19 @@ export async function seedOrganizationB(h: Harness): Promise<void> {
     createdAt: NOW_B,
     updatedAt: NOW_B,
   });
-  await repo.flags.flags.insert(appScope(B.appId), {
-    lifecycleClass: "ops",
-    id: B.flagId,
-    appId: B.appId,
-    key: B.flagKey,
-    name: "Beta pricing 9271",
-    defaultVariantId: B.alphaVariantId,
-    createdAt: NOW_B,
-    updatedAt: NOW_B,
-  });
+  await repo.flags.flags.insert(
+    appScope(B.appId),
+    flagRow({
+      lifecycleClass: "ops",
+      id: B.flagId,
+      appId: B.appId,
+      key: B.flagKey,
+      name: "Beta pricing 9271",
+      defaultVariantId: B.alphaVariantId,
+      createdAt: NOW_B,
+      updatedAt: NOW_B,
+    }),
+  );
   await repo.flags.addVariant(appScope(B.appId), B.flagId, {
     id: B.alphaVariantId,
     name: "beta-alpha",
@@ -120,7 +125,7 @@ export async function proposeB(h: Harness, idempotencyKey = "idem_beta_9271"): P
 export async function jwtFor(h: Harness, sub: string, scopes: string[]): Promise<string> {
   return h.signer.sign({
     sub,
-    iss: "https://auth.splitch.test",
+    iss: ISSUER,
     aud: "https://cp.splitch.test",
     iat: 1_780_000_000,
     exp: 1_999_999_999,

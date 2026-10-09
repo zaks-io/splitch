@@ -1,10 +1,7 @@
 import { type DeltaNudge, type EnvironmentPolicy, flagConfigKey } from "@splitch/contracts";
 import { appScope, createRepository, envScope, type Repository } from "@splitch/db";
-import type { RateLimiter } from "@splitch/worker-runtime";
 import type { Hono } from "hono";
-import { createApp } from "./app";
 import type { ApprovalArchiveStore } from "./approval-archive";
-import { makeControlPlaneAuthResolver } from "./auth-resolver";
 import { type ConfigStoreWriter, makeConfigStore } from "./config-store";
 import {
   ids,
@@ -14,11 +11,10 @@ import {
   startSeededExperiment,
 } from "./config-store-fixture-data";
 import { type FixtureSigner, makeFixtureSigner } from "./fixture-signer";
-import { makeJwksVerifier } from "./jwks-verify";
 import { appAdminScope } from "./scope-binding";
-import { makeSessionStore } from "./session-store";
+import { makeTestApp as createApp } from "./test-app-fixture";
+import { AUDIENCE, ISSUER } from "./test-constants";
 
-const AUDIENCE = "https://cp.splitch.test";
 const TEST_IDEMPOTENCY_KEY = "idem_config_store_test";
 export const USER_ID = "user_config_admin";
 
@@ -36,8 +32,6 @@ export interface Harness {
   warnings: unknown[][];
   events: string[];
 }
-
-const allowLimiter: RateLimiter = () => ({ limited: false });
 
 /**
  * Wire an already-seeded set of bindings into the Harness the tests drive.
@@ -97,26 +91,16 @@ export function makeAuthedApp(
   approvalArchiveStore?: ApprovalArchiveStore,
   scopedWriterFor?: (appId: string, environmentId: string) => ConfigStoreWriter,
 ): Hono {
-  const verifier = makeJwksVerifier({
-    issuer: "https://auth.splitch.test",
-    fetchJwks: async () => h.signer.jwks,
-    controlPlaneAudience: AUDIENCE,
-  });
   return createApp({
-    authResolver: makeControlPlaneAuthResolver({
-      verifier,
-      sessions: makeSessionStore(
-        h.sessions ?? ({ get: async () => null } as unknown as KVNamespace),
-      ),
-      membershipAccess: {
-        authorize: async () => true,
-        resolve: async () => {
-          throw new Error("config-store harness has no wide membership fixture");
-        },
+    signer: h.signer,
+    sessions: h.sessions ?? ({ get: async () => null } as unknown as KVNamespace),
+    membershipAccess: {
+      authorize: async () => true,
+      resolve: async () => {
+        throw new Error("config-store harness has no wide membership fixture");
       },
-      now: () => NOW_MS,
-    }),
-    rateLimiter: allowLimiter,
+    },
+    now: () => NOW_MS,
     repo: h.repo,
     ...(store
       ? {
@@ -221,7 +205,7 @@ function approvalMutationBody(
 export function token(signer: FixtureSigner, scopes = [appAdminScope(ids.appId)]): Promise<string> {
   return signer.sign({
     sub: USER_ID,
-    iss: "https://auth.splitch.test",
+    iss: ISSUER,
     aud: AUDIENCE,
     iat: Math.floor(NOW_MS / 1000),
     exp: Math.floor(NOW_MS / 1000) + 3600,

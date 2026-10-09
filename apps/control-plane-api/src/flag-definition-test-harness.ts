@@ -1,22 +1,17 @@
 import type { ErrorResponse } from "@splitch/contracts";
 import { createRepository, type Repository } from "@splitch/db";
-import type { RateLimiter } from "@splitch/worker-runtime";
 import type { Hono } from "hono";
 import { expect } from "vitest";
-import { createApp } from "./app";
 import { ALLOW_POLICY } from "./app-environment-model";
-import { makeControlPlaneAuthResolver } from "./auth-resolver";
 import type { ConfigStoreAccess } from "./config-store-access";
 import type { EnvironmentExposureStatusCleanup } from "./environment-exposure-status-cleanup";
 import { type FixtureSigner, makeFixtureSigner } from "./fixture-signer";
-import { makeJwksVerifier } from "./jwks-verify";
 import type { RunSnapshotDelivery } from "./run-snapshot";
-import { makeSessionStore } from "./session-store";
+import { makeTestApp as createApp } from "./test-app-fixture";
+import { AUDIENCE, ISSUER, NOW_MS } from "./test-constants";
 import type { LocalBindings } from "./test-fixtures";
 import { resetOrganizationGraph, seedOrgApp, seedOrgMember } from "./test-seeds";
 
-const AUDIENCE = "https://cp.splitch.test";
-const NOW_MS = Date.UTC(2026, 6, 2, 12, 0, 0);
 export const NOW_ISO = new Date(NOW_MS).toISOString();
 const ORG = {
   orgId: "org_flag_definition_crud",
@@ -27,7 +22,6 @@ const ORG = {
 };
 
 export const OWNER = "user_flag_definition_owner";
-const allowLimiter: RateLimiter = () => ({ limited: false });
 const nowSeconds = () => Math.floor(NOW_MS / 1000);
 const noOpExposureStatusCleanup: EnvironmentExposureStatusCleanup = {
   delete: async () => undefined,
@@ -87,24 +81,16 @@ export function makeAppForRepo(
   runSnapshotDelivery?: RunSnapshotDelivery,
   eventDefinitionStore?: KVNamespace,
 ): Hono {
-  const verifier = makeJwksVerifier({
-    issuer: "https://auth.splitch.test",
-    fetchJwks: async () => h.signer.jwks,
-    controlPlaneAudience: AUDIENCE,
-  });
   return createApp({
-    authResolver: makeControlPlaneAuthResolver({
-      verifier,
-      sessions: makeSessionStore(h.bindings.kv),
-      membershipAccess: {
-        authorize: async () => true,
-        resolve: async () => {
-          throw new Error("Flag definition harness has no wide membership fixture");
-        },
+    signer: h.signer,
+    sessions: h.bindings.kv,
+    membershipAccess: {
+      authorize: async () => true,
+      resolve: async () => {
+        throw new Error("Flag definition harness has no wide membership fixture");
       },
-      now: () => NOW_MS,
-    }),
-    rateLimiter: allowLimiter,
+    },
+    now: () => NOW_MS,
     repo,
     configStore,
     runSnapshotDelivery,
@@ -123,7 +109,7 @@ export function orgToken(h: FlagDefinitionHarness): Promise<string> {
 export function orgTokenFor(h: FlagDefinitionHarness, orgId: string): Promise<string> {
   return h.signer.sign({
     sub: OWNER,
-    iss: "https://auth.splitch.test",
+    iss: ISSUER,
     aud: AUDIENCE,
     iat: nowSeconds(),
     exp: nowSeconds() + 3600,
@@ -134,7 +120,7 @@ export function orgTokenFor(h: FlagDefinitionHarness, orgId: string): Promise<st
 export function appToken(h: FlagDefinitionHarness, appId: string): Promise<string> {
   return h.signer.sign({
     sub: OWNER,
-    iss: "https://auth.splitch.test",
+    iss: ISSUER,
     aud: AUDIENCE,
     iat: nowSeconds(),
     exp: nowSeconds() + 3600,

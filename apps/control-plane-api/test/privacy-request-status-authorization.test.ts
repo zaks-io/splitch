@@ -1,19 +1,18 @@
 import { type ErrorResponse } from "@splitch/contracts";
 import { createRepository } from "@splitch/db";
-import type { RateLimiter } from "@splitch/worker-runtime";
 import type { Hono } from "hono";
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { createApp } from "../src/app";
 import { makeControlPlaneAuthResolver } from "../src/auth-resolver";
 import { type FixtureSigner, makeFixtureSigner } from "../src/fixture-signer";
 import { makeJwksVerifier } from "../src/jwks-verify";
 import { appAdminScope } from "../src/scope-binding";
 import { makeSessionStore } from "../src/session-store";
+import { makeTestApp as createApp } from "../src/test-app-fixture";
+import { AUDIENCE, allowLimiter, ISSUER } from "../src/test-constants";
 import type { LocalBindings } from "../src/test-fixtures";
 import { seedAppMember, seedOrgApp, seedOrgMember } from "../src/test-seeds";
 import { makePoolBindings as makeLocalBindings } from "./pool-bindings";
 
-const AUDIENCE = "https://cp.splitch.test";
 const NOW_MS = Date.UTC(2026, 6, 18, 12, 0, 0);
 const APP = {
   orgId: "org_privacy_status_authorization",
@@ -28,7 +27,6 @@ const REQUESTER = "user_privacy_status_requester";
 const OUTSIDER = "user_privacy_status_outsider";
 const APP_REQUEST_ID = "privacy_status_app_request";
 const USER_REQUEST_ID = "privacy_status_user_request";
-const allowLimiter: RateLimiter = () => ({ limited: false });
 
 interface Harness {
   app: Hono;
@@ -76,7 +74,7 @@ beforeEach(async () => {
       apiVersion: () => "local",
       authResolver: makeControlPlaneAuthResolver({
         verifier: makeJwksVerifier({
-          issuer: "https://auth.splitch.test",
+          issuer: ISSUER,
           fetchJwks: async () => signer.jwks,
           controlPlaneAudience: AUDIENCE,
         }),
@@ -149,7 +147,7 @@ function token(scopes: string[], userId: string): Promise<string> {
   const now = Math.floor(NOW_MS / 1000);
   return h.signer.sign({
     sub: userId,
-    iss: "https://auth.splitch.test",
+    iss: ISSUER,
     aud: AUDIENCE,
     iat: now,
     exp: now + 3600,

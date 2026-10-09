@@ -1,4 +1,5 @@
 import { appScope, createRepository, type Repository } from "@splitch/db";
+import { flagRow } from "@splitch/db/testing";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   appToken,
@@ -42,17 +43,20 @@ async function seedFlags(appId: string, count: number): Promise<void> {
   for (let index = 0; index < count; index += 1) {
     const suffix = String(index).padStart(4, "0");
     const variantId = `var_bulk_${suffix}`;
-    await repo.flags.flags.insert(scope, {
-      lifecycleClass: "ops",
-      id: `flag_bulk_${suffix}`,
-      appId,
-      key: `bulk-flag-${suffix}`,
-      name: `Bulk flag ${index}`,
-      schema: JSON.stringify({ type: "boolean" }),
-      defaultVariantId: variantId,
-      createdAt: NOW_ISO,
-      updatedAt: NOW_ISO,
-    });
+    await repo.flags.flags.insert(
+      scope,
+      flagRow({
+        lifecycleClass: "ops",
+        id: `flag_bulk_${suffix}`,
+        appId,
+        key: `bulk-flag-${suffix}`,
+        name: `Bulk flag ${index}`,
+        schema: JSON.stringify({ type: "boolean" }),
+        defaultVariantId: variantId,
+        createdAt: NOW_ISO,
+        updatedAt: NOW_ISO,
+      }),
+    );
     await repo.flags.addVariant(scope, `flag_bulk_${suffix}`, {
       id: variantId,
       name: "control",

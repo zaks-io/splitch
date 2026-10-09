@@ -1,18 +1,16 @@
 import type { ErrorResponse } from "@splitch/contracts";
 import { createRepository } from "@splitch/db";
-import type { RateLimiter } from "@splitch/worker-runtime";
 import type { Hono } from "hono";
 import { hc } from "hono/client";
-import { createApp } from "../src/app";
-import { makeControlPlaneAuthResolver } from "../src/auth-resolver";
 import { type FixtureSigner, makeFixtureSigner } from "../src/fixture-signer";
-import { makeJwksVerifier } from "../src/jwks-verify";
-import { makeSessionStore } from "../src/session-store";
+import { makeTestApp as createApp } from "../src/test-app-fixture";
+import { AUDIENCE, ISSUER } from "../src/test-constants";
 import type { LocalBindings } from "../src/test-fixtures";
 import { seedOrgApp, seedOrgMember } from "../src/test-seeds";
 import { makePoolBindings } from "./pool-bindings";
 
-export const AUDIENCE = "https://cp.splitch.test";
+export { AUDIENCE };
+
 const NOW_MS = Date.UTC(2026, 6, 1, 12, 0, 0);
 export const NOW_ISO = new Date(NOW_MS).toISOString();
 export const PRIMARY = {
@@ -80,7 +78,6 @@ interface MemberResourceClient {
   $delete(args: { param: { orgId: string; userId: string } }): Promise<Response>;
 }
 
-const allowLimiter: RateLimiter = () => ({ limited: false });
 const nowSeconds = () => Math.floor(NOW_MS / 1000);
 
 let h: Harness;
@@ -120,24 +117,17 @@ export async function setup(): Promise<void> {
   await seedOrgMember(bindings.d1, { orgId: SOLO.orgId, userId: SOLO_ADMIN, role: "admin" });
 
   const signer = await makeFixtureSigner();
-  const verifier = makeJwksVerifier({
-    issuer: "https://auth.splitch.test",
-    fetchJwks: async () => signer.jwks,
-    controlPlaneAudience: AUDIENCE,
-  });
+
   const app = createApp({
-    authResolver: makeControlPlaneAuthResolver({
-      verifier,
-      sessions: makeSessionStore(bindings.kv),
-      membershipAccess: {
-        authorize: async () => true,
-        resolve: async () => {
-          throw new Error("Organization members harness has no wide membership fixture");
-        },
+    signer: signer,
+    sessions: bindings.kv,
+    membershipAccess: {
+      authorize: async () => true,
+      resolve: async () => {
+        throw new Error("Organization members harness has no wide membership fixture");
       },
-      now: () => NOW_MS,
-    }),
-    rateLimiter: allowLimiter,
+    },
+    now: () => NOW_MS,
     repo: createRepository(bindings.d1),
     memberProfileResolver: ({ userId, request }) => {
       if (request.headers.get("x-test-profile-failure-user") === userId) {
@@ -167,7 +157,7 @@ export function token(
 ): Promise<string> {
   return h.signer.sign({
     sub: userId,
-    iss: "https://auth.splitch.test",
+    iss: ISSUER,
     aud: AUDIENCE,
     iat: nowSeconds(),
     exp: nowSeconds() + 3600,

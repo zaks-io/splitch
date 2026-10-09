@@ -1,4 +1,5 @@
 import { appScope, createRepository } from "@splitch/db";
+import { flagRow } from "@splitch/db/testing";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   appToken,
@@ -36,17 +37,20 @@ async function seedFlags(appId: string, count: number): Promise<void> {
   for (let index = 0; index < count; index += 1) {
     const suffix = String(index).padStart(4, "0");
     const variantId = `var_bulk_${suffix}`;
-    await repo.flags.flags.insert(scope, {
-      lifecycleClass: "ops",
-      id: `flag_bulk_${suffix}`,
-      appId,
-      key: `bulk-flag-${suffix}`,
-      name: `Bulk flag ${index}`,
-      schema: JSON.stringify({ type: "boolean" }),
-      defaultVariantId: variantId,
-      createdAt: NOW_ISO,
-      updatedAt: NOW_ISO,
-    });
+    await repo.flags.flags.insert(
+      scope,
+      flagRow({
+        lifecycleClass: "ops",
+        id: `flag_bulk_${suffix}`,
+        appId,
+        key: `bulk-flag-${suffix}`,
+        name: `Bulk flag ${index}`,
+        schema: JSON.stringify({ type: "boolean" }),
+        defaultVariantId: variantId,
+        createdAt: NOW_ISO,
+        updatedAt: NOW_ISO,
+      }),
+    );
     await repo.flags.addVariant(scope, `flag_bulk_${suffix}`, {
       id: variantId,
       name: "control",
@@ -69,34 +73,40 @@ async function createSecondApp(): Promise<{ id: string }> {
 async function seedIdKeyCollision(appId: string): Promise<void> {
   const scope = appScope(appId);
   const repo = createRepository(h.bindings.d1);
-  await repo.flags.flags.insert(scope, {
-    lifecycleClass: "ops",
-    id: COLLIDING_ID,
-    appId,
-    key: "shadow-key",
-    name: "Shadow (id collides)",
-    schema: JSON.stringify({ type: "boolean" }),
-    defaultVariantId: "var_shadow",
-    createdAt: NOW_ISO,
-    updatedAt: NOW_ISO,
-  });
+  await repo.flags.flags.insert(
+    scope,
+    flagRow({
+      lifecycleClass: "ops",
+      id: COLLIDING_ID,
+      appId,
+      key: "shadow-key",
+      name: "Shadow (id collides)",
+      schema: JSON.stringify({ type: "boolean" }),
+      defaultVariantId: "var_shadow",
+      createdAt: NOW_ISO,
+      updatedAt: NOW_ISO,
+    }),
+  );
   await repo.flags.addVariant(scope, COLLIDING_ID, {
     id: "var_shadow",
     name: "control",
     value: JSON.stringify(false),
     createdAt: NOW_ISO,
   });
-  await repo.flags.flags.insert(scope, {
-    lifecycleClass: "ops",
-    id: "flag_keyed_elsewhere_0001",
-    appId,
-    key: COLLIDING_ID,
-    name: "Keyed as the other's id",
-    schema: JSON.stringify({ type: "boolean" }),
-    defaultVariantId: "var_keyed",
-    createdAt: NOW_ISO,
-    updatedAt: NOW_ISO,
-  });
+  await repo.flags.flags.insert(
+    scope,
+    flagRow({
+      lifecycleClass: "ops",
+      id: "flag_keyed_elsewhere_0001",
+      appId,
+      key: COLLIDING_ID,
+      name: "Keyed as the other's id",
+      schema: JSON.stringify({ type: "boolean" }),
+      defaultVariantId: "var_keyed",
+      createdAt: NOW_ISO,
+      updatedAt: NOW_ISO,
+    }),
+  );
   await repo.flags.addVariant(scope, "flag_keyed_elsewhere_0001", {
     id: "var_keyed",
     name: "control",

@@ -5,22 +5,20 @@ import {
   kvEnvelope,
 } from "@splitch/contracts";
 import { createRepository, envScope, type Repository } from "@splitch/db";
-import type { RateLimiter } from "@splitch/worker-runtime";
 import type { Hono } from "hono";
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { createApp } from "../src/app";
 import { makeControlPlaneAuthResolver } from "../src/auth-resolver";
 import { readOrProvisionClientKey } from "../src/client-key-provisioning";
 import { sha256Hex } from "../src/credential-cache";
 import { type FixtureSigner, makeFixtureSigner } from "../src/fixture-signer";
 import { makeJwksVerifier } from "../src/jwks-verify";
 import { makeSessionStore } from "../src/session-store";
+import { makeTestApp as createApp } from "../src/test-app-fixture";
+import { AUDIENCE, allowLimiter, ISSUER, NOW_MS } from "../src/test-constants";
 import type { LocalBindings } from "../src/test-fixtures";
 import { seedAppMember, seedEnvironment, seedOrgApp } from "../src/test-seeds";
 import { makePoolBindings as makeLocalBindings } from "./pool-bindings";
 
-const AUDIENCE = "https://cp.splitch.test";
-const NOW_MS = Date.UTC(2026, 6, 2, 12, 0, 0);
 const APP = {
   orgId: "org_client_key_race",
   orgName: "Client Key Race Co",
@@ -31,8 +29,6 @@ const APP = {
 const ENV = { environmentId: "env_client_key_race_prod", key: "prod" };
 const SETTINGS_ENV = { environmentId: "env_client_key_settings_read", key: "settings-read" };
 const ADMIN = "user_client_key_race_admin";
-
-const allowLimiter: RateLimiter = () => ({ limited: false });
 
 interface Harness {
   app: Hono;
@@ -69,7 +65,7 @@ function makeApp(
   credentialStore: KVNamespace = bindings.credentialKv,
 ) {
   const verifier = makeJwksVerifier({
-    issuer: "https://auth.splitch.test",
+    issuer: ISSUER,
     fetchJwks: async () => signer.jwks,
     controlPlaneAudience: AUDIENCE,
   });
@@ -95,7 +91,7 @@ function makeApp(
 function token(): Promise<string> {
   return h.signer.sign({
     sub: ADMIN,
-    iss: "https://auth.splitch.test",
+    iss: ISSUER,
     aud: AUDIENCE,
     iat: Math.floor(NOW_MS / 1000),
     exp: Math.floor(NOW_MS / 1000) + 3600,

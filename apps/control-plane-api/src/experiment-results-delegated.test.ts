@@ -1,5 +1,4 @@
 import { describe, expect, it, vi } from "vitest";
-import { createApp } from "./app";
 import {
   binding,
   deps,
@@ -11,6 +10,7 @@ import {
   stubRun,
 } from "./delegated-routes-test-fixtures";
 import { analysisEnvelope, statsOutput } from "./panel-experiments-test-fixtures";
+import { makeTestApp as createApp } from "./test-app-fixture";
 
 describe("experiment results Experiment vs Run resolution (SPL-305)", () => {
   it("returns typed no_run for a draft Experiment without calling Analysis", async () => {

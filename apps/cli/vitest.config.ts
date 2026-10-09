@@ -17,6 +17,12 @@ export default defineConfig({
         new URL("../../packages/sdk/src/local-evaluation/index.ts", import.meta.url),
       ),
       "@splitch/sdk": fileURLToPath(new URL("../../packages/sdk/src/index.ts", import.meta.url)),
+      "@splitch/db/test-migrations": fileURLToPath(
+        new URL("../../packages/db/src/test-migrations.ts", import.meta.url),
+      ),
+      "@splitch/db/testing": fileURLToPath(
+        new URL("../../packages/db/src/testing.ts", import.meta.url),
+      ),
       "@splitch/db": fileURLToPath(new URL("../../packages/db/src/index.ts", import.meta.url)),
       "@splitch/worker-runtime": fileURLToPath(
         new URL("../../packages/worker-runtime/src/index.ts", import.meta.url),

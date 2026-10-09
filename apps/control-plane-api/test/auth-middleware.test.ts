@@ -1,15 +1,18 @@
 import type { ErrorResponse } from "@splitch/contracts";
 import { createRepository } from "@splitch/db";
-import type { RateLimiter } from "@splitch/worker-runtime";
 import { Hono } from "hono";
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { controlPlaneRegistrar, createApp } from "../src/app";
 import { makeControlPlaneAuthResolver } from "../src/auth-resolver";
 import { type FixtureSigner, makeFixtureSigner } from "../src/fixture-signer";
 import { makeJwksVerifier } from "../src/jwks-verify";
 import { controlPlaneRoute, withRequiredScopes } from "../src/routes";
 import { appAdminScope } from "../src/scope-binding";
 import { makeSessionStore, revocationKey } from "../src/session-store";
+import {
+  makeTestRegistrar as controlPlaneRegistrar,
+  makeTestApp as createApp,
+} from "../src/test-app-fixture";
+import { AUDIENCE, allowLimiter, ISSUER } from "../src/test-constants";
 import type { LocalBindings } from "../src/test-fixtures";
 import { seedAppMember, seedOrgApp, seedOrgMember } from "../src/test-seeds";
 import { makeTokenMembershipAccess } from "../src/token-membership";
@@ -26,8 +29,6 @@ import { makePoolBindings as makeLocalBindings } from "./pool-bindings";
  * roles): a "payments" App where Alice is admin, an "analytics" App where Bob is
  * a member, and an org-level token (Carol) bound to no App.
  */
-
-const AUDIENCE = "https://cp.splitch.test";
 
 const PAYMENTS = {
   orgId: "org_paymentsvc_7f3a",
@@ -63,8 +64,6 @@ interface Harness {
   bindings: LocalBindings;
 }
 
-const allowLimiter: RateLimiter = () => ({ limited: false });
-
 let h: Harness;
 
 // The Workers pool isolates storage per FILE, not per test (isolatedStorage was
@@ -86,7 +85,7 @@ beforeEach(async () => {
   const bindings = await makeLocalBindings();
   const signer = await makeFixtureSigner();
   const verifier = makeJwksVerifier({
-    issuer: "https://auth.splitch.test",
+    issuer: ISSUER,
     fetchJwks: async () => signer.jwks,
     controlPlaneAudience: AUDIENCE,
   });
@@ -135,7 +134,7 @@ function token(
 ): Promise<string> {
   return signer.sign({
     sub,
-    iss: "https://auth.splitch.test",
+    iss: ISSUER,
     aud: AUDIENCE,
     iat: nowSeconds(),
     exp: nowSeconds() + 3600,
@@ -349,7 +348,7 @@ describe("control-plane auth middleware: fail-loud KV fault", () => {
       },
     } as unknown as KVNamespace;
     const verifier = makeJwksVerifier({
-      issuer: "https://auth.splitch.test",
+      issuer: ISSUER,
       fetchJwks: async () => h.signer.jwks,
       controlPlaneAudience: AUDIENCE,
     });

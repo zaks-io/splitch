@@ -7,8 +7,9 @@ import {
 import { createRepository } from "@splitch/db";
 import type { Principal } from "@splitch/worker-runtime";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { createApp } from "../src/app";
 import { sha256Hex } from "../src/credential-cache";
+import { makeTestApp as createApp } from "../src/test-app-fixture";
+import { allowLimiter } from "../src/test-constants";
 import type { LocalBindings } from "../src/test-fixtures";
 import { resetOrganizationGraph } from "../src/test-seeds";
 import { makePoolBindings } from "./pool-bindings";
@@ -35,7 +36,7 @@ beforeEach(async () => {
   // verification maps PAT and unknown claims to anonymous before this point.
   app = createApp({
     authResolver: () => ({ ok: true, principal }),
-    rateLimiter: () => ({ limited: false }),
+    rateLimiter: allowLimiter,
     repo: createRepository(bindings.d1),
     personalAccessTokenStore: bindings.kv,
   });

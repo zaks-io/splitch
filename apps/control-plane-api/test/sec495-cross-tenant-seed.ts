@@ -1,4 +1,5 @@
 import { appScope, envScope, type Repository } from "@splitch/db";
+import { flagRow } from "@splitch/db/testing";
 import { seedAppMember } from "../src/test-seeds";
 
 const NOW = "2026-07-01T20:00:00.000Z";
@@ -85,16 +86,19 @@ async function seedTenant(
     createdAt: NOW,
     updatedAt: NOW,
   });
-  await repo.flags.flags.insert(app, {
-    lifecycleClass: "ops",
-    id: tenant.flagId,
-    appId: tenant.appId,
-    key: tenant.flagKey,
-    name: tenant.flagKey,
-    defaultVariantId: tenant.controlVariantId,
-    createdAt: NOW,
-    updatedAt: NOW,
-  });
+  await repo.flags.flags.insert(
+    app,
+    flagRow({
+      lifecycleClass: "ops",
+      id: tenant.flagId,
+      appId: tenant.appId,
+      key: tenant.flagKey,
+      name: tenant.flagKey,
+      defaultVariantId: tenant.controlVariantId,
+      createdAt: NOW,
+      updatedAt: NOW,
+    }),
+  );
   await addVariant(repo, tenant, tenant.controlVariantId, tenant.controlVariantName, "off");
   await addVariant(repo, tenant, tenant.treatmentVariantId, tenant.treatmentVariantName, "on");
   await repo.flags.flagConfigs.insert(environment, {

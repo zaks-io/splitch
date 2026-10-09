@@ -46,6 +46,14 @@ export default defineConfig({
         replacement: new URL("../../packages/db/src/repo/test-d1.ts", import.meta.url).pathname,
       },
       {
+        find: "@splitch/db/test-migrations",
+        replacement: new URL("../../packages/db/src/test-migrations.ts", import.meta.url).pathname,
+      },
+      {
+        find: "@splitch/db/testing",
+        replacement: new URL("../../packages/db/src/testing.ts", import.meta.url).pathname,
+      },
+      {
         find: "@splitch/db",
         replacement: new URL("../../packages/db/src/index.ts", import.meta.url).pathname,
       },

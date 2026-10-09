@@ -2,8 +2,9 @@ import { env } from "cloudflare:workers";
 import { createRepository } from "@splitch/db";
 import type { Principal } from "@splitch/worker-runtime";
 import { beforeEach, describe, expect, it } from "vitest";
-import { createApp } from "./app";
 import type { ConfigStoreAccess } from "./config-store-access";
+import { makeTestApp as createApp } from "./test-app-fixture";
+import { allowLimiter } from "./test-constants";
 import {
   resetOrganizationGraph,
   seedAppMember,
@@ -218,7 +219,7 @@ function testApp(
 ) {
   return createApp({
     authResolver: async () => ({ ok: true, principal: actor }),
-    rateLimiter: () => ({ limited: false }),
+    rateLimiter: allowLimiter,
     repo,
     configStore: store,
   });

@@ -1,12 +1,12 @@
 import type { ErrorResponse } from "@splitch/contracts";
 import { createRepository } from "@splitch/db";
-import type { RateLimiter } from "@splitch/worker-runtime";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { createApp } from "../src/app";
 import { makeControlPlaneAuthResolver } from "../src/auth-resolver";
 import { type FixtureSigner, makeFixtureSigner } from "../src/fixture-signer";
 import { makeJwksVerifier } from "../src/jwks-verify";
 import { makeSessionStore } from "../src/session-store";
+import { makeTestApp as createApp } from "../src/test-app-fixture";
+import { AUDIENCE, allowLimiter, ISSUER } from "../src/test-constants";
 import type { LocalBindings } from "../src/test-fixtures";
 import {
   resetOrganizationGraph,
@@ -18,8 +18,6 @@ import {
 import { makeTokenMembershipAccess } from "../src/token-membership";
 import { makePoolBindings } from "./pool-bindings";
 
-const AUDIENCE = "https://cp.splitch.test";
-const ISSUER = "https://auth.splitch.test";
 const NOW_MS = Date.UTC(2026, 7, 28, 12, 0, 0);
 const USER = "user_wide_read";
 const OWN = {
@@ -37,7 +35,6 @@ const FOREIGN = {
   appKey: "foreign-app",
 };
 const ENVIRONMENT = "env_wide_own";
-const allowLimiter: RateLimiter = () => ({ limited: false });
 
 let bindings: LocalBindings;
 let signer: FixtureSigner;

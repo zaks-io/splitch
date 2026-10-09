@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { appScope, createRepository, envScope } from "../index";
+import { flagRow } from "../testing";
 import { createLocalD1, type LocalD1 } from "./test-d1-pool";
 import { type SeededTenants, seedTwoTenants } from "./test-seed";
 
@@ -55,15 +56,18 @@ describe("INSERT cannot be forged into another tenant", () => {
   it("a forged appId in the insert input is overridden by the issuing scope", async () => {
     const aScope = appScope(seed.a.appId);
 
-    const returned = await repo.flags.flags.insert(aScope, {
-      lifecycleClass: "ops",
-      id: "flag_forge_attempt",
-      appId: seed.b.appId, // FORGED: caller claims App B from App A's scope
-      key: "flag-key-forge",
-      name: "forged",
-      createdAt: "2026-06-28T00:00:00.000Z",
-      updatedAt: "2026-06-28T00:00:00.000Z",
-    });
+    const returned = await repo.flags.flags.insert(
+      aScope,
+      flagRow({
+        lifecycleClass: "ops",
+        id: "flag_forge_attempt",
+        appId: seed.b.appId, // FORGED: caller claims App B from App A's scope
+        key: "flag-key-forge",
+        name: "forged",
+        createdAt: "2026-06-28T00:00:00.000Z",
+        updatedAt: "2026-06-28T00:00:00.000Z",
+      }),
+    );
 
     // The returned object must carry App A (the issuing scope), not the forgery.
     expect(returned.appId).toBe(seed.a.appId);

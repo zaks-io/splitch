@@ -16,6 +16,14 @@
     "./test-d1-pool": {
       "types": "./src/repo/test-d1-pool.ts",
       "default": "./src/repo/test-d1-pool.ts"
+    },
+    "./testing": {
+      "types": "./src/testing.ts",
+      "default": "./src/testing.ts"
+    },
+    "./test-migrations": {
+      "types": "./src/test-migrations.ts",
+      "default": "./src/test-migrations.ts"
     }
   },
   "files": [

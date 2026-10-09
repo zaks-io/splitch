@@ -1,5 +1,6 @@
 import { TARGETING_RULE_ID_DUPLICATE_MESSAGE } from "@splitch/contracts";
 import { appScope, envScope } from "@splitch/db";
+import { flagRow } from "@splitch/db/testing";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { makeConfigStore } from "../src/config-store";
 import {
@@ -181,16 +182,19 @@ function persistRow(id: string) {
 
 async function seedSecondFlag(): Promise<void> {
   const scope = appScope(ids.appId);
-  await h.repo.flags.flags.insert(scope, {
-    lifecycleClass: "ops",
-    id: SECOND_FLAG_ID,
-    appId: ids.appId,
-    key: "search",
-    name: "Search",
-    defaultVariantId: "var_search_control",
-    createdAt: "2026-07-01T20:00:00.000Z",
-    updatedAt: "2026-07-01T20:00:00.000Z",
-  });
+  await h.repo.flags.flags.insert(
+    scope,
+    flagRow({
+      lifecycleClass: "ops",
+      id: SECOND_FLAG_ID,
+      appId: ids.appId,
+      key: "search",
+      name: "Search",
+      defaultVariantId: "var_search_control",
+      createdAt: "2026-07-01T20:00:00.000Z",
+      updatedAt: "2026-07-01T20:00:00.000Z",
+    }),
+  );
   await h.repo.flags.addVariant(scope, SECOND_FLAG_ID, {
     id: "var_search_control",
     name: "control",

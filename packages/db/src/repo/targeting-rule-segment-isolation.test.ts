@@ -6,6 +6,7 @@ import {
   envScope,
   type TenantScope,
 } from "../index";
+import { flagRow } from "../testing";
 import { createLocalD1, type LocalD1 } from "./test-d1-pool";
 
 /**
@@ -61,15 +62,18 @@ async function seedTenant(t: typeof TA): Promise<void> {
     createdAt: NOW,
     updatedAt: NOW,
   });
-  await repo.flags.flags.insert(appScope(t.appId), {
-    lifecycleClass: "ops",
-    id: t.flagId,
-    appId: t.appId,
-    key: `key-${t.flagId}`,
-    name: t.flagId,
-    createdAt: NOW,
-    updatedAt: NOW,
-  });
+  await repo.flags.flags.insert(
+    appScope(t.appId),
+    flagRow({
+      lifecycleClass: "ops",
+      id: t.flagId,
+      appId: t.appId,
+      key: `key-${t.flagId}`,
+      name: t.flagId,
+      createdAt: NOW,
+      updatedAt: NOW,
+    }),
+  );
   await repo.flags.segments.insert(appScope(t.appId), {
     id: t.segmentId,
     appId: t.appId,

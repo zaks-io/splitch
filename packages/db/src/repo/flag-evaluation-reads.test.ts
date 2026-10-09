@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { appScope, createRepository, envScope } from "../index";
+import { flagRow } from "../testing";
 import { createLocalD1, type LocalD1 } from "./test-d1-pool";
 import { seedSiblingEnvironment, seedTwoTenants } from "./test-seed";
 
@@ -162,15 +163,18 @@ async function seedConfiguration(
 }
 
 async function seedSameKeyFlag(): Promise<void> {
-  await repo.flags.flags.insert(appScope(seed.b.appId), {
-    lifecycleClass: "ops",
-    id: SAME_KEY_FLAG_ID,
-    appId: seed.b.appId,
-    key: seed.a.flagKey,
-    name: "B's Flag under A's key",
-    createdAt: NOW,
-    updatedAt: NOW,
-  });
+  await repo.flags.flags.insert(
+    appScope(seed.b.appId),
+    flagRow({
+      lifecycleClass: "ops",
+      id: SAME_KEY_FLAG_ID,
+      appId: seed.b.appId,
+      key: seed.a.flagKey,
+      name: "B's Flag under A's key",
+      createdAt: NOW,
+      updatedAt: NOW,
+    }),
+  );
   await repo.flags.addVariant(appScope(seed.b.appId), SAME_KEY_FLAG_ID, {
     id: "var_b_same_key",
     name: "control",
@@ -181,15 +185,18 @@ async function seedSameKeyFlag(): Promise<void> {
 }
 
 async function seedMovedFlag(): Promise<void> {
-  await repo.flags.flags.insert(appScope(seed.a.appId), {
-    lifecycleClass: "ops",
-    id: MOVED_FLAG_ID,
-    appId: seed.a.appId,
-    key: "flag-key-a-moved",
-    name: "A re-created Flag",
-    createdAt: NOW,
-    updatedAt: NOW,
-  });
+  await repo.flags.flags.insert(
+    appScope(seed.a.appId),
+    flagRow({
+      lifecycleClass: "ops",
+      id: MOVED_FLAG_ID,
+      appId: seed.a.appId,
+      key: "flag-key-a-moved",
+      name: "A re-created Flag",
+      createdAt: NOW,
+      updatedAt: NOW,
+    }),
+  );
   await repo.flags.addVariant(appScope(seed.a.appId), MOVED_FLAG_ID, {
     id: "var_a_moved",
     name: "control",

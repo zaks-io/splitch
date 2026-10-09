@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { makeFixtureSigner } from "./fixture-signer";
 import { makeCachedJwksVerifier, makeJwksVerifier } from "./jwks-verify";
+import { ISSUER } from "./test-constants";
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -15,7 +16,7 @@ describe("makeJwksVerifier", () => {
       });
       const verifier = makeJwksVerifier({
         fetchJwks,
-        issuer: "https://auth.splitch.test",
+        issuer: ISSUER,
         controlPlaneAudience: "https://cp.splitch.test",
       });
 
@@ -28,7 +29,7 @@ describe("makeJwksVerifier", () => {
     const signer = await makeFixtureSigner();
     const verifier = makeJwksVerifier({
       fetchJwks: async () => signer.jwks,
-      issuer: "https://auth.splitch.test",
+      issuer: ISSUER,
       controlPlaneAudience: "https://cp.splitch.test",
     });
 

@@ -4,14 +4,14 @@ import {
   personalAccessTokenCacheKey,
 } from "@splitch/contracts";
 import { createRepository } from "@splitch/db";
-import type { RateLimiter } from "@splitch/worker-runtime";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { createApp } from "../src/app";
 import { makeControlPlaneAuthResolver } from "../src/auth-resolver";
 import { sha256Hex } from "../src/credential-cache";
 import { type FixtureSigner, makeFixtureSigner } from "../src/fixture-signer";
 import { makeJwksVerifier } from "../src/jwks-verify";
 import { makeSessionStore } from "../src/session-store";
+import { makeTestApp as createApp } from "../src/test-app-fixture";
+import { AUDIENCE, allowLimiter, ISSUER } from "../src/test-constants";
 import type { LocalBindings } from "../src/test-fixtures";
 import {
   resetOrganizationGraph,
@@ -29,8 +29,6 @@ import { makePoolBindings } from "./pool-bindings";
  * validated against live membership.
  */
 
-const AUDIENCE = "https://cp.splitch.test";
-const ISSUER = "https://auth.splitch.test";
 const NOW_MS = Date.UTC(2026, 9, 3, 12, 0, 0);
 const DAY_MS = 24 * 60 * 60 * 1000;
 const ALICE = "user_pat_routes_alice";
@@ -49,8 +47,6 @@ const OTHER = {
   appName: "Other",
   appKey: "pat-other",
 };
-
-const allowLimiter: RateLimiter = () => ({ limited: false });
 
 let bindings: LocalBindings;
 let signer: FixtureSigner;

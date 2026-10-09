@@ -11,6 +11,7 @@ import {
   liveRunKey,
 } from "@splitch/contracts";
 import { appScope, envScope } from "@splitch/db";
+import { flagRow } from "@splitch/db/testing";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { makeConfigStore } from "../src/config-store";
 import {
@@ -164,15 +165,18 @@ describe("config store purge target isolation", () => {
     const otherFlagId = "flag_unrelated_experiment";
     const otherExperimentId = "exp_unrelated_flag";
     const scope = envScope(ids.appId, ids.environmentId);
-    await h.repo.flags.flags.insert(appScope(ids.appId), {
-      lifecycleClass: "ops",
-      id: otherFlagId,
-      appId: ids.appId,
-      key: "unrelated-flag",
-      name: "Unrelated flag",
-      createdAt: NOW,
-      updatedAt: NOW,
-    });
+    await h.repo.flags.flags.insert(
+      appScope(ids.appId),
+      flagRow({
+        lifecycleClass: "ops",
+        id: otherFlagId,
+        appId: ids.appId,
+        key: "unrelated-flag",
+        name: "Unrelated flag",
+        createdAt: NOW,
+        updatedAt: NOW,
+      }),
+    );
     await h.repo.experiments.experiments.insert(scope, {
       id: otherExperimentId,
       appId: ids.appId,

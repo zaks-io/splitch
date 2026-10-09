@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { appScope, createRepository, envScope, type TenantScope } from "../index";
+import { flagRow } from "../testing";
 import { createLocalD1, type LocalD1 } from "./test-d1-pool";
 
 /**
@@ -96,15 +97,18 @@ describe("BUG 2 — a hand-forged (unminted) scope is rejected on the WRITE path
     const forged = { appId: TB.appId } as unknown as TenantScope;
 
     await expect(
-      repo.flags.flags.insert(forged, {
-        lifecycleClass: "ops",
-        id: flagId,
-        appId: TA.appId,
-        key: TB.flagKey,
-        name: "forged",
-        createdAt: NOW,
-        updatedAt: NOW,
-      }),
+      repo.flags.flags.insert(
+        forged,
+        flagRow({
+          lifecycleClass: "ops",
+          id: flagId,
+          appId: TA.appId,
+          key: TB.flagKey,
+          name: "forged",
+          createdAt: NOW,
+          updatedAt: NOW,
+        }),
+      ),
     ).rejects.toThrow(/forged scope is rejected/);
 
     // Raw read: nothing landed under B (or anywhere) for this id.
@@ -161,15 +165,18 @@ describe("BUG 3 — a forged scope cannot be branded by lifting the marker off a
     forged.appId = TB.appId;
 
     await expect(
-      repo.flags.flags.insert(forged as unknown as TenantScope, {
-        lifecycleClass: "ops",
-        id: flagId,
-        appId: TA.appId,
-        key: `${TB.flagKey}-lift`,
-        name: "lift-forged",
-        createdAt: NOW,
-        updatedAt: NOW,
-      }),
+      repo.flags.flags.insert(
+        forged as unknown as TenantScope,
+        flagRow({
+          lifecycleClass: "ops",
+          id: flagId,
+          appId: TA.appId,
+          key: `${TB.flagKey}-lift`,
+          name: "lift-forged",
+          createdAt: NOW,
+          updatedAt: NOW,
+        }),
+      ),
     ).rejects.toThrow(/forged scope is rejected/);
 
     // Raw read: nothing landed under the victim tenant B (or anywhere).
@@ -215,15 +222,18 @@ describe("BUG 1 — a minted scope is immutable; it cannot be rebound to another
     expect(s.appId).toBe(TA.appId);
 
     const flagId = "flag_frozen_app";
-    await repo.flags.flags.insert(s, {
-      lifecycleClass: "ops",
-      id: flagId,
-      appId: TB.appId, // input lies; the (unmutated) scope must win
-      key: `${TA.flagKey}-frozen`,
-      name: "frozen",
-      createdAt: NOW,
-      updatedAt: NOW,
-    });
+    await repo.flags.flags.insert(
+      s,
+      flagRow({
+        lifecycleClass: "ops",
+        id: flagId,
+        appId: TB.appId, // input lies; the (unmutated) scope must win
+        key: `${TA.flagKey}-frozen`,
+        name: "frozen",
+        createdAt: NOW,
+        updatedAt: NOW,
+      }),
+    );
 
     expect(await rawFlagAppId(flagId)).toBe(TA.appId);
   });
@@ -259,15 +269,18 @@ describe("no regression — a normally minted scope writes and reads back", () =
   it("App-scoped insert then scoped read round-trips", async () => {
     const flagId = "flag_happy_app";
     const s = appScope(TA.appId);
-    const inserted = await repo.flags.flags.insert(s, {
-      lifecycleClass: "ops",
-      id: flagId,
-      appId: TA.appId,
-      key: `${TA.flagKey}-happy`,
-      name: "happy",
-      createdAt: NOW,
-      updatedAt: NOW,
-    });
+    const inserted = await repo.flags.flags.insert(
+      s,
+      flagRow({
+        lifecycleClass: "ops",
+        id: flagId,
+        appId: TA.appId,
+        key: `${TA.flagKey}-happy`,
+        name: "happy",
+        createdAt: NOW,
+        updatedAt: NOW,
+      }),
+    );
     expect(inserted.id).toBe(flagId);
     expect(inserted.appId).toBe(TA.appId);
 

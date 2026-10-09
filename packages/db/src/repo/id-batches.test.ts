@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { appScope, createRepository, envScope } from "../index";
+import { flagRow } from "../testing";
 import { twoAxisIdBatches } from "./id-batches";
 import { createLocalD1, type LocalD1 } from "./test-d1-pool";
 import { seedTwoTenants } from "./test-seed";
@@ -27,15 +28,18 @@ beforeAll(async () => {
   seed = await seedTwoTenants(local.d1);
   const scope = appScope(seed.a.appId);
   for (const id of bulkIds) {
-    await repo.flags.flags.insert(scope, {
-      lifecycleClass: "ops",
-      id,
-      appId: seed.a.appId,
-      key: id,
-      name: id,
-      createdAt: "2026-07-01T00:00:00.000Z",
-      updatedAt: "2026-07-01T00:00:00.000Z",
-    });
+    await repo.flags.flags.insert(
+      scope,
+      flagRow({
+        lifecycleClass: "ops",
+        id,
+        appId: seed.a.appId,
+        key: id,
+        name: id,
+        createdAt: "2026-07-01T00:00:00.000Z",
+        updatedAt: "2026-07-01T00:00:00.000Z",
+      }),
+    );
     await repo.flags.addVariant(scope, id, {
       id: `var_${id}`,
       name: "control",
