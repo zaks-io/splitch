@@ -1,4 +1,4 @@
-import type { FlagChangeDiff, FlagChangeFieldDiff } from "./flag-change-diff";
+import type { FlagChangeDiff, FlagChangeFieldDiff } from "@splitch/contracts";
 
 export interface FlagChangeUnifiedSource {
   seq: number;

@@ -1,11 +1,11 @@
 import {
   type PreRegistration,
   type PreRegistrationIntent,
+  PreRegistrationIntentSchema,
   type PreRegistrationIssueCode,
   type PreRegistrationMetric,
-  PreRegistrationIntentSchema,
   PreRegistrationSchema,
-} from "./run-preregistration";
+} from "@splitch/contracts";
 
 /**
  * Resolve caller pre-registration intent into the frozen form, against the

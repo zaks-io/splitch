@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
-  detectStaleReasons,
   daysBetween,
-  uniformServingMode,
+  detectStaleReasons,
   type EnvironmentConfigState,
+  uniformServingMode,
 } from "./flag-stale-detect";
 
 const NOW = "2026-07-02T12:00:00.000Z";
