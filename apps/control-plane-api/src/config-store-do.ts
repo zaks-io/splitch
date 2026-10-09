@@ -5,7 +5,7 @@ import {
   type LiveUpdateAuthorizationContext,
   parseLiveUpdateConnectionContext,
 } from "@splitch/contracts";
-import { appScope, createRepository, envScope } from "@splitch/db";
+import { createRepository, envScope } from "@splitch/db";
 import { type ConfigStoreWriter, makeConfigStore } from "./config-store";
 import type { EvaluationFlagConfigRead, EvaluationFlagConfigSnapshot } from "./config-store-access";
 import {
@@ -28,7 +28,7 @@ import {
   parseConfigStoreConnectionContext,
   parsePanelSessionContext,
 } from "./config-store-live-update-context";
-import { buildSnapshotFromD1 } from "./config-store-shared";
+import { buildEvaluationSnapshotFromD1 } from "./config-store-snapshot-build";
 import { makeDurableSnapshotRevisionAllocator } from "./config-store-snapshot-revision";
 import type { ControlPlaneApiEnv } from "./env";
 
@@ -41,13 +41,10 @@ export class ConfigStoreDurableObject
   async readFlagConfigForEvaluation(
     input: EvaluationFlagConfigRead,
   ): Promise<EvaluationFlagConfigSnapshot | null> {
-    const repo = createRepository(this.env.DB);
-    const flag = await repo.flags.getFlagByKey(appScope(input.appId), input.flagKey);
-    if (!flag) return null;
-    const snapshot = await buildSnapshotFromD1(
-      repo,
+    const snapshot = await buildEvaluationSnapshotFromD1(
+      createRepository(this.env.DB),
       envScope(input.appId, input.environmentId),
-      flag.id,
+      input.flagKey,
     );
     return snapshot === null
       ? null

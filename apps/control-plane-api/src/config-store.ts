@@ -13,7 +13,6 @@ import {
 } from "./config-store-snapshot-write";
 import {
   type ApplyApprovedFlagConfigInput,
-  buildSnapshotFromD1,
   type ConfigStoreDeps,
   type ConfigStoreRuntimeDeps,
   type FlagConfigResult,
@@ -30,6 +29,7 @@ import {
   responseFromSnapshot,
   type Snapshot,
 } from "./config-store-shared";
+import { buildSnapshotFromD1 } from "./config-store-snapshot-build";
 import {
   deleteFlagConfigFromStore,
   type FlagConfigDeleteInput,

@@ -3,7 +3,6 @@ import { approvedProposalFreeze } from "./config-store-freeze";
 import { writeFlagConfigSnapshot } from "./config-store-snapshot-write";
 import {
   type ApplyApprovedFlagConfigInput,
-  buildSnapshotFromD1,
   type ConfigStoreRuntimeDeps,
   type FlagConfigWriteResult,
   json,
@@ -12,6 +11,7 @@ import {
   type Snapshot,
   targetingRuleRows,
 } from "./config-store-shared";
+import { buildSnapshotFromD1 } from "./config-store-snapshot-build";
 import { targetingRulePersistFailure } from "./config-store-targeting-rules";
 import { baselineIsUnresolvable } from "./flag-config-rollout";
 import { diffEntriesTouch } from "./flag-config-run-freeze-proposal";

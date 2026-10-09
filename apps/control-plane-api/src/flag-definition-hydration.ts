@@ -4,7 +4,7 @@ import {
   type TargetingRule,
 } from "@splitch/contracts";
 import { appScope, type Repository } from "@splitch/db";
-import { toTargetingRule } from "./config-store-shared";
+import { toTargetingRule } from "./config-store-snapshot-build";
 import type { FlagDefinitionDeps } from "./flag-definition-handler-utils";
 import { flagFrom } from "./flag-definition-model";
 

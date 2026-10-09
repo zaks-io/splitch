@@ -2,11 +2,11 @@ import { type DeltaNudge, DeltaNudgeSchema } from "@splitch/contracts";
 import { appScope, envScope } from "@splitch/db";
 import { deleteFlagConfigSnapshot, writeSnapshot } from "./config-store-kv";
 import {
-  buildSnapshotFromD1,
   type ConfigStoreRuntimeDeps,
   type FlagConfigResult,
   responseFromSnapshot,
 } from "./config-store-shared";
+import { buildSnapshotFromD1 } from "./config-store-snapshot-build";
 
 export interface FlagConfigResyncInput {
   appId: string;

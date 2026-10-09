@@ -1,10 +1,7 @@
 import type { ConcludeRunRequest, TargetingRule } from "@splitch/contracts";
 import type { Repository } from "@splitch/db";
-import {
-  type buildSnapshotFromD1,
-  missingAvailableVariants,
-  missingRuleVariantNames,
-} from "./config-store-shared";
+import { missingAvailableVariants, missingRuleVariantNames } from "./config-store-shared";
+import type { buildSnapshotFromD1 } from "./config-store-snapshot-build";
 import type { FlagConfigResult } from "./config-store-types";
 import {
   baselineIsUnresolvable,

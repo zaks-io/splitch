@@ -22,6 +22,7 @@ export const D1_TEST_FILES = defineTestFileManifest(import.meta.url, [
   "src/repo/experiment-start-approval-landing.test.ts",
   "src/repo/flag-change-events.test.ts",
   "src/repo/flag-change-triggers.test.ts",
+  "src/repo/flag-evaluation-reads.test.ts",
   "src/repo/flag-health-reads.test.ts",
   "src/repo/flag-health-run-history.test.ts",
   "src/repo/flag-health-stale-snapshot.test.ts",

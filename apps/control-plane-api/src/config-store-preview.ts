@@ -2,7 +2,6 @@ import { DeltaNudgeSchema, type TargetingRule } from "@splitch/contracts";
 import { envScope } from "@splitch/db";
 import { targetingFreeze } from "./config-store-freeze";
 import {
-  buildSnapshotFromD1,
   type ConfigStoreDeps,
   type FlagConfigWriteResult,
   missingRuleVariantNames,
@@ -10,6 +9,7 @@ import {
   responseFromSnapshot,
   type Snapshot,
 } from "./config-store-shared";
+import { buildSnapshotFromD1 } from "./config-store-snapshot-build";
 import { normalizeTargetingRuleRollouts } from "./flag-config-rollout";
 import { resolveTargetingRules } from "./targeting-rule-resolution";
 

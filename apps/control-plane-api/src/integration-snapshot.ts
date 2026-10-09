@@ -8,7 +8,7 @@ import {
   type Variant,
 } from "@splitch/contracts";
 import { appScope, type EnvScope, type Repository } from "@splitch/db";
-import { toTargetingRule } from "./config-store-shared";
+import { toTargetingRule } from "./config-store-snapshot-build";
 import { parseStoredRollout } from "./flag-config-rollout";
 import { requireResolvedTargetingRules, resolveTargetingRules } from "./targeting-rule-resolution";
 
