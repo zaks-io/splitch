@@ -37,7 +37,7 @@ export function runControlPlaneScheduled(
   }
   ctx.waitUntil(runDemoReaper(env, event, ctx));
   ctx.waitUntil(runCredentialCacheBackfill(env));
-  ctx.waitUntil(env.EVENT_INGEST_API.adoptMetricEventClaimRetention());
+  ctx.waitUntil(runMetricEventClaimRetentionAdoption(env, event, ctx));
   ctx.waitUntil(runApprovalArchive(env, event, ctx));
   ctx.waitUntil(runFlagChangeLogRetention(env, event, ctx));
   ctx.waitUntil(runDeliveryRetention(env, event, ctx));
@@ -184,6 +184,28 @@ async function runDemoReaper(
       privacyExportArtifacts,
     },
   );
+}
+
+/** The daily retry is how a halted claim retention backfill resumes, so each failure is reported. */
+async function runMetricEventClaimRetentionAdoption(
+  env: ControlPlaneApiEnv,
+  event: ScheduledController,
+  ctx: Pick<ExecutionContext, "waitUntil">,
+): Promise<void> {
+  try {
+    await env.EVENT_INGEST_API.adoptMetricEventClaimRetention();
+  } catch (error) {
+    createWorkerFaultReporter(env, workerObservabilityWithWaitUntil("control-plane-api", ctx))(
+      "metric_event_claim_retention_adoption_failed",
+      {
+        service,
+        job: "metric-event-claim-retention-adoption",
+        cron: event.cron,
+        fault: error instanceof Error ? (error.stack ?? error.message) : String(error),
+      },
+    );
+    throw error;
+  }
 }
 
 async function runApprovalArchive(
