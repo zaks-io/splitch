@@ -47,8 +47,8 @@ function QuickstartRoute() {
             </p>
             <CodeSnippet code="claude mcp add --transport http splitch https://mcp.splitch.dev" />
             <p className="text-muted-foreground text-sm leading-relaxed">
-              Your agent calls that endpoint and signs in on its first tool call, so there is no key
-              to copy.
+              Sign in in your browser when your agent connects. In Claude Code, run /mcp if it does
+              not prompt. There is no key to copy.
             </p>
           </div>
         </header>
