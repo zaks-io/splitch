@@ -298,6 +298,11 @@ byte-identical tokens.
 
 ## Analysis Results envelope (Analysis Worker)
 
+Analysis may add response fields ahead of the Control Plane deployment. On this internal hop,
+the Control Plane strips unknown fields with `parseResponseBody`, including nested result fields,
+while required fields and their types remain enforced. Removals, renames, and type changes still
+need a staged rollout. Inbound requests and Control Plane response schemas remain strict.
+
 The Analysis Worker returns `AnalysisResultsEnvelopeSchema`. Its strict `state: "ready"` member
 contains `run_id`, `control_variant`, and `stats`. It admits `data_watermark` and `result_token`
 only as an all-or-nothing pair. A Results read that supports Conclude returns both; the

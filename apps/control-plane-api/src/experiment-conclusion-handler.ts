@@ -4,6 +4,7 @@ import {
   canonicalHash,
   createResultToken,
   evaluateExperimentDecisionGate,
+  parseResponseBody,
   resolveAnalysisControlIntegrity,
   resolveFrozenControlIdentity,
 } from "@splitch/contracts";
@@ -135,7 +136,7 @@ async function validatedEvidence(
     "results_read",
   );
   if (!response.ok) return { ok: false as const, response };
-  const envelope = AnalysisResultsEnvelopeSchema.parse(await response.json());
+  const envelope = parseResponseBody(AnalysisResultsEnvelopeSchema, await response.json());
   if (envelope.state !== "ready") {
     return {
       ok: false as const,

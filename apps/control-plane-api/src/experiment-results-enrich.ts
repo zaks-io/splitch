@@ -5,6 +5,7 @@ import {
   type ExperimentResultsView,
   ExperimentResultsViewSchema,
   type PersistedSrmAlarm,
+  parseResponseBody,
   produceExperimentResults,
   resolveAnalysisControlIntegrity,
   resolveFrozenControlIdentity,
@@ -94,7 +95,7 @@ export async function enrichAnalysisResultsResponse(
     includeExploratory?: boolean;
   },
 ): Promise<ExperimentResultsResponse> {
-  const analysis = AnalysisResultsEnvelopeSchema.parse(analysisBody);
+  const analysis = parseResponseBody(AnalysisResultsEnvelopeSchema, analysisBody);
   // Callers only reach enrich after D1 resolved a Run. Analysis no_run here is a
   // contract violation (drafts are finished before the hop); masking it as
   // START_A_RUN would tell clients the Experiment never started.
