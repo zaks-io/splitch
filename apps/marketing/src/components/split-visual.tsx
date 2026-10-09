@@ -17,14 +17,11 @@ export function SplitVisual() {
   return (
     <figure
       aria-label="Example experiment comparing user feedback on a current model and a cheaper candidate model. No results are shown."
-      className="grid min-w-0 gap-5 rounded-xl border border-border bg-card p-5 shadow-md sm:p-6"
+      className="grid min-w-0 gap-5 rounded-xl border border-border bg-card p-5 sm:p-6"
     >
       <div className="flex items-center justify-between gap-3 font-mono text-xs">
         <span className="text-foreground">Model comparison</span>
-        <span className="flex items-center gap-1.5 text-muted-foreground">
-          <span aria-hidden="true" className="size-1.5 rounded-full bg-arm-treatment" />
-          Example experiment
-        </span>
+        <span className="text-muted-foreground">Example experiment</span>
       </div>
 
       <svg
