@@ -21,7 +21,6 @@ export const localDevServices = {
 
 const fixtureSecrets: Record<string, string> = {
   SENTRY_DSN: "",
-  SPLITCH_DEPLOY_GATE_TOKEN: "local-e2e-deploy-gate",
   SPLITCH_EVENT_INGEST_TOKEN: "local-e2e-event-ingest-token",
   TINYBIRD_READ_TOKEN: "local-e2e-tinybird-read-token",
   TINYBIRD_COPY_TOKEN: "local-e2e-tinybird-copy-token",

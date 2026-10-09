@@ -106,25 +106,20 @@ Key:   revoked:{credential_cache_key}
 Value: presence marker
 ```
 
-The data plane checks this permanent marker before the mutable credential entry. Backfill and other
-active writers never delete it, so an in-flight stale write cannot make a revoked credential active.
+The data plane checks this permanent marker before the mutable credential entry. Active writers
+never delete it, so an in-flight stale write cannot make a revoked credential active.
 
-### Credential cache schema-v1 rollout
+### Credential cache ownership
 
 Credential cache payload version 2 adds the owning `organizationId`. This value is authoritative D1
-App ownership, not request input. During rollout, the Evaluation Worker can parse a schema-v1 entry
+App ownership, not request input. The Evaluation Worker can still parse a schema-v1 entry
 but treats it as unscoped and returns `503 SERVICE_UNAVAILABLE` for the billing-bearing `evaluate`
 route. It never guesses an Organization or writes usage without one.
 
-The control-plane daily scheduled job is the steady-state backfill path. During a hosted rollout, the
-deployment workflow first deploys the marker-aware Evaluation Worker, which remains compatible with
-marker-less schema-v1 entries. It then deploys the Control Plane compatibility writer, drives its protected,
-versioned backfill gate to `done`, and verifies that checkpoint before the final Control Plane cutover. A
-legacy `done` checkpoint cannot satisfy a newer migration.
-This is CI-owned automation, never a manual production deploy. The backfill joins every D1 Client Key
-and API Key to `apps.organization_id` and rewrites its KV entry as schema v2. The write is fail-loud
-and idempotent, so the next scheduled run retries an incomplete migration. Once the v2 entry exists,
-the data plane supplies that authenticated Organization scope to Evaluation usage ingest.
+Control Plane provisioning, rotation, and revocation write schema-v2 entries using D1 App ownership.
+Once the v2 entry exists, the data plane supplies that authenticated Organization scope to Evaluation
+usage ingest. There is no scheduled migration or bulk cache rebuild command; recovering lost entries
+requires a separately reviewed recovery procedure.
 
 The `environment_id` in the cache value is how the edge resolves an evaluation to the correct
 Environment's Flag Configuration — the key carries its Environment, so the caller never specifies it.
@@ -154,10 +149,7 @@ fire-and-forget — a leaked secret API Key is exactly the incident the threat m
 - The revoked key id is **negative-cached** by a permanent terminal marker plus the short-lived
   tombstone at the mutable entry. A stale active writer can replace the mutable entry, but cannot remove
   the marker that the data plane checks first.
-- The schema-v1 rollout backfill writes terminal markers for credentials already revoked in D1. Until
-  the version 2 backfill reaches `done`, operators must assume a pre-rollout revoked credential may still
-  have an active legacy cache entry. After version 2 reaches `done`, the marker is the durable revocation
-  authority. The deployment order never runs this backfill while a marker-blind Evaluation Worker is live.
+- Terminal markers remain the durable revocation authority for credentials already revoked in D1.
   Rolling Evaluation back to a marker-blind version requires reasserting revoked primary entries first.
 - The kill-switch / incident posture wins (CONTEXT.md): revoke must propagate as fast as the edge allows
   and must report when it does not.

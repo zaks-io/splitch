@@ -137,7 +137,8 @@ what `recommendedAction: "READ_PER_ENVIRONMENT"` names for the `recover_from_err
 
 Auth: live Organization and App member. The Worker rejects a token bound to another App or stale
 membership before any analysis read. Control Panel callers use the configured signed binding-only
-`SignedControlPanelEntrypoint`; the browser/session bearer never crosses the binding. The
+`SignedControlPanelEntrypoint`; each operation uses a signed, single-use delegation and the
+browser/session bearer never crosses the binding. The
 Control Plane Worker calls Analysis through its binding-only entrypoint with an exact
 actor/App/Environment/Experiment/Run service identity.
 

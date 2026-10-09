@@ -52,7 +52,6 @@ describe("memoizePanelIdentityReads", () => {
     const repo = { identity: {} } as never;
 
     expect(repositoryForPanelRequest(repo, "signed", "POST")).toBe(repo);
-    expect(repositoryForPanelRequest(repo, "bounded-session", "GET")).toBe(repo);
     expect(repositoryForPanelRequest(repo, "none", "GET")).toBe(repo);
     expect(repositoryForPanelRequest(repo, "signed", "GET")).not.toBe(repo);
   });

@@ -109,16 +109,34 @@ describe("Control Plane API Wrangler runtime config", () => {
     ["local", config],
     ["shared-preview", config.env?.["shared-preview"]],
     ["production", config.env?.production],
-  ])("declaratively provisions every Durable Object for %s", (_target, target) => {
-    expect(effectiveExports(target)).toEqual({
-      ConfigStoreDurableObject: { type: "durable-object", storage: "sqlite" },
-      CredentialCacheWriterDurableObject: { type: "durable-object", storage: "sqlite" },
-      CredentialCacheBackfillDurableObject: { type: "durable-object", storage: "sqlite" },
-      PanelDelegationReplayDurableObject: { type: "durable-object", storage: "sqlite" },
-      McpDelegationReplayDurableObject: { type: "durable-object", storage: "sqlite" },
-    });
-    expect(target?.migrations).toBeUndefined();
-  });
+  ])(
+    "declaratively provisions live Durable Objects and retires completed migrations for %s",
+    (_target, target) => {
+      const exports = Object.values(effectiveExports(target) ?? {});
+      expect(exports.filter((entry) => entry.state === "deleted")).toEqual([
+        { type: "durable-object", state: "deleted" },
+      ]);
+      for (const [name, entry] of Object.entries(effectiveExports(target) ?? {})) {
+        if (entry.state === "deleted") {
+          expect(
+            target?.durable_objects?.bindings?.some((binding) => binding.class_name === name),
+          ).toBe(false);
+        }
+      }
+      const liveExports = Object.fromEntries(
+        Object.entries(effectiveExports(target) ?? {}).filter(
+          ([, entry]) => entry.state !== "deleted",
+        ),
+      );
+      expect(liveExports).toEqual({
+        ConfigStoreDurableObject: { type: "durable-object", storage: "sqlite" },
+        CredentialCacheWriterDurableObject: { type: "durable-object", storage: "sqlite" },
+        PanelDelegationReplayDurableObject: { type: "durable-object", storage: "sqlite" },
+        McpDelegationReplayDurableObject: { type: "durable-object", storage: "sqlite" },
+      });
+      expect(target?.migrations).toBeUndefined();
+    },
+  );
 
   it("binds the actor-scoped limiter in production", () => {
     expect(config.env?.production?.ratelimits).toContainEqual({
@@ -126,15 +144,6 @@ describe("Control Plane API Wrangler runtime config", () => {
       namespace_id: expect.stringMatching(/^\d+$/u),
       simple: { limit: 600, period: 60 },
     });
-  });
-
-  it.each([
-    ["local", config],
-    ["shared-preview", config.env?.["shared-preview"]],
-    ["production", config.env?.production],
-  ])("keeps predecessor session redemption disabled for %s", (_target, target) => {
-    expect(target?.vars?.CONTROL_PANEL_LEGACY_SESSION_MODE).toBe("disabled");
-    expect(target?.vars?.CONTROL_PANEL_LEGACY_SESSION_EXPIRES_AT).toBe("0");
   });
 });
 
@@ -181,7 +190,7 @@ interface ServiceBinding {
 
 type DurableObjectExports = Record<
   string,
-  { type: "durable-object"; storage: "sqlite" | "legacy-kv" }
+  { type: "durable-object"; storage?: "sqlite" | "legacy-kv"; state?: "deleted" }
 >;
 
 function effectiveCrons(target: WranglerTarget | undefined): string[] | undefined {

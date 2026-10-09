@@ -104,16 +104,6 @@ The `apps_create` handler applies the live owner/admin matrix above. Cached Pane
 authorize a mutation, and Worker refusals remain the typed response returned to the Panel. The Panel
 cookie, bearer material, and reusable session hash stay inside the Panel Worker.
 
-The only exception is the binding-only deploy/rollback bridge for the predecessor Panel protocol.
-While both the explicit bounded mode and its future transition deadline are valid, the predecessor
-`ControlPanelEntrypoint` may redeem `x-splitch-panel-session`, a SHA-256 session handle, for
-`apps_create` only. It resolves the still-live actor from shared session KV and then applies the same
-live D1 owner/admin check. The bridge does not accept that handle for Flag or Environment operations,
-is unreachable through public HTTP, and fails closed for an absent, malformed, unknown, or expired
-handle, an unsupported operation, a disabled mode, or an elapsed deadline. The checked-in final
-configuration disables the bridge; the signed entrypoint never accepts reusable session-hash
-authority.
-
 ## App Membership
 
 App membership controls who can read/write Flag, Experiment, and Run config for a specific App.

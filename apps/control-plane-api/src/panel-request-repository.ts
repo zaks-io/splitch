@@ -4,7 +4,7 @@ type Repository = ReturnType<typeof createRepository>;
 
 export function repositoryForPanelRequest(
   repo: Repository,
-  protocol: "none" | "signed" | "bounded-session",
+  protocol: "none" | "signed",
   method: string,
 ): Repository {
   return protocol === "signed" && method === "GET" ? memoizePanelIdentityReads(repo) : repo;

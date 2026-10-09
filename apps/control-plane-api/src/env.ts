@@ -25,7 +25,6 @@ interface EventIngestControlPlaneBinding extends Fetcher {
   completeAppIdentityReset(appId: string, resetId: string, nextVersion: string): Promise<void>;
 }
 
-import type { CredentialCacheBackfillDurableObjectNamespace } from "./credential-cache-backfill-do";
 import type { CredentialCacheWriterDurableObjectNamespace } from "./credential-cache-writer-do";
 import type { PanelDelegationReplayDurableObjectNamespace } from "./panel-identity-replay";
 
@@ -51,7 +50,6 @@ export interface ControlPlaneApiEnv {
   /** Per-App/Environment config writer and live-update nudge fan-out. */
   CONFIG_STORE_WRITER: ConfigStoreDurableObjectNamespace;
   CREDENTIAL_CACHE_WRITER: CredentialCacheWriterDurableObjectNamespace;
-  CREDENTIAL_CACHE_BACKFILL: CredentialCacheBackfillDurableObjectNamespace;
   PANEL_DELEGATION_REPLAY: PanelDelegationReplayDurableObjectNamespace;
   /** Strongly consistent one-use claims for binding-only MCP delegations. */
   MCP_DELEGATION_REPLAY?: McpDelegationReplayDurableObjectNamespace;
@@ -69,8 +67,6 @@ export interface ControlPlaneApiEnv {
   PRIVACY_EXPORTS: R2Bucket;
   /** HMAC key for 15-minute application download URLs. */
   PRIVACY_EXPORT_URL_SECRET?: string;
-  /** CI-only bearer token for the hosted credential-cache rollout gate. */
-  SPLITCH_DEPLOY_GATE_TOKEN?: string;
   /** This control-plane protected-resource origin; the token `aud` must equal it. */
   CONTROL_PLANE_ORIGIN?: string;
   TINYBIRD_API_URL?: string;
@@ -80,8 +76,6 @@ export interface ControlPlaneApiEnv {
   /** Auth-api JWKS endpoint the control-plane token signature is verified against. */
   AUTH_JWKS_URI?: string;
   CONTROL_PANEL_DELEGATION_SECRET?: string;
-  CONTROL_PANEL_LEGACY_SESSION_EXPIRES_AT?: string;
-  CONTROL_PANEL_LEGACY_SESSION_MODE?: string;
   CONVEX_WEBHOOK_KEK?: string;
   CONVEX_WEBHOOK_KEY_VERSION?: string;
   INTEGRATION_SECRET_KEK?: string;

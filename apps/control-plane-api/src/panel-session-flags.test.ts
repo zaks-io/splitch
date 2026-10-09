@@ -4,11 +4,11 @@ import {
   parseControlPanelOperation,
 } from "@splitch/control-plane-sdk/control-panel-identity";
 import { describe, expect, it, vi } from "vitest";
-import { makeControlPlaneAuthResolver, PANEL_SESSION_HEADER } from "./auth-resolver";
+import { makeControlPlaneAuthResolver } from "./auth-resolver";
 import type { JwksVerifier } from "./jwks-verify";
 import type { PanelDelegationReplayStore } from "./panel-identity-replay";
 import type { PanelSessionAccess } from "./panel-session-access";
-import type { PanelSessionStore, SessionStore } from "./session-store";
+import type { SessionStore } from "./session-store";
 
 const NOW = 1_800_000_000;
 const DELEGATION_SECRET = "test-control-panel-delegation-secret-1234";
@@ -126,25 +126,6 @@ describe("Control Panel Flags principal", () => {
 
     expect(result).toEqual({ ok: false, reason: "UNAUTHORIZED" });
     expect(authorizeApp).not.toHaveBeenCalled();
-  });
-
-  it("does not broaden the bounded predecessor session protocol to Flags", async () => {
-    const loadPanelSessionActor = vi.fn(async () => ({ userId: "user_1" }));
-    const resolver = makeControlPlaneAuthResolver(deps(), {
-      allowBoundedPanelSession: true,
-      boundedPanelSessions: { loadPanelSessionActor } as PanelSessionStore,
-    });
-    const request = new Request("https://control-plane.internal/apps/app_1/flags", {
-      headers: {
-        "x-splitch-panel-environment": "env_1",
-        [PANEL_SESSION_HEADER]: "a".repeat(64),
-      },
-    });
-
-    const result = await resolver(request);
-
-    expect(result).toEqual({ ok: false, reason: "UNAUTHORIZED" });
-    expect(loadPanelSessionActor).not.toHaveBeenCalled();
   });
 });
 

@@ -54,27 +54,20 @@ export function deploymentCommands(environment, requestedPackages, workspacePack
     throw new Error("at least one deployable Worker package is required");
   }
 
-  const requiresControlPanelCutover = selected.has(CONTROL_PANEL) || selected.has(CONTROL_PLANE);
   const commands = selectedPrerequisiteCommands(environment, selected, ORDERED_PREREQUISITES);
-
-  // Evaluation binds the Config Store DO while Control Plane binds Evaluation's
-  // named entrypoint. When both change, the compatibility deploy supplies the
-  // new DO RPC first, Evaluation moves second, and final Control Plane moves last.
-  if (requiresControlPanelCutover) {
-    commands.push(["run", `deploy:cloudflare:control-plane-compat:${environment}`]);
+  if (selected.has(CONTROL_PLANE)) {
+    commands.push(["run", `deploy:cloudflare:control-plane:${environment}`]);
   }
   if (selected.has(EVALUATION)) {
     commands.push(["run", `deploy:cloudflare:evaluation:${environment}`]);
+    // Both Workers bind each other's named entrypoint, so Control Plane must
+    // deploy before Evaluation and rebind after Evaluation deploys.
+    if (selected.has(CONTROL_PLANE)) {
+      commands.push(["run", `deploy:cloudflare:control-plane:${environment}`]);
+    }
   }
-  if (requiresControlPanelCutover) {
-    commands.push(["run", `credential-cache:backfill:${environment}`]);
-  }
-
-  if (requiresControlPanelCutover) {
-    commands.push(
-      ["run", `deploy:cloudflare:control-panel:${environment}`],
-      ["run", `deploy:cloudflare:control-plane:${environment}`],
-    );
+  if (selected.has(CONTROL_PANEL)) {
+    commands.push(["run", `deploy:cloudflare:control-panel:${environment}`]);
   }
 
   const remaining = [...selected].filter((packageName) => !SPECIAL_WORKERS.has(packageName)).sort();

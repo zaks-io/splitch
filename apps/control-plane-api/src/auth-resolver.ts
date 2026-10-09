@@ -14,7 +14,7 @@ import type { PanelDelegationReplayStore } from "./panel-identity-replay";
 import { resolvePanelResourcePrincipal } from "./panel-resource-principal";
 import type { PanelSessionAccess } from "./panel-session-access";
 import { deriveBinding } from "./scope-binding";
-import type { PanelSessionStore, SessionStore } from "./session-store";
+import type { SessionStore } from "./session-store";
 import {
   authorizeBearerMembership,
   requireTokenMembershipAccess,
@@ -31,9 +31,6 @@ import {
  * Binding calls verify the signature, allowlisted operation and resource claims,
  * canonical request-body digest, expiry, and single-use nonce before deriving
  * authority from live D1 access.
- * During the self-expiring deploy bridge only, the predecessor entrypoint may
- * redeem the old Panel's SHA-256 session handle for apps_create. That path
- * resolves the live session from KV and still rechecks the Org role in D1.
  *
  * Order (access-control-matrix.md "Token validation"):
  *   1. Extract `Authorization: Bearer <jwt>`; absent/malformed → UNAUTHORIZED.
@@ -61,7 +58,6 @@ import {
  */
 
 const BEARER_PREFIX = "Bearer ";
-export const PANEL_SESSION_HEADER = "x-splitch-panel-session";
 
 /**
  * A Control Panel session is only ever minted after a completed WorkOS sign-in
@@ -95,9 +91,6 @@ export interface ControlPlaneAuthOptions {
   panelDelegationSecret?: string;
   panelAccess?: PanelSessionAccess;
   panelDelegationReplay?: PanelDelegationReplayStore;
-  /** Temporary predecessor bridge. The deployment workflow disables it after V2 is live. */
-  allowBoundedPanelSession?: boolean;
-  boundedPanelSessions?: PanelSessionStore;
 }
 
 function extractBearer(header: string | null): string | null {
@@ -115,19 +108,14 @@ export function makeControlPlaneAuthResolver(
   const nowSeconds = () => Math.floor((deps.now?.() ?? Date.now()) / 1000);
 
   return async (request) => {
-    if (
-      (options.allowPanelDelegation || options.allowBoundedPanelSession) &&
-      request.headers.get("authorization") === null
-    ) {
+    if (options.allowPanelDelegation && request.headers.get("authorization") === null) {
       const panelPrincipal = await resolvePanelPrincipal(
         request,
         nowSeconds(),
         options.spans ?? noopPerformanceSpanRecorder,
-        options.boundedPanelSessions,
         options.panelDelegationSecret,
         options.panelAccess,
         options.panelDelegationReplay,
-        options.allowBoundedPanelSession ?? false,
       );
       if (panelPrincipal) return panelPrincipal;
     }
@@ -203,24 +191,12 @@ async function resolvePanelPrincipal(
   request: Request,
   nowSeconds: number,
   spans: PerformanceSpanRecorder,
-  boundedPanelSessions?: PanelSessionStore,
   delegationSecret?: string,
   panelAccess?: PanelSessionAccess,
   replay?: PanelDelegationReplayStore,
-  allowBoundedPanelSession = false,
 ) {
   const operation = parseControlPanelBindingOperation(request);
   if (!operation) return null;
-
-  if (allowBoundedPanelSession) {
-    if (!boundedPanelSessions) return null;
-    return resolveBoundedPanelSessionPrincipal(
-      request,
-      operation,
-      boundedPanelSessions,
-      nowSeconds,
-    );
-  }
 
   const delegation = delegationSecret
     ? await spans.record({ name: "Panel delegation verification", op: "auth" }, async () =>
@@ -323,38 +299,9 @@ async function resolveDelegatedPrincipal(
   return resolvePanelResourcePrincipal(operation, actorId, panelAccess, PANEL_AUTH_DOOR);
 }
 
-async function resolveBoundedPanelSessionPrincipal(
-  request: Request,
-  operation: NonNullable<ReturnType<typeof parseControlPanelBindingOperation>>,
-  sessions: PanelSessionStore,
-  nowSeconds: number,
-) {
-  if (operation.id !== "apps_create") return null;
-  const tokenHash = request.headers.get(PANEL_SESSION_HEADER);
-  if (!tokenHash) return null;
-  const actor = await sessions.loadPanelSessionActor(tokenHash, nowSeconds);
-  if (!actor) return null;
-  return {
-    ok: true as const,
-    principal: {
-      kind: "control-plane-token" as const,
-      id: actor.userId,
-      // Cached panel roles never authorize the mutation. This ceiling scope binds
-      // the path while the apps_create handler still requires the live D1 role.
-      scopes: [`org:${operation.orgId}:owner`],
-      orgId: operation.orgId,
-      appId: null,
-      environmentId: null,
-      authDoor: PANEL_AUTH_DOOR,
-    },
-  };
-}
-
 /**
- * Authority for an Organization-scoped Panel read. Unlike `apps_create`, the
- * claimed `orgId` is never taken as the binding on its own: the read leaves this
- * Worker over a service binding, so the Org membership is checked in live D1
- * here and a non-member is refused before any Analysis hop.
+ * Organization-scoped reads require live membership before any Analysis hop.
+ * Unlike apps_create, the handler cannot defer this check until after delegation.
  */
 async function resolvePanelOrgPrincipal(
   orgId: string,

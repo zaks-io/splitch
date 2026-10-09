@@ -22,12 +22,10 @@ import { ConfigStoreDurableObject } from "./config-store-do";
 import { parseControlPanelBindingOperation } from "./control-panel-operation";
 import { handleControlPlaneAppRequest } from "./control-plane-app-request";
 import {
-  boundedPanelSessionEnabled,
   controlPanelAuthOptions,
   requiredMcpDelegationSecret,
   requiredMcpReplayBinding,
 } from "./control-plane-runtime-config";
-import { CredentialCacheBackfillDurableObject } from "./credential-cache-backfill-do";
 import { CredentialCacheWriterDurableObject } from "./credential-cache-writer-do";
 import { handlePrivacyJobQueue, type PrivacyJobMessage } from "./entity-privacy-jobs";
 import type { ControlPlaneApiEnv } from "./env";
@@ -39,7 +37,7 @@ import {
   resetCompromisedAppIdentityFromEnv,
 } from "./exposure-verification-entrypoint";
 import { controlPlaneHealthResponse } from "./health";
-import { handleCredentialCacheBackfillGate, handleLiveUpdateTestControl } from "./internal-routes";
+import { handleLiveUpdateTestControl } from "./internal-routes";
 import { makeCachedJwksVerifier } from "./jwks-verify";
 import { PanelDelegationReplayDurableObject } from "./panel-delegation-replay-do";
 import { repositoryForPanelRequest } from "./panel-request-repository";
@@ -71,20 +69,8 @@ const handler = {
 
 export default wrapWorkerHandler(handler, { surface: "control-plane-api" });
 
-const boundedPanelHandler = bindingHandler("bounded-session");
 const mcpHandler = bindingHandler("mcp");
 const signedPanelHandler = bindingHandler("signed");
-
-/** Bounded bridge for the predecessor Panel's session-handle binding protocol. */
-export class ControlPanelEntrypoint extends WorkerEntrypoint<ControlPlaneApiEnv> {
-  override async fetch(request: Request): Promise<Response> {
-    return wrapWorkerHandler(boundedPanelHandler, { surface: "control-plane-api" }).fetch(
-      request as Parameters<typeof boundedPanelHandler.fetch>[0],
-      this.env,
-      this.ctx,
-    );
-  }
-}
 
 /** Binding-only entrypoint for one-operation MCP delegations. */
 export class McpEntrypoint extends WorkerEntrypoint<ControlPlaneApiEnv> {
@@ -156,9 +142,6 @@ type AuthMode = PanelProtocol | "mcp";
 function bindingHandler(authMode: Exclude<AuthMode, "none">) {
   return {
     async fetch(request, env, ctx): Promise<Response> {
-      if (authMode === "bounded-session" && !boundedPanelSessionEnabled(env)) {
-        return new Response("not found", { status: 404 });
-      }
       if (authMode !== "mcp" && !parseControlPanelBindingOperation(request)) {
         return new Response("not found", { status: 404 });
       }
@@ -178,9 +161,6 @@ async function handleRequest(
   const url = new URL(request.url);
   if (url.pathname === "/health" || url.pathname === "/") {
     return controlPlaneHealthResponse(env);
-  }
-  if (url.pathname.startsWith("/internal/credential-cache-backfill")) {
-    return handleCredentialCacheBackfillGate(request, env, url);
   }
   const liveUpdateTestControl = await handleLiveUpdateTestControl(request, env, url);
   if (liveUpdateTestControl) return liveUpdateTestControl;
@@ -262,7 +242,6 @@ async function handleRequest(
 
 export {
   ConfigStoreDurableObject,
-  CredentialCacheBackfillDurableObject,
   CredentialCacheWriterDurableObject,
   McpDelegationReplayDurableObject,
   PanelDelegationReplayDurableObject,

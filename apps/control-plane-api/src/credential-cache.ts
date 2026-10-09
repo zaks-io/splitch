@@ -85,34 +85,6 @@ export async function writeApiKeyCache(
   );
 }
 
-export interface CredentialCacheBackfillRows {
-  readonly clientKeys: readonly (ClientKeyCacheRow & {
-    readonly organizationId: string;
-    readonly revokedAt: string | null;
-  })[];
-  readonly apiKeys: readonly (ApiKeyCacheRow & {
-    readonly organizationId: string;
-    readonly revokedAt: string | null;
-  })[];
-}
-
-/** Rewrites every D1 credential into the v2 cache shape using D1 App ownership. */
-export async function backfillCredentialCaches(
-  deps: CredentialCacheDeps,
-  rows: CredentialCacheBackfillRows,
-): Promise<number> {
-  let written = 0;
-  for (const row of rows.clientKeys) {
-    await writeClientKeyCache(deps, row, row.revokedAt !== null, row.organizationId, true);
-    written += 1;
-  }
-  for (const row of rows.apiKeys) {
-    await writeApiKeyCache(deps, row, row.revokedAt !== null, row.organizationId, true);
-    written += 1;
-  }
-  return written;
-}
-
 export async function sha256Hex(value: string): Promise<string> {
   const bytes = new TextEncoder().encode(value);
   const digest = await crypto.subtle.digest("SHA-256", bytes);
