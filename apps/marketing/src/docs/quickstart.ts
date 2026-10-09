@@ -4,6 +4,9 @@ export type QuickstartStep = {
   code: string;
 };
 
+export const quickstartIntro =
+  "Install the CLI, create a Flag, and verify it before connecting your app to the SDK.";
+
 export const quickstartSteps: readonly QuickstartStep[] = [
   {
     title: "Install and authenticate",
@@ -17,12 +20,12 @@ export const quickstartSteps: readonly QuickstartStep[] = [
   },
   {
     title: "Create an App",
-    body: "A dev and a prod Environment are auto-provisioned. You do not create Environments by hand for the common case.",
+    body: "Creating an App also creates its dev and prod Environments.",
     code: 'splitch apps create --org <orgId> --name "My App"',
   },
   {
     title: "Select the dev Environment",
-    body: "Active context fills in IDs on every later call. It is convenience only and never widens authorization.",
+    body: "Select the App and Environment to use for the following commands. This selection does not change your permissions.",
     code: "splitch use --app my-app --env dev",
   },
   {
@@ -32,24 +35,24 @@ export const quickstartSteps: readonly QuickstartStep[] = [
   },
   {
     title: "Create a Flag",
-    body: "Flag definition is App-level; serving config is per-Environment. A fresh Flag starts disabled with rollout null — it only ever serves the Default Variant until you flip Configuration.",
+    body: "Define the Flag once for the App, then configure it for each Environment. A new Flag starts disabled and serves the Default Variant until you enable it and set a Percentage Rollout.",
     code: "splitch flags create --key new-checkout --variants on,off --lifecycle-class release --owner checkout-team --expires-at 2027-01-01T00:00:00Z",
   },
   {
     title: "Enable and roll out",
-    body: "Turn the Flag on and set the baseline rollout to 100% so every Targeting Key in this Environment gets the non-default Variant. Configuration fields are documented at /docs/flags.",
+    body: "Enable the Flag and set its Percentage Rollout to 100% so every Targeting Key in this Environment gets the non-default Variant. See /docs/flags for Flag Configuration fields.",
     code: "splitch flag-config update new-checkout --enabled true --rollout 100",
   },
   {
     title: "Verify",
-    body: 'Confirm the Flag resolves for a Targeting Key without firing an Exposure. reason "DISABLED" means the Flag is still inert (enabled false) — that is not a pass. After the enable step you should see reason "SPLIT" and value true. One green round-trip with SPLIT proves auth, Environment, credential, and Flag config all line up.',
+    body: 'Verify the Flag for a Targeting Key without recording an Exposure. If the response has reason "DISABLED", enable the Flag before continuing. After enabling it, expect reason "SPLIT" and value true. This confirms that your credentials and Flag Configuration work in the selected Environment.',
     code: `splitch flags verify new-checkout --targeting-key test-user-1 --json
 # before enable: {"value":false,"variantName":"off","reason":"DISABLED"}
 # after enable:  {"value":true,"variantName":"on","reason":"SPLIT"}`,
   },
   {
     title: "Wire the SDK",
-    body: "evaluate() fires the first real Exposure and closes the loop. Fail-loud is one check: an error resolution names its code instead of hiding behind a default.",
+    body: 'Evaluate the Flag in your app to record its first Exposure. Check for reason "ERROR" and use errorCode to handle a failed evaluation.',
     code: `import { createSplitchClient } from "@splitch/sdk";
 
 // Paste keyMaterial from \`splitch client-key get\` (pk_…; not the ck_… keyId).
@@ -74,8 +77,16 @@ export const quickstartRecoveries = [
     "the Variant is not promoted to this Environment",
     "promote the Variant to this Environment, then retry",
   ],
-  ["RUN_FROZEN", "the edit touches a running Run", "clone into a new draft Run"],
-  ["APP_MISMATCH", "wrong key for this App or Environment", "fetch the credential for this Env"],
+  [
+    "RUN_FROZEN",
+    "the edit touches a running Experiment Run",
+    "clone into a new draft Experiment Run",
+  ],
+  [
+    "APP_MISMATCH",
+    "wrong key for this App or Environment",
+    "fetch the credential for this Environment",
+  ],
   [
     "401 / 403",
     "bad or revoked key, or origin not allowed",

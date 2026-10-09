@@ -15,9 +15,9 @@ export function QuickstartRecovery() {
         When a step fails
       </h2>
       <p className="max-w-2xl text-muted-foreground text-sm leading-relaxed">
-        splitch fails loud, then guides. Every operational 409 carries a machine-stable
-        <span className="font-mono text-foreground"> recommendedAction</span> token. Branch on the
-        token, not on prose.
+        If a command fails, read its error code and follow the recovery steps below. Agents can use
+        the <span className="font-mono text-foreground">recommendedAction</span> field in a 409
+        response to choose the next action.
       </p>
       <div className="overflow-x-auto rounded-xl border border-border">
         <Table>
