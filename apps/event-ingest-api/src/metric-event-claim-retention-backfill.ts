@@ -33,6 +33,9 @@ interface BackfillRow {
 
 type Retention = "retained" | "expired" | "missing";
 
+/** A failure whose message this module wrote, so logging it verbatim leaks nothing. */
+class BackfillFailure extends Error {}
+
 export interface MetricEventClaimRetentionBackfillNamespace {
   getByName(name: string): {
     fetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response>;
@@ -63,6 +66,10 @@ export async function adoptMetricEventClaimRetention(env: Env): Promise<void> {
 
 /** One-time, bounded adoption of claim records created before retention alarms existed. */
 export class MetricEventClaimRetentionBackfillDurableObject {
+  // Handlers interleave at every outbound await, so /run and alarm() could page
+  // from the same stale checkpoint and overwrite each other's outcome.
+  private paging: Promise<unknown> = Promise.resolve();
+
   constructor(
     private readonly ctx: DurableObjectState,
     private readonly env: Env,
@@ -76,30 +83,46 @@ export class MetricEventClaimRetentionBackfillDurableObject {
     if (request.method !== "POST" || path !== "/run") {
       return new Response("not found", { status: 404 });
     }
-    const next = await this.runBatch(await this.checkpoint());
+    const next = await this.serialized(async () => this.runBatch(await this.checkpoint()));
     const healthy = next.done || (next.halted === undefined && !next.failedAttempts);
     return Response.json(next, { status: healthy ? 200 : 503 });
   }
 
   async alarm(): Promise<void> {
-    const checkpoint = await this.checkpoint();
     // A halt waits for the daily /run, and a failed page has already scheduled its
     // backoff. Throwing here would stack the runtime's own alarm retries on top.
-    if (checkpoint.halted !== undefined) return;
-    await this.runBatch(checkpoint);
+    await this.serialized(async () => {
+      const checkpoint = await this.checkpoint();
+      if (checkpoint.done || checkpoint.halted !== undefined) return;
+      if ((checkpoint.failedAttempts ?? 0) >= MAX_FAILED_ATTEMPTS) {
+        // The attempt at the bound was interrupted before it recorded an outcome.
+        await this.ctx.storage.put(CHECKPOINT_KEY, exhausted(checkpoint, "interrupted"));
+        await this.ctx.storage.deleteAlarm();
+        return;
+      }
+      await this.runBatch(checkpoint);
+    });
+  }
+
+  private serialized<T>(work: () => Promise<T>): Promise<T> {
+    const run = this.paging.then(work);
+    this.paging = run.catch(() => undefined);
+    return run;
   }
 
   private async runBatch(checkpoint: Checkpoint): Promise<Checkpoint> {
     if (checkpoint.done) return checkpoint;
     const failedAttempts = (checkpoint.failedAttempts ?? 0) + 1;
-    // A run evicted mid-page resumes no sooner than a failed page would retry, so a
-    // page that fails the same way every time cannot spin.
+    // The attempt counts as failed until it succeeds, so one that dies mid-page still
+    // spends an attempt and resumes no sooner than a failed page would retry.
+    const started = { ...checkpoint, failedAttempts };
+    await this.ctx.storage.put(CHECKPOINT_KEY, started);
     await this.ctx.storage.setAlarm(Date.now() + retryDelayMs(failedAttempts));
     let next: Checkpoint;
     try {
-      next = await this.adoptPage(checkpoint);
+      next = await this.adoptPage(started);
     } catch (error) {
-      next = failedPage(checkpoint, failedAttempts, error);
+      next = failedPage(started, error);
     }
     await this.ctx.storage.put(CHECKPOINT_KEY, next);
     if (next.done || next.halted !== undefined) {
@@ -146,8 +169,10 @@ export class MetricEventClaimRetentionBackfillDurableObject {
   }
 
   private async readRows(checkpoint: Checkpoint): Promise<BackfillRow[]> {
-    if (!this.env.TINYBIRD_READ_TOKEN) throw new Error("TINYBIRD_READ_TOKEN is unavailable");
-    if (!this.env.TINYBIRD_API_URL) throw new Error("TINYBIRD_API_URL is unavailable");
+    if (!this.env.TINYBIRD_READ_TOKEN) {
+      throw new BackfillFailure("TINYBIRD_READ_TOKEN is unavailable");
+    }
+    if (!this.env.TINYBIRD_API_URL) throw new BackfillFailure("TINYBIRD_API_URL is unavailable");
     const url = new URL(`/v0/pipes/${PIPE_NAME}.json`, this.env.TINYBIRD_API_URL);
     url.searchParams.set("retained_after", tinybirdTimestamp(checkpoint.retainedAfter));
     url.searchParams.set("limit", String(BATCH_SIZE));
@@ -163,18 +188,24 @@ export class MetricEventClaimRetentionBackfillDurableObject {
       signal: AbortSignal.timeout(READ_TIMEOUT_MS),
     });
     if (!response.ok) {
-      throw new Error(`Metric Event retention backfill returned HTTP ${response.status}`);
+      throw new BackfillFailure(`Metric Event retention backfill returned HTTP ${response.status}`);
     }
-    const body = (await response.json()) as { data?: unknown };
+    let body: { data?: unknown };
+    try {
+      body = (await response.json()) as { data?: unknown };
+    } catch {
+      // JSON parse errors quote the body, which holds dedup keys.
+      throw new BackfillFailure("Metric Event retention backfill returned malformed JSON");
+    }
     if (!Array.isArray(body.data)) {
-      throw new Error("Metric Event retention backfill returned malformed data");
+      throw new BackfillFailure("Metric Event retention backfill returned malformed data");
     }
     return body.data.map(parseRow);
   }
 
   private async retain(row: BackfillRow): Promise<Retention> {
     const namespace = this.env.METRIC_EVENT_OUTBOX;
-    if (!namespace) throw new Error("METRIC_EVENT_OUTBOX binding is unavailable");
+    if (!namespace) throw new BackfillFailure("METRIC_EVENT_OUTBOX binding is unavailable");
     const response = await namespace
       .get(namespace.idFromName(row.dedupKey))
       .fetch("https://metric-event-outbox.local/retain", {
@@ -188,7 +219,7 @@ export class MetricEventClaimRetentionBackfillDurableObject {
       return Date.parse(row.serverReceivedAt) + RETENTION_MS <= Date.now() ? "expired" : "missing";
     }
     if (!response.ok) {
-      throw new Error(`Metric Event claim retention returned HTTP ${response.status}`);
+      throw new BackfillFailure(`Metric Event claim retention returned HTTP ${response.status}`);
     }
     return "retained";
   }
@@ -206,20 +237,26 @@ function advanced(checkpoint: Checkpoint, row: BackfillRow | undefined, halted?:
   };
 }
 
-function failedPage(checkpoint: Checkpoint, failedAttempts: number, error: unknown): Checkpoint {
-  const exhausted = failedAttempts >= MAX_FAILED_ATTEMPTS;
+function failedPage(started: Checkpoint, error: unknown): Checkpoint {
+  const failure =
+    error instanceof BackfillFailure
+      ? error.message
+      : `unexpected ${error instanceof Error ? error.name : typeof error}`;
+  if ((started.failedAttempts ?? 0) >= MAX_FAILED_ATTEMPTS) return exhausted(started, failure);
   console.error("event-ingest-api Metric Event claim retention backfill failed", {
-    failedAttempts,
-    halted: exhausted,
-    errorMessage: error instanceof Error ? error.message : "non-error rejection",
+    failedAttempts: started.failedAttempts,
+    failure,
   });
-  return exhausted
-    ? {
-        ...checkpoint,
-        failedAttempts,
-        halted: { reason: "retries-exhausted", at: new Date().toISOString() },
-      }
-    : { ...checkpoint, failedAttempts };
+  return started;
+}
+
+function exhausted(checkpoint: Checkpoint, failure: string): Checkpoint {
+  console.error("event-ingest-api Metric Event claim retention backfill halted", {
+    reason: "retries-exhausted",
+    failedAttempts: checkpoint.failedAttempts,
+    failure,
+  });
+  return { ...checkpoint, halted: { reason: "retries-exhausted", at: new Date().toISOString() } };
 }
 
 function retryDelayMs(failedAttempts: number): number {
@@ -228,7 +265,7 @@ function retryDelayMs(failedAttempts: number): number {
 
 function parseRow(value: unknown): BackfillRow {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    throw new Error("Metric Event retention backfill row is invalid");
+    throw new BackfillFailure("Metric Event retention backfill row is invalid");
   }
   const row = value as Record<string, unknown>;
   if (
@@ -236,7 +273,7 @@ function parseRow(value: unknown): BackfillRow {
     row.dedup_key.length === 0 ||
     typeof row.server_received_at !== "string"
   ) {
-    throw new Error("Metric Event retention backfill row is invalid");
+    throw new BackfillFailure("Metric Event retention backfill row is invalid");
   }
   return {
     dedupKey: row.dedup_key,
@@ -253,6 +290,8 @@ function parseTimestamp(value: string): number {
   const parsed = Date.parse(
     /^\d{4}-\d{2}-\d{2} /u.test(value) ? `${value.replace(" ", "T")}Z` : value,
   );
-  if (!Number.isFinite(parsed)) throw new Error("Metric Event retention timestamp is invalid");
+  if (!Number.isFinite(parsed)) {
+    throw new BackfillFailure("Metric Event retention timestamp is invalid");
+  }
   return parsed;
 }
