@@ -109,34 +109,15 @@ describe("Control Plane API Wrangler runtime config", () => {
     ["local", config],
     ["shared-preview", config.env?.["shared-preview"]],
     ["production", config.env?.production],
-  ])(
-    "declaratively provisions live Durable Objects and retires completed migrations for %s",
-    (_target, target) => {
-      const exports = Object.values(effectiveExports(target) ?? {});
-      expect(exports.filter((entry) => entry.state === "deleted")).toEqual([
-        { type: "durable-object", state: "deleted" },
-      ]);
-      for (const [name, entry] of Object.entries(effectiveExports(target) ?? {})) {
-        if (entry.state === "deleted") {
-          expect(
-            target?.durable_objects?.bindings?.some((binding) => binding.class_name === name),
-          ).toBe(false);
-        }
-      }
-      const liveExports = Object.fromEntries(
-        Object.entries(effectiveExports(target) ?? {}).filter(
-          ([, entry]) => entry.state !== "deleted",
-        ),
-      );
-      expect(liveExports).toEqual({
-        ConfigStoreDurableObject: { type: "durable-object", storage: "sqlite" },
-        CredentialCacheWriterDurableObject: { type: "durable-object", storage: "sqlite" },
-        PanelDelegationReplayDurableObject: { type: "durable-object", storage: "sqlite" },
-        McpDelegationReplayDurableObject: { type: "durable-object", storage: "sqlite" },
-      });
-      expect(target?.migrations).toBeUndefined();
-    },
-  );
+  ])("declaratively provisions the live Durable Objects for %s", (_target, target) => {
+    expect(effectiveExports(target)).toEqual({
+      ConfigStoreDurableObject: { type: "durable-object", storage: "sqlite" },
+      CredentialCacheWriterDurableObject: { type: "durable-object", storage: "sqlite" },
+      PanelDelegationReplayDurableObject: { type: "durable-object", storage: "sqlite" },
+      McpDelegationReplayDurableObject: { type: "durable-object", storage: "sqlite" },
+    });
+    expect(target?.migrations).toBeUndefined();
+  });
 
   it("binds the actor-scoped limiter in production", () => {
     expect(config.env?.production?.ratelimits).toContainEqual({
@@ -190,7 +171,7 @@ interface ServiceBinding {
 
 type DurableObjectExports = Record<
   string,
-  { type: "durable-object"; storage?: "sqlite" | "legacy-kv"; state?: "deleted" }
+  { type: "durable-object"; storage?: "sqlite" | "legacy-kv" }
 >;
 
 function effectiveCrons(target: WranglerTarget | undefined): string[] | undefined {

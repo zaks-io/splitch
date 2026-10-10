@@ -85,7 +85,6 @@
   "exports": {
     "ConfigStoreDurableObject": { "type": "durable-object", "storage": "sqlite" },
     "CredentialCacheWriterDurableObject": { "type": "durable-object", "storage": "sqlite" },
-    "CredentialCacheBackfillDurableObject": { "type": "durable-object", "state": "deleted" },
     "PanelDelegationReplayDurableObject": { "type": "durable-object", "storage": "sqlite" },
     "McpDelegationReplayDurableObject": { "type": "durable-object", "storage": "sqlite" }
   },
