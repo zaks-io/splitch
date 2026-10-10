@@ -2,6 +2,7 @@ import {
   AnalysisResultsEnvelopeSchema,
   type ErrorResponse,
   ErrorResponseSchema,
+  parseResponseBody,
   type StatsOutput,
 } from "@splitch/contracts";
 import { isAnalysisInsufficientData } from "@splitch/control-plane-sdk/panel-experiments";
@@ -89,7 +90,7 @@ async function unwrapEnvelope(
     // was promoted to SERVICE_UNAVAILABLE for every successful read (SPL-290).
     // Panel results already unwrap via parseAnalysisResults; this reader must
     // do the same and keep the no-pooling Run check.
-    const envelope = AnalysisResultsEnvelopeSchema.parse(await response.json());
+    const envelope = parseResponseBody(AnalysisResultsEnvelopeSchema, await response.json());
     // `no_run` is resolved on the Control Plane before the hop (SPL-305). A
     // running Experiment's attention read should never see it; treat as empty.
     if (envelope.state === "no_run") return null;
