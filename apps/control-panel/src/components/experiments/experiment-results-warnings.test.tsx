@@ -1,15 +1,13 @@
+import {
+  breachedGuardrailScenario,
+  cleanScenario,
+  srmFiringScenario,
+  underpoweredScenario,
+} from "@splitch/contracts/testing";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { ExperimentResults } from "#components/experiments/experiment-results";
-import {
-  breachedGuardrailStats,
-  metricsFixture,
-  resultsFixture,
-  runFixture,
-  srmFiringStats,
-  statsFixture,
-  underpoweredStats,
-} from "./experiment-results-test-fixtures";
+import { metricsFixture, resultsFixture, runFixture } from "./experiment-results-test-fixtures";
 
 describe("ExperimentResults warning states", () => {
   it("keeps every Guardrail breach visible while its station is collapsed", () => {
@@ -18,7 +16,7 @@ describe("ExperimentResults warning states", () => {
         onConclude={() => {}}
         metrics={metricsFixture()}
         run={runFixture()}
-        results={resultsFixture(breachedGuardrailStats())}
+        results={resultsFixture(breachedGuardrailScenario())}
       />,
     );
     const guardrailsTrigger = (html.match(/<button[\s\S]*?<\/button>/g) ?? []).find((button) =>
@@ -37,7 +35,7 @@ describe("ExperimentResults warning states", () => {
         onConclude={() => {}}
         metrics={metricsFixture()}
         run={runFixture()}
-        results={resultsFixture(srmFiringStats())}
+        results={resultsFixture(srmFiringScenario())}
       />,
     );
 
@@ -61,7 +59,7 @@ describe("ExperimentResults warning states", () => {
         onConclude={() => {}}
         metrics={metricsFixture()}
         run={runFixture()}
-        results={resultsFixture(srmFiringStats())}
+        results={resultsFixture(srmFiringScenario())}
       />,
     );
 
@@ -78,7 +76,7 @@ describe("ExperimentResults warning states", () => {
         onConclude={() => {}}
         metrics={metricsFixture()}
         run={runFixture()}
-        results={resultsFixture(underpoweredStats())}
+        results={resultsFixture(underpoweredScenario())}
       />,
     );
 
@@ -95,7 +93,7 @@ describe("ExperimentResults warning states", () => {
         onConclude={() => {}}
         metrics={metricsFixture()}
         run={runFixture()}
-        results={resultsFixture(srmFiringStats())}
+        results={resultsFixture(srmFiringScenario())}
       />,
     );
 
@@ -106,7 +104,7 @@ describe("ExperimentResults warning states", () => {
   it("renders whatever verdict the Worker sent, without re-deriving it", () => {
     // Statistically dirty Run, but the Worker said ship. The Panel obeys the
     // Worker: if this rendered a block, the Panel would be computing stats.
-    const results = resultsFixture(srmFiringStats(), {
+    const results = resultsFixture(srmFiringScenario(), {
       gate: {
         shipAllowed: true,
         blockedBy: [],
@@ -149,7 +147,7 @@ describe("Conclusion evidence", () => {
         onConclude={() => {}}
         metrics={metricsFixture()}
         run={runFixture()}
-        results={resultsFixture(statsFixture())}
+        results={resultsFixture(cleanScenario())}
       />,
     );
     const button = (html.match(/<button[\s\S]*?<\/button>/g) ?? []).find((button) =>

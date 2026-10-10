@@ -1,19 +1,17 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import {
+  breachedGuardrailScenario,
+  cleanScenario,
+  modestLiftScenario,
+} from "@splitch/contracts/testing";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import {
   ExperimentResults,
   ExperimentResultsEmpty,
 } from "#components/experiments/experiment-results";
-import {
-  breachedGuardrailStats,
-  metricsFixture,
-  modestLiftStats,
-  resultsFixture,
-  runFixture,
-  statsFixture,
-} from "./experiment-results-test-fixtures";
+import { metricsFixture, resultsFixture, runFixture } from "./experiment-results-test-fixtures";
 
 describe("ExperimentResults", () => {
   it("renders the lift plot, the numbers and an allowed decision on a clean Run", () => {
@@ -22,7 +20,7 @@ describe("ExperimentResults", () => {
         onConclude={() => {}}
         metrics={metricsFixture()}
         run={runFixture()}
-        results={resultsFixture(statsFixture())}
+        results={resultsFixture(cleanScenario())}
       />,
     );
 
@@ -36,7 +34,7 @@ describe("ExperimentResults", () => {
   // "Every readiness check passed" claims a pass for checks that only reported
   // not-applicable. The count has to match what was actually assessed.
   it("counts the checks that passed instead of claiming they all did", () => {
-    const results = resultsFixture(statsFixture());
+    const results = resultsFixture(cleanScenario());
     const passed = results.gate.checks.filter((check) => check.status === "pass").length;
     const html = renderToStaticMarkup(
       <ExperimentResults
@@ -58,7 +56,7 @@ describe("ExperimentResults", () => {
         onConclude={() => {}}
         metrics={metricsFixture()}
         run={runFixture()}
-        results={resultsFixture(modestLiftStats())}
+        results={resultsFixture(modestLiftScenario())}
       />,
     );
 
@@ -70,7 +68,7 @@ describe("ExperimentResults", () => {
   // 0.0499 and 0.0501 fall on opposite sides of a conventional alpha and must
   // never print as the same number.
   it("keeps p-values distinguishable across a decision boundary", () => {
-    const base = statsFixture();
+    const base = cleanScenario().stats;
     const [arm] = base.arm_results;
     if (!arm) throw new Error("fixture must produce an arm");
     const render = (pValue: number) =>
@@ -79,7 +77,9 @@ describe("ExperimentResults", () => {
           onConclude={() => {}}
           metrics={metricsFixture()}
           run={runFixture()}
-          results={resultsFixture({ ...base, arm_results: [{ ...arm, p_value: pValue }] })}
+          results={resultsFixture(cleanScenario(), {
+            stats: { ...base, arm_results: [{ ...arm, p_value: pValue }] },
+          })}
         />,
       );
 
@@ -90,7 +90,7 @@ describe("ExperimentResults", () => {
   // ADR-0014: the interval a reader sees must be the interval the call was made
   // on. When they disagree, saying so beats picking the flattering one.
   it("refuses to call a result significant when the interval shown spans zero", () => {
-    const base = statsFixture();
+    const base = cleanScenario().stats;
     const [arm] = base.arm_results;
     if (!arm) throw new Error("fixture must produce an arm");
     const html = renderToStaticMarkup(
@@ -98,9 +98,11 @@ describe("ExperimentResults", () => {
         onConclude={() => {}}
         metrics={metricsFixture()}
         run={runFixture()}
-        results={resultsFixture({
-          ...base,
-          arm_results: [{ ...arm, ci_lower: -2036.6, ci_upper: 5036.6, is_significant: true }],
+        results={resultsFixture(cleanScenario(), {
+          stats: {
+            ...base,
+            arm_results: [{ ...arm, ci_lower: -2036.6, ci_upper: 5036.6, is_significant: true }],
+          },
         })}
       />,
     );
@@ -112,7 +114,7 @@ describe("ExperimentResults", () => {
   // Guardrails deliberately do not gate, which makes a breach beside an
   // otherwise clean gate the most misleading state the tab can reach.
   it("names a breached Guardrail in the ship decision without blocking on it", () => {
-    const results = resultsFixture(breachedGuardrailStats());
+    const results = resultsFixture(breachedGuardrailScenario());
     const html = renderToStaticMarkup(
       <ExperimentResults
         onConclude={() => {}}
@@ -141,7 +143,7 @@ describe("ExperimentResults baseline legend", () => {
   // Control name alone. When no ArmResult matches that name, nothing is drawn
   // at zero, so claiming a baseline there is a lie about missing data.
   it("does not claim a baseline at zero lift when no arm matches the Control name", () => {
-    const stats = statsFixture();
+    const stats = cleanScenario().stats;
     expect(stats.arm_results.some((arm) => arm.variant === "control")).toBe(false);
 
     const html = renderToStaticMarkup(
@@ -149,7 +151,7 @@ describe("ExperimentResults baseline legend", () => {
         onConclude={() => {}}
         metrics={metricsFixture()}
         run={runFixture()}
-        results={resultsFixture(stats)}
+        results={resultsFixture(cleanScenario(), { stats })}
       />,
     );
 
@@ -166,7 +168,7 @@ describe("ExperimentResults baseline legend", () => {
         onConclude={() => {}}
         metrics={metricsFixture()}
         run={runFixture()}
-        results={resultsFixture(statsFixture(), {
+        results={resultsFixture(cleanScenario(), {
           control: {
             state: "frozen",
             variantId: "variant_analysis_control",
@@ -184,7 +186,7 @@ describe("ExperimentResults baseline legend", () => {
   // would render as an unbounded whisker spanning the plot, claiming total
   // uncertainty about the one quantity here that is exact.
   it("anchors the baseline arm at zero instead of drawing it as an open interval", () => {
-    const stats = statsFixture();
+    const stats = cleanScenario().stats;
     const [treatment] = stats.arm_results;
     if (!treatment) throw new Error("fixture must produce a treatment arm");
     const html = renderToStaticMarkup(
@@ -192,20 +194,22 @@ describe("ExperimentResults baseline legend", () => {
         onConclude={() => {}}
         metrics={metricsFixture()}
         run={runFixture()}
-        results={resultsFixture({
-          ...stats,
-          arm_results: [
-            {
-              ...treatment,
-              variant: "control",
-              relative_lift_pct: null,
-              ci_lower: null,
-              ci_upper: null,
-              in_bh_family: false,
-              is_significant: false,
-            },
-            treatment,
-          ],
+        results={resultsFixture(cleanScenario(), {
+          stats: {
+            ...stats,
+            arm_results: [
+              {
+                ...treatment,
+                variant: "control",
+                relative_lift_pct: null,
+                ci_lower: null,
+                ci_upper: null,
+                in_bh_family: false,
+                is_significant: false,
+              },
+              treatment,
+            ],
+          },
         })}
       />,
     );

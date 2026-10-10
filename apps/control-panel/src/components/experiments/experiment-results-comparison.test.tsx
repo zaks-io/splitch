@@ -1,18 +1,15 @@
 import type { StatsOutput } from "@splitch/contracts";
+import { analysisControlScenario } from "@splitch/contracts/testing";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { ExperimentResultsComparison } from "./experiment-results-comparison";
-import {
-  resultsFixture,
-  runFixture,
-  statsWithAnalysisControl,
-} from "./experiment-results-test-fixtures";
+import { resultsFixture, runFixture } from "./experiment-results-test-fixtures";
 import { visibleText } from "./experiment-results-test-markup";
 
 function renderComparison(
   options: { zero?: boolean; missing?: boolean; empty?: boolean; ratio?: boolean } = {},
 ) {
-  const stats = statsWithAnalysisControl();
+  const stats = analysisControlScenario().stats;
   stats.arm_results = stats.arm_results.map((arm) => ({
     ...arm,
     point_estimate: options.zero ? 0 : arm.variant === "control" ? 0.0167 : 0.0577,
@@ -24,7 +21,7 @@ function renderComparison(
     stats.arm_results = stats.arm_results.filter((arm) => arm.variant === "control");
   return renderToStaticMarkup(
     <ExperimentResultsComparison
-      results={resultsFixture(stats)}
+      results={resultsFixture(analysisControlScenario(), { stats })}
       run={runFixture({ decisionMetricIds: ["checkout_conversion", "missing_metric"] })}
       metrics={[
         {
@@ -42,7 +39,7 @@ function renderComparison(
 }
 
 function threeArmStats(): StatsOutput {
-  const stats = statsWithAnalysisControl();
+  const stats = analysisControlScenario().stats;
   const template = stats.arm_results[1];
   if (!template) throw new Error("Missing fixture Treatment arm");
   const control = stats.arm_results[0];
@@ -70,11 +67,11 @@ describe("ExperimentResultsComparison", () => {
   });
 
   it("groups Metrics by the role the Run froze for them", () => {
-    const stats = statsWithAnalysisControl();
+    const stats = analysisControlScenario().stats;
     const text = visibleText(
       renderToStaticMarkup(
         <ExperimentResultsComparison
-          results={resultsFixture(stats)}
+          results={resultsFixture(analysisControlScenario(), { stats })}
           run={runFixture({
             decisionMetricIds: ["checkout_conversion"],
             decisionGuardrailMetricIds: ["checkout_latency_p95"],
@@ -147,7 +144,8 @@ describe("ExperimentResultsComparison ordering and states", () => {
     stats.arm_results.push({ ...control, metric_id: "quiet", point_estimate: 1 });
     const html = renderToStaticMarkup(
       <ExperimentResultsComparison
-        results={resultsFixture(stats, {
+        results={resultsFixture(analysisControlScenario(), {
+          stats,
           dataWatermark: "2026-09-16T12:00:00Z",
           resultToken: `sha256:${"a".repeat(64)}`,
         })}
@@ -173,7 +171,7 @@ describe("ExperimentResultsComparison ordering and states", () => {
   });
 
   it("marks a breached Guardrail in words and draws its threshold", () => {
-    const stats = statsWithAnalysisControl();
+    const stats = analysisControlScenario().stats;
     const treatment = stats.arm_results[1];
     if (!treatment) throw new Error("Missing fixture Treatment arm");
     stats.arm_results.push({
@@ -189,7 +187,7 @@ describe("ExperimentResultsComparison ordering and states", () => {
     stats.guardrail_results = [{ ...guardrail, ci_lower: -24.6, is_breached: true }];
     const html = renderToStaticMarkup(
       <ExperimentResultsComparison
-        results={resultsFixture(stats)}
+        results={resultsFixture(analysisControlScenario(), { stats })}
         run={runFixture({ decisionGuardrailMetricIds: ["checkout_latency_p95"] })}
         metrics={[
           { id: "checkout_conversion", name: "Checkout conversion", kind: "binomial" },
@@ -206,7 +204,7 @@ describe("ExperimentResultsComparison ordering and states", () => {
   });
 
   it("keeps estimates visible when confidence interval calculation fails", () => {
-    const stats = statsWithAnalysisControl();
+    const stats = analysisControlScenario().stats;
     stats.arm_results = stats.arm_results.map((arm) =>
       arm.variant === "treatment"
         ? { ...arm, status: "error", point_estimate: 0.12, ci_lower: null, ci_upper: null }
@@ -215,7 +213,7 @@ describe("ExperimentResultsComparison ordering and states", () => {
     const text = visibleText(
       renderToStaticMarkup(
         <ExperimentResultsComparison
-          results={resultsFixture(stats)}
+          results={resultsFixture(analysisControlScenario(), { stats })}
           run={runFixture()}
           metrics={[{ id: "checkout_conversion", name: "Checkout conversion", kind: "binomial" }]}
           baseline="control"
@@ -231,7 +229,7 @@ describe("ExperimentResultsComparison ordering and states", () => {
     const text = visibleText(
       renderToStaticMarkup(
         <ExperimentResultsComparison
-          results={resultsFixture(statsWithAnalysisControl())}
+          results={resultsFixture(analysisControlScenario())}
           run={runFixture()}
           metrics={[]}
           baseline="control"
