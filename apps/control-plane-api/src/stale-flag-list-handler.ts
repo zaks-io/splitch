@@ -1,17 +1,19 @@
 import {
   boundListRead,
-  detectStaleReasons,
   FLAG_UNIFORM_SERVING_HISTORY_WINDOW_DAYS,
   PercentageRolloutSchema,
-  type EnvironmentConfigState,
   type StaleFlagItem,
-  type StaleFlagSignals,
 } from "@splitch/contracts";
 import { appScope, type Repository } from "@splitch/db";
 import type { HandlerArgs } from "@splitch/worker-runtime";
 import { appNotFound, nowIso } from "./app-environment-model";
 import type { FlagDefinitionDeps } from "./flag-definition-handler-utils";
 import { flagFrom } from "./flag-definition-model";
+import {
+  detectStaleReasons,
+  type EnvironmentConfigState,
+  type StaleFlagSignals,
+} from "./flag-stale-detect";
 import { pathParam } from "./handler-input";
 import { FLAG_LIST_READ_LIMIT } from "./overview-thresholds";
 

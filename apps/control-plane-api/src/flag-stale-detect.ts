@@ -1,11 +1,13 @@
-import { FLAG_STALE_THRESHOLDS } from "./flag-stale-thresholds";
-import type { StoredFlagLifecycleClass } from "./leaf-schemas-flag";
-
-/** Ordinary Flag reads record no served Variant, so serving stays unverified. */
-export const SERVING_EVIDENCE_UNVERIFIED = "unverified" as const;
-export type ServingEvidence = typeof SERVING_EVIDENCE_UNVERIFIED;
-
-export type UniformServingMode = "disabled" | "default_only" | "full_rollout";
+import {
+  FLAG_STALE_THRESHOLDS,
+  SERVING_EVIDENCE_UNVERIFIED,
+  type ServingEvidence,
+  type StaleReason,
+  type StoredFlagLifecycleClass,
+  type UniformEnvironmentEvidence,
+  type UniformServingMode,
+  type UniformServingSignal,
+} from "@splitch/contracts";
 
 /**
  * One Environment's configuration facts used for uniform-serving detection.
@@ -27,41 +29,6 @@ export type EnvironmentConfigState = {
    */
   lastRunLifecycleAt: string | null;
 };
-
-export type UniformEnvironmentEvidence = {
-  environmentId: string;
-  mode: UniformServingMode;
-  updatedAt: string;
-};
-
-export type StaleReason =
-  | {
-      kind: "uniform_serving";
-      thresholdDays: number;
-      /** Latest Environment config `updatedAt` across the App; uniform at least this long. */
-      uniformSince: string;
-      environments: UniformEnvironmentEvidence[];
-    }
-  | {
-      kind: "past_expiry";
-      expiresAt: string;
-      lifecycleClass: StoredFlagLifecycleClass;
-    }
-  | {
-      kind: "unchanged";
-      thresholdDays: number;
-      lastChangedAt: string;
-      /** Where `lastChangedAt` came from so agents do not invent a second clock. */
-      source: "flag_change_log" | "flag_updated_at";
-    };
-
-/**
- * App-scoped uniform-serving history. Legacy Runs (no Start change-log row) leave
- * attribution unknown; never fall back to Configuration `updatedAt` alone.
- */
-export type UniformServingSignal =
-  | { state: "available" }
-  | { state: "unknown"; reason: "run_history_unavailable" };
 
 export type StaleFlagSignals = {
   reasons: StaleReason[];

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseFlagChangeDiff } from "./flag-change-diff";
+import { parseFlagChangeDiff } from "./flag-change-diff-parse";
 import { renderFlagChangeUnifiedDiff } from "./flag-change-unified-diff";
 
 /**

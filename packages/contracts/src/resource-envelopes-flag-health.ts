@@ -1,11 +1,16 @@
 import { z } from "@hono/zod-openapi";
-import { SERVING_EVIDENCE_UNVERIFIED } from "./flag-stale-detect";
 import { FLAG_AGE_BUCKETS } from "./flag-stale-thresholds";
 import { StoredFlagLifecycleClassSchema } from "./leaf-schemas-flag";
 import { FlagResponseSchema } from "./resource-envelopes-flag";
 import { listResponse } from "./wire-envelopes-core";
 
+/** Ordinary Flag reads record no served Variant, so serving stays unverified. */
+export const SERVING_EVIDENCE_UNVERIFIED = "unverified" as const;
+export type ServingEvidence = typeof SERVING_EVIDENCE_UNVERIFIED;
+
 const UniformServingModeSchema = z.enum(["disabled", "default_only", "full_rollout"]);
+
+export type UniformServingMode = z.infer<typeof UniformServingModeSchema>;
 
 const UniformEnvironmentEvidenceSchema = z
   .object({
@@ -14,6 +19,8 @@ const UniformEnvironmentEvidenceSchema = z
     updatedAt: z.string(),
   })
   .strict();
+
+export type UniformEnvironmentEvidence = z.infer<typeof UniformEnvironmentEvidenceSchema>;
 
 /**
  * One typed stale reason with its evidence. Additive discriminated union: new
@@ -45,6 +52,7 @@ export const StaleFlagReasonSchema = z.discriminatedUnion("kind", [
     .strict(),
 ]);
 export type StaleFlagReason = z.infer<typeof StaleFlagReasonSchema>;
+export type StaleReason = StaleFlagReason;
 
 /**
  * App-scoped uniform-serving history. Legacy Runs with no Start change-log row
@@ -60,6 +68,8 @@ export const UniformServingSignalSchema = z.discriminatedUnion("state", [
     })
     .strict(),
 ]);
+
+export type UniformServingSignal = z.infer<typeof UniformServingSignalSchema>;
 
 /**
  * A stale item either has at least one definite reason, or carries unknown
