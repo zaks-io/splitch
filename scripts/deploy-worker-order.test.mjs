@@ -121,7 +121,12 @@ function definedClasses(config) {
       for (const name of migration?.deleted_classes ?? []) defined.delete(name);
     }
     for (const [name, entry] of Object.entries(target?.exports ?? {})) {
-      if (entry?.type === "durable-object") defined.add(name);
+      if (
+        entry?.type === "durable-object" &&
+        (entry.state === undefined || entry.state === "created")
+      ) {
+        defined.add(name);
+      }
     }
     for (const binding of target?.durable_objects?.bindings ?? []) {
       if (!binding?.script_name && binding?.class_name) defined.add(binding.class_name);
@@ -160,28 +165,16 @@ function deployOrder(commands) {
       if (args.some((arg) => arg === `--filter=${name}`)) order.push(name);
     }
     const [verb, script] = args;
-    // The ordering steps and the Control Panel cutover run through pnpm scripts,
+    // The ordering steps run through pnpm scripts,
     // so map those back to the package each one deploys.
     if (verb === "run" && typeof script === "string") order.push(...packagesDeployedBy(script));
   }
   return order;
 }
 
-/**
- * Resolves a pnpm script to the packages it deploys, following the one level of
- * indirection the cutover uses: `deploy:cloudflare:control-plane-compat` shells
- * out to a node script that turbo-deploys Control Plane with a temporary config.
- */
+/** The ordering scripts deploy packages directly through Turbo filters. */
 function packagesDeployedBy(scriptName) {
-  let body = packageScripts()[scriptName] ?? "";
-  const delegated = /node (scripts\/[\w-]+\.mjs)/.exec(body);
-  if (delegated) {
-    try {
-      body += readFileSync(join(repoRoot, delegated[1]), "utf8");
-    } catch {
-      // A script that is not on disk simply contributes no filters.
-    }
-  }
+  const body = packageScripts()[scriptName] ?? "";
   return deployable.filter(
     (name) => body.includes(`--filter=${name}`) && !body.includes(`--filter=!${name}`),
   );

@@ -20,42 +20,57 @@ test("deploys one independent Worker without traversing the fleet", () => {
   ]);
 });
 
-test("preserves the bounded Control Panel cutover when either side changes", () => {
-  for (const changedPackage of ["@splitch/control-panel", "@splitch/control-plane-api"]) {
-    assert.deepEqual(deploymentCommands("production", [changedPackage], workspacePackages), [
-      ["run", "deploy:cloudflare:control-plane-compat:production"],
-      ["run", "credential-cache:backfill:production"],
-      ["run", "deploy:cloudflare:control-panel:production"],
-      ["run", "deploy:cloudflare:control-plane:production"],
-    ]);
-  }
-});
+for (const environment of ["production", "shared-preview"]) {
+  test(`${environment} deploys Control Plane alone exactly once`, () => {
+    assert.deepEqual(
+      deploymentCommands(environment, ["@splitch/control-plane-api"], workspacePackages),
+      [["run", `deploy:cloudflare:control-plane:${environment}`]],
+    );
+  });
 
-test("deploys an affected Evaluation Worker without requiring a Control Plane checkpoint", () => {
-  assert.deepEqual(
-    deploymentCommands("production", ["@splitch/evaluation-api"], workspacePackages),
-    [["run", "deploy:cloudflare:evaluation:production"]],
-  );
-});
+  test(`${environment} deploys Control Panel alone without redeploying Control Plane`, () => {
+    assert.deepEqual(
+      deploymentCommands(environment, ["@splitch/control-panel"], workspacePackages),
+      [["run", `deploy:cloudflare:control-panel:${environment}`]],
+    );
+  });
 
-// Evaluation exports the entrypoint Control Plane binds (ADR-0046), so a release
-// touching both must put Evaluation on the wire before Control Plane rebinds it.
-test("deploys the Control Plane compatibility RPC before Evaluation and final Control Plane", () => {
-  assert.deepEqual(
-    deploymentCommands(
-      "production",
-      ["@splitch/control-plane-api", "@splitch/evaluation-api"],
-      workspacePackages,
-    ),
-    [
-      ["run", "deploy:cloudflare:control-plane-compat:production"],
-      ["run", "deploy:cloudflare:evaluation:production"],
-      ["run", "credential-cache:backfill:production"],
-      ["run", "deploy:cloudflare:control-panel:production"],
-      ["run", "deploy:cloudflare:control-plane:production"],
-    ],
-  );
-});
+  test(`${environment} deploys Control Plane before a selected Control Panel`, () => {
+    assert.deepEqual(
+      deploymentCommands(
+        environment,
+        ["@splitch/control-panel", "@splitch/control-plane-api"],
+        workspacePackages,
+      ),
+      [
+        ["run", `deploy:cloudflare:control-plane:${environment}`],
+        ["run", `deploy:cloudflare:control-panel:${environment}`],
+      ],
+    );
+  });
+
+  test(`${environment} deploys Evaluation alone`, () => {
+    assert.deepEqual(
+      deploymentCommands(environment, ["@splitch/evaluation-api"], workspacePackages),
+      [["run", `deploy:cloudflare:evaluation:${environment}`]],
+    );
+  });
+
+  test(`${environment} deploys Control Plane before and after a selected Evaluation`, () => {
+    assert.deepEqual(
+      deploymentCommands(
+        environment,
+        ["@splitch/evaluation-api", "@splitch/control-plane-api"],
+        workspacePackages,
+      ),
+      [
+        ["run", `deploy:cloudflare:control-plane:${environment}`],
+        ["run", `deploy:cloudflare:evaluation:${environment}`],
+        ["run", `deploy:cloudflare:control-plane:${environment}`],
+      ],
+    );
+  });
+}
 
 test("deploys Analysis first and independent remaining Workers together", () => {
   assert.deepEqual(

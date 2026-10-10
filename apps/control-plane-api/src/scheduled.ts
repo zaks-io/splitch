@@ -12,7 +12,6 @@ import { runDeliveryRetention } from "./delivery-retention";
 import { purgeExpiredPrivacyArtifacts, reconcilePrivacyJobs } from "./entity-privacy-jobs";
 import type { ControlPlaneApiEnv } from "./env";
 import { FLAG_CHANGE_LOG_RETENTION_MS } from "./flag-change-log-retention";
-import { runCredentialCacheBackfill } from "./internal-routes";
 import { deleteOrphanedPrivacyExports } from "./privacy-export-cleanup";
 import { dispatchSentryWebhooks } from "./sentry-webhook-dispatch";
 
@@ -36,7 +35,6 @@ export function runControlPlaneScheduled(
     return;
   }
   ctx.waitUntil(runDemoReaper(env, event, ctx));
-  ctx.waitUntil(runCredentialCacheBackfill(env));
   ctx.waitUntil(runMetricEventClaimRetentionAdoption(env, event, ctx));
   ctx.waitUntil(runApprovalArchive(env, event, ctx));
   ctx.waitUntil(runFlagChangeLogRetention(env, event, ctx));

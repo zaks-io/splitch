@@ -13,7 +13,7 @@ import { panelOverviewRead } from "./panel-overview";
 import { panelSettingsRead } from "./panel-settings";
 import { unauthorized } from "./unauthorized";
 
-export type PanelProtocol = "none" | "signed" | "bounded-session";
+export type PanelProtocol = "none" | "signed";
 
 export async function handleSignedControlPanelRequest(
   request: Request,

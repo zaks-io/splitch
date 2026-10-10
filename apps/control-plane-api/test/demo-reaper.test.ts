@@ -42,9 +42,6 @@ async function runScheduled(): Promise<void> {
     } as ScheduledController,
     {
       ...env,
-      CREDENTIAL_CACHE_BACKFILL: {
-        getByName: () => ({ fetch: async () => new Response(null, { status: 204 }) }),
-      },
       SPLITCH_PLATFORM_TARGET: "local",
     } as ControlPlaneApiEnv,
     {

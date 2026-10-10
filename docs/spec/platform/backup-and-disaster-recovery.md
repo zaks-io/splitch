@@ -12,17 +12,17 @@ Vocabulary follows [CONTEXT.md](../../../CONTEXT.md). Store assignments follow
 
 ## What exists today
 
-| Store                           | Built-in recovery                                               | Off-store copy | Restore procedure written           |
-| ------------------------------- | --------------------------------------------------------------- | -------------- | ----------------------------------- |
-| D1 `splitch-production-d1`      | Time Travel, 30 days, minute granularity, restores in place     | none           | no                                  |
-| SQLite Durable Objects          | PITR, 30 days, per object, only callable from inside the object | none           | no                                  |
-| Legacy KV Durable Object (MCP)  | none                                                            | none           | n/a (session state)                 |
-| Workers KV (5 namespaces)       | none                                                            | none           | partial (credential cache backfill) |
-| Tinybird `splitch_prod`         | vendor daily backup, kept 2 days, restore by support request    | none           | no                                  |
-| R2 `splitch-privacy-exports`    | none (no versioning)                                            | none           | n/a (regenerable)                   |
-| Cloudflare Queues + DLQs        | none                                                            | none           | n/a (in-flight)                     |
-| Worker secrets / GitHub secrets | write-only; neither can be read back                            | none           | no                                  |
-| WorkOS, Stripe                  | vendor-managed                                                  | none           | no                                  |
+| Store                           | Built-in recovery                                               | Off-store copy | Restore procedure written |
+| ------------------------------- | --------------------------------------------------------------- | -------------- | ------------------------- |
+| D1 `splitch-production-d1`      | Time Travel, 30 days, minute granularity, restores in place     | none           | no                        |
+| SQLite Durable Objects          | PITR, 30 days, per object, only callable from inside the object | none           | no                        |
+| Legacy KV Durable Object (MCP)  | none                                                            | none           | n/a (session state)       |
+| Workers KV (5 namespaces)       | none                                                            | none           | no                        |
+| Tinybird `splitch_prod`         | vendor daily backup, kept 2 days, restore by support request    | none           | no                        |
+| R2 `splitch-privacy-exports`    | none (no versioning)                                            | none           | n/a (regenerable)         |
+| Cloudflare Queues + DLQs        | none                                                            | none           | n/a (in-flight)           |
+| Worker secrets / GitHub secrets | write-only; neither can be read back                            | none           | no                        |
+| WorkOS, Stripe                  | vendor-managed                                                  | none           | no                        |
 
 D1 Time Travel cannot fork or clone, and it cannot recover a deleted database. Durable Object PITR
 restores one object at a time and only from code running inside that object, so it is not a fleet
@@ -105,8 +105,9 @@ re-assigned by deterministic `assign()`, which only differs at a Run boundary (A
 ### Tier 4: rebuildable or transient, no backup
 
 - `CONFIG_STORE` flag projections rebuild from D1 on read ([storage-map.md](./storage-map.md), "No
-  internal config-copy seam"). `CREDENTIAL_STORE` rebuilds through the credential cache backfill
-  Durable Object and `scripts/complete-credential-cache-backfill.mjs`.
+  internal config-copy seam"). `CREDENTIAL_STORE` entries are written during credential
+  provisioning, rotation, and revocation. There is no bulk restore command; restoring this cache
+  from D1 needs a separately reviewed recovery procedure before Evaluation can resume.
 - `SESSION_STORE`, `JTI_CACHE`, MCP session objects, rate-limit and admission-gate objects: users
   re-authenticate.
 - Outbox, claim, replay-window, and reconciliation Durable Objects plus the four Queues and their
@@ -190,8 +191,8 @@ Each path is a numbered runbook in this document once wired. Summary:
   bookmark first so the restore itself can be undone.
 - **D1 from bundle**: `wrangler d1 create` a fresh database, strip `BEGIN TRANSACTION` and `COMMIT`
   from `d1.sql`, `wrangler d1 execute --remote --file`, then update every `database_id` in the
-  Wrangler configs and redeploy. Config and credential KV projections rebuild from D1 on read and
-  through the credential cache backfill.
+  Wrangler configs and redeploy. Config KV projections rebuild from D1 on read. Credential KV
+  projections require the separately reviewed recovery procedure described above.
 - **Identity record for one App**: write the escrowed wrapped record back to the Config Store
   Durable Object through `putConfigStoreAppIdentityIfAbsent`, which already refuses to overwrite a
   present record. Needs a new admin route on the Control Plane API. Until it exists, the 30-day

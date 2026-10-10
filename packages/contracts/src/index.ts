@@ -47,7 +47,6 @@ export * from "./cloudflare-integration";
 export { CONTROL_PANEL_DELEGATION_HEADER, PANEL_API_KEY_SCOPES } from "./control-panel-binding";
 // biome-ignore lint/performance/noReExportAll: package entry point intentionally exposes the grouped Convex integration contract
 export * from "./convex-integration";
-export { CREDENTIAL_CACHE_BACKFILL_CHECKPOINT_VERSION } from "./credential-cache-backfill";
 export type { DeltaNudge, DeltaNudgeEntity } from "./delta-nudge";
 export { DeltaNudgeEntitySchema, DeltaNudgeSchema, deltaNudgeEntities } from "./delta-nudge";
 // biome-ignore lint/performance/noReExportAll: outcome class lives beside the error envelope exports

@@ -53,9 +53,6 @@ describe("Metric Event claim retention scheduled adoption", () => {
 function scheduledEnv(adoptMetricEventClaimRetention: () => Promise<void>): ControlPlaneApiEnv {
   return {
     DB: h.d1,
-    CREDENTIAL_CACHE_BACKFILL: {
-      getByName: () => ({ fetch: () => Promise.resolve(new Response(null, { status: 204 })) }),
-    },
     EVENT_INGEST_API: { adoptMetricEventClaimRetention },
     PRIVACY_JOBS_QUEUE: { send: () => Promise.resolve() },
     PRIVACY_EXPORTS: {

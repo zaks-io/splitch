@@ -432,13 +432,11 @@ Tinybird flow:
    production deploy by themselves; the generated quickstart refreshes on the next MCP Worker runtime
    deployment. Tinybird, D1, and Worker phases run only when their owned inputs changed, and
    the Worker phase follows workspace dependencies to select its deployable packages. Missing, divergent,
-   or unclassified baseline evidence fails closed to the full deployment. When a Control Plane or Control
-   Panel input changed, the deployment job retains the complete bounded compatibility cutover and
-   credential backfill. When Evaluation changed, it retains the Event Ingest ordering without requiring
-   a Control Plane checkpoint. The backfill gate is bearer-protected by the hosted
-   `SPLITCH_DEPLOY_GATE_TOKEN`, reports only migration checkpoints, and fails the release instead of
-   allowing a partial rollout. The remaining Worker phase excludes Analysis and Control Plane and
-   runs only after that verification.
+   or unclassified baseline evidence fails closed to the full deployment. Selected Workers deploy in service-binding order.
+   Control Plane deploys once unless Evaluation is also selected; then Control Plane deploys before
+   and after Evaluation because they bind each other's named entrypoint. Control Panel deploys only
+   when selected, after any selected Control Plane deployment. Independent remaining Workers run
+   together after the ordered Workers.
 4. Destructive Tinybird deploys require explicit human approval and `--allow-destructive-operations`.
    They are not allowed in the default production deploy workflow.
 
@@ -494,15 +492,13 @@ recovery. That override does not provide data rollback.
 5. When D1 migration or Cloudflare toolchain inputs changed, apply D1 migrations to production.
 6. When Worker inputs changed, follow workspace dependencies to the affected deployable Workers, then
    build or restore only those Worker artifacts through Turborepo. A `services` binding resolves when
-   the caller deploys, so every affected callee deploys first: Event Ingest, Analysis, then Evaluation.
-   Analysis and Evaluation export the named entrypoint the Control Plane delegates to
-   (ADR-0046), so deploying the Control Plane ahead of either binds it to an entrypoint the live
-   Worker does not export yet. If either Control Plane or Control Panel is affected, preserve the full
-   bounded cutover: deploy the Control Plane with the predecessor session-handle binding entrypoint
-   enabled with a 30-minute expiry, complete its versioned credential-cache backfill after marker-aware
-   Evaluation is live, deploy the V2 Panel bound to the signed entrypoint, then
-   immediately redeploy the Control Plane from its checked-in config with predecessor session
-   redemption disabled. Turborepo deploys the remaining independent affected Workers together.
+   the caller deploys, so Event Ingest and Analysis deploy first when selected. Control Plane deploys
+   once when selected alone. When Control Plane and Evaluation are both selected, deploy Control
+   Plane, Evaluation, then Control Plane again: Evaluation binds Control Plane's named entrypoint
+   and Control Plane binds Evaluation's named entrypoint. Control Panel deploys only when selected,
+   after Control Plane. A Control Panel-only release deploys only Control Panel against the live
+   signed binding entrypoint. Full-fleet deploys therefore run Event Ingest, Analysis, Control Plane,
+   Evaluation, Control Plane, Control Panel, then the remaining independent Workers together.
    `scripts/deploy-worker-order.test.mjs` derives these edges from the Workers' own wrangler configs
    and fails when an added binding has no ordering entry.
 7. Verify cron trigger registration on Control Plane API and Analysis Workers when Workers changed.
@@ -559,7 +555,7 @@ migrations.
   API Worker must consult that gate before constructing a repository or otherwise touching D1. This
   includes HTTP routes and scheduled handlers, specifically the Control Plane API scheduled demo-reaper.
   Every Durable Object entrypoint capable of D1 access, including the Control Plane API credential-cache
-  writer, credential-cache backfill, and config-store Durable Objects, must use the same guard before
+  writer and config-store Durable Objects, must use the same guard before
   touching D1. A fenced gate, an unreadable gate, or a timed-out gate fails closed: HTTP entrypoints
   return the standard `503` `SERVICE_UNAVAILABLE` response with `Retry-After`, while scheduled entrypoints
   stop before D1 and record an explicit maintenance-skipped operational outcome rather than success. No
@@ -669,12 +665,8 @@ Worker code-only rollback:
 
 - Use `wrangler rollback <version_id>` or deploy a previous version to 100 percent traffic.
 - Cloudflare only supports rollback to recent versions, and rollback immediately changes active traffic.
-- A Control Panel protocol rollback must run
-  `rollback:cloudflare:panel-binding:<platform-target>` with the prior Panel Worker version ID. It first
-  enables bounded predecessor session redemption on the current Control Plane, then activates the prior
-  Panel version while leaving that self-expiring compatibility Control Plane active. The prior Control Plane
-  must not be restored because it has no bounded predecessor-session deadline. If recovery stalls, the
-  compatibility entrypoint closes automatically at its transition deadline.
+- Control Panel rollback targets must use the signed delegation protocol supported by the live
+  Control Plane. Reusable session-handle versions are no longer supported.
 
 Rollback limits:
 

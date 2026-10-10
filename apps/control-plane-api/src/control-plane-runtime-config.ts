@@ -4,9 +4,8 @@ import type { ControlPlaneAuthOptions } from "./auth-resolver";
 import type { ControlPlaneApiEnv } from "./env";
 import { makePanelDelegationReplayStore } from "./panel-identity-replay";
 import { makePanelSessionAccess } from "./panel-session-access";
-import { makePanelSessionStore } from "./session-store";
 
-type PanelProtocol = "none" | "signed" | "bounded-session";
+type PanelProtocol = "none" | "signed";
 
 export function requiredMcpDelegationSecret(secret: string | undefined): string {
   if (!secret) {
@@ -28,29 +27,13 @@ export function controlPanelAuthOptions(
   protocol: PanelProtocol,
 ): ControlPlaneAuthOptions {
   if (protocol === "none") return {};
-  if (protocol === "signed") {
-    return {
-      spans: createPerformanceSpanRecorder(env),
-      allowPanelDelegation: true,
-      panelDelegationSecret: requiredPanelDelegationSecret(env),
-      panelAccess: makePanelSessionAccess(repo),
-      panelDelegationReplay: makePanelDelegationReplayStore(env.PANEL_DELEGATION_REPLAY),
-    };
-  }
   return {
-    allowBoundedPanelSession: true,
-    boundedPanelSessions: makePanelSessionStore(env.SESSION_STORE),
+    spans: createPerformanceSpanRecorder(env),
+    allowPanelDelegation: true,
+    panelDelegationSecret: requiredPanelDelegationSecret(env),
+    panelAccess: makePanelSessionAccess(repo),
+    panelDelegationReplay: makePanelDelegationReplayStore(env.PANEL_DELEGATION_REPLAY),
   };
-}
-
-export function boundedPanelSessionEnabled(env: ControlPlaneApiEnv): boolean {
-  const expiresAt = env.CONTROL_PANEL_LEGACY_SESSION_EXPIRES_AT;
-  return (
-    env.CONTROL_PANEL_LEGACY_SESSION_MODE === "bounded-rollout" &&
-    typeof expiresAt === "string" &&
-    /^\d{10}$/u.test(expiresAt) &&
-    Number(expiresAt) > Math.floor(Date.now() / 1000)
-  );
 }
 
 function requiredPanelDelegationSecret(env: ControlPlaneApiEnv): string {

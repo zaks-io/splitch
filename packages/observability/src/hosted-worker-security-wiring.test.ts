@@ -80,12 +80,7 @@ describe("hosted Worker security-header wiring", () => {
       ["apps/control-panel/src/server.ts", []],
       [
         "apps/control-plane-api/src/index.ts",
-        [
-          "ControlPanelEntrypoint",
-          "EvaluationEntrypoint",
-          "McpEntrypoint",
-          "SignedControlPanelEntrypoint",
-        ],
+        ["EvaluationEntrypoint", "McpEntrypoint", "SignedControlPanelEntrypoint"],
       ],
       ["apps/evaluation-api/src/index.ts", ["ControlPlaneEntrypoint"]],
       ["apps/event-ingest-api/src/index.ts", ["ControlPlaneEntrypoint", "EvaluationEntrypoint"]],

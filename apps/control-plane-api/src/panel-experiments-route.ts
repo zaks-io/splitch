@@ -22,7 +22,7 @@ import { unauthorized } from "./unauthorized";
 export async function handleSignedPanelExperiments(
   request: Request,
   env: ControlPlaneApiEnv,
-  protocol: "none" | "signed" | "bounded-session",
+  protocol: "none" | "signed",
   authResolver: ReturnType<typeof makeControlPlaneAuthResolver>,
 ): Promise<Response | null> {
   if (protocol !== "signed") return null;

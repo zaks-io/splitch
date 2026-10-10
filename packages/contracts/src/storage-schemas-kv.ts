@@ -154,7 +154,7 @@ export const credentialKinds = ["api_key", "client_key"] as const;
 export const CredentialKindSchema = z.enum(credentialKinds);
 export type CredentialKind = z.infer<typeof CredentialKindSchema>;
 
-/** Schema-v1 credential payloads remain readable during the backfill rollout. */
+/** Schema-v1 credential payloads remain readable and are treated as unscoped. */
 export const CredentialCacheKVSchemaV1 = z
   .object({
     appId: z.string(),
