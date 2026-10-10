@@ -1,9 +1,6 @@
-import {
-  experimentSignificanceDisplays,
-  experimentSrmDiagnostics,
-  type ExperimentResultsResponse,
-} from "@splitch/contracts";
+import { type ExperimentResultsResponse, experimentSignificanceDisplays } from "@splitch/contracts";
 import type { PanelExperimentResultsOutput } from "@splitch/control-plane-sdk/panel-experiments";
+import { experimentSrmDiagnostics } from "@splitch/stats";
 
 /**
  * Map the shared producer (public snake_case + readiness) onto the Panel's

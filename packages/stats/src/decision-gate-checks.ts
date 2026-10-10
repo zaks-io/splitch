@@ -1,13 +1,14 @@
-import { controlIdentityCheck } from "./experiment-control-identity-check";
-import { decisionValidMembers, lockedFamilyMembers, named } from "./experiment-decision-family";
 import type {
   DecisionGateCheck,
   ExperimentSrmDiagnostics,
   SrmSignal,
-} from "./experiment-decision-gate";
-import { formatPValue } from "./p-value-format";
-import type { StatsResultStatus } from "./stats-result-arm";
-import type { StatsOutput } from "./stats-result-contract";
+  StatsOutput,
+  StatsResultStatus,
+} from "@splitch/contracts";
+import { formatPValue } from "@splitch/contracts";
+import { controlIdentityCheck } from "./decision-gate-control-identity";
+import { decisionValidMembers, lockedFamilyMembers, named } from "./decision-gate-family";
+import { SRM_MISMATCH_P_VALUE } from "./srm-checker-threshold";
 
 export { controlIdentityCheck };
 
@@ -21,8 +22,6 @@ export { controlIdentityCheck };
 
 /** Statsig-style caution band: noisy enough to watch, not to condemn. */
 export const SRM_CAUTION_P = 0.01;
-/** SRM chi-square hard threshold (docs/spec/stats/srm-and-health.md). */
-const SRM_MISMATCH_P = 0.001;
 
 /**
  * How far a Metric result is from supporting a decision.
@@ -61,7 +60,7 @@ export function srmIsFiring(signal: {
   isMismatch: boolean | null;
 }): boolean {
   if (signal.isMismatch !== null) return signal.isMismatch;
-  return signal.pValue !== null && signal.pValue < SRM_MISMATCH_P;
+  return signal.pValue !== null && signal.pValue < SRM_MISMATCH_P_VALUE;
 }
 
 export function exposureSrmCheck(signal: SrmSignal, isMismatch: boolean | null): DecisionGateCheck {
@@ -81,7 +80,7 @@ export function exposureSrmCheck(signal: SrmSignal, isMismatch: boolean | null):
       id: "exposure_srm",
       status: "pass",
       title: "Exposure split is within tolerance, with a caution",
-      detail: `Chi-square p = ${p} sits in the ${SRM_MISMATCH_P}-${SRM_CAUTION_P} caution band. That is worth watching and often self-resolves, but it is not a Sample Ratio Mismatch and does not block a decision.`,
+      detail: `Chi-square p = ${p} sits in the ${SRM_MISMATCH_P_VALUE}-${SRM_CAUTION_P} caution band. That is worth watching and often self-resolves, but it is not a Sample Ratio Mismatch and does not block a decision.`,
     };
   }
   return {

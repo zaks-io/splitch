@@ -7,7 +7,10 @@ envelopes, or generated clients.
 
 Contracts holds wire schemas, inferred types, route definitions, error shapes, and constants
 shared across packages. Computation with a single owning app lives in that app; statistical
-computation lives in `@splitch/stats`.
+computation lives in `@splitch/stats`. Experiment Results, decision-gate, ship-recommendation,
+and SRM diagnostics schemas stay here; their producers and checks are exported by stats. The
+Experiment Start `next` builder lives in control-plane-api because that Worker owns its only
+production use.
 
 ## Owns
 

@@ -1,5 +1,4 @@
-import type { MetricDirection } from "./leaf-schemas-experiment";
-import type { RopeScale } from "./run-preregistration";
+import type { MetricDirection, RopeScale } from "@splitch/contracts";
 
 /**
  * Classify one Treatment arm's confidence sequence against desirability and the

@@ -1,4 +1,3 @@
-import { lockedFamilyMembers } from "@splitch/contracts";
 import {
   AnalysisResultsError,
   guardrailBreached,
@@ -10,6 +9,7 @@ import {
 } from "@splitch/control-plane-sdk/panel-experiments";
 import { envScope, type Repository } from "@splitch/db";
 import type { PerformanceSpanRecorder } from "@splitch/observability/performance-spans";
+import { lockedFamilyMembers } from "@splitch/stats";
 import { fetchAnalysis } from "./analysis-binding";
 import { analysisResultsRequest } from "./analysis-results-request";
 import type { experimentResponse } from "./experiment-model";

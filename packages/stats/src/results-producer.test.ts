@@ -1,8 +1,8 @@
+import { ExperimentResultsResponseSchema } from "@splitch/contracts";
 import { describe, expect, it } from "vitest";
-import { armResult, stats } from "./experiment-decision-gate-test-fixtures";
-import { produceExperimentResults } from "./experiment-results-producer";
-import { control, readyAnalysis, run } from "./experiment-results-producer-test-fixtures";
-import { ExperimentResultsResponseSchema } from "./experiment-results-response";
+import { armResult, stats } from "./decision-gate-test-fixtures";
+import { produceExperimentResults } from "./results-producer";
+import { control, readyAnalysis, run } from "./results-producer-test-fixtures";
 
 describe("produceExperimentResults", () => {
   it("puts readiness, blockedBy, and reasons before detailed stats", () => {

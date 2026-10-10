@@ -2,14 +2,14 @@ import type {
   DecisionFailure,
   ExperimentDecisionGate,
   FrozenControlIdentity,
-  PlannedDurationEvidence,
   StatsOutput,
 } from "@splitch/contracts";
+import type { PlannedDurationEvidence } from "@splitch/stats";
 import {
   decisionValidMembers,
   earliestDecisionWatermark,
   observedEvidenceDays,
-} from "@splitch/contracts";
+} from "@splitch/stats";
 import { renderError } from "@splitch/worker-runtime";
 
 export function decisionResultUnavailable(

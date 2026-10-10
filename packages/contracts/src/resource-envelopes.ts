@@ -17,7 +17,6 @@ export type { MutationNext } from "./mutation-next";
 export {
   MutationNextSchema,
   mutationNext,
-  nextAfterExperimentStart,
   nextAfterFlagShip,
   nextAfterPendingApproval,
 } from "./mutation-next";

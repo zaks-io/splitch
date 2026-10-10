@@ -1,4 +1,4 @@
-import type { PlannedDurationEvidence } from "@splitch/contracts";
+import type { PlannedDurationEvidence } from "@splitch/stats";
 
 export interface RunDurationRow {
   startedAt: string;

@@ -1,8 +1,5 @@
-import {
-  type FrozenControlIdentity,
-  unresolvableControlReasonMessages,
-} from "./experiment-control-identity";
-import type { DecisionGateCheck } from "./experiment-decision-gate";
+import type { DecisionGateCheck } from "@splitch/contracts";
+import { type FrozenControlIdentity, unresolvableControlReasonMessages } from "@splitch/contracts";
 
 export function controlIdentityCheck(control: FrozenControlIdentity): DecisionGateCheck {
   if (control.state === "frozen") {

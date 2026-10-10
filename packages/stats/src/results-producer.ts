@@ -1,21 +1,18 @@
-import type { CohortEffectDiagnostic } from "./cohort-effect";
-import type { FrozenControlIdentity } from "./experiment-control-identity";
-import {
-  type ExperimentDecisionGate,
-  evaluateExperimentDecisionGate,
-  type PersistedSrmAlarm,
-} from "./experiment-decision-gate";
-import type { PlannedDurationEvidence } from "./experiment-decision-gate-duration";
-import {
-  type ExperimentResultsReadiness,
-  type ExperimentResultsView,
-  reasonsFromChecks,
-  statisticalReadiness,
-} from "./experiment-results-readiness";
-import type { ExperimentResultsResponse } from "./experiment-results-response";
+import type {
+  AnalysisResultsEnvelope,
+  CohortEffectDiagnostic,
+  ExperimentDecisionGate,
+  ExperimentResultsReadiness,
+  ExperimentResultsResponse,
+  ExperimentResultsView,
+  FrozenControlIdentity,
+  PersistedSrmAlarm,
+  SrmRootCauseClassification,
+} from "@splitch/contracts";
+import { evaluateExperimentDecisionGate } from "./decision-gate";
+import type { PlannedDurationEvidence } from "./decision-gate-duration";
+import { reasonsFromChecks, statisticalReadiness } from "./results-readiness";
 import { computeShipRecommendation } from "./ship-recommendation-compute";
-import type { SrmRootCauseClassification } from "./srm-root-cause";
-import type { AnalysisResultsEnvelope } from "./stats-result-contract";
 
 /**
  * Shared Control Plane result producer (plan 0.15 / 2.4). CLI, MCP, and the
@@ -40,9 +37,8 @@ export interface ProduceExperimentResultsInput {
   /** Whether this caller may invoke Conclude (App owner/admin). */
   canConclude: boolean;
   /**
-   * Precomputed Fabijan root-cause from `@splitch/stats`. The producer cannot
-   * import stats (contracts ← stats dependency direction), so the Control Plane
-   * enrich seam classifies and passes the result. Omit or null when SRM is clean.
+   * Precomputed Fabijan root-cause from the Control Plane enrich seam.
+   * Omit or null when SRM is clean.
    */
   srmRootCause?: SrmRootCauseClassification | null;
   /**

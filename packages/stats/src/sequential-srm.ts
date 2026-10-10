@@ -1,3 +1,4 @@
+import { SRM_MISMATCH_P_VALUE } from "./srm-checker-threshold";
 import {
   applySequentialSrmIncrements,
   createSequentialSrmWealthState,
@@ -47,7 +48,7 @@ export const SEQUENTIAL_SRM_SOURCE = {
   ],
 } as const;
 
-export const SEQUENTIAL_SRM_DEFAULT_ALPHA = 0.001;
+export const SEQUENTIAL_SRM_DEFAULT_ALPHA = SRM_MISMATCH_P_VALUE;
 export const SEQUENTIAL_SRM_DEFAULT_CONCENTRATION = 100;
 
 export type SequentialSrmObservations =

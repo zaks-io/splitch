@@ -1,5 +1,4 @@
-import type { ArmResult } from "./stats-result-arm";
-import type { StatsOutput } from "./stats-result-contract";
+import type { ArmResult, StatsOutput } from "@splitch/contracts";
 
 /**
  * The Run's unified decision family.

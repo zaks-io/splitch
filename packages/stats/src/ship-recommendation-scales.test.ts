@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { armResult, stats } from "./experiment-decision-gate-test-fixtures";
+import { armResult, stats } from "./decision-gate-test-fixtures";
 import { beneficialArm, preReg, recommend } from "./ship-recommendation-test-fixtures";
 
 function positiveControlArm(overrides: Parameters<typeof armResult>[0] = {}) {

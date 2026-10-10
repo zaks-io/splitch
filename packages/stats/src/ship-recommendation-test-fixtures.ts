@@ -1,8 +1,7 @@
-import { evaluateExperimentDecisionGate } from "./experiment-decision-gate";
-import { armResult, reachedDuration } from "./experiment-decision-gate-test-fixtures";
-import type { PreRegistration } from "./run-preregistration";
+import type { GuardrailResult, PreRegistration, StatsOutput } from "@splitch/contracts";
+import { evaluateExperimentDecisionGate } from "./decision-gate";
+import { armResult, reachedDuration } from "./decision-gate-test-fixtures";
 import { computeShipRecommendation } from "./ship-recommendation-compute";
-import type { GuardrailResult, StatsOutput } from "./stats-result-contract";
 
 const control = {
   state: "frozen" as const,

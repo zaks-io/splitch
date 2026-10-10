@@ -6,12 +6,11 @@ import {
   ExperimentResultsViewSchema,
   type PersistedSrmAlarm,
   parseResponseBody,
-  produceExperimentResults,
   resolveAnalysisControlIntegrity,
   resolveFrozenControlIdentity,
 } from "@splitch/contracts";
 import { envScope, type Repository } from "@splitch/db";
-import { classifySrmRootCauseFromStats } from "@splitch/stats";
+import { classifySrmRootCauseFromStats, produceExperimentResults } from "@splitch/stats";
 import { runDurationEvidence } from "./run-duration-evidence";
 
 const CONCLUDE_ROLES = new Set(["owner", "admin"]);

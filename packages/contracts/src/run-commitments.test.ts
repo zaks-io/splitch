@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import { canonicalHash } from "./canonical-json";
-import { armResult, stats } from "./experiment-decision-gate-test-fixtures";
 import {
   CURRENT_ANALYSIS_VERSION,
   createResultToken,
@@ -9,6 +8,10 @@ import {
   SUPPORTED_ANALYSIS_VERSIONS,
 } from "./run-commitments";
 import { AnalysisResultsEnvelopeSchema } from "./stats-result-contract";
+import {
+  armResultFixture as armResult,
+  statsOutputFixture as stats,
+} from "./testing/stats-result-fixtures";
 
 const identity = {
   appId: "app_1",

@@ -1,17 +1,18 @@
 import {
   ApprovalDiffSchema,
+  type ConcludeRunRequest,
   canonicalHash,
   canonicalJson,
-  type ConcludeRunRequest,
   type ExperimentDecisionGate,
   type FrozenControlIdentity,
-  type PlannedDurationEvidence,
   type StatsOutput,
 } from "@splitch/contracts";
 import { appScope, envScope } from "@splitch/db";
+import type { PlannedDurationEvidence } from "@splitch/stats";
 import type { HandlerArgs } from "@splitch/worker-runtime";
 import { approvalDiff, approvalRequestId } from "./approval-canonical";
 import { idempotencyConflict, requiredAuthDoor } from "./approval-review-outcomes";
+import { resolveConclusionGuardFailure } from "./experiment-conclusion-guard-errors";
 import type { PreparedWinnerProposal } from "./experiment-conclusion-proposal";
 import {
   type ConclusionPathIds,
@@ -19,7 +20,6 @@ import {
   replayConclusion,
   winnerApprovalRow,
 } from "./experiment-conclusion-response";
-import { resolveConclusionGuardFailure } from "./experiment-conclusion-guard-errors";
 import type { ExperimentDeps } from "./experiment-handler-shared";
 
 interface ConclusionContext {

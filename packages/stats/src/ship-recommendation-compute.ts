@@ -1,9 +1,13 @@
-import type { ExperimentDecisionGate } from "./experiment-decision-gate";
-import type { PreRegistration } from "./run-preregistration";
+import type {
+  ExperimentDecisionGate,
+  GuardrailResult,
+  PreRegistration,
+  RecommendationUnavailableReason,
+  ShipRecommendation,
+  StatsOutput,
+} from "@splitch/contracts";
 import { guardrailBecause } from "./ship-recommendation-because";
 import { combineEffects, goalEffects, resolvePrimaryEffect } from "./ship-recommendation-primary";
-import type { RecommendationUnavailableReason, ShipRecommendation } from "./ship-recommendation";
-import type { GuardrailResult, StatsOutput } from "./stats-result-contract";
 
 /**
  * Precedence (plan 2.4; table in docs/spec/stats/result-contracts.md):

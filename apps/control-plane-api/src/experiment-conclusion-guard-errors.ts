@@ -1,11 +1,10 @@
-import {
-  evaluateExperimentDecisionGate,
-  type ExperimentDecisionGate,
-  type FrozenControlIdentity,
-  type PlannedDurationEvidence,
-  type StatsOutput,
+import type {
+  ExperimentDecisionGate,
+  FrozenControlIdentity,
+  StatsOutput,
 } from "@splitch/contracts";
 import { appScope, envScope } from "@splitch/db";
+import { evaluateExperimentDecisionGate, type PlannedDurationEvidence } from "@splitch/stats";
 import type { HandlerArgs } from "@splitch/worker-runtime";
 import { requireAppAdmin } from "./app-authz";
 import { idempotencyConflict } from "./approval-review-outcomes";

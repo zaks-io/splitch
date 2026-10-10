@@ -309,7 +309,4 @@ export { SegmentListItemSchema, SegmentListResponseSchema } from "./routes/route
 // biome-ignore lint/performance/noReExportAll: package entry point intentionally exposes the grouped Sentry integration contract
 export * from "./sentry-integration";
 export { deriveSlug, SLUG_MAX_LENGTH, SLUG_MIN_LENGTH, SLUG_PATTERN, SlugSchema } from "./slug";
-// `./experiment-rigor` exports a different DecisionFamilyMember; naming this one
-// explicitly keeps the stats-input shape as the package's, as it was before the
-// stats exports moved into a sub-barrel.
 export type { DecisionFamilyMember } from "./stats-input-contract";

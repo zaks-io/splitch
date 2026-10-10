@@ -3,6 +3,12 @@
 The output shapes the stats engine writes to the UI/API — the members of `StatsOutput`. The input
 contract and `StatsEngine` signature live in [data-contracts.md](data-contracts.md).
 
+`@splitch/contracts` owns the result schemas and inferred wire types. `@splitch/stats` owns
+the computation that fills them: `results-producer.ts`, `ship-recommendation-*.ts`, and
+`decision-gate*.ts` in `packages/stats/src`. Control Plane callers import these producers and
+checks from stats. Rendering clients consume the contracts without importing the computation.
+The statistics unit, golden, property, simulation, and audit gates cover this implementation.
+
 ## Per-arm result object (one per (Variant, Metric))
 
 | Field                 | Type                 | Meaning                                                                                                              |
@@ -350,7 +356,8 @@ Guardrail contrast; it is current for new Runs.
 ## Control Plane result producer (CLI, MCP, panel)
 
 Public `experiment_results_get` / `experiment_results_post` responses are produced by the Control
-Plane (`ExperimentResultsResponseSchema`), not the raw Analysis envelope. The producer resolves
+Plane using `produceExperimentResults` from `@splitch/stats`
+(`ExperimentResultsResponseSchema` in contracts), not the raw Analysis envelope. The producer resolves
 Control identity against the Run Snapshot, Run lifecycle, planned duration (`run_commitments` /
 D1), caller conclude permission, and analysis evidence, then emits:
 

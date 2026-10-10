@@ -1,12 +1,12 @@
 import {
   getRoute,
   type MutationNext,
-  nextAfterExperimentStart,
   nextAfterFlagShip,
   nextAfterPendingApproval,
 } from "@splitch/contracts";
 import { appScope, type Repository } from "@splitch/db";
 import type { RunRow } from "./experiment-model";
+import { nextAfterExperimentStart } from "./mutation-next-experiment";
 
 /** Fail loud if a builder ever emits an unregistered operation id. */
 function requireRegisteredNext(next: MutationNext): MutationNext {
