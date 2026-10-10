@@ -1,5 +1,6 @@
 import { createServer, type IncomingMessage, type Server } from "node:http";
 import { MCP_DELEGATION_HEADER } from "@splitch/contracts";
+import { flagResourceFixture } from "@splitch/contracts/testing";
 import { describe, expect, it, vi } from "vitest";
 import { requestCarriesCredentials, withoutCredentialRedirect } from "./credential-fetch";
 import { createControlPlaneSdk } from "./index";
@@ -10,19 +11,14 @@ const flagPage = {
   readLimit: 200,
   cursor: null,
   items: [
-    {
-      id: "flag_checkout",
-      appId: "app_local",
+    flagResourceFixture({
       key: "checkout",
       name: "Checkout",
+      id: "flag_checkout",
+      appId: "app_local",
       variants: [{ id: "var_on", name: "on", value: true }],
       defaultVariantId: "var_on",
-      lifecycleClass: "unclassified" as const,
-      owner: null,
-      expiresAt: null,
-      createdAt: "2026-07-03T00:00:00.000Z",
-      updatedAt: "2026-07-03T00:00:00.000Z",
-    },
+    }),
   ],
 };
 

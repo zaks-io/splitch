@@ -1,3 +1,4 @@
+import { experimentResourceFixture } from "@splitch/contracts/testing";
 import {
   CONTROL_PANEL_DELEGATION_HEADER,
   verifyControlPanelDelegation,
@@ -188,26 +189,20 @@ describe("Control Panel Experiment mutation transport", () => {
 });
 
 function experimentResponse() {
-  return {
+  return experimentResourceFixture({
     id: "exp_1",
+    flagId: "flag_1",
     appId: "app_acme",
     environmentId: "env_dev",
     key: "checkout",
-    flagId: "flag_1",
     name: "Checkout",
     status: "running",
-    targetingKey: "userId",
-    targetingKeyType: "user",
-    confidenceLevel: 0.95,
     defaultVariantId: "variant_control",
-    metrics: [],
-    guardrailMetrics: [],
     conversionWindowMs: 86_400_000,
-    dimensions: [],
     liveRunId: "run_1",
     createdAt: "2026-07-18T00:00:00.000Z",
     updatedAt: "2026-07-19T00:00:00.000Z",
-  };
+  });
 }
 
 function runResponse() {

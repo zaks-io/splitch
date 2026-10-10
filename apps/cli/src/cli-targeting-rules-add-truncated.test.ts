@@ -1,4 +1,5 @@
 import { writeFile } from "node:fs/promises";
+import { flagResourceFixture } from "@splitch/contracts/testing";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { runCli } from "./cli.js";
 import { EXIT_OK } from "./exit-codes.js";
@@ -51,9 +52,9 @@ function flagCatalogBody(options: {
   readonly key: string;
   readonly name: string;
 }) {
-  return {
-    id: options.id,
+  return flagResourceFixture({
     appId: "app_1",
+    id: options.id,
     key: options.key,
     name: options.name,
     schema: { type: "boolean" },
@@ -62,12 +63,7 @@ function flagCatalogBody(options: {
       { id: "var_off", name: "off", value: false },
     ],
     defaultVariantId: "var_off",
-    lifecycleClass: "unclassified" as const,
-    owner: null,
-    expiresAt: null,
-    createdAt: "2026-07-03T00:00:00.000Z",
-    updatedAt: "2026-07-03T00:00:00.000Z",
-  };
+  });
 }
 
 describe("flag-targeting-rules add server-side selector resolution", () => {

@@ -1,4 +1,5 @@
 import { writeFile } from "node:fs/promises";
+import { experimentResourceFixture } from "@splitch/contracts/testing";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { runCli } from "./cli.js";
 import { EXIT_OK } from "./exit-codes.js";
@@ -22,26 +23,15 @@ describe("body-only flagId is not resolved", () => {
           request.method === "POST" &&
           new URL(request.url).pathname === "/apps/app_1/envs/env_1/experiments",
         status: 200,
-        body: {
+        body: experimentResourceFixture({
           id: "exp_1",
           appId: "app_1",
           environmentId: "env_1",
           key: "checkout-exp",
           flagId: "checkout-banner",
           name: "Checkout exp",
-          status: "draft",
-          targetingKey: "userId",
-          targetingKeyType: "user",
-          confidenceLevel: 0.95,
           defaultVariantId: "var_on",
-          metrics: [],
-          guardrailMetrics: [],
-          dimensions: [],
-          conversionWindowMs: 0,
-          liveRunId: null,
-          createdAt: "2026-07-03T00:00:00.000Z",
-          updatedAt: "2026-07-03T00:00:00.000Z",
-        },
+        }),
       },
     ]);
 

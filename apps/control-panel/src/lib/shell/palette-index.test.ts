@@ -1,3 +1,4 @@
+import { flagResourceFixture } from "@splitch/contracts/testing";
 import type { ControlPlaneOperationResult, FlagsClient } from "@splitch/control-plane-sdk";
 import type {
   PanelExperimentListItem,
@@ -64,7 +65,7 @@ function flagsClient(readTruncated: boolean): Pick<FlagsClient, "list"> {
         readLimit: 200,
         cursor: null,
         items: [
-          {
+          flagResourceFixture({
             id: "flag_checkout",
             appId: "app_checkout",
             key: "new-checkout",
@@ -75,12 +76,9 @@ function flagsClient(readTruncated: boolean): Pick<FlagsClient, "list"> {
               { id: "var_on", name: "on", value: true },
             ],
             defaultVariantId: "var_off",
-            lifecycleClass: "unclassified" as const,
-            owner: null,
-            expiresAt: null,
             createdAt: "2026-08-21T00:00:00.000Z",
             updatedAt: "2026-08-21T00:00:00.000Z",
-          },
+          }),
         ],
       },
     })),

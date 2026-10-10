@@ -7,13 +7,13 @@ import {
   type PreRegistration,
   type PreRegistrationIntent,
   PreRegistrationSchema,
-  preRegistrationToIntent,
   type Run,
   RunResponseSchema,
   type TargetingRule,
   type Variant,
 } from "@splitch/contracts";
 import type { Repository } from "@splitch/db";
+import { preRegistrationToIntent } from "./run-preregistration-resolve";
 
 export type ExperimentRow = NonNullable<
   Awaited<ReturnType<Repository["experiments"]["getExperiment"]>>

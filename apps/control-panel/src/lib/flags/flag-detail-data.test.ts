@@ -1,10 +1,11 @@
+import { flagResourceFixture } from "@splitch/contracts/testing";
 import type { FlagConfigGetOutput, FlagsClient } from "@splitch/control-plane-sdk";
 import { describe, expect, it, vi } from "vitest";
 import { isFlagDetailNotFound, readFlagDetail } from "#lib/flags/flag-detail-data";
 
 const scope = { appId: "app_checkout", environmentId: "env_dev" };
 
-const definition = {
+const definition = flagResourceFixture({
   id: "flag_checkout",
   appId: "app_checkout",
   key: "new-checkout",
@@ -15,12 +16,9 @@ const definition = {
     { id: "var_enabled", name: "enabled", value: true },
   ],
   defaultVariantId: "var_disabled",
-  lifecycleClass: "unclassified" as const,
-  owner: null,
-  expiresAt: null,
   createdAt: "2026-07-18T00:00:00.000Z",
   updatedAt: "2026-07-18T00:00:00.000Z",
-};
+});
 
 describe("Flag detail route data", () => {
   it("resolves the URL key via flags_get?by=key and pairs it with this Environment's config", async () => {

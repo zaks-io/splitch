@@ -1,19 +1,15 @@
+import { flagResourceFixture } from "@splitch/contracts/testing";
 import { describe, expect, it } from "vitest";
 import { createControlPlaneSdk } from "./index";
 
-const flag = {
-  id: "flag_checkout",
-  appId: "app_local",
+const flag = flagResourceFixture({
   key: "checkout",
   name: "Checkout",
+  id: "flag_checkout",
+  appId: "app_local",
   variants: [{ id: "var_on", name: "on", value: true }],
   defaultVariantId: "var_on",
-  lifecycleClass: "unclassified" as const,
-  owner: null,
-  expiresAt: null,
-  createdAt: "2026-07-03T00:00:00.000Z",
-  updatedAt: "2026-07-03T00:00:00.000Z",
-};
+});
 
 describe("flags.list with Environment configuration", () => {
   it("carries Environment scope in one request and parses the inline summary", async () => {

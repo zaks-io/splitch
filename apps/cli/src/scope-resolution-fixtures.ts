@@ -1,3 +1,4 @@
+import { flagResourceFixture } from "@splitch/contracts/testing";
 import { type FakeResponse, oauthTokenMint } from "./test-fixtures.js";
 
 const scopeStamp = "2026-07-03T00:00:00.000Z";
@@ -131,20 +132,19 @@ export function flagsListStub(options?: {
       request.method === "GET" && new URL(request.url).pathname === `/apps/${appId}/flags`,
     status: 200,
     body: {
-      items: flags.map((flag) => ({
-        id: flag.id,
-        appId,
-        key: flag.key,
-        name: flag.name ?? flag.key,
-        schema: null,
-        variants: [{ id: "var_on", name: "on", value: true }],
-        defaultVariantId: "var_on",
-        lifecycleClass: "unclassified" as const,
-        owner: null,
-        expiresAt: null,
-        createdAt: scopeStamp,
-        updatedAt: scopeStamp,
-      })),
+      items: flags.map((flag) =>
+        flagResourceFixture({
+          id: flag.id,
+          appId,
+          key: flag.key,
+          name: flag.name ?? flag.key,
+          schema: null,
+          variants: [{ id: "var_on", name: "on", value: true }],
+          defaultVariantId: "var_on",
+          createdAt: scopeStamp,
+          updatedAt: scopeStamp,
+        }),
+      ),
       readTruncated: options?.readTruncated ?? false,
       readLimit: options?.readLimit ?? 200,
       cursor: null,

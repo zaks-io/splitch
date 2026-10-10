@@ -1,4 +1,5 @@
 import { writeFile } from "node:fs/promises";
+import { flagResourceFixture } from "@splitch/contracts/testing";
 import { CreateFlagRequestSchema } from "@splitch/sdk/control-plane";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { runCli } from "./cli.js";
@@ -32,9 +33,9 @@ const quickstartCreateArgs = [
   "2027-01-01T00:00:00Z",
 ] as const;
 
-const createdFlag = {
-  id: "flag_new_checkout",
+const createdFlag = flagResourceFixture({
   appId: "app_1",
+  id: "flag_new_checkout",
   key: "new-checkout",
   name: "New Checkout",
   schema: { type: "boolean" },
@@ -43,12 +44,7 @@ const createdFlag = {
     { id: "var_off", name: "off", value: false },
   ],
   defaultVariantId: "var_off",
-  lifecycleClass: "unclassified" as const,
-  owner: null,
-  expiresAt: null,
-  createdAt: "2026-07-03T00:00:00.000Z",
-  updatedAt: "2026-07-03T00:00:00.000Z",
-};
+});
 
 afterEach(async () => {
   await cleanupTempHomes();

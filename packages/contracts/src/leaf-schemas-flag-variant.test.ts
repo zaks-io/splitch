@@ -1,3 +1,4 @@
+import { flagResourceFixture } from "@splitch/contracts/testing";
 import { describe, expect, it } from "vitest";
 import {
   FlagSchema,
@@ -31,20 +32,16 @@ const validTargetingRule = {
   variantId: "var_1",
 };
 
-const validFlag = {
+const validFlag = flagResourceFixture({
   id: "flag_1",
   appId: "app_1",
   key: "feature-x",
   name: "Feature X",
   schema: null,
   variants: [validVariant, { id: "var_2", name: "treatment", value: "on" }],
-  defaultVariantId: "var_1",
-  lifecycleClass: "unclassified",
-  owner: null,
-  expiresAt: null,
   createdAt: "2024-01-01T00:00:00Z",
   updatedAt: "2024-01-02T00:00:00Z",
-};
+});
 
 describe("VariantSchema", () => {
   it("parses a boolean value variant", () => {

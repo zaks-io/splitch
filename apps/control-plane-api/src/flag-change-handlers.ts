@@ -1,13 +1,9 @@
-import {
-  FlagChangeActionSchema,
-  FlagChangeTargetTypeSchema,
-  parseFlagChangeDiff,
-  renderFlagChangeUnifiedDiff,
-} from "@splitch/contracts";
+import { FlagChangeActionSchema, FlagChangeTargetTypeSchema } from "@splitch/contracts";
 import { appScope, type FlagChangeLogRow, type Repository } from "@splitch/db";
 import type { HandlerArgs } from "@splitch/worker-runtime";
 import { renderError } from "@splitch/worker-runtime";
 import { requireAppMember } from "./app-authz";
+import { parseFlagChangeDiff } from "./flag-change-diff-parse";
 import {
   assertFlagChangeWindow,
   flagChangeLogFilter,
@@ -15,6 +11,7 @@ import {
   parseChangeCursor,
   parseFlagChangeQuery,
 } from "./flag-change-query";
+import { renderFlagChangeUnifiedDiff } from "./flag-change-unified-diff";
 import { pathParam } from "./handler-input";
 
 export function makeFlagChangeHandlers(deps: { repo: Repository }) {

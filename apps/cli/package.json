@@ -60,6 +60,7 @@
     "open": "^11.0.4"
   },
   "devDependencies": {
+    "@splitch/contracts": "workspace:*",
     "@splitch/db": "workspace:*",
     "@splitch/observability": "workspace:*",
     "@splitch/worker-runtime": "workspace:*",

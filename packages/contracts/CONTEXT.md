@@ -3,6 +3,12 @@
 Read this when touching `packages/contracts`, API schemas, storage schemas, request/response
 envelopes, or generated clients.
 
+## Ownership boundary
+
+Contracts holds wire schemas, inferred types, route definitions, error shapes, and constants
+shared across packages. Computation with a single owning app lives in that app; statistical
+computation lives in `@splitch/stats`.
+
 ## Owns
 
 - Canonical schema names.

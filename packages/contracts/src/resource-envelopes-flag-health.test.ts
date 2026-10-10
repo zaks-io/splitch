@@ -1,11 +1,12 @@
+import { flagResourceFixture } from "@splitch/contracts/testing";
 import { describe, expect, it } from "vitest";
-import { getRoute } from "./route-registry";
 import {
   FlagInventoryHealthResponseSchema,
   StaleFlagListResponseSchema,
 } from "./resource-envelopes-flag-health";
+import { getRoute } from "./route-registry";
 
-const flagLeaf = {
+const flagLeaf = flagResourceFixture({
   id: "flag_1",
   appId: "app_1",
   key: "checkout",
@@ -15,13 +16,12 @@ const flagLeaf = {
     { id: "var_1", name: "control", value: false },
     { id: "var_2", name: "treatment", value: true },
   ],
-  defaultVariantId: "var_1",
-  lifecycleClass: "release" as const,
+  lifecycleClass: "release",
   owner: "checkout-team",
   expiresAt: "2026-06-01T00:00:00.000Z",
   createdAt: "2026-01-01T00:00:00.000Z",
   updatedAt: "2026-01-01T00:00:00.000Z",
-};
+});
 
 describe("Flag health envelopes", () => {
   it("parses a stale list item with unverified serving evidence", () => {

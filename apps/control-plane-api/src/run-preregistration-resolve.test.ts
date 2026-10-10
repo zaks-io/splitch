@@ -1,6 +1,6 @@
+import { PreRegistrationSchema } from "@splitch/contracts";
 import { describe, expect, it } from "vitest";
 import { type PreRegistrationIssue, resolvePreRegistration } from "./run-preregistration-resolve";
-import { PreRegistrationSchema } from "./run-preregistration";
 
 const RUN_METRICS = new Set(["metric_goal", "metric_guard"]);
 

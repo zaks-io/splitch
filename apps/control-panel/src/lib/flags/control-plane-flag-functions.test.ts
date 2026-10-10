@@ -1,3 +1,4 @@
+import { flagResourceFixture } from "@splitch/contracts/testing";
 import { describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
@@ -61,7 +62,7 @@ describe("Flag creation implementation handoff", () => {
       get: vi.fn().mockResolvedValue({
         ok: true,
         status: 200,
-        data: {
+        data: flagResourceFixture({
           id: "flag_checkout",
           appId: "app_checkout",
           key: "new-checkout",
@@ -72,11 +73,9 @@ describe("Flag creation implementation handoff", () => {
             { id: "var_enabled", name: "enabled", value: true },
           ],
           defaultVariantId: "var_disabled",
-          lifecycleClass: "unclassified" as const,
-          owner: null,
-          expiresAt: null,
           createdAt: "2026-08-29T00:00:00.000Z",
-        },
+          updatedAt: "2026-08-29T00:00:00.000Z",
+        }),
       }),
       getConfig: vi.fn().mockResolvedValue({
         ok: true,

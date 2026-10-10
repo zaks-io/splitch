@@ -1,5 +1,6 @@
-import { type PreRegistration, resolvePreRegistration } from "@splitch/contracts";
+import type { PreRegistration } from "@splitch/contracts";
 import { validationErrors } from "./flag-definition-errors";
+import { resolvePreRegistration } from "./run-preregistration-resolve";
 
 /**
  * Resolve optional Start pre-registration against the Metric ids the Run will

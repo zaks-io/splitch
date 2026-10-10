@@ -1,3 +1,4 @@
+import { flagResourceFixture } from "@splitch/contracts/testing";
 import { describe, expect, it, vi } from "vitest";
 import { parseControlPanelOperation } from "./control-panel-operation";
 import { createControlPlaneSdk, type FlagsClient } from "./index";
@@ -31,7 +32,7 @@ const BINDING_METHODS = new Set<keyof FlagsClient>([
   "promote",
 ]);
 
-const flagDefinition = {
+const flagDefinition = flagResourceFixture({
   id: FLAG_ID,
   appId: APP,
   key: FLAG_KEY,
@@ -42,12 +43,9 @@ const flagDefinition = {
     { id: "var_enabled", name: "enabled", value: true },
   ],
   defaultVariantId: "var_disabled",
-  lifecycleClass: "unclassified" as const,
-  owner: null,
-  expiresAt: null,
   createdAt: "2026-07-18T00:00:00.000Z",
   updatedAt: "2026-07-18T00:00:00.000Z",
-};
+});
 
 const flagConfig = {
   flagId: FLAG_ID,

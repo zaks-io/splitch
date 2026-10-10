@@ -1,3 +1,4 @@
+import { experimentResourceFixture, flagResourceFixture } from "@splitch/contracts/testing";
 import { describe, expect, it } from "vitest";
 import { createControlPlaneSdk } from "./index";
 
@@ -6,19 +7,14 @@ const flagPage = {
   readLimit: 200,
   cursor: null,
   items: [
-    {
-      id: "flag_checkout",
-      appId: "app_local",
+    flagResourceFixture({
       key: "checkout",
       name: "Checkout",
+      id: "flag_checkout",
+      appId: "app_local",
       variants: [{ id: "var_on", name: "on", value: true }],
       defaultVariantId: "var_on",
-      lifecycleClass: "unclassified" as const,
-      owner: null,
-      expiresAt: null,
-      createdAt: "2026-07-03T00:00:00.000Z",
-      updatedAt: "2026-07-03T00:00:00.000Z",
-    },
+    }),
   ],
 };
 
@@ -68,26 +64,16 @@ describe("control plane sdk typed route groups", () => {
   it("returns parsed experiments.list output", async () => {
     const experimentPage = {
       items: [
-        {
+        experimentResourceFixture({
           id: "exp_checkout",
           appId: "app_local",
           environmentId: "env_local",
           key: "checkout-exp",
           flagId: "flag_checkout",
           name: "Checkout experiment",
-          status: "draft",
           targetingKey: "user_id",
-          targetingKeyType: "user",
-          confidenceLevel: 0.95,
           defaultVariantId: "var_on",
-          metrics: [],
-          guardrailMetrics: [],
-          conversionWindowMs: 0,
-          dimensions: [],
-          liveRunId: null,
-          createdAt: "2026-07-03T00:00:00.000Z",
-          updatedAt: "2026-07-03T00:00:00.000Z",
-        },
+        }),
       ],
       readLimit: 200,
       readTruncated: false,
@@ -117,26 +103,18 @@ describe("control plane sdk typed route groups", () => {
       baseUrl: "https://control-plane.test",
       fetch: async (_input, init) => {
         capturedBody = init?.body ? JSON.parse(String(init.body)) : undefined;
-        return Response.json({
-          id: "exp_checkout",
-          appId: "app_local",
-          environmentId: "env_local",
-          key: "checkout-exp",
-          flagId: "flag_checkout",
-          name: "Checkout experiment",
-          status: "draft",
-          targetingKey: "user_id",
-          targetingKeyType: "user",
-          confidenceLevel: 0.95,
-          defaultVariantId: "var_on",
-          metrics: [],
-          guardrailMetrics: [],
-          conversionWindowMs: 0,
-          dimensions: [],
-          liveRunId: null,
-          createdAt: "2026-07-03T00:00:00.000Z",
-          updatedAt: "2026-07-03T00:00:00.000Z",
-        });
+        return Response.json(
+          experimentResourceFixture({
+            id: "exp_checkout",
+            appId: "app_local",
+            environmentId: "env_local",
+            key: "checkout-exp",
+            flagId: "flag_checkout",
+            name: "Checkout experiment",
+            targetingKey: "user_id",
+            defaultVariantId: "var_on",
+          }),
+        );
       },
     });
 
