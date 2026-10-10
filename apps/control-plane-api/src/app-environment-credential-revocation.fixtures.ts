@@ -6,20 +6,15 @@ import {
   kvEnvelope,
 } from "@splitch/contracts";
 import { createRepository, envScope } from "@splitch/db";
-import type { RateLimiter } from "@splitch/worker-runtime";
 import type { Hono } from "hono";
-import { createApp } from "./app";
-import { makeControlPlaneAuthResolver } from "./auth-resolver";
 import { sha256Hex, writeApiKeyCache } from "./credential-cache";
-import { type FixtureSigner, makeFixtureSigner } from "./fixture-signer";
-import { makeJwksVerifier } from "./jwks-verify";
-import { makeSessionStore } from "./session-store";
 import type { EnvironmentExposureStatusCleanup } from "./environment-exposure-status-cleanup";
+import { type FixtureSigner, makeFixtureSigner } from "./fixture-signer";
+import { makeTestApp as createApp } from "./test-app-fixture";
+import { AUDIENCE, ISSUER, NOW_MS } from "./test-constants";
 import type { LocalBindings } from "./test-fixtures";
 import { resetOrganizationGraph, seedOrgApp, seedOrgMember } from "./test-seeds";
 
-const AUDIENCE = "https://cp.splitch.test";
-const NOW_MS = Date.UTC(2026, 6, 2, 12, 0, 0);
 const ORG = {
   orgId: "org_app_env_credential_revoke",
   orgName: "App Env Credential Revoke Co",
@@ -29,7 +24,6 @@ const ORG = {
 };
 const OWNER = "user_app_env_credential_revoke_owner";
 
-const allowLimiter: RateLimiter = () => ({ limited: false });
 const cacheEnvelope = kvEnvelope(CredentialCacheKVSchema);
 const nowSeconds = () => Math.floor(NOW_MS / 1000);
 const nowIso = () => new Date(NOW_MS).toISOString();
@@ -81,24 +75,16 @@ export function makeApp(
   signer: FixtureSigner,
   credentialStore: KVNamespace,
 ) {
-  const verifier = makeJwksVerifier({
-    issuer: "https://auth.splitch.test",
-    fetchJwks: async () => signer.jwks,
-    controlPlaneAudience: AUDIENCE,
-  });
   return createApp({
-    authResolver: makeControlPlaneAuthResolver({
-      verifier,
-      sessions: makeSessionStore(bindings.kv),
-      membershipAccess: {
-        authorize: async () => true,
-        resolve: async () => {
-          throw new Error("credential revocation fixture has no wide membership fixture");
-        },
+    signer: signer,
+    sessions: bindings.kv,
+    membershipAccess: {
+      authorize: async () => true,
+      resolve: async () => {
+        throw new Error("credential revocation fixture has no wide membership fixture");
       },
-      now: () => NOW_MS,
-    }),
-    rateLimiter: allowLimiter,
+    },
+    now: () => NOW_MS,
     repo: createRepository(bindings.d1),
     credentialStore,
     exposureStatusCleanup: noOpExposureStatusCleanup,
@@ -110,7 +96,7 @@ export function makeApp(
 function orgToken(): Promise<string> {
   return h.signer.sign({
     sub: OWNER,
-    iss: "https://auth.splitch.test",
+    iss: ISSUER,
     aud: AUDIENCE,
     iat: nowSeconds(),
     exp: nowSeconds() + 3600,
@@ -121,7 +107,7 @@ function orgToken(): Promise<string> {
 export function appToken(appId: string, role: "owner" | "admin" = "owner"): Promise<string> {
   return h.signer.sign({
     sub: OWNER,
-    iss: "https://auth.splitch.test",
+    iss: ISSUER,
     aud: AUDIENCE,
     iat: nowSeconds(),
     exp: nowSeconds() + 3600,

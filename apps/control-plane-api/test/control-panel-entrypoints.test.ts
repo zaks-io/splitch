@@ -7,8 +7,8 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import type { ControlPlaneApiEnv } from "../src/env.js";
 import { type FixtureSigner, makeFixtureSigner } from "../src/fixture-signer.js";
 import worker, { SignedControlPanelEntrypoint } from "../src/index.js";
+import { AUDIENCE } from "../src/test-constants";
 
-const AUDIENCE = "https://cp.splitch.test";
 const JWKS_URI = "https://auth.splitch.test/.well-known/jwks.json";
 const NOW_MS = Date.UTC(2026, 6, 1, 12, 0, 0);
 const DELEGATION_SECRET = "test-control-panel-delegation-secret-1234";

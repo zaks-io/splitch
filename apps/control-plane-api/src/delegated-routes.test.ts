@@ -1,9 +1,9 @@
 import { type ApiRouteContract, routesDelegatedBy } from "@splitch/contracts";
 import { DELEGATED_IDENTITY_HEADER } from "@splitch/worker-runtime";
 import { describe, expect, it, vi } from "vitest";
-import { createApp } from "./app";
 import { binding, deps, RESULTS_PATH } from "./delegated-routes-test-fixtures";
 import { analysisEnvelope, statsOutput } from "./panel-experiments-test-fixtures";
+import { makeTestApp as createApp } from "./test-app-fixture";
 
 /**
  * The gateway half of ADR-0046: `api.splitch.dev` answers for routes the Analysis

@@ -4,15 +4,15 @@ import {
   issueControlPanelDelegation,
 } from "@splitch/control-plane-sdk/control-panel-identity";
 import { createRepository } from "@splitch/db";
-import type { RateLimiter } from "@splitch/worker-runtime";
 import type { Hono } from "hono";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { createApp } from "../src/app";
 import { makeControlPlaneAuthResolver } from "../src/auth-resolver";
 import { makeFixtureSigner } from "../src/fixture-signer";
 import { makeJwksVerifier } from "../src/jwks-verify";
 import type { PanelDelegationReplayStore } from "../src/panel-identity-replay";
 import { makeSessionStore } from "../src/session-store";
+import { makeTestApp as createApp } from "../src/test-app-fixture";
+import { AUDIENCE, allowLimiter, ISSUER } from "../src/test-constants";
 import type { LocalBindings } from "../src/test-fixtures";
 import { makePoolBindings as makeLocalBindings } from "./pool-bindings";
 
@@ -31,11 +31,9 @@ import { makePoolBindings as makeLocalBindings } from "./pool-bindings";
  * worthless if two cases share a handle by accident.
  */
 
-const AUDIENCE = "https://cp.splitch.test";
 const NOW_MS = Date.UTC(2026, 6, 29, 9, 0, 0);
 const NOW_SECONDS = Math.floor(NOW_MS / 1000);
 const DELEGATION_SECRET = "test-control-panel-delegation-secret-5205";
-const allowLimiter: RateLimiter = () => ({ limited: false });
 
 let app: Hono;
 let publicApp: Hono;
@@ -46,7 +44,7 @@ beforeEach(async () => {
   const signer = await makeFixtureSigner();
   const authDeps = {
     verifier: makeJwksVerifier({
-      issuer: "https://auth.splitch.test",
+      issuer: ISSUER,
       fetchJwks: async () => signer.jwks,
       controlPlaneAudience: AUDIENCE,
     }),

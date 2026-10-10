@@ -2,7 +2,8 @@ import { env } from "cloudflare:workers";
 import { MEMBERSHIP_WIDE_READ_AUTHORIZATION } from "@splitch/contracts";
 import { createRepository } from "@splitch/db";
 import { describe, expect, it, vi } from "vitest";
-import { createApp } from "../src/app";
+import { makeTestApp as createApp } from "../src/test-app-fixture";
+import { allowLimiter } from "../src/test-constants";
 
 describe("membership-wide live-update authorization", () => {
   it("fails loud when a wide principal has no live memberships", async () => {
@@ -21,7 +22,7 @@ describe("membership-wide live-update authorization", () => {
           authorization: MEMBERSHIP_WIDE_READ_AUTHORIZATION,
         },
       }),
-      rateLimiter: () => ({ limited: false }),
+      rateLimiter: allowLimiter,
       repo: createRepository(env.DB),
       observability: { onError },
     });
@@ -48,7 +49,7 @@ describe("membership-wide live-update authorization", () => {
         ok: true,
         principal: widePrincipal(),
       }),
-      rateLimiter: () => ({ limited: false }),
+      rateLimiter: allowLimiter,
       repo: createRepository(env.DB),
     });
 
@@ -70,7 +71,7 @@ describe("membership-wide live-update authorization", () => {
         ok: true,
         principal: widePrincipal(),
       }),
-      rateLimiter: () => ({ limited: false }),
+      rateLimiter: allowLimiter,
       repo: createRepository(env.DB),
     });
 
@@ -91,7 +92,7 @@ describe("membership-wide live-update authorization", () => {
           environmentId: "env_foreign",
         },
       }),
-      rateLimiter: () => ({ limited: false }),
+      rateLimiter: allowLimiter,
       repo: createRepository(env.DB),
     });
 

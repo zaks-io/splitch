@@ -2,7 +2,8 @@ import { env } from "cloudflare:workers";
 import { MEMBERSHIP_WIDE_READ_AUTHORIZATION } from "@splitch/contracts";
 import { createRepository } from "@splitch/db";
 import { beforeAll, describe, expect, it, vi } from "vitest";
-import { createApp } from "../src/app";
+import { makeTestApp as createApp } from "../src/test-app-fixture";
+import { allowLimiter } from "../src/test-constants";
 import { seedOrgApp, seedOrgMember } from "../src/test-seeds";
 
 /**
@@ -141,7 +142,7 @@ function request(
               },
       },
     }),
-    rateLimiter: () => ({ limited: false }),
+    rateLimiter: allowLimiter,
     repo: createRepository(env.DB),
     ...(overrides.onError ? { observability: { onError: overrides.onError } } : {}),
   });

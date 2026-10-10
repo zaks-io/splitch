@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { appScope, createRepository } from "../index";
+import { flagRow } from "../testing";
 import { createLocalD1, type LocalD1 } from "./test-d1-pool";
 import { type SeededTenants, seedTwoTenants } from "./test-seed";
 
@@ -30,7 +31,7 @@ afterEach(async () => {
 const NOW = "2026-07-30T00:00:00.000Z";
 
 function flagValues(appId: string, id: string, key: string) {
-  return {
+  return flagRow({
     id,
     appId,
     key,
@@ -38,7 +39,7 @@ function flagValues(appId: string, id: string, key: string) {
     lifecycleClass: "ops" as const,
     createdAt: NOW,
     updatedAt: NOW,
-  };
+  });
 }
 
 async function rawFlagIds(local: LocalD1, appId: string, key: string): Promise<string[]> {

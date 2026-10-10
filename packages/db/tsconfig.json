@@ -8,6 +8,8 @@
   "include": ["src/**/*.ts"],
   "exclude": [
     "src/**/*.test.ts",
+    "src/test-migrations.ts",
+    "src/testing.ts",
     "src/repo/test-d1.ts",
     "src/repo/test-d1-pool.ts",
     "src/repo/test-d1-pool-setup.ts",

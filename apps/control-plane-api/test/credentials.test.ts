@@ -6,21 +6,19 @@ import {
   kvEnvelope,
 } from "@splitch/contracts";
 import { createRepository, envScope } from "@splitch/db";
-import type { RateLimiter } from "@splitch/worker-runtime";
 import type { Hono } from "hono";
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { createApp } from "../src/app";
 import { makeControlPlaneAuthResolver } from "../src/auth-resolver";
 import { sha256Hex } from "../src/credential-cache";
 import { type FixtureSigner, makeFixtureSigner } from "../src/fixture-signer";
 import { makeJwksVerifier } from "../src/jwks-verify";
 import { makeSessionStore } from "../src/session-store";
+import { makeTestApp as createApp } from "../src/test-app-fixture";
+import { AUDIENCE, allowLimiter, ISSUER, NOW_MS } from "../src/test-constants";
 import type { LocalBindings } from "../src/test-fixtures";
 import { seedAppMember, seedEnvironment, seedOrgApp } from "../src/test-seeds";
 import { makePoolBindings as makeLocalBindings } from "./pool-bindings";
 
-const AUDIENCE = "https://cp.splitch.test";
-const NOW_MS = Date.UTC(2026, 6, 2, 12, 0, 0);
 const APP = {
   orgId: "org_credentials_37ad",
   orgName: "Credentials Co",
@@ -32,7 +30,6 @@ const ENV = { environmentId: "env_prod_37ad", key: "prod" };
 const ADMIN = "user_admin_37ad";
 const MEMBER = "user_member_37ad";
 
-const allowLimiter: RateLimiter = () => ({ limited: false });
 const cacheEnvelope = kvEnvelope(CredentialCacheKVSchema);
 const rejectWideRead = () => Promise.reject<never>(new Error("memberships unavailable"));
 
@@ -66,7 +63,7 @@ afterEach(async () => h.bindings.dispose());
 
 function makeApp(bindings: LocalBindings, signer: FixtureSigner, credentialStore: KVNamespace) {
   const verifier = makeJwksVerifier({
-    issuer: "https://auth.splitch.test",
+    issuer: ISSUER,
     fetchJwks: async () => signer.jwks,
     controlPlaneAudience: AUDIENCE,
   });
@@ -87,7 +84,7 @@ function makeApp(bindings: LocalBindings, signer: FixtureSigner, credentialStore
 function token(userId: string, role: "admin" | "member"): Promise<string> {
   return h.signer.sign({
     sub: userId,
-    iss: "https://auth.splitch.test",
+    iss: ISSUER,
     aud: AUDIENCE,
     iat: Math.floor(NOW_MS / 1000),
     exp: Math.floor(NOW_MS / 1000) + 3600,

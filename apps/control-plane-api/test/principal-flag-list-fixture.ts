@@ -1,21 +1,17 @@
 import { appScope, createRepository, envScope } from "@splitch/db";
-import type { RateLimiter } from "@splitch/worker-runtime";
-import { createApp } from "../src/app";
-import { makeControlPlaneAuthResolver } from "../src/auth-resolver";
+import { flagRow } from "@splitch/db/testing";
 import { type FixtureSigner, makeFixtureSigner } from "../src/fixture-signer";
-import { makeJwksVerifier } from "../src/jwks-verify";
-import { makeSessionStore } from "../src/session-store";
+import { makeTestApp as createApp } from "../src/test-app-fixture";
+import { AUDIENCE, ISSUER } from "../src/test-constants";
 import type { LocalBindings } from "../src/test-fixtures";
 import { resetOrganizationGraph } from "../src/test-seeds";
 import { makeTokenMembershipAccess } from "../src/token-membership";
 import { makePoolBindings } from "./pool-bindings";
 
-const AUDIENCE = "https://cp.splitch.test";
 const NOW_MS = Date.UTC(2026, 7, 28, 12, 0, 0);
 export const NOW = new Date(NOW_MS).toISOString();
 const USER_ID = "user_principal_flags_member";
 const OTHER_USER_ID = "user_zzaudit_other";
-const allowLimiter: RateLimiter = () => ({ limited: false });
 
 export const PRINCIPAL_APPS = [
   {
@@ -113,17 +109,10 @@ export async function makePrincipalFlagHarness(additionalFlags = 0): Promise<Pri
 
   const signer = await makeFixtureSigner();
   const app = createApp({
-    authResolver: makeControlPlaneAuthResolver({
-      verifier: makeJwksVerifier({
-        issuer: "https://auth.splitch.test",
-        fetchJwks: async () => signer.jwks,
-        controlPlaneAudience: AUDIENCE,
-      }),
-      sessions: makeSessionStore(bindings.kv),
-      membershipAccess: makeTokenMembershipAccess(repo),
-      now: () => NOW_MS,
-    }),
-    rateLimiter: allowLimiter,
+    signer: signer,
+    sessions: bindings.kv,
+    membershipAccess: makeTokenMembershipAccess(repo),
+    now: () => NOW_MS,
     repo,
   });
   return {
@@ -134,7 +123,7 @@ export async function makePrincipalFlagHarness(additionalFlags = 0): Promise<Pri
     token: () =>
       signer.sign({
         sub: USER_ID,
-        iss: "https://auth.splitch.test",
+        iss: ISSUER,
         aud: AUDIENCE,
         iat: Math.floor(NOW_MS / 1000),
         exp: Math.floor(NOW_MS / 1000) + 3600,
@@ -187,17 +176,20 @@ async function seedFlag(
       updatedAt: NOW,
     });
   }
-  await repo.flags.flags.insert(scope, {
-    lifecycleClass: "ops",
-    id: row.flagId,
-    appId: row.appId,
-    key: row.flagKey,
-    name: `Flag ${row.flagKey}`,
-    schema: JSON.stringify({ type: "boolean" }),
-    defaultVariantId: variantId,
-    createdAt: NOW,
-    updatedAt: NOW,
-  });
+  await repo.flags.flags.insert(
+    scope,
+    flagRow({
+      lifecycleClass: "ops",
+      id: row.flagId,
+      appId: row.appId,
+      key: row.flagKey,
+      name: `Flag ${row.flagKey}`,
+      schema: JSON.stringify({ type: "boolean" }),
+      defaultVariantId: variantId,
+      createdAt: NOW,
+      updatedAt: NOW,
+    }),
+  );
   await repo.flags.addVariant(scope, row.flagId, {
     id: variantId,
     name: `control-${row.flagKey}`,

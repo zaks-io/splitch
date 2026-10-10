@@ -1,4 +1,5 @@
 import { appScope, envScope } from "@splitch/db";
+import { flagRow } from "@splitch/db/testing";
 import { describe, expect, it } from "vitest";
 import {
   ATTENTION_TEST_TIMEOUT,
@@ -30,15 +31,18 @@ async function seedChangedFlagConfigs(count: number, changedAt: (index: number) 
   const eScope = envScope(ids.appId, ids.environmentId);
   for (let index = 0; index < count; index += 1) {
     const flagId = `flag_bulk_${String(index).padStart(3, "0")}`;
-    await repo.flags.flags.insert(aScope, {
-      lifecycleClass: "ops",
-      id: flagId,
-      appId: ids.appId,
-      key: `bulk-flag-${index}`,
-      name: `Bulk flag ${index}`,
-      createdAt: NOW,
-      updatedAt: NOW,
-    });
+    await repo.flags.flags.insert(
+      aScope,
+      flagRow({
+        lifecycleClass: "ops",
+        id: flagId,
+        appId: ids.appId,
+        key: `bulk-flag-${index}`,
+        name: `Bulk flag ${index}`,
+        createdAt: NOW,
+        updatedAt: NOW,
+      }),
+    );
     await repo.flags.flagConfigs.insert(eScope, {
       id: `flag_config_bulk_${String(index).padStart(3, "0")}`,
       appId: ids.appId,

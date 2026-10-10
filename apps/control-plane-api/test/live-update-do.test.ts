@@ -4,7 +4,6 @@ import { createRepository } from "@splitch/db";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import { authorizeLiveUpdateUpgrade } from "../../control-panel/src/lib/live-updates/live-update-authorization.js";
 import { handleLiveUpdateUpgrade } from "../../control-panel/src/lib/live-updates/live-update-upgrade.js";
-import { createApp } from "../src/app.js";
 import { makeControlPlaneAuthResolver } from "../src/auth-resolver.js";
 import { durableConfigStoreAccess } from "../src/config-store-access.js";
 import { ids, NOW_MS, seedConfigGraph } from "../src/config-store-fixture-data.js";
@@ -13,8 +12,9 @@ import { type FixtureSigner, makeFixtureSigner } from "../src/fixture-signer.js"
 import { makeJwksVerifier } from "../src/jwks-verify.js";
 import { appAdminScope } from "../src/scope-binding.js";
 import { makeSessionStore } from "../src/session-store.js";
+import { makeTestApp as createApp } from "../src/test-app-fixture";
+import { AUDIENCE, allowLimiter, ISSUER } from "../src/test-constants";
 
-const AUDIENCE = "https://cp.splitch.test";
 const USER_ID = "user_live_updates";
 const DEFAULT_SESSION_VALIDITY_MS = 3_600_000;
 
@@ -88,7 +88,7 @@ describe("live-update Durable Object authorization", () => {
     const app = createApp({
       authResolver: makeControlPlaneAuthResolver({
         verifier: makeJwksVerifier({
-          issuer: "https://auth.splitch.test",
+          issuer: ISSUER,
           fetchJwks: async () => signer.jwks,
           controlPlaneAudience: AUDIENCE,
         }),
@@ -101,7 +101,7 @@ describe("live-update Durable Object authorization", () => {
         },
         now: () => NOW_MS,
       }),
-      rateLimiter: () => ({ limited: false }),
+      rateLimiter: allowLimiter,
       repo: createRepository(env.DB),
       configStore: durableConfigStoreAccess(env.CONFIG_STORE_WRITER, env.CONFIG_STORE),
     });
@@ -120,7 +120,7 @@ describe("live-update Durable Object authorization", () => {
     const app = createApp({
       authResolver: makeControlPlaneAuthResolver({
         verifier: makeJwksVerifier({
-          issuer: "https://auth.splitch.test",
+          issuer: ISSUER,
           fetchJwks: async () => signer.jwks,
           controlPlaneAudience: AUDIENCE,
         }),
@@ -133,7 +133,7 @@ describe("live-update Durable Object authorization", () => {
         },
         now: () => NOW_MS,
       }),
-      rateLimiter: () => ({ limited: false }),
+      rateLimiter: allowLimiter,
       repo: createRepository(env.DB),
       configStore: durableConfigStoreAccess(env.CONFIG_STORE_WRITER, env.CONFIG_STORE),
     });
@@ -264,7 +264,7 @@ async function seededLiveUpdateContext(
 async function token(scopes: string[]): Promise<string> {
   return signer.sign({
     sub: USER_ID,
-    iss: "https://auth.splitch.test",
+    iss: ISSUER,
     aud: AUDIENCE,
     iat: Math.floor(NOW_MS / 1000),
     exp: Math.floor(NOW_MS / 1000) + 3600,

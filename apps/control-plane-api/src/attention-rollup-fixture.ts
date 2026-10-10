@@ -1,17 +1,17 @@
 import type { StatsOutput } from "@splitch/contracts";
 import { appScope, createRepository, envScope, type Repository } from "@splitch/db";
-import type { AuthResolver, Principal, RateLimiter } from "@splitch/worker-runtime";
+import type { AuthResolver, Principal } from "@splitch/worker-runtime";
 import { afterEach, beforeEach, type Mock, vi } from "vitest";
-import { createApp } from "./app";
 import type { AnalysisResultsReader } from "./attention-analysis-reader";
 import { ids, NOW, seedConfigGraph, startSeededExperiment } from "./config-store-fixture-data";
+import { makeTestApp as createApp } from "./test-app-fixture";
+import { allowLimiter } from "./test-constants";
 import type { LocalBindings } from "./test-fixtures";
 
 export const USER_ID = "user_attention";
 export const OTHER_APP_ID = "app_other_attention";
 export const DEV_EXPERIMENT_ID = "exp_attention_dev";
 export const QA_ENVIRONMENT_ID = "env_qa";
-const allowLimiter: RateLimiter = () => ({ limited: false });
 
 /**
  * The fan-out cases seed hundreds of rows, so they retain a larger timeout for

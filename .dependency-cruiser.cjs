@@ -137,6 +137,14 @@ module.exports = {
       from: { path: "^packages/worker-runtime/" },
       to: { path: "^packages/(control-plane-sdk|sdk|ui)/" },
     },
+    {
+      name: "worker-entrypoints-do-not-reach-db-test-support",
+      severity: "error",
+      comment:
+        "D1 test support reads migration files from disk and seeds fixture rows; no deployed Worker may load it.",
+      from: { path: "^apps/[^/]+/src/(index|server)\\.tsx?$" },
+      to: { path: "^packages/db/src/(testing|test-migrations)\\.ts$", reachable: true },
+    },
   ],
   options: {
     doNotFollow: {

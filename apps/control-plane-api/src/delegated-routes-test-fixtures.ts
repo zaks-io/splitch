@@ -4,6 +4,7 @@ import type { AuthResolver, Principal, RateLimiter } from "@splitch/worker-runti
 import { vi } from "vitest";
 import type { DelegationBindings } from "./delegated-routes";
 import { appAdminScope } from "./scope-binding";
+import { allowLimiter as rateLimiter } from "./test-constants";
 
 export const RESULTS_PATH = "/apps/app_1/envs/env_1/experiments/exp_1/results";
 export const OTHER_TENANT_RESULTS_PATH = "/apps/app_1/envs/env_1/experiments/exp_tenant_b/results";
@@ -83,7 +84,6 @@ export function deps(options: {
       ...options.principal,
     },
   });
-  const rateLimiter: RateLimiter = () => ({ limited: false });
   return {
     authResolver,
     rateLimiter,

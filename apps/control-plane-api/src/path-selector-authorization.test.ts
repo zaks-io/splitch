@@ -1,9 +1,10 @@
 import { env } from "cloudflare:workers";
 import { createRepository } from "@splitch/db";
-import type { Principal, RateLimiter } from "@splitch/worker-runtime";
+import type { Principal } from "@splitch/worker-runtime";
 import { beforeEach, describe, expect, it } from "vitest";
-import { createApp } from "./app";
 import { resolveControlPlanePathSelectors } from "./path-selector-resolution";
+import { makeTestApp as createApp } from "./test-app-fixture";
+import { allowLimiter } from "./test-constants";
 import {
   resetOrganizationGraph,
   seedAppMember,
@@ -16,7 +17,6 @@ const ATTACKER = "user_selector_attacker";
 const OTHER_USER = "user_selector_other";
 const ATTACKER_APP = "app_selector_attacker";
 const VICTIM_APP = "app_selector_victim";
-const allowLimiter: RateLimiter = () => ({ limited: false });
 
 beforeEach(async () => {
   await resetOrganizationGraph(env.DB);

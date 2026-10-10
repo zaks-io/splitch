@@ -1,21 +1,19 @@
 import type { ErrorResponse } from "@splitch/contracts";
 import { createRepository } from "@splitch/db";
-import type { RateLimiter } from "@splitch/worker-runtime";
 import type { Hono } from "hono";
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { createApp } from "../src/app";
 import { makeControlPlaneAuthResolver } from "../src/auth-resolver";
 import { type FixtureSigner, makeFixtureSigner } from "../src/fixture-signer";
 import { makeJwksVerifier } from "../src/jwks-verify";
 import { makeSessionStore } from "../src/session-store";
+import { makeTestApp as createApp } from "../src/test-app-fixture";
+import { AUDIENCE, allowLimiter, ISSUER, NOW_MS } from "../src/test-constants";
 import type { LocalBindings } from "../src/test-fixtures";
 import { seedOrgApp, seedOrgMember } from "../src/test-seeds";
-import { makePoolBindings as makeLocalBindings } from "./pool-bindings";
 import { noOpExposureStatusCleanup } from "./exposure-status-cleanup-fixture";
 import { noOpHoldoverWriteOutboxCleanup } from "./holdover-write-outbox-cleanup-fixture";
+import { makePoolBindings as makeLocalBindings } from "./pool-bindings";
 
-const AUDIENCE = "https://cp.splitch.test";
-const NOW_MS = Date.UTC(2026, 6, 2, 12, 0, 0);
 const NOW_ISO = new Date(NOW_MS).toISOString();
 const ORG = {
   orgId: "org_app_env_authz",
@@ -29,7 +27,6 @@ const ADMIN = "user_app_env_authz_admin";
 const NON_MEMBER = "user_app_env_authz_non_member";
 type AppRole = "owner" | "admin" | "member";
 
-const allowLimiter: RateLimiter = () => ({ limited: false });
 const nowSeconds = () => Math.floor(NOW_MS / 1000);
 
 interface Harness {
@@ -59,7 +56,7 @@ beforeEach(async () => {
 
   const signer = await makeFixtureSigner();
   const verifier = makeJwksVerifier({
-    issuer: "https://auth.splitch.test",
+    issuer: ISSUER,
     fetchJwks: async () => signer.jwks,
     controlPlaneAudience: AUDIENCE,
   });
@@ -93,7 +90,7 @@ afterEach(async () => h.bindings.dispose());
 function orgToken(role: AppRole = "owner"): Promise<string> {
   return h.signer.sign({
     sub: OWNER,
-    iss: "https://auth.splitch.test",
+    iss: ISSUER,
     aud: AUDIENCE,
     iat: nowSeconds(),
     exp: nowSeconds() + 3600,
@@ -104,7 +101,7 @@ function orgToken(role: AppRole = "owner"): Promise<string> {
 function appToken(userId: string, appId: string, role: AppRole): Promise<string> {
   return h.signer.sign({
     sub: userId,
-    iss: "https://auth.splitch.test",
+    iss: ISSUER,
     aud: AUDIENCE,
     iat: nowSeconds(),
     exp: nowSeconds() + 3600,

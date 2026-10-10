@@ -4,9 +4,10 @@ import {
   routesSurfacedBy,
 } from "@splitch/contracts";
 import type { Repository } from "@splitch/db";
-import type { AuthResolver, RateLimiter } from "@splitch/worker-runtime";
+import type { AuthResolver } from "@splitch/worker-runtime";
 import { describe, expect, it } from "vitest";
-import { createApp } from "./app";
+import { makeTestApp as createApp } from "./test-app-fixture";
+import { allowLimiter as rateLimiter } from "./test-constants";
 
 /**
  * The address model and the mount model have to be the same model. Nothing
@@ -46,7 +47,6 @@ function stubDeps() {
     ok: false as const,
     reason: "UNAUTHORIZED" as const,
   });
-  const rateLimiter: RateLimiter = () => ({ limited: false });
   return {
     door: "binding" as const,
     authResolver,

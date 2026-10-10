@@ -2,7 +2,8 @@ import { env } from "cloudflare:workers";
 import { createRepository } from "@splitch/db";
 import type { Principal } from "@splitch/worker-runtime";
 import { beforeEach, describe, expect, it } from "vitest";
-import { createApp } from "./app";
+import { makeTestApp as createApp } from "./test-app-fixture";
+import { allowLimiter } from "./test-constants";
 import { resetOrganizationGraph, seedEnvironment, seedOrgApp } from "./test-seeds";
 
 const APP_ID = "app_environment_selector_read";
@@ -86,7 +87,7 @@ describe("Environment selector read reuse", () => {
 function testApp(d1: D1Database) {
   return createApp({
     authResolver: async () => ({ ok: true, principal: actor }),
-    rateLimiter: () => ({ limited: false }),
+    rateLimiter: allowLimiter,
     repo: createRepository(d1),
   });
 }

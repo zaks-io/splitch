@@ -1,11 +1,12 @@
 import { appScope, createRepository } from "@splitch/db";
-import type { AuthResolver, RateLimiter } from "@splitch/worker-runtime";
+import type { AuthResolver } from "@splitch/worker-runtime";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { createApp } from "./app";
 import {
   EnvironmentExposureStatusCleanupError,
   type EnvironmentExposureStatusCleanupInput,
 } from "./environment-exposure-status-cleanup";
+import { makeTestApp as createApp } from "./test-app-fixture";
+import { allowLimiter as rateLimiter } from "./test-constants";
 import { type LocalBindings, makeLocalBindings } from "./test-fixtures";
 
 const APP_ID = "app_cleanup";
@@ -204,7 +205,6 @@ function app(
       authDoor: "device_flow",
     },
   });
-  const rateLimiter: RateLimiter = () => ({ limited: false });
   return createApp({
     authResolver,
     rateLimiter,

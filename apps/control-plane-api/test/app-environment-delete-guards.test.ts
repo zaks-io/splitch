@@ -1,21 +1,20 @@
 import type { ErrorResponse } from "@splitch/contracts";
 import { appScope, createRepository, envScope } from "@splitch/db";
-import type { RateLimiter } from "@splitch/worker-runtime";
+import { flagRow } from "@splitch/db/testing";
 import type { Hono } from "hono";
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { createApp } from "../src/app";
 import { makeControlPlaneAuthResolver } from "../src/auth-resolver";
 import { type FixtureSigner, makeFixtureSigner } from "../src/fixture-signer";
 import { makeJwksVerifier } from "../src/jwks-verify";
 import { makeSessionStore } from "../src/session-store";
+import { makeTestApp as createApp } from "../src/test-app-fixture";
+import { AUDIENCE, allowLimiter, ISSUER, NOW_MS } from "../src/test-constants";
 import type { LocalBindings } from "../src/test-fixtures";
 import { seedOrgApp, seedOrgMember } from "../src/test-seeds";
-import { makePoolBindings as makeLocalBindings } from "./pool-bindings";
 import { noOpExposureStatusCleanup } from "./exposure-status-cleanup-fixture";
 import { noOpHoldoverWriteOutboxCleanup } from "./holdover-write-outbox-cleanup-fixture";
+import { makePoolBindings as makeLocalBindings } from "./pool-bindings";
 
-const AUDIENCE = "https://cp.splitch.test";
-const NOW_MS = Date.UTC(2026, 6, 2, 12, 0, 0);
 const NOW_ISO = new Date(NOW_MS).toISOString();
 const ORG = {
   orgId: "org_app_env_delete_guards",
@@ -26,7 +25,6 @@ const ORG = {
 };
 const OWNER = "user_app_env_delete_owner";
 
-const allowLimiter: RateLimiter = () => ({ limited: false });
 const nowSeconds = () => Math.floor(NOW_MS / 1000);
 
 interface Harness {
@@ -56,7 +54,7 @@ beforeEach(async () => {
 
   const signer = await makeFixtureSigner();
   const verifier = makeJwksVerifier({
-    issuer: "https://auth.splitch.test",
+    issuer: ISSUER,
     fetchJwks: async () => signer.jwks,
     controlPlaneAudience: AUDIENCE,
   });
@@ -90,7 +88,7 @@ afterEach(async () => h.bindings.dispose());
 function orgToken(): Promise<string> {
   return h.signer.sign({
     sub: OWNER,
-    iss: "https://auth.splitch.test",
+    iss: ISSUER,
     aud: AUDIENCE,
     iat: nowSeconds(),
     exp: nowSeconds() + 3600,
@@ -101,7 +99,7 @@ function orgToken(): Promise<string> {
 function appToken(appId: string): Promise<string> {
   return h.signer.sign({
     sub: OWNER,
-    iss: "https://auth.splitch.test",
+    iss: ISSUER,
     aud: AUDIENCE,
     iat: nowSeconds(),
     exp: nowSeconds() + 3600,
@@ -138,15 +136,18 @@ async function seedRunningExperiment(appId: string, environmentId: string, suffi
   // `experiments.flag_id` is a real foreign key into `flags`. The Node harness's
   // hand-written schema declares no foreign keys at all, so this row used to
   // insert against a flag that never existed; the migrated schema rejects it.
-  await repo.flags.flags.insert(appScope(appId), {
-    lifecycleClass: "ops",
-    id: flagId,
-    appId,
-    key: `delete-guard-${suffix}`,
-    name: "Delete guard",
-    createdAt: NOW_ISO,
-    updatedAt: NOW_ISO,
-  });
+  await repo.flags.flags.insert(
+    appScope(appId),
+    flagRow({
+      lifecycleClass: "ops",
+      id: flagId,
+      appId,
+      key: `delete-guard-${suffix}`,
+      name: "Delete guard",
+      createdAt: NOW_ISO,
+      updatedAt: NOW_ISO,
+    }),
+  );
   await repo.experiments.experiments.insert(scope, {
     id: experimentId,
     appId,
@@ -195,15 +196,18 @@ async function seedRunningExperiment(appId: string, environmentId: string, suffi
 async function seedFlagConfig(appId: string, environmentId: string, suffix = "primary") {
   const repo = createRepository(h.bindings.d1);
   const flagId = `flag_delete_block_${suffix}`;
-  await repo.flags.flags.insert(appScope(appId), {
-    lifecycleClass: "ops",
-    id: flagId,
-    appId,
-    key: `delete-block-${suffix}`,
-    name: "Delete block",
-    createdAt: NOW_ISO,
-    updatedAt: NOW_ISO,
-  });
+  await repo.flags.flags.insert(
+    appScope(appId),
+    flagRow({
+      lifecycleClass: "ops",
+      id: flagId,
+      appId,
+      key: `delete-block-${suffix}`,
+      name: "Delete block",
+      createdAt: NOW_ISO,
+      updatedAt: NOW_ISO,
+    }),
+  );
   await repo.flags.flagConfigs.insert(envScope(appId, environmentId), {
     id: `cfg_delete_block_${suffix}`,
     appId,
@@ -217,15 +221,18 @@ async function seedFlagConfig(appId: string, environmentId: string, suffix = "pr
 }
 
 async function seedAppFlag(appId: string, suffix = "primary") {
-  await createRepository(h.bindings.d1).flags.flags.insert(appScope(appId), {
-    lifecycleClass: "ops",
-    id: `flag_app_delete_block_${suffix}`,
-    appId,
-    key: `app-delete-block-${suffix}`,
-    name: "App delete block",
-    createdAt: NOW_ISO,
-    updatedAt: NOW_ISO,
-  });
+  await createRepository(h.bindings.d1).flags.flags.insert(
+    appScope(appId),
+    flagRow({
+      lifecycleClass: "ops",
+      id: `flag_app_delete_block_${suffix}`,
+      appId,
+      key: `app-delete-block-${suffix}`,
+      name: "App delete block",
+      createdAt: NOW_ISO,
+      updatedAt: NOW_ISO,
+    }),
+  );
 }
 
 async function errorBody(res: Response): Promise<ErrorResponse> {

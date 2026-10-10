@@ -1,12 +1,14 @@
 import { env } from "cloudflare:workers";
 import { appScope, createRepository, envScope } from "@splitch/db";
+import { flagRow } from "@splitch/db/testing";
 import { mintInitialAppIdentityRecord, wrapAppIdentityRecord } from "@splitch/privacy";
 import { expect } from "vitest";
 import type { ControlPlaneApiEnv } from "../src/env.js";
 import { McpEntrypoint } from "../src/index.js";
+import { AUDIENCE } from "../src/test-constants";
 import { seedAppMember, seedEnvironment, seedOrgApp, seedOrgMember } from "../src/test-seeds.js";
 
-export const AUDIENCE = "https://cp.splitch.test";
+export { AUDIENCE } from "../src/test-constants";
 export const MCP_DELEGATION_SECRET = "d".repeat(32);
 export const OWNER = "user_index_owner_1c91";
 export const TENANT_A = {
@@ -95,17 +97,20 @@ async function seedTenant(d1: D1Database, tenant: TenantFixture, owner: string):
 
   const repo = createRepository(d1);
   const controlVariantId = `${tenant.flagId}_control`;
-  await repo.flags.flags.insert(appScope(tenant.appId), {
-    lifecycleClass: "ops",
-    id: tenant.flagId,
-    appId: tenant.appId,
-    key: tenant.flagKey,
-    name: `${tenant.appName} Flag`,
-    schema: JSON.stringify({ type: "boolean" }),
-    defaultVariantId: controlVariantId,
-    createdAt: now,
-    updatedAt: now,
-  });
+  await repo.flags.flags.insert(
+    appScope(tenant.appId),
+    flagRow({
+      lifecycleClass: "ops",
+      id: tenant.flagId,
+      appId: tenant.appId,
+      key: tenant.flagKey,
+      name: `${tenant.appName} Flag`,
+      schema: JSON.stringify({ type: "boolean" }),
+      defaultVariantId: controlVariantId,
+      createdAt: now,
+      updatedAt: now,
+    }),
+  );
   await repo.flags.addVariant(appScope(tenant.appId), tenant.flagId, {
     id: controlVariantId,
     name: "control",

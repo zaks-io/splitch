@@ -1,10 +1,11 @@
 import { createRepository } from "@splitch/db";
-import type { AuthResolver, RateLimiter } from "@splitch/worker-runtime";
+import type { AuthResolver } from "@splitch/worker-runtime";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { createApp } from "./app";
 import { makeControlPlaneAuthResolver } from "./auth-resolver";
 import type { EnvironmentExposureStatusCleanupInput } from "./environment-exposure-status-cleanup";
 import type { HoldoverWriteOutboxCleanup } from "./holdover-write-outbox-cleanup";
+import { makeTestApp as createApp } from "./test-app-fixture";
+import { allowLimiter as rateLimiter } from "./test-constants";
 import { type LocalBindings, makeLocalBindings } from "./test-fixtures";
 
 const APP_ID = "app_finalize_resume";
@@ -266,7 +267,6 @@ function createTestApp(
       },
     },
   });
-  const rateLimiter: RateLimiter = () => ({ limited: false });
   const repo = repoOverride ?? createRepository(bindings.d1);
   const deleteAppCascade = repo.identity.deleteAppCascade;
   return createApp({

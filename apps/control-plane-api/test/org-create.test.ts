@@ -4,14 +4,14 @@ import {
   USER_OWNED_ORGANIZATION_LIMIT,
 } from "@splitch/contracts";
 import { createRepository } from "@splitch/db";
-import type { RateLimiter } from "@splitch/worker-runtime";
 import type { Hono } from "hono";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { createApp } from "../src/app";
 import { makeControlPlaneAuthResolver } from "../src/auth-resolver";
 import { type FixtureSigner, makeFixtureSigner } from "../src/fixture-signer";
 import { makeJwksVerifier } from "../src/jwks-verify";
 import { makeSessionStore } from "../src/session-store";
+import { makeTestApp as createApp } from "../src/test-app-fixture";
+import { AUDIENCE, allowLimiter, ISSUER } from "../src/test-constants";
 import type { LocalBindings } from "../src/test-fixtures";
 import { resetOrganizationGraph, seedOrgApp, seedOrgMember } from "../src/test-seeds";
 import { makePoolBindings as makeLocalBindings } from "./pool-bindings";
@@ -25,7 +25,6 @@ import { makePoolBindings as makeLocalBindings } from "./pool-bindings";
  * and one principal's Org must stay invisible to an unrelated one.
  */
 
-const AUDIENCE = "https://cp.splitch.test";
 const NOW_MS = Date.UTC(2026, 6, 1, 12, 0, 0);
 
 /**
@@ -58,7 +57,6 @@ interface Harness {
   bindings: LocalBindings;
 }
 
-const allowLimiter: RateLimiter = () => ({ limited: false });
 const nowSeconds = () => Math.floor(NOW_MS / 1000);
 
 let h: Harness;
@@ -81,7 +79,7 @@ beforeEach(async () => {
   const app = createApp({
     authResolver: makeControlPlaneAuthResolver({
       verifier: makeJwksVerifier({
-        issuer: "https://auth.splitch.test",
+        issuer: ISSUER,
         fetchJwks: async () => signer.jwks,
         controlPlaneAudience: AUDIENCE,
       }),
@@ -113,7 +111,7 @@ interface TokenOptions {
 function token(options: TokenOptions): Promise<string> {
   return h.signer.sign({
     sub: options.userId,
-    iss: "https://auth.splitch.test",
+    iss: ISSUER,
     aud: AUDIENCE,
     iat: nowSeconds(),
     exp: nowSeconds() + 3600,
@@ -272,7 +270,7 @@ describe("organizations_create", () => {
     // cannot dodge the gate by simply omitting the claim.
     const jwt = await h.signer.sign({
       sub: ALICE.userId,
-      iss: "https://auth.splitch.test",
+      iss: ISSUER,
       aud: AUDIENCE,
       iat: nowSeconds(),
       exp: nowSeconds() + 3600,

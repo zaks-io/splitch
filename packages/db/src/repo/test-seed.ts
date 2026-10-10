@@ -1,4 +1,5 @@
 import { appScope, createRepository, envScope } from "../index";
+import { flagRow } from "../testing";
 
 /**
  * Seed two complete tenant graphs (App A, App B) into one local D1.
@@ -77,15 +78,18 @@ async function seedTenant(repo: ReturnType<typeof createRepository>, t: Tenant):
     updatedAt: NOW,
   });
 
-  await repo.flags.flags.insert(aScope, {
-    lifecycleClass: "ops",
-    id: t.flagId,
-    appId: t.appId,
-    key: t.flagKey,
-    name: "A Flag",
-    createdAt: NOW,
-    updatedAt: NOW,
-  });
+  await repo.flags.flags.insert(
+    aScope,
+    flagRow({
+      lifecycleClass: "ops",
+      id: t.flagId,
+      appId: t.appId,
+      key: t.flagKey,
+      name: "A Flag",
+      createdAt: NOW,
+      updatedAt: NOW,
+    }),
+  );
 
   await repo.flags.addVariant(aScope, t.flagId, {
     id: t.variantId,

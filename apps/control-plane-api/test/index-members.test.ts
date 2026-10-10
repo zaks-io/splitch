@@ -4,8 +4,8 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import type { ControlPlaneApiEnv } from "../src/env.js";
 import { type FixtureSigner, makeFixtureSigner } from "../src/fixture-signer.js";
 import worker from "../src/index.js";
+import { AUDIENCE, ISSUER } from "../src/test-constants";
 
-const AUDIENCE = "https://cp.splitch.test";
 const JWKS_URI = "https://auth.splitch.test/.well-known/jwks.json";
 const NOW_MS = Date.UTC(2026, 6, 1, 12, 0, 0);
 const ORG = {
@@ -73,7 +73,7 @@ async function token(sub: string, scopes: string[]): Promise<string> {
   const now = Math.floor(Date.now() / 1000);
   return signer.sign({
     sub,
-    iss: "https://auth.splitch.test",
+    iss: ISSUER,
     aud: AUDIENCE,
     iat: now,
     exp: now + 3600,

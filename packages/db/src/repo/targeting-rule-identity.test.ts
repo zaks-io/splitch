@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { appScope, createRepository, envScope } from "../index";
+import { flagRow } from "../testing";
 import { createLocalD1, type LocalD1 } from "./test-d1-pool";
 import { type SeededTenants, seedTwoTenants } from "./test-seed";
 
@@ -23,15 +24,18 @@ afterEach(async () => {
 describe("Targeting Rule identity is scoped to one Flag Configuration", () => {
   it("lets two Flags in the same Environment persist the same rule id", async () => {
     const secondFlagId = "flag_a_search";
-    await repo.flags.flags.insert(appScope(seed.a.appId), {
-      lifecycleClass: "ops",
-      id: secondFlagId,
-      appId: seed.a.appId,
-      key: "search",
-      name: "Search",
-      createdAt: NOW,
-      updatedAt: NOW,
-    });
+    await repo.flags.flags.insert(
+      appScope(seed.a.appId),
+      flagRow({
+        lifecycleClass: "ops",
+        id: secondFlagId,
+        appId: seed.a.appId,
+        key: "search",
+        name: "Search",
+        createdAt: NOW,
+        updatedAt: NOW,
+      }),
+    );
     await repo.flags.flagConfigs.insert(envScope(seed.a.appId, seed.a.environmentId), {
       id: "cfg_a_search",
       appId: seed.a.appId,

@@ -2,10 +2,11 @@ import type { FlagListReadResponse, PrincipalFlagListReadResponse } from "@split
 import { LIST_READ_LIMIT } from "@splitch/contracts";
 import { appScope } from "@splitch/db";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { ISSUER } from "../src/test-constants";
 import {
   FOREIGN_APP,
-  makePrincipalFlagHarness,
   MEMBER_ORG_NONMEMBER_APP,
+  makePrincipalFlagHarness,
   NOW,
   PRINCIPAL_APPS,
   type PrincipalFlagHarness,
@@ -101,7 +102,7 @@ describe("principal-scoped GET /flags", () => {
     const list = vi.spyOn(h.repo.flags, "listFlagPageAcrossApps");
     const token = await h.signer.sign({
       sub: "user_principal_flags_member",
-      iss: "https://auth.splitch.test",
+      iss: ISSUER,
       aud: "https://cp.splitch.test",
       iat: Math.floor(Date.UTC(2026, 7, 28, 12) / 1000),
       exp: Math.floor(Date.UTC(2026, 7, 28, 13) / 1000),
