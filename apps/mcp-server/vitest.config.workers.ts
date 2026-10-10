@@ -14,6 +14,10 @@ export default defineConfig({
   ],
   resolve: {
     alias: {
+      "@splitch/contracts/testing": new URL(
+        "../../packages/contracts/src/testing/index.ts",
+        import.meta.url,
+      ).pathname,
       "@splitch/contracts": new URL("../../packages/contracts/src/index.ts", import.meta.url)
         .pathname,
     },

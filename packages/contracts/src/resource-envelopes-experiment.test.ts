@@ -1,3 +1,4 @@
+import { experimentResourceFixture } from "@splitch/contracts/testing";
 import { describe, expect, it } from "vitest";
 import {
   CreateExperimentRequestSchema,
@@ -178,33 +179,26 @@ describe("PatchExperimentRequestSchema", () => {
 
 describe("ExperimentResponseSchema", () => {
   it("parses the full Experiment leaf", () => {
-    const res = ExperimentResponseSchema.parse({
-      id: "exp_1",
-      appId: "app_1",
-      environmentId: "env_prod",
-      key: "checkout-test",
-      flagId: "flag_1",
-      name: "Checkout test",
-      owner: "user_1",
-      tags: ["checkout", "q3"],
-      status: "draft",
-      targetingKey: "userId",
-      targetingKeyType: "user",
-      activationMetricId: null,
-      confidenceLevel: 0.95,
-      defaultVariantId: "var_1",
-      metrics: [{ metricId: "m_1" }],
-      guardrailMetrics: [],
-      conversionWindowMs: 0,
-      dimensions: [],
-      draftAllocation: { control: 50, treatment: 50 },
-      draftSalt: "draft-salt",
-      draftTargetingRules: [],
-      draftSegmentIds: ["seg_1"],
-      liveRunId: null,
-      createdAt: "2026-06-28T00:00:00.000Z",
-      updatedAt: "2026-06-28T00:00:00.000Z",
-    });
+    const res = ExperimentResponseSchema.parse(
+      experimentResourceFixture({
+        id: "exp_1",
+        appId: "app_1",
+        flagId: "flag_1",
+        environmentId: "env_prod",
+        key: "checkout-test",
+        name: "Checkout test",
+        owner: "user_1",
+        tags: ["checkout", "q3"],
+        activationMetricId: null,
+        metrics: [{ metricId: "m_1" }],
+        draftAllocation: { control: 50, treatment: 50 },
+        draftSalt: "draft-salt",
+        draftTargetingRules: [],
+        draftSegmentIds: ["seg_1"],
+        createdAt: "2026-06-28T00:00:00.000Z",
+        updatedAt: "2026-06-28T00:00:00.000Z",
+      }),
+    );
     expect(res.liveRunId).toBeNull();
   });
 });

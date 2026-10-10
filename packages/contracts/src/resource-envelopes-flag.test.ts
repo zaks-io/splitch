@@ -1,10 +1,11 @@
+import { flagResourceFixture } from "@splitch/contracts/testing";
 import { describe, expect, it } from "vitest";
 import {
   CreateFlagRequestSchema,
   CreateVariantRequestSchema,
-  HydratedFlagResponseSchema,
   FlagListResponseSchema,
   FlagResponseSchema,
+  HydratedFlagResponseSchema,
   PatchFlagRequestSchema,
   PatchVariantRequestSchema,
 } from "./resource-envelopes-flag";
@@ -22,20 +23,16 @@ const validCreateFlag = {
   idempotency_key: "idem-create-flag",
 };
 
-const storedFlag = {
+const storedFlag = flagResourceFixture({
   id: "flag_1",
   appId: "app_1",
   key: "feature-x",
   name: "Feature X",
   schema: null,
   variants: [{ id: "var_1", name: "control", value: false }],
-  defaultVariantId: "var_1",
-  lifecycleClass: "unclassified",
-  owner: null,
-  expiresAt: null,
   createdAt: "2026-06-28T00:00:00.000Z",
   updatedAt: "2026-06-28T00:00:00.000Z",
-};
+});
 
 describe("CreateFlagRequestSchema", () => {
   it("parses a minimal App-level request", () => {

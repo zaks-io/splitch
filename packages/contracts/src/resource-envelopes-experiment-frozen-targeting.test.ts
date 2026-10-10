@@ -1,3 +1,4 @@
+import { experimentResourceFixture } from "@splitch/contracts/testing";
 import { describe, expect, it } from "vitest";
 import {
   ExperimentUpdateResponseSchema,
@@ -82,26 +83,18 @@ describe("StartRunResponseSchema (SPL-307 frozen targeting)", () => {
 
 describe("ExperimentUpdateResponseSchema (SPL-307 liveRunUnaffected)", () => {
   it("parses an optional liveRunUnaffected notice on a staged edit", () => {
-    const experiment = {
+    const experiment = experimentResourceFixture({
       id: "exp_1",
       appId: "app_1",
+      flagId: "flag_1",
       environmentId: "env_prod",
       key: "checkout-test",
-      flagId: "flag_1",
       name: "Checkout test",
-      status: "running" as const,
-      targetingKey: "userId",
-      targetingKeyType: "user",
-      confidenceLevel: 0.95,
-      defaultVariantId: "var_1",
-      metrics: [],
-      guardrailMetrics: [],
-      conversionWindowMs: 0,
-      dimensions: [],
+      status: "running",
       liveRunId: "run_1",
       createdAt: "2026-06-28T00:00:00.000Z",
       updatedAt: "2026-06-28T00:00:00.000Z",
-    };
+    });
     const parsed = ExperimentUpdateResponseSchema.parse({
       ...experiment,
       liveRunUnaffected: { runId: "run_1", frozenTargetingRules: [] },
