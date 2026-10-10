@@ -75,6 +75,14 @@ module.exports = {
       },
     },
     {
+      name: "stats-stays-server-side",
+      severity: "error",
+      comment:
+        "The Decision Gate is computed by the Workers (ADR-0030). A stats dependency makes the production deploy planner redeploy the Panel and SDK consumers.",
+      from: { path: "^(apps/control-panel|packages/control-plane-sdk)/" },
+      to: { path: "^(packages/stats/|@splitch/stats$)" },
+    },
+    {
       name: "contracts-testing-is-test-only",
       severity: "error",
       comment: "Schema-checked wire fixtures must never enter runtime or published interfaces.",

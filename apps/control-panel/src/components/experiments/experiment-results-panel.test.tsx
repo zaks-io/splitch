@@ -1,3 +1,4 @@
+import { cleanScenario } from "@splitch/contracts/testing";
 import type { PanelExperimentRun } from "@splitch/control-plane-sdk/panel-experiments";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
@@ -5,7 +6,6 @@ import {
   metricsFixture,
   resultsFixture,
   resultsNoDataFixture,
-  statsFixture,
 } from "./experiment-results-test-fixtures";
 import { visibleText } from "./experiment-results-test-markup";
 
@@ -136,7 +136,7 @@ describe("Experiment Results route no_data waiting state", () => {
   });
 
   it("still renders measured Results when Analysis answers ready", () => {
-    resultsData.current = resultsFixture(statsFixture());
+    resultsData.current = resultsFixture(cleanScenario());
 
     const html = renderPanel();
 
