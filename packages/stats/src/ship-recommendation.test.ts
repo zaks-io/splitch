@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { armResult, stats } from "./experiment-decision-gate-test-fixtures";
+import { armResult, stats } from "./decision-gate-test-fixtures";
 import { computeShipRecommendation } from "./ship-recommendation-compute";
 import {
   beneficialArm,

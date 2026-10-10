@@ -1,15 +1,15 @@
-import {
-  computeShipRecommendation,
-  evaluateExperimentDecisionGate,
-  type ArmResult,
-  type PreRegistration,
-  type StatsOutput,
-  type VarianceTechniques,
+import type {
+  ArmResult,
+  PreRegistration,
+  StatsOutput,
+  VarianceTechniques,
 } from "@splitch/contracts";
 import { describe, expect, it } from "vitest";
 import { applyDecisionFamilyCorrection } from "./decision-family-fdr";
+import { evaluateExperimentDecisionGate } from "./decision-gate";
 import { SequentialCI } from "./sequential-ci";
 import { monteCarloTolerance } from "./sequential-ci-simulation";
+import { computeShipRecommendation } from "./ship-recommendation-compute";
 import { seededNormal } from "./simulation-null-draws";
 
 /**

@@ -1,14 +1,11 @@
 import type { ArmResult, FrozenControlIdentity, StatsOutput } from "@splitch/contracts";
-import {
-  evaluateExperimentDecisionGate,
-  experimentSignificanceDisplays,
-  experimentSrmDiagnostics,
-} from "@splitch/contracts";
+import { experimentSignificanceDisplays } from "@splitch/contracts";
 import type {
   PanelExperimentResultsNoData,
   PanelExperimentResultsReady,
   PanelExperimentRun,
 } from "@splitch/control-plane-sdk/panel-experiments";
+import { evaluateExperimentDecisionGate, experimentSrmDiagnostics } from "@splitch/stats";
 import type { ComparisonMetric } from "#lib/experiments/metric-comparison-rows";
 
 /**

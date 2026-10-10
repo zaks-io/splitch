@@ -1,6 +1,6 @@
+import type { DimensionResult } from "@splitch/contracts";
 import { describe, expect, it } from "vitest";
-import { armResult, check, gateFor, stats } from "./experiment-decision-gate-test-fixtures";
-import type { DimensionResult } from "./stats-result-contract";
+import { armResult, check, gateFor, stats } from "./decision-gate-test-fixtures";
 
 // (docs/spec/stats/dimension-slicing.md), so readiness has to read both.
 describe("evaluateExperimentDecisionGate dimension slices", () => {

@@ -1,5 +1,5 @@
-import { reachedDuration, stats } from "./experiment-decision-gate-test-fixtures";
-import type { AnalysisResultsEnvelope } from "./stats-result-contract";
+import type { AnalysisResultsEnvelope } from "@splitch/contracts";
+import { reachedDuration, stats } from "./decision-gate-test-fixtures";
 
 export const control = {
   state: "frozen" as const,

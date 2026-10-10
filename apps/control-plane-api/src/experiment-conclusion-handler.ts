@@ -3,12 +3,12 @@ import {
   type ConcludeRunRequest,
   canonicalHash,
   createResultToken,
-  evaluateExperimentDecisionGate,
   parseResponseBody,
   resolveAnalysisControlIntegrity,
   resolveFrozenControlIdentity,
 } from "@splitch/contracts";
 import { appScope, envScope } from "@splitch/db";
+import { evaluateExperimentDecisionGate } from "@splitch/stats";
 import type { HandlerArgs } from "@splitch/worker-runtime";
 import { fetchAnalysis } from "./analysis-binding";
 import { analysisResultsRequest } from "./analysis-results-request";

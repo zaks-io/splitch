@@ -2,13 +2,15 @@ import {
   ANALYSIS_V1_VERSION,
   ANALYSIS_V2_VERSION,
   createResultToken,
+  type PersistedSrmAlarm,
+} from "@splitch/contracts";
+import type { Repository } from "@splitch/db";
+import {
   evaluateExperimentDecisionGate,
   experimentSrmDiagnostics,
   overlayPersistedSrmAlarms,
-  type PersistedSrmAlarm,
   produceExperimentResults,
-} from "@splitch/contracts";
-import type { Repository } from "@splitch/db";
+} from "@splitch/stats";
 import { describe, expect, it, vi } from "vitest";
 import {
   SrmAlarmWatermarkRequiredError,

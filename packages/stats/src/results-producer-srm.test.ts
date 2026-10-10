@@ -1,8 +1,8 @@
+import { ExperimentResultsResponseSchema } from "@splitch/contracts";
 import { describe, expect, it } from "vitest";
-import { stats } from "./experiment-decision-gate-test-fixtures";
-import { produceExperimentResults } from "./experiment-results-producer";
-import { readyAnalysis, run } from "./experiment-results-producer-test-fixtures";
-import { ExperimentResultsResponseSchema } from "./experiment-results-response";
+import { stats } from "./decision-gate-test-fixtures";
+import { produceExperimentResults } from "./results-producer";
+import { readyAnalysis, run } from "./results-producer-test-fixtures";
 
 describe("produceExperimentResults persisted SRM alarms", () => {
   it("keeps Analysis stats byte-identical when durable alarms OR into the gate", () => {

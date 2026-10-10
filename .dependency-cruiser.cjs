@@ -36,7 +36,7 @@ module.exports = {
       comment:
         "@splitch/contracts is Zod schemas, inferred types, route definitions, and error shapes only.",
       from: { path: "^packages/contracts/" },
-      to: { path: "^packages/(control-plane-sdk|sdk|ui)/" },
+      to: { path: "^packages/(stats|control-plane-sdk|sdk|ui)/" },
     },
     {
       name: "control-plane-sdk-does-not-import-apps",

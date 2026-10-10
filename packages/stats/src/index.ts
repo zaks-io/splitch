@@ -142,3 +142,35 @@ export type {
   SrmRootCauseClassification,
   SrmRootCauseInput,
 } from "./srm-root-cause-types";
+
+export { produceExperimentResults } from "./results-producer";
+export type {
+  ExperimentResultsRunContext,
+  ProduceExperimentResultsInput,
+} from "./results-producer";
+export { computeShipRecommendation } from "./ship-recommendation-compute";
+export type { ShipRecommendationResult } from "./ship-recommendation-compute";
+export {
+  evaluateExperimentDecisionGate,
+  experimentSrmDiagnostics,
+  overlayPersistedSrmAlarms,
+  srmTierFor,
+} from "./decision-gate";
+export {
+  earliestDecisionWatermark,
+  observedEvidenceDays,
+  plannedDurationCheck,
+} from "./decision-gate-duration";
+export type { PlannedDurationEvidence } from "./decision-gate-duration";
+export {
+  activatedSrmCheck,
+  activationBalanceCheck,
+  controlIdentityCheck,
+  decisionValidCheck,
+  engineStatusCheck,
+  exposureSrmCheck,
+  srmIsFiring,
+  underpoweredCheck,
+} from "./decision-gate-checks";
+export { decisionValidMembers, lockedFamilyMembers, named } from "./decision-gate-family";
+export { reasonsFromChecks, statisticalReadiness } from "./results-readiness";

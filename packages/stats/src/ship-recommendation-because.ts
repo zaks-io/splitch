@@ -1,5 +1,4 @@
-import type { MetricDirection } from "./leaf-schemas-experiment";
-import type { RopeScale } from "./run-preregistration";
+import type { MetricDirection, RopeScale } from "@splitch/contracts";
 import type { MetricEffectVerdict } from "./ship-recommendation-effect";
 
 /** Format helpers for the one-sentence `because`. Numbers only; no Metric ids. */

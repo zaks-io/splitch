@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { DecisionGateCheck, DecisionGateCheckId } from "./experiment-decision-gate";
+import type { DecisionGateCheckId } from "./experiment-decision-gate";
 
 /**
  * Control Plane result readiness (plan item 0.15 / C10 part one).
@@ -35,13 +35,3 @@ export const statisticalGateCheckIds = [
   "underpowered",
   "decision_valid_result",
 ] as const satisfies readonly DecisionGateCheckId[];
-
-const STATISTICAL_CHECK_IDS: ReadonlySet<string> = new Set(statisticalGateCheckIds);
-
-export function statisticalReadiness(checks: readonly DecisionGateCheck[]): boolean {
-  return !checks.some((check) => check.status === "fail" && STATISTICAL_CHECK_IDS.has(check.id));
-}
-
-export function reasonsFromChecks(checks: readonly DecisionGateCheck[]): string[] {
-  return checks.filter((check) => check.status === "fail").map((check) => check.detail);
-}

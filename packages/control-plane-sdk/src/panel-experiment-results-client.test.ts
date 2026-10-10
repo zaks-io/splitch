@@ -1,9 +1,5 @@
-import {
-  evaluateExperimentDecisionGate,
-  experimentSignificanceDisplays,
-  experimentSrmDiagnostics,
-  type StatsOutput,
-} from "@splitch/contracts";
+import { experimentSignificanceDisplays, type StatsOutput } from "@splitch/contracts";
+import { evaluateExperimentDecisionGate, experimentSrmDiagnostics } from "@splitch/stats";
 import { describe, expect, it, vi } from "vitest";
 import { createPanelExperimentsClient } from "./panel-experiments";
 

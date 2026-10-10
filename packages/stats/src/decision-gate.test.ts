@@ -1,7 +1,7 @@
+import type { ArmResult } from "@splitch/contracts";
 import { describe, expect, it } from "vitest";
-import { experimentSrmDiagnostics, srmTierFor } from "./experiment-decision-gate";
-import { armResult, check, gateFor, stats } from "./experiment-decision-gate-test-fixtures";
-import type { ArmResult } from "./stats-result-arm";
+import { experimentSrmDiagnostics, srmTierFor } from "./decision-gate";
+import { armResult, check, gateFor, stats } from "./decision-gate-test-fixtures";
 
 describe("srmTierFor", () => {
   it("tiers the caution band separately from a confirmed mismatch", () => {

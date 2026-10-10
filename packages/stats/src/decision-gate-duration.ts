@@ -1,5 +1,5 @@
-import type { DecisionGateCheck } from "./experiment-decision-gate";
-import { MAX_PLANNED_DURATION_DAYS } from "./run-commitments";
+import type { DecisionGateCheck } from "@splitch/contracts";
+import { MAX_PLANNED_DURATION_DAYS } from "@splitch/contracts";
 
 /**
  * The planned-duration readiness check (ADR-0059, plan decision D7).

@@ -1,11 +1,16 @@
+import {
+  srmRootCauseBranches,
+  type SrmRootCauseBranch,
+  type SrmRootCauseClassification,
+} from "@splitch/contracts";
+
 /**
  * Shared types and constants for the Fabijan et al. 2019 SRM root-cause
  * classifier. Classification lives in `srm-root-cause.ts`.
  */
 
-export const SRM_ROOT_CAUSE_BRANCHES = ["triggered_only", "unclassified"] as const;
-
-export type SrmRootCauseBranch = (typeof SRM_ROOT_CAUSE_BRANCHES)[number];
+export type { SrmRootCauseBranch, SrmRootCauseClassification } from "@splitch/contracts";
+export const SRM_ROOT_CAUSE_BRANCHES = srmRootCauseBranches;
 
 /**
  * Fabijan branches this classifier does not emit yet. `day_one` and
@@ -52,21 +57,9 @@ export interface SrmRootCauseInput {
 /** Canonical operation id every branch's `nextCheck` must resolve to today. */
 export const SRM_ROOT_CAUSE_NEXT_CHECK = "experiment_results_get" as const;
 
-export interface SrmRootCauseClassification {
-  readonly branch: SrmRootCauseBranch;
-  readonly explanation: string;
-  /**
-   * Canonical `routeRegistry` operationId the operator/agent should call next.
-   * Must resolve via `getRoute` — never a future/spec-only path name.
-   */
-  readonly nextCheck: string;
-  /** Set on `unclassified`: every signal the classifier weighed. */
-  readonly evidenceConsidered?: string[];
-}
-
 /** Internal matched Fabijan branch before conflict resolution. */
-export interface SrmRootCauseMatchedBranch {
-  readonly branch: Exclude<SrmRootCauseBranch, "unclassified">;
-  readonly explanation: string;
-  readonly nextCheck: string;
-}
+export type SrmRootCauseMatchedBranch = Readonly<
+  Pick<SrmRootCauseClassification, "explanation" | "nextCheck"> & {
+    branch: Exclude<SrmRootCauseBranch, "unclassified">;
+  }
+>;

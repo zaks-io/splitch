@@ -1,6 +1,6 @@
-import { z } from "zod";
 import { describe, expect, it } from "vitest";
-import { nextAfterExperimentStart } from "./mutation-next";
+import { z } from "zod";
+import { mutationNext } from "./mutation-next";
 import { parseResponseTolerantly } from "./parse-response-tolerantly";
 
 /**
@@ -16,14 +16,18 @@ describe("mutation next client compatibility", () => {
         previousRunId: z.string().nullable(),
       })
       .strict();
-    const next = nextAfterExperimentStart({
-      appId: "app_1",
-      environmentId: "env_1",
-      experimentId: "exp_1",
-      runId: "run_1",
-      runStartedAt: "2026-10-03T00:00:00.000Z",
-      plannedDurationDays: 7,
-      targetN: 5000,
+    const next = mutationNext({
+      tool: "experiment_results_get",
+      reason:
+        "Poll Experiment results after the frozen planned duration (7 days) and sequential target_n of 5000.",
+      earliestAt: "2026-10-10T00:00:00.000Z",
+      args: {
+        appId: "app_1",
+        environmentId: "env_1",
+        experimentId: "exp_1",
+        runId: "run_1",
+        targetN: 5000,
+      },
     });
     const parsed = parseResponseTolerantly(legacyStart, {
       experimentId: "exp_1",

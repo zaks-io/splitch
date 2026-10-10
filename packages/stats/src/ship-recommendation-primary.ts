@@ -1,14 +1,16 @@
-import type { PreRegistration } from "./run-preregistration";
+import type {
+  ArmResult,
+  PreRegistration,
+  RecommendationUnavailableReason,
+} from "@splitch/contracts";
 import {
+  type ClassifiedEffect,
   classifyTreatmentArms,
   relativeControlMeanGate,
   treatmentArmsFor,
-  type ClassifiedEffect,
 } from "./ship-recommendation-arms";
-import { marginOnIntervalScale, type MetricEffectVerdict } from "./ship-recommendation-effect";
+import { type MetricEffectVerdict, marginOnIntervalScale } from "./ship-recommendation-effect";
 import { classifyLockedGoalMetrics } from "./ship-recommendation-locked-goals";
-import type { RecommendationUnavailableReason } from "./ship-recommendation";
-import type { ArmResult } from "./stats-result-arm";
 
 export type { ClassifiedEffect } from "./ship-recommendation-arms";
 

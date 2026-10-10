@@ -1,12 +1,14 @@
-import type { PreRegistration } from "./run-preregistration";
+import type {
+  ArmResult,
+  PreRegistration,
+  RecommendationUnavailableReason,
+} from "@splitch/contracts";
 import { effectBecause } from "./ship-recommendation-because";
 import {
   classifyMetricEffect,
   clearsRequiredMargin,
   type MetricEffectVerdict,
 } from "./ship-recommendation-effect";
-import type { RecommendationUnavailableReason } from "./ship-recommendation";
-import type { ArmResult } from "./stats-result-arm";
 
 export type ClassifiedEffect = {
   effect: MetricEffectVerdict;

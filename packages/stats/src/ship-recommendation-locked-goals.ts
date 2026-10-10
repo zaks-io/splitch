@@ -1,14 +1,16 @@
-import type { PreRegistration } from "./run-preregistration";
+import type {
+  ArmResult,
+  PreRegistration,
+  RecommendationUnavailableReason,
+} from "@splitch/contracts";
 import {
+  type ClassifiedEffect,
   classifyTreatmentArms,
   relativeControlMeanGate,
   treatmentArmsFor,
   unavailableForScale,
-  type ClassifiedEffect,
 } from "./ship-recommendation-arms";
 import { marginOnIntervalScale } from "./ship-recommendation-effect";
-import type { RecommendationUnavailableReason } from "./ship-recommendation";
-import type { ArmResult } from "./stats-result-arm";
 
 /**
  * Classify every locked goal Metric (BH family, non-Guardrail). Omitting one

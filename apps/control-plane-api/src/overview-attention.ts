@@ -1,13 +1,13 @@
-import {
-  lockedFamilyMembers,
-  type OverviewDecisionExperiment,
-  type OverviewDecisionReason,
-  type OverviewExperiments,
-  type OverviewFailingExperiment,
-  type OverviewFailureReason,
-  type StatsOutput,
+import type {
+  OverviewDecisionExperiment,
+  OverviewDecisionReason,
+  OverviewExperiments,
+  OverviewFailingExperiment,
+  OverviewFailureReason,
+  StatsOutput,
 } from "@splitch/contracts";
 import { guardrailBreached, srmFiring } from "@splitch/control-plane-sdk/panel-experiments";
+import { lockedFamilyMembers } from "@splitch/stats";
 import { MULTIPLE_ASSIGNMENT_RATE_THRESHOLD } from "./overview-thresholds";
 
 /** The identity of one running Experiment, as the Overview wire shape carries it. */

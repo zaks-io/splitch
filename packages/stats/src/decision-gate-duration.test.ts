@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { check, gateFor, reachedDuration, stats } from "./experiment-decision-gate-test-fixtures";
+import { check, gateFor, reachedDuration, stats } from "./decision-gate-test-fixtures";
 
 const STARTED = "2026-07-01T00:00:00.000Z";
 

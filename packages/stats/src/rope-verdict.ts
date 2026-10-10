@@ -1,3 +1,5 @@
+import type { RopeScale } from "@splitch/contracts";
+
 /**
  * Region Of Practical Equivalence (ROPE) verdict for a confidence-sequence
  * interval (Kruschke 2018).
@@ -21,8 +23,7 @@ export const ROPE_VERDICTS = ["outside", "inside", "undecided"] as const;
 
 export type RopeVerdict = (typeof ROPE_VERDICTS)[number];
 
-/** Caller-stated scale shared by the interval and the ROPE. Not used in math. */
-export type RopeScale = "absolute" | "relative";
+export type { RopeScale } from "@splitch/contracts";
 
 export interface RopeVerdictInput {
   readonly lower: number;
