@@ -1,6 +1,51 @@
 # Agent and human auth via the auth.md protocol: one principal, three doors, splitch as resource server
 
-**Status:** accepted; amended 2026-07-19, 2026-08-28, 2026-08-31, 2026-10-03
+**Status:** accepted; amended 2026-07-19, 2026-08-28, 2026-08-31, 2026-10-03, 2026-10-15
+
+## 2026-10-15 amendment: Personal Access Tokens authenticate the CLI; grants carry permissions
+
+Implementation pending. The design and rollout are in
+[personal-access-token-permissions.md](../spec/control-plane/personal-access-token-permissions.md).
+Until it lands, the 2026-10-03 amendment below describes running behavior.
+
+Agents need to run the CLI headless (CI, sandboxes, remote servers) and to manage Apps without
+being able to mint secrets. Device flow cannot run headless, and a copied refresh token is
+single-use, rotates, and carries the user's full authority. This amendment extends the existing
+PAT instead of adding a credential type.
+
+- **The Control Plane public bearer door accepts a PAT.** The CLI reads `SPLITCH_TOKEN` and
+  sends it as the bearer. The Control Plane resolves it exactly as it resolves a PAT delegation
+  from MCP: the D1 row is authoritative for owner, expiry, revocation, and the current secret
+  hash, then live membership is clamped by the grants. The PAT is never exchanged for a JWT, so
+  no issuer mints the `personal_access_token` door as a claim. Auth API and every data-plane
+  Worker keep refusing a PAT. This supersedes "MCP only" in the 2026-10-03 amendment.
+- **Grants carry permissions, not an access level.** A grant is `{ target, role, permissions }`.
+  Reading the target is implicit. `permissions` is a subset of a closed set: `write`, `delete`,
+  `credentials`, `members`, `privacy`. Every Control Plane route declares the permission it
+  needs in the contract registry, and a route without one fails typecheck. The guard narrows a
+  PAT principal to the grants carrying that permission. The role ceiling still applies. Both
+  checks must pass.
+- **Approval application is checked against the proposal.** Approving an Approval Request
+  applies the stored operation without re-entering its route guard, so the approve route takes
+  its permission from the stored operation. A `write` token cannot apply a pending deletion.
+- **PAT management stays session-only.** Create, update, and rotate keep their device-flow
+  allow-list, so a PAT still cannot mint, widen, or extend a PAT. Deleting the calling User is
+  also session-only. List, revoke, and revoke-all bypass permission narrowing for the owner, so
+  cleanup is never blocked.
+- **No silent widening on migration.** Stored `read-write` grants migrate to every permission,
+  so existing tokens keep their exact authority. Users narrow them deliberately.
+
+**Considered and rejected:**
+
+- **Exchange the PAT at Auth API for a short-lived JWT.** This needs new issuance and expiry
+  machinery, and immediate revocation would still need the D1 check, so it adds a hop without
+  removing one.
+- **Reuse the SDK API Key for management.** It has no user, it lives in deployed servers, and
+  ADR-0018 keeps it on the data-plane hot path. A leaked server key must never reconfigure Flags.
+- **Per-resource scopes** (`flags:write`, `experiments:write`, ...). Dozens of scopes would have to
+  track every new route and would be easy to get wrong. The closed set covers the boundaries
+  that matter: secrets, irreversible removal, access control, and personal data.
+- **Organization-owned agent keys.** Still rejected for the reasons in the original decision.
 
 ## 2026-10-03 amendment: Personal Access Tokens for the remote MCP server
 
