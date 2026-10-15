@@ -175,8 +175,10 @@ function isNonDeployableChange(path) {
     path === "scripts/lib/production-deploy-plan.mjs" ||
     path === "scripts/plan-ci-verification.mjs" ||
     path === "scripts/setup-worktree.sh" ||
+    path === ".dependency-cruiser.cjs" ||
     path.endsWith(".test.mjs") ||
     path.endsWith(".test.ts") ||
+    path.endsWith(".test.tsx") ||
     path === "packages/stats/vitest.simulation.config.ts" ||
     path === "LICENSE" ||
     (!path.includes("/") && path.endsWith(".md")) ||
