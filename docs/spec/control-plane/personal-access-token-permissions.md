@@ -26,20 +26,27 @@ A grant is `{ target, role, permissions }`:
 | `members`     | Organization and App membership and roles, and Organization name and plan                                                                 |
 | `privacy`     | Data exports and Entity erasure                                                                                                           |
 
-At use time, the principal's authority for a route is the owner's live membership, clamped by the
-role ceiling of every grant that covers the target AND carries the route's permission. A grant
-without the permission contributes nothing to that route. When several grants cover one target,
-the highest ceiling among those carrying the permission applies, so `org:X:member:write` plus
-`app:Y:admin:credentials` gives `credentials` on Y at admin and `write` on Y at member.
+At use time, the principal's authority for a route declared with one of the five permissions is
+the owner's live membership, clamped by the role ceiling of every grant that covers the target AND
+carries that permission. A grant without the permission contributes nothing to that route. When
+several grants cover one target, the highest ceiling among those carrying the permission applies,
+so `org:X:member:write` plus `app:Y:admin:credentials` gives `credentials` on Y at admin and
+`write` on Y at member.
 
-A route whose path names no Organization or App needs an `all` grant carrying its permission.
+A `read` route uses every grant that covers its target, whatever that grant's permissions, at the
+highest covering ceiling. It is never filtered by permission and never needs an `all` grant, so
+an App-only token can still run path-less reads such as `principal_capabilities_get`.
+
+A route declared with one of the five permissions whose path names no Organization or App needs
+an `all` grant carrying that permission. The special rules below are not subject to either rule.
 
 ## Route permission map
 
 Every `control-plane-token` route declares exactly one entry in the contract registry. A route
 with none fails typecheck. Routes not listed as `read` or a special rule are mutating.
 
-**`read`.** Every route whose audited effects do not mutate, including the POST reads
+**`read`.** Every route whose audited effects do not mutate and that is not listed under Special
+rules, including the POST reads
 `experiment_plan`, `flags_test_eval`, and `experiment_results_post`, plus
 `principal_capabilities_get` and `privacy_requests_get`.
 
@@ -82,7 +89,10 @@ decision, so it sits with access control rather than `write`.
 
 - `approval_request_reviews_create` derives its permission. `approve_and_apply` requires the
   permission of the stored proposal's operation, at that operation's role, checked against the
-  current token before application. A decline requires `write`.
+  current token before application. A decline requires `write`. Every `ApprovalOperation` maps to a
+  permission and role, and a missing mapping fails typecheck. An operation that is a route takes
+  that route's entry. `experiment_winner_promote` has no route; it maps to `write` at App admin,
+  matching `conclusion_promotion_requests_create`.
 - `personal_access_tokens_list`, `personal_access_tokens_revoke`, and
   `personal_access_tokens_revoke_all` are owner cleanup. They bypass permission narrowing; the
   handler's owner check still applies.
@@ -143,7 +153,15 @@ Control Plane cannot parse a migrated grant and fails PAT calls loudly. That dep
 accepted rather than engineered around with a dual-shape reader. Rolling the Control Plane back
 past this release after the migration is forbidden.
 
-The production migration and deploy need explicit approval.
+In the same window the previous Control Plane still writes grants in the old shape through
+`personal_access_tokens_create` and `personal_access_tokens_update`, so a row can be stored
+unmigrated after the migration ran. The new Control Plane refuses such a row loudly; it never
+reads it as permitted. The release is complete only after a post-cutover check: a read-only
+production D1 query counts stored grants still containing `access`. When the count is above zero,
+the migration's idempotent rewrite is run again against production D1 and the count is repeated
+until it is zero. The rewrite therefore lives in a file that can be re-run on its own.
+
+The production migration, the deploy, and any post-cutover re-run need explicit approval.
 
 ## Slices
 
@@ -158,7 +176,8 @@ Each slice ships something a user can observe and test end to end.
 2. **The CLI authenticates with a PAT** (SPL-762, blocked by SPL-761). The Control Plane bearer
    resolver and its abuse limits, public `principal_capabilities_get` with token metadata, CLI
    token mode with `context`, the `CLI_TOKEN_INVALID` mapping, and the default variable. Neither
-   half is testable without the other. Updates `auth-doors.md`, `mcp-and-cli-surfaces.md`, and `CONTEXT.md`.
+   half is testable without the other. Updates `auth-doors.md`, `mcp-and-cli-surfaces.md`, and
+   `CONTEXT.md`.
 
 Coverage:
 
