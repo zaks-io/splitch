@@ -13,8 +13,7 @@ export function getPrincipalCapabilities({ principal }: HandlerArgs<unknown>): R
       ? {
           personalAccessToken: {
             id: principal.personalAccessToken.id,
-            writeScopes: [...principal.personalAccessToken.writeScopes],
-            writeAll: principal.personalAccessToken.writeAll,
+            permissions: principal.personalAccessToken.permissions,
           },
         }
       : {}),

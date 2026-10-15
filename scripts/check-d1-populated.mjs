@@ -22,6 +22,7 @@ import { cpSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync }
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { checkPersonalAccessTokenMigration } from "./check-d1-populated-pat.mjs";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const dbDir = join(repoRoot, "packages", "db");
@@ -136,7 +137,7 @@ const NON_TOKEN_NAMES_SQL = `SELECT DISTINCT app_id, event_name FROM metrics
  * withheld migrations. The final apply result is returned rather than asserted
  * so a caller can demand either a success or a deliberate abort.
  */
-function migrate(seed) {
+function migrate(seed, firstMigration = FIRST_REBUILD_MIGRATION) {
   const sandbox = mkdtempSync(join(tmpdir(), "splitch-d1-populated-"));
   const persistDir = join(sandbox, "persist");
   const sandboxDb = join(sandbox, "db");
@@ -162,8 +163,8 @@ function migrate(seed) {
     );
   }
 
-  function execSql(sql, label) {
-    const result = wrangler(["execute", "--command", sql]);
+  function execSql(sql, label, json = false) {
+    const result = wrangler(["execute", `--command=${sql}`, ...(json ? ["--json"] : [])]);
     if (result.signal) {
       fail(
         `${label}: wrangler was killed with ${result.signal} (timed out after ${WRANGLER_TIMEOUT_MS / 60000}m?).`,
@@ -181,10 +182,10 @@ function migrate(seed) {
   writeFileSync(sandboxConfig, readFileSync(join(dbDir, "wrangler.jsonc"), "utf8"));
 
   const deferred = readdirSync(sandboxMigrations)
-    .filter((f) => f.endsWith(".sql") && f >= FIRST_REBUILD_MIGRATION)
+    .filter((f) => f.endsWith(".sql") && f >= firstMigration)
     .sort();
   if (deferred.length === 0) {
-    fail(`no migration at or after ${FIRST_REBUILD_MIGRATION}; this gate needs updating.`);
+    fail(`no migration at or after ${firstMigration}; this gate needs updating.`);
   }
 
   const withheld = deferred.map((file) => ({
@@ -362,3 +363,5 @@ try {
 } finally {
   legacyName.dispose();
 }
+
+checkPersonalAccessTokenMigration(migrate);

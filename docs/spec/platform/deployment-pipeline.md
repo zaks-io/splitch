@@ -234,8 +234,9 @@ The API smoke authenticates directly to the Control Plane with the preview-only
 `client_credentials` grant. For MCP, each authenticated test mints one short-lived Personal Access
 Token with that Control Plane token, then revokes it in teardown even after a failure. Hosted MCP
 verifies WorkOS AuthKit JWTs on its OAuth door and does not accept the Splitch-issued smoke JWT.
-The PAT grants read-write admin access only to the seeded smoke Organization and its Apps, covering
-App creation and Flag mutations. API traces are disabled to keep PAT secrets out of artifacts.
+The PAT grants admin access only to the seeded smoke Organization and its Apps, with
+`permissions: ["write", "delete", "credentials", "members", "privacy"]`, covering App creation,
+Flag mutations, and teardown. API traces are disabled to keep PAT secrets out of artifacts.
 See [the shared-preview smoke grant](../control-plane/auth-doors.md#shared-preview-smoke-grant-client_credentials).
 
 ### Control Panel golden path
@@ -308,6 +309,15 @@ or any Durable Object migration.
 - Failed migrations roll back the failed migration and leave prior successful migrations applied.
 - Schema changes follow expand/contract. Additive migrations and backward-compatible reads ship first;
   destructive cleanup ships in a later release with an explicit runbook.
+
+The PAT permissions release is an explicit exception to expand/contract. Migration
+`0042_personal_access_token_permissions.sql` converts stored `read` grants to `permissions: []`
+and `read-write` grants to all five permissions while preserving target and role. New-shape rows
+are unchanged on re-apply. Production applies this migration before Workers. The previous Control
+Plane fails PAT calls loudly between those steps; that window is accepted. Rolling the Control Plane
+back past this release after the migration is forbidden. Production migration and deploy need explicit
+approval. Record the production deploy run for the merge SHA with `Apply D1 migrations` and
+`Deploy Cloudflare Workers` both succeeded as completion evidence.
 
 ### Durable Object migrations
 

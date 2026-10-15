@@ -115,6 +115,10 @@ test("Tinybird, D1, and production Vite inputs are classified independently", ()
   assert.equal(classifyCiChanges(["packages/ui/src/button.tsx"]).productionVite, true);
 });
 
+test("the populated PAT migration validator triggers D1 verification", () => {
+  assert.equal(classifyCiChanges(["scripts/check-d1-populated-pat.mjs"]).d1, true);
+});
+
 test("a lockfile bump revalidates D1 but not Tinybird", () => {
   // `d1:migrate:*` shell out to `pnpm exec wrangler`, so the resolved dependency
   // graph changes what they prove. `tb` is curl-installed and the Tinybird

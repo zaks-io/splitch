@@ -2,7 +2,9 @@ import {
   type AuthDoor,
   type PersonalAccessToken,
   PersonalAccessTokenCacheSchema,
+  personalAccessTokenAuthority,
   personalAccessTokenCacheKey,
+  personalAccessTokenPermissions,
 } from "@splitch/contracts";
 import { createRepository } from "@splitch/db";
 import type { Principal } from "@splitch/worker-runtime";
@@ -15,7 +17,13 @@ import { resetOrganizationGraph } from "../src/test-seeds";
 import { makePoolBindings } from "./pool-bindings";
 
 const USER_ID = "user_pat_auth_doors";
-const grants = [{ target: "all", role: "owner", access: "read-write" }] as const;
+const grants = [
+  {
+    target: "all",
+    role: "owner",
+    permissions: ["write", "delete", "credentials", "members", "privacy"],
+  },
+] as const;
 let bindings: LocalBindings;
 let app: ReturnType<typeof createApp>;
 let principal: Principal;
@@ -70,6 +78,30 @@ async function cacheEntry(secret: string) {
 const refusedDoors = ["id_jag", "anonymous", "personal_access_token", null, "future_door"];
 
 describe("personal access token management auth doors", () => {
+  it("refuses User deletion with every PAT permission and preserves owner cleanup without permissions", async () => {
+    const { token } = await create();
+    principal.authDoor = "personal_access_token";
+    principal.personalAccessToken = {
+      id: token.id,
+      permissions: personalAccessTokenAuthority({ organizations: [], apps: [] }, [
+        { target: "all", role: "owner", permissions: [...personalAccessTokenPermissions] },
+      ]).permissions,
+    };
+    const deleted = await call("DELETE", "/users/me");
+    expect(deleted.status).toBe(403);
+    expect(await deleted.json()).toMatchObject({
+      code: "FORBIDDEN",
+      message: expect.stringContaining("login session"),
+    });
+    principal.personalAccessToken.permissions = personalAccessTokenAuthority(
+      { organizations: [], apps: [] },
+      [{ target: "app:app_only", role: "member", permissions: [] }],
+    ).permissions;
+    expect((await call("GET", "/personal-access-tokens")).status).toBe(200);
+    expect((await call("POST", `/personal-access-tokens/${token.id}/revoke`)).status).toBe(200);
+    expect((await call("POST", "/personal-access-tokens/revoke-all")).status).toBe(200);
+  });
+
   it.each(refusedDoors)("refuses create, update, and rotate for %s", async (door) => {
     const { token, secret } = await create();
     const repo = createRepository(bindings.d1).personalAccessTokens;

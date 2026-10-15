@@ -1,61 +1,162 @@
-import { type ErrorResponse, getRoute, type RouteContract } from "@splitch/contracts";
+import {
+  type ApiRouteContract,
+  type ErrorResponse,
+  getRoute,
+  getRouteMembershipGate,
+  type PersonalAccessTokenPermission,
+  type RouteContract,
+  scopeSatisfiesMembershipGate,
+} from "@splitch/contracts";
 import { scopeBinding } from "../mcp-delegation-auth";
 import type { Principal } from "../principal";
+import { enforceScopes } from "./scopes";
 
 export type NarrowOutcome =
   | { ok: true; principal: Principal }
   | { ok: false; error: ErrorResponse };
 
-/**
- * Step 5b. A Personal Access Token's grants may be read-only for some or all
- * targets. On an operation whose audited effects mutate, the principal is
- * narrowed to the token's write scopes BEFORE selector binding, co-scope, and
- * the handler's role checks, so every downstream gate sees write authority
- * only. A mutation with no Organization or App in its path (e.g. creating an
- * Organization) needs a read-write `all` grant.
- *
- * Effects come from the audited route registry, never the HTTP method: a POST
- * that writes nothing stays readable. An operation missing from the registry is
- * treated as mutating (fail closed).
- */
+/** Select permission authority before selector resolution and handler role checks. */
 export function narrowPersonalAccessTokenForRoute(
   contract: RouteContract,
   principal: Principal,
   params: Record<string, string>,
 ): NarrowOutcome {
+  if (!principal.personalAccessToken) return { ok: true, principal };
+  const route = getRoute(contract.id);
+  if (!route)
+    return refuse(`personal access token cannot authorize unregistered operation ${contract.id}`);
+  switch (route.permission) {
+    case "read":
+    case "owner-cleanup":
+    case "derived":
+      return { ok: true, principal };
+    case "session-only":
+      return refuse("a login session is required; run splitch login");
+    case "write":
+    case "delete":
+    case "credentials":
+    case "members":
+    case "privacy":
+      return narrowPersonalAccessTokenForPermission(route.permission, principal, params, {
+        targeted: /:(orgId|appId)\b/.test(route.path),
+      });
+    default:
+      return refuse(
+        `personal access token cannot authorize operation ${contract.id} without a permission declaration`,
+      );
+  }
+}
+
+/** Used for the write permission on a decline, whose route otherwise derives its permission. */
+export function narrowPersonalAccessTokenForPermission(
+  permission: PersonalAccessTokenPermission,
+  principal: Principal,
+  params: Record<string, string>,
+  options: { targeted: boolean },
+): NarrowOutcome {
   const token = principal.personalAccessToken;
   if (!token) return { ok: true, principal };
-  if (getRoute(contract.id)?.effects.mutates === false) return { ok: true, principal };
-
-  const targeted = /:(orgId|appId)\b/.test(contract.path);
-  if (!targeted && !token.writeAll) {
-    return refuse("personal access token needs a read-write `all` grant for this operation");
-  }
-  const readOnlyTarget = canonicalTarget(params);
-  if (readOnlyTarget && !token.writeScopes.some((scope) => scope.startsWith(readOnlyTarget))) {
-    return refuse(
-      `personal access token grants read-only access to ${readOnlyTarget.slice(0, -1)}`,
-    );
-  }
+  const authority = token.permissions[permission];
+  if (!options.targeted && !authority.all) return missingPermission(permission, "all");
+  const target = targetOf(params);
+  const canonical = params.appId?.startsWith("app_") || params.orgId?.startsWith("org_");
+  if (
+    options.targeted &&
+    !authority.scopes.some((scope) =>
+      canonical ? scope.startsWith(`${target}:`) : scope.startsWith(params.appId ? "app:" : "org:"),
+    )
+  )
+    return missingPermission(permission, target);
   return {
     ok: true,
-    principal: {
-      ...principal,
-      scopes: token.writeScopes,
-      ...scopeBinding(token.writeScopes),
-    },
+    principal: { ...principal, scopes: authority.scopes, ...scopeBinding(authority.scopes) },
   };
 }
 
-/**
- * The canonical `app:<id>:`/`org:<id>:` prefix the path names, when it names one
- * by id. A slug is left to selector resolution and co-scope, which still refuse
- * it against the narrowed write scopes.
- */
-function canonicalTarget(params: Record<string, string>): string | null {
-  if (params.appId?.startsWith("app_")) return `app:${params.appId}:`;
-  if (params.orgId?.startsWith("org_")) return `org:${params.orgId}:`;
-  return null;
+/** Recheck a stored proposal using the current token, never the proposer's authority. */
+export function narrowPersonalAccessTokenForOperation(
+  operationId: string,
+  principal: Principal,
+  params: Record<string, string>,
+): NarrowOutcome {
+  const route = getRoute(
+    operationId === "experiment_winner_promote"
+      ? "conclusion_promotion_requests_create"
+      : operationId,
+  );
+  if (!route)
+    return refuse(`personal access token cannot authorize unregistered operation ${operationId}`);
+  const narrowed = narrowPersonalAccessTokenForRoute(route, principal, params);
+  if (!narrowed.ok || !principal.personalAccessToken) return narrowed;
+  return enforceOperationRole(route, narrowed.principal, params);
+}
+
+function enforceOperationRole(
+  route: ApiRouteContract,
+  principal: Principal,
+  params: Record<string, string>,
+): NarrowOutcome {
+  const gate = getRouteMembershipGate(route.operationId);
+  const target = gate.axis === "app" ? params.appId : params.orgId;
+  if (!hasRequiredRole(gate, principal.scopes, target))
+    return refuse(
+      `personal access token needs ${route.permission} permission at ${gate.minimumRole} role for ${targetOf(params)}`,
+    );
+  const bound = {
+    ...principal,
+    ...(gate.axis === "app" ? { appId: target ?? null } : {}),
+    ...(gate.axis === "org" ? { orgId: target ?? null } : {}),
+  };
+  const scopeError = enforceScopes(route, bound, params);
+  return scopeError ? { ok: false, error: scopeError } : { ok: true, principal: bound };
+}
+
+function hasRequiredRole(
+  gate: ReturnType<typeof getRouteMembershipGate>,
+  scopes: readonly string[],
+  target: string | undefined,
+): boolean {
+  if (!gate.minimumRole) return true;
+  if (!target) return false;
+  return scopes.some(
+    (scope) =>
+      scope.startsWith(`${gate.axis}:${target}:`) &&
+      scopeSatisfiesMembershipGate(scope, `${gate.axis}:${gate.minimumRole}`),
+  );
+}
+
+/** Selector failures must retain the permission and user-supplied target that were narrowed. */
+export function personalAccessTokenSelectorError(
+  contract: RouteContract,
+  principal: Principal,
+  params: Record<string, string>,
+  error: ErrorResponse,
+): ErrorResponse {
+  if (!principal.personalAccessToken) return error;
+  const permission = getRoute(contract.id)?.permission;
+  if (!permission || ["read", "owner-cleanup", "session-only", "derived"].includes(permission))
+    return error;
+  if (
+    error.code !== "FORBIDDEN" &&
+    !(error.code === "APP_NOT_FOUND" && params.appId && !params.appId.startsWith("app_"))
+  )
+    return error;
+  return {
+    code: "FORBIDDEN",
+    message: `personal access token needs ${permission} permission for ${targetOf(params)}; target could not be authorized`,
+    details: {},
+  };
+}
+
+function targetOf(params: Record<string, string>): string {
+  return params.appId ? `app:${params.appId}` : params.orgId ? `org:${params.orgId}` : "all";
+}
+
+function missingPermission(
+  permission: PersonalAccessTokenPermission,
+  target: string,
+): NarrowOutcome {
+  return refuse(`personal access token needs ${permission} permission for ${target}`);
 }
 
 function refuse(message: string): NarrowOutcome {

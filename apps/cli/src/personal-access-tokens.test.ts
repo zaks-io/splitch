@@ -16,7 +16,7 @@ const ROTATED_SECRET = `spl_pat_${"8".repeat(64)}`;
 const TOKEN = {
   id: `pat_${"1".repeat(32)}`,
   name: "sandboxes",
-  grants: [{ target: "all", role: "member", access: "read" }],
+  grants: [{ target: "all", role: "member", permissions: [] }],
   expiresAt: null,
   neverExpires: true,
   status: "active",
@@ -84,7 +84,7 @@ describe("splitch tokens create", () => {
     });
     expect(transport.requests.at(-1)?.body).toEqual({
       name: "sandboxes",
-      grants: [{ target: "all", role: "member", access: "read" }],
+      grants: [{ target: "all", role: "member", permissions: [] }],
       expiresAt: null,
     });
   });
@@ -236,7 +236,7 @@ describe("splitch tokens rotate / update", () => {
         "update",
         TOKEN.id,
         "--grant",
-        "app:app_1:admin:read-write",
+        "app:app_1:admin:delete,write",
         "--grant",
         "org:org_1:member:read",
         "--expires-at",
@@ -247,10 +247,51 @@ describe("splitch tokens rotate / update", () => {
     expect(exitCode).toBe(EXIT_OK);
     const body = transport.requests.at(-1)?.body as { grants: unknown; expiresAt: string };
     expect(body.grants).toEqual([
-      { target: "app:app_1", role: "admin", access: "read-write" },
-      { target: "org:org_1", role: "member", access: "read" },
+      { target: "app:app_1", role: "admin", permissions: ["write", "delete"] },
+      { target: "org:org_1", role: "member", permissions: [] },
     ]);
     const days = (Date.parse(body.expiresAt) - Date.now()) / (24 * 60 * 60 * 1000);
     expect(Math.round(days)).toBe(30);
+  });
+});
+
+describe("splitch tokens grant permissions", () => {
+  it.each(["read-write", "write,write", "write,unknown", "read,write", "", "write,"])(
+    "rejects invalid permissions %j before any request with the new syntax",
+    async (permissions) => {
+      const { dir } = await makeTempHome();
+      const { exitCode, output, transport } = await run([
+        "tokens",
+        "create",
+        "--name",
+        "x",
+        "--grant",
+        `app:app_1:admin:${permissions}`,
+        "--output-file",
+        join(dir, "pat.env"),
+      ]);
+      expect(exitCode).toBe(EXIT_USAGE);
+      expect(transport.requests).toHaveLength(0);
+      expect(output).toContain("--grant <target>:<role>:<permissions>");
+      expect(output).toContain("write,delete,credentials,members,privacy");
+    },
+  );
+
+  it("sends explicit write and delete permissions on create", async () => {
+    const { dir } = await makeTempHome();
+    const { exitCode, transport } = await run([
+      "tokens",
+      "create",
+      "--name",
+      "x",
+      "--grant",
+      "app:app_1:admin:write,delete",
+      "--output-file",
+      join(dir, "pat.env"),
+    ]);
+    expect(exitCode).toBe(EXIT_OK);
+    expect(transport.requests.at(-1)?.body).toMatchObject({
+      grants: [{ target: "app:app_1", role: "admin", permissions: ["write", "delete"] }],
+    });
   });
 });

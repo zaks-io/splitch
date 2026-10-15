@@ -115,7 +115,7 @@ async function call(
   });
 }
 
-const readGrant = { target: `app:${PAY.appId}`, role: "admin", access: "read" } as const;
+const readGrant = { target: `app:${PAY.appId}`, role: "admin", permissions: [] } as const;
 
 async function create(body: Record<string, unknown>) {
   const response = await call("POST", "/personal-access-tokens", { body });
@@ -169,8 +169,8 @@ describe("personal access token routes", () => {
 
   it("rejects grants outside live membership, above the live role, and past expiries", async () => {
     for (const [body, path] of [
-      [{ grants: [{ target: `app:${OTHER.appId}`, role: "member", access: "read" }] }, "target"],
-      [{ grants: [{ target: `org:${PAY.orgId}`, role: "owner", access: "read" }] }, "role"],
+      [{ grants: [{ target: `app:${OTHER.appId}`, role: "member", permissions: [] }] }, "target"],
+      [{ grants: [{ target: `org:${PAY.orgId}`, role: "owner", permissions: [] }] }, "role"],
       [
         { grants: [readGrant], expiresAt: new Date(Date.now() - DAY_MS).toISOString() },
         "expiresAt",
@@ -192,20 +192,30 @@ describe("personal access token routes", () => {
     });
     expect(response.status).toBe(403);
   });
+});
 
+describe("personal access token lifecycle", () => {
   it("updates grants and expiry without rotating the secret", async () => {
     const { token, secret } = await create({ name: "n", grants: [readGrant] });
     const response = await call("PATCH", `/personal-access-tokens/${token.id}`, {
       body: {
         name: "renamed",
-        grants: [{ ...readGrant, role: "member", access: "read-write" }],
+        grants: [
+          {
+            ...readGrant,
+            role: "member",
+            permissions: ["write", "delete", "credentials", "members", "privacy"],
+          },
+        ],
         expiresAt: null,
       },
     });
     expect(response.status, await response.clone().text()).toBe(200);
     expect(await response.json()).toMatchObject({
       name: "renamed",
-      grants: [{ role: "member", access: "read-write" }],
+      grants: [
+        { role: "member", permissions: ["write", "delete", "credentials", "members", "privacy"] },
+      ],
       neverExpires: true,
     });
     expect(await cacheEntry(secret)).toMatchObject({ expiresAt: null, revoked: false });

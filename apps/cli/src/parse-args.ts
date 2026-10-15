@@ -26,7 +26,7 @@ export interface ParsedGlobalFlags {
   readonly rollout?: number | null;
   readonly idempotencyKey?: string;
   readonly outputFile?: string;
-  /** Personal Access Token grants, `<all|org:org_…|app:app_…>:<role>:<read|read-write>`. */
+  /** Personal Access Token grants, `<all|org:org_…|app:app_…>:<role>:<permissions>`. */
   readonly grant: readonly string[];
   readonly secretFormat?: string;
   readonly envVar?: string;

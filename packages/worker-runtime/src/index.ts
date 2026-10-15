@@ -51,6 +51,11 @@ export {
   wrapWorkerHandler,
 } from "./security-headers";
 export {
+  type NarrowOutcome,
+  narrowPersonalAccessTokenForOperation,
+  narrowPersonalAccessTokenForPermission,
+} from "./steps/personal-access-token-write";
+export {
   appAccessCovers,
   enforceScopes,
   organizationAccessCovers,

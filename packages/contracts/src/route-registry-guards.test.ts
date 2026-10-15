@@ -12,7 +12,9 @@ import { readOnlyClosed } from "./route-effects";
  * silently — the registry is cross-cutting, a quiet gap poisons every consumer.
  */
 
-function sampleRoute(over: Partial<DefineApiRouteInput> = {}): ApiRouteContract {
+function sampleRoute(
+  over: Partial<Omit<DefineApiRouteInput, "auth" | "permission">> = {},
+): ApiRouteContract {
   return defineApiRoute({
     operationId: "things_get",
     owner: "control-plane-api",

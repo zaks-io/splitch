@@ -5,19 +5,22 @@ import { containObservability } from "./contained-observability";
 import type { RegistrarDeps } from "./deps";
 import { parseInput } from "./parse-input";
 import { type Principal, PUBLIC_PRINCIPAL } from "./principal";
-import { checkIdempotency } from "./steps/idempotency";
-import { resolvePrincipal } from "./steps/resolve-principal";
-import { applyRateLimit } from "./steps/rate-limit-step";
-import { narrowPersonalAccessTokenForRoute } from "./steps/personal-access-token-write";
-import { enforceScopes } from "./steps/scopes";
-import { emptyError, renderError } from "./respond";
 import { resolveRequestId } from "./request-id";
 import { mutatingJsonMediaTypeError, unlabeledBodyError } from "./request-media-type";
+import { emptyError, renderError } from "./respond";
 import {
   applyResponseHeaders,
   mergeHeaderRecords,
   WORKER_BASELINE_SECURITY_HEADERS,
 } from "./security-headers";
+import { checkIdempotency } from "./steps/idempotency";
+import {
+  narrowPersonalAccessTokenForRoute,
+  personalAccessTokenSelectorError,
+} from "./steps/personal-access-token-write";
+import { applyRateLimit } from "./steps/rate-limit-step";
+import { resolvePrincipal } from "./steps/resolve-principal";
+import { enforceScopes } from "./steps/scopes";
 
 /**
  * What a route handler receives: the validated input, the resolved principal, and
@@ -119,7 +122,7 @@ async function runGuard<Input extends z.ZodTypeAny, Output extends z.ZodTypeAny>
     if (!principalResult.ok) {
       return fail(principalResult.error);
     }
-    // Step 4b: a Personal Access Token mutating call sees only its write grants.
+    // Step 4b: select the Personal Access Token's authority for this route's permission.
     const narrowed = narrowPersonalAccessTokenForRoute(
       contract,
       principalResult.principal,
@@ -151,11 +154,13 @@ async function runGuard<Input extends z.ZodTypeAny, Output extends z.ZodTypeAny>
         })
       : { ok: true as const, input: parsed.value, params: c.req.param(), principal };
     if (!resolved.ok) {
-      return fail(resolved.error);
+      return fail(
+        personalAccessTokenSelectorError(contract, principal, c.req.param(), resolved.error),
+      );
     }
     const scopeError = enforceScopes(contract, resolved.principal, resolved.params);
     if (scopeError) {
-      return fail(scopeError);
+      return fail(personalAccessTokenSelectorError(contract, principal, c.req.param(), scopeError));
     }
 
     // Step 7: idempotency header validation for mutating routes.

@@ -2,20 +2,15 @@ import { describe, expect, it } from "vitest";
 import {
   accessTokenAuthDoorFromClaim,
   CreatePersonalAccessTokenRequestSchema,
-  createMcpDelegationHeader,
+  getRoute,
   isPersonalAccessTokenSecret,
   type PersonalAccessTokenGrant,
-  parseMcpDelegation,
+  PersonalAccessTokenGrantSchema,
+  personalAccessTokenPermissions,
   personalAccessTokenAuthority,
   personalAccessTokenExpired,
   UpdatePersonalAccessTokenRequestSchema,
 } from "./index";
-import {
-  memoryReplayGuard,
-  resignCredential,
-  SECRET,
-  withCredential,
-} from "./mcp-delegation-test-fixtures";
 
 const MEMBERSHIPS = {
   organizations: [
@@ -32,35 +27,35 @@ const MEMBERSHIPS = {
 function grant(
   target: string,
   role: PersonalAccessTokenGrant["role"],
-  access: PersonalAccessTokenGrant["access"] = "read-write",
+  permissions: PersonalAccessTokenGrant["permissions"] = ["write"],
 ): PersonalAccessTokenGrant {
-  return { target, role, access };
+  return { target, role, permissions };
 }
 
 describe("personalAccessTokenAuthority", () => {
-  it("an `all` grant mirrors live membership, capped at its role ceiling", () => {
-    expect(personalAccessTokenAuthority(MEMBERSHIPS, [grant("all", "admin")])).toEqual({
-      scopes: [
-        "app:app_a1:admin",
-        "app:app_a2:admin",
-        "app:app_b1:member",
-        "org:org_a:admin",
-        "org:org_b:member",
-      ],
-      writeScopes: [
-        "app:app_a1:admin",
-        "app:app_a2:admin",
-        "app:app_b1:member",
-        "org:org_a:admin",
-        "org:org_b:member",
-      ],
-      writeAll: true,
-    });
+  it("an all grant mirrors live membership, capped at its role ceiling for every permission", () => {
+    const authority = personalAccessTokenAuthority(MEMBERSHIPS, [
+      grant("all", "admin", [...personalAccessTokenPermissions]),
+    ]);
+    const scopes = [
+      "app:app_a1:admin",
+      "app:app_a2:admin",
+      "app:app_b1:member",
+      "org:org_a:admin",
+      "org:org_b:member",
+    ];
+    expect(authority.scopes).toEqual(scopes);
+    expect(Object.keys(authority.permissions)).toEqual(personalAccessTokenPermissions);
+    for (const permission of personalAccessTokenPermissions) {
+      expect(authority.permissions[permission]).toEqual({ scopes, all: true });
+    }
   });
 
   it("never raises a role above the live membership", () => {
     const authority = personalAccessTokenAuthority(MEMBERSHIPS, [grant("org:org_b", "owner")]);
-    expect(authority.scopes).toEqual(["app:app_b1:member", "org:org_b:member"]);
+    const scopes = ["app:app_b1:member", "org:org_b:member"];
+    expect(authority.scopes).toEqual(scopes);
+    expect(authority.permissions.write).toEqual({ scopes, all: false });
   });
 
   it("an Organization grant covers its Apps; an App grant covers only that App", () => {
@@ -74,29 +69,98 @@ describe("personalAccessTokenAuthority", () => {
 
   it("grants naming a target the user no longer belongs to add nothing", () => {
     const authority = personalAccessTokenAuthority(MEMBERSHIPS, [
-      grant("app:app_gone", "owner"),
-      grant("org:org_gone", "owner"),
+      grant("app:app_gone", "owner", [...personalAccessTokenPermissions]),
+      grant("org:org_gone", "owner", [...personalAccessTokenPermissions]),
     ]);
-    expect(authority).toEqual({ scopes: [], writeScopes: [], writeAll: false });
+    expect(authority.scopes).toEqual([]);
+    for (const permission of personalAccessTokenPermissions) {
+      expect(authority.permissions[permission]).toEqual({ scopes: [], all: false });
+    }
   });
 
-  it("read grants contribute to reads only; write authority comes from read-write grants", () => {
+  it("read-only grants never contribute their higher role to a permission", () => {
     const authority = personalAccessTokenAuthority(MEMBERSHIPS, [
-      grant("all", "owner", "read"),
-      grant("app:app_a1", "member", "read-write"),
+      grant("all", "owner", []),
+      grant("app:app_a1", "member", ["write"]),
     ]);
     expect(authority.scopes).toContain("org:org_a:owner");
-    expect(authority.writeScopes).toEqual(["app:app_a1:member"]);
-    expect(authority.writeAll).toBe(false);
+    expect(authority.permissions.write).toEqual({ scopes: ["app:app_a1:member"], all: false });
+    expect(authority.permissions.credentials).toEqual({ scopes: [], all: false });
   });
 
-  it("the highest applicable ceiling wins when grants overlap", () => {
+  it("uses the highest ceiling among only grants carrying each permission", () => {
     const authority = personalAccessTokenAuthority(MEMBERSHIPS, [
-      grant("all", "member", "read"),
-      grant("app:app_a1", "admin", "read"),
+      grant("org:org_a", "member", ["write"]),
+      grant("app:app_a1", "admin", ["credentials"]),
+      grant("app:app_a1", "owner", ["privacy"]),
+      grant("app:app_a1", "admin", ["write"]),
     ]);
-    expect(authority.scopes).toContain("app:app_a1:admin");
-    expect(authority.scopes).toContain("app:app_a2:member");
+    expect(authority.scopes).toContain("app:app_a1:owner");
+    expect(authority.permissions.write.scopes).toEqual([
+      "app:app_a1:admin",
+      "app:app_a2:member",
+      "org:org_a:member",
+    ]);
+    expect(authority.permissions.credentials.scopes).toEqual(["app:app_a1:admin"]);
+    expect(authority.permissions.privacy.scopes).toEqual(["app:app_a1:owner"]);
+    expect(authority.permissions.delete.scopes).toEqual([]);
+    expect(authority.permissions.members.scopes).toEqual([]);
+  });
+
+  it("does not borrow a higher credentials ceiling for write on the same target", () => {
+    const authority = personalAccessTokenAuthority(MEMBERSHIPS, [
+      grant("org:org_a", "member", ["write"]),
+      grant("app:app_a1", "admin", ["credentials"]),
+    ]);
+    expect(authority.permissions.write.scopes).toContain("app:app_a1:member");
+    expect(authority.permissions.credentials.scopes).toEqual(["app:app_a1:admin"]);
+  });
+
+  it("requires an all grant to carry the permission for a path-less mutation", () => {
+    const authority = personalAccessTokenAuthority(MEMBERSHIPS, [
+      grant("all", "member", ["write"]),
+      grant("org:org_a", "owner", ["privacy"]),
+    ]);
+    expect(authority.permissions.write.all).toBe(true);
+    expect(authority.permissions.privacy.all).toBe(false);
+    expect(authority.permissions.delete.all).toBe(false);
+  });
+
+  it("does not invent memberships for a user without any", () => {
+    const authority = personalAccessTokenAuthority({ organizations: [], apps: [] }, [
+      grant("all", "owner", ["write"]),
+    ]);
+    expect(authority.scopes).toEqual([]);
+    expect(authority.permissions.write).toEqual({ scopes: [], all: true });
+  });
+});
+
+describe("principal capabilities Personal Access Token metadata", () => {
+  it("exposes the same complete permission authority record and rejects legacy metadata", () => {
+    const route = getRoute("principal_capabilities_get");
+    if (!route) throw new Error("missing principal_capabilities_get route");
+    const authority = personalAccessTokenAuthority(MEMBERSHIPS, [
+      grant("all", "member", ["write", "privacy"]),
+    ]);
+    const response = {
+      scopes: authority.scopes,
+      membershipWideRead: false,
+      personalAccessToken: { id: `pat_${"0".repeat(32)}`, permissions: authority.permissions },
+    };
+    expect(route.output.safeParse(response).success).toBe(true);
+    expect(
+      route.output.safeParse({
+        ...response,
+        personalAccessToken: { ...response.personalAccessToken, writeScopes: [], writeAll: true },
+      }).success,
+    ).toBe(false);
+    const { privacy: _privacy, ...incomplete } = authority.permissions;
+    expect(
+      route.output.safeParse({
+        ...response,
+        personalAccessToken: { ...response.personalAccessToken, permissions: incomplete },
+      }).success,
+    ).toBe(false);
   });
 });
 
@@ -105,7 +169,7 @@ describe("personal access token request schemas", () => {
     expect(
       CreatePersonalAccessTokenRequestSchema.safeParse({
         name: "sandboxes",
-        grants: [grant("all", "member", "read")],
+        grants: [grant("all", "member", [])],
         expiresAt: null,
       }).success,
     ).toBe(true);
@@ -131,6 +195,30 @@ describe("personal access token request schemas", () => {
         secret: "spl_pat_x",
       }).success,
     ).toBe(false);
+  });
+
+  it("rejects legacy access, omitted permissions, unknown permissions, and duplicates", () => {
+    for (const value of [
+      { target: "all", role: "member", access: "read-write" },
+      { target: "all", role: "member" },
+      { target: "all", role: "member", permissions: ["read"] },
+      { target: "all", role: "member", permissions: ["write", "write"] },
+      { target: "all", role: "member", permissions: [], access: "read" },
+      { target: "all", role: "member", permissions: [], extra: true },
+    ]) {
+      expect(PersonalAccessTokenGrantSchema.safeParse(value).success).toBe(false);
+    }
+  });
+
+  it("canonicalizes permissions without changing their meaning", () => {
+    expect(
+      PersonalAccessTokenGrantSchema.parse(
+        grant("all", "member", ["privacy", "members", "credentials", "delete", "write"]),
+      ).permissions,
+    ).toEqual(personalAccessTokenPermissions);
+    expect(PersonalAccessTokenGrantSchema.parse(grant("all", "member", [])).permissions).toEqual(
+      [],
+    );
   });
 
   it("an update must change something", () => {
@@ -166,111 +254,5 @@ describe("accessTokenAuthDoorFromClaim", () => {
     expect(accessTokenAuthDoorFromClaim("device_flow")).toBe("device_flow");
     expect(accessTokenAuthDoorFromClaim("not-a-door")).toBe("anonymous");
     expect(accessTokenAuthDoorFromClaim(undefined)).toBe("anonymous");
-  });
-});
-
-describe("PAT MCP delegation", () => {
-  const TOKEN_ID = `pat_${"0".repeat(32)}`;
-  const TOKEN_HASH = "e".repeat(64);
-  const request = () => new Request("https://control-plane.internal/apps/app_one/flags");
-
-  it("round-trips the token id on a live personal_access_token delegation", async () => {
-    const credential = await createMcpDelegationHeader({
-      operationId: "flags_list",
-      actor: {
-        subject: "user_one",
-        scopes: [],
-        liveMembership: true,
-        authDoor: "personal_access_token",
-        personalAccessTokenId: TOKEN_ID,
-        personalAccessTokenHash: TOKEN_HASH,
-      },
-      request: request(),
-      secret: SECRET,
-      nowSeconds: 100,
-      jti: "delegation-id-pat-one",
-    });
-    await expect(
-      parseMcpDelegation({
-        request: withCredential(request(), credential),
-        surface: "control-plane-api",
-        secret: SECRET,
-        replayGuard: memoryReplayGuard(),
-        nowSeconds: 100,
-      }),
-    ).resolves.toEqual({
-      subject: "user_one",
-      scopes: [],
-      liveMembership: true,
-      authDoor: "personal_access_token",
-      personalAccessTokenId: TOKEN_ID,
-      personalAccessTokenHash: TOKEN_HASH,
-    });
-  });
-
-  it("refuses to mint a PAT door without a token id, or a token id on another door", async () => {
-    const base = { subject: "user_one", scopes: [], liveMembership: true as const };
-    for (const actor of [
-      { ...base, authDoor: "personal_access_token" as const },
-      { ...base, authDoor: "personal_access_token" as const, personalAccessTokenId: TOKEN_ID },
-      {
-        ...base,
-        authDoor: "device_flow" as const,
-        personalAccessTokenId: TOKEN_ID,
-        personalAccessTokenHash: TOKEN_HASH,
-      },
-      {
-        subject: "user_one",
-        scopes: [],
-        authDoor: "personal_access_token" as const,
-        personalAccessTokenId: TOKEN_ID,
-        personalAccessTokenHash: TOKEN_HASH,
-      },
-    ]) {
-      await expect(
-        createMcpDelegationHeader({
-          operationId: "flags_list",
-          actor,
-          request: request(),
-          secret: SECRET,
-          nowSeconds: 100,
-        }),
-      ).rejects.toThrow(/personal_access_token/);
-    }
-  });
-
-  it("rejects a signed credential whose door and token id disagree", async () => {
-    const credential = await createMcpDelegationHeader({
-      operationId: "flags_list",
-      actor: { subject: "user_one", scopes: [], liveMembership: true, authDoor: "device_flow" },
-      request: request(),
-      secret: SECRET,
-      nowSeconds: 100,
-    });
-    for (const patch of [
-      { personalAccessTokenId: TOKEN_ID, personalAccessTokenHash: TOKEN_HASH },
-      { authDoor: "personal_access_token" },
-      { authDoor: "personal_access_token", personalAccessTokenId: TOKEN_ID },
-      {
-        authDoor: "personal_access_token",
-        personalAccessTokenId: "pat_short",
-        personalAccessTokenHash: TOKEN_HASH,
-      },
-      {
-        authDoor: "personal_access_token",
-        personalAccessTokenId: TOKEN_ID,
-        personalAccessTokenHash: "not-hex",
-      },
-    ]) {
-      await expect(
-        parseMcpDelegation({
-          request: withCredential(request(), await resignCredential(credential, patch)),
-          surface: "control-plane-api",
-          secret: SECRET,
-          replayGuard: memoryReplayGuard(),
-          nowSeconds: 100,
-        }),
-      ).resolves.toBeNull();
-    }
   });
 });

@@ -147,7 +147,11 @@ function mintPat(request, raw, scenario, state) {
   assert.equal(request.headers["content-type"], "application/json");
   const body = JSON.parse(raw);
   assert.deepEqual(body.grants, [
-    { target: "org:org_fixture", role: "admin", access: "read-write" },
+    {
+      target: "org:org_fixture",
+      role: "admin",
+      permissions: ["write", "delete", "credentials", "members", "privacy"],
+    },
   ]);
   const ttl = Date.parse(body.expiresAt) - Date.now();
   assert.ok(ttl > 3_590_000 && ttl <= 3_600_000);

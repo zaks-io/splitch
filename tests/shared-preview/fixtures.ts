@@ -39,7 +39,13 @@ export const test = base.extend<SmokeFixtures>({
       {
         name: smoke.uniqueKey("pat-mcp-smoke"),
         // App creation needs Org admin; this also covers Flag admin in its Apps.
-        grants: [{ target: `org:${smoke.config.smokeOrgId}`, role: "admin", access: "read-write" }],
+        grants: [
+          {
+            target: `org:${smoke.config.smokeOrgId}`,
+            role: "admin",
+            permissions: ["write", "delete", "credentials", "members", "privacy"],
+          },
+        ],
         expiresAt: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
       },
     );

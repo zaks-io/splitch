@@ -236,7 +236,15 @@ deploying, and missing secrets or replay bindings fail closed.
 
 A Personal Access Token is not a JWT and is accepted only by the MCP Worker. The MCP Control Plane
 door resolves its principal from the D1 token row: the owner's live Organization and App memberships,
-kept only where a grant covers them, at min(live role, grant ceiling). Mutating operations narrow
-that principal to the `read-write` grants before selector binding and co-scope. A path-less mutation
-additionally needs a `read-write` `all` grant. PAT management routes are mounted on the public bearer
-door only. See [personal-access-tokens.md](personal-access-tokens.md).
+kept only where a grant covers them, at min(live role, grant ceiling). Each grant is strictly
+`{ target, role, permissions }`; reading is implicit and `[]` is read-only. The closed permissions
+are `write`, `delete`, `credentials`, `members`, and `privacy`. Each route declares its permission;
+a route requiring one narrows the principal to grants carrying it before selector binding and
+co-scope. Overlapping grants contribute role ceilings only for permissions they carry. A route
+whose path names no Organization or App additionally needs an `all` grant carrying its permission.
+Refusals name the missing permission and target.
+
+Approval application derives permission and role from the stored operation and checks the current
+token before applying it; decline needs `write`. Owner PAT cleanup bypasses permission narrowing.
+PAT create, update, rotate, and `current_user_delete` are session-only. PAT management routes are
+mounted on the public bearer door only. See [personal-access-tokens.md](personal-access-tokens.md).

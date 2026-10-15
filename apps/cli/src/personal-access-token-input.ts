@@ -19,13 +19,13 @@ export function returnsPersonalAccessTokenSecret(operationId: string): boolean {
 }
 
 const ROLES = new Set(["member", "admin", "owner"]);
-const ACCESS = new Set(["read", "read-write"]);
+const PERMISSIONS = ["write", "delete", "credentials", "members", "privacy"] as const;
 const DAY_MS = 24 * 60 * 60 * 1000;
-const GRANT_EXAMPLE = "--grant app:app_123:admin:read-write, --grant all:member:read";
+const GRANT_EXAMPLE = "--grant app:app_123:admin:write,delete, --grant all:member:read";
 
 /**
  * Fold `--grant` and `--expires-at` into a `tokens create|update` body. A grant
- * is `<target>:<role>:<access>` with `<target>` one of `all`, `org:<org id>`,
+ * is `<target>:<role>:<permissions>` with `<target>` one of `all`, `org:<org id>`,
  * `app:<app id>`. `--expires-at` takes `never`, a day count like `90d`, or an
  * ISO 8601 date or date-time. Omitting it on create keeps the 90-day default;
  * `never` is the only way to ask for a token that does not expire.
@@ -56,19 +56,29 @@ export function applyPersonalAccessTokenFields(
   }
 }
 
-function parseGrant(value: string): { target: string; role: string; access: string } {
+function parseGrant(value: string): { target: string; role: string; permissions: string[] } {
   const parts = value.split(":");
-  const access = parts.pop() ?? "";
+  const rawPermissions = parts.pop() ?? "";
   const role = parts.pop() ?? "";
   const target = parts.join(":");
+  const permissions = rawPermissions === "read" ? [] : rawPermissions.split(",");
   const targetOk = target === "all" || /^(org|app):[^:]+$/.test(target);
-  if (!targetOk || !ROLES.has(role) || !ACCESS.has(access)) {
+  if (
+    !targetOk ||
+    !ROLES.has(role) ||
+    permissions.some((permission) => !PERMISSIONS.some((allowed) => allowed === permission)) ||
+    new Set(permissions).size !== permissions.length
+  ) {
     throw usage(
-      `--grant ${value} is not <target>:<role>:<access>`,
-      `Use a target of all, org:<org id>, or app:<app id>; a role of member, admin, or owner; and access read or read-write (${GRANT_EXAMPLE})`,
+      `--grant ${value} is not <target>:<role>:<permissions>`,
+      `Use --grant <target>:<role>:<permissions>: target all, org:<org id>, or app:<app id>; role member, admin, or owner; permissions read or a comma-separated list of write,delete,credentials,members,privacy (${GRANT_EXAMPLE}). Replace read-write with write,delete,credentials,members,privacy to keep its authority.`,
     );
   }
-  return { target, role, access };
+  return {
+    target,
+    role,
+    permissions: PERMISSIONS.filter((permission) => permissions.includes(permission)),
+  };
 }
 
 function parseExpiry(value: string, nowMs: number): string | null {

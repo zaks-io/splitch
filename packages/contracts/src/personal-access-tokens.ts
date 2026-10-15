@@ -25,9 +25,24 @@ export const PERSONAL_ACCESS_TOKEN_FINGERPRINT_LENGTH = 12;
 // grant always names the stable id it was validated against.
 const GRANT_TARGET_PATTERN = /^(all|org:org_[A-Za-z0-9_-]{1,124}|app:app_[A-Za-z0-9_-]{1,124})$/;
 
-export const personalAccessTokenAccessLevels = ["read", "read-write"] as const;
-export const PersonalAccessTokenAccessSchema = z.enum(personalAccessTokenAccessLevels);
-export type PersonalAccessTokenAccess = z.infer<typeof PersonalAccessTokenAccessSchema>;
+export const personalAccessTokenPermissions = [
+  "write",
+  "delete",
+  "credentials",
+  "members",
+  "privacy",
+] as const;
+export const PersonalAccessTokenPermissionSchema = z.enum(personalAccessTokenPermissions);
+export type PersonalAccessTokenPermission = z.infer<typeof PersonalAccessTokenPermissionSchema>;
+
+const GrantPermissionsSchema = z
+  .array(PersonalAccessTokenPermissionSchema)
+  .refine((permissions) => new Set(permissions).size === permissions.length, {
+    message: "grant permissions must not contain duplicates",
+  })
+  .transform((permissions) =>
+    personalAccessTokenPermissions.filter((permission) => permissions.includes(permission)),
+  );
 
 export const PersonalAccessTokenIdSchema = z
   .string()
@@ -36,8 +51,8 @@ export const PersonalAccessTokenIdSchema = z
 /**
  * One grant. `target` is `all` (every current and future membership), `org:<id>`
  * (that Organization and every App in it), or `app:<id>`. `role` is a ceiling:
- * the effective role is never above the user's live role. `access: "read"`
- * refuses every mutating operation on that target.
+ * the effective role is never above the user's live role. Reading is implicit;
+ * `permissions: []` grants only read access to the target.
  */
 export const PersonalAccessTokenGrantSchema = z
   .object({
@@ -48,7 +63,7 @@ export const PersonalAccessTokenGrantSchema = z
         "expected `all`, `org:org_…`, or `app:app_…` (canonical ids, not slugs)",
       ),
     role: UserRoleSchema,
-    access: PersonalAccessTokenAccessSchema,
+    permissions: GrantPermissionsSchema,
   })
   .strict();
 export type PersonalAccessTokenGrant = z.infer<typeof PersonalAccessTokenGrantSchema>;
@@ -156,14 +171,13 @@ interface ClampMemberships {
 }
 
 /**
- * The authority a PAT holds right now. `scopes` drive reads; on a mutating
- * operation the principal is narrowed to `writeScopes`, and a mutation with no
- * Organization or App in its path additionally requires `writeAll`.
+ * The authority a PAT holds right now. Reads use `scopes`; a mutation uses its
+ * permission's scopes. A path without an Organization or App additionally
+ * requires that permission's `all` flag.
  */
 export interface PersonalAccessTokenAuthority {
   scopes: string[];
-  writeScopes: string[];
-  writeAll: boolean;
+  permissions: Record<PersonalAccessTokenPermission, { scopes: string[]; all: boolean }>;
 }
 
 const ROLE_RANK: Record<UserRole, number> = { member: 1, admin: 2, owner: 3 };
@@ -178,12 +192,15 @@ export function personalAccessTokenAuthority(
   memberships: ClampMemberships,
   grants: readonly PersonalAccessTokenGrant[],
 ): PersonalAccessTokenAuthority {
-  const writable = grants.filter((grant) => grant.access === "read-write");
-  return {
-    scopes: clampedScopes(memberships, grants),
-    writeScopes: clampedScopes(memberships, writable),
-    writeAll: writable.some((grant) => grant.target === "all"),
-  };
+  const permissions = {} as PersonalAccessTokenAuthority["permissions"];
+  for (const permission of personalAccessTokenPermissions) {
+    const carrying = grants.filter((grant) => grant.permissions.includes(permission));
+    permissions[permission] = {
+      scopes: clampedScopes(memberships, carrying),
+      all: carrying.some((grant) => grant.target === "all"),
+    };
+  }
+  return { scopes: clampedScopes(memberships, grants), permissions };
 }
 
 function clampedScopes(

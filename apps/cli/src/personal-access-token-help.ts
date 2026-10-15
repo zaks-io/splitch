@@ -23,7 +23,7 @@ const DESCRIPTIONS: Readonly<Record<string, string>> = {
 const EXAMPLES: Readonly<Record<string, string>> = {
   personal_access_tokens_list: "splitch tokens list --json",
   personal_access_tokens_create:
-    "splitch tokens create --name sandboxes --grant app:app_123:admin:read-write --expires-at never --output-file ~/.config/splitch/mcp.env --append --json",
+    "splitch tokens create --name sandboxes --grant app:app_123:admin:write,delete --expires-at never --output-file ~/.config/splitch/mcp.env --append --json",
   personal_access_tokens_update:
     "splitch tokens update <token-id> --grant all:member:read --expires-at 30d --json",
   personal_access_tokens_rotate:
@@ -68,10 +68,10 @@ export function personalAccessTokenHelpFlags(operationId: string): HelpFlag[] {
 function grantFlags(defaultValue: string): HelpFlag[] {
   return [
     flag(
-      "--grant <target:role:access>",
+      "--grant <target:role:permissions>",
       "string (repeatable)",
       defaultValue,
-      "What the token may reach. Target: all, org:<org id>, or app:<app id>. Role ceiling: member, admin, or owner (never above your own). Access: read or read-write. Repeat for more targets; on update the list replaces the current grants.",
+      "What the token may reach. Target: all, org:<org id>, or app:<app id>. Role ceiling: member, admin, or owner (never above your own). Permissions: read (read-only), or a comma-separated list of write,delete,credentials,members,privacy. Repeat for more targets; on update the list replaces the current grants.",
     ),
     flag(
       "--expires-at <when>",

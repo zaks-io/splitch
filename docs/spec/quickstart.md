@@ -45,10 +45,15 @@ file and is never printed:
 
 ```bash
 splitch tokens create --name sandboxes \
-  --grant app:<app id>:admin:read-write \
+  --grant app:<app id>:admin:write \
   --expires-at never \
   --output-file ~/.config/splitch/mcp.env --append
 ```
+
+This grants reads and configuration changes on that App. Add `delete`, `credentials`, `members`, or
+`privacy` only when the agent needs them, for example `--grant app:<app id>:admin:write,delete`.
+Use `read` for a read-only grant. Unknown and duplicate permissions are refused; `read-write` must be
+replaced with an explicit permission list. Organization creation needs an `all` grant with `write`.
 
 Inject `SPLITCH_MCP_TOKEN` into each machine's environment, and point the MCP client at it, for
 example `claude mcp add --transport http splitch https://mcp.splitch.dev/mcp --header
@@ -144,6 +149,9 @@ https://splitch.dev/docs/sdk/credentials.
 splitch client-key get          # public, safe to ship — paste keyMaterial (pk_…), not keyId (ck_…)
 api_keys_create { scopes: ["data-plane:evaluate"] } # secret, surfaced once; store it in a secret manager
 ```
+
+A PAT with `write` can retrieve the public Client Key. Creating an API Key or rotating or
+reconfiguring either credential needs `credentials` in its grant.
 
 Your Client Key is **auto-provisioned and open to all origins** so it works immediately.
 Before shipping to production, lock it to your app's origins in one step (control panel or

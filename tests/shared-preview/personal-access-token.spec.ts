@@ -16,7 +16,7 @@ test.describe("shared-preview Personal Access Token", () => {
       "/personal-access-tokens",
       {
         name: smoke.uniqueKey("pat-smoke"),
-        grants: [{ target: `app:${smoke.config.smokeAppId}`, role: "member", access: "read" }],
+        grants: [{ target: `app:${smoke.config.smokeAppId}`, role: "member", permissions: [] }],
         expiresAt: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
       },
     );
@@ -32,7 +32,8 @@ test.describe("shared-preview Personal Access Token", () => {
         appId: smoke.config.smokeAppId,
         name: "must not be renamed by a read-only PAT",
       });
-      expect(JSON.stringify(refused)).toContain("read-only access");
+      expect(JSON.stringify(refused)).toContain("write");
+      expect(JSON.stringify(refused)).toContain(`app:${smoke.config.smokeAppId}`);
     } finally {
       await smoke.controlPlaneSend(
         controlPlaneAccessToken,

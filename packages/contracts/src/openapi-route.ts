@@ -7,12 +7,12 @@ import {
   IDEMPOTENCY_KEY_SHAPE_MESSAGE,
 } from "./persisted-field-limits";
 import {
-  type AuthKind,
   defineRoute,
   type HttpMethod,
   type IdempotencyMode,
   type RateLimitClass,
   type RawBodyByteLimit,
+  type RouteAuthorization,
   type RouteContract,
   type RouteOwner,
 } from "./route-contract";
@@ -56,7 +56,7 @@ export interface ApiRouteRequest {
 
 type RouteExposure = "public" | "mcp-binding" | "public-bearer";
 
-export interface DefineApiRouteInput {
+interface ApiRouteInputFields {
   /** Stable, explicit, UNIQUE `resource_operation` snake_case id (MCP tool name). */
   operationId: string;
   owner: RouteOwner;
@@ -84,7 +84,6 @@ export interface DefineApiRouteInput {
    * status so protocol-shaped errors (OFREP, etc.) match the wire.
    */
   errorResponseSchemas?: Readonly<Record<number, z.ZodTypeAny>>;
-  auth: AuthKind;
   scopes?: readonly string[];
   rateLimit: RateLimitClass;
   idempotency: IdempotencyMode;
@@ -94,22 +93,24 @@ export interface DefineApiRouteInput {
   effects: RouteEffects;
 }
 
+export type DefineApiRouteInput = ApiRouteInputFields & RouteAuthorization;
+
 /**
  * A route authored through {@link defineApiRoute}: it IS a RouteContract (so the
  * registrar mounts it unchanged) and additionally carries the `operationId`,
  * human `summary`, and the lazily-built `@hono/zod-openapi` `createRoute` config.
  */
-export interface ApiRouteContract<
+export type ApiRouteContract<
   Input extends z.ZodTypeAny = z.ZodTypeAny,
   Output extends z.ZodTypeAny = z.ZodTypeAny,
-> extends RouteContract<Input, Output> {
+> = RouteContract<Input, Output> & {
   operationId: string;
   summary: string;
   exposure: RouteExposure;
   effects: RouteEffects;
   /** The @hono/zod-openapi route definition derived from the same schemas. */
   openapi: RouteConfig;
-}
+};
 
 /**
  * The Zod schema behind a route's JSON media-type entry (request body or
@@ -271,7 +272,9 @@ export function defineApiRoute<const Input extends DefineApiRouteInput>(input: I
     path: input.path,
     input: runtimeInput(request),
     output: input.response,
-    auth: input.auth,
+    ...(input.auth === "control-plane-token"
+      ? { auth: input.auth, permission: input.permission }
+      : { auth: input.auth }),
     scopes: input.scopes ?? [],
     rateLimit: input.rateLimit,
     idempotency: input.idempotency,

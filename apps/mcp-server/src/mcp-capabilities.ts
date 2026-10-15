@@ -3,16 +3,16 @@ import {
   getRoute,
   getRouteMembershipGate,
   membershipGatePatterns,
+  type PersonalAccessTokenAuthority,
   scopeSatisfiesMembershipGate,
 } from "@splitch/contracts";
 export interface McpEffectiveAuthority {
   readonly scopes: readonly string[];
   readonly membershipWideRead: boolean;
-  /** Present for a Personal Access Token: mutations are limited to its write grants. */
+  /** Present for a Personal Access Token, with authority for each permission. */
   readonly personalAccessToken?: {
     readonly id: string;
-    readonly writeScopes: readonly string[];
-    readonly writeAll: boolean;
+    readonly permissions: PersonalAccessTokenAuthority["permissions"];
   };
 }
 
@@ -55,14 +55,25 @@ export function buildCapabilitiesResource(
 }
 
 /**
- * The scopes that may grant one tool. A Personal Access Token's mutating calls
- * are narrowed to its write grants, and a mutation naming no Organization or App
- * needs a read-write `all` grant, so the resource must not advertise more.
+ * A tool advertises only scopes carrying its declared permission. A derived
+ * Approval Review still checks the stored proposal when it is applied.
  */
 function grantingScopes(authority: McpEffectiveAuthority, toolName: string): readonly string[] {
   const token = authority.personalAccessToken;
   const route = getRoute(toolName);
-  if (!token || route?.effects.mutates === false) return authority.scopes;
-  const targeted = /:(orgId|appId)\b/.test(route?.path ?? "");
-  return targeted || token.writeAll ? token.writeScopes : [];
+  if (!token) return authority.scopes;
+  if (route?.auth !== "control-plane-token") return [];
+  switch (route.permission) {
+    case "read":
+    case "owner-cleanup":
+    case "derived":
+      return authority.scopes;
+    case "session-only":
+      return [];
+    default: {
+      const permission = token.permissions[route.permission];
+      const targeted = /:(orgId|appId)\b/.test(route.path);
+      return targeted || permission.all ? permission.scopes : [];
+    }
+  }
 }

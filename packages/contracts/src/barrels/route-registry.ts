@@ -13,6 +13,7 @@ export type {
   RawBodyByteLimit,
   RouteContract,
   RouteOwner,
+  RoutePermission,
 } from "../route-contract";
 export type { McpToolAnnotations, ReversibilityClass, RouteEffects } from "../route-effects";
 export {
