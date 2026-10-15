@@ -149,16 +149,27 @@ The production migration and deploy need explicit approval.
 
 Each slice ships something a user can observe and test end to end.
 
-1. **Permissions, live on MCP.** Route permission declarations with the completeness and
+1. **Permissions, live on MCP** (SPL-761). Route permission declarations with the completeness and
    consistency tests, the grant schema and its D1 migration, permission narrowing, approval
    derivation, the owner-cleanup and session-only rules, and the `--grant` syntax in
    `splitch tokens`. The CLI changes here because it shares the grant schema and no installed CLI
    needs to keep working. Updates `personal-access-tokens.md`, `access-control-matrix.md`, and
    `quickstart.md`.
-2. **The CLI authenticates with a PAT.** The Control Plane bearer resolver and its abuse limits,
-   public `principal_capabilities_get` with token metadata, CLI token mode with `context`, the
-   `CLI_TOKEN_INVALID` mapping, and the default variable. Neither half is testable without the
-   other. Updates `auth-doors.md`, `mcp-and-cli-surfaces.md`, and `CONTEXT.md`.
+2. **The CLI authenticates with a PAT** (SPL-762, blocked by SPL-761). The Control Plane bearer
+   resolver and its abuse limits, public `principal_capabilities_get` with token metadata, CLI
+   token mode with `context`, the `CLI_TOKEN_INVALID` mapping, and the default variable. Neither
+   half is testable without the other. Updates `auth-doors.md`, `mcp-and-cli-surfaces.md`, and `CONTEXT.md`.
+
+Coverage:
+
+| section                   | slice            |
+| ------------------------- | ---------------- |
+| Grants                    | SPL-761          |
+| Route permission map      | SPL-761          |
+| Control Plane bearer door | SPL-762          |
+| CLI token mode            | SPL-762          |
+| Rollout                   | SPL-761          |
+| Done                      | SPL-761, SPL-762 |
 
 ## Done
 
