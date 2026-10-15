@@ -1,4 +1,7 @@
-import { PersonalAccessTokenGrantsSchema, personalAccessTokenAuthority } from "@splitch/contracts";
+import {
+  PersonalAccessTokenGrantsSchema,
+  personalAccessTokenAuthority,
+} from "@splitch/sdk/control-plane";
 import {
   applySchema,
   migrationFileStatements,
