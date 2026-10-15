@@ -16,6 +16,7 @@ test("documentation and non-deployable application changes skip production mutat
       "docs/spec/quickstart.md",
       ".github/workflows/deploy-production.yml",
       "scripts/setup-worktree.sh",
+      ".dependency-cruiser.cjs",
     ]),
     {
       d1: false,
@@ -35,6 +36,7 @@ test("colocated TypeScript tests never select production phases", () => {
     "apps/analysis-api/src/results.test.ts",
     "packages/stats/src/sequential-ci.simulation.test.ts",
     "packages/db/src/repo/identity-selector-reads.test.ts",
+    "apps/control-panel/src/components/experiments/experiment-results.test.tsx",
   ]) {
     const plan = classifyProductionChanges([path]);
     assert.equal(plan.shouldDeploy, false, path);
