@@ -9,9 +9,9 @@ import { DEFAULT_PERSONAL_ACCESS_TOKEN_ENV_VAR } from "./personal-access-token-s
 
 const DESCRIPTIONS: Readonly<Record<string, string>> = {
   personal_access_tokens_list:
-    "List your Personal Access Tokens for the MCP server: names, grants, expiry, and status. Secrets are never shown.",
+    "List your Personal Access Tokens for the CLI and MCP server: names, grants, expiry, and status. Secrets are never shown.",
   personal_access_tokens_create:
-    "Create a Personal Access Token for connecting the MCP server without browser sign-in. The secret is written to --output-file and never printed.",
+    "Create a Personal Access Token for the CLI and MCP server without browser sign-in. The secret is written to --output-file and never printed.",
   personal_access_tokens_update:
     "Rename a Personal Access Token or replace its grants or expiry. Takes effect on its next use; the secret is unchanged.",
   personal_access_tokens_rotate:

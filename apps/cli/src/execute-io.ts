@@ -2,6 +2,7 @@ import type { EnvironmentPolicy } from "@splitch/sdk/control-plane";
 import type { CliIo } from "./execute-types.js";
 import { formatEnvironmentPolicy, isEnvironmentPolicy } from "./format-environment-policy.js";
 import { formatPayload } from "./format-payload.js";
+import { redactPersonalAccessTokenSecrets } from "./personal-access-token-redaction.js";
 
 export function emit(io: CliIo, asJson: boolean, payload: unknown, noun?: string): void {
   if (asJson) {
@@ -31,7 +32,12 @@ function isPolicyProjection(payload: unknown): payload is { policy: EnvironmentP
  * so the mode rides on the io rather than being threaded through ~28 call sites.
  */
 export function withJsonMode(io: CliIo, json: boolean): CliIo {
-  return { ...io, json };
+  return {
+    ...io,
+    json,
+    log: (line) => io.log(redactPersonalAccessTokenSecrets(line)),
+    error: (line) => io.error(redactPersonalAccessTokenSecrets(line)),
+  };
 }
 
 export function consoleIo(): CliIo {

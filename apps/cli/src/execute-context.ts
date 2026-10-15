@@ -1,3 +1,4 @@
+import type { PersonalAccessToken, PersonalAccessTokenAuthority } from "@splitch/sdk/control-plane";
 import { describeOAuthFault, isSessionRefusal } from "./auth-binding.js";
 import { ensurePrincipalEmail, type SessionUnverifiedReason } from "./auth-email-backfill.js";
 import { refreshAccessToken, refreshFaultOf } from "./auth-token.js";
@@ -9,9 +10,11 @@ import {
 } from "./credentials.js";
 import { SplitchCliError, writeCliError } from "./errors.js";
 import { emit } from "./execute-io.js";
+import { executeApiOperation } from "./execute-operations.js";
 import type { CliDeps, CliIo, CliResult } from "./execute-types.js";
 import { EXIT_AUTH, EXIT_OK } from "./exit-codes.js";
 import type { ParsedInvocation } from "./parse-args.js";
+import { personalAccessTokenFromEnv } from "./personal-access-token-auth.js";
 
 /**
  * `splitch context` is the first command an agent runs, so it is the one place
@@ -31,6 +34,15 @@ export async function executeContext(
     env: deps.env,
     cwd: deps.cwd,
   });
+  if (personalAccessTokenFromEnv(deps) !== undefined) {
+    return executeApiOperation("principal_capabilities_get", {}, invocation, deps, io, (data) => ({
+      authenticated: true,
+      credentialMode: "token",
+      personalAccessToken: requireTokenMetadata(data),
+      ...context,
+      nextSteps: nextSteps(context),
+    }));
+  }
   const stored = await deps.credentialStore.load();
   if (!stored) {
     writeCliError(io, {
@@ -76,6 +88,24 @@ export async function executeContext(
   };
   emit(io, invocation.flags.json, payload);
   return { exitCode: EXIT_OK, payload };
+}
+
+type TokenMetadata = Pick<PersonalAccessToken, "id" | "name" | "grants" | "expiresAt"> & {
+  effective: PersonalAccessTokenAuthority;
+};
+
+function requireTokenMetadata(data: unknown): TokenMetadata {
+  // The SDK validates the response contract; token mode additionally requires its optional token.
+  const token = (data as { token?: TokenMetadata }).token;
+  if (!token) {
+    throw new SplitchCliError({
+      code: "CLI_UNEXPECTED_ERROR",
+      causeSummary:
+        "The Control Plane returned no Personal Access Token metadata for SPLITCH_TOKEN",
+      remediation: "Update the CLI and Control Plane together, then retry splitch context",
+    });
+  }
+  return token;
 }
 
 type SessionVerification =

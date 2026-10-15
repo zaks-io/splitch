@@ -7,6 +7,7 @@ import {
   sdkErrorCodes,
 } from "@splitch/sdk";
 import type { CliIo } from "./execute-types.js";
+import { redactPersonalAccessTokenSecrets } from "./personal-access-token-redaction.js";
 
 export const cliClientErrorCodes = [
   "CLI_USAGE_INVALID",
@@ -14,6 +15,7 @@ export const cliClientErrorCodes = [
   "CLI_SCOPE_UNRESOLVED",
   "CLI_NOT_AUTHENTICATED",
   "CLI_SESSION_EXPIRED",
+  "CLI_TOKEN_INVALID",
   "CLI_TOKEN_BINDING_REFUSED",
   "CLI_EMAIL_UNVERIFIED",
   "CLI_DEVICE_AUTHORIZATION_FAILED",
@@ -72,14 +74,18 @@ export class SplitchCliError extends Error {
   readonly outcome: "retryable" | "user_action_required" | "non_retryable" | null;
 
   constructor(detail: CliErrorDetail) {
-    super(formatSdkErrorMessage(detail), { cause: detail.originalError });
+    super(redactPersonalAccessTokenSecrets(formatSdkErrorMessage(detail)), {
+      cause: detail.originalError,
+    });
     this.name = "SplitchCliError";
     this.code = detail.code;
-    this.summary = detail.causeSummary.trim();
-    this.causeSummary = sentence(detail.causeSummary);
-    this.remediation = sentence(detail.remediation);
+    this.summary = redactPersonalAccessTokenSecrets(detail.causeSummary.trim());
+    this.causeSummary = sentence(this.summary);
+    this.remediation = sentence(redactPersonalAccessTokenSecrets(detail.remediation));
     this.docsUrl = resolveErrorDocsUrl(detail.code);
-    this.details = detail.details ?? null;
+    this.details = detail.details
+      ? JSON.parse(redactPersonalAccessTokenSecrets(JSON.stringify(detail.details)))
+      : null;
     this.outcome = detail.outcome ?? null;
   }
 }

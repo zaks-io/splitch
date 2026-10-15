@@ -2314,7 +2314,7 @@ Flags:
 
 Example:
   splitch stale-flags list --json",
-    "tokens create": "Create a Personal Access Token for connecting the MCP server without browser sign-in. The secret is written to --output-file and never printed.
+    "tokens create": "Create a Personal Access Token for the CLI and MCP server without browser sign-in. The secret is written to --output-file and never printed.
 
 Usage:
   splitch tokens create [flags]
@@ -2325,7 +2325,7 @@ Flags:
   --expires-at <when>                [type: never | <days>d | ISO 8601 date; default: 90d] When the token stops working. never means it does not expire.
   --output-file <path>               [type: string; default: required] File that receives the secret (mode 0600). The secret is never printed.
   --secret-format <format>           [type: env | raw; default: env] env writes NAME=secret for env files and env injection; raw writes the bare secret.
-  --env-var <name>                   [type: string; default: SPLITCH_MCP_TOKEN] Variable name for --secret-format env.
+  --env-var <name>                   [type: string; default: SPLITCH_TOKEN] Variable name for --secret-format env.
   --append                           [type: boolean; default: false] Add the env line to an existing file (which must not be readable by other users); creates the file if missing.
   --force                            [type: boolean; default: false] Overwrite an existing file, or with --append replace an existing definition of the variable.
   --body-json <json>                 [type: JSON object; default: none] Request body fields; see Request body below.
@@ -2344,7 +2344,7 @@ Credential semantics:
 
 Example:
   splitch tokens create --name sandboxes --grant app:app_123:admin:write,delete --expires-at never --output-file ~/.config/splitch/mcp.env --append --json",
-    "tokens list": "List your Personal Access Tokens for the MCP server: names, grants, expiry, and status. Secrets are never shown.
+    "tokens list": "List your Personal Access Tokens for the CLI and MCP server: names, grants, expiry, and status. Secrets are never shown.
 
 Usage:
   splitch tokens list [flags]
@@ -2394,7 +2394,7 @@ Usage:
 Flags:
   --output-file <path>      [type: string; default: required] File that receives the secret (mode 0600). The secret is never printed.
   --secret-format <format>  [type: env | raw; default: env] env writes NAME=secret for env files and env injection; raw writes the bare secret.
-  --env-var <name>          [type: string; default: SPLITCH_MCP_TOKEN] Variable name for --secret-format env.
+  --env-var <name>          [type: string; default: SPLITCH_TOKEN] Variable name for --secret-format env.
   --append                  [type: boolean; default: false] Add the env line to an existing file (which must not be readable by other users); creates the file if missing.
   --force                   [type: boolean; default: false] Overwrite an existing file, or with --append replace an existing definition of the variable.
   --json                    [type: boolean; default: false] Write machine-readable JSON to stdout.
@@ -2970,8 +2970,8 @@ Usage:
   splitch tokens <action> [arguments] [flags]
 
 Commands:
-  list            List your Personal Access Tokens for the MCP server: names, grants, expiry, and status. Secrets are never shown.
-  create          Create a Personal Access Token for connecting the MCP server without browser sign-in. The secret is written to --output-file and never printed.
+  list            List your Personal Access Tokens for the CLI and MCP server: names, grants, expiry, and status. Secrets are never shown.
+  create          Create a Personal Access Token for the CLI and MCP server without browser sign-in. The secret is written to --output-file and never printed.
   update          Rename a Personal Access Token or replace its grants or expiry. Takes effect on its next use; the secret is unchanged.
   rotate          Replace a Personal Access Token's secret. The old secret stops working; the new one is written to --output-file and never printed.
   revoke          Revoke a Personal Access Token. Its next use is refused.
@@ -2984,7 +2984,7 @@ Example:
   splitch tokens list --help",
   },
   "meta": {
-    "context": "Show the logged-in principal and the resolved App and Environment.
+    "context": "Show the login session or SPLITCH_TOKEN metadata and effective authority, plus the resolved App and Environment.
 
 Usage:
   splitch context [flags]
@@ -3009,7 +3009,7 @@ Flags:
 
 Example:
   splitch health --json",
-    "login": "Authenticate the control-plane session with the browser device flow.
+    "login": "Authenticate the control-plane session with the browser device flow. Unset SPLITCH_TOKEN first.
 
 Usage:
   splitch login [--app <app>] [flags]
@@ -3021,7 +3021,7 @@ Flags:
 
 Example:
   splitch login",
-    "logout": "Revoke and remove the stored control-plane session.
+    "logout": "Revoke and remove the stored control-plane session. Unset SPLITCH_TOKEN first.
 
 Usage:
   splitch logout [flags]
@@ -3058,10 +3058,10 @@ Usage:
   splitch <resource> <action> [arguments] [flags]
 
 Commands:
-  login           Authenticate the control-plane session with the browser device flow.
-  logout          Revoke and remove the stored control-plane session.
+  login           Authenticate the control-plane session with the browser device flow. Unset SPLITCH_TOKEN first.
+  logout          Revoke and remove the stored control-plane session. Unset SPLITCH_TOKEN first.
   use             Select the default App and Environment for this project.
-  context         Show the logged-in principal and the resolved App and Environment.
+  context         Show the login session or SPLITCH_TOKEN metadata and effective authority, plus the resolved App and Environment.
   health          Check the Control Plane API health endpoint.
 
 Resource groups:

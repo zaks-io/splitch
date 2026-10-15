@@ -158,6 +158,7 @@ async function executeParsedInvocation(
     writeCliError(withJsonMode(consoleIo(), invocation.flags.json), cliError);
     return cliError.code === "CLI_NOT_AUTHENTICATED" ||
       cliError.code === "CLI_SESSION_EXPIRED" ||
+      cliError.code === "CLI_TOKEN_INVALID" ||
       cliError.code === "CLI_EMAIL_UNVERIFIED"
       ? EXIT_AUTH
       : cliError.code === "CLI_SCOPE_UNRESOLVED" || cliError.code === "CLI_TOKEN_BINDING_REFUSED"

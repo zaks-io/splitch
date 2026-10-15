@@ -24,6 +24,7 @@ import { EXIT_API, EXIT_AUTH, EXIT_OK, EXIT_SCOPE, EXIT_USAGE } from "./exit-cod
 import { environmentSelectorOverride, parseEvaluationContext } from "./operation-input.js";
 import { emitOperationNotices } from "./operation-notices.js";
 import type { ParsedInvocation } from "./parse-args.js";
+import { personalAccessTokenFromEnv } from "./personal-access-token-auth.js";
 import { createOperationSdks, resolveDataPlaneBaseUrl, sdkForRoute } from "./sdks.js";
 import { exitCodeForServerError, writeServerError } from "./server-errors.js";
 
@@ -181,6 +182,8 @@ export async function executeApiOperation(
 ): Promise<CliResult> {
   try {
     const route = requireOperationRoute(operationId);
+    const sessionRefusal = refuseSessionOnlyOperation(route, deps, io);
+    if (sessionRefusal) return sessionRefusal;
     const tokenAuthorization = operationAuthorization(route, input);
     const payload = await withAuthorizationRetry(
       deps,
@@ -220,6 +223,22 @@ export async function executeApiOperation(
   } catch (error) {
     return handleExecutionError(error, io);
   }
+}
+
+function refuseSessionOnlyOperation(
+  route: NonNullable<ReturnType<typeof getRoute>>,
+  deps: CliDeps,
+  io: CliIo,
+): CliResult | null {
+  if (route.permission !== "session-only" || personalAccessTokenFromEnv(deps) === undefined)
+    return null;
+  writeCliError(io, {
+    code: "FORBIDDEN",
+    causeSummary: "This operation requires a login session and cannot use SPLITCH_TOKEN",
+    remediation: "Unset SPLITCH_TOKEN and run splitch login before retrying the command",
+    outcome: "user_action_required",
+  });
+  return { exitCode: EXIT_API };
 }
 
 /**
@@ -280,6 +299,7 @@ async function clearScopeAfterAppDelete(
   if (!appId) return;
   const { clearDeletedAppFromConfig } = await import("./context.js");
   await clearDeletedAppFromConfig(deps.cwd ?? process.cwd(), appId);
+  if (personalAccessTokenFromEnv(deps) !== undefined) return;
   const stored = await deps.credentialStore.load();
   if (stored?.credential.selectedAppId !== appId) return;
   const { selectedAppId: _removed, ...credentialRest } = stored.credential;
@@ -301,6 +321,7 @@ export function handleExecutionError(error: unknown, io: CliIo): CliResult {
   if (
     cliError.code === "CLI_NOT_AUTHENTICATED" ||
     cliError.code === "CLI_SESSION_EXPIRED" ||
+    cliError.code === "CLI_TOKEN_INVALID" ||
     cliError.code === "CLI_EMAIL_UNVERIFIED"
   ) {
     return { exitCode: EXIT_AUTH };

@@ -8,6 +8,10 @@ import {
   type RouteContract,
 } from "@splitch/sdk/control-plane";
 import { SplitchCliError } from "./errors.js";
+import {
+  personalAccessTokenFetch,
+  personalAccessTokenFromEnv,
+} from "./personal-access-token-auth.js";
 
 const defaultControlPlaneBaseUrl = "http://127.0.0.1:8787";
 const defaultEvaluationBaseUrl = "http://127.0.0.1:8788";
@@ -39,6 +43,7 @@ export type OperationSdk = ReturnType<typeof createMcpOperationAdapter>;
 export type OperationSdks = Record<PublicSurface, OperationSdk>;
 
 export interface SdkFactoryOptions {
+  readonly env?: Record<string, string | undefined>;
   readonly platformTarget?: string;
   readonly controlPlaneBaseUrl?: string;
   readonly evaluationBaseUrl?: string;
@@ -122,7 +127,10 @@ export function createOperationSdks(options: SdkFactoryOptions = {}): OperationS
   ) =>
     createMcpOperationAdapter({
       baseUrl: apiBaseUrl(envName, configured, localDefault, platformTarget),
-      fetch: options.fetch,
+      fetch:
+        personalAccessTokenFromEnv(options) === undefined
+          ? options.fetch
+          : personalAccessTokenFetch(options.fetch ?? fetch),
     });
   return {
     get "control-plane-api"() {
