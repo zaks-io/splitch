@@ -1,13 +1,8 @@
+import { cleanScenario, srmFiringScenario } from "@splitch/contracts/testing";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { ExperimentResults } from "./experiment-results";
-import {
-  metricsFixture,
-  resultsFixture,
-  runFixture,
-  srmFiringStats,
-  statsFixture,
-} from "./experiment-results-test-fixtures";
+import { metricsFixture, resultsFixture, runFixture } from "./experiment-results-test-fixtures";
 
 const evidence = {
   resultToken: `sha256:${"a".repeat(64)}`,
@@ -22,7 +17,7 @@ describe("Conclude Run availability", () => {
         onConclude={() => {}}
         metrics={metricsFixture()}
         run={runFixture()}
-        results={resultsFixture(statsFixture(), { ...evidence, ...executable })}
+        results={resultsFixture(cleanScenario(), { ...evidence, ...executable })}
       />,
     );
     expect(concludeButton(html)).not.toMatch(/\sdisabled=""/);
@@ -35,7 +30,7 @@ describe("Conclude Run availability", () => {
         onConclude={() => {}}
         metrics={metricsFixture()}
         run={runFixture()}
-        results={resultsFixture(srmFiringStats(), evidence)}
+        results={resultsFixture(srmFiringScenario(), evidence)}
       />,
     );
     expect(concludeButton(html)).toMatch(/\sdisabled=""/);
@@ -48,7 +43,7 @@ describe("Conclude Run availability", () => {
         onConclude={() => {}}
         metrics={metricsFixture()}
         run={runFixture()}
-        results={resultsFixture(statsFixture(), evidence)}
+        results={resultsFixture(cleanScenario(), evidence)}
       />,
     );
     expect(concludeButton(html)).toMatch(/\sdisabled=""/);
@@ -63,7 +58,7 @@ describe("Conclude Run availability", () => {
         onConclude={() => {}}
         metrics={metricsFixture()}
         run={runFixture()}
-        results={resultsFixture(statsFixture(), {
+        results={resultsFixture(cleanScenario(), {
           ...evidence,
           readiness: { statistical: true, concludeExecutable: false },
           reasons: ["Conclude requires App owner or admin membership for this caller."],
@@ -80,7 +75,7 @@ describe("Conclude Run availability", () => {
         onConclude={() => {}}
         metrics={metricsFixture()}
         run={{ ...runFixture(), status: "ended" }}
-        results={resultsFixture(statsFixture(), {
+        results={resultsFixture(cleanScenario(), {
           ...evidence,
           runStatus: "ended",
           readiness: { statistical: true, concludeExecutable: false },

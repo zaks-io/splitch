@@ -1,14 +1,11 @@
-import type { FrozenControlIdentity } from "@splitch/contracts";
+import {
+  controlDisagreementScenario,
+  unresolvableControlScenario,
+} from "@splitch/contracts/testing";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { ExperimentResults } from "#components/experiments/experiment-results";
-import {
-  controlDisagreementStats,
-  metricsFixture,
-  resultsFixture,
-  runFixture,
-  statsWithAnalysisControl,
-} from "./experiment-results-test-fixtures";
+import { metricsFixture, resultsFixture, runFixture } from "./experiment-results-test-fixtures";
 import { visibleText } from "./experiment-results-test-markup";
 
 /**
@@ -19,29 +16,13 @@ import { visibleText } from "./experiment-results-test-markup";
  * worse than saying which Variant is missing and refusing the decision.
  */
 
-const unresolvable: FrozenControlIdentity = {
-  state: "unresolvable",
-  variantId: "variant_from_a_later_edit",
-  reason: "absent_from_frozen_variant_set",
-  frozenVariantNames: ["control", "treatment"],
-  analysisVariant: "control",
-};
-
-const disagreement: FrozenControlIdentity = {
-  state: "disagreement",
-  variantId: "variant_control",
-  variant: "control",
-  analysisVariant: "legacy_checkout",
-};
-
 function unresolvableHtml() {
-  const stats = statsWithAnalysisControl();
   return renderToStaticMarkup(
     <ExperimentResults
       onConclude={() => {}}
       metrics={metricsFixture()}
       run={runFixture()}
-      results={resultsFixture(stats, { control: unresolvable })}
+      results={resultsFixture(unresolvableControlScenario())}
     />,
   );
 }
@@ -129,7 +110,7 @@ describe("ExperimentResults with an Analysis Control disagreement", () => {
             { id: "variant_control", name: "control", value: true },
           ]),
         })}
-        results={resultsFixture(controlDisagreementStats(), { control: disagreement })}
+        results={resultsFixture(controlDisagreementScenario())}
       />,
     );
   }

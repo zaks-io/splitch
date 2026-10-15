@@ -1,16 +1,15 @@
+import { analysisControlScenario, breachedGuardrailScenario } from "@splitch/contracts/testing";
 import { describe, expect, it } from "vitest";
 import {
-  breachedGuardrailStats,
   metricsFixture,
   resultsFixture,
-  statsWithAnalysisControl,
 } from "../../components/experiments/experiment-results-test-fixtures";
-import { metricNamesById } from "./metric-names";
 import { experimentResultsVerdict } from "./experiment-results-verdict";
+import { metricNamesById } from "./metric-names";
 
 describe("experimentResultsVerdict", () => {
   it("selects the largest significant comparison for the leading Variant", () => {
-    const results = resultsFixture(statsWithAnalysisControl());
+    const results = resultsFixture(analysisControlScenario());
 
     expect(verdictText(results)).toContain(
       "treatment moves Checkout conversion +6.4%, significant.",
@@ -18,7 +17,7 @@ describe("experimentResultsVerdict", () => {
   });
 
   it("stays calm when there is no affirmative significance call", () => {
-    const results = resultsFixture(statsWithAnalysisControl());
+    const results = resultsFixture(analysisControlScenario());
     const significance = Object.fromEntries(
       Object.keys(results.significance).map((key) => [key, "not_significant"] as const),
     );
@@ -29,19 +28,21 @@ describe("experimentResultsVerdict", () => {
   });
 
   it("counts multiple Guardrail breaches", () => {
-    const stats = breachedGuardrailStats();
+    const stats = breachedGuardrailScenario().stats;
     const [guardrail] = stats.guardrail_results;
     if (!guardrail) throw new Error("breached fixture must produce a Guardrail");
-    const results = resultsFixture({
-      ...stats,
-      guardrail_results: [guardrail, { ...guardrail, metric_id: "checkout_error_rate" }],
+    const results = resultsFixture(analysisControlScenario(), {
+      stats: {
+        ...stats,
+        guardrail_results: [guardrail, { ...guardrail, metric_id: "checkout_error_rate" }],
+      },
     });
 
     expect(verdictText(results)).toContain("2 Guardrails are breached.");
   });
 
   it("counts multiple blocking checks without re-deriving them", () => {
-    const base = resultsFixture(statsWithAnalysisControl());
+    const base = resultsFixture(analysisControlScenario());
     const checks = base.gate.checks.map((check) =>
       check.id === "underpowered" || check.id === "decision_valid_result"
         ? { ...check, status: "fail" as const }
@@ -64,7 +65,7 @@ describe("experimentResultsVerdict", () => {
   });
 
   it("never counts an inconsistent display as significant", () => {
-    const results = resultsFixture(statsWithAnalysisControl());
+    const results = resultsFixture(analysisControlScenario());
     const treatmentKey = Object.keys(results.significance).find((key) =>
       key.endsWith("/treatment"),
     );

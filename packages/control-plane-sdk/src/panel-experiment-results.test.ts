@@ -1,5 +1,5 @@
-import { experimentSignificanceDisplays, type StatsOutput } from "@splitch/contracts";
-import { evaluateExperimentDecisionGate, experimentSrmDiagnostics } from "@splitch/stats";
+import { experimentSignificanceDisplays } from "@splitch/contracts";
+import { cleanScenario, controlDisagreementScenario } from "@splitch/contracts/testing";
 import { describe, expect, it } from "vitest";
 import { PanelExperimentResultsOutputSchema } from "./panel-experiment-results";
 
@@ -17,69 +17,8 @@ const frozenControl = {
   variant: "control",
 };
 
-function statsOutput(): StatsOutput {
-  return {
-    arm_results: [
-      {
-        variant: "treatment",
-        metric_id: "conversion",
-        sample_size_n: 500,
-        point_estimate: 0.8,
-        relative_lift_pct: 12.5,
-        ci_lower: 4.1,
-        ci_upper: 21.4,
-        p_value: 0.002,
-        is_significant: true,
-        in_bh_family: true,
-        exploratory: false,
-        decision_valid: true,
-        status: "ready",
-        variance_techniques: {
-          winsorized: false,
-          winsorize_pct: null,
-          winsorize_cap: null,
-          cuped_applied: false,
-          cuped_method: null,
-          cuped_attribute: null,
-          cuped_attribute_source: null,
-          cuped_coverage_pct: null,
-          delta_method: false,
-        },
-      },
-    ],
-    srm: {
-      srm_p_value: 0.71,
-      srm_is_mismatch: false,
-      observed_counts: { control: 502, treatment: 498 },
-      expected_counts: { control: 500, treatment: 500 },
-      activated_srm_p_value: null,
-      activated_srm_mismatch: null,
-    },
-    guardrail_results: [],
-    health: {
-      multiple_rate: 0,
-      multiple_count: 0,
-      activation_rates: null,
-      activation_balance_p_value: null,
-      activation_balance_mismatch: null,
-      exposure_counts: { control: 502, treatment: 498 },
-      deduped_counts: { control: 502, treatment: 498 },
-      low_n_warning: false,
-    },
-  };
-}
-
-/** A legacy Run: the planned-duration check is not applicable and blocks nothing. */
-const legacyDuration = {
-  plannedDurationDays: null,
-  overrideReason: null,
-  runStartedAt: "2026-07-01T00:00:00.000Z",
-  dataWatermark: null,
-};
-
 function readyEnvelope() {
-  const stats = statsOutput();
-  const gate = evaluateExperimentDecisionGate(stats, frozenControl, legacyDuration);
+  const { stats, gate, srm } = cleanScenario();
   return {
     state: "ready" as const,
     runId: "run_1",
@@ -91,7 +30,7 @@ function readyEnvelope() {
     reasons: [],
     recommendationUnavailable: "no_pre_registration" as const,
     stats,
-    srm: experimentSrmDiagnostics(stats),
+    srm,
     gate,
     significance: experimentSignificanceDisplays(stats),
   };
@@ -157,19 +96,13 @@ describe("PanelExperimentResultsOutputSchema contract pins (SPL-305)", () => {
   });
 
   it("accepts a named Analysis Control disagreement with both identities", () => {
-    const stats = statsOutput();
-    const control = {
-      state: "disagreement" as const,
-      variantId: "variant_control",
-      variant: "control",
-      analysisVariant: "legacy_checkout",
-    };
+    const { control, gate } = controlDisagreementScenario();
 
     expect(
       PanelExperimentResultsOutputSchema.safeParse({
         ...readyEnvelope(),
         control,
-        gate: evaluateExperimentDecisionGate(stats, control, legacyDuration),
+        gate,
       }).success,
     ).toBe(true);
   });
