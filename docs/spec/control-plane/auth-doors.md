@@ -295,8 +295,9 @@ The grant is advertised in OAuth discovery only while enabled.
    [access-control-matrix.md](access-control-matrix.md). No refresh token is issued.
 7. For MCP smoke, use the Control Plane token to create a one-hour Personal Access Token through
    `POST /personal-access-tokens`. The test-scoped PAT has one `org:<smoke org id>` grant with
-   `role: admin` and `access: read-write`. App creation and Flag mutations require admin; the
-   Organization grant covers the seeded App, so no additional App or `all` grant is needed.
+   `role: admin` and `permissions: ["write", "delete", "credentials", "members", "privacy"]`.
+   App creation and Flag mutations require admin. The Organization grant covers the seeded App,
+   so no additional App or `all` grant is needed.
 8. Call MCP with the PAT. Hosted MCP verifies WorkOS AuthKit JWTs on its OAuth door, so a
    Splitch-issued `client_credentials` JWT, even with an MCP audience, is not an MCP credential.
    The PAT door delegates to the Control Plane with `authDoor: personal_access_token`, where live

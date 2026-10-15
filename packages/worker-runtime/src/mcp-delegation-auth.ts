@@ -74,8 +74,7 @@ async function personalAccessTokenPrincipal(
       ...principalFromScopes(actor, authority.scopes),
       personalAccessToken: {
         id: token.tokenId,
-        writeScopes: authority.writeScopes,
-        writeAll: authority.writeAll,
+        permissions: authority.permissions,
       },
     },
   };

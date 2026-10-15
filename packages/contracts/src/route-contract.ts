@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { ErrorCode, ErrorResponse } from "./errors";
+import type { PersonalAccessTokenPermission } from "./personal-access-tokens";
 
 /**
  * Route-contract metadata. Each authored route in @splitch/contracts carries this
@@ -39,6 +40,17 @@ export const authKinds = [
 ] as const;
 export const AuthKindSchema = z.enum(authKinds);
 export type AuthKind = z.infer<typeof AuthKindSchema>;
+
+export type RoutePermission =
+  | "read"
+  | PersonalAccessTokenPermission
+  | "derived"
+  | "owner-cleanup"
+  | "session-only";
+
+export type RouteAuthorization =
+  | { auth: "control-plane-token"; permission: RoutePermission }
+  | { auth: Exclude<AuthKind, "control-plane-token">; permission?: never };
 
 /**
  * The public hostname a route is addressed on, as a Worker name resolved through
@@ -198,7 +210,7 @@ export function rawBodyByteLimitFor(
  * The runtime-enforcement metadata for one route. `input`/`output` are Zod
  * schemas; everything else is guard policy the registrar reads.
  */
-export interface RouteContract<
+interface RouteContractFields<
   Input extends z.ZodTypeAny = z.ZodTypeAny,
   Output extends z.ZodTypeAny = z.ZodTypeAny,
 > {
@@ -208,13 +220,17 @@ export interface RouteContract<
   path: string;
   input: Input;
   output: Output;
-  auth: AuthKind;
   scopes: readonly string[];
   rateLimit: RateLimitClass;
   idempotency: IdempotencyMode;
   rawBodyByteLimit?: RawBodyByteLimit;
   errors: readonly ErrorCode[];
 }
+
+export type RouteContract<
+  Input extends z.ZodTypeAny = z.ZodTypeAny,
+  Output extends z.ZodTypeAny = z.ZodTypeAny,
+> = RouteContractFields<Input, Output> & RouteAuthorization;
 
 /**
  * Authoring helper: infers Input/Output generics from the passed schemas and

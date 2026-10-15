@@ -3,6 +3,7 @@ import type {
   AuthDoor,
   AuthKind,
   ErrorResponse,
+  PersonalAccessTokenAuthority,
   UserRole,
 } from "@splitch/contracts";
 
@@ -51,16 +52,10 @@ export interface Principal {
   memberships?: PrincipalMemberships;
   /** Membership scopes were resolved live after a signed MCP delegation was validated. */
   liveMembership?: true;
-  /**
-   * Present when a Personal Access Token authenticated the MCP call. `scopes`
-   * above are its read authority (live membership clamped by its grants). The
-   * guard narrows a mutating operation to `writeScopes`, and a mutation that
-   * names no Organization or App in its path additionally needs `writeAll`.
-   */
+  /** Read authority stays in `scopes`; each operation selects its permission authority. */
   personalAccessToken?: {
     id: string;
-    writeScopes: readonly string[];
-    writeAll: boolean;
+    permissions: PersonalAccessTokenAuthority["permissions"];
   };
   /**
    * Which door minted this credential, when the auth kind carries one. `null`

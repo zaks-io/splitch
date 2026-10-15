@@ -23,6 +23,7 @@ const OpenInput = z.object({
 const OkOutput = z.object({ ok: z.boolean() });
 
 export function route(overrides: Partial<RouteContract> = {}): RouteContract {
+  const { auth = "public", permission, ...fields } = overrides;
   return defineRoute({
     id: "test.route",
     owner: "control-plane-api",
@@ -30,12 +31,12 @@ export function route(overrides: Partial<RouteContract> = {}): RouteContract {
     path: "/things",
     input: OpenInput,
     output: OkOutput,
-    auth: "public",
     scopes: [],
     rateLimit: "none",
     idempotency: "none",
     errors: [],
-    ...overrides,
+    ...fields,
+    ...(auth === "control-plane-token" ? { auth, permission: permission ?? "read" } : { auth }),
   });
 }
 

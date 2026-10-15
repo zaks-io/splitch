@@ -51,7 +51,8 @@ export function classifyCiChanges(paths) {
         (path) =>
           path.startsWith("packages/db/") ||
           path === "scripts/check-d1-local.mjs" ||
-          path === "scripts/check-d1-populated.mjs",
+          path === "scripts/check-d1-populated.mjs" ||
+          path === "scripts/check-d1-populated-pat.mjs",
       ),
     productionVite: productionPlan.workerPackages.some(
       (name) => name === "@splitch/control-panel" || name === "@splitch/marketing",

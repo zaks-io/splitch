@@ -9,12 +9,13 @@ import {
   ErrorDetailsSchema,
 } from "@splitch/contracts";
 import { appScope } from "@splitch/db";
-import type { Principal } from "@splitch/worker-runtime";
+import { type Principal, renderError } from "@splitch/worker-runtime";
 import { requireAppAdmin } from "./app-authz";
 import { approvalDiff, approvalRequestId, approvalReviewId } from "./approval-canonical";
 import { approvalRequestProjection } from "./approval-model";
 import { resultingVersionFor } from "./approval-resulting-version";
 import { prepareAndApplyApproval } from "./approval-review-application";
+import { narrowApprovalReviewPrincipal } from "./approval-review-authorization";
 import {
   approvalNotFound,
   idempotencyConflict,
@@ -190,6 +191,12 @@ export async function reviewApproval(
   const scope = appScope(input.appId);
   const row = await deps.repo.approvals.getRequest(scope, input.approvalRequestId);
   if (!row) return { ok: false, response: approvalNotFound(input.requestId) };
+
+  const authority = narrowApprovalReviewPrincipal(input, row.operation);
+  if (!authority.ok) {
+    return { ok: false, response: renderError(authority.error, { requestId: input.requestId }) };
+  }
+  input = { ...input, principal: authority.principal };
 
   const requestHash = await canonicalHash({ action: input.action, reason: input.reason });
   const replay = await deps.repo.approvals.reviewByActorKey(

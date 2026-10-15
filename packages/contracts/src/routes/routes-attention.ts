@@ -13,6 +13,7 @@ export const attentionRoutes = [
     request: { params: AppParams },
     response: AppAttentionRollupResponseSchema,
     auth: "control-plane-token",
+    permission: "read",
     rateLimit: "control-plane-actor",
     idempotency: "none",
     effects: readOnlyClosed,

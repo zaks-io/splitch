@@ -1,6 +1,9 @@
 import { z } from "@hono/zod-openapi";
 import { HeldScopeSchema } from "../held-scope";
-import { PersonalAccessTokenIdSchema } from "../personal-access-tokens";
+import {
+  PersonalAccessTokenIdSchema,
+  PersonalAccessTokenPermissionSchema,
+} from "../personal-access-tokens";
 import { OrganizationMemberSchema } from "../leaf-schemas-runtime";
 import { type ApiRouteContract, defineApiRoute } from "../openapi-route";
 import {
@@ -41,14 +44,16 @@ const PrincipalCapabilitiesResponse = z
     membershipWideRead: z.boolean(),
     /**
      * Present when a Personal Access Token authenticated the call. `scopes`
-     * above are its read authority; mutations are limited to `writeScopes`, and
-     * a mutation with no Organization or App in its path needs `writeAll`.
+     * above are its read authority; each permission has its own clamped scopes
+     * and an `all` flag for paths without an Organization or App.
      */
     personalAccessToken: z
       .object({
         id: PersonalAccessTokenIdSchema,
-        writeScopes: z.array(HeldScopeSchema),
-        writeAll: z.boolean(),
+        permissions: z.record(
+          PersonalAccessTokenPermissionSchema,
+          z.object({ scopes: z.array(HeldScopeSchema), all: z.boolean() }).strict(),
+        ),
       })
       .strict()
       .optional(),
@@ -68,6 +73,7 @@ const organizationRoutes = [
     summary: "List organizations the token can reach (agent cold-start entry).",
     response: OrgListResponse,
     auth: AUTH,
+    permission: "read",
     rateLimit: RATE,
     idempotency: "none",
     effects: readOnlyClosed,
@@ -82,6 +88,7 @@ const organizationRoutes = [
     exposure: "mcp-binding",
     response: PrincipalCapabilitiesResponse,
     auth: AUTH,
+    permission: "read",
     rateLimit: RATE,
     idempotency: "none",
     effects: readOnlyClosed,
@@ -100,6 +107,7 @@ const organizationRoutes = [
     request: { body: CreateOrganizationRequestSchema },
     response: OrganizationResponseSchema,
     auth: AUTH,
+    permission: "write",
     rateLimit: RATE,
     // "none" until replay semantics exist. Declaring "optional" would expose an
     // `Idempotency-Key` header through every derived client and the OpenAPI
@@ -119,6 +127,7 @@ const organizationRoutes = [
     request: { params: OrgParams },
     response: OrganizationResponseSchema,
     auth: AUTH,
+    permission: "read",
     rateLimit: RATE,
     idempotency: "none",
     effects: readOnlyClosed,
@@ -133,6 +142,7 @@ const organizationRoutes = [
     request: { params: OrgParams, body: PatchOrganizationRequestSchema },
     response: OrganizationResponseSchema,
     auth: AUTH,
+    permission: "members",
     rateLimit: RATE,
     idempotency: "none",
     effects: updateClosed,
@@ -147,6 +157,7 @@ const organizationRoutes = [
     request: { params: OrgParams },
     response: DeletedResponse,
     auth: AUTH,
+    permission: "delete",
     rateLimit: RATE,
     idempotency: "none",
     effects: deleteClosed,
@@ -166,6 +177,7 @@ const organizationRoutes = [
     request: { params: OrgParams },
     response: MemberListResponse,
     auth: AUTH,
+    permission: "read",
     rateLimit: RATE,
     idempotency: "none",
     effects: readOnlyClosed,
@@ -180,6 +192,7 @@ const organizationRoutes = [
     request: { params: OrgParams, body: AddMemberRequestSchema },
     response: MemberResponse,
     auth: AUTH,
+    permission: "members",
     rateLimit: RATE,
     idempotency: "none",
     effects: createClosed,
@@ -201,6 +214,7 @@ const organizationRoutes = [
     request: { params: OrgMemberParams, body: UpdateMemberRequestSchema },
     response: MemberUpdateResponse,
     auth: AUTH,
+    permission: "members",
     rateLimit: RATE,
     idempotency: "none",
     effects: updateClosed,
@@ -222,6 +236,7 @@ const organizationRoutes = [
     request: { params: OrgMemberParams },
     response: DeletedResponse,
     auth: AUTH,
+    permission: "members",
     rateLimit: RATE,
     idempotency: "none",
     effects: membershipRemoveClosed,

@@ -1,92 +1,20 @@
 import { env } from "cloudflare:workers";
-import {
-  createMcpDelegationHeader,
-  MCP_DELEGATION_HEADER,
-  type PersonalAccessTokenGrant,
-} from "@splitch/contracts";
+import { personalAccessTokenPermissions } from "@splitch/contracts";
 import { createRepository } from "@splitch/db";
 import { beforeAll, beforeEach, describe, expect, it } from "vitest";
-import type { ControlPlaneApiEnv } from "../src/env.js";
 import { McpEntrypoint } from "../src/index.js";
+import { AUDIENCE, OWNER, TENANT_A, TENANT_B, testCtx } from "./index-mcp-fixtures.js";
 import {
-  AUDIENCE,
-  MCP_DELEGATION_SECRET,
-  OWNER,
-  setupMcpDoorTestEnv,
-  TENANT_A,
-  TENANT_B,
-  testCtx,
-} from "./index-mcp-fixtures.js";
+  call,
+  resetPatMcpToken,
+  seedToken,
+  setupPatMcpFixture,
+  TOKEN_ID,
+} from "./personal-access-token-mcp-fixture";
 
-/**
- * SPL-683: a Personal Access Token reaching the Control Plane through the MCP
- * binding. Authority is the owner's LIVE membership clamped by the row's
- * CURRENT grants on every call; read-only grants refuse mutations; a revoked,
- * expired, or re-owned token refuses the next call.
- */
-
-const TOKEN_ID = `pat_${"a".repeat(32)}`;
-const TOKEN_HASH = "f".repeat(64);
-let testEnv: ControlPlaneApiEnv;
 const repo = () => createRepository(env.DB);
-
-beforeAll(async () => {
-  testEnv = await setupMcpDoorTestEnv();
-});
-
-beforeEach(async () => {
-  await env.DB.prepare("DELETE FROM personal_access_tokens").run();
-  await seedToken([{ target: `app:${TENANT_A.appId}`, role: "owner", access: "read" }]);
-});
-
-async function seedToken(
-  grants: PersonalAccessTokenGrant[],
-  overrides: { userId?: string; expiresAt?: string | null } = {},
-): Promise<void> {
-  await repo().personalAccessTokens.insert({
-    id: TOKEN_ID,
-    userId: overrides.userId ?? OWNER,
-    name: "door",
-    tokenHash: TOKEN_HASH,
-    grants: JSON.stringify(grants),
-    expiresAt: overrides.expiresAt === undefined ? null : overrides.expiresAt,
-    createdAt: new Date().toISOString(),
-  });
-}
-
-let jti = 0;
-async function call(
-  operationId: string,
-  method: string,
-  path: string,
-  body?: unknown,
-  tokenHash = TOKEN_HASH,
-): Promise<Response> {
-  const request = new Request(`${AUDIENCE}${path}`, {
-    method,
-    ...(body === undefined
-      ? {}
-      : { body: JSON.stringify(body), headers: { "content-type": "application/json" } }),
-  });
-  request.headers.set(
-    MCP_DELEGATION_HEADER,
-    await createMcpDelegationHeader({
-      operationId,
-      actor: {
-        subject: OWNER,
-        scopes: [],
-        liveMembership: true,
-        authDoor: "personal_access_token",
-        personalAccessTokenId: TOKEN_ID,
-        personalAccessTokenHash: tokenHash,
-      },
-      request,
-      secret: MCP_DELEGATION_SECRET,
-      jti: `pat-door-delegation-${++jti}-${Date.now()}`,
-    }),
-  );
-  return new McpEntrypoint(testCtx, testEnv).fetch(request);
-}
+beforeAll(() => setupPatMcpFixture());
+beforeEach(resetPatMcpToken);
 
 const getApp = (appId: string) => call("apps_get", "GET", `/apps/${appId}`);
 const renameApp = (appId: string) =>
@@ -105,26 +33,64 @@ describe("Personal Access Token on the MCP door", () => {
     expect(response.status).toBe(403);
     expect(await response.json()).toMatchObject({
       code: "FORBIDDEN",
-      message: `personal access token grants read-only access to app:${TENANT_A.appId}`,
+      message: expect.stringContaining("write"),
     });
   });
 
-  it("allows a mutation under a read-write grant, capped at the grant's role", async () => {
+  it("allows a path-less capabilities read with only a read-only App grant", async () => {
+    const response = await call("principal_capabilities_get", "GET", "/principal/capabilities");
+    expect(response.status, await response.clone().text()).toBe(200);
+    const body = await response.json();
+    expect(body).toMatchObject({ scopes: [`app:${TENANT_A.appId}:owner`] });
+    expect(body).toMatchObject({
+      personalAccessToken: {
+        permissions: Object.fromEntries(
+          personalAccessTokenPermissions.map((permission) => [
+            permission,
+            { scopes: [], all: false },
+          ]),
+        ),
+      },
+    });
+  });
+
+  it("fails loudly if the previous Worker writes a legacy grant after migration", async () => {
+    await repo().personalAccessTokens.update(OWNER, TOKEN_ID, {
+      grants: JSON.stringify([{ target: `app:${TENANT_A.appId}`, role: "admin", access: "read" }]),
+    });
+    const response = await getApp(TENANT_A.appId);
+    expect(response.status).toBe(500);
+    expect(await response.json()).toMatchObject({ code: "INTERNAL_SERVER_ERROR" });
+  });
+
+  it("allows a mutation under a write grant, capped at the grant's role", async () => {
     await env.DB.prepare("DELETE FROM personal_access_tokens").run();
-    await seedToken([{ target: `app:${TENANT_A.appId}`, role: "admin", access: "read-write" }]);
+    await seedToken([
+      {
+        target: `app:${TENANT_A.appId}`,
+        role: "admin",
+        permissions: ["write", "delete", "credentials", "members", "privacy"],
+      },
+    ]);
     expect((await renameApp(TENANT_A.appId)).status).toBe(200);
 
     await env.DB.prepare("DELETE FROM personal_access_tokens").run();
     // `member` is below the admin role the rename requires, even though the
     // user is a live owner.
-    await seedToken([{ target: `app:${TENANT_A.appId}`, role: "member", access: "read-write" }]);
+    await seedToken([
+      {
+        target: `app:${TENANT_A.appId}`,
+        role: "member",
+        permissions: ["write", "delete", "credentials", "members", "privacy"],
+      },
+    ]);
     expect((await renameApp(TENANT_A.appId)).status).toBe(403);
   });
 
   it("applies a narrowed grant on the next call without rotating the secret", async () => {
     expect((await getApp(TENANT_A.appId)).status).toBe(200);
     await repo().personalAccessTokens.update(OWNER, TOKEN_ID, {
-      grants: JSON.stringify([{ target: `app:${TENANT_B.appId}`, role: "owner", access: "read" }]),
+      grants: JSON.stringify([{ target: `app:${TENANT_B.appId}`, role: "owner", permissions: [] }]),
     });
     expect((await getApp(TENANT_A.appId)).status).toBe(403);
   });
@@ -158,7 +124,16 @@ describe("Personal Access Token on the MCP door", () => {
       { userId: "user_someone_else" },
     ]) {
       await env.DB.prepare("DELETE FROM personal_access_tokens").run();
-      await seedToken([{ target: "all", role: "owner", access: "read-write" }], overrides);
+      await seedToken(
+        [
+          {
+            target: "all",
+            role: "owner",
+            permissions: ["write", "delete", "credentials", "members", "privacy"],
+          },
+        ],
+        overrides,
+      );
       const refused = await getApp(TENANT_A.appId);
       expect(await refused.json()).toMatchObject({ code: "CREDENTIAL_REVOKED" });
     }
@@ -187,8 +162,12 @@ describe("Personal Access Token on the MCP door", () => {
   it("reports its clamped authority so an agent can diagnose it without the secret", async () => {
     await env.DB.prepare("DELETE FROM personal_access_tokens").run();
     await seedToken([
-      { target: `app:${TENANT_A.appId}`, role: "admin", access: "read-write" },
-      { target: `app:${TENANT_B.appId}`, role: "owner", access: "read" },
+      {
+        target: `app:${TENANT_A.appId}`,
+        role: "admin",
+        permissions: ["write", "delete", "credentials", "members", "privacy"],
+      },
+      { target: `app:${TENANT_B.appId}`, role: "owner", permissions: [] },
     ]);
     const response = await call("principal_capabilities_get", "GET", "/principal/capabilities");
     expect(response.status, await response.clone().text()).toBe(200);
@@ -197,15 +176,19 @@ describe("Personal Access Token on the MCP door", () => {
       membershipWideRead: true,
       personalAccessToken: {
         id: TOKEN_ID,
-        writeScopes: [`app:${TENANT_A.appId}:admin`],
-        writeAll: false,
+        permissions: Object.fromEntries(
+          personalAccessTokenPermissions.map((permission) => [
+            permission,
+            { scopes: [`app:${TENANT_A.appId}:admin`], all: false },
+          ]),
+        ),
       },
     });
   });
 
   it("never exposes PAT management on the MCP binding", async () => {
     const request = new Request(`${AUDIENCE}/personal-access-tokens`);
-    const response = await new McpEntrypoint(testCtx, testEnv).fetch(request);
+    const response = await new McpEntrypoint(testCtx, env).fetch(request);
     expect(response.status).toBe(404);
   });
 });

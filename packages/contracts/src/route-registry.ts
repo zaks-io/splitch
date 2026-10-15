@@ -2,6 +2,7 @@ import { type ErrorCode, errorCodes } from "./errors";
 import type { ApiRouteContract } from "./openapi-route";
 import { type PublicSurface, publicSurfaceFor, type RouteOwner } from "./route-contract";
 import { assertRouteEffects } from "./route-effects";
+import { assertRoutePermission } from "./route-permissions";
 import { accountRoutes } from "./routes/routes-account";
 import { analysisRoutes } from "./routes/routes-analysis";
 import { approvalRoutes } from "./routes/routes-approvals";
@@ -76,6 +77,7 @@ export function assertRegistry<const T extends readonly ApiRouteContract[]>(rout
     assertRouteIdentity(route, seen);
     assertRouteErrors(route);
     assertRouteEffects(route);
+    assertRoutePermission(route);
   }
   return Object.freeze([...routes]) as T;
 }

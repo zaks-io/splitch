@@ -14,6 +14,7 @@ const fromHelper = defineApiRoute({
   request: { params: AppParams },
   response: z.object({ items: z.array(FlagResponseSchema) }),
   auth: "control-plane-token",
+  permission: "read",
   rateLimit: "control-plane-actor",
   idempotency: "none",
   effects: readOnlyClosed,

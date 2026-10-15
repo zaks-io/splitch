@@ -2,7 +2,7 @@
 
 How a user connects the remote MCP server from machines that cannot complete browser OAuth (remote
 servers, sandboxes), and how those tokens are created, scoped, rotated, and revoked. The decision
-record is the 2026-10-03 amendment to
+record includes the 2026-10-03 and 2026-10-15 amendments to
 [ADR-0022](../../adr/0022-agent-and-human-auth-via-auth-md-one-principal-three-doors.md).
 
 ## Shape
@@ -20,13 +20,21 @@ record is the 2026-10-03 amendment to
 
 ## Grants
 
-A token carries 1 to 32 grants. Each grant is `{ target, role, access }`:
+A token carries 1 to 32 grants. Each grant is `{ target, role, permissions }`:
 
 - `target`: `all` (every current and future membership), `org:<org id>` (that Organization and every
   App in it), or `app:<app id>` (that App only). Canonical ids only, never slugs.
 - `role`: `member`, `admin`, or `owner`. A **ceiling**. The effective role on a target is the lower of
   the user's live role and the highest applicable grant ceiling.
-- `access`: `read` or `read-write`.
+- `permissions`: a subset of `write`, `delete`, `credentials`, `members`, `privacy`, in that
+  canonical order. Reads are implicit; `[]` is read-only. Unknown permissions and duplicates are
+  refused. The grant is strict: the former `access` field is not accepted.
+
+`write` permits configuration changes, `delete` irreversible resource removal, `credentials` SDK
+keys and integration credentials, `members` membership, roles, and Organization name and plan,
+and `privacy` data exports and Entity erasure. Creating an App or Environment provisions a public
+Client Key and needs only `write`; reading the Client Key also needs `write` because it can
+provision one. Rotating or reconfiguring it needs `credentials`.
 
 At create and update, an `org:` or `app:` grant must name a membership the caller holds now, with a
 ceiling at or below the caller's live role. `all` is checked at use time.
@@ -40,12 +48,23 @@ adding a door does not silently grant PAT management; missing and unknown doors 
 A step-up credential from Auth API remains the deferred full fix, as recorded in the ADR amendment.
 
 At use time, the Control Plane resolves the owner's live memberships and keeps only those a grant
-covers, at the clamped role. That set is the principal's read authority. On an operation whose
-audited route effects mutate, the principal is first narrowed to the scopes from `read-write`
-grants, before selector binding, co-scope, and the handler's role checks. A mutation whose path names
-an App or Organization the token can only read is refused with `FORBIDDEN` (`personal access token
-grants read-only access to app:<id>`). A mutation whose path names no Organization or App (for
-example `organizations_create`) needs a `read-write` `all` grant.
+covers, at the clamped role. That set is the principal's read authority. Every Control Plane route
+explicitly declares its permission. Before selector binding, co-scope, and role checks, a route
+needing a permission narrows the principal to grants carrying that permission. An overlapping grant
+without that permission contributes no role ceiling: `org:X:member:write` plus
+`app:Y:admin:credentials` gives `write` on Y at member and `credentials` on Y at admin.
+
+A refusal returns `FORBIDDEN` naming the missing permission and target. Only a route declared with
+one of the five permissions whose path names no Organization or App needs an `all` grant carrying
+that permission. Reads use every covering grant at the highest covering ceiling, without filtering
+by permission. Path-less reads such as `principal_capabilities_get` work with an App-only token.
+`experiment_plan`, `flags_test_eval`, and `experiment_results_post` also need no extra permission. See the
+[route permission map](personal-access-token-permissions.md#route-permission-map).
+
+Approval `approve_and_apply` checks the stored proposal operation's permission and role against the
+current token before application; every `ApprovalOperation` has a typed mapping, and winner Promotion
+uses `write` at App admin. A decline needs `write`. Listing and revoking one's own PATs bypass
+permission narrowing. Create, update, rotate, and `current_user_delete` refuse every PAT.
 
 ## Request path
 
@@ -108,5 +127,25 @@ rewrites the tombstone.
 - Output is metadata only: id, grants, expiry, status, a hash fingerprint, `secretWrittenTo`, and
   `envVar`.
 
-`--grant <target>:<role>:<access>` is repeatable. `--expires-at` takes `never`, a day count such as
-`90d`, or an ISO 8601 date.
+`--grant <target>:<role>:<permissions>` is repeatable. Pass `read` for no extra permissions or a
+comma-separated list, for example `--grant app:app_123:admin:write,delete`. The old `:read-write`
+syntax is refused before any request. To retain its authority, use
+`:write,delete,credentials,members,privacy`. Installed CLIs must upgrade to this syntax.
+`--expires-at` takes `never`, a day count such as `90d`, or an ISO 8601 date.
+
+## Rollout
+
+Migration `0042_personal_access_token_permissions.sql` rewrites stored `read` grants to
+`permissions: []` and `read-write` grants to all five permissions, preserving targets and role
+ceilings. Re-applying it leaves new-shape rows unchanged. There is no dual-shape reader.
+
+Production applies D1 migrations before deploying Workers. The previous Control Plane cannot parse
+migrated grants and fails PAT calls loudly during that accepted deploy window. Rolling the Control
+Plane back past this release after the migration is forbidden. The production migration and deploy
+require explicit approval. Completion evidence is the production deploy run for the merge SHA with
+`Apply D1 migrations` and `Deploy Cloudflare Workers` both succeeded.
+
+The previous Worker can still create or update old-shape grants during the deploy window. The new
+reader refuses those rows. After cutover, follow the
+[post-cutover check and standalone rewrite](../platform/deployment-pipeline.md#d1-migrations)
+until no stored grant contains `access`. Any production rewrite requires explicit approval.
