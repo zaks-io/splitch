@@ -1,5 +1,6 @@
 import {
   type ApiRouteContract,
+  type ApprovalOperation,
   type ErrorResponse,
   getRoute,
   getRouteMembershipGate,
@@ -14,6 +15,19 @@ import { enforceScopes } from "./scopes";
 export type NarrowOutcome =
   | { ok: true; principal: Principal }
   | { ok: false; error: ErrorResponse };
+
+const approvalOperationRoutes = {
+  flag_config_update: "flag_config_update",
+  flag_targeting_rules_replace: "flag_targeting_rules_replace",
+  flags_promote: "flags_promote",
+  flag_variants_create: "flag_variants_create",
+  flag_variants_update: "flag_variants_update",
+  flag_variants_delete: "flag_variants_delete",
+  flags_delete: "flags_delete",
+  segments_update: "segments_update",
+  experiments_start: "experiments_start",
+  experiment_winner_promote: "conclusion_promotion_requests_create",
+} satisfies Record<ApprovalOperation, string>;
 
 /** Select permission authority before selector resolution and handler role checks. */
 export function narrowPersonalAccessTokenForRoute(
@@ -79,11 +93,10 @@ export function narrowPersonalAccessTokenForOperation(
   principal: Principal,
   params: Record<string, string>,
 ): NarrowOutcome {
-  const route = getRoute(
-    operationId === "experiment_winner_promote"
-      ? "conclusion_promotion_requests_create"
-      : operationId,
-  );
+  const routeId = Object.hasOwn(approvalOperationRoutes, operationId)
+    ? approvalOperationRoutes[operationId as ApprovalOperation]
+    : operationId;
+  const route = getRoute(routeId);
   if (!route)
     return refuse(`personal access token cannot authorize unregistered operation ${operationId}`);
   const narrowed = narrowPersonalAccessTokenForRoute(route, principal, params);

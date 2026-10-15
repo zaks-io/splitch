@@ -319,6 +319,23 @@ back past this release after the migration is forbidden. Production migration an
 approval. Record the production deploy run for the merge SHA with `Apply D1 migrations` and
 `Deploy Cloudflare Workers` both succeeded as completion evidence.
 
+The previous Control Plane can still create or update old-shape grants after the migration ran.
+The new reader refuses those rows loudly. After Worker cutover, run this read-only query against
+production D1 and record the `legacy_grants` count:
+
+```sql
+SELECT COUNT(*) AS legacy_grants
+FROM personal_access_tokens AS token, json_each(token.grants) AS grant
+WHERE json_type(grant.value, '$.access') IS NOT NULL;
+```
+
+If the count is above zero, obtain explicit approval and re-run the migration SQL directly with
+`pnpm --filter @splitch/db exec wrangler d1 execute DB --env production --remote --file migrations/0042_personal_access_token_permissions.sql`.
+Wrangler's `execute --file` runs the rewrite independently of its migration ledger. Repeat the
+read-only count and approved rewrite until the count is zero. This is required for release
+completion. The local populated-D1 validator proves this procedure with late legacy creates and
+updates and confirms that a further rewrite is a no-op.
+
 ### Durable Object migrations
 
 - New Durable Object classes use SQLite-backed Durable Objects and `new_sqlite_classes`.

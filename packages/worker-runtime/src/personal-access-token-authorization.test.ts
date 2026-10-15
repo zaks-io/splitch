@@ -1,4 +1,5 @@
 import {
+  ApprovalOperationSchema,
   getRoute,
   type PersonalAccessTokenGrant,
   personalAccessTokenAuthority,
@@ -10,6 +11,7 @@ import { createRegistrar } from "./registrar";
 import {
   narrowPersonalAccessTokenForOperation,
   narrowPersonalAccessTokenForPermission,
+  narrowPersonalAccessTokenForRoute,
 } from "./steps/personal-access-token-write";
 
 function principal(grants: PersonalAccessTokenGrant[]): Principal {
@@ -39,6 +41,40 @@ function principal(grants: PersonalAccessTokenGrant[]): Principal {
 const writer = principal([{ target: "all", role: "admin", permissions: ["write"] }]);
 
 describe("stored proposal permission and role checks", () => {
+  it.each(ApprovalOperationSchema.options)(
+    "authorizes every mapped ApprovalOperation: %s",
+    (operation) => {
+      const owner = principal([
+        { target: "app:app_one", role: "owner", permissions: ["write", "delete"] },
+      ]);
+      expect(
+        narrowPersonalAccessTokenForOperation(operation, owner, { appId: "app_one" }),
+      ).toMatchObject({
+        ok: true,
+      });
+      const readOnly = principal([{ target: "app:app_one", role: "owner", permissions: [] }]);
+      expect(
+        narrowPersonalAccessTokenForOperation(operation, readOnly, { appId: "app_one" }),
+      ).toMatchObject({ ok: false });
+    },
+  );
+
+  it("reads at the highest covering ceiling without permission filtering or an all grant", () => {
+    const mixed = principal([
+      { target: "app:app_one", role: "member", permissions: ["write"] },
+      { target: "app:app_one", role: "owner", permissions: ["credentials"] },
+    ]);
+    expect(mixed.scopes).toEqual(["app:app_one:owner"]);
+    for (const operation of ["flags_get", "principal_capabilities_get"]) {
+      const route = getRoute(operation);
+      if (!route) throw new Error(`missing ${operation}`);
+      expect(narrowPersonalAccessTokenForRoute(route, mixed, {})).toEqual({
+        ok: true,
+        principal: mixed,
+      });
+    }
+  });
+
   it("allows writes and winner Promotion, while refusing deletion for a write token", () => {
     for (const operation of ["flags_promote", "experiments_start", "experiment_winner_promote"]) {
       expect(

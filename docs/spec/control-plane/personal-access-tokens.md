@@ -54,13 +54,16 @@ needing a permission narrows the principal to grants carrying that permission. A
 without that permission contributes no role ceiling: `org:X:member:write` plus
 `app:Y:admin:credentials` gives `write` on Y at member and `credentials` on Y at admin.
 
-A refusal returns `FORBIDDEN` naming the missing permission and target. A route whose path names no
-Organization or App needs an `all` grant carrying its permission. Reads, including `experiment_plan`,
-`flags_test_eval`, and `experiment_results_post`, need no extra permission. See the
+A refusal returns `FORBIDDEN` naming the missing permission and target. Only a route declared with
+one of the five permissions whose path names no Organization or App needs an `all` grant carrying
+that permission. Reads use every covering grant at the highest covering ceiling, without filtering
+by permission. Path-less reads such as `principal_capabilities_get` work with an App-only token.
+`experiment_plan`, `flags_test_eval`, and `experiment_results_post` also need no extra permission. See the
 [route permission map](personal-access-token-permissions.md#route-permission-map).
 
 Approval `approve_and_apply` checks the stored proposal operation's permission and role against the
-current token before application; decline needs `write`. Listing and revoking one's own PATs bypass
+current token before application; every `ApprovalOperation` has a typed mapping, and winner Promotion
+uses `write` at App admin. A decline needs `write`. Listing and revoking one's own PATs bypass
 permission narrowing. Create, update, rotate, and `current_user_delete` refuse every PAT.
 
 ## Request path
@@ -141,3 +144,8 @@ migrated grants and fails PAT calls loudly during that accepted deploy window. R
 Plane back past this release after the migration is forbidden. The production migration and deploy
 require explicit approval. Completion evidence is the production deploy run for the merge SHA with
 `Apply D1 migrations` and `Deploy Cloudflare Workers` both succeeded.
+
+The previous Worker can still create or update old-shape grants during the deploy window. The new
+reader refuses those rows. After cutover, follow the
+[post-cutover check and standalone rewrite](../platform/deployment-pipeline.md#d1-migrations)
+until no stored grant contains `access`. Any production rewrite requires explicit approval.

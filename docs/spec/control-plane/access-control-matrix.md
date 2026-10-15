@@ -240,8 +240,10 @@ kept only where a grant covers them, at min(live role, grant ceiling). Each gran
 `{ target, role, permissions }`; reading is implicit and `[]` is read-only. The closed permissions
 are `write`, `delete`, `credentials`, `members`, and `privacy`. Each route declares its permission;
 a route requiring one narrows the principal to grants carrying it before selector binding and
-co-scope. Overlapping grants contribute role ceilings only for permissions they carry. A route
-whose path names no Organization or App additionally needs an `all` grant carrying its permission.
+co-scope. For a route declared with one of the five permissions, overlapping grants contribute
+role ceilings only for permissions they carry, and a path without an Organization or App needs an
+`all` grant carrying that permission. Reads use every covering grant at the highest covering ceiling;
+path-less reads never require `all`. Owner cleanup, session-only and derived rules remain separate.
 Refusals name the missing permission and target.
 
 Approval application derives permission and role from the stored operation and checks the current

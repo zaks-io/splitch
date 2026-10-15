@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
-  defineApiRoute,
   type ApiRouteContract,
   type DefineApiRouteInput,
+  defineApiRoute,
   z,
 } from "./openapi-route";
 import { defineRoute, type RouteContract, type RoutePermission } from "./route-contract";
@@ -185,10 +185,13 @@ describe("route permissions", () => {
     }
   });
 
-  it("requires read for nonmutating operations except owner cleanup", () => {
+  it("requires read for nonmutating operations except special rules", () => {
     const reads = routeRegistry.filter((route) => !route.effects.mutates);
     for (const route of reads) {
-      if (route.auth === "control-plane-token" && route.permission !== "owner-cleanup") {
+      if (
+        route.auth === "control-plane-token" &&
+        !["owner-cleanup", "session-only", "derived"].includes(route.permission)
+      ) {
         expect(route.permission, route.operationId).toBe("read");
       }
     }

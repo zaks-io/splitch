@@ -37,6 +37,32 @@ describe("Personal Access Token on the MCP door", () => {
     });
   });
 
+  it("allows a path-less capabilities read with only a read-only App grant", async () => {
+    const response = await call("principal_capabilities_get", "GET", "/principal/capabilities");
+    expect(response.status, await response.clone().text()).toBe(200);
+    const body = await response.json();
+    expect(body).toMatchObject({ scopes: [`app:${TENANT_A.appId}:owner`] });
+    expect(body).toMatchObject({
+      personalAccessToken: {
+        permissions: Object.fromEntries(
+          personalAccessTokenPermissions.map((permission) => [
+            permission,
+            { scopes: [], all: false },
+          ]),
+        ),
+      },
+    });
+  });
+
+  it("fails loudly if the previous Worker writes a legacy grant after migration", async () => {
+    await repo().personalAccessTokens.update(OWNER, TOKEN_ID, {
+      grants: JSON.stringify([{ target: `app:${TENANT_A.appId}`, role: "admin", access: "read" }]),
+    });
+    const response = await getApp(TENANT_A.appId);
+    expect(response.status).toBe(500);
+    expect(await response.json()).toMatchObject({ code: "INTERNAL_SERVER_ERROR" });
+  });
+
   it("allows a mutation under a write grant, capped at the grant's role", async () => {
     await env.DB.prepare("DELETE FROM personal_access_tokens").run();
     await seedToken([

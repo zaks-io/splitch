@@ -213,6 +213,7 @@ function migrate(seed, firstMigration = FIRST_REBUILD_MIGRATION) {
   return {
     apply,
     execSql,
+    execFile: (file) => wrangler(["execute", `--file=${file}`, "--json"]),
     dispose: () => rmSync(sandbox, { recursive: true, force: true }),
   };
 }

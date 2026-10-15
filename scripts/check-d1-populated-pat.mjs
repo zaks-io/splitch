@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 
 const MIGRATION = "0042_personal_access_token_permissions.sql";
 const ALL_PERMISSIONS = ["write", "delete", "credentials", "members", "privacy"];
@@ -47,17 +47,47 @@ export function checkPersonalAccessTokenMigration(migrate) {
     ]);
     assert.equal(byId.pat_existing, existing, "new-shape rows must stay byte-for-byte unchanged");
 
-    const reapplied = JSON.parse(
-      run.execSql(
-        `${readFileSync(new URL(`../packages/db/migrations/${MIGRATION}`, import.meta.url), "utf8")}\nSELECT changes() AS changed;`,
-        "re-applying the PAT permissions migration",
-        true,
-      ),
-    );
-    assert.equal(reapplied.at(-1).results[0].changed, 0, "re-applying must not rewrite any row");
+    const rewrite = () => {
+      const result = run.execFile(
+        fileURLToPath(new URL(`../packages/db/migrations/${MIGRATION}`, import.meta.url)),
+      );
+      assert.equal(result.status, 0, result.stderr || result.stdout);
+    };
+    rewrite();
     assert.deepEqual(rows(), migrated, "re-applying must leave every PAT column unchanged");
+
+    // The previous Worker can create and update legacy grants after the first rewrite.
+    run.execSql(seed[0].replaceAll("pat_legacy_read", "pat_late_create"), "late legacy create");
+    run.execSql(
+      `UPDATE personal_access_tokens SET grants = '[{"target":"app:app_read","role":"member","access":"read"}]' WHERE id = 'pat_legacy_read'`,
+      "late legacy update",
+    );
+    const legacyCount = () =>
+      JSON.parse(
+        run.execSql(
+          "SELECT COUNT(*) AS legacy_grants FROM personal_access_tokens AS token, json_each(token.grants) AS grant WHERE json_type(grant.value, '$.access') IS NOT NULL",
+          "post-cutover legacy grant count",
+          true,
+        ),
+      )[0].results[0].legacy_grants;
+    assert.equal(legacyCount(), 2);
+    rewrite();
+    assert.equal(legacyCount(), 0, "the standalone file must rewrite post-migration legacy rows");
+    for (const row of rows().filter((row) =>
+      ["pat_legacy_read", "pat_late_create"].includes(row.id),
+    ))
+      assert.deepEqual(JSON.parse(row.grants), [
+        { target: "app:app_read", role: "member", permissions: [] },
+      ]);
+    const afterCutover = rows();
+    rewrite();
+    assert.deepEqual(
+      rows(),
+      afterCutover,
+      "standalone reapplication must leave every row unchanged",
+    );
     console.log(
-      "✔ d1:migrate:populated: legacy PAT grants preserve authority and re-apply changes no rows.",
+      "✔ d1:migrate:populated: PAT authority preserved; standalone rewrite clears late legacy grants and re-apply changes no rows.",
     );
   } finally {
     run.dispose();
