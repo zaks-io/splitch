@@ -6,6 +6,7 @@ import {
   type PersonalAccessToken,
   PersonalAccessTokenGrantsSchema,
   type PersonalAccessTokenStepUpInput,
+  personalAccessTokenAppOrganizationLookups,
   personalAccessTokenNeedsStepUp,
 } from "@splitch/sdk/control-plane";
 import { withAuthorizationRetry } from "./auth.js";
@@ -48,9 +49,14 @@ export async function callPersonalAccessTokenMutation(
   if (!personalAccessTokenNeedsStepUp(policy)) {
     return sdk.callOperationById(operationId, input, { authorization });
   }
-  const mapped = await organizationApps(policy, authorization, deps);
-  if ("failure" in mapped) return mapped.failure;
-  if (!personalAccessTokenNeedsStepUp({ ...policy, apps: mapped.apps })) {
+  // Discovery is advisory: the server can prove cleanup through canonical D1
+  // identity even when the CLI cannot read a needed App relationship.
+  const mapped = await organizationApps(policy, authorization, deps).catch(() => null);
+  if (
+    mapped &&
+    "apps" in mapped &&
+    !personalAccessTokenNeedsStepUp({ ...policy, apps: mapped.apps })
+  ) {
     return sdk.callOperationById(operationId, input, { authorization });
   }
   return callWithStepUp(operationId, input, authorization, deps);
@@ -65,7 +71,7 @@ async function organizationApps(
   authorization: string,
   deps: CliDeps,
 ): Promise<OrganizationAppsResult> {
-  const appIds = appOrganizationLookups(policy);
+  const appIds = personalAccessTokenAppOrganizationLookups(policy);
   const read = async (
     readAuthorization: string,
   ): Promise<{ status: number; value: OrganizationAppsResult }> => {
@@ -88,39 +94,6 @@ async function organizationApps(
   return originalCanRead
     ? (await read(authorization)).value
     : withAuthorizationRetry(deps, read, { kind: MEMBERSHIP_WIDE_READ_AUTHORIZATION });
-}
-
-function appOrganizationLookups(policy: PersonalAccessTokenStepUpInput): string[] {
-  const grants = policy.grants ?? policy.current?.grants ?? [];
-  if (!grants.some((grant) => grant.target.startsWith("app:"))) return [];
-  const expiry = policy.expiresAt === undefined ? policy.current?.expiresAt : policy.expiresAt;
-  if (
-    policy.operation !== "update" &&
-    (expiry === null || grants.some((grant) => grant.target === "all"))
-  ) {
-    return [];
-  }
-  if (organizationCandidates(policy).length === 0) return [];
-  // A bounded Organization catalog cannot establish coverage for an omitted App.
-  return [
-    ...new Set(
-      grants
-        .filter((grant) => grant.target.startsWith("app:"))
-        .map((grant) => grant.target.slice(4)),
-    ),
-  ];
-}
-
-function organizationCandidates(policy: PersonalAccessTokenStepUpInput): string[] {
-  const orgIds = new Set<string>();
-  for (const scope of policy.scopes) {
-    const org = /^org:([^:]+):(member|admin|owner)$/.exec(scope);
-    if (org?.[1]) orgIds.add(org[1]);
-  }
-  for (const grant of policy.current?.grants ?? []) {
-    if (grant.target.startsWith("org:")) orgIds.add(grant.target.slice(4));
-  }
-  return [...orgIds];
 }
 
 async function readCurrentToken(

@@ -37,7 +37,7 @@ import { controlPlaneRoute } from "./routes";
 import { makeTokenMembershipAccess, type TokenMembershipAccess } from "./token-membership";
 
 interface PersonalAccessTokenHandlerDeps {
-  repo: Pick<Repository, "personalAccessTokens">;
+  repo: Pick<Repository, "personalAccessTokens" | "identity">;
   membershipAccess: TokenMembershipAccess;
   /** SESSION_STORE: shared with the MCP Worker, which authenticates PATs from it. */
   store?: KVNamespace;

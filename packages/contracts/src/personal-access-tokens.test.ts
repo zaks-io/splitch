@@ -183,6 +183,30 @@ describe("principal capabilities Personal Access Token metadata", () => {
 });
 
 describe("personal access token request schemas", () => {
+  it.each([
+    {
+      operationId: "personal_access_tokens_create",
+      input: { body: { name: "scoped", grants: [grant("app:app_a1", "member", [])] } },
+    },
+    {
+      operationId: "personal_access_tokens_update",
+      input: { params: { tokenId: `pat_${"1".repeat(32)}` }, body: { name: "renamed" } },
+    },
+    {
+      operationId: "personal_access_tokens_rotate",
+      input: { params: { tokenId: `pat_${"1".repeat(32)}` } },
+    },
+  ])(
+    "accepts $operationId without a headers object as the released CLI sends it",
+    ({ operationId, input }) => {
+      const route = getRoute(operationId);
+      if (!route) throw new Error(`missing ${operationId} route`);
+      expect(route.input.safeParse(input).success).toBe(true);
+      const schema = z.toJSONSchema(route.input, { io: "input" });
+      expect(schema.required ?? []).not.toContain("headers");
+    },
+  );
+
   it("declares the dedicated optional approval header on create, update, and rotate", () => {
     for (const route of [
       personalAccessTokenRoutes[1],

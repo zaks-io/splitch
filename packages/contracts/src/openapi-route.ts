@@ -148,7 +148,12 @@ function runtimeInput(request: ApiRouteRequest | undefined): z.ZodTypeAny {
   if (request?.query) {
     shape.query = request.query;
   }
-  if (request?.headers) shape.headers = request.headers;
+  if (request?.headers) {
+    // Omitting the header group must accept the same requests as empty headers.
+    shape.headers = request.headers.safeParse({}).success
+      ? request.headers.optional()
+      : request.headers;
+  }
   const body = request?.runtimeBody ?? request?.body;
   if (body) {
     shape.body = body;

@@ -90,6 +90,28 @@ function scopeCoversGrant(
   });
 }
 
+/** Resolve only relationships that can change the cleanup or session-coverage decision. */
+export function personalAccessTokenAppOrganizationLookups(
+  input: PersonalAccessTokenStepUpInput,
+): string[] {
+  const { grants, expiresAt } = resultingAuthority(input);
+  const apps = grants.filter((grant) => grant.target.startsWith("app:"));
+  const ids = (candidates: readonly PersonalAccessTokenGrant[]) => [
+    ...new Set(candidates.map((grant) => grant.target.slice(4))),
+  ];
+  if (input.operation === "update" && input.current) {
+    const current = input.current;
+    const uncovered = apps.filter((grant) => !grantsCover(current.grants, [grant], input.apps));
+    if (uncovered.length > 0) {
+      return current.grants.some((grant) => grant.target.startsWith("org:")) ? ids(uncovered) : [];
+    }
+  } else if (expiresAt === null || grants.some((grant) => grant.target === "all")) {
+    return [];
+  }
+  if (!input.scopes.some((scope) => /^org:[^:]+:(member|admin|owner)$/.test(scope))) return [];
+  return ids(apps.filter((grant) => !scopeCoversGrant(input, grant)));
+}
+
 /** One policy for both the CLI prompt and the server's issuance guard. */
 export function personalAccessTokenStepUpReason(
   input: PersonalAccessTokenStepUpInput,

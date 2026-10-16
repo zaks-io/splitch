@@ -53,6 +53,7 @@ interface RunOptions {
   catalogReadRebind?: boolean;
   catalogFailure?: boolean;
   catalogTruncated?: boolean;
+  appFailures?: Record<string, 403 | 404 | "transport">;
 }
 
 type CapturedRequest = Pick<Request, "url" | "method" | "headers" | "text">;
@@ -116,6 +117,14 @@ function catalogResponse(options: RunOptions): Response {
 }
 
 function appResponse(options: RunOptions, path: string): Response {
+  const failure = options.appFailures?.[path.split("/").at(-1) ?? ""];
+  if (failure === "transport") throw new Error(`${STEP_UP} ${SECRET}`);
+  if (failure) {
+    return Response.json(
+      { code: "FORBIDDEN", message: "App is no longer readable", details: {} },
+      { status: failure },
+    );
+  }
   if (options.catalogFailure) return catalogResponse(options);
   return Response.json({
     id: path.split("/").at(-1),

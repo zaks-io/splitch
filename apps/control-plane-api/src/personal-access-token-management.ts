@@ -3,16 +3,19 @@ import {
   PERSONAL_ACCESS_TOKEN_DEFAULT_TTL_DAYS,
   type PersonalAccessTokenGrant,
   PersonalAccessTokenGrantsSchema,
+  type PersonalAccessTokenStepUpInput,
+  personalAccessTokenAppOrganizationLookups,
   personalAccessTokenStepUpReason,
   type UserRole,
   userRoleCovers,
 } from "@splitch/contracts";
-import type { PersonalAccessTokenPatch, PersonalAccessTokenRow } from "@splitch/db";
+import type { PersonalAccessTokenPatch, PersonalAccessTokenRow, Repository } from "@splitch/db";
 import { type Principal, renderError } from "@splitch/worker-runtime";
 import type { TokenMembershipAccess } from "./token-membership";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 interface PersonalAccessTokenManagementDeps {
+  repo: Pick<Repository, "identity">;
   membershipAccess: TokenMembershipAccess;
   nowMs?: () => number;
 }
@@ -29,7 +32,7 @@ export async function authorizeIssuance(
     operation,
     scopes: principal.scopes,
     authorization: principal.authorization,
-    apps: memberships.apps,
+    apps: memberships.apps.map(({ id, organizationId }) => ({ id, organizationId })),
     current: current
       ? {
           grants: PersonalAccessTokenGrantsSchema.parse(JSON.parse(current.grants)),
@@ -39,6 +42,7 @@ export async function authorizeIssuance(
     grants: body.grants as PersonalAccessTokenGrant[] | undefined,
     expiresAt: body.expiresAt as string | null | undefined,
   };
+  input.apps.push(...(await canonicalCleanupApps(deps, input)));
   const cleanup =
     operation === "update" && personalAccessTokenStepUpReason({ ...input, scopes: [] }) === null;
   if (!cleanup) {
@@ -60,6 +64,22 @@ export async function authorizeIssuance(
         }
       : undefined,
   };
+}
+
+async function canonicalCleanupApps(
+  deps: PersonalAccessTokenManagementDeps,
+  input: PersonalAccessTokenStepUpInput,
+): Promise<{ id: string; organizationId: string }[]> {
+  if (input.operation !== "update") return [];
+  // Cleanup depends on stored authority and canonical identity, even when the
+  // caller can no longer discover an App through its live memberships.
+  const appIds = personalAccessTokenAppOrganizationLookups({ ...input, scopes: [], apps: [] });
+  const apps: { id: string; organizationId: string }[] = [];
+  for (const appId of appIds) {
+    const app = await deps.repo.identity.getApp(appId);
+    if (app) apps.push({ id: app.id, organizationId: app.organizationId });
+  }
+  return apps;
 }
 
 export async function updateProblems(
