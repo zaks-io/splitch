@@ -42,3 +42,46 @@ describe.each(handlers)("conditional taint in %s", (_handler, wrap) => {
       expect(reportedFaultRethrows(parse(wrap(fail(value))))).toEqual([1]);
   });
 });
+
+describe.each(handlers)("operator value taint in %s", (_handler, wrap) => {
+  it.each([
+    ["AND OR fixed code", '(err instanceof TypeError && "worker_type_failed") || "worker_failed"'],
+    ["AND fixed result", 'err instanceof X && "a"'],
+    ["negated predicate", '!err ? "a" : "b"'],
+    ["typeof predicate", 'typeof err === "string" ? "a" : "b"'],
+    ["nested AND OR true branch", 'flag ? ((err instanceof X && "a") || "b") : "c"'],
+    ["nested AND OR false branch", 'flag ? "c" : ((err instanceof X && "a") || "b")'],
+    ["AND raw left fixed result", 'err.message && "a"'],
+    ["OR fixed conditional", '(err instanceof X ? "" : "a") || "b"'],
+    ["nullish fixed conditional", '(err instanceof X ? undefined : "a") ?? "b"'],
+    ["instanceof result", "err instanceof X"],
+    ["in result", '"key" in err'],
+    ["strict equality result", "err === value"],
+    ["strict inequality result", "err !== value"],
+    ["equality result", "err == value"],
+    ["inequality result", "err != value"],
+    ["less than result", "err < value"],
+    ["less than or equal result", "err <= value"],
+    ["greater than result", "err > value"],
+    ["greater than or equal result", "err >= value"],
+    ["negation result", "!err"],
+    ["typeof result", "typeof err"],
+  ])("allows fixed operator output: %s", (_pattern, value) => {
+    for (const [_failure, fail] of failures)
+      expect(reportedFaultRethrows(parse(wrap(fail(value))))).toEqual([]);
+  });
+
+  it.each([
+    ["OR raw left", 'err.message || "fallback"'],
+    ["AND raw right", '"x" && err.message'],
+    ["nullish raw left", 'err.message ?? "x"'],
+    ["nested AND OR raw", '(cond && err.message) || "y"'],
+    ["nested ternary String", 'cond ? "x" : (other ? String(err) : "y")'],
+    ["OR raw right", '"" || err.message'],
+    ["nullish raw right", "value ?? String(err)"],
+    ["AND nested raw", 'cond && (other ? err.message : "x")'],
+  ])("rejects data-bearing operator output: %s", (_pattern, value) => {
+    for (const [_failure, fail] of failures)
+      expect(reportedFaultRethrows(parse(wrap(fail(value))))).toEqual([1]);
+  });
+});

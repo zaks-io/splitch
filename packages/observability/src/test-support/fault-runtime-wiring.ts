@@ -2,10 +2,23 @@ import ts from "typescript";
 import { addBindingNames, propertyName, rejectionBindings } from "./fault-catch-bindings";
 import { faultReportCalls } from "./fault-report-calls";
 
+const fixedResultOperators = new Set([
+  ts.SyntaxKind.InstanceOfKeyword,
+  ts.SyntaxKind.InKeyword,
+  ts.SyntaxKind.EqualsEqualsEqualsToken,
+  ts.SyntaxKind.ExclamationEqualsEqualsToken,
+  ts.SyntaxKind.EqualsEqualsToken,
+  ts.SyntaxKind.ExclamationEqualsToken,
+  ts.SyntaxKind.LessThanToken,
+  ts.SyntaxKind.LessThanEqualsToken,
+  ts.SyntaxKind.GreaterThanToken,
+  ts.SyntaxKind.GreaterThanEqualsToken,
+]);
+
 /**
  * Report-then-rethrow tripwire for catch/rejection callbacks: throw and Promise.reject,
- * caught aliases/properties, derived Error messages and cause options. Fresh static or
- * fault-code Errors remain allowed. Deliberate evasion is outside this guard's scope.
+ * caught aliases/properties, operator outputs, derived Error messages and cause options.
+ * Fresh static or fault-code Errors remain allowed. Deliberate evasion is outside scope.
  */
 export function reportedFaultRethrows(source: ts.SourceFile): number[] {
   const violations = new Set<number>();
@@ -138,13 +151,30 @@ function isCaught(node: ts.Node, caught: Set<string>): boolean {
   if (ts.isPropertyAccessExpression(node) || ts.isElementAccessExpression(node))
     return isCaught(node.expression, caught);
   if (ts.isPropertyAssignment(node)) return isCaught(node.initializer, caught);
-  if (ts.isConditionalExpression(node))
-    return isCaught(node.whenTrue, caught) || isCaught(node.whenFalse, caught);
-  let tainted = false;
+  return emittedChildren(node).some((child) => isCaught(child, caught));
+}
+
+/** Value taint follows operator results, not the data used to choose those results. */
+function emittedChildren(node: ts.Node): ts.Node[] {
+  if (ts.isConditionalExpression(node)) return [node.whenTrue, node.whenFalse];
+  if (ts.isTypeOfExpression(node)) return [];
+  if (ts.isPrefixUnaryExpression(node) && node.operator === ts.SyntaxKind.ExclamationToken)
+    return [];
+  if (ts.isBinaryExpression(node)) return binaryValues(node);
+  const children: ts.Node[] = [];
   ts.forEachChild(node, (child) => {
-    if (isCaught(child, caught)) tainted = true;
+    children.push(child);
   });
-  return tainted;
+  return children;
+}
+
+function binaryValues(node: ts.BinaryExpression): ts.Node[] {
+  const operator = node.operatorToken.kind;
+  if (fixedResultOperators.has(operator)) return [];
+  // The left side of && can reach the result only as a falsy value, which carries no data.
+  if (operator === ts.SyntaxKind.AmpersandAmpersandToken) return [node.right];
+  // Both operands can contribute data to ||, ?? and the remaining value operators.
+  return [node.left, node.right];
 }
 
 function isPromiseReject(node: ts.Node): node is ts.CallExpression {
