@@ -16,8 +16,8 @@ export function OverviewCalmState({ scopeHref }: { scopeHref: string }) {
       }
       description={
         <span>
-          No Experiment is waiting on a decision, nothing is failing, and no Flag Configuration
-          changed recently. Start a Flag, or run an Experiment on one you already have.
+          No Experiment is waiting on a decision, nothing is failing, and no Flag changes were
+          recorded recently. Start a Flag, or run an Experiment on one you already have.
         </span>
       }
       secondaryAction={
