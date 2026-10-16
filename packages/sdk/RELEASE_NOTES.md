@@ -15,11 +15,20 @@ session-only routes.
 Token it also returns the token's id, name, configured grants, expiry, and effective authority per
 permission.
 
-Breaking: the Experiment decision and ship-recommendation helpers (for example
-`computeShipRecommendation`, `evaluateExperimentDecisionGate`, `produceExperimentResults`, and
-`classifyMetricEffect`), the Flag change diff helpers such as `parseFlagChangeDiff`, and
-`CREDENTIAL_CACHE_BACKFILL_CHECKPOINT_VERSION` are no longer exported. Splitch computes these
-server-side, so they are no longer part of the client contract.
+Breaking: computation that Splitch now performs server-side is no longer exported from
+`@splitch/sdk/control-plane`. Imports of these names fail after upgrading:
+
+- Experiment decisions and results: `computeShipRecommendation`, `evaluateExperimentDecisionGate`,
+  `produceExperimentResults`, and the other decision-gate and ship-recommendation helpers. Read
+  decisions from the Experiment results responses.
+- Experiment pre-registration: `resolvePreRegistration`, `preRegistrationToIntent`,
+  `PreRegistrationIssue`, and `nextAfterExperimentStart`. Experiment responses carry the resolved
+  `preRegistration`, and mutation responses carry `next`.
+- Flag lifecycle and staleness: `detectStaleReasons`, `uniformServingMode`, `daysBetween`,
+  `EnvironmentConfigState`, and `StaleFlagSignals`.
+- Flag change diffs: `parseFlagChangeDiff`, `renderFlagChangeUnifiedDiff`, and
+  `UNAVAILABLE_FLAG_CHANGE_DIFF`.
+- `CREDENTIAL_CACHE_BACKFILL_CHECKPOINT_VERSION`, an internal migration constant.
 
 ## Sentry
 
