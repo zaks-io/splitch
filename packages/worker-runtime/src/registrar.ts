@@ -122,22 +122,17 @@ async function runGuard<Input extends z.ZodTypeAny, Output extends z.ZodTypeAny>
     if (!principalResult.ok) {
       return fail(principalResult.error);
     }
-    // Step 4b: select the Personal Access Token's authority for this route's permission.
+    // Charge the authenticated actor before permission refusals as well as scope refusals.
+    const rateLimited = await applyRateLimit(contract, deps, request, principalResult.principal);
+    if (rateLimited) return fail(rateLimited);
+
     const narrowed = narrowPersonalAccessTokenForRoute(
       contract,
       principalResult.principal,
       c.req.param(),
     );
-    if (!narrowed.ok) {
-      return fail(narrowed.error);
-    }
+    if (!narrowed.ok) return fail(narrowed.error);
     const principal = narrowed.principal;
-
-    // Step 5: rate-limit class (before scopes; fails closed on missing/throwing binding).
-    const rateLimited = await applyRateLimit(contract, deps, request, principal);
-    if (rateLimited) {
-      return fail(rateLimited);
-    }
 
     // Step 6: resolve authenticated path selectors, then enforce scopes against
     // the canonical params. A resolver must reject a canonical App co-scope

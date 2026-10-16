@@ -39,15 +39,16 @@ The three doors are detailed in the `splitch://auth` MCP resource. After auth, `
 
 ### Headless machines and many sandboxes: Personal Access Tokens
 
-When the MCP client runs where browser sign-in cannot complete (a remote server, a sandbox), create a
-Personal Access Token once from any machine where you are logged in. The secret goes straight into a
+To run the CLI or an MCP client where browser sign-in cannot complete (a remote server, a sandbox),
+create a Personal Access Token once from a machine where you have a CLI login session. Unset
+`SPLITCH_TOKEN` on that machine before creating or managing grants. The secret goes straight into a
 file and is never printed:
 
 ```bash
 splitch tokens create --name sandboxes \
   --grant app:<app id>:admin:write \
   --expires-at never \
-  --output-file ~/.config/splitch/mcp.env --append
+  --output-file ~/.config/splitch/token.env --append
 ```
 
 This grants reads and configuration changes on that App. Add `delete`, `credentials`, `members`, or
@@ -55,12 +56,26 @@ This grants reads and configuration changes on that App. Add `delete`, `credenti
 Use `read` for a read-only grant. Unknown and duplicate permissions are refused; `read-write` must be
 replaced with an explicit permission list. Organization creation needs an `all` grant with `write`.
 
-Inject `SPLITCH_MCP_TOKEN` into each machine's environment, and point the MCP client at it, for
-example `claude mcp add --transport http splitch https://mcp.splitch.dev/mcp --header
-"Authorization: Bearer $SPLITCH_MCP_TOKEN"`. Narrow or widen it later with `splitch tokens update`.
-Grants apply on the next call, with no secret to redistribute. `splitch tokens rotate` and
-`splitch tokens revoke` handle compromise. The token's effective authority is visible to the agent
-through `splitch://capabilities`.
+The file uses `SPLITCH_TOKEN` by default. Inject that variable into each machine's environment using
+your secret manager or a private env file; never pass the secret as a command argument. The CLI
+needs no login file:
+
+```bash
+splitch context --json
+splitch flags list --app <app id> --json
+```
+
+`context` shows token mode, the token's name, id, grants, expiry, and effective authority. While
+`SPLITCH_TOKEN` is set, it is the only credential. Empty or malformed values fail before any request;
+`login` and `logout` refuse. A revoked, expired, or rotated-out secret fails with `CLI_TOKEN_INVALID`.
+Permission and membership refusals stay authorization errors.
+
+For MCP, configure the client to read `SPLITCH_TOKEN` from its environment and send it in the
+`Authorization: Bearer` header without expanding the secret into process arguments. Narrow or widen
+its grants later with `splitch tokens update` from a CLI login session. Grants apply on the next
+call, with no secret to redistribute. `splitch tokens rotate` and `splitch tokens revoke` handle
+compromise. A PAT can list and revoke its owner's tokens, but cannot create, update, or rotate one.
+The agent can also inspect effective authority through `splitch://capabilities`.
 
 > **Anonymous door is a demo.** It is the fastest self-serve start (no human approval needed) but the
 > Org carries `demo_expires_at = now + 24h`. To keep your work, claim it (verify an email) before it

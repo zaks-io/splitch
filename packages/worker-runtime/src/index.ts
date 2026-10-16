@@ -22,6 +22,7 @@ export type {
 export {
   makeMcpDelegationAuthResolver,
   type PersonalAccessTokenResolver,
+  resolvePersonalAccessTokenPrincipal,
 } from "./mcp-delegation-auth";
 export type { McpDelegationReplayDurableObjectNamespace } from "./mcp-delegation-replay";
 export {
@@ -30,6 +31,7 @@ export {
 } from "./mcp-delegation-replay";
 export type { RawInput } from "./parse-input";
 export { MALFORMED_BODY } from "./parse-input";
+export { verifyPersonalAccessTokenSecret } from "./personal-access-token";
 export type { AuthResolver, AuthResult, Principal, PrincipalMemberships } from "./principal";
 export type { RateLimitDecision, RateLimiter } from "./rate-limit";
 export type { HandlerArgs, Registrar, RouteHandler } from "./registrar";

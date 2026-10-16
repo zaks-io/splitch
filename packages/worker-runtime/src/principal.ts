@@ -4,6 +4,7 @@ import type {
   AuthKind,
   ErrorResponse,
   PersonalAccessTokenAuthority,
+  PersonalAccessTokenGrant,
   UserRole,
 } from "@splitch/contracts";
 
@@ -56,6 +57,7 @@ export interface Principal {
   personalAccessToken?: {
     id: string;
     permissions: PersonalAccessTokenAuthority["permissions"];
+    metadata?: { name: string; grants: PersonalAccessTokenGrant[]; expiresAt: string | null };
   };
   /**
    * Which door minted this credential, when the auth kind carries one. `null`

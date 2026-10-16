@@ -2,10 +2,11 @@ import {
   type McpDelegationActor,
   type McpDelegationReplayGuard,
   type PersonalAccessTokenAuthority,
+  type PersonalAccessTokenGrant,
   type PublicSurface,
   parseMcpDelegation,
 } from "@splitch/contracts";
-import type { AuthResolver, Principal } from "./principal";
+import type { AuthResolver, AuthResult, Principal } from "./principal";
 
 const ORG_SCOPE = /^org:([^:]+):(owner|admin|member)$/;
 const APP_SCOPE = /^app:([^:]+):(owner|admin|member)$/;
@@ -27,11 +28,7 @@ export function makeMcpDelegationAuthResolver(options: {
     const actor = await parseMcpDelegation({ request, ...options });
     if (!actor) return { ok: false, reason: "UNAUTHORIZED" };
     if (actor.personalAccessTokenId && actor.personalAccessTokenHash) {
-      return personalAccessTokenPrincipal(
-        actor,
-        { tokenId: actor.personalAccessTokenId, tokenHash: actor.personalAccessTokenHash },
-        options.resolvePersonalAccessToken,
-      );
+      return resolvePersonalAccessTokenPrincipal(actor, options.resolvePersonalAccessToken);
     }
     return { ok: true, principal: await principalFromActor(actor, options.resolveLiveScopes) };
   };
@@ -46,39 +43,16 @@ export type PersonalAccessTokenResolver = (token: {
   subject: string;
   tokenId: string;
   tokenHash: string;
-}) => Promise<PersonalAccessTokenAuthority | null>;
-
-async function personalAccessTokenPrincipal(
-  actor: McpDelegationActor,
-  token: { tokenId: string; tokenHash: string },
-  resolve: PersonalAccessTokenResolver | undefined,
-): Promise<Awaited<ReturnType<AuthResolver>>> {
-  if (!resolve) {
-    throw new Error("worker-runtime: Personal Access Token resolver is required");
-  }
-  const authority = await resolve({ subject: actor.subject, ...token });
-  if (!authority) {
-    return {
-      ok: false,
-      reason: "CREDENTIAL_REVOKED",
-      error: {
-        code: "CREDENTIAL_REVOKED",
-        message: "personal access token is revoked, rotated, expired, or unknown",
-        details: {},
-      },
-    };
-  }
-  return {
-    ok: true,
-    principal: {
-      ...principalFromScopes(actor, authority.scopes),
-      personalAccessToken: {
-        id: token.tokenId,
-        permissions: authority.permissions,
-      },
-    },
-  };
-}
+}) => Promise<
+  | (PersonalAccessTokenAuthority & {
+      token?: {
+        name: string;
+        grants: PersonalAccessTokenGrant[];
+        expiresAt: string | null;
+      };
+    })
+  | null
+>;
 
 async function principalFromActor(
   actor: McpDelegationActor,
@@ -132,4 +106,48 @@ function idsInScopes(scopes: readonly string[], pattern: RegExp): Set<string> {
 
 function soleId(ids: Set<string>): string | null {
   return ids.size === 1 ? ([...ids][0] as string) : null;
+}
+
+/** The shared final authority step for public PAT bearers and signed MCP PAT delegations. */
+export async function resolvePersonalAccessTokenPrincipal(
+  actor: McpDelegationActor,
+  resolve: PersonalAccessTokenResolver | undefined,
+): Promise<AuthResult> {
+  if (!resolve) throw new Error("worker-runtime: Personal Access Token resolver is required");
+  if (!actor.personalAccessTokenId || !actor.personalAccessTokenHash) {
+    throw new Error("worker-runtime: Personal Access Token identity is required");
+  }
+  const authority = await resolve({
+    subject: actor.subject,
+    tokenId: actor.personalAccessTokenId,
+    tokenHash: actor.personalAccessTokenHash,
+  });
+  if (!authority) {
+    return {
+      ok: false,
+      reason: "CREDENTIAL_REVOKED",
+      error: {
+        code: "CREDENTIAL_REVOKED",
+        message: "personal access token is revoked, rotated, expired, or unknown",
+        details: {},
+      },
+    };
+  }
+  return {
+    ok: true,
+    principal: {
+      kind: "control-plane-token",
+      id: actor.subject,
+      scopes: authority.scopes,
+      ...scopeBinding(authority.scopes),
+      environmentId: null,
+      authDoor: "personal_access_token",
+      liveMembership: true,
+      personalAccessToken: {
+        id: actor.personalAccessTokenId,
+        permissions: authority.permissions,
+        ...(authority.token ? { metadata: authority.token } : {}),
+      },
+    },
+  };
 }

@@ -41,8 +41,10 @@ import { handleLiveUpdateTestControl } from "./internal-routes";
 import { makeCachedJwksVerifier } from "./jwks-verify";
 import { PanelDelegationReplayDurableObject } from "./panel-delegation-replay-do";
 import { repositoryForPanelRequest } from "./panel-request-repository";
-import { runControlPlaneScheduled } from "./scheduled";
+import { withPersonalAccessTokenBearer } from "./personal-access-token-auth";
 import { makePersonalAccessTokenAuthorityResolver } from "./personal-access-token-store";
+import { rateLimiterForTarget } from "./rate-limit";
+import { runControlPlaneScheduled } from "./scheduled";
 import { makeSessionStore } from "./session-store";
 import {
   handleSignedControlPanelRequest,
@@ -189,6 +191,20 @@ async function handleRequest(
     },
     controlPanelAuthOptions(env, repo, panelProtocol),
   );
+  const resolvePersonalAccessToken = makePersonalAccessTokenAuthorityResolver({
+    repo,
+    membershipAccess,
+    nowMs: Date.now,
+  });
+  const publicAuthResolver = withPersonalAccessTokenBearer({
+    fallback: panelAuthResolver,
+    store: env.SESSION_STORE,
+    resolve: resolvePersonalAccessToken,
+    rateLimiter: rateLimiterForTarget(
+      env.SPLITCH_PLATFORM_TARGET,
+      env.CONTROL_PLANE_ACTOR_RATE_LIMITER,
+    ),
+  });
   const rawAuthResolver =
     typeof authMode === "object"
       ? delegatedAuthResolver(authMode.identity)
@@ -198,18 +214,16 @@ async function handleRequest(
               surface: "control-plane-api",
               secret: requiredMcpDelegationSecret(env.MCP_CONTROL_PLANE_DELEGATION_SECRET),
               resolveLiveScopes: (userId) => resolveMcpMembershipScopes(membershipAccess, userId),
-              resolvePersonalAccessToken: makePersonalAccessTokenAuthorityResolver({
-                repo,
-                membershipAccess,
-                nowMs: Date.now,
-              }),
+              resolvePersonalAccessToken,
               replayGuard: makeDurableMcpDelegationReplayGuard(
                 requiredMcpReplayBinding(env.MCP_DELEGATION_REPLAY),
               ),
             }),
             membershipAccess,
           )
-        : panelAuthResolver;
+        : authMode === "none"
+          ? publicAuthResolver
+          : panelAuthResolver;
   const authResolver: typeof rawAuthResolver = (authRequest) =>
     createPerformanceSpanRecorder(env).record(
       { name: "Control Plane authorization", op: "auth" },

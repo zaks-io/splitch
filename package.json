@@ -55,6 +55,7 @@
     "smoke:ci": "node -e \"console.log('smoke:ci is deployment-workflow-only; run pnpm shared-preview:smoke against a deployed preview.')\"",
     "smoke:local": "node scripts/smoke-workers-local.mjs",
     "smoke:local:api": "node scripts/smoke-workers-local.mjs api",
+    "smoke:local:cli": "node scripts/smoke-cli-pat-local.mjs",
     "spec:lint": "node scripts/spec-lint.mjs",
     "worktree:setup": "bash scripts/setup-worktree.sh",
     "stats:audit": "VITEST_MAX_WORKERS=2 turbo run stats:audit",

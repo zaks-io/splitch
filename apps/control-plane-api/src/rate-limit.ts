@@ -19,7 +19,9 @@ export function rateLimiterForTarget(
   target: string | undefined,
   actorRateLimiter: RateLimit | undefined,
 ): RateLimiter {
-  if (target === "local" || target === "shared-preview") return allowRuntimeRateLimiter;
+  if (!actorRateLimiter && (target === "local" || target === "shared-preview")) {
+    return allowRuntimeRateLimiter;
+  }
 
   return async ({ class: rateLimitClass, principal }) => {
     if (SURFACE_RATE_LIMIT_CLASSES.has(rateLimitClass)) {
