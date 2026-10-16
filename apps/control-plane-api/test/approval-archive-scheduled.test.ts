@@ -24,7 +24,7 @@ afterEach(async () => {
 });
 
 describe("Approval Request scheduled archival", () => {
-  it("logs the complete archival failure before waitUntil rejects", async () => {
+  it("logs candidate identities and withholds nested messages before waitUntil rejects", async () => {
     for (const id of REQUEST_IDS) {
       await seedApprovalArchiveFixture(h.d1, {
         id,
@@ -57,7 +57,8 @@ describe("Approval Request scheduled archival", () => {
     for (const id of REQUEST_IDS) {
       expect(row?.fault).toEqual(expect.stringContaining(id));
     }
-    expect(row?.fault).toEqual(expect.stringContaining("read token is unavailable"));
+    expect(row?.fault).toEqual(expect.stringContaining("Error: [message withheld]"));
+    expect(row?.fault).not.toEqual(expect.stringContaining("read token is unavailable"));
   });
 });
 

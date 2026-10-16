@@ -8,7 +8,7 @@ const KEY = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=";
 const NOW = new Date("2026-08-25T12:00:00.000Z");
 const DELIVERY_ID = "00000000-0000-4000-8000-000000000001";
 
-describe("Cloudflare configuration push dispatch", () => {
+describe("Cloudflare dispatch fault detail", () => {
   it("preserves SQL and the D1 cause from aggregated delivery update failures", async () => {
     const { repo } = await fixture();
     const statement = {
@@ -21,7 +21,7 @@ describe("Cloudflare configuration push dispatch", () => {
     // Substitute only the failing persistence boundary, retaining Drizzle's real
     // query wrapping and the dispatcher's own AggregateError construction.
     repo.cloudflare.finishDelivery = async () => {
-      await failingRepo.identity.completeAppCreate(DELIVERY_ID, "dispatch-bound-canary");
+      await failingRepo.identity.completeAppCreate("dispatch-id-canary", "dispatch-bound-canary");
     };
     const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
     try {
@@ -37,14 +37,22 @@ describe("Cloudflare configuration push dispatch", () => {
       expect(fault).toContain("Cloudflare delivery lease updates failed");
       expect(fault).toContain('update "apps" set "create_response" = ?');
       expect(fault).toContain("D1_ERROR: lease update failed");
-      expect(fault).not.toContain(DELIVERY_ID);
+      expect(fault).not.toContain("dispatch-id-canary");
       expect(fault).not.toContain("dispatch-bound-canary");
       expect(fault).not.toContain("params:");
+      expect(consoleError).toHaveBeenCalled();
+      for (const call of consoleError.mock.calls) {
+        expect(JSON.stringify(call)).not.toContain("dispatch-id-canary");
+        expect(JSON.stringify(call)).not.toContain("dispatch-bound-canary");
+        expect(JSON.stringify(call)).not.toContain("params:");
+      }
     } finally {
       consoleError.mockRestore();
     }
   });
+});
 
+describe("Cloudflare configuration push dispatch", () => {
   it("builds and signs the exact snapshot body before recording the applied version", async () => {
     const { repo, finishes } = await fixture();
     const fetcher = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {

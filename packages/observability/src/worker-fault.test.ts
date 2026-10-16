@@ -85,7 +85,8 @@ describe("Worker fault reports", () => {
       expect(context.extra.fault).toContain(query);
       expect(context.extra.fault).toContain("app create failed");
       expect(context.extra.fault).toContain("D1_ERROR: internal error");
-      expect(context.extra.fault).toContain("database connection interrupted");
+      expect(context.extra.fault).toContain("Error: [message withheld]");
+      expect(context.extra.fault).not.toContain("database connection interrupted");
       expect(context.extra.fault).toContain(d1Cause.stack);
       expect(context.extra.fault).toContain("worker-fault.test.ts");
       for (const canary of [...params, "bound-canary-line-one", "bound-canary-line-two"]) {

@@ -6,14 +6,15 @@ import {
   UserRoleSchema,
 } from "@splitch/contracts";
 import type { Repository } from "@splitch/db";
+import { serializeFault } from "@splitch/observability/worker";
 import type { HandlerArgs } from "@splitch/worker-runtime";
 import { renderError } from "@splitch/worker-runtime";
 import { objectBody, pathParam } from "./handler-input";
+import { membershipConflict } from "./membership-conflict";
 import { ORG_ADMIN_ROLES, ORG_MEMBER_ROLES, ORG_OWNER_ROLES, requireOrgRole } from "./org-authz";
 import { makeCreateOrganizationHandler } from "./org-create-handler";
 import { makeListOrganizationsHandler } from "./org-list-handler";
 import { organizationResponse } from "./org-response";
-import { membershipConflict } from "./membership-conflict";
 
 export interface MemberProfile {
   email: string;
@@ -311,11 +312,15 @@ function memberProfileUnavailable(requestId: string): Response {
 /**
  * The message reaches the Members screen as rendered copy, so it names no one:
  * a roster that deliberately shows emails must not leak another person's raw
- * splitch User ID. The ID and the cause stay whole in the log, correlated by
+ * splitch User ID. The ID and safe fault diagnostics stay in the log, correlated by
  * requestId, which is where a fault of this shape is actually diagnosed.
  */
 function memberProfileReadFailed(userId: string, requestId: string, cause: unknown): Response {
-  console.error("control-plane: member profile lookup failed", { requestId, userId, cause });
+  console.error("control-plane: member profile lookup failed", {
+    requestId,
+    userId,
+    cause: serializeFault(cause),
+  });
   return renderError(
     {
       code: "SERVICE_UNAVAILABLE",

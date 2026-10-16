@@ -82,7 +82,7 @@ export async function runApprovalRequestArchival(input: {
         ({ requestId, error }) =>
           new Error(`Approval Request ${requestId} archival failed`, { cause: error }),
       ),
-      `Approval Request archival failed for ${failures.length} candidate(s)`,
+      `Approval Request archival failed for ${failures.length} candidate(s): ${failures.map(({ requestId }) => requestId).join(", ")}`,
     );
   }
   return archived;

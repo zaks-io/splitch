@@ -13,7 +13,34 @@ const metricQueryConfig = [
   },
 ];
 
-describe("runSnapshotRow", () => {
+describe("Run Snapshot fault detail", () => {
+  it("withholds native parser excerpts from malformed variantSet faults", async () => {
+    const onFault = vi.fn();
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      expect(
+        await shipCommittedRunSnapshot(
+          { onFault },
+          run({
+            variantSet: "varcanary-that-is-not-json",
+          }),
+          scope,
+          [],
+          "now",
+        ),
+      ).toBe(false);
+      expect(onFault).toHaveBeenCalledOnce();
+      const [detail, cause] = onFault.mock.calls[0] ?? [];
+      expect(cause.cause).toBeInstanceOf(SyntaxError);
+      expect(cause.cause.message).toContain("varcanary");
+      expect(detail.fault).toContain("Run variantSet is unparseable");
+      expect(detail.fault).toContain("SyntaxError: [message withheld]");
+      expect(JSON.stringify([detail, consoleError.mock.calls])).not.toContain("varcanary");
+    } finally {
+      consoleError.mockRestore();
+    }
+  });
+
   it("preserves the nested ship failure in the fault sink", async () => {
     const onFault = vi.fn();
     const underlying = new Error("snapshot connection interrupted");
@@ -32,9 +59,12 @@ describe("runSnapshotRow", () => {
     expect(shipped).toBe(false);
     const fault = onFault.mock.calls[0]?.[0]?.fault;
     expect(fault).toContain("Tinybird Run Snapshot append failed");
-    expect(fault).toContain(underlying.stack);
+    expect(fault).toContain("Error: [message withheld]");
+    expect(fault).not.toContain(underlying.message);
   });
+});
 
+describe("runSnapshotRow", () => {
   it("maps frozen Run values and resolves the Control Variant name", () => {
     expect(runSnapshotRow(run(), scope, metricQueryConfig, "2026-08-03T12:00:00.100Z")).toEqual({
       app_id: "app_1",

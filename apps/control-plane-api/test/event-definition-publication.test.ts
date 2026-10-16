@@ -89,7 +89,7 @@ describe("Event Definition publication", () => {
     expect(error).toHaveBeenCalledWith("EventDefinitionStateWriteError", {
       appId,
       eventDefinitionId: DEFINITION_ID,
-      cause: stateFailure,
+      cause: expect.stringContaining(stateFailure.message),
     });
     expect(await store.get(eventDefinitionConfigKey(appId, EVENT_NAME))).toBeNull();
     await expectUnpublished();
@@ -118,7 +118,7 @@ describe("Event Definition publication", () => {
     expect(error).toHaveBeenCalledWith("EventDefinitionConfigWriteError", {
       appId,
       eventDefinitionId: DEFINITION_ID,
-      cause: configFailure,
+      cause: expect.stringContaining(configFailure.message),
     });
     expect(await store.get(eventDefinitionConfigKey(appId, EVENT_NAME))).toBeNull();
     const published = await readDefinition();

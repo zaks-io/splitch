@@ -16,7 +16,7 @@ describe("reduceRequestError is total", () => {
     reduceRequestError({ requestId: "req-1", code: "INTERNAL_SERVER_ERROR", status: 500, cause });
 
   it("survives a null-prototype throw, which String() cannot convert", () => {
-    expect(fault(Object.create(null)).fault).toContain("unrepresentable");
+    expect(fault(Object.create(null)).fault).toBe("[fault serialization failed: TypeError]");
   });
 
   it("survives a throw whose toString itself throws", () => {
@@ -25,10 +25,10 @@ describe("reduceRequestError is total", () => {
         throw new Error("nope");
       },
     };
-    expect(fault(hostile).fault).toContain("unrepresentable");
+    expect(fault(hostile).fault).toBe("[fault serialization failed: Error]");
   });
 
-  it("keeps an Error's identity when only its stack getter throws", () => {
+  it("returns a safe diagnostic when a stack getter throws", () => {
     const hostile = new Error("boom");
     Object.defineProperty(hostile, "stack", {
       get() {
@@ -36,9 +36,7 @@ describe("reduceRequestError is total", () => {
       },
     });
 
-    // Losing the frames is survivable; reporting a real Error as an anonymous
-    // unrepresentable value would throw away the one thing still readable.
-    expect(fault(hostile).fault).toBe("Error: boom");
+    expect(fault(hostile).fault).toBe("[fault serialization failed: Error]");
   });
 
   it("survives an Error whose name getter also throws", () => {
@@ -50,7 +48,7 @@ describe("reduceRequestError is total", () => {
         },
       });
     }
-    expect(fault(hostile).fault).toContain("unrepresentable");
+    expect(fault(hostile).fault).toBe("[fault serialization failed: Error]");
   });
 });
 

@@ -1,11 +1,12 @@
 import type { Repository } from "@splitch/db";
+import { serializeFault } from "@splitch/observability/worker";
 import {
   configurationCallbackDestinationError,
   postConfigurationCallback,
 } from "./configuration-callback-transport";
 import { decryptConvexSecret, signConvexWebhook } from "./convex-secret";
 import { validateIntegrationSecretKey } from "./integration-secret";
-import { describeCause, retryDelayMs, type WebhookPost } from "./webhook-transport";
+import { retryDelayMs, type WebhookPost } from "./webhook-transport";
 
 const LEASE_MS = 30_000;
 const BATCH_SIZE = 25;
@@ -164,7 +165,7 @@ async function deliverOne(
     console.error("convex_webhook_delivery_transport_failed", {
       deliveryId: delivery.deliveryId,
       callbackUrl: delivery.callbackUrl,
-      cause: describeCause(result.cause),
+      cause: serializeFault(result.cause),
     });
     await finishFailure(deps, delivery, leaseOwner, now, true, {
       kind: "transport",
