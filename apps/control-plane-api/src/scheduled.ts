@@ -1,6 +1,7 @@
 import { createRepository } from "@splitch/db";
 import {
   createWorkerFaultReporter,
+  serializeFault,
   workerEmitter,
   workerObservabilityWithWaitUntil,
 } from "@splitch/observability/worker";
@@ -73,7 +74,7 @@ async function runCloudflarePushDispatch(
         service,
         job: "cloudflare-push-dispatch",
         cron: event.cron,
-        fault: error instanceof Error ? (error.stack ?? error.message) : String(error),
+        fault: serializeFault(error),
       },
     );
     throw error;
@@ -105,7 +106,7 @@ async function runSentryWebhookDispatch(
         service,
         job: "sentry-webhook-dispatch",
         cron: event.cron,
-        fault: error instanceof Error ? (error.stack ?? error.message) : String(error),
+        fault: serializeFault(error),
       },
     );
     throw error;
@@ -207,7 +208,7 @@ async function runMetricEventClaimRetentionAdoption(
         service,
         job: "metric-event-claim-retention-adoption",
         cron: event.cron,
-        fault: error instanceof Error ? (error.stack ?? error.message) : String(error),
+        fault: serializeFault(error),
       },
     );
     throw error;
@@ -237,7 +238,7 @@ async function runApprovalArchive(
         service,
         job: "approval-request-archive",
         cron: event.cron,
-        fault: error instanceof Error ? (error.stack ?? error.message) : String(error),
+        fault: serializeFault(error),
       },
     );
     throw error;

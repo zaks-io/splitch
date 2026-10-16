@@ -1,6 +1,7 @@
 import { createRepository } from "@splitch/db";
 import {
   createWorkerFaultReporter,
+  serializeFault,
   workerEmitter,
   workerObservabilityWithWaitUntil,
 } from "@splitch/observability/worker";
@@ -46,7 +47,7 @@ export async function runDeliveryRetention(
   } catch (error) {
     createWorkerFaultReporter(env, observability)("delivery_retention_failed", {
       ...attributes,
-      fault: error instanceof Error ? (error.stack ?? error.message) : String(error),
+      fault: serializeFault(error),
     });
     throw error;
   }

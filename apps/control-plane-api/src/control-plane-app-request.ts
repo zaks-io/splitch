@@ -3,6 +3,7 @@ import { createPerformanceSpanRecorder } from "@splitch/observability/performanc
 import {
   createWorkerFaultReporter,
   createWorkerObservability,
+  serializeFault,
   workerObservabilityWithWaitUntil,
 } from "@splitch/observability/worker";
 import type { AuthResolver } from "@splitch/worker-runtime";
@@ -133,7 +134,7 @@ function reportCloudflarePushFault(
       service: "splitch-control-plane-api",
       job: "cloudflare-push-dispatch",
       trigger,
-      fault: error instanceof Error ? (error.stack ?? error.message) : String(error),
+      fault: serializeFault(error),
     },
   );
 }

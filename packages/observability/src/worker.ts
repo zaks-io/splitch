@@ -9,10 +9,10 @@ import {
   createScrubbedEmitter,
   createSentryBeforeSend,
   createSentryBeforeSendSpan,
-  SENTRY_DATA_COLLECTION,
-  sentryPrivacyIntegration,
   type ScrubbedEmitter,
+  SENTRY_DATA_COLLECTION,
   secretsFromEnv,
+  sentryPrivacyIntegration,
 } from "./emitter.js";
 import {
   type RequestErrorContext,
@@ -22,6 +22,9 @@ import {
 } from "./request-error-sentry.js";
 import { loadSentry, type SentryCloudflare } from "./sentry-module.js";
 import type { ObservabilitySurfaceId } from "./surfaces.js";
+
+// biome-ignore lint/performance/noBarrelFile: shared fault detail is part of the Worker observability API
+export { serializeFault } from "./serialize-fault.js";
 
 type WorkerEnv = {
   SENTRY_DSN?: string;
@@ -305,7 +308,7 @@ export function createWorkerFaultReporter(
   return (code, detail) => {
     emitter.log("error", code, detail);
     if (env.SENTRY_DSN) {
-      keepWorkerAlive(options, captureSentryMessage(options, { code, ...detail }));
+      keepWorkerAlive(options, captureSentryMessage(options, { ...detail, code }));
     }
   };
 }
@@ -347,6 +350,7 @@ async function captureSentryMessage(
   const Sentry = await loadSentry();
   Sentry.captureMessage(`worker fault ${ctx.code}`, {
     level: "error",
+    fingerprint: ["worker-fault", options.surface, ctx.code],
     tags: { surface: options.surface, code: ctx.code },
     extra: { ...ctx },
   });
