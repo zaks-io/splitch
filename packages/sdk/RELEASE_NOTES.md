@@ -19,11 +19,14 @@ Breaking: computation that Splitch now performs server-side is no longer exporte
 `@splitch/sdk/control-plane`. Imports of these names fail after upgrading:
 
 - Experiment decisions and results: `computeShipRecommendation`, `evaluateExperimentDecisionGate`,
-  `produceExperimentResults`, and the other decision-gate and ship-recommendation helpers. Read
-  decisions from the Experiment results responses.
+  `produceExperimentResults`, and the other decision-gate and ship-recommendation helpers, plus
+  the types `ShipRecommendationResult`, `ProduceExperimentResultsInput`,
+  `ExperimentResultsRunContext`, and `PlannedDurationEvidence`. Read decisions from the Experiment
+  results responses.
 - Experiment pre-registration: `resolvePreRegistration`, `preRegistrationToIntent`,
-  `PreRegistrationIssue`, and `nextAfterExperimentStart`. Experiment responses carry the resolved
-  `preRegistration`, and mutation responses carry `next`.
+  `PreRegistrationIssue`, and `nextAfterExperimentStart`. Run responses carry the optional resolved
+  `preRegistration`, Experiment results carry the frozen form at
+  `run_commitments.pre_registration` when present, and mutation responses carry `next`.
 - Flag lifecycle and staleness: `detectStaleReasons`, `uniformServingMode`, `daysBetween`,
   `EnvironmentConfigState`, and `StaleFlagSignals`.
 - Flag change diffs: `parseFlagChangeDiff`, `renderFlagChangeUnifiedDiff`, and
