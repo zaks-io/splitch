@@ -1,3 +1,4 @@
+import { inspect } from "node:util";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Harness } from "../src/config-store-harness-core";
 import type { ControlPlaneApiEnv } from "../src/env";
@@ -5,12 +6,8 @@ import { runControlPlaneScheduled } from "../src/scheduled";
 import { seedApprovalArchiveFixture } from "./approval-archive-fixture";
 import { makePoolHarness } from "./config-store-pool-harness";
 
-// Production-shaped `apr_<ULID>` ids (approval-canonical.ts:8): a real ULID
-// can land an 8+ digit run with no letters between, which the default
-// phone-like scrub pattern in packages/privacy redacts. These two were chosen
-// to avoid that run so the assertion below proves the fault row carries the
-// full id an operator would actually see, not a placeholder shape that
-// happens to dodge the scrubber.
+// These IDs avoid phone-like scrub patterns, so withholding must come from
+// fault serialization rather than incidental privacy-pattern redaction.
 const REQUEST_IDS = ["apr_01JYXRMM3TX1AWBFZJF9NRM1V2", "apr_01JYQYRWAG7SZZCJR63PRGKX0F"];
 let h: Harness;
 
@@ -24,7 +21,7 @@ afterEach(async () => {
 });
 
 describe("Approval Request scheduled archival", () => {
-  it("logs candidate identities and withholds nested messages before waitUntil rejects", async () => {
+  it("withholds candidate identities and nested messages before waitUntil rejects", async () => {
     for (const id of REQUEST_IDS) {
       await seedApprovalArchiveFixture(h.d1, {
         id,
@@ -54,11 +51,15 @@ describe("Approval Request scheduled archival", () => {
       job: "approval-request-archive",
       cron: "0 8 * * *",
     });
-    for (const id of REQUEST_IDS) {
-      expect(row?.fault).toEqual(expect.stringContaining(id));
-    }
+    const output = inspect(consoleError.mock.calls, {
+      showHidden: true,
+      depth: null,
+      maxStringLength: null,
+      maxArrayLength: null,
+    });
+    for (const id of REQUEST_IDS) expect(output).not.toContain(id);
     expect(row?.fault).toEqual(expect.stringContaining("Error: [message withheld]"));
-    expect(row?.fault).not.toEqual(expect.stringContaining("read token is unavailable"));
+    expect(output).not.toContain("read token is unavailable");
   });
 });
 

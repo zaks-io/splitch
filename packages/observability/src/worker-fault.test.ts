@@ -1,3 +1,4 @@
+import { inspect } from "node:util";
 import { DrizzleQueryError } from "drizzle-orm/errors";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { __setSentryModuleForTests } from "./sentry-module.js";
@@ -83,15 +84,29 @@ describe("Worker fault reports", () => {
         "INTERNAL_SERVER_ERROR",
       ]);
       expect(context.extra.fault).toContain(query);
-      expect(context.extra.fault).toContain("app create failed");
+      expect(context.extra.fault).not.toContain("app create failed");
       expect(context.extra.fault).toContain("D1_ERROR: internal error");
       expect(context.extra.fault).toContain("Error: [message withheld]");
       expect(context.extra.fault).not.toContain("database connection interrupted");
       expect(context.extra.fault).toContain(d1Cause.stack);
       expect(context.extra.fault).toContain("worker-fault.test.ts");
       for (const canary of [...params, "bound-canary-line-one", "bound-canary-line-two"]) {
-        expect(JSON.stringify(context)).not.toContain(canary);
-        expect(JSON.stringify(vi.mocked(console.error).mock.calls)).not.toContain(canary);
+        expect(
+          inspect(context, {
+            showHidden: true,
+            depth: null,
+            maxStringLength: null,
+            maxArrayLength: null,
+          }),
+        ).not.toContain(canary);
+        expect(
+          inspect(vi.mocked(console.error).mock.calls, {
+            showHidden: true,
+            depth: null,
+            maxStringLength: null,
+            maxArrayLength: null,
+          }),
+        ).not.toContain(canary);
       }
       expect(context.extra.fault).not.toContain("params:");
       expect(context.extra).not.toHaveProperty("cause");

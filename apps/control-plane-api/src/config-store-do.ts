@@ -6,6 +6,7 @@ import {
   parseLiveUpdateConnectionContext,
 } from "@splitch/contracts";
 import { createRepository, envScope } from "@splitch/db";
+import { serializeFault } from "@splitch/observability/worker";
 import { type ConfigStoreWriter, makeConfigStore } from "./config-store";
 import type { EvaluationFlagConfigRead, EvaluationFlagConfigSnapshot } from "./config-store-access";
 import {
@@ -249,7 +250,7 @@ export class ConfigStoreDurableObject
       try {
         socket.send(payload);
       } catch (cause) {
-        console.warn("config_store_live_update_send_failed", { cause });
+        console.warn("config_store_live_update_send_failed", { cause: serializeFault(cause) });
       }
     }
   }

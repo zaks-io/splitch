@@ -149,7 +149,7 @@ describe("createWorkerObservability onError", () => {
     await flushSentryHooks();
 
     const extra = captureMessage.mock.calls[0]?.[1]?.extra as { fault?: string };
-    expect(extra.fault).toContain("Network connection lost.");
+    expect(extra.fault).toContain("Error: [message withheld]");
   });
 
   it("names the shape of a non-Error throw rather than reporting nothing", async () => {
@@ -167,7 +167,7 @@ describe("createWorkerObservability onError", () => {
     await flushSentryHooks();
 
     const extra = captureMessage.mock.calls[0]?.[1]?.extra as { fault?: string };
-    expect(extra.fault).toContain("bare string throw");
+    expect(extra.fault).toBe("Error: [message withheld]");
   });
 
   it("omits the fault field when nothing was thrown", async () => {
@@ -242,7 +242,7 @@ describe("createWorkerObservability without a Sentry DSN", () => {
 
     const row = consoleError.mock.calls[0]?.[0] as { message?: string; fault?: string };
     expect(row.message).toBe("request_fault");
-    expect(row.fault).toContain("Network connection lost.");
+    expect(row.fault).toContain("Error: [message withheld]");
     consoleError.mockRestore();
   });
 

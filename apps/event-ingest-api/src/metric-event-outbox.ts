@@ -1,3 +1,4 @@
+import { serializeFault } from "@splitch/observability/worker";
 import {
   type BeginOutcome,
   beginDelivery,
@@ -101,10 +102,7 @@ export class MetricEventOutboxDurableObject {
   }
 
   private async retryPublication(publishing: MetricEventClaimState, error: unknown): Promise<void> {
-    const current = await this.ctx.storage.get<MetricEventClaimState>(STATE_KEY);
-    if (current === undefined || current.deleted) {
-      throw new Error("Metric Event outbox changed during queue publication");
-    }
+    const current = await this.requiredCurrentState();
     const publicationAttempts = publishing.publicationAttempts ?? 1;
     const publicationRetryAt =
       Date.now() + queueRetryDelaySeconds(publicationAttempts, publishing.fingerprint) * 1_000;
@@ -116,7 +114,7 @@ export class MetricEventOutboxDurableObject {
     });
     await this.ctx.storage.setAlarm(publicationRetryAt);
     console.error("event-ingest-api Metric Event outbox publication failed", {
-      errorMessage: error instanceof Error ? error.message : "non-error rejection",
+      errorMessage: serializeFault(error),
     });
   }
 

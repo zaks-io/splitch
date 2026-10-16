@@ -1,3 +1,4 @@
+import { inspect } from "node:util";
 import { ErrorResponseSchema, eventDefinitionConfigKey, getRoute } from "@splitch/contracts";
 import { describe, expect, it, vi } from "vitest";
 import {
@@ -212,7 +213,12 @@ async function producePublicSdkTrackShapes() {
     errors,
     success: { first, replay },
     probes: { missingRequired, nestedRequired, wrongType },
-    diagnostic: JSON.stringify(errorsLog),
+    diagnostic: inspect(errorsLog, {
+      showHidden: true,
+      depth: null,
+      maxStringLength: null,
+      maxArrayLength: null,
+    }),
   };
 }
 

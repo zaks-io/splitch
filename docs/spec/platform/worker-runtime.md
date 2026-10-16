@@ -143,6 +143,21 @@ not move queue or Tinybird ownership into `@splitch/worker-runtime`.
   Cloudflare's zone-level Always Use HTTPS control remains the primary edge
   redirect and must be enabled separately in production.
 
+## Worker fault diagnostics
+
+Worker fault reports use a fingerprint per Worker surface and fault code. Their `fault` detail
+comes from the shared `serializeFault` helper before entering Sentry extras, breadcrumbs, or
+Workers Logs. It emits validated error names, Drizzle placeholder SQL capped at 2,000 characters,
+static D1 tokens and allowlisted diagnostic phrases, SQLite result-code names, and stack frames
+verified against the complete original stack header. Every other error message is withheld,
+including top-level messages, parser excerpts, and interpolated customer values. Bound query
+parameters are never read or emitted.
+
+The helper isolates unreadable fields, traverses causes before aggregate members in depth-first
+order, protects against cycles, and keeps the first 32 nodes within 8 KB of UTF-8 output. Fixed
+markers identify unreadable fields, withheld stacks, truncation, and omitted errors. A serializer
+failure returns a safe diagnostic instead of interrupting the fault reporter.
+
 ## What the runtime does not own
 
 - Organization, App, Flag, Experiment, Run, Metric, or Segment invariants

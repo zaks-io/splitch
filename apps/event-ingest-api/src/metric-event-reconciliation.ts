@@ -1,4 +1,5 @@
 import { requirePlatformTarget } from "@splitch/contracts";
+import { serializeFault } from "@splitch/observability/worker";
 import type { MetricEventDeliveryAttempt } from "./metric-event-delivery-attempt";
 import {
   readMetricEventDelivery,
@@ -76,7 +77,7 @@ async function handleReconciliationMessage(
     console.error("event-ingest-api Metric Event reconciliation failed", {
       queueMessageId: message.id,
       attempts: message.attempts,
-      errorMessage: error instanceof Error ? error.message : "non-error rejection",
+      errorMessage: serializeFault(error),
     });
     message.retry({
       delaySeconds: queueRetryDelaySeconds(message.attempts, message.id),

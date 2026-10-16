@@ -16,7 +16,7 @@ describe("reduceRequestError is total", () => {
     reduceRequestError({ requestId: "req-1", code: "INTERNAL_SERVER_ERROR", status: 500, cause });
 
   it("survives a null-prototype throw, which String() cannot convert", () => {
-    expect(fault(Object.create(null)).fault).toBe("[fault serialization failed: TypeError]");
+    expect(fault(Object.create(null)).fault).toBe("Error: [message withheld]\n[stack withheld]");
   });
 
   it("survives a throw whose toString itself throws", () => {
@@ -25,7 +25,8 @@ describe("reduceRequestError is total", () => {
         throw new Error("nope");
       },
     };
-    expect(fault(hostile).fault).toBe("[fault serialization failed: Error]");
+    expect(fault(hostile).fault).toContain("[message withheld]");
+    expect(fault(hostile).fault).not.toContain("fault serialization failed");
   });
 
   it("returns a safe diagnostic when a stack getter throws", () => {
@@ -36,7 +37,8 @@ describe("reduceRequestError is total", () => {
       },
     });
 
-    expect(fault(hostile).fault).toBe("[fault serialization failed: Error]");
+    expect(fault(hostile).fault).toContain("[message withheld]");
+    expect(fault(hostile).fault).not.toContain("fault serialization failed");
   });
 
   it("survives an Error whose name getter also throws", () => {
@@ -48,7 +50,8 @@ describe("reduceRequestError is total", () => {
         },
       });
     }
-    expect(fault(hostile).fault).toBe("[fault serialization failed: Error]");
+    expect(fault(hostile).fault).toContain("[message withheld]");
+    expect(fault(hostile).fault).not.toContain("fault serialization failed");
   });
 });
 

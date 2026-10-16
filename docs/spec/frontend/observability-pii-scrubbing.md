@@ -160,6 +160,21 @@ beforeSend(event) {
 can break schema validation in Sentry ingest). The function must recurse through `extra`,
 `contexts`, `breadcrumbs.values[].data`, and stringified exception messages.
 
+### Worker fault detail
+
+Worker fault messages group by Worker surface and fault code. Before a caught error reaches
+Sentry extras, breadcrumbs, or Workers Logs, `serializeFault` withholds all free error messages.
+Its output contains only validated error names, Drizzle placeholder SQL capped at 2,000 characters,
+static D1 tokens and allowlisted phrases, SQLite result-code names, verified stack frames, and fixed
+diagnostic markers. It strips the complete original stack header before selecting frames, so a
+multiline parser excerpt cannot masquerade as a frame. Bound parameters are never read; parameter
+value matching is unnecessary because messages and excerpts are not emitted.
+
+Cause chains and aggregate members are traversed depth-first, with causes first, cycle protection,
+a shared 32-node budget, an omitted count, and an 8 KB UTF-8 output cap. Unreadable fields are
+isolated, and the serializer never throws. The existing privacy scrubber remains a backstop for
+the resulting fault detail and other event metadata.
+
 ### Sentry v11 collection and streamed spans
 
 Every Sentry init explicitly disables automatic user information, cookies, HTTP headers and

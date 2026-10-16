@@ -1,3 +1,4 @@
+import { inspect } from "node:util";
 import { type CURRENT_KV_SCHEMA_VERSION, eventDefinitionConfigKey } from "@splitch/contracts";
 import { appScope, createRepository, type Repository } from "@splitch/db";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -89,8 +90,9 @@ describe("Event Definition publication", () => {
     expect(error).toHaveBeenCalledWith("EventDefinitionStateWriteError", {
       appId,
       eventDefinitionId: DEFINITION_ID,
-      cause: expect.stringContaining(stateFailure.message),
+      cause: expect.stringContaining("[message withheld]"),
     });
+    expectMessageWithheld(error.mock.calls, stateFailure.message);
     expect(await store.get(eventDefinitionConfigKey(appId, EVENT_NAME))).toBeNull();
     await expectUnpublished();
 
@@ -118,8 +120,9 @@ describe("Event Definition publication", () => {
     expect(error).toHaveBeenCalledWith("EventDefinitionConfigWriteError", {
       appId,
       eventDefinitionId: DEFINITION_ID,
-      cause: expect.stringContaining(configFailure.message),
+      cause: expect.stringContaining("[message withheld]"),
     });
+    expectMessageWithheld(error.mock.calls, configFailure.message);
     expect(await store.get(eventDefinitionConfigKey(appId, EVENT_NAME))).toBeNull();
     const published = await readDefinition();
     expect(published.current_published_version_id).not.toBeNull();
@@ -312,4 +315,14 @@ async function readHotConfig() {
       version: { id: string; version: number; entityType: string };
     };
   };
+}
+
+function expectMessageWithheld(calls: unknown, message: string): void {
+  const output = inspect(calls, {
+    showHidden: true,
+    depth: null,
+    maxStringLength: null,
+    maxArrayLength: null,
+  });
+  expect(output).not.toContain(message);
 }

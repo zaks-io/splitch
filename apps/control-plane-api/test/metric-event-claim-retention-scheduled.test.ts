@@ -1,3 +1,4 @@
+import { inspect } from "node:util";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Harness } from "../src/config-store-harness-core";
 import type { ControlPlaneApiEnv } from "../src/env";
@@ -46,7 +47,15 @@ describe("Metric Event claim retention scheduled adoption", () => {
       job: "metric-event-claim-retention-adoption",
       cron: "0 8 * * *",
     });
-    expect(row?.fault).toEqual(expect.stringContaining("halted=missing-claim"));
+    expect(row?.fault).toEqual(expect.stringContaining("[message withheld]"));
+    expect(
+      inspect(consoleError.mock.calls, {
+        showHidden: true,
+        depth: null,
+        maxStringLength: null,
+        maxArrayLength: null,
+      }),
+    ).not.toContain("halted=missing-claim");
   });
 });
 

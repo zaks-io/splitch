@@ -1,3 +1,4 @@
+import { inspect } from "node:util";
 import { createRepository } from "@splitch/db";
 import { __setSentryModuleForTests } from "@splitch/observability/sentry-module";
 import {
@@ -74,10 +75,20 @@ it("bounds a 100 KB repository query failure and withholds a native parser excer
   expect(addBreadcrumb).toHaveBeenCalledOnce();
   expect(consoleError).toHaveBeenCalled();
   expect(
-    JSON.stringify([captureMessage.mock.calls, addBreadcrumb.mock.calls, consoleError.mock.calls]),
+    inspect([captureMessage.mock.calls, addBreadcrumb.mock.calls, consoleError.mock.calls], {
+      showHidden: true,
+      depth: null,
+      maxStringLength: null,
+      maxArrayLength: null,
+    }),
   ).not.toContain(prefix);
   expect(
-    JSON.stringify([captureMessage.mock.calls, addBreadcrumb.mock.calls, consoleError.mock.calls]),
+    inspect([captureMessage.mock.calls, addBreadcrumb.mock.calls, consoleError.mock.calls], {
+      showHidden: true,
+      depth: null,
+      maxStringLength: null,
+      maxArrayLength: null,
+    }),
   ).not.toContain("large-query-id-canary");
 });
 
@@ -89,7 +100,7 @@ it("reports real approval archival query failures without bound parameters in Se
   const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
   const statement = {
     bind: vi.fn().mockReturnThis(),
-    raw: vi.fn().mockRejectedValue(new Error("D1_ERROR: archive read failed")),
+    raw: vi.fn().mockRejectedValue(new Error("D1_ERROR: internal error")),
   };
   const repo = createRepository({ prepare: vi.fn(() => statement) } as unknown as D1Database);
   vi.spyOn(repo.approvals, "listArchiveCandidates").mockResolvedValue([
@@ -117,16 +128,21 @@ it("reports real approval archival query failures without bound parameters in Se
   )("approval_request_archive_failed", { fault: serializeFault(failure) });
   await Promise.all(pending);
   const context = captureMessage.mock.calls[0]?.[1];
-  expect(context.extra.fault).toContain("Approval Request");
+  expect(context.extra.fault).toContain("AggregateError: [message withheld]");
   expect(context.extra.fault).toContain('from "approval_reviews"');
-  expect(context.extra.fault).toContain("D1_ERROR: archive read failed");
+  expect(context.extra.fault).toContain("D1_ERROR: internal error");
   expect(consoleError).toHaveBeenCalledWith(
     expect.objectContaining({
       message: "approval_request_archive_failed",
-      fault: expect.stringContaining("D1_ERROR: archive read failed"),
+      fault: expect.stringContaining("D1_ERROR: internal error"),
     }),
   );
-  const emitted = JSON.stringify([context, consoleError.mock.calls]);
+  const emitted = inspect([context, consoleError.mock.calls], {
+    showHidden: true,
+    depth: null,
+    maxStringLength: null,
+    maxArrayLength: null,
+  });
   expect(emitted).not.toContain("archive-bound-canary");
   expect(emitted).not.toContain("params:");
 });
@@ -194,9 +210,16 @@ it("keeps a failed App completion opaque to HTTP while reporting SQL and its D1 
   ]);
   expect(context.extra.fault).toContain('update "apps" set "create_response" = ?');
   expect(context.extra.fault).toContain(databaseCause.stack);
-  const emitted = JSON.stringify([context, consoleError.mock.calls, body]);
+  const emitted = inspect([context, consoleError.mock.calls, body], {
+    showHidden: true,
+    depth: null,
+    maxStringLength: null,
+    maxArrayLength: null,
+  });
   expect(emitted).not.toContain("app-bound-canary");
   expect(emitted).not.toContain("create-response-bound-canary");
   expect(emitted).not.toContain("params:");
-  expect(JSON.stringify(body)).not.toContain("D1_ERROR");
+  expect(
+    inspect(body, { showHidden: true, depth: null, maxStringLength: null, maxArrayLength: null }),
+  ).not.toContain("D1_ERROR");
 });

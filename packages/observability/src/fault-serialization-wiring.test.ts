@@ -2,6 +2,7 @@ import { readdirSync, readFileSync } from "node:fs";
 import { join, relative } from "node:path";
 import ts from "typescript";
 import { expect, it } from "vitest";
+import { unsafeFaultLogs } from "./test-support/fault-log-wiring";
 
 const repoRoot = new URL("../../../", import.meta.url).pathname;
 
@@ -95,4 +96,65 @@ it("accepts shared serialization and public refusal codes", () => {
   expect(
     violationsIn('renderError({ details: { fault: "FLAG_CONFIGURATION_MISSING" } });'),
   ).toEqual([]);
+});
+
+it("serializes caught errors at every Control Plane and Event Ingest log boundary", () => {
+  const violations = ["control-plane-api", "event-ingest-api"]
+    .flatMap((app) => sourceFiles(join(repoRoot, "apps", app, "src")))
+    .flatMap((file) =>
+      unsafeFaultLogs(
+        ts.createSourceFile(file, readFileSync(file, "utf8"), ts.ScriptTarget.Latest, true),
+      ).map((line) => `${relative(repoRoot, file)}:${line}`),
+    );
+  expect(violations).toEqual([]);
+});
+
+it.each([
+  "console.error(error)",
+  "logger.warn({ cause: error })",
+  "deps.logger?.error(error.message)",
+  "(deps.logger ?? console).error(error.stack)",
+  "const alias = deps.logger; alias.warn({ cause: error.cause })",
+  "const write = console.error.bind(console); write(error)",
+  "const { warn: write } = logger; write(error)",
+  "const payload = { cause: error }; const output = payload; logger.error(output)",
+  "const detail = error.message; logger.info(detail)",
+  "let sink; sink = console.warn; let detail; detail = error; sink(detail)",
+])("rejects raw errors through logger aliases: %s", (body) => {
+  const source = ts.createSourceFile(
+    "fixture.ts",
+    `try {} catch (error) { ${body}; }`,
+    ts.ScriptTarget.Latest,
+    true,
+  );
+  expect(unsafeFaultLogs(source).length).toBeGreaterThan(0);
+});
+
+it("rejects raw errors through an imported logger alias", () => {
+  const source = ts.createSourceFile(
+    "fixture.ts",
+    'import { logger as output } from "./logging"; try {} catch (err) { output.warn(err); }',
+    ts.ScriptTarget.Latest,
+    true,
+  );
+  expect(unsafeFaultLogs(source)).toHaveLength(1);
+});
+
+it("accepts serialized error aliases and ordinary log metadata", () => {
+  const source = ts.createSourceFile(
+    "fixture.ts",
+    `
+    import { serializeFault as safeFault } from "@splitch/observability/worker";
+    try {} catch (error) {
+      const detail = safeFault(error);
+      const write = console.error.bind(console);
+      write({ fault: detail });
+      logger.warn({ cause: serializeFault(error) });
+      console.info({ requestId: "request" });
+    }
+  `,
+    ts.ScriptTarget.Latest,
+    true,
+  );
+  expect(unsafeFaultLogs(source)).toEqual([]);
 });

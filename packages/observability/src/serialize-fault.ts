@@ -1,28 +1,21 @@
+import { d1Diagnostic } from "./fault-d1-diagnostics.js";
+
 const MAX_NODES = 32;
 const MAX_BYTES = 8 * 1024;
-
-interface QueryFault extends Error {
-  query: string;
-  params: unknown[];
-}
-
-interface FaultNode {
-  value: unknown;
-  relation: string;
-  identity: string;
-  stack: string;
-  children: FaultNode[];
-}
+type Field = { ok: true; value: unknown } | { ok: false };
 
 /**
- * Never-throw Worker diagnostics: at most 32 nodes and 8 KB of UTF-8 output.
- * Rebuild Drizzle messages from SQL only; retain D1_ and top-level messages
- * (500 characters), except SyntaxError. Withhold every other nested message.
- * Emit only stack-frame lines, traverse causes and aggregate members with cycle
- * protection, and retain earlier diagnostics with an omitted count on overflow.
- * Read query parameters only for defense in depth: remove their exact string
- * values with string-only replaceAll, including before extracting stack frames.
- * Internal failures return a fixed diagnostic containing only the error type.
+ * Deny-by-default, never-throw Worker diagnostics. Emit only validated error names,
+ * Drizzle placeholder SQL (2,000 characters), allowlisted D1 tokens/static phrases
+ * and SQLite result-code names, header-verified stack frames, and fixed markers.
+ * All other messages, including top-level messages and parser excerpts, are withheld.
+ * Strip the complete exact name/message header before selecting frame lines; custom,
+ * mutated or unreadable headers cannot contribute frames. Isolate every field read
+ * so a hostile getter cannot discard another field's SQL or the rest of the graph.
+ * Traverse cause, then aggregate members, depth-first with cycle protection and one
+ * 32-node budget. Keep earlier diagnostics and an omitted count within 8 KB of UTF-8.
+ * Parameter values are never read or redacted: no free message text is emitted, so
+ * value matching is unnecessary and cannot leak truncated excerpts or missed nodes.
  */
 export function serializeFault(cause: unknown): string | undefined {
   try {
@@ -33,112 +26,150 @@ export function serializeFault(cause: unknown): string | undefined {
   }
 }
 
-function serializeGraph(cause: unknown): string {
-  const root = faultNode(cause, "");
-  const nodes = [root];
+function readField(value: object, field: string): Field {
+  try {
+    return { ok: true, value: Reflect.get(value, field) };
+  } catch {
+    return { ok: false };
+  }
+}
+
+function serializeGraph(root: unknown): string {
   const seen = new Set<unknown>();
-  const queries: QueryFault[] = [];
+  const output: string[] = [];
+  let visited = 0;
   let omitted = 0;
 
-  function enqueue(value: unknown, relation: string, parent: FaultNode): void {
-    if (nodes.length >= MAX_NODES) {
+  function visit(value: unknown, relation: string): void {
+    if (visited >= MAX_NODES) {
       omitted++;
       return;
     }
-    const node = faultNode(value, relation);
-    parent.children.push(node);
-    nodes.push(node);
-  }
-
-  function visit(node: FaultNode): void {
-    if (seen.has(node.value)) {
-      node.identity = "[circular error cause]";
+    visited++;
+    if (seen.has(value)) {
+      output.push(`${relation}[circular error cause]`);
       return;
     }
-    seen.add(node.value);
-    readIdentity(node, node === root, queries);
-    if (node.value instanceof Error) visitChildren(node.value, node);
-  }
-
-  function visitChildren(error: Error, node: FaultNode): void {
-    const nested = error.cause;
-    if (nested !== undefined) enqueue(nested, "\nCaused by: ", node);
-    if (!(error instanceof AggregateError)) return;
-    const members: unknown[] = error.errors;
-    if (!Array.isArray(members)) throw new TypeError("Unreadable aggregate members");
-    const available = MAX_NODES - nodes.length;
-    for (const member of members.slice(0, available)) {
-      enqueue(member, "\nAggregate member: ", node);
+    seen.add(value);
+    if ((typeof value !== "object" || value === null) && typeof value !== "function") {
+      output.push(`${relation}Error: [message withheld]`);
+      return;
     }
-    omitted += Math.max(0, members.length - available);
+    output.push(relation + nodeDiagnostic(value));
+    visitCause(value);
+    visitMembers(value);
   }
 
-  // Reserve the node budget breadth-first, then render causes beside their
-  // parents so an aggregate's first SQL and D1 cause remain useful within 8 KB.
-  for (const node of nodes) visit(node);
-  const parameters = queryParameters(queries);
-  const text = redact(renderNode(root, parameters), parameters);
-  const suffix = omitted > 0 ? `\n[${omitted} more errors omitted]` : "";
-  return boundedOutput(text, redact(suffix, parameters));
-}
+  function visitCause(value: object): void {
+    const cause = readField(value, "cause");
+    if (!cause.ok) output.push("\ncause: [unreadable]");
+    else if (cause.value !== undefined) visit(cause.value, "\nCaused by: ");
+  }
 
-function queryParameters(queries: QueryFault[]): Set<string> {
-  const parameters = new Set<string>();
-  for (const query of queries) {
-    for (const value of query.params) {
-      const parameter = String(value);
-      if (parameter) parameters.add(parameter);
+  function visitMembers(value: object): void {
+    const errors = readMembers(value);
+    if (!errors.ok) {
+      output.push("\nerrors: [unreadable]");
+      return;
+    }
+    if (!errors.value) return;
+    const { members, length } = errors.value;
+    // Do not read omitted members or invoke a user-supplied iterator.
+    for (let index = 0; index < length; index++) {
+      if (visited >= MAX_NODES) {
+        omitted += length - index;
+        break;
+      }
+      const member = readField(members, String(index));
+      visitMember(member);
     }
   }
-  return parameters;
-}
 
-function faultNode(value: unknown, relation: string): FaultNode {
-  return { value, relation, identity: "", stack: "", children: [] };
-}
-
-function readIdentity(node: FaultNode, topLevel: boolean, queries: QueryFault[]): void {
-  const error = node.value;
-  if (!(error instanceof Error)) {
-    const message = topLevel ? String(error).slice(0, 500) : "[message withheld]";
-    node.identity = `non-Error thrown (${typeof error}): ${message}`;
-    return;
+  function visitMember(member: Field): void {
+    if (member.ok) visit(member.value, "\nAggregate member: ");
+    else {
+      visited++;
+      output.push("\nAggregate member: [unreadable]");
+    }
   }
-  let message: string;
-  if (isQueryFault(error)) {
-    message = `Failed query: ${error.query}`;
-    queries.push(error);
-  } else {
-    message = permittedMessage(error, topLevel);
+
+  visit(root, "");
+  return boundedOutput(output.join(""), omitted ? `\n[${omitted} more errors omitted]` : "");
+}
+
+function readMembers(
+  error: object,
+): { ok: true; value?: { members: unknown[]; length: number } } | { ok: false } {
+  try {
+    const members: unknown = Reflect.get(error, "errors");
+    if (!Array.isArray(members)) return { ok: true };
+    const length: unknown = members.length;
+    return typeof length === "number" && Number.isSafeInteger(length) && length >= 0
+      ? { ok: true, value: { members, length } }
+      : { ok: false };
+  } catch {
+    return { ok: false };
   }
-  node.identity = `${error.name}: ${message}`;
-  node.stack = error.stack ?? "";
 }
 
-function isQueryFault(error: Error): error is QueryFault {
-  return "query" in error && typeof error.query === "string" && "params" in error;
-}
-
-function permittedMessage(error: Error, topLevel: boolean): string {
-  if (error instanceof SyntaxError) return "[message withheld]";
-  const message = error.message;
-  return topLevel || message.startsWith("D1_") ? message.slice(0, 500) : "[message withheld]";
-}
-
-function renderNode(node: FaultNode, parameters: Set<string>): string {
-  const frames = redact(node.stack, parameters)
-    .split("\n")
-    .filter((line) => /^\s+at /.test(line));
+function nodeDiagnostic(error: object): string {
+  const name = readField(error, "name");
+  const message = readField(error, "message");
+  const query = readQuery(error);
+  const stack = readField(error, "stack");
+  const safeName =
+    name.ok && typeof name.value === "string" && /^[A-Za-z][A-Za-z0-9_]{0,63}$/.test(name.value)
+      ? name.value
+      : "Error";
+  const identity =
+    query.ok && typeof query.value === "string"
+      ? `Failed query: ${query.value.slice(0, 2000)}`
+      : message.ok && typeof message.value === "string"
+        ? (d1Diagnostic(message.value) ?? "[message withheld]")
+        : "[message withheld]";
+  const unreadable = [
+    ["name", name],
+    ["message", message],
+    ["query", query],
+    ["stack", stack],
+  ] as const;
   return (
-    node.relation +
-    [node.identity, ...frames].join("\n") +
-    node.children.map((child) => renderNode(child, parameters)).join("")
+    `${safeName}: ${identity}` +
+    unreadable
+      .filter(([, field]) => !field.ok)
+      .map(([field]) => `\n${field}: [unreadable]`)
+      .join("") +
+    verifiedFrames(name, message, stack)
   );
 }
 
-function redact(text: string, parameters: Set<string>): string {
-  for (const parameter of parameters) text = text.replaceAll(parameter, "");
-  return text;
+function readQuery(error: object): Field {
+  try {
+    // Drizzle's structural identity avoids importing its runtime into Workers.
+    // Presence is sufficient; parameter values and their getters are never read.
+    return { ok: true, value: "params" in error ? Reflect.get(error, "query") : undefined };
+  } catch {
+    return { ok: false };
+  }
+}
+
+function verifiedFrames(name: Field, message: Field, stack: Field): string {
+  if (
+    !name.ok ||
+    !message.ok ||
+    !stack.ok ||
+    typeof name.value !== "string" ||
+    typeof message.value !== "string" ||
+    typeof stack.value !== "string"
+  )
+    return "\n[stack withheld]";
+  const header = message.value ? `${name.value}: ${message.value}\n` : `${name.value}\n`;
+  if (!stack.value.startsWith(header)) return "\n[stack withheld]";
+  const frames = stack.value
+    .slice(header.length)
+    .split("\n")
+    .filter((line) => /^\s+at /.test(line));
+  return frames.length ? `\n${frames.join("\n")}` : "";
 }
 
 function boundedOutput(text: string, suffix: string): string {
@@ -164,7 +195,7 @@ function failureName(failure: unknown): string {
       if (failure instanceof kind) return kind.name;
     }
   } catch {
-    // Even a hostile thrown Proxy must not escape the fallback.
+    /* A hostile thrown Proxy cannot escape the fallback. */
   }
   return "Error";
 }

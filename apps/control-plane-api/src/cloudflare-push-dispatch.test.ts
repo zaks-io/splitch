@@ -1,3 +1,4 @@
+import { inspect } from "node:util";
 import { createRepository, type Repository } from "@splitch/db";
 import { serializeFault } from "@splitch/observability/worker";
 import { describe, expect, it, vi } from "vitest";
@@ -13,7 +14,7 @@ describe("Cloudflare dispatch fault detail", () => {
     const { repo } = await fixture();
     const statement = {
       bind: vi.fn().mockReturnThis(),
-      raw: vi.fn().mockRejectedValue(new Error("D1_ERROR: lease update failed")),
+      raw: vi.fn().mockRejectedValue(new Error("D1_ERROR: internal error")),
     };
     const failingRepo = createRepository({
       prepare: vi.fn(() => statement),
@@ -34,17 +35,38 @@ describe("Cloudflare dispatch fault detail", () => {
       expect(failure).toBeInstanceOf(AggregateError);
       expect(statement.raw).toHaveBeenCalled();
       const fault = serializeFault(failure);
-      expect(fault).toContain("Cloudflare delivery lease updates failed");
+      expect(fault).toContain("AggregateError: [message withheld]");
       expect(fault).toContain('update "apps" set "create_response" = ?');
-      expect(fault).toContain("D1_ERROR: lease update failed");
+      expect(fault).toContain("D1_ERROR: internal error");
       expect(fault).not.toContain("dispatch-id-canary");
       expect(fault).not.toContain("dispatch-bound-canary");
       expect(fault).not.toContain("params:");
       expect(consoleError).toHaveBeenCalled();
       for (const call of consoleError.mock.calls) {
-        expect(JSON.stringify(call)).not.toContain("dispatch-id-canary");
-        expect(JSON.stringify(call)).not.toContain("dispatch-bound-canary");
-        expect(JSON.stringify(call)).not.toContain("params:");
+        expect(
+          inspect(call, {
+            showHidden: true,
+            depth: null,
+            maxStringLength: null,
+            maxArrayLength: null,
+          }),
+        ).not.toContain("dispatch-id-canary");
+        expect(
+          inspect(call, {
+            showHidden: true,
+            depth: null,
+            maxStringLength: null,
+            maxArrayLength: null,
+          }),
+        ).not.toContain("dispatch-bound-canary");
+        expect(
+          inspect(call, {
+            showHidden: true,
+            depth: null,
+            maxStringLength: null,
+            maxArrayLength: null,
+          }),
+        ).not.toContain("params:");
       }
     } finally {
       consoleError.mockRestore();

@@ -92,12 +92,11 @@ async function deliverSafely(
   } catch (cause) {
     let failure = failures.get(delivery.installationId);
     if (!failure) {
-      const causeName = preparationCauseName(cause);
       console.error("convex_webhook_delivery_preparation_failed", {
         installationId: delivery.installationId,
         deliveryId: delivery.deliveryId,
         code: "DELIVERY_PREPARATION_FAILED",
-        causeName,
+        cause: serializeFault(cause),
       });
       summary.preparationFailedInstallations += 1;
       failure = deps.repo.convex.deferPreparationFailure(delivery.installationId, leaseOwner, {
@@ -208,13 +207,4 @@ async function finishFailure(
     ...(retryable ? { nextAttemptAt: new Date(now.getTime() + retryDelay).toISOString() } : {}),
     errorJson: JSON.stringify(error),
   });
-}
-
-function preparationCauseName(cause: unknown): string {
-  return cause instanceof Error &&
-    ["Error", "OperationError", "DataError", "InvalidCharacterError", "TypeError"].includes(
-      cause.name,
-    )
-    ? cause.name
-    : "UnknownError";
 }
