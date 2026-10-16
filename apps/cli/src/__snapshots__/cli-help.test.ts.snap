@@ -99,6 +99,32 @@ Flags:
 
 Example:
   splitch app-attention-rollup get --json",
+    "app-audit list": "List App audit events. Requires live App admin membership and credential scope.
+
+Formats: appId: required Canonical App ID (app_...) or human-readable App slug. environmentId: optional canonical id. resourceId: optional canonical id. approvalRequestId: optional canonical id. runId: optional canonical id.
+
+Terms: App — the product or service surface that groups related Flags and hosts Experiments.
+
+Usage:
+  splitch app-audit list [flags]
+
+Flags:
+  --app <app>                                  [type: string; default: SPLITCH_APP or config] App ID or slug.
+  --env <environment>                          [type: string; default: none] Optional Environment ID or key filter (Policy context).
+  --limit <limit>                              [type: number; default: 50] Query parameter limit.
+  --cursor <cursor>                            [type: string | null; default: null] Query parameter cursor.
+  --action <action>                            [type: string; default: none] Query parameter action.
+  --resource-type <resource-type>              [type: string; default: none] Query parameter resourceType.
+  --resource-id <resource-id>                  [type: string; default: none] Query parameter resourceId.
+  --approval-request-id <approval-request-id>  [type: string; default: none] Query parameter approvalRequestId.
+  --run-id <run-id>                            [type: string; default: none] Query parameter runId.
+  --from <from>                                [type: string; default: none] Query parameter from.
+  --to <to>                                    [type: string; default: none] Query parameter to.
+  --json                                       [type: boolean; default: false] Write machine-readable JSON to stdout.
+  -h, --help                                   [type: boolean; default: false] Show help and exit.
+
+Example:
+  splitch app-audit list --json",
     "app-members add": "Grant a user a role on an App.
 
 Formats: appId: required Canonical App ID (app_...) or human-readable App slug. userId: required canonical id. role: required one of "owner", "admin", "member".
@@ -2460,6 +2486,19 @@ Flags:
 
 Example:
   splitch app-attention-rollup get --help",
+    "app-audit": "Manage app-audit resources.
+
+Usage:
+  splitch app-audit <action> [arguments] [flags]
+
+Commands:
+  list            List App audit events. Requires live App admin membership and credential scope.
+
+Flags:
+  -h, --help  [type: boolean; default: false] Show help and exit.
+
+Example:
+  splitch app-audit list --help",
     "app-members": "Manage app-members resources.
 
 Usage:
@@ -3067,6 +3106,7 @@ Commands:
 Resource groups:
   api-keys
   app-attention-rollup
+  app-audit
   app-members
   approval-request-reviews
   approval-requests
