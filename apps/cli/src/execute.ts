@@ -30,11 +30,7 @@ import { commandFlags, metaFlags } from "./help-flags.js";
 import { oneTimeSecretDescriptor, writeOneTimeSecret } from "./one-time-secret-output.js";
 import { buildOperationInput } from "./operation-input.js";
 import type { ParsedInvocation } from "./parse-args.js";
-import {
-  personalAccessTokenAuthorization,
-  personalAccessTokenFromEnv,
-  refuseTokenModeSessionCommand,
-} from "./personal-access-token-auth.js";
+import { prepareInvocationCredential } from "./personal-access-token-auth.js";
 import { returnsPersonalAccessTokenSecret } from "./personal-access-token-input.js";
 import {
   personalAccessTokenSecretTarget,
@@ -45,10 +41,10 @@ export type { CliDeps, CliResult } from "./execute-types.js";
 
 export async function executeInvocation(
   invocation: ParsedInvocation,
-  deps: CliDeps,
+  options: CliDeps,
 ): Promise<CliResult> {
+  const deps = prepareInvocationCredential(invocation, options);
   const io = withJsonMode(deps.io ?? consoleIo(), invocation.flags.json);
-  validateInvocationCredential(invocation, deps);
   if (invocation.metaCommand) {
     const flagError = validateAdvertisedFlags(
       invocation,
@@ -78,16 +74,6 @@ export async function executeInvocation(
   const usageError = validateFlagReadUsage(command, invocation, io);
   if (usageError) return usageError;
   return executeCommand(command, invocation, deps, io);
-}
-
-function validateInvocationCredential(invocation: ParsedInvocation, deps: CliDeps): void {
-  if (invocation.commandPath[0] === "cloudflare") return;
-  if (invocation.metaCommand === "login" || invocation.metaCommand === "logout") {
-    refuseTokenModeSessionCommand(deps, `splitch ${invocation.metaCommand}`);
-    return;
-  }
-  const token = personalAccessTokenFromEnv(deps);
-  if (token !== undefined) personalAccessTokenAuthorization(token);
 }
 
 async function executeMeta(

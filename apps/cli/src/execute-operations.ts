@@ -24,7 +24,7 @@ import { EXIT_API, EXIT_AUTH, EXIT_OK, EXIT_SCOPE, EXIT_USAGE } from "./exit-cod
 import { environmentSelectorOverride, parseEvaluationContext } from "./operation-input.js";
 import { emitOperationNotices } from "./operation-notices.js";
 import type { ParsedInvocation } from "./parse-args.js";
-import { personalAccessTokenFromEnv } from "./personal-access-token-auth.js";
+import { selectedPersonalAccessToken } from "./personal-access-token-auth.js";
 import { createOperationSdks, resolveDataPlaneBaseUrl, sdkForRoute } from "./sdks.js";
 import { exitCodeForServerError, writeServerError } from "./server-errors.js";
 
@@ -230,7 +230,7 @@ function refuseSessionOnlyOperation(
   deps: CliDeps,
   io: CliIo,
 ): CliResult | null {
-  if (route.permission !== "session-only" || personalAccessTokenFromEnv(deps) === undefined)
+  if (route.permission !== "session-only" || selectedPersonalAccessToken(deps) === undefined)
     return null;
   writeCliError(io, {
     code: "FORBIDDEN",
@@ -299,7 +299,7 @@ async function clearScopeAfterAppDelete(
   if (!appId) return;
   const { clearDeletedAppFromConfig } = await import("./context.js");
   await clearDeletedAppFromConfig(deps.cwd ?? process.cwd(), appId);
-  if (personalAccessTokenFromEnv(deps) !== undefined) return;
+  if (selectedPersonalAccessToken(deps) !== undefined) return;
   const stored = await deps.credentialStore.load();
   if (stored?.credential.selectedAppId !== appId) return;
   const { selectedAppId: _removed, ...credentialRest } = stored.credential;

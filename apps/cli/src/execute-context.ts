@@ -14,7 +14,7 @@ import { executeApiOperation } from "./execute-operations.js";
 import type { CliDeps, CliIo, CliResult } from "./execute-types.js";
 import { EXIT_AUTH, EXIT_OK } from "./exit-codes.js";
 import type { ParsedInvocation } from "./parse-args.js";
-import { personalAccessTokenFromEnv } from "./personal-access-token-auth.js";
+import { selectedPersonalAccessToken } from "./personal-access-token-auth.js";
 
 /**
  * `splitch context` is the first command an agent runs, so it is the one place
@@ -34,7 +34,7 @@ export async function executeContext(
     env: deps.env,
     cwd: deps.cwd,
   });
-  if (personalAccessTokenFromEnv(deps) !== undefined) {
+  if (selectedPersonalAccessToken(deps) !== undefined) {
     return executeApiOperation("principal_capabilities_get", {}, invocation, deps, io, (data) => ({
       authenticated: true,
       credentialMode: "token",

@@ -9,8 +9,9 @@ import {
 } from "@splitch/sdk/control-plane";
 import { SplitchCliError } from "./errors.js";
 import {
+  type CredentialOptions,
   personalAccessTokenFetch,
-  personalAccessTokenFromEnv,
+  selectedPersonalAccessToken,
 } from "./personal-access-token-auth.js";
 
 const defaultControlPlaneBaseUrl = "http://127.0.0.1:8787";
@@ -42,8 +43,7 @@ const hostedOrigins: Readonly<
 export type OperationSdk = ReturnType<typeof createMcpOperationAdapter>;
 export type OperationSdks = Record<PublicSurface, OperationSdk>;
 
-export interface SdkFactoryOptions {
-  readonly env?: Record<string, string | undefined>;
+export interface SdkFactoryOptions extends CredentialOptions {
   readonly platformTarget?: string;
   readonly controlPlaneBaseUrl?: string;
   readonly evaluationBaseUrl?: string;
@@ -120,6 +120,7 @@ function invalidOriginError(
 // origin it actually routes to.
 export function createOperationSdks(options: SdkFactoryOptions = {}): OperationSdks {
   const platformTarget = requirePlatformTarget(options.platformTarget);
+  const tokenMode = selectedPersonalAccessToken(options) !== undefined;
   const adapter = (
     envName: ApiOriginEnvName,
     configured: string | undefined,
@@ -127,10 +128,7 @@ export function createOperationSdks(options: SdkFactoryOptions = {}): OperationS
   ) =>
     createMcpOperationAdapter({
       baseUrl: apiBaseUrl(envName, configured, localDefault, platformTarget),
-      fetch:
-        personalAccessTokenFromEnv(options) === undefined
-          ? options.fetch
-          : personalAccessTokenFetch(options.fetch ?? fetch),
+      fetch: tokenMode ? personalAccessTokenFetch(options.fetch ?? fetch) : options.fetch,
     });
   return {
     get "control-plane-api"() {

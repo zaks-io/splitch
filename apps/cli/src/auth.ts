@@ -21,8 +21,8 @@ import { SplitchCliError } from "./errors.js";
 import {
   invalidPersonalAccessTokenError,
   personalAccessTokenAuthorization,
-  personalAccessTokenFromEnv,
   refuseTokenModeSessionCommand,
+  selectedPersonalAccessToken,
 } from "./personal-access-token-auth.js";
 import { authOriginRequiresHttps, resolveAuthBaseUrl } from "./sdks.js";
 
@@ -205,7 +205,7 @@ export async function withAuthorizationRetry<T>(
   run: (authorization: string) => Promise<{ status: number; value: T }>,
   binding?: TokenAuthorization,
 ): Promise<T> {
-  const personalAccessToken = personalAccessTokenFromEnv(deps);
+  const personalAccessToken = selectedPersonalAccessToken(deps);
   if (personalAccessToken !== undefined) {
     const result = await run(personalAccessTokenAuthorization(personalAccessToken));
     if (result.status === 401) throw invalidPersonalAccessTokenError();

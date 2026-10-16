@@ -1,13 +1,38 @@
 import { isPersonalAccessTokenSecret } from "@splitch/sdk/control-plane";
 import { SplitchCliError } from "./errors.js";
+import type { ParsedInvocation } from "./parse-args.js";
 import { redactPersonalAccessTokenSecrets } from "./personal-access-token-redaction.js";
 
-interface TokenEnvironment {
+type InvocationCredential =
+  | { readonly mode: "session" }
+  | { readonly mode: "token"; readonly secret: string };
+
+export interface CredentialOptions {
   readonly env?: Record<string, string | undefined>;
+  readonly invocationCredential?: InvocationCredential;
+}
+
+export function prepareInvocationCredential<T extends CredentialOptions>(
+  invocation: ParsedInvocation,
+  deps: T,
+): T {
+  if (invocation.commandPath[0] === "cloudflare") return deps;
+  const secret = selectedPersonalAccessToken(deps);
+  const invocationCredential: InvocationCredential =
+    secret === undefined ? { mode: "session" } : { mode: "token", secret };
+  const prepared = { ...deps, invocationCredential };
+  if (invocation.metaCommand === "login" || invocation.metaCommand === "logout") {
+    refuseTokenModeSessionCommand(prepared, `splitch ${invocation.metaCommand}`);
+  } else if (secret !== undefined) {
+    personalAccessTokenAuthorization(secret);
+  }
+  return prepared;
 }
 
 /** Presence selects token mode, including an empty value. Never trim a credential. */
-export function personalAccessTokenFromEnv(deps: TokenEnvironment): string | undefined {
+export function selectedPersonalAccessToken(deps: CredentialOptions): string | undefined {
+  const selected = deps.invocationCredential;
+  if (selected) return selected.mode === "token" ? selected.secret : undefined;
   return (deps.env ?? process.env).SPLITCH_TOKEN;
 }
 
@@ -18,8 +43,8 @@ export function personalAccessTokenAuthorization(secret: string): string {
   return `Bearer ${secret}`;
 }
 
-export function refuseTokenModeSessionCommand(deps: TokenEnvironment, command: string): void {
-  if (personalAccessTokenFromEnv(deps) === undefined) return;
+export function refuseTokenModeSessionCommand(deps: CredentialOptions, command: string): void {
+  if (selectedPersonalAccessToken(deps) === undefined) return;
   throw new SplitchCliError({
     code: "CLI_USAGE_INVALID",
     causeSummary: `${command} is unavailable while SPLITCH_TOKEN is set`,
