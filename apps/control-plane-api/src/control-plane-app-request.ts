@@ -115,7 +115,7 @@ export async function handleControlPlaneAppRequest(input: {
         secretKeyVersion: env.INTEGRATION_SECRET_KEY_VERSION,
       }).catch((error) => {
         reportCloudflarePushFault(env, ctx, error, "mutation");
-        throw error;
+        throw new Error("cloudflare_push_dispatch_failed");
       }),
     );
   }

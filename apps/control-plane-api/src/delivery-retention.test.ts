@@ -1,3 +1,4 @@
+import { inspect } from "node:util";
 import { beforeEach, expect, it, vi } from "vitest";
 import { runDeliveryRetention } from "./delivery-retention";
 import type { ControlPlaneApiEnv } from "./env";
@@ -85,9 +86,18 @@ it.each([
 });
 
 it("reports and rejects a failed pruning job without claiming success", async () => {
-  const error = new Error("D1 failed");
+  const error = Object.assign(new Error("private-retention-canary"), {
+    data: "private-retention-canary",
+    cause: new Error("private-retention-canary"),
+  });
   mocks.cloudflare.mockRejectedValue(error);
-  await expect(runDeliveryRetention(env, event, ctx)).rejects.toBe(error);
+  const failure = await runDeliveryRetention(env, event, ctx).catch((cause: unknown) => cause);
+  expect(failure).toBeInstanceOf(Error);
+  expect((failure as Error).message).toBe("delivery_retention_failed");
+  expect(Object.getOwnPropertyNames(failure)).toEqual(["stack", "message"]);
+  expect(
+    inspect([failure, mocks.report.mock.calls], { showHidden: true, depth: null }),
+  ).not.toContain("private-retention-canary");
   expect(mocks.report).toHaveBeenCalledWith(
     "delivery_retention_failed",
     expect.objectContaining({

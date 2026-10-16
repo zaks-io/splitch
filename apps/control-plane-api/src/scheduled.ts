@@ -13,9 +13,9 @@ import { runDeliveryRetention } from "./delivery-retention";
 import { purgeExpiredPrivacyArtifacts, reconcilePrivacyJobs } from "./entity-privacy-jobs";
 import type { ControlPlaneApiEnv } from "./env";
 import { FLAG_CHANGE_LOG_RETENTION_MS } from "./flag-change-log-retention";
+import { runPersonalAccessTokenRetention } from "./personal-access-token-rotation";
 import { deleteOrphanedPrivacyExports } from "./privacy-export-cleanup";
 import { dispatchSentryWebhooks } from "./sentry-webhook-dispatch";
-import { runPersonalAccessTokenRetention } from "./personal-access-token-rotation";
 
 const service = "splitch-control-plane-api";
 
@@ -77,7 +77,7 @@ async function runCloudflarePushDispatch(
         fault: serializeFault(error),
       },
     );
-    throw error;
+    throw new Error("cloudflare_push_dispatch_failed");
   }
 }
 
@@ -109,7 +109,7 @@ async function runSentryWebhookDispatch(
         fault: serializeFault(error),
       },
     );
-    throw error;
+    throw new Error("sentry_webhook_dispatch_failed");
   }
 }
 
@@ -211,7 +211,7 @@ async function runMetricEventClaimRetentionAdoption(
         fault: serializeFault(error),
       },
     );
-    throw error;
+    throw new Error("metric_event_claim_retention_adoption_failed");
   }
 }
 
@@ -241,6 +241,6 @@ async function runApprovalArchive(
         fault: serializeFault(error),
       },
     );
-    throw error;
+    throw new Error("approval_request_archive_failed");
   }
 }

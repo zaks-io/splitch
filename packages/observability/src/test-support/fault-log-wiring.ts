@@ -1,12 +1,16 @@
 import ts from "typescript";
+import { addBindingNames, rejectionBindings } from "./fault-catch-bindings";
+import { type FaultAlias, objectPropertyValue } from "./fault-log-properties";
 
 /** Static guard for the API log boundaries, including local logger/error aliases. */
 export function unsafeFaultLogs(source: ts.SourceFile): number[] {
   const raw = new Set<string>();
   const loggers = new Set(["console", "logger"]);
   const serializers = new Set(["serializeFault"]);
-  const aliases: Array<{ name: ts.BindingName; value: ts.Expression }> = [];
+  const aliases: FaultAlias[] = [];
   const calls: ts.CallExpression[] = [];
+  const evaluating = new Set<ts.Node>();
+  for (const binding of rejectionBindings(source).values()) addBindingNames(binding, raw);
 
   function collect(node: ts.Node): void {
     collectRawBindings(node, raw, source);
@@ -35,12 +39,27 @@ export function unsafeFaultLogs(source: ts.SourceFile): number[] {
   }
 
   function isRaw(node: ts.Node): boolean {
+    if (evaluating.has(node)) return false;
+    evaluating.add(node);
+    try {
+      return rawValue(node);
+    } finally {
+      evaluating.delete(node);
+    }
+  }
+
+  function rawValue(node: ts.Node): boolean {
     if (isSerializer(node)) return false;
+    if (isErrorConstruction(node)) return true;
     if (ts.isIdentifier(node)) return raw.has(node.text);
     if (ts.isPropertyAssignment(node)) return isRaw(node.initializer);
-    if (ts.isPropertyAccessExpression(node) || ts.isElementAccessExpression(node))
-      return rawProperty(node, isRaw);
+    if (isPropertyRead(node)) return isRawProperty(node);
     return emittedChildren(node).some(isRaw);
+  }
+
+  function isRawProperty(node: ts.PropertyAccessExpression | ts.ElementAccessExpression): boolean {
+    const value = objectPropertyValue(node, aliases);
+    return value ? isRaw(value) : rawProperty(node, isRaw);
   }
 
   collect(source);
@@ -50,8 +69,8 @@ export function unsafeFaultLogs(source: ts.SourceFile): number[] {
     return size !== raw.size + loggers.size;
   }
   function updateAlias(alias: { name: ts.BindingName; value: ts.Expression }): void {
-    if (isLogger(alias.value)) addNames(alias.name, loggers);
-    if (isRaw(alias.value)) addNames(alias.name, raw);
+    if (isLogger(alias.value)) addBindingNames(alias.name, loggers);
+    if (isRaw(alias.value)) addBindingNames(alias.name, raw);
   }
   while (propagate()) {
     /* Resolve transitive aliases before checking sinks. */
@@ -63,10 +82,7 @@ export function unsafeFaultLogs(source: ts.SourceFile): number[] {
     .map((call) => source.getLineAndCharacterOfPosition(call.getStart(source)).line + 1);
 }
 
-function collectAlias(
-  node: ts.Node,
-  aliases: Array<{ name: ts.BindingName; value: ts.Expression }>,
-): void {
+function collectAlias(node: ts.Node, aliases: FaultAlias[]): void {
   if (ts.isVariableDeclaration(node) && node.initializer)
     aliases.push({ name: node.name, value: node.initializer });
   if (
@@ -75,13 +91,6 @@ function collectAlias(
     ts.isIdentifier(node.left)
   )
     aliases.push({ name: node.left, value: node.right });
-}
-
-function addNames(name: ts.BindingName, names: Set<string>): void {
-  if (ts.isIdentifier(name)) names.add(name.text);
-  else
-    for (const element of name.elements)
-      if (ts.isBindingElement(element)) addNames(element.name, names);
 }
 
 function children(node: ts.Node): ts.Node[] {
@@ -97,14 +106,18 @@ function emittedChildren(node: ts.Node): ts.Node[] {
 }
 
 function collectRawBindings(node: ts.Node, raw: Set<string>, source: ts.SourceFile): void {
-  if (ts.isCatchClause(node) && node.variableDeclaration)
-    addNames(node.variableDeclaration.name, raw);
   if (
     ts.isParameter(node) &&
-    /^(cause|error|failure)$/.test(node.name.getText(source)) &&
+    (/^(cause|error|failure)$/.test(node.name.getText(source)) || isErrorType(node.type)) &&
     node.type?.getText(source) !== "string"
   )
-    addNames(node.name, raw);
+    addBindingNames(node.name, raw);
+}
+
+function isErrorType(node: ts.TypeNode | undefined): boolean {
+  if (!node) return false;
+  if (ts.isTypeReferenceNode(node)) return /Error$/.test(node.typeName.getText());
+  return ts.isUnionTypeNode(node) && node.types.some(isErrorType);
 }
 
 function rawProperty(
@@ -115,8 +128,18 @@ function rawProperty(
     ? node.name.text
     : node.argumentExpression.getText().replaceAll(/["']/g, "");
   if (field === "cause" || field === "stack") return true;
-  if (field === "message" && isRaw(node.expression)) return true;
+  if (field === "message") return isRaw(node.expression);
   return !ts.isIdentifier(node.expression) && isRaw(node.expression);
+}
+
+function isErrorConstruction(node: ts.Node): boolean {
+  return ts.isNewExpression(node) && /Error$/.test(node.expression.getText());
+}
+
+function isPropertyRead(
+  node: ts.Node,
+): node is ts.PropertyAccessExpression | ts.ElementAccessExpression {
+  return ts.isPropertyAccessExpression(node) || ts.isElementAccessExpression(node);
 }
 
 function loggerReceivers(node: ts.Node): ts.Node[] {

@@ -167,7 +167,7 @@ describe("createWorkerObservability onError", () => {
     await flushSentryHooks();
 
     const extra = captureMessage.mock.calls[0]?.[1]?.extra as { fault?: string };
-    expect(extra.fault).toBe("Error: [message withheld]");
+    expect(extra.fault).toBe("Error: [message withheld]\n[stack withheld]");
   });
 
   it("omits the fault field when nothing was thrown", async () => {

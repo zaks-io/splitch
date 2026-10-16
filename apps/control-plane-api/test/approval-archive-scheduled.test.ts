@@ -43,6 +43,10 @@ describe("Approval Request scheduled archival", () => {
     const results = await Promise.allSettled(waits);
 
     expect(results.filter((result) => result.status === "rejected")).toHaveLength(1);
+    const failure = results.find((result) => result.status === "rejected")?.reason;
+    expect(failure).toBeInstanceOf(Error);
+    expect(failure.message).toBe("approval_request_archive_failed");
+    expect(Object.getOwnPropertyNames(failure)).toEqual(["stack", "message"]);
     const row = consoleError.mock.calls
       .map(([value]) => value as Record<string, unknown>)
       .find((value) => value.message === "approval_request_archive_failed");
@@ -51,7 +55,7 @@ describe("Approval Request scheduled archival", () => {
       job: "approval-request-archive",
       cron: "0 8 * * *",
     });
-    const output = inspect(consoleError.mock.calls, {
+    const output = inspect([results, consoleError.mock.calls], {
       showHidden: true,
       depth: null,
       maxStringLength: null,

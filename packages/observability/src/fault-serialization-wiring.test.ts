@@ -3,16 +3,10 @@ import { join, relative } from "node:path";
 import ts from "typescript";
 import { expect, it } from "vitest";
 import { unsafeFaultLogs } from "./test-support/fault-log-wiring";
+import { reportedFaultRethrows, unsafeStackWrites } from "./test-support/fault-runtime-wiring";
+import { sourceFiles } from "./test-support/workspace-sources";
 
 const repoRoot = new URL("../../../", import.meta.url).pathname;
-
-function sourceFiles(directory: string): string[] {
-  return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
-    const path = join(directory, entry.name);
-    if (entry.isDirectory()) return sourceFiles(path);
-    return path.endsWith(".ts") && !/\.(test|spec|d)\.ts$/.test(path) ? [path] : [];
-  });
-}
 
 function workspaceSources(workspace: string): string[] {
   return readdirSync(join(repoRoot, workspace), { withFileTypes: true }).flatMap((entry) => {
@@ -70,6 +64,26 @@ it("uses shared serialization for every Worker fault producer", () => {
     .flatMap((file) => violationsIn(readFileSync(file, "utf8"), file));
   expect(violations).toEqual([]);
 });
+
+it("preserves engine stack trust throughout application and package source", () => {
+  const violations = ["apps", "packages"]
+    .flatMap((workspace) => sourceFiles(join(repoRoot, workspace)))
+    .flatMap((file) => guardViolations(file, unsafeStackWrites));
+  expect(violations).toEqual([]);
+});
+
+it("does not rethrow reported faults into the Worker runtime", () => {
+  const violations = ["control-plane-api", "event-ingest-api", "mcp-server"]
+    .flatMap((app) => sourceFiles(join(repoRoot, "apps", app, "src")))
+    .flatMap((file) => guardViolations(file, reportedFaultRethrows));
+  expect(violations).toEqual([]);
+});
+
+function guardViolations(file: string, guard: (source: ts.SourceFile) => number[]): string[] {
+  return guard(
+    ts.createSourceFile(file, readFileSync(file, "utf8"), ts.ScriptTarget.Latest, true),
+  ).map((line) => `${relative(repoRoot, file)}:${line}`);
+}
 
 it.each([
   "cause.stack ?? cause.message",

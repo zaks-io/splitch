@@ -9,12 +9,19 @@ type Field = { ok: true; value: unknown } | { ok: false };
  * Drizzle placeholder SQL (2,000 characters), allowlisted D1 tokens/static phrases
  * and SQLite result-code names, header-verified stack frames, and fixed markers.
  * All other messages, including top-level messages and parser excerpts, are withheld.
- * Strip the complete exact name/message header before selecting frame lines; custom,
- * mutated or unreadable headers cannot contribute frames. Isolate every field read
- * so a hostile getter cannot discard another field's SQL or the rest of the graph.
+ * SQL requires Object.prototype.toString.call(error) === "[object Error]", an
+ * isolated constructor.name of DrizzleQueryError, an own string query, and an own
+ * array params. Only engine Errors with a nonempty, exact name/message header
+ * contribute the contiguous frame block immediately after that header. Other stacks,
+ * including empty-message, mutated or unreadable headers, are withheld. Workerd
+ * disallows eval and new Function, so eval-source frames cannot occur in production.
+ * The repository guard forbids writing .stack or Error.prepareStackTrace in source;
+ * that guard prevents deliberately placing data in frames, not this serializer.
+ * Isolate every field read so a hostile getter cannot discard another field's SQL
+ * or the rest of the graph.
  * Traverse cause, then aggregate members, depth-first with cycle protection and one
  * 32-node budget. Keep earlier diagnostics and an omitted count within 8 KB of UTF-8.
- * Parameter values are never read or redacted: no free message text is emitted, so
+ * Parameter entries are never read or redacted: no free message text is emitted, so
  * value matching is unnecessary and cannot leak truncated excerpts or missed nodes.
  */
 export function serializeFault(cause: unknown): string | undefined {
@@ -52,7 +59,7 @@ function serializeGraph(root: unknown): string {
     }
     seen.add(value);
     if ((typeof value !== "object" || value === null) && typeof value !== "function") {
-      output.push(`${relation}Error: [message withheld]`);
+      output.push(`${relation}Error: [message withheld]\n[stack withheld]`);
       return;
     }
     output.push(relation + nodeDiagnostic(value));
@@ -113,9 +120,13 @@ function readMembers(
 }
 
 function nodeDiagnostic(error: object): string {
+  const engineError = isEngineError(error);
   const name = readField(error, "name");
   const message = readField(error, "message");
-  const query = readQuery(error);
+  const constructorName = engineError
+    ? readConstructorName(error)
+    : { ok: true as const, value: undefined };
+  const query = readQuery(error, engineError, constructorName);
   const stack = readField(error, "stack");
   const safeName =
     name.ok && typeof name.value === "string" && /^[A-Za-z][A-Za-z0-9_]{0,63}$/.test(name.value)
@@ -130,6 +141,7 @@ function nodeDiagnostic(error: object): string {
   const unreadable = [
     ["name", name],
     ["message", message],
+    ["constructor.name", constructorName],
     ["query", query],
     ["stack", stack],
   ] as const;
@@ -139,36 +151,65 @@ function nodeDiagnostic(error: object): string {
       .filter(([, field]) => !field.ok)
       .map(([field]) => `\n${field}: [unreadable]`)
       .join("") +
-    verifiedFrames(name, message, stack)
+    verifiedFrames(engineError, name, message, stack)
   );
 }
 
-function readQuery(error: object): Field {
+function isEngineError(error: object): boolean {
   try {
-    // Drizzle's structural identity avoids importing its runtime into Workers.
-    // Presence is sufficient; parameter values and their getters are never read.
-    return { ok: true, value: "params" in error ? Reflect.get(error, "query") : undefined };
+    return Object.prototype.toString.call(error) === "[object Error]";
+  } catch {
+    return false;
+  }
+}
+
+function readConstructorName(error: object): Field {
+  const errorConstructor = readField(error, "constructor");
+  if (!errorConstructor.ok) return errorConstructor;
+  return errorConstructor.value !== null &&
+    (typeof errorConstructor.value === "object" || typeof errorConstructor.value === "function")
+    ? readField(errorConstructor.value, "name")
+    : { ok: true, value: undefined };
+}
+
+function readQuery(error: object, engineError: boolean, constructorName: Field): Field {
+  if (!engineError || !constructorName.ok || constructorName.value !== "DrizzleQueryError")
+    return { ok: true, value: undefined };
+  try {
+    // Verify Drizzle's own data shape without importing its runtime or reading a
+    // parameter entry. Accessors cannot establish the required params array.
+    const params = Object.getOwnPropertyDescriptor(error, "params");
+    return {
+      ok: true,
+      value:
+        params && "value" in params && Array.isArray(params.value) && Object.hasOwn(error, "query")
+          ? Reflect.get(error, "query")
+          : undefined,
+    };
   } catch {
     return { ok: false };
   }
 }
 
-function verifiedFrames(name: Field, message: Field, stack: Field): string {
+function verifiedFrames(engineError: boolean, name: Field, message: Field, stack: Field): string {
   if (
+    !engineError ||
     !name.ok ||
     !message.ok ||
     !stack.ok ||
     typeof name.value !== "string" ||
     typeof message.value !== "string" ||
+    !message.value ||
     typeof stack.value !== "string"
   )
     return "\n[stack withheld]";
-  const header = message.value ? `${name.value}: ${message.value}\n` : `${name.value}\n`;
+  const header = `${name.value}: ${message.value}\n`;
   if (!stack.value.startsWith(header)) return "\n[stack withheld]";
-  const frames = stack.value
-    .slice(header.length)
-    .split("\n")
-    .filter((line) => /^\s+at /.test(line));
+  const frames: string[] = [];
+  for (const line of stack.value.slice(header.length).split("\n")) {
+    if (!/^\s+at /.test(line)) break;
+    frames.push(line);
+  }
   return frames.length ? `\n${frames.join("\n")}` : "";
 }
 

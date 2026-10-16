@@ -49,6 +49,6 @@ export async function runDeliveryRetention(
       ...attributes,
       fault: serializeFault(error),
     });
-    throw error;
+    throw new Error("delivery_retention_failed");
   }
 }

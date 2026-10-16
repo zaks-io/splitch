@@ -34,12 +34,12 @@ describe("deny-by-default fault messages", () => {
     expect(serializeFault(error)).toContain("Domain_Error2: [message withheld]");
   });
 
-  it("retains SQL without reading or matching any parameters", () => {
+  it("retains SQL without reading or matching any parameter entries", () => {
     const error = new DrizzleQueryError("select 1 where ? = 1", [1], new Error("D1_ERROR"));
     const params = vi.fn(() => {
       throw new Error("params must not be read");
     });
-    Object.defineProperty(error, "params", { get: params });
+    Object.defineProperty(error.params, "0", { get: params });
     expect(serializeFault(error)).toContain("Failed query: select 1 where ? = 1");
     expect(params).not.toHaveBeenCalled();
   });
