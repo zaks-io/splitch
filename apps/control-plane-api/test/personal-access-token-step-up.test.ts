@@ -1,4 +1,7 @@
-import { personalAccessTokenCacheKey } from "@splitch/contracts";
+import {
+  PERSONAL_ACCESS_TOKEN_STEP_UP_CHALLENGE,
+  personalAccessTokenCacheKey,
+} from "@splitch/contracts";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   APP,
@@ -63,6 +66,7 @@ describe("PAT step-up through the real D1 route", () => {
     const before = await f.repo.personalAccessTokens.listForUser(USER, { limit: 100 });
     const refused = await f.call(method, path, body, { claims });
     expect(refused.status).toBe(403);
+    expect(refused.headers.get("WWW-Authenticate")).toBe(PERSONAL_ACCESS_TOKEN_STEP_UP_CHALLENGE);
     expect(await refused.json()).toMatchObject({
       code: "FORBIDDEN",
       message: expect.stringContaining("rerun the same splitch tokens command"),
@@ -78,6 +82,7 @@ describe("PAT step-up through the real D1 route", () => {
     ).toBe(0);
     const approved = await f.call(method, path, body, { claims, approval: await f.approval() });
     expect(approved.status, await approved.clone().text()).toBe(200);
+    expect(approved.headers.has("WWW-Authenticate")).toBe(false);
   });
 
   it("ordinary finite issuance and cleanup of a broad permanent token remain available", async () => {
@@ -139,6 +144,7 @@ describe("PAT step-up through the real D1 route", () => {
       { approval: await f.approval(claims) },
     );
     expect(response.status).toBe(403);
+    expect(response.headers.has("WWW-Authenticate")).toBe(false);
     expect(f.puts).toEqual([]);
     expect(await f.repo.personalAccessTokens.listActiveForUser(USER)).toEqual([]);
   });
@@ -166,6 +172,7 @@ describe("PAT step-up through the real D1 route", () => {
       f.call("POST", "/personal-access-tokens", body, { approval }),
     ]);
     expect(results.map((r) => r.status).sort()).toEqual([200, 403]);
+    expect(results.every((r) => !r.headers.has("WWW-Authenticate"))).toBe(true);
     const rows = await f.repo.personalAccessTokens.listActiveForUser(USER);
     expect(rows).toHaveLength(1);
     expect(f.puts).toHaveLength(1);
@@ -184,6 +191,7 @@ describe("PAT step-up through the real D1 route", () => {
       f.call("PATCH", path, body, { approval }),
     ]);
     expect(responses.map((r) => r.status).sort()).toEqual([200, 403]);
+    expect(responses.every((r) => !r.headers.has("WWW-Authenticate"))).toBe(true);
     const updated = await f.repo.personalAccessTokens.getForUser(USER, row.id);
     const calls = f.puts.length;
     expect((await f.call("PATCH", path, body, { approval })).status).toBe(403);

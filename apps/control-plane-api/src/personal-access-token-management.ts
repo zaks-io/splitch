@@ -1,6 +1,7 @@
 import {
   type ErrorResponse,
   PERSONAL_ACCESS_TOKEN_DEFAULT_TTL_DAYS,
+  PERSONAL_ACCESS_TOKEN_STEP_UP_CHALLENGE,
   type PersonalAccessTokenGrant,
   PersonalAccessTokenGrantsSchema,
   type PersonalAccessTokenStepUpInput,
@@ -9,7 +10,12 @@ import {
   type UserRole,
   userRoleCovers,
 } from "@splitch/contracts";
-import type { PersonalAccessTokenPatch, PersonalAccessTokenRow, Repository } from "@splitch/db";
+import type {
+  PersonalAccessTokenPatch,
+  PersonalAccessTokenRow,
+  PersonalAccessTokenStepUpUse,
+  Repository,
+} from "@splitch/db";
 import { type Principal, renderError } from "@splitch/worker-runtime";
 import type { TokenMembershipAccess } from "./token-membership";
 
@@ -20,13 +26,24 @@ interface PersonalAccessTokenManagementDeps {
   nowMs?: () => number;
 }
 
+interface IssuanceRefusal {
+  refusal: ErrorResponse;
+  defaultHeaders: Record<string, string>;
+}
+
+export function issuanceRefusalResponse(issuance: IssuanceRefusal, requestId: string): Response {
+  return renderError(issuance.refusal, { requestId, defaultHeaders: issuance.defaultHeaders });
+}
+
 export async function authorizeIssuance(
   deps: PersonalAccessTokenManagementDeps,
   principal: Principal,
   operation: "create" | "update" | "rotate",
   body: Record<string, unknown>,
   current?: PersonalAccessTokenRow,
-) {
+): Promise<
+  IssuanceRefusal | { cleanup: boolean; approval: PersonalAccessTokenStepUpUse | undefined }
+> {
   const memberships = await deps.membershipAccess.resolve(principal.id);
   const input = {
     operation,
@@ -47,13 +64,21 @@ export async function authorizeIssuance(
     operation === "update" && personalAccessTokenStepUpReason({ ...input, scopes: [] }) === null;
   if (!cleanup) {
     const refused = personalAccessTokenManagementRefusal(principal);
-    if (refused) return refused.message;
+    if (refused) return { refusal: refused, defaultHeaders: {} };
   }
   const reason = personalAccessTokenStepUpReason(input);
   const approval =
     principal.authDoor === "device_flow" ? principal.personalAccessTokenStepUp : undefined;
-  if (reason && !approval)
-    return `${reason}; rerun the same splitch tokens command to approve in the browser`;
+  if (reason && !approval) {
+    return {
+      refusal: forbidden(
+        `${reason}; rerun the same splitch tokens command to approve in the browser`,
+      ),
+      // Released SDKs require empty FORBIDDEN details. Challenge in the header
+      // so their existing error body and useful human message remain valid.
+      defaultHeaders: { "WWW-Authenticate": PERSONAL_ACCESS_TOKEN_STEP_UP_CHALLENGE },
+    };
+  }
   return {
     cleanup,
     approval: approval

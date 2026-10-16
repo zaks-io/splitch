@@ -3,6 +3,7 @@ import {
   type ControlPlaneOperationResult,
   MEMBERSHIP_WIDE_READ_AUTHORIZATION,
   PERSONAL_ACCESS_TOKEN_AUTHORIZATION_HEADER,
+  PERSONAL_ACCESS_TOKEN_STEP_UP_CHALLENGE,
   type PersonalAccessToken,
   PersonalAccessTokenGrantsSchema,
   type PersonalAccessTokenStepUpInput,
@@ -52,14 +53,38 @@ export async function callPersonalAccessTokenMutation(
   // Discovery is advisory: the server can prove cleanup through canonical D1
   // identity even when the CLI cannot read a needed App relationship.
   const mapped = await organizationApps(policy, authorization, deps).catch(() => null);
-  if (
-    mapped &&
-    "apps" in mapped &&
-    !personalAccessTokenNeedsStepUp({ ...policy, apps: mapped.apps })
-  ) {
+  if (!mapped || "failure" in mapped) {
+    return callWithChallenge(operationId, input, authorization, deps);
+  }
+  if (!personalAccessTokenNeedsStepUp({ ...policy, apps: mapped.apps })) {
     return sdk.callOperationById(operationId, input, { authorization });
   }
   return callWithStepUp(operationId, input, authorization, deps);
+}
+
+async function callWithChallenge(
+  operationId: string,
+  input: Record<string, unknown>,
+  authorization: string,
+  deps: CliDeps,
+): Promise<ControlPlaneOperationResult> {
+  let challenged = false;
+  const fetchImpl = deps.fetch ?? fetch;
+  const sdk = createOperationSdks({
+    ...deps,
+    fetch: async (request, init) => {
+      const response = await fetchImpl(request, init);
+      challenged =
+        response.headers.get("WWW-Authenticate") === PERSONAL_ACCESS_TOKEN_STEP_UP_CHALLENGE;
+      return response;
+    },
+  })["control-plane-api"];
+  // Only an explicit, parsed refusal proves no write occurred. Success, other
+  // refusals and transport/response parsing errors must never repeat a mutation.
+  const result = await sdk.callOperationById(operationId, input, { authorization });
+  return challenged && !result.ok && result.status === 403 && result.error.code === "FORBIDDEN"
+    ? callWithStepUp(operationId, input, authorization, deps)
+    : result;
 }
 
 type OrganizationAppsResult =

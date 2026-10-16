@@ -30,6 +30,7 @@
     "@cloudflare/vitest-pool-workers": "0.22.0",
     "@vitest/runner": "4.1.11",
     "miniflare": "^4.20260730.0",
+    "open": "11.0.4",
     "vitest": "4.1.11"
   }
 }

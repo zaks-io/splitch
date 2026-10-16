@@ -21,6 +21,7 @@ import {
   forbidden,
   grantProblems,
   isActivePersonalAccessToken,
+  issuanceRefusalResponse,
   notFound,
   personalAccessTokenManagementRefusal,
   requireStore,
@@ -83,7 +84,7 @@ function makePersonalAccessTokenHandlers(deps: PersonalAccessTokenHandlerDeps) {
       }
 
       const issuance = await authorizeIssuance(deps, principal, "create", body);
-      if (typeof issuance === "string") return renderError(forbidden(issuance), { requestId });
+      if ("refusal" in issuance) return issuanceRefusalResponse(issuance, requestId);
       const secret = newSecret();
       const tokenHash = await sha256Hex(secret);
       const row = await tokens.insertAuthorized(
@@ -116,7 +117,7 @@ function makePersonalAccessTokenHandlers(deps: PersonalAccessTokenHandlerDeps) {
       const current = await tokens.getForUser(principal.id, pathParam(input, "tokenId"));
       if (!isActivePersonalAccessToken(current)) return notFound(requestId);
       const issuance = await authorizeIssuance(deps, principal, "update", body, current);
-      if (typeof issuance === "string") return renderError(forbidden(issuance), { requestId });
+      if ("refusal" in issuance) return issuanceRefusalResponse(issuance, requestId);
       const invalid = await updateProblems(
         deps.membershipAccess,
         principal.id,
@@ -147,7 +148,7 @@ function makePersonalAccessTokenHandlers(deps: PersonalAccessTokenHandlerDeps) {
       if (!isActivePersonalAccessToken(current)) return notFound(requestId);
       const nowMs = now();
       const issuance = await authorizeIssuance(deps, principal, "rotate", {}, current);
-      if (typeof issuance === "string") return renderError(forbidden(issuance), { requestId });
+      if ("refusal" in issuance) return issuanceRefusalResponse(issuance, requestId);
       if (personalAccessTokenExpired(current.expiresAt, nowMs)) {
         // A rotated secret would be dead on arrival. Extending is the explicit
         // way to revive an expired token: `tokens update --expires-at …`.

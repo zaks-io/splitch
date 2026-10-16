@@ -3,6 +3,8 @@ import type { UserRole } from "./leaf-schemas-runtime";
 import { type PersonalAccessTokenGrant, userRoleCovers } from "./personal-access-tokens";
 
 export const PERSONAL_ACCESS_TOKEN_AUTHORIZATION_HEADER = "Splitch-PAT-Authorization";
+export const PERSONAL_ACCESS_TOKEN_STEP_UP_CHALLENGE =
+  'Bearer error="insufficient_user_authentication", authorization="pat-management"';
 export const PERSONAL_ACCESS_TOKEN_STEP_UP_TTL_SECONDS = 300;
 
 interface TokenAuthority {

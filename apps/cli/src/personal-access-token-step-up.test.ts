@@ -163,15 +163,15 @@ describe("CLI Personal Access Token Organization coverage", () => {
     );
   });
 
-  it("requests approval when a needed App lookup fails and lets the server decide", async () => {
+  it("lets the server accept issuance when a needed App lookup fails", async () => {
     const { result, requests } = await run(
       ["create", "--name", "x", "--grant", "app:app_1:member:read"],
       { scopes: ["org:org_1:owner"], catalogFailure: true, catalogReadRebind: true },
     );
     expect(result.exitCode).toBe(EXIT_OK);
-    expect(open).toHaveBeenCalledOnce();
+    expect(open).not.toHaveBeenCalled();
     expect(mutations(requests)).toHaveLength(1);
-    expect(mutations(requests)[0]?.headers.get("Splitch-PAT-Authorization")).toBe(STEP_UP);
+    expect(mutations(requests)[0]?.headers.has("Splitch-PAT-Authorization")).toBe(false);
   });
 });
 

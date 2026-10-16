@@ -6,7 +6,6 @@ import {
   BROAD,
   personalAccessTokenMutations as mutations,
   runPersonalAccessTokenStepUp as run,
-  STEP_UP,
   TOKEN,
 } from "./personal-access-token-test-fixtures.js";
 import { cleanupTempHomes } from "./test-helpers.js";
@@ -125,7 +124,7 @@ describe("CLI cleanup after losing membership", () => {
   );
 
   it.each([403, 404, "transport"] as const)(
-    "uses browser approval when required Org-to-App discovery returns %s",
+    "sends cleanup without approval when Org-to-App discovery returns %s",
     async (status) => {
       const { result, requests, session } = await run(
         ["update", TOKEN.id, "--grant", "app:app_1:member:read"],
@@ -140,12 +139,12 @@ describe("CLI cleanup after losing membership", () => {
         },
       );
       expect(result.exitCode).toBe(EXIT_OK);
-      expect(open).toHaveBeenCalledOnce();
+      expect(open).not.toHaveBeenCalled();
       expect(mutations(requests)).toHaveLength(1);
       expect(mutations(requests)[0]?.headers.get("authorization")).toBe(
         `Bearer ${session.credential.accessToken}`,
       );
-      expect(mutations(requests)[0]?.headers.get("Splitch-PAT-Authorization")).toBe(STEP_UP);
+      expect(mutations(requests)[0]?.headers.has("Splitch-PAT-Authorization")).toBe(false);
     },
   );
 });

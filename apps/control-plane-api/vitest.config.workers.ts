@@ -46,6 +46,10 @@ export default defineConfig(async () => {
     ],
     resolve: {
       alias: {
+        "@splitch/sdk/control-plane": new URL(
+          "../../packages/sdk/src/control-plane/index.ts",
+          import.meta.url,
+        ).pathname,
         "@splitch/contracts": new URL("../../packages/contracts/src/index.ts", import.meta.url)
           .pathname,
         // Ordered before the bare "@splitch/db" alias: that one is a prefix match

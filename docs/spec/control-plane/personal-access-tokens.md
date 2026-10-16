@@ -203,7 +203,16 @@ secrets fail on the next call. Logging out of a CLI session does not revoke its 
   `envVar`.
 
 Before create, update, or rotate, the CLI applies the shared step-up rule using the original session
-and, for updates and rotation, the server's current token metadata. When approval is needed, it starts
+and, for updates and rotation, the server's current token metadata. If an App relationship lookup
+fails or is unreadable, classification is inconclusive: the CLI sends the mutation once without
+approval so the server can recognize cleanup from canonical D1 identity. Only a 403 `FORBIDDEN`
+response carrying `WWW-Authenticate: Bearer error="insufficient_user_authentication",
+authorization="pat-management"` opens approval and permits one further attempt with step-up.
+The server emits this challenge only for missing step-up, before any write; its existing error
+code, human message, and empty details remain unchanged for released CLIs. The header avoids adding
+fields to `FORBIDDEN.details`, which CLI 0.8.0 validates strictly. Success, other refusals, and
+transport or response-parsing failures never trigger approval or retry. The second attempt is final.
+When the shared rule conclusively requires approval, the CLI goes directly to approval. It starts
 a new device flow with `authorization: "pat-management"` at initiation and polling, then opens the
 existing browser approval. Auth API issues no refresh session or refresh token for this exchange.
 The CLI holds the five-minute, single-use JWT in memory only, sends the management request once
