@@ -3,6 +3,7 @@ export {
   type AccessTokenAuthorization,
   accessTokenAuthorizationFromClaim,
   MEMBERSHIP_WIDE_READ_AUTHORIZATION,
+  PAT_MANAGEMENT_AUTHORIZATION,
 } from "./access-token-authorization";
 export type { ApprovalRequestId, ApprovalReviewId } from "./approval-identifiers";
 export { ApprovalRequestIdSchema, ApprovalReviewIdSchema } from "./approval-identifiers";

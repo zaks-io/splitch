@@ -1,4 +1,5 @@
 import {
+  PERSONAL_ACCESS_TOKEN_AUTHORIZATION_HEADER,
   type PersonalAccessToken,
   PersonalAccessTokenCacheSchema,
   personalAccessTokenCacheKey,
@@ -29,7 +30,6 @@ import { makePoolBindings } from "./pool-bindings";
  * validated against live membership.
  */
 
-const NOW_MS = Date.UTC(2026, 9, 3, 12, 0, 0);
 const DAY_MS = 24 * 60 * 60 * 1000;
 const ALICE = "user_pat_routes_alice";
 const BOB = "user_pat_routes_bob";
@@ -75,7 +75,7 @@ function buildApp(store: KVNamespace): ReturnType<typeof createApp> {
       }),
       sessions: makeSessionStore(bindings.kv),
       membershipAccess: makeTokenMembershipAccess(repo),
-      now: () => NOW_MS,
+      now: () => Date.now(),
     }),
     rateLimiter: allowLimiter,
     repo,
@@ -87,28 +87,33 @@ afterEach(async () => {
   await bindings.dispose();
 });
 
-function jwt(sub: string, authDoor = "device_flow"): Promise<string> {
+function jwt(sub: string, authDoor = "device_flow", stepUp = false): Promise<string> {
   const now = Math.floor(Date.now() / 1000);
   return signer.sign({
     sub,
     iss: ISSUER,
     aud: AUDIENCE,
     iat: now,
-    exp: now + 3600,
-    scopes: [],
+    exp: now + (stepUp ? 300 : 3600),
+    scopes: stepUp ? [] : sub === ALICE ? [`app:${PAY.appId}:admin`] : [`org:${OTHER.orgId}:owner`],
     auth_door: authDoor,
+    ...(stepUp ? { authorization: "pat-management", jti: crypto.randomUUID() } : {}),
   });
 }
 
 async function call(
   method: string,
   path: string,
-  options: { sub?: string; body?: unknown; authDoor?: string } = {},
+  options: { sub?: string; body?: unknown; authDoor?: string; stepUp?: boolean } = {},
 ): Promise<Response> {
+  const approval = options.stepUp
+    ? await jwt(options.sub ?? ALICE, "device_flow", true)
+    : undefined;
   return app.request(path, {
     method,
     headers: {
       authorization: `Bearer ${await jwt(options.sub ?? ALICE, options.authDoor)}`,
+      ...(approval ? { [PERSONAL_ACCESS_TOKEN_AUTHORIZATION_HEADER]: approval } : {}),
       ...(options.body === undefined ? {} : { "content-type": "application/json" }),
     },
     ...(options.body === undefined ? {} : { body: JSON.stringify(options.body) }),
@@ -117,8 +122,8 @@ async function call(
 
 const readGrant = { target: `app:${PAY.appId}`, role: "admin", permissions: [] } as const;
 
-async function create(body: Record<string, unknown>) {
-  const response = await call("POST", "/personal-access-tokens", { body });
+async function create(body: Record<string, unknown>, stepUp = false) {
+  const response = await call("POST", "/personal-access-tokens", { body, stepUp });
   expect(response.status, await response.clone().text()).toBe(200);
   return (await response.json()) as { token: PersonalAccessToken; secret: string };
 }
@@ -157,12 +162,11 @@ describe("personal access token routes", () => {
     );
   });
 
-  it("creates a never-expiring token only when asked, and flags it", async () => {
-    const { token, secret } = await create({
-      name: "forever",
-      grants: [readGrant],
-      expiresAt: null,
-    });
+  it("creates a never-expiring token after fresh browser approval, and flags it", async () => {
+    const { token, secret } = await create(
+      { name: "forever", grants: [readGrant], expiresAt: null },
+      true,
+    );
     expect(token).toMatchObject({ expiresAt: null, neverExpires: true });
     expect(await cacheEntry(secret)).toMatchObject({ expiresAt: null });
   });
@@ -198,6 +202,7 @@ describe("personal access token lifecycle", () => {
   it("updates grants and expiry without rotating the secret", async () => {
     const { token, secret } = await create({ name: "n", grants: [readGrant] });
     const response = await call("PATCH", `/personal-access-tokens/${token.id}`, {
+      stepUp: true,
       body: {
         name: "renamed",
         grants: [

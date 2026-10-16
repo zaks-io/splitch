@@ -10,13 +10,18 @@ import { createRepository } from "@splitch/db";
 import type { Principal } from "@splitch/worker-runtime";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { sha256Hex } from "../src/credential-cache";
+import {
+  personalAccessTokenResponse,
+  writePersonalAccessTokenCache,
+} from "../src/personal-access-token-store";
 import { makeTestApp as createApp } from "../src/test-app-fixture";
 import { allowLimiter } from "../src/test-constants";
 import type { LocalBindings } from "../src/test-fixtures";
-import { resetOrganizationGraph } from "../src/test-seeds";
+import { resetOrganizationGraph, seedOrgApp, seedOrgMember } from "../src/test-seeds";
 import { makePoolBindings } from "./pool-bindings";
 
 const USER_ID = "user_pat_auth_doors";
+const ORG_ID = "org_pat_auth_doors";
 const grants = [
   {
     target: "all",
@@ -24,6 +29,7 @@ const grants = [
     permissions: ["write", "delete", "credentials", "members", "privacy"],
   },
 ] as const;
+const scopedGrants = [{ ...grants[0], target: `org:${ORG_ID}`, role: "admin" }] as const;
 let bindings: LocalBindings;
 let app: ReturnType<typeof createApp>;
 let principal: Principal;
@@ -31,10 +37,18 @@ let principal: Principal;
 beforeEach(async () => {
   bindings = await makePoolBindings();
   await resetOrganizationGraph(bindings.d1);
+  await seedOrgApp(bindings.d1, {
+    orgId: ORG_ID,
+    orgName: "PAT doors",
+    appId: "app_pat_auth_doors",
+    appName: "PAT doors",
+    appKey: "pat-auth-doors",
+  });
+  await seedOrgMember(bindings.d1, { orgId: ORG_ID, userId: USER_ID, role: "owner" });
   principal = {
     kind: "control-plane-token",
     id: USER_ID,
-    scopes: [],
+    scopes: [`org:${ORG_ID}:owner`],
     orgId: null,
     appId: null,
     environmentId: null,
@@ -64,9 +78,29 @@ function call(method: string, path: string, body?: unknown): Promise<Response> {
 }
 
 async function create() {
-  const response = await call("POST", "/personal-access-tokens", { name: "door", grants });
+  const response = await call("POST", "/personal-access-tokens", {
+    name: "door",
+    grants: scopedGrants,
+    expiresAt: new Date(Date.now() + 3_600_000).toISOString(),
+  });
   expect(response.status).toBe(200);
   return (await response.json()) as { token: PersonalAccessToken; secret: string };
+}
+
+async function seedBroadToken() {
+  const nowMs = Date.now();
+  const secret = `spl_pat_${crypto.randomUUID().replaceAll("-", "")}${crypto.randomUUID().replaceAll("-", "")}`;
+  const row = await createRepository(bindings.d1).personalAccessTokens.insert({
+    id: `pat_${crypto.randomUUID().replaceAll("-", "")}`,
+    userId: USER_ID,
+    name: "existing broad permanent token",
+    tokenHash: await sha256Hex(secret),
+    grants: JSON.stringify(grants),
+    expiresAt: null,
+    createdAt: new Date(nowMs).toISOString(),
+  });
+  await writePersonalAccessTokenCache(bindings.kv, row, row.tokenHash, false, nowMs);
+  return { token: personalAccessTokenResponse(row, nowMs), secret };
 }
 
 async function cacheEntry(secret: string) {
@@ -79,7 +113,7 @@ const refusedDoors = ["id_jag", "anonymous", "personal_access_token", null, "fut
 
 describe("personal access token management auth doors", () => {
   it("refuses User deletion with every PAT permission and preserves owner cleanup without permissions", async () => {
-    const { token } = await create();
+    const { token } = await seedBroadToken();
     principal.authDoor = "personal_access_token";
     principal.personalAccessToken = {
       id: token.id,
@@ -103,7 +137,7 @@ describe("personal access token management auth doors", () => {
   });
 
   it.each(refusedDoors)("refuses create, update, and rotate for %s", async (door) => {
-    const { token, secret } = await create();
+    const { token, secret } = await seedBroadToken();
     const repo = createRepository(bindings.d1).personalAccessTokens;
     const original = await repo.getForUser(USER_ID, token.id);
     const originalCache = await cacheEntry(secret);
@@ -131,12 +165,19 @@ describe("personal access token management auth doors", () => {
     async (door) => {
       principal.authDoor = door;
       const { token, secret } = await create();
+      const expiresAt = new Date(Date.now() + 1_800_000).toISOString();
       const updated = await call("PATCH", `/personal-access-tokens/${token.id}`, {
-        grants,
-        expiresAt: null,
+        name: "updated",
+        grants: scopedGrants,
+        expiresAt,
       });
       expect(updated.status).toBe(200);
-      expect(await updated.json()).toMatchObject({ grants, expiresAt: null, neverExpires: true });
+      expect(await updated.json()).toMatchObject({
+        name: "updated",
+        grants: scopedGrants,
+        expiresAt,
+        neverExpires: false,
+      });
       const rotated = await call("POST", `/personal-access-tokens/${token.id}/rotate`);
       expect(rotated.status).toBe(200);
       const result = (await rotated.json()) as { secret: string };
@@ -146,22 +187,63 @@ describe("personal access token management auth doors", () => {
     },
   );
 
-  it.each(refusedDoors)("keeps list, revoke, and revoke-all available for %s", async (door) => {
-    const first = await create();
-    const second = await create();
-    principal.authDoor = door as AuthDoor | null;
-    const listed = await call("GET", "/personal-access-tokens");
-    expect(listed.status).toBe(200);
-    expect(await listed.json()).toMatchObject({
-      items: expect.arrayContaining([{ ...first.token }]),
-    });
-    const revoked = await call("POST", `/personal-access-tokens/${first.token.id}/revoke`);
-    expect(revoked.status).toBe(200);
-    expect(await revoked.json()).toMatchObject({ status: "revoked" });
-    expect(await cacheEntry(first.secret)).toMatchObject({ revoked: true });
-    const all = await call("POST", "/personal-access-tokens/revoke-all");
-    expect(all.status).toBe(200);
-    expect(await all.json()).toEqual({ revokedCount: 1 });
-    expect(await cacheEntry(second.secret)).toMatchObject({ revoked: true });
-  });
+  it.each(["all", "permanent"] as const)(
+    "refuses %s issuance through the client_credentials door without state changes",
+    async (kind) => {
+      principal.authDoor = "client_credentials";
+      const before = await bindings.kv.list();
+      const response = await call("POST", "/personal-access-tokens", {
+        name: "blocked",
+        grants: kind === "all" ? grants : scopedGrants,
+        expiresAt: kind === "permanent" ? null : new Date(Date.now() + 3_600_000).toISOString(),
+      });
+      expect(response.status).toBe(403);
+      expect(await response.json()).toMatchObject({
+        code: "FORBIDDEN",
+        message: expect.stringContaining("rerun the same splitch tokens command"),
+      });
+      expect(
+        await createRepository(bindings.d1).personalAccessTokens.listForUser(USER_ID, {
+          limit: 100,
+        }),
+      ).toEqual([]);
+      expect(await bindings.kv.list()).toEqual(before);
+    },
+  );
+
+  it.each([...refusedDoors, "device_flow", "client_credentials"])(
+    "keeps narrowing an existing broad permanent token available for %s",
+    async (door) => {
+      const { token, secret } = await seedBroadToken();
+      principal.authDoor = door as AuthDoor | null;
+      const response = await call("PATCH", `/personal-access-tokens/${token.id}`, {
+        grants: scopedGrants,
+      });
+      expect(response.status).toBe(200);
+      expect(await response.json()).toMatchObject({ grants: scopedGrants, expiresAt: null });
+      expect(await cacheEntry(secret)).toMatchObject({ revoked: false, expiresAt: null });
+    },
+  );
+
+  it.each([...refusedDoors, "device_flow", "client_credentials"])(
+    "keeps list, revoke, and revoke-all available for %s",
+    async (door) => {
+      const first = await seedBroadToken();
+      const second = await seedBroadToken();
+      principal.authDoor = door as AuthDoor | null;
+      const listed = await call("GET", "/personal-access-tokens");
+      expect(listed.status).toBe(200);
+      expect(await listed.json()).toMatchObject({
+        items: expect.arrayContaining([{ ...first.token }]),
+      });
+      const revoked = await call("POST", `/personal-access-tokens/${first.token.id}/revoke`);
+      expect(revoked.status).toBe(200);
+      expect(await revoked.json()).toMatchObject({ status: "revoked" });
+      expect(await cacheEntry(first.secret)).toMatchObject({ revoked: true });
+      const all = await call("POST", "/personal-access-tokens/revoke-all");
+      expect(all.status).toBe(200);
+      expect(await all.json()).toEqual({ revokedCount: 1 });
+      expect(await cacheEntry(second.secret)).toMatchObject({ revoked: true });
+    },
+  );
 });

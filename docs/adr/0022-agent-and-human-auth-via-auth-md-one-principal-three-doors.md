@@ -1,6 +1,39 @@
 # Agent and human auth via the auth.md protocol: one principal, three doors, splitch as resource server
 
-**Status:** accepted; amended 2026-07-19, 2026-08-28, 2026-08-31, 2026-10-03, 2026-10-15
+**Status:** accepted; amended 2026-07-19, 2026-08-28, 2026-08-31, 2026-10-03, 2026-10-15, 2026-10-16
+
+## 2026-10-16 amendment: browser approval for broader or permanent PAT issuance
+
+A CLI session may create, update, or rotate a finite PAT within its own access token's authority.
+An `app:` or `org:` grant must be covered by a held scope at an equal or higher role, and a grant
+with any permission requires write authority on that target. A `membership-wide-read` token may
+issue only `permissions: []`. Live membership continues to limit both issuance and every PAT call.
+An `all` grant, an uncovered target or higher role, permanent issuance, any widening update, or
+rotation of a broad or permanent PAT requires fresh browser approval. Comparing updates against
+the stored grants and expiry keeps strict narrowing and expiry shortening available to the owner through an authenticated session, including cleanup of an already broad
+or permanent PAT. A PAT bearer cannot create, update, or rotate PATs.
+
+Auth API issues `authorization: "pat-management"` only from a device-code flow that requested it
+at initiation and preserves that request while polling. The token has `auth_door: "device_flow"`,
+empty scopes, a unique `jti`, and at most 300 seconds of validity. Refresh, identity-assertion
+exchange, and `client_credentials` cannot issue it; its exchange neither persists nor returns a
+refresh session. It is never a generic bearer. The CLI keeps it in memory and sends it once in
+`Splitch-PAT-Authorization` alongside the original session's `Authorization`. The Control Plane
+independently verifies signature, issuer, audience, kind, freshness, and matching subject.
+Neither token nor either authorization header may enter output or logs.
+
+Create and update consume the `jti` atomically with their D1 write. Rotation first claims both
+the `jti` and the PAT/current-hash operation in D1, bound to the subject and canonical operation
+fingerprint, before any KV access. Replays and concurrent losers write nothing and make no KV
+calls. The claim retains phases and non-secret hashes so a failure remains owned. Scheduled
+recovery revokes an interrupted PAT and tombstones both hashes without returning another secret.
+Unresolved claims never expire by time alone. Bounded global cleanup retains terminal consumption
+records until beyond token expiry plus 24 hours, including records belonging to inactive users.
+
+The preview-only smoke door retains finite issuance within its configured scopes. It cannot get
+step-up authority, mint `all`, or issue permanent PATs. Production still disables that door.
+List, revoke, and revoke-all require no step-up. Logging out still does not revoke PATs;
+`splitch tokens revoke` and `splitch tokens revoke-all` remain the explicit controls.
 
 ## 2026-10-15 amendment: Personal Access Tokens authenticate the CLI; grants carry permissions
 
@@ -30,10 +63,11 @@ PAT instead of adding a credential type.
 - **Approval application is checked against the proposal.** Approving an Approval Request
   applies the stored operation without re-entering its route guard, so the approve route takes
   its permission from the stored operation. A `write` token cannot apply a pending deletion.
-- **PAT management stays session-only.** Create, update, and rotate keep their device-flow
-  allow-list, so a PAT still cannot mint, widen, or extend a PAT. Deleting the calling User is
-  also session-only. List, revoke, and revoke-all bypass permission narrowing for the owner, so
-  cleanup is never blocked.
+- **PAT issuance stays session-only.** Create, update, and rotate keep their session
+  allow-list, so a PAT still cannot mint, widen, or extend a PAT. The 2026-10-16 amendment adds
+  fresh approval for issuance beyond the current access token and preserves narrowing updates
+  for cleanup. Deleting the calling User is also session-only. List, revoke, and revoke-all
+  bypass permission narrowing for the owner, so cleanup is never blocked.
 - **No silent widening on migration.** Stored `read-write` grants migrate to every permission,
   so existing tokens keep their exact authority. Users narrow them deliberately.
 
@@ -82,22 +116,12 @@ that gap without creating a second principal class.
   suspend a long-lived PAT temporarily. A PAT is revoked on its own, durably in
   D1 (`splitch tokens revoke` or `splitch tokens revoke-all`).
 
-**Accepted risk: a CLI device-flow token can mint a broad PAT.** Grants are
-checked against the user's live membership, not against the scopes of the
-Control Plane access token that creates or updates them. Creating, updating,
-and rotating PATs explicitly allow only `device_flow` and `client_credentials`.
-The latter is the shared-preview-only smoke grant. Every other door, including
-missing or unknown doors, is refused. Un-pausing ID-JAG or adding a door does
-not silently grant PAT management. Listing and revocation remain available to
-any authenticated door of the owning user so credential cleanup is never
-blocked by this allow-list.
-
-The residual risk is bounded to the CLI device-flow door and the preview-only
-smoke grant. A one-hour, App-bound CLI token can still create an `all` grant that
-never expires. Device-flow access tokens live in the CLI credential store,
-next to the refresh token that can already rebind to any membership, so stealing
-one usually means stealing both. Closing this fully needs a step-up ("sudo")
-credential for PAT management from Auth API. That remains deferred.
+**Step-up decision, accepted 2026-10-15 and delivered by the 2026-10-16 amendment.**
+A device-flow access or refresh token alone cannot mint durable authority beyond the current
+access token's scopes. Fresh, single-use `pat-management` browser approval is required for broader
+or permanent issuance and widening updates. The shared-preview `client_credentials` door remains
+limited to finite PATs within its own configured scopes. Other doors cannot gain issuance
+authority implicitly. Cleanup and independent logout behavior remain unchanged.
 
 This narrows the earlier rejection of "a raw API key from the agent flow". That
 rejection protected two properties: every action ties to a real, revocable user,

@@ -4,6 +4,7 @@ import {
   accessTokenAuthDoorFromClaim,
   accessTokenAuthorizationFromClaim,
   accessTokenIssuedAt,
+  PERSONAL_ACCESS_TOKEN_STEP_UP_TTL_SECONDS,
 } from "@splitch/contracts";
 import { remoteJwksSignatureVerifier } from "@splitch/worker-runtime";
 
@@ -39,6 +40,7 @@ interface VerifiedToken {
   authorization?: AccessTokenAuthorization;
   /** `iat`, compared against the subject's revocation time. */
   issuedAt?: number;
+  patManagement?: { jti: string; expiresAt: number };
 }
 
 interface JwtHeader {
@@ -192,30 +194,56 @@ function actorFromClaims(
   controlPlaneAudience: string,
   nowSeconds: number,
 ): VerifiedToken | null {
-  if (payload.iss !== issuer || payload.typ !== "access_token") {
-    return null;
-  }
-  // aud must bind to this control-plane resource (matrix.md step 2).
-  if (payload.aud !== controlPlaneAudience) {
-    return null;
-  }
-  // exp is REQUIRED: a missing exp must not read as never-expires (fail-loud).
-  if (typeof payload.exp !== "number" || payload.exp < nowSeconds) {
-    return null;
-  }
-  if (typeof payload.sub !== "string" || payload.sub.length === 0) {
-    return null;
-  }
+  if (!validAccessTokenClaims(payload, issuer, controlPlaneAudience, nowSeconds)) return null;
   const scopes = Array.isArray(payload.scopes) ? (payload.scopes as string[]) : [];
   const authorization = validAuthorization(payload.authorization, payload.scopes, scopes);
   if (authorization === null) return null;
+  if (authorization === "pat-management" && !validPatManagementClaims(payload, nowSeconds)) {
+    return null;
+  }
   return {
     sub: payload.sub,
     scopes,
     authDoor: authDoorFromClaim(payload.auth_door),
     ...(authorization ? { authorization } : {}),
     ...accessTokenIssuedAt(payload),
+    ...(authorization === "pat-management"
+      ? { patManagement: { jti: payload.jti as string, expiresAt: payload.exp } }
+      : {}),
   };
+}
+
+function validAccessTokenClaims(
+  payload: Record<string, unknown>,
+  issuer: string,
+  audience: string,
+  nowSeconds: number,
+): payload is Record<string, unknown> & { sub: string; exp: number } {
+  return (
+    payload.iss === issuer &&
+    payload.typ === "access_token" &&
+    payload.aud === audience &&
+    typeof payload.exp === "number" &&
+    payload.exp >= nowSeconds &&
+    typeof payload.sub === "string" &&
+    payload.sub.length > 0
+  );
+}
+
+function validPatManagementClaims(payload: Record<string, unknown>, nowSeconds: number): boolean {
+  if (payload.auth_door !== "device_flow" || typeof payload.jti !== "string") return false;
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(payload.jti)) {
+    return false;
+  }
+  if (!Number.isSafeInteger(payload.iat) || !Number.isSafeInteger(payload.exp)) return false;
+  const issuedAt = payload.iat as number;
+  const expiresAt = payload.exp as number;
+  return (
+    issuedAt <= nowSeconds &&
+    expiresAt > nowSeconds &&
+    expiresAt > issuedAt &&
+    expiresAt - issuedAt <= PERSONAL_ACCESS_TOKEN_STEP_UP_TTL_SECONDS
+  );
 }
 
 function validAuthorization(

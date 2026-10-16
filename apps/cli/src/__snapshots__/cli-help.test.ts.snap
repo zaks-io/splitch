@@ -2314,7 +2314,7 @@ Flags:
 
 Example:
   splitch stale-flags list --json",
-    "tokens create": "Create a Personal Access Token for the CLI and MCP server without browser sign-in. The secret is written to --output-file and never printed.
+    "tokens create": "Create a Personal Access Token for the CLI and MCP server. Broader or permanent access requires browser approval. The secret is written to --output-file and never printed.
 
 Usage:
   splitch tokens create [flags]
@@ -2386,7 +2386,7 @@ Credential semantics:
 
 Example:
   splitch tokens revoke-all --json",
-    "tokens rotate": "Replace a Personal Access Token's secret. The old secret stops working; the new one is written to --output-file and never printed.
+    "tokens rotate": "Replace a Personal Access Token's secret. Broader or permanent access requires browser approval. The old secret stops working; the new one is written to --output-file and never printed.
 
 Usage:
   splitch tokens rotate <token-id> [flags]
@@ -2405,7 +2405,7 @@ Credential semantics:
 
 Example:
   splitch tokens rotate <token-id> --output-file ~/.config/splitch/mcp.env --append --force --json",
-    "tokens update": "Rename a Personal Access Token or replace its grants or expiry. Takes effect on its next use; the secret is unchanged.
+    "tokens update": "Rename a Personal Access Token or replace its grants or expiry. Widening access requires browser approval; narrowing stays available without it. The secret is unchanged.
 
 Usage:
   splitch tokens update <token-id> [flags]
@@ -2971,9 +2971,9 @@ Usage:
 
 Commands:
   list            List your Personal Access Tokens for the CLI and MCP server: names, grants, expiry, and status. Secrets are never shown.
-  create          Create a Personal Access Token for the CLI and MCP server without browser sign-in. The secret is written to --output-file and never printed.
-  update          Rename a Personal Access Token or replace its grants or expiry. Takes effect on its next use; the secret is unchanged.
-  rotate          Replace a Personal Access Token's secret. The old secret stops working; the new one is written to --output-file and never printed.
+  create          Create a Personal Access Token for the CLI and MCP server. Broader or permanent access requires browser approval. The secret is written to --output-file and never printed.
+  update          Rename a Personal Access Token or replace its grants or expiry. Widening access requires browser approval; narrowing stays available without it. The secret is unchanged.
+  rotate          Replace a Personal Access Token's secret. Broader or permanent access requires browser approval. The old secret stops working; the new one is written to --output-file and never printed.
   revoke          Revoke a Personal Access Token. Its next use is refused.
   revoke-all      Revoke every active Personal Access Token you own.
 

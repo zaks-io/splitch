@@ -34,6 +34,12 @@ const EXPOSURE = "public-bearer" as const;
 const TOKEN_ERRORS = ["CREDENTIAL_NOT_FOUND", "FORBIDDEN"] as const;
 
 const TokenParams = z.object({ tokenId: PersonalAccessTokenIdSchema });
+const StepUpHeaders = z.object({
+  "splitch-pat-authorization": z.string().min(1).max(8192).optional().openapi({
+    description:
+      "Fresh single-use pat-management JWT from browser device approval. The Authorization bearer remains the original session.",
+  }),
+});
 
 export const personalAccessTokenOperationIds = [
   "personal_access_tokens_list",
@@ -66,7 +72,7 @@ export const personalAccessTokenRoutes = [
     method: "POST",
     path: "/personal-access-tokens",
     summary: "Create a Personal Access Token for the MCP server (secret surfaced once only).",
-    request: { body: CreatePersonalAccessTokenRequestSchema },
+    request: { body: CreatePersonalAccessTokenRequestSchema, headers: StepUpHeaders },
     response: PersonalAccessTokenSecretResponseSchema,
     exposure: EXPOSURE,
     auth: AUTH,
@@ -83,7 +89,11 @@ export const personalAccessTokenRoutes = [
     method: "PATCH",
     path: "/personal-access-tokens/:tokenId",
     summary: "Rename a Personal Access Token or replace its grants or expiry.",
-    request: { params: TokenParams, body: UpdatePersonalAccessTokenRequestSchema },
+    request: {
+      params: TokenParams,
+      body: UpdatePersonalAccessTokenRequestSchema,
+      headers: StepUpHeaders,
+    },
     response: PersonalAccessTokenSchema,
     exposure: EXPOSURE,
     auth: AUTH,
@@ -99,7 +109,7 @@ export const personalAccessTokenRoutes = [
     method: "POST",
     path: "/personal-access-tokens/:tokenId/rotate",
     summary: "Replace a Personal Access Token's secret; the old secret stops working.",
-    request: { params: TokenParams },
+    request: { params: TokenParams, headers: StepUpHeaders },
     response: PersonalAccessTokenSecretResponseSchema,
     exposure: EXPOSURE,
     auth: AUTH,

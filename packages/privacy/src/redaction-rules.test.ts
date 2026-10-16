@@ -42,6 +42,7 @@ describe("redaction key policy", () => {
   it("recognizes credential-bearing leaf keys", () => {
     for (const key of [
       "authorization",
+      "Splitch-PAT-Authorization",
       "cookie",
       "password",
       "secret",

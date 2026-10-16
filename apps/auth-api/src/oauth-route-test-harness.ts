@@ -4,9 +4,9 @@ import type { DeviceFlowPort } from "./device-flow";
 import { sealDeviceGrant } from "./device-grant";
 import type { DeviceRefreshSessionStore } from "./device-session-store";
 import type { MembershipAuthorityRepo } from "./membership-authority";
-import { mountOAuthRoutes } from "./oauth-routes";
-import { makeRateLimiter } from "./rate-limit";
+import { mountOAuthRoutes, type SmokeClientCredentials } from "./oauth-routes";
 import type { RateLimiter } from "./rate-limit";
+import { makeRateLimiter } from "./rate-limit";
 import type { RevocationStore } from "./revocation";
 import { memoryKvNamespace } from "./test-kv";
 import type { TokenSigner } from "./token-exchange";
@@ -63,6 +63,8 @@ export function routeApp(params: {
   deviceAuthorizationRateLimiter?: RateLimiter;
   revocations?: RevocationStore;
   now?: () => number;
+  smokeClientCredentials?: SmokeClientCredentials;
+  mcpAudience?: string;
 }): Hono {
   const app = new Hono();
   mountOAuthRoutes(app, {
@@ -75,6 +77,8 @@ export function routeApp(params: {
     accessSecret: "test-access-secret",
     issuer: "http://localhost",
     controlPlaneAudience: "https://cp.splitch.test",
+    mcpAudience: params.mcpAudience,
+    smokeClientCredentials: params.smokeClientCredentials,
     now: params.now ?? (() => 1_780_000_000_000),
     repo: params.repo ?? emptyMembershipRepo,
     deviceAuthorizationRateLimiter: params.deviceAuthorizationRateLimiter ?? makeRateLimiter(),

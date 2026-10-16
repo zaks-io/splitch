@@ -29,6 +29,7 @@ const CONTAINER_KEYS = ["targeting", "context", "evaluationcontext"] as const;
  */
 const LEAF_PII_KEYS = [
   "authorization",
+  "splitchpatauthorization",
   "cookie",
   "cookies",
   // Credential-bearing keys: like `authorization`/`cookie`, a secret carried

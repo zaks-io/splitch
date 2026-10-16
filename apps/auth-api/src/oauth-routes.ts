@@ -12,9 +12,9 @@ import { exchangeRefreshToken } from "./device-refresh";
 import type { DeviceRefreshSessionStore } from "./device-session-store";
 import type { MembershipAuthorityRepo } from "./membership-authority";
 import { OAuthError, renderDoorFault, renderOAuthError } from "./oauth-errors";
+import type { RateLimiter } from "./rate-limit";
 import { readOAuthRequestBody, renderAuthBodyError } from "./read-request-body";
 import type { RevocationStore } from "./revocation";
-import type { RateLimiter } from "./rate-limit";
 import {
   ClientCredentialsRequestSchema,
   RevokeTokenRequestSchema,
@@ -276,7 +276,7 @@ function resolveRequestedAccess(
   if (authorization && audience !== deps.controlPlaneAudience) {
     throw new OAuthError(
       "invalid_request",
-      "membership-wide read authorization is only valid for the control-plane resource",
+      `${authorization} authorization is only valid for the control-plane resource`,
     );
   }
   return authorization ? { audience, authorization } : { audience };

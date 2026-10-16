@@ -82,6 +82,9 @@ function membershipWideReadError(
   principal: Principal,
 ): ErrorResponse | null {
   if (principal.authorization !== MEMBERSHIP_WIDE_READ_AUTHORIZATION) return null;
+  // Owner cleanup stays available; issuance handlers decide whether a fresh
+  // browser approval is needed before they change any PAT authority.
+  if (contract.id.startsWith("personal_access_tokens_")) return null;
   if (contract.method !== "GET") return forbidden("credential grants read access only");
   requireWideMemberships(principal);
   return null;

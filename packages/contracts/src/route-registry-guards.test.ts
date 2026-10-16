@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { defineApiRoute, z } from "./openapi-route";
-import type { ApiRouteContract, DefineApiRouteInput } from "./openapi-route";
-import { assertRegistry } from "./route-registry";
 import type { ErrorCode } from "./errors";
+import type { ApiRouteContract, DefineApiRouteInput } from "./openapi-route";
+import { defineApiRoute, z } from "./openapi-route";
 import type { RouteContract } from "./route-contract";
 import { readOnlyClosed } from "./route-effects";
+import { assertRegistry } from "./route-registry";
 
 /**
  * Fail-loud proofs for the registry's contract guards. A malformed registry must
@@ -30,6 +30,16 @@ function sampleRoute(
     ...over,
   });
 }
+
+describe("route request headers", () => {
+  it("keeps required header groups required in runtime and JSON Schema contracts", () => {
+    const route = sampleRoute({ request: { headers: z.object({ "x-required": z.string() }) } });
+    expect(route.input.safeParse({}).success).toBe(false);
+    expect(route.input.safeParse({ headers: {} }).success).toBe(false);
+    expect(route.input.safeParse({ headers: { "x-required": "present" } }).success).toBe(true);
+    expect(z.toJSONSchema(route.input, { io: "input" }).required).toContain("headers");
+  });
+});
 
 describe("registry guard: duplicate operationId fails loud", () => {
   it("throws when two routes share an operationId", () => {

@@ -1,25 +1,35 @@
 import {
   boundListRead,
-  type ErrorResponse,
   LIST_READ_LIMIT,
-  PERSONAL_ACCESS_TOKEN_DEFAULT_TTL_DAYS,
   PERSONAL_ACCESS_TOKEN_MAX_ACTIVE,
   PERSONAL_ACCESS_TOKEN_SECRET_PREFIX,
   type PersonalAccessTokenGrant,
   personalAccessTokenExpired,
-  type UserRole,
-  userRoleCovers,
 } from "@splitch/contracts";
-import type { PersonalAccessTokenPatch, PersonalAccessTokenRow, Repository } from "@splitch/db";
 import {
-  type HandlerArgs,
-  type Principal,
-  type Registrar,
-  renderError,
-} from "@splitch/worker-runtime";
+  PersonalAccessTokenClaimRefused,
+  type PersonalAccessTokenRow,
+  type Repository,
+} from "@splitch/db";
+import { type HandlerArgs, type Registrar, renderError } from "@splitch/worker-runtime";
 import type { Hono } from "hono";
 import { randomHex, sha256Hex } from "./credential-cache";
 import { objectBody, pathParam } from "./handler-input";
+import {
+  authorizeIssuance,
+  expiryProblem,
+  forbidden,
+  grantProblems,
+  isActivePersonalAccessToken,
+  issuanceRefusalResponse,
+  notFound,
+  personalAccessTokenManagementRefusal,
+  requireStore,
+  resolveExpiry,
+  updatePatch,
+  updateProblems,
+} from "./personal-access-token-management";
+import { rotatePersonalAccessToken } from "./personal-access-token-rotation";
 import {
   personalAccessTokenResponse,
   writePersonalAccessTokenCache,
@@ -27,10 +37,8 @@ import {
 import { controlPlaneRoute } from "./routes";
 import { makeTokenMembershipAccess, type TokenMembershipAccess } from "./token-membership";
 
-const DAY_MS = 24 * 60 * 60 * 1000;
-
 interface PersonalAccessTokenHandlerDeps {
-  repo: Pick<Repository, "personalAccessTokens">;
+  repo: Pick<Repository, "personalAccessTokens" | "identity">;
   membershipAccess: TokenMembershipAccess;
   /** SESSION_STORE: shared with the MCP Worker, which authenticates PATs from it. */
   store?: KVNamespace;
@@ -56,8 +64,6 @@ function makePersonalAccessTokenHandlers(deps: PersonalAccessTokenHandlerDeps) {
     },
 
     async create({ input, principal, requestId }: HandlerArgs<unknown>): Promise<Response> {
-      const refused = personalAccessTokenManagementRefusal(principal);
-      if (refused) return renderError(refused, { requestId });
       const store = requireStore(deps.store);
       const body = objectBody(input);
       const grants = body.grants as PersonalAccessTokenGrant[];
@@ -77,17 +83,22 @@ function makePersonalAccessTokenHandlers(deps: PersonalAccessTokenHandlerDeps) {
         );
       }
 
+      const issuance = await authorizeIssuance(deps, principal, "create", body);
+      if ("refusal" in issuance) return issuanceRefusalResponse(issuance, requestId);
       const secret = newSecret();
       const tokenHash = await sha256Hex(secret);
-      const row = await tokens.insert({
-        id: `pat_${randomHex(16)}`,
-        userId: principal.id,
-        name: body.name as string,
-        tokenHash,
-        grants: JSON.stringify(grants),
-        expiresAt: resolveExpiry(body.expiresAt, nowMs),
-        createdAt: new Date(nowMs).toISOString(),
-      });
+      const row = await tokens.insertAuthorized(
+        {
+          id: `pat_${randomHex(16)}`,
+          userId: principal.id,
+          name: body.name as string,
+          tokenHash,
+          grants: JSON.stringify(grants),
+          expiresAt: resolveExpiry(body.expiresAt, nowMs),
+          createdAt: new Date(nowMs).toISOString(),
+        },
+        issuance.approval,
+      );
       try {
         await writePersonalAccessTokenCache(store, row, tokenHash, false, nowMs);
       } catch (cause) {
@@ -100,20 +111,28 @@ function makePersonalAccessTokenHandlers(deps: PersonalAccessTokenHandlerDeps) {
     },
 
     async update({ input, principal, requestId }: HandlerArgs<unknown>): Promise<Response> {
-      const refused = personalAccessTokenManagementRefusal(principal);
-      if (refused) return renderError(refused, { requestId });
       const store = requireStore(deps.store);
       const body = objectBody(input);
       const nowMs = now();
-      const invalid = await updateProblems(deps.membershipAccess, principal.id, body, nowMs);
+      const current = await tokens.getForUser(principal.id, pathParam(input, "tokenId"));
+      if (!isActivePersonalAccessToken(current)) return notFound(requestId);
+      const issuance = await authorizeIssuance(deps, principal, "update", body, current);
+      if ("refusal" in issuance) return issuanceRefusalResponse(issuance, requestId);
+      const invalid = await updateProblems(
+        deps.membershipAccess,
+        principal.id,
+        body,
+        nowMs,
+        issuance.cleanup,
+      );
       if (invalid) return renderError(invalid, { requestId });
 
-      const updated = await tokens.update(
-        principal.id,
-        pathParam(input, "tokenId"),
+      const updated = await tokens.updateAuthorized(
+        current,
         updatePatch(body, nowMs),
+        issuance.approval,
       );
-      if (!updated) return notFound(requestId);
+      if (!updated) throw new PersonalAccessTokenClaimRefused();
       if ("expiresAt" in body) {
         await writePersonalAccessTokenCache(store, updated, updated.tokenHash, false, nowMs);
       }
@@ -126,8 +145,10 @@ function makePersonalAccessTokenHandlers(deps: PersonalAccessTokenHandlerDeps) {
       const store = requireStore(deps.store);
       const tokenId = pathParam(input, "tokenId");
       const current = await tokens.getForUser(principal.id, tokenId);
-      if (!current || current.revokedAt !== null) return notFound(requestId);
+      if (!isActivePersonalAccessToken(current)) return notFound(requestId);
       const nowMs = now();
+      const issuance = await authorizeIssuance(deps, principal, "rotate", {}, current);
+      if ("refusal" in issuance) return issuanceRefusalResponse(issuance, requestId);
       if (personalAccessTokenExpired(current.expiresAt, nowMs)) {
         // A rotated secret would be dead on arrival. Extending is the explicit
         // way to revive an expired token: `tokens update --expires-at …`.
@@ -140,20 +161,14 @@ function makePersonalAccessTokenHandlers(deps: PersonalAccessTokenHandlerDeps) {
       }
       const secret = newSecret();
       const tokenHash = await sha256Hex(secret);
-      // Tombstone the old secret and publish the new one BEFORE the D1 swap: any
-      // failure leaves the token closed (old secret dead, new one never handed
-      // out), never with both secrets live.
-      await writePersonalAccessTokenCache(store, current, current.tokenHash, true, nowMs);
-      await writePersonalAccessTokenCache(store, current, tokenHash, false, nowMs);
-      const rotated = await tokens.rotate(principal.id, tokenId, {
-        previousHash: current.tokenHash,
+      const rotated = await rotatePersonalAccessToken(
+        tokens,
+        store,
+        current,
         tokenHash,
-        rotatedAt: new Date(nowMs).toISOString(),
-      });
-      if (!rotated) {
-        await writePersonalAccessTokenCache(store, current, tokenHash, true, nowMs);
-        return notFound(requestId);
-      }
+        nowMs,
+        issuance.approval,
+      );
       return Response.json({ token: personalAccessTokenResponse(rotated, nowMs), secret });
     },
 
@@ -187,122 +202,53 @@ function makePersonalAccessTokenHandlers(deps: PersonalAccessTokenHandlerDeps) {
   };
 }
 
-async function updateProblems(
-  access: TokenMembershipAccess,
-  userId: string,
-  body: Record<string, unknown>,
-  nowMs: number,
-): Promise<ErrorResponse | null> {
-  const grants = body.grants as PersonalAccessTokenGrant[] | undefined;
-  if (grants) {
-    const problem = await grantProblems(access, userId, grants);
-    if (problem) return problem;
-  }
-  return "expiresAt" in body ? expiryProblem(body.expiresAt, nowMs) : null;
-}
-
-function updatePatch(body: Record<string, unknown>, nowMs: number): PersonalAccessTokenPatch {
-  return {
-    ...(typeof body.name === "string" ? { name: body.name } : {}),
-    ...(Array.isArray(body.grants) ? { grants: JSON.stringify(body.grants) } : {}),
-    ...("expiresAt" in body ? { expiresAt: resolveExpiry(body.expiresAt, nowMs) } : {}),
-  };
-}
-
 function newSecret(): string {
   return `${PERSONAL_ACCESS_TOKEN_SECRET_PREFIX}${randomHex(32)}`;
-}
-
-function requireStore(store: KVNamespace | undefined): KVNamespace {
-  if (!store)
-    throw new Error("control-plane-api: SESSION_STORE is required for personal access tokens");
-  return store;
-}
-
-function resolveExpiry(value: unknown, nowMs: number): string | null {
-  if (value === null) return null;
-  if (typeof value === "string") return new Date(Date.parse(value)).toISOString();
-  return new Date(nowMs + PERSONAL_ACCESS_TOKEN_DEFAULT_TTL_DAYS * DAY_MS).toISOString();
-}
-
-function expiryProblem(value: unknown, nowMs: number): ErrorResponse | null {
-  if (typeof value !== "string" || Date.parse(value) > nowMs) return null;
-  return validation(["expiresAt"], "expiresAt must be in the future (use null for never)");
-}
-
-/**
- * A grant must name a membership the caller holds now, with a ceiling at or
- * below the caller's live role. `all` is checked at use time instead, since it
- * spans memberships with different roles.
- */
-async function grantProblems(
-  access: TokenMembershipAccess,
-  userId: string,
-  grants: readonly PersonalAccessTokenGrant[],
-): Promise<ErrorResponse | null> {
-  const memberships = await access.resolve(userId);
-  const roles = new Map<string, UserRole>([
-    ...memberships.organizations.map((org) => [`org:${org.id}`, org.role] as const),
-    ...memberships.apps.map((app) => [`app:${app.id}`, app.role] as const),
-  ]);
-  for (const [index, grant] of grants.entries()) {
-    if (grant.target === "all") continue;
-    const role = roles.get(grant.target);
-    if (!role) {
-      return validation(
-        ["grants", String(index), "target"],
-        `you are not a member of ${grant.target}`,
-      );
-    }
-    if (!userRoleCovers(role, grant.role)) {
-      return validation(
-        ["grants", String(index), "role"],
-        `grant role ${grant.role} exceeds your ${role} role on ${grant.target}`,
-      );
-    }
-  }
-  return null;
-}
-
-function personalAccessTokenManagementRefusal(principal: Principal): ErrorResponse | null {
-  if (principal.authDoor === "device_flow" || principal.authDoor === "client_credentials") {
-    return null;
-  }
-  return forbidden(
-    "creating, updating, or rotating personal access tokens requires device_flow or client_credentials authentication; sign in with splitch login",
-  );
-}
-
-function validation(path: string[], message: string): ErrorResponse {
-  return { code: "VALIDATION_ERROR", message, details: { issues: [{ path, message }] } };
-}
-
-function forbidden(message: string): ErrorResponse {
-  return { code: "FORBIDDEN", message, details: {} };
-}
-
-function notFound(requestId: string): Response {
-  return renderError(
-    {
-      code: "CREDENTIAL_NOT_FOUND",
-      message: "no active personal access token with that id",
-      details: {},
-    },
-    { requestId },
-  );
 }
 
 /** Mount the six routes. Callers mount this on the public bearer door only. */
 export function mountPersonalAccessTokenRoutes(
   app: Hono,
   registrar: Registrar,
-  deps: { repo: Repository; store?: KVNamespace },
+  deps: { repo: Repository; store?: KVNamespace; nowIso?: () => string },
 ): void {
+  app.use("/personal-access-tokens*", async (c, next) => {
+    c.header("access-control-allow-origin", "*");
+    if (c.req.method === "OPTIONS") {
+      return new Response(null, {
+        status: 204,
+        headers: {
+          "access-control-allow-origin": "*",
+          "access-control-allow-methods": "GET, POST, PATCH, OPTIONS",
+          "access-control-allow-headers": "authorization, content-type, splitch-pat-authorization",
+        },
+      });
+    }
+    await next();
+    return undefined;
+  });
   const handlers = makePersonalAccessTokenHandlers({
     repo: deps.repo,
     membershipAccess: makeTokenMembershipAccess(deps.repo),
     ...(deps.store ? { store: deps.store } : {}),
+    ...(deps.nowIso ? { nowMs: () => Date.parse(deps.nowIso?.() as string) } : {}),
   });
+  for (const operation of ["create", "update", "rotate"] as const) {
+    const handler = handlers[operation];
+    handlers[operation] = async (args) => {
+      try {
+        return await handler(args);
+      } catch (error) {
+        if (!(error instanceof PersonalAccessTokenClaimRefused)) throw error;
+        return renderError(
+          forbidden(
+            "PAT approval was already used or the token changed; rerun the same splitch tokens command to approve in the browser",
+          ),
+          { requestId: args.requestId },
+        );
+      }
+    };
+  }
   registrar.mount(app, controlPlaneRoute("personal_access_tokens_list"), handlers.list);
   registrar.mount(app, controlPlaneRoute("personal_access_tokens_create"), handlers.create);
   registrar.mount(app, controlPlaneRoute("personal_access_tokens_revoke_all"), handlers.revokeAll);

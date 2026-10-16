@@ -21,6 +21,42 @@ const scenarios = [
   "request-network-failure",
 ];
 
+test("configured preview smoke authority allows the delivered finite grants and requires step-up for all or never", async () => {
+  const config = await readFile(resolve(repoRoot, "apps/auth-api/wrangler.jsonc"), "utf8");
+  const [, scopes] = config.match(/"SPLITCH_SMOKE_SCOPES": "([^"]+)"/) ?? [];
+  assert.ok(scopes, "shared-preview smoke scopes must be configured");
+  const { code, output } = await runPnpm([
+    "--filter",
+    "@splitch/cli",
+    "exec",
+    "tsx",
+    "--eval",
+    `
+import assert from "node:assert/strict";
+import { personalAccessTokenNeedsStepUp } from "../../packages/contracts/src/personal-access-token-step-up.ts";
+const scopes = ${JSON.stringify(scopes.split(" "))};
+assert.ok(scopes.includes("org:org_shared_preview_smoke:owner"));
+const expiresAt = new Date(Date.now() + 3_600_000).toISOString();
+for (const grant of [
+  { target: "org:org_shared_preview_smoke", role: "admin", permissions: ["write", "delete", "credentials", "members", "privacy"] },
+  { target: "org:org_shared_preview_smoke", role: "member", permissions: [] },
+]) {
+  for (const operation of ["create", "update", "rotate"]) {
+    const input = { operation, grants: [grant], expiresAt, scopes,
+      ...(operation === "create" ? {} : { current: { grants: [grant], expiresAt } }) };
+    assert.equal(personalAccessTokenNeedsStepUp(input), false);
+    assert.equal(personalAccessTokenNeedsStepUp({ ...input, grants: [{ ...grant, target: "all" }],
+      ...(operation === "rotate" ? { current: { grants: [{ ...grant, target: "all" }], expiresAt } } : {}) }), true);
+    assert.equal(personalAccessTokenNeedsStepUp({ ...input, expiresAt: null,
+      ...(operation === "rotate" ? { current: { grants: [grant], expiresAt: null } } : {}) }), true);
+  }
+}
+`,
+  ]);
+  verifyNoSecrets(output);
+  assert.equal(code, 0, output);
+});
+
 // Exercise the real Playwright fixture lifecycle over HTTP, including teardown errors.
 for (const surface of ["MCP", "CLI"]) {
   test(`shared-preview ${surface} PAT fixture revokes on success and failure`, async (t) => {
@@ -60,7 +96,14 @@ export default { ...config, testDir: ${JSON.stringify(directory)}, retries: 0,
             resolve(directory, "fixture.spec.ts"),
             fixtureSpec(origin, directory, surface, scenario),
           );
-          const { code, output } = await runPlaywright(resolve(directory, "playwright.config.ts"));
+          const { code, output } = await runPnpm([
+            "exec",
+            "playwright",
+            "test",
+            "--workers=2",
+            "-c",
+            resolve(directory, "playwright.config.ts"),
+          ]);
           verifyResult(scenario, state, code, output, surface);
           verifyNoSecrets(await readFile(resolve(directory, "report.json"), "utf8"));
           if (surface === "CLI" && scenario !== "invalid-secret") {
@@ -137,8 +180,8 @@ ${scenario === "cli-command-failure" ? "process.stderr.write(process.env.SPLITCH
   );
 }
 
-async function runPlaywright(config) {
-  const child = spawn("pnpm", ["exec", "playwright", "test", "-c", config], {
+async function runPnpm(args) {
+  const child = spawn("pnpm", args, {
     cwd: repoRoot,
     stdio: ["ignore", "pipe", "pipe"],
     timeout: 120_000,
@@ -199,6 +242,7 @@ async function handleRequest(request, response, scenario, state, surface) {
 
 function mintPat(request, raw, scenario, state, surface) {
   assert.equal(request.headers.authorization === `Bearer ${controlPlaneToken}`, true);
+  assert.equal(request.headers["splitch-pat-authorization"], undefined);
   assert.equal(request.headers["content-type"], "application/json");
   const body = JSON.parse(raw);
   assert.deepEqual(

@@ -1,4 +1,8 @@
-import { type AuthDoor, MEMBERSHIP_WIDE_READ_AUTHORIZATION } from "@splitch/contracts";
+import {
+  type AuthDoor,
+  MEMBERSHIP_WIDE_READ_AUTHORIZATION,
+  PERSONAL_ACCESS_TOKEN_AUTHORIZATION_HEADER,
+} from "@splitch/contracts";
 import {
   CONTROL_PANEL_DELEGATION_HEADER,
   verifyControlPanelDelegation,
@@ -119,7 +123,49 @@ export function makeControlPlaneAuthResolver(
       );
       if (panelPrincipal) return panelPrincipal;
     }
-    return resolveBearerPrincipal(request, deps, nowSeconds());
+    const now = nowSeconds();
+    const result = await resolveBearerPrincipal(request, deps, now);
+    if (!result.ok) return result;
+    return resolvePatManagementPrincipal(request, deps, result, now);
+  };
+}
+
+function isPatManagementRoute(request: Request): boolean {
+  const path = new URL(request.url).pathname;
+  return (
+    (request.method === "POST" && path === "/personal-access-tokens") ||
+    (request.method === "PATCH" && /^\/personal-access-tokens\/pat_[0-9a-f]{32}$/.test(path)) ||
+    (request.method === "POST" && /^\/personal-access-tokens\/pat_[0-9a-f]{32}\/rotate$/.test(path))
+  );
+}
+
+async function resolvePatManagementPrincipal(
+  request: Request,
+  deps: ControlPlaneAuthDeps,
+  result: Extract<Awaited<ReturnType<typeof resolveBearerPrincipal>>, { ok: true }>,
+  now: number,
+) {
+  const approval = request.headers.get(PERSONAL_ACCESS_TOKEN_AUTHORIZATION_HEADER);
+  if (approval === null) return result;
+  const verified =
+    isPatManagementRoute(request) && result.principal.authDoor === "device_flow"
+      ? await deps.verifier.verify(approval, now)
+      : null;
+  if (!verified?.patManagement || verified.sub !== result.principal.id) {
+    return {
+      ok: false as const,
+      reason: "UNAUTHORIZED" as const,
+      error: {
+        code: "FORBIDDEN" as const,
+        message:
+          "invalid or expired PAT approval; rerun the same splitch tokens command to approve in the browser",
+        details: {},
+      },
+    };
+  }
+  return {
+    ok: true as const,
+    principal: { ...result.principal, personalAccessTokenStepUp: verified.patManagement },
   };
 }
 
@@ -134,7 +180,7 @@ async function resolveBearerPrincipal(
   }
 
   const verified = await deps.verifier.verify(token, nowSeconds);
-  if (!verified) {
+  if (!verified || verified.authorization === "pat-management") {
     return { ok: false as const, reason: "UNAUTHORIZED" as const };
   }
 

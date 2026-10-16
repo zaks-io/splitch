@@ -300,7 +300,7 @@ export function createApp(deps: AppDeps): Hono {
     // Public bearer door only: the MCP and panel bindings never mount PAT
     // management, so a Personal Access Token can never mint or widen another.
     mountPersonalAccessTokenRoutes(app, registrar, {
-      repo: deps.repo,
+      ...deps,
       ...(deps.personalAccessTokenStore ? { store: deps.personalAccessTokenStore } : {}),
     });
   }

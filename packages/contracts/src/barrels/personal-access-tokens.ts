@@ -2,6 +2,15 @@
 
 // Personal Access Tokens: the MCP-only, user-bound credential and its grant model.
 export {
+  PERSONAL_ACCESS_TOKEN_AUTHORIZATION_HEADER,
+  PERSONAL_ACCESS_TOKEN_STEP_UP_CHALLENGE,
+  PERSONAL_ACCESS_TOKEN_STEP_UP_TTL_SECONDS,
+  type PersonalAccessTokenStepUpInput,
+  personalAccessTokenAppOrganizationLookups,
+  personalAccessTokenNeedsStepUp,
+  personalAccessTokenStepUpReason,
+} from "../personal-access-token-step-up";
+export {
   CreatePersonalAccessTokenRequestSchema,
   isPersonalAccessTokenSecret,
   PERSONAL_ACCESS_TOKEN_DEFAULT_TTL_DAYS,
@@ -19,14 +28,14 @@ export {
   PersonalAccessTokenGrantSchema,
   PersonalAccessTokenGrantsSchema,
   PersonalAccessTokenIdSchema,
-  PersonalAccessTokenSchema,
-  PersonalAccessTokenSecretResponseSchema,
   type PersonalAccessTokenPermission,
   PersonalAccessTokenPermissionSchema,
-  personalAccessTokenPermissions,
+  PersonalAccessTokenSchema,
+  PersonalAccessTokenSecretResponseSchema,
   personalAccessTokenAuthority,
   personalAccessTokenCacheKey,
   personalAccessTokenExpired,
+  personalAccessTokenPermissions,
   RevokeAllPersonalAccessTokensResponseSchema,
   UpdatePersonalAccessTokenRequestSchema,
   userRoleCovers,

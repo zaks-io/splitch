@@ -60,6 +60,32 @@ Two key classes with different blast radii.
 - **Client Key** (public, client-side): safe to embed; open-by-default with loud origin surfacing
   (ADR-0034 §1); Exposure-bearing `evaluate` plus strict write-only Metric Event `track()` and Web
   Event `web.track()`; no Flag Configuration, Event Definition, or analytics reads.
+- **Personal Access Token** (user-bound management secret): its grants intersect live membership on
+  every call. Finite issuance within a login access token's covered targets, role ceilings, and
+  write authority needs no extra approval. An `all` grant, broader authority, widening update,
+  permanent issuance, or rotation of a broad or permanent token requires fresh browser-approved
+  `pat-management` authorization. A `membership-wide-read` session can issue only grants with
+  `permissions: []` without approval.
+- **PAT step-up authorization**: Auth API issues it only through a newly requested device-code
+  approval, with no scopes, a unique `jti`, `auth_door: "device_flow"`, and at most 300 seconds of
+  validity. Refresh, identity-assertion exchange, and `client_credentials` refuse it, and its exchange
+  creates no refresh session. The CLI keeps it in memory and sends it once in
+  `Splitch-PAT-Authorization` alongside the original session bearer. The Control Plane independently
+  verifies signature, issuer, audience, kind, freshness, and subject. Other routes refuse it as a
+  bearer. Approval tokens, PAT secrets, and both authorization headers never enter output or logs.
+- **Single-use issuance and recovery**: D1 consumes approval atomically with create or update.
+  Rotation durably claims the approval and PAT/current-hash operation before touching KV; replay
+  and concurrent losers make zero KV calls. A failure leaves a pending claim for scheduled recovery
+  to revoke the PAT and tombstone both hashes without returning another secret. Unresolved claims
+  never expire by age alone. Bounded global retention includes inactive users and keeps terminal
+  consumption records beyond approval expiry plus 24 hours, so unexpired approval cannot replay.
+- **Cleanup and smoke boundaries**: strict narrowing and expiry shortening compare against the
+  stored token and require no approval through a login session, including cleanup of broad or
+  permanent tokens. A PAT bearer cannot create, update, or rotate PATs. List,
+  revoke, and revoke-all remain available to every authenticated door of the owner. Logout still
+  does not revoke PATs; explicit revoke and revoke-all do. The preview-only smoke grant can issue
+  finite PATs within its own scopes, but cannot obtain step-up or issue `all` or permanent PATs.
+  Production keeps the smoke grant disabled.
 - Canonical contract: [`credentials-and-keys`](../control-plane/credentials-and-keys.md), [`auth-doors`](../control-plane/auth-doors.md), [`access-control-matrix`](../control-plane/access-control-matrix.md).
 - Enforced in code by the `splitch-api-key-never-returned` and
   `splitch-no-secret-in-logs` Semgrep rules and by gitleaks.

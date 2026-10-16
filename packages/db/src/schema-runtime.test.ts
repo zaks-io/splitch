@@ -151,7 +151,7 @@ describe("remaining applied D1 schema", () => {
     }
   });
 
-  it("contains the 38 named live D1 tables", async () => {
+  it("contains the 40 named live D1 tables", async () => {
     const local = await createLocalD1();
     try {
       const tables = await local.d1
@@ -189,6 +189,8 @@ describe("remaining applied D1 schema", () => {
         "metrics",
         "org_memberships",
         "organizations",
+        "personal_access_token_rotations",
+        "personal_access_token_step_up_uses",
         "personal_access_tokens",
         "privacy_jobs",
         "privacy_requests",
