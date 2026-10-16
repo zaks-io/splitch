@@ -21,8 +21,8 @@ import { allowLimiter as rateLimiter } from "./test-constants";
  */
 describe("control-plane-api mounts exactly the routes addressed at its hostname", () => {
   it("mounts every control-plane-token route, including the ones another Worker executes", () => {
-    // `public-bearer` routes (Personal Access Token management) are the one
-    // exception: no service binding may answer them.
+    // Personal Access Token management routes are public-only: no service
+    // binding may answer them.
     const expected = routesMountedOnBindingsBy("control-plane-api").map(
       (route) => route.operationId,
     );
@@ -32,10 +32,10 @@ describe("control-plane-api mounts exactly the routes addressed at its hostname"
     );
   });
 
-  it("does not mount MCP binding routes on the public door", () => {
+  it("mounts the public routes, including principal capabilities", () => {
     const mounted = mountedOperationIds(createApp({ ...stubDeps(), door: "public" }).routes);
 
-    expect(mounted).not.toContain("principal_capabilities_get");
+    expect(mounted).toContain("principal_capabilities_get");
     expect([...mounted].sort()).toEqual(
       [...routesSurfacedBy("control-plane-api").map((route) => route.operationId)].sort(),
     );
