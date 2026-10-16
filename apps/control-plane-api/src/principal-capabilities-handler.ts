@@ -3,17 +3,24 @@ import { type HandlerArgs, type Principal, requireWideMemberships } from "@split
 
 /** Effective authority resolved at the Control Plane boundary for the current principal. */
 export function getPrincipalCapabilities({ principal }: HandlerArgs<unknown>): Response {
+  const pat = principal.personalAccessToken;
+  if (pat && !pat.metadata) throw new Error("personal access token metadata is required");
   return Response.json({
     scopes: effectiveScopes(principal),
     membershipWideRead:
       principal.liveMembership === true ||
       principal.authorization === MEMBERSHIP_WIDE_READ_AUTHORIZATION,
     // Lets an agent diagnose its Personal Access Token without ever reading it.
-    ...(principal.personalAccessToken
+    ...(pat
       ? {
+          token: {
+            id: pat.id,
+            ...pat.metadata,
+            effective: { scopes: principal.scopes, permissions: pat.permissions },
+          },
           personalAccessToken: {
-            id: principal.personalAccessToken.id,
-            permissions: principal.personalAccessToken.permissions,
+            id: pat.id,
+            permissions: pat.permissions,
           },
         }
       : {}),

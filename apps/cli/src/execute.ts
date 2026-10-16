@@ -27,9 +27,10 @@ import { CliInputError } from "./flag-create-input.js";
 import { validateFlagReadUsage } from "./flag-read-usage.js";
 import { executeFlagTargetingRulesAdd } from "./flag-targeting-rules-add.js";
 import { commandFlags, metaFlags } from "./help-flags.js";
+import { oneTimeSecretDescriptor, writeOneTimeSecret } from "./one-time-secret-output.js";
 import { buildOperationInput } from "./operation-input.js";
 import type { ParsedInvocation } from "./parse-args.js";
-import { oneTimeSecretDescriptor, writeOneTimeSecret } from "./one-time-secret-output.js";
+import { prepareInvocationCredential } from "./personal-access-token-auth.js";
 import { returnsPersonalAccessTokenSecret } from "./personal-access-token-input.js";
 import {
   personalAccessTokenSecretTarget,
@@ -40,8 +41,9 @@ export type { CliDeps, CliResult } from "./execute-types.js";
 
 export async function executeInvocation(
   invocation: ParsedInvocation,
-  deps: CliDeps,
+  options: CliDeps,
 ): Promise<CliResult> {
+  const deps = prepareInvocationCredential(invocation, options);
   const io = withJsonMode(deps.io ?? consoleIo(), invocation.flags.json);
   if (invocation.metaCommand) {
     const flagError = validateAdvertisedFlags(

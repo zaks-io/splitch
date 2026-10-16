@@ -72,15 +72,15 @@ describe("splitch tokens create", () => {
     ]);
 
     expect(exitCode).toBe(EXIT_OK);
-    expect(await readFile(target, "utf8")).toBe(`SPLITCH_MCP_TOKEN=${SECRET}\n`);
+    expect(await readFile(target, "utf8")).toBe(`SPLITCH_TOKEN=${SECRET}\n`);
     expect((await stat(target)).mode & 0o777).toBe(0o600);
-    expect(output).not.toContain(SECRET);
+    expect(output).not.toContain("spl_pat_");
     expect(JSON.parse(String(log.mock.calls.at(-1)?.[0]))).toMatchObject({
       token: { id: TOKEN.id, neverExpires: true },
       secret: null,
       secretWrittenTo: target,
       secretFormat: "env",
-      envVar: "SPLITCH_MCP_TOKEN",
+      envVar: "SPLITCH_TOKEN",
     });
     expect(transport.requests.at(-1)?.body).toEqual({
       name: "sandboxes",
@@ -96,9 +96,9 @@ describe("splitch tokens create", () => {
     const { exitCode, output } = await run([...CREATE, "--output-file", target, "--append"]);
     expect(exitCode).toBe(EXIT_OK);
     expect(await readFile(target, "utf8")).toBe(
-      `OTHER=1\nLAST=no-newline\nSPLITCH_MCP_TOKEN=${SECRET}\n`,
+      `OTHER=1\nLAST=no-newline\nSPLITCH_TOKEN=${SECRET}\n`,
     );
-    expect(output).not.toContain(SECRET);
+    expect(output).not.toContain("spl_pat_");
   });
 
   it("creates the file when --append targets a missing path", async () => {
@@ -120,7 +120,7 @@ describe("splitch tokens create", () => {
   it("refuses unsafe or ambiguous targets before minting anything", async () => {
     const { dir } = await makeTempHome();
     const existing = join(dir, "existing.env");
-    await writeFile(existing, "SPLITCH_MCP_TOKEN=old\n", { mode: 0o600 });
+    await writeFile(existing, "SPLITCH_TOKEN=old\n", { mode: 0o600 });
     const shared = join(dir, "shared.env");
     await writeFile(shared, "A=1\n");
     await chmod(shared, 0o644);
@@ -129,7 +129,7 @@ describe("splitch tokens create", () => {
       [[], /--output-file is required/],
       [["--output-file", "-"], /terminal or stream/],
       [["--output-file", existing], /already exists/],
-      [["--output-file", existing, "--append"], /already defines SPLITCH_MCP_TOKEN/],
+      [["--output-file", existing, "--append"], /already defines SPLITCH_TOKEN/],
       [["--output-file", shared, "--append"], /readable by other users/],
       [
         ["--output-file", join(dir, "x"), "--append", "--secret-format", "raw"],
@@ -185,7 +185,7 @@ describe("splitch tokens create", () => {
     );
     expect(exitCode).not.toBe(EXIT_OK);
     expect(output).toMatch(/unusable token was revoked/);
-    expect(output).not.toContain(SECRET);
+    expect(output).not.toContain("spl_pat_");
     expect(transport.requests.map((request) => request.url).at(-1)).toMatch(/\/revoke$/);
   });
 });
@@ -194,17 +194,17 @@ describe("splitch tokens rotate / update", () => {
   it("rotates into an existing env file, replacing the variable in place with --force", async () => {
     const { dir } = await makeTempHome();
     const target = join(dir, "mcp.env");
-    await writeFile(target, `A=1\nexport SPLITCH_MCP_TOKEN=${SECRET}\nB=2\n`, { mode: 0o600 });
+    await writeFile(target, `A=1\nexport SPLITCH_TOKEN=${SECRET}\nB=2\n`, { mode: 0o600 });
     const { exitCode, output } = await run(
       ["tokens", "rotate", TOKEN.id, "--output-file", target, "--append", "--force"],
       [rotateResponse],
     );
     expect(exitCode).toBe(EXIT_OK);
     expect(await readFile(target, "utf8")).toBe(
-      `A=1\nexport SPLITCH_MCP_TOKEN=${ROTATED_SECRET}\nB=2\n`,
+      `A=1\nexport SPLITCH_TOKEN=${ROTATED_SECRET}\nB=2\n`,
     );
     expect((await stat(target)).mode & 0o777).toBe(0o600);
-    expect(output).not.toContain(ROTATED_SECRET);
+    expect(output).not.toContain("spl_pat_");
   });
 
   it("overwrites an existing file only with --force, leaving it 0600", async () => {

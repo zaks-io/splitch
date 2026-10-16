@@ -10,7 +10,8 @@ responsibility split, see [access-control-matrix.md](access-control-matrix.md).
 ## One principal, three identity doors
 
 An agent is never a distinct principal. Every door produces a WorkOS user identity; authorization is
-single-sourced on D1 membership. Which door was used is audit-only and never branches an authz decision.
+single-sourced on D1 membership, narrowed by PAT grants when present. The door is recorded for
+audit and restricts session-only operations such as PAT creation, update, and rotation.
 The shared-preview `client_credentials` grant is the one non-interactive exception: it can only mint
 a scoped token for the configured seeded smoke WorkOS user, and it exists to exercise hosted Auth API
 to Control Plane verification in smoke tests.
@@ -20,7 +21,8 @@ Door A: ID-JAG   ──┐
 Door B: Anonymous ─┼──► /oauth2/token ──► resource-bound access token ──► resource verification
 Door C: Device flow┘
 
-Personal Access Token ──► MCP Worker (SESSION_STORE) ──► live membership ∩ grants at the Control Plane
+Personal Access Token ──► MCP Worker (SESSION_STORE) ──► Control Plane (D1 + live membership ∩ grants)
+SPLITCH_TOKEN in CLI  ──► Control Plane (SESSION_STORE + D1 + live membership ∩ grants)
 
 Shared-preview smoke client_credentials ──► /oauth2/token ──► scoped smoke access token
 ```
@@ -255,12 +257,19 @@ membership lists out of headers, avoids the carried-scope count limit, and
 prevents a provider token from carrying stale or invented Splitch tenant
 authority.
 
-## Personal Access Tokens (headless MCP)
+## Personal Access Tokens (headless MCP and CLI)
 
-A user-bound, MCP-only credential for machines that cannot finish browser OAuth. It is not a new
-principal: the MCP Worker authenticates the secret, delegates with the `personal_access_token` door
-and the token id, and the Control Plane clamps the user's live membership by the token's grants on
-every call. Shape, grants, routes, and CLI behavior are in
+A user-bound credential for machines that cannot finish browser sign-in. The CLI reads it from
+`SPLITCH_TOKEN` and sends it directly to the Control Plane public bearer door. The MCP Worker
+checks SESSION_STORE, then delegates with the `personal_access_token` door, token id, and secret
+hash. Both paths share the Control Plane's authoritative D1 check and clamp the user's live
+membership by the token's grants on every call. Revocation, expiry, rotation, and narrowing take
+effect on the next call even if KV still holds an active entry. Auth API `/oauth2/token` and
+data-plane Workers refuse a PAT; it is never exchanged for a JWT.
+
+The CLI uses no credential store or session fallback while `SPLITCH_TOKEN` is set. Its `context`
+command reports configured grants and effective authority separately. Shape, grants, routes, and
+CLI behavior are in
 [personal-access-tokens.md](personal-access-tokens.md).
 
 ## Shared-preview smoke grant: client_credentials
@@ -302,13 +311,17 @@ The grant is advertised in OAuth discovery only while enabled.
    Splitch-issued `client_credentials` JWT, even with an MCP audience, is not an MCP credential.
    The PAT door delegates to the Control Plane with `authDoor: personal_access_token`, where live
    membership and PAT grants bound authority.
-9. Revoke the PAT with the Control Plane token in fixture teardown, including after test failures.
-   Failed revocation fails the test. API traces are disabled because they capture the PAT secret
-   and bearer headers.
+9. For CLI smoke, mint a separate one-hour PAT with an Organization read grant. Run the built CLI's
+   `context` and `apps list --org <smoke org>` commands with `SPLITCH_TOKEN` and a temporary HOME,
+   without a login file. Capture child output privately and refuse secret-bearing output before
+   it can enter a report.
+10. Revoke each PAT with the Control Plane token in fixture teardown, including after test failures.
+    Failed revocation fails the test. API traces are disabled because they capture the PAT secret
+    and bearer headers.
 
 This grant is not a production user or agent auth path. It exists to validate the hosted
-Auth API to Control Plane trust contract and PAT-authenticated MCP delegation with a seeded smoke
-Organization/App. PAT management accepts this preview-only smoke door; see
+Auth API to Control Plane trust contract, PAT-authenticated MCP delegation, and headless CLI access
+with a seeded smoke Organization/App. PAT management accepts this preview-only smoke door; see
 [personal-access-tokens.md](personal-access-tokens.md).
 
 ## Sources

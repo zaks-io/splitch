@@ -158,7 +158,9 @@ describe("Personal Access Token on the MCP door", () => {
     expect(response.status).toBeLessThan(500);
     expect((await getApp(TENANT_A.appId)).status).toBe(200);
   });
+});
 
+describe("MCP PAT diagnostics and management isolation", () => {
   it("reports its clamped authority so an agent can diagnose it without the secret", async () => {
     await env.DB.prepare("DELETE FROM personal_access_tokens").run();
     await seedToken([
@@ -171,7 +173,26 @@ describe("Personal Access Token on the MCP door", () => {
     ]);
     const response = await call("principal_capabilities_get", "GET", "/principal/capabilities");
     expect(response.status, await response.clone().text()).toBe(200);
-    expect(await response.json()).toEqual({
+    const body = await response.json();
+    expect(body.token).toMatchObject({
+      id: TOKEN_ID,
+      name: "door",
+      expiresAt: null,
+      grants: [
+        {
+          target: `app:${TENANT_A.appId}`,
+          role: "admin",
+          permissions: [...personalAccessTokenPermissions],
+        },
+        { target: `app:${TENANT_B.appId}`, role: "owner", permissions: [] },
+      ],
+      effective: {
+        scopes: [`app:${TENANT_A.appId}:admin`],
+        permissions: body.personalAccessToken.permissions,
+      },
+    });
+    const { token: _token, ...previous } = body;
+    expect(previous).toEqual({
       scopes: [`app:${TENANT_A.appId}:admin`],
       membershipWideRead: true,
       personalAccessToken: {

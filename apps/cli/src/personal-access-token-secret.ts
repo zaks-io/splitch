@@ -5,7 +5,7 @@ import type { CliErrorDetail } from "./errors.js";
 import { SplitchCliError } from "./errors.js";
 import type { ParsedGlobalFlags } from "./parse-args.js";
 
-export const DEFAULT_PERSONAL_ACCESS_TOKEN_ENV_VAR = "SPLITCH_MCP_TOKEN";
+export const DEFAULT_PERSONAL_ACCESS_TOKEN_ENV_VAR = "SPLITCH_TOKEN";
 const ENV_VAR_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/;
 
 /**

@@ -5,7 +5,7 @@ export const CLI_MCP_CONTRACT_EXCEPTIONS = [
     operationId: "principal_capabilities_get",
     cli: false,
     mcp: false,
-    reason: "internal MCP-to-Control-Plane authority resolution route",
+    reason: "authority resolution for CLI context and MCP; no standalone command or tool",
   },
   {
     operationId: "organizations_delete",

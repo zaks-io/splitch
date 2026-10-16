@@ -1,9 +1,9 @@
 # Personal Access Token permissions and CLI token mode
 
-**Status:** planned. The decision is the 2026-10-15 amendment to
-[ADR-0022](../../adr/0022-agent-and-human-auth-via-auth-md-one-principal-three-doors.md). Until the
-slices below land, [personal-access-tokens.md](personal-access-tokens.md) describes running
-behavior. Each slice updates that spec, `CONTEXT.md`, and the related specs as its behavior ships.
+**Status:** implemented in SPL-761 and SPL-762. The decision is the 2026-10-15 amendment to
+[ADR-0022](../../adr/0022-agent-and-human-auth-via-auth-md-one-principal-three-doors.md).
+[personal-access-tokens.md](personal-access-tokens.md) describes running behavior. The rollout
+requirements below still apply to deployment.
 
 Goal: an agent runs the CLI headless with one PAT and can manage Apps, Flags, and Experiments
 without being able to mint secrets, delete resources, change access, or export personal data,

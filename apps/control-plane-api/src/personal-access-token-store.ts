@@ -85,7 +85,7 @@ function tokenStatus(row: PersonalAccessTokenRow, nowMs: number): PersonalAccess
 }
 
 /**
- * The MCP door's authority read. D1 is authoritative on every delegated call:
+ * Both PAT doors' authority read. D1 is authoritative on every call:
  * a revoked, expired, or re-owned row refuses even while a stale KV entry still
  * authenticates at the MCP Worker. Membership is read live and clamped by the
  * row's CURRENT grants, so a narrowed grant or a removed membership takes
@@ -109,7 +109,10 @@ export function makePersonalAccessTokenAuthorityResolver(deps: {
       return null;
     }
     const grants: PersonalAccessTokenGrant[] = parseStoredGrants(row);
-    return personalAccessTokenAuthority(await deps.membershipAccess.resolve(token.subject), grants);
+    return {
+      ...personalAccessTokenAuthority(await deps.membershipAccess.resolve(token.subject), grants),
+      token: { name: row.name, grants, expiresAt: row.expiresAt },
+    };
   };
   return resolve;
 }

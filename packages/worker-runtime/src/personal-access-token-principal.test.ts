@@ -217,7 +217,9 @@ describe("narrowPersonalAccessTokenForRoute", () => {
         ok: false,
         error: {
           code: "FORBIDDEN",
-          message: expect.stringContaining("a login session is required; run splitch login"),
+          message: expect.stringContaining(
+            "a login session is required; unset SPLITCH_TOKEN and run splitch login",
+          ),
         },
       });
     }

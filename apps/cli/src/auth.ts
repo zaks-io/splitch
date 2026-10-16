@@ -18,6 +18,12 @@ import {
 import type { CliCredentialFile } from "./credentials.js";
 import { isAccessTokenExpired } from "./credentials.js";
 import { SplitchCliError } from "./errors.js";
+import {
+  invalidPersonalAccessTokenError,
+  personalAccessTokenAuthorization,
+  refuseTokenModeSessionCommand,
+  selectedPersonalAccessToken,
+} from "./personal-access-token-auth.js";
 import { authOriginRequiresHttps, resolveAuthBaseUrl } from "./sdks.js";
 
 const DEVICE_CODE_GRANT = "urn:ietf:params:oauth:grant-type:device_code";
@@ -33,6 +39,7 @@ export async function loginWithDeviceFlow(
   deps: AuthDeps,
   appSelector: string | null,
 ): Promise<AuthSession> {
+  refuseTokenModeSessionCommand(deps, "splitch login");
   const fetchImpl = deps.fetch ?? fetch;
   const authBaseUrl = resolveAuthBaseUrl(deps);
   const auth = await formPost(fetchImpl, `${authBaseUrl}/oauth2/device_authorization`, {
@@ -162,6 +169,7 @@ function buildCredentialFile(body: DeviceTokenBody): CliCredentialFile {
  * is exactly the silent half-failure the credential holder must not be told.
  */
 export async function logout(deps: AuthDeps): Promise<void> {
+  refuseTokenModeSessionCommand(deps, "splitch logout");
   const stored = await deps.credentialStore.load();
   let revocation: Response | null = null;
   if (stored?.credential.type === "device_flow") {
@@ -197,6 +205,12 @@ export async function withAuthorizationRetry<T>(
   run: (authorization: string) => Promise<{ status: number; value: T }>,
   binding?: TokenAuthorization,
 ): Promise<T> {
+  const personalAccessToken = selectedPersonalAccessToken(deps);
+  if (personalAccessToken !== undefined) {
+    const result = await run(personalAccessTokenAuthorization(personalAccessToken));
+    if (result.status === 401) throw invalidPersonalAccessTokenError();
+    return result.value;
+  }
   // Refresh first when the principal lacks a real email so member-profile
   // backfill runs before any control-plane call (SPL-293). The command itself
   // only needs the credential; a swallowed unverified reason is `context`'s

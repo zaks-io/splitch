@@ -4,9 +4,11 @@
 
 ## 2026-10-15 amendment: Personal Access Tokens authenticate the CLI; grants carry permissions
 
-Implementation pending. The design and rollout are in
-[personal-access-token-permissions.md](../spec/control-plane/personal-access-token-permissions.md).
-Until it lands, the 2026-10-03 amendment below describes running behavior.
+Implemented in SPL-761 and SPL-762. The permission contract and rollout are in
+[personal-access-token-permissions.md](../spec/control-plane/personal-access-token-permissions.md),
+and [personal-access-tokens.md](../spec/control-plane/personal-access-tokens.md) describes running
+behavior. This amendment supersedes the MCP-only acceptance and access-level grants recorded in
+the 2026-10-03 amendment.
 
 Agents need to run the CLI headless (CI, sandboxes, remote servers) and to manage Apps without
 being able to mint secrets. Device flow cannot run headless, and a copied refresh token is

@@ -1,11 +1,17 @@
 import { z } from "@hono/zod-openapi";
 import { HeldScopeSchema } from "../held-scope";
+import { OrganizationMemberSchema } from "../leaf-schemas-runtime";
+import { type ApiRouteContract, defineApiRoute } from "../openapi-route";
 import {
+  PersonalAccessTokenGrantSchema,
   PersonalAccessTokenIdSchema,
   PersonalAccessTokenPermissionSchema,
 } from "../personal-access-tokens";
-import { OrganizationMemberSchema } from "../leaf-schemas-runtime";
-import { type ApiRouteContract, defineApiRoute } from "../openapi-route";
+import {
+  CreateOrganizationRequestSchema,
+  OrganizationResponseSchema,
+  PatchOrganizationRequestSchema,
+} from "../resource-envelopes-account";
 import {
   createClosed,
   deleteClosed,
@@ -13,11 +19,6 @@ import {
   readOnlyClosed,
   updateClosed,
 } from "../route-effects";
-import {
-  CreateOrganizationRequestSchema,
-  OrganizationResponseSchema,
-  PatchOrganizationRequestSchema,
-} from "../resource-envelopes-account";
 import { listResponse } from "../wire-envelopes-core";
 import {
   AddMemberRequestSchema,
@@ -42,6 +43,24 @@ const PrincipalCapabilitiesResponse = z
   .object({
     scopes: z.array(HeldScopeSchema),
     membershipWideRead: z.boolean(),
+    token: z
+      .object({
+        id: PersonalAccessTokenIdSchema,
+        name: z.string(),
+        grants: z.array(PersonalAccessTokenGrantSchema),
+        expiresAt: z.iso.datetime().nullable(),
+        effective: z
+          .object({
+            scopes: z.array(HeldScopeSchema),
+            permissions: z.record(
+              PersonalAccessTokenPermissionSchema,
+              z.object({ scopes: z.array(HeldScopeSchema), all: z.boolean() }).strict(),
+            ),
+          })
+          .strict(),
+      })
+      .strict()
+      .optional(),
     /**
      * Present when a Personal Access Token authenticated the call. `scopes`
      * above are its read authority; each permission has its own clamped scopes
@@ -85,7 +104,6 @@ const organizationRoutes = [
     method: "GET",
     path: "/principal/capabilities",
     summary: "Read the principal's effective live Control Plane authority.",
-    exposure: "mcp-binding",
     response: PrincipalCapabilitiesResponse,
     auth: AUTH,
     permission: "read",

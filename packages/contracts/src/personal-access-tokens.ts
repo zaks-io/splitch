@@ -3,7 +3,7 @@ import { type UserRole, UserRoleSchema } from "./leaf-schemas-runtime";
 
 /**
  * Personal Access Tokens: long-lived, user-bound, revocable bearer credentials
- * accepted ONLY by the remote MCP server (ADR-0022, 2026-10-03 amendment).
+ * accepted by the MCP server and Control Plane bearer door (ADR-0022).
  *
  * A PAT is never a separate principal. Its authority is the owning user's LIVE
  * Organization/App membership, clamped by the token's own grants on every

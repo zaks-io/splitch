@@ -40,6 +40,13 @@ export const cliErrorDocs = {
     exitCode: 2,
     related: ["CLI_NOT_AUTHENTICATED", "CLI_TOKEN_BINDING_REFUSED"],
   },
+  CLI_TOKEN_INVALID: {
+    cause:
+      "`SPLITCH_TOKEN` is empty or malformed, or a request in token mode returned HTTP 401 or HTTP 403 with `CREDENTIAL_REVOKED`. Other HTTP 403 responses keep their server error code.",
+    fix: "Set `SPLITCH_TOKEN` to a valid, active Personal Access Token, or unset `SPLITCH_TOKEN` and run `splitch login`. Retry `splitch context --json` to verify authentication. Never pass the secret as a command argument or print it.",
+    exitCode: 2,
+    related: ["UNAUTHORIZED", "CREDENTIAL_REVOKED", "FORBIDDEN"],
+  },
   CLI_TOKEN_BINDING_REFUSED: {
     cause:
       "The session token could not be bound to the requested scope, usually because the account holds no membership that reaches it.",

@@ -45,7 +45,7 @@ export function narrowPersonalAccessTokenForRoute(
     case "derived":
       return { ok: true, principal };
     case "session-only":
-      return refuse("a login session is required; run splitch login");
+      return refuse("a login session is required; unset SPLITCH_TOKEN and run splitch login");
     case "write":
     case "delete":
     case "credentials":

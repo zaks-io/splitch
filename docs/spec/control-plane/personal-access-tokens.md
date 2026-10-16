@@ -1,8 +1,8 @@
-# Personal Access Tokens: headless MCP access
+# Personal Access Tokens: headless MCP and CLI access
 
-How a user connects the remote MCP server from machines that cannot complete browser OAuth (remote
-servers, sandboxes), and how those tokens are created, scoped, rotated, and revoked. The decision
-record includes the 2026-10-03 and 2026-10-15 amendments to
+How a user connects the remote MCP server or runs the CLI from machines that cannot complete browser
+sign-in (remote servers, sandboxes), and how those tokens are created, scoped, rotated, and revoked.
+The decision record includes the 2026-10-03 and 2026-10-15 amendments to
 [ADR-0022](../../adr/0022-agent-and-human-auth-via-auth-md-one-principal-three-doors.md).
 
 ## Shape
@@ -12,8 +12,8 @@ record includes the 2026-10-03 and 2026-10-15 amendments to
 | secret       | `spl_pat_` + 64 lowercase hex characters (32 random bytes)                                                |
 | id           | `pat_` + 32 lowercase hex characters                                                                      |
 | owner        | exactly one WorkOS User; never a service account                                                          |
-| accepted by  | the MCP Worker only; the Control Plane API and Auth API refuse it as a bearer                             |
-| authority    | the owner's live membership ∩ the token's grants, recomputed on every delegated call                      |
+| accepted by  | the MCP Worker and the Control Plane public bearer door; Auth API and data-plane Workers refuse it        |
+| authority    | the owner's live membership ∩ the token's grants, recomputed on every request                             |
 | expiry       | 90 days by default; any future instant; or never (explicit `null`, always flagged `neverExpires: true`)   |
 | storage      | D1 `personal_access_tokens` holds the SHA-256 hash only; the secret is returned once, at create or rotate |
 | active limit | 50 unrevoked tokens per user                                                                              |
@@ -68,23 +68,38 @@ permission narrowing. Create, update, rotate, and `current_user_delete` refuse e
 
 ## Request path
 
-1. The MCP client sends `Authorization: Bearer spl_pat_…` to the MCP Worker.
-2. The MCP Worker hashes the secret and reads `pat:{sha256}` from SESSION_STORE. Unknown, revoked,
-   or expired entries get a 401 whose `WWW-Authenticate` carries `error="invalid_token"` and an
-   `error_description` an agent can act on. The CLI session-revocation marker does not apply to PATs.
-3. Each tool call is delegated with `authDoor: "personal_access_token"`, `liveMembership: true`, an
-   empty scope list, and `personalAccessTokenId`. The token id is signed with the rest of the
-   one-call delegation, together with the SHA-256 of the presented secret (never the secret). A PAT
-   door without both, or either on any other door, is rejected as a forgery.
-4. The Control Plane reads the D1 row by id. It refuses with `CREDENTIAL_REVOKED` when the row is
-   missing, revoked, expired, or owned by anyone other than the delegation subject. It then applies
-   the grants as above.
+The CLI sends `SPLITCH_TOKEN` as the `Authorization` bearer directly to the Control Plane. A bearer
+matching `spl_pat_` plus 64 hex characters selects PAT authentication; every other bearer follows the
+JWT path. A client-address attempt limit runs before the SESSION_STORE lookup. Authenticated
+refusals count against the owner's user-keyed actor limit, shared by all of that user's tokens.
 
-D1 is authoritative at step 4, so revoking, narrowing, expiring, or rotating a token takes effect on
-its next tool call even before the KV entry converges. The MCP Worker signs the SHA-256 of the
-presented secret into the delegation, and the Control Plane requires it to equal the row's current
-hash, so a rotated-out secret is refused immediately. Rotating an expired token is refused; extend it
-with `update` first.
+The direct bearer door and MCP delegation share the same verification rules:
+
+1. Hash the presented secret and read `pat:{sha256}` from SESSION_STORE as a fast reject. Unknown,
+   revoked, or expired entries are refused. The CLI session-revocation marker does not apply to PATs.
+2. Read the D1 row as the authority for owner, expiry, revocation, and current secret hash. The hash
+   of the presented secret must equal the row's current hash. A stale active KV entry cannot accept
+   a token whose D1 state no longer permits it.
+3. Resolve the owner's live memberships, clamp them by the grants, and apply the route's permission
+   and role checks. The principal carries `authDoor: "personal_access_token"`, `liveMembership: true`,
+   and the token id.
+
+For MCP, the Worker first checks SESSION_STORE and returns 401 with
+`WWW-Authenticate: Bearer` and `error="invalid_token"` for an unknown, revoked, or expired entry.
+Each tool call delegates an empty scope list, the token id, and the presented secret's SHA-256,
+all signed into the one-call delegation. A PAT door without the id and hash, or either on another
+door, is rejected as a forgery. The Control Plane then applies the shared D1 and membership checks.
+A missing, revoked, expired, or owner-mismatched row, or an obsolete hash, returns
+`CREDENTIAL_REVOKED`.
+
+Revoking, narrowing, expiring, or rotating a token takes effect on its next call, even before KV
+converges. Rotating an expired token is refused; extend it with `update` first. When the Control
+Plane delegates to Analysis or Evaluation, it sends the already-narrowed identity, never the PAT
+secret. Auth API `/oauth2/token` and data-plane Workers never accept a PAT.
+
+`principal_capabilities_get` is available on the public bearer door. For a PAT it returns the id,
+name, configured grants, expiry, and effective authority per permission. Configured grants and
+effective authority are reported separately so a caller can see the effect of current membership.
 
 ## Routes
 
@@ -93,8 +108,9 @@ tool and are never mounted on the MCP or panel bindings. Create, update, and rot
 `device_flow` or `client_credentials` authentication. Every other door gets `FORBIDDEN` with guidance
 to sign in with `splitch login`. List, revoke, and revoke-all remain available to any authenticated
 door of the owning user. Listing returns metadata only, and revocation reduces authority, so this
-allow-list must never block credential cleanup. A PAT secret remains invalid as a Control Plane
-bearer.
+allow-list must never block credential cleanup. A PAT can list and revoke its owner's tokens,
+including itself. Session-only refusals tell CLI callers to unset `SPLITCH_TOKEN` and run
+`splitch login`.
 
 | operation                           | method + path                                  | returns                    |
 | ----------------------------------- | ---------------------------------------------- | -------------------------- |
@@ -111,11 +127,22 @@ rewrites the tombstone.
 
 ## CLI
 
+Set `SPLITCH_TOKEN` in the environment to run headless. It is the only credential while set: the CLI
+never calls the credential store, exchanges the PAT for a JWT, refreshes it, or falls back to a
+login session. An empty or malformed value fails before any request. There is no `--token` flag or
+token file option. `splitch login` and `splitch logout` refuse while the variable is set.
+
+`splitch context` reports token mode, token metadata, configured grants, and effective authority
+from `principal_capabilities_get`. A 401 or `CREDENTIAL_REVOKED` maps to `CLI_TOKEN_INVALID`;
+permission and membership refusals remain authorization errors. Revoked, expired, and rotated-out
+secrets fail on the next call. Logging out of a CLI session does not revoke its PATs.
+
 `splitch tokens list|create|update|rotate|revoke|revoke-all`. The secret is never printed:
 
 - `create` and `rotate` require `--output-file <path>`.
-- `--secret-format env` (the default) writes `SPLITCH_MCP_TOKEN=<secret>`; `--env-var` renames the
-  variable. `raw` writes the bare secret.
+- `--secret-format env` (the default) writes `SPLITCH_TOKEN=<secret>`; `--env-var` renames the
+  variable. The same variable supplies the CLI and an MCP client's `Authorization` header.
+  `raw` writes the bare secret.
 - Without `--append`, the file is created with mode 0600. An existing file is refused unless
   `--force` is passed.
 - `--append` adds the env line to an existing file and creates it (0600) when missing. It refuses a

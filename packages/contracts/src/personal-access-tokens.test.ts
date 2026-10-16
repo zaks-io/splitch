@@ -148,6 +148,21 @@ describe("principal capabilities Personal Access Token metadata", () => {
       personalAccessToken: { id: `pat_${"0".repeat(32)}`, permissions: authority.permissions },
     };
     expect(route.output.safeParse(response).success).toBe(true);
+    const token = {
+      id: response.personalAccessToken.id,
+      name: "headless",
+      grants: [grant("all", "member", ["write", "privacy"])],
+      expiresAt: null,
+      effective: authority,
+    };
+    expect(route.output.safeParse({ ...response, token }).success).toBe(true);
+    expect(
+      route.output.safeParse({
+        ...response,
+        token: { ...token, effective: { ...authority, permissions: {} } },
+      }).success,
+    ).toBe(false);
+
     expect(
       route.output.safeParse({
         ...response,

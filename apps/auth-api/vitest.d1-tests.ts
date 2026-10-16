@@ -21,5 +21,6 @@ export const D1_TEST_FILES = defineTestFileManifest(import.meta.url, [
   "src/index.test.ts",
   "src/mcp-local-integration.test.ts",
   "src/oauth-routes.test.ts",
+  "src/personal-access-token-refusal.test.ts",
   "src/trusted-idp-crud.test.ts",
 ]);

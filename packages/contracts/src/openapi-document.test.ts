@@ -185,8 +185,8 @@ describe("openapi document: full route coverage", () => {
     }).toEqual({ internalPaths: [], cleanupOperations: [] });
   });
 
-  it("does not publish the MCP binding authority route", () => {
-    expect(documentOperations()).not.toContainEqual(
+  it("publishes the public principal capabilities route", () => {
+    expect(documentOperations()).toContainEqual(
       expect.objectContaining({ operationId: "principal_capabilities_get" }),
     );
   });

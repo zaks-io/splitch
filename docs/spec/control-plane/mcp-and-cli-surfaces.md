@@ -22,12 +22,31 @@ CLI, MCP, control panel). See ADR-0025.
 ## CLI
 
 **Who:** humans at a terminal, scripted CI, human fallback for agents.
-**Auth:** Device flow (primary) or ID-JAG (if agent invokes CLI on behalf of user).
+**Auth:** Device flow for interactive login, or a Personal Access Token from `SPLITCH_TOKEN` for
+headless use. ID-JAG remains paused.
 **Invocation model:** one-shot command; returns formatted text + exit codes.
+
+### Personal Access Token mode
+
+When `SPLITCH_TOKEN` is set, the CLI sends that PAT as the Control Plane bearer. It makes no
+credential store call and never refreshes, exchanges, or falls back to a login session. Empty or
+malformed values fail before any request. The secret comes only from the environment, never argv
+or a token file option. `login` and `logout` refuse while the variable is set.
+
+`context` reports token mode, the token's name, id, configured grants, expiry, and effective
+authority per permission from `principal_capabilities_get`. A 401 or `CREDENTIAL_REVOKED` maps to
+`CLI_TOKEN_INVALID`; permission and membership refusals remain authorization errors. Session-only
+operations tell the caller to unset `SPLITCH_TOKEN` and run `splitch login`.
+
+`splitch tokens create` and `rotate` write the secret to a private file, never stdout. Their default
+env-file variable is `SPLITCH_TOKEN`, also usable in an MCP client's `Authorization` header. Token
+creation, update, rotation, and deleting the current User require a login session. An App-only read
+PAT can still list and revoke its owner's tokens. See
+[personal-access-tokens.md](personal-access-tokens.md).
 
 ### Credential storage
 
-Credentials stored in order of preference:
+When `SPLITCH_TOKEN` is unset, credentials are stored in order of preference:
 
 1. System keychain (macOS Keychain, Linux Secret Service)
 2. `~/.splitch/credentials.json` (mode 0600, fallback for sandboxes without keychain)
@@ -93,7 +112,7 @@ Resolution order for `app_id` / `environment_id`, first match wins:
 ```
 splitch use --app <app_id|slug> [--env <environment_id|slug>]   # writes nearest splitch.json
 splitch use --env <environment_id|slug>                          # switch Environment within the current App
-splitch context                                                  # print the principal plus the resolved app/env and where each came from; CLI_NOT_AUTHENTICATED (exit 2) with no session
+splitch context                                                  # print the principal plus the resolved app/env and where each came from; CLI_NOT_AUTHENTICATED (exit 2) with neither a PAT nor a session
 ```
 
 `splitch use` accepts slugs (human/agent-readable) and resolves them to canonical IDs (CONTEXT.md:
@@ -105,8 +124,8 @@ it; subsequent tool calls inherit `app_id`/`environment_id` from the session unl
 them explicitly. This is what stops an agent from re-passing full scope on every tool call. The
 session context is never persisted server-side beyond the session and never widens token scope.
 
-**Auto-refresh on 401:** CLI exchanges the refresh token or identity_assertion for a new access token
-silently. Device refresh tokens rotate. Auth API retains the canonical selected App authority and
+**Session auto-refresh on 401:** With `SPLITCH_TOKEN` unset, the CLI silently exchanges the refresh
+token or identity_assertion for a new access token. Device refresh tokens rotate. Auth API retains the canonical selected App authority and
 reintersects it with the WorkOS Organization grant and live membership before minting. A dead or
 missing provider session fails with `CLI_SESSION_EXPIRED` (exit 2) and remediates with re-login. An
 `invalid_grant` that refuses an App/Org rebind against an otherwise-live session fails with
