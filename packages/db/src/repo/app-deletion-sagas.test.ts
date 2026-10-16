@@ -38,6 +38,47 @@ beforeEach(async () => {
 
 afterEach(async () => local.dispose());
 
+describe("App deletion audit retention", () => {
+  it("retains pending and delivered audit facts through saga completion until eligible pruning", async () => {
+    const scope = appScope(APP_ID);
+    const changedAt = "2026-01-01T00:00:00.000Z";
+    for (const [userId, actorRef] of [
+      ["user_pending_member", "deleted-user:user_deleted"],
+      ["user_delivered_member", ACTOR_ID],
+    ] as const) {
+      await repo.identity.createAppMembership(
+        scope,
+        { userId, role: "member", createdAt: changedAt },
+        { actorRef, actorVia: "device_flow", requestId: null, changedAt },
+      );
+    }
+    const events = await repo.auditEvents.list(scope);
+    expect(events).toHaveLength(2);
+    const [pending, delivered] = events;
+    if (!pending || !delivered) throw new Error("Expected both committed audit facts");
+    await repo.auditEvents.markForwarded(scope, [delivered.eventId], NOW);
+    const before = await repo.auditEvents.list(scope);
+    const saga = await beginSaga();
+
+    await repo.identity.deleteAppCascade(scope, boundary(saga));
+    await repo.identity.completeAppDeletionSaga({
+      appId: APP_ID,
+      generationId: GENERATION_ID,
+      updatedAt: NOW,
+    });
+
+    expect(await repo.identity.getApp(APP_ID)).toBeNull();
+    expect(await repo.identity.getAppMembership(scope, ACTOR_ID)).toBeNull();
+    expect(await repo.auditEvents.list(scope)).toEqual(before);
+    expect(await repo.auditEvents.listPending(50)).toEqual([pending]);
+    expect(pending.actorRef).toBe("deleted-user:user_deleted");
+    expect(await repo.auditEvents.pruneBefore({ changedBefore: NOW, limit: 50 })).toBe(1);
+    expect(await repo.auditEvents.list(scope)).toEqual([pending]);
+    await repo.auditEvents.markForwarded(scope, [pending.eventId], NOW);
+    expect(await repo.auditEvents.pruneBefore({ changedBefore: NOW, limit: 50 })).toBe(1);
+  });
+});
+
 describe("App deletion D1 boundary", () => {
   it("commits the recovery boundary atomically with deleting the App", async () => {
     const saga = await beginSaga();
