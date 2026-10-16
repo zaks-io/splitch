@@ -138,6 +138,8 @@ function isCaught(node: ts.Node, caught: Set<string>): boolean {
   if (ts.isPropertyAccessExpression(node) || ts.isElementAccessExpression(node))
     return isCaught(node.expression, caught);
   if (ts.isPropertyAssignment(node)) return isCaught(node.initializer, caught);
+  if (ts.isConditionalExpression(node))
+    return isCaught(node.whenTrue, caught) || isCaught(node.whenFalse, caught);
   let tainted = false;
   ts.forEachChild(node, (child) => {
     if (isCaught(child, caught)) tainted = true;
