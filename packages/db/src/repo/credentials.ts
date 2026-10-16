@@ -2,6 +2,7 @@ import { and, desc, eq, isNull } from "drizzle-orm";
 import { apiKeys, apps, clientKeys } from "../schema/index";
 import { type AuditContext, auditInsert } from "./audit-event-write";
 import type { Db } from "./client";
+import { makeClientKeyWriteOps } from "./client-key-write";
 import { makeCredentialMintOps } from "./credential-mint";
 import { type EnvScope, withScope } from "./scope";
 import { type ReadOptions, scopedTable } from "./scoped-table";
@@ -25,6 +26,7 @@ export function makeCredentialRepo(db: Db) {
     clientKeys: clientKeysTable,
 
     ...makeCredentialMintOps(db),
+    ...makeClientKeyWriteOps(db),
 
     listApiKeys(scope: EnvScope, options?: ReadOptions) {
       return apiKeysTable.findMany(scope, undefined, {
@@ -115,47 +117,6 @@ export function makeCredentialRepo(db: Db) {
 
     getClientKey(scope: EnvScope, keyId: string) {
       return clientKeysTable.findOne(scope, eq(clientKeys.keyId, keyId));
-    },
-
-    async updateClientKey(
-      scope: EnvScope,
-      keyId: string,
-      values: Partial<typeof clientKeys.$inferInsert>,
-      audit?: AuditContext,
-    ) {
-      if (!audit)
-        return (
-          (await clientKeysTable.update(scope, values, eq(clientKeys.keyId, keyId)))[0] ?? null
-        );
-      if ("appId" in values || "environmentId" in values)
-        throw new Error("updateClientKey: cannot set scope columns");
-      const query = db
-        .update(clientKeys)
-        .set(values)
-        .where(
-          withScope(
-            { appId: clientKeys.appId, appIdKey: "appId", environmentId: clientKeys.environmentId },
-            scope,
-            eq(clientKeys.keyId, keyId),
-          ),
-        )
-        .returning();
-      const [rows] = await db.batch([
-        query,
-        auditInsert(db, scope, {
-          ...audit,
-          action: "client_key_update",
-          resourceType: "credential",
-          resourceId: keyId,
-          environmentId: scope.environmentId,
-          metadata: {
-            changedFields: Object.keys(values).filter(
-              (field) => field === "originAllowlist" || field === "rateLimitRps",
-            ),
-          },
-        }),
-      ]);
-      return rows[0] ?? null;
     },
 
     removeClientKey(scope: EnvScope, keyId: string) {

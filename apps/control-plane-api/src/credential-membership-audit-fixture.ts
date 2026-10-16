@@ -35,7 +35,7 @@ export interface CredentialMembershipAuditFixture
   extends Awaited<ReturnType<typeof makeLocalBindings>> {
   repo: Repository;
   app: TestApp;
-  appFor: (overrides?: Partial<Principal>) => TestApp;
+  appFor: (overrides?: Partial<Principal>, credentialStore?: KVNamespace) => TestApp;
   request: (
     method: string,
     path: string,
@@ -96,7 +96,7 @@ export async function makeCredentialMembershipAuditFixture(): Promise<Credential
     });
   }
 
-  function appFor(overrides: Partial<Principal> = {}) {
+  function appFor(overrides: Partial<Principal> = {}, credentialStore = local.credentialKv) {
     const principal: Principal = {
       id: OWNER,
       kind: "control-plane-token",
@@ -109,7 +109,7 @@ export async function makeCredentialMembershipAuditFixture(): Promise<Credential
     };
     return makeTestApp({
       repo,
-      credentialStore: local.credentialKv,
+      credentialStore,
       nowIso: () => AUDIT_NOW,
       authResolver: () => ({ ok: true, principal }),
       observability: {

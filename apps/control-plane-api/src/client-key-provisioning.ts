@@ -6,7 +6,7 @@ import {
   writeClientKeyCache,
 } from "./credential-cache";
 
-interface ClientKeyDeps {
+export interface ClientKeyDeps {
   repo: Repository;
   credentialStore?: KVNamespace;
   credentialCacheWriter?: CredentialCacheWriterAccess;
@@ -14,6 +14,13 @@ interface ClientKeyDeps {
 }
 
 type EnvScopeValue = ReturnType<typeof envScope>;
+
+export interface ClientKeyContext {
+  appId: string;
+  environmentId: string;
+  organizationId: string;
+  scope: EnvScopeValue;
+}
 
 export type ClientKeyRow = Awaited<ReturnType<Repository["credentials"]["listClientKeys"]>>[number];
 
@@ -37,13 +44,6 @@ export async function readOrProvisionClientKey(
   return key;
 }
 
-export async function ensureActiveClientKey(
-  deps: ClientKeyDeps,
-  ctx: { appId: string; environmentId: string; organizationId: string; scope: EnvScopeValue },
-): Promise<ClientKeyRow> {
-  return (await ensureActiveClientKeyState(deps, ctx)).key;
-}
-
 async function ensureActiveClientKeyState(
   deps: ClientKeyDeps,
   ctx: { appId: string; environmentId: string; organizationId: string; scope: EnvScopeValue },
@@ -64,7 +64,12 @@ async function createClientKey(
   deps: ClientKeyDeps,
   ctx: { appId: string; environmentId: string; organizationId: string; scope: EnvScopeValue },
 ): Promise<ClientKeyRow> {
-  return deps.repo.credentials.clientKeys.insert(ctx.scope, {
+  return deps.repo.credentials.clientKeys.insert(ctx.scope, newClientKey(deps, ctx));
+}
+
+/** Prepare material without committing or publishing a credential. */
+export function newClientKey(deps: ClientKeyDeps, ctx: ClientKeyContext): ClientKeyRow {
+  return {
     keyId: `ck_${randomHex(16)}`,
     appId: ctx.appId,
     environmentId: ctx.environmentId,
@@ -72,7 +77,9 @@ async function createClientKey(
     originAllowlist: null,
     rateLimitRps: DEFAULT_CLIENT_KEY_RATE_LIMIT_RPS,
     createdAt: nowIso(deps),
-  });
+    revokedAt: null,
+    createdBy: null,
+  };
 }
 
 export function clientKeyResponse(row: ClientKeyRow): ClientKey {
@@ -90,7 +97,7 @@ export function clientKeyResponse(row: ClientKeyRow): ClientKey {
   };
 }
 
-async function findActiveClientKey(
+export async function findActiveClientKey(
   deps: ClientKeyDeps,
   ctx: { scope: EnvScopeValue },
 ): Promise<ClientKeyRow | null> {
