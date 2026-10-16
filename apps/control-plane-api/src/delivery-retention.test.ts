@@ -15,7 +15,8 @@ vi.mock("@splitch/db", () => ({
     cloudflare: { pruneDeliveries: mocks.cloudflare },
   }),
 }));
-vi.mock("@splitch/observability/worker", () => ({
+vi.mock(import("@splitch/observability/worker"), async (importOriginal) => ({
+  ...(await importOriginal()),
   workerObservabilityWithWaitUntil: () => ({}),
   workerEmitter: () => ({ log: mocks.log }),
   createWorkerFaultReporter: () => mocks.report,
