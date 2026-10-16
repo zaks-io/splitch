@@ -2,10 +2,16 @@
 
 ## Control Plane contracts
 
-`@splitch/sdk/control-plane` adds the Personal Access Token step-up contracts. Creating, widening,
-or rotating a token beyond the calling session's own authority, or issuing a token that never
-expires, now needs a fresh browser approval. Narrowing grants, shortening expiry, listing, and
-revoking never need one.
+`@splitch/sdk/control-plane` adds the Personal Access Token step-up contracts. Some token changes
+now need a fresh browser approval:
+
+- Creating or rotating a token needs approval when the resulting token never expires, grants all
+  memberships, or goes beyond the calling session's own authority.
+- Updating a token needs approval whenever it widens the stored grants, even within the session's
+  authority. Any other update, such as a rename or a longer finite expiry, is judged by the
+  resulting token, as a create is.
+- Narrowing grants or shortening expiry never needs approval, provided the same update neither
+  widens a grant nor extends expiry. Listing and revoking never need approval.
 
 - `personalAccessTokenNeedsStepUp` and `personalAccessTokenStepUpReason` decide whether a token
   create, update, or rotate needs step-up, and why. `PersonalAccessTokenStepUpInput` describes
