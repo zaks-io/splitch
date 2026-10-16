@@ -3,7 +3,8 @@ import { join, relative } from "node:path";
 import ts from "typescript";
 import { expect, it } from "vitest";
 import { unsafeFaultLogs } from "./test-support/fault-log-wiring";
-import { reportedFaultRethrows, unsafeStackWrites } from "./test-support/fault-runtime-wiring";
+import { reportedFaultRethrows } from "./test-support/fault-runtime-wiring";
+import { unsafeStackWrites } from "./test-support/fault-stack-wiring";
 import { sourceFiles } from "./test-support/workspace-sources";
 
 const repoRoot = new URL("../../../", import.meta.url).pathname;
@@ -112,8 +113,8 @@ it("accepts shared serialization and public refusal codes", () => {
   ).toEqual([]);
 });
 
-it("serializes caught errors at every Control Plane and Event Ingest log boundary", () => {
-  const violations = ["control-plane-api", "event-ingest-api"]
+it("serializes caught errors at every Control Plane, Event Ingest and MCP log boundary", () => {
+  const violations = ["control-plane-api", "event-ingest-api", "mcp-server"]
     .flatMap((app) => sourceFiles(join(repoRoot, "apps", app, "src")))
     .flatMap((file) =>
       unsafeFaultLogs(

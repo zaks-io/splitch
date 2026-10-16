@@ -2,47 +2,11 @@ import ts from "typescript";
 import { addBindingNames, propertyName, rejectionBindings } from "./fault-catch-bindings";
 import { faultReportCalls } from "./fault-report-calls";
 
-/** Engine frames are trusted only while application code cannot replace their source. */
-export function unsafeStackWrites(source: ts.SourceFile): number[] {
-  const lines: number[] = [];
-  function visit(node: ts.Node): void {
-    if (
-      ts.isBinaryExpression(node) &&
-      node.operatorToken.kind >= ts.SyntaxKind.FirstAssignment &&
-      node.operatorToken.kind <= ts.SyntaxKind.LastAssignment &&
-      isStackTarget(node.left)
-    )
-      lines.push(lineOf(node, source));
-    ts.forEachChild(node, visit);
-  }
-  visit(source);
-  return lines;
-}
-
-function isStackTarget(node: ts.Node): boolean {
-  if (ts.isParenthesizedExpression(node)) return isStackTarget(node.expression);
-  const field = propertyName(node);
-  if (field === "stack") return true;
-  return (
-    field === "prepareStackTrace" &&
-    (ts.isPropertyAccessExpression(node) || ts.isElementAccessExpression(node)) &&
-    isErrorConstructor(node.expression)
-  );
-}
-
-function isErrorConstructor(node: ts.Node): boolean {
-  if (ts.isIdentifier(node)) return node.text === "Error";
-  if (ts.isParenthesizedExpression(node) || ts.isAsExpression(node))
-    return isErrorConstructor(node.expression);
-  return (
-    (ts.isPropertyAccessExpression(node) || ts.isElementAccessExpression(node)) &&
-    propertyName(node) === "Error" &&
-    ts.isIdentifier(node.expression) &&
-    node.expression.text === "globalThis"
-  );
-}
-
-/** A safe report must not be followed by handing the original rejection to Workers. */
+/**
+ * Report-then-rethrow tripwire for catch/rejection callbacks: throw and Promise.reject,
+ * caught aliases/properties, derived Error messages and cause options. Fresh static or
+ * fault-code Errors remain allowed. Deliberate evasion is outside this guard's scope.
+ */
 export function reportedFaultRethrows(source: ts.SourceFile): number[] {
   const violations = new Set<number>();
   const reports = faultReportCalls(source);
@@ -71,18 +35,27 @@ interface FlowContext {
 
 function inspectFlow(node: ts.Node, reported: boolean, context: FlowContext): ReportFlow {
   if (ts.isBlock(node)) return inspectBlock(node.statements, reported, context);
-  if (ts.isIfStatement(node)) {
-    const before = reported || hasFaultReport(node.expression, context);
-    const yes = inspectFlow(node.thenStatement, before, context);
-    const no = node.elseStatement ? inspectFlow(node.elseStatement, before, context) : before;
-    return mergeFlow(yes, no);
-  }
+  if (ts.isIfStatement(node)) return inspectBranch(node, reported, context);
   if (ts.isThrowStatement(node)) {
     if (reported && isCaught(node.expression, context.caught)) context.flag(node);
     return undefined;
   }
+  if (reported) flagRejectedTaint(node, context);
   if (ts.isReturnStatement(node)) return undefined;
   return inspectCompound(node, reported, context);
+}
+
+function inspectBranch(node: ts.IfStatement, reported: boolean, context: FlowContext): ReportFlow {
+  const before = reported || hasFaultReport(node.expression, context);
+  const yes = inspectFlow(node.thenStatement, before, context);
+  const no = node.elseStatement ? inspectFlow(node.elseStatement, before, context) : before;
+  return mergeFlow(yes, no);
+}
+
+function flagRejectedTaint(node: ts.Node, context: FlowContext): void {
+  for (const child of handlerNodes(node))
+    if (isPromiseReject(child) && child.arguments.some((arg) => isCaught(arg, context.caught)))
+      context.flag(child);
 }
 
 function inspectBlock(
@@ -161,7 +134,26 @@ function isCaught(node: ts.Node, caught: Set<string>): boolean {
   if (ts.isIdentifier(node)) return caught.has(node.text);
   if (ts.isParenthesizedExpression(node) || ts.isAsExpression(node) || ts.isNonNullExpression(node))
     return isCaught(node.expression, caught);
-  return false;
+  if (ts.isFunctionLike(node)) return false;
+  if (ts.isPropertyAccessExpression(node) || ts.isElementAccessExpression(node))
+    return isCaught(node.expression, caught);
+  if (ts.isPropertyAssignment(node)) return isCaught(node.initializer, caught);
+  let tainted = false;
+  ts.forEachChild(node, (child) => {
+    if (isCaught(child, caught)) tainted = true;
+  });
+  return tainted;
+}
+
+function isPromiseReject(node: ts.Node): node is ts.CallExpression {
+  return (
+    ts.isCallExpression(node) &&
+    propertyName(node.expression) === "reject" &&
+    (ts.isPropertyAccessExpression(node.expression) ||
+      ts.isElementAccessExpression(node.expression)) &&
+    ts.isIdentifier(node.expression.expression) &&
+    node.expression.expression.text === "Promise"
+  );
 }
 
 function lineOf(node: ts.Node, source: ts.SourceFile): number {

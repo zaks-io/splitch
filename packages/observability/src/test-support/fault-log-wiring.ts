@@ -1,8 +1,13 @@
 import ts from "typescript";
-import { addBindingNames, rejectionBindings } from "./fault-catch-bindings";
+import { addBindingNames, rejectionBindings, rejectionCallback } from "./fault-catch-bindings";
 import { type FaultAlias, objectPropertyValue } from "./fault-log-properties";
 
-/** Static guard for the API log boundaries, including local logger/error aliases. */
+/**
+ * Raw-log tripwire for catch/then rejection callbacks (including direct logger callbacks),
+ * logger/binding aliases and object properties. Taint survives String, toString, templates,
+ * JSON.stringify and message/stack/cause/params/query reads; serialized detail and explicit
+ * domain metadata are allowed. Deliberate evasion is outside this guard's scope.
+ */
 export function unsafeFaultLogs(source: ts.SourceFile): number[] {
   const raw = new Set<string>();
   const loggers = new Set(["console", "logger"]);
@@ -76,9 +81,13 @@ export function unsafeFaultLogs(source: ts.SourceFile): number[] {
     /* Resolve transitive aliases before checking sinks. */
   }
   return calls
-    .filter(
-      (call) => !isSerializer(call) && isLogger(call.expression) && call.arguments.some(isRaw),
-    )
+    .filter((call) => {
+      const callback = rejectionCallback(call);
+      return (
+        (callback && isLogger(callback)) ||
+        (!isSerializer(call) && isLogger(call.expression) && call.arguments.some(isRaw))
+      );
+    })
     .map((call) => source.getLineAndCharacterOfPosition(call.getStart(source)).line + 1);
 }
 
@@ -128,7 +137,7 @@ function rawProperty(
     ? node.name.text
     : node.argumentExpression.getText().replaceAll(/["']/g, "");
   if (field === "cause" || field === "stack") return true;
-  if (field === "message") return isRaw(node.expression);
+  if (["message", "params", "query", "toString"].includes(field)) return isRaw(node.expression);
   return !ts.isIdentifier(node.expression) && isRaw(node.expression);
 }
 

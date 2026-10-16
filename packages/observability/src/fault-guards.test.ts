@@ -1,7 +1,8 @@
 import ts from "typescript";
 import { expect, it } from "vitest";
 import { unsafeFaultLogs } from "./test-support/fault-log-wiring";
-import { reportedFaultRethrows, unsafeStackWrites } from "./test-support/fault-runtime-wiring";
+import { reportedFaultRethrows } from "./test-support/fault-runtime-wiring";
+import { unsafeStackWrites } from "./test-support/fault-stack-wiring";
 
 function parse(code: string): ts.SourceFile {
   return ts.createSourceFile("fixture.ts", code, ts.ScriptTarget.Latest, true);

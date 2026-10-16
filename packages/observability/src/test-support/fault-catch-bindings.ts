@@ -69,7 +69,7 @@ function collectFunction(
     functions.set(node.name.text, node.initializer);
 }
 
-function rejectionCallback(node: ts.Node): ts.Expression | undefined {
+export function rejectionCallback(node: ts.Node): ts.Expression | undefined {
   if (!ts.isCallExpression(node)) return undefined;
   const method = propertyName(node.expression);
   if (method === "catch") return node.arguments[0];
