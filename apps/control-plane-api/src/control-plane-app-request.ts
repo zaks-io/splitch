@@ -10,6 +10,7 @@ import { apiDocumentVersion } from "./api-document-version";
 import { createApp } from "./app";
 import { approvalArchiveStoreFromEnv } from "./approval-archive-tinybird";
 import { createAnalysisResultsReader } from "./attention-analysis-reader";
+import { forwardAuditEvents } from "./audit-events";
 import { dispatchCloudflarePushes } from "./cloudflare-push-dispatch";
 import { durableConfigStoreAccess } from "./config-store-access";
 import { durableCredentialCacheWriterAccess } from "./credential-cache-writer-do";
@@ -105,6 +106,10 @@ export async function handleControlPlaneAppRequest(input: {
   });
 
   const response = await app.fetch(request, env);
+  // A pending Approval Request is a committed mutation even when the route answers 409.
+  if (resolvedAppId && request.method !== "GET" && request.method !== "HEAD") {
+    ctx.waitUntil(forwardAuditEvents({ repo, env, scope: appScope(resolvedAppId) }));
+  }
   if (response.ok && resolvedAppId && request.method !== "GET" && request.method !== "HEAD") {
     ctx.waitUntil(
       dispatchCloudflarePushes({

@@ -1,16 +1,6 @@
-import { z } from "@hono/zod-openapi";
-import type {
-  EventDefinitionDetailSchema,
-  EventDefinitionListResponseSchema,
-  EventDefinitionSchema,
-  EventDefinitionVersionListResponseSchema,
-  EventDefinitionVersionSchema,
-} from "./event-definition";
-import type {
-  CreateEventDefinitionRequestSchema,
-  PatchEventDefinitionRequestSchema,
-  PublishEventDefinitionVersionRequestSchema,
-} from "./event-definition-write";
+import type { z } from "@hono/zod-openapi";
+import type { AppAuditListQuery, AppAuditListResponse } from "./app-audit";
+
 import { AppMemberSchema, AppSchema } from "./leaf-schemas-runtime";
 import type {
   ResourceDeleteModeQuerySchema,
@@ -26,6 +16,22 @@ import type {
 } from "./resource-envelopes-account";
 import type * as EnvironmentRoutes from "./route-types-environment";
 import type {
+  EventDefinitionsCreateInput,
+  EventDefinitionsCreateOutput,
+  EventDefinitionsGetInput,
+  EventDefinitionsGetOutput,
+  EventDefinitionsListInput,
+  EventDefinitionsListOutput,
+  EventDefinitionsUpdateInput,
+  EventDefinitionsUpdateOutput,
+  EventDefinitionVersionsCreateInput,
+  EventDefinitionVersionsCreateOutput,
+  EventDefinitionVersionsGetInput,
+  EventDefinitionVersionsGetOutput,
+  EventDefinitionVersionsListInput,
+  EventDefinitionVersionsListOutput,
+} from "./route-types-event-definition";
+import type {
   AddAppMemberRequestSchema,
   AppMemberParams,
   AppParams,
@@ -36,7 +42,9 @@ import type {
 import type { EntityPrivacyRequestSchema, PrivacyResponseSchema } from "./routes/routes-privacy";
 
 export type * from "./route-types-environment";
+export type * from "./route-types-event-definition";
 export type * from "./route-types-flags";
+
 import type {
   ExpiredFlagsListInput,
   ExpiredFlagsListOutput,
@@ -81,28 +89,6 @@ import { listResponse } from "./wire-envelopes-core";
 
 const ApprovalRequestListResponseSchema = listResponse(ApprovalRequestSchema);
 
-type EventDefinitionPath = z.infer<typeof AppParams> & { eventDefinitionId: string };
-type EventDefinitionVersionPath = EventDefinitionPath & { versionId: string };
-export type EventDefinitionsListInput = z.infer<typeof AppParams>;
-export type EventDefinitionsListOutput = z.infer<typeof EventDefinitionListResponseSchema>;
-export type EventDefinitionsCreateInput = z.infer<typeof AppParams> &
-  z.infer<typeof CreateEventDefinitionRequestSchema>;
-export type EventDefinitionsCreateOutput = z.infer<typeof EventDefinitionSchema>;
-export type EventDefinitionsGetInput = EventDefinitionPath;
-export type EventDefinitionsGetOutput = z.infer<typeof EventDefinitionDetailSchema>;
-export type EventDefinitionsUpdateInput = EventDefinitionPath &
-  z.infer<typeof PatchEventDefinitionRequestSchema>;
-export type EventDefinitionsUpdateOutput = z.infer<typeof EventDefinitionSchema>;
-export type EventDefinitionVersionsCreateInput = EventDefinitionPath &
-  z.infer<typeof PublishEventDefinitionVersionRequestSchema>;
-export type EventDefinitionVersionsCreateOutput = z.infer<typeof EventDefinitionVersionSchema>;
-export type EventDefinitionVersionsListInput = EventDefinitionPath;
-export type EventDefinitionVersionsListOutput = z.infer<
-  typeof EventDefinitionVersionListResponseSchema
->;
-export type EventDefinitionVersionsGetInput = EventDefinitionVersionPath;
-export type EventDefinitionVersionsGetOutput = z.infer<typeof EventDefinitionVersionSchema>;
-
 export type EntityPrivacyInput = z.infer<typeof AppParams> &
   z.infer<typeof EntityPrivacyRequestSchema>;
 export type EntityPrivacyOutput = z.infer<typeof PrivacyResponseSchema>;
@@ -146,6 +132,9 @@ export type AppMembersUpdateOutput = z.infer<typeof AppMemberSchema>;
 export type AppMembersRemoveInput = z.infer<typeof AppMemberParams>;
 export type AppMembersRemoveOutput = { deleted: true };
 
+export type AppAuditListInput = { appId: string } & Partial<AppAuditListQuery>;
+export type AppAuditListOutput = AppAuditListResponse;
+
 export type AppAttentionRollupGetInput = z.infer<typeof AppParams>;
 export type AppAttentionRollupGetOutput = z.infer<typeof AppAttentionRollupResponseSchema>;
 
@@ -155,6 +144,7 @@ export type AppAttentionRollupGetOutput = z.infer<typeof AppAttentionRollupRespo
  * is one entry rather than three parallel edits.
  */
 export interface RouteTypeMap {
+  app_audit_list: { input: AppAuditListInput; output: AppAuditListResponse };
   event_definitions_list: { input: EventDefinitionsListInput; output: EventDefinitionsListOutput };
   event_definitions_create: {
     input: EventDefinitionsCreateInput;

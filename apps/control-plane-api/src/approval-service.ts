@@ -11,19 +11,18 @@ import {
 import { appScope } from "@splitch/db";
 import { type Principal, renderError } from "@splitch/worker-runtime";
 import { requireAppAdmin } from "./app-authz";
-import { approvalDiff, approvalRequestId, approvalReviewId } from "./approval-canonical";
+import { approvalDiff, approvalRequestId } from "./approval-canonical";
 import { approvalRequestProjection } from "./approval-model";
 import { resultingVersionFor } from "./approval-resulting-version";
 import { prepareAndApplyApproval } from "./approval-review-application";
 import { narrowApprovalReviewPrincipal } from "./approval-review-authorization";
+import { declineApproval } from "./approval-review-decline";
 import {
   approvalNotFound,
   idempotencyConflict,
   materializeStale,
-  projectedResult,
   requiredAuthDoor,
   resolvedError,
-  resolvedWinner,
   reviewForbidden,
   reviewRequired,
 } from "./approval-review-outcomes";
@@ -36,6 +35,7 @@ import type {
   ReviewApprovalInput,
 } from "./approval-service-types";
 import { approvalTargetVersion, currentPolicyProjection } from "./approval-target";
+import { auditContext } from "./audit-context";
 
 export interface CreateApprovalInput {
   appId: string;
@@ -135,25 +135,29 @@ export async function createApproval(
   const diff = ApprovalDiffSchema.parse(approvalDiff(input.current, input.proposed));
   const requestHash = await proposalRequestHash(input);
   const now = deps.nowIso?.() ?? new Date().toISOString();
-  const created = await deps.repo.approvals.createRequest(appScope(input.appId), {
-    id: approvalRequestId(new Date(now).getTime()),
-    operation: input.operation,
-    targetType: input.target.type,
-    targetId: input.target.id,
-    targetVersion,
-    policyContexts: JSON.stringify(input.policyContexts),
-    diff: canonicalJson(diff),
-    status: "pending",
-    proposedBy: input.principal.id,
-    proposedVia: requiredAuthDoor(input.principal),
-    proposedAt: now,
-    resolvedAt: null,
-    resultingTargetVersion: null,
-    resultingResourceType: null,
-    resultingResourceId: null,
-    idempotencyKey: input.idempotencyKey,
-    requestHash,
-  });
+  const created = await deps.repo.approvals.createRequest(
+    appScope(input.appId),
+    {
+      id: approvalRequestId(new Date(now).getTime()),
+      operation: input.operation,
+      targetType: input.target.type,
+      targetId: input.target.id,
+      targetVersion,
+      policyContexts: JSON.stringify(input.policyContexts),
+      diff: canonicalJson(diff),
+      status: "pending",
+      proposedBy: input.principal.id,
+      proposedVia: requiredAuthDoor(input.principal),
+      proposedAt: now,
+      resolvedAt: null,
+      resultingTargetVersion: null,
+      resultingResourceType: null,
+      resultingResourceId: null,
+      idempotencyKey: input.idempotencyKey,
+      requestHash,
+    },
+    auditContext(input.principal, input.requestId, now),
+  );
   if (!created.ok) {
     return {
       ok: false,
@@ -229,21 +233,7 @@ export async function reviewApproval(
   // Declining never touches the target, so it neither needs nor re-validates the
   // target version: a proposal against a deleted target must still be closable.
   if (input.action === "decline") {
-    const resolved = await deps.repo.approvals.resolveWithoutApplication(scope, {
-      requestId: row.id,
-      reviewId: approvalReviewId(new Date(now).getTime()),
-      action: input.action,
-      outcome: "declined",
-      reviewedBy: input.principal.id,
-      reviewedVia: requiredAuthDoor(input.principal),
-      reviewedAt: now,
-      reason: input.reason,
-      idempotencyKey: input.idempotencyKey,
-      requestHash,
-    });
-    return resolved
-      ? projectedResult(deps, row.appId, row.id, input.requestId)
-      : resolvedWinner(deps, row.appId, row.id, input.requestId);
+    return declineApproval(deps, row, input, requestHash, now);
   }
 
   const policyError = await validateReviewPolicy(deps, row.proposedBy, contexts, input);

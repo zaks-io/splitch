@@ -2,13 +2,6 @@ import { z } from "@hono/zod-openapi";
 import { AppMemberSchema, AppSchema, EnvironmentSchema } from "../leaf-schemas-runtime";
 import { type ApiRouteContract, defineApiRoute } from "../openapi-route";
 import {
-  createClosed,
-  deleteClosed,
-  membershipRemoveClosed,
-  readOnlyClosed,
-  updateClosed,
-} from "../route-effects";
-import {
   ResourceDeleteModeQuerySchema,
   ResourceDeleteResponseSchema,
 } from "../resource-delete-tree";
@@ -19,6 +12,14 @@ import {
   PatchAppRequestSchema,
 } from "../resource-envelopes-account";
 import {
+  createClosed,
+  deleteClosed,
+  membershipRemoveClosed,
+  readOnlyClosed,
+  updateClosed,
+} from "../route-effects";
+import { listResponse } from "../wire-envelopes-core";
+import {
   AddAppMemberRequestSchema,
   AppMemberParams,
   AppParams,
@@ -28,7 +29,6 @@ import {
   PatchEnvironmentRequestSchema,
   UpdateAppMemberRequestSchema,
 } from "./route-shapes";
-import { listResponse } from "../wire-envelopes-core";
 
 /**
  * App and Environment management routes. Split out of routes-account.ts purely
@@ -233,6 +233,7 @@ export const appEnvironmentRoutes = [
   }),
   defineApiRoute({
     operationId: "app_members_add",
+    audit: "app",
     owner: OWNER,
     method: "POST",
     path: "/apps/:appId/members",
@@ -255,6 +256,7 @@ export const appEnvironmentRoutes = [
   }),
   defineApiRoute({
     operationId: "app_members_update",
+    audit: "app",
     owner: OWNER,
     method: "PATCH",
     path: "/apps/:appId/members/:userId",
@@ -277,6 +279,7 @@ export const appEnvironmentRoutes = [
   }),
   defineApiRoute({
     operationId: "app_members_remove",
+    audit: "app",
     owner: OWNER,
     method: "DELETE",
     path: "/apps/:appId/members/:userId",

@@ -45,6 +45,7 @@ const MCP_TOOL_MEMBERSHIP_GATES = {
   apps_create: ORG_ADMIN,
   apps_get: APP_MEMBER,
   app_attention_rollup_get: APP_MEMBER,
+  app_audit_list: APP_ADMIN,
   apps_update: APP_ADMIN,
   apps_delete: APP_OWNER,
   // The App role matrix grants "view config" to every role, so listing who has

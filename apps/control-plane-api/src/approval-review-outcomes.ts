@@ -17,6 +17,7 @@ import type {
   ReviewApprovalInput,
   UnapplicableProposal,
 } from "./approval-service-types";
+import { auditContext } from "./audit-context";
 
 /**
  * One message per target state, and no message without one. Keyed by the union
@@ -43,6 +44,7 @@ export async function materializeStale(
 ): Promise<ApprovalResult> {
   const now = deps.nowIso?.() ?? new Date().toISOString();
   const resolved = await deps.repo.approvals.resolveWithoutApplication(appScope(row.appId), {
+    audit: auditContext(input.principal, input.requestId, now),
     requestId: row.id,
     reviewId: approvalReviewId(new Date(now).getTime()),
     action: input.action,
@@ -91,6 +93,7 @@ export async function resolveUnapplicable(
   refusal: UnapplicableProposal,
 ): Promise<ApprovalResult> {
   const resolved = await deps.repo.approvals.resolveWithoutApplication(appScope(row.appId), {
+    audit: commit.audit,
     requestId: row.id,
     reviewId: commit.reviewId,
     action: "approve_and_apply",
@@ -129,6 +132,7 @@ export async function recordApplicationFailure(
   const code = ErrorCodeSchema.parse(error.code);
   const errorDetails = ErrorDetailsSchema.parse(error.details);
   const recorded = await deps.repo.approvals.recordFailure(appScope(row.appId), {
+    audit: commit.audit,
     requestId: row.id,
     reviewId: commit.reviewId,
     reviewedBy: commit.reviewedBy,

@@ -1,3 +1,4 @@
+import { auditContext } from "./audit-context";
 /**
  * Starting an Experiment Run is the one Experiment write that publishes traffic
  * allocation to the edge, so it carries the `start_experiment_run` Approval gate,
@@ -109,6 +110,7 @@ export async function startExperiment(
 
   const now = nowIso(deps);
   const committed = await deps.repo.experiments.startRun(scope, {
+    audit: auditContext(args.principal, args.requestId, now),
     experimentId: experiment.id,
     flagId: experiment.flagId,
     expectedDraft: {

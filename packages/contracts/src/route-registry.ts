@@ -5,20 +5,21 @@ import { assertRouteEffects } from "./route-effects";
 import { assertRoutePermission } from "./route-permissions";
 import { accountRoutes } from "./routes/routes-account";
 import { analysisRoutes } from "./routes/routes-analysis";
+import { appAuditRoutes } from "./routes/routes-app-audit";
 import { approvalRoutes } from "./routes/routes-approvals";
 import { attentionRoutes } from "./routes/routes-attention";
 import { cloudflareRoutes } from "./routes/routes-cloudflare";
 import { convexRoutes } from "./routes/routes-convex";
 import { credentialRoutes } from "./routes/routes-credentials";
 import { dataPlaneRoutes } from "./routes/routes-data-plane";
-import { ofrepRoutes } from "./routes/routes-ofrep";
-import { personalAccessTokenRoutes } from "./routes/routes-personal-access-tokens";
 import { eventDefinitionRoutes } from "./routes/routes-event-definitions";
 import { experimentRoutes } from "./routes/routes-experiments";
 import { flagChangeRoutes } from "./routes/routes-flag-changes";
 import { flagHealthRoutes } from "./routes/routes-flag-health";
 import { flagLifecycleReadRoutes } from "./routes/routes-flag-lifecycle-reads";
 import { flagRoutes } from "./routes/routes-flags";
+import { ofrepRoutes } from "./routes/routes-ofrep";
+import { personalAccessTokenRoutes } from "./routes/routes-personal-access-tokens";
 import { privacyRoutes } from "./routes/routes-privacy";
 import { segmentRoutes } from "./routes/routes-segments";
 import { sentryRoutes } from "./routes/routes-sentry";
@@ -99,6 +100,7 @@ export const routeRegistry = assertRegistry([
   ...convexRoutes,
   ...sentryRoutes,
   ...analysisRoutes,
+  ...appAuditRoutes,
   ...privacyRoutes,
   ...dataPlaneRoutes,
   ...ofrepRoutes,

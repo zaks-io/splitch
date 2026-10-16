@@ -1,6 +1,9 @@
+import { PAGINATION_DEFAULT_LIMIT } from "@splitch/contracts";
 import type {
   AppAttentionRollupGetInput,
   AppAttentionRollupGetOutput,
+  AppAuditListInput,
+  AppAuditListOutput,
   AppMembersAddInput,
   AppMembersAddOutput,
   AppMembersListInput,
@@ -31,6 +34,10 @@ import { invokeHcRoute } from "./hc-invoke";
 import type { ControlPlaneOperationOptions, ControlPlaneOperationResult } from "./operation-result";
 
 export interface AppsClient {
+  listAudit(
+    input: AppAuditListInput,
+    options?: ControlPlaneOperationOptions,
+  ): Promise<ControlPlaneOperationResult<AppAuditListOutput>>;
   list(
     input: AppsListInput,
     options?: ControlPlaneOperationOptions,
@@ -141,6 +148,23 @@ export function createAppsClient(
           hcRequestOptions(withAuthorization(hcOptions, callOptions)),
         ),
       ),
+    listAudit: (input, callOptions) => {
+      const { appId, ...filters } = input;
+      const query = Object.fromEntries(
+        Object.entries(filters)
+          .filter(([, value]) => value !== undefined)
+          .map(([key, value]) => [key, String(value)]),
+      );
+      return invokeHcRoute<AppAuditListOutput>("app_audit_list", () =>
+        hcClient.apps[":appId"].audit.$get(
+          {
+            param: { appId },
+            query: { ...query, limit: String(input.limit ?? PAGINATION_DEFAULT_LIMIT) },
+          } as never,
+          hcRequestOptions(withAuthorization(hcOptions, callOptions)),
+        ),
+      );
+    },
     members: createAppMembersClient(hcOptions, hcClient),
   };
 }

@@ -1,15 +1,13 @@
 import { expect, test } from "@playwright/test";
-import {
-  LOCAL_E2E_OVERVIEW_STATES,
-  LOCAL_E2E_SESSION_TOKEN,
-} from "../../scripts/local-e2e-fixtures.mjs";
+import { LOCAL_E2E_SESSION_TOKEN } from "../../scripts/local-e2e-fixtures.mjs";
+import { LOCAL_E2E_OVERVIEW_STATES } from "../../scripts/local-e2e-overview-fixture.mjs";
 import { captureThemeScreenshots } from "./screenshot";
 
 const origin = "http://127.0.0.1:18793";
 const states = LOCAL_E2E_OVERVIEW_STATES;
 
-function overviewHref(environmentKey: string): string {
-  return `/acme-labs/checkout-api/${environmentKey}`;
+function overviewHref(state: { appSlug: string; environmentKey: string }): string {
+  return `/acme-labs/${state.appSlug}/${state.environmentKey}`;
 }
 
 test.describe("App Overview", () => {
@@ -26,7 +24,7 @@ test.describe("App Overview", () => {
     // dev registry delivers to the default export, so the read comes back 401.
     // That makes the degraded path the honest thing this fleet can prove, and it
     // is the path ADR-0036 is about.
-    await page.goto(overviewHref(states.experimentsUnavailable.environmentKey));
+    await page.goto(overviewHref(states.experimentsUnavailable));
 
     await expect(page.locator("[data-overview='ready']")).toBeVisible();
     await expect(page.locator("[data-overview-state='calm']")).toHaveCount(0);
@@ -51,23 +49,21 @@ test.describe("App Overview", () => {
     await captureThemeScreenshots(page, testInfo, "app-overview-experiments-unavailable");
   });
 
-  test("lists Flag Configuration changed inside the window and excludes older ones", async ({
+  test("lists recorded Flag changes inside the window and excludes older ones", async ({
     page,
   }, testInfo) => {
-    await page.goto(overviewHref(states.flagChanges.environmentKey));
+    await page.goto(overviewHref(states.flagChanges));
 
     const card = page.locator("[data-overview-card='flag-changes']");
     await expect(
       card.locator(`[data-overview-flag='${states.flagChanges.recentFlagKey}']`),
-    ).toHaveAttribute(
-      "href",
-      `${overviewHref(states.flagChanges.environmentKey)}/flags/${states.flagChanges.recentFlagKey}`,
-    );
+    ).toHaveAttribute("href", `${overviewHref(states.flagChanges)}/flags`);
     await expect(
       card.locator(`[data-overview-flag='${states.flagChanges.staleFlagKey}']`),
     ).toHaveCount(0);
-    // No audit trail exists yet (SPL-161); the card says so rather than guessing.
-    await expect(card).toContainText("Who made each change is not recorded yet");
+    await expect(card).toContainText("Recorded in the Flag change log");
+    await expect(card).toContainText("Updated");
+    await expect(card).not.toContainText("Who made each change is not recorded yet");
 
     // This Environment has no running Experiment, so the Experiment sections were
     // read successfully and are empty — which is a different answer from the
@@ -91,7 +87,7 @@ test.describe("App Overview", () => {
   test("renders the calm empty state only when every section was read and is empty", async ({
     page,
   }, testInfo) => {
-    await page.goto(overviewHref(states.calm.environmentKey));
+    await page.goto(overviewHref(states.calm));
 
     await expect(page.locator("[data-overview-state='calm']")).toContainText(
       "Nothing needs your attention",
@@ -101,11 +97,11 @@ test.describe("App Overview", () => {
     const calm = page.locator("[data-overview-state='calm']");
     await expect(calm.getByRole("link", { name: "Create a Flag" })).toHaveAttribute(
       "href",
-      `${overviewHref(states.calm.environmentKey)}/flags`,
+      `${overviewHref(states.calm)}/flags`,
     );
     await expect(calm.getByRole("link", { name: "Create an Experiment" })).toHaveAttribute(
       "href",
-      `${overviewHref(states.calm.environmentKey)}/experiments`,
+      `${overviewHref(states.calm)}/experiments`,
     );
     // The Environment card is policy posture, not attention, so it survives calm.
     await expect(page.locator("[data-overview-card='environment']")).toBeVisible();

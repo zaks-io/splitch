@@ -7,8 +7,14 @@ import {
   CardHeader,
   CardTitle,
 } from "@splitch/ui/components/card";
-import { changedAtLabel } from "#lib/overview/overview-view";
 import { FlagChangesTruncatedNotice } from "#components/flags/flag-changes-truncated-notice";
+import { changedAtLabel } from "#lib/overview/overview-view";
+
+const ACTION_LABELS: Record<OverviewFlagConfigChange["action"], string> = {
+  created: "Created",
+  updated: "Updated",
+  deleted: "Deleted",
+};
 
 export function OverviewFlagChangesCard({
   changedCount,
@@ -33,12 +39,10 @@ export function OverviewFlagChangesCard({
   return (
     <Card data-overview-card="flag-changes">
       <CardHeader>
-        <CardTitle>Recently changed Flag Configuration</CardTitle>
+        <CardTitle>Recent Flag changes</CardTitle>
         <CardDescription>
-          {/* No audit trail exists yet (SPL-161), so this reports what changed and
-              when, and deliberately attributes it to nobody. */}
-          Changed in this Environment in the last {windowDays} days. Who made each change is not
-          recorded yet.
+          Recorded in the Flag change log in the last {windowDays} days. Includes App-level changes
+          and changes in this Environment.
         </CardDescription>
       </CardHeader>
       <CardContent className="grid gap-3">
@@ -58,24 +62,24 @@ export function OverviewFlagChangesCard({
             above "nothing changed" is worse than showing neither. */}
         {recentlyChanged.length === 0 && !truncated ? (
           <p className="text-muted-foreground text-sm">
-            No Flag Configuration changed in the last {windowDays} days.
+            No Flag changes recorded in the last {windowDays} days.
           </p>
         ) : (
           <ul className="grid gap-2">
             {recentlyChanged.map((change) => (
-              <li key={change.flagId}>
+              <li key={change.seq}>
                 <a
                   className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-border px-3 py-2 text-sm hover:bg-accent"
                   data-overview-flag={change.flagKey}
-                  href={`${scopeHref}/flags/${encodeURIComponent(change.flagKey)}`}
+                  href={`${scopeHref}/flags`}
                 >
                   <span className="font-medium font-mono text-foreground">{change.flagKey}</span>
                   <span className="flex items-center gap-2">
-                    <Badge variant={change.enabled ? "default" : "secondary"}>
-                      {change.enabled ? "Enabled" : "Disabled"}
+                    <Badge variant={change.action === "created" ? "default" : "secondary"}>
+                      {ACTION_LABELS[change.action]}
                     </Badge>
-                    <time className="text-muted-foreground text-xs" dateTime={change.updatedAt}>
-                      {changedAtLabel(change.updatedAt)}
+                    <time className="text-muted-foreground text-xs" dateTime={change.changedAt}>
+                      {changedAtLabel(change.changedAt)}
                     </time>
                   </span>
                 </a>

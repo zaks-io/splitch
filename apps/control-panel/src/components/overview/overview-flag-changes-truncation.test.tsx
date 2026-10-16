@@ -27,7 +27,7 @@ describe("Overview Flag Configuration read bound", () => {
     });
 
     expect(html).toContain('data-testid="flag-changes-truncated"');
-    expect(html).toContain("More than 50 Flag Configurations changed");
+    expect(html).toContain("More than 50 Flag changes recorded");
     // The remedy is a surface that answers the whole question, never "reload":
     // the ceiling is not transient, so a retry returns the same page (ADR-0036).
     expect(html).not.toContain("Refresh");
@@ -36,6 +36,7 @@ describe("Overview Flag Configuration read bound", () => {
     // app already ships.
     expect(html).toContain('data-testid="flag-changes-truncated-link"');
     expect(html).toContain(`href="${SCOPE_HREF}/flags"`);
+    expect(html).toContain("flag-changes");
   });
 
   it("offers the Flags screen without promising it holds everything", () => {
@@ -49,13 +50,7 @@ describe("Overview Flag Configuration read bound", () => {
       },
     });
 
-    // The copy is PINNED, not just its presence. The Flags screen is bounded at
-    // `FLAG_LIST_READ_LIMIT` and pages Flag DEFINITIONS by `created_at`, while
-    // this card pages Flag CONFIGURATIONS by `updated_at`: wider, but not a
-    // superset. Copy promising "every Flag" would route an operator to a screen
-    // that need not contain the change they were sent for, which is the exact
-    // disguised-complete-result this notice exists to prevent (ADR-0036). Any
-    // future edit that re-adds a completeness claim has to fail here.
+    // The Flags screen shows live Flags and is not a complete change-log read.
     expect(html).toContain("Open the Flags screen for this App");
     for (const claim of ["every Flag", "all Flags", "all of your Flags", "the whole catalog"]) {
       expect(html).not.toContain(claim);
@@ -79,7 +74,7 @@ describe("Overview Flag Configuration read bound", () => {
     expect(html).toContain('data-testid="flag-changes-truncated"');
     // "More than 50 changed" and "nothing changed" cannot both be true, so the
     // empty line yields to the notice rather than sitting under it.
-    expect(html).not.toContain("No Flag Configuration changed in the last");
+    expect(html).not.toContain("No Flag changes recorded in the last");
   });
 
   it("does not claim truncation when the scan came back under the ceiling", () => {
@@ -115,13 +110,14 @@ describe("Overview Flag Configuration display cap", () => {
     expect(html).toContain('data-testid="flag-changes-truncated"');
     // Not hedged: the scan completed, so the total is known exactly, and "more
     // than 5" would understate what the operator is not seeing.
-    expect(html).toContain("12 Flag Configurations changed");
+    expect(html).toContain("12 Flag changes recorded");
     expect(html).not.toContain("More than");
     expect(html).toContain("The 5 below are the most recent");
     // The cap is not transient either, so the remedy is still the Flags screen.
     expect(html).not.toContain("Refresh");
     expect(html).toContain('data-testid="flag-changes-truncated-link"');
     expect(html).toContain(`href="${SCOPE_HREF}/flags"`);
+    expect(html).toContain("flag-changes");
   });
 
   it("renders no notice when the card shows every change it counted", () => {
@@ -154,7 +150,7 @@ describe("Overview Flag Configuration display cap", () => {
     });
 
     expect((html.match(/data-testid="flag-changes-truncated"/gu) ?? []).length).toBe(1);
-    expect(html).toContain("More than 50 Flag Configurations changed");
+    expect(html).toContain("More than 50 Flag changes recorded");
     expect(html).not.toContain("the rest are not on this card");
   });
 });

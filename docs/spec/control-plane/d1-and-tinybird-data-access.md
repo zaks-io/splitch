@@ -96,43 +96,84 @@ This is a one-way write; the control-plane does not read it back.
 
 ## Tinybird: audit log
 
-Audit events for the control plane are append-only and unbounded → Tinybird, not D1.
+App-scoped control-plane audit facts are committed to the D1
+`control_plane_audit_events` outbox in the **same batch** as each mutation, then forwarded to
+Tinybird `audit_log`. D1 is the bounded delivery bridge; Tinybird is the append-only security
+record. Flag-domain history remains in `flag_change_events` and is neither copied nor merged into
+this list. Organization, principal and authentication-door events are a later slice.
 
-**What is audited:** who / what / when / which door, for every control-plane mutation.
+### Commit and delivery contract
 
-Audit is a legal/security record, not product analytics. User deletion does not remove the fact that
-a control-plane mutation happened; read surfaces show a deleted-user tombstone where required. The
-privacy request ledger is retained for at least 24 months or the contracted audit period, whichever
-is longer. See [../platform/privacy-data-lifecycle.md](../platform/privacy-data-lifecycle.md).
+Each immutable outbox fact contains `seq`, unique UUID `event_id`, `app_id`, nullable
+`environment_id`, server-derived `organization_id`, `actor_ref`, `actor_via`, route `operationId`
+as `action`, `resource_type`, `resource_id`, nullable `target_version`, `outcome`, request,
+Approval Request and Run correlation ids, allowlisted `changes_json`, and server `changed_at`.
+Only `forwarded_at` changes during delivery. There are no attribution triggers or subject foreign
+keys. The actor comes from the resolved principal; unknown references or doors remain null and
+project explicitly as `unattributed`. A known `deleted-user:<reference>` tombstone is preserved;
+reads do not infer deletion from missing membership or fetch names/emails.
 
-`auth_door = "client_credentials"` is reserved for the shared-preview smoke grant. It still resolves
-to the configured seeded smoke WorkOS user and scoped smoke App/Organization; the value is audit
-provenance, not a different authorization model.
+The post-commit `waitUntil` and every-minute cron share the Control Plane sender in
+`approval-archive-tinybird.ts`. Each batch contains at most 50 rows, uses `dedup_key = event_id`
+and `wait=true`, and requires HTTP 200, exact `successful_rows`, and zero quarantined rows before
+acknowledgment. A failed append or lost response leaves the batch pending. Physical duplicates
+are expected under at-least-once delivery. The daily cron removes only forwarded rows older than
+90 days, in bounded batches. Failed deliveries remain eligible regardless of age.
 
-**Audit event shape (row):**
+Ordinary rows use `audit_id = event_id`; `changes` is canonical JSON containing
+`environmentId`, `organizationId`, `targetVersion`, `outcome`, `requestId`, `approvalRequestId`,
+`runId` and `metadata`. Named optional metadata fields are `changedFields`, `reviewId`,
+`reviewAction`, `resultingTargetVersion`, `errorCode`, `role`, `previousRole` and `revokedKeyId`.
+Credential material and hashes, bearer tokens, Targeting Keys, Evaluation Context values,
+raw diffs, reasons and error details are never copied. Field names are recorded instead of values.
 
-```
-{
-  event_id:    string     // ulid
-  app_id:      string     // mandatory; first sort key
-  environment_id: string | null  // co-scoped with app_id for per-Env actions (ADR-0027); null for App-level actions
-  org_id:      string
-  user_id:     string
-  auth_door:   string     // "id_jag" | "anonymous" | "device_flow" | "client_credentials"
-  action:      string     // e.g. "flag.create", "run.start", "run.end", "flag_config.promote", "api_key.revoke"
-  resource_id: string     // the ID of the affected entity
-  resource_type: string   // "flag" | "experiment" | "run" | "environment" | "flag_config" | ...
-  detail:      string     // JSON blob; action-specific fields
-  ts:          string     // ISO 8601; server-side timestamp
-}
-```
+### App audit read
 
-**Tinybird isolation:** `app_id` is a mandatory, non-defaulted parameter on every tenant-scoped pipe.
-`app_id` is the first column in `ENGINE_SORTING_KEY`. A missing `app_id` fails loud; never defaults.
+`app_audit_list` is `GET /apps/:appId/audit`. Control Plane calls `requireAppAdmin` against live
+App membership and credential scope before any downstream request. An Organization role alone
+confers no access. A deleted App has no audit read visibility.
 
-**Tinybird is never directly exposed to clients or agents.** Analytics reads proxy through the
-Analysis Worker, which injects `app_id` and `environment_id` from control-plane auth/path context.
-The Analysis Worker is the single enforcement point for Tinybird read isolation.
+The Analysis Worker is the sole Tinybird ordinary-event read boundary and injects the authorized
+`app_id`. The `app_audit_events` pipe refuses a missing App. It excludes Approval archives,
+groups ordinary rows by `audit_id`, verifies equal canonical content for every physical duplicate,
+and deduplicates **before** applying filters or pagination. Any conflicting identity fails loudly,
+including when the requested filters would hide it. Pages order by timestamp and event id descending;
+the cursor binds the App and filters. Responses use the shared `ListResponse` bounds and cursor.
+The typed SDK exposes `apps.listAudit`; CLI and MCP use the same registered operation and schemas.
+
+Filters: `environmentId`, `action`, `resourceType`, `resourceId`, `approvalRequestId`, `runId`,
+`from`, `to`, `limit`, `cursor`. Callers cannot supply Tinybird tenant parameters. Tinybird tokens
+are never exposed to callers or agents.
+
+### Producer coverage and retry semantics
+
+Every row below includes the common fact fields above. A recognized replay or a refused/no-write
+attempt emits nothing. A committed Approval Request and a committed Review are separate facts;
+a failed application that commits a failed Review still records that Review. A conclusion commits
+both the Run decision and its generated Approval Request in one batch and records both facts.
+
+| Action group / action                                                         | Atomic producer                                                                                                           | Additional fields                                                                                     | Existing retry identity or no-write recognition                                       | Known gaps                                                                                                                      |
+| ----------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| Credentials: `api_keys_create`                                                | `credentials.createApiKey`                                                                                                | Environment, new key id                                                                               | **none**; two committed calls mint two keys and two events                            | Once-only secret responses are unchanged; no credential replay is added                                                         |
+| Credentials: `api_keys_revoke`                                                | `credentials.revokeApiKey`                                                                                                | Environment, key id                                                                                   | Key id plus already-revoked state                                                     | No separate idempotency-key store                                                                                               |
+| Credentials: `client_key_update`                                              | `credentials.updateClientKey`                                                                                             | Environment, key id, changed field names                                                              | Current-state equality; unchanged patch is a no-write                                 | Origin and rate-limit values are deliberately omitted                                                                           |
+| Credentials: `client_key_rotate`                                              | `credentials.rotateClientKey`                                                                                             | Environment, replacement and revoked key ids                                                          | **none**; every committed call rotates again                                          | No recovery/replay of returned key material                                                                                     |
+| App membership: `app_members_add`, `app_members_update`, `app_members_remove` | `identity-app-memberships` guarded batches                                                                                | Subject user id, new role where applicable                                                            | Existing membership, role equality, missing membership and last-owner guards          | Organization membership remains outside this slice                                                                              |
+| Promotion: `flags_promote`                                                    | `flag-config-ops` batch, through Config Store                                                                             | Target Environment, actual Configuration id and committed version, selected field names               | Existing gate replay identity; empty selection writes nothing                         | Ungated Promotion has no durable retry identity; committed repeats retain existing behavior                                     |
+| Run Start: `experiments_start`                                                | `experiment-start-run` guarded batch                                                                                      | Run id, frozen config hash, Environment and Approval id when gated                                    | Existing frozen draft/live Run preconditions and Approval replay                      | A fresh accepted Start retains existing new-Run behavior                                                                        |
+| Run End: `runs_end`                                                           | `experiment-end-run` guarded batch                                                                                        | Run id, frozen config hash, Environment                                                               | Running/live Run state guard                                                          | End reason is deliberately omitted                                                                                              |
+| Run Conclusion: `runs_conclude`                                               | `experiment-conclusion-atomic` guarded batch                                                                              | Run id, config hash, generated Approval id and target version                                         | Actor plus conclusion idempotency key and request hash                                | Selected Variant, raw results and reason are deliberately omitted                                                               |
+| Indirect Approval Request creation                                            | `approvals.createRequest`; conclusion and replacement batches                                                             | Original route action, Request id, target version, pending outcome and Environment                    | Actor plus idempotency key and request hash; replacement ordinal/target preconditions | Original proposal diffs are never copied; definition-only history remains in Flag change log                                    |
+| Review: `approval_request_reviews_create`                                     | `approval-atomic`, explicit guarded variant/config/deletion batches, raw Run Start batch, disposition and failure batches | Request and Review ids, Review action/outcome, resulting target version, Run correlation, error code  | Request plus reviewer plus idempotency key and request hash                           | Applied Promotion is correlated by its Review and resulting version; no second Flag history store                               |
+| Actor projection                                                              | `app_audit_list`, matching the Approval archive projection                                                                | Opaque `userRef`: live WorkOS reference, carried `deleted-user:*` tombstone, or explicit unattributed | Read-only projection; no actor rewrite                                                | User-account deletion does not yet rewrite or map audit actor references. When that lifecycle lands, it must supply the mapping |
+
+`audit_log` has no TTL and retains records for at least 24 months or the contracted audit period,
+whichever is longer. App deletion removes read visibility; audit/security retention does not make
+these records product analytics. The existing Flag log retains its separate 90-day age-plus-cursor
+policy. This slice preserves tombstones carried by canonical rows and never resolves actors to
+names or emails. Historical actor backfill, user-account deletion integration, SIEM export and
+Organization/principal audit reads are outside this slice. See the
+[privacy lifecycle contracts](../platform/privacy-data-lifecycle.md).
 
 ## Sources
 

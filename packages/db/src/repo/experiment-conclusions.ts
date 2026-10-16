@@ -80,7 +80,7 @@ export function makeExperimentConclusionRepo(db: Db, d1: D1Database) {
 
     async createReplacement(scope: TenantScope, input: CreateReplacementPromotionInput) {
       assertMintedScope(scope);
-      const results = await d1.batch(replacementStatements(d1, scope.appId, input));
+      const results = await d1.batch(replacementStatements(d1, scope, input));
       return (results[2]?.results ?? []).length === 1;
     },
   };

@@ -1,13 +1,6 @@
 import { z } from "@hono/zod-openapi";
+import { ExperimentPlanRequestSchema, ExperimentPlanResponseSchema } from "../experiment-plan";
 import { type ApiRouteContract, defineApiRoute } from "../openapi-route";
-import {
-  createClosed,
-  deleteClosed,
-  readOnlyClosed,
-  sealRunClosed,
-  startRunClosed,
-  updateClosed,
-} from "../route-effects";
 import {
   CreateMetricRequestSchema,
   MetricResponseSchema,
@@ -22,7 +15,14 @@ import {
   StartRunRequestSchema,
   StartRunResponseSchema,
 } from "../resource-envelopes-experiment";
-import { ExperimentPlanRequestSchema, ExperimentPlanResponseSchema } from "../experiment-plan";
+import {
+  createClosed,
+  deleteClosed,
+  readOnlyClosed,
+  sealRunClosed,
+  startRunClosed,
+  updateClosed,
+} from "../route-effects";
 import { listResponse } from "../wire-envelopes-core";
 import { EndRunRequestSchema } from "../write-persisted-schemas";
 import { APPROVAL_WRITE_ERRORS } from "./approval-write-errors";
@@ -129,6 +129,7 @@ export const experimentRoutes = [
   }),
   defineApiRoute({
     operationId: "experiments_start",
+    audit: "app",
     owner: OWNER,
     method: "POST",
     path: "/apps/:appId/envs/:environmentId/experiments/:experimentId/start",
@@ -215,6 +216,7 @@ export const experimentRoutes = [
   }),
   defineApiRoute({
     operationId: "runs_end",
+    audit: "app",
     owner: OWNER,
     method: "POST",
     path: "/apps/:appId/envs/:environmentId/runs/:runId/end",

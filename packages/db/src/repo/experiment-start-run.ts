@@ -1,6 +1,7 @@
 import { and, eq } from "drizzle-orm";
 import { experiments, runs } from "../schema/index";
 import type { ApprovalCommit } from "./approval-types";
+import { type AuditContext, auditStatement } from "./audit-event-write";
 import { approvalAppliedStatements } from "./experiment-start-approval";
 import {
   endCurrentRunStatement,
@@ -25,6 +26,7 @@ export type StartRunExpectedDraft = Pick<
 type NonNullableFields<T> = { [Key in keyof T]: NonNullable<T[Key]> };
 
 export type StartRunInput = {
+  audit?: AuditContext;
   experimentId: string;
   flagId: string;
   expectedDraft: StartRunExpectedDraft;
@@ -132,6 +134,7 @@ async function runStartBatch(
     insertRunStatement(d1, scope, input, guardParams),
     updateExperimentStartedStatement(d1, input, guardParams),
     ...(input.approval ? approvalAppliedStatements(d1, scope, input.approval, input.run.id) : []),
+    startAuditStatement(d1, scope, input),
   ]);
   const inserted = batch[1]?.results ?? [];
   const updated = batch[2]?.results ?? [];
@@ -139,13 +142,24 @@ async function runStartBatch(
   if (inserted.length !== 1 || updated.length !== 1) {
     throw new Error("startRun: guarded D1 batch produced an inconsistent result");
   }
-  // The Approval statements are appended to this same batch but were never
-  // inspected, so a Run could start while its Approval Request stayed pending
-  // and the caller was still told `ok`. This is the `approvalReviewLanded`
-  // equivalent every other Approval write path already has; here the Review
-  // insert RETURNs its id, so the evidence is in the batch result itself.
   if (input.approval && (batch[3]?.results ?? []).length !== 1) {
     throw new Error("startRun: the Run started but its Approval Review did not land");
   }
   return true;
+}
+
+function startAuditStatement(d1: D1Database, scope: EnvScope, input: StartRunInput) {
+  return auditStatement(d1, scope, {
+    actorRef: input.audit?.actorRef ?? input.run.createdBy ?? null,
+    actorVia: input.audit?.actorVia ?? input.approval?.reviewedVia ?? null,
+    requestId: input.audit?.requestId ?? input.approval?.audit?.requestId ?? null,
+    changedAt: input.run.startedAt,
+    action: "experiments_start",
+    resourceType: "run",
+    resourceId: input.run.id,
+    environmentId: scope.environmentId,
+    targetVersion: input.run.configHash,
+    runId: input.run.id,
+    approvalRequestId: input.approval?.requestId ?? null,
+  });
 }

@@ -93,6 +93,8 @@ export function createControlPlaneSdk(options: ControlPlaneSdkOptions): ControlP
 export type {
   AppAttentionRollupGetInput,
   AppAttentionRollupGetOutput,
+  AppAuditListInput,
+  AppAuditListOutput,
   AppsCreateInput,
   AppsCreateOutput,
   ConclusionPromotionRequestsCreateInput,

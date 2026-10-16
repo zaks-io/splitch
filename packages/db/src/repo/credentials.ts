@@ -1,7 +1,9 @@
-import { desc, eq } from "drizzle-orm";
+import { and, desc, eq, isNull } from "drizzle-orm";
 import { apiKeys, apps, clientKeys } from "../schema/index";
+import { type AuditContext, auditInsert } from "./audit-event-write";
 import type { Db } from "./client";
-import type { EnvScope } from "./scope";
+import { makeCredentialMintOps } from "./credential-mint";
+import { type EnvScope, withScope } from "./scope";
 import { type ReadOptions, scopedTable } from "./scoped-table";
 
 /**
@@ -21,6 +23,8 @@ export function makeCredentialRepo(db: Db) {
   return {
     apiKeys: apiKeysTable,
     clientKeys: clientKeysTable,
+
+    ...makeCredentialMintOps(db),
 
     listApiKeys(scope: EnvScope, options?: ReadOptions) {
       return apiKeysTable.findMany(scope, undefined, {
@@ -52,12 +56,32 @@ export function makeCredentialRepo(db: Db) {
       return apiKeysTable.findOne(scope, eq(apiKeys.keyId, keyId));
     },
 
-    async revokeApiKey(scope: EnvScope, keyId: string, revokedAt: string) {
-      const rows = await apiKeysTable.update(
-        scope,
-        { revokedAt, lastRotatedAt: revokedAt },
-        eq(apiKeys.keyId, keyId),
-      );
+    async revokeApiKey(scope: EnvScope, keyId: string, revokedAt: string, audit?: AuditContext) {
+      const query = db
+        .update(apiKeys)
+        .set({ revokedAt, lastRotatedAt: revokedAt })
+        .where(
+          withScope(
+            { appId: apiKeys.appId, appIdKey: "appId", environmentId: apiKeys.environmentId },
+            scope,
+            and(eq(apiKeys.keyId, keyId), isNull(apiKeys.revokedAt)),
+          ),
+        )
+        .returning();
+      const rows = audit
+        ? (
+            await db.batch([
+              query,
+              auditInsert(db, scope, {
+                ...audit,
+                action: "api_keys_revoke",
+                resourceType: "credential",
+                resourceId: keyId,
+                environmentId: scope.environmentId,
+              }),
+            ])
+          )[0]
+        : await query;
       return rows[0] ?? null;
     },
 
@@ -97,8 +121,40 @@ export function makeCredentialRepo(db: Db) {
       scope: EnvScope,
       keyId: string,
       values: Partial<typeof clientKeys.$inferInsert>,
+      audit?: AuditContext,
     ) {
-      const rows = await clientKeysTable.update(scope, values, eq(clientKeys.keyId, keyId));
+      if (!audit)
+        return (
+          (await clientKeysTable.update(scope, values, eq(clientKeys.keyId, keyId)))[0] ?? null
+        );
+      if ("appId" in values || "environmentId" in values)
+        throw new Error("updateClientKey: cannot set scope columns");
+      const query = db
+        .update(clientKeys)
+        .set(values)
+        .where(
+          withScope(
+            { appId: clientKeys.appId, appIdKey: "appId", environmentId: clientKeys.environmentId },
+            scope,
+            eq(clientKeys.keyId, keyId),
+          ),
+        )
+        .returning();
+      const [rows] = await db.batch([
+        query,
+        auditInsert(db, scope, {
+          ...audit,
+          action: "client_key_update",
+          resourceType: "credential",
+          resourceId: keyId,
+          environmentId: scope.environmentId,
+          metadata: {
+            changedFields: Object.keys(values).filter(
+              (field) => field === "originAllowlist" || field === "rateLimitRps",
+            ),
+          },
+        }),
+      ]);
       return rows[0] ?? null;
     },
 

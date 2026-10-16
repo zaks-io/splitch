@@ -88,6 +88,8 @@ interface ApiRouteInputFields {
   scopes?: readonly string[];
   rateLimit: RateLimitClass;
   idempotency: IdempotencyMode;
+  /** Commits in this domain append an App audit fact with action = operationId. */
+  audit?: "app";
   rawBodyByteLimit?: RawBodyByteLimit;
   errors: readonly ErrorCode[];
   /** Audited effects; never inferred from `method`. */
@@ -296,6 +298,7 @@ export function defineApiRoute<const Input extends DefineApiRouteInput>(input: I
     summary: input.summary,
     exposure: input.exposure ?? "public",
     effects: input.effects,
+    ...(input.audit ? { audit: input.audit } : {}),
     openapi: createRoute({
       method: input.method.toLowerCase() as Lowercase<HttpMethod>,
       path: honoPathToOpenApiPath(input.path) as HonoToOpenApiPath<Input["path"]>,

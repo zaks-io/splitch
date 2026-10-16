@@ -1,6 +1,7 @@
 import { existsSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { proveAnalysisScopePredicates } from "./lib/tinybird-analysis-scope-proof.mjs";
+import { proveAppAuditBoundary } from "./lib/tinybird-app-audit-proof.mjs";
 import { assertEnvironmentExposureStatusContract } from "./lib/tinybird-exposure-status-contract.mjs";
 import { stageTinybirdProject } from "./lib/tinybird-fixture-clock.mjs";
 import { assertPromotedForwardQueriesRemoved } from "./lib/tinybird-forward-query-cleanup-contract.mjs";
@@ -65,6 +66,7 @@ try {
   if (hasTinybirdTests(testsDir)) {
     await run("tb", ["--no-version-warning", "test", "run"], projectDir);
   }
+  await proveAppAuditBoundary(projectDir);
   // COPY_MODE replace rewrites the whole deduped_exposures snapshot. Run after
   // fixture tests so the replace cannot change Variant quarantine / membership
   // that analysis_* yaml expectations pin to the staged fixtures.

@@ -3,13 +3,14 @@ import { envScope, type Repository } from "@splitch/db";
 import type { HandlerArgs } from "@splitch/worker-runtime";
 import { requireAppAdmin } from "./app-authz";
 import { environmentPolicyContexts, requiresReview } from "./approval-target";
+import { auditContext } from "./audit-context";
 import type { ConfigStoreWriter } from "./config-store";
 import type { ConfigStoreAccess } from "./config-store-access";
 import { configStoreUnavailable } from "./experiment-errors";
+import { flagConfigApprovalFlow } from "./flag-config-approval-flow";
 import { flagConfigNotFound } from "./flag-config-errors";
 import { actorOf, type PromotionSelect, renderPromotionResult } from "./flag-config-handler-render";
 import { promotionGates, readEnvironmentPolicy } from "./flag-config-policy";
-import { flagConfigApprovalFlow } from "./flag-config-approval-flow";
 import { pathParam } from "./handler-input";
 import { emitNextAfterFlagShip } from "./mutation-next-emit";
 import { validatePromotionSource } from "./promotion-source-validation";
@@ -84,6 +85,7 @@ export function makePromotionHandlers(deps: PromotionHandlerDeps) {
       const gates = promotionGates(body.select as PromotionSelect, sourceConfig.enabled);
       const mutationInput: Parameters<ConfigStoreWriter["promoteFlagConfig"]>[0] = {
         actor: actorOf(principal),
+        audit: auditContext(principal, requestId, deps.nowIso?.() ?? new Date().toISOString()),
         appId,
         targetEnvironmentId,
         flagId,

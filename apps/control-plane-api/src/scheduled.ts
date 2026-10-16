@@ -6,15 +6,16 @@ import {
 } from "@splitch/observability/worker";
 import { runApprovalRequestArchival } from "./approval-archive";
 import { approvalArchiveStoreFromEnv } from "./approval-archive-tinybird";
+import { forwardAuditEvents } from "./audit-events";
 import { dispatchCloudflarePushes } from "./cloudflare-push-dispatch";
 import { dispatchConvexWebhooks } from "./convex-webhook-dispatch";
 import { runDeliveryRetention } from "./delivery-retention";
 import { purgeExpiredPrivacyArtifacts, reconcilePrivacyJobs } from "./entity-privacy-jobs";
 import type { ControlPlaneApiEnv } from "./env";
 import { FLAG_CHANGE_LOG_RETENTION_MS } from "./flag-change-log-retention";
+import { runPersonalAccessTokenRetention } from "./personal-access-token-rotation";
 import { deleteOrphanedPrivacyExports } from "./privacy-export-cleanup";
 import { dispatchSentryWebhooks } from "./sentry-webhook-dispatch";
-import { runPersonalAccessTokenRetention } from "./personal-access-token-rotation";
 
 const service = "splitch-control-plane-api";
 
@@ -37,6 +38,7 @@ export function runControlPlaneScheduled(
   // land: the Convex and Cloudflare paths lease their deliveries and would
   // survive it, but the Sentry cursor has no lease to protect it.
   if (event.cron !== "0 8 * * *") {
+    ctx.waitUntil(forwardAuditEvents({ repo: createRepository(env.DB), env }));
     ctx.waitUntil(runConvexWebhookDispatch(env, event, ctx));
     ctx.waitUntil(runCloudflarePushDispatch(env, event, ctx));
     ctx.waitUntil(runSentryWebhookDispatch(env, event, ctx));
@@ -47,6 +49,12 @@ export function runControlPlaneScheduled(
   ctx.waitUntil(runApprovalArchive(env, event, ctx));
   ctx.waitUntil(runFlagChangeLogRetention(env, event, ctx));
   ctx.waitUntil(runDeliveryRetention(env, event, ctx));
+  ctx.waitUntil(
+    createRepository(env.DB).auditEvents.pruneBefore({
+      changedBefore: new Date(event.scheduledTime - FLAG_CHANGE_LOG_RETENTION_MS).toISOString(),
+      limit: RETENTION_BATCH,
+    }),
+  );
 }
 
 async function runCloudflarePushDispatch(

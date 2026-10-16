@@ -2,6 +2,9 @@ import { boundListRead, LIST_READ_LIMIT } from "@splitch/contracts";
 import { envScope } from "@splitch/db";
 import type { HandlerArgs } from "@splitch/worker-runtime";
 import { nowIso } from "./app-environment-model";
+import { auditContext } from "./audit-context";
+import { concludeRun } from "./experiment-conclusion-handler";
+import { createConclusionPromotionRequest } from "./experiment-conclusion-replacement";
 import {
   configStoreUnavailable,
   experimentNotFound,
@@ -17,8 +20,6 @@ import {
 } from "./experiment-handler-shared";
 import { jsonArrayOrNull, runResponse } from "./experiment-model";
 import { pathParam } from "./handler-input";
-import { concludeRun } from "./experiment-conclusion-handler";
-import { createConclusionPromotionRequest } from "./experiment-conclusion-replacement";
 
 export function makeRunHandlers(deps: ExperimentDeps) {
   return {
@@ -80,6 +81,7 @@ async function endRun(deps: ExperimentDeps, args: HandlerArgs<unknown>): Promise
   const body = optionalBody(args.input);
   const now = nowIso(deps);
   const ended = await deps.repo.experiments.endRun(scope, {
+    audit: auditContext(args.principal, args.requestId, now),
     experimentId: run.experimentId,
     runId: run.id,
     expectedLiveRunId: run.id,

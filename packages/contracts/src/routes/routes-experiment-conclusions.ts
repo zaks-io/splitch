@@ -16,6 +16,7 @@ const RATE = "control-plane-actor" as const;
 export const conclusionRoutes = [
   defineApiRoute({
     operationId: "runs_conclude",
+    audit: "app",
     owner: OWNER,
     method: "POST",
     path: "/apps/:appId/envs/:environmentId/experiments/:experimentId/runs/:runId/conclusions",
@@ -45,6 +46,7 @@ export const conclusionRoutes = [
   }),
   defineApiRoute({
     operationId: "conclusion_promotion_requests_create",
+    audit: "app",
     owner: OWNER,
     method: "POST",
     path: "/apps/:appId/envs/:environmentId/experiments/:experimentId/runs/:runId/conclusions/:conclusionId/promotion-requests",

@@ -5,6 +5,18 @@ export {
   MEMBERSHIP_WIDE_READ_AUTHORIZATION,
   PAT_MANAGEMENT_AUTHORIZATION,
 } from "./access-token-authorization";
+export {
+  type AppAuditChanges,
+  AppAuditChangesSchema,
+  type AppAuditEvent,
+  AppAuditEventSchema,
+  type AppAuditListQuery,
+  AppAuditListQuerySchema,
+  type AppAuditListResponse,
+  AppAuditListResponseSchema,
+  AppAuditMetadataSchema,
+  AppAuditStorageRowSchema,
+} from "./app-audit";
 export type { ApprovalRequestId, ApprovalReviewId } from "./approval-identifiers";
 export { ApprovalRequestIdSchema, ApprovalReviewIdSchema } from "./approval-identifiers";
 // biome-ignore lint/performance/noReExportAll: configuration snapshot and callback contracts are grouped by domain
@@ -223,16 +235,7 @@ export {
   OrganizationSlugSchema,
   RESERVED_ORGANIZATION_SLUGS,
 } from "./organization-slug";
-export type {
-  AppOverviewResponse,
-  OverviewDecisionExperiment,
-  OverviewDecisionReason,
-  OverviewExperiments,
-  OverviewExperimentsUnavailableReason,
-  OverviewFailingExperiment,
-  OverviewFailureReason,
-  OverviewFlagConfigChange,
-} from "./panel-overview-contract";
+export type * from "./panel-overview-contract";
 export {
   AppOverviewResponseSchema,
   OverviewDecisionExperimentSchema,

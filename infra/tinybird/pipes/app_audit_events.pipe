@@ -1,0 +1,92 @@
+DESCRIPTION >
+    App audit events, deduplicated before filters and pagination. Approval archives stay on their archive-only read.
+
+NODE logical_events
+SQL >
+    %
+    {% if not defined(app_id) %}
+    {{error('app_id is required')}}
+    {% end %}
+    {% if not defined(limit) %}
+    {{error('limit is required')}}
+    {% end %}
+    SELECT
+        audit_id,
+        any(tuple(dedup_key, app_id, user_id, auth_method, action, resource_type, resource_id, changes, timestamp)) AS content,
+        uniqExact(tuple(dedup_key, app_id, user_id, auth_method, action, resource_type, resource_id, changes, timestamp)) AS content_versions
+    FROM audit_log
+    WHERE app_id = {{String(app_id)}}
+        AND archive_version IS NULL
+        AND action != 'approval_request.archive'
+    GROUP BY audit_id
+
+NODE events
+SQL >
+    SELECT
+        audit_id,
+        content.1 AS dedup_key,
+        content.2 AS app_id,
+        content.3 AS user_id,
+        content.4 AS auth_method,
+        content.5 AS action,
+        content.6 AS resource_type,
+        content.7 AS resource_id,
+        content.8 AS changes,
+        content.9 AS timestamp,
+        CAST(NULL, 'Nullable(UInt16)') AS archive_version
+    FROM logical_events
+
+NODE page
+SQL >
+    %
+    SELECT * FROM events
+    WHERE 1
+        {% if defined(environment_id) %}
+        AND JSONExtractString(changes, 'environmentId') = {{String(environment_id)}}
+        {% end %}
+        {% if defined(action) %}
+        AND action = {{String(action)}}
+        {% end %}
+        {% if defined(resource_type) %}
+        AND resource_type = {{String(resource_type)}}
+        {% end %}
+        {% if defined(resource_id) %}
+        AND resource_id = {{String(resource_id)}}
+        {% end %}
+        {% if defined(approval_request_id) %}
+        AND JSONExtractString(changes, 'approvalRequestId') = {{String(approval_request_id)}}
+        {% end %}
+        {% if defined(run_id) %}
+        AND JSONExtractString(changes, 'runId') = {{String(run_id)}}
+        {% end %}
+        {% if defined(from_timestamp) %}
+        AND timestamp >= {{DateTime64(from_timestamp, 3)}}
+        {% end %}
+        {% if defined(to_timestamp) %}
+        AND timestamp <= {{DateTime64(to_timestamp, 3)}}
+        {% end %}
+        {% if defined(after_timestamp) %}
+        AND (timestamp, audit_id) < ({{DateTime64(after_timestamp, 3)}}, {{String(after_event_id)}})
+        {% end %}
+    ORDER BY timestamp DESC, audit_id DESC
+    LIMIT {{Int32(limit)}}
+
+NODE audited_page
+SQL >
+    SELECT * FROM (
+        SELECT * FROM page
+        UNION ALL
+        SELECT
+            '' AS audit_id, NULL AS dedup_key, '' AS app_id, '' AS user_id,
+            '' AS auth_method, '' AS action, '' AS resource_type, '' AS resource_id,
+            '' AS changes, toDateTime64(0, 3) AS timestamp, NULL AS archive_version
+        FROM (
+            SELECT throwIf(countIf(content_versions != 1) > 0, 'Conflicting App audit event identity') AS invalid
+            FROM logical_events
+        )
+        WHERE invalid != 0
+    )
+    ORDER BY timestamp DESC, audit_id DESC
+
+TYPE ENDPOINT
+TOKEN app_audit_events_read READ

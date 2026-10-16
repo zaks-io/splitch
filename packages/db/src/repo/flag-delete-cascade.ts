@@ -3,8 +3,8 @@ import {
   experiments,
   flagConfigs,
   flags,
-  runs,
   runSrmAlarms,
+  runs,
   targetingRules,
   variants,
 } from "../schema/index";
@@ -14,9 +14,10 @@ import {
   approvalPendingCondition,
   approvalReviewLanded,
 } from "./approval-atomic";
+import { approvalReviewAudit } from "./approval-audit";
 import type { ApprovalCommit } from "./approval-types";
 import type { Db } from "./client";
-import { scopedFlagConfig, scopedTargetingRule } from "./flag-config-ops";
+import { scopedFlagConfig, scopedTargetingRule } from "./flag-config-direct-write";
 import {
   codeRemovalClaimBatchStatements,
   type FlagDeletionCodeRemovalRecord,
@@ -63,7 +64,11 @@ export function makeDeleteFlagCascade(db: Db, flagInScope: FlagInScope) {
         .returning(),
       // Review insert must stay immediately after Flag DELETE so changes()=1 binds.
       ...(approval
-        ? [appliedReviewInsert(db, scope, approval), appliedRequestUpdate(db, scope, approval)]
+        ? [
+            appliedReviewInsert(db, scope, approval),
+            appliedRequestUpdate(db, scope, approval),
+            approvalReviewAudit(db, scope, approval, "applied"),
+          ]
         : []),
       ...codeRemovalClaimBatchStatements(db, scope, flag, codeRemoval, { approval }),
     ];

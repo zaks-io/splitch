@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { FlagChangeActionSchema, FlagChangeTargetTypeSchema } from "./flag-change-diff";
 import { EnvironmentPolicySchema } from "./leaf-schemas-runtime";
 
 /**
@@ -85,11 +86,14 @@ export type OverviewExperiments = z.infer<typeof OverviewExperimentsSchema>;
 
 export const OverviewFlagConfigChangeSchema = z
   .object({
+    seq: z.number().int().positive(),
     flagId: z.string().min(1),
     flagKey: z.string().min(1),
-    flagName: z.string().min(1),
-    enabled: z.boolean(),
-    updatedAt: z.string().min(1),
+    action: FlagChangeActionSchema,
+    targetType: FlagChangeTargetTypeSchema,
+    actorRef: z.string().nullable(),
+    actorVia: z.string().nullable(),
+    changedAt: z.string().min(1),
   })
   .strict();
 export type OverviewFlagConfigChange = z.infer<typeof OverviewFlagConfigChangeSchema>;
@@ -105,7 +109,7 @@ export const AppOverviewResponseSchema = z
      * a capped list rendered as a complete one is the silent fallback ADR-0036
      * forbids.
      *
-     * `changedCount` is how many changed Flag Configurations the Overview
+     * `changedCount` is how many Flag change-log events the Overview
      * OBSERVED inside the window. `recentlyChanged` holds only the newest few, so
      * `changedCount > recentlyChanged.length` means what follows is a head, not a
      * list. The display cap itself is not on the wire because it is not needed:

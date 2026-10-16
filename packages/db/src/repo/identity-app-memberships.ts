@@ -1,5 +1,6 @@
 import { and, asc, eq, sql } from "drizzle-orm";
 import { appMemberships } from "../schema/index";
+import { type AuditContext, auditInsert } from "./audit-event-write";
 import type { Db } from "./client";
 import type { TenantScope } from "./scope";
 import { type ReadOptions, scopedTable } from "./scoped-table";
@@ -41,7 +42,28 @@ export function makeAppMembershipRepo(db: Db) {
     createAppMembership(
       scope: TenantScope,
       values: Omit<typeof appMemberships.$inferInsert, "appId">,
+      audit?: AuditContext,
     ) {
+      if (audit)
+        return db
+          .batch([
+            db
+              .insert(appMemberships)
+              .values({ ...values, appId: scope.appId })
+              .returning(),
+            auditInsert(db, scope, {
+              ...audit,
+              action: "app_members_add",
+              resourceType: "app_membership",
+              resourceId: values.userId,
+              metadata: { role: values.role },
+            }),
+          ])
+          .then(([rows]) => {
+            if (!rows[0])
+              throw new Error("createAppMembership: committed membership was not returned");
+            return rows[0];
+          });
       return table.insert(scope, values as typeof appMemberships.$inferInsert);
     },
 
@@ -49,7 +71,32 @@ export function makeAppMembershipRepo(db: Db) {
       scope: TenantScope,
       userId: string,
       values: Pick<typeof appMemberships.$inferInsert, "role">,
+      audit?: AuditContext,
     ) {
+      if (audit)
+        return db
+          .batch([
+            db
+              .update(appMemberships)
+              .set(values)
+              .where(
+                and(
+                  eq(appMemberships.appId, scope.appId),
+                  eq(appMemberships.userId, userId),
+                  canChangeOwnerRole(scope, values.role),
+                  sql`${appMemberships.role} <> ${values.role}`,
+                ),
+              )
+              .returning(),
+            auditInsert(db, scope, {
+              ...audit,
+              action: "app_members_update",
+              resourceType: "app_membership",
+              resourceId: userId,
+              metadata: { role: values.role },
+            }),
+          ])
+          .then(([rows]) => rows[0] ?? null);
       return table
         .update(
           scope,
@@ -59,7 +106,28 @@ export function makeAppMembershipRepo(db: Db) {
         .then((rows) => rows[0] ?? null);
     },
 
-    deleteAppMembership(scope: TenantScope, userId: string) {
+    deleteAppMembership(scope: TenantScope, userId: string, audit?: AuditContext) {
+      if (audit)
+        return db
+          .batch([
+            db
+              .delete(appMemberships)
+              .where(
+                and(
+                  eq(appMemberships.appId, scope.appId),
+                  eq(appMemberships.userId, userId),
+                  canDeleteMember(scope),
+                ),
+              )
+              .returning(),
+            auditInsert(db, scope, {
+              ...audit,
+              action: "app_members_remove",
+              resourceType: "app_membership",
+              resourceId: userId,
+            }),
+          ])
+          .then(([rows]) => rows.length);
       return table.remove(scope, and(eq(appMemberships.userId, userId), canDeleteMember(scope)));
     },
 

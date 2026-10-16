@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createRepository } from "../index";
+import { appScope, envScope } from "./scope";
 import { createLocalD1, type LocalD1 } from "./test-d1-pool";
 
 const NOW = "2026-08-26T08:00:00.000Z";
@@ -38,6 +39,35 @@ afterEach(async () => local.dispose());
  * key and the Organization outlives its expiry forever.
  */
 describe("demo reaper over the full App subtree", () => {
+  it("preserves pending audit facts after their App is reaped until delivery and retention", async () => {
+    const changedAt = "2026-01-01T00:00:00.000Z";
+    await repo.credentials.createApiKey(
+      envScope(IDS.app, IDS.env),
+      {
+        keyId: "key_reaped_audit",
+        appId: IDS.app,
+        environmentId: IDS.env,
+        keyHash: "test_hash",
+        scopes: '["data-plane:evaluate"]',
+        createdAt: changedAt,
+      },
+      { actorRef: IDS.user, actorVia: "device_flow", requestId: null, changedAt },
+    );
+    const before = await repo.auditEvents.listPending(50);
+    expect(before).toHaveLength(1);
+    const event = before[0];
+    if (!event) throw new Error("Expected the committed credential audit fact");
+    expect(await repo.identity.reapExpiredProvisionalOrganizations(NOW)).toEqual({
+      candidates: 1,
+      reaped: 1,
+    });
+    expect(await count("apps")).toBe(0);
+    expect(await repo.auditEvents.listPending(50)).toEqual(before);
+    expect(await repo.auditEvents.pruneBefore({ changedBefore: EXPIRED, limit: 50 })).toBe(0);
+    await repo.auditEvents.markForwarded(appScope(IDS.app), [event.eventId], NOW);
+    expect(await repo.auditEvents.pruneBefore({ changedBefore: EXPIRED, limit: 50 })).toBe(1);
+  });
+
   it("clears integration installations, deliveries, Approvals, and Event Definitions", async () => {
     await expect(repo.identity.reapExpiredProvisionalOrganizations(NOW)).resolves.toEqual({
       candidates: 1,

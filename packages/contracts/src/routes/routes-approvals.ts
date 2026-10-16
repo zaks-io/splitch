@@ -57,6 +57,7 @@ export const approvalRoutes = [
   }),
   defineApiRoute({
     operationId: "approval_request_reviews_create",
+    audit: "app",
     owner: OWNER,
     method: "POST",
     path: "/apps/:appId/approval-requests/:id/reviews",

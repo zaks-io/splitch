@@ -1,3 +1,5 @@
+export type { AuditContext, AuditEventInput } from "./repo/audit-event-write";
+export type { AuditEventRow } from "./repo/audit-events";
 /**
  * @splitch/db — the authoritative D1 schema AND the single tenant-isolation
  * data-access seam (ADR-0018).
@@ -24,12 +26,12 @@ export type {
 export type { ConvexInstallationRow, ConvexInstallationWrite } from "./repo/convex-integrations";
 export type { FlagChangeEventRow } from "./repo/flag-change-events";
 export type { FlagChangeLogFilter, FlagChangeLogRow } from "./repo/flag-change-log-reads";
+export type { ReplaceTargetingRulesResult } from "./repo/flag-config-direct-write";
 export type { FlagDeletionCodeRemovalRecord } from "./repo/flag-deletion-code-removal";
-export type { ReplaceTargetingRulesResult } from "./repo/flag-config-ops";
+export type { FlagDefinitionPatch } from "./repo/flag-lifecycle-reads";
 export type { UpdateVariantResult } from "./repo/flag-variant-approval";
 export type { RemoveVariantResult, TargetingRuleVariantRef } from "./repo/flag-variant-ops";
 export type { VariantFrozenChange, VariantRunFreeze } from "./repo/flag-variant-run-freeze";
-export type { FlagDefinitionPatch } from "./repo/flag-lifecycle-reads";
 export type { CreateFlagResult } from "./repo/flags";
 export type {
   ApprovalCommit,
@@ -42,15 +44,18 @@ export type {
 // constructors come straight from the internal scope module (this root barrel
 // is INSIDE packages/db, so reaching repo/* is allowed; outside code cannot).
 export { createRepository } from "./repo/index";
-export type { EnvScope, MultiAppScope, TenantScope } from "./repo/scope";
-export { appScope, envScope, multiAppScope } from "./repo/scope";
+export {
+  PersonalAccessTokenClaimRefused,
+  type PersonalAccessTokenStepUpUse,
+} from "./repo/personal-access-token-authorization";
 export type {
   PersonalAccessTokenPatch,
   PersonalAccessTokenRow,
 } from "./repo/personal-access-tokens";
+export type { EnvScope, MultiAppScope, TenantScope } from "./repo/scope";
+export { appScope, envScope, multiAppScope } from "./repo/scope";
 export type { ScopedTable } from "./repo/scoped-table";
 export type { SentryInstallationRow, SentryInstallationWrite } from "./repo/sentry-integrations";
-
 export {
   apiKeys,
   appDeletionSagas,
@@ -63,6 +68,7 @@ export {
   cloudflareInstallations,
   conclusionApprovalRequests,
   configWebhookDeliveries,
+  controlPlaneAuditEvents,
   convexInstallations,
   deviceRefreshSessions,
   entityDeletions,
@@ -78,14 +84,10 @@ export {
   orgMemberships,
   personalAccessTokens,
   privacyRequests,
-  runs,
   runSrmAlarms,
+  runs,
   segments,
   targetingRules,
   trustedIdps,
   variants,
 } from "./schema/index";
-export {
-  PersonalAccessTokenClaimRefused,
-  type PersonalAccessTokenStepUpUse,
-} from "./repo/personal-access-token-authorization";

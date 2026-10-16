@@ -60,7 +60,7 @@ async function ensureActiveClientKeyState(
   }
 }
 
-export async function createClientKey(
+async function createClientKey(
   deps: ClientKeyDeps,
   ctx: { appId: string; environmentId: string; organizationId: string; scope: EnvScopeValue },
 ): Promise<ClientKeyRow> {

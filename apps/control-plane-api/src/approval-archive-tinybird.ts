@@ -1,10 +1,10 @@
+import { createPerformanceSpanRecorder } from "@splitch/observability/performance-spans";
 import type {
   ApprovalArchiveEvent,
   ApprovalArchiveQuery,
   ApprovalArchiveStore,
 } from "./approval-archive";
 import { APPROVAL_ARCHIVE_VERSION } from "./approval-archive";
-import { createPerformanceSpanRecorder } from "@splitch/observability/performance-spans";
 import type { ControlPlaneApiEnv } from "./env";
 
 const PIPE_NAME = "approval_request_archives";
@@ -17,31 +17,7 @@ export function approvalArchiveStoreFromEnv(
   const spans = createPerformanceSpanRecorder(env);
   return {
     async append(event) {
-      const response = await fetchFn(eventsUrl(requiredApiUrl(env)), {
-        method: "POST",
-        headers: {
-          authorization: `Bearer ${requiredToken(env.TINYBIRD_APPROVAL_ARCHIVE_WRITE_TOKEN, "write")}`,
-          "content-type": "application/json",
-        },
-        body: JSON.stringify(event),
-      });
-      if (response.status !== 200) {
-        throw new Error(
-          `Tinybird Approval Request archive append failed with HTTP ${response.status}`,
-        );
-      }
-      const body = (await response.json().catch(() => null)) as {
-        successful_rows?: number;
-        quarantined_rows?: number;
-      } | null;
-      if (!body) {
-        throw new Error("Tinybird Approval Request archive append acknowledgment is malformed");
-      }
-      if (body.successful_rows !== 1 || body.quarantined_rows !== 0) {
-        throw new Error(
-          `Tinybird Approval Request archive append mismatch (successful=${body.successful_rows}, quarantined=${body.quarantined_rows})`,
-        );
-      }
+      await appendAuditLogRows(env, [event], fetchFn);
     },
 
     async get(appId, requestId, archiveVersion) {
@@ -60,6 +36,37 @@ export function approvalArchiveStoreFromEnv(
       return rows.map(parseArchiveEvent);
     },
   };
+}
+
+/** The Control Plane's one physical audit_log sender, shared by archives and ordinary events. */
+export async function appendAuditLogRows(
+  env: ControlPlaneApiEnv,
+  events: readonly object[],
+  fetchFn: typeof fetch = fetch,
+): Promise<void> {
+  if (events.length === 0) return;
+  const response = await fetchFn(eventsUrl(requiredApiUrl(env)), {
+    method: "POST",
+    headers: {
+      authorization: `Bearer ${requiredToken(env.TINYBIRD_APPROVAL_ARCHIVE_WRITE_TOKEN, "write")}`,
+      "content-type": "application/json",
+    },
+    body: events.map((event) => JSON.stringify(event)).join("\n"),
+  });
+  if (response.status !== 200) {
+    throw new Error(`Tinybird Approval Request archive append failed with HTTP ${response.status}`);
+  }
+  const body = (await response.json().catch(() => null)) as {
+    successful_rows?: number;
+    quarantined_rows?: number;
+  } | null;
+  if (!body)
+    throw new Error("Tinybird Approval Request archive append acknowledgment is malformed");
+  if (body.successful_rows !== events.length || body.quarantined_rows !== 0) {
+    throw new Error(
+      `Tinybird Approval Request archive append mismatch (successful=${body.successful_rows}, quarantined=${body.quarantined_rows})`,
+    );
+  }
 }
 
 function pipeParams(

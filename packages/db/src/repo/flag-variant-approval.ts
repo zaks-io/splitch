@@ -7,6 +7,7 @@ import {
   approvalReviewLanded,
   reviewRecorded,
 } from "./approval-atomic";
+import { approvalReviewAudit } from "./approval-audit";
 import type { ApprovalCommit } from "./approval-types";
 import type { Db } from "./client";
 import {
@@ -152,6 +153,7 @@ export function catalogApprovalBatch(
     flagUpdate,
     appliedReviewInsert(db, args.scope, approval),
     appliedRequestUpdate(db, args.scope, approval),
+    approvalReviewAudit(db, args.scope, approval, "applied"),
   ] as unknown as Parameters<Db["batch"]>[0];
 }
 
@@ -281,7 +283,10 @@ export function makeUpdateVariant(
       ? [appliedReviewInsert(db, scope, options.approval)]
       : [];
     const requestUpdate = options?.approval
-      ? [appliedRequestUpdate(db, scope, options.approval)]
+      ? [
+          appliedRequestUpdate(db, scope, options.approval),
+          approvalReviewAudit(db, scope, options.approval, "applied"),
+        ]
       : [];
     // A rename must carry `flag_configs.available_variant_names` with it in the
     // same transaction. Otherwise every Environment keeps pointing at a Variant

@@ -12,6 +12,7 @@ import type { PlannedDurationEvidence } from "@splitch/stats";
 import type { HandlerArgs } from "@splitch/worker-runtime";
 import { approvalDiff, approvalRequestId } from "./approval-canonical";
 import { idempotencyConflict, requiredAuthDoor } from "./approval-review-outcomes";
+import { auditContext } from "./audit-context";
 import { resolveConclusionGuardFailure } from "./experiment-conclusion-guard-errors";
 import type { PreparedWinnerProposal } from "./experiment-conclusion-proposal";
 import {
@@ -82,6 +83,7 @@ export async function commitConclusion(
     committed = await deps.repo.experimentConclusions.commit(
       envScope(ids.appId, ids.environmentId),
       {
+        audit: auditContext(args.principal, args.requestId, now),
         expectedLiveRunId: run.id,
         expectedTargetConfigVersion: body.target.expectedConfigVersion,
         conclusion: {

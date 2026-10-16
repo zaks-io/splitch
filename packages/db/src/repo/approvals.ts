@@ -1,14 +1,14 @@
 import { and, asc, desc, eq, inArray, isNotNull, lte, notExists, sql } from "drizzle-orm";
 import { approvalRequests, approvalReviews, conclusionApprovalRequests } from "../schema/index";
 import { appliedReviewQueries, approvalPendingCondition } from "./approval-atomic";
+import { approvalReviewAudit } from "./approval-audit";
 import { dispositionQueries, failureInsert } from "./approval-dispositions";
 import { type ApprovalArchiveFinalization, finalizeApprovalArchive } from "./approval-finalization";
+import { makeCreateApprovalRequest, requestByActorKey } from "./approval-request-create";
 import type { ApprovalCommit, ApprovalDisposition, ApprovalFailure } from "./approval-types";
 import type { Db } from "./client";
 import type { TenantScope } from "./scope";
 import { assertMintedScope } from "./scope";
-
-type ApprovalRequestInsert = typeof approvalRequests.$inferInsert;
 
 export interface ApprovalPageFilters {
   /** Persisted `status` values the page may contain. */
@@ -101,38 +101,7 @@ function approvalArchiveQueries(db: Db, d1: D1Database) {
 export function makeApprovalRepo(db: Db, d1: D1Database) {
   return {
     ...approvalArchiveQueries(db, d1),
-    // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: the insert/race winner paths enforce one exact idempotency decision
-    async createRequest(
-      scope: TenantScope,
-      input: Omit<ApprovalRequestInsert, "appId">,
-    ): Promise<
-      | { ok: true; request: typeof approvalRequests.$inferSelect; replay: boolean }
-      | { ok: false; reason: "idempotency_conflict" }
-    > {
-      assertMintedScope(scope);
-      const existing = await requestByActorKey(db, scope, input.proposedBy, input.idempotencyKey);
-      if (existing) {
-        return existing.requestHash === input.requestHash
-          ? { ok: true, request: existing, replay: true }
-          : { ok: false, reason: "idempotency_conflict" };
-      }
-
-      try {
-        const rows = await db
-          .insert(approvalRequests)
-          .values({ ...input, appId: scope.appId })
-          .returning();
-        const request = rows[0];
-        if (!request) throw new Error("createRequest: no Approval Request returned");
-        return { ok: true, request, replay: false };
-      } catch (cause) {
-        const winner = await requestByActorKey(db, scope, input.proposedBy, input.idempotencyKey);
-        if (!winner) throw cause;
-        return winner.requestHash === input.requestHash
-          ? { ok: true, request: winner, replay: true }
-          : { ok: false, reason: "idempotency_conflict" };
-      }
-    },
+    createRequest: makeCreateApprovalRequest(db),
 
     getRequest(scope: TenantScope, requestId: string) {
       assertMintedScope(scope);
@@ -224,7 +193,10 @@ export function makeApprovalRepo(db: Db, d1: D1Database) {
       disposition: ApprovalDisposition,
     ): Promise<boolean> {
       assertMintedScope(scope);
-      const results = await db.batch(dispositionQueries(db, scope, disposition));
+      const results = await db.batch([
+        ...dispositionQueries(db, scope, disposition),
+        approvalReviewAudit(db, scope, disposition, disposition.outcome),
+      ]);
       return results[1].length === 1;
     },
 
@@ -249,23 +221,11 @@ export function makeApprovalRepo(db: Db, d1: D1Database) {
      */
     async recordFailure(scope: TenantScope, failure: ApprovalFailure): Promise<boolean> {
       assertMintedScope(scope);
-      const rows = await failureInsert(db, scope, failure).returning({ id: approvalReviews.id });
+      const [rows] = await db.batch([
+        failureInsert(db, scope, failure).returning({ id: approvalReviews.id }),
+        approvalReviewAudit(db, scope, failure, "failed"),
+      ]);
       return rows.length === 1;
     },
   };
-}
-
-function requestByActorKey(db: Db, scope: TenantScope, proposedBy: string, idempotencyKey: string) {
-  return db
-    .select()
-    .from(approvalRequests)
-    .where(
-      and(
-        eq(approvalRequests.appId, scope.appId),
-        eq(approvalRequests.proposedBy, proposedBy),
-        eq(approvalRequests.idempotencyKey, idempotencyKey),
-      ),
-    )
-    .limit(1)
-    .then((rows) => rows[0] ?? null);
 }

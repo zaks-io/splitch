@@ -4,6 +4,11 @@ import {
   LOCAL_E2E_SETTINGS_APPS,
 } from "./local-e2e-app-settings-fixture.mjs";
 import { LOCAL_E2E_FLAG_EDITING_SEED } from "./local-e2e-flag-editing-fixture.mjs";
+import {
+  LOCAL_E2E_OVERVIEW_HISTORY_SEED,
+  LOCAL_E2E_OVERVIEW_STALE_CHANGED_AT as staleChangedAt,
+} from "./local-e2e-overview-fixture.mjs";
+
 import { LOCAL_E2E_PROMOTION_SEED } from "./local-e2e-promotion-fixture.mjs";
 import { d1RunDecisions, LOCAL_E2E_RUN_CONFIG as run } from "./local-e2e-run-config.mjs";
 
@@ -77,23 +82,6 @@ export const LOCAL_E2E_FIXTURE_CONTRACT = Object.freeze({
   },
 });
 
-/**
- * The Environments the App Overview is proven against, one per attention state.
- * Each state gets its own Environment and its own Flag Configuration rows, so a
- * card that reads another state's rows shows up as the wrong card rather than as
- * a coincidentally matching one.
- */
-export const LOCAL_E2E_OVERVIEW_STATES = Object.freeze({
-  experimentsUnavailable: { environmentKey: "dev", environmentId: "env_checkout_dev_e2e" },
-  flagChanges: {
-    environmentKey: "overview-changes",
-    environmentId: "env_checkout_overview_e2e",
-    recentFlagKey: "new-checkout",
-    staleFlagKey: "checkout-srm",
-  },
-  calm: { environmentKey: "calm", environmentId: "env_checkout_calm_e2e" },
-});
-
 const createdAt = "2026-07-18T00:00:00.000Z";
 // Environments list in creation order (`listEnvironments` orders by created_at),
 // so checkout-api's Environments get distinct timestamps in seed order; identical
@@ -101,11 +89,6 @@ const createdAt = "2026-07-18T00:00:00.000Z";
 function environmentCreatedAt(index) {
   return new Date(Date.parse(createdAt) + index * 60_000).toISOString();
 }
-// The Overview's recently-changed window is relative to now, so the Flag
-// Configuration that must land inside it needs a relative timestamp; a frozen
-// one silently ages out of the window and the fixture stops proving anything.
-const recentlyChangedAt = new Date(Date.now() - 2 * 60 * 60 * 1_000).toISOString();
-const staleChangedAt = "2026-06-01T00:00:00.000Z";
 const json = JSON.stringify;
 
 /**
@@ -143,6 +126,7 @@ export function localE2eSession(expiresAt = Math.floor(Date.now() / 1000) + 3_60
         demoExpiresAt: null,
         apps: [
           { appId: "app_checkout_e2e", appSlug: "checkout-api", role: "owner" },
+          { appId: "app_overview_calm_e2e", appSlug: "overview-calm", role: "owner" },
           { appId: "app_billing_e2e", appSlug: "billing-api", role: "admin" },
           { appId: "app_editing_e2e", appSlug: "flag-editing", role: "admin" },
           { appId: "app_promotion_e2e", appSlug: "promotion", role: "admin" },
@@ -201,13 +185,14 @@ INSERT INTO organizations (id, name, slug, plan, is_provisional, created_at, upd
   ('org_orbit_e2e', 'Orbit Tools', 'orbit-tools', 'free', 0, '${createdAt}', '${createdAt}');
 INSERT INTO apps (id, organization_id, name, key, created_at, updated_at, created_by) VALUES
   ('app_checkout_e2e', 'org_acme_e2e', 'Checkout API', 'checkout-api', '${createdAt}', '${createdAt}', 'user_local_e2e'),
+  ('app_overview_calm_e2e', 'org_acme_e2e', 'Overview Calm', 'overview-calm', '${createdAt}', '${createdAt}', 'user_local_e2e'),
   ('app_billing_e2e', 'org_acme_e2e', 'Billing API', 'billing-api', '${createdAt}', '${createdAt}', 'user_local_e2e'),
   ('app_agent_e2e', 'org_orbit_e2e', 'Agent Console', 'agent-console', '${createdAt}', '${createdAt}', 'user_local_e2e');
 INSERT INTO environments (id, app_id, key, name, policy, created_at, updated_at, created_by) VALUES
   ('env_checkout_dev_e2e', 'app_checkout_e2e', 'dev', 'Development', '{"variantAvailability":"allow","targetingRolloutValue":"allow","enabledState":"allow","startExperimentRun":"allow"}', '${environmentCreatedAt(0)}', '${environmentCreatedAt(0)}', 'user_local_e2e'),
   ('env_checkout_settings_retry_e2e', 'app_checkout_e2e', 'settings-retry', 'Settings Retry', '{"variantAvailability":"allow","targetingRolloutValue":"allow","enabledState":"allow","startExperimentRun":"allow"}', '${environmentCreatedAt(1)}', '${environmentCreatedAt(1)}', 'user_local_e2e'),
   ('env_checkout_overview_e2e', 'app_checkout_e2e', 'overview-changes', 'Overview Changes', '{"variantAvailability":"allow","targetingRolloutValue":"allow","enabledState":"confirm","startExperimentRun":"allow"}', '${environmentCreatedAt(2)}', '${environmentCreatedAt(2)}', 'user_local_e2e'),
-  ('env_checkout_calm_e2e', 'app_checkout_e2e', 'calm', 'Overview Calm', '{"variantAvailability":"allow","targetingRolloutValue":"allow","enabledState":"allow","startExperimentRun":"allow"}', '${environmentCreatedAt(3)}', '${environmentCreatedAt(3)}', 'user_local_e2e'),
+  ('env_checkout_calm_e2e', 'app_overview_calm_e2e', 'calm', 'Overview Calm', '{"variantAvailability":"allow","targetingRolloutValue":"allow","enabledState":"allow","startExperimentRun":"allow"}', '${environmentCreatedAt(3)}', '${environmentCreatedAt(3)}', 'user_local_e2e'),
   ('env_checkout_prod_e2e', 'app_checkout_e2e', 'prod', 'Production', '{"variantAvailability":"confirm","targetingRolloutValue":"confirm","enabledState":"confirm","startExperimentRun":"confirm"}', '${environmentCreatedAt(4)}', '${environmentCreatedAt(4)}', 'user_local_e2e'),
   ('env_checkout_setup_e2e', 'app_checkout_e2e', 'setup', 'Setup QA', '{"variantAvailability":"allow","targetingRolloutValue":"allow","enabledState":"allow","startExperimentRun":"confirm"}', '${environmentCreatedAt(5)}', '${environmentCreatedAt(5)}', 'user_local_e2e'),
   ('env_billing_prod_e2e', 'app_billing_e2e', 'prod', 'Production', '{"variantAvailability":"confirm","targetingRolloutValue":"confirm","enabledState":"confirm","startExperimentRun":"confirm"}', '${createdAt}', '${createdAt}', 'user_local_e2e'),
@@ -224,6 +209,7 @@ INSERT INTO org_memberships (org_id, user_id, role, created_at) VALUES
   ('org_acme_e2e', '${LOCAL_E2E_PROFILELESS_USER_ID}', 'member', '${createdAt}');
 INSERT INTO app_memberships (app_id, user_id, role, created_at) VALUES
   ('app_checkout_e2e', 'user_local_e2e', 'owner', '${createdAt}'),
+  ('app_overview_calm_e2e', 'user_local_e2e', 'owner', '${createdAt}'),
   ('app_billing_e2e', 'user_local_e2e', 'admin', '${createdAt}'),
   ('app_agent_e2e', 'user_local_e2e', 'admin', '${createdAt}'),
   ('app_checkout_e2e', 'user_local_member_e2e', 'member', '${createdAt}');
@@ -264,7 +250,7 @@ INSERT INTO flag_configs (id, app_id, environment_id, flag_id, enabled, availabl
   ('config_ended_dev_e2e', 'app_checkout_e2e', 'env_checkout_dev_e2e', 'flag_checkout_ended_e2e', 1, '["control"]', 'variant_ended_control_e2e', '${createdAt}', '${createdAt}'),
   ('config_srm_prod_e2e', 'app_checkout_e2e', 'env_checkout_prod_e2e', 'flag_checkout_srm_e2e', 1, '["control","treatment"]', 'variant_srm_control_e2e', '${createdAt}', '${createdAt}'),
   ('config_integrity_e2e', 'app_checkout_e2e', 'env_checkout_integrity_e2e', 'flag_checkout_integrity_e2e', 1, '["control","treatment"]', 'variant_integrity_control_e2e', '${createdAt}', '${createdAt}'),
-  ('config_checkout_overview_e2e', 'app_checkout_e2e', 'env_checkout_overview_e2e', 'flag_checkout_e2e', 1, '["control","treatment"]', 'variant_checkout_control_e2e', '${createdAt}', '${recentlyChangedAt}'),
+  ('config_checkout_overview_e2e', 'app_checkout_e2e', 'env_checkout_overview_e2e', 'flag_checkout_e2e', 0, '["control","treatment"]', 'variant_checkout_control_e2e', '${createdAt}', '${staleChangedAt}'),
   ('config_srm_overview_e2e', 'app_checkout_e2e', 'env_checkout_overview_e2e', 'flag_checkout_srm_e2e', 0, '["control"]', 'variant_srm_control_e2e', '${createdAt}', '${staleChangedAt}'),
   ('config_create_lab_e2e', 'app_checkout_e2e', 'env_checkout_create_e2e', 'flag_checkout_ended_e2e', 1, '["control","treatment"]', 'variant_ended_control_e2e', '${createdAt}', '${createdAt}'),
   ('config_create_gated_e2e', 'app_checkout_e2e', 'env_checkout_creategate_e2e', 'flag_checkout_ended_e2e', 1, '["control","treatment"]', 'variant_ended_control_e2e', '${createdAt}', '${createdAt}');
@@ -347,4 +333,6 @@ ${onboardingApps
 
 ${LOCAL_E2E_APP_SETTINGS_SEED}
 ${LOCAL_E2E_FLAG_EDITING_SEED}
-${LOCAL_E2E_PROMOTION_SEED}`;
+${LOCAL_E2E_PROMOTION_SEED}
+
+${LOCAL_E2E_OVERVIEW_HISTORY_SEED}`;

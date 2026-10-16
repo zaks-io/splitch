@@ -29,6 +29,8 @@ const WRITER_MODULE = "repo/flag-variant-approval.ts";
  * Run cannot be stripped of an arm through it. A new one fails the sweep.
  */
 const AVAILABILITY_WRITERS: Record<string, string> = {
+  "repo/flag-config-direct-write.ts":
+    "direct Configuration writes extracted from flag-config-ops; still frozen at the config-store seam (SPL-118) and swept by apps/control-plane-api/test/flag-config-run-freeze-writer-sweep.test.ts",
   "repo/flag-config-ops.ts":
     "patch types for updateFlagConfig/applyApprovedFlagConfig; frozen at the config-store seam (SPL-118) and swept by apps/control-plane-api/test/flag-config-run-freeze-writer-sweep.test.ts",
   [WRITER_MODULE]: `${WRITER}, reachable only from updateVariant, which refuses a rename under a live Run`,

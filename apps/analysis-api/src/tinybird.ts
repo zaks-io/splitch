@@ -1,8 +1,8 @@
-import type { AnalysisApiEnv } from "./env";
 import {
   createPerformanceSpanRecorder,
   type PerformanceSpanRecorder,
 } from "@splitch/observability/performance-spans";
+import type { AnalysisApiEnv } from "./env";
 
 export type PipeParams = Record<string, string>;
 export type TinybirdReadOptions = { method: "GET" | "POST" };
@@ -98,7 +98,7 @@ export function createTinybirdReadTransport(
   return {
     async readPipe(pipeName, params, options = { method: "GET" }) {
       return spans.record(tinybirdSpan(pipeName, "read", options.method), async (span) => {
-        assertScoped(params);
+        assertReadScope(params, pipeName);
         const request = pipeRequest(apiUrl, pipeName, params, options);
         const response = await fetchWithTimeout(
           fetchFn,
@@ -225,6 +225,17 @@ function parseRows(body: { data?: unknown }): readonly unknown[] {
     throw new TinybirdReadError("Tinybird pipe read returned a malformed payload");
   }
   return body.data;
+}
+
+function assertReadScope(params: PipeParams, pipeName: string): void {
+  if (pipeName === "app_audit_events") {
+    requiredParam(params.app_id, "app_id");
+    if (params.organization_id !== undefined) {
+      throw new TinybirdReadError("App audit scope cannot mix tenant axes");
+    }
+    return;
+  }
+  assertScoped(params);
 }
 
 function assertScoped(params: PipeParams): void {

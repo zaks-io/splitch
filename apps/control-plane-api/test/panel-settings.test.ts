@@ -13,6 +13,12 @@ import {
   signedPanelRequest,
 } from "./panel-flags-harness.js";
 
+vi.hoisted(() => vi.resetModules());
+vi.mock("../src/approval-archive-tinybird", async (original) => ({
+  ...(await original<typeof import("../src/approval-archive-tinybird")>()),
+  appendAuditLogRows: vi.fn(async () => undefined),
+}));
+
 const ids = panelFlagsIds("settings");
 const { appId: APP_ID, envId: ENVIRONMENT_ID, userId: USER_ID } = ids;
 let entrypoint: SignedControlPanelEntrypoint;

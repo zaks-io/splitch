@@ -56,8 +56,11 @@ export function changes(
   return Array.from({ length: count }, (_unused, index) => ({
     flagId: `flag_${index}`,
     flagKey: `flag-key-${index}`,
-    flagName: `Flag ${index}`,
-    enabled: index % 2 === 0,
-    updatedAt: new Date(Date.UTC(2026, 6, 19, 10, 0) - index * 60_000).toISOString(),
+    seq: count - index,
+    action: "updated",
+    targetType: "flag_config",
+    actorRef: null,
+    actorVia: null,
+    changedAt: new Date(Date.UTC(2026, 6, 19, 10, 0) - index * 60_000).toISOString(),
   }));
 }

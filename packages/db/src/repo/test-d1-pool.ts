@@ -1,6 +1,7 @@
 import { env } from "cloudflare:workers";
 
 export const RESET_TABLES = [
+  "control_plane_audit_events",
   "cloudflare_config_deliveries",
   "cloudflare_installations",
   "config_webhook_deliveries",

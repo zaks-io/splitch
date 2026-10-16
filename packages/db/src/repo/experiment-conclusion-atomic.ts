@@ -1,11 +1,17 @@
 import type { approvalRequests, experimentConclusions } from "../schema/index";
+import type { AuditContext } from "./audit-event-write";
+import {
+  conclusionAuditStatements,
+  replacementAuditStatement,
+} from "./experiment-conclusion-audit";
 import { endRunningRunStatement } from "./experiment-conclusion-end-run";
-import type { EnvScope } from "./scope";
+import type { EnvScope, TenantScope } from "./scope";
 
 type ConclusionInsert = Omit<typeof experimentConclusions.$inferInsert, "appId">;
 type ApprovalInsert = Omit<typeof approvalRequests.$inferInsert, "appId">;
 
 export interface CommitConclusionInput {
+  audit?: AuditContext;
   conclusion: ConclusionInsert;
   approval: ApprovalInsert;
   expectedLiveRunId: string;
@@ -13,6 +19,8 @@ export interface CommitConclusionInput {
 }
 
 export interface CreateReplacementPromotionInput {
+  audit?: AuditContext;
+  runId?: string;
   conclusionId: string;
   previousApprovalRequestId: string;
   ordinal: number;
@@ -92,14 +100,16 @@ export function conclusionStatements(
       )
       .bind(scope.appId, c.id, input.approval.id, c.concludedAt, scope.appId, input.approval.id),
     atomicAssertion(d1, input.approval.id, c.id, 1),
+    ...conclusionAuditStatements(d1, scope, input),
   ];
 }
 
 export function replacementStatements(
   d1: D1Database,
-  appId: string,
+  scope: TenantScope,
   input: CreateReplacementPromotionInput,
 ) {
+  const appId = scope.appId;
   const guard = replacementGuard(appId, input);
   return [
     d1
@@ -129,6 +139,7 @@ export function replacementStatements(
         input.approval.id,
       ),
     atomicAssertion(d1, input.approval.id, input.conclusionId, input.ordinal),
+    replacementAuditStatement(d1, scope, input),
   ];
 }
 
