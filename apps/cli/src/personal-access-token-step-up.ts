@@ -56,40 +56,41 @@ export async function callPersonalAccessTokenMutation(
   return callWithStepUp(operationId, input, authorization, deps);
 }
 
+type OrganizationAppsResult =
+  | { apps: NonNullable<PersonalAccessTokenStepUpInput["apps"]> }
+  | { failure: ControlPlaneOperationResult };
+
 async function organizationApps(
   policy: PersonalAccessTokenStepUpInput,
   authorization: string,
   deps: CliDeps,
-): Promise<
-  | { apps: NonNullable<PersonalAccessTokenStepUpInput["apps"]> }
-  | { failure: ControlPlaneOperationResult }
-> {
-  const apps: { id: string; organizationId: string }[] = [];
-  for (const orgId of organizationLookups(policy)) {
-    const read = async (readAuthorization: string) => {
+): Promise<OrganizationAppsResult> {
+  const appIds = appOrganizationLookups(policy);
+  const read = async (
+    readAuthorization: string,
+  ): Promise<{ status: number; value: OrganizationAppsResult }> => {
+    const apps: { id: string; organizationId: string }[] = [];
+    for (const appId of appIds) {
       const result = await createOperationSdks(deps)["control-plane-api"].callOperationById(
-        "apps_list",
-        { orgId },
+        "apps_get",
+        { appId },
         { authorization: readAuthorization },
       );
-      return { status: result.ok ? 200 : result.status, value: result };
-    };
-    // Rebinding reads must not change the token used to decide or execute the mutation.
-    const originalCanRead = policy.scopes.some((scope) => scope.startsWith(`org:${orgId}:`));
-    const listed = originalCanRead
-      ? (await read(authorization)).value
-      : await withAuthorizationRetry(deps, read, { kind: MEMBERSHIP_WIDE_READ_AUTHORIZATION });
-    if (!listed.ok) return { failure: listed };
-    const page = listed.data as {
-      items: { id: string; organizationId: string }[];
-      readTruncated: boolean;
-    };
-    apps.push(...page.items);
-  }
-  return { apps };
+      if (!result.ok) return { status: result.status, value: { failure: result } };
+      apps.push(result.data as { id: string; organizationId: string });
+    }
+    return { status: 200, value: { apps } };
+  };
+  // Rebinding reads must not change the token used to decide or execute the mutation.
+  const originalCanRead = appIds.every((appId) =>
+    policy.scopes.some((scope) => scope.startsWith(`app:${appId}:`)),
+  );
+  return originalCanRead
+    ? (await read(authorization)).value
+    : withAuthorizationRetry(deps, read, { kind: MEMBERSHIP_WIDE_READ_AUTHORIZATION });
 }
 
-function organizationLookups(policy: PersonalAccessTokenStepUpInput): string[] {
+function appOrganizationLookups(policy: PersonalAccessTokenStepUpInput): string[] {
   const grants = policy.grants ?? policy.current?.grants ?? [];
   if (!grants.some((grant) => grant.target.startsWith("app:"))) return [];
   const expiry = policy.expiresAt === undefined ? policy.current?.expiresAt : policy.expiresAt;
@@ -99,7 +100,15 @@ function organizationLookups(policy: PersonalAccessTokenStepUpInput): string[] {
   ) {
     return [];
   }
-  return organizationCandidates(policy);
+  if (organizationCandidates(policy).length === 0) return [];
+  // A bounded Organization catalog cannot establish coverage for an omitted App.
+  return [
+    ...new Set(
+      grants
+        .filter((grant) => grant.target.startsWith("app:"))
+        .map((grant) => grant.target.slice(4)),
+    ),
+  ];
 }
 
 function organizationCandidates(policy: PersonalAccessTokenStepUpInput): string[] {

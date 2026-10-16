@@ -82,8 +82,8 @@ function makePersonalAccessTokenHandlers(deps: PersonalAccessTokenHandlerDeps) {
         );
       }
 
-      const approval = await authorizeIssuance(deps, principal, "create", body);
-      if (typeof approval === "string") return renderError(forbidden(approval), { requestId });
+      const issuance = await authorizeIssuance(deps, principal, "create", body);
+      if (typeof issuance === "string") return renderError(forbidden(issuance), { requestId });
       const secret = newSecret();
       const tokenHash = await sha256Hex(secret);
       const row = await tokens.insertAuthorized(
@@ -96,7 +96,7 @@ function makePersonalAccessTokenHandlers(deps: PersonalAccessTokenHandlerDeps) {
           expiresAt: resolveExpiry(body.expiresAt, nowMs),
           createdAt: new Date(nowMs).toISOString(),
         },
-        approval,
+        issuance.approval,
       );
       try {
         await writePersonalAccessTokenCache(store, row, tokenHash, false, nowMs);
@@ -115,12 +115,22 @@ function makePersonalAccessTokenHandlers(deps: PersonalAccessTokenHandlerDeps) {
       const nowMs = now();
       const current = await tokens.getForUser(principal.id, pathParam(input, "tokenId"));
       if (!isActivePersonalAccessToken(current)) return notFound(requestId);
-      const approval = await authorizeIssuance(deps, principal, "update", body, current);
-      if (typeof approval === "string") return renderError(forbidden(approval), { requestId });
-      const invalid = await updateProblems(deps.membershipAccess, principal.id, body, nowMs);
+      const issuance = await authorizeIssuance(deps, principal, "update", body, current);
+      if (typeof issuance === "string") return renderError(forbidden(issuance), { requestId });
+      const invalid = await updateProblems(
+        deps.membershipAccess,
+        principal.id,
+        body,
+        nowMs,
+        issuance.cleanup,
+      );
       if (invalid) return renderError(invalid, { requestId });
 
-      const updated = await tokens.updateAuthorized(current, updatePatch(body, nowMs), approval);
+      const updated = await tokens.updateAuthorized(
+        current,
+        updatePatch(body, nowMs),
+        issuance.approval,
+      );
       if (!updated) throw new PersonalAccessTokenClaimRefused();
       if ("expiresAt" in body) {
         await writePersonalAccessTokenCache(store, updated, updated.tokenHash, false, nowMs);
@@ -136,8 +146,8 @@ function makePersonalAccessTokenHandlers(deps: PersonalAccessTokenHandlerDeps) {
       const current = await tokens.getForUser(principal.id, tokenId);
       if (!isActivePersonalAccessToken(current)) return notFound(requestId);
       const nowMs = now();
-      const approval = await authorizeIssuance(deps, principal, "rotate", {}, current);
-      if (typeof approval === "string") return renderError(forbidden(approval), { requestId });
+      const issuance = await authorizeIssuance(deps, principal, "rotate", {}, current);
+      if (typeof issuance === "string") return renderError(forbidden(issuance), { requestId });
       if (personalAccessTokenExpired(current.expiresAt, nowMs)) {
         // A rotated secret would be dead on arrival. Extending is the explicit
         // way to revive an expired token: `tokens update --expires-at …`.
@@ -156,7 +166,7 @@ function makePersonalAccessTokenHandlers(deps: PersonalAccessTokenHandlerDeps) {
         current,
         tokenHash,
         nowMs,
-        approval,
+        issuance.approval,
       );
       return Response.json({ token: personalAccessTokenResponse(rotated, nowMs), secret });
     },

@@ -88,16 +88,17 @@ export function makePersonalAccessTokenAuthorizationRepo(d1: D1Database) {
     ): Promise<PersonalAccessTokenRow | null> {
       const guard = snapshot(current);
       const statements = use ? [consume(d1, current.userId, use, guard)] : [];
+      const fields = Object.entries({
+        name: patch.name,
+        grants: patch.grants,
+        expires_at: patch.expiresAt,
+      }).filter(([, value]) => value !== undefined);
+      if (fields.length === 0) throw new Error("db: authorized PAT update requires a patch");
       statements.push(
         d1
-          .prepare(`UPDATE personal_access_tokens SET name = ?, grants = ?, expires_at = ?
+          .prepare(`UPDATE personal_access_tokens SET ${fields.map(([column]) => `${column} = ?`).join(", ")}
         WHERE ${guard.sql} AND ${NO_ROTATION} RETURNING ${TOKEN_COLUMNS}`)
-          .bind(
-            patch.name ?? current.name,
-            patch.grants ?? current.grants,
-            patch.expiresAt === undefined ? current.expiresAt : patch.expiresAt,
-            ...guard.values,
-          ),
+          .bind(...fields.map(([, value]) => value), ...guard.values),
       );
       const result = await batch(d1, statements);
       return (result.at(-1)?.results[0] as PersonalAccessTokenRow | undefined) ?? null;

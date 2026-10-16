@@ -91,15 +91,46 @@ describe("CLI Personal Access Token step-up", () => {
 });
 
 describe("CLI Personal Access Token Organization coverage", () => {
-  it("creates a finite App grant inside the session's Organization scope without approval", async () => {
+  it("narrows to an App beyond a truncated catalog using a direct authenticated read", async () => {
     const { result, requests, session } = await run(
-      ["create", "--name", "x", "--grant", "app:app_1:admin:write,delete"],
-      { scopes: ["org:org_1:owner"] },
+      ["update", TOKEN.id, "--grant", "app:app_beyond_page:member:read"],
+      {
+        current: {
+          ...BROAD,
+          grants: [{ target: "org:org_1", role: "owner", permissions: ["write"] }],
+        },
+        scopes: ["app:app_other:member"],
+        catalogReadRebind: true,
+        catalogTruncated: true,
+      },
     );
     expect(result.exitCode).toBe(EXIT_OK);
     expect(open).not.toHaveBeenCalled();
-    expect(requests[0]?.url).toMatch(/\/orgs\/org_1\/apps$/);
-    expect(requests).toHaveLength(2);
+    expect(requests.some((request) => request.url.endsWith("/orgs/org_1/apps"))).toBe(false);
+    const app = requests.find((request) => request.url.endsWith("/apps/app_beyond_page"));
+    expect(app?.headers.get("authorization")).toBe(`Bearer ${CATALOG_READ}`);
+    expect(mutations(requests)).toHaveLength(1);
+    expect(mutations(requests)[0]?.headers.get("authorization")).toBe(
+      `Bearer ${session.credential.accessToken}`,
+    );
+    expect(requests.some((request) => request.url.endsWith("/oauth2/device_authorization"))).toBe(
+      false,
+    );
+    expect(requests.every((request) => !request.headers.has("Splitch-PAT-Authorization"))).toBe(
+      true,
+    );
+  });
+
+  it("creates a finite App grant inside the session's Organization scope without approval", async () => {
+    const { result, requests, session } = await run(
+      ["create", "--name", "x", "--grant", "app:app_1:admin:write,delete"],
+      { scopes: ["org:org_1:owner"], catalogReadRebind: true },
+    );
+    expect(result.exitCode).toBe(EXIT_OK);
+    expect(open).not.toHaveBeenCalled();
+    const app = requests.find((request) => request.url.endsWith("/apps/app_1"));
+    expect(app?.headers.get("authorization")).toBe(`Bearer ${CATALOG_READ}`);
+    expect(requests).toHaveLength(3);
     expect(mutations(requests)[0]?.headers.get("authorization")).toBe(
       `Bearer ${session.credential.accessToken}`,
     );
@@ -122,7 +153,7 @@ describe("CLI Personal Access Token Organization coverage", () => {
     );
     expect(result.exitCode).toBe(EXIT_OK);
     expect(open).not.toHaveBeenCalled();
-    const catalog = requests.find((request) => request.url.endsWith("/orgs/org_1/apps"));
+    const catalog = requests.find((request) => request.url.endsWith("/apps/app_1"));
     expect(catalog?.headers.get("authorization")).toBe(`Bearer ${CATALOG_READ}`);
     expect(mutations(requests)[0]?.headers.get("authorization")).toBe(
       `Bearer ${session.credential.accessToken}`,
@@ -135,12 +166,12 @@ describe("CLI Personal Access Token Organization coverage", () => {
   it("propagates an App catalog lookup failure before browser approval or mutation", async () => {
     const { result, requests, output } = await run(
       ["create", "--name", "x", "--grant", "app:app_1:member:read"],
-      { scopes: ["org:org_1:owner"], catalogFailure: true },
+      { scopes: ["org:org_1:owner"], catalogFailure: true, catalogReadRebind: true },
     );
     expect(result.exitCode).toBe(EXIT_API);
     expect(open).not.toHaveBeenCalled();
     expect(mutations(requests)).toHaveLength(0);
-    expect(requests).toHaveLength(1);
+    expect(requests).toHaveLength(2);
     expect(output).toContain("App catalog unavailable");
   });
 });

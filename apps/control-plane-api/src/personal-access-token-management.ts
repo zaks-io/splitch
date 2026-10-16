@@ -48,15 +48,17 @@ export async function authorizeIssuance(
   const reason = personalAccessTokenStepUpReason(input);
   const approval =
     principal.authDoor === "device_flow" ? principal.personalAccessTokenStepUp : undefined;
-  if (!approval) {
-    return reason
-      ? `${reason}; rerun the same splitch tokens command to approve in the browser`
-      : undefined;
-  }
+  if (reason && !approval)
+    return `${reason}; rerun the same splitch tokens command to approve in the browser`;
   return {
-    jti: approval.jti,
-    consumedAt: new Date(deps.nowMs?.() ?? Date.now()).toISOString(),
-    expiresAt: new Date(approval.expiresAt * 1000).toISOString(),
+    cleanup,
+    approval: approval
+      ? {
+          jti: approval.jti,
+          consumedAt: new Date(deps.nowMs?.() ?? Date.now()).toISOString(),
+          expiresAt: new Date(approval.expiresAt * 1000).toISOString(),
+        }
+      : undefined,
   };
 }
 
@@ -65,9 +67,12 @@ export async function updateProblems(
   userId: string,
   body: Record<string, unknown>,
   nowMs: number,
+  cleanup: boolean,
 ): Promise<ErrorResponse | null> {
   const grants = body.grants as PersonalAccessTokenGrant[] | undefined;
-  if (grants) {
+  // Cleanup reduces stored authority even after membership changes. PAT usage
+  // still intersects the remaining grants with live membership on every call.
+  if (grants && !cleanup) {
     const problem = await grantProblems(access, userId, grants);
     if (problem) return problem;
   }

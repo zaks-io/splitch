@@ -52,6 +52,7 @@ interface RunOptions {
   tokenMode?: boolean;
   catalogReadRebind?: boolean;
   catalogFailure?: boolean;
+  catalogTruncated?: boolean;
 }
 
 type CapturedRequest = Pick<Request, "url" | "method" | "headers" | "text">;
@@ -89,16 +90,46 @@ function catalogResponse(options: RunOptions): Response {
     );
   }
   return Response.json({
-    items: [
-      {
-        id: "app_1",
-        organizationId: "org_1",
-        name: "Example",
-        key: "example",
-        createdAt: TOKEN.createdAt,
-        updatedAt: TOKEN.createdAt,
-      },
-    ],
+    items: options.catalogTruncated
+      ? Array.from({ length: 200 }, (_, index) => ({
+          id: `app_page_${index}`,
+          organizationId: "org_1",
+          name: `App ${index}`,
+          key: `app-${index}`,
+          createdAt: TOKEN.createdAt,
+          updatedAt: TOKEN.createdAt,
+        }))
+      : [
+          {
+            id: "app_1",
+            organizationId: "org_1",
+            name: "Example",
+            key: "example",
+            createdAt: TOKEN.createdAt,
+            updatedAt: TOKEN.createdAt,
+          },
+        ],
+    readLimit: 200,
+    readTruncated: options.catalogTruncated ?? false,
+    cursor: null,
+  });
+}
+
+function appResponse(options: RunOptions, path: string): Response {
+  if (options.catalogFailure) return catalogResponse(options);
+  return Response.json({
+    id: path.split("/").at(-1),
+    organizationId: "org_1",
+    name: "Example",
+    key: "example",
+    createdAt: TOKEN.createdAt,
+    updatedAt: TOKEN.createdAt,
+  });
+}
+
+function tokenListResponse(current: PersonalAccessToken = TOKEN): Response {
+  return Response.json({
+    items: [current],
     readLimit: 200,
     readTruncated: false,
     cursor: null,
@@ -149,14 +180,8 @@ export async function runPersonalAccessTokenStepUp(args: string[], options: RunO
     const path = new URL(request.url).pathname;
     if (path.startsWith("/oauth2/")) return oauthResponse(request, approvalResponse);
     if (path.endsWith("/apps")) return catalogResponse(options);
-    if (request.method === "GET") {
-      return Response.json({
-        items: [options.current ?? TOKEN],
-        readLimit: 200,
-        readTruncated: false,
-        cursor: null,
-      });
-    }
+    if (/\/apps\/[^/]+$/.test(path)) return appResponse(options, path);
+    if (request.method === "GET") return tokenListResponse(options.current);
     return options.mutation ? options.mutation(request) : operationResponse(request);
   };
   const flags =
