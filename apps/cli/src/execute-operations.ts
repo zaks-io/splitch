@@ -23,8 +23,13 @@ import type { CliDeps, CliIo, CliResult } from "./execute-types.js";
 import { EXIT_API, EXIT_AUTH, EXIT_OK, EXIT_SCOPE, EXIT_USAGE } from "./exit-codes.js";
 import { environmentSelectorOverride, parseEvaluationContext } from "./operation-input.js";
 import { emitOperationNotices } from "./operation-notices.js";
+import { refuseSessionOnlyOperation } from "./operation-session-authorization.js";
 import type { ParsedInvocation } from "./parse-args.js";
 import { selectedPersonalAccessToken } from "./personal-access-token-auth.js";
+import {
+  callPersonalAccessTokenMutation,
+  isPersonalAccessTokenMutation,
+} from "./personal-access-token-step-up.js";
 import { createOperationSdks, resolveDataPlaneBaseUrl, sdkForRoute } from "./sdks.js";
 import { exitCodeForServerError, writeServerError } from "./server-errors.js";
 
@@ -188,6 +193,16 @@ export async function executeApiOperation(
     const payload = await withAuthorizationRetry(
       deps,
       async (authorization) => {
+        if (isPersonalAccessTokenMutation(operationId)) {
+          const result = await callPersonalAccessTokenMutation(
+            operationId,
+            input,
+            authorization,
+            deps,
+          );
+          // A mutation may already have consumed approval. Never replay it after a 401.
+          return { status: 200, value: result };
+        }
         const sdks = createOperationSdks(deps);
         const sdk = sdkForRoute(sdks, route);
         const result = await sdk.callOperationById(operationId, input, { authorization });
@@ -223,22 +238,6 @@ export async function executeApiOperation(
   } catch (error) {
     return handleExecutionError(error, io);
   }
-}
-
-function refuseSessionOnlyOperation(
-  route: NonNullable<ReturnType<typeof getRoute>>,
-  deps: CliDeps,
-  io: CliIo,
-): CliResult | null {
-  if (route.permission !== "session-only" || selectedPersonalAccessToken(deps) === undefined)
-    return null;
-  writeCliError(io, {
-    code: "FORBIDDEN",
-    causeSummary: "This operation requires a login session and cannot use SPLITCH_TOKEN",
-    remediation: "Unset SPLITCH_TOKEN and run splitch login before retrying the command",
-    outcome: "user_action_required",
-  });
-  return { exitCode: EXIT_API };
 }
 
 /**

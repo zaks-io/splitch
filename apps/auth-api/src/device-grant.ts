@@ -1,3 +1,7 @@
+import {
+  type AccessTokenAuthorization,
+  accessTokenAuthorizationFromClaim,
+} from "@splitch/contracts";
 import { OAuthError } from "./oauth-errors";
 
 interface DeviceGrant {
@@ -5,6 +9,7 @@ interface DeviceGrant {
   /** Null: a cold-start login with no App yet; the token mints unbound. */
   selectedAppSelector: string | null;
   expiresAt: number;
+  authorization?: AccessTokenAuthorization;
 }
 
 export async function sealDeviceGrant(grant: DeviceGrant, secret: string): Promise<string> {
@@ -27,7 +32,9 @@ export async function openDeviceGrant(
       typeof parsed.deviceCode !== "string" ||
       (typeof parsed.selectedAppSelector !== "string" && parsed.selectedAppSelector !== null) ||
       typeof parsed.expiresAt !== "number" ||
-      parsed.expiresAt <= now
+      parsed.expiresAt <= now ||
+      (parsed.authorization !== undefined &&
+        !accessTokenAuthorizationFromClaim(parsed.authorization))
     ) {
       throw new Error("invalid device grant claims");
     }

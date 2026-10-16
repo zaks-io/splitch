@@ -11,11 +11,11 @@ const DESCRIPTIONS: Readonly<Record<string, string>> = {
   personal_access_tokens_list:
     "List your Personal Access Tokens for the CLI and MCP server: names, grants, expiry, and status. Secrets are never shown.",
   personal_access_tokens_create:
-    "Create a Personal Access Token for the CLI and MCP server without browser sign-in. The secret is written to --output-file and never printed.",
+    "Create a Personal Access Token for the CLI and MCP server. Broader or permanent access requires browser approval. The secret is written to --output-file and never printed.",
   personal_access_tokens_update:
-    "Rename a Personal Access Token or replace its grants or expiry. Takes effect on its next use; the secret is unchanged.",
+    "Rename a Personal Access Token or replace its grants or expiry. Widening access requires browser approval; narrowing stays available without it. The secret is unchanged.",
   personal_access_tokens_rotate:
-    "Replace a Personal Access Token's secret. The old secret stops working; the new one is written to --output-file and never printed.",
+    "Replace a Personal Access Token's secret. Broader or permanent access requires browser approval. The old secret stops working; the new one is written to --output-file and never printed.",
   personal_access_tokens_revoke: "Revoke a Personal Access Token. Its next use is refused.",
   personal_access_tokens_revoke_all: "Revoke every active Personal Access Token you own.",
 };

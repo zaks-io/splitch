@@ -47,7 +47,7 @@ export function createRepository(d1: D1Database) {
     flagChangeEvents: makeFlagChangeEventRepo(d1, db),
     claim: makeClaimStateRepo(d1),
     identity: makeIdentityRepo(db, d1),
-    personalAccessTokens: makePersonalAccessTokenRepo(db),
+    personalAccessTokens: makePersonalAccessTokenRepo(db, d1),
     privacy: makePrivacyRepo(db, d1),
     approvals: makeApprovalRepo(db, d1),
     runSrmAlarms: makeRunSrmAlarmRepo(db, d1),

@@ -15,7 +15,11 @@
  * must equal the control-plane audience.
  */
 
-import { accessTokenIssuedAt, isCanonicalHeldScopes } from "@splitch/contracts";
+import {
+  accessTokenIssuedAt,
+  isCanonicalHeldScopes,
+  PAT_MANAGEMENT_AUTHORIZATION,
+} from "@splitch/contracts";
 import { type AccessTokenPublicJwk, accessTokenPublicJwkFromSecret } from "./access-token-key";
 
 export interface VerifiedActor {
@@ -133,6 +137,9 @@ function actorFromClaims(
 ): VerifiedActor | null {
   // Must be a genuine access token, not an identity_assertion replayed as a Bearer.
   if (claims.typ !== "access_token" || typeof claims.sub !== "string") {
+    return null;
+  }
+  if (claims.authorization === PAT_MANAGEMENT_AUTHORIZATION) {
     return null;
   }
   if (claims.iss !== issuer) {

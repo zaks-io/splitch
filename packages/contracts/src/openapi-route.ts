@@ -1,6 +1,7 @@
 import { createRoute, type RouteConfig, z } from "@hono/zod-openapi";
 import { errorStatusByCode } from "./error-status";
 import { type ErrorCode, ErrorResponseSchema } from "./errors";
+import { derivedErrors, selectorAwareRequest } from "./openapi-route-request";
 import {
   IDEMPOTENCY_KEY_MAX_LENGTH,
   IDEMPOTENCY_KEY_PATTERN,
@@ -16,7 +17,6 @@ import {
   type RouteContract,
   type RouteOwner,
 } from "./route-contract";
-import { derivedErrors, selectorAwareRequest } from "./openapi-route-request";
 import type { RouteEffects } from "./route-effects";
 
 /**
@@ -45,6 +45,7 @@ const IDEMPOTENCY_HEADER = "Idempotency-Key";
 export interface ApiRouteRequest {
   params?: z.ZodObject;
   query?: z.ZodObject;
+  headers?: z.ZodObject;
   body?: z.ZodTypeAny;
   /**
    * When set, the registrar validates this schema instead of `body`. OpenAPI
@@ -147,6 +148,7 @@ function runtimeInput(request: ApiRouteRequest | undefined): z.ZodTypeAny {
   if (request?.query) {
     shape.query = request.query;
   }
+  if (request?.headers) shape.headers = request.headers;
   const body = request?.runtimeBody ?? request?.body;
   if (body) {
     shape.body = body;
@@ -167,9 +169,12 @@ type HonoToOpenApiPath<S extends string> = S extends `${infer Head}/:${infer Nam
     : S;
 
 function buildOpenApiRequestConfig(request: ApiRouteRequest | undefined) {
-  if (!request) {
-    return undefined;
-  }
+  if (!request) return undefined;
+  const parts = buildOpenApiRequestParts(request);
+  return request.headers ? { ...parts, headers: request.headers } : parts;
+}
+
+function buildOpenApiRequestParts(request: ApiRouteRequest) {
   if (request.params) {
     return {
       params: request.params,
@@ -177,9 +182,7 @@ function buildOpenApiRequestConfig(request: ApiRouteRequest | undefined) {
       ...(request.body ? { body: { content: { [JSON_CONTENT]: { schema: request.body } } } } : {}),
     };
   }
-  if (request.query) {
-    return { query: request.query };
-  }
+  if (request.query) return { query: request.query };
   if (request.body) {
     return { body: { content: { [JSON_CONTENT]: { schema: request.body } } } };
   }

@@ -1,5 +1,9 @@
 import type { AccessTokenAuthorization } from "@splitch/contracts";
-import { rememberMemberProfile } from "@splitch/contracts";
+import {
+  PAT_MANAGEMENT_AUTHORIZATION,
+  PERSONAL_ACCESS_TOKEN_STEP_UP_TTL_SECONDS,
+  rememberMemberProfile,
+} from "@splitch/contracts";
 import type { PerformanceSpanRecorder } from "@splitch/observability/performance-spans";
 import type { DeviceFlowPort } from "./device-flow";
 import { openDeviceGrant, sealDeviceGrant } from "./device-grant";
@@ -75,6 +79,7 @@ export async function authorizeDevice(
     const selector =
       parsed.data.app ??
       (parsed.data.scope ? parseSelectedAppRequest(parsed.data.scope).selector : null);
+    assertCompatibleDeviceAuthorization(parsed.data.authorization, selector);
     const grant = await deps.deviceFlow.authorizeDevice({});
     return Response.json({
       ...grant,
@@ -83,6 +88,7 @@ export async function authorizeDevice(
           deviceCode: grant.device_code,
           selectedAppSelector: selector,
           expiresAt: deps.now() + grant.expires_in * 1000,
+          ...(parsed.data.authorization ? { authorization: parsed.data.authorization } : {}),
         },
         deps.accessSecret,
       ),
@@ -111,10 +117,28 @@ export async function exchangeDeviceCode(
     const grant = await openDeviceGrant(parsed.data.device_code, deps.accessSecret, deps.now());
     assertUnchangedDeviceSelection(parsed.data.scope, grant.selectedAppSelector);
     assertCompatibleDeviceAuthorization(access.authorization, grant.selectedAppSelector);
+    assertUnchangedPatAuthorization(access.authorization, grant.authorization);
     const deviceToken = await deps.deviceFlow.exchangeDeviceCode({
       deviceCode: grant.deviceCode,
     });
     const email = requireDeviceEmail(deviceToken);
+    if (access.authorization === PAT_MANAGEMENT_AUTHORIZATION) {
+      const accessToken = await deps.tokenSigner.mintAccessToken(
+        deviceToken.userId,
+        [],
+        "device_flow",
+        nowSeconds,
+        access.audience,
+        access.authorization,
+      );
+      return Response.json({
+        access_token: accessToken,
+        token_type: "Bearer",
+        expires_in: PERSONAL_ACCESS_TOKEN_STEP_UP_TTL_SECONDS,
+        user_id: deviceToken.userId,
+        email,
+      });
+    }
     await rememberMemberProfile(deps.sessionStore, deviceToken.userId, email);
     const binding = await resolveDeviceBinding(
       deps.repo,
@@ -167,7 +191,22 @@ function assertCompatibleDeviceAuthorization(
   if (authorization && selector) {
     throw new OAuthError(
       "invalid_request",
-      "membership-wide read authorization cannot be combined with an App selection",
+      `${authorization} authorization cannot be combined with an App selection`,
+    );
+  }
+}
+
+function assertUnchangedPatAuthorization(
+  requested: AccessTokenAuthorization | undefined,
+  granted: AccessTokenAuthorization | undefined,
+): void {
+  if (
+    (requested === PAT_MANAGEMENT_AUTHORIZATION || granted === PAT_MANAGEMENT_AUTHORIZATION) &&
+    requested !== granted
+  ) {
+    throw new OAuthError(
+      "invalid_grant",
+      "PAT management authorization must match the original device approval request",
     );
   }
 }

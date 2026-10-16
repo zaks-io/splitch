@@ -1,12 +1,11 @@
 import {
   bindingKey,
   describeOAuthFault,
-  deviceAuthorizationError,
   MEMBERSHIP_WIDE_READ_AUTHORIZATION,
   readOAuthFault,
   type TokenAuthorization,
 } from "./auth-binding.js";
-import { openDeviceApproval } from "./auth-device-approval.js";
+import { type DeviceTokenBody, requestDeviceApproval } from "./auth-device-approval.js";
 import { ensurePrincipalEmail } from "./auth-email-backfill.js";
 import {
   type AuthDeps,
@@ -24,9 +23,8 @@ import {
   refuseTokenModeSessionCommand,
   selectedPersonalAccessToken,
 } from "./personal-access-token-auth.js";
-import { authOriginRequiresHttps, resolveAuthBaseUrl } from "./sdks.js";
+import { resolveAuthBaseUrl } from "./sdks.js";
 
-const DEVICE_CODE_GRANT = "urn:ietf:params:oauth:grant-type:device_code";
 const CLI_CLIENT_ID = "splitch-cli";
 
 export interface AuthSession {
@@ -40,40 +38,9 @@ export async function loginWithDeviceFlow(
   appSelector: string | null,
 ): Promise<AuthSession> {
   refuseTokenModeSessionCommand(deps, "splitch login");
-  const fetchImpl = deps.fetch ?? fetch;
-  const authBaseUrl = resolveAuthBaseUrl(deps);
-  const auth = await formPost(fetchImpl, `${authBaseUrl}/oauth2/device_authorization`, {
-    client_id: CLI_CLIENT_ID,
+  const tokenBody = await requestDeviceApproval(deps, {
     ...(appSelector ? { app: appSelector } : {}),
   });
-  if (!auth.ok) {
-    throw deviceAuthorizationError(await readOAuthFault(auth));
-  }
-  const grant = (await auth.json()) as {
-    device_code: string;
-    user_code: string;
-    verification_uri: string;
-    verification_uri_complete?: string;
-    interval?: number;
-  };
-
-  await openDeviceApproval({
-    verificationUri: grant.verification_uri,
-    verificationUriComplete: grant.verification_uri_complete,
-    userCode: grant.user_code,
-    authBaseUrl,
-    requireHttps: authOriginRequiresHttps(deps),
-  });
-
-  const intervalMs = (grant.interval ?? 5) * 1000;
-  const maxAttempts = 30;
-  const tokenBody = await pollDeviceApproval(
-    fetchImpl,
-    authBaseUrl,
-    grant.device_code,
-    intervalMs,
-    maxAttempts,
-  );
   const file = buildCredentialFile(tokenBody);
   await deps.credentialStore.save(file);
   return {
@@ -81,51 +48,6 @@ export async function loginWithDeviceFlow(
     principal: file.principal,
     selectedAppId: file.credential.selectedAppId ?? null,
   };
-}
-
-interface DeviceTokenBody {
-  access_token: string;
-  refresh_token: string;
-  expires_in?: number;
-  user_id?: string;
-  email?: string;
-  app_id?: string;
-}
-
-async function pollDeviceApproval(
-  fetchImpl: typeof fetch,
-  authBaseUrl: string,
-  deviceCode: string,
-  intervalMs: number,
-  maxAttempts: number,
-): Promise<DeviceTokenBody> {
-  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
-    await sleep(intervalMs);
-    const token = await formPost(fetchImpl, `${authBaseUrl}/oauth2/token`, {
-      grant_type: DEVICE_CODE_GRANT,
-      device_code: deviceCode,
-      client_id: CLI_CLIENT_ID,
-    });
-    if (token.status === 200) {
-      return (await token.json()) as DeviceTokenBody;
-    }
-    const fault = await readOAuthFault(token);
-    if (fault.error === "email_unverified") {
-      throw emailUnverifiedError(fault.description);
-    }
-    if (fault.error !== "authorization_pending" && fault.error !== "slow_down") {
-      throw new SplitchCliError({
-        code: "CLI_DEVICE_TOKEN_EXCHANGE_FAILED",
-        causeSummary: `Device token exchange failed with ${describeOAuthFault(fault)}`,
-        remediation: "Restart splitch login and complete the new device authorization",
-      });
-    }
-  }
-  throw new SplitchCliError({
-    code: "CLI_DEVICE_APPROVAL_TIMEOUT",
-    causeSummary: "Device approval timed out",
-    remediation: "Run splitch login again and approve the request before it expires",
-  });
 }
 
 function buildCredentialFile(body: DeviceTokenBody): CliCredentialFile {
@@ -144,6 +66,13 @@ function buildCredentialFile(body: DeviceTokenBody): CliCredentialFile {
     throw emailUnverifiedError(
       "Device token response carried no verified email for the session principal",
     );
+  }
+  if (!body.refresh_token) {
+    throw new SplitchCliError({
+      code: "CLI_DEVICE_TOKEN_EXCHANGE_FAILED",
+      causeSummary: "Device token response carried no refresh token for the login session",
+      remediation: "Run splitch login again to create a complete login session",
+    });
   }
   return {
     version: 1,
@@ -258,10 +187,4 @@ function storedBinding(stored: CliCredentialFile): string {
     stored.credential.accessTokenBinding ??
     (stored.credential.selectedAppId ? `app:${stored.credential.selectedAppId}` : "")
   );
-}
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => {
-    setTimeout(resolve, ms);
-  });
 }

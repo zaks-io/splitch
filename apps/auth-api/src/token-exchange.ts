@@ -1,7 +1,9 @@
+import type { AccessTokenAuthorization } from "@splitch/contracts";
 import {
-  type AccessTokenAuthorization,
-  MEMBERSHIP_WIDE_READ_AUTHORIZATION,
-} from "@splitch/contracts";
+  type AccessTokenClaims,
+  accessTokenAuthorizationClaims,
+  assertIdentityExchangeAuthorization,
+} from "./access-token-claims";
 import { accessTokenPrivateJwkFromSecret, accessTokenSigningKey } from "./access-token-key";
 import { OAuthError } from "./oauth-errors";
 
@@ -38,22 +40,8 @@ interface AssertionClaims {
 }
 
 type AssertionAuthDoor = "id_jag" | "anonymous";
-type AccessTokenAuthDoor = "id_jag" | "anonymous" | "device_flow" | "client_credentials";
 
 export type AccessTokenTrustContract = "local-hs256" | "rs256-jwks";
-
-interface AccessTokenClaims {
-  typ: "access_token";
-  sub: string;
-  iss: string;
-  aud: string;
-  iat: number;
-  exp: number;
-  scopes: string[];
-  auth_door: AccessTokenAuthDoor;
-  demo_expires_at?: string;
-  authorization?: AccessTokenAuthorization;
-}
 
 function bytesToBase64Url(bytes: Uint8Array): string {
   let binary = "";
@@ -303,6 +291,7 @@ export function makeTokenSigner(opts: {
       audience = opts.controlPlaneAudience,
       authorization,
     ) {
+      assertIdentityExchangeAuthorization(authorization);
       const claims = await verifyAndDecode(assertion, opts.assertionSecret);
       const exchanged = exchangedAssertionClaims(claims, nowSeconds);
       const access = accessTokenClaimsForExchange(exchanged, {
@@ -336,9 +325,6 @@ export function makeTokenSigner(opts: {
       audience = opts.controlPlaneAudience,
       authorization,
     ) {
-      if (authorization === MEMBERSHIP_WIDE_READ_AUTHORIZATION && scopes.length !== 0) {
-        throw new Error("membership-wide read tokens cannot carry selector scopes");
-      }
       const access: AccessTokenClaims = {
         typ: "access_token",
         sub: userId,
@@ -348,7 +334,14 @@ export function makeTokenSigner(opts: {
         exp: nowSeconds + ACCESS_TOKEN_TTL_SECONDS,
         scopes,
         auth_door: authDoor,
-        ...(authorization ? { authorization } : {}),
+        ...accessTokenAuthorizationClaims(
+          authorization,
+          scopes,
+          authDoor,
+          audience,
+          opts.controlPlaneAudience,
+          nowSeconds,
+        ),
       };
       return signAccessJwt(access, opts.accessSecret, accessTokenTrustContract);
     },

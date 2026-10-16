@@ -14,6 +14,7 @@ import type { ControlPlaneApiEnv } from "./env";
 import { FLAG_CHANGE_LOG_RETENTION_MS } from "./flag-change-log-retention";
 import { deleteOrphanedPrivacyExports } from "./privacy-export-cleanup";
 import { dispatchSentryWebhooks } from "./sentry-webhook-dispatch";
+import { runPersonalAccessTokenRetention } from "./personal-access-token-rotation";
 
 const service = "splitch-control-plane-api";
 
@@ -24,6 +25,13 @@ export function runControlPlaneScheduled(
 ): void {
   ctx.waitUntil(reconcilePrivacyJobs(env, new Date(event.scheduledTime)));
   ctx.waitUntil(purgeExpiredPrivacyArtifacts(env, new Date(event.scheduledTime)));
+  ctx.waitUntil(
+    runPersonalAccessTokenRetention(
+      createRepository(env.DB).personalAccessTokens,
+      env.SESSION_STORE,
+      event.scheduledTime,
+    ),
+  );
   // Integration delivery belongs to the minute cron alone. Running it on every
   // tick would fire a second concurrent dispatch at 08:00, when both crons
   // land: the Convex and Cloudflare paths lease their deliveries and would

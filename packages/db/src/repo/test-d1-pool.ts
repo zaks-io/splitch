@@ -29,6 +29,8 @@ export const RESET_TABLES = [
   "variants",
   "flags",
   "device_refresh_sessions",
+  "personal_access_token_rotations",
+  "personal_access_token_step_up_uses",
   "personal_access_tokens",
   "trusted_idps",
   "app_memberships",

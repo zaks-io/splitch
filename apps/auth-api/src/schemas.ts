@@ -1,4 +1,7 @@
-import { MEMBERSHIP_WIDE_READ_AUTHORIZATION } from "@splitch/contracts";
+import {
+  MEMBERSHIP_WIDE_READ_AUTHORIZATION,
+  PAT_MANAGEMENT_AUTHORIZATION,
+} from "@splitch/contracts";
 import { z } from "zod";
 import { jwksUrlError, normalizeJwksUrl } from "./jwks-url";
 
@@ -59,6 +62,9 @@ export const DeviceAuthorizationRequestSchema = z.object({
   client_id: z.string().min(1),
   app: z.string().min(1).optional(),
   scope: z.string().min(1).optional(),
+  authorization: z
+    .enum([MEMBERSHIP_WIDE_READ_AUTHORIZATION, PAT_MANAGEMENT_AUTHORIZATION])
+    .optional(),
 });
 
 /** POST /oauth2/token: Door C device-code polling grant. */
@@ -68,7 +74,9 @@ export const DeviceTokenRequestSchema = z.object({
   client_id: z.string().min(1).optional(),
   scope: z.string().min(1).optional(),
   resource: z.url().optional(),
-  authorization: z.literal(MEMBERSHIP_WIDE_READ_AUTHORIZATION).optional(),
+  authorization: z
+    .enum([MEMBERSHIP_WIDE_READ_AUTHORIZATION, PAT_MANAGEMENT_AUTHORIZATION])
+    .optional(),
 });
 
 /**
@@ -99,6 +107,7 @@ export const ClientCredentialsRequestSchema = z.object({
   client_secret: z.string().min(1),
   scope: z.string().min(1).optional(),
   resource: z.url().optional(),
+  authorization: z.never().optional(),
 });
 
 /** POST /oauth2/revoke: RFC 7009 token revocation. */

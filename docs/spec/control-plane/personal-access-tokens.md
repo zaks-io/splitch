@@ -2,7 +2,7 @@
 
 How a user connects the remote MCP server or runs the CLI from machines that cannot complete browser
 sign-in (remote servers, sandboxes), and how those tokens are created, scoped, rotated, and revoked.
-The decision record includes the 2026-10-03 and 2026-10-15 amendments to
+The decision record includes the 2026-10-03, 2026-10-15, and 2026-10-16 amendments to
 [ADR-0022](../../adr/0022-agent-and-human-auth-via-auth-md-one-principal-three-doors.md).
 
 ## Shape
@@ -39,13 +39,26 @@ provision one. Rotating or reconfiguring it needs `credentials`.
 At create and update, an `org:` or `app:` grant must name a membership the caller holds now, with a
 ceiling at or below the caller's live role. `all` is checked at use time.
 
-Grants are checked against live membership, not against the scopes of the access token that creates
-or updates them. The accepted residual risk is bounded to the CLI `device_flow` door and the
-shared-preview-only `client_credentials` smoke grant. An App-bound CLI token can still mint an `all`,
-never-expiring PAT. Its access token lives next to the refresh token in the CLI credential store.
-Creating, updating, and rotating PATs explicitly allow only those two doors. Un-pausing ID-JAG or
-adding a door does not silently grant PAT management; missing and unknown doors are also refused.
-A step-up credential from Auth API remains the deferred full fix, as recorded in the ADR amendment.
+The shared `personalAccessTokenNeedsStepUp` contract also checks issuance against the calling
+access token's authority. Without step-up, each resulting grant must have an `app:` or `org:`
+target covered by one of that token's scopes and a role at or below the scope's role. Organization
+scopes cover Apps in that Organization. Any nonempty `permissions` requires write authority on
+the target; `membership-wide-read` permits only `permissions: []`. Access-token scopes carry roles,
+not individual PAT permissions. Role checks still clamp each PAT call to the effective live role.
+The resulting expiry must be finite.
+
+Fresh browser approval is required for an `all` grant, an uncovered target, a higher role, permissions
+over read-only authority, permanent issuance, or rotation of a PAT whose grants or expiry would
+require approval. Any widening update requires approval even if the result fits the session's
+scopes. A resulting grant widens authority unless a stored grant covers its target at an equal or
+higher role with a superset of its permissions. Adding any permission is widening. Changing a finite
+expiry to `null` is permanent issuance.
+
+Cleanup takes precedence. An update that strictly narrows stored grants or shortens expiry without
+issuing a secret or increasing any other authority needs no step-up, even for an already broad or
+permanent token. Leaving a permanent expiry unchanged while narrowing grants does not issue a new
+permanent token. The server compares the resulting request against its stored row, never a
+caller-supplied account of prior authority. Live-membership checks remain in place.
 
 At use time, the Control Plane resolves the owner's live memberships and keeps only those a grant
 covers, at the clamped role. That set is the principal's read authority. Every Control Plane route
@@ -64,7 +77,8 @@ by permission. Path-less reads such as `principal_capabilities_get` work with an
 Approval `approve_and_apply` checks the stored proposal operation's permission and role against the
 current token before application; every `ApprovalOperation` has a typed mapping, and winner Promotion
 uses `write` at App admin. A decline needs `write`. Listing and revoking one's own PATs bypass
-permission narrowing. Create, update, rotate, and `current_user_delete` refuse every PAT.
+permission narrowing. Create, update, rotate, and `current_user_delete` refuse every PAT. Strict cleanup updates remain
+available to the owner through an authenticated session.
 
 ## Request path
 
@@ -104,13 +118,30 @@ effective authority are reported separately so a caller can see the effect of cu
 ## Routes
 
 CLI-only Control Plane routes on the public bearer door, keyed by the calling user. They derive no MCP
-tool and are never mounted on the MCP or panel bindings. Create, update, and rotate require
-`device_flow` or `client_credentials` authentication. Every other door gets `FORBIDDEN` with guidance
+tool and are never mounted on the MCP or panel bindings. Create, non-cleanup update, and rotate
+require `device_flow` or `client_credentials` authentication. Every other door gets `FORBIDDEN` with guidance
 to sign in with `splitch login`. List, revoke, and revoke-all remain available to any authenticated
 door of the owning user. Listing returns metadata only, and revocation reduces authority, so this
 allow-list must never block credential cleanup. A PAT can list and revoke its owner's tokens,
 including itself. Session-only refusals tell CLI callers to unset `SPLITCH_TOKEN` and run
 `splitch login`.
+
+When the grant and expiry rule above requires approval, only a `device_flow` session can satisfy it.
+The original session remains the `Authorization` bearer; a separate `Splitch-PAT-Authorization`
+header carries the step-up JWT. The server independently checks its signature, issuer, Control
+Plane audience, `authorization: "pat-management"`, `auth_door: "device_flow"`, empty scopes, `jti`,
+at most 300-second lifetime, current freshness, and subject equal to the authenticated owner.
+It accepts this JWT only on create, update, and rotate, and rejects it as a bearer everywhere else.
+The request contract and CORS allow the dedicated header. Neither authorization header is logged.
+Missing, unknown, expired, wrong-subject, or replayed approval returns `403 FORBIDDEN` with the reason
+and guidance to rerun the same `splitch tokens` command to approve in the browser. The refusal never
+echoes other memberships' grants.
+
+The shared-preview `client_credentials` door cannot request or present step-up authorization. Its
+configured `org:org_shared_preview_smoke:owner` scope still permits a one-hour Organization admin
+PAT with all five permissions and a separate one-hour Organization member PAT with `permissions: []`.
+It cannot mint an `all` grant or a permanent token. Production, where this grant is disabled, is
+unchanged.
 
 | operation                           | method + path                                  | returns                    |
 | ----------------------------------- | ---------------------------------------------- | -------------------------- |
@@ -124,6 +155,23 @@ including itself. Session-only refusals tell CLI callers to unset `SPLITCH_TOKEN
 Every write updates the SESSION_STORE entry, and a failed write fails loud. A create whose KV write
 fails revokes its own row before raising, so no unusable active token remains. Re-running revoke
 rewrites the tombstone.
+
+For create and update, D1 inserts the approval's `jti` into `personal_access_token_step_up_uses`
+in the same batch as the PAT write. The primary key makes consumption single-use, including
+concurrent requests. A refused consumption leaves both D1 and KV unchanged.
+
+Rotation first atomically claims the approval and the PAT's current-hash operation in D1 before
+any KV read or write. The claim binds the authenticated owner, PAT id, current hash, and canonical
+operation fingerprint. Only its owner may tombstone the old secret, publish the candidate, and
+perform the guarded D1 hash swap. Competing or replayed claims make zero KV calls. The durable
+phase record contains only non-secret hashes and identifiers. D1 atomicity does not make KV atomic.
+A failure leaves a pending operation; scheduled recovery revokes the PAT and tombstones both old
+and candidate hashes without issuing another secret. Pending claims remain owned until reconciled,
+so retries cannot alter KV or make two secrets usable.
+
+The scheduled retention sweep scans all users in bounded pages, including inactive users. Terminal
+consumption records remain until beyond the token's expiry plus 24 hours. Unresolved rotation
+claims are reconciled rather than deleted by age, and unexpired approval never becomes replayable.
 
 ## CLI
 
@@ -153,6 +201,17 @@ secrets fail on the next call. Logging out of a CLI session does not revoke its 
   CLI revokes the unusable token.
 - Output is metadata only: id, grants, expiry, status, a hash fingerprint, `secretWrittenTo`, and
   `envVar`.
+
+Before create, update, or rotate, the CLI applies the shared step-up rule using the original session
+and, for updates and rotation, the server's current token metadata. When approval is needed, it starts
+a new device flow with `authorization: "pat-management"` at initiation and polling, then opens the
+existing browser approval. Auth API issues no refresh session or refresh token for this exchange.
+The CLI holds the five-minute, single-use JWT in memory only, sends the management request once
+with both authorization headers, then discards it. It never writes the approval to the credential
+store, an output file, stdout, or stderr. Token mode cannot reach this flow; callers must unset
+`SPLITCH_TOKEN` and use their login session. List, revoke, revoke-all, strict narrowing, and expiry
+shortening never open approval. Logging out still leaves PATs valid; revoke and revoke-all are the
+explicit controls.
 
 `--grant <target>:<role>:<permissions>` is repeatable. Pass `read` for no extra permissions or a
 comma-separated list, for example `--grant app:app_123:admin:write,delete`. The old `:read-write`

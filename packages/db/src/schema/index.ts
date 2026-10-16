@@ -34,4 +34,8 @@ export {
   sentryInstallations,
 } from "./integrations";
 export { personalAccessTokens } from "./personal-access-tokens";
+export {
+  personalAccessTokenStepUpUses,
+  personalAccessTokenRotations,
+} from "./personal-access-token-step-up";
 export { entityDeletions, privacyJobs, privacyRequests } from "./privacy";

@@ -66,6 +66,8 @@ export interface Principal {
    * gets `false` rather than a guess.
    */
   authDoor: AuthDoor | null;
+  /** Verified single-use approval, independent of the bearer session. Never the JWT. */
+  personalAccessTokenStepUp?: { jti: string; expiresAt: number };
 }
 
 /**

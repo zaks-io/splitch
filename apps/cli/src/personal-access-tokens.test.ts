@@ -3,8 +3,11 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { runCli } from "./cli.js";
 import { EXIT_OK, EXIT_USAGE } from "./exit-codes.js";
+import { personalAccessTokenApprovalResponses } from "./personal-access-token-test-fixtures.js";
 import { FakeCliTransport, type FakeResponse, storedCredential } from "./test-fixtures.js";
 import { cleanupTempHomes, makeTempHome } from "./test-helpers.js";
+
+vi.mock("open", () => ({ default: vi.fn() }));
 
 afterEach(async () => {
   vi.restoreAllMocks();
@@ -47,7 +50,10 @@ async function run(args: string[], responses: FakeResponse[] = [createResponse])
   await writeFile(credentialPath, `${JSON.stringify(storedCredential())}\n`);
   const log = vi.spyOn(console, "log").mockImplementation(() => {});
   const error = vi.spyOn(console, "error").mockImplementation(() => {});
-  const transport = new FakeCliTransport(responses);
+  const transport = new FakeCliTransport([
+    ...responses,
+    ...personalAccessTokenApprovalResponses(TOKEN),
+  ]);
   const exitCode = await runCli([...args, "--json"], {
     cwd: dir,
     credentialPath,

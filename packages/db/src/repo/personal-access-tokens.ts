@@ -1,6 +1,7 @@
 import { and, desc, eq, isNull, sql } from "drizzle-orm";
 import { personalAccessTokens } from "../schema/index";
 import type { Db } from "./client";
+import { makePersonalAccessTokenAuthorizationRepo } from "./personal-access-token-authorization";
 
 export type PersonalAccessTokenRow = typeof personalAccessTokens.$inferSelect;
 
@@ -20,7 +21,7 @@ export interface PersonalAccessTokenPatch {
  * as null so the caller fails loud instead of reporting a write that never
  * reached D1.
  */
-export function makePersonalAccessTokenRepo(db: Db) {
+export function makePersonalAccessTokenRepo(db: Db, d1: D1Database) {
   const active = (userId: string, id: string) =>
     and(
       eq(personalAccessTokens.userId, userId),
@@ -29,6 +30,7 @@ export function makePersonalAccessTokenRepo(db: Db) {
     );
 
   return {
+    ...makePersonalAccessTokenAuthorizationRepo(d1),
     async insert(
       values: typeof personalAccessTokens.$inferInsert,
     ): Promise<PersonalAccessTokenRow> {

@@ -1,3 +1,4 @@
+import { z } from "@hono/zod-openapi";
 import { describe, expect, it } from "vitest";
 import {
   accessTokenAuthDoorFromClaim,
@@ -6,11 +7,13 @@ import {
   isPersonalAccessTokenSecret,
   type PersonalAccessTokenGrant,
   PersonalAccessTokenGrantSchema,
-  personalAccessTokenPermissions,
   personalAccessTokenAuthority,
   personalAccessTokenExpired,
+  personalAccessTokenPermissions,
   UpdatePersonalAccessTokenRequestSchema,
 } from "./index";
+
+import { personalAccessTokenRoutes } from "./routes/routes-personal-access-tokens";
 
 const MEMBERSHIPS = {
   organizations: [
@@ -180,6 +183,23 @@ describe("principal capabilities Personal Access Token metadata", () => {
 });
 
 describe("personal access token request schemas", () => {
+  it("declares the dedicated optional approval header on create, update, and rotate", () => {
+    for (const route of [
+      personalAccessTokenRoutes[1],
+      personalAccessTokenRoutes[2],
+      personalAccessTokenRoutes[3],
+    ]) {
+      const headers = route.openapi.request?.headers;
+      expect(headers).toBeInstanceOf(z.ZodObject);
+      if (!(headers instanceof z.ZodObject)) throw new Error("missing approval header schema");
+      expect(headers.safeParse({}).success).toBe(true);
+      expect(headers.parse({ "splitch-pat-authorization": "approval" })).toEqual({
+        "splitch-pat-authorization": "approval",
+      });
+      expect(headers.safeParse({ "splitch-pat-authorization": "" }).success).toBe(false);
+    }
+  });
+
   it("accepts an explicit never-expiring token and rejects an empty grant list", () => {
     expect(
       CreatePersonalAccessTokenRequestSchema.safeParse({

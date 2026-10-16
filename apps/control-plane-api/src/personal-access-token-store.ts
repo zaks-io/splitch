@@ -108,6 +108,7 @@ export function makePersonalAccessTokenAuthorityResolver(deps: {
     ) {
       return null;
     }
+    if (await deps.repo.personalAccessTokens.hasPendingRotation(row.userId, row.id)) return null;
     const grants: PersonalAccessTokenGrant[] = parseStoredGrants(row);
     return {
       ...personalAccessTokenAuthority(await deps.membershipAccess.resolve(token.subject), grants),

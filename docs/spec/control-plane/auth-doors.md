@@ -184,7 +184,7 @@ Before creating a WorkOS device authorization, the Worker applies an independent
 ceiling of 10 requests per source IP per hour and 10,000 requests globally per hour. Rejected
 requests never reach WorkOS.
 
-**One approval, many rebinds.** The single human approval mints a durable provider session. Each
+**One approval, many rebinds.** An ordinary login's human approval mints a durable provider session. Each
 access-token mint binds to at most one resource, resolved against live D1 membership keyed by the
 WorkOS User at mint time — never against a WorkOS Organization grant, which personal AuthKit
 sign-ins do not have. `grant_type=refresh_token` accepts an optional `app` or `org` selector (ID
@@ -209,6 +209,26 @@ wide authority for one request without changing the session's stored App default
 is refused for MCP resources, does not change token TTL, and uses the same session revocation check
 as every other access token.
 
+PAT issuance beyond the current access token's authority uses a separate, fresh browser approval.
+Both `/oauth2/device_authorization` and device-code polling set `authorization: "pat-management"`,
+without an App selector. Auth API seals that authorization into the device code, refuses changes
+while polling before contacting WorkOS, and waits for browser approval. The resulting JWT has
+`auth_door: "device_flow"`, empty scopes, a unique `jti`, the Control Plane audience, and a lifetime
+of at most 300 seconds. This exchange neither creates nor updates a refresh session and returns no
+refresh token. Refresh, identity-assertion exchange, and `client_credentials` refuse requests for
+this authorization. The `membership-wide-read` flow and its ordinary refresh behavior are unchanged.
+
+The CLI holds the step-up JWT in memory and sends it once in `Splitch-PAT-Authorization`, alongside
+the original session's `Authorization` bearer. It never stores or prints either approval or PAT
+secrets. The Control Plane independently verifies the approval's signature, issuer, audience, kind,
+freshness, and matching subject. Only PAT create, update, and rotate accept that header; all bearer
+routes refuse a step-up JWT. Consumption is single-use in D1, atomic with create or update. Rotation
+claims approval and the current PAT/hash operation before any KV access, retains pending state on
+failure, and recovers by revoking the PAT and tombstoning both hashes. Bounded scheduled cleanup
+retains terminal records beyond approval expiry plus 24 hours and never ages out unresolved claims.
+Neither authorization header enters logs. Missing or invalid approval returns `403 FORBIDDEN`
+with guidance to rerun the same `splitch tokens` command to approve in the browser.
+
 **Selector resolution is two-pass, ID before key.** An App ID is globally unique; an App key is
 unique per Organization only, and any user may add another user to an Organization they own. So a
 selector is matched against the canonical ID across every reachable App first, and only then
@@ -227,7 +247,7 @@ identifier-shaped" as a property.
 `splitch use` applies the identical two-pass rule client-side; the two must not drift, and
 `apps/cli/src/cli-context.test.ts` pins the client half against the same two attacks.
 
-Auth API stores only a hash of the provider refresh token plus its provider session ID, WorkOS
+For ordinary sessions, Auth API stores only a hash of the provider refresh token plus its provider session ID, WorkOS
 User grant (and Organization grant when one exists), and the canonical selected App ID or none.
 Roles are never stored — the scope's role is reintersected with live membership at every mint.
 Missing or changed authority, expired/revoked provider sessions, and removed membership fail
@@ -272,6 +292,17 @@ command reports configured grants and effective authority separately. Shape, gra
 CLI behavior are in
 [personal-access-tokens.md](personal-access-tokens.md).
 
+Session-only creation, update, and rotation may issue a finite PAT within the access token's own covered
+`app:` or `org:` targets and role ceilings. Any permission requires write authority; a
+`membership-wide-read` token can issue only `permissions: []`. An `all` grant, out-of-scope target,
+higher role, permission over read-only authority, widening update, permanent issuance, or rotation
+of a broad or permanent PAT requires the fresh, 300-second, single-use approval described above.
+Strict narrowing and expiry shortening compare against the stored token and never require approval,
+including when an existing permanent expiry is left unchanged during narrowing. These updates
+remain session-only; a PAT bearer cannot update PATs. List, revoke, and
+revoke-all remain open to every authenticated door of the owner. Logging out does not revoke PATs;
+revoke and revoke-all are the explicit controls.
+
 ## Shared-preview smoke grant: client_credentials
 
 **Endpoint:** `POST /oauth2/token` on the auth-api Worker
@@ -306,7 +337,8 @@ The grant is advertised in OAuth discovery only while enabled.
    `POST /personal-access-tokens`. The test-scoped PAT has one `org:<smoke org id>` grant with
    `role: admin` and `permissions: ["write", "delete", "credentials", "members", "privacy"]`.
    App creation and Flag mutations require admin. The Organization grant covers the seeded App,
-   so no additional App or `all` grant is needed.
+   so no additional App or `all` grant is needed. Its finite one-hour expiry and matching configured
+   Organization owner scope keep issuance within the smoke access token's authority.
 8. Call MCP with the PAT. Hosted MCP verifies WorkOS AuthKit JWTs on its OAuth door, so a
    Splitch-issued `client_credentials` JWT, even with an MCP audience, is not an MCP credential.
    The PAT door delegates to the Control Plane with `authDoor: personal_access_token`, where live
@@ -321,7 +353,10 @@ The grant is advertised in OAuth discovery only while enabled.
 
 This grant is not a production user or agent auth path. It exists to validate the hosted
 Auth API to Control Plane trust contract, PAT-authenticated MCP delegation, and headless CLI access
-with a seeded smoke Organization/App. PAT management accepts this preview-only smoke door; see
+with a seeded smoke Organization/App. PAT management accepts this preview-only smoke door only for
+finite issuance within its own configured targets, roles, and write authority. It cannot obtain or
+present `pat-management`, so an `all` grant or `never` expiry is refused before a PAT write. Cleanup
+needs no approval, and production remains unchanged with this grant disabled. See
 [personal-access-tokens.md](personal-access-tokens.md).
 
 ## Sources

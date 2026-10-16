@@ -85,3 +85,7 @@ export {
   trustedIdps,
   variants,
 } from "./schema/index";
+export {
+  PersonalAccessTokenClaimRefused,
+  type PersonalAccessTokenStepUpUse,
+} from "./repo/personal-access-token-authorization";

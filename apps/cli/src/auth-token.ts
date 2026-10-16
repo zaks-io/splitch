@@ -17,6 +17,7 @@ const CLI_CLIENT_ID = "splitch-cli";
 export interface AuthDeps extends SdkFactoryOptions {
   readonly credentialStore: CredentialStore;
   readonly fetch?: typeof fetch;
+  readonly sleep?: (milliseconds: number) => Promise<void>;
 }
 
 interface RefreshTokenBody {
