@@ -85,3 +85,62 @@ describe.each(handlers)("operator value taint in %s", (_handler, wrap) => {
       expect(reportedFaultRethrows(parse(wrap(fail(value))))).toEqual([1]);
   });
 });
+
+describe.each(handlers)("discarded operand taint in %s", (_handler, wrap) => {
+  it.each([
+    ["comma discards raw left", '(err, "worker_failed")'],
+    ["void discards raw operand", "void err"],
+    ["delete discards raw operand", "delete err.message"],
+    ["assignment ignores raw target", 'err = "worker_failed"'],
+    ["AND assignment ignores raw left", 'err &&= "worker_failed"'],
+    ["OR assignment fixed operands", '({ code: "" }.code ||= "worker_failed")'],
+    ["nullish assignment fixed operands", '({ code: undefined }.code ??= "worker_failed")'],
+  ])("allows discarded input: %s", (_pattern, value) => {
+    for (const [_failure, fail] of failures)
+      expect(reportedFaultRethrows(parse(wrap(fail(value))))).toEqual([]);
+  });
+
+  it.each([
+    ["comma emits raw right", '("worker_failed", err.message)'],
+    ["void result then raw comma value", "(void err, err.message)"],
+    ["delete result then raw comma value", "(delete err.message, String(err))"],
+    ["assignment emits raw right", "value = err.message"],
+    ["AND assignment emits raw right", "value &&= err.message"],
+    ["OR assignment emits raw left", 'err ||= "worker_failed"'],
+    ["OR assignment emits raw right", "value ||= err.message"],
+    ["nullish assignment emits raw left", 'err ??= "worker_failed"'],
+    ["nullish assignment emits raw right", "value ??= err.message"],
+  ])("rejects emitted input: %s", (_pattern, value) => {
+    for (const [_failure, fail] of failures)
+      expect(reportedFaultRethrows(parse(wrap(fail(value))))).toEqual([1]);
+  });
+
+  it.each(["+=", "-=", "*=", "**=", "/=", "%=", "<<=", ">>=", ">>>=", "&=", "|=", "^="])(
+    "tracks both compound assignment operands: %s",
+    (operator) => {
+      for (const [_failure, fail] of failures) {
+        expect(
+          reportedFaultRethrows(parse(wrap(fail(`String(({ code: 1 }.code ${operator} 1))`)))),
+        ).toEqual([]);
+        for (const value of [`err ${operator} 1`, `value ${operator} err.message`])
+          expect(reportedFaultRethrows(parse(wrap(fail(value))))).toEqual([1]);
+      }
+    },
+  );
+
+  it.each(["throw next", "return Promise.reject(next)"])(
+    "allows report comma fixed Error: %s",
+    (sink) => {
+      const body = `const next = (reportFault(err), new Error("worker_failed")); ${sink};`;
+      expect(reportedFaultRethrows(parse(wrap(body)))).toEqual([]);
+    },
+  );
+
+  it.each(["throw next", "return Promise.reject(next)"])(
+    "rejects report comma raw Error: %s",
+    (sink) => {
+      const body = `const next = (reportFault(err), new Error(err.message)); ${sink};`;
+      expect(reportedFaultRethrows(parse(wrap(body)))).toEqual([1]);
+    },
+  );
+});

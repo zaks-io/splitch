@@ -15,6 +15,13 @@ const fixedResultOperators = new Set([
   ts.SyntaxKind.GreaterThanEqualsToken,
 ]);
 
+const rightValueOperators = new Set([
+  ts.SyntaxKind.AmpersandAmpersandToken,
+  ts.SyntaxKind.AmpersandAmpersandEqualsToken,
+  ts.SyntaxKind.CommaToken,
+  ts.SyntaxKind.EqualsToken,
+]);
+
 /**
  * Report-then-rethrow tripwire for catch/rejection callbacks: throw and Promise.reject,
  * caught aliases/properties, operator outputs, derived Error messages and cause options.
@@ -154,10 +161,14 @@ function isCaught(node: ts.Node, caught: Set<string>): boolean {
   return emittedChildren(node).some((child) => isCaught(child, caught));
 }
 
-/** Value taint follows operator results, not the data used to choose those results. */
+/**
+ * Value taint follows emitted results. Predicates, assignment targets, discarded values
+ * and operands of operators with constant results do not contribute taint.
+ */
 function emittedChildren(node: ts.Node): ts.Node[] {
   if (ts.isConditionalExpression(node)) return [node.whenTrue, node.whenFalse];
-  if (ts.isTypeOfExpression(node)) return [];
+  if (ts.isTypeOfExpression(node) || ts.isVoidExpression(node) || ts.isDeleteExpression(node))
+    return [];
   if (ts.isPrefixUnaryExpression(node) && node.operator === ts.SyntaxKind.ExclamationToken)
     return [];
   if (ts.isBinaryExpression(node)) return binaryValues(node);
@@ -171,9 +182,9 @@ function emittedChildren(node: ts.Node): ts.Node[] {
 function binaryValues(node: ts.BinaryExpression): ts.Node[] {
   const operator = node.operatorToken.kind;
   if (fixedResultOperators.has(operator)) return [];
-  // The left side of && can reach the result only as a falsy value, which carries no data.
-  if (operator === ts.SyntaxKind.AmpersandAmpersandToken) return [node.right];
-  // Both operands can contribute data to ||, ?? and the remaining value operators.
+  // Comma discards the left value, = uses it as a target, and && / &&= emit it only when falsy.
+  if (rightValueOperators.has(operator)) return [node.right];
+  // ||, ??, their assignments, and arithmetic/string assignments keep both value sources.
   return [node.left, node.right];
 }
 
