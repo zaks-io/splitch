@@ -1,4 +1,5 @@
-import type { Repository } from "@splitch/db";
+import { createRepository, type Repository } from "@splitch/db";
+import { serializeFault } from "@splitch/observability/worker";
 import { describe, expect, it, vi } from "vitest";
 import { dispatchCloudflarePushes } from "./cloudflare-push-dispatch";
 import { encryptIntegrationSecret, signIntegrationPayload } from "./integration-secret";
@@ -8,6 +9,42 @@ const NOW = new Date("2026-08-25T12:00:00.000Z");
 const DELIVERY_ID = "00000000-0000-4000-8000-000000000001";
 
 describe("Cloudflare configuration push dispatch", () => {
+  it("preserves SQL and the D1 cause from aggregated delivery update failures", async () => {
+    const { repo } = await fixture();
+    const statement = {
+      bind: vi.fn().mockReturnThis(),
+      raw: vi.fn().mockRejectedValue(new Error("D1_ERROR: lease update failed")),
+    };
+    const failingRepo = createRepository({
+      prepare: vi.fn(() => statement),
+    } as unknown as D1Database);
+    // Substitute only the failing persistence boundary, retaining Drizzle's real
+    // query wrapping and the dispatcher's own AggregateError construction.
+    repo.cloudflare.finishDelivery = async () => {
+      await failingRepo.identity.completeAppCreate(DELIVERY_ID, "dispatch-bound-canary");
+    };
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      const failure = await dispatchCloudflarePushes({
+        repo,
+        secretKek: KEY,
+        now: () => NOW,
+        fetcher: async () => new Response(null, { status: 503 }),
+      }).catch((error: unknown) => error);
+      expect(failure).toBeInstanceOf(AggregateError);
+      expect(statement.raw).toHaveBeenCalled();
+      const fault = serializeFault(failure);
+      expect(fault).toContain("Cloudflare delivery lease updates failed");
+      expect(fault).toContain('update "apps" set "create_response" = ?');
+      expect(fault).toContain("D1_ERROR: lease update failed");
+      expect(fault).not.toContain(DELIVERY_ID);
+      expect(fault).not.toContain("dispatch-bound-canary");
+      expect(fault).not.toContain("params:");
+    } finally {
+      consoleError.mockRestore();
+    }
+  });
+
   it("builds and signs the exact snapshot body before recording the applied version", async () => {
     const { repo, finishes } = await fixture();
     const fetcher = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {

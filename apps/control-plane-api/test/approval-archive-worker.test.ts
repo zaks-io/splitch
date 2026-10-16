@@ -126,10 +126,16 @@ describe("Approval Request archival sweep isolation", () => {
 
     const sweep = runApprovalRequestArchival({ repo: h.repo, store, now: NOW });
     for (const poison of poisons) {
-      await expect(sweep).rejects.toThrow(poison);
-      await expect(sweep).rejects.toThrow(
-        `Tinybird quarantined the complete payload for ${poison}`,
-      );
+      await expect(sweep).rejects.toMatchObject({
+        errors: expect.arrayContaining([
+          expect.objectContaining({
+            message: `Approval Request ${poison} archival failed`,
+            cause: expect.objectContaining({
+              message: `Tinybird quarantined the complete payload for ${poison}`,
+            }),
+          }),
+        ]),
+      });
     }
 
     for (const poison of poisons) {
@@ -237,9 +243,15 @@ describe("Approval Request archive verification failures", () => {
     const store = new MemoryApprovalArchiveStore();
     configure(store);
 
-    await expect(runApprovalRequestArchival({ repo: h.repo, store, now: NOW })).rejects.toThrow(
-      message,
-    );
+    await expect(
+      runApprovalRequestArchival({ repo: h.repo, store, now: NOW }),
+    ).rejects.toMatchObject({
+      errors: [
+        expect.objectContaining({
+          cause: expect.objectContaining({ message: expect.stringContaining(message) }),
+        }),
+      ],
+    });
     expect(await approvalRowCounts(h.d1, ids.appId, requestId)).toEqual({
       requests: 1,
       reviews: 2,

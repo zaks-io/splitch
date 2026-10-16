@@ -1,14 +1,70 @@
 import { createRepository } from "@splitch/db";
 import { __setSentryModuleForTests } from "@splitch/observability/sentry-module";
-import { createWorkerObservability } from "@splitch/observability/worker";
+import {
+  createWorkerFaultReporter,
+  createWorkerObservability,
+  serializeFault,
+} from "@splitch/observability/worker";
 import { createRegistrar, PUBLIC_PRINCIPAL } from "@splitch/worker-runtime";
 import { Hono } from "hono";
 import { afterEach, expect, it, vi } from "vitest";
+import { type ApprovalArchiveStore, runApprovalRequestArchival } from "./approval-archive";
+import type { RequestRow } from "./approval-model";
 import { controlPlaneRoute } from "./routes";
 
 afterEach(() => {
   __setSentryModuleForTests(undefined);
   vi.restoreAllMocks();
+});
+
+it("reports real approval archival query failures without bound parameters in Sentry or Workers Logs", async () => {
+  const captureMessage = vi.fn();
+  __setSentryModuleForTests({ captureMessage } as unknown as Parameters<
+    typeof __setSentryModuleForTests
+  >[0]);
+  const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+  const statement = {
+    bind: vi.fn().mockReturnThis(),
+    raw: vi.fn().mockRejectedValue(new Error("D1_ERROR: archive read failed")),
+  };
+  const repo = createRepository({ prepare: vi.fn(() => statement) } as unknown as D1Database);
+  vi.spyOn(repo.approvals, "listArchiveCandidates").mockResolvedValue([
+    {
+      id: "apr_archive_fault",
+      appId: "archive-bound-canary",
+      status: "declined",
+      resolvedAt: "2026-01-01T00:00:00.000Z",
+    } as RequestRow,
+  ]);
+  const failure = await runApprovalRequestArchival({
+    repo,
+    store: {} as ApprovalArchiveStore,
+  }).catch((error: unknown) => error);
+  expect(failure).toBeInstanceOf(AggregateError);
+  expect((failure as AggregateError).message).not.toContain("archive-bound-canary");
+  expect(statement.raw).toHaveBeenCalledOnce();
+  const pending: Promise<unknown>[] = [];
+  createWorkerFaultReporter(
+    { SENTRY_DSN: "https://example@sentry.io/1" },
+    {
+      surface: "control-plane-api",
+      waitUntil: (promise) => pending.push(promise),
+    },
+  )("approval_request_archive_failed", { fault: serializeFault(failure) });
+  await Promise.all(pending);
+  const context = captureMessage.mock.calls[0]?.[1];
+  expect(context.extra.fault).toContain("Approval Request");
+  expect(context.extra.fault).toContain('from "approval_reviews"');
+  expect(context.extra.fault).toContain("D1_ERROR: archive read failed");
+  expect(consoleError).toHaveBeenCalledWith(
+    expect.objectContaining({
+      message: "approval_request_archive_failed",
+      fault: expect.stringContaining("D1_ERROR: archive read failed"),
+    }),
+  );
+  const emitted = JSON.stringify([context, consoleError.mock.calls]);
+  expect(emitted).not.toContain("archive-bound-canary");
+  expect(emitted).not.toContain("params:");
 });
 
 it("keeps a failed App completion opaque to HTTP while reporting SQL and its D1 cause", async () => {

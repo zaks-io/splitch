@@ -14,6 +14,27 @@ const metricQueryConfig = [
 ];
 
 describe("runSnapshotRow", () => {
+  it("preserves the nested ship failure in the fault sink", async () => {
+    const onFault = vi.fn();
+    const underlying = new Error("snapshot connection interrupted");
+    const shipped = await shipCommittedRunSnapshot(
+      {
+        apiUrl: "https://api.tinybird.test",
+        token: "test-token",
+        fetch: () => Promise.reject(underlying),
+        onFault,
+      },
+      run(),
+      scope,
+      [],
+      "now",
+    );
+    expect(shipped).toBe(false);
+    const fault = onFault.mock.calls[0]?.[0]?.fault;
+    expect(fault).toContain("Tinybird Run Snapshot append failed");
+    expect(fault).toContain(underlying.stack);
+  });
+
   it("maps frozen Run values and resolves the Control Variant name", () => {
     expect(runSnapshotRow(run(), scope, metricQueryConfig, "2026-08-03T12:00:00.100Z")).toEqual({
       app_id: "app_1",

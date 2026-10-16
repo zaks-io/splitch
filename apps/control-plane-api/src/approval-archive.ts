@@ -1,4 +1,4 @@
-import { canonicalHash, canonicalJson, type ApprovalRequest } from "@splitch/contracts";
+import { type ApprovalRequest, canonicalHash, canonicalJson } from "@splitch/contracts";
 import { appScope, type Repository } from "@splitch/db";
 import { type RequestRow, type ReviewRow, storedApprovalRequestProjection } from "./approval-model";
 
@@ -77,30 +77,15 @@ export async function runApprovalRequestArchival(input: {
     }
   }
   if (failures.length > 0) {
-    const details = failures
-      .map(({ requestId, error }) => `${requestId}: ${fullError(error)}`)
-      .join("\n");
     throw new AggregateError(
-      failures.map(({ error }) => error),
-      `Approval Request archival failed for ${failures.length} candidate(s):\n${details}`,
+      failures.map(
+        ({ requestId, error }) =>
+          new Error(`Approval Request ${requestId} archival failed`, { cause: error }),
+      ),
+      `Approval Request archival failed for ${failures.length} candidate(s)`,
     );
   }
   return archived;
-}
-
-function fullError(error: unknown): string {
-  if (error instanceof Error) {
-    const rendered = error.stack ?? `${error.name}: ${error.message}`;
-    return error.cause === undefined
-      ? rendered
-      : `${rendered}\nCaused by: ${fullError(error.cause)}`;
-  }
-  if (typeof error === "string") return error;
-  try {
-    return canonicalJson(error);
-  } catch {
-    return String(error);
-  }
 }
 
 async function archiveCandidate(
