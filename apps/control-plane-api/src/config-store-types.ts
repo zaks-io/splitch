@@ -188,6 +188,9 @@ export interface ConfigStoreDeps {
 }
 
 export interface ConfigStoreRuntimeDeps extends ConfigStoreDeps {
+  observeEnvironment(
+    environment: Awaited<ReturnType<Repository["identity"]["getEnvironment"]>>,
+  ): void;
   snapshotMutations: {
     run<T>(operation: () => Promise<T>): Promise<T>;
   };

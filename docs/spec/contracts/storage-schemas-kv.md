@@ -34,9 +34,12 @@ provision, lifecycle checkpoints, reset, and every hosted data-plane read (ADR-0
 may carry the bounded traffic lease defined by ADR-0057. The authority waits for every issued lease
 before a destructive reset, so the lease does not weaken the reset fence or create a KV replica.
 
-The Environment-scoped Config Store writer stores a durable projection journal in its own DO
-storage. Each `projection-key:{kvKey}` entry has value `true` and is committed before that KV key is
-published, including snapshot repairs, deletion tombstones, and Activation configuration writes.
+Only a Temporary Environment's Config Store writer stores a durable projection journal in its own
+DO storage. The writer derives the immutable kind from the stored Environment row inside its
+mutation queue before the first publication, including the create-time Sync copy. Permanent
+Environments write no journal entries and incur no per-publication journal storage operation.
+Each `projection-key:{kvKey}` entry has value `true` and is committed before that KV key is published,
+including snapshot repairs, deletion tombstones, and Activation configuration writes.
 Ordinary deletion retains entries. Temporary Environment teardown enumerates this journal rather
 than D1 rows, deletes every listed projection, and clears journal and revision state only after all
 deletes succeed. A crash or deletion failure leaves both the journal and Environment row for retry.

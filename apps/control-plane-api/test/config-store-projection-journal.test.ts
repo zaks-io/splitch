@@ -34,9 +34,17 @@ beforeEach(async () => {
   }
 });
 
-it.each(["cache-miss repair", "explicit repair", "resync", "write"])(
-  "journals every projection from %s through the production writer",
-  async (operation) => {
+it.each(
+  ["permanent", "temporary"].flatMap((kind) =>
+    ["cache-miss repair", "explicit repair", "resync", "write"].map((operation) => ({
+      kind,
+      operation,
+    })),
+  ),
+)(
+  "selects $kind journaling for $operation through the production writer",
+  async ({ kind, operation }) => {
+    if (kind === "temporary") await makeTemporary(identity.environmentId);
     const stub = env.CONFIG_STORE_WRITER.getByName(`${identity.appId}:${identity.environmentId}`);
     const result =
       operation === "cache-miss repair"
@@ -55,23 +63,13 @@ it.each(["cache-miss repair", "explicit repair", "resync", "write"])(
     const recorded = await runInDurableObject(stub, async (_instance, ctx) =>
       makeDurableConfigStoreProjectionJournal(ctx.storage).list(),
     );
-    expect(recorded.toSorted()).toEqual(keys.toSorted());
-    for (const key of recorded) expect(await h.kv.get(key)).not.toBeNull();
+    expect(recorded.toSorted()).toEqual(kind === "temporary" ? keys.toSorted() : []);
+    for (const key of keys) expect(await h.kv.get(key)).not.toBeNull();
   },
 );
 
 it("journals a live Temporary Environment's deletion tombstone and Activation publication", async () => {
-  await h.d1
-    .prepare(
-      "UPDATE environments SET expires_at = ?, synced_from_environment_id = ?, synced_at = ? WHERE id = ?",
-    )
-    .bind(
-      new Date(Date.now() + 60_000).toISOString(),
-      ids.environmentId,
-      new Date().toISOString(),
-      identity.environmentId,
-    )
-    .run();
+  await makeTemporary(identity.environmentId);
   const stub = env.CONFIG_STORE_WRITER.getByName(`${identity.appId}:${identity.environmentId}`);
   await h.repo.flags.removeTargetingRules(
     envScope(identity.appId, identity.environmentId),
@@ -99,7 +97,21 @@ it("journals a live Temporary Environment's deletion tombstone and Activation pu
   ).not.toBeNull();
 });
 
-it("journals Experiment, Run, live Run and Activation projections", async () => {
+async function makeTemporary(environmentId: string) {
+  await h.d1
+    .prepare(
+      "UPDATE environments SET expires_at = ?, synced_from_environment_id = ?, synced_at = ? WHERE id = ?",
+    )
+    .bind(
+      new Date(Date.now() + 60_000).toISOString(),
+      ids.environmentId,
+      new Date().toISOString(),
+      environmentId,
+    )
+    .run();
+}
+
+it("publishes permanent Experiment, Run, live Run and Activation projections without journaling", async () => {
   await startSeededExperiment(h.d1);
   const stub = env.CONFIG_STORE_WRITER.getByName(`${ids.appId}:${ids.environmentId}`);
   expect(
@@ -112,20 +124,20 @@ it("journals Experiment, Run, live Run and Activation projections", async () => 
   const recorded = await runInDurableObject(stub, async (_instance, ctx) =>
     makeDurableConfigStoreProjectionJournal(ctx.storage).list(),
   );
-  expect(recorded.toSorted()).toEqual(
-    [
-      controlPlaneFlagConfigKey(ids.appId, ids.environmentId, ids.flagId),
-      flagConfigKey(ids.appId, ids.environmentId, ids.flagKey),
-      experimentConfigKey(ids.appId, ids.environmentId, ids.experimentId),
-      runConfigKey(ids.appId, ids.environmentId, ids.liveRunId),
-      liveRunKey(ids.appId, ids.environmentId, ids.experimentId),
-      activationConfigKey(ids.appId, ids.environmentId),
-    ].toSorted(),
-  );
-  for (const key of recorded) expect(await h.kv.get(key)).not.toBeNull();
+  expect(recorded).toEqual([]);
+  const published = [
+    controlPlaneFlagConfigKey(ids.appId, ids.environmentId, ids.flagId),
+    flagConfigKey(ids.appId, ids.environmentId, ids.flagKey),
+    experimentConfigKey(ids.appId, ids.environmentId, ids.experimentId),
+    runConfigKey(ids.appId, ids.environmentId, ids.liveRunId),
+    liveRunKey(ids.appId, ids.environmentId, ids.experimentId),
+    activationConfigKey(ids.appId, ids.environmentId),
+  ];
+  for (const key of published) expect(await h.kv.get(key)).not.toBeNull();
 });
 
 it("retains the durable journal after a partial snapshot publication", async () => {
+  await makeTemporary(identity.environmentId);
   const stub = env.CONFIG_STORE_WRITER.getByName(`${identity.appId}:${identity.environmentId}`);
   await runInDurableObject(stub, async (_instance, ctx) => {
     const kv = new Proxy(env.CONFIG_STORE, {

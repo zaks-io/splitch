@@ -47,6 +47,8 @@ export async function environmentWriteFailure(
   deps: ConfigStoreRuntimeDeps,
   input: EnvironmentWriteScope,
 ): Promise<EnvironmentWriteFailure | null> {
+  // A failed D1 read must not retain a previously selected publication adapter.
+  deps.observeEnvironment(null);
   const environment = await deps.repo.identity.getEnvironment(
     appScope(input.appId),
     input.environmentId,
@@ -55,6 +57,7 @@ export async function environmentWriteFailure(
   if (environment.expiresAt !== null && !Number.isFinite(Date.parse(environment.expiresAt))) {
     throw new Error("config-store: invalid Environment expiry");
   }
+  deps.observeEnvironment(environment);
   if (
     environment.expiresAt !== null &&
     Date.parse(environment.expiresAt) <= (deps.now?.() ?? new Date()).getTime()

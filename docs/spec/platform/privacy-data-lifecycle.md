@@ -345,7 +345,9 @@ Temporary Environment expiry stops credential use before asynchronous teardown. 
 its credential rows, Flag Configurations and Targeting Rules, per-Flag KV projections, evaluation
 and Activation configuration snapshots, Exposure status, and Config Store Durable Object state.
 The Environment row is the durable manifest and is deleted last; failed steps leave it for retry.
-The Config Store writer journals projection keys in durable storage before publishing them. Teardown
+Only Temporary Environment Config Store writers journal projection keys in durable storage before
+publishing them, starting with the create-time Sync copy. The writer derives the kind from the stored
+Environment row inside its mutation queue. Permanent Environments create no journal entries. Teardown
 uses that journal even when concurrent Flag deletion has already removed the Flag's D1 rows. It
 retains the journal until every projection delete succeeds, then clears its durable state.
 Permanent credential terminal revocation markers remain, as for any revoked credential. Manual

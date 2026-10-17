@@ -268,8 +268,12 @@ it, so teardown can rediscover external state even after another operation delet
    credential rows, as Environment delete does today.
 3. **KV and Durable Object state.** Enumerate projection keys from the Environment's Config Store
    writer's durable journal and delete every key, including per-Flag configuration projections,
-   evaluation snapshots, and the activation configuration entry. Every publication records its key
-   before the KV write. Ordinary deletion retains journal entries; a stale entry only causes an
+   evaluation snapshots, and the activation configuration entry. Only Temporary Environments have
+   this journal. The writer derives the kind from the stored Environment row inside its mutation
+   queue before any publication, including the create-time Sync copy; a failed lookup never permits
+   an unjournaled write. Every Temporary Environment publication records its key before the KV write.
+   Permanent Environments write no journal entries or per-publication journal storage operations.
+   Ordinary deletion in a Temporary Environment retains journal entries; a stale entry only causes an
    idempotent delete. Clear the journal and Config Store snapshot revision state together only after
    every KV deletion succeeds. This dedicated operation is allowed only for an expired Temporary
    Environment and does not depend on surviving Flag or Flag Configuration rows. The ordinary Flag
