@@ -66,9 +66,9 @@ creation. A Temporary Environment is a scratch copy of another Environment in th
   `POST /apps/{app_id}/envs/{environment_id}/sync` is the one new operation.
 - Route contracts gain an opt-in marker for `temporary_environments`, enforced once in the shared
   path-selector resolution step rather than per handler.
-- Each App holds at most 50 live Temporary Environments, which keeps them clear of the
-  200-Environment attention budget even before the rollup excludes them. Sync refuses Apps above a
-  tested Flag count before writing anything.
+- Each App holds at most 50 live Temporary Environments, and from the release that creates them
+  the attention rollup excludes them from planning and its 200-Environment budget. Sync refuses
+  Apps above a tested Flag count before writing anything.
 - Data an Exposure or event wrote under a Temporary Environment ages out under the existing
   datasource TTLs, the same as for any deleted Environment.
 - Full design, rollout, and slices:

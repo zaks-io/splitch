@@ -84,8 +84,10 @@ existing `LIST_READ_LIMIT`.
   blockers are unchanged: a Variant that a Targeting Rule in any Environment still references,
   including an expired Temporary Environment awaiting teardown, cannot be deleted. The blocker names
   that Environment, and deleting it is the remedy.
-- **App-level rollups ignore Temporary Environments:** the attention rollup (including its
-  200-Environment budget), expired and stale Flag detection, and Flag inventory health. The
+- **App-level rollups ignore Temporary Environments:** the attention rollup (its planning, its
+  200-Environment budget, and its items), expired and stale Flag detection, and Flag inventory
+  health. The attention rollup exclusion ships with creation: without it, an App with more than 150
+  permanent Environments could exceed the budget by creating Temporary Environments. The
   last-Environment delete guard counts permanent Environments only, and a Temporary Environment
   never satisfies or trips it.
 - **Sentry.** Flag Configuration changes in a Temporary Environment are recorded in the Flag change
@@ -259,8 +261,9 @@ The permanent-Environment `RESOURCE_NOT_EMPTY` blockers do not apply. A failed s
 and the next run repeats from step 2; every step tolerates work already done.
 
 Credential cache entries keep the expiry they were written with; shortening `expires_at` does not
-rewrite them. A scheduled teardown only runs after that original expiry, so its keys are already
-rejected. A manual delete is the one case where keys are still live when teardown starts, so
+rewrite them. A teardown the cron starts on its own runs only after that original expiry, so its
+keys are already rejected. A manual delete is the one case where keys can still be live when
+teardown runs, including when the cron finishes a manual delete that failed, so
 `environments_delete` returns `{ deleted: true }` only after the whole cascade completes. If it fails
 after step 1, it returns `SERVICE_UNAVAILABLE` with `retryAfterMs`, the Environment stays read-only,
 and its keys keep authenticating until a retry completes step 2: the caller's retry, or the cron,
@@ -268,7 +271,8 @@ which picks it up because `expires_at` has passed but serves expired Environment
 backlog or repeated failures delay it.
 
 The minute cron tears down up to 5 expired Temporary Environments per tick, oldest expiry first, so
-50 that expire together are gone within 10 minutes. It logs `temporary-environment-teardown` with
+with no older expired backlog, 50 that expire together are gone within 10 minutes; each 5 ahead of
+them in the queue adds a minute. It logs `temporary-environment-teardown` with
 the Environment id and counts, and reports a failure as `temporary_environment_teardown_failed`
 through the Worker fault reporter. Past the original expiry, a slow teardown costs only storage.
 
@@ -347,10 +351,11 @@ blocked by it and can run in parallel; their footprints are disjoint.
    Temporary Environments with temporary keys.** The D1 migration, create and Sync, credential cache
    v3 with the data-plane expiry check and SDK mapping, every `ENVIRONMENT_KIND_UNSUPPORTED` refusal,
    the live and Sync limits, expired-is-read-only, the Config Store fence and the App-wide skip, the
-   change-log kind with the Sentry skip, teardown on delete and on the cron, CLI and MCP.
+   change-log kind with the Sentry skip, the attention rollup exclusion, teardown on delete and on
+   the cron, CLI and MCP.
 2. **[SPL-771](https://linear.app/zaks-io/issue/SPL-771) App-level views and the Control Panel
-   treat Temporary Environments as scratch** (blocked by SPL-770; split for size). Rollup, stale
-   and expired Flag, and inventory health exclusions; the switcher group, expiry and Sync source,
+   treat Temporary Environments as scratch** (blocked by SPL-770; split for size). Stale and
+   expired Flag and inventory health exclusions; the switcher group, expiry and Sync source,
    and unavailable Policy and Experiment affordances.
 3. **[SPL-772](https://linear.app/zaks-io/issue/SPL-772) A PAT with `temporary_environments` can
    manage Temporary Environments and nothing permanent** (blocked by SPL-770; split for risk and
@@ -358,21 +363,21 @@ blocked by it and can run in parallel; their footprints are disjoint.
    path-selector enforcement, the create-body check, the approval exclusion, capabilities,
    `--grant`.
 
-| Section                                   | Slices                                                  |
-| ----------------------------------------- | ------------------------------------------------------- |
-| [Glossary additions](#glossary-additions) | SPL-770                                                 |
-| [Environment shape](#environment-shape)   | SPL-770                                                 |
-| [Rules](#rules)                           | SPL-770; SPL-771 (App-level rollups)                    |
-| [Create](#create)                         | SPL-770                                                 |
-| [Sync](#sync)                             | SPL-770                                                 |
-| [Credentials](#credentials)               | SPL-770                                                 |
-| [Permission](#permission)                 | SPL-772                                                 |
-| [Teardown](#teardown)                     | SPL-770                                                 |
-| [Surfaces](#surfaces)                     | SPL-770 (CLI, MCP); SPL-771 (Control Panel)             |
-| [Errors](#errors)                         | SPL-770                                                 |
-| [Storage](#storage)                       | SPL-770                                                 |
-| [Rollout](#rollout)                       | SPL-770                                                 |
-| [Done](#done)                             | SPL-770; SPL-771 (last bullet); SPL-772 (token bullets) |
+| Section                                   | Slices                                                                           |
+| ----------------------------------------- | -------------------------------------------------------------------------------- |
+| [Glossary additions](#glossary-additions) | SPL-770                                                                          |
+| [Environment shape](#environment-shape)   | SPL-770                                                                          |
+| [Rules](#rules)                           | SPL-770; SPL-771 (stale, expired, and inventory health exclusions)               |
+| [Create](#create)                         | SPL-770                                                                          |
+| [Sync](#sync)                             | SPL-770                                                                          |
+| [Credentials](#credentials)               | SPL-770                                                                          |
+| [Permission](#permission)                 | SPL-772                                                                          |
+| [Teardown](#teardown)                     | SPL-770                                                                          |
+| [Surfaces](#surfaces)                     | SPL-770 (CLI, MCP); SPL-771 (Control Panel)                                      |
+| [Errors](#errors)                         | SPL-770                                                                          |
+| [Storage](#storage)                       | SPL-770                                                                          |
+| [Rollout](#rollout)                       | SPL-770                                                                          |
+| [Done](#done)                             | SPL-770; SPL-771 (stale, expired, and inventory bullet); SPL-772 (token bullets) |
 
 ## Done
 
@@ -397,7 +402,8 @@ blocked by it and can run in parallel; their footprints are disjoint.
   evaluate-all, OFREP, verify, peek, exposures, Metric Events, Web Events, and activations, from
   the SDK and raw HTTP; a key rotated before expiry behaves the same. After teardown they get
   `CREDENTIAL_REVOKED`.
-- 50 Temporary Environments that expire together are gone from `envs list` within 10 minutes. A
+- With no older expired backlog, 50 Temporary Environments that expire together are gone from
+  `envs list` within 10 minutes. A
   teardown made to fail after each step completes on a later tick with nothing left in D1, KV, or
   Config Store state. A manual delete made to fail between the fence and credential revocation
   returns `SERVICE_UNAVAILABLE`, and its keys stop authenticating once a retry completes
@@ -414,5 +420,7 @@ blocked by it and can run in parallel; their footprints are disjoint.
   with 501 Flags fails create and Sync with `SYNC_LIMIT_EXCEEDED` before any write.
 - Flag changes in a Temporary Environment appear in its change log and never reach a Sentry
   installation, including changes made just before teardown.
-- The attention rollup, stale and expired Flag lists, and inventory health are unchanged by
-  creating 50 Temporary Environments.
+- An App with 200 permanent Environments and 50 Temporary Environments gets the same attention
+  rollup as without them, never `ATTENTION_FANOUT_LIMIT_EXCEEDED`.
+- Stale and expired Flag lists and inventory health are unchanged by creating 50 Temporary
+  Environments.
