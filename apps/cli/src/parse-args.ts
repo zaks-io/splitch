@@ -22,6 +22,8 @@ export interface ParsedGlobalFlags {
   readonly owner?: string;
   readonly expiresAt?: string;
   readonly fromEnvironmentId?: string;
+  readonly from?: string;
+  readonly temporary?: boolean;
   readonly enabled?: boolean;
   readonly rollout?: number | null;
   readonly idempotencyKey?: string;
@@ -51,7 +53,16 @@ export interface ParsedInvocation {
 
 const META_COMMANDS = new Set(["login", "logout", "use", "context", "health"]);
 
-const BOOLEAN_FLAGS = new Set(["json", "confirm", "help", "dryRun", "force", "summary", "append"]);
+const BOOLEAN_FLAGS = new Set([
+  "json",
+  "confirm",
+  "help",
+  "dryRun",
+  "force",
+  "summary",
+  "append",
+  "temporary",
+]);
 
 /**
  * Every flag the CLI reads, keyed as it appears after `toCamel`.
@@ -79,6 +90,7 @@ const KNOWN_FLAGS = new Set([
   "owner",
   "expiresAt",
   "fromEnvironmentId",
+  "from",
   "enabled",
   "rollout",
   "idempotencyKey",
@@ -255,6 +267,8 @@ function toParsedFlags(
     owner: stringFlag(flags.owner),
     expiresAt: stringFlag(flags.expiresAt),
     fromEnvironmentId: stringFlag(flags.fromEnvironmentId),
+    from: stringFlag(flags.from),
+    temporary: Boolean(flags.temporary),
     enabled: parseEnabledFlag(flags.enabled),
     rollout: parseRolloutFlag(flags.rollout),
     idempotencyKey: stringFlag(flags.idempotencyKey),

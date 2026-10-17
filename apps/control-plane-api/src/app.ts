@@ -8,7 +8,7 @@ import {
   type RegistrarDeps,
 } from "@splitch/worker-runtime";
 import { Hono } from "hono";
-import { appEnvironmentCleanupDeps } from "./app-environment-cleanup-deps";
+import { appEnvironmentHandlerDeps } from "./app-environment-cleanup-deps";
 import { makeAppEnvironmentHandlers } from "./app-environment-handlers";
 import { makeAppMemberHandlers } from "./app-member-handlers";
 import { makeOtherApprovalApplication } from "./approval-application";
@@ -111,7 +111,7 @@ export interface AppDeps {
 
 /** Build the registrar bound to this Worker's control-plane-token resolver. */
 export function controlPlaneRegistrar(deps: AppDeps): Registrar {
-  const resolveInput = makePathSelectorResolver(deps.repo);
+  const resolveInput = makePathSelectorResolver(deps.repo, deps.nowIso);
   const registrarDeps: RegistrarDeps = {
     authResolvers: {
       "control-plane-token": deps.authResolver,
@@ -173,14 +173,7 @@ export function createApp(deps: AppDeps): Hono {
       nowIso: deps.nowIso,
     }),
   );
-  const appEnvironmentHandlers = makeAppEnvironmentHandlers({
-    repo: deps.repo,
-    credentialStore: deps.credentialStore,
-    credentialCacheWriter: deps.credentialCacheWriter,
-    configStore: deps.configStore,
-    ...appEnvironmentCleanupDeps(deps),
-    nowIso: deps.nowIso,
-  });
+  const appEnvironmentHandlers = makeAppEnvironmentHandlers(appEnvironmentHandlerDeps(deps));
   const registrar = controlPlaneRegistrar(deps);
   mountConvexRoutes(app, registrar, deps.repo, deps.door === "binding" ? deps.convex : undefined);
   mountCloudflareRoutes(
@@ -252,6 +245,11 @@ export function createApp(deps: AppDeps): Hono {
     app,
     controlPlaneRoute("environments_delete"),
     appEnvironmentHandlers.deleteEnvironment,
+  );
+  registrar.mount(
+    app,
+    controlPlaneRoute("environments_sync"),
+    appEnvironmentHandlers.syncEnvironment,
   );
   registrar.mount(app, controlPlaneRoute("organizations_get"), handlers.getOrg);
   registrar.mount(app, controlPlaneRoute("organizations_list"), handlers.listOrganizations);

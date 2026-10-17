@@ -4,6 +4,7 @@ import { StoredClientKeyRateLimitRpsSchema } from "../client-key-rate-limit";
 import { OriginAllowlistSchema } from "../client-origin";
 import { PercentageRolloutSchema, TargetingRuleSchema } from "../leaf-schemas-flag";
 import { EnvironmentPolicySchema, UserRoleSchema } from "../leaf-schemas-runtime";
+import { MutationNextSchema } from "../mutation-next";
 import {
   IdempotencyKeySchema,
   PersistedDescriptionSchema,
@@ -13,7 +14,6 @@ import {
 } from "../persisted-field-limits";
 import { SlugSchema } from "../slug";
 import { TargetingRuleInputSchema, WriteConditionSchema } from "../write-persisted-schemas";
-import { MutationNextSchema } from "../mutation-next";
 import {
   ApprovalRequestSchema,
   InlineApproveAndApplyReviewSchema,
@@ -65,6 +65,28 @@ export const CreateEnvironmentRequestSchema = z
     key: SlugSchema,
     name: PersistedNameSchema.optional(),
     policy: EnvironmentPolicySchema.optional(),
+    temporary: z
+      .object({
+        fromEnvironmentId: PersistedIdentifierSchema.describe(
+          "Source Environment ID or key in this App.",
+        ),
+        expiresAt: z.iso
+          .datetime({ offset: true })
+          .optional()
+          .describe(
+            "Expiry more than one minute and at most seven days after creation; defaults to seven days.",
+          ),
+      })
+      .strict()
+      .optional(),
+  })
+  .strict();
+
+export const SyncEnvironmentRequestSchema = z
+  .object({
+    fromEnvironmentId: PersistedIdentifierSchema.describe(
+      "Source Environment ID or key in this App.",
+    ),
   })
   .strict();
 

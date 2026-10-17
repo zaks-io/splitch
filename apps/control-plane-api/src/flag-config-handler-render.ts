@@ -1,5 +1,5 @@
 import type { ApprovalRequest, MutationNext } from "@splitch/contracts";
-import type { Principal } from "@splitch/worker-runtime";
+import { type Principal, renderError } from "@splitch/worker-runtime";
 import type { ConfigStoreWriter } from "./config-store";
 import type { FlagConfigActor } from "./config-store-types";
 import { variantNotAvailable } from "./experiment-errors";
@@ -11,6 +11,7 @@ import {
   targetingRuleSaltRejected,
 } from "./flag-config-errors";
 import { runFrozenResponse } from "./flag-config-run-freeze";
+import { environmentExpiredError } from "./temporary-environment-errors";
 
 /**
  * Request shaping and refusal rendering for the Flag Configuration routes.
@@ -94,6 +95,12 @@ export function renderFlagConfigWriteResult(
   if (result.reason === "VARIANT_NOT_AVAILABLE") {
     return variantNotAvailable(flagId, environmentId, result.missingVariants, requestId);
   }
+  if (result.reason === "ENVIRONMENT_EXPIRED") {
+    return renderError(
+      environmentExpiredError({ id: environmentId, expiresAt: result.expiredAt }),
+      { requestId },
+    );
+  }
   if (result.reason === "ROLLOUT_AMBIGUOUS") {
     return rolloutAmbiguous(result.availableVariantNames, requestId);
   }
@@ -130,6 +137,12 @@ export function renderPromotionResult(
   }
   if (result.reason === "VARIANT_NOT_AVAILABLE") {
     return variantNotAvailable(flagId, environmentId, result.missingVariants, requestId);
+  }
+  if (result.reason === "ENVIRONMENT_EXPIRED") {
+    return renderError(
+      environmentExpiredError({ id: environmentId, expiresAt: result.expiredAt }),
+      { requestId },
+    );
   }
   if (result.reason === "ROLLOUT_AMBIGUOUS") {
     return rolloutAmbiguous(result.availableVariantNames, requestId);

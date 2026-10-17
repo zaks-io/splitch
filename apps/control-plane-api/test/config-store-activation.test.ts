@@ -7,6 +7,7 @@ import {
   startSeededExperiment,
 } from "../src/config-store-fixture-data";
 import { type Harness, ids, kvJson, NOW } from "../src/config-store-harness-core";
+import { makeConfigStoreProjectionJournalFixture } from "../src/config-store-projection-journal-fixture";
 import { makePoolHarness } from "./config-store-pool-harness";
 
 let h: Harness;
@@ -43,6 +44,7 @@ async function freezeActivationMetric(runId: string, metricId: string) {
 
 function makeStore() {
   return makeConfigStore({
+    projectionJournal: makeConfigStoreProjectionJournalFixture(),
     repo: h.repo,
     kv: h.kv,
     broadcaster: { broadcast: () => undefined },

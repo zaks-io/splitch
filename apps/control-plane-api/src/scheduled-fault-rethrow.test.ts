@@ -14,7 +14,10 @@ const jobs = vi.hoisted(() => ({
 
 vi.mock("@splitch/db", () => ({
   createRepository: () => ({
-    identity: { reapExpiredProvisionalOrganizations: async () => ({ candidates: 0, reaped: 0 }) },
+    identity: {
+      reapExpiredProvisionalOrganizations: async () => ({ candidates: 0, reaped: 0 }),
+      listExpiredTemporaryEnvironments: async () => [],
+    },
     claim: { purgeExpiredClaimArtifacts: async () => 0 },
     sentry: { minUndeliveredSeq: async () => null },
     flagChangeEvents: { pruneBefore: async () => 0 },

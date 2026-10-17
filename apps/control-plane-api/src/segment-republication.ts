@@ -1,8 +1,10 @@
+import { appScope } from "@splitch/db";
 import { renderError } from "@splitch/worker-runtime";
 import type { FlagConfigWriteResult } from "./config-store-types";
 import { frozenTargetingFields, frozenWriteFailure } from "./flag-config-run-freeze";
 import type { MetricSegmentDeps } from "./metric-segment-shared";
 import type { SegmentDependencies } from "./segment-dependencies";
+import { environmentHasExpired } from "./temporary-environment-errors";
 
 type FlagConfigurationDependency = SegmentDependencies["flagConfigurations"][number];
 type RepublishedFlagConfiguration = Omit<FlagConfigurationDependency, "targetingRuleIds">;
@@ -28,7 +30,7 @@ export interface SegmentRepublishFailure {
 }
 
 type RepublishOutcome =
-  | { ok: true; flagConfiguration: RepublishedFlagConfiguration }
+  | { ok: true; skipped?: boolean; flagConfiguration: RepublishedFlagConfiguration }
   | { ok: false; flagConfiguration: NotRepublishedFlagConfiguration };
 
 export async function republishFlagConfigurations(
@@ -54,7 +56,7 @@ export async function republishFlagConfigurations(
     };
   });
   const republishedFlagConfigurations = outcomes.flatMap((outcome) =>
-    outcome.ok ? [outcome.flagConfiguration] : [],
+    outcome.ok && !outcome.skipped ? [outcome.flagConfiguration] : [],
   );
   const notRepublishedFlagConfigurations = outcomes.flatMap((outcome) =>
     outcome.ok ? [] : [outcome.flagConfiguration],
@@ -85,6 +87,7 @@ export async function frozenDependentsRefusal(
 ): Promise<SegmentRepublishFailure | null> {
   const frozen: NotRepublishedFlagConfiguration[] = [];
   for (const dependency of dependencies.flagConfigurations) {
+    if (await skipExpired(deps, appId, dependency.environmentId)) continue;
     const failure = await frozenWriteFailure(
       deps.repo,
       { appId, environmentId: dependency.environmentId, flagId: dependency.flagId },
@@ -115,6 +118,9 @@ async function republishOne(
   dependency: FlagConfigurationDependency,
 ): Promise<RepublishOutcome> {
   const identity = flagConfigurationIdentity(dependency);
+  if (await skipExpired(deps, appId, dependency.environmentId)) {
+    return { ok: true, skipped: true, flagConfiguration: identity };
+  }
   if (!deps.configStore) {
     return {
       ok: false,
@@ -128,9 +134,23 @@ async function republishOne(
       environmentId: dependency.environmentId,
       flagId: dependency.flagId,
     });
+  if (
+    !result.ok &&
+    (result.reason === "ENVIRONMENT_EXPIRED" || result.reason === "ENVIRONMENT_NOT_FOUND")
+  ) {
+    return { ok: true, skipped: true, flagConfiguration: identity };
+  }
   return result.ok
     ? { ok: true, flagConfiguration: identity }
     : { ok: false, flagConfiguration: writeFailure(identity, result) };
+}
+
+async function skipExpired(deps: MetricSegmentDeps, appId: string, environmentId: string) {
+  const environment = await deps.repo.identity.getEnvironment(appScope(appId), environmentId);
+  return (
+    environment !== null &&
+    environmentHasExpired(environment, deps.nowIso?.() ?? new Date().toISOString())
+  );
 }
 
 function writeFailure(
@@ -138,6 +158,8 @@ function writeFailure(
   failure: FlagConfigWriteFailure,
 ): NotRepublishedFlagConfiguration {
   switch (failure.reason) {
+    case "ENVIRONMENT_EXPIRED":
+      return { ...identity, reason: failure.reason, expiredAt: failure.expiredAt };
     case "RUN_FROZEN":
       return {
         ...identity,

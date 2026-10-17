@@ -199,6 +199,10 @@ export interface RouteTypeMap {
     input: EnvironmentRoutes.EnvironmentsUpdateInput;
     output: EnvironmentRoutes.EnvironmentsUpdateOutput;
   };
+  environments_sync: {
+    input: EnvironmentRoutes.EnvironmentsSyncInput;
+    output: EnvironmentRoutes.EnvironmentsSyncOutput;
+  };
   environments_delete: {
     input: EnvironmentRoutes.EnvironmentsDeleteInput;
     output: EnvironmentRoutes.EnvironmentsDeleteOutput;

@@ -20,6 +20,7 @@ import {
   startSeededExperiment,
 } from "../src/config-store-fixture-data";
 import { type Harness, ids, kvJson, NOW, NOW_MS } from "../src/config-store-harness-core";
+import { makeConfigStoreProjectionJournalFixture } from "../src/config-store-projection-journal-fixture";
 import { makePoolHarness as makeHarness } from "./config-store-pool-harness";
 
 let h: Harness;
@@ -36,6 +37,7 @@ afterEach(async () => {
 describe("config store snapshot deletion", () => {
   it("deleteFlagConfig removes an archived Experiment's evaluation snapshots", async () => {
     const store = makeConfigStore({
+      projectionJournal: makeConfigStoreProjectionJournalFixture(),
       repo: h.repo,
       kv: h.kv,
       broadcaster: { broadcast: (nudge) => void h.nudges.push(nudge) },
@@ -120,6 +122,7 @@ describe("config store purge target isolation", () => {
     const scope = envScope(ids.appId, ids.environmentId);
     await h.repo.flags.removeFlagConfig(scope, ids.flagId);
     const store = makeConfigStore({
+      projectionJournal: makeConfigStoreProjectionJournalFixture(),
       repo: h.repo,
       kv: h.kv,
       broadcaster: { broadcast: (nudge) => void h.nudges.push(nudge) },
@@ -144,6 +147,7 @@ describe("config store purge target isolation", () => {
         .bind(status, ids.experimentId)
         .run();
       const store = makeConfigStore({
+        projectionJournal: makeConfigStoreProjectionJournalFixture(),
         repo: h.repo,
         kv: h.kv,
         broadcaster: { broadcast: (nudge) => void h.nudges.push(nudge) },
@@ -202,6 +206,7 @@ describe("config store purge target isolation", () => {
     await h.kv.put(unrelatedExperimentKey, "unrelated experiment snapshot");
     await h.kv.put(unrelatedLiveKey, "unrelated live Run snapshot");
     const store = makeConfigStore({
+      projectionJournal: makeConfigStoreProjectionJournalFixture(),
       repo: h.repo,
       kv: h.kv,
       broadcaster: { broadcast: (nudge) => void h.nudges.push(nudge) },

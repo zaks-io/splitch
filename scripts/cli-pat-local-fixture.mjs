@@ -1,84 +1,74 @@
-import { spawn } from "node:child_process";
-import { chmod, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { spawnSync } from "node:child_process";
+import { chmod, mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { createServer } from "node:net";
-import { tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
-import { setTimeout as delay } from "node:timers/promises";
-import { stripVTControlCharacters } from "node:util";
+import { join, resolve } from "node:path";
+import { createAnalysisSourceServer } from "./local-e2e-analysis-source.mjs";
 import { LOCAL_E2E_D1_SEED } from "./local-e2e-fixtures.mjs";
-import { localBindings, wranglerBin } from "./local-e2e-fleet-config.mjs";
+import { startManagedFleet } from "./local-e2e-fleet.mjs";
+import {
+  apiWorkers,
+  createApiFleetConfigs,
+  localBindings,
+  wranglerBin,
+} from "./local-e2e-fleet-config.mjs";
+import { capturedChild, stopChild } from "./local-e2e-fleet-supervisor.mjs";
 
+export { capturedChild };
 export const repoRoot = resolve(import.meta.dirname, "..");
-export const issuerOrigin = "http://127.0.0.1:18788";
-export const controlPlaneOrigin = "http://127.0.0.1:18790";
-
+export class FixtureError extends Error {}
+export function check(condition, message) {
+  if (!condition) throw new FixtureError(message);
+}
 export function requireSafeOutput(output) {
-  if (output.includes("spl_pat_") || /eyJ[\w-]+\.eyJ[\w-]+\.[\w-]+/.test(output)) {
-    throw new Error("A diagnostic child emitted a credential; captured output was suppressed");
-  }
+  check(
+    !/(?:spl_pat_|sk_|pk_)[a-f0-9]{32,}|eyJ[\w-]+\.eyJ[\w-]+\.[\w-]+/.test(output),
+    "A diagnostic child emitted a credential; captured output was suppressed",
+  );
 }
-
-export function capturedChild(args, { cwd = repoRoot, env = process.env, signal } = {}) {
-  const child = spawn(process.execPath, args, {
-    cwd,
-    env,
-    detached: true,
-    stdio: ["ignore", "pipe", "pipe"],
-    signal,
-  });
-  let stdout = "";
-  let stderr = "";
-  child.stdout.setEncoding("utf8").on("data", (chunk) => {
-    stdout += chunk;
-  });
-  child.stderr.setEncoding("utf8").on("data", (chunk) => {
-    stderr += chunk;
-  });
-  const completed = new Promise((done) => {
-    // Abort and spawn errors still emit close; wait until both output pipes have drained.
-    child.once("error", () => {});
-    child.once("close", (code) => done({ code, stdout, stderr }));
-  });
-  return { child, completed, output: () => stdout + stderr };
-}
-
-async function stopChild(running) {
-  if (running.child.pid) {
-    const kill = (signal) => {
-      try {
-        process.kill(-running.child.pid, signal);
-      } catch (error) {
-        if (error.code !== "ESRCH") throw error;
-      }
-    };
-    kill("SIGTERM");
-    const closed = await Promise.race([
-      running.completed.then(() => true),
-      delay(5_000, false, { ref: false }),
-    ]);
-    if (!closed) kill("SIGKILL");
-  }
-  await running.completed;
-}
-
 async function requireFreePort(port) {
   const server = createServer();
   await new Promise((done, reject) => {
-    server.once("error", () => reject(new Error(`Local diagnostic port ${port} is occupied`)));
+    server.once("error", () =>
+      reject(new FixtureError(`Local diagnostic port ${port} is occupied`)),
+    );
     server.listen(port, "127.0.0.1", done);
   });
   await new Promise((done) => server.close(done));
 }
 
-export async function createLocalPatFixture(signal) {
-  const { SBX_AGENT_ID: agentId } = process.env;
-  if (!agentId) throw new Error("SBX_AGENT_ID is required for owned local state");
-  for (const port of [18788, 18790, 12027, 12028]) await requireFreePort(port);
-  const agent = agentId.replace(/[^a-zA-Z0-9_-]/g, "_");
-  const root = await mkdtemp(join(tmpdir(), `splitch-cli-pat-${agent}-`));
-  await chmod(root, 0o700);
+// Both CLI smokes use managed ports and a fresh private state directory. No
+// migration, SQL or cleanup operation can address the panel's shared persistence.
+export async function createLocalPatFixture(signal, options = {}) {
+  const runtime = await allocatePrivateRuntime(options.full ?? false);
+  try {
+    await chmod(runtime.root, 0o700);
+    return prepareLocalPatFixture(runtime, signal, options);
+  } catch (error) {
+    await rm(runtime.root, { recursive: true, force: true });
+    throw error;
+  }
+}
+
+function prepareLocalPatFixture(
+  { agent, port, root },
+  signal,
+  { full = false, owner = false, teardown },
+) {
   const state = join(root, "state");
-  const running = [];
+  const origin = `http://127.0.0.1:${port("gateway")}`;
+  const issuerOrigin = `http://127.0.0.1:${port("issuer")}`;
+  const source = createAnalysisSourceServer(agent, {
+    mode: "standalone",
+    origin: issuerOrigin,
+    audience: origin,
+    principal: owner
+      ? { sub: "user_local_e2e", scopes: ["app:app_checkout_e2e:owner"] }
+      : {
+          sub: "user_local_member_e2e",
+          scopes: ["org:org_acme_e2e:member", "app:app_checkout_e2e:admin"],
+        },
+    cleanupAppId: "app_checkout_e2e",
+  });
   const env = {
     ...process.env,
     ...localBindings,
@@ -86,39 +76,100 @@ export async function createLocalPatFixture(signal) {
     WRANGLER_SEND_METRICS: "false",
     WRANGLER_WRITE_LOGS: "false",
     SPLITCH_LOCAL_DEV_FLEET: "false",
-    SPLITCH_LOCAL_E2E_RUN_ID: agent,
   };
   delete env.SPLITCH_TOKEN;
+  let managed;
+  const commands = [];
   const fixture = {
     root,
-    async sql(sql) {
+    origin,
+    issuerOrigin,
+    agent,
+    sessionToken: source.fixture.accessToken,
+    serviceOrigin: (worker) =>
+      worker === "control-plane-api" ? origin : `${origin}/__fleet/${worker}`,
+    diagnostics: () => ({
+      ...managed?.diagnostics(),
+      tinybirdDeletes: source.fixture.cleanedEnvironments.size,
+    }),
+    assertCleanup: (ids) =>
+      check(
+        ids.every((id) => source.fixture.cleanedEnvironments.has(id)),
+        "Analysis cleanup did not reach tenant-scoped Tinybird deletion",
+      ),
+    async sql(sql, taskSignal = signal) {
       const path = join(root, "fixture.sql");
       await writeFile(path, sql, { mode: 0o600 });
-      await wrangler(["d1", "execute", "DB", "--file", path], "D1 fixture SQL");
+      await wrangler(["d1", "execute", "DB", "--file", path], taskSignal);
     },
+    async start() {
+      await new Promise((done, reject) => {
+        source.once("error", reject);
+        source.listen(port("issuer"), "127.0.0.1", done);
+      });
+      const workers = full ? apiWorkers : ["control-plane-api", "analysis-api"];
+      const configs = await createApiFleetConfigs({
+        root,
+        agent,
+        origin,
+        issuerOrigin,
+        privateKey: source.fixture.privateKey,
+        workers,
+        teardown,
+      });
+      managed = await startManagedFleet(agent, {
+        signal,
+        seed: async () => {
+          await wrangler(["d1", "migrations", "apply", "DB"]);
+          await fixture.sql(
+            LOCAL_E2E_D1_SEED +
+              (owner
+                ? ""
+                : "\nUPDATE app_memberships SET role='admin' WHERE app_id='app_checkout_e2e' AND user_id='user_local_member_e2e';"),
+          );
+        },
+        workers: [
+          {
+            name: "api-fleet",
+            command: process.execPath,
+            args: [
+              wranglerBin,
+              "dev",
+              ...configs.flatMap((path) => ["--config", path]),
+              "--local",
+              "--ip",
+              "127.0.0.1",
+              "--port",
+              String(port("gateway")),
+              "--inspector-port",
+              String(port("inspector")),
+              "--persist-to",
+              state,
+            ],
+            env,
+            healthTargets: workers.map((worker) => ({
+              name: worker,
+              origin: fixture.serviceOrigin(worker),
+              service: `splitch-${worker}`,
+              checkRunId: worker === "control-plane-api",
+            })),
+          },
+        ],
+      });
+    },
+    run: (task) => managed.run(task),
     async close() {
       try {
-        for (const worker of [...running].reverse()) await stopChild(worker);
-        for (const worker of running) requireSafeOutput(worker.output());
+        await managed?.close();
       } finally {
+        for (const command of commands) await stopChild(command);
+        if (source.listening) await new Promise((done) => source.close(done));
         await rm(root, { recursive: true, force: true });
       }
     },
-    async start() {
-      await wrangler(["d1", "migrations", "apply", "DB"], "D1 migrations");
-      // The authority change belongs only to this run's isolated database.
-      await fixture.sql(`${LOCAL_E2E_D1_SEED}\nUPDATE app_memberships SET role='admin'
-WHERE app_id='app_checkout_e2e' AND user_id='user_local_member_e2e';`);
-      await launch(["scripts/local-e2e-analysis-source.mjs"], issuerOrigin, "session issuer");
-      const analysis = await config("apps/analysis-api/wrangler.jsonc", "analysis");
-      await launch(workerArgs(analysis, 12027, 12028), "http://127.0.0.1:12027", "Analysis Worker");
-      const controlPlane = await config("apps/control-plane-api/wrangler.jsonc", "control-plane");
-      await launch(workerArgs(controlPlane, 18790, 0), controlPlaneOrigin, "Control Plane Worker");
-    },
   };
-
-  async function wrangler(args, label) {
-    const run = capturedChild(
+  async function wrangler(args, taskSignal = signal) {
+    const running = capturedChild(
       [
         wranglerBin,
         ...args,
@@ -128,98 +179,129 @@ WHERE app_id='app_checkout_e2e' AND user_id='user_local_member_e2e';`);
         "--persist-to",
         state,
       ],
-      { env, signal },
+      { env, signal: taskSignal },
     );
-    const result = await run.completed;
+    commands.push(running);
+    const result = await running.completed;
     requireSafeOutput(result.stdout + result.stderr);
-    if (result.code !== 0) throw new Error(`${label} failed; private child output suppressed`);
+    check(result.code === 0, "Isolated D1 fixture operation failed; private output suppressed");
   }
-
-  async function config(source, name) {
-    const sourcePath = resolve(repoRoot, source);
-    const original = JSON.parse(await readFile(sourcePath, "utf8"));
-    // Local fixture values are vars; retaining required secrets would bind each name twice.
-    const { env: _environments, $schema: _schema, secrets: _secrets, ...local } = original;
-    const derived = {
-      ...local,
-      name: `${original.name}-${agent}`,
-      main: resolve(dirname(sourcePath), original.main),
-      vars: {
-        ...original.vars,
-        ...localBindings,
-        TINYBIRD_API_URL: issuerOrigin,
-        AUTH_JWKS_URI: `${issuerOrigin}/.well-known/jwks.json`,
-        CONTROL_PLANE_ORIGIN: controlPlaneOrigin,
-      },
-    };
-    if (name === "control-plane") {
-      derived.services = original.services.map((service) => ({
-        ...service,
-        service: `${service.service}-${agent}`,
-      }));
-      derived.ratelimits = [
-        {
-          name: "CONTROL_PLANE_ACTOR_RATE_LIMITER",
-          namespace_id: "1102",
-          simple: { limit: 600, period: 60 },
-        },
-      ];
-    }
-    const path = join(root, `${name}.json`);
-    await writeFile(path, JSON.stringify(derived), { mode: 0o600 });
-    return path;
-  }
-
-  function workerArgs(path, port, inspector) {
-    return [
-      wranglerBin,
-      "dev",
-      "--config",
-      path,
-      "--local",
-      "--ip",
-      "127.0.0.1",
-      "--port",
-      String(port),
-      "--inspector-port",
-      String(inspector),
-      "--persist-to",
-      state,
-    ];
-  }
-
-  async function launch(args, origin, label) {
-    const worker = capturedChild(args, { env });
-    running.push(worker);
-    const deadline = Date.now() + 90_000;
-    while (Date.now() < deadline) {
-      signal.throwIfAborted();
-      requireSafeOutput(worker.output());
-      if (worker.child.exitCode !== null) {
-        throw new Error(
-          `${label} exited before health was ready: ${startupDiagnostic(worker.output())}`,
-        );
-      }
-      const healthy = await fetch(`${origin}/health`, { signal: AbortSignal.timeout(1_000) })
-        .then((response) => response.ok)
-        .catch(() => false);
-      if (healthy) return;
-      await delay(250);
-    }
-    throw new Error(`${label} health timed out; private child output suppressed`);
-  }
-
   return fixture;
 }
 
-function startupDiagnostic(output) {
-  const line = stripVTControlCharacters(output).match(/\[ERROR\][\s\S]{0,1500}/)?.[0];
-  if (!line) return "no Wrangler error summary";
-  let safe = line;
-  for (const value of [...Object.values(process.env), ...Object.values(localBindings)]) {
-    if (value && value.length > 7) safe = safe.replaceAll(value, "[redacted]");
+export function createPatClient(fixture, signal) {
+  let sequence = 0;
+  const { SPLITCH_CLI_SMOKE_BINARY: binary } = process.env;
+  const cliPath = resolve(repoRoot, binary ?? "apps/cli/dist/cli.js");
+  async function sessionRequest(method, path, body) {
+    const response = await fetch(`${fixture.origin}${path}`, {
+      method,
+      headers: {
+        authorization: `Bearer ${fixture.sessionToken()}`,
+        "content-type": "application/json",
+      },
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+      signal: AbortSignal.any([signal, AbortSignal.timeout(30_000)]),
+    });
+    check(response.ok, `Session ${method} failed with HTTP ${response.status}`);
+    return response.json();
   }
-  safe = safe.replace(/[A-Za-z0-9_./:+-]{24,}/g, "[redacted]");
-  requireSafeOutput(safe);
-  return safe;
+  const client = {
+    async mint(grants) {
+      const created = await sessionRequest("POST", "/personal-access-tokens", {
+        name: "local-e2e",
+        grants,
+        expiresAt: new Date(Date.now() + 3_600_000).toISOString(),
+      });
+      check(
+        /^pat_[a-f0-9]{32}$/.test(created.token.id) &&
+          /^spl_pat_[a-f0-9]{64}$/.test(created.secret),
+        "Mint returned invalid PAT material",
+      );
+      return created;
+    },
+    revoke: (id) => sessionRequest("POST", `/personal-access-tokens/${id}/revoke`),
+    async cli(secret, args, expectedExit = 0) {
+      signal.throwIfAborted();
+      const cwd = join(fixture.root, "cli");
+      await mkdir(cwd, { recursive: true, mode: 0o700 });
+      const env = {
+        ...process.env,
+        SPLITCH_TOKEN: secret,
+        SPLITCH_PLATFORM_TARGET: "local",
+        CONTROL_PLANE_API_ORIGIN: fixture.origin,
+        AUTH_API_ORIGIN: fixture.origin,
+      };
+      for (const name of ["SPLITCH_APP", "SPLITCH_ENV", "EVALUATION_API_ORIGIN"]) delete env[name];
+      const running = capturedChild([cliPath, ...args, "--json"], {
+        cwd,
+        env,
+        signal: AbortSignal.any([signal, AbortSignal.timeout(45_000)]),
+      });
+      const result = await running.completed;
+      requireSafeOutput(result.stderr);
+      // Client Key JSON is expected on create/get. It stays captured; API and PAT
+      // material must never appear in either success or error output.
+      requireSafeOutput(result.stdout.replace(/pk_[a-f0-9]{64}/g, "[Client Key]"));
+      check(
+        result.code === expectedExit,
+        `CLI ${args[0]} ${args[1] ?? ""} exited ${result.code}; expected ${expectedExit}; private output suppressed`,
+      );
+      try {
+        return JSON.parse(result.stdout);
+      } catch {
+        throw new FixtureError("CLI did not return JSON; private output suppressed");
+      }
+    },
+    async apiKey(secret, appId, environmentId) {
+      const output = join(fixture.root, `api-key-${++sequence}.txt`);
+      const created = await client.cli(secret, [
+        "api-keys",
+        "create",
+        "--app",
+        appId,
+        "--env",
+        environmentId,
+        "--body-json",
+        JSON.stringify({ scopes: ["data-plane:evaluate"] }),
+        "--output-file",
+        output,
+      ]);
+      check(created.value === null, "API Key appeared in CLI JSON instead of private output-file");
+      check(((await stat(output)).mode & 0o077) === 0, "API Key output file is not private");
+      const key = (await readFile(output, "utf8")).trim();
+      check(/^sk_[a-f0-9]{64}$/.test(key), "Private API Key file has invalid material");
+      return key;
+    },
+  };
+  return client;
+}
+
+async function allocatePrivateRuntime(full) {
+  const { SBX_AGENT_ID: agentId } = process.env;
+  const agent = agentId?.replace(/[^a-zA-Z0-9_-]/g, "_");
+  check(agent, "SBX_AGENT_ID is required for owned local state");
+  const name = full ? "temporary-env" : "cli-pat";
+  const allocated = spawnSync(
+    "sbx-runtime",
+    ["allocate", "--format", "json", `${name}-gateway`, `${name}-inspector`, `${name}-issuer`],
+    { cwd: repoRoot, encoding: "utf8" },
+  );
+  check(allocated.status === 0, "sbx-runtime allocation failed; private output suppressed");
+  const allocation = JSON.parse(allocated.stdout);
+  const port = (service) => allocation.ports[`${name}-${service}`];
+  for (const value of Object.values(allocation.ports)) await requireFreePort(value);
+  await mkdir(allocation.state_dir, { recursive: true, mode: 0o700 });
+  const root = await mkdtemp(join(allocation.state_dir, `${name}-${agent}-`));
+  return { agent, port, root };
+}
+
+export async function writeLocalEvidence(name, report) {
+  const json = `${JSON.stringify(report, null, 2)}\n`;
+  requireSafeOutput(json);
+  const directory = resolve(repoRoot, "test-results");
+  await mkdir(directory, { recursive: true });
+  const path = join(directory, `${name}-${report.agent ?? "unknown"}.json`);
+  await writeFile(path, json);
+  console.log(`Sanitized evidence: ${path}`);
 }

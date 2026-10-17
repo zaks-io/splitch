@@ -11,6 +11,7 @@ import { appScope, createRepository, envScope, type Repository } from "@splitch/
 import { type ConfigStoreWriter, makeConfigStore } from "./config-store";
 import type { ConfigStoreAccess } from "./config-store-access";
 import { makeSnapshotRevisionCounter } from "./config-store-fixture-data";
+import { makeConfigStoreProjectionJournalFixture } from "./config-store-projection-journal-fixture";
 import { insertExperimentRunEventDefinition } from "./experiment-run-event-definition-fixture";
 import {
   appToken,
@@ -295,6 +296,7 @@ export function configStoreAccess(
     const existing = writers.get(name);
     if (existing) return existing;
     const writer = makeConfigStore({
+      projectionJournal: makeConfigStoreProjectionJournalFixture(),
       repo,
       kv,
       broadcaster: { broadcast() {} },

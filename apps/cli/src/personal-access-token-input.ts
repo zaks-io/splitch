@@ -1,4 +1,5 @@
 import { SplitchCliError } from "./errors.js";
+import { parseExpiry } from "./expiry-input.js";
 import type { ParsedGlobalFlags } from "./parse-args.js";
 
 export const PERSONAL_ACCESS_TOKEN_OPERATIONS: ReadonlySet<string> = new Set([
@@ -20,7 +21,6 @@ export function returnsPersonalAccessTokenSecret(operationId: string): boolean {
 
 const ROLES = new Set(["member", "admin", "owner"]);
 const PERMISSIONS = ["write", "delete", "credentials", "members", "privacy"] as const;
-const DAY_MS = 24 * 60 * 60 * 1000;
 const GRANT_EXAMPLE = "--grant app:app_123:admin:write,delete, --grant all:member:read";
 
 /**
@@ -79,20 +79,6 @@ function parseGrant(value: string): { target: string; role: string; permissions:
     role,
     permissions: PERMISSIONS.filter((permission) => permissions.includes(permission)),
   };
-}
-
-function parseExpiry(value: string, nowMs: number): string | null {
-  if (value === "never") return null;
-  const days = /^(\d{1,5})d$/.exec(value);
-  if (days) return new Date(nowMs + Number(days[1]) * DAY_MS).toISOString();
-  const parsed = Date.parse(value);
-  if (/^\d{4}-\d{2}-\d{2}/.test(value) && Number.isFinite(parsed)) {
-    return new Date(parsed).toISOString();
-  }
-  throw usage(
-    `--expires-at ${value} is not a date, a day count, or never`,
-    "Pass never, a day count like 90d, or an ISO 8601 date such as 2027-01-01",
-  );
 }
 
 function usage(causeSummary: string, remediation: string): SplitchCliError {

@@ -135,9 +135,23 @@ export function durableConfigStoreAccess(
         syncExperimentConfig: (input) => writer.syncExperimentConfig(input).then(remember),
         resyncFlagConfig: (input) =>
           writer.resyncFlagConfig(input).then((result) => remember(result, input.flagId)),
+        syncFlagConfig: (input) =>
+          writer.syncFlagConfig(input).then((result) => remember(result, input.flagId)),
+        fenceTemporaryEnvironment: (input) => writer.fenceTemporaryEnvironment(input),
+        async teardownTemporaryEnvironment(input) {
+          await writer.teardownTemporaryEnvironment(input);
+          for (const [key, snapshot] of writeThrough) {
+            if (snapshot.appId === appId && snapshot.environmentId === environmentId)
+              writeThrough.delete(key);
+          }
+        },
         async deleteFlagConfig(input) {
           const result = await writer.deleteFlagConfig(input);
           if (isSuccessful(result)) {
+            if (result.snapshotRevision === null) {
+              localSnapshots.delete(controlPlaneFlagConfigKey(appId, environmentId, input.flagId));
+              return result;
+            }
             localSnapshots.set(controlPlaneFlagConfigKey(appId, environmentId, input.flagId), {
               appId,
               environmentId,

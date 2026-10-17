@@ -4,31 +4,26 @@ import { type HandlerArgs, renderError } from "@splitch/worker-runtime";
 import { requireAppDelete, requireAppWrite } from "./app-authz";
 import { deleteEnvironmentCredentials } from "./app-environment-credentials";
 import {
-  ALLOW_POLICY,
   type AppEnvironmentDeps,
   appNotFound,
-  createEnvironmentRecord,
   deleteEnvironmentBlockedByChildren,
   environmentResponse,
   lastEnvironmentRequired,
   nowIso,
   runningExperimentError,
 } from "./app-environment-model";
-import {
-  type ClientKeyRow,
-  clientKeyResponse,
-  provisionClientKey,
-} from "./client-key-provisioning";
+import { createPermanentEnvironment } from "./environment-create";
 import { EnvironmentExposureStatusCleanupError } from "./environment-exposure-status-cleanup";
-import {
-  initializeFlagConfigsForEnvironment,
-  rollbackCreatedEnvironment,
-} from "./flag-config-lifecycle";
 import { objectBody, pathParam } from "./handler-input";
 import { resolvedEnvironment } from "./resolved-environment";
+import { createTemporaryEnvironment } from "./temporary-environment-create";
+import { environmentKindUnsupported } from "./temporary-environment-errors";
+import { makeEnvironmentSyncHandler } from "./temporary-environment-sync";
+import { teardownTemporaryEnvironment } from "./temporary-environment-teardown";
 
 export function makeEnvironmentHandlers(deps: AppEnvironmentDeps) {
   return {
+    syncEnvironment: makeEnvironmentSyncHandler(deps),
     async listEnvironments({ input, requestId }: HandlerArgs<unknown>): Promise<Response> {
       const appId = pathParam(input, "appId");
       const app = await deps.repo.identity.getApp(appId);
@@ -53,33 +48,9 @@ export function makeEnvironmentHandlers(deps: AppEnvironmentDeps) {
       if (writeError) return writeError;
 
       const body = objectBody(input);
-      const environment = await createEnvironmentRecord(deps, appScope(appId), appId, {
-        key: body.key as string,
-        name: (body.name as string | undefined) ?? (body.key as string),
-        policy: (body.policy as EnvironmentPolicy | undefined) ?? ALLOW_POLICY,
-        actorId: principal.id,
-      });
-      let clientKey: ClientKeyRow;
-      try {
-        await initializeFlagConfigsForEnvironment(deps, appId, environment.id);
-        clientKey = await provisionClientKey(deps, {
-          appId,
-          environmentId: environment.id,
-          organizationId: app.organizationId,
-          scope: envScope(appId, environment.id),
-        });
-      } catch (cause) {
-        await rollbackCreatedEnvironment(deps, appId, environment.id);
-        throw cause;
-      }
-      // The public Client Key rides the create response so the caller can point an
-      // SDK at the new Environment without a second command (ADR-0034, SPL-377).
-      // Provisioning failure rolls the Environment back above, so there is no
-      // success path that answers without a key.
-      return Response.json({
-        ...environmentResponse(environment),
-        clientKey: clientKeyResponse(clientKey),
-      });
+      if (body.temporary !== undefined)
+        return createTemporaryEnvironment(deps, app, body, principal, requestId);
+      return createPermanentEnvironment(deps, app, body, principal, requestId);
     },
 
     async getEnvironment({ input, requestId }: HandlerArgs<unknown>): Promise<Response> {
@@ -108,13 +79,15 @@ export function makeEnvironmentHandlers(deps: AppEnvironmentDeps) {
       if (writeError) return writeError;
 
       const body = objectBody(input);
-      const updated = await deps.repo.identity.updateEnvironment(appScope(appId), environmentId, {
-        ...(body.name !== undefined ? { name: body.name as string } : {}),
-        ...(body.policy !== undefined
-          ? { policy: JSON.stringify(body.policy as EnvironmentPolicy) }
-          : {}),
-        updatedAt: nowIso(deps),
-      });
+      const environment = await deps.repo.identity.getEnvironment(appScope(appId), environmentId);
+      if (environment && environment.expiresAt !== null && body.policy !== undefined) {
+        return environmentKindUnsupported(environment, "environments_update", requestId);
+      }
+      const updated = await deps.repo.identity.updateEnvironment(
+        appScope(appId),
+        environmentId,
+        environmentPatch(body, nowIso(deps)),
+      );
       if (!updated) return appNotFound(requestId);
       return Response.json(environmentResponse(updated));
     },
@@ -132,28 +105,26 @@ export function makeEnvironmentHandlers(deps: AppEnvironmentDeps) {
       const deleteError = await requireAppDelete(deps, appId, principal, requestId);
       if (deleteError) return deleteError;
 
-      try {
-        return await deleteEnvironmentAfterAuth(
-          deps,
-          appId,
-          app.organizationId,
-          environmentId,
-          principal.id,
-          requestId,
-        );
-      } catch (cause) {
-        if (!(cause instanceof EnvironmentExposureStatusCleanupError)) throw cause;
-        return exposureCleanupUnavailable(requestId);
-      }
+      return deleteEnvironmentWithRecovery(
+        deps,
+        appId,
+        app.organizationId,
+        environmentId,
+        principal.id,
+        requestId,
+      );
     },
   };
 }
 
-function exposureCleanupUnavailable(requestId: string): Response {
+function exposureCleanupUnavailable(
+  requestId: string,
+  message = "Exposure status cleanup is unavailable",
+): Response {
   return renderError(
     {
       code: "SERVICE_UNAVAILABLE",
-      message: "Exposure status cleanup is unavailable",
+      message,
       details: { retryAfterMs: 30_000 },
     },
     { requestId },
@@ -175,6 +146,17 @@ async function deleteEnvironmentAfterAuth(
     const cleanup = deps.exposureStatusCleanup;
     if (!cleanup) throw new Error("environment delete requires Exposure status cleanup");
     await cleanup.delete({ appId, environmentId, actorId, orgId: organizationId, requestId });
+    return Response.json({ deleted: true });
+  }
+
+  if (environment.expiresAt !== null) {
+    await teardownTemporaryEnvironment(deps, {
+      appId,
+      environmentId,
+      orgId: organizationId,
+      actorId,
+      requestId,
+    });
     return Response.json({ deleted: true });
   }
 
@@ -219,7 +201,8 @@ async function environmentDeleteBlocker(
   if (running) return running;
 
   const environments = await deps.repo.identity.listEnvironments(appScope(appId));
-  if (environments.length <= 1) return lastEnvironmentRequired(appId, requestId);
+  if (environments.filter((item) => item.expiresAt === null).length <= 1)
+    return lastEnvironmentRequired(appId, requestId);
 
   return deleteEnvironmentBlockedByChildren(
     deps,
@@ -228,4 +211,46 @@ async function environmentDeleteBlocker(
     "DELETE_ENVIRONMENT",
     requestId,
   );
+}
+
+async function deleteEnvironmentWithRecovery(
+  deps: AppEnvironmentDeps,
+  appId: string,
+  organizationId: string,
+  environmentId: string,
+  actorId: string,
+  requestId: string,
+): Promise<Response> {
+  try {
+    return await deleteEnvironmentAfterAuth(
+      deps,
+      appId,
+      organizationId,
+      environmentId,
+      actorId,
+      requestId,
+    );
+  } catch (cause) {
+    const environment = await deps.repo.identity.getEnvironment(appScope(appId), environmentId);
+    if (!(cause instanceof EnvironmentExposureStatusCleanupError) && environment?.expiresAt == null)
+      throw cause;
+    if (environment?.expiresAt != null) {
+      deps.onTeardownFault?.(cause, requestId);
+      return exposureCleanupUnavailable(
+        requestId,
+        "Temporary Environment teardown is unavailable; retry delete",
+      );
+    }
+    return exposureCleanupUnavailable(requestId);
+  }
+}
+
+function environmentPatch(body: Record<string, unknown>, updatedAt: string) {
+  return {
+    ...(body.name !== undefined ? { name: body.name as string } : {}),
+    ...(body.policy !== undefined
+      ? { policy: JSON.stringify(body.policy as EnvironmentPolicy) }
+      : {}),
+    updatedAt,
+  };
 }

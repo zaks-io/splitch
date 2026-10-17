@@ -13,6 +13,44 @@ beforeEach(async () => {
   seed = await seedTwoTenants(local.d1);
   repo = createRepository(local.d1);
 });
+
+it("does not let 25 temporary-only Organizations starve a permanent change", async () => {
+  await local.d1
+    .prepare(`WITH RECURSIVE n(x) AS (VALUES(1) UNION ALL SELECT x + 1 FROM n WHERE x < 25)
+    INSERT INTO organizations(id, name, slug, plan, created_at, updated_at)
+    SELECT 'org_temp_' || x, 'Temporary', 'temporary-' || x, 'free', ?, ? FROM n`)
+    .bind(NOW, NOW)
+    .run();
+  await local.d1
+    .prepare(`INSERT INTO apps(id, organization_id, name, key, created_at, updated_at)
+    SELECT 'app_' || id, id, 'Temporary', id, ?, ? FROM organizations WHERE id LIKE 'org_temp_%'`)
+    .bind(NOW, NOW)
+    .run();
+  await local.d1
+    .prepare(`INSERT INTO environments(id, app_id, key, name, expires_at,
+    synced_from_environment_id, synced_at, created_at, updated_at)
+    SELECT 'env_' || id, id, 'temporary', 'Temporary', ?, 'deleted-source', ?, ?, ?
+    FROM apps WHERE organization_id LIKE 'org_temp_%'`)
+    .bind(LATER, NOW, NOW, NOW)
+    .run();
+  await local.d1
+    .prepare(`INSERT INTO flag_change_events(app_id, environment_id, flag_id,
+    flag_key, action, target_type, changed_at)
+    SELECT app_id, id, 'temporary-flag', 'temporary-flag', 'updated', 'flag_config', ?
+    FROM environments WHERE app_id LIKE 'app_org_temp_%'`)
+    .bind(NOW)
+    .run();
+  for (let index = 1; index <= 25; index += 1)
+    await install(`org_temp_${index}`, `sentry_temp_${index}`);
+  await install(seed.a.orgId, "sentry_permanent", LATER);
+
+  expect(await repo.flagChangeEvents.pendingForOrg("org_temp_1", 0, 100)).toEqual([]);
+  expect((await repo.sentry.dueInstallations(LATER, 25)).map((row) => row.installationId)).toEqual([
+    "sentry_permanent",
+  ]);
+  const selectedAgain = await repo.sentry.dueInstallations(LATER, 25);
+  expect(selectedAgain.map((row) => row.installationId)).toEqual(["sentry_permanent"]);
+});
 afterEach(async () => local.dispose());
 
 function install(orgId: string, installationId: string, now = NOW) {

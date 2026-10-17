@@ -81,16 +81,34 @@ retry returns `create_response`; different intent returns `IDEMPOTENCY_KEY_CONFL
 A first-class axis under App (ADR-0027). Experiments, Experiment Runs, Exposures, SDK credentials,
 and Flag CONFIGURATION are scoped to one Environment.
 
-| Column       | Type        | Constraints                                                               |
-| ------------ | ----------- | ------------------------------------------------------------------------- |
-| `id`         | text        | PK                                                                        |
-| `app_id`     | text        | FK → apps, not null                                                       |
-| `key`        | text        | not null, unique per `(app_id)` (e.g. `'production'`, `'staging'`)        |
-| `name`       | text        | not null                                                                  |
-| `policy`     | text        | not null JSON Environment Policy (`allow \| confirm`; `approve` reserved) |
-| `created_at` | timestamptz | not null                                                                  |
-| `updated_at` | timestamptz | not null                                                                  |
-| `created_by` | text        | WorkOS user ID or deleted-user tombstone                                  |
+| Column                       | Type        | Constraints                                                               |
+| ---------------------------- | ----------- | ------------------------------------------------------------------------- |
+| `id`                         | text        | PK                                                                        |
+| `app_id`                     | text        | FK → apps, not null                                                       |
+| `key`                        | text        | not null, unique per `(app_id)` (e.g. `'production'`, `'staging'`)        |
+| `name`                       | text        | not null                                                                  |
+| `policy`                     | text        | not null JSON Environment Policy (`allow \| confirm`; `approve` reserved) |
+| `expires_at`                 | timestamptz | nullable; null means permanent; indexed for teardown                      |
+| `synced_from_environment_id` | text        | nullable; no FK, so provenance survives source deletion                   |
+| `synced_at`                  | timestamptz | nullable; time of the last completed Sync                                 |
+| `created_at`                 | timestamptz | not null                                                                  |
+| `updated_at`                 | timestamptz | not null                                                                  |
+| `created_by`                 | text        | WorkOS user ID or deleted-user tombstone                                  |
+
+The three lifecycle columns are all null for a permanent Environment and all non-null for a
+Temporary Environment, enforced by a check constraint. Kind is immutable. Temporary Environment
+expiry cannot be extended; manual delete may shorten it to fence writes before teardown. The row
+is the teardown manifest and is deleted last. See
+[Environment lifecycle](../control-plane/endpoints-org-app.md#temporary-environment-lifecycle).
+
+### `flag_change_events`
+
+The append-only Flag change log adds `temporary_environment INTEGER NOT NULL DEFAULT 0`.
+Every write captures whether its Environment is temporary while that Environment row still exists,
+including configuration removal. The value stays with the event after Environment teardown.
+Sentry skips events with `temporary_environment = 1`; the normal change-log API and retention
+still include them. Existing rows default to permanent. See
+[Sentry dispatch](../sdk/sentry-integration.md).
 
 ### `approval_requests`
 

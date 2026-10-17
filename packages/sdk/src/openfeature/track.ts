@@ -1,4 +1,6 @@
+import { sdkErrorForFailure } from "../evaluate";
 import { postMetricEvent } from "../fetch-track";
+import { ErrorCodeSchema } from "../generated/contract-surface.js";
 import type { TransportFailure } from "../transport";
 import type { OfrepEvaluationContext, OfrepTrackingDetails } from "./types";
 
@@ -35,7 +37,7 @@ export async function trackMetricEvent(
     readFailure,
   );
   if (result.status !== 200 && result.status !== 202) {
-    throw new Error(result.errorMessage ?? "OFREP track failed");
+    throw sdkErrorForFailure("OFREP track", result);
   }
 }
 
@@ -80,9 +82,10 @@ function dimensionsFrom(details: OfrepTrackingDetails): Record<string, boolean |
 
 async function readFailure(response: Response): Promise<TransportFailure> {
   const body = (await response.json().catch(() => ({}))) as Record<string, unknown>;
+  const code = ErrorCodeSchema.safeParse(body.code);
   return {
     status: response.status,
-    errorCode: "SDK_TRANSPORT_NETWORK",
+    ...(code.success ? { errorCode: code.data } : {}),
     errorMessage:
       typeof body.message === "string" ? body.message : `HTTP ${String(response.status)}`,
   };

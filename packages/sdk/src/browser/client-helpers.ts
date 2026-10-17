@@ -1,10 +1,36 @@
+import { requireCredentialPrefix } from "../credential";
 import { formatSdkErrorMessage, SplitchSdkError } from "../errors";
-import { DEFAULT_ID_TYPE, type EvaluateContext, type Logger } from "../evaluate";
+import {
+  DEFAULT_ID_TYPE,
+  type EvaluateContext,
+  type Logger,
+  sdkErrorForFailure,
+} from "../evaluate";
 import type { PrecomputedEvaluations } from "../evaluate-all";
 import { EvaluateAllResponseSchema } from "../generated/contract-surface.js";
 import type { AttributeValue } from "../transport";
-import { requireCredentialPrefix } from "../credential";
 import { canonicalEqual, type HeldPayload, type ListenerFailure } from "./payload-store";
+import type { BrowserTransport } from "./transport";
+
+export async function fetchInitialPayload(
+  transport: BrowserTransport,
+  context: ReturnType<typeof resolveContext>,
+  logger: Logger,
+): Promise<HeldPayload> {
+  const result = await transport.evaluateAll({
+    ...context,
+    idempotencyKey: mintIdempotencyKey(logger, context.targetingKey),
+  });
+  if (result.status !== 200 || result.evaluations === null || result.etag === null) {
+    throw loudly(
+      logger,
+      context.targetingKey,
+      sdkErrorForFailure("evaluateAll", result),
+      result.cause,
+    );
+  }
+  return { evaluations: result.evaluations, etag: result.etag };
+}
 
 export function resolveBrowserClientKey(clientKey: string): string {
   if (typeof clientKey !== "string" || clientKey.length === 0) {

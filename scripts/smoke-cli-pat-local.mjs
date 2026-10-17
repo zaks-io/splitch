@@ -6,9 +6,8 @@ import { join, resolve } from "node:path";
 import { isDeepStrictEqual } from "node:util";
 import {
   capturedChild,
-  controlPlaneOrigin,
   createLocalPatFixture,
-  issuerOrigin,
+  createPatClient,
   repoRoot,
   requireSafeOutput,
 } from "./cli-pat-local-fixture.mjs";
@@ -22,46 +21,29 @@ const grant = { target: `org:${organizationId}`, role: "member", permissions: []
 const abort = new AbortController();
 for (const signal of ["SIGINT", "SIGTERM"]) process.once(signal, () => abort.abort());
 let fixture;
-let session;
+let patClient;
+let workSignal = abort.signal;
 
 function check(condition, message) {
   if (!condition) throw new Error(message);
 }
 
-async function sessionRequest(method, path, body) {
-  const response = await fetch(`${controlPlaneOrigin}${path}`, {
-    method,
-    headers: { authorization: `Bearer ${session}`, "content-type": "application/json" },
-    body: body === undefined ? undefined : JSON.stringify(body),
-    signal: AbortSignal.timeout(15_000),
-  });
-  check(response.ok, `Session ${method} ${path} failed with HTTP ${response.status}`);
-  return response.json();
-}
-
 async function withToken(grants, use) {
-  abort.signal.throwIfAborted();
-  const created = await sessionRequest("POST", "/personal-access-tokens", {
-    name: `cli-local-${randomUUID()}`,
-    grants,
-    expiresAt: new Date(Date.now() + 3_600_000).toISOString(),
-  });
+  workSignal.throwIfAborted();
+  const created = await patClient.mint(grants);
   try {
     check(/^pat_[0-9a-f]{32}$/.test(created.token.id), "Mint returned an invalid PAT id");
     check(/^spl_pat_[0-9a-f]{64}$/.test(created.secret), "Mint returned an invalid PAT secret");
     await use(created);
   } finally {
-    const revoked = await sessionRequest(
-      "POST",
-      `/personal-access-tokens/${created.token.id}/revoke`,
-    );
+    const revoked = await createPatClient(fixture, abort.signal).revoke(created.token.id);
     check(typeof revoked.revokedAt === "string", "Session cleanup did not revoke its PAT");
     console.log("PASS session cleanup revoked test PAT");
   }
 }
 
 async function cli(secret, args, expectedExit = 0) {
-  abort.signal.throwIfAborted();
+  workSignal.throwIfAborted();
   const home = join(fixture.root, "home");
   await mkdir(home, { recursive: true, mode: 0o700 });
   const env = {
@@ -69,14 +51,14 @@ async function cli(secret, args, expectedExit = 0) {
     HOME: home,
     SPLITCH_TOKEN: secret,
     SPLITCH_PLATFORM_TARGET: "local",
-    CONTROL_PLANE_API_ORIGIN: controlPlaneOrigin,
-    AUTH_API_ORIGIN: issuerOrigin,
+    CONTROL_PLANE_API_ORIGIN: fixture.origin,
+    AUTH_API_ORIGIN: fixture.issuerOrigin,
   };
   for (const name of ["SPLITCH_APP", "SPLITCH_ENV", "EVALUATION_API_ORIGIN"]) delete env[name];
   const run = capturedChild([cliPath, ...args, "--json"], {
     cwd: home,
     env,
-    signal: AbortSignal.any([abort.signal, AbortSignal.timeout(30_000)]),
+    signal: AbortSignal.any([workSignal, AbortSignal.timeout(30_000)]),
   });
   const result = await run.completed;
   requireSafeOutput(result.stdout + result.stderr);
@@ -237,7 +219,10 @@ async function invalidSmoke() {
     await withToken([grant], async ({ token, secret }) => {
       await cli(secret, ["context"]);
       // Mutate D1 only, preserving the active KV entry written by minting.
-      await fixture.sql(`UPDATE personal_access_tokens SET ${mutation} WHERE id='${token.id}';`);
+      await fixture.sql(
+        `UPDATE personal_access_tokens SET ${mutation} WHERE id='${token.id}';`,
+        workSignal,
+      );
       const result = await cli(secret, ["context"], 2);
       check(result.code === "CLI_TOKEN_INVALID", `D1 ${state} token lost its auth error code`);
       console.log(`PASS D1 ${state} PAT rejected despite active KV`);
@@ -252,13 +237,13 @@ try {
   console.log(
     "PASS isolated issuer and real Analysis/Control Plane Workers healthy; native actor limiter 1102",
   );
-  const response = await fetch(`${issuerOrigin}/token`, { signal: AbortSignal.timeout(5_000) });
-  check(response.ok, "Local session issuer failed");
-  ({ accessToken: session } = await response.json());
-  check(typeof session === "string", "Local issuer omitted the session token");
-  await readSmoke();
-  await writeSmoke();
-  await invalidSmoke();
+  await fixture.run(async (signal) => {
+    workSignal = signal;
+    patClient = createPatClient(fixture, signal);
+    await readSmoke();
+    await writeSmoke();
+    await invalidSmoke();
+  });
   console.log("PASS real session to PAT to built CLI smoke, including AC1/AC2 and invalid mapping");
 } catch (error) {
   // Only our fixed diagnostic messages are public. Native errors can carry headers or bodies.

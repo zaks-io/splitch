@@ -29,6 +29,7 @@ import {
   parseConfigStoreConnectionContext,
   parsePanelSessionContext,
 } from "./config-store-live-update-context";
+import { makeDurableConfigStoreProjectionJournal } from "./config-store-projection-journal";
 import { buildEvaluationSnapshotFromD1 } from "./config-store-snapshot-build";
 import { makeDurableSnapshotRevisionAllocator } from "./config-store-snapshot-revision";
 import type { ControlPlaneApiEnv } from "./env";
@@ -135,6 +136,20 @@ export class ConfigStoreDurableObject
     return this.store().deleteFlagConfig(input);
   }
 
+  syncFlagConfig(input: Parameters<ConfigStoreWriter["syncFlagConfig"]>[0]) {
+    return this.store().syncFlagConfig(input);
+  }
+
+  fenceTemporaryEnvironment(input: Parameters<ConfigStoreWriter["fenceTemporaryEnvironment"]>[0]) {
+    return this.store().fenceTemporaryEnvironment(input);
+  }
+
+  teardownTemporaryEnvironment(
+    input: Parameters<ConfigStoreWriter["teardownTemporaryEnvironment"]>[0],
+  ) {
+    return this.store().teardownTemporaryEnvironment(input);
+  }
+
   override async fetch(request: Request): Promise<Response> {
     if (request.method !== "GET" || request.headers.get("upgrade")?.toLowerCase() !== "websocket") {
       return new Response("expected WebSocket upgrade", { status: 426 });
@@ -237,9 +252,16 @@ export class ConfigStoreDurableObject
     this.#configStore ??= makeConfigStore({
       repo: createRepository(this.env.DB),
       kv: this.env.CONFIG_STORE,
+      projectionJournal: makeDurableConfigStoreProjectionJournal(this.ctx.storage),
       broadcaster: { broadcast: (nudge) => this.broadcast(nudge) },
       nextSnapshotRevision: makeDurableSnapshotRevisionAllocator(this.ctx.storage),
       logger: console,
+      clearEnvironmentState: async () => {
+        for (const socket of this.ctx.getWebSockets()) {
+          socket.close(AUTHORIZATION_POLICY_CLOSE_CODE, "Environment deleted");
+        }
+        await this.ctx.storage.deleteAll();
+      },
     });
     return this.#configStore;
   }

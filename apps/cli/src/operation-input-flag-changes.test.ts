@@ -35,6 +35,10 @@ describe("flag-changes promotion filter", () => {
 
       expect(input.fromEnvironmentId).toBe("env_dev");
       expect(input.toEnvironmentId).toBe("env_prod");
+      if (action === "export") {
+        expect(input.from).toBe("2026-01-01T00:00:00Z");
+        expect(input.to).toBe("2026-01-02T00:00:00Z");
+      }
     },
   );
 });

@@ -13,6 +13,7 @@ import {
 } from "../src/config-store-access";
 import { makeSnapshotRevisionCounter } from "../src/config-store-fixture-data";
 import { type Harness, ids, makeAuthedApp, token } from "../src/config-store-harness-core";
+import { makeConfigStoreProjectionJournalFixture } from "../src/config-store-projection-journal-fixture";
 import { makePoolHarness } from "./config-store-pool-harness";
 
 let h: Harness;
@@ -27,26 +28,14 @@ afterEach(async () => {
 
 describe("flag_config_get direct KV reads", () => {
   it("issues zero config-store D1 queries and zero DO subrequests on a warm read", async () => {
-    const seeded = makeConfigStore({
-      repo: h.repo,
-      kv: h.kv,
-      broadcaster: { broadcast: () => undefined },
-      nextSnapshotRevision: makeSnapshotRevisionCounter(),
-    });
+    const seeded = makeWriter();
     expect(await seeded.resyncFlagConfig(configIdentity())).toMatchObject({ ok: true });
 
     const resolverD1 = countingD1(h.d1);
     const configStoreD1 = countingD1(h.d1);
     const repo = createRepository(resolverD1.db);
     const configStoreRepo = createRepository(configStoreD1.db);
-    const target = namespaceFor(
-      makeConfigStore({
-        repo: configStoreRepo,
-        kv: h.kv,
-        broadcaster: { broadcast: () => undefined },
-        nextSnapshotRevision: makeSnapshotRevisionCounter(),
-      }),
-    );
+    const target = namespaceFor(makeWriter(configStoreRepo));
     const access = durableConfigStoreAccess(target.namespace, h.kv, {
       repo: configStoreRepo,
       waitUntil: (promise) => void promise,
@@ -81,12 +70,7 @@ describe("flag_config_get direct KV reads", () => {
 describe("flag_config_get KV miss reads", () => {
   it("reads D1 directly on a KV miss and repairs the snapshot in waitUntil", async () => {
     const revisions = makeSnapshotRevisionCounter();
-    const seeded = makeConfigStore({
-      repo: h.repo,
-      kv: h.kv,
-      broadcaster: { broadcast: () => undefined },
-      nextSnapshotRevision: revisions,
-    });
+    const seeded = makeWriter(h.repo, revisions);
     expect(await seeded.resyncFlagConfig(configIdentity())).toMatchObject({ ok: true });
     const key = controlPlaneFlagConfigKey(ids.appId, ids.environmentId, ids.flagId);
     await h.kv.delete(key);
@@ -98,12 +82,7 @@ describe("flag_config_get KV miss reads", () => {
     const configStoreD1 = countingD1(h.d1);
     const repo = createRepository(resolverD1.db);
     const configStoreRepo = createRepository(configStoreD1.db);
-    const writer = makeConfigStore({
-      repo: configStoreRepo,
-      kv: h.kv,
-      broadcaster: { broadcast: () => undefined },
-      nextSnapshotRevision: revisions,
-    });
+    const writer = makeWriter(configStoreRepo, revisions);
     const target = namespaceFor(writer);
     const warn = vi.fn();
     const backgroundTasks: Promise<unknown>[] = [];
@@ -153,14 +132,7 @@ describe("flag_config_get KV miss reads", () => {
   it("returns FLAG_NOT_FOUND from D1 on a KV miss without touching the writer DO", async () => {
     const counted = countingD1(h.d1);
     const repo = createRepository(counted.db);
-    const target = namespaceFor(
-      makeConfigStore({
-        repo,
-        kv: h.kv,
-        broadcaster: { broadcast: () => undefined },
-        nextSnapshotRevision: makeSnapshotRevisionCounter(),
-      }),
-    );
+    const target = namespaceFor(makeWriter(repo));
     const backgroundTasks: Promise<unknown>[] = [];
     const access = durableConfigStoreAccess(target.namespace, h.kv, {
       repo,
@@ -191,14 +163,7 @@ describe("flag_config_get snapshot failures", () => {
     const configStoreD1 = countingD1(h.d1);
     const repo = createRepository(resolverD1.db);
     const configStoreRepo = createRepository(configStoreD1.db);
-    const target = namespaceFor(
-      makeConfigStore({
-        repo: configStoreRepo,
-        kv: h.kv,
-        broadcaster: { broadcast: () => undefined },
-        nextSnapshotRevision: makeSnapshotRevisionCounter(),
-      }),
-    );
+    const target = namespaceFor(makeWriter(configStoreRepo));
     const error = vi.fn();
     const access = durableConfigStoreAccess(target.namespace, h.kv, {
       logger: { error, warn: vi.fn() },
@@ -238,6 +203,16 @@ describe("flag_config_get snapshot failures", () => {
     expect(await h.kv.get(key, "text")).toContain('"version":"broken"');
   });
 });
+
+function makeWriter(repo = h.repo, nextSnapshotRevision = makeSnapshotRevisionCounter()) {
+  return makeConfigStore({
+    projectionJournal: makeConfigStoreProjectionJournalFixture(),
+    repo,
+    kv: h.kv,
+    broadcaster: { broadcast: () => undefined },
+    nextSnapshotRevision,
+  });
+}
 
 function appFor(repo: Harness["repo"], access: ConfigStoreAccess) {
   const writer = access.writerFor(ids.appId, ids.environmentId);

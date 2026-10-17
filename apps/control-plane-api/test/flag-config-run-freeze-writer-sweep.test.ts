@@ -14,6 +14,7 @@ import {
   NOW_MS,
   startSeededExperiment,
 } from "../src/config-store-harness-core";
+import { makeConfigStoreProjectionJournalFixture } from "../src/config-store-projection-journal-fixture";
 import { makePoolHarness as makeHarness } from "./config-store-pool-harness";
 
 /**
@@ -55,6 +56,9 @@ const APPROVAL: ApprovalCommit = {
  * cannot be frozen by the Run it is publishing.
  */
 const EXEMPT_WRITERS: Record<string, string> = {
+  syncFlagConfig: "temporary-only target cannot host an Experiment Run",
+  fenceTemporaryEnvironment: "changes only a Temporary Environment's expiry",
+  teardownTemporaryEnvironment: "removes an expired Temporary Environment's external state",
   readFlagConfig: "read-only",
   readFlagConfigPurgeTarget: "reads the stored evaluation owner before deletion",
   repairFlagConfigSnapshot: "repairs derived KV state without changing D1",
@@ -67,6 +71,7 @@ beforeEach(async () => {
   await narrowSeededAvailability(h.d1, ["control", "treatment"]);
   await startSeededExperiment(h.d1);
   store = makeConfigStore({
+    projectionJournal: makeConfigStoreProjectionJournalFixture(),
     repo: h.repo,
     kv: h.kv,
     broadcaster: { broadcast: () => undefined },

@@ -662,7 +662,7 @@ Flags:
 
 Example:
   splitch environment-exposure-status get --json",
-    "envs create": "Create an Environment (auto-provisions its Client Key, returned inline).
+    "envs create": "Create an Environment and its Client Key. A Temporary Environment copies a source and expires within seven days.
 
 Formats: appId: required Canonical App ID (app_...) or human-readable App slug.
 
@@ -674,23 +674,27 @@ Usage:
   splitch envs create [flags]
 
 Flags:
-  --app <app>         [type: string; default: SPLITCH_APP or config] App ID or slug.
-  --name <name>       [type: string; default: none] Resource name.
-  --key <key>         [type: string; default: none] Resource key.
-  --body-json <json>  [type: JSON object; default: none] Request body fields; see Request body below.
-  --json              [type: boolean; default: false] Write machine-readable JSON to stdout.
-  -h, --help          [type: boolean; default: false] Show help and exit.
+  --app <app>                  [type: string; default: SPLITCH_APP or config] App ID or slug.
+  --name <name>                [type: string; default: none] Resource name.
+  --key <key>                  [type: string; default: none] Resource key.
+  --temporary                  [type: boolean; default: false] Create a Temporary Environment from --from.
+  --from <environment>         [type: string; default: none] Source Environment ID or key; requires --temporary.
+  --expires-at <instant|days>  [type: ISO 8601 with offset | day count; default: 7d] Temporary Environment expiry, more than one minute and at most seven days out, for example 3d.
+  --body-json <json>           [type: JSON object; default: none] Request body fields; see Request body below.
+  --json                       [type: boolean; default: false] Write machine-readable JSON to stdout.
+  -h, --help                   [type: boolean; default: false] Show help and exit.
 
 Request body (--body-json):
-  key     required  string
-  name    optional  string
-  policy  optional  { variantAvailability: string ("allow" | "confirm"); targetingRolloutValue: string ("allow" | "confirm"); enabledState: string ("allow" | "confirm"); startExperimentRun: string ("allow" | "confirm") }
+  key        required  string
+  name       optional  string
+  policy     optional  { variantAvailability: string ("allow" | "confirm"); targetingRolloutValue: string ("allow" | "confirm"); enabledState: string ("allow" | "confirm"); startExperimentRun: string ("allow" | "confirm") }
+  temporary  optional  { fromEnvironmentId: string; expiresAt?: string }
   Example:
     {"key":"key"}
 
 Example:
-  splitch envs create --key staging --name "Staging" --json",
-    "envs delete": "Delete an Environment (blocked if running or last Environment).
+  splitch envs create --key pr-123 --temporary --from prod --expires-at 3d --json",
+    "envs delete": "Delete an Environment. Temporary Environments tear down immediately; permanent Environments retain running, non-empty and last-permanent-Environment guards.
 
 Formats: appId: required Canonical App ID (app_...) or human-readable App slug. environmentId: required Canonical Environment ID (env_...) or human-readable Environment key. by: optional one of "id".
 
@@ -744,6 +748,33 @@ Flags:
 
 Example:
   splitch envs list --json",
+    "envs sync": "Sync every Flag Configuration from a source Environment into a Temporary Environment, including salts and excluding live Runs. Retry an incomplete Sync to converge.
+
+Formats: appId: required Canonical App ID (app_...) or human-readable App slug. environmentId: required Canonical Environment ID (env_...) or human-readable Environment key. by: optional one of "id". fromEnvironmentId: required Source Environment ID or key in this App.
+
+Terms: Environment — a named deployment context under an App, such as \`dev\` or \`prod\`. Flag — a named feature toggle with a key, Variants, Targeting Rules, and enabled state. Experiment Run — the immutable, time-boxed unit of experiment analysis. App — the product or service surface that groups related Flags and hosts Experiments.
+
+Example arguments: {"appId":"app_1","environmentId":"environment_1","fromEnvironmentId":"fromEnvironment_1"}
+
+Usage:
+  splitch envs sync [flags]
+
+Flags:
+  --app <app>           [type: string; default: SPLITCH_APP or config] App ID or slug.
+  --env <environment>   [type: string; default: SPLITCH_ENV or config] Environment ID or key.
+  --by <mode>           [type: string; default: automatic] Allowed: id. Resolve a canonical-looking selector explicitly.
+  --from <environment>  [type: string; default: required] Source Environment ID or key to Sync from.
+  --body-json <json>    [type: JSON object; default: none] Request body fields; see Request body below.
+  --json                [type: boolean; default: false] Write machine-readable JSON to stdout.
+  -h, --help            [type: boolean; default: false] Show help and exit.
+
+Request body (--body-json):
+  fromEnvironmentId  required  string
+  Example:
+    {"fromEnvironmentId":"fromEnvironment_1"}
+
+Example:
+  splitch envs sync --env pr-123 --from dev --json",
     "envs update": "Rename an Environment or edit its Policy.
 
 Formats: appId: required Canonical App ID (app_...) or human-readable App slug. environmentId: required Canonical Environment ID (env_...) or human-readable Environment key. by: optional one of "id".
@@ -2664,10 +2695,11 @@ Usage:
 
 Commands:
   list            List an App's Environments.
-  create          Create an Environment (auto-provisions its Client Key, returned inline).
+  create          Create an Environment and its Client Key. A Temporary Environment copies a source and expires within seven days.
   get             Get one Environment (includes its inline Policy).
   update          Rename an Environment or edit its Policy.
-  delete          Delete an Environment (blocked if running or last Environment).
+  delete          Delete an Environment. Temporary Environments tear down immediately; permanent Environments retain running, non-empty and last-permanent-Environment guards.
+  sync            Sync every Flag Configuration from a source Environment into a Temporary Environment, including salts and excluding live Runs. Retry an incomplete Sync to converge.
 
 Flags:
   -h, --help  [type: boolean; default: false] Show help and exit.

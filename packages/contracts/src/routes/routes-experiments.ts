@@ -25,7 +25,11 @@ import {
 } from "../route-effects";
 import { listResponse } from "../wire-envelopes-core";
 import { EndRunRequestSchema } from "../write-persisted-schemas";
-import { APPROVAL_WRITE_ERRORS } from "./approval-write-errors";
+import {
+  EXPERIMENT_CREATE_ERRORS,
+  EXPERIMENT_START_ERRORS,
+  EXPERIMENT_UPDATE_ERRORS,
+} from "./experiment-route-errors";
 import {
   AppParams,
   EnvParams,
@@ -80,14 +84,7 @@ export const experimentRoutes = [
     rateLimit: RATE,
     idempotency: "optional",
     effects: createClosed,
-    errors: [
-      "APP_NOT_FOUND",
-      "FLAG_NOT_FOUND",
-      "VARIANT_NOT_AVAILABLE",
-      "EXPERIMENT_KEY_CONFLICT",
-      "FORBIDDEN",
-      "VALIDATION_ERROR",
-    ],
+    errors: EXPERIMENT_CREATE_ERRORS,
   }),
   defineApiRoute({
     operationId: "experiments_get",
@@ -118,14 +115,7 @@ export const experimentRoutes = [
     rateLimit: RATE,
     idempotency: "none",
     effects: updateClosed,
-    errors: [
-      "EXPERIMENT_NOT_FOUND",
-      "FORBIDDEN",
-      "RUN_FROZEN",
-      "DECISION_LOCKED",
-      "ALLOCATION_INVALID",
-      "VALIDATION_ERROR",
-    ],
+    errors: EXPERIMENT_UPDATE_ERRORS,
   }),
   defineApiRoute({
     operationId: "experiments_start",
@@ -142,16 +132,7 @@ export const experimentRoutes = [
     rateLimit: RATE,
     idempotency: "required",
     effects: startRunClosed,
-    errors: [
-      "EXPERIMENT_NOT_FOUND",
-      "FORBIDDEN",
-      "EXPERIMENT_RUNNING",
-      "EXPERIMENT_NO_DRAFT",
-      "ALLOCATION_INVALID",
-      "VARIANT_NOT_AVAILABLE",
-      ...APPROVAL_WRITE_ERRORS,
-      "VALIDATION_ERROR",
-    ],
+    errors: EXPERIMENT_START_ERRORS,
   }),
   defineApiRoute({
     operationId: "experiment_plan",
@@ -182,7 +163,13 @@ export const experimentRoutes = [
     rateLimit: RATE,
     idempotency: "none",
     effects: deleteClosed,
-    errors: ["EXPERIMENT_NOT_FOUND", "FORBIDDEN", "EXPERIMENT_RUNNING", "SERVICE_UNAVAILABLE"],
+    errors: [
+      "ENVIRONMENT_EXPIRED",
+      "EXPERIMENT_NOT_FOUND",
+      "FORBIDDEN",
+      "EXPERIMENT_RUNNING",
+      "SERVICE_UNAVAILABLE",
+    ],
   }),
   defineApiRoute({
     operationId: "runs_list",
@@ -228,7 +215,7 @@ export const experimentRoutes = [
     rateLimit: RATE,
     idempotency: "none",
     effects: sealRunClosed,
-    errors: ["RUN_NOT_FOUND", "FORBIDDEN", "RUN_NOT_RUNNING"],
+    errors: ["ENVIRONMENT_EXPIRED", "RUN_NOT_FOUND", "FORBIDDEN", "RUN_NOT_RUNNING"],
   }),
   ...conclusionRoutes,
   defineApiRoute({

@@ -1,18 +1,23 @@
 # Temporary Environments, Sync, and the `temporary_environments` permission
 
-**Status:** planned. The decision is
+**Status:** lifecycle implemented by SPL-770. The Control Panel and app-view changes in SPL-771 and
+PAT permission changes in SPL-772 remain pending. The decision is
 [ADR-0060](../../adr/0060-temporary-environments-are-expiring-scratch-environments-with-their-own-permission.md).
-Each slice below moves its part of this file into the canonical specs it names when it ships.
+Canonical lifecycle behavior is documented in [Environment endpoints](endpoints-org-app.md),
+[credentials](credentials-and-keys.md), [CLI and MCP](mcp-and-cli-surfaces.md),
+[D1](../contracts/storage-schemas-d1.md), [KV](../contracts/storage-schemas-kv.md), and
+[errors](../contracts/error-responses.md). This file retains the full design and pending slices.
 
 Goal: an agent working on one branch creates its own copy of `dev` or `prod`, points its local
 server and client at that copy, changes Flags freely, and never touches an Environment anyone else
-uses. The token it holds cannot change a permanent Environment. The copy and its keys stop working
+uses. With the pending SPL-772 permission, the token it holds cannot change a permanent Environment.
+The copy and its keys stop working
 on their own within 7 days.
 
 ## Glossary additions
 
-These land in `CONTEXT.md` and `apps/control-plane-api/CONTEXT.md` with the slice that exposes
-creation, not before, because the MCP Worker serves root `CONTEXT.md` to agents.
+These definitions are in `CONTEXT.md` and `apps/control-plane-api/CONTEXT.md` with SPL-770. The MCP
+Worker serves root `CONTEXT.md` to agents.
 
 **Temporary Environment**: an Environment created as a scratch copy of another Environment in the
 same App. It expires at most 7 days after creation and is then torn down with its configuration
@@ -20,7 +25,8 @@ and credentials. Its Policy is always all-`allow` and it cannot host Experiments
 Environment is permanent; the kind is fixed at creation.
 
 **Sync**: replacing every Flag Configuration in a Temporary Environment with the configuration of a
-source Environment in the same App, including the salt and never the live Run. Sync only ever writes
+source Environment in the same App, including the per-Environment Default Variant and salt, and
+never the live Run or Activation bindings. Sync only ever writes
 into a Temporary Environment.
 
 Reserved language: use **Sync** only for that whole-Environment copy into a Temporary Environment.
@@ -68,7 +74,9 @@ existing `LIST_READ_LIMIT`.
   before teardown.
 - **Expired is read-only.** After `expiresAt`, every mutation addressed to the Environment
   (configuration, Sync, keys, rename) is refused with `ENVIRONMENT_EXPIRED`. Reads work until
-  teardown. `environments_delete` still works and starts teardown immediately.
+  teardown. The registry's `route.effects.mutates` classifies mutations, independent of HTTP
+  method. `client_key_get` provisions and is fenced; read-only POST operations stay readable.
+  `environments_delete` still works and starts teardown immediately.
 - **The fence is serialized.** Every Flag Configuration write, Sync write, and teardown step that
   touches configuration runs in the Environment's existing Config Store writer
   (`configWriterName(appId, environmentId)`), which re-checks the Environment's expiry inside its
@@ -86,7 +94,8 @@ existing `LIST_READ_LIMIT`.
   that Environment, and deleting it is the remedy.
 - **App-level rollups ignore Temporary Environments:** the attention rollup (its planning, its
   200-Environment budget, and its items), expired and stale Flag detection, and Flag inventory
-  health. The attention rollup exclusion ships with creation: without it, an App with more than 150
+  health. Stale, expired, and inventory health exclusions remain pending in SPL-771. The attention
+  rollup exclusion ships with creation: without it, an App with more than 150
   permanent Environments could exceed the budget by creating Temporary Environments. The
   last-Environment delete guard counts permanent Environments only, and a Temporary Environment
   never satisfies or trips it.
@@ -98,7 +107,8 @@ existing `LIST_READ_LIMIT`.
   any other (ADR-0033).
 - **Keys.** The Environment key follows the existing key rules and stays unique within the App
   until teardown. Agents use a key that names their work, such as `pr-123`. Creating over a key an
-  expired but not yet torn down Environment still holds returns the existing `SLUG_CONFLICT`.
+  expired but not yet torn down Environment still holds returns `SLUG_CONFLICT`, with
+  `resourceType: "environment"` and `recommendedAction: "CHOOSE_DIFFERENT_SLUG"`.
 
 ## Create
 
@@ -129,6 +139,7 @@ a Client Key. An unknown source is `ENVIRONMENT_NOT_FOUND`.
 | Flag Configuration part                                  | Sync                    |
 | -------------------------------------------------------- | ----------------------- |
 | enabled state                                            | copied                  |
+| per-Environment Default Variant                          | copied                  |
 | available Variants                                       | copied                  |
 | baseline rollout percentage                              | copied                  |
 | salt                                                     | copied (unlike Promote) |
@@ -168,22 +179,29 @@ Returns `{ ...Environment, syncedFlags: number }` with `temporary.syncedFromEnvi
   `api_keys_create`; there is no second minting path. Every credential minted in a Temporary
   Environment, including after rotation, expires with it.
 - `CredentialCacheKV` gains payload version 3, identical to version 2 plus
-  `expiresAt: string | null`. The credential cache writer Durable Object derives the version and
+  `expiresAt: ISO datetime | null`, required and validated with an explicit UTC or numeric offset.
+  The credential cache writer Durable Object derives the version and
   expiry from the D1 Environment row, never from its caller: a Temporary Environment's credential is
   always written as version 3 with the Environment's expiry, and everything else keeps version 2. It
   refuses an active entry for an expired Temporary Environment.
 - Evaluation and Event Ingest readers accept versions 1, 2, and 3. After checking the terminal
   revocation marker and before rate limiting, they reject a credential whose `expiresAt` has passed
-  with `410 ENVIRONMENT_EXPIRED`. The rejection is not billed. A v3 entry with an unparseable
-  `expiresAt` fails closed as `ENVIRONMENT_EXPIRED`. Once teardown revokes the credential, the
+  with `410 ENVIRONMENT_EXPIRED`, whose `details.expiredAt` is an ISO datetime. The rejection is not
+  billed. A v3 entry with an invalid `expiresAt` fails schema parsing through the existing invalid
+  blob 5xx response and Worker fault path. Once teardown revokes the credential, the
   terminal marker wins and the response becomes `CREDENTIAL_REVOKED`.
 - Every route that authenticates a Client Key or API Key applies the check: evaluate, evaluate-all,
-  OFREP, verify, peek, exposures, Metric Events, Web Events, and activations.
-- The SDK maps a `410` body with `ENVIRONMENT_EXPIRED` to `reason: ERROR`,
-  `errorCode: ENVIRONMENT_EXPIRED`, logged once per client, never retried. SDK versions before this
+  OFREP, verify, peek, exposures, Metric Events, activations, and registered integration key routes.
+  The shared credential-authentication step also covers future routes. There is no Web Events route.
+- The primary SDK maps a `410` body with `ENVIRONMENT_EXPIRED` to `reason: ERROR`,
+  `errorCode: ENVIRONMENT_EXPIRED`. OpenFeature uses `GENERAL` and includes `ENVIRONMENT_EXPIRED`
+  in the message. Both log once per client and never retry. SDK versions before this
   change fold `410` into `SERVICE_UNAVAILABLE`: still a loud error, not a silent default.
 
 ## Permission
+
+Pending SPL-772. SPL-770 uses the existing permissions and role gates; it adds no PAT permission,
+route opt-in marker, or temporary-only narrowing.
 
 `temporary_environments` joins the closed PAT permission set:
 
@@ -239,7 +257,8 @@ widening.
 
 Teardown is one idempotent cascade, used by the scheduled job and by `environments_delete` on a
 Temporary Environment. The `environments` row is its durable manifest: while the row exists,
-teardown is pending, and every step can be rediscovered from D1.
+teardown is pending. The Config Store writer durably records each projection key before publishing
+it, so teardown can rediscover external state even after another operation deletes the Flag's D1 rows.
 
 1. **Fence.** `environments_delete` sets `expires_at` to now inside the Environment's Config Store
    writer, so the read-only rule, the App-wide skip, and the credential-writer refusal apply before
@@ -247,11 +266,17 @@ teardown is pending, and every step can be rediscovered from D1.
    holds.
 2. **Credentials.** Revoke every credential (terminal markers and tombstones) and delete the
    credential rows, as Environment delete does today.
-3. **KV and Durable Object state.** Delete everything the Environment owns outside D1, enumerated
-   from D1 rows that still exist: per-Flag configuration projections, the evaluation snapshot, the
-   activation configuration entry, and Config Store snapshot revision state. This is a dedicated
-   Environment-teardown operation on the Config Store writer, allowed only for an expired Temporary
-   Environment, that removes external state while D1 configuration remains. The ordinary Flag
+3. **KV and Durable Object state.** Enumerate projection keys from the Environment's Config Store
+   writer's durable journal and delete every key, including per-Flag configuration projections,
+   evaluation snapshots, and the activation configuration entry. Only Temporary Environments have
+   this journal. The writer derives the kind from the stored Environment row inside its mutation
+   queue before any publication, including the create-time Sync copy; a failed lookup never permits
+   an unjournaled write. Every Temporary Environment publication records its key before the KV write.
+   Permanent Environments write no journal entries or per-publication journal storage operations.
+   Ordinary deletion in a Temporary Environment retains journal entries; a stale entry only causes an
+   idempotent delete. Clear the journal and Config Store snapshot revision state together only after
+   every KV deletion succeeds. This dedicated operation is allowed only for an expired Temporary
+   Environment and does not depend on surviving Flag or Flag Configuration rows. The ordinary Flag
    deletion path keeps its guard against deleting a snapshot whose D1 configuration exists.
 4. **Exposure status.** Run the existing Exposure-status cleanup.
 5. **D1 configuration.** Delete Targeting Rules, then Flag Configurations.
@@ -296,7 +321,7 @@ splitch api-keys create --env pr-123                                        # [c
 tools derive from the same contracts: `environments_create` with `temporary`, `environments_sync`,
 `environments_delete`.
 
-Control Panel: the environment switcher lists Temporary Environments in their own group with their
+Control Panel, pending SPL-771: the environment switcher lists Temporary Environments in their own group with their
 expiry, and pages scoped to one show its expiry and Sync source. The Policy editor and Experiment
 creation are unavailable there, with the reason stated. Both reuse existing components and
 treatments. Creating and Sync stay CLI and MCP operations in this release.
@@ -347,17 +372,17 @@ Three slices. The first ships the whole lifecycle because creation is unsafe wit
 teardown, the fence, and the Sentry skip, and Sync reuses the create copy path. The other two are
 blocked by it and can run in parallel; their footprints are disjoint.
 
-1. **[SPL-770](https://linear.app/zaks-io/issue/SPL-770) Agents create, Sync, and use expiring
+1. **[SPL-770](https://linear.app/zaks-io/issue/SPL-770), lifecycle implemented. Agents create, Sync, and use expiring
    Temporary Environments with temporary keys.** The D1 migration, create and Sync, credential cache
    v3 with the data-plane expiry check and SDK mapping, every `ENVIRONMENT_KIND_UNSUPPORTED` refusal,
    the live and Sync limits, expired-is-read-only, the Config Store fence and the App-wide skip, the
    change-log kind with the Sentry skip, the attention rollup exclusion, teardown on delete and on
    the cron, CLI and MCP.
-2. **[SPL-771](https://linear.app/zaks-io/issue/SPL-771) App-level views and the Control Panel
+2. **[SPL-771](https://linear.app/zaks-io/issue/SPL-771), pending. App-level views and the Control Panel
    treat Temporary Environments as scratch** (blocked by SPL-770; split for size). Stale and
    expired Flag and inventory health exclusions; the switcher group, expiry and Sync source,
    and unavailable Policy and Experiment affordances.
-3. **[SPL-772](https://linear.app/zaks-io/issue/SPL-772) A PAT with `temporary_environments` can
+3. **[SPL-772](https://linear.app/zaks-io/issue/SPL-772), pending. A PAT with `temporary_environments` can
    manage Temporary Environments and nothing permanent** (blocked by SPL-770; split for risk and
    authority). Permission enum, route opt-in marker and registry validation, narrowing, the
    path-selector enforcement, the create-body check, the approval exclusion, capabilities,
@@ -381,6 +406,10 @@ blocked by it and can run in parallel; their footprints are disjoint.
 
 ## Done
 
+These are full-design acceptance criteria. The temporary-only token criteria require SPL-772;
+the stale, expired, inventory, and Control Panel criteria require SPL-771. SPL-770 uses tokens with
+the existing lifecycle permissions.
+
 - From a clean checkout with only `SPLITCH_TOKEN` set to a token granted
   `app:<id>:owner:temporary_environments`, an agent runs `envs create --temporary --from prod`,
   `api-keys create`, and a local server against the new keys. Every Flag not controlled by a live
@@ -399,7 +428,8 @@ blocked by it and can run in parallel; their footprints are disjoint.
   Environments exactly as before, a grant mixing `temporary_environments` on one App with `write`
   on another resolves per App, and a login session is unaffected.
 - From `expiresAt` until teardown, both keys get `410 ENVIRONMENT_EXPIRED` on evaluate,
-  evaluate-all, OFREP, verify, peek, exposures, Metric Events, Web Events, and activations, from
+  evaluate-all, OFREP, verify, peek, exposures, Metric Events, activations, and registered integration
+  key routes, from
   the SDK and raw HTTP; a key rotated before expiry behaves the same. After teardown they get
   `CREDENTIAL_REVOKED`.
 - With no older expired backlog, 50 Temporary Environments that expire together are gone from

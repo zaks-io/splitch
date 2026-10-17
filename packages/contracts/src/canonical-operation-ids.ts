@@ -34,6 +34,7 @@ export const CANONICAL_OPERATION_IDS = [
   "environments_get",
   "environments_update",
   "environments_delete",
+  "environments_sync",
   // Approval Requests + Reviews
   "approval_requests_list",
   "approval_requests_get",

@@ -8,6 +8,7 @@ import {
 } from "../../control-plane-api/src/config-store.js";
 import type { ConfigStoreAccess } from "../../control-plane-api/src/config-store-access.js";
 import { makeSnapshotRevisionCounter } from "../../control-plane-api/src/config-store-fixture-data.js";
+import { makeConfigStoreProjectionJournalFixture } from "../../control-plane-api/src/config-store-projection-journal-fixture.js";
 import type { FixtureSigner } from "../../control-plane-api/src/fixture-signer.js";
 import {
   appToken,
@@ -39,7 +40,6 @@ export interface QuickstartHarness {
   readonly controlPlaneApp: Hono;
   readonly evaluationApp: Hono;
   readonly repo: Repository;
-  readonly configStore: ConfigStoreWriter;
   readonly signer: FixtureSigner;
   readonly flagHarness: FlagDefinitionHarness;
   readonly appId: string;
@@ -87,21 +87,7 @@ export async function makeQuickstartHarness(): Promise<QuickstartHarness> {
     updatedAt: NOW_ISO,
   });
   const signer = flagHarness.signer;
-  const configStore = makeConfigStore({
-    repo,
-    kv: configKv,
-    broadcaster: { broadcast() {} },
-    nextSnapshotRevision: makeSnapshotRevisionCounter(),
-    now: () => new Date(Date.parse(NOW_ISO)),
-  });
-  const configStoreAccess: ConfigStoreAccess = {
-    writerFor() {
-      return configStore;
-    },
-    liveUpdatesFor: () => ({
-      connect: async () => new Response("test live updates unavailable", { status: 503 }),
-    }),
-  };
+  const configStoreAccess = quickstartConfigStoreAccess(repo, configKv);
 
   flagHarness.app = makeAppForRepo(flagHarness, repo, configStoreAccess);
 
@@ -159,7 +145,6 @@ export async function makeQuickstartHarness(): Promise<QuickstartHarness> {
     controlPlaneApp,
     evaluationApp,
     repo,
-    configStore,
     signer,
     flagHarness,
     appId,
@@ -305,6 +290,35 @@ async function readRequestText(input: RequestInfo | URL): Promise<string | undef
     return undefined;
   }
   return input.text();
+}
+
+function quickstartConfigStoreAccess(repo: Repository, kv: KVNamespace): ConfigStoreAccess {
+  const writers = new Map<string, ConfigStoreWriter>();
+  const writerFor = (appId: string, environmentId: string): ConfigStoreWriter => {
+    const name = `${appId}:${environmentId}`;
+    let writer = writers.get(name);
+    if (!writer) {
+      const projectionJournal = makeConfigStoreProjectionJournalFixture();
+      writer = makeConfigStore({
+        projectionJournal,
+        repo,
+        kv,
+        broadcaster: { broadcast() {} },
+        nextSnapshotRevision: makeSnapshotRevisionCounter(),
+        clearEnvironmentState: async () => projectionJournal.clear(),
+        now: () => new Date(Date.parse(NOW_ISO)),
+      });
+      writers.set(name, writer);
+    }
+    return writer;
+  };
+  return {
+    readFlagConfig: (input) => writerFor(input.appId, input.environmentId).readFlagConfig(input),
+    writerFor,
+    liveUpdatesFor: () => ({
+      connect: async () => new Response("test live updates unavailable", { status: 503 }),
+    }),
+  };
 }
 
 export const quickstartOrigins = {

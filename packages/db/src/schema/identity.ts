@@ -146,11 +146,17 @@ export const environments = sqliteTable(
     name: text("name").notNull(),
     policy: text("policy").notNull().default(DEFAULT_ENVIRONMENT_POLICY),
     configVersion: integer("config_version").notNull().default(0),
+    expiresAt: text("expires_at"),
+    syncedFromEnvironmentId: text("synced_from_environment_id"),
+    syncedAt: text("synced_at"),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
     createdBy: userRef("created_by"),
   },
-  (t) => [uniqueIndex("environments_app_key_unique").on(t.appId, t.key)],
+  (t) => [
+    uniqueIndex("environments_app_key_unique").on(t.appId, t.key),
+    index("environments_expires_at_idx").on(t.expiresAt),
+  ],
 );
 
 export const deviceRefreshSessions = sqliteTable("device_refresh_sessions", {

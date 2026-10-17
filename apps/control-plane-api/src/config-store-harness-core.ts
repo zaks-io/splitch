@@ -10,6 +10,7 @@ import {
   NOW_MS,
   startSeededExperiment,
 } from "./config-store-fixture-data";
+import { makeConfigStoreProjectionJournalFixture } from "./config-store-projection-journal-fixture";
 import { type FixtureSigner, makeFixtureSigner } from "./fixture-signer";
 import { appAdminScope } from "./scope-binding";
 import { makeTestApp as createApp } from "./test-app-fixture";
@@ -60,6 +61,7 @@ export async function buildHarness(bindings: {
     let store = stores.get(name);
     if (!store) {
       store = makeConfigStore({
+        projectionJournal: makeConfigStoreProjectionJournalFixture(),
         repo,
         kv: recordedKv,
         broadcaster: {

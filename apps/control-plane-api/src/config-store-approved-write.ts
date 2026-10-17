@@ -1,6 +1,6 @@
 import { envScope } from "@splitch/db";
+import { requireWritableEnvironment } from "./config-store-expiry-fence";
 import { approvedProposalFreeze } from "./config-store-freeze";
-import { writeFlagConfigSnapshot } from "./config-store-snapshot-write";
 import {
   type ApplyApprovedFlagConfigInput,
   type ConfigStoreRuntimeDeps,
@@ -12,6 +12,7 @@ import {
   targetingRuleRows,
 } from "./config-store-shared";
 import { buildSnapshotFromD1 } from "./config-store-snapshot-build";
+import { writeFlagConfigSnapshot } from "./config-store-snapshot-write";
 import { targetingRulePersistFailure } from "./config-store-targeting-rules";
 import { baselineIsUnresolvable } from "./flag-config-rollout";
 import { diffEntriesTouch } from "./flag-config-run-freeze-proposal";
@@ -54,6 +55,7 @@ export async function applyApprovedFlagConfig(
   if (!rulesChanged && !approvedPatchMovesConfig(patch)) {
     return { ok: false, reason: "APPROVAL_EMPTY_CHANGE" };
   }
+  await requireWritableEnvironment(deps, scope);
   if (rulesChanged) {
     const replaced = await deps.repo.flags.replaceTargetingRules(
       scope,

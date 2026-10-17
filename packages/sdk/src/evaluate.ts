@@ -1,3 +1,4 @@
+import { ENVIRONMENT_EXPIRED_REMEDIATION } from "./environment-expiry";
 import { formatSdkErrorMessage, SplitchSdkError } from "./errors";
 import { resolveIdempotencyKey } from "./evaluate-idempotency-key";
 import type { VariantValue } from "./generated/contract-surface.js";
@@ -72,7 +73,8 @@ export function sdkErrorForFailure(operation: string, result: TransportFailure):
   return new SplitchSdkError({
     code,
     causeSummary: result.errorMessage ?? `${operation} failed with ${code}`,
-    remediation: SERVER_ERROR_REMEDIATION,
+    remediation:
+      code === "ENVIRONMENT_EXPIRED" ? ENVIRONMENT_EXPIRED_REMEDIATION : SERVER_ERROR_REMEDIATION,
     status: result.status,
     originalError: result.cause,
   });
@@ -100,7 +102,10 @@ function logEvaluateError(
     formatSdkErrorMessage({
       code: details.errorCode ?? errorCodeForStatus(status),
       causeSummary: "Evaluation failed loud to the Default Variant",
-      remediation: SERVER_ERROR_REMEDIATION,
+      remediation:
+        details.errorCode === "ENVIRONMENT_EXPIRED"
+          ? ENVIRONMENT_EXPIRED_REMEDIATION
+          : SERVER_ERROR_REMEDIATION,
       status,
       originalError: cause,
     }),
@@ -351,7 +356,10 @@ export async function runVerify(
       formatSdkErrorMessage({
         code: details.errorCode ?? errorCodeForStatus(result.status),
         causeSummary: "Verification failed loud to the Default Variant",
-        remediation: SERVER_ERROR_REMEDIATION,
+        remediation:
+          details.errorCode === "ENVIRONMENT_EXPIRED"
+            ? ENVIRONMENT_EXPIRED_REMEDIATION
+            : SERVER_ERROR_REMEDIATION,
         status: result.status,
         originalError: result.cause,
       }),

@@ -54,6 +54,7 @@ export function makeFlagChangeEventRepo(d1: D1Database, db: Db) {
             changed_at AS changedAt
           FROM flag_change_events
           WHERE app_id IN (SELECT id FROM apps WHERE organization_id = ?) AND seq > ?
+            AND temporary_environment = 0
           ORDER BY seq ASC LIMIT ?`,
         )
         .bind(orgId, afterSeq, limit)

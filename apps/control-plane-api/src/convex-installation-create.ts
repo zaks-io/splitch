@@ -1,4 +1,4 @@
-import type { ConvexInstallationRow } from "@splitch/db";
+import { appScope, type ConvexInstallationRow } from "@splitch/db";
 import type { HandlerArgs, RouteHandler } from "@splitch/worker-runtime";
 import { renderError } from "@splitch/worker-runtime";
 import { configurationCallbackDestinationError } from "./configuration-callback-transport";
@@ -6,6 +6,7 @@ import { verifyConfigurationCallback } from "./configuration-callback-verificati
 import type { ConvexHandlerDeps } from "./convex-handlers";
 import { convexPrincipalScope } from "./convex-installation-response";
 import { encryptConvexSecret } from "./convex-secret";
+import { environmentKindUnsupported } from "./temporary-environment-errors";
 
 export interface ConvexInstallationCreateInput {
   body: {
@@ -20,7 +21,7 @@ export function makeConvexInstallationCreateHandler(
   now: () => Date,
 ): RouteHandler<ConvexInstallationCreateInput> {
   return (async ({ input, principal, requestId }: HandlerArgs<ConvexInstallationCreateInput>) => {
-    const scope = convexPrincipalScope(principal, requestId);
+    const scope = await installationCreateScope(deps, principal, requestId);
     if (scope instanceof Response) return scope;
     const callbackError = validateCallbackUrl(input.body, requestId);
     if (callbackError) return callbackError;
@@ -56,6 +57,22 @@ export function makeConvexInstallationCreateHandler(
       })
     );
   }) satisfies RouteHandler<ConvexInstallationCreateInput>;
+}
+
+async function installationCreateScope(
+  deps: ConvexHandlerDeps,
+  principal: HandlerArgs<unknown>["principal"],
+  requestId: string,
+) {
+  const scope = convexPrincipalScope(principal, requestId);
+  if (scope instanceof Response) return scope;
+  const environment = await deps.repo.identity.getEnvironment(
+    appScope(scope.appId),
+    scope.environmentId,
+  );
+  if (environment && environment.expiresAt !== null)
+    return environmentKindUnsupported(environment, "convex_installations_create", requestId);
+  return scope;
 }
 
 function validateCallbackUrl(

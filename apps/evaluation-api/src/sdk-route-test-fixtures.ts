@@ -75,6 +75,7 @@ interface SdkRouteHarnessOptions {
   readonly assignmentStore?: RecordingAssignmentStore;
   readonly exposureSourceId?: () => string;
   readonly spans?: PerformanceSpanRecorder;
+  readonly observability?: Parameters<typeof createApp>[0]["observability"];
 }
 
 function routeExposureSourceId(options: SdkRouteHarnessOptions): () => string {
@@ -244,6 +245,7 @@ export async function makeSdkRouteHarness(options: SdkRouteHarnessOptions = {}) 
     evaluationCommitSink,
     evaluationUsageSink,
     spans: options.spans,
+    observability: options.observability,
   });
   return {
     app,

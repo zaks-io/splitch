@@ -1,9 +1,8 @@
 import assert from "node:assert/strict";
 import { EventEmitter } from "node:events";
 import test from "node:test";
-import { watchWorker } from "./local-e2e-fleet.mjs";
 import { createFaultTracker } from "./local-e2e-fleet-faults.mjs";
-import { createSupervisor } from "./local-e2e-fleet-supervisor.mjs";
+import { createSupervisor, watchWorker } from "./local-e2e-fleet-supervisor.mjs";
 
 test("a Worker that dies without the harness signature still fails loud", async () => {
   const tracker = createFaultTracker();
@@ -96,3 +95,18 @@ function fakeWorker(name, startedAt = 0) {
   const worker = { name, origin: `http://${name}.test`, process, startedAt };
   return { ...worker, stopped: watchWorker(worker) };
 }
+
+test("scenario cancellation stops supervision before intentional Worker shutdown", async () => {
+  const controller = new AbortController();
+  const worker = fakeWorker("api-fleet");
+  const supervisor = createSupervisor({
+    tracker: createFaultTracker(),
+    relaunch: () => assert.fail("intentional shutdown must not restart"),
+    waitForHealth: async () => {},
+    log: () => {},
+  });
+  const monitored = supervisor.supervise([worker], { signal: controller.signal });
+  controller.abort();
+  worker.process.emit("exit", 0, null);
+  await monitored;
+});

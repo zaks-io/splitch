@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { spawn, spawnSync } from "node:child_process";
+import { spawnSync } from "node:child_process";
 import { mkdirSync, rmSync } from "node:fs";
 import { createServer } from "node:http";
 import { resolve } from "node:path";
@@ -15,9 +15,15 @@ import {
   localE2eSession,
   memberProfileKey,
 } from "./local-e2e-fixtures.mjs";
-import { localBindings, localE2eWorkers, wranglerBin } from "./local-e2e-fleet-config.mjs";
-import { createFaultTracker, describeFault } from "./local-e2e-fleet-faults.mjs";
-import { createSupervisor } from "./local-e2e-fleet-supervisor.mjs";
+import { localE2eWorkers, wranglerBin } from "./local-e2e-fleet-config.mjs";
+import { createFaultTracker } from "./local-e2e-fleet-faults.mjs";
+import {
+  createSupervisor,
+  createTaskScope,
+  failOnWorkerStop,
+  launchWorker,
+  stopChild,
+} from "./local-e2e-fleet-supervisor.mjs";
 
 const repoRoot = resolve(import.meta.dirname, "..");
 const persistPath = resolve(repoRoot, "test-results/control-panel-e2e-state");
@@ -28,12 +34,13 @@ const faultTracker = createFaultTracker();
 
 export async function waitForHealth(
   worker,
-  { timeoutMs = 60_000, fetchImpl = fetch, pollMs = 250, runId } = {},
+  { timeoutMs = 60_000, fetchImpl = fetch, pollMs = 250, runId, signal } = {},
 ) {
   const deadline = Date.now() + timeoutMs;
   let lastFailure = "no response";
   while (Date.now() < deadline) {
-    if (worker.process?.exitCode !== null) {
+    signal?.throwIfAborted();
+    if (worker.process && worker.process.exitCode !== null) {
       throw new Error(`${worker.name} exited ${worker.process.exitCode} before becoming healthy`);
     }
     lastFailure = await probeHealth(worker, fetchImpl, runId);
@@ -45,7 +52,11 @@ export async function waitForHealth(
 
 async function probeHealth(worker, fetchImpl, runId) {
   try {
-    const response = await fetchImpl(`${worker.origin}/health`);
+    const response = await fetchImpl(`${worker.origin}/health`, {
+      signal: AbortSignal.timeout(1_000),
+    });
+    if (response.ok && !(await expectedService(response, worker)))
+      return "unexpected service identity";
     if (!response.ok) return `HTTP ${response.status}`;
     const responseRunId = response.headers.get("x-splitch-local-e2e-run-id");
     return !runId || worker.checkRunId === false || responseRunId === runId
@@ -56,21 +67,10 @@ async function probeHealth(worker, fetchImpl, runId) {
   }
 }
 
-export function watchWorker(worker) {
-  return new Promise((resolveStop) => {
-    worker.process.once("error", (error) => {
-      resolveStop({ name: worker.name, error });
-    });
-    worker.process.once("exit", (code, signal) => {
-      resolveStop({ name: worker.name, code, signal });
-    });
-  });
-}
-
-export async function failOnWorkerStop(running) {
-  const stopped = await Promise.race(running.map((worker) => worker.stopped));
-  const detail = stopped.error?.message ?? stopped.signal ?? `exit ${stopped.code ?? "unknown"}`;
-  throw new Error(`${stopped.name} stopped unexpectedly (${detail})`);
+async function expectedService(response, worker) {
+  if (!worker.service) return true;
+  const body = await response.clone().json();
+  return body.service === worker.service && body.platformTarget === "local";
 }
 
 export async function waitForFleetReady(running, healthOptions) {
@@ -183,68 +183,97 @@ function seedLocalResources() {
   }
 }
 
-function launchWorker(worker, runId, tracker = faultTracker) {
-  const args =
-    worker.name === "control-plane-api"
-      ? [...worker.args, "--var", `SPLITCH_LOCAL_E2E_RUN_ID:${runId}`]
-      : worker.args;
-  const env = {
-    ...process.env,
-    ...localBindings,
-    ...worker.env,
-    CI: "true",
-    SPLITCH_LOCAL_E2E_RUN_ID: runId,
-  };
-  if (process.env.SPLITCH_LOCAL_DEV_FLEET === "true") {
-    // Each auxiliary Worker supplies its own identity-provider fixture config.
-    delete env.WORKOS_API_KEY;
-    delete env.WORKOS_CLIENT_ID;
-  }
-  const child = spawn(worker.command, args, {
-    cwd: worker.cwd ?? repoRoot,
-    env,
-    // SPL-181: piped rather than inherited so the harness can watch for the
-    // miniflare D1 crash signature. Output is still echoed verbatim.
-    stdio: ["ignore", "pipe", "pipe"],
-  });
-  for (const [stream, sink] of [
-    [child.stdout, process.stdout],
-    [child.stderr, process.stderr],
-  ]) {
-    stream.setEncoding("utf8");
-    stream.on("data", (chunk) => {
-      sink.write(chunk);
-      for (const fault of tracker.scan(worker.name, chunk)) {
-        process.stderr.write(`${describeFault(fault)}\n`);
-      }
-    });
-    // A Worker dying mid-write can leave the crash signature on an unterminated
-    // line; flush it so the death is attributed instead of reading as unexplained.
-    stream.on("end", () => {
-      for (const fault of tracker.flush(worker.name)) {
-        process.stderr.write(`${describeFault(fault)}\n`);
-      }
-    });
-  }
-  const runningWorker = { ...worker, process: child, startedAt: Date.now() };
-  return { ...runningWorker, stopped: watchWorker(runningWorker) };
-}
-
 function launchWorkers(runId) {
-  return workers.map((worker) => launchWorker(worker, runId));
+  return workers.map((worker) => launchWorker(worker, runId, faultTracker));
 }
 
 export async function bootFleet(
   runId,
-  { listenImpl = listen, seed = seedLocalResources, launch = launchWorkers } = {},
+  {
+    listenImpl = listen,
+    seed = seedLocalResources,
+    launch = launchWorkers,
+    readinessPort = 18799,
+    tracker = faultTracker,
+  } = {},
 ) {
-  const readiness = createReadinessServer(runId);
-  await listenImpl(readiness.server);
+  const readiness = createReadinessServer(runId, tracker);
+  await listenImpl(readiness.server, readinessPort);
   try {
-    seed();
-    return { readiness, running: launch(runId) };
+    await seed();
+    return { readiness, running: await launch(runId) };
   } catch (error) {
     readiness.server.close();
+    throw error;
+  }
+}
+
+// Scenario fleets share readiness, fault attribution and restart policy with panel E2E.
+export async function startManagedFleet(runId, { workers, seed, signal }) {
+  const tracker = createFaultTracker();
+  const controller = new AbortController();
+  const tasks = createTaskScope(signal);
+  const launched = [];
+  const running = [];
+  let readiness;
+  let monitored;
+  async function launch(worker) {
+    const replacement = launchWorker(worker, runId, tracker, { quiet: true });
+    launched.push(replacement);
+    const index = running.findIndex((candidate) => candidate.name === worker.name);
+    if (index < 0) running.push(replacement);
+    else running[index] = replacement;
+    return replacement;
+  }
+  const health = (worker, options) =>
+    Promise.all(
+      (worker.healthTargets ?? [worker]).map((target) =>
+        waitForHealth(
+          { ...target, process: worker.process },
+          { ...options, signal, timeoutMs: 120_000 },
+        ),
+      ),
+    );
+  const lifecycle = {
+    run: (task) => tasks.run(task, monitored),
+    diagnostics: () => ({
+      storageFaults: tracker.count,
+      restarts: launched.length - workers.length,
+    }),
+    async close() {
+      await tasks.close();
+      controller.abort();
+      if (readiness?.server.listening) await new Promise((done) => readiness.server.close(done));
+      for (const worker of launched.toReversed()) await stopChild(worker);
+      await monitored?.catch(() => {});
+    },
+  };
+  try {
+    ({ readiness } = await bootFleet(runId, {
+      seed,
+      tracker,
+      readinessPort: 0,
+      launch: async () => {
+        for (const worker of workers) await launch(worker);
+        return running;
+      },
+    }));
+    await Promise.all(running.map((worker) => health(worker, { runId })));
+    readiness.markReady();
+    const supervisor = createSupervisor({
+      tracker,
+      runId,
+      relaunch: async (worker) => {
+        await stopChild(worker);
+        return launch(worker);
+      },
+      waitForHealth: health,
+      log: () => console.error("local-e2e-fleet: recovering a storage harness fault"),
+    });
+    monitored = tasks.watch(supervisor.supervise(running, { signal: controller.signal }));
+    return lifecycle;
+  } catch (error) {
+    await lifecycle.close();
     throw error;
   }
 }
@@ -255,7 +284,7 @@ async function main() {
   const { readiness, running } = await bootFleet(runId);
 
   const stop = () => {
-    for (const worker of running) worker.process.kill("SIGTERM");
+    for (const worker of running) void stopChild(worker);
   };
   process.once("SIGINT", stop);
   process.once("SIGTERM", stop);
@@ -264,7 +293,7 @@ async function main() {
     tracker: faultTracker,
     runId,
     relaunch: (worker) => {
-      const replacement = launchWorker(worker, runId);
+      const replacement = launchWorker(worker, runId, faultTracker);
       running[running.findIndex((candidate) => candidate.name === worker.name)] = replacement;
       return replacement;
     },

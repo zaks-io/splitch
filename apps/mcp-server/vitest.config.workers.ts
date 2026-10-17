@@ -51,6 +51,7 @@ function controlPlaneService(request: Request): Response {
       appId: "app_session",
       key: "session",
       name: "Session",
+      temporary: null,
       policy: {
         variantAvailability: "allow",
         targetingRolloutValue: "allow",

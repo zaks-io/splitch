@@ -136,7 +136,7 @@ describe("attention rollup Analysis fan-out bounds", { timeout: ATTENTION_TEST_T
     // 200 bulk Environments on top of the three the fixture seeds: 203 > 200.
     await seedEnvironments(repo, 200);
     const read = vi.fn<AnalysisResultsReader["read"]>();
-    const { spied, listRunningExperiments, listEnvironments } = spyOnPlanningReads(repo);
+    const { spied, listRunningExperiments, listPermanentEnvironments } = spyOnPlanningReads(repo);
     const app = harness({ read }, authFor(ids.appId, USER_ID), spied);
 
     const response = await app.request(`/apps/${ids.appId}/attention-rollup`, {
@@ -161,7 +161,7 @@ describe("attention rollup Analysis fan-out bounds", { timeout: ATTENTION_TEST_T
     expect(read).not.toHaveBeenCalled();
     // The read that enforces the budget must itself be bounded: one row past the
     // budget decides it, and materializing all 203 is the work being refused.
-    const rows = await listEnvironments.mock.results[0]?.value;
+    const rows = await listPermanentEnvironments.mock.results[0]?.value;
     expect(rows).toHaveLength(201);
     // The point of this budget is that it fires BEFORE the per-Environment D1
     // fan-out it exists to prevent; observing Analysis reads alone cannot tell

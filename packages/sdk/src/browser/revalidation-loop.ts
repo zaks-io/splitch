@@ -23,7 +23,7 @@ export interface RevalidationLoopDeps {
     etag: string,
   ) => void;
   readonly onNotModified: () => void;
-  readonly onFailure: () => void;
+  readonly onFailure: (error?: SplitchSdkError) => void;
 }
 
 /** Non-overlapping recursive timeout loop; the next tick starts after this one settles. */
@@ -108,6 +108,7 @@ export class RevalidationLoop {
 
   private fail(error: SplitchSdkError, cause?: unknown): void {
     loudly(this.deps.logger, this.deps.context.targetingKey, error, cause);
-    this.deps.onFailure();
+    this.deps.onFailure(error);
+    if (error.code === "ENVIRONMENT_EXPIRED") this.stop();
   }
 }

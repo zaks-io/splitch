@@ -15,6 +15,11 @@ describe("Segment dependent Flag Configuration publication", () => {
       experimentDrafts: [],
     } satisfies SegmentDependencies;
     const deps = {
+      repo: {
+        identity: {
+          getEnvironment: async (_scope: unknown, id: string) => ({ id, expiresAt: null }),
+        },
+      },
       configStore: {
         writerFor: () => ({
           resyncFlagConfig: async ({ flagId }: { flagId: string }) =>
@@ -100,6 +105,11 @@ describe("Segment dependent Flag Configuration publication", () => {
       experimentDrafts: [],
     } satisfies SegmentDependencies;
     const deps = {
+      repo: {
+        identity: {
+          getEnvironment: async (_scope: unknown, id: string) => ({ id, expiresAt: null }),
+        },
+      },
       configStore: {
         writerFor: () => ({
           resyncFlagConfig: async ({ flagId }: { flagId: string }) => {

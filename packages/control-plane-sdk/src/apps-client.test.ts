@@ -210,6 +210,7 @@ function environment(id: string, key: string, name: string, level: "allow" | "co
       enabledState: level,
       startExperimentRun: level,
     },
+    temporary: null,
     createdAt: "2026-07-18T00:00:00.000Z",
     updatedAt: "2026-07-18T00:00:00.000Z",
   };

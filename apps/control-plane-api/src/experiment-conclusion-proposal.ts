@@ -4,9 +4,6 @@ import { approvalTargetVersion, environmentPolicyContexts } from "./approval-tar
 import { responseFromSnapshot } from "./config-store-shared";
 import { buildSnapshotFromD1 } from "./config-store-snapshot-build";
 import type { FlagConfigResult } from "./config-store-types";
-import { validationErrors } from "./flag-definition-errors";
-import { flagConfigNotFound } from "./flag-config-errors";
-import { readEnvironmentPolicy } from "./flag-config-policy";
 import { targetConfigurationStale } from "./experiment-conclusion-errors";
 import { winnerConfirmFloor } from "./experiment-conclusion-policy";
 import {
@@ -17,6 +14,10 @@ import {
   type WinnerTargetSnapshot,
 } from "./experiment-conclusion-proposal-validation";
 import { runFrozen } from "./experiment-errors";
+import { flagConfigNotFound } from "./flag-config-errors";
+import { readEnvironmentPolicy } from "./flag-config-policy";
+import { validationErrors } from "./flag-definition-errors";
+import { environmentKindUnsupported } from "./temporary-environment-errors";
 
 export type PreparedWinnerProposal = {
   current: FlagConfigResult;
@@ -82,6 +83,16 @@ async function loadTarget(repo: Repository, input: WinnerProposalInput) {
     target.environmentId,
   );
   if (!environment) return { ok: false as const, response: flagConfigNotFound(input.requestId) };
+  if (environment.expiresAt !== null) {
+    return {
+      ok: false as const,
+      response: environmentKindUnsupported(
+        environment,
+        "CONCLUSION_WINNER_PROMOTION",
+        input.requestId,
+      ),
+    };
+  }
   const scope = envScope(input.appId, target.environmentId);
   const [snapshot, targetRow] = await Promise.all([
     buildSnapshotFromD1(repo, scope, target.flagId),

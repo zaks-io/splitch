@@ -1,6 +1,6 @@
 {
   "$schema": "https://unpkg.com/knip@6/schema.json",
-  "ignoreBinaries": ["gitleaks", "tb", "sbx-preview"],
+  "ignoreBinaries": ["gitleaks", "tb", "sbx-preview", "sbx-runtime"],
   "ignoreDependencies": ["cloudflare"],
   "lefthook": {
     "config": ["lefthook.yml"]

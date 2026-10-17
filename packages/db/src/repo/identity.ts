@@ -19,6 +19,7 @@ import { makeSessionReads } from "./identity-session-reads";
 import { makeCreateOrganization } from "./organization-create";
 import type { TenantScope } from "./scope";
 import { type ReadOptions, scopedTable } from "./scoped-table";
+import { makeTemporaryEnvironmentRepo } from "./temporary-environments";
 
 /**
  * Identity-domain repository.
@@ -56,6 +57,7 @@ export function makeIdentityRepo(db: Db, d1: D1Database) {
 
   return {
     environments: environmentsTable,
+    ...makeTemporaryEnvironmentRepo(db, d1),
     appMemberships: appMembershipRepo.table,
     deleteAppCascade,
     ...appDeletionSagaRepo,

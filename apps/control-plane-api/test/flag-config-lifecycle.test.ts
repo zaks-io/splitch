@@ -76,7 +76,7 @@ describe("flag configuration lifecycle on Flag create", () => {
     h.app = makeAppForRepo(
       h,
       faultingRepo(repo, 2),
-      configStoreAccess(h.bindings),
+      configStoreAccess(h.bindings, repo),
       h.bindings.credentialKv,
     );
 
@@ -163,7 +163,7 @@ describe("flag configuration lifecycle on Environment create", () => {
     h.app = makeAppForRepo(
       h,
       faultingRepo(repo, 2),
-      configStoreAccess(h.bindings),
+      configStoreAccess(h.bindings, repo),
       h.bindings.credentialKv,
     );
 

@@ -17,6 +17,7 @@ import {
   token,
 } from "../src/config-store-harness-core";
 import type { ControlPlaneFlagConfigSnapshot } from "../src/config-store-kv";
+import { makeConfigStoreProjectionJournalFixture } from "../src/config-store-projection-journal-fixture";
 import { makeDurableSnapshotRevisionAllocator } from "../src/config-store-snapshot-revision";
 import { makePoolHarness } from "./config-store-pool-harness";
 
@@ -154,6 +155,7 @@ function makeStore(
   nextSnapshotRevision: ConfigStoreDeps["nextSnapshotRevision"],
 ): ConfigStoreWriter {
   return makeConfigStore({
+    projectionJournal: makeConfigStoreProjectionJournalFixture(),
     repo: h.repo,
     kv: h.kv,
     broadcaster: { broadcast: () => undefined },
