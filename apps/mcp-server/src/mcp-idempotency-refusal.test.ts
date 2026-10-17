@@ -1,3 +1,4 @@
+import { inspect } from "node:util";
 import type { ErrorResponse } from "@splitch/contracts";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { handleMcpServerRequest } from "./mcp-handler";
@@ -51,8 +52,15 @@ describe("mcp missing-idempotency-key refusal", () => {
 
     expect(body.result).toBeUndefined();
     expect(body.error).toMatchObject({ code: -32603, message: "Internal error" });
-    // The cause is the operator's, in full, and the caller only gets its handle.
-    expect(JSON.stringify(logged[0]?.[0])).toContain("upstream exploded");
+    const row = inspect(logged, {
+      showHidden: true,
+      depth: null,
+      maxStringLength: null,
+      maxArrayLength: null,
+    });
+    expect(row).toContain("[message withheld]");
+    expect(row).toContain("mcp-idempotency-refusal.test.ts");
+    expect(row).not.toContain("upstream exploded");
     expect(body.error?.data?.message).not.toContain("upstream exploded");
     expect(body.error?.data?.reference).toMatch(/^[0-9a-f-]{36}$/);
   });

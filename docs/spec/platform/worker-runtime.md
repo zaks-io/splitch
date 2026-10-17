@@ -143,6 +143,33 @@ not move queue or Tinybird ownership into `@splitch/worker-runtime`.
   Cloudflare's zone-level Always Use HTTPS control remains the primary edge
   redirect and must be enabled separately in production.
 
+## Worker fault diagnostics
+
+Worker fault reports use a fingerprint per Worker surface and fault code. Their `fault` detail
+comes from the shared `serializeFault` helper before entering Sentry extras, breadcrumbs, or
+Workers Logs. It emits validated error names, Drizzle placeholder SQL capped at 2,000 characters,
+static D1 tokens and allowlisted diagnostic phrases, SQLite result-code names, and stack frames
+verified against the complete original stack header. SQL is emitted only for an engine Error
+whose isolated `constructor.name` is `DrizzleQueryError`, with its own string `query` and array
+`params`; parameter entries are never read or emitted. Every other error message is withheld,
+including top-level messages, parser excerpts, and interpolated customer values.
+
+Frames require `Object.prototype.toString.call(error) === "[object Error]"` and a nonempty
+message matching the complete stack header. Only the contiguous frame block immediately after
+that header survives; concatenated causes and subsequent lines are dropped. Workerd disallows
+`eval` and `new Function`, so eval-source frames cannot occur in production. A repository guard
+forbids non-test source assignments to `.stack` and `Error.prepareStackTrace`. That guard, rather
+than the serializer, prevents code from deliberately putting data in frame positions.
+
+The helper isolates unreadable fields, traverses causes before aggregate members in depth-first
+order, protects against cycles, and keeps the first 32 nodes within 8 KB of UTF-8 output. Fixed
+markers identify unreadable fields, withheld stacks, truncation, and omitted errors. A serializer
+failure returns a safe diagnostic instead of interrupting the fault reporter.
+
+After reporting a background fault, scheduled, queue, and `waitUntil` paths signal failure with
+a fresh Error containing only the fault code. They do not rethrow the caught error or attach a
+cause or other data, because workerd's native exception records bypass fault serialization.
+
 ## What the runtime does not own
 
 - Organization, App, Flag, Experiment, Run, Metric, or Segment invariants

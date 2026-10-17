@@ -1,3 +1,4 @@
+import { inspect } from "node:util";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { MetricEventDeliveryAttempt } from "./metric-event-delivery-attempt";
 import { handleMetricEventReconciliationQueue } from "./metric-event-reconciliation";
@@ -6,6 +7,38 @@ import type { Env } from "./types";
 afterEach(() => {
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
+});
+
+describe("Metric Event reconciliation fault diagnostics", () => {
+  it("withholds native Response.json diagnostics before retrying reconciliation", async () => {
+    const canary = "qxZ7s3crt";
+    const logs = ["error", "warn", "info", "log"].map((method) =>
+      vi.spyOn(console, method as "error").mockImplementation(() => {}),
+    );
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response(`${canary}!`)),
+    );
+    const queued = message(2);
+    await handleMetricEventReconciliationQueue(batch(queued), env(outboxNamespace()));
+    expect(queued.retry).toHaveBeenCalledOnce();
+    expect(queued.ack).not.toHaveBeenCalled();
+    expect(logs[0]).toHaveBeenCalledWith(
+      "event-ingest-api Metric Event reconciliation failed",
+      expect.any(Object),
+    );
+    const logged = inspect(
+      logs.map((log) => log.mock.calls),
+      {
+        showHidden: true,
+        depth: null,
+        maxStringLength: null,
+        maxArrayLength: null,
+      },
+    );
+    expect(logged).not.toContain(canary);
+    expect(logged).toContain("[message withheld]");
+  });
 });
 
 describe("Metric Event reconciliation", () => {

@@ -1,7 +1,8 @@
 import { env } from "cloudflare:workers";
+import { inspect } from "node:util";
 import { createRepository } from "@splitch/db";
 import type { Principal } from "@splitch/worker-runtime";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { dispatchCloudflarePushes } from "./cloudflare-push-dispatch";
 import { handleControlPlaneAppRequest } from "./control-plane-app-request";
 import type { ControlPlaneApiEnv } from "./env";
@@ -33,8 +34,38 @@ beforeEach(async () => {
   await seedReachableApp(APP_A, "neuron");
   repo = createRepository(env.DB);
 });
+afterEach(() => vi.restoreAllMocks());
 
 describe("immediate Cloudflare dispatch after resolved App mutations", () => {
+  it("reports a failed background dispatch and rejects with only the fault code", async () => {
+    const canary = "mutationdispatchprivatecanary";
+    const original = Object.assign(new Error(canary, { cause: new Error(canary) }), {
+      data: canary,
+    });
+    dispatch.mockRejectedValueOnce(original);
+    const logs = vi.spyOn(console, "error").mockImplementation(() => {});
+    const { response, background } = await request(
+      "/apps/neuron",
+      "PATCH",
+      { name: "Renamed" },
+      undefined,
+      "cloudflare_push_dispatch_failed",
+    );
+    expect(response.status).toBe(200);
+    const failures = background.filter((result) => result.status === "rejected");
+    expect(failures).toHaveLength(1);
+    const failure = failures[0].reason;
+    expect(failure).toBeInstanceOf(Error);
+    expect(failure.message).toBe("cloudflare_push_dispatch_failed");
+    expect(Object.getOwnPropertyNames(failure)).toEqual(["stack", "message"]);
+    expect(logs).toHaveBeenCalledWith(
+      expect.objectContaining({ message: "cloudflare_push_dispatch_failed", trigger: "mutation" }),
+    );
+    expect(inspect([background, logs.mock.calls], { showHidden: true, depth: null })).not.toContain(
+      canary,
+    );
+  });
+
   it("dispatches with the minted canonical App scope resolved from a slug", async () => {
     await seedReachableApp(APP_B, "other");
     const actor = principal(null, [APP_A, APP_B]);
@@ -129,6 +160,7 @@ async function request(
   method: string,
   body?: unknown,
   actor = principal(APP_A, [APP_A]),
+  expectedBackgroundFailure?: string,
 ) {
   const pending: Promise<unknown>[] = [];
   const waitUntil = vi.fn((promise: Promise<unknown>) => {
@@ -154,8 +186,13 @@ async function request(
     door: "binding",
     delegated: true,
   });
-  await Promise.all(pending);
-  return { response, waitUntil };
+  const background = await Promise.allSettled(pending);
+  if (expectedBackgroundFailure) {
+    await expect(Promise.all(pending)).rejects.toThrow(expectedBackgroundFailure);
+  } else {
+    await Promise.all(pending);
+  }
+  return { response, waitUntil, background };
 }
 
 async function expectMintedDispatch(appId: string) {

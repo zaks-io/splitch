@@ -1,3 +1,4 @@
+import { serializeFault } from "@splitch/observability/worker";
 import {
   deliverSealedEvaluationCommit,
   parseSealedEvaluationCommitPayload,
@@ -122,7 +123,7 @@ export class EvaluationCommitOutboxDurableObject {
     });
     await this.ctx.storage.setAlarm(publicationRetryAt);
     console.error("event-ingest-api Evaluation commit outbox publication failed", {
-      errorMessage: error instanceof Error ? error.message : "non-error rejection",
+      errorMessage: serializeFault(error),
     });
   }
 

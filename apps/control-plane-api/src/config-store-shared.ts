@@ -5,6 +5,7 @@ import {
   type Variant,
 } from "@splitch/contracts";
 import { appScope, type EnvScope } from "@splitch/db";
+import { serializeFault } from "@splitch/observability/worker";
 import { parseFlagConfigEnvelope, writeSnapshot } from "./config-store-kv";
 import { buildSnapshotFromD1 } from "./config-store-snapshot-build";
 import type {
@@ -61,7 +62,7 @@ export async function readFlagSnapshot(
   try {
     return { ...fromD1, flag: parseFlagConfigEnvelope(raw) };
   } catch (cause) {
-    deps.logger?.warn("config_store_kv_schema_mismatch", { key, cause });
+    deps.logger?.warn("config_store_kv_schema_mismatch", { key, cause: serializeFault(cause) });
     throw cause;
   }
 }

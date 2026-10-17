@@ -1,3 +1,4 @@
+import { inspect } from "node:util";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { missingAnalysisBindingCall } from "./mcp-control-plane-dispatch.test-fixture";
 import { handleMcpServerRequest, type McpServerRequestOptions } from "./mcp-handler";
@@ -110,7 +111,7 @@ describe("MCP error vocabulary", () => {
     }
   });
 
-  it("logs the whole fault and hands the caller a reference for it", async () => {
+  it("logs safe fault diagnostics and hands the caller a reference for it", async () => {
     const logged: unknown[][] = [];
     vi.spyOn(console, "error").mockImplementation((...args: unknown[]) => {
       logged.push(args);
@@ -131,9 +132,16 @@ describe("MCP error vocabulary", () => {
     expect(data.message).toContain("The arguments are not the problem");
     expect(data.reference).toMatch(/^[0-9a-f-]{36}$/);
     expect(logged).toHaveLength(1);
-    const row = JSON.stringify(logged[0]?.[0]);
+    const row = inspect(logged, {
+      showHidden: true,
+      depth: null,
+      maxStringLength: null,
+      maxArrayLength: null,
+    });
     expect(row).toContain(data.reference);
-    expect(row).toContain("CONTROL_PLANE_API delegation secret is required");
+    expect(row).toContain("[message withheld]");
+    expect(row).toContain("requiredDelegationSecret");
+    expect(row).not.toContain("CONTROL_PLANE_API delegation secret is required");
   });
 });
 

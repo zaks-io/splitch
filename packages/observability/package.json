@@ -51,5 +51,8 @@
     "@splitch/privacy": "workspace:*",
     "@splitch/worker-runtime": "workspace:*",
     "typescript": "^6.0.3"
+  },
+  "devDependencies": {
+    "drizzle-orm": "^0.45.3"
   }
 }

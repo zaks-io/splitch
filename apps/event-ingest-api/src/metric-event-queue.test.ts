@@ -44,7 +44,7 @@ describe("Metric Event queue delivery", () => {
       maxRetries: 7,
       ...identityOf("event-bad"),
       dedupKey: "<absent>",
-      errorMessage: "Metric Event row has no dedup_key",
+      errorMessage: expect.stringContaining("[message withheld]"),
     });
   });
 
@@ -66,7 +66,7 @@ describe("Metric Event queue delivery", () => {
         attempts: 8,
         maxRetries: 7,
         ...identityOf("event-discarded"),
-        errorMessage: "Tinybird returned HTTP 500 on the final of 8 delivery attempts",
+        errorMessage: expect.stringContaining("[message withheld]"),
       },
     );
   });
@@ -91,7 +91,7 @@ describe("Metric Event queue delivery", () => {
         dedupKey: "<absent>",
         eventDefinitionVersionId: "42",
         targetingKeyHash: '{"unexpected":"shape"}',
-        errorMessage: "Metric Event row has no dedup_key",
+        errorMessage: expect.stringContaining("[message withheld]"),
       },
     );
   });

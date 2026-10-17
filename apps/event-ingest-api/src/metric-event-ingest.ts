@@ -4,6 +4,7 @@ import {
   kvEnvelope,
   type MetricEventTrackRequest,
 } from "@splitch/contracts";
+import { serializeFault } from "@splitch/observability/worker";
 import type { MetricEventCredentialScope } from "./client-key-auth";
 import { activationNotAvailable, renderError, serviceUnavailable } from "./errors";
 import {
@@ -158,7 +159,7 @@ export async function handleAuthorizedMetricEvent(
  * config blob. The step that failed is named only for an API Key: to a public
  * Client Key these messages would answer "is this Entity enrolled?" and "which
  * Event Definitions gate an Activation?" one request at a time. Operators get the
- * full cause plus ids from the log, which is where the ids only ever go.
+ * safe cause diagnostics plus ids from the log, which is where the ids only ever go.
  */
 function activationFailure(
   cause: unknown,
@@ -174,9 +175,7 @@ function activationFailure(
       eventId: event.eventId,
       idType: event.idType,
       eventDefinitionId,
-      message: cause instanceof Error ? cause.message : String(cause),
-      detail: resolution?.detail ?? null,
-      stack: cause instanceof Error ? cause.stack : null,
+      fault: serializeFault(cause),
     }),
   );
   return renderError(activationResolutionError(resolution, disclosure));

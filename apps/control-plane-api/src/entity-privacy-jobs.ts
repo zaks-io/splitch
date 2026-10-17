@@ -1,4 +1,5 @@
 import { createRepository, type Repository } from "@splitch/db";
+import { serializeFault } from "@splitch/observability/worker";
 import { durableConfigStoreAccess } from "./config-store-access";
 import { createEntityPrivacyConsumer, type EntityPrivacyConsumer } from "./entity-privacy-consumer";
 import { runEntityDeleteJob } from "./entity-privacy-delete-job";
@@ -43,7 +44,7 @@ export async function handlePrivacyJobQueue(
       console.error("control-plane-api privacy job failed", {
         requestId: safeMessageRequestId(message.body),
         attempt: message.attempts,
-        error: cause instanceof Error ? cause.message : String(cause),
+        error: serializeFault(cause),
       });
       message.retry({ delaySeconds: retryDelaySeconds(message.attempts) });
     }

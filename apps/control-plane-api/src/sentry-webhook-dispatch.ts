@@ -1,4 +1,5 @@
 import type { Repository, SentryInstallationRow } from "@splitch/db";
+import { serializeFault } from "@splitch/observability/worker";
 import { decryptIntegrationSecret, signIntegrationPayload } from "./integration-secret";
 import { sentryFlagLogBody, unattributedSeqs } from "./sentry-change-payload";
 import { sentryWebhookUrlError } from "./sentry-webhook-url";
@@ -58,7 +59,7 @@ async function deliverIsolated(
   } catch (cause) {
     console.error("sentry_webhook_delivery_failed", {
       installationId: installation.installationId,
-      cause: describeCause(cause),
+      cause: serializeFault(cause),
     });
     await recordFailure(deps, installation, now, {
       kind: "internal",
@@ -137,7 +138,7 @@ async function deliverOne(
   if (result.outcome === "transport-failed") {
     console.error("sentry_webhook_delivery_transport_failed", {
       installationId: installation.installationId,
-      cause: describeCause(result.cause),
+      cause: serializeFault(result.cause),
     });
     await recordFailure(deps, installation, now, {
       kind: "transport",

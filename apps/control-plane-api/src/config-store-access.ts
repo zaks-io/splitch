@@ -5,6 +5,7 @@ import {
   type RunConfigKV,
 } from "@splitch/contracts";
 import { envScope, type Repository } from "@splitch/db";
+import { serializeFault } from "@splitch/observability/worker";
 import type { ConfigStoreWriter } from "./config-store";
 import {
   type ConfigStoreAppIdentityAccess,
@@ -222,7 +223,7 @@ function reportSnapshotReadFailure(
     ...(cause instanceof ControlPlaneFlagConfigSnapshotScopeError
       ? { mismatchAxes: cause.mismatchAxes }
       : {}),
-    cause,
+    cause: serializeFault(cause),
   });
 }
 

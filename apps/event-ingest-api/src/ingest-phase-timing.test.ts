@@ -1,10 +1,11 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
-import { scrubSentrySpan } from "@splitch/privacy";
+import { inspect } from "node:util";
 import type {
   PerformanceSpanDescriptor,
   PerformanceSpanRecorder,
 } from "@splitch/observability/performance-spans";
 import { __setSentryModuleForTests } from "@splitch/observability/sentry-module";
+import { scrubSentrySpan } from "@splitch/privacy";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { createIngestPhaseTiming, ingestTimingOutcomeFor } from "./ingest-phase-timing";
 
 afterEach(() => {
@@ -55,7 +56,14 @@ describe("ingest phase timing", () => {
       authMs: 2,
       serializedBytes: 128,
     });
-    expect(JSON.stringify(info.mock.calls[0]?.[0])).not.toContain("user@example.com");
+    expect(
+      inspect(info.mock.calls[0]?.[0], {
+        showHidden: true,
+        depth: null,
+        maxStringLength: null,
+        maxArrayLength: null,
+      }),
+    ).not.toContain("user@example.com");
     expect(descriptors).toEqual([
       {
         name: "Event ingest internal_exposure auth",

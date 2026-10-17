@@ -1,4 +1,5 @@
 import type { Repository, TenantScope } from "@splitch/db";
+import { serializeFault } from "@splitch/observability/worker";
 
 type PublishInput = Parameters<Repository["eventDefinitions"]["publish"]>[1];
 type PublishedVersion = NonNullable<Awaited<ReturnType<Repository["eventDefinitions"]["publish"]>>>;
@@ -61,7 +62,7 @@ function publicationFailure(
   console.error(name, {
     appId: args.appId,
     eventDefinitionId: args.eventDefinitionId,
-    cause,
+    cause: serializeFault(cause),
   });
   const failure = new Error(name, { cause });
   failure.name = name;

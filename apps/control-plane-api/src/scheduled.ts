@@ -1,6 +1,7 @@
 import { createRepository } from "@splitch/db";
 import {
   createWorkerFaultReporter,
+  serializeFault,
   workerEmitter,
   workerObservabilityWithWaitUntil,
 } from "@splitch/observability/worker";
@@ -81,10 +82,10 @@ async function runCloudflarePushDispatch(
         service,
         job: "cloudflare-push-dispatch",
         cron: event.cron,
-        fault: error instanceof Error ? (error.stack ?? error.message) : String(error),
+        fault: serializeFault(error),
       },
     );
-    throw error;
+    throw new Error("cloudflare_push_dispatch_failed");
   }
 }
 
@@ -113,10 +114,10 @@ async function runSentryWebhookDispatch(
         service,
         job: "sentry-webhook-dispatch",
         cron: event.cron,
-        fault: error instanceof Error ? (error.stack ?? error.message) : String(error),
+        fault: serializeFault(error),
       },
     );
-    throw error;
+    throw new Error("sentry_webhook_dispatch_failed");
   }
 }
 
@@ -215,10 +216,10 @@ async function runMetricEventClaimRetentionAdoption(
         service,
         job: "metric-event-claim-retention-adoption",
         cron: event.cron,
-        fault: error instanceof Error ? (error.stack ?? error.message) : String(error),
+        fault: serializeFault(error),
       },
     );
-    throw error;
+    throw new Error("metric_event_claim_retention_adoption_failed");
   }
 }
 
@@ -245,9 +246,9 @@ async function runApprovalArchive(
         service,
         job: "approval-request-archive",
         cron: event.cron,
-        fault: error instanceof Error ? (error.stack ?? error.message) : String(error),
+        fault: serializeFault(error),
       },
     );
-    throw error;
+    throw new Error("approval_request_archive_failed");
   }
 }

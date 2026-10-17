@@ -10,6 +10,9 @@ export default defineConfig({
       "@splitch/observability/performance-spans": fileURLToPath(
         new URL("../../packages/observability/src/performance-spans.ts", import.meta.url),
       ),
+      "@splitch/observability/worker": fileURLToPath(
+        new URL("../../packages/observability/src/worker.ts", import.meta.url),
+      ),
       "@splitch/observability": fileURLToPath(
         new URL("../../packages/observability/src/index.ts", import.meta.url),
       ),
