@@ -14,21 +14,23 @@ Environments.
 An Environment is either **permanent** (every Environment today) or **temporary**, fixed at
 creation. A Temporary Environment is a scratch copy of another Environment in the same App:
 
-- It is created from a source Environment and **Sync** can later replace its Flag Configurations
+- It is created from a source Environment, and **Sync** can later replace its Flag Configurations
   from any Environment in the App, including `prod`. Sync is a whole-Environment copy into a
   Temporary Environment only. It copies the salt so rollout bucketing matches the source, and never
   copies a live Run.
-- It expires at most 7 days after creation. The expiry cannot be extended. Every Client Key and
-  API Key minted in it carries that expiry, and the data plane rejects them with `410
-ENVIRONMENT_EXPIRED` from that instant, before any teardown runs. A scheduled teardown then
-  removes the Environment, its configuration, and its credentials.
-- Its Environment Policy is always all-`allow`, it cannot host Experiments, and its Flag changes
-  are not sent to the Sentry integration. App-level rollups ignore it.
-- A new PAT permission, `temporary_environments`, authorizes the full lifecycle of Temporary
+- It expires at most 7 days after creation, and the expiry cannot be extended. Every Client Key and
+  API Key minted in it carries that expiry. From that instant the data plane rejects them with
+  `ENVIRONMENT_EXPIRED`, the Environment becomes read-only, and a scheduled teardown removes the
+  Environment, its configuration, and its credentials.
+- Its Environment Policy is always all-`allow`. It cannot host Experiments, receive a Conclusion's
+  winner Promotion, or hold a Convex or Cloudflare integration installation, so nothing durable
+  outside it ever references it and no locally cached snapshot outlives it. Its Flag changes are
+  not sent to the Sentry integration, and App-level rollups ignore it.
+- A new PAT permission, `temporary_environments`, authorizes the lifecycle of Temporary
   Environments (create, Sync, Flag Configuration edits, Promotion into them, SDK keys, delete) and
   nothing else. It is checked after the target Environment is resolved, so a token carrying only
-  this permission is refused on every permanent Environment. Existing permissions keep their
-  meaning on Temporary Environments.
+  this permission is refused on every permanent Environment, and it never authorizes a stored
+  Approval Request. Existing permissions keep their meaning on Temporary Environments.
 
 ## Considered options
 
@@ -48,18 +50,25 @@ ENVIRONMENT_EXPIRED` from that instant, before any teardown runs. A scheduled te
 - **Sending Temporary Environment changes to Sentry.** Rejected. Sentry's flag log has no
   Environment axis, so scratch toggles would appear beside production errors as if they were
   production changes. That misleads triage, which is worse than the omission.
+- **Allowing integrations and propagating expiry into their snapshots.** Deferred. The Convex and
+  Cloudflare runtimes evaluate stored snapshots locally with no expiry, and revoking an installation
+  does not invalidate a snapshot already delivered. Refusing them keeps the 7-day guarantee true
+  until a real need justifies extending both snapshot contracts.
 
 ## Consequences
 
-- `environments` gains `expires_at` (non-null means temporary) and Sync provenance columns. The
-  credential cache gains a v3 payload carrying `expiresAt`; data-plane readers ship before any
-  writer emits it.
+- `environments` gains `expires_at` (non-null means temporary) and Sync provenance columns, and the
+  Flag change log records the Environment kind at write time. The credential cache gains a v3
+  payload carrying `expiresAt`. Data-plane readers ship before any writer emits it, and the Control
+  Plane must not roll back past the release that creates Temporary Environments while any exist.
 - `POST /apps/{app_id}/envs` gains an optional `temporary` body, and
   `POST /apps/{app_id}/envs/{environment_id}/sync` is the one new operation.
 - Route contracts gain an opt-in marker for `temporary_environments`, enforced once in the shared
   path-selector resolution step rather than per handler.
 - Each App holds at most 50 live Temporary Environments, which keeps them clear of the
-  200-Environment attention budget even before the rollup excludes them.
+  200-Environment attention budget even before the rollup excludes them. Sync refuses Apps above a
+  tested Flag count before writing anything.
 - Data an Exposure or event wrote under a Temporary Environment ages out under the existing
   datasource TTLs, the same as for any deleted Environment.
-- Full design, rollout, and slices: [temporary-environments.md](../spec/control-plane/temporary-environments.md).
+- Full design, rollout, and slices:
+  [temporary-environments.md](../spec/control-plane/temporary-environments.md).
