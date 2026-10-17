@@ -1,5 +1,6 @@
 import type { Repository, TenantScope } from "@splitch/db";
 import { envScope } from "@splitch/db";
+import { serializeFault } from "@splitch/observability/worker";
 import { decryptIntegrationSecret, signIntegrationPayload } from "./integration-secret";
 import { buildIntegrationSnapshot } from "./integration-snapshot";
 import { postWebhook, retryDelayMs } from "./webhook-transport";
@@ -61,10 +62,7 @@ async function deliverSafely(
   } catch (cause) {
     console.error("cloudflare_push_delivery_preparation_failed", {
       deliveryId: delivery.deliveryId,
-      cause:
-        cause instanceof Error
-          ? { name: cause.name, message: cause.message, stack: cause.stack }
-          : String(cause),
+      cause: serializeFault(cause),
     });
     await finishFailure(deps, delivery, leaseOwner, now, true, {
       kind: "internal",

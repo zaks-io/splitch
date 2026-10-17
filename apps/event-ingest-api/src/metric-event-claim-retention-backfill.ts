@@ -1,3 +1,4 @@
+import { serializeFault } from "@splitch/observability/worker";
 import { queueRetryDelaySeconds } from "./queue-retry";
 import type { Env } from "./types";
 
@@ -33,7 +34,7 @@ interface BackfillRow {
 
 type Retention = "retained" | "expired" | "missing";
 
-/** A failure whose message this module wrote, so logging it verbatim leaks nothing. */
+/** Distinguishes backfill failures from transport and runtime errors. */
 class BackfillFailure extends Error {}
 
 export interface MetricEventClaimRetentionBackfillNamespace {
@@ -238,10 +239,7 @@ function advanced(checkpoint: Checkpoint, row: BackfillRow | undefined, halted?:
 }
 
 function failedPage(started: Checkpoint, error: unknown): Checkpoint {
-  const failure =
-    error instanceof BackfillFailure
-      ? error.message
-      : `unexpected ${error instanceof Error ? error.name : typeof error}`;
+  const failure = serializeFault(error) ?? "[message withheld]";
   if ((started.failedAttempts ?? 0) >= MAX_FAILED_ATTEMPTS) return exhausted(started, failure);
   console.error("event-ingest-api Metric Event claim retention backfill failed", {
     failedAttempts: started.failedAttempts,

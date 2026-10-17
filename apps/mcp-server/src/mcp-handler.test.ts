@@ -1,4 +1,5 @@
 import { readFile } from "node:fs/promises";
+import { inspect } from "node:util";
 import { deriveMcpProtocolTools, type ErrorResponse } from "@splitch/contracts";
 import { describe, expect, it, vi } from "vitest";
 import { flagDefinition, flagPage } from "./mcp-flag-fixtures";
@@ -198,10 +199,15 @@ describe("mcp server errors and config", () => {
     };
 
     expect(body.error).toMatchObject({ code: -32603 });
-    // Loud where an operator reads it, opaque where the agent does.
-    expect(JSON.stringify(logged[0]?.[0])).toContain(
-      "CONTROL_PLANE_API service binding is required",
-    );
+    const row = inspect(logged, {
+      showHidden: true,
+      depth: null,
+      maxStringLength: null,
+      maxArrayLength: null,
+    });
+    expect(row).toContain("[message withheld]");
+    expect(row).toContain("requiredControlPlaneFetch");
+    expect(row).not.toContain("CONTROL_PLANE_API service binding is required");
     expect(body.error.data?.message).not.toContain("CONTROL_PLANE_API");
     expect(body.error.data?.reference).toMatch(/^[0-9a-f-]{36}$/);
   });

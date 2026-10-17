@@ -1,3 +1,4 @@
+import { serializeFault } from "@splitch/observability/worker";
 import { DeletedFlagConfigSnapshotError } from "./config-store-snapshot-revision";
 import type { ConfigStoreRuntimeDeps } from "./config-store-types";
 import { SegmentNotFoundError } from "./targeting-rule-resolution";
@@ -12,7 +13,7 @@ export async function catchConfigStoreFailure<T>(
     if (cause instanceof DeletedFlagConfigSnapshotError) {
       (deps.logger ?? console).error("config_store_deleted_snapshot_write_refused", {
         flagId: cause.flagId,
-        cause,
+        cause: serializeFault(cause),
       });
       return { ok: false as const, reason: "FLAG_NOT_FOUND" as const };
     }

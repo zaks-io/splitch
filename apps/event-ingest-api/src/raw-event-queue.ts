@@ -1,4 +1,5 @@
 import { requirePlatformTarget } from "@splitch/contracts";
+import { serializeFault } from "@splitch/observability/worker";
 import { createIngestPhaseTiming } from "./ingest-phase-timing";
 import { queueRetryDelaySeconds } from "./queue-retry";
 import {
@@ -235,7 +236,7 @@ function retryDelivery(
     datasource: item.envelope.datasource,
     queueMessageId: item.message.id,
     attempts: item.message.attempts,
-    errorMessage: error.message,
+    errorMessage: serializeFault(error),
   });
   item.message.retry({
     delaySeconds:
@@ -306,7 +307,7 @@ function retry(message: Message<Record<string, unknown>>, error: unknown): void 
   console.error("event-ingest-api raw event queue admission failed", {
     queueMessageId: message.id,
     attempts: message.attempts,
-    errorMessage: error instanceof Error ? error.message : "non-error rejection",
+    errorMessage: serializeFault(error),
   });
   message.retry({ delaySeconds: queueRetryDelaySeconds(message.attempts, message.id) });
 }

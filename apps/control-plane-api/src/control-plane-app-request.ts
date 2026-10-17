@@ -3,6 +3,7 @@ import { createPerformanceSpanRecorder } from "@splitch/observability/performanc
 import {
   createWorkerFaultReporter,
   createWorkerObservability,
+  serializeFault,
   workerObservabilityWithWaitUntil,
 } from "@splitch/observability/worker";
 import type { AuthResolver } from "@splitch/worker-runtime";
@@ -114,7 +115,7 @@ export async function handleControlPlaneAppRequest(input: {
         secretKeyVersion: env.INTEGRATION_SECRET_KEY_VERSION,
       }).catch((error) => {
         reportCloudflarePushFault(env, ctx, error, "mutation");
-        throw error;
+        throw new Error("cloudflare_push_dispatch_failed");
       }),
     );
   }
@@ -133,7 +134,7 @@ function reportCloudflarePushFault(
       service: "splitch-control-plane-api",
       job: "cloudflare-push-dispatch",
       trigger,
-      fault: error instanceof Error ? (error.stack ?? error.message) : String(error),
+      fault: serializeFault(error),
     },
   );
 }

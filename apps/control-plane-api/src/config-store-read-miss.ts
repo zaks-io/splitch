@@ -1,4 +1,5 @@
 import type { envScope, Repository } from "@splitch/db";
+import { serializeFault } from "@splitch/observability/worker";
 import type { ConfigStoreWriter } from "./config-store";
 import { responseFromSnapshot } from "./config-store-shared";
 import { buildSnapshotFromD1 } from "./config-store-snapshot-build";
@@ -54,7 +55,11 @@ export async function readFlagConfigOnMiss(options: {
         remember(result);
       })
       .catch((cause: unknown) => {
-        logger.error("config_store_kv_snapshot_repair_failed", { key, ...input, cause });
+        logger.error("config_store_kv_snapshot_repair_failed", {
+          key,
+          ...input,
+          cause: serializeFault(cause),
+        });
       }),
   );
   return { ok: true, config: responseFromSnapshot(snapshot) };

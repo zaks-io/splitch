@@ -1,3 +1,4 @@
+import { inspect } from "node:util";
 import { eventDefinitionConfigKey } from "@splitch/contracts";
 import { describe, expect, it, vi } from "vitest";
 import {
@@ -144,7 +145,12 @@ describe("Metric Event ingest Client Key probes", () => {
       expect(raw).not.toContain("expected boolean");
     }
     expect(JSON.stringify(wrongTypeBody)).not.toContain("expected boolean");
-    const recorded = JSON.stringify(errors);
+    const recorded = inspect(errors, {
+      showHidden: true,
+      depth: null,
+      maxStringLength: null,
+      maxArrayLength: null,
+    });
     expect(recorded).toContain("internal_purchase_limit");
     expect(recorded).toContain("internal_quota");
     expect(recorded).toContain("expected boolean");
@@ -173,8 +179,14 @@ describe("Metric Event ingest Client Key probes", () => {
       details: { eventName: METRIC_EVENT_NAME },
     });
     expect(JSON.stringify(body)).not.toContain("ed_signed_up");
-    expect(JSON.stringify(errors)).toContain("ed_signed_up");
-    expect(JSON.stringify(errors)).not.toMatch(/\.\.\./);
+    const recorded = inspect(errors, {
+      showHidden: true,
+      depth: null,
+      maxStringLength: null,
+      maxArrayLength: null,
+    });
+    expect(recorded).toContain("ed_signed_up");
+    expect(recorded).not.toMatch(/\.\.\./);
   });
 
   it("omits Event Definition IDs from Client Key first accept and replay", async () => {

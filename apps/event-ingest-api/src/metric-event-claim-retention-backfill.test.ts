@@ -1,3 +1,4 @@
+import { inspect } from "node:util";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MetricEventClaimRetentionBackfillDurableObject } from "./metric-event-claim-retention-backfill";
 import type { Env } from "./types";
@@ -103,7 +104,7 @@ describe("Metric Event claim retention backfill failures", () => {
     expect(firstDelay).toBeGreaterThanOrEqual(5_000);
     expect(errors).toHaveBeenCalledWith(
       "event-ingest-api Metric Event claim retention backfill failed",
-      { failedAttempts: 1, failure: "Metric Event retention backfill returned HTTP 500" },
+      { failedAttempts: 1, failure: expect.stringContaining("[message withheld]") },
     );
 
     await runAlarm();
@@ -184,23 +185,34 @@ describe("Metric Event claim retention backfill failures", () => {
     ]);
     const { object, runAlarm } = makeBackfill({
       outboxStatus: () => {
-        throw new Error("secret-dependency-detail");
+        try {
+          JSON.parse("qxZ7s3crt!");
+        } catch (cause) {
+          throw new Error("secret-dependency-detail", { cause });
+        }
+        throw new Error("Invalid JSON unexpectedly parsed");
       },
     });
 
     await run(object);
     await runAlarm();
 
-    const logged = JSON.stringify(errors.mock.calls);
+    const logged = inspect(errors.mock.calls, {
+      showHidden: true,
+      depth: null,
+      maxStringLength: null,
+      maxArrayLength: null,
+    });
     expect(logged).not.toContain("secret-dedup-key");
     expect(logged).not.toContain("secret-dependency-detail");
+    expect(logged).not.toContain("qxZ7s3crt");
     expect(errors).toHaveBeenCalledWith(
       "event-ingest-api Metric Event claim retention backfill failed",
-      { failedAttempts: 1, failure: "Metric Event retention backfill returned malformed JSON" },
+      { failedAttempts: 1, failure: expect.stringContaining("[message withheld]") },
     );
     expect(errors).toHaveBeenCalledWith(
       "event-ingest-api Metric Event claim retention backfill failed",
-      { failedAttempts: 2, failure: "unexpected Error" },
+      { failedAttempts: 2, failure: expect.stringContaining("[message withheld]") },
     );
   });
 });

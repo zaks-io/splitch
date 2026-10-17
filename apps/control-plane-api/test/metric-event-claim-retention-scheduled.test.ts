@@ -1,3 +1,4 @@
+import { inspect } from "node:util";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Harness } from "../src/config-store-harness-core";
 import type { ControlPlaneApiEnv } from "../src/env";
@@ -38,6 +39,10 @@ describe("Metric Event claim retention scheduled adoption", () => {
     const results = await Promise.allSettled(waits);
 
     expect(results.filter((result) => result.status === "rejected")).toHaveLength(1);
+    const failure = results.find((result) => result.status === "rejected")?.reason;
+    expect(failure).toBeInstanceOf(Error);
+    expect(failure.message).toBe("metric_event_claim_retention_adoption_failed");
+    expect(Object.getOwnPropertyNames(failure)).toEqual(["stack", "message"]);
     const row = consoleError.mock.calls
       .map(([value]) => value as Record<string, unknown>)
       .find((value) => value.message === "metric_event_claim_retention_adoption_failed");
@@ -46,7 +51,15 @@ describe("Metric Event claim retention scheduled adoption", () => {
       job: "metric-event-claim-retention-adoption",
       cron: "0 8 * * *",
     });
-    expect(row?.fault).toEqual(expect.stringContaining("halted=missing-claim"));
+    expect(row?.fault).toEqual(expect.stringContaining("[message withheld]"));
+    expect(
+      inspect([results, consoleError.mock.calls], {
+        showHidden: true,
+        depth: null,
+        maxStringLength: null,
+        maxArrayLength: null,
+      }),
+    ).not.toContain("halted=missing-claim");
   });
 });
 

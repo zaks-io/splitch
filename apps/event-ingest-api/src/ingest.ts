@@ -1,3 +1,4 @@
+import { serializeFault } from "@splitch/observability/worker";
 import { timingSafeEqualString } from "@splitch/worker-runtime";
 import { emptyError, renderError, serviceUnavailable } from "./errors";
 import { evaluationUsageReplayWindow } from "./evaluation-usage-replay-window";
@@ -83,7 +84,7 @@ export async function handleIngest(request: Request, env: Env): Promise<Response
       runId: event.value.runId,
       eventId: event.value.eventId,
       type: event.value.type,
-      errorMessage: error instanceof Error ? error.message : "non-error rejection",
+      errorMessage: serializeFault(error),
     });
     timing.emit("fault", { serializedBytes: ingestAdmissionCost([row]).byteCost });
     return renderError(serviceUnavailable("raw event queue handoff failed"));
@@ -138,7 +139,7 @@ export async function handleEvaluationIngest(request: Request, env: Env): Promis
       organizationId: event.value.organizationId,
       appId: event.value.appId,
       environmentId: event.value.environmentId,
-      errorMessage: error instanceof Error ? error.message : "non-error rejection",
+      errorMessage: serializeFault(error),
     });
     timing.emit("fault", { serializedBytes: ingestAdmissionCost([row]).byteCost });
     return renderError(serviceUnavailable("Evaluation usage queue handoff failed"));

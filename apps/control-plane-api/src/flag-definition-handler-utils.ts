@@ -1,4 +1,5 @@
 import { appScope, type Repository, type TenantScope } from "@splitch/db";
+import { serializeFault } from "@splitch/observability/worker";
 import type { HandlerArgs } from "@splitch/worker-runtime";
 import { requireAppWrite } from "./app-authz";
 import { appNotFound } from "./app-environment-model";
@@ -40,7 +41,7 @@ export async function resyncFlagSnapshots(
         appId,
         environmentId: env.id,
         flagId,
-        cause,
+        cause: serializeFault(cause),
       });
     }
   }

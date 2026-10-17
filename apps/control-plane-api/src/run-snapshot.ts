@@ -1,5 +1,6 @@
 import type { MetricQueryConfig } from "@splitch/contracts";
 import type { EnvScope } from "@splitch/db";
+import { serializeFault } from "@splitch/observability/worker";
 import type { ControlPlaneApiEnv } from "./env";
 import type { RunRow } from "./experiment-model";
 
@@ -156,7 +157,7 @@ export async function shipCommittedRunSnapshot(
       environmentId: scope.environmentId,
       experimentId: run.experimentId,
       runId: run.id,
-      fault: cause instanceof Error ? cause.message : String(cause),
+      fault: serializeFault(cause),
     };
     // Same containment rule as `containObservability`: a throwing fault sink
     // must not corrupt a correct 200 into a 500 on top of the lost report.

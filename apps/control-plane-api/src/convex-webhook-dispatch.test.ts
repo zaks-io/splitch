@@ -144,7 +144,7 @@ describe("Convex config webhook dispatch", () => {
       installationId: "poisoned-installation",
       deliveryId: "00000000-0000-4000-8000-000000000002",
       code: "DELIVERY_PREPARATION_FAILED",
-      causeName: "Error",
+      cause: expect.stringContaining("[message withheld]"),
     });
     consoleError.mockRestore();
     expect(deferrals).toEqual([
@@ -218,7 +218,7 @@ describe("Convex preparation diagnostics", () => {
       installationId: "00000000-0000-4000-8000-000000000002",
       deliveryId: "00000000-0000-4000-8000-000000000001",
       code: "DELIVERY_PREPARATION_FAILED",
-      causeName: "OperationError",
+      cause: expect.stringContaining("[message withheld]"),
     });
     expect(finishes[0]).toMatchObject({
       retryAt: "2026-08-25T12:30:00.000Z",

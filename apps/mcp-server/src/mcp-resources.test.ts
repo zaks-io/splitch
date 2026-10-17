@@ -1,4 +1,5 @@
 import { readFile } from "node:fs/promises";
+import { inspect } from "node:util";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { MCP_RESOURCE_URIS } from "./mcp-resources";
 import {
@@ -119,8 +120,15 @@ describe("MCP resource reads", () => {
     const body = (await response.json()) as JsonRpcError;
 
     expect(body.error).toMatchObject({ code: -32603, message: "Internal error" });
-    // The store's own words go to the Worker log; the caller gets its handle.
-    expect(JSON.stringify(logged[0]?.[0])).toContain("session store read failed");
+    const row = inspect(logged, {
+      showHidden: true,
+      depth: null,
+      maxStringLength: null,
+      maxArrayLength: null,
+    });
+    expect(row).toContain("[message withheld]");
+    expect(row).toContain("resourceReadError");
+    expect(row).not.toContain("session store read failed");
     expect(body.error.data).toMatchObject({ reference: expect.stringMatching(/^[0-9a-f-]{36}$/) });
   });
 

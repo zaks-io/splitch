@@ -160,6 +160,33 @@ beforeSend(event) {
 can break schema validation in Sentry ingest). The function must recurse through `extra`,
 `contexts`, `breadcrumbs.values[].data`, and stringified exception messages.
 
+### Worker fault detail
+
+Worker fault messages group by Worker surface and fault code. Before a caught error reaches
+Sentry extras, breadcrumbs, or Workers Logs, `serializeFault` withholds all free error messages.
+Its output contains only validated error names, Drizzle placeholder SQL capped at 2,000 characters,
+static D1 tokens and allowlisted phrases, SQLite result-code names, verified stack frames, and fixed
+diagnostic markers. SQL requires an engine Error whose isolated `constructor.name` is
+`DrizzleQueryError`, with its own string `query` and array `params`. Parameter entries are never
+read; parameter value matching is unnecessary because messages and excerpts are not emitted.
+
+Frames require `Object.prototype.toString.call(error) === "[object Error]"` and a nonempty message
+matching the complete original header, which is stripped before selecting the contiguous frame
+block immediately after it. A multiline parser excerpt cannot masquerade as a frame, and lines
+after concatenated cause text are dropped. Workerd disallows `eval` and `new Function`, so
+eval-source frames cannot occur in production. The repository guard against non-test source
+assignments to `.stack` and `Error.prepareStackTrace`, rather than the serializer, prevents code
+from deliberately writing data into frame positions.
+
+Cause chains and aggregate members are traversed depth-first, with causes first, cycle protection,
+a shared 32-node budget, an omitted count, and an 8 KB UTF-8 output cap. Unreadable fields are
+isolated, and the serializer never throws. The existing privacy scrubber remains a backstop for
+the resulting fault detail and other event metadata.
+
+Background paths that report a fault then signal failure throw a fresh Error whose message is
+only the fault code, without a cause or other data. The caught error must not reach workerd's
+native exception records through a scheduled, queue, or `waitUntil` rejection.
+
 ### Sentry v11 collection and streamed spans
 
 Every Sentry init explicitly disables automatic user information, cookies, HTTP headers and

@@ -1,4 +1,5 @@
 import { requirePlatformTarget } from "@splitch/contracts";
+import { serializeFault } from "@splitch/observability/worker";
 import {
   type Admission,
   type AdmittedRow,
@@ -6,14 +7,14 @@ import {
   deliverAdmittedRows,
 } from "./metric-event-batch-delivery";
 import { type PoisonedDelivery, transferToDeadLetter } from "./metric-event-dead-letter";
-import { makeMetricEventSaltStore } from "./metric-event-salt-store";
 import {
   transferToReconciliation,
   type UnresolvedMetricEvent,
 } from "./metric-event-reconciliation";
+import { makeMetricEventSaltStore } from "./metric-event-salt-store";
+import { QUEUE_MAX_RETRIES, queueRetryDelaySeconds } from "./queue-retry";
 import { tinybirdDelivery } from "./tinybird";
 import type { DeliveryOutcome } from "./tinybird-microbatch";
-import { QUEUE_MAX_RETRIES, queueRetryDelaySeconds } from "./queue-retry";
 import type { Env } from "./types";
 
 type MetricEventRow = Record<string, unknown>;
@@ -249,7 +250,7 @@ function retryMessage(message: Message<MetricEventRow>, error: unknown): void {
 function logBatchFailure(rowCount: number, error: unknown): void {
   console.error("event-ingest-api Metric Event batch delivery failed", {
     rowCount,
-    errorMessage: error instanceof Error ? error.message : "non-error rejection",
+    errorMessage: serializeFault(error),
   });
 }
 
@@ -283,7 +284,7 @@ function logMetricEventFailure(message: Message<MetricEventRow>, error: unknown)
       attempts: message.attempts,
       maxRetries: METRIC_EVENT_MAX_RETRIES,
       ...metricEventIdentity(message.body),
-      errorMessage: error instanceof Error ? error.message : "non-error rejection",
+      errorMessage: serializeFault(error),
     },
   );
 }
