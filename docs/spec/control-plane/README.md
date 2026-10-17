@@ -13,6 +13,7 @@ capability Workers. Shared contracts come from `@splitch/contracts`; skins stay 
 | [auth-doors.md](auth-doors.md)                                               | How a principal authenticates: the three identity doors (ID-JAG, anonymous/pre-claim, device flow), shared-preview `client_credentials` smoke grant, claim ceremony, `interaction_required` error shape, provisional demo reaping |
 | [personal-access-tokens.md](personal-access-tokens.md)                       | Personal Access Tokens for headless MCP access: grants, live-membership clamp, CLI-only management routes, file-only secret output                                                                                                |
 | [personal-access-token-permissions.md](personal-access-token-permissions.md) | Planned: PAT grant permissions, the route permission map, Control Plane bearer acceptance, CLI token mode (`SPLITCH_TOKEN`), and rollout                                                                                          |
+| [temporary-environments.md](temporary-environments.md)                       | Planned: Temporary Environments (expiring scratch copies), Sync, credential expiry at the edge, the `temporary_environments` PAT permission, teardown, and rollout                                                                |
 | [access-control-matrix.md](access-control-matrix.md)                         | Scopes + `app:{app_id}:{role}` format, control-plane token claims/validation, trusted-IdP D1 table, Worker responsibility split, revocation                                                                                       |
 | [run-state-machine.md](run-state-machine.md)                                 | Run states (`draft → running → ended`), which endpoint triggers each transition, frozen vs mutable fields, Run D1 record shape, error codes for Run invariants                                                                    |
 | [conclusion-and-winner-promotion.md](conclusion-and-winner-promotion.md)     | Ordered Conclude, End, Approval Request, and winner Promotion semantics; stale-result protection, decision failures, idempotency, and immutable evidence                                                                          |
@@ -58,4 +59,4 @@ capability Workers. Shared contracts come from `@splitch/contracts`; skins stay 
 
 ## Sources
 
-ADRs: 0018, 0021, 0022, 0023, 0025, 0026, 0027, 0028, 0029
+ADRs: 0018, 0021, 0022, 0023, 0025, 0026, 0027, 0028, 0029, 0060
