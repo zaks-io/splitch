@@ -70,10 +70,18 @@ existing `LIST_READ_LIMIT`.
   (configuration, Sync, keys, rename) is refused with `ENVIRONMENT_EXPIRED`. Reads work until
   teardown. `environments_delete` still works and starts teardown immediately.
 - **The fence is serialized.** Every Flag Configuration write, Sync write, and teardown step that
-  touches configuration runs in the App's Config Store Durable Object, which re-checks the
-  Environment's expiry inside its serialization. The credential cache writer Durable Object refuses
+  touches configuration runs in the Environment's existing Config Store writer
+  (`configWriterName(appId, environmentId)`), which re-checks the Environment's expiry inside its
+  serialization. The fence refuses anything that creates or changes configuration in an expired
+  Temporary Environment; removals still apply. The credential cache writer Durable Object refuses
   an active entry for an expired Temporary Environment. A write that passed the handler's check just
   before expiry therefore cannot recreate state after teardown starts.
+- **App-wide operations skip expired Temporary Environments.** Operations that fan out over every
+  Environment (Flag creation provisioning, Segment republication, Variant catalog changes) skip an
+  expired Temporary Environment, and treat a fence refusal from one that expired after enumeration
+  as a skip, not a failure. Flag deletion still removes its configuration there, because removal is
+  not refused. An Environment waiting for teardown never fails or partially applies an App-level
+  change.
 - **App-level rollups ignore Temporary Environments:** the attention rollup (including its
   200-Environment budget), expired and stale Flag detection, and Flag inventory health. The
   last-Environment delete guard counts permanent Environments only, and a Temporary Environment
@@ -229,14 +237,18 @@ Teardown is one idempotent cascade, used by the scheduled job and by `environmen
 Temporary Environment. The `environments` row is its durable manifest: while the row exists,
 teardown is pending, and every step can be rediscovered from D1.
 
-1. **Fence.** `environments_delete` sets `expires_at` to now inside the App's Config Store Durable
-   Object, so the read-only rule and the credential-writer refusal apply before anything is
-   removed. The scheduled job starts only after `expires_at`, when the fence already holds.
+1. **Fence.** `environments_delete` sets `expires_at` to now inside the Environment's Config Store
+   writer, so the read-only rule, the App-wide skip, and the credential-writer refusal apply before
+   anything is removed. The scheduled job starts only after `expires_at`, when the fence already
+   holds.
 2. **Credentials.** Revoke every credential (terminal markers and tombstones) and delete the
    credential rows, as Environment delete does today.
 3. **KV and Durable Object state.** Delete everything the Environment owns outside D1, enumerated
    from D1 rows that still exist: per-Flag configuration projections, the evaluation snapshot, the
-   activation configuration entry, and Config Store snapshot revision state.
+   activation configuration entry, and Config Store snapshot revision state. This is a dedicated
+   Environment-teardown operation on the Config Store writer, allowed only for an expired Temporary
+   Environment, that removes external state while D1 configuration remains. The ordinary Flag
+   deletion path keeps its guard against deleting a snapshot whose D1 configuration exists.
 4. **Exposure status.** Run the existing Exposure-status cleanup.
 5. **D1 configuration.** Delete Targeting Rules, then Flag Configurations.
 6. **Row.** Delete the `environments` row last.
@@ -244,11 +256,18 @@ teardown is pending, and every step can be rediscovered from D1.
 The permanent-Environment `RESOURCE_NOT_EMPTY` blockers do not apply. A failed step leaves the row,
 and the next run repeats from step 2; every step tolerates work already done.
 
+Credential cache entries keep the expiry they were written with; shortening `expires_at` does not
+rewrite them. A scheduled teardown only runs after that original expiry, so its keys are already
+rejected. A manual delete is the one case where keys are still live when teardown starts, so
+`environments_delete` returns `{ deleted: true }` only after the whole cascade completes. If it fails
+after step 1, it returns `SERVICE_UNAVAILABLE` with `retryAfterMs`, the Environment stays read-only,
+and its keys keep authenticating until step 2 succeeds, either on the caller's retry or on the next
+cron tick, which picks it up because `expires_at` has passed.
+
 The minute cron tears down up to 5 expired Temporary Environments per tick, oldest expiry first, so
 50 that expire together are gone within 10 minutes. It logs `temporary-environment-teardown` with
 the Environment id and counts, and reports a failure as `temporary_environment_teardown_failed`
-through the Worker fault reporter. Expired keys are already rejected, so a slow teardown costs only
-storage.
+through the Worker fault reporter. Past the original expiry, a slow teardown costs only storage.
 
 Data retention: D1 rows, KV entries, and Durable Object state go at teardown. Credential terminal
 markers stay, as for any revoked credential. Exposures, Metric Events, and Web Events written under
@@ -321,7 +340,8 @@ Each slice ships something observable and testable end to end. Creation is expos
    Tested with seeded v3 entries. Updates `credentials-and-keys.md`, `storage-schemas-kv.md`,
    `error-responses.md`.
 2. **Temporary Environment guards.** The D1 migration, the `temporary` response member, every
-   `ENVIRONMENT_KIND_UNSUPPORTED` refusal, expired-is-read-only and the Config Store fence, the
+   `ENVIRONMENT_KIND_UNSUPPORTED` refusal, expired-is-read-only, the Config Store fence and the
+   App-wide skip, the
    credential writer's version and expiry derivation, the change-log kind with the Sentry skip,
    rollup exclusions, and the last-Environment guard. Tested with seeded rows. Updates
    `storage-schemas-d1.md`, `endpoints-org-app.md`, `sentry-integration.md`.
@@ -364,7 +384,11 @@ Each slice ships something observable and testable end to end. Creation is expos
   `CREDENTIAL_REVOKED`.
 - 50 Temporary Environments that expire together are gone from `envs list` within 10 minutes. A
   teardown made to fail after each step completes on a later tick with nothing left in D1, KV, or
-  Config Store state.
+  Config Store state. A manual delete made to fail between the fence and credential revocation
+  returns `SERVICE_UNAVAILABLE`, and its keys stop authenticating by the next tick.
+- Creating a Flag, editing a Segment a Temporary Environment uses, and changing a Variant catalog
+  all succeed while an expired Temporary Environment waits for teardown, including one that expires
+  mid-operation. Deleting a Flag removes its configuration there too.
 - Experiment creation, Policy edits, a winner Promotion targeting a Temporary Environment, and a
   Convex or Cloudflare installation with its credential fail with `ENVIRONMENT_KIND_UNSUPPORTED`.
   The 51st live Temporary Environment fails with `TEMPORARY_ENVIRONMENT_LIMIT_EXCEEDED`, and an App
