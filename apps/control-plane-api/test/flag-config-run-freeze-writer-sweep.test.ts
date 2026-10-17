@@ -14,6 +14,7 @@ import {
   NOW_MS,
   startSeededExperiment,
 } from "../src/config-store-harness-core";
+import { makeConfigStoreProjectionJournalFixture } from "../src/config-store-projection-journal-fixture";
 import { makePoolHarness as makeHarness } from "./config-store-pool-harness";
 
 /**
@@ -70,6 +71,7 @@ beforeEach(async () => {
   await narrowSeededAvailability(h.d1, ["control", "treatment"]);
   await startSeededExperiment(h.d1);
   store = makeConfigStore({
+    projectionJournal: makeConfigStoreProjectionJournalFixture(),
     repo: h.repo,
     kv: h.kv,
     broadcaster: { broadcast: () => undefined },

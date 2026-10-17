@@ -9,6 +9,7 @@ import {
   NOW,
   seedConfigGraph,
 } from "./config-store-fixture-data";
+import { makeConfigStoreProjectionJournalFixture } from "./config-store-projection-journal-fixture";
 import { makeTestApp } from "./test-app-fixture";
 import { type LocalBindings, makeLocalBindings } from "./test-fixtures";
 
@@ -55,13 +56,15 @@ export async function temporaryEnvironmentHarness(): Promise<TemporaryEnvironmen
     const name = `${appId}:${environmentId}`;
     let writer = writers.get(name);
     if (!writer) {
+      const projectionJournal = makeConfigStoreProjectionJournalFixture();
       writer = makeConfigStore({
+        projectionJournal,
         repo,
         kv: bindings.kv,
         broadcaster: { broadcast() {} },
         now: () => new Date(currentTime),
         nextSnapshotRevision: makeSnapshotRevisionCounter(),
-        clearEnvironmentState: async () => undefined,
+        clearEnvironmentState: async () => projectionJournal.clear(),
       });
       writers.set(name, writer);
     }

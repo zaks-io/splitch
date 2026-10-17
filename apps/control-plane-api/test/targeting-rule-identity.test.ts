@@ -15,6 +15,7 @@ import {
   setProdPolicy,
   token,
 } from "../src/config-store-harness-core";
+import { makeConfigStoreProjectionJournalFixture } from "../src/config-store-projection-journal-fixture";
 import { renderFlagConfigWriteResult } from "../src/flag-config-handler-render";
 import { reviewRequest } from "./approval-harness";
 import { makePoolHarness as makeHarness } from "./config-store-pool-harness";
@@ -97,6 +98,7 @@ describe("Targeting Rule identity", () => {
     expect(persist).toEqual({ ok: false, reason: "id_conflict" });
 
     const store = makeConfigStore({
+      projectionJournal: makeConfigStoreProjectionJournalFixture(),
       repo: h.repo,
       kv: h.kv,
       broadcaster: { broadcast() {} },

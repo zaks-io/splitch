@@ -15,6 +15,7 @@ import { durableConfigStoreAccess } from "../src/config-store-access";
 import { makeSnapshotRevisionCounter } from "../src/config-store-fixture-data";
 import { type Harness, ids, NOW, NOW_MS } from "../src/config-store-harness-core";
 import type { ControlPlaneFlagConfigSnapshot } from "../src/config-store-kv";
+import { makeConfigStoreProjectionJournalFixture } from "../src/config-store-projection-journal-fixture";
 import { sha256Hex } from "../src/credential-cache";
 import { teardownTemporaryEnvironment } from "../src/temporary-environment-teardown";
 import { makePoolHarness } from "./config-store-pool-harness";
@@ -22,6 +23,7 @@ import { makePoolHarness } from "./config-store-pool-harness";
 let h: Harness;
 let deps: AppEnvironmentDeps;
 let state: Map<string, string>;
+let projectionJournal: ReturnType<typeof makeConfigStoreProjectionJournalFixture>;
 const scope = envScope(ids.appId, ids.devEnvironmentId);
 const input = {
   appId: ids.appId,
@@ -47,7 +49,9 @@ beforeEach(async () => {
     createdAt: NOW,
   });
   state = new Map([["control-plane-snapshot-revision", "10"]]);
+  projectionJournal = makeConfigStoreProjectionJournalFixture();
   const writer = makeConfigStore({
+    projectionJournal,
     repo: h.repo,
     kv: h.kv,
     broadcaster: { broadcast() {} },
@@ -55,6 +59,7 @@ beforeEach(async () => {
     now: () => new Date(NOW_MS),
     clearEnvironmentState: async () => {
       state.clear();
+      projectionJournal.clear();
     },
   });
   await writer.resyncFlagConfig({ ...input, flagId: ids.flagId });
@@ -165,6 +170,7 @@ it("removes real Config Store Durable Object revision state and prevents resurre
     .bind(future, input.environmentId)
     .run();
   const stub = env.CONFIG_STORE_WRITER.getByName(`${ids.appId}:${input.environmentId}`);
+  expect(await stub.resyncFlagConfig({ ...input, flagId: ids.flagId })).toMatchObject({ ok: true });
   await runInDurableObject(stub, async (_instance, ctx) => {
     await ctx.storage.put("control-plane-snapshot-revision", 8);
     await ctx.storage.put(`control-plane-snapshot-state:${ids.flagId}`, "present");

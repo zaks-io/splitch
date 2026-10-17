@@ -2,6 +2,7 @@ import { appScope, createRepository, envScope } from "@splitch/db";
 import { expect } from "vitest";
 import { makeConfigStore } from "../src/config-store";
 import { makeSnapshotRevisionCounter } from "../src/config-store-fixture-data";
+import { makeConfigStoreProjectionJournalFixture } from "../src/config-store-projection-journal-fixture";
 import { makeFixtureSigner } from "../src/fixture-signer";
 import {
   type FlagDefinitionHarness,
@@ -65,6 +66,7 @@ export function configStoreAccess(
     let store = stores.get(name);
     if (!store) {
       store = makeConfigStore({
+        projectionJournal: makeConfigStoreProjectionJournalFixture(),
         repo,
         kv: bindings.configKv,
         broadcaster: { broadcast: (nudge) => void nudges.push(nudge) },

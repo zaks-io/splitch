@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { makeConfigStore } from "../src/config-store";
 import { makeSnapshotRevisionCounter } from "../src/config-store-fixture-data";
 import { type Harness, ids, NOW_MS } from "../src/config-store-harness-core";
+import { makeConfigStoreProjectionJournalFixture } from "../src/config-store-projection-journal-fixture";
 import { makePoolHarness } from "./config-store-pool-harness";
 
 let h: Harness;
@@ -23,6 +24,7 @@ describe("Flag Configuration delete ownership guard", () => {
     const reads: string[] = [];
     const kv = trackingEvaluationReadKv(h.kv, key, reads);
     const store = makeConfigStore({
+      projectionJournal: makeConfigStoreProjectionJournalFixture(),
       repo: h.repo,
       kv,
       broadcaster: { broadcast: async () => {} },

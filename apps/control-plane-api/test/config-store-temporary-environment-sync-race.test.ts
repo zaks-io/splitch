@@ -5,6 +5,7 @@ import { makeConfigStore } from "../src/config-store";
 import { makeSnapshotRevisionCounter } from "../src/config-store-fixture-data";
 import { type Harness, ids, NOW, NOW_MS } from "../src/config-store-harness-core";
 import { parseFlagConfigEnvelope } from "../src/config-store-kv";
+import { makeConfigStoreProjectionJournalFixture } from "../src/config-store-projection-journal-fixture";
 import { makePoolHarness } from "./config-store-pool-harness";
 
 let h: Harness;
@@ -79,6 +80,7 @@ it.each(["before", "after"] as const)(
       },
     });
     const writer = makeConfigStore({
+      projectionJournal: makeConfigStoreProjectionJournalFixture(),
       repo: createRepository(d1),
       kv: h.kv,
       broadcaster: { broadcast() {} },

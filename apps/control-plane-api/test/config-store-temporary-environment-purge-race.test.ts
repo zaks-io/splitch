@@ -1,15 +1,12 @@
-import { env, runInDurableObject } from "cloudflare:test";
+import { env, evictDurableObject, runInDurableObject } from "cloudflare:test";
 import { controlPlaneFlagConfigKey, flagConfigKey } from "@splitch/contracts";
 import { appScope, envScope } from "@splitch/db";
 import { flagRow } from "@splitch/db/testing";
-import { beforeEach, expect, it } from "vitest";
+import { beforeEach, expect, it, vi } from "vitest";
 import { durableConfigStoreAccess } from "../src/config-store-access";
 import { type Harness, ids, NOW } from "../src/config-store-harness-core";
-import {
-  captureFlagConfigPurgeTargets,
-  deleteFlagD1Cascade,
-  purgeFlagConfigsKvForKey,
-} from "../src/flag-config-lifecycle";
+import { makeDurableConfigStoreProjectionJournal } from "../src/config-store-projection-journal";
+import { captureFlagConfigPurgeTargets, deleteFlagD1Cascade } from "../src/flag-config-lifecycle";
 import { teardownTemporaryEnvironment } from "../src/temporary-environment-teardown";
 import { makePoolHarness } from "./config-store-pool-harness";
 
@@ -50,7 +47,77 @@ beforeEach(async () => {
   });
 });
 
-it("purges captured Flag KV after app-wide D1 deletion removes it from the teardown manifest", async () => {
+it("retains the Environment and durable journal after projection deletion until an evicted writer retries state clear", async () => {
+  const access = durableConfigStoreAccess(env.CONFIG_STORE_WRITER, h.kv);
+  const writer = access.writerFor(ids.appId, environmentId);
+  expect(
+    await writer.resyncFlagConfig({ ...identity, initialConfig: { defaultVariantId: variantId } }),
+  ).toMatchObject({ ok: true });
+  const projectionKeys = [
+    controlPlaneFlagConfigKey(ids.appId, environmentId, flagId),
+    flagConfigKey(ids.appId, environmentId, flagKey),
+  ];
+  await captureFlagConfigPurgeTargets({ repo: h.repo, configStore: access }, ids.appId, flagId);
+  await deleteFlagD1Cascade({ repo: h.repo }, ids.appId, flagId);
+  const stub = env.CONFIG_STORE_WRITER.getByName(`${ids.appId}:${environmentId}`);
+  const input = {
+    appId: ids.appId,
+    environmentId,
+    orgId: ids.orgId,
+    actorId: "user_eviction",
+    requestId: "req_eviction",
+  };
+  const deps = {
+    repo: h.repo,
+    configStore: access,
+    credentialStore: env.CREDENTIAL_STORE,
+    exposureStatusCleanup: { delete: async () => {} },
+    nowIso: () => new Date().toISOString(),
+  };
+  const failingAccess = {
+    ...access,
+    writerFor: () => ({
+      ...writer,
+      teardownTemporaryEnvironment: async () =>
+        runInDurableObject(stub, async (instance, ctx) => {
+          const clear = vi
+            .spyOn(ctx.storage, "deleteAll")
+            .mockRejectedValueOnce(new Error("interrupted state clear"));
+          try {
+            await instance.teardownTemporaryEnvironment(input);
+          } finally {
+            clear.mockRestore();
+          }
+        }),
+    }),
+  };
+
+  await expect(
+    teardownTemporaryEnvironment({ ...deps, configStore: failingAccess }, input),
+  ).rejects.toThrow("interrupted state clear");
+  expect(await h.repo.identity.getEnvironment(appScope(ids.appId), environmentId)).not.toBeNull();
+  for (const key of projectionKeys) expect(await h.kv.get(key)).toBeNull();
+  expect(
+    await runInDurableObject(stub, async (_instance, ctx) =>
+      makeDurableConfigStoreProjectionJournal(ctx.storage).list(),
+    ),
+  ).toEqual(expect.arrayContaining(projectionKeys));
+
+  await evictDurableObject(stub);
+  expect(
+    await runInDurableObject(stub, async (_instance, ctx) =>
+      makeDurableConfigStoreProjectionJournal(ctx.storage).list(),
+    ),
+  ).toEqual(expect.arrayContaining(projectionKeys));
+  await teardownTemporaryEnvironment(deps, input);
+  expect(await h.repo.identity.getEnvironment(appScope(ids.appId), environmentId)).toBeNull();
+  expect(
+    await runInDurableObject(stub, async (_instance, ctx) => (await ctx.storage.list()).size),
+  ).toBe(0);
+  for (const key of projectionKeys) expect(await h.kv.get(key)).toBeNull();
+});
+
+it("teardown deletes all projections after app-wide D1 deletion even when captured purge never resumes", async () => {
   const configStore = durableConfigStoreAccess(env.CONFIG_STORE_WRITER, h.kv);
   const lifecycle = { repo: h.repo, configStore };
   const writer = configStore.writerFor(ids.appId, environmentId);
@@ -70,12 +137,20 @@ it("purges captured Flag KV after app-wide D1 deletion removes it from the teard
   await deleteFlagD1Cascade(lifecycle, ids.appId, flagId);
   expect(await h.repo.flags.getFlagConfig(scope, flagId)).toBeNull();
   expect(await h.repo.flags.getFlag(appScope(ids.appId), flagId)).toBeNull();
+  const stub = env.CONFIG_STORE_WRITER.getByName(`${ids.appId}:${environmentId}`);
+  const assertExternalCleanup = vi.fn(async () => {
+    expect(await h.repo.identity.getEnvironment(appScope(ids.appId), environmentId)).not.toBeNull();
+    for (const key of projectionKeys) expect(await h.kv.get(key)).toBeNull();
+    expect(
+      await runInDurableObject(stub, async (_instance, ctx) => (await ctx.storage.list()).size),
+    ).toBe(0);
+  });
 
   await teardownTemporaryEnvironment(
     {
       ...lifecycle,
       credentialStore: env.CREDENTIAL_STORE,
-      exposureStatusCleanup: { delete: async () => {} },
+      exposureStatusCleanup: { delete: assertExternalCleanup },
       nowIso: () => new Date().toISOString(),
     },
     {
@@ -86,22 +161,8 @@ it("purges captured Flag KV after app-wide D1 deletion removes it from the teard
       requestId: "req_purge_race",
     },
   );
+  expect(assertExternalCleanup).toHaveBeenCalledOnce();
   expect(await h.repo.identity.getEnvironment(appScope(ids.appId), environmentId)).toBeNull();
-  for (const key of projectionKeys) expect(await h.kv.get(key)).not.toBeNull();
-  const stub = env.CONFIG_STORE_WRITER.getByName(`${ids.appId}:${environmentId}`);
-  expect(
-    await runInDurableObject(stub, async (_instance, ctx) => (await ctx.storage.list()).size),
-  ).toBe(0);
-
-  await purgeFlagConfigsKvForKey(lifecycle, ids.appId, flagId, flagKey, captured);
-  for (const key of projectionKeys) expect(await h.kv.get(key)).toBeNull();
-  expect(
-    await runInDurableObject(stub, async (_instance, ctx) => (await ctx.storage.list()).size),
-  ).toBe(0);
-  expect(await writer.deleteFlagConfig({ ...identity, flagKey, experimentIds: [] })).toMatchObject({
-    ok: true,
-    snapshotRevision: null,
-  });
   for (const key of projectionKeys) expect(await h.kv.get(key)).toBeNull();
   expect(
     await runInDurableObject(stub, async (_instance, ctx) => (await ctx.storage.list()).size),

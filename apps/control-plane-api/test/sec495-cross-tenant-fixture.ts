@@ -7,6 +7,7 @@ import {
   type ConfigStoreDurableObjectNamespace,
   durableConfigStoreAccess,
 } from "../src/config-store-access";
+import { makeConfigStoreProjectionJournalFixture } from "../src/config-store-projection-journal-fixture";
 import { makeDurableSnapshotRevisionAllocator } from "../src/config-store-snapshot-revision";
 import { type FixtureSigner, makeFixtureSigner } from "../src/fixture-signer";
 import { appAdminScope } from "../src/scope-binding";
@@ -62,6 +63,7 @@ export function makeWorld(
       let writer = writers.get(name);
       if (!writer) {
         writer = makeConfigStore({
+          projectionJournal: makeConfigStoreProjectionJournalFixture(),
           repo,
           kv,
           broadcaster: { broadcast: () => undefined },

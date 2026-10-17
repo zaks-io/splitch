@@ -221,6 +221,7 @@ function chooseDifferentSteps(
   details: Record<string, unknown>,
 ): readonly McpPromptMessage[] {
   if (action === "CHOOSE_DIFFERENT_SLUG") {
+    const field = details.resourceType === "environment" ? "key" : "slug";
     const taken =
       typeof details.conflictingSlug === "string"
         ? `"${details.conflictingSlug}"`
@@ -228,7 +229,7 @@ function chooseDifferentSteps(
     return [
       message(
         "assistant",
-        `The URL handle ${taken} is already taken. Resend the same call with a different "slug". No different tool is required.`,
+        `The URL handle ${taken} is already taken. Resend the same call with a different "${field}". No different tool is required.`,
       ),
     ];
   }

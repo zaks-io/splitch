@@ -3,6 +3,7 @@ import { envScope } from "@splitch/db";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { type ConfigStoreDeps, type ConfigStoreWriter, makeConfigStore } from "../src/config-store";
 import { type Harness, ids } from "../src/config-store-harness-core";
+import { makeConfigStoreProjectionJournalFixture } from "../src/config-store-projection-journal-fixture";
 import { makeDurableSnapshotRevisionAllocator } from "../src/config-store-snapshot-revision";
 import { makePoolHarness } from "./config-store-pool-harness";
 
@@ -101,6 +102,7 @@ function makeStore(
   error: (...args: unknown[]) => void = console.error,
 ): ConfigStoreWriter {
   return makeConfigStore({
+    projectionJournal: makeConfigStoreProjectionJournalFixture(),
     repo: h.repo,
     kv: h.kv,
     broadcaster: { broadcast: () => undefined },

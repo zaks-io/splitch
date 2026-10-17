@@ -257,7 +257,8 @@ widening.
 
 Teardown is one idempotent cascade, used by the scheduled job and by `environments_delete` on a
 Temporary Environment. The `environments` row is its durable manifest: while the row exists,
-teardown is pending, and every step can be rediscovered from D1.
+teardown is pending. The Config Store writer durably records each projection key before publishing
+it, so teardown can rediscover external state even after another operation deletes the Flag's D1 rows.
 
 1. **Fence.** `environments_delete` sets `expires_at` to now inside the Environment's Config Store
    writer, so the read-only rule, the App-wide skip, and the credential-writer refusal apply before
@@ -265,11 +266,13 @@ teardown is pending, and every step can be rediscovered from D1.
    holds.
 2. **Credentials.** Revoke every credential (terminal markers and tombstones) and delete the
    credential rows, as Environment delete does today.
-3. **KV and Durable Object state.** Delete everything the Environment owns outside D1, enumerated
-   from D1 rows that still exist: per-Flag configuration projections, the evaluation snapshot, the
-   activation configuration entry, and Config Store snapshot revision state. This is a dedicated
-   Environment-teardown operation on the Config Store writer, allowed only for an expired Temporary
-   Environment, that removes external state while D1 configuration remains. The ordinary Flag
+3. **KV and Durable Object state.** Enumerate projection keys from the Environment's Config Store
+   writer's durable journal and delete every key, including per-Flag configuration projections,
+   evaluation snapshots, and the activation configuration entry. Every publication records its key
+   before the KV write. Ordinary deletion retains journal entries; a stale entry only causes an
+   idempotent delete. Clear the journal and Config Store snapshot revision state together only after
+   every KV deletion succeeds. This dedicated operation is allowed only for an expired Temporary
+   Environment and does not depend on surviving Flag or Flag Configuration rows. The ordinary Flag
    deletion path keeps its guard against deleting a snapshot whose D1 configuration exists.
 4. **Exposure status.** Run the existing Exposure-status cleanup.
 5. **D1 configuration.** Delete Targeting Rules, then Flag Configurations.

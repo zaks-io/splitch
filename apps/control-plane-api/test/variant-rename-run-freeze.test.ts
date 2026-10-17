@@ -14,6 +14,7 @@ import {
   NOW_MS,
   setProdPolicy,
 } from "../src/config-store-harness-core";
+import { makeConfigStoreProjectionJournalFixture } from "../src/config-store-projection-journal-fixture";
 import { allowPolicy, confirmPolicy, patchVariant, reviewRequest } from "./approval-harness";
 import { makePoolHarness } from "./config-store-pool-harness";
 
@@ -212,6 +213,7 @@ describe("published KV stays consistent with the frozen allocation", () => {
     // Publish the live Run to KV the way Start does, so the blobs below are the
     // ones a real evaluate would read rather than a hand-built fixture.
     const store = makeConfigStore({
+      projectionJournal: makeConfigStoreProjectionJournalFixture(),
       repo: h.repo,
       kv: h.kv,
       broadcaster: { broadcast: () => undefined },

@@ -74,6 +74,38 @@ describe("MCP recover_from_error attention fan-out", () => {
 });
 
 describe("MCP recover_from_error Temporary Environments", () => {
+  it("recovers an Environment collision with a request accepted by the create schema", () => {
+    const error = ErrorResponseSchema.parse({
+      code: "SLUG_CONFLICT",
+      message: 'Environment key "pr-123" is already taken in this App',
+      details: {
+        resourceType: "environment",
+        conflictingSlug: "pr-123",
+        recommendedAction: "CHOOSE_DIFFERENT_SLUG",
+      },
+    });
+    const plan = getPromptPlan("recover_from_error", {
+      errorCode: error.code,
+      details: error.details,
+    });
+    expect(plan.operationIds).toEqual([]);
+    const text = plan.messages.map((entry) => entry.content.text).join("\n");
+    const field = /different "([^"]+)"/.exec(text)?.[1];
+    expect(field).toBe("key");
+    if (!field) throw new Error("collision recovery omitted the replacement field");
+    const create = deriveMcpTools().find((tool) => tool.name === "environments_create");
+    if (!create) throw new Error("Environment create tool missing");
+    for (const temporary of [undefined, { fromEnvironmentId: "env_prod" }]) {
+      expect(
+        create.inputSchema.safeParse({
+          appId: "app_checkout",
+          [field]: "pr-124",
+          ...(temporary ? { temporary } : {}),
+        }).success,
+      ).toBe(true);
+    }
+  });
+
   it("replaces an expired Environment using the supported create tool and CLI flags", () => {
     const error = ErrorResponseSchema.parse({
       code: "ENVIRONMENT_EXPIRED",

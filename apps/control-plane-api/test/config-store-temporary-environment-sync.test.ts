@@ -6,6 +6,7 @@ import { type ConfigStoreWriter, makeConfigStore } from "../src/config-store";
 import { makeSnapshotRevisionCounter } from "../src/config-store-fixture-data";
 import { type Harness, ids, NOW_MS, startSeededExperiment } from "../src/config-store-harness-core";
 import { parseFlagConfigEnvelope } from "../src/config-store-kv";
+import { makeConfigStoreProjectionJournalFixture } from "../src/config-store-projection-journal-fixture";
 import { buildSnapshotFromD1 } from "../src/config-store-snapshot-build";
 import { makePoolHarness } from "./config-store-pool-harness";
 
@@ -30,6 +31,7 @@ beforeEach(async () => {
     .bind("2026-07-02T20:00:00.000Z", target.environmentId)
     .run();
   store = makeConfigStore({
+    projectionJournal: makeConfigStoreProjectionJournalFixture(),
     repo: h.repo,
     kv: h.kv,
     now: () => new Date(NOW_MS),

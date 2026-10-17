@@ -24,6 +24,7 @@ import {
   patchFlagConfig,
   token,
 } from "../src/config-store-harness-core";
+import { makeConfigStoreProjectionJournalFixture } from "../src/config-store-projection-journal-fixture";
 import { makePoolHarness as makeHarness } from "./config-store-pool-harness";
 
 let h: Harness;
@@ -97,6 +98,7 @@ describe("config store write path", () => {
   it("returns 500 with no KV write and no broadcast when D1 commit fails", async () => {
     const kvPut = vi.fn();
     const store = makeConfigStore({
+      projectionJournal: makeConfigStoreProjectionJournalFixture(),
       repo: faultingCommitRepo(h.repo),
       kv: { get: h.kv.get.bind(h.kv), put: kvPut } as unknown as KVNamespace,
       broadcaster: { broadcast: (nudge) => void h.nudges.push(nudge) },
@@ -201,6 +203,7 @@ describe("config store write path", () => {
 describe("config store variant catalog resync", () => {
   it("resyncFlagConfig rebuilds the KV snapshot after an app-scoped Variant value change", async () => {
     const store = makeConfigStore({
+      projectionJournal: makeConfigStoreProjectionJournalFixture(),
       repo: h.repo,
       kv: h.kv,
       broadcaster: { broadcast: (nudge) => void h.nudges.push(nudge) },
@@ -242,6 +245,7 @@ describe("config store variant catalog resync", () => {
 describe("config store missing resync", () => {
   it("resyncFlagConfig reports FLAG_NOT_FOUND when the Environment has no config for the Flag", async () => {
     const store = makeConfigStore({
+      projectionJournal: makeConfigStoreProjectionJournalFixture(),
       repo: h.repo,
       kv: h.kv,
       broadcaster: { broadcast: (nudge) => void h.nudges.push(nudge) },

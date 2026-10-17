@@ -1,5 +1,4 @@
-import { activationConfigKey, controlPlaneFlagConfigKey, flagConfigKey } from "@splitch/contracts";
-import { appScope, envScope } from "@splitch/db";
+import { appScope } from "@splitch/db";
 import type { EnvironmentWriteScope } from "./config-store-expiry-fence";
 import type { ConfigStoreRuntimeDeps } from "./config-store-types";
 
@@ -21,7 +20,7 @@ export async function fenceTemporaryEnvironment(
   return { ok: true };
 }
 
-/** Removes projections while D1 remains the durable manifest for every retry. */
+/** The journal survives Flag deletion and remains until every KV delete succeeds. */
 export async function teardownTemporaryEnvironmentState(
   deps: ConfigStoreRuntimeDeps,
   input: EnvironmentWriteScope,
@@ -34,14 +33,6 @@ export async function teardownTemporaryEnvironmentState(
   }
   if (!deps.clearEnvironmentState)
     throw new Error("config-store: Environment state removal is not configured");
-  const scope = envScope(input.appId, input.environmentId);
-  const configs = await deps.repo.flags.flagConfigs.findMany(scope);
-  for (const config of configs) {
-    const flag = await deps.repo.flags.getFlag(appScope(input.appId), config.flagId);
-    if (!flag) throw new Error("config-store: teardown manifest references a missing Flag");
-    await deps.kv.delete(controlPlaneFlagConfigKey(input.appId, input.environmentId, flag.id));
-    await deps.kv.delete(flagConfigKey(input.appId, input.environmentId, flag.key));
-  }
-  await deps.kv.delete(activationConfigKey(input.appId, input.environmentId));
+  for (const key of await deps.projectionJournal.list()) await deps.kv.delete(key);
   await deps.clearEnvironmentState();
 }

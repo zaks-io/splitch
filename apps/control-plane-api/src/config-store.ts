@@ -16,6 +16,7 @@ import { configPatchFreeze, targetingFreeze } from "./config-store-freeze";
 import { makeConfigStoreMutationQueue } from "./config-store-mutation-queue";
 import { promoteFlagConfig } from "./config-store-mutations";
 import { previewSnapshotResult, previewTargetingRules } from "./config-store-preview";
+import { journaledConfigStoreKv } from "./config-store-projection-journal";
 import {
   type ApplyApprovedFlagConfigInput,
   type ConfigStoreDeps,
@@ -109,6 +110,7 @@ export interface ConfigStoreWriter {
 export function makeConfigStore(deps: ConfigStoreDeps): ConfigStoreWriter {
   const runtimeDeps: ConfigStoreRuntimeDeps = {
     ...deps,
+    kv: journaledConfigStoreKv(deps.kv, deps.projectionJournal),
     snapshotMutations: makeConfigStoreMutationQueue(),
   };
   const mutate = <T>(input: EnvironmentWriteScope, operation: () => Promise<T>) =>

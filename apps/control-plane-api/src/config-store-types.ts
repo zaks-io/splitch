@@ -11,6 +11,7 @@ import type {
 } from "@splitch/contracts";
 import type { ApprovalCommit, AuditContext, Repository } from "@splitch/db";
 import type { EnvironmentWriteFailure } from "./config-store-expiry-fence";
+import type { ConfigStoreProjectionJournal } from "./config-store-projection-journal";
 import type { RunFrozenFailure } from "./flag-config-run-freeze";
 
 /**
@@ -178,6 +179,7 @@ export interface SnapshotRevisionRequest {
 export interface ConfigStoreDeps {
   repo: Repository;
   kv: KVNamespace;
+  projectionJournal: ConfigStoreProjectionJournal;
   broadcaster: { broadcast(nudge: DeltaNudge): Promise<void> | void };
   nextSnapshotRevision(request: SnapshotRevisionRequest): Promise<number> | number;
   logger?: Pick<Console, "error" | "warn">;

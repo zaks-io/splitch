@@ -4,10 +4,12 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { type ConfigStoreWriter, makeConfigStore } from "../src/config-store";
 import { makeSnapshotRevisionCounter } from "../src/config-store-fixture-data";
 import { type Harness, ids, kvJson, NOW, NOW_MS } from "../src/config-store-harness-core";
+import { makeConfigStoreProjectionJournalFixture } from "../src/config-store-projection-journal-fixture";
 import { makePoolHarness } from "./config-store-pool-harness";
 
 let h: Harness;
 let store: ConfigStoreWriter;
+let projectionJournal: ReturnType<typeof makeConfigStoreProjectionJournalFixture>;
 let now: number;
 const scope = envScope(ids.appId, ids.devEnvironmentId);
 const target = { appId: ids.appId, environmentId: ids.devEnvironmentId, flagId: ids.flagId };
@@ -17,6 +19,7 @@ const expiry = "2026-07-01T20:01:00.000Z";
 beforeEach(async () => {
   h = await makePoolHarness();
   now = NOW_MS;
+  projectionJournal = makeConfigStoreProjectionJournalFixture();
   await h.d1
     .prepare(
       "UPDATE environments SET expires_at = ?, synced_from_environment_id = 'env_prod', synced_at = '2026-07-01T20:00:00.000Z' WHERE id = ?",
@@ -24,12 +27,13 @@ beforeEach(async () => {
     .bind(expiry, ids.devEnvironmentId)
     .run();
   store = makeConfigStore({
+    projectionJournal,
     repo: h.repo,
     kv: h.kv,
     now: () => new Date(now),
     broadcaster: { broadcast() {} },
     nextSnapshotRevision: makeSnapshotRevisionCounter(),
-    clearEnvironmentState: async () => {},
+    clearEnvironmentState: async () => projectionJournal.clear(),
   });
 });
 afterEach(() => vi.restoreAllMocks());
@@ -202,6 +206,7 @@ it("teardown removes external state while retaining the D1 manifest and ordinary
   await expect(store.deleteFlagConfig({ ...target, experimentIds: [] })).rejects.toThrow(
     "exists in D1",
   );
+  await projectionJournal.record(activationConfigKey(ids.appId, target.environmentId));
   await h.kv.put(activationConfigKey(ids.appId, target.environmentId), "stale bindings");
   await store.fenceTemporaryEnvironment({ ...target, now: NOW });
   await store.teardownTemporaryEnvironment(target);

@@ -29,6 +29,7 @@ import {
   parseConfigStoreConnectionContext,
   parsePanelSessionContext,
 } from "./config-store-live-update-context";
+import { makeDurableConfigStoreProjectionJournal } from "./config-store-projection-journal";
 import { buildEvaluationSnapshotFromD1 } from "./config-store-snapshot-build";
 import { makeDurableSnapshotRevisionAllocator } from "./config-store-snapshot-revision";
 import type { ControlPlaneApiEnv } from "./env";
@@ -251,6 +252,7 @@ export class ConfigStoreDurableObject
     this.#configStore ??= makeConfigStore({
       repo: createRepository(this.env.DB),
       kv: this.env.CONFIG_STORE,
+      projectionJournal: makeDurableConfigStoreProjectionJournal(this.ctx.storage),
       broadcaster: { broadcast: (nudge) => this.broadcast(nudge) },
       nextSnapshotRevision: makeDurableSnapshotRevisionAllocator(this.ctx.storage),
       logger: console,
