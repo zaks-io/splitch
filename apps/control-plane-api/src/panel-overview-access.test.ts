@@ -5,14 +5,14 @@ import {
   ATTENTION_TEST_TIMEOUT,
   DEV_EXPERIMENT_ID,
   repository,
-  setupAttentionRollupFixture,
   USER_ID,
 } from "./attention-rollup-fixture";
 import { ids, NOW } from "./config-store-fixture-data";
+import { setupOverviewFixture } from "./overview-flag-change-test-fixture";
 import { OVERVIEW_ANALYSIS_READ_LIMIT } from "./overview-thresholds";
 import { body, CALM, overview, readerFor, SIGNIFICANT } from "./panel-overview-fixture";
 
-setupAttentionRollupFixture();
+setupOverviewFixture();
 
 describe("panelOverviewRead refusals", () => {
   it(
@@ -78,7 +78,7 @@ describe("panelOverviewRead refusals", () => {
   );
 
   it(
-    "reports only this Environment's Flag Configuration",
+    "reports recorded Configuration events for this Environment",
     async () => {
       const response = await overview(readerFor({ [ids.liveRunId]: CALM }));
 
@@ -87,9 +87,12 @@ describe("panelOverviewRead refusals", () => {
         {
           flagId: ids.flagId,
           flagKey: ids.flagKey,
-          flagName: "Checkout redesign",
-          enabled: false,
-          updatedAt: NOW,
+          seq: expect.any(Number),
+          action: "updated",
+          targetType: "flag_config",
+          actorRef: null,
+          actorVia: null,
+          changedAt: NOW,
         },
       ]);
     },

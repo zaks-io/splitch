@@ -1,12 +1,9 @@
 import { envScope, type Repository } from "@splitch/db";
 import { describe, expect, it, vi } from "vitest";
 import type { AnalysisResultsReader } from "./attention-analysis-reader";
-import {
-  ATTENTION_TEST_TIMEOUT,
-  repository,
-  setupAttentionRollupFixture,
-} from "./attention-rollup-fixture";
+import { ATTENTION_TEST_TIMEOUT, repository } from "./attention-rollup-fixture";
 import { ids, NOW } from "./config-store-fixture-data";
+import { setupOverviewFixture } from "./overview-flag-change-test-fixture";
 import { OVERVIEW_ANALYSIS_READ_LIMIT } from "./overview-thresholds";
 import { CALM, overview } from "./panel-overview-fixture";
 
@@ -14,7 +11,7 @@ import { CALM, overview } from "./panel-overview-fixture";
  * The Overview's Analysis read budget is enforced by a BOUNDED read, not by
  * counting rows an unbounded read has already paid for.
  */
-setupAttentionRollupFixture();
+setupOverviewFixture();
 
 /** The seeded graph already carries one running Experiment in this Environment. */
 const SEEDED_RUNNING = 1;

@@ -1,4 +1,5 @@
 import { z } from "@hono/zod-openapi";
+import { DeleteFlagRequestSchema } from "../flag-removal";
 import { type ApiRouteContract, defineApiRoute } from "../openapi-route";
 import {
   CreateFlagRequestSchema,
@@ -11,7 +12,6 @@ import {
   PatchVariantRequestSchema,
   PrincipalFlagListReadResponseSchema,
 } from "../resource-envelopes-flag";
-import { DeleteFlagRequestSchema } from "../flag-removal";
 import {
   createIdempotentClosed,
   deleteClosed,
@@ -271,6 +271,7 @@ export const flagRoutes = [
   }),
   defineApiRoute({
     operationId: "flags_promote",
+    audit: "app",
     owner: OWNER,
     method: "POST",
     path: "/apps/:appId/envs/:targetEnvironmentId/flags/:flagId/promote",

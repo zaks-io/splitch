@@ -19,7 +19,9 @@ const dispatch = vi.hoisted(() => {
   vi.resetModules();
   return vi.fn(async (_input: unknown) => 0);
 });
+const auditForward = vi.hoisted(() => vi.fn(async (_input: unknown) => 0));
 vi.mock("./cloudflare-push-dispatch", () => ({ dispatchCloudflarePushes: dispatch }));
+vi.mock("./audit-events", () => ({ forwardAuditEvents: auditForward }));
 
 const USER = "user_dispatch";
 const APP_A = "app_dispatch_a";
@@ -30,41 +32,48 @@ let repo: ReturnType<typeof createRepository>;
 
 beforeEach(async () => {
   dispatch.mockClear();
+  auditForward.mockReset().mockResolvedValue(0);
   await resetOrganizationGraph(env.DB);
   await seedReachableApp(APP_A, "neuron");
   repo = createRepository(env.DB);
 });
 afterEach(() => vi.restoreAllMocks());
 
-describe("immediate Cloudflare dispatch after resolved App mutations", () => {
-  it("reports a failed background dispatch and rejects with only the fault code", async () => {
-    const canary = "mutationdispatchprivatecanary";
-    const original = Object.assign(new Error(canary, { cause: new Error(canary) }), {
-      data: canary,
-    });
-    dispatch.mockRejectedValueOnce(original);
-    const logs = vi.spyOn(console, "error").mockImplementation(() => {});
-    const { response, background } = await request(
-      "/apps/neuron",
-      "PATCH",
-      { name: "Renamed" },
-      undefined,
-      "cloudflare_push_dispatch_failed",
-    );
-    expect(response.status).toBe(200);
-    const failures = background.filter((result) => result.status === "rejected");
-    expect(failures).toHaveLength(1);
-    const failure = failures[0].reason;
-    expect(failure).toBeInstanceOf(Error);
-    expect(failure.message).toBe("cloudflare_push_dispatch_failed");
-    expect(Object.getOwnPropertyNames(failure)).toEqual(["stack", "message"]);
-    expect(logs).toHaveBeenCalledWith(
-      expect.objectContaining({ message: "cloudflare_push_dispatch_failed", trigger: "mutation" }),
-    );
-    expect(inspect([background, logs.mock.calls], { showHidden: true, depth: null })).not.toContain(
-      canary,
-    );
-  });
+describe("immediate background dispatch after resolved App mutations", () => {
+  it.each([
+    ["Cloudflare", dispatch, "cloudflare_push_dispatch_failed", "cloudflare-push-dispatch"],
+    ["audit", auditForward, "audit_event_forward_failed", "audit-event-forward"],
+  ] as const)(
+    "reports a failed %s dispatch and rejects with only the fault code",
+    async (_name, job, code, jobName) => {
+      const canary = "mutationdispatchprivatecanary";
+      const original = Object.assign(new Error(canary, { cause: new Error(canary) }), {
+        data: canary,
+      });
+      job.mockRejectedValueOnce(original);
+      const logs = vi.spyOn(console, "error").mockImplementation(() => {});
+      const { response, background } = await request(
+        "/apps/neuron",
+        "PATCH",
+        { name: "Renamed" },
+        undefined,
+        code,
+      );
+      expect(response.status).toBe(200);
+      const failures = background.filter((result) => result.status === "rejected");
+      expect(failures).toHaveLength(1);
+      const failure = failures[0].reason;
+      expect(failure).toBeInstanceOf(Error);
+      expect(failure.message).toBe(code);
+      expect(Object.getOwnPropertyNames(failure)).toEqual(["stack", "message"]);
+      expect(logs).toHaveBeenCalledWith(
+        expect.objectContaining({ message: code, job: jobName, trigger: "mutation" }),
+      );
+      expect(
+        inspect([background, logs.mock.calls], { showHidden: true, depth: null }),
+      ).not.toContain(canary);
+    },
+  );
 
   it("dispatches with the minted canonical App scope resolved from a slug", async () => {
     await seedReachableApp(APP_B, "other");

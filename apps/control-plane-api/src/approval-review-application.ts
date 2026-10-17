@@ -8,6 +8,7 @@ import {
 import { type ApprovalCommit, appScope } from "@splitch/db";
 import { requireAppAdmin } from "./app-authz";
 import { approvalReviewId } from "./approval-canonical";
+import { flagConfigurationApplication } from "./approval-flag-configuration-proposal";
 import { approvalRequestProjection } from "./approval-model";
 import { isFlagConfigurationOperation, resultingVersionFor } from "./approval-resulting-version";
 import {
@@ -21,7 +22,6 @@ import {
   reviewForbidden,
 } from "./approval-review-outcomes";
 import { rowTargetVersion } from "./approval-row-target";
-import { flagConfigurationApplication } from "./approval-flag-configuration-proposal";
 import type {
   ApplicationOutcome,
   ApplicationTargetState,
@@ -31,6 +31,7 @@ import type {
   ReviewApprovalInput,
 } from "./approval-service-types";
 import { currentPolicyProjection } from "./approval-target";
+import { auditContext } from "./audit-context";
 import { mapApprovedFlagConfigFailure } from "./map-approved-flag-config-failure";
 
 export async function prepareAndApplyApproval(
@@ -55,6 +56,7 @@ export async function prepareAndApplyApproval(
     return { ok: false, response: approvalNotFound(input.requestId) };
   }
   const commit: ApprovalCommit = {
+    audit: auditContext(input.principal, input.requestId, now),
     requestId: row.id,
     reviewId: approvalReviewId(new Date(now).getTime()),
     action: "approve_and_apply",

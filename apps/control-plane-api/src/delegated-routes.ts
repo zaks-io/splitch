@@ -9,11 +9,12 @@ import {
   renderError,
 } from "@splitch/worker-runtime";
 import type { Hono } from "hono";
+import { handleAppAuditRead } from "./app-audit-handler";
 import { requireAppMember } from "./app-authz";
 import { appNotFound } from "./app-environment-model";
 import type { ConfigStoreAccess } from "./config-store-access";
-import { handleExperimentResultsDelegation } from "./experiment-results-delegated";
 import { environmentExists } from "./experiment-handler-shared";
+import { handleExperimentResultsDelegation } from "./experiment-results-delegated";
 import { controlPlaneRoute } from "./routes";
 
 /**
@@ -79,7 +80,11 @@ function delegatingHandler(
   repo: Repository,
   configStore?: ConfigStoreAccess,
 ): RouteHandler<unknown> {
-  return async ({ input, principal, requestId }: HandlerArgs<unknown>): Promise<Response> => {
+  return async (args: HandlerArgs<unknown>): Promise<Response> => {
+    const { input, principal, requestId } = args;
+    if (route.operationId === "app_audit_list") {
+      return handleAppAuditRead({ repo, binding }, args);
+    }
     const parts = inputParts(input);
     const refused = await refuseBeforeDelegation(
       route,

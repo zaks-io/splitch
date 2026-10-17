@@ -22,6 +22,7 @@ describe("list envelope: every *_list route uses listResponse", () => {
   it("finds the registered list operations", () => {
     expect(listRoutes.map((route) => route.operationId).sort()).toEqual([
       "api_keys_list",
+      "app_audit_list",
       "app_members_list",
       "approval_requests_list",
       "apps_list",

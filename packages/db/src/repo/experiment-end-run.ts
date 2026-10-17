@@ -1,5 +1,6 @@
 import { eq } from "drizzle-orm";
 import { experiments, runs } from "../schema/index";
+import { type AuditContext, auditStatement } from "./audit-event-write";
 import type { EnvScope } from "./scope";
 import { assertMintedScope } from "./scope";
 import type { ScopedTable } from "./scoped-table";
@@ -8,6 +9,7 @@ type ExperimentRow = typeof experiments.$inferSelect;
 type RunRow = typeof runs.$inferSelect;
 
 export type EndRunInput = {
+  audit?: AuditContext;
   experimentId: string;
   runId: string;
   expectedLiveRunId: string;
@@ -31,7 +33,7 @@ export function makeEndRun(
     const state = await loadEndState(experimentsTable, runsTable, scope, input);
     if (!state.ok) return state;
 
-    const committed = await runEndBatch(d1, scope, input);
+    const committed = await runEndBatch(d1, scope, input, state.run.configHash);
     if (!committed) return { ok: false, reason: "not_running" };
 
     const run = await runsTable.findOne(scope, eq(runs.id, input.runId));
@@ -59,12 +61,29 @@ async function loadEndState(
   return { ok: true, run, experiment };
 }
 
-async function runEndBatch(d1: D1Database, scope: EnvScope, input: EndRunInput): Promise<boolean> {
+async function runEndBatch(
+  d1: D1Database,
+  scope: EnvScope,
+  input: EndRunInput,
+  configHash: string,
+): Promise<boolean> {
   const liveGuardParams = liveExperimentGuardParams(scope, input);
   const runGuardParams = runGuardParamsFor(scope, input);
   const batch = await d1.batch([
     endRunStatement(d1, input, runGuardParams, liveGuardParams),
     clearExperimentLiveRunStatement(d1, input, liveGuardParams, runGuardParams),
+    auditStatement(d1, scope, {
+      actorRef: input.audit?.actorRef ?? input.updatedBy ?? null,
+      actorVia: input.audit?.actorVia ?? null,
+      requestId: input.audit?.requestId ?? null,
+      changedAt: input.endedAt,
+      action: "runs_end",
+      resourceType: "run",
+      resourceId: input.runId,
+      environmentId: scope.environmentId,
+      runId: input.runId,
+      targetVersion: configHash,
+    }),
   ]);
   const ended = batch[0]?.results ?? [];
   const updated = batch[1]?.results ?? [];

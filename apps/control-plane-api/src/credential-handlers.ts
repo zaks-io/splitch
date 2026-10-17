@@ -9,11 +9,11 @@ import { appScope, envScope, type Repository } from "@splitch/db";
 import type { HandlerArgs } from "@splitch/worker-runtime";
 import { renderError } from "@splitch/worker-runtime";
 import { requireAppAdmin } from "./app-authz";
+import { auditContext } from "./audit-context";
+import { rotateClientKey, updateClientKey } from "./client-key-mutations";
 import {
   type ClientKeyRow,
   clientKeyResponse,
-  createClientKey,
-  ensureActiveClientKey,
   provisionClientKey,
 } from "./client-key-provisioning";
 import {
@@ -21,7 +21,6 @@ import {
   randomHex,
   sha256Hex,
   writeApiKeyCache,
-  writeClientKeyCache,
 } from "./credential-cache";
 import { objectBody, pathParam } from "./handler-input";
 
@@ -56,18 +55,14 @@ export function makeCredentialHandlers(deps: CredentialHandlerDeps) {
       const ctx = await credentialContext(deps, input, requestId);
       if (ctx instanceof Response) return ctx;
 
-      const current = await provisionClientKey(deps, ctx);
       const updates = clientKeyPatchValues(objectBody(input));
-      // A zero-row UPDATE (the key vanished concurrently, e.g. a racing
-      // environment delete) must fail loud — fabricating a "current" row would
-      // report a patch that never reached D1.
-      const updated = await deps.repo.credentials.updateClientKey(
-        ctx.scope,
-        current.keyId,
+      const updated = await updateClientKey(
+        deps,
+        ctx,
         updates,
+        auditContext(principal, requestId, nowIso(deps)),
       );
       if (!updated) return credentialNotFound(requestId);
-      await writeClientKeyCache(deps, updated, false, ctx.organizationId, true);
       return Response.json(clientKeyResponse(updated));
     },
 
@@ -81,18 +76,14 @@ export function makeCredentialHandlers(deps: CredentialHandlerDeps) {
       const ctx = await credentialContext(deps, input, requestId);
       if (ctx instanceof Response) return ctx;
 
-      const current = await ensureActiveClientKey(deps, ctx);
-      const revokedAt = nowIso(deps);
-      // Revoke is never best-effort: a zero-row UPDATE means the revocation did
-      // NOT land in D1, so the response must not claim it did.
-      const revoked = await deps.repo.credentials.updateClientKey(ctx.scope, current.keyId, {
-        revokedAt,
-      });
-      if (!revoked) return credentialNotFound(requestId);
-      await writeClientKeyCache(deps, revoked, true, ctx.organizationId, true);
-
-      const next = await createClientKey(deps, ctx);
-      await writeClientKeyCache(deps, next, false, ctx.organizationId, true);
+      const changedAt = nowIso(deps);
+      const rotated = await rotateClientKey(
+        deps,
+        ctx,
+        auditContext(principal, requestId, changedAt),
+      );
+      if (!rotated) return credentialNotFound(requestId);
+      const { revoked, created: next } = rotated;
       return Response.json({
         newKey: { keyId: next.keyId, keyMaterial: next.keyMaterial },
         revokedKeyId: revoked.keyId,
@@ -123,15 +114,19 @@ export function makeCredentialHandlers(deps: CredentialHandlerDeps) {
       const scopes = body.scopes as string[];
       const secret = `sk_${randomHex(32)}`;
       const keyHash = await sha256Hex(secret);
-      const row = await deps.repo.credentials.apiKeys.insert(ctx.scope, {
-        keyId: `ak_${randomHex(16)}`,
-        appId: ctx.appId,
-        environmentId: ctx.environmentId,
-        keyHash,
-        scopes: JSON.stringify(scopes),
-        createdAt: nowIso(deps),
-        createdBy: principal.id,
-      });
+      const row = await deps.repo.credentials.createApiKey(
+        ctx.scope,
+        {
+          keyId: `ak_${randomHex(16)}`,
+          appId: ctx.appId,
+          environmentId: ctx.environmentId,
+          keyHash,
+          scopes: JSON.stringify(scopes),
+          createdAt: nowIso(deps),
+          createdBy: principal.id,
+        },
+        auditContext(principal, requestId, nowIso(deps)),
+      );
       await writeApiKeyCache(deps, row, false, ctx.organizationId);
       return Response.json({ credential: apiKeyResponse(row), value: secret });
     },
@@ -150,7 +145,12 @@ export function makeCredentialHandlers(deps: CredentialHandlerDeps) {
       // must surface as an error, not a fabricated revoked row.
       const revoked =
         current.revokedAt == null
-          ? await deps.repo.credentials.revokeApiKey(ctx.scope, current.keyId, nowIso(deps))
+          ? await deps.repo.credentials.revokeApiKey(
+              ctx.scope,
+              current.keyId,
+              nowIso(deps),
+              auditContext(principal, requestId, nowIso(deps)),
+            )
           : current;
       if (!revoked) return credentialNotFound(requestId);
       await writeApiKeyCache(deps, revoked, true, ctx.organizationId, true);

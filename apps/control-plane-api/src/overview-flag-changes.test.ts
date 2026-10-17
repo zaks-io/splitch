@@ -1,3 +1,4 @@
+import type { FlagChangeLogRow } from "@splitch/db";
 import { describe, expect, it } from "vitest";
 import { overviewFlagChanges } from "./overview-flag-changes";
 import { FLAG_CHANGE_LIMIT, FLAG_CHANGE_WINDOW_DAYS } from "./overview-thresholds";
@@ -5,93 +6,90 @@ import { FLAG_CHANGE_LIMIT, FLAG_CHANGE_WINDOW_DAYS } from "./overview-threshold
 const NOW = new Date("2026-07-20T12:00:00.000Z");
 const DAY_MS = 86_400_000;
 
+function event(overrides: Partial<FlagChangeLogRow> = {}): FlagChangeLogRow {
+  return {
+    seq: 1,
+    appId: "app_checkout",
+    environmentId: "env_prod",
+    flagId: "flag_checkout",
+    flagKey: "checkout-redesign",
+    action: "updated",
+    targetType: "flag_config",
+    actorRef: null,
+    actorVia: null,
+    changedAt: NOW.toISOString(),
+    diffJson: null,
+    ...overrides,
+  };
+}
+
 function isoDaysAgo(days: number): string {
   return new Date(NOW.getTime() - days * DAY_MS).toISOString();
 }
 
-const flags = [
-  { id: "flag_a", key: "checkout-redesign", name: "Checkout redesign" },
-  { id: "flag_b", key: "search-ranking", name: "Search ranking" },
-  { id: "flag_c", key: "pricing-page", name: "Pricing page" },
-];
-
 describe("overviewFlagChanges", () => {
-  it("drops Flag Configuration changed before the window", () => {
+  it("counts the inclusive window without admitting old or future events", () => {
     const result = overviewFlagChanges(
       [
-        { flagId: "flag_a", enabled: true, updatedAt: isoDaysAgo(1) },
-        { flagId: "flag_b", enabled: false, updatedAt: isoDaysAgo(FLAG_CHANGE_WINDOW_DAYS + 1) },
+        event({ seq: 1, changedAt: isoDaysAgo(FLAG_CHANGE_WINDOW_DAYS) }),
+        event({ seq: 2, changedAt: isoDaysAgo(FLAG_CHANGE_WINDOW_DAYS + 1) }),
+        event({ seq: 3, changedAt: isoDaysAgo(-1) }),
       ],
-      flags,
       NOW,
     );
 
-    expect(result.recentlyChanged.map((change) => change.flagKey)).toEqual(["checkout-redesign"]);
-    // Out-of-window rows are not changes in this window, so they must not inflate
-    // the count the card reports.
     expect(result.changedCount).toBe(1);
+    expect(result.recentlyChanged.map((change) => change.seq)).toEqual([1]);
   });
 
-  it("counts every change in the window, then caps what it returns", () => {
-    const configs = Array.from({ length: FLAG_CHANGE_LIMIT + 2 }, (_unused, index) => ({
-      flagId: `flag_${index}`,
-      enabled: index % 2 === 0,
-      updatedAt: isoDaysAgo(index * 0.5),
-    }));
-    const manyFlags = configs.map((config, index) => ({
-      id: config.flagId,
-      key: `flag-key-${index}`,
-      name: `Flag ${index}`,
-    }));
+  it("counts distinct events on the same Flag, then caps in authoritative sequence order", () => {
+    const events = Array.from({ length: FLAG_CHANGE_LIMIT + 2 }, (_, index) =>
+      event({ seq: index + 1 }),
+    );
+    const result = overviewFlagChanges(events, NOW);
 
-    const result = overviewFlagChanges(configs, manyFlags, NOW);
-
-    expect(result.recentlyChanged).toHaveLength(FLAG_CHANGE_LIMIT);
-    // The cap is what makes this card a pointer; the count is what keeps the cap
-    // from being silent (ADR-0036). Taken before the slice, so it survives it.
     expect(result.changedCount).toBe(FLAG_CHANGE_LIMIT + 2);
-    expect(result.recentlyChanged.map((change) => change.flagKey)).toEqual([
-      "flag-key-0",
-      "flag-key-1",
-      "flag-key-2",
-      "flag-key-3",
-      "flag-key-4",
-    ]);
+    expect(result.recentlyChanged.map((change) => change.seq)).toEqual([7, 6, 5, 4, 3]);
   });
 
-  it("carries the Configuration's enabled state, not the Flag definition's", () => {
+  it("projects definition, deletion and Configuration events without inventing landing values or actors", () => {
     const result = overviewFlagChanges(
-      [{ flagId: "flag_c", enabled: false, updatedAt: isoDaysAgo(2) }],
-      flags,
+      [
+        event({ seq: 1, action: "created", targetType: "flag", environmentId: null }),
+        event({ seq: 2, action: "deleted", targetType: "flag", environmentId: null }),
+        event({ seq: 3, actorRef: "user_recorded", actorVia: "session" }),
+      ],
       NOW,
     );
 
-    expect(result.recentlyChanged[0]).toEqual({
-      flagId: "flag_c",
-      flagKey: "pricing-page",
-      flagName: "Pricing page",
-      enabled: false,
-      updatedAt: isoDaysAgo(2),
-    });
+    expect(result.recentlyChanged).toEqual([
+      {
+        seq: 3,
+        flagId: "flag_checkout",
+        flagKey: "checkout-redesign",
+        action: "updated",
+        targetType: "flag_config",
+        actorRef: "user_recorded",
+        actorVia: "session",
+        changedAt: NOW.toISOString(),
+      },
+      expect.objectContaining({ seq: 2, action: "deleted", actorRef: null, actorVia: null }),
+      expect.objectContaining({ seq: 1, action: "created", actorRef: null, actorVia: null }),
+    ]);
+    for (const change of result.recentlyChanged) {
+      expect(change).not.toHaveProperty("enabled");
+      expect(change).not.toHaveProperty("flagName");
+      expect(change).not.toHaveProperty("diffJson");
+    }
   });
 
-  it("fails loud on a Configuration whose Flag is missing", () => {
-    expect(() =>
-      overviewFlagChanges(
-        [{ flagId: "flag_ghost", enabled: true, updatedAt: isoDaysAgo(1) }],
-        flags,
-        NOW,
-      ),
-    ).toThrow(/missing Flag/u);
+  it("fails loudly on an invalid timestamp", () => {
+    expect(() => overviewFlagChanges([event({ changedAt: "not-a-date" })], NOW)).toThrow(
+      /invalid changed_at/u,
+    );
   });
 
-  it("fails loud on an unparseable timestamp instead of silently dropping the row", () => {
-    expect(() =>
-      overviewFlagChanges(
-        [{ flagId: "flag_a", enabled: true, updatedAt: "not-a-date" }],
-        flags,
-        NOW,
-      ),
-    ).toThrow(/invalid updated_at/u);
+  it("fails loudly on an unknown stored target type", () => {
+    expect(() => overviewFlagChanges([event({ targetType: "unknown" })], NOW)).toThrow();
   });
 });

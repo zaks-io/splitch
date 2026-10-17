@@ -531,9 +531,11 @@ fails the read. Deletion rows that store `diff_json` NULL return
 Same filters as the list, but `from` and `to` are required. `format` is `json` or `unified`. The
 JSON envelope always includes `items` and `unifiedDiff` so CLI and MCP share one contract.
 
-The Control Panel does not render this log. The overview "recently changed" card is a different
-read (`flag_configs.updated_at`) and has no existing detail pattern that can reuse
-`ApprovalDiffTable` without a new visual treatment.
+The Control Panel Overview recent-changes card reads this log, ordered by `changed_at` and `seq`.
+It includes App-level definition events and events in the selected Environment within its recent
+window. It counts changes rather than distinct Flags, reports truncation as Flag changes, and links
+to the existing Flags screen with the `flag_changes_list` parity hint. Unknown actors remain
+unattributed. Live `flag_configs.updated_at` does not determine recent history.
 
 ## Segment endpoints
 

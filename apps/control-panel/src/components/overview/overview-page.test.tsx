@@ -102,7 +102,7 @@ describe("Overview page", () => {
     expect(html).toContain("Multiple assignment");
   });
 
-  it("links a recently changed Flag Configuration by key and admits it has no actor", () => {
+  it("links a recorded Flag change to Flags without inventing actor or enabled state", () => {
     const html = render({
       flagConfiguration: {
         windowDays: 7,
@@ -113,16 +113,23 @@ describe("Overview page", () => {
           {
             flagId: "flag_checkout",
             flagKey: "checkout-redesign",
-            flagName: "Checkout redesign",
-            enabled: true,
-            updatedAt: "2026-07-19T10:00:00.000Z",
+            seq: 1,
+            action: "updated",
+            targetType: "flag_config",
+            actorRef: null,
+            actorVia: null,
+            changedAt: "2026-07-19T10:00:00.000Z",
           },
         ],
       },
     });
 
-    expect(html).toContain(`href="${SCOPE_HREF}/flags/checkout-redesign"`);
-    expect(html).toContain("Who made each change is not recorded yet");
+    expect(html).toContain(`href="${SCOPE_HREF}/flags"`);
+    expect(html).toContain("Recorded in the Flag change log");
+    expect(html).toContain(">Updated<");
+    expect(html).not.toContain("Who made each change is not recorded yet");
+    expect(html).not.toContain(">Enabled<");
+    expect(html).not.toContain(">Disabled<");
     // The machine-readable value stays exact; the visible one is UTC, because a
     // locale- or clock-relative label would disagree between server and client.
     expect(html).toContain('dateTime="2026-07-19T10:00:00.000Z"');

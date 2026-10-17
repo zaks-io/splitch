@@ -99,10 +99,10 @@ Sentry's generic feature-flag provider hook forced the question: change tracking
   entry's structured diff is projected from the stored `diff_json`; a missing or unparseable
   record fails the read rather than inventing values. Deletion triggers intentionally store
   `diff_json` NULL; those rows project as `{ before: null, after: null, fields: [], unavailable: true }`
-  so the absence is explicit. The Control Panel does not render the log
-  itself: the overview card still reports `flag_configs.updated_at`, and there is no existing
-  detail pattern that can reuse the Approval diff table without a new visual treatment. The
-  Sentry installation remains the outbound consumer of the same log.
+  so the absence is explicit. The Control Panel Overview recent-changes card reads this same
+  log, using event time and explicit unattributed actors. It includes App-level definition
+  events and events in the selected Environment. The Sentry installation remains the outbound
+  consumer of the same log; no parallel Flag history store is introduced.
 - `sentry_installations` reuses the AES-GCM envelope custody in `integration-secret.ts` and the
   existing `INTEGRATION_SECRET_KEK`, the same key the Cloudflare integration already uses. No new
   KEK name, so no ops step: a missing KEK still throws rather than falling back.

@@ -26,6 +26,7 @@ const EXPECTED_GATES: Record<string, string> = {
   apps_create: "org:admin",
   apps_get: "app:member",
   app_attention_rollup_get: "app:member",
+  app_audit_list: "app:admin",
   apps_update: "app:admin",
   apps_delete: "app:owner",
   app_members_list: "app:member",

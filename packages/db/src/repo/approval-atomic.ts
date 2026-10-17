@@ -1,5 +1,6 @@
 import { and, eq, exists, inArray, type SQL, sql } from "drizzle-orm";
 import { appMemberships, approvalRequests, approvalReviews, environments } from "../schema/index";
+import { approvalReviewAudit } from "./approval-audit";
 import type { ApprovalCommit, ApprovalPolicyContextGuard } from "./approval-types";
 import type { Db } from "./client";
 import type { TenantScope } from "./scope";
@@ -140,6 +141,7 @@ export function appliedReviewQueries(
   return [
     appliedReviewInsert(db, scope, commit, mutationEvidence),
     appliedRequestUpdate(db, scope, commit),
+    approvalReviewAudit(db, scope, commit, "applied"),
   ] as const;
 }
 

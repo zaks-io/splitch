@@ -7,7 +7,10 @@
  * rather than a local seam invariant. The field is absent so the compiler
  * refuses to let anyone reintroduce that.
  */
+import type { AuditContext } from "./audit-event-write";
+
 export interface ApprovalCommit {
+  audit?: AuditContext;
   requestId: string;
   reviewId: string;
   action: "approve_and_apply";
@@ -38,6 +41,7 @@ export interface ApprovalPolicyContextGuard {
 
 /** Same rule as `ApprovalCommit`: the App comes from the minted scope only. */
 export interface ApprovalDisposition {
+  audit?: AuditContext;
   requestId: string;
   reviewId: string;
   action: "approve_and_apply" | "decline";
@@ -59,6 +63,7 @@ export interface ApprovalDisposition {
 
 /** Same rule as `ApprovalCommit`: the App comes from the minted scope only. */
 export interface ApprovalFailure {
+  audit?: AuditContext;
   requestId: string;
   reviewId: string;
   reviewedBy: string;

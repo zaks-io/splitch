@@ -1,4 +1,5 @@
 import type { ApprovalCommit } from "./approval-types";
+import { auditStatement } from "./audit-event-write";
 import type { EnvScope } from "./scope";
 
 /**
@@ -140,5 +141,27 @@ export function approvalAppliedStatements(
       approval.reviewId,
       approval.requestId,
     );
-  return [review, request];
+  return [
+    review,
+    request,
+    auditStatement(d1, scope, {
+      actorRef: approval.reviewedBy,
+      actorVia: approval.reviewedVia,
+      requestId: approval.audit?.requestId ?? null,
+      changedAt: approval.reviewedAt,
+      action: "approval_request_reviews_create",
+      resourceType: "approval_request",
+      resourceId: approval.requestId,
+      targetVersion: approval.resultingTargetVersion,
+      outcome: "applied",
+      approvalRequestId: approval.requestId,
+      runId,
+      environmentId: scope.environmentId,
+      metadata: {
+        reviewId: approval.reviewId,
+        reviewAction: approval.action,
+        resultingTargetVersion: approval.resultingTargetVersion,
+      },
+    }),
+  ];
 }

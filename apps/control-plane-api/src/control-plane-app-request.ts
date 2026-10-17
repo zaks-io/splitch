@@ -11,6 +11,7 @@ import { apiDocumentVersion } from "./api-document-version";
 import { createApp } from "./app";
 import { approvalArchiveStoreFromEnv } from "./approval-archive-tinybird";
 import { createAnalysisResultsReader } from "./attention-analysis-reader";
+import { forwardAuditEvents } from "./audit-events";
 import { dispatchCloudflarePushes } from "./cloudflare-push-dispatch";
 import { durableConfigStoreAccess } from "./config-store-access";
 import { durableCredentialCacheWriterAccess } from "./credential-cache-writer-do";
@@ -106,6 +107,21 @@ export async function handleControlPlaneAppRequest(input: {
   });
 
   const response = await app.fetch(request, env);
+  // A pending Approval Request is a committed mutation even when the route answers 409.
+  if (resolvedAppId && request.method !== "GET" && request.method !== "HEAD") {
+    ctx.waitUntil(
+      forwardAuditEvents({ repo, env, scope: appScope(resolvedAppId) }).catch((error) => {
+        reportMutationBackgroundFault(
+          env,
+          ctx,
+          error,
+          "audit-event-forward",
+          "audit_event_forward_failed",
+        );
+        throw new Error("audit_event_forward_failed");
+      }),
+    );
+  }
   if (response.ok && resolvedAppId && request.method !== "GET" && request.method !== "HEAD") {
     ctx.waitUntil(
       dispatchCloudflarePushes({
@@ -114,7 +130,13 @@ export async function handleControlPlaneAppRequest(input: {
         secretKek: env.INTEGRATION_SECRET_KEK,
         secretKeyVersion: env.INTEGRATION_SECRET_KEY_VERSION,
       }).catch((error) => {
-        reportCloudflarePushFault(env, ctx, error, "mutation");
+        reportMutationBackgroundFault(
+          env,
+          ctx,
+          error,
+          "cloudflare-push-dispatch",
+          "cloudflare_push_dispatch_failed",
+        );
         throw new Error("cloudflare_push_dispatch_failed");
       }),
     );
@@ -122,19 +144,17 @@ export async function handleControlPlaneAppRequest(input: {
   return response;
 }
 
-function reportCloudflarePushFault(
+function reportMutationBackgroundFault(
   env: ControlPlaneApiEnv,
   ctx: Pick<ExecutionContext, "waitUntil">,
   error: unknown,
-  trigger: string,
+  job: string,
+  code: string,
 ): void {
-  createWorkerFaultReporter(env, workerObservabilityWithWaitUntil("control-plane-api", ctx))(
-    "cloudflare_push_dispatch_failed",
-    {
-      service: "splitch-control-plane-api",
-      job: "cloudflare-push-dispatch",
-      trigger,
-      fault: serializeFault(error),
-    },
-  );
+  createWorkerFaultReporter(env, workerObservabilityWithWaitUntil("control-plane-api", ctx))(code, {
+    service: "splitch-control-plane-api",
+    job,
+    trigger: "mutation",
+    fault: serializeFault(error),
+  });
 }

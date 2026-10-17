@@ -1,8 +1,8 @@
 import {
   ApprovalDiffSchema,
   type ApprovalRequest,
-  canonicalHash,
   type CreateConclusionPromotionRequest,
+  canonicalHash,
   FlagConfigResponseSchema,
 } from "@splitch/contracts";
 import { appScope, envScope } from "@splitch/db";
@@ -10,8 +10,9 @@ import type { HandlerArgs } from "@splitch/worker-runtime";
 import { requireAppAdmin } from "./app-authz";
 import { approvalDiff, approvalRequestId } from "./approval-canonical";
 import { approvalRequestProjection } from "./approval-model";
-import { approvalTargetVersion, environmentPolicyContexts } from "./approval-target";
 import { idempotencyConflict, requiredAuthDoor } from "./approval-review-outcomes";
+import { approvalTargetVersion, environmentPolicyContexts } from "./approval-target";
+import { auditContext } from "./audit-context";
 import { responseFromSnapshot } from "./config-store-shared";
 import { buildSnapshotFromD1 } from "./config-store-snapshot-build";
 import { targetConfigurationStale } from "./experiment-conclusion-errors";
@@ -213,6 +214,8 @@ async function commitReplacement(
     const created = await deps.repo.experimentConclusions.createReplacement(
       appScope(input.conclusion.appId),
       {
+        audit: auditContext(args.principal, args.requestId, now),
+        runId: input.conclusion.runId,
         conclusionId: input.conclusion.id,
         previousApprovalRequestId: input.previous.id,
         ordinal: input.ordinal,

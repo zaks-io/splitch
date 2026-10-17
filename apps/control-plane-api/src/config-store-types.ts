@@ -9,7 +9,7 @@ import type {
   TargetingRule,
   TargetingRuleInput,
 } from "@splitch/contracts";
-import type { ApprovalCommit, Repository } from "@splitch/db";
+import type { ApprovalCommit, AuditContext, Repository } from "@splitch/db";
 import type { RunFrozenFailure } from "./flag-config-run-freeze";
 
 /**
@@ -92,6 +92,7 @@ export interface ReplaceTargetingRulesInput {
 }
 
 export interface PromoteFlagConfigInput {
+  audit?: AuditContext;
   actor: FlagConfigActor;
   appId: string;
   targetEnvironmentId: string;

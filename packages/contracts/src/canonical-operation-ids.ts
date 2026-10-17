@@ -21,6 +21,7 @@ export const CANONICAL_OPERATION_IDS = [
   "apps_create",
   "apps_get",
   "app_attention_rollup_get",
+  "app_audit_list",
   "apps_update",
   "apps_delete",
   "app_members_list",

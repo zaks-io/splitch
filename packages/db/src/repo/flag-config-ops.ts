@@ -8,24 +8,30 @@ import {
   approvalReviewLanded,
   reviewRecorded,
 } from "./approval-atomic";
+import { approvalReviewAudit } from "./approval-audit";
 import type { ApprovalCommit } from "./approval-types";
+import type { AuditEventInput } from "./audit-event-write";
 import type { Db } from "./client";
+import { makeFlagConfigCrossEnvironmentReads } from "./flag-config-cross-environment-reads";
+import {
+  type FlagConfigWritePatch,
+  type ReplaceTargetingRulesResult,
+  replaceDirectTargetingRules,
+  scopedFlagConfig,
+  scopedTargetingRule,
+  type TargetingRuleWrite,
+  updateDirectFlagConfig,
+} from "./flag-config-direct-write";
+
 import {
   missingReferencedVariants,
   referencedVariantMustExist,
   targetingRuleWriteFailure,
 } from "./flag-config-variant-refs";
-import { makeFlagConfigCrossEnvironmentReads } from "./flag-config-cross-environment-reads";
 import { idBatches } from "./id-batches";
 import type { EnvScope } from "./scope";
 import { assertMintedScope } from "./scope";
 import type { ScopedTable } from "./scoped-table";
-
-export type ReplaceTargetingRulesResult =
-  | { ok: true; config: typeof flagConfigs.$inferSelect }
-  | { ok: false; reason: "not_found" }
-  | { ok: false; reason: "id_conflict" }
-  | { ok: false; reason: "missing_variant"; missingVariantIds: string[] };
 
 /**
  * Per-Environment Flag CONFIGURATION reads and writes (ADR-0027), split out of
@@ -141,6 +147,7 @@ export function makeFlagConfigOps(
         >
       >,
       approval?: ApprovalCommit,
+      audit?: AuditEventInput,
     ): Promise<typeof flagConfigs.$inferSelect | null> {
       assertMintedScope(scope);
       const current = await flagConfigsTable.findOne(scope, eq(flagConfigs.flagId, flagId));
@@ -168,15 +175,7 @@ export function makeFlagConfigOps(
         if (!(await approvalReviewLanded(db, scope, approval))) return null;
         return flagConfigsTable.findOne(scope, eq(flagConfigs.flagId, flagId));
       }
-      // The version bumps in SQL: `current.version + 1` is a stale read-modify-
-      // write, and two concurrent writers would both land on the same version.
-      // Raw update because the scoped facade only accepts plain column values.
-      const rows = await db
-        .update(flagConfigs)
-        .set({ ...patch, version: sql`${flagConfigs.version} + 1` })
-        .where(scopedFlagConfig(scope, flagId))
-        .returning();
-      return rows[0] ?? null;
+      return updateDirectFlagConfig(db, scope, flagId, patch, audit);
     },
 
     listTargetingRules(scope: EnvScope, flagId: string) {
@@ -199,6 +198,7 @@ export function makeFlagConfigOps(
       rows: TargetingRuleWrite[],
       configPatch: FlagConfigWritePatch,
       approval?: ApprovalCommit,
+      audit?: AuditEventInput,
     ): Promise<ReplaceTargetingRulesResult> {
       assertMintedScope(scope);
       const current = await flagConfigsTable.findOne(scope, eq(flagConfigs.flagId, flagId));
@@ -214,21 +214,10 @@ export function makeFlagConfigOps(
             configPatch,
             approval,
           )
-        : replaceDirectTargetingRules(db, scope, flagId, rows, configPatch);
+        : replaceDirectTargetingRules(db, scope, flagId, rows, configPatch, audit);
     },
   };
 }
-
-type TargetingRuleWrite = Omit<
-  typeof targetingRules.$inferInsert,
-  "appId" | "environmentId" | "flagId"
->;
-type FlagConfigWritePatch = Partial<
-  Pick<
-    typeof flagConfigs.$inferInsert,
-    "enabled" | "availableVariantNames" | "rollout" | "updatedAt" | "updatedBy" | "updatedVia"
-  >
->;
 
 async function replaceApprovedTargetingRules(
   db: Db,
@@ -289,6 +278,7 @@ async function replaceApprovedTargetingRules(
       guardedDelete,
       ...guardedInserts,
       appliedRequestUpdate(db, scope, approval),
+      approvalReviewAudit(db, scope, approval, "applied"),
     ] as unknown as Parameters<Db["batch"]>[0]);
   } catch (cause) {
     return targetingRuleWriteFailure(
@@ -301,59 +291,4 @@ async function replaceApprovedTargetingRules(
   }
   const approved = await flagConfigsTable.findOne(scope, eq(flagConfigs.flagId, flagId));
   return approved ? { ok: true, config: approved } : { ok: false, reason: "not_found" };
-}
-
-async function replaceDirectTargetingRules(
-  db: Db,
-  scope: EnvScope,
-  flagId: string,
-  rows: TargetingRuleWrite[],
-  configPatch: FlagConfigWritePatch,
-): Promise<ReplaceTargetingRulesResult> {
-  const batch = [
-    ...referencedVariantMustExist(db, scope, flagId, rows),
-    db.delete(targetingRules).where(scopedTargetingRule(scope, flagId)).returning(),
-    ...rows.map((row) =>
-      db
-        .insert(targetingRules)
-        .values({
-          ...row,
-          appId: scope.appId,
-          environmentId: scope.environmentId,
-          flagId,
-        })
-        .returning(),
-    ),
-    db
-      .update(flagConfigs)
-      .set({ ...configPatch, version: sql`${flagConfigs.version} + 1` })
-      .where(scopedFlagConfig(scope, flagId))
-      .returning(),
-  ];
-  try {
-    const results = await db.batch(batch as unknown as Parameters<Db["batch"]>[0]);
-    const updated = results.at(-1) as (typeof flagConfigs.$inferSelect)[] | undefined;
-    return updated?.[0] ? { ok: true, config: updated[0] } : { ok: false, reason: "not_found" };
-  } catch (cause) {
-    return targetingRuleWriteFailure(
-      cause,
-      await missingReferencedVariants(db, scope, flagId, rows),
-    );
-  }
-}
-
-export function scopedTargetingRule(scope: EnvScope, flagId: string) {
-  return and(
-    eq(targetingRules.appId, scope.appId),
-    eq(targetingRules.environmentId, scope.environmentId),
-    eq(targetingRules.flagId, flagId),
-  );
-}
-
-export function scopedFlagConfig(scope: EnvScope, flagId: string) {
-  return and(
-    eq(flagConfigs.appId, scope.appId),
-    eq(flagConfigs.environmentId, scope.environmentId),
-    eq(flagConfigs.flagId, flagId),
-  );
 }

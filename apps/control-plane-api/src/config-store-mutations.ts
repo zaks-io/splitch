@@ -1,7 +1,6 @@
 import type { PercentageRollout, TargetingRule, Variant } from "@splitch/contracts";
 import { type EnvScope, envScope } from "@splitch/db";
 import { promotionFreeze } from "./config-store-freeze";
-import { writeFlagConfigSnapshot } from "./config-store-snapshot-write";
 import {
   type ConfigStoreRuntimeDeps,
   type FlagConfigWriteResult,
@@ -16,6 +15,7 @@ import {
   targetingRuleRows,
 } from "./config-store-shared";
 import { buildSnapshotFromD1 } from "./config-store-snapshot-build";
+import { writeFlagConfigSnapshot } from "./config-store-snapshot-write";
 import { targetingRulePersistFailure } from "./config-store-targeting-rules";
 import { baselineIsUnresolvable, mintSalt } from "./flag-config-rollout";
 import { SegmentNotFoundError } from "./targeting-rule-resolution";
@@ -275,6 +275,21 @@ async function commitPromotion(
     return flagConfigResult(input.flagId, current);
   }
   const configPatch = promotionConfigPatch(input, prepared, now);
+  const audit = input.audit
+    ? {
+        ...input.audit,
+        changedAt: now.toISOString(),
+        action: "flags_promote",
+        resourceType: "flag_configuration",
+        resourceId: input.flagId,
+        environmentId: input.targetEnvironmentId,
+        metadata: {
+          changedFields: Object.keys(input.select).filter((field) =>
+            ["availability", "enabled", "rollout", "targeting"].includes(field),
+          ),
+        },
+      }
+    : undefined;
   // Only `select.targeting` moves rules. Since SPL-170 `select.rollout` means the
   // config-level baseline, which lives on flag_configs — routing it through
   // replaceTargetingRules (a DELETE + re-INSERT) would re-stamp `createdAt` on
@@ -286,6 +301,7 @@ async function commitPromotion(
       targetingRuleRows(prepared.targetingRules, now),
       configPatch,
       input.approval,
+      audit,
     );
     if (!replaced.ok) {
       return targetingRulePersistFailure(replaced, prepared.targetingRules, "FLAG_NOT_FOUND");
@@ -296,6 +312,7 @@ async function commitPromotion(
       input.flagId,
       configPatch,
       input.approval,
+      audit,
     ))
   ) {
     return { ok: false, reason: "FLAG_NOT_FOUND" };

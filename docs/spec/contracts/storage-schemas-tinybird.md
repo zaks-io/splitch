@@ -145,7 +145,7 @@ Session identifiers follow those filters rather than blocking time-range data sk
 | `action`        | String                 | e.g. route `operationId`: `'flags_create'`, `'runs_end'`, `'api_keys_revoke'` |
 | `resource_type` | LowCardinality(String) | `'flag' \| 'run' \| 'experiment' \| 'metric' \| 'credential' \| ...`          |
 | `resource_id`   | String                 | —                                                                             |
-| `changes`       | String                 | JSON; before/after snapshot or description                                    |
+| `changes`       | String                 | Canonical allowlisted event metadata (archive payloads are separate)          |
 | `timestamp`     | DateTime               | Event time                                                                    |
 
 The physical datasource also carries archive-only indexing and verification columns:
@@ -155,25 +155,36 @@ archive-only columns null. `archived_d1_row_count` counts the Request row plus e
 the archive payload, not Tinybird rows. The sorting key begins with `app_id`; no read can select an
 Approval Request archive before applying its App scope.
 
-Approval audit rows use this existing `audit_log` datasource, not a new datasource. The minimum
-projection is the ordinary `app_id`, `user_id`, `auth_method`, `action`, `resource_type`,
-`resource_id`, and `timestamp`, with `changes` carrying:
+App-scoped ordinary audit rows use `audit_id = event_id` and `dedup_key = event_id` from the
+D1 `control_plane_audit_events` outbox. `changes` contains canonical JSON:
 
-```
+```typescript
 {
-  approval_request_id: string,
-  review_id: string | null,
-  review_action: 'approve_and_apply' | 'decline' | null,
-  outcome: 'pending' | 'applied' | 'declined' | 'stale' | 'failed',
-  target_version: string,
-  resulting_target_version: string | null,
-  error_code: ErrorCode | null
+  environmentId: string | null,
+  organizationId: string,
+  targetVersion: string | null,
+  outcome: 'committed' | 'pending' | 'applied' | 'declined' | 'stale' | 'failed',
+  requestId: string | null,
+  approvalRequestId: string | null,
+  runId: string | null,
+  metadata: {
+    changedFields?: string[],
+    reviewId?: string,
+    reviewAction?: 'approve_and_apply' | 'decline',
+    resultingTargetVersion?: string | null,
+    errorCode?: string | null,
+    role?: string,
+    previousRole?: string,
+    revokedKeyId?: string
+  }
 }
 ```
 
-`resource_type` is `approval_request`; `resource_id` is the Approval Request ID. D1 remains
-canonical. Emitting these post-commit Approval audit rows through the D1-to-Tinybird bridge is
-forward-referenced here and implemented by the separately tracked bridge work.
+The [producer and delivery contract](../control-plane/d1-and-tinybird-data-access.md#tinybird-audit-log)
+defines action coverage and existing retry semantics. The ordinary read deduplicates by `audit_id`
+and rejects conflicting canonical content before filters and pagination. It excludes archive rows.
+Unknown actor/auth attribution projects explicitly as `unattributed`, and deleted-user tombstone
+references are preserved. Only allowlisted metadata enters the bridge, never raw diffs or secrets.
 
 Terminal archival uses `action = 'approval_request.archive'`. Its `changes` value is the complete,
 RFC 8785-canonical payload `{ archiveVersion, request, reviews }`; `reviews` is ordered by
@@ -184,7 +195,7 @@ canonical payload before removing D1 rows. The append uses `wait=true` and succe
 acknowledgment for exactly one successful row and zero quarantined rows. Replays with the same
 identity and checksum are idempotent; a conflicting payload fails loud.
 
-`audit_log` has no TTL. Approval Request archives remain readable for at least 24 months or the
+`audit_log` has no TTL. Ordinary events and Approval Request archives remain readable for at least 24 months or the
 contracted audit period, whichever is longer. Archived read pipes preserve the Request wire
 projection, require `app_id`, and apply the same deleted-user tombstone values carried by the
 canonical audit rows.

@@ -13,12 +13,16 @@ type TableConfig = ReturnType<typeof getTableConfig>;
  * only surfaces once a demo org has actually used the feature.
  */
 describe("demo reap delete plan", () => {
-  it("clears every table that hangs off an App", () => {
+  it("clears App state while retaining only the audit delivery bridge", () => {
     const appScoped = tables()
       .filter((config) => config.columns.some((column) => column.name === "app_id"))
       .map((config) => config.name);
     expect(appScoped.length).toBeGreaterThan(0);
-    expect(appScoped.filter((name) => !DEMO_REAP_DELETE_ORDER.includes(name))).toEqual([]);
+    // Audit facts outlive their subject until the age-plus-forwarded retention rule permits pruning.
+    expect(appScoped.filter((name) => !DEMO_REAP_DELETE_ORDER.includes(name))).toEqual([
+      "control_plane_audit_events",
+    ]);
+    expect(getTableConfig(schema.controlPlaneAuditEvents).foreignKeys).toEqual([]);
   });
 
   it("clears every child before the table it references", () => {

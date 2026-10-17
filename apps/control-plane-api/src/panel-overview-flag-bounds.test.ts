@@ -1,201 +1,160 @@
-import { appScope, envScope } from "@splitch/db";
-import { flagRow } from "@splitch/db/testing";
-import { describe, expect, it } from "vitest";
-import {
-  ATTENTION_TEST_TIMEOUT,
-  repository,
-  setupAttentionRollupFixture,
-} from "./attention-rollup-fixture";
+import { appScope } from "@splitch/db";
+import { describe, expect, it, vi } from "vitest";
+import { ATTENTION_TEST_TIMEOUT, repository } from "./attention-rollup-fixture";
 import { ids, NOW, NOW_MS } from "./config-store-fixture-data";
-import { FLAG_CHANGE_LIMIT, FLAG_CHANGE_READ_LIMIT } from "./overview-thresholds";
+import { seedOverviewEvent, setupOverviewFixture } from "./overview-flag-change-test-fixture";
+import {
+  FLAG_CHANGE_LIMIT,
+  FLAG_CHANGE_READ_LIMIT,
+  FLAG_CHANGE_WINDOW_DAYS,
+} from "./overview-thresholds";
 import { body, CALM, overview, readerFor } from "./panel-overview-fixture";
 
-/**
- * The Overview's Flag Configuration scan is bounded, and the bound is reported.
- *
- * The seeded graph already carries one Flag Configuration in the Production
- * Environment, changed at `NOW`, so every count below is "seeded + 1".
- */
-setupAttentionRollupFixture();
+setupOverviewFixture();
 
-const MINUTE_MS = 60_000;
 const DAY_MS = 86_400_000;
 
-/**
- * Adds `count` Flags, each with its own Flag Configuration in the Production
- * Environment. `changedAt` decides whether they land inside the card's window.
- */
-async function seedChangedFlagConfigs(count: number, changedAt: (index: number) => string) {
-  const repo = repository();
-  const aScope = appScope(ids.appId);
-  const eScope = envScope(ids.appId, ids.environmentId);
+async function seedEvents(count: number, changedAt: (index: number) => string = () => NOW) {
   for (let index = 0; index < count; index += 1) {
-    const flagId = `flag_bulk_${String(index).padStart(3, "0")}`;
-    await repo.flags.flags.insert(
-      aScope,
-      flagRow({
-        lifecycleClass: "ops",
-        id: flagId,
-        appId: ids.appId,
-        key: `bulk-flag-${index}`,
-        name: `Bulk flag ${index}`,
-        createdAt: NOW,
-        updatedAt: NOW,
-      }),
-    );
-    await repo.flags.flagConfigs.insert(eScope, {
-      id: `flag_config_bulk_${String(index).padStart(3, "0")}`,
-      appId: ids.appId,
-      environmentId: ids.environmentId,
-      flagId,
-      enabled: index % 2 === 0,
-      availableVariantNames: JSON.stringify([]),
-      createdAt: NOW,
-      updatedAt: changedAt(index),
-    });
+    await seedOverviewEvent({ flagKey: `bulk-flag-${index}`, changedAt: changedAt(index) });
   }
 }
 
-/** Staggered inside the window: index 0 is the most recent of the bulk rows. */
-function insideWindow(index: number): string {
-  return new Date(NOW_MS - (index + 1) * MINUTE_MS).toISOString();
-}
+const read = () => overview(readerFor({ [ids.liveRunId]: CALM }));
 
-describe("panelOverviewRead Flag Configuration read bound", () => {
+describe("panelOverviewRead Flag change-log bounds", () => {
   it(
-    "reports the scan as truncated once more changed than the ceiling, instead of dropping rows quietly",
+    "observes read truncation and keeps the newest sequences",
     async () => {
-      // Ceiling + 1 in-window rows in total, counting the seeded one.
-      await seedChangedFlagConfigs(FLAG_CHANGE_READ_LIMIT, insideWindow);
+      await seedEvents(FLAG_CHANGE_READ_LIMIT);
+      const { flagConfiguration: changes } = await body(await read());
 
-      const overviewBody = await body(await overview(readerFor({ [ids.liveRunId]: CALM })));
-
-      // The signal itself is the assertion: a row count alone would pass even if
-      // truncation were never wired to the response (ADR-0036).
-      expect(overviewBody.flagConfiguration.readTruncated).toBe(true);
-      expect(overviewBody.flagConfiguration.readLimit).toBe(FLAG_CHANGE_READ_LIMIT);
-      // The count is capped BY the read bound, so it is a floor and it is exactly
-      // the limit. Nothing else pins that: if the count were taken after the
-      // display slice it would read 5, and the Panel renders "more than N" from
-      // this number.
-      expect(overviewBody.flagConfiguration.changedCount).toBe(FLAG_CHANGE_READ_LIMIT);
-      // Newest first: the seeded Flag Configuration is stamped at NOW, ahead of
-      // every bulk row, so truncation drops the OLDEST changes and not the newest.
-      expect(overviewBody.flagConfiguration.recentlyChanged[0]?.flagKey).toBe(ids.flagKey);
-    },
-    ATTENTION_TEST_TIMEOUT,
-  );
-
-  it(
-    "does not claim truncation when the scan lands exactly on the ceiling",
-    async () => {
-      await seedChangedFlagConfigs(FLAG_CHANGE_READ_LIMIT - 1, insideWindow);
-
-      const overviewBody = await body(await overview(readerFor({ [ids.liveRunId]: CALM })));
-
-      expect(overviewBody.flagConfiguration.readTruncated).toBe(false);
-      // A full page and a truncated one carry the same row count, so the count is
-      // pinned here too: this is the one seeding where `>` and `>=` disagree, and
-      // an off-by-one in either the scan or the count shows up as 49 or 51.
-      expect(overviewBody.flagConfiguration.changedCount).toBe(FLAG_CHANGE_READ_LIMIT);
-    },
-    ATTENTION_TEST_TIMEOUT,
-  );
-
-  it(
-    "counts only what changed inside the window, so an old Flag catalog cannot trip the ceiling",
-    async () => {
-      // Past the ceiling in row count, but all changed long before the window.
-      await seedChangedFlagConfigs(FLAG_CHANGE_READ_LIMIT + 5, (index) =>
-        new Date(NOW_MS - (30 + index) * DAY_MS).toISOString(),
-      );
-
-      const overviewBody = await body(await overview(readerFor({ [ids.liveRunId]: CALM })));
-
-      expect(overviewBody.flagConfiguration.readTruncated).toBe(false);
-      expect(overviewBody.flagConfiguration.recentlyChanged).toEqual([
-        {
-          flagId: ids.flagId,
-          flagKey: ids.flagKey,
-          flagName: "Checkout redesign",
-          enabled: false,
-          updatedAt: NOW,
-        },
-      ]);
-    },
-    ATTENTION_TEST_TIMEOUT,
-  );
-
-  it(
-    "truncates the same rows on every read when the change timestamps collide",
-    async () => {
-      // Every row stamped at the same instant, which is what a batch write looks
-      // like: `updated_at` alone cannot decide which rows the LIMIT keeps.
-      await seedChangedFlagConfigs(FLAG_CHANGE_READ_LIMIT, () => NOW);
-
-      const first = await body(await overview(readerFor({ [ids.liveRunId]: CALM })));
-      const second = await body(await overview(readerFor({ [ids.liveRunId]: CALM })));
-
-      expect(first.flagConfiguration.readTruncated).toBe(true);
-      // Weak on its own: a partial order can still be stable within one process,
-      // and this passes with the tiebreaker removed. It is here for the shuffle an
-      // operator would actually see, not as the total-order proof.
-      expect(second.flagConfiguration.recentlyChanged).toEqual(
-        first.flagConfiguration.recentlyChanged,
-      );
-      // THIS is the total-order proof, and it is what fails if
-      // `desc(flagConfigs.id)` is dropped. The tiebreaker is `flag_configs.id`
-      // DESC and the id is the table's PRIMARY KEY, so exactly one head is
-      // reachable: "flag_config_checkout_prod" sorts above every
-      // "flag_config_bulk_NNN", then the bulk ids descend.
-      expect(first.flagConfiguration.recentlyChanged.map((change) => change.flagKey)).toEqual([
-        ids.flagKey,
+      expect(changes.readTruncated).toBe(true);
+      expect(changes.readLimit).toBe(FLAG_CHANGE_READ_LIMIT);
+      expect(changes.changedCount).toBe(FLAG_CHANGE_READ_LIMIT);
+      expect(changes.recentlyChanged.map((change) => change.flagKey)).toEqual([
         "bulk-flag-49",
         "bulk-flag-48",
         "bulk-flag-47",
         "bulk-flag-46",
+        "bulk-flag-45",
       ]);
-    },
-    ATTENTION_TEST_TIMEOUT,
-  );
-});
-
-/**
- * The display cap is the bound an ordinary Environment hits. Well under the read
- * ceiling, so these prove the second truncation on its own rather than riding on
- * the first.
- */
-describe("panelOverviewRead Flag Configuration display cap", () => {
-  it(
-    "reports how many changed, not just the few it shows",
-    async () => {
-      // Twelve in-window changes, counting the seeded one: more than the card
-      // displays, far fewer than the scan reads.
-      await seedChangedFlagConfigs(11, insideWindow);
-
-      const overviewBody = await body(await overview(readerFor({ [ids.liveRunId]: CALM })));
-
-      expect(overviewBody.flagConfiguration.changedCount).toBe(12);
-      expect(overviewBody.flagConfiguration.recentlyChanged).toHaveLength(FLAG_CHANGE_LIMIT);
-      // The read bound never fired, so the count is a total and the Panel is free
-      // to render it as one.
-      expect(overviewBody.flagConfiguration.readTruncated).toBe(false);
+      expect((await body(await read())).flagConfiguration.recentlyChanged).toEqual(
+        changes.recentlyChanged,
+      );
     },
     ATTENTION_TEST_TIMEOUT,
   );
 
   it(
-    "counts only the window, so an old Flag catalog cannot invent changes",
+    "does not infer truncation from a full page",
     async () => {
-      // More rows than the card shows, all changed long before the window.
-      await seedChangedFlagConfigs(FLAG_CHANGE_LIMIT + 5, (index) =>
+      await seedEvents(FLAG_CHANGE_READ_LIMIT - 1);
+      const { flagConfiguration: changes } = await body(await read());
+
+      expect(changes.readTruncated).toBe(false);
+      expect(changes.changedCount).toBe(FLAG_CHANGE_READ_LIMIT);
+    },
+    ATTENTION_TEST_TIMEOUT,
+  );
+
+  it(
+    "filters old events in SQL before applying the bound",
+    async () => {
+      await seedEvents(FLAG_CHANGE_READ_LIMIT + 5, (index) =>
         new Date(NOW_MS - (30 + index) * DAY_MS).toISOString(),
       );
+      const { flagConfiguration: changes } = await body(await read());
 
-      const overviewBody = await body(await overview(readerFor({ [ids.liveRunId]: CALM })));
+      expect(changes.readTruncated).toBe(false);
+      expect(changes.changedCount).toBe(1);
+      expect(changes.recentlyChanged[0]?.flagKey).toBe(ids.flagKey);
+    },
+    ATTENTION_TEST_TIMEOUT,
+  );
 
-      // Only the seeded Flag Configuration, stamped at NOW.
-      expect(overviewBody.flagConfiguration.changedCount).toBe(1);
+  it(
+    "reports display truncation while counting repeated changes to one Flag",
+    async () => {
+      await seedEvents(11);
+      const { flagConfiguration: changes } = await body(await read());
+
+      expect(changes.changedCount).toBe(12);
+      expect(changes.recentlyChanged).toHaveLength(FLAG_CHANGE_LIMIT);
+      expect(changes.readTruncated).toBe(false);
+    },
+    ATTENTION_TEST_TIMEOUT,
+  );
+
+  it(
+    "includes shared definitions and deleted Flags, and excludes other scopes and future events",
+    async () => {
+      await seedOverviewEvent({ targetType: "flag", action: "created", environmentId: null });
+      await seedOverviewEvent({
+        flagId: "flag_deleted",
+        flagKey: "deleted-flag",
+        targetType: "flag",
+        action: "deleted",
+        environmentId: null,
+        actorRef: "deleted:user",
+        actorVia: "session",
+      });
+      await seedOverviewEvent({ environmentId: ids.devEnvironmentId, flagKey: "dev-only" });
+      await seedOverviewEvent({ appId: ids.otherAppId, flagKey: "other-app" });
+      await seedOverviewEvent({
+        flagKey: "future",
+        changedAt: new Date(NOW_MS + DAY_MS).toISOString(),
+      });
+      await seedOverviewEvent({
+        flagKey: "window-boundary",
+        changedAt: new Date(NOW_MS - FLAG_CHANGE_WINDOW_DAYS * DAY_MS).toISOString(),
+      });
+
+      const { flagConfiguration: changes } = await body(await read());
+
+      expect(changes.changedCount).toBe(4);
+      expect(changes.recentlyChanged.map((change) => change.flagKey)).toEqual([
+        "window-boundary",
+        "deleted-flag",
+        ids.flagKey,
+        ids.flagKey,
+      ]);
+      expect(changes.recentlyChanged[1]).toMatchObject({
+        action: "deleted",
+        actorRef: "deleted:user",
+        actorVia: "session",
+      });
+      expect(changes.recentlyChanged[2]).toMatchObject({ action: "created", actorRef: null });
+    },
+    ATTENTION_TEST_TIMEOUT,
+  );
+
+  it(
+    "uses one bounded authoritative read and no live Flag or Configuration reads",
+    async () => {
+      const repo = repository();
+      const listForApp = vi.fn(repo.flagChangeEvents.listForApp.bind(repo.flagChangeEvents));
+      const listRecentFlagConfigs = vi.fn(repo.flags.listRecentFlagConfigs);
+      const listFlagsByIds = vi.fn(repo.flags.listFlagsByIds);
+      const response = await overview(readerFor({ [ids.liveRunId]: CALM }), {
+        repo: {
+          ...repo,
+          flagChangeEvents: { ...repo.flagChangeEvents, listForApp },
+          flags: { ...repo.flags, listRecentFlagConfigs, listFlagsByIds },
+        },
+      });
+
+      expect(response.status).toBe(200);
+      expect(listForApp).toHaveBeenCalledExactlyOnceWith(appScope(ids.appId), {
+        from: new Date(NOW_MS - FLAG_CHANGE_WINDOW_DAYS * DAY_MS).toISOString(),
+        to: NOW,
+        environmentIds: [ids.environmentId],
+        includeAppLevel: true,
+        order: "desc",
+        limit: FLAG_CHANGE_READ_LIMIT + 1,
+      });
+      expect(listRecentFlagConfigs).not.toHaveBeenCalled();
+      expect(listFlagsByIds).not.toHaveBeenCalled();
     },
     ATTENTION_TEST_TIMEOUT,
   );

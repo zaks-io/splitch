@@ -97,6 +97,32 @@ describe("INSERT cannot be forged into another tenant", () => {
 });
 
 describe("UPDATE cannot move a row across tenants", () => {
+  it("an audited Client Key patch cannot move its credential or append an audit fact", async () => {
+    const scope = envScope(seed.a.appId, seed.a.environmentId);
+    await repo.credentials.clientKeys.insert(scope, {
+      keyId: "client_audit_isolation",
+      appId: seed.a.appId,
+      environmentId: seed.a.environmentId,
+      keyMaterial: "test-client-material",
+      createdAt: "2026-10-16T00:00:00.000Z",
+    });
+    for (const patch of [{ appId: seed.b.appId }, { environmentId: seed.b.environmentId }]) {
+      await expect(
+        repo.credentials.updateClientKey(scope, "client_audit_isolation", patch, {
+          actorRef: null,
+          actorVia: null,
+          requestId: null,
+          changedAt: "2026-10-16T00:00:00.000Z",
+        }),
+      ).rejects.toThrow("cannot set scope columns");
+    }
+    expect(await repo.credentials.getClientKey(scope, "client_audit_isolation")).toMatchObject({
+      appId: seed.a.appId,
+      environmentId: seed.a.environmentId,
+    });
+    expect(await repo.auditEvents.list(appScope(seed.a.appId))).toEqual([]);
+  });
+
   it("setting app_id in an UPDATE throws (immutable scope column)", async () => {
     const aScope = appScope(seed.a.appId);
 

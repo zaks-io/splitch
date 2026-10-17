@@ -1,9 +1,9 @@
+import { ClientKeySchema } from "../leaf-schemas-runtime";
+import { type ApiRouteContract, defineApiRoute } from "../openapi-route";
 import {
   CreateCredentialResponseSchema,
   ListCredentialsResponseSchema,
 } from "../resource-envelopes-account";
-import { ClientKeySchema } from "../leaf-schemas-runtime";
-import { type ApiRouteContract, defineApiRoute } from "../openapi-route";
 import {
   deleteClosed,
   mintSecretClosed,
@@ -51,6 +51,7 @@ export const credentialRoutes = [
   }),
   defineApiRoute({
     operationId: "client_key_update",
+    audit: "app",
     owner: OWNER,
     method: "PATCH",
     path: "/apps/:appId/envs/:environmentId/client-key",
@@ -66,6 +67,7 @@ export const credentialRoutes = [
   }),
   defineApiRoute({
     operationId: "client_key_rotate",
+    audit: "app",
     owner: OWNER,
     method: "POST",
     path: "/apps/:appId/envs/:environmentId/client-key/revoke",
@@ -96,6 +98,7 @@ export const credentialRoutes = [
   }),
   defineApiRoute({
     operationId: "api_keys_create",
+    audit: "app",
     owner: OWNER,
     method: "POST",
     path: "/apps/:appId/envs/:environmentId/api-keys",
@@ -113,6 +116,7 @@ export const credentialRoutes = [
   }),
   defineApiRoute({
     operationId: "api_keys_revoke",
+    audit: "app",
     owner: OWNER,
     method: "POST",
     path: "/apps/:appId/envs/:environmentId/api-keys/:keyId/revoke",

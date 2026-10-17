@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { accountRoutes } from "./routes/routes-account";
+import { appAuditRoutes } from "./routes/routes-app-audit";
 import { approvalRoutes } from "./routes/routes-approvals";
 import { attentionRoutes } from "./routes/routes-attention";
 import { credentialRoutes } from "./routes/routes-credentials";
@@ -41,6 +42,7 @@ function sdkIndices(tupleName: string, routeGroup?: string): number[] {
 const FLAGS_SDK_INDICES = sdkIndices("flagsSdkRoutes");
 const EXPERIMENTS_SDK_INDICES = sdkIndices("experimentsSdkRoutes");
 const APPS_SDK_INDICES = sdkIndices("appsSdkRoutes", "account");
+const APP_AUDIT_SDK_INDICES = sdkIndices("appsSdkRoutes", "appAudit");
 const ATTENTION_SDK_INDICES = sdkIndices("appsSdkRoutes", "attention");
 const ENVIRONMENTS_SDK_INDICES = sdkIndices("environmentsSdkRoutes");
 const CREDENTIALS_SDK_INDICES = sdkIndices("credentialsSdkRoutes");
@@ -99,6 +101,7 @@ describe("control plane SDK route selection", () => {
       "app_members_update",
       "app_members_remove",
     ]);
+    expect(operationIdsAt(appAuditRoutes, APP_AUDIT_SDK_INDICES)).toEqual(["app_audit_list"]);
     expect(operationIdsAt(attentionRoutes, ATTENTION_SDK_INDICES)).toEqual([
       "app_attention_rollup_get",
     ]);

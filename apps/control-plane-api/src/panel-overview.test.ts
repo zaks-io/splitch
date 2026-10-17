@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { ATTENTION_TEST_TIMEOUT, setupAttentionRollupFixture } from "./attention-rollup-fixture";
+import { ATTENTION_TEST_TIMEOUT } from "./attention-rollup-fixture";
 import { ids } from "./config-store-fixture-data";
+import { setupOverviewFixture } from "./overview-flag-change-test-fixture";
 import {
   body,
   CALM,
@@ -11,7 +12,7 @@ import {
   SIGNIFICANT,
 } from "./panel-overview-fixture";
 
-setupAttentionRollupFixture();
+setupOverviewFixture();
 
 describe("panelOverviewRead attention", () => {
   it(

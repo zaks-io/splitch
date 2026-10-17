@@ -1,4 +1,5 @@
 import { makeApprovalRepo } from "./approvals";
+import { makeAuditEventRepo } from "./audit-events";
 import { makeClaimStateRepo } from "./claim-state";
 import { createDb } from "./client";
 import { makeCloudflareIntegrationRepo } from "./cloudflare-integrations";
@@ -34,6 +35,7 @@ import { makeSentryIntegrationRepo } from "./sentry-integrations";
 export function createRepository(d1: D1Database) {
   const db = createDb(d1);
   return {
+    auditEvents: makeAuditEventRepo(db, d1),
     flags: makeFlagRepo(db),
     flagEvaluation: makeFlagEvaluationReads(db),
     flagHealth: makeFlagHealthReads(db),

@@ -1,6 +1,6 @@
 import { env } from "cloudflare:workers";
 import { appScope, createRepository, envScope } from "@splitch/db";
-import { beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { OWNER, TENANT_A } from "./index-mcp-fixtures";
 import {
   call,
@@ -8,6 +8,12 @@ import {
   seedToken,
   setupPatMcpFixture,
 } from "./personal-access-token-mcp-fixture";
+
+vi.hoisted(() => vi.resetModules());
+vi.mock("../src/approval-archive-tinybird", async (original) => ({
+  ...(await original<typeof import("../src/approval-archive-tinybird")>()),
+  appendAuditLogRows: vi.fn(async () => undefined),
+}));
 
 beforeAll(() => setupPatMcpFixture());
 beforeEach(async () => {

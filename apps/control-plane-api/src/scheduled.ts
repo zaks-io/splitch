@@ -7,6 +7,7 @@ import {
 } from "@splitch/observability/worker";
 import { runApprovalRequestArchival } from "./approval-archive";
 import { approvalArchiveStoreFromEnv } from "./approval-archive-tinybird";
+import { forwardAuditEvents } from "./audit-events";
 import { dispatchCloudflarePushes } from "./cloudflare-push-dispatch";
 import { dispatchConvexWebhooks } from "./convex-webhook-dispatch";
 import { runDeliveryRetention } from "./delivery-retention";
@@ -26,18 +27,13 @@ export function runControlPlaneScheduled(
 ): void {
   ctx.waitUntil(reconcilePrivacyJobs(env, new Date(event.scheduledTime)));
   ctx.waitUntil(purgeExpiredPrivacyArtifacts(env, new Date(event.scheduledTime)));
-  ctx.waitUntil(
-    runPersonalAccessTokenRetention(
-      createRepository(env.DB).personalAccessTokens,
-      env.SESSION_STORE,
-      event.scheduledTime,
-    ),
-  );
+  ctx.waitUntil(runPersonalAccessTokenRetentionJob(env, event));
   // Integration delivery belongs to the minute cron alone. Running it on every
   // tick would fire a second concurrent dispatch at 08:00, when both crons
   // land: the Convex and Cloudflare paths lease their deliveries and would
   // survive it, but the Sentry cursor has no lease to protect it.
   if (event.cron !== "0 8 * * *") {
+    ctx.waitUntil(runAuditEventForwarding(env, event, ctx));
     ctx.waitUntil(runConvexWebhookDispatch(env, event, ctx));
     ctx.waitUntil(runCloudflarePushDispatch(env, event, ctx));
     ctx.waitUntil(runSentryWebhookDispatch(env, event, ctx));
@@ -48,6 +44,58 @@ export function runControlPlaneScheduled(
   ctx.waitUntil(runApprovalArchive(env, event, ctx));
   ctx.waitUntil(runFlagChangeLogRetention(env, event, ctx));
   ctx.waitUntil(runDeliveryRetention(env, event, ctx));
+  ctx.waitUntil(runAuditEventRetention(env, event, ctx));
+}
+
+async function runPersonalAccessTokenRetentionJob(
+  env: ControlPlaneApiEnv,
+  event: ScheduledController,
+): Promise<void> {
+  await runPersonalAccessTokenRetention(
+    createRepository(env.DB).personalAccessTokens,
+    env.SESSION_STORE,
+    event.scheduledTime,
+  );
+}
+
+async function runAuditEventForwarding(
+  env: ControlPlaneApiEnv,
+  event: ScheduledController,
+  ctx: Pick<ExecutionContext, "waitUntil">,
+): Promise<void> {
+  try {
+    await forwardAuditEvents({ repo: createRepository(env.DB), env });
+  } catch (error) {
+    createWorkerFaultReporter(env, workerObservabilityWithWaitUntil("control-plane-api", ctx))(
+      "audit_event_forward_failed",
+      { service, job: "audit-event-forward", cron: event.cron, fault: serializeFault(error) },
+    );
+    throw new Error("audit_event_forward_failed");
+  }
+}
+
+async function runAuditEventRetention(
+  env: ControlPlaneApiEnv,
+  event: ScheduledController,
+  ctx: Pick<ExecutionContext, "waitUntil">,
+): Promise<void> {
+  try {
+    const pruned = await createRepository(env.DB).auditEvents.pruneBefore({
+      changedBefore: new Date(event.scheduledTime - FLAG_CHANGE_LOG_RETENTION_MS).toISOString(),
+      limit: RETENTION_BATCH,
+    });
+    workerEmitter(env, workerObservabilityWithWaitUntil("control-plane-api", ctx)).log(
+      "info",
+      "audit-event-retention",
+      { service, job: "audit-event-retention", cron: event.cron, pruned },
+    );
+  } catch (error) {
+    createWorkerFaultReporter(env, workerObservabilityWithWaitUntil("control-plane-api", ctx))(
+      "audit_event_retention_failed",
+      { service, job: "audit-event-retention", cron: event.cron, fault: serializeFault(error) },
+    );
+    throw new Error("audit_event_retention_failed");
+  }
 }
 
 async function runCloudflarePushDispatch(

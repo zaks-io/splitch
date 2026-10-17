@@ -7,12 +7,13 @@ import {
   type RegistrarDeps,
 } from "@splitch/worker-runtime";
 import { Hono } from "hono";
+import { makeAppAuditHandler } from "./app-audit";
+import { type EntityPrivacyDeps, makeEntityPrivacyHandler } from "./entity-privacy";
+import { type ExposureStatusDeps, makeExposureStatusHandler } from "./exposure-status";
 import {
-  makeExposureStatusCleanupHandler,
   type ExposureStatusCleanupDeps,
+  makeExposureStatusCleanupHandler,
 } from "./exposure-status-cleanup";
-import { makeEntityPrivacyHandler, type EntityPrivacyDeps } from "./entity-privacy";
-import { makeExposureStatusHandler, type ExposureStatusDeps } from "./exposure-status";
 import { makeResultsHandler, type ResultsDeps } from "./results";
 import { analysisRoute } from "./routes";
 import { makeUsageHandler, type UsageDeps } from "./usage";
@@ -62,6 +63,7 @@ export function createApp(deps: AnalysisAppDeps): Hono {
   }
 
   const registrar = analysisRegistrar(deps);
+  registrar.mount(app, analysisRoute("app_audit_list"), makeAppAuditHandler(deps));
   const resultsHandler = makeResultsHandler(deps);
   const usageHandler = makeUsageHandler(deps);
   const exposureStatusHandler = makeExposureStatusHandler(deps);
