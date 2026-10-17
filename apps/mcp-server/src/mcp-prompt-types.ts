@@ -94,7 +94,7 @@ export const PROMPT_DEFINITIONS: readonly McpPromptDefinition[] = [
   {
     name: "recover_from_error",
     description:
-      "Plan: map details.recommendedAction to the remediation tool sequence for an operational 409.",
+      "Plan: map details.recommendedAction to the remediation tool sequence for an operational error.",
     arguments: [
       {
         name: "errorCode",
@@ -135,6 +135,8 @@ export const RECOVERY_OPERATION_IDS: Readonly<Record<RecommendedAction, readonly
   EDIT_DRAFT_THEN_START: ["experiments_start"],
   ADD_VARIANT_TO_ENV: ["flags_promote"],
   RETRY_AFTER: [],
+  CREATE_TEMPORARY_ENVIRONMENT: ["environments_list", "environments_create"],
+  DELETE_TEMPORARY_ENVIRONMENT: ["environments_list", "environments_delete"],
   REVIEW_APPROVAL_REQUEST: ["approval_request_reviews_create"],
   REFRESH_AND_REPROPOSE: ["approval_requests_get"],
   RETRY_REVIEW: ["approval_request_reviews_create"],

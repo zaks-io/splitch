@@ -1,5 +1,5 @@
-import type { CliCommandDefinition } from "./command-registry.js";
 import { commandHelpArguments } from "./command-positionals.js";
+import type { CliCommandDefinition } from "./command-registry.js";
 import { bodyJsonExampleFlag } from "./help-body-json.js";
 import { oneTimeSecretDescriptor } from "./one-time-secret-output.js";
 import { personalAccessTokenExample } from "./personal-access-token-help.js";
@@ -36,7 +36,9 @@ function simpleCommandExample(command: CliCommandDefinition): string | undefined
     case "apps update":
       return 'splitch apps update --name "Checkout" --json';
     case "envs create":
-      return 'splitch envs create --key staging --name "Staging" --json';
+      return "splitch envs create --key pr-123 --temporary --from prod --expires-at 3d --json";
+    case "envs sync":
+      return "splitch envs sync --env pr-123 --from dev --json";
     case "envs update":
       return 'splitch envs update --name "Production" --json';
     case "flags create":

@@ -79,6 +79,24 @@ function credentialFailure(request: Request, cached: CredentialCache): AuthResul
   if (cached.revoked) {
     return { ok: false, reason: "CREDENTIAL_REVOKED" };
   }
+  if ("expiresAt" in cached && cached.expiresAt !== null) {
+    const expiry = Date.parse(cached.expiresAt);
+    if (Date.now() >= expiry) {
+      return {
+        ok: false,
+        reason: "UNAUTHORIZED",
+        error: {
+          code: "ENVIRONMENT_EXPIRED",
+          message: "Temporary Environment has expired",
+          details: {
+            environmentId: cached.environmentId,
+            expiredAt: cached.expiresAt,
+            recommendedAction: "CREATE_TEMPORARY_ENVIRONMENT",
+          },
+        },
+      };
+    }
+  }
   if (cached.kind !== "client_key") {
     return null;
   }

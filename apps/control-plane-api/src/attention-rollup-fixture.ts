@@ -109,18 +109,20 @@ export function harness(
 export function spyOnPlanningReads(repo: Repository): {
   spied: Repository;
   listRunningExperiments: Mock<Repository["experiments"]["listRunningExperiments"]>;
-  listEnvironments: Mock<Repository["identity"]["listEnvironments"]>;
+  listPermanentEnvironments: Mock<Repository["identity"]["listPermanentEnvironments"]>;
 } {
   const listRunningExperiments = vi.fn(
     repo.experiments.listRunningExperiments.bind(repo.experiments),
   );
-  const listEnvironments = vi.fn(repo.identity.listEnvironments.bind(repo.identity));
+  const listPermanentEnvironments = vi.fn(
+    repo.identity.listPermanentEnvironments.bind(repo.identity),
+  );
   const spied: Repository = {
     ...repo,
-    identity: { ...repo.identity, listEnvironments },
+    identity: { ...repo.identity, listPermanentEnvironments },
     experiments: { ...repo.experiments, listRunningExperiments },
   };
-  return { spied, listRunningExperiments, listEnvironments };
+  return { spied, listRunningExperiments, listPermanentEnvironments };
 }
 
 export function authFor(appId: string, userId: string): AuthResolver {

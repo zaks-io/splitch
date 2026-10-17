@@ -120,13 +120,19 @@ Four details the contract turns on:
   rejected batch would silently drop real production changes; the backlog stays and the failure is
   visible in `attemptCount` and `latestDeliveryError`.
 
-Every Flag change under the Organization is published: App-level DEFINITION changes (create, rename,
-delete, Variant edits) and per-Environment CONFIGURATION changes (`enabled`, rollout, targeting)
-alike. Nothing is filtered by App or Environment, because there is nowhere in Sentry's payload to
-say which one a change came from: the generic webhook accepts only `action`, `change_id`, `created_at`,
-`created_by`, `flag`, and `meta.version`. A filter here would silently drop real production changes
-from the one log Sentry correlates errors against, so a Flag key that exists in several Apps or
-Environments shows up as several changes to the same name (ADR-0027, ADR-0036).
+App-level DEFINITION changes (create, rename, delete, Variant edits) and permanent-Environment
+CONFIGURATION changes (`enabled`, rollout, targeting) under the Organization are published.
+Temporary Environment configuration changes are recorded in the change log but never sent to
+Sentry. Every event records `temporary_environment` at write time, so dispatch can exclude it even
+after teardown deletes the Environment row. The pending query excludes these rows, so they consume
+no delivery batch capacity. The next accepted permanent-event batch advances the cursor past any
+earlier excluded rows. A backlog containing only excluded rows causes no webhook and does not
+advance the delivery cursor.
+
+There is no other App or Environment filter. Sentry's generic webhook accepts only `action`,
+`change_id`, `created_at`, `created_by`, `flag`, and `meta.version`, so permanent-Environment changes
+to a Flag key shared by several Apps or Environments still appear as changes to the same name
+(ADR-0027, ADR-0036).
 
 ## Evaluation tracking
 

@@ -6,6 +6,7 @@ import {
 } from "@splitch/contracts";
 import { appScope, type EnvScope } from "@splitch/db";
 import { serializeFault } from "@splitch/observability/worker";
+import { environmentWriteFailure } from "./config-store-expiry-fence";
 import { parseFlagConfigEnvelope, writeSnapshot } from "./config-store-kv";
 import { buildSnapshotFromD1 } from "./config-store-snapshot-build";
 import type {
@@ -46,8 +47,10 @@ export async function readFlagSnapshot(
   const raw = await deps.kv.get(key, "text");
   if (!raw) {
     return deps.snapshotMutations.run(async () => {
+      if (await environmentWriteFailure(deps, scope)) return fromD1;
       const repair = await buildSnapshotFromD1(deps.repo, scope, flagId);
       if (!repair) return null;
+      if (await environmentWriteFailure(deps, scope)) return repair;
       await writeSnapshot(
         deps.kv,
         scope,

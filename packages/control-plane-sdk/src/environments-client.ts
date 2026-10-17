@@ -7,6 +7,8 @@ import type {
   EnvironmentsGetOutput,
   EnvironmentsListInput,
   EnvironmentsListOutput,
+  EnvironmentsSyncInput,
+  EnvironmentsSyncOutput,
   EnvironmentsUpdateInput,
   EnvironmentsUpdateOutput,
 } from "@splitch/contracts/route-types";
@@ -42,6 +44,10 @@ export interface EnvironmentsClient {
     input: EnvironmentsUpdateInput,
     options?: ControlPlaneOperationOptions,
   ): Promise<ControlPlaneOperationResult<EnvironmentsUpdateOutput>>;
+  sync(
+    input: EnvironmentsSyncInput,
+    options?: ControlPlaneOperationOptions,
+  ): Promise<ControlPlaneOperationResult<EnvironmentsSyncOutput>>;
   delete(
     input: EnvironmentsDeleteInput,
     options?: ControlPlaneOperationOptions,
@@ -94,6 +100,17 @@ export function createEnvironmentsClient(
         ),
       );
     },
+    sync: (input, callOptions) =>
+      invokeHcRoute<EnvironmentsSyncOutput>("environments_sync", () =>
+        hcClient.apps[":appId"].envs[":environmentId"].sync.$post(
+          {
+            param: { appId: input.appId, environmentId: input.environmentId },
+            ...environmentSelectorQuery(input),
+            json: { fromEnvironmentId: input.fromEnvironmentId },
+          } as never,
+          hcRequestOptions(withAuthorization(hcOptions, callOptions)),
+        ),
+      ),
     delete: (input, callOptions) =>
       invokeHcRoute<EnvironmentsDeleteOutput>("environments_delete", () =>
         hcClient.apps[":appId"].envs[":environmentId"].$delete(

@@ -100,32 +100,36 @@ export async function deleteFlagConfigSnapshot(
   kv: KVNamespace,
   scope: EnvScope,
   flagId: string,
-  revision: number,
+  revision: number | null,
   flagKey: string,
   experimentIds: readonly string[],
   deleteEvaluationSnapshot: boolean,
 ): Promise<void> {
-  await kv.put(
-    controlPlaneFlagConfigKey(scope.appId, scope.environmentId, flagId),
-    serializeControlPlaneFlagConfigSnapshot({
-      appId: scope.appId,
-      environmentId: scope.environmentId,
-      flagId,
-      revision,
-      state: "deleted",
-    }),
-    {
-      // After expiry, a KV miss reads authoritative D1; a deleted Flag returns FLAG_NOT_FOUND.
-      expirationTtl: DELETED_SNAPSHOT_EXPIRATION_TTL_SECONDS,
-    },
-  );
+  if (revision === null) {
+    await kv.delete(controlPlaneFlagConfigKey(scope.appId, scope.environmentId, flagId));
+  } else
+    await kv.put(
+      controlPlaneFlagConfigKey(scope.appId, scope.environmentId, flagId),
+      serializeControlPlaneFlagConfigSnapshot({
+        appId: scope.appId,
+        environmentId: scope.environmentId,
+        flagId,
+        revision,
+        state: "deleted",
+      }),
+      {
+        // After expiry, a KV miss reads authoritative D1; a deleted Flag returns FLAG_NOT_FOUND.
+        expirationTtl: DELETED_SNAPSHOT_EXPIRATION_TTL_SECONDS,
+      },
+    );
   const evaluationKey = flagConfigKey(scope.appId, scope.environmentId, flagKey);
   if (deleteEvaluationSnapshot) await kv.delete(evaluationKey);
   for (const experimentId of experimentIds) {
     await kv.delete(experimentConfigKey(scope.appId, scope.environmentId, experimentId));
     await kv.delete(liveRunKey(scope.appId, scope.environmentId, experimentId));
   }
-  await updateActivationConfig(kv, scope, experimentIds, []);
+  if (revision === null) await kv.delete(activationConfigKey(scope.appId, scope.environmentId));
+  else await updateActivationConfig(kv, scope, experimentIds, []);
 }
 
 export async function writeSnapshot(

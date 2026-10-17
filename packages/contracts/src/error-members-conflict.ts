@@ -15,7 +15,7 @@ export const conflictErrorMembers = [
   member(
     "SLUG_CONFLICT",
     z.object({
-      resourceType: z.enum(["organization", "app"]),
+      resourceType: z.enum(["organization", "app", "environment"]),
       conflictingSlug: z.string(),
       // A slug collision has exactly one remedy. The open enum would let an
       // unrelated action typecheck here and send a caller somewhere useless.

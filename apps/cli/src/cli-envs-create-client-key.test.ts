@@ -28,6 +28,7 @@ const createEnvironmentResponse = {
     enabledState: "allow",
     startExperimentRun: "allow",
   },
+  temporary: null,
   createdAt: timestamp,
   updatedAt: timestamp,
   clientKey: {

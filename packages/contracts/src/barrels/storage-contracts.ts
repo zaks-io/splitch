@@ -7,6 +7,7 @@ export {
   isAccessTokenRevoked,
   readAccessTokenRevocation,
 } from "../access-token-revocation";
+export { assignmentWriterName } from "../storage-keys-durable-objects";
 export {
   activationConfigKey,
   apiKeyCacheKey,
@@ -23,7 +24,6 @@ export {
   runConfigKey,
   TERMINAL_CREDENTIAL_REVOCATION_MARKER,
 } from "../storage-keys-kv";
-export { assignmentWriterName } from "../storage-keys-durable-objects";
 export type {
   ActivationBindingKV,
   ActivationConfigKV,
@@ -44,6 +44,8 @@ export {
   AssignmentStoreValueSchema,
   CredentialCacheKVSchema,
   CredentialCacheKVSchemaV1,
+  CredentialCacheKVSchemaV2,
+  CredentialCacheKVSchemaV3,
   CredentialKindSchema,
   CURRENT_KV_SCHEMA_VERSION,
   credentialKinds,

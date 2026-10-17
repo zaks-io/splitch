@@ -168,7 +168,7 @@ export const CredentialCacheKVSchemaV1 = z
   })
   .strict();
 
-export const CredentialCacheKVSchema = z
+const credentialCacheSchemaV2 = z
   .object({
     appId: z.string(),
     environmentId: z.string(),
@@ -184,16 +184,35 @@ export const CredentialCacheKVSchema = z
     revoked: z.boolean(),
     cachedAt: z.string(),
   })
-  .strict()
-  .superRefine((value, ctx) => {
-    if (!value.revoked && value.organizationId === null) {
-      ctx.addIssue({
-        code: "custom",
-        path: ["organizationId"],
-        message: "active credentials require an organizationId",
-      });
-    }
-  });
+  .strict();
+
+function requireCredentialOrganization(
+  value: { revoked: boolean; organizationId: string | null },
+  ctx: z.RefinementCtx,
+): void {
+  if (!value.revoked && value.organizationId === null) {
+    ctx.addIssue({
+      code: "custom",
+      path: ["organizationId"],
+      message: "active credentials require an organizationId",
+    });
+  }
+}
+
+export const CredentialCacheKVSchemaV2 = credentialCacheSchemaV2.superRefine(
+  requireCredentialOrganization,
+);
+export const CredentialCacheKVSchemaV3 = credentialCacheSchemaV2
+  .extend({
+    credentialSchemaVersion: z.literal(3),
+    expiresAt: z.iso.datetime({ offset: true }).nullable(),
+  })
+  .superRefine(requireCredentialOrganization);
+
+export const CredentialCacheKVSchema = z.discriminatedUnion("credentialSchemaVersion", [
+  CredentialCacheKVSchemaV2,
+  CredentialCacheKVSchemaV3,
+]);
 export type CredentialCacheKV = z.infer<typeof CredentialCacheKVSchema>;
 
 // ---------------------------------------------------------------------------

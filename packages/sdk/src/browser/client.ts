@@ -1,6 +1,6 @@
+import { environmentExpiryLogger } from "../environment-expiry";
 import { SplitchSdkError } from "../errors";
 import type { EvaluateContext, Logger } from "../evaluate";
-import { sdkErrorForFailure } from "../evaluate";
 import type { PrecomputedEvaluations } from "../evaluate-all";
 import type {
   EvaluateAllEntry,
@@ -9,9 +9,8 @@ import type {
 } from "../generated/contract-surface.js";
 import type { SdkResolutionDetails } from "../resolution";
 import {
+  fetchInitialPayload,
   logListenerFailures,
-  loudly,
-  mintIdempotencyKey,
   resolveBootstrap,
   resolveBrowserClientKey,
   resolveContext,
@@ -93,19 +92,13 @@ export function createSplitchBrowserClient(
   const context = resolveContext(options.context);
   const { targetingKey } = context;
   const revalidateMs = resolveRevalidateMs(options.revalidateMs, DEFAULT_REVALIDATE_MS);
-  const logger = options.logger ?? console;
+  const logger = environmentExpiryLogger(options.logger ?? console);
   const now = options.now ?? Date.now;
   const initial = initialPayload(options.bootstrap, context);
-  const transport =
-    options.transport ??
-    createBrowserFetchTransport({
-      credential: clientKey,
-      endpoint: options.endpoint ?? DEFAULT_ENDPOINT,
-      timeoutMs: options.timeoutMs ?? DEFAULT_TIMEOUT_MS,
-      fetchImpl: options.fetch ?? globalThis.fetch.bind(globalThis),
-    });
+  const transport = resolveTransport(options, clientKey);
 
   let initPromise: Promise<void> | null = null;
+  let expiryError: SplitchSdkError | null = null;
   const loggedResolutions = new Set<string>();
   const store = new BrowserPayloadStore(initial);
   // Pass document/window only when the key is present: an absent key means
@@ -114,6 +107,7 @@ export function createSplitchBrowserClient(
     transport,
     logger,
     now,
+    onEnvironmentExpired: expire,
     ...("document" in options ? { document: options.document } : {}),
     ...("window" in options ? { window: options.window } : {}),
   });
@@ -131,8 +125,19 @@ export function createSplitchBrowserClient(
       logListenerFailures(logger, store.notify(changed));
     },
     onNotModified: () => store.markRecovered(),
-    onFailure: () => store.markDegraded(),
+    onFailure: (error) => {
+      if (error?.code === "ENVIRONMENT_EXPIRED") expire(error);
+      store.markDegraded();
+    },
   });
+
+  function expire(error: SplitchSdkError): void {
+    if (expiryError !== null) return;
+    expiryError = error;
+    revalidation.stop();
+    queue.expire(error);
+    logListenerFailures(logger, store.notify(store.expire()));
+  }
 
   function requireHeld(): HeldPayload {
     const held = store.current();
@@ -162,6 +167,15 @@ export function createSplitchBrowserClient(
   }
 
   function readDetails(flagKey: string, defaultValue: VariantValue): SdkResolutionDetails {
+    if (expiryError !== null) {
+      return {
+        value: defaultValue,
+        variantName: null,
+        reason: "ERROR",
+        errorCode: expiryError.code,
+        errorMessage: expiryError.message,
+      };
+    }
     const entry = readHeldEntry(flagKey);
     const resolution = deriveDetails(flagKey, entry, defaultValue);
     const { details } = resolution;
@@ -182,6 +196,7 @@ export function createSplitchBrowserClient(
 
   const client: SplitchBrowserClient = {
     async init() {
+      if (expiryError !== null) throw expiryError;
       if (store.current() !== null) {
         revalidation.start();
         return;
@@ -191,31 +206,19 @@ export function createSplitchBrowserClient(
       if (initPromise !== null) {
         return initPromise;
       }
-      initPromise = (async () => {
-        const idempotencyKey = mintIdempotencyKey(logger, targetingKey);
-        const result = await transport.evaluateAll({
-          targetingKey,
-          idType: context.idType,
-          attributes: context.attributes,
-          idempotencyKey,
+      initPromise = fetchInitialPayload(transport, context, logger)
+        .then((payload) => {
+          store.setInitial(payload);
+          revalidation.start();
+        })
+        .catch((error: unknown) => {
+          if (error instanceof SplitchSdkError && error.code === "ENVIRONMENT_EXPIRED") {
+            expire(error);
+          }
+          initPromise = null;
+          throw error;
         });
-        if (result.status !== 200 || result.evaluations === null || result.etag === null) {
-          throw loudly(
-            logger,
-            targetingKey,
-            sdkErrorForFailure("evaluateAll", result),
-            result.cause,
-          );
-        }
-        store.setInitial({ evaluations: result.evaluations, etag: result.etag });
-        revalidation.start();
-      })();
-      try {
-        await initPromise;
-      } catch (error) {
-        initPromise = null;
-        throw error;
-      }
+      return initPromise;
     },
 
     evaluate(flagKey, defaultValue = FALLBACK_DEFAULT_VALUE) {
@@ -258,4 +261,19 @@ function initialPayload(
   return bootstrap === undefined || bootstrap === null
     ? null
     : resolveBootstrap(bootstrap, context);
+}
+
+function resolveTransport(
+  options: SplitchBrowserClientOptions,
+  clientKey: string,
+): BrowserTransport {
+  return (
+    options.transport ??
+    createBrowserFetchTransport({
+      credential: clientKey,
+      endpoint: options.endpoint ?? DEFAULT_ENDPOINT,
+      timeoutMs: options.timeoutMs ?? DEFAULT_TIMEOUT_MS,
+      fetchImpl: options.fetch ?? globalThis.fetch.bind(globalThis),
+    })
+  );
 }

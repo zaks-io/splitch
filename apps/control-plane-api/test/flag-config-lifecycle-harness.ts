@@ -54,8 +54,10 @@ export async function setup(): Promise<LifecycleHarness> {
   };
 }
 
-export function configStoreAccess(bindings: PoolBindingsWithConfig) {
-  const repo = createRepository(bindings.d1);
+export function configStoreAccess(
+  bindings: PoolBindingsWithConfig,
+  repo = createRepository(bindings.d1),
+) {
   const nudges: unknown[] = [];
   const stores = new Map<string, ReturnType<typeof makeConfigStore>>();
   const writerFor = (appId: string, environmentId: string) => {

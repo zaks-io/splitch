@@ -1,12 +1,14 @@
 import { DurableObject } from "cloudflare:workers";
 import { CredentialCacheKVSchema, kvEnvelope } from "@splitch/contracts";
 import { createRepository } from "@splitch/db";
+import { makeConfigStoreMutationQueue } from "./config-store-mutation-queue";
 import type {
   CredentialCacheWrite,
   CredentialCacheWriter,
   CredentialCacheWriterAccess,
 } from "./credential-cache";
 import { putCredentialCacheEntry } from "./credential-cache";
+import { credentialEnvironmentExpiry } from "./credential-environment-expiry";
 import type { ControlPlaneApiEnv } from "./env";
 
 export interface CredentialCacheWriterDurableObjectNamespace {
@@ -24,10 +26,22 @@ export class CredentialCacheWriterDurableObject
   extends DurableObject<ControlPlaneApiEnv>
   implements CredentialCacheWriter
 {
+  #writes = makeConfigStoreMutationQueue();
+
   async put(write: CredentialCacheWrite): Promise<void> {
-    const candidate = credentialEnvelope.parse(JSON.parse(write.value)).data;
-    await assertCurrentCredential(this.env, write.credential, candidate);
-    await putCredentialCacheEntry(this.env.CREDENTIAL_STORE, write);
+    return this.#writes.run(async () => {
+      const candidate = credentialEnvelope.parse(JSON.parse(write.value)).data;
+      await assertCurrentCredential(this.env, write.credential, candidate);
+      const data = await credentialEnvironmentExpiry(
+        createRepository(this.env.DB),
+        candidate,
+        new Date().toISOString(),
+      );
+      await putCredentialCacheEntry(this.env.CREDENTIAL_STORE, {
+        ...write,
+        value: JSON.stringify(credentialEnvelope.parse({ ...JSON.parse(write.value), data })),
+      });
+    });
   }
 }
 

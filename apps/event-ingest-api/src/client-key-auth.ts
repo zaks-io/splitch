@@ -50,6 +50,23 @@ export async function authenticateDelegatedDataPlaneCredential(
   const credential = parsed.value;
   if (credential.kind !== delegated.kind) return failure("UNAUTHORIZED", `${label} is unknown`);
   if (credential.revoked) return failure("CREDENTIAL_REVOKED", `${label} is revoked`);
+  if ("expiresAt" in credential && credential.expiresAt !== null) {
+    const expiry = Date.parse(credential.expiresAt);
+    if (Date.now() >= expiry) {
+      return {
+        ok: false,
+        error: {
+          code: "ENVIRONMENT_EXPIRED",
+          message: "Temporary Environment has expired",
+          details: {
+            environmentId: credential.environmentId,
+            expiredAt: credential.expiresAt,
+            recommendedAction: "CREATE_TEMPORARY_ENVIRONMENT",
+          },
+        },
+      };
+    }
+  }
   if (!credential.scopes.includes("data-plane:write")) {
     return {
       ok: false,

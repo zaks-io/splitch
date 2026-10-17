@@ -1,4 +1,4 @@
-import { deriveMcpProtocolTools, ErrorResponseSchema } from "@splitch/contracts";
+import { deriveMcpProtocolTools, deriveMcpTools, ErrorResponseSchema } from "@splitch/contracts";
 import { describe, expect, it } from "vitest";
 import { getPromptPlan } from "./mcp-prompts";
 
@@ -70,6 +70,68 @@ describe("MCP recover_from_error attention fan-out", () => {
     const statsSchema = readyBranch?.properties?.stats ?? resultsSchema.properties?.stats;
     expect(statsSchema?.properties).toHaveProperty("srm");
     expect(statsSchema?.properties).toHaveProperty("guardrail_results");
+  });
+});
+
+describe("MCP recover_from_error Temporary Environments", () => {
+  it("replaces an expired Environment using the supported create tool and CLI flags", () => {
+    const error = ErrorResponseSchema.parse({
+      code: "ENVIRONMENT_EXPIRED",
+      message: "Temporary Environment has expired",
+      details: {
+        environmentId: "env_expired",
+        expiredAt: "2026-10-17T12:00:00Z",
+        recommendedAction: "CREATE_TEMPORARY_ENVIRONMENT",
+      },
+    });
+    const plan = getPromptPlan("recover_from_error", {
+      errorCode: error.code,
+      details: error.details,
+    });
+    expect(plan.operationIds).toEqual(["environments_list", "environments_create"]);
+    const text = plan.messages.map((entry) => entry.content.text).join("\n");
+    expect(text).toContain("splitch envs list");
+    expect(text).toContain(
+      "splitch envs create --key <new-key> --temporary --from <source-environment>",
+    );
+    expect(text).toContain("fromEnvironmentId");
+    expect(text).toContain("cannot be extended");
+    expect(text).toContain("replacement Environment and its credentials");
+
+    const create = deriveMcpTools().find((tool) => tool.name === "environments_create");
+    expect(create).toBeDefined();
+    expect(
+      create?.inputSchema.parse({
+        appId: "app_checkout",
+        key: "replacement",
+        temporary: { fromEnvironmentId: "env_prod" },
+      }),
+    ).toMatchObject({ temporary: { fromEnvironmentId: "env_prod" } });
+  });
+
+  it("frees live capacity by deleting only a selected Temporary Environment", () => {
+    const error = ErrorResponseSchema.parse({
+      code: "TEMPORARY_ENVIRONMENT_LIMIT_EXCEEDED",
+      message: "App has 50 live Temporary Environments",
+      details: {
+        appId: "app_checkout",
+        limit: 50,
+        active: 50,
+        nextExpiresAt: "2026-10-18T12:00:00Z",
+        recommendedAction: "DELETE_TEMPORARY_ENVIRONMENT",
+      },
+    });
+    const plan = getPromptPlan("recover_from_error", {
+      errorCode: error.code,
+      details: error.details,
+    });
+    expect(plan.operationIds).toEqual(["environments_list", "environments_delete"]);
+    const text = plan.messages.map((entry) => entry.content.text).join("\n");
+    expect(text).toContain("splitch envs list");
+    expect(text).toContain("temporary !== null");
+    expect(text).toContain("never choose a permanent Environment");
+    expect(text).toContain("splitch envs delete --env <temporary-environment>");
+    expect(text).toContain("Retry the original create after teardown completes");
   });
 });
 

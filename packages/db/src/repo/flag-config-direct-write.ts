@@ -22,7 +22,13 @@ export type TargetingRuleWrite = Omit<
 export type FlagConfigWritePatch = Partial<
   Pick<
     typeof flagConfigs.$inferInsert,
-    "enabled" | "availableVariantNames" | "rollout" | "updatedAt" | "updatedBy" | "updatedVia"
+    | "enabled"
+    | "availableVariantNames"
+    | "defaultVariantId"
+    | "rollout"
+    | "updatedAt"
+    | "updatedBy"
+    | "updatedVia"
   >
 >;
 

@@ -174,14 +174,16 @@ evaluation and ingest readers still use the `ExperimentConfigKV` → `RunConfigK
 
 ### CredentialCacheKV
 
-New writes use payload version 2. Active credentials must carry the owning
+New permanent-Environment writes use payload version 2. Temporary Environment writes use version 3,
+which adds the Environment's expiry. Active credentials must carry the owning
 Organization so data-plane Evaluation usage cannot infer tenant scope from a
 request. Revoked tombstones may retain `organizationId: null` because they only
 reject the credential. The evaluation reader still accepts the schema-v1 payload,
 marks it unscoped, and fails closed for billing-bearing Evaluation.
 
-Control Plane credential provisioning, rotation, and revocation write the v2 cache shape using
-D1 App ownership. Billing-bearing Evaluation rejects an unscoped entry until a valid v2 entry is present;
+Control Plane credential provisioning, rotation, and revocation derive the version, expiry, and
+Organization from the D1 Environment and App rows. Callers cannot supply or omit expiry to bypass
+it. Billing-bearing Evaluation rejects an unscoped entry until a valid scoped entry is present;
 it never accepts an Organization from a request or guesses from an App name.
 
 Client Key entries may carry `rateLimitRps`. New Control Plane writes persist only an exact
@@ -193,15 +195,33 @@ limiter then fail-closes as typed `RATE_LIMITED` instead of failing auth as `500
 {
   appId:                   string
   environmentId:           string  // credentials are per-Environment (ADR-0027)
-  credentialSchemaVersion: 2
+  credentialSchemaVersion: 2 | 3
+  expiresAt:               string | null  // v3 only, required ISO datetime with offset
   organizationId:           string | null
   kind:                     'api_key' | 'client_key'
   scopes:                   string[]
+  originAllowlist?:          string[] | null
   rateLimitRps:            number | null  // write: exact set or null; read: any number
   revoked:                  boolean
   cachedAt:                 string  // ISO 8601
 }
 ```
+
+The strict v2 schema has no `expiresAt`; v3 requires an ISO datetime with a UTC or numeric offset,
+or `null`. A malformed string, date without time, missing offset, missing member, or numeric value
+fails schema parsing through the existing invalid-blob 5xx response and Worker fault reporter.
+It never becomes `ENVIRONMENT_EXPIRED`. Contracts export `CredentialCacheKVSchemaV2` and
+`CredentialCacheKVSchemaV3`, their current discriminated union, and the separate legacy v1 reader
+schema. Readers retain v1/v2 compatibility. V1 remains unscoped for billing-bearing Evaluation.
+
+Active entries have no KV TTL. Logical expiry is the v3 timestamp; the credential writer refuses
+an active write when its Temporary Environment has expired. Shared credential authentication checks
+the permanent terminal revocation marker first, then logical expiry before rate limiting or billing.
+An expired credential returns `410 ENVIRONMENT_EXPIRED` with ISO `details.expiredAt`; a terminal
+marker returns `CREDENTIAL_REVOKED` even if a stale active entry remains. This applies to every
+registered Client Key or API Key route, including trusted delegation to Control Plane integration
+handlers. Future routes inherit the shared check. See
+[credentials](../control-plane/credentials-and-keys.md#kv-hot-validation-cache).
 
 ---
 

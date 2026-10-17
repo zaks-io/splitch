@@ -1,7 +1,7 @@
 import type { TargetingRule } from "@splitch/contracts";
 import { type EnvScope, envScope, type ReplaceTargetingRulesResult } from "@splitch/db";
+import { requireWritableEnvironment } from "./config-store-expiry-fence";
 import { targetingFreeze } from "./config-store-freeze";
-import { writeFlagConfigSnapshot } from "./config-store-snapshot-write";
 import {
   type ConfigStoreRuntimeDeps,
   type FlagConfigWriteResult,
@@ -10,6 +10,7 @@ import {
   targetingRuleRows,
 } from "./config-store-shared";
 import { loadFlagConfigWriteContext, toTargetingRule } from "./config-store-snapshot-build";
+import { writeFlagConfigSnapshot } from "./config-store-snapshot-write";
 import { normalizeTargetingRuleRollouts } from "./flag-config-rollout";
 import { resolveTargetingRules } from "./targeting-rule-resolution";
 
@@ -95,6 +96,7 @@ async function commitTargetingRules(
 ): Promise<FlagConfigWriteResult> {
   const { approval, flagId } = input;
   const now = approval ? new Date(approval.reviewedAt) : (deps.now?.() ?? new Date());
+  await requireWritableEnvironment(deps, scope);
   // The rule rewrite also bumps the owning Flag Configuration, so the actor lands
   // on `flag_configs` and the audit trigger can attribute the targeting change.
   const replaced = await deps.repo.flags.replaceTargetingRules(

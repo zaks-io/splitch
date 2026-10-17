@@ -172,6 +172,7 @@ export function makeSentryIntegrationRepo(d1: D1Database) {
             WHERE event.app_id IN (
               SELECT id FROM apps WHERE organization_id = sentry_installations.org_id
             ) AND event.seq > COALESCE(sentry_installations.last_delivered_seq, 0)
+            AND event.temporary_environment = 0
           )
           ORDER BY next_attempt_at ASC, installation_id ASC LIMIT ?`,
         )

@@ -7,6 +7,7 @@ import {
 } from "./command-positionals.js";
 import type { CliCommandDefinition } from "./command-registry.js";
 import type { ResolvedContext } from "./context.js";
+import { applyEnvironmentFields } from "./environment-input.js";
 import { SplitchCliError } from "./errors.js";
 import { applyFlagsCreateConvenienceFields } from "./flag-create-input.js";
 import { applyFlagLifecycleFlags } from "./flag-lifecycle-input.js";
@@ -40,7 +41,13 @@ export function buildOperationInput(
   applyOrgFlag(invocation.flags, input);
   applyPositionalFields(command, invocation, input);
   applyNamedFlags(command, invocation.flags, input);
-  applyRouteQueryFlags(command.operationId, invocation.flags.queryFlags, input, command.path);
+  const environmentSource =
+    command.operationId === "environments_create" || command.operationId === "environments_sync";
+  const queryFlags =
+    invocation.flags.from === undefined || environmentSource
+      ? invocation.flags.queryFlags
+      : { ...invocation.flags.queryFlags, from: invocation.flags.from };
+  applyRouteQueryFlags(command.operationId, queryFlags, input, command.path);
   // No contract check here: the Worker judges the body, so a CLI older than the
   // API can still send fields its bundled contract does not know (--body-json).
   applyOperationIdempotencyInput(command.operationId, invocation.flags.idempotencyKey, input);
@@ -198,6 +205,7 @@ function applyCommandSpecificFields(
     );
   }
   applyPersonalAccessTokenFields(command.operationId, invocation.flags, input);
+  applyEnvironmentFields(command.operationId, invocation.flags, input);
   if (command.operationId === "flags_create") {
     applyFlagsCreateConvenienceFields(input, {
       key: invocation.flags.key,

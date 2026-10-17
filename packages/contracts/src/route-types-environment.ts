@@ -11,6 +11,7 @@ import type {
   CreateCredentialResponseSchema,
   CreateEnvironmentResponseSchema,
   ListCredentialsResponseSchema,
+  SyncEnvironmentResponseSchema,
 } from "./resource-envelopes-account";
 import {
   type CreateExperimentRequestSchema,
@@ -41,6 +42,7 @@ import type {
   PromoteRequestSchema,
   PromoteResponseSchema,
   ReplaceTargetingRulesRequestSchema,
+  SyncEnvironmentRequestSchema,
 } from "./routes/route-shapes";
 import { listResponse } from "./wire-envelopes-core";
 
@@ -62,6 +64,10 @@ export type EnvironmentsUpdateInput = z.infer<typeof EnvParams> &
 export type EnvironmentsUpdateOutput = z.infer<typeof EnvironmentSchema>;
 export type EnvironmentsDeleteInput = z.infer<typeof EnvParams> & EnvironmentSelectorInput;
 export type EnvironmentsDeleteOutput = { deleted: true };
+export type EnvironmentsSyncInput = InEnvironment<
+  z.infer<typeof EnvParams> & z.infer<typeof SyncEnvironmentRequestSchema>
+>;
+export type EnvironmentsSyncOutput = z.infer<typeof SyncEnvironmentResponseSchema>;
 
 export type FlagConfigGetInput = InEnvironment<z.infer<typeof EnvFlagParams>>;
 export type FlagConfigGetOutput = z.infer<typeof FlagConfigResponseSchema>;

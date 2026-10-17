@@ -10,6 +10,7 @@ import type {
   TargetingRuleInput,
 } from "@splitch/contracts";
 import type { ApprovalCommit, AuditContext, Repository } from "@splitch/db";
+import type { EnvironmentWriteFailure } from "./config-store-expiry-fence";
 import type { RunFrozenFailure } from "./flag-config-run-freeze";
 
 /**
@@ -116,6 +117,7 @@ export interface PromoteFlagConfigInput {
  * single non-Default available Variant to roll into (see config-store.ts).
  */
 type FlagConfigWriteFailure =
+  | EnvironmentWriteFailure
   | { ok: false; reason: "FLAG_NOT_FOUND" }
   /**
    * The Approval-guarded D1 write selected zero rows, so no Review landed,
@@ -180,6 +182,7 @@ export interface ConfigStoreDeps {
   nextSnapshotRevision(request: SnapshotRevisionRequest): Promise<number> | number;
   logger?: Pick<Console, "error" | "warn">;
   now?: () => Date;
+  clearEnvironmentState?: () => Promise<void>;
 }
 
 export interface ConfigStoreRuntimeDeps extends ConfigStoreDeps {

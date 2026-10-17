@@ -29,6 +29,7 @@ import { UnsupportedMediaTypeDetailsSchema } from "./request-error-details";
 import { ResourceDeleteBlockerSchema } from "./resource-delete-tree";
 import { SegmentDependenciesSchema } from "./segment-error-details";
 import { SelectorAmbiguousDetailsSchema } from "./selector-error-details";
+import { temporaryEnvironmentErrorMembers } from "./temporary-environment-errors";
 
 /**
  * Canonical error contract. One base shape, discriminated on `code`, parsed by
@@ -89,6 +90,7 @@ const ValidationIssue = z.object({
 const errorMembers = [
   member("VALIDATION_ERROR", z.object({ issues: z.array(ValidationIssue) })),
   ...eventErrorMembers,
+  ...temporaryEnvironmentErrorMembers,
   member(
     "ALLOCATION_INVALID",
     z.object({

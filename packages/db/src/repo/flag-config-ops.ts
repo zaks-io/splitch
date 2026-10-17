@@ -1,4 +1,4 @@
-import { and, desc, eq, gte, inArray, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, sql } from "drizzle-orm";
 import { flagConfigs, targetingRules } from "../schema/index";
 import {
   appliedRequestUpdate,
@@ -50,6 +50,9 @@ export function makeFlagConfigOps(
     getFlagConfig(scope: EnvScope, flagId: string) {
       return flagConfigsTable.findOne(scope, eq(flagConfigs.flagId, flagId));
     },
+
+    getFlagConfigWithTargetingRules: (scope: EnvScope, flagId: string) =>
+      readFlagConfigWithTargetingRules(db, scope, flagId),
 
     getFlagConfigById(scope: EnvScope, configId: string) {
       return flagConfigsTable.findOne(scope, eq(flagConfigs.id, configId));
@@ -291,4 +294,18 @@ async function replaceApprovedTargetingRules(
   }
   const approved = await flagConfigsTable.findOne(scope, eq(flagConfigs.flagId, flagId));
   return approved ? { ok: true, config: approved } : { ok: false, reason: "not_found" };
+}
+
+/** D1 batches give Sync one transactionally consistent source Flag Configuration. */
+async function readFlagConfigWithTargetingRules(db: Db, scope: EnvScope, flagId: string) {
+  assertMintedScope(scope);
+  const [configs, rules] = await db.batch([
+    db.select().from(flagConfigs).where(scopedFlagConfig(scope, flagId)).limit(1),
+    db
+      .select()
+      .from(targetingRules)
+      .where(scopedTargetingRule(scope, flagId))
+      .orderBy(asc(targetingRules.priority), asc(targetingRules.id)),
+  ]);
+  return { config: configs[0] ?? null, targetingRules: rules };
 }

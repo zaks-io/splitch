@@ -18,6 +18,7 @@ import {
   readOnlyClosed,
   updateClosed,
 } from "../route-effects";
+import { APPROVAL_WRITE_ERRORS } from "./approval-write-errors";
 import {
   AppParams,
   EnvFlagParams,
@@ -46,14 +47,6 @@ const AUTH = "control-plane-token" as const;
 const RATE = "control-plane-actor" as const;
 
 const DeletedResponse = z.object({ deleted: z.literal(true) });
-const APPROVAL_WRITE_ERRORS = [
-  "APPROVAL_REVIEW_REQUIRED",
-  "APPROVAL_REVIEW_FORBIDDEN",
-  "APPROVAL_REQUEST_STALE",
-  "APPROVAL_REQUEST_RESOLVED",
-  "APPROVAL_APPLICATION_FAILED",
-  "IDEMPOTENCY_KEY_CONFLICT",
-] as const;
 
 export const flagRoutes = [
   defineApiRoute({
@@ -234,6 +227,7 @@ export const flagRoutes = [
     idempotency: "required",
     effects: updateClosed,
     errors: [
+      "ENVIRONMENT_EXPIRED",
       "FLAG_NOT_FOUND",
       "VARIANT_NOT_AVAILABLE",
       "SEGMENT_NOT_FOUND",
@@ -259,6 +253,7 @@ export const flagRoutes = [
     idempotency: "required",
     effects: updateClosed,
     errors: [
+      "ENVIRONMENT_EXPIRED",
       "FLAG_NOT_FOUND",
       "VARIANT_NOT_AVAILABLE",
       "SEGMENT_NOT_FOUND",
@@ -284,6 +279,7 @@ export const flagRoutes = [
     idempotency: "required",
     effects: createIdempotentClosed,
     errors: [
+      "ENVIRONMENT_EXPIRED",
       "FLAG_NOT_FOUND",
       "VARIANT_NOT_AVAILABLE",
       "SEGMENT_NOT_FOUND",

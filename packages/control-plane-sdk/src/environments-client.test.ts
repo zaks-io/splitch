@@ -13,6 +13,7 @@ const environment = {
     enabledState: "confirm" as const,
     startExperimentRun: "confirm" as const,
   },
+  temporary: null,
   createdAt: "2026-07-18T00:00:00.000Z",
   updatedAt: "2026-07-18T00:00:00.000Z",
 };
@@ -177,5 +178,84 @@ describe("control plane sdk Environments client", () => {
         details: { appId: "app_checkout" },
       },
     });
+  });
+});
+
+describe("control plane sdk Temporary Environments client", () => {
+  it("creates a Temporary Environment and preserves its expiry and Sync provenance", async () => {
+    const temporary = {
+      expiresAt: "2026-10-20T12:00:00.000Z",
+      syncedFromEnvironmentId: "env_prod",
+      syncedAt: "2026-10-17T12:00:00.000Z",
+    };
+    const response = { ...createdEnvironment, temporary };
+    const { sdk, requests } = sdkWith(() => Response.json(response));
+    const input = {
+      key: "pr-123",
+      temporary: {
+        fromEnvironmentId: "prod",
+        expiresAt: temporary.expiresAt,
+      },
+    };
+
+    const result = await sdk.environments.create({ appId: "app_checkout", ...input });
+
+    await expect(requests[0]?.json()).resolves.toEqual(input);
+    expect(result).toEqual({ ok: true, status: 200, data: response });
+  });
+
+  it.each([undefined, "id" as const])(
+    "Syncs with selector %s and only the source in its body",
+    async (by) => {
+      const response = {
+        ...environment,
+        temporary: {
+          expiresAt: "2026-10-20T12:00:00.000Z",
+          syncedFromEnvironmentId: "env_dev",
+          syncedAt: "2026-10-17T12:00:00.000Z",
+        },
+        syncedFlags: 12,
+      };
+      const { sdk, requests } = sdkWith(() => Response.json(response));
+
+      const result = await sdk.environments.sync({
+        appId: "app_checkout",
+        environmentId: "pr-123",
+        fromEnvironmentId: "dev",
+        by,
+      });
+
+      expect(requests[0]?.url).toBe(
+        `https://control-plane.test/apps/app_checkout/envs/pr-123/sync${by ? "?by=id" : ""}`,
+      );
+      expect(requests[0]?.method).toBe("POST");
+      await expect(requests[0]?.json()).resolves.toEqual({ fromEnvironmentId: "dev" });
+      expect(result).toEqual({ ok: true, status: 200, data: response });
+    },
+  );
+
+  it("returns an incomplete Sync as a typed retryable error", async () => {
+    const error = {
+      code: "ENVIRONMENT_SYNC_INCOMPLETE",
+      message: "Retry Sync to converge",
+      outcome: "retryable",
+      details: {
+        environmentId: "env_temporary",
+        fromEnvironmentId: "env_dev",
+        applied: 2,
+        failed: 1,
+        failedFlagIds: ["flag_1"],
+        retryAfterMs: 1000,
+      },
+    };
+    const { sdk } = sdkWith(() => Response.json(error, { status: 503 }));
+
+    await expect(
+      sdk.environments.sync({
+        appId: "app_checkout",
+        environmentId: "env_temporary",
+        fromEnvironmentId: "env_dev",
+      }),
+    ).resolves.toEqual({ ok: false, status: 503, error });
   });
 });

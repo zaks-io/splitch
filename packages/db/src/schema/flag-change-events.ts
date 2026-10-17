@@ -39,6 +39,9 @@ export const flagChangeEvents = sqliteTable(
      * (flag_configs, targeting_rules, runs) always carry one.
      */
     environmentId: text("environment_id"),
+    temporaryEnvironment: integer("temporary_environment", { mode: "boolean" })
+      .notNull()
+      .default(false),
     flagId: text("flag_id").notNull(),
     /**
      * Denormalized on purpose: the Flag key at the time of the change. A later

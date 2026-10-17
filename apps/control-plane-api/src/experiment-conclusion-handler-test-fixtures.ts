@@ -232,6 +232,9 @@ function environmentRow() {
   return {
     id: ENVIRONMENT_ID,
     appId: APP_ID,
+    expiresAt: null,
+    syncedFromEnvironmentId: null,
+    syncedAt: null,
     policy: JSON.stringify({
       variantAvailability: "allow",
       targetingRolloutValue: "allow",

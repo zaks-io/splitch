@@ -114,6 +114,7 @@ describe("control plane SDK route selection", () => {
       "environments_get",
       "environments_update",
       "environments_delete",
+      "environments_sync",
     ]);
   });
 
@@ -150,7 +151,7 @@ describe("control plane SDK route selection", () => {
     expect(EXPERIMENTS_SDK_INDICES).toEqual([0, 1, 2, 3, 4, 5, 6, 10, 11]);
     expect(APPS_SDK_INDICES).toEqual([10, 11, 12, 13, 14, 20, 21, 22, 23]);
     expect(ATTENTION_SDK_INDICES).toEqual([0]);
-    expect(ENVIRONMENTS_SDK_INDICES).toEqual([15, 16, 17, 18, 19]);
+    expect(ENVIRONMENTS_SDK_INDICES).toEqual([15, 16, 17, 18, 19, 24]);
     expect(CREDENTIALS_SDK_INDICES).toEqual([0, 1, 2, 3, 4, 5]);
     expect(APPROVALS_SDK_INDICES).toEqual([0, 1, 2]);
     expect(PRIVACY_SDK_INDICES).toEqual([4, 5]);

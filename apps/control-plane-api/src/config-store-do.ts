@@ -135,6 +135,20 @@ export class ConfigStoreDurableObject
     return this.store().deleteFlagConfig(input);
   }
 
+  syncFlagConfig(input: Parameters<ConfigStoreWriter["syncFlagConfig"]>[0]) {
+    return this.store().syncFlagConfig(input);
+  }
+
+  fenceTemporaryEnvironment(input: Parameters<ConfigStoreWriter["fenceTemporaryEnvironment"]>[0]) {
+    return this.store().fenceTemporaryEnvironment(input);
+  }
+
+  teardownTemporaryEnvironment(
+    input: Parameters<ConfigStoreWriter["teardownTemporaryEnvironment"]>[0],
+  ) {
+    return this.store().teardownTemporaryEnvironment(input);
+  }
+
   override async fetch(request: Request): Promise<Response> {
     if (request.method !== "GET" || request.headers.get("upgrade")?.toLowerCase() !== "websocket") {
       return new Response("expected WebSocket upgrade", { status: 426 });
@@ -240,6 +254,12 @@ export class ConfigStoreDurableObject
       broadcaster: { broadcast: (nudge) => this.broadcast(nudge) },
       nextSnapshotRevision: makeDurableSnapshotRevisionAllocator(this.ctx.storage),
       logger: console,
+      clearEnvironmentState: async () => {
+        for (const socket of this.ctx.getWebSockets()) {
+          socket.close(AUTHORIZATION_POLICY_CLOSE_CODE, "Environment deleted");
+        }
+        await this.ctx.storage.deleteAll();
+      },
     });
     return this.#configStore;
   }

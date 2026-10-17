@@ -57,6 +57,7 @@ export function scopeResolutionStubs(options?: {
         enabledState: "allow",
         startExperimentRun: "allow",
       },
+      temporary: null,
       createdAt: scopeStamp,
       updatedAt: scopeStamp,
     }));

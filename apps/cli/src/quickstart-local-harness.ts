@@ -92,9 +92,11 @@ export async function makeQuickstartHarness(): Promise<QuickstartHarness> {
     kv: configKv,
     broadcaster: { broadcast() {} },
     nextSnapshotRevision: makeSnapshotRevisionCounter(),
+    clearEnvironmentState: async () => undefined,
     now: () => new Date(Date.parse(NOW_ISO)),
   });
   const configStoreAccess: ConfigStoreAccess = {
+    readFlagConfig: (input) => configStore.readFlagConfig(input),
     writerFor() {
       return configStore;
     },

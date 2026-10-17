@@ -1,16 +1,17 @@
-import { flagConfigKey, routeRegistry } from "@splitch/contracts";
+import { clientKeyCacheKey, flagConfigKey, routeRegistry } from "@splitch/contracts";
 import { ProviderError } from "@splitch/evaluation-core";
+import { expiryRequest } from "./environment-expiry.test-fixture";
 import { makeEvaluationRateLimiter } from "./evaluation-rate-limit";
 import { MemoryExposureRedemptionClaimStore } from "./exposure-redemption-claim";
 import type { ExposureRedemptionClaimStore } from "./exposure-redemption-claim-core";
 import {
   EXPOSURE_ID_A,
+  PATH as EXPOSURES_PATH,
   exposuresInit,
   mintTicket,
-  PATH as EXPOSURES_PATH,
 } from "./exposures-test-fixtures";
-import { flagConfigKV } from "./provider/fixtures";
 import { produceOfrepEvaluate, produceOfrepEvaluateBulk } from "./ofrep/public-shapes";
+import { flagConfigKV } from "./provider/fixtures";
 import {
   APP_ID,
   CLIENT_KEY,
@@ -21,6 +22,7 @@ import {
   makeSdkRouteHarness,
   REVOKED_CLIENT_KEY,
   sdkRouteInit,
+  sha256Hex,
   UNSCOPED_API_KEY,
 } from "./sdk-route-test-fixtures";
 
@@ -47,7 +49,20 @@ export async function produceEvaluationClientKeyShapes(): Promise<Record<string,
   for (const route of EVALUATION_CLIENT_KEY_ROUTES) {
     const producer = PRODUCERS[route.operationId];
     if (producer === undefined) throw new Error(`no HTTP producer for ${route.operationId}`);
-    produced[route.operationId] = await producer();
+    const shapes = await producer();
+    const fixture = await makeSdkRouteHarness();
+    const key = clientKeyCacheKey(await sha256Hex(CLIENT_KEY));
+    const cached = JSON.parse((await fixture.credentialKv.get(key)) as string);
+    cached.data = {
+      ...cached.data,
+      credentialSchemaVersion: 3,
+      expiresAt: "2000-01-01T00:00:00.000Z",
+    };
+    fixture.credentialKv.putRaw(key, JSON.stringify(cached));
+    shapes.errors.ENVIRONMENT_EXPIRED = await jsonOf(
+      await fixture.app.request(...expiryRequest(route, CLIENT_KEY)),
+    );
+    produced[route.operationId] = shapes;
   }
   return produced;
 }

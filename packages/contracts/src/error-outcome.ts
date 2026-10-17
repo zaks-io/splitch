@@ -23,9 +23,15 @@ export type PresentedError<T extends { readonly code: ErrorCode }> = T & {
  * agents and the Exposure drain to loop on poison. Transient seams use
  * `SERVICE_UNAVAILABLE` (or `RATE_LIMITED`) instead.
  */
-const retryableCodes = ["RATE_LIMITED", "SERVICE_UNAVAILABLE"] as const;
+const retryableCodes = [
+  "RATE_LIMITED",
+  "SERVICE_UNAVAILABLE",
+  "ENVIRONMENT_SYNC_INCOMPLETE",
+] as const;
 
 const nonRetryableCodes = [
+  "ENVIRONMENT_KIND_UNSUPPORTED",
+  "SYNC_LIMIT_EXCEEDED",
   "EVENT_DEFINITION_IMMUTABLE",
   "APPROVAL_REQUEST_RESOLVED",
   "ACTIVATION_NOT_AVAILABLE",

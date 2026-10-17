@@ -17,6 +17,7 @@ import { FLAG_CHANGE_LOG_RETENTION_MS } from "./flag-change-log-retention";
 import { runPersonalAccessTokenRetention } from "./personal-access-token-rotation";
 import { deleteOrphanedPrivacyExports } from "./privacy-export-cleanup";
 import { dispatchSentryWebhooks } from "./sentry-webhook-dispatch";
+import { runTemporaryEnvironmentTeardown } from "./temporary-environment-teardown-scheduled";
 
 const service = "splitch-control-plane-api";
 
@@ -33,6 +34,7 @@ export function runControlPlaneScheduled(
   // land: the Convex and Cloudflare paths lease their deliveries and would
   // survive it, but the Sentry cursor has no lease to protect it.
   if (event.cron !== "0 8 * * *") {
+    ctx.waitUntil(runTemporaryEnvironmentTeardown(env, event, ctx));
     ctx.waitUntil(runAuditEventForwarding(env, event, ctx));
     ctx.waitUntil(runConvexWebhookDispatch(env, event, ctx));
     ctx.waitUntil(runCloudflarePushDispatch(env, event, ctx));

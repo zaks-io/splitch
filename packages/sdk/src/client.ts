@@ -1,4 +1,5 @@
 import { requireCredentialPrefix } from "./credential";
+import { ENVIRONMENT_EXPIRED_REMEDIATION, environmentExpiryLogger } from "./environment-expiry";
 import { SplitchSdkError } from "./errors";
 import type { EvaluateContext, EvaluateDeps, EvaluationContext, Logger } from "./evaluate";
 import { runEvaluate, runPeekVariant, runVerify } from "./evaluate";
@@ -193,14 +194,14 @@ export function createSplitchClient(options: SplitchClientOptions): SplitchClien
         fetchImpl: options.fetch ?? globalThis.fetch.bind(globalThis),
       }),
     seenSet: new SeenSet(options.seenSetMaxSize, options.revalidateMs),
-    logger: options.logger ?? console,
+    logger: environmentExpiryLogger(options.logger ?? console),
     now: options.now ?? Date.now,
   };
 
   return {
     async activate(eventName, event) {
       const result = await deps.transport.activate({ eventName, ...event });
-      if (!result.accepted || result.eventId === null) throw metricEventError(result);
+      if (!result.accepted || result.eventId === null) throw reportMetricEventError(result);
       return {
         eventId: result.eventId,
         duplicate: result.duplicate,
@@ -210,7 +211,7 @@ export function createSplitchClient(options: SplitchClientOptions): SplitchClien
     async track(eventName, event) {
       const result = await deps.transport.track({ eventName, ...event });
       if (!result.accepted || result.eventId === null) {
-        throw metricEventError(result);
+        throw reportMetricEventError(result);
       }
       return {
         eventId: result.eventId,
@@ -237,6 +238,14 @@ export function createSplitchClient(options: SplitchClientOptions): SplitchClien
     },
   };
 
+  function reportMetricEventError(result: TrackResult): SplitchSdkError {
+    const error = metricEventError(result);
+    if (error.code === "ENVIRONMENT_EXPIRED") {
+      deps.logger.error(error.message, { errorCode: error.code, status: error.status });
+    }
+    return error;
+  }
+
   function report(flagKey: string, details: SdkResolutionDetails): SdkResolutionDetails {
     options.onResolution?.(flagKey, details);
     return details;
@@ -247,7 +256,10 @@ function metricEventError(result: TrackResult): SplitchSdkError {
   return new SplitchSdkError({
     code: result.errorCode ?? "SDK_TRANSPORT_PARSE",
     causeSummary: result.errorMessage ?? "Metric Event was rejected",
-    remediation: "Correct the Event Definition, identity, or payload and retry",
+    remediation:
+      result.errorCode === "ENVIRONMENT_EXPIRED"
+        ? ENVIRONMENT_EXPIRED_REMEDIATION
+        : "Correct the Event Definition, identity, or payload and retry",
     status: result.status ?? undefined,
     originalError: result.cause,
   });

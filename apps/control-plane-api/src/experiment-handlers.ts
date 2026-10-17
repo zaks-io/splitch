@@ -1,5 +1,5 @@
 import { boundListRead, LIST_READ_LIMIT, type TargetingRule } from "@splitch/contracts";
-import { type EnvScope, envScope } from "@splitch/db";
+import { appScope, type EnvScope, envScope } from "@splitch/db";
 import type { HandlerArgs } from "@splitch/worker-runtime";
 import { appNotFound, nowIso } from "./app-environment-model";
 import { randomHex } from "./credential-cache";
@@ -25,9 +25,9 @@ import {
   jsonArray,
   jsonArrayOrNull,
 } from "./experiment-model";
+import { planExperimentHandler } from "./experiment-plan-handler";
 import { makeRunHandlers } from "./experiment-run-handlers";
 import { startExperiment } from "./experiment-start-handler";
-import { planExperimentHandler } from "./experiment-plan-handler";
 import {
   loadUpdateContext,
   prepareUpdatePatch,
@@ -37,6 +37,7 @@ import {
 import { targetingRuleSaltRejected } from "./flag-config-errors";
 import { runningExperimentError } from "./flag-definition-errors";
 import { objectBody, pathParam } from "./handler-input";
+import { environmentKindUnsupported } from "./temporary-environment-errors";
 
 export function makeExperimentHandlers(deps: ExperimentDeps) {
   return {
@@ -71,6 +72,9 @@ async function createExperiment(
   const body = objectBody(input);
   const writeError = await requireWritableEnvironment(deps, scope, principal, requestId);
   if (writeError) return writeError;
+
+  const kindError = await temporaryExperimentRefusal(deps, scope, requestId);
+  if (kindError) return kindError;
 
   const key = body.key as string;
   const existingKey = await deps.repo.experiments.findExperimentByKey(scope, key);
@@ -279,4 +283,18 @@ async function resolveArchiveRace(
     );
   }
   return experimentDeleteConflict(requestId);
+}
+
+async function temporaryExperimentRefusal(
+  deps: ExperimentDeps,
+  scope: ReturnType<typeof envScope>,
+  requestId: string,
+): Promise<Response | null> {
+  const environment = await deps.repo.identity.getEnvironment(
+    appScope(scope.appId),
+    scope.environmentId,
+  );
+  return environment && environment.expiresAt !== null
+    ? environmentKindUnsupported(environment, "experiments_create", requestId)
+    : null;
 }

@@ -181,7 +181,7 @@ The full generated reference, rendered from the binary's own command registry, i
 | `apps`                        | `list`, `create`, `get`, `update`, `delete`                                   |
 | `app-members`                 | `list`, `add`, `update`, `remove`                                             |
 | `app-attention-rollup`        | `get`                                                                         |
-| `envs`                        | `list`, `create`, `get`, `update`, `delete`                                   |
+| `envs`                        | `list`, `create`, `get`, `update`, `delete`, `sync`                           |
 | `env-policy`                  | `get`, `set`                                                                  |
 | `environment-exposure-status` | `get`                                                                         |
 | `flags`                       | `list`, `create`, `get`, `update`, `delete`, `promote`, `test-eval`, `verify` |
@@ -208,6 +208,23 @@ The full generated reference, rendered from the binary's own command registry, i
 `splitch cloudflare setup` deploys the Cloudflare integration Worker into your own Cloudflare account; see
 [`@splitch/cloudflare`](https://www.npmjs.com/package/@splitch/cloudflare). The `*-installations`
 groups are the operator view of integrations already installed in an Environment.
+
+## Temporary Environments
+
+Create a Temporary Environment from another Environment in the selected App. It has its own
+configuration and credentials, expires within seven days, and is then torn down.
+
+```bash
+splitch envs create --key pr-123 --temporary --from prod --expires-at 3d --json
+splitch envs sync --env pr-123 --from dev --json
+splitch envs delete --env pr-123 --json
+```
+
+Creation returns the new Client Key. `--expires-at` accepts a day count or an ISO 8601 instant with
+an offset. Omit it for seven days; a supplied expiry must be more than one minute and at most seven
+days away. Sync replaces the target's Flag Configurations with the source's, including rollout salts
+and excluding live Experiment Runs. Use `api-keys create --env pr-123 --output-file <path>` for a
+server-side API Key that expires with the Environment.
 
 ## Approval Policies
 

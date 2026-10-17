@@ -170,6 +170,11 @@ export const CreateEnvironmentResponseSchema = EnvironmentSchema.extend({
 });
 export type CreateEnvironmentResponse = z.infer<typeof CreateEnvironmentResponseSchema>;
 
+export const SyncEnvironmentResponseSchema = EnvironmentSchema.extend({
+  syncedFlags: z.number().int().nonnegative(),
+});
+export type SyncEnvironmentResponse = z.infer<typeof SyncEnvironmentResponseSchema>;
+
 /**
  * Minimal per-Environment health signal for the App-list attention rollup.
  * `state` keeps no data distinct from a measured clear result, while the two

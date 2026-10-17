@@ -51,6 +51,15 @@ to exactly one Organization and spans one or more Environments. See
 has its own Flag Configuration, SDK credentials, experiment data, and Environment Policy. See
 [`apps/control-plane-api/CONTEXT.md`](./apps/control-plane-api/CONTEXT.md).
 
+**Temporary Environment**: an Environment created as a copy of another Environment in the same
+App. It expires at most 7 days after creation, then its configuration and credentials are torn
+down. Its Policy is always all-`allow` and it cannot host Experiments. Every other Environment is
+permanent; the kind is fixed at creation.
+
+**Sync**: replacing every Flag Configuration in a Temporary Environment with the configuration of a
+source Environment in the same App, including its per-Environment Default Variant and rollout
+salts, and excluding live Runs and Activation bindings. Sync writes only into a Temporary Environment.
+
 **Flag**: a named feature toggle with a key, Variants, Targeting Rules, and enabled state. See
 [`apps/evaluation-api/CONTEXT.md`](./apps/evaluation-api/CONTEXT.md).
 
@@ -199,6 +208,8 @@ from a CLI login session (`splitch tokens`); a token can list and revoke its own
 - Use **Targeting Key**, not userId, unitId, subjectId, or sessionId as the domain term.
 - Use **Experiment Run**, not phase, version, configVersion, or analysis window.
 - Use **Promote** for applying Flag Configuration to a target Environment.
+- Use **Sync** only for the whole-Environment copy into a Temporary Environment. Use **temporary**
+  for this kind of Environment.
 - Use **Start**, **End**, and **Conclude** for Experiment Run lifecycle.
 - Do not use **publish** for either Promotion or Experiment Run lifecycle.
 - Use **publish** only for immutable Event Definition Versions.

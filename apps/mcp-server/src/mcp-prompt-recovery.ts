@@ -1,4 +1,4 @@
-import { type RecommendedAction, recommendedActions } from "@splitch/contracts";
+import { cliCommandString, type RecommendedAction, recommendedActions } from "@splitch/contracts";
 import {
   type McpPromptMessage,
   type McpPromptPlan,
@@ -97,6 +97,9 @@ function recoverySteps(
     return chooseDifferentSteps(action, details);
   }
   switch (action) {
+    case "CREATE_TEMPORARY_ENVIRONMENT":
+    case "DELETE_TEMPORARY_ENVIRONMENT":
+      return temporaryEnvironmentRecoverySteps(action);
     case "USE_CANONICAL_ID":
       return [
         message(
@@ -191,6 +194,26 @@ function recoverySteps(
       ];
     }
   }
+}
+
+function temporaryEnvironmentRecoverySteps(
+  action: "CREATE_TEMPORARY_ENVIRONMENT" | "DELETE_TEMPORARY_ENVIRONMENT",
+): readonly McpPromptMessage[] {
+  const creating = action === "CREATE_TEMPORARY_ENVIRONMENT";
+  const selection = creating
+    ? "Choose an unexpired source for the replacement."
+    : "Select an unexpired Temporary Environment that is safe to delete. Require temporary !== null; never choose a permanent Environment.";
+  const operationId = creating ? "environments_create" : "environments_delete";
+  const recovery = creating
+    ? `Create a replacement with a fresh key and temporary: { fromEnvironmentId: <chosen source ID> }. CLI: \`${cliCommandString("environments_create")} --key <new-key> --temporary --from <source-environment>\`. The expired Environment cannot be extended. Update the original caller to use the replacement Environment and its credentials before retrying.`
+    : `Delete only the chosen Temporary Environment. CLI: \`${cliCommandString("environments_delete")} --env <temporary-environment>\`. Retry the original create after teardown completes.`;
+  return [
+    toolMessage(
+      "environments_list",
+      `List the App's Environments. ${selection} CLI: \`${cliCommandString("environments_list")}\`.`,
+    ),
+    toolMessage(operationId, recovery),
+  ];
 }
 
 function chooseDifferentSteps(

@@ -1,3 +1,4 @@
+import { SplitchSdkError } from "../errors";
 import { toOfrepErrorCode } from "./error-code";
 import { evaluateOfrepFlag, type OfrepHttpConfig } from "./http";
 import { trackMetricEvent } from "./track";
@@ -20,6 +21,7 @@ export class SplitchOfrepProvider {
   readonly runsOn = "server" as const;
   private readonly http: OfrepHttpConfig;
   private readonly logger: OfrepLogger;
+  private expiryLogged = false;
 
   constructor(options: SplitchOfrepProviderOptions) {
     let parsed: URL;
@@ -85,6 +87,10 @@ export class SplitchOfrepProvider {
       context,
       details,
     ).catch((cause) => {
+      if (cause instanceof SplitchSdkError && cause.code === "ENVIRONMENT_EXPIRED") {
+        this.logExpiry(cause.message);
+        return;
+      }
       this.logger.error("splitch OFREP track failed", cause);
     });
   }
@@ -97,6 +103,9 @@ export class SplitchOfrepProvider {
   ): Promise<OfrepResolutionDetails<T>> {
     const resolved = await evaluateOfrepFlag(this.http, flagKey, context);
     if (resolved.reason === "ERROR") {
+      if (resolved.errorMessage?.startsWith("ENVIRONMENT_EXPIRED:")) {
+        this.logExpiry(resolved.errorMessage);
+      }
       return { ...resolved, value: defaultValue };
     }
     if (resolved.value === undefined) {
@@ -111,6 +120,12 @@ export class SplitchOfrepProvider {
       };
     }
     return { ...resolved, value: resolved.value as T };
+  }
+
+  private logExpiry(message: string): void {
+    if (this.expiryLogged) return;
+    this.expiryLogged = true;
+    this.logger.error(message, { errorCode: "ENVIRONMENT_EXPIRED" });
   }
 }
 

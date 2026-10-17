@@ -29,7 +29,7 @@ afterEach(async () => {
   await h.dispose();
 });
 
-describe("approve_and_apply freeze uses the request's changed-field set", () => {
+describe("approve_and_apply preserves enabled-only changes", () => {
   it("applies an enabled-only proposal while a Run is live", async () => {
     await narrowSeededAvailability(h.d1, ["control", "treatment"]);
     await insertProdTargetingRule();
@@ -87,7 +87,7 @@ describe("approve_and_apply freeze uses the request's changed-field set", () => 
     expect(after.rollout).toEqual({ percentage: 40, salt: "post-mint" });
   });
 
-  it("preserves a versioned PATCH that lands after the staleness read", async () => {
+  it("serializes a versioned PATCH after an in-flight approved application", async () => {
     await setProdPolicy(h, { ...confirmPolicy, targetingRolloutValue: "allow" });
     expect((await patchConfig(h, "idem_disable_before_race", { enabled: false })).status).toBe(200);
     const proposed = await patchConfig(h, "idem_propose_enable_before_race", { enabled: true });
@@ -107,20 +107,27 @@ describe("approve_and_apply freeze uses the request's changed-field set", () => 
 
     const review = reviewRequest(h, requestId, "idem_review_after_concurrent_patch");
     await entered.promise;
-    const concurrent = await patchConfig(h, "idem_concurrent_rollout", {
+    let patchCompleted = false;
+    const concurrent = patchConfig(h, "idem_concurrent_rollout", {
+      rollout: { percentage: 40 },
+    }).finally(() => {
+      patchCompleted = true;
+    });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(patchCompleted).toBe(false);
+    resume.resolve();
+    expect((await review).status).toBe(200);
+    expect((await concurrent).status).toBe(200);
+    const after = await readProdConfig();
+    expect(after).toMatchObject({
+      version: before.version + 2,
+      enabled: true,
       rollout: { percentage: 40 },
     });
-    expect(concurrent.status).toBe(200);
-    const patched = await readProdConfig();
-    expect(patched.version).toBe(before.version + 1);
-    resume.resolve();
-
-    expect((await review).status).toBe(200);
-    const after = await readProdConfig();
-    expect(after.enabled).toBe(true);
-    expect(after.rollout).toEqual(patched.rollout);
   });
+});
 
+describe("approve_and_apply freeze uses the request's changed-field set", () => {
   it("refuses a genuine frozen-field proposal naming only that field", async () => {
     await narrowSeededAvailability(h.d1, ["control", "treatment"]);
     await insertProdTargetingRule();

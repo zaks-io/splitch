@@ -21,7 +21,12 @@ it("withholds native JSON parse causes during per-Environment resync and continu
   await resyncFlagSnapshots(
     {
       repo: {
-        identity: { listEnvironments: async () => [{ id: "env_1" }, { id: "env_2" }] },
+        identity: {
+          listEnvironments: async () => [
+            { id: "env_1", expiresAt: null },
+            { id: "env_2", expiresAt: null },
+          ],
+        },
       } as unknown as Repository,
       configStore: {
         writerFor: () => ({ resyncFlagConfig: resync }),

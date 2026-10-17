@@ -142,7 +142,7 @@ function attentionRollupRepo(): Repository {
       getApp: vi.fn(async () => ({ id: APP_ID, organizationId: ids.orgId })),
       getOrgMembership: vi.fn(async () => ({ role: "member" })),
       getAppMembership: vi.fn(async () => ({ role: "member" })),
-      listEnvironments: vi.fn(async () => [{ id: ENVIRONMENT_ID }]),
+      listPermanentEnvironments: vi.fn(async () => [{ id: ENVIRONMENT_ID }]),
     },
     experiments: {
       listRunningExperiments: vi.fn(async () => [{ id: EXPERIMENT_ID, liveRunId: RUN_ID }]),

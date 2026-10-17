@@ -7,6 +7,8 @@ import { z } from "zod";
  */
 export const recommendedActions = [
   "CREATE_NEW_RUN",
+  "CREATE_TEMPORARY_ENVIRONMENT",
+  "DELETE_TEMPORARY_ENVIRONMENT",
   "END_RUNNING_RUN_FIRST",
   "START_A_RUN",
   "EDIT_DRAFT_THEN_START",

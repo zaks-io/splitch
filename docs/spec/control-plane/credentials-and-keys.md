@@ -13,7 +13,7 @@ prod config only.
 | -------------- | ----------------------------------------------- | ------------------------------------------------------------------- |
 | who holds it   | Client-side SDK (browser, mobile)               | Server-side SDK (trusted runtime)                                   |
 | secrecy        | Public — ships in client code                   | Secret — never shipped client-side                                  |
-| capability     | Evaluate + write-only Metric/Web Event ingest   | Full data-plane access, App+Environment-scoped                      |
+| capability     | Evaluate + write-only Metric Event ingest       | Full data-plane access, App+Environment-scoped                      |
 | agent behavior | Freely retrieved and surfaced by CLI/MCP        | Provisioned once, value surfaces at creation only; never read after |
 | abuse bound    | Origin/referrer allow-list + rate-limit at edge | Secret; never exposed after creation                                |
 | KV cache key   | `ck:{key_material_hash}`                        | `ak:{key_hash}`                                                     |
@@ -85,18 +85,18 @@ Every SDK call presents either a Client Key or an API Key. The Worker validates 
 
 ```
 Key:   ck:{sha256(key_material)}
-Value: { organizationId, app_id, environment_id, capabilities: ["evaluate", "track"], revoked: boolean, origin_allowlist: string[] | null, valid_until: ISO8601 }
+Value: CredentialCacheKV { kind: "client_key", appId, environmentId, organizationId, scopes, originAllowlist, rateLimitRps, revoked, cachedAt, credentialSchemaVersion, ... }
 ```
 
-The existing `track` capability authorizes both strict route-specific write surfaces:
-`POST /api/sdk/events` for Metric Events and `POST /api/sdk/web-events` for Web Events. It is not a
-generic event, configuration, or analytics-read capability.
+The `track` capability authorizes `POST /api/sdk/events` for Metric Events. There is no Web Events
+route. Any future route that authenticates a Client Key or API Key inherits the shared credential
+expiry check. Tracking does not authorize configuration or analytics reads.
 
 **API Key cache entry:**
 
 ```
 Key:   ak:{key_hash}
-Value: { app_id, environment_id, scopes: string[], revoked: boolean, valid_until: ISO8601 }
+Value: CredentialCacheKV { kind: "api_key", appId, environmentId, organizationId, scopes, rateLimitRps, revoked, cachedAt, credentialSchemaVersion, ... }
 ```
 
 **Terminal revocation marker:**
@@ -116,21 +116,30 @@ App ownership, not request input. The Evaluation Worker can still parse a schema
 but treats it as unscoped and returns `503 SERVICE_UNAVAILABLE` for the billing-bearing `evaluate`
 route. It never guesses an Organization or writes usage without one.
 
-Control Plane provisioning, rotation, and revocation write schema-v2 entries using D1 App ownership.
-Once the v2 entry exists, the data plane supplies that authenticated Organization scope to Evaluation
+Control Plane provisioning, rotation, and revocation write schema-v2 entries for permanent
+Environments and schema-v3 entries for Temporary Environments. Version 3 adds required
+`expiresAt: ISO datetime | null`, with a UTC or numeric offset. The serialized credential cache
+writer derives the version and expiry from the D1 Environment row and Organization from App
+ownership, never from caller-supplied cache data. It refuses an active write for an expired Temporary
+Environment. Rotation keeps the same Environment expiry.
+
+Readers accept v1, v2, and v3. The v3 schema rejects an invalid string, missing offset, date without
+time, missing member, or numeric expiry through the existing invalid-blob 5xx response and Worker
+fault reporter. Malformed cache data never becomes `ENVIRONMENT_EXPIRED`.
+
+Once a scoped v2 or v3 entry exists, the data plane supplies that authenticated Organization scope to Evaluation
 usage ingest. There is no scheduled migration or bulk cache rebuild command; recovering lost entries
 requires a separately reviewed recovery procedure.
 
-The `environment_id` in the cache value is how the edge resolves an evaluation to the correct
+The `environmentId` in the cache value is how the edge resolves an evaluation to the correct
 Environment's Flag Configuration — the key carries its Environment, so the caller never specifies it.
 
 **Write-through contract:**
 
-- On D1 create: write KV entry immediately. Until the data plane implements the D1 fallback
-  below, active entries are written **without an expiry** — the data plane rejects a KV miss as
-  UNAUTHORIZED, so an expiring active entry would brick a deployed SDK key one TTL after the
-  last control-plane touch. Revocation correctness comes from the explicit tombstone, never
-  from active-entry expiry.
+- On D1 create: write KV immediately, without a KV TTL. A Temporary Environment's logical expiry
+  is the v3 `expiresAt`, independent of KV retention. The data plane rejects a KV miss as
+  `UNAUTHORIZED`; a TTL on active entries would disable deployed keys after their last Control
+  Plane touch. Revocation correctness comes from the explicit terminal marker and tombstone.
 - On D1 revoke: write the permanent terminal marker, then a **revoked tombstone** KV entry
   (`revoked: true`) with a short TTL, and **fail loud** if either write-through errors (see revoke
   contract below) — revoke is never best-effort
@@ -138,8 +147,32 @@ Environment's Flag Configuration — the key carries its Environment, so the cal
   marks the key revoked, **re-assert the revoked tombstone** in KV rather than treating the miss
   as "unknown / re-validate as valid", then reject
 
-**Failure contract (create):** If KV write-through fails on create, the D1 row is the system of record.
-The next request sees a KV miss, falls back to D1, and re-populates KV. No distributed transaction.
+**Failure contract (Temporary Environment create):** creation returns success only after Sync and
+Client Key provisioning succeed. A failure rolls the new Environment back through teardown. There
+is no current hot-path D1 fallback to repair a missing cache entry.
+
+### Temporary Environment credential expiry
+
+Shared credential authentication checks terminal revocation first, then v3 logical expiry before
+rate limiting or billing. After expiry, every registered Client Key or API Key route returns
+`410 ENVIRONMENT_EXPIRED`, including evaluate/evaluate-all, OFREP, verify, peek, Exposures, Metric
+Events, Activations, and integration key routes. The details include `environmentId`, ISO
+`expiredAt`, and `recommendedAction: "CREATE_TEMPORARY_ENVIRONMENT"`. Expiry refusals incur no
+Evaluation usage. Once teardown writes the terminal marker, `CREDENTIAL_REVOKED` wins.
+
+Control Plane-owned integration key routes authenticate at the Evaluation public edge before
+delegation forwards trusted identity. Control Plane does not reauthenticate the key.
+
+The primary SDK reports `reason: ERROR` and literal `errorCode: ENVIRONMENT_EXPIRED`. OpenFeature
+reports `GENERAL` and includes `ENVIRONMENT_EXPIRED` in the message. Both log once per client and
+never retry. Older SDKs still fail loudly when they cannot recognize the code.
+
+Readers and writers ship with the whole lifecycle. During the current deploy order, Control Plane
+can briefly mint v3 before Evaluation deploys; the old strict reader fails closed with a server
+error until its update finishes. Event Ingest deploys first. Permanent entries stay v2. Once
+Temporary Environments exist, rolling Control Plane back to a version without this lifecycle is
+forbidden until all Temporary Environments have been deleted. Production deploys and the additive
+migration require explicit approval. See [rollout](temporary-environments.md#rollout).
 
 **Revoke contract (fail-loud, ADR-0034):** Revocation is the one credential operation that is **not**
 fire-and-forget — a leaked secret API Key is exactly the incident the threat model exists for.

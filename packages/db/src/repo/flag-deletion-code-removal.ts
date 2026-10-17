@@ -98,6 +98,7 @@ export function codeRemovalClaimBatchStatements(
         seq: sql<number | null>`NULL`.as("seq"),
         appId: sql<string>`${scope.appId}`.as("app_id"),
         environmentId: sql<string | null>`NULL`.as("environment_id"),
+        temporaryEnvironment: sql<boolean>`0`.as("temporary_environment"),
         flagId: sql<string>`${flagId}`.as("flag_id"),
         flagKey: sql<string>`${flag.key}`.as("flag_key"),
         action: sql<string>`'deleted'`.as("action"),
