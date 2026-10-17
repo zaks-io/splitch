@@ -76,12 +76,14 @@ existing `LIST_READ_LIMIT`.
   Temporary Environment; removals still apply. The credential cache writer Durable Object refuses
   an active entry for an expired Temporary Environment. A write that passed the handler's check just
   before expiry therefore cannot recreate state after teardown starts.
-- **App-wide operations skip expired Temporary Environments.** Operations that fan out over every
-  Environment (Flag creation provisioning, Segment republication, Variant catalog changes) skip an
-  expired Temporary Environment, and treat a fence refusal from one that expired after enumeration
-  as a skip, not a failure. Flag deletion still removes its configuration there, because removal is
-  not refused. An Environment waiting for teardown never fails or partially applies an App-level
-  change.
+- **App-wide provisioning and republication skip expired Temporary Environments.** Flag creation
+  provisioning, Segment republication, and Variant catalog republication skip an expired Temporary
+  Environment, and treat a fence refusal from one that expired after enumeration as a skip, not a
+  failure, so an Environment waiting for teardown never fails or partially applies those changes.
+  Flag deletion still removes its configuration there, because removal is not refused. Reference
+  blockers are unchanged: a Variant that a Targeting Rule in any Environment still references,
+  including an expired Temporary Environment awaiting teardown, cannot be deleted. The blocker names
+  that Environment, and deleting it is the remedy.
 - **App-level rollups ignore Temporary Environments:** the attention rollup (including its
   200-Environment budget), expired and stale Flag detection, and Flag inventory health. The
   last-Environment delete guard counts permanent Environments only, and a Temporary Environment
@@ -261,8 +263,9 @@ rewrite them. A scheduled teardown only runs after that original expiry, so its 
 rejected. A manual delete is the one case where keys are still live when teardown starts, so
 `environments_delete` returns `{ deleted: true }` only after the whole cascade completes. If it fails
 after step 1, it returns `SERVICE_UNAVAILABLE` with `retryAfterMs`, the Environment stays read-only,
-and its keys keep authenticating until step 2 succeeds, either on the caller's retry or on the next
-cron tick, which picks it up because `expires_at` has passed.
+and its keys keep authenticating until a retry completes step 2: the caller's retry, or the cron,
+which picks it up because `expires_at` has passed but serves expired Environments oldest first, so a
+backlog or repeated failures delay it.
 
 The minute cron tears down up to 5 expired Temporary Environments per tick, oldest expiry first, so
 50 that expire together are gone within 10 minutes. It logs `temporary-environment-teardown` with
@@ -320,11 +323,14 @@ One additive D1 migration:
 ## Rollout
 
 1. The D1 migration is additive; existing rows read as permanent.
-2. Evaluation and Event Ingest accept credential cache v3 and enforce its expiry before any
-   Control Plane writes v3.
-3. The guard, teardown, and Sentry slices ship before creation is exposed, so the first Temporary
-   Environment is born with every safeguard in place.
-4. Once creation ships, rolling the Control Plane back past that release is forbidden while any
+2. Creation, expiry, teardown, the fence, and the Sentry skip ship in one release, so the first
+   Temporary Environment is born with every safeguard in place. Permanent credentials stay v2, so
+   the only reader/writer window is inside that deploy: the production deploy runs the Control
+   Plane before Evaluation, and a Temporary Environment created in between has keys an older
+   Evaluation reader cannot parse. It fails closed with a server error, never falls back to a
+   non-expiring read, and the keys work once Evaluation finishes deploying. Event Ingest deploys
+   first, so it never sees the window. No existing key changes shape.
+3. Once creation ships, rolling the Control Plane back past that release is forbidden while any
    Temporary Environment exists: an older writer would mint non-expiring v2 credentials and an
    older cron would not tear down. Delete every Temporary Environment first if a rollback is
    unavoidable.
@@ -333,31 +339,40 @@ Each production deploy and the production migration need explicit approval.
 
 ## Slices
 
-Each slice ships something observable and testable end to end. Creation is exposed only by slice 4.
+Three slices. The first ships the whole lifecycle because creation is unsafe without expiry,
+teardown, the fence, and the Sentry skip, and Sync reuses the create copy path. The other two are
+blocked by it and can run in parallel; their footprints are disjoint.
 
-1. **Data plane honors credential expiry.** Credential cache v3 in contracts, the expiry check on
-   every Client Key and API Key route, `ENVIRONMENT_EXPIRED` in the error contract, SDK mapping.
-   Tested with seeded v3 entries. Updates `credentials-and-keys.md`, `storage-schemas-kv.md`,
-   `error-responses.md`.
-2. **Temporary Environment guards.** The D1 migration, the `temporary` response member, every
-   `ENVIRONMENT_KIND_UNSUPPORTED` refusal, expired-is-read-only, the Config Store fence and the
-   App-wide skip, the
-   credential writer's version and expiry derivation, the change-log kind with the Sentry skip,
-   rollup exclusions, and the last-Environment guard. Tested with seeded rows. Updates
-   `storage-schemas-d1.md`, `endpoints-org-app.md`, `sentry-integration.md`.
-3. **Teardown** (blocked by 2). The cascade, `environments_delete` on a Temporary Environment, the
-   cron job. Updates `endpoints-org-app.md`, `privacy-data-lifecycle.md`.
-4. **Create from a source** (blocked by 1, 2, 3). The create body with Sync, the live limit, the
-   Sync size limit, CLI flags, and the glossary. Updates `endpoints-org-app.md`,
-   `mcp-and-cli-surfaces.md`, `CONTEXT.md`, both glossaries.
-5. **Sync** (blocked by 4). `environments_sync`, CLI and MCP. Updates `endpoints-org-app.md`,
-   `endpoints-flag-segment.md`, `control-plane-endpoint-inventory.md`.
-6. **`temporary_environments` permission** (blocked by 4 and 5). Permission enum, route opt-in
-   marker and registry validation, narrowing, the path-selector enforcement, the create-body check,
-   the approval exclusion, capabilities, `--grant`. Updates
-   `personal-access-token-permissions.md`, `personal-access-tokens.md`, `access-control-matrix.md`.
-7. **Control Panel display** (blocked by 4). Switcher group, expiry and Sync source, unavailable
-   Policy and Experiment affordances. Updates `screen-inventory.md`.
+1. **[SPL-770](https://linear.app/zaks-io/issue/SPL-770) Agents create, Sync, and use expiring
+   Temporary Environments with temporary keys.** The D1 migration, create and Sync, credential cache
+   v3 with the data-plane expiry check and SDK mapping, every `ENVIRONMENT_KIND_UNSUPPORTED` refusal,
+   the live and Sync limits, expired-is-read-only, the Config Store fence and the App-wide skip, the
+   change-log kind with the Sentry skip, teardown on delete and on the cron, CLI and MCP.
+2. **[SPL-771](https://linear.app/zaks-io/issue/SPL-771) App-level views and the Control Panel
+   treat Temporary Environments as scratch** (blocked by SPL-770; split for size). Rollup, stale
+   and expired Flag, and inventory health exclusions; the switcher group, expiry and Sync source,
+   and unavailable Policy and Experiment affordances.
+3. **[SPL-772](https://linear.app/zaks-io/issue/SPL-772) A PAT with `temporary_environments` can
+   manage Temporary Environments and nothing permanent** (blocked by SPL-770; split for risk and
+   authority). Permission enum, route opt-in marker and registry validation, narrowing, the
+   path-selector enforcement, the create-body check, the approval exclusion, capabilities,
+   `--grant`.
+
+| Section                                   | Slices                                                  |
+| ----------------------------------------- | ------------------------------------------------------- |
+| [Glossary additions](#glossary-additions) | SPL-770                                                 |
+| [Environment shape](#environment-shape)   | SPL-770                                                 |
+| [Rules](#rules)                           | SPL-770; SPL-771 (App-level rollups)                    |
+| [Create](#create)                         | SPL-770                                                 |
+| [Sync](#sync)                             | SPL-770                                                 |
+| [Credentials](#credentials)               | SPL-770                                                 |
+| [Permission](#permission)                 | SPL-772                                                 |
+| [Teardown](#teardown)                     | SPL-770                                                 |
+| [Surfaces](#surfaces)                     | SPL-770 (CLI, MCP); SPL-771 (Control Panel)             |
+| [Errors](#errors)                         | SPL-770                                                 |
+| [Storage](#storage)                       | SPL-770                                                 |
+| [Rollout](#rollout)                       | SPL-770                                                 |
+| [Done](#done)                             | SPL-770; SPL-771 (last bullet); SPL-772 (token bullets) |
 
 ## Done
 
@@ -385,10 +400,14 @@ Each slice ships something observable and testable end to end. Creation is expos
 - 50 Temporary Environments that expire together are gone from `envs list` within 10 minutes. A
   teardown made to fail after each step completes on a later tick with nothing left in D1, KV, or
   Config Store state. A manual delete made to fail between the fence and credential revocation
-  returns `SERVICE_UNAVAILABLE`, and its keys stop authenticating by the next tick.
-- Creating a Flag, editing a Segment a Temporary Environment uses, and changing a Variant catalog
+  returns `SERVICE_UNAVAILABLE`, and its keys stop authenticating once a retry completes
+  credential revocation, including when the cron reaches it behind a backlog of older expired
+  Environments.
+- Creating a Flag, editing a Segment a Temporary Environment uses, and editing a Variant's value
   all succeed while an expired Temporary Environment waits for teardown, including one that expires
-  mid-operation. Deleting a Flag removes its configuration there too.
+  mid-operation. Deleting a Flag removes its configuration there too. Deleting a Variant that only
+  that Environment's Targeting Rules reference is refused naming it, and succeeds after
+  `envs delete`.
 - Experiment creation, Policy edits, a winner Promotion targeting a Temporary Environment, and a
   Convex or Cloudflare installation with its credential fail with `ENVIRONMENT_KIND_UNSUPPORTED`.
   The 51st live Temporary Environment fails with `TEMPORARY_ENVIRONMENT_LIMIT_EXCEEDED`, and an App

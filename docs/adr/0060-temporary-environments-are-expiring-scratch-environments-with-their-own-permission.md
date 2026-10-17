@@ -59,8 +59,9 @@ creation. A Temporary Environment is a scratch copy of another Environment in th
 
 - `environments` gains `expires_at` (non-null means temporary) and Sync provenance columns, and the
   Flag change log records the Environment kind at write time. The credential cache gains a v3
-  payload carrying `expiresAt`. Data-plane readers ship before any writer emits it, and the Control
-  Plane must not roll back past the release that creates Temporary Environments while any exist.
+  payload carrying `expiresAt`. Permanent credentials keep v2, and a data-plane reader that cannot
+  parse v3 fails closed, so readers and writer ship in one release. The Control Plane must not roll
+  back past that release while any Temporary Environment exists.
 - `POST /apps/{app_id}/envs` gains an optional `temporary` body, and
   `POST /apps/{app_id}/envs/{environment_id}/sync` is the one new operation.
 - Route contracts gain an opt-in marker for `temporary_environments`, enforced once in the shared
