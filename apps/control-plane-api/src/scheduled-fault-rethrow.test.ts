@@ -8,6 +8,8 @@ const jobs = vi.hoisted(() => ({
   sentry: vi.fn(),
   adoption: vi.fn(),
   archive: vi.fn(),
+  auditForward: vi.fn(),
+  auditRetention: vi.fn(),
 }));
 
 vi.mock("@splitch/db", () => ({
@@ -16,8 +18,10 @@ vi.mock("@splitch/db", () => ({
     claim: { purgeExpiredClaimArtifacts: async () => 0 },
     sentry: { minUndeliveredSeq: async () => null },
     flagChangeEvents: { pruneBefore: async () => 0 },
+    auditEvents: { pruneBefore: jobs.auditRetention },
   }),
 }));
+vi.mock("./audit-events", () => ({ forwardAuditEvents: jobs.auditForward }));
 vi.mock("./cloudflare-push-dispatch", () => ({ dispatchCloudflarePushes: jobs.cloudflare }));
 vi.mock("./sentry-webhook-dispatch", () => ({ dispatchSentryWebhooks: jobs.sentry }));
 vi.mock("./approval-archive", () => ({
@@ -44,6 +48,8 @@ it.each([
   ["sentry", "* * * * *", "sentry_webhook_dispatch_failed"],
   ["adoption", "0 8 * * *", "metric_event_claim_retention_adoption_failed"],
   ["archive", "0 8 * * *", "approval_request_archive_failed"],
+  ["auditForward", "* * * * *", "audit_event_forward_failed"],
+  ["auditRetention", "0 8 * * *", "audit_event_retention_failed"],
 ] as const)(
   "reports %s failure and rejects waitUntil with only its fault code",
   async (job, cron, code) => {
