@@ -17,6 +17,15 @@ const PUBLIC_EVENT_ERROR_BY_CODE = {
     message: "Client Key is revoked",
     details: {},
   },
+  ENVIRONMENT_EXPIRED: {
+    code: "ENVIRONMENT_EXPIRED",
+    message: "Temporary Environment has expired",
+    details: {
+      environmentId: "env_temporary",
+      expiredAt: "2026-10-17T00:00:00.000Z",
+      recommendedAction: "CREATE_TEMPORARY_ENVIRONMENT",
+    },
+  },
   INSUFFICIENT_SCOPES: {
     code: "INSUFFICIENT_SCOPES",
     message: "Client Key cannot write Metric Events",
@@ -80,32 +89,6 @@ const PUBLIC_EVENT_ERROR_BY_CODE = {
   },
 } as const;
 
-const TRUSTED_EVENT_ERROR_SHAPES = [
-  {
-    code: "EVENT_SCHEMA_MISMATCH",
-    message: "Metric Event does not match the Event Definition Version",
-    details: {
-      eventName: "signed_up",
-      eventDefinitionVersionId: "edv_1",
-      issues: [{ path: ["fields", "amount"], message: "number must be at least 10" }],
-    },
-  },
-  {
-    code: "ENTITY_TYPE_MISMATCH",
-    message: "Metric Event Entity type does not match the Event Definition Version",
-    details: {
-      expectedIdType: "user",
-      receivedIdType: "workspace",
-      eventDefinitionId: "ed_signed_up",
-    },
-  },
-  {
-    code: "EVENT_DEFINITION_UNPUBLISHED",
-    message: "Metric Event Definition Version is not published",
-    details: { eventDefinitionId: "ed_signed_up", eventName: "signed_up" },
-  },
-] as const;
-
 function publicEventError(code: string) {
   if (!(code in PUBLIC_EVENT_ERROR_BY_CODE)) {
     throw new Error(`sdk_track public error shape missing for ${code}`);
@@ -115,7 +98,7 @@ function publicEventError(code: string) {
 
 describe("Event Ingest error disclosure contract", () => {
   it("enumerates every public Client Key sdk_track error from the route contract", () => {
-    expect(SDK_TRACK_ERRORS).toHaveLength(12);
+    expect(SDK_TRACK_ERRORS).toHaveLength(13);
     expect([...SDK_TRACK_ERRORS].sort()).toEqual(Object.keys(PUBLIC_EVENT_ERROR_BY_CODE).sort());
     expect(
       SDK_TRACK_ERRORS.map((code) => ErrorResponseSchema.parse(publicEventError(code))),
@@ -130,6 +113,15 @@ describe("Event Ingest error disclosure contract", () => {
           "code": "CREDENTIAL_REVOKED",
           "details": {},
           "message": "Client Key is revoked",
+        },
+        {
+          "code": "ENVIRONMENT_EXPIRED",
+          "details": {
+            "environmentId": "env_temporary",
+            "expiredAt": "2026-10-17T00:00:00.000Z",
+            "recommendedAction": "CREATE_TEMPORARY_ENVIRONMENT",
+          },
+          "message": "Temporary Environment has expired",
         },
         {
           "code": "INSUFFICIENT_SCOPES",
@@ -241,63 +233,5 @@ describe("Event Ingest error disclosure contract", () => {
         },
       ]
     `);
-  });
-
-  it("keeps trusted Event Definition diagnostics optional on the contract", () => {
-    expect(
-      TRUSTED_EVENT_ERROR_SHAPES.map((shape) => ErrorResponseSchema.parse(shape)),
-    ).toMatchInlineSnapshot(`
-      [
-        {
-          "code": "EVENT_SCHEMA_MISMATCH",
-          "details": {
-            "eventDefinitionVersionId": "edv_1",
-            "eventName": "signed_up",
-            "issues": [
-              {
-                "message": "number must be at least 10",
-                "path": [
-                  "fields",
-                  "amount",
-                ],
-              },
-            ],
-          },
-          "message": "Metric Event does not match the Event Definition Version",
-        },
-        {
-          "code": "ENTITY_TYPE_MISMATCH",
-          "details": {
-            "eventDefinitionId": "ed_signed_up",
-            "expectedIdType": "user",
-            "receivedIdType": "workspace",
-          },
-          "message": "Metric Event Entity type does not match the Event Definition Version",
-        },
-        {
-          "code": "EVENT_DEFINITION_UNPUBLISHED",
-          "details": {
-            "eventDefinitionId": "ed_signed_up",
-            "eventName": "signed_up",
-          },
-          "message": "Metric Event Definition Version is not published",
-        },
-      ]
-    `);
-  });
-
-  it("rejects a public-shaped schema mismatch that still names a Version ID as required", () => {
-    const parsed = ErrorResponseSchema.parse({
-      code: "EVENT_SCHEMA_MISMATCH",
-      message: "Metric Event does not match the Event Definition Version",
-      details: {
-        eventName: "signed_up",
-        issues: [{ path: ["fields"], message: "invalid value" }],
-      },
-    });
-    if (parsed.code !== "EVENT_SCHEMA_MISMATCH") {
-      throw new Error("discriminant did not narrow to EVENT_SCHEMA_MISMATCH");
-    }
-    expect(parsed.details.eventDefinitionVersionId).toBeUndefined();
   });
 });

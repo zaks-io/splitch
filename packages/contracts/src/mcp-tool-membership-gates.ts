@@ -59,6 +59,7 @@ const MCP_TOOL_MEMBERSHIP_GATES = {
   environments_get: APP_MEMBER,
   environments_update: APP_ADMIN,
   environments_delete: APP_OWNER,
+  environments_sync: APP_ADMIN,
   approval_requests_list: APP_MEMBER,
   approval_requests_get: APP_MEMBER,
   approval_request_reviews_create: APP_MEMBER,

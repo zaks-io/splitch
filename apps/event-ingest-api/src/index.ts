@@ -167,6 +167,14 @@ const delegatedHandler = {
       authenticateDelegatedDataPlaneCredential(identity, env),
     );
     if (!credential.ok) {
+      if (credential.error.code === "INTERNAL_SERVER_ERROR") {
+        observability.onError?.({
+          requestId: request.headers.get("x-request-id") ?? "metric-event-request",
+          code: credential.error.code,
+          status: 500,
+          cause: new Error(credential.error.message),
+        });
+      }
       const response = renderError(credential.error);
       timing.emit(ingestTimingOutcomeFor(response), { serializedBytes: null });
       return response;

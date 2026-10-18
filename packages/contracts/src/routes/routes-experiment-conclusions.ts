@@ -29,6 +29,8 @@ export const conclusionRoutes = [
     idempotency: "required",
     effects: sealRunClosed,
     errors: [
+      "ENVIRONMENT_EXPIRED",
+      "ENVIRONMENT_KIND_UNSUPPORTED",
       "RUN_NOT_FOUND",
       "RUN_NOT_RUNNING",
       "FLAG_NOT_FOUND",
@@ -59,6 +61,8 @@ export const conclusionRoutes = [
     idempotency: "required",
     effects: createIdempotentClosed,
     errors: [
+      "ENVIRONMENT_EXPIRED",
+      "ENVIRONMENT_KIND_UNSUPPORTED",
       "RUN_NOT_FOUND",
       "FORBIDDEN",
       "TARGET_CONFIGURATION_STALE",

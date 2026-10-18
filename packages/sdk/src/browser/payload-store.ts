@@ -43,6 +43,26 @@ export class BrowserPayloadStore {
     this.degraded = false;
   }
 
+  expire(): readonly string[] {
+    if (this.held === null) return [];
+    return this.swap({
+      etag: this.held.etag,
+      evaluations: Object.fromEntries(
+        Object.keys(this.held.evaluations).map((flagKey) => [
+          flagKey,
+          {
+            variant: null,
+            variantName: null,
+            reason: "ERROR",
+            errorCode: "ENVIRONMENT_EXPIRED",
+            exposureTicket: null,
+            exposureIdentity: null,
+          },
+        ]),
+      ),
+    });
+  }
+
   swap(payload: HeldPayload): readonly string[] {
     const previous = this.held;
     const changed =

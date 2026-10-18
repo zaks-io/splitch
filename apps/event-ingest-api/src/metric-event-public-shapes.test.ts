@@ -1,5 +1,10 @@
 import { inspect } from "node:util";
-import { ErrorResponseSchema, eventDefinitionConfigKey, getRoute } from "@splitch/contracts";
+import {
+  clientKeyCacheKey,
+  ErrorResponseSchema,
+  eventDefinitionConfigKey,
+  getRoute,
+} from "@splitch/contracts";
 import { describe, expect, it, vi } from "vitest";
 import {
   hotConfig,
@@ -17,7 +22,7 @@ const INGEST_OWNED_ERRORS = SDK_TRACK_ERRORS.filter((code) => code !== "ORIGIN_N
 describe("sdk_track public Client Key response shapes", () => {
   it("HTTP-produces every route-contract error plus first/replay success and schema probes", async () => {
     const produced = await producePublicSdkTrackShapes();
-    expect(SDK_TRACK_ERRORS).toHaveLength(12);
+    expect(SDK_TRACK_ERRORS).toHaveLength(13);
     expect(ROUTE_ERRORS).toContain("UNSUPPORTED_MEDIA_TYPE");
     expect(SDK_TRACK_ERRORS).toContain("ORIGIN_NOT_ALLOWED");
     expect(Object.keys(produced.errors).sort()).toEqual([...INGEST_OWNED_ERRORS].sort());
@@ -110,6 +115,7 @@ async function producePublicSdkTrackShapes() {
       metricEventBody(),
     ),
   );
+  await record("ENVIRONMENT_EXPIRED", await expiredCredentialResponse());
   await record(
     "INSUFFICIENT_SCOPES",
     await sendMetricEvent(
@@ -253,4 +259,19 @@ function purchaseLimitVersion() {
     ],
     dimensions: [],
   };
+}
+
+async function expiredCredentialResponse(): Promise<Response> {
+  const expired = await makeMetricEventFixture();
+  const key = clientKeyCacheKey(expired.hash);
+  const cached = JSON.parse((await expired.env.CREDENTIAL_STORE?.get(key, "text")) as string);
+  cached.data = {
+    ...cached.data,
+    credentialSchemaVersion: 3,
+    expiresAt: "2000-01-01T00:00:00.000Z",
+  };
+  expired.env.CREDENTIAL_STORE = {
+    get: async (requested: string) => (requested === key ? JSON.stringify(cached) : null),
+  } as unknown as KVNamespace;
+  return sendMetricEvent(expired, metricEventBody());
 }

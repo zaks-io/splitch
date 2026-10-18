@@ -162,6 +162,53 @@ const validCredentialCache = {
 };
 
 describe("CredentialCacheKVSchema", () => {
+  it.each([null, "2026-10-17T12:00:00.000Z", "2026-10-17T12:00:00+02:00"])(
+    "reads v3 expiry %s",
+    (expiresAt) => {
+      const entry = { ...validCredentialCache, credentialSchemaVersion: 3, expiresAt };
+      expect(CredentialCacheKVSchema.parse(entry)).toMatchObject(entry);
+    },
+  );
+
+  it.each(["unparseable expiry", "", "2026-10-17", "2026-10-17T12:00:00", 123])(
+    "rejects malformed v3 expiry %s as an invalid credential blob",
+    (expiresAt) => {
+      expect(
+        CredentialCacheKVSchema.safeParse({
+          ...validCredentialCache,
+          credentialSchemaVersion: 3,
+          expiresAt,
+        }).success,
+      ).toBe(false);
+    },
+  );
+
+  it("requires explicit expiry on v3 and forbids expiry on v2", () => {
+    expect(
+      CredentialCacheKVSchema.safeParse({
+        ...validCredentialCache,
+        credentialSchemaVersion: 3,
+      }).success,
+    ).toBe(false);
+    expect(
+      CredentialCacheKVSchema.safeParse({
+        ...validCredentialCache,
+        expiresAt: null,
+      }).success,
+    ).toBe(false);
+  });
+
+  it("preserves organization scope validation on v3", () => {
+    expect(
+      CredentialCacheKVSchema.safeParse({
+        ...validCredentialCache,
+        credentialSchemaVersion: 3,
+        expiresAt: null,
+        organizationId: null,
+      }).success,
+    ).toBe(false);
+  });
+
   it("parses a valid api_key cache entry", () => {
     const c = CredentialCacheKVSchema.parse(validCredentialCache);
     expect(c.kind).toBe("api_key");

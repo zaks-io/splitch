@@ -38,6 +38,7 @@ const EXPECTED_GATES: Record<string, string> = {
   environments_get: "app:member",
   environments_update: "app:admin",
   environments_delete: "app:owner",
+  environments_sync: "app:admin",
   approval_requests_list: "app:member",
   approval_requests_get: "app:member",
   approval_request_reviews_create: "app:member",

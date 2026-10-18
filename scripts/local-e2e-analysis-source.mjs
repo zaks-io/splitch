@@ -9,29 +9,51 @@ const origin = "http://127.0.0.1:18788";
 const audience = "http://127.0.0.1:18790";
 const keyId = "local-e2e-analysis";
 const readToken = "local-e2e-tinybird-read-token";
-const fullFleet = process.env.SPLITCH_LOCAL_DEV_FLEET === "true";
-const privateKey = fullFleet
-  ? createPrivateKey({ key: JSON.parse(process.env.ACCESS_TOKEN_SECRET), format: "jwk" })
-  : generateKeyPairSync("rsa", { modulusLength: 2048 }).privateKey;
-const publicKey = createPublicKey(privateKey);
-const publicJwk = { ...publicKey.export({ format: "jwk" }), alg: "RS256", kid: keyId, use: "sig" };
-
-export function createAnalysisSourceServer(runId = "local-e2e") {
-  return createServer((request, response) => {
-    handleRequest(request, response, runId).catch((cause) => {
-      const error = cause instanceof Error ? cause : new Error(String(cause));
-      if (!response.headersSent) {
-        json(response, 500, { error: error.message }, runId);
-      } else {
-        response.destroy(error);
-      }
+export function createAnalysisSourceServer(runId = "local-e2e", options = {}) {
+  const fullFleet =
+    (options.mode ?? (process.env.SPLITCH_LOCAL_DEV_FLEET === "true" ? "full" : "standalone")) ===
+    "full";
+  const privateKey = fullFleet
+    ? createPrivateKey({ key: JSON.parse(process.env.ACCESS_TOKEN_SECRET), format: "jwk" })
+    : generateKeyPairSync("rsa", { modulusLength: 2048 }).privateKey;
+  const context = {
+    runId,
+    privateKey,
+    origin,
+    audience,
+    issuer: fullFleet ? "http://localhost:8791" : (options.origin ?? origin),
+    principal: { sub: "user_local_member_e2e", scopes: ["app:app_checkout_e2e:member"] },
+    cleanedEnvironments: new Set(),
+    suppressedEnvironments: new Set(),
+    ...options,
+  };
+  context.publicJwk = {
+    ...createPublicKey(privateKey).export({ format: "jwk" }),
+    alg: "RS256",
+    kid: keyId,
+    use: "sig",
+  };
+  const server = createServer((request, response) => {
+    handleRequest(request, response, context).catch(() => {
+      // Request bodies and native errors can contain credentials; never echo them.
+      if (!response.headersSent)
+        json(response, 500, { error: "invalid local fixture request" }, runId);
+      else response.destroy();
     });
   });
+  server.fixture = {
+    privateKey,
+    accessToken: () => analysisAccessToken(context),
+    cleanedEnvironments: context.cleanedEnvironments,
+  };
+  return server;
 }
 
-async function handleRequest(request, response, runId) {
-  const url = new URL(request.url ?? "/", origin);
-  if (servePublicRoute(url.pathname, response, runId)) return;
+async function handleRequest(request, response, context) {
+  const { runId } = context;
+  const url = new URL(request.url ?? "/", context.origin);
+  if (servePublicRoute(url.pathname, response, context)) return;
+  if (await serveCleanupRoute(request, response, url, context)) return;
   if (request.headers.authorization !== `Bearer ${readToken}`) {
     json(response, 401, { error: "unauthorized" }, runId);
     return;
@@ -49,7 +71,8 @@ async function handleRequest(request, response, runId) {
   json(response, 200, { data: pipeRows(pipeName, params) }, runId);
 }
 
-function servePublicRoute(pathname, response, runId) {
+function servePublicRoute(pathname, response, context) {
+  const { runId, publicJwk } = context;
   if (pathname === "/health") {
     json(response, 200, { ok: true, service: "local-e2e-analysis-source" }, runId);
     return true;
@@ -59,10 +82,97 @@ function servePublicRoute(pathname, response, runId) {
     return true;
   }
   if (pathname === "/token") {
-    json(response, 200, { accessToken: analysisAccessToken() }, runId);
+    json(response, 200, { accessToken: analysisAccessToken(context) }, runId);
     return true;
   }
   return false;
+}
+
+// Model only the external Tinybird async deletion protocol; Analysis still owns
+// the real cleanup operation, tenant predicate and polling inside the Worker.
+async function serveCleanupRoute(request, response, url, context) {
+  const action = cleanupAction(request.method, url);
+  if (!action) return false;
+  const { runId, cleanedEnvironments, cleanupAppId } = context;
+  if (!cleanupAppId) {
+    json(response, 404, { error: "cleanup fixture disabled" }, runId);
+    return true;
+  }
+  if (request.headers.authorization !== "Bearer local-e2e-tinybird-delete-token") {
+    json(response, 401, { error: "unauthorized" }, runId);
+    return true;
+  }
+  if (action === "suppress") await serveSuppression(request, response, context);
+  else if (action === "delete") await serveDeletion(request, response, url, context);
+  else if (cleanedEnvironments.has(action)) json(response, 200, { status: "done" }, runId);
+  else json(response, 404, { error: "unknown cleanup job" }, runId);
+  return true;
+}
+
+function cleanupAction(method, url) {
+  if (method === "POST") {
+    if (url.pathname === "/v0/datasources/environment_exposure_status_state/delete")
+      return "delete";
+    if (
+      url.pathname === "/v0/events" &&
+      url.searchParams.get("name") === "environment_exposure_status_deletions"
+    )
+      return "suppress";
+  }
+  return method === "GET" ? url.pathname.match(/^\/v0\/jobs\/([\w-]+)$/)?.[1] : null;
+}
+
+async function serveSuppression(request, response, context) {
+  const chunks = [];
+  for await (const chunk of request) chunks.push(Buffer.from(chunk));
+  const scope = JSON.parse(Buffer.concat(chunks).toString("utf8"));
+  if (
+    scope?.app_id !== context.cleanupAppId ||
+    typeof scope.environment_id !== "string" ||
+    !/^[\w-]+$/.test(scope.environment_id)
+  ) {
+    json(
+      response,
+      400,
+      { error: "suppression must name one fixture App and Environment" },
+      context.runId,
+    );
+    return;
+  }
+  context.suppressedEnvironments.add(scope.environment_id);
+  json(response, 200, { successful_rows: 1, quarantined_rows: 0 }, context.runId);
+}
+
+async function serveDeletion(request, response, url, context) {
+  const environmentId = await recordScopedDeletion(request, url, context);
+  if (!environmentId) {
+    json(
+      response,
+      400,
+      { error: "deletion must name exactly one App and Environment" },
+      context.runId,
+    );
+    return;
+  }
+  json(
+    response,
+    200,
+    { status: "waiting", job_url: `${context.origin}/v0/jobs/${environmentId}` },
+    context.runId,
+  );
+}
+
+async function recordScopedDeletion(request, url, context) {
+  const condition = (await requestParams(request, url)).get("delete_condition");
+  const environmentId = condition?.match(/environment_id = '([\w-]+)'/)?.[1];
+  if (
+    !environmentId ||
+    condition !== `app_id = '${context.cleanupAppId}' AND environment_id = '${environmentId}'`
+  )
+    return null;
+  if (!context.suppressedEnvironments.has(environmentId)) return null;
+  context.cleanedEnvironments.add(environmentId);
+  return environmentId;
 }
 
 function pipeRows(pipeName, params) {
@@ -131,17 +241,17 @@ async function requestParams(request, url) {
   return params;
 }
 
-function analysisAccessToken() {
+function analysisAccessToken(context) {
+  const { issuer, audience, principal, privateKey } = context;
   const now = Math.floor(Date.now() / 1000);
   const header = base64Url(JSON.stringify({ alg: "RS256", kid: keyId, typ: "JWT" }));
   const payload = base64Url(
     JSON.stringify({
-      iss: fullFleet ? "http://localhost:8791" : origin,
+      iss: issuer,
       aud: audience,
       typ: "access_token",
       auth_door: "device_flow",
-      sub: "user_local_member_e2e",
-      scopes: ["app:app_checkout_e2e:member"],
+      ...principal,
       iat: now,
       exp: now + 3_600,
     }),

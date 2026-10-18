@@ -92,6 +92,15 @@ function ofrepFailure(
   status: number,
   body: Record<string, unknown>,
 ): OfrepResolutionDetails<unknown> {
+  if (body.code === "ENVIRONMENT_EXPIRED" || body.errorCode === "ENVIRONMENT_EXPIRED") {
+    return {
+      value: undefined,
+      reason: "ERROR",
+      errorCode: toOfrepErrorCode("GENERAL"),
+      errorMessage:
+        "ENVIRONMENT_EXPIRED: Temporary Environment has expired. Create a new Temporary Environment and configure its credential.",
+    };
+  }
   return {
     value: undefined,
     reason: "ERROR",

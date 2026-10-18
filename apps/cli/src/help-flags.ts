@@ -1,4 +1,5 @@
 import type { CliCommandDefinition, META_COMMANDS } from "./command-registry.js";
+import { environmentHelpFlags } from "./environment-help.js";
 import { commandHasBodyJson } from "./help-body-json.js";
 import { toolByOperation } from "./help-command-description.js";
 import { deleteModeHelpFlags } from "./help-delete-flags.js";
@@ -147,6 +148,8 @@ function operationFlags(command: CliCommandDefinition): HelpFlag[] {
       ),
     ];
   }
+  const environmentFlags = environmentHelpFlags(command.operationId);
+  if (environmentFlags.length > 0) return environmentFlags;
   const tokenFlags = personalAccessTokenHelpFlags(command.operationId);
   if (tokenFlags.length > 0) return tokenFlags;
   switch (command.operationId) {

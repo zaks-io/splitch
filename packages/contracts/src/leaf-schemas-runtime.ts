@@ -183,6 +183,14 @@ export const EnvironmentSchema = z.object({
   key: z.string(),
   name: z.string(),
   policy: EnvironmentPolicySchema,
+  temporary: z
+    .object({
+      expiresAt: z.iso.datetime({ offset: true }),
+      syncedFromEnvironmentId: z.string().min(1),
+      syncedAt: z.iso.datetime({ offset: true }),
+    })
+    .strict()
+    .nullable(),
   createdAt: z.string(),
   updatedAt: z.string(),
 });

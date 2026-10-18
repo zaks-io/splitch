@@ -82,7 +82,7 @@ async function rollupResponse(
   // One row past the budget is all it takes to decide, so the read that enforces
   // the bound is itself bounded: materializing every row first would be the same
   // unbounded work the budget exists to refuse.
-  const environments = await deps.repo.identity.listEnvironments(appScope(appId), {
+  const environments = await deps.repo.identity.listPermanentEnvironments(appScope(appId), {
     limit: ENVIRONMENT_FANOUT_LIMIT + 1,
   });
   if (environments.length > ENVIRONMENT_FANOUT_LIMIT) {
@@ -93,7 +93,7 @@ async function rollupResponse(
       {
         appId,
         limit: ENVIRONMENT_FANOUT_LIMIT,
-        environments: await deps.repo.identity.countEnvironments(appScope(appId)),
+        environments: await deps.repo.identity.countPermanentEnvironments(appScope(appId)),
       },
       requestId,
     );

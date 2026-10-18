@@ -91,6 +91,7 @@ describe("Environment", () => {
     key: "production",
     name: "Production",
     policy: allowPolicy,
+    temporary: null,
     createdAt: "2024-01-01T00:00:00Z",
     updatedAt: "2024-01-01T00:00:00Z",
   };

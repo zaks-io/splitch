@@ -1,5 +1,7 @@
 import { type EnvScope, envScope } from "@splitch/db";
+import { environmentWriteFailure } from "./config-store-expiry-fence";
 import { catchConfigStoreFailure } from "./config-store-failure";
+import { ensureInitialFlagConfig } from "./config-store-initial-config";
 import { writeSnapshot } from "./config-store-kv";
 import { flagConfigResult } from "./config-store-shared";
 import { buildExperimentSnapshotFromD1, buildSnapshotFromD1 } from "./config-store-snapshot-build";
@@ -16,9 +18,10 @@ export function resyncFlagConfig(
   deps: ConfigStoreRuntimeDeps,
   input: FlagConfigResyncInput,
 ): Promise<FlagConfigWriteResult> {
-  return catchConfigStoreFailure(deps, () =>
-    writeFlagConfigSnapshot(deps, envScope(input.appId, input.environmentId), input.flagId),
-  );
+  return catchConfigStoreFailure(deps, async () => {
+    if (input.initialConfig) await ensureInitialFlagConfig(deps, input, input.initialConfig);
+    return writeFlagConfigSnapshot(deps, envScope(input.appId, input.environmentId), input.flagId);
+  });
 }
 
 export function syncExperimentConfig(
@@ -57,15 +60,17 @@ async function writeLoadedSnapshot(
   scope: EnvScope,
   loadSnapshot: () => Promise<Snapshot | null>,
 ): Promise<FlagConfigWriteResult> {
-  return deps.snapshotMutations.run(async () => {
-    const snapshot = await loadSnapshot();
-    if (!snapshot) return { ok: false, reason: "FLAG_NOT_FOUND" };
+  const refused = await environmentWriteFailure(deps, scope);
+  if (refused) return refused;
+  const snapshot = await loadSnapshot();
+  if (!snapshot) return { ok: false, reason: "FLAG_NOT_FOUND" };
 
-    const flagId = snapshot.flag.id;
-    const result = flagConfigResult(flagId, snapshot);
-    const snapshotRevision = await deps.nextSnapshotRevision({ flagId, operation: "write" });
-    await writeSnapshot(deps.kv, scope, snapshot, result.config, snapshotRevision);
-    await deps.broadcaster.broadcast(result.nudge);
-    return { ...result, snapshotRevision };
-  });
+  const flagId = snapshot.flag.id;
+  const result = flagConfigResult(flagId, snapshot);
+  const snapshotRevision = await deps.nextSnapshotRevision({ flagId, operation: "write" });
+  const expired = await environmentWriteFailure(deps, scope);
+  if (expired) return expired;
+  await writeSnapshot(deps.kv, scope, snapshot, result.config, snapshotRevision);
+  await deps.broadcaster.broadcast(result.nudge);
+  return { ...result, snapshotRevision };
 }

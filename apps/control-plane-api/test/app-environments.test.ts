@@ -1,4 +1,9 @@
-import { canonicalHash, deriveMcpTools, getRoute } from "@splitch/contracts";
+import {
+  type CreateAppResponse,
+  canonicalHash,
+  deriveMcpTools,
+  getRoute,
+} from "@splitch/contracts";
 import { appScope, createRepository, envScope } from "@splitch/db";
 import type { Hono } from "hono";
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
@@ -127,18 +132,15 @@ async function createDefaultApp(key = "checkout") {
     key,
   });
   expect(res.status).toBe(200);
-  return (await res.json()) as {
-    app: { id: string; name: string; key: string };
-    environments: Array<{ id: string; key: string; policy: Record<string, string> }>;
-    clientKeys: Array<{ keyId: string; environmentId: string; isOriginOpen: boolean }>;
-  };
+  return (await res.json()) as CreateAppResponse;
 }
 
-describe("control-plane App and Environment CRUD", () => {
+describe("control-plane App creation", () => {
   it("creates an App with dev/prod Environments and open Client Keys", async () => {
     const created = await createDefaultApp();
     expect(created.app).toMatchObject({ name: "Checkout", key: "checkout" });
     expect(created.environments.map((env) => env.key)).toEqual(["dev", "prod"]);
+    expect(created.environments.map((env) => env.temporary)).toEqual([null, null]);
     expect(created.environments[0]?.policy).toMatchObject({ enabledState: "allow" });
     expect(created.environments[1]?.policy).toMatchObject({ enabledState: "confirm" });
     expect(created.clientKeys).toHaveLength(2);
@@ -241,7 +243,9 @@ describe("control-plane App and Environment CRUD", () => {
     expect(body.message).toContain('supply an explicit "key"');
     expect(body.details).toMatchObject({ issues: [{ path: ["key"] }] });
   });
+});
 
+describe("control-plane App and Environment CRUD", () => {
   it("round-trips App and Environment CRUD plus prod Policy patch", async () => {
     // A distinct key per test: storage is shared across the file, so reusing
     // "checkout" would collide with the App the previous test created.

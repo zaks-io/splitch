@@ -24,6 +24,7 @@ export interface AppEnvironmentDeps {
   holdoverWriteOutboxCleanup?: HoldoverWriteOutboxCleanup;
   privacyExports?: R2Bucket;
   nowIso?: () => string;
+  onTeardownFault?: (cause: unknown, requestId: string) => void;
 }
 
 export type AppRow = NonNullable<Awaited<ReturnType<Repository["identity"]["getApp"]>>>;
@@ -198,8 +199,20 @@ export function environmentResponse(row: EnvironmentRow): Environment {
     key: row.key,
     name: row.name,
     policy: EnvironmentPolicySchema.parse(JSON.parse(row.policy)),
+    temporary: row.expiresAt === null ? null : temporaryResponse(row),
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
+  };
+}
+
+function temporaryResponse(row: EnvironmentRow): NonNullable<Environment["temporary"]> {
+  if (!row.expiresAt || !row.syncedFromEnvironmentId || !row.syncedAt) {
+    throw new Error("Temporary Environment is missing expiry or Sync provenance");
+  }
+  return {
+    expiresAt: row.expiresAt,
+    syncedFromEnvironmentId: row.syncedFromEnvironmentId,
+    syncedAt: row.syncedAt,
   };
 }
 

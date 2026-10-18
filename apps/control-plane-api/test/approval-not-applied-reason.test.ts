@@ -3,8 +3,11 @@ import type { ApprovalCommit } from "@splitch/db";
 import { appScope, envScope } from "@splitch/db";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { applyApprovedFlagConfig } from "../src/config-store-approved-write";
+import { makeSnapshotRevisionCounter } from "../src/config-store-fixture-data";
 import { type Harness, ids, setProdPolicy, USER_ID } from "../src/config-store-harness-core";
-import type { ConfigStoreDeps } from "../src/config-store-types";
+import { makeConfigStoreProjectionJournalFixture } from "../src/config-store-projection-journal-fixture";
+import { makeConfigStoreRuntimeDeps } from "../src/config-store-runtime";
+import type { ConfigStoreRuntimeDeps } from "../src/config-store-types";
 import { clearFrozenRun, confirmPolicy, proposeA } from "./approval-harness";
 import { makePoolHarness } from "./config-store-pool-harness";
 
@@ -31,13 +34,15 @@ afterEach(async () => {
   await h.dispose();
 });
 
-function deps(): ConfigStoreDeps {
-  return {
+function deps(): ConfigStoreRuntimeDeps {
+  return makeConfigStoreRuntimeDeps({
     repo: h.repo,
     kv: env.CONFIG_STORE,
+    projectionJournal: makeConfigStoreProjectionJournalFixture(),
+    nextSnapshotRevision: makeSnapshotRevisionCounter(),
     broadcaster: { broadcast: () => undefined },
     now: () => new Date(NOW),
-  };
+  });
 }
 
 async function proposal(flagId: string) {

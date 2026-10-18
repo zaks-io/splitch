@@ -2,6 +2,7 @@ import { type ErrorCode, errorCodes, httpStatusForError } from "@splitch/contrac
 import { approvalErrorDocs } from "./api-approval";
 import { authErrorDocs } from "./api-auth";
 import { decisionErrorDocs } from "./api-decision";
+import { environmentErrorDocs } from "./api-environment";
 import { eventErrorDocs } from "./api-events";
 import { lookupErrorDocs } from "./api-lookup";
 import { runErrorDocs } from "./api-run";
@@ -53,6 +54,7 @@ const wireCatalog = {
   ...authErrorDocs,
   ...approvalErrorDocs,
   ...decisionErrorDocs,
+  ...environmentErrorDocs,
   ...systemErrorDocs,
 } satisfies Record<ErrorCode, ErrorDoc & { remediation: string }>;
 

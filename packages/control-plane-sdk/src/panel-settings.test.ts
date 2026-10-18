@@ -13,6 +13,7 @@ const settings = {
       enabledState: "allow",
       startExperimentRun: "allow",
     },
+    temporary: null,
     createdAt: "2026-07-29T00:00:00.000Z",
     updatedAt: "2026-07-29T00:00:00.000Z",
   },

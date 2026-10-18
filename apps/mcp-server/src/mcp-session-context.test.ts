@@ -259,6 +259,7 @@ function contextValidationFetch(seen: Request[]): typeof fetch {
           enabledState: "allow",
           startExperimentRun: "allow",
         },
+        temporary: null,
         createdAt: "2026-07-01T00:00:00.000Z",
         updatedAt: "2026-07-01T00:00:00.000Z",
       });

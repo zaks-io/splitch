@@ -339,6 +339,27 @@ Definition Version remains available while any retained row references it.
 The governing ADR is
 [0032](../../adr/0032-privacy-data-lifecycle-is-an-enforced-product-contract.md).
 
+## Temporary Environment teardown retention
+
+Temporary Environment expiry stops credential use before asynchronous teardown. Teardown deletes
+its credential rows, Flag Configurations and Targeting Rules, per-Flag KV projections, evaluation
+and Activation configuration snapshots, Exposure status, and Config Store Durable Object state.
+The Environment row is the durable manifest and is deleted last; failed steps leave it for retry.
+Only Temporary Environment Config Store writers journal projection keys in durable storage before
+publishing them, starting with the create-time Sync copy. The writer derives the kind from the stored
+Environment row inside its mutation queue. Permanent Environments create no journal entries. Teardown
+uses that journal even when concurrent Flag deletion has already removed the Flag's D1 rows. It
+retains the journal until every projection delete succeeds, then clears its durable state.
+Permanent credential terminal revocation markers remain, as for any revoked credential. Manual
+delete uses the same cascade and returns success only when it completes. See
+[Environment deletion](../control-plane/endpoints-org-app.md#delete-appsapp_idenvsenvironment_id).
+
+This cascade does not delete historical Tinybird facts. Exposures, Metric Events, and any retained
+Web Events attributed to the Environment age out under their normal datasource TTLs. This does
+not imply a Web Events ingest route exists. Entity and App privacy deletion obligations still
+apply. Flag change-log rows follow normal change-log retention; their stored Environment kind
+lets Sentry exclude Temporary Environment changes after teardown.
+
 ## Product stance
 
 Splitch does not sell or share customer Entity data and does not use sensitive personal information to

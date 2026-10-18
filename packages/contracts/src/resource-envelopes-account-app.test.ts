@@ -113,6 +113,7 @@ function environment(
     key,
     name,
     policy,
+    temporary: null,
     createdAt: timestamp,
     updatedAt: timestamp,
   };

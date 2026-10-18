@@ -47,7 +47,7 @@ export const credentialRoutes = [
     rateLimit: RATE,
     idempotency: "none",
     effects: provisionClosed,
-    errors: ["APP_NOT_FOUND", "FORBIDDEN"],
+    errors: ["ENVIRONMENT_EXPIRED", "APP_NOT_FOUND", "FORBIDDEN"],
   }),
   defineApiRoute({
     operationId: "client_key_update",
@@ -63,7 +63,7 @@ export const credentialRoutes = [
     rateLimit: RATE,
     idempotency: "none",
     effects: updateClosed,
-    errors: ["CREDENTIAL_NOT_FOUND", "FORBIDDEN", "VALIDATION_ERROR"],
+    errors: ["ENVIRONMENT_EXPIRED", "CREDENTIAL_NOT_FOUND", "FORBIDDEN", "VALIDATION_ERROR"],
   }),
   defineApiRoute({
     operationId: "client_key_rotate",
@@ -79,7 +79,7 @@ export const credentialRoutes = [
     rateLimit: RATE,
     idempotency: "none",
     effects: rotateClosed,
-    errors: ["CREDENTIAL_NOT_FOUND", "FORBIDDEN"],
+    errors: ["ENVIRONMENT_EXPIRED", "CREDENTIAL_NOT_FOUND", "FORBIDDEN"],
   }),
   defineApiRoute({
     operationId: "api_keys_list",
@@ -112,7 +112,7 @@ export const credentialRoutes = [
     // secret material. Do not advertise idempotency the handler cannot honor.
     idempotency: "none",
     effects: mintSecretClosed,
-    errors: ["APP_NOT_FOUND", "FORBIDDEN", "VALIDATION_ERROR"],
+    errors: ["ENVIRONMENT_EXPIRED", "APP_NOT_FOUND", "FORBIDDEN", "VALIDATION_ERROR"],
   }),
   defineApiRoute({
     operationId: "api_keys_revoke",
@@ -128,6 +128,6 @@ export const credentialRoutes = [
     rateLimit: RATE,
     idempotency: "none",
     effects: deleteClosed,
-    errors: ["CREDENTIAL_NOT_FOUND", "FORBIDDEN"],
+    errors: ["ENVIRONMENT_EXPIRED", "CREDENTIAL_NOT_FOUND", "FORBIDDEN"],
   }),
 ] as const satisfies readonly ApiRouteContract[];

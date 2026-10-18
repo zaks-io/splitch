@@ -1,5 +1,5 @@
 import { z } from "@hono/zod-openapi";
-import { AppMemberSchema, AppSchema, EnvironmentSchema } from "../leaf-schemas-runtime";
+import { AppMemberSchema, AppSchema } from "../leaf-schemas-runtime";
 import { type ApiRouteContract, defineApiRoute } from "../openapi-route";
 import {
   ResourceDeleteModeQuerySchema,
@@ -8,7 +8,6 @@ import {
 import {
   CreateAppRequestSchema,
   CreateAppResponseSchema,
-  CreateEnvironmentResponseSchema,
   PatchAppRequestSchema,
 } from "../resource-envelopes-account";
 import {
@@ -23,12 +22,10 @@ import {
   AddAppMemberRequestSchema,
   AppMemberParams,
   AppParams,
-  CreateEnvironmentRequestSchema,
-  EnvParams,
   OrgAppsParams,
-  PatchEnvironmentRequestSchema,
   UpdateAppMemberRequestSchema,
 } from "./route-shapes";
+import { environmentRoutes, environmentSyncRoute } from "./routes-environments";
 
 /**
  * App and Environment management routes. Split out of routes-account.ts purely
@@ -43,7 +40,6 @@ const RATE = "control-plane-actor" as const;
 
 const AppListResponse = listResponse(AppSchema);
 const AppMemberListResponse = listResponse(AppMemberSchema);
-const EnvListResponse = listResponse(EnvironmentSchema);
 const DeletedResponse = z.object({ deleted: z.literal(true) });
 
 export const appEnvironmentRoutes = [
@@ -129,87 +125,7 @@ export const appEnvironmentRoutes = [
       "VALIDATION_ERROR",
     ],
   }),
-  defineApiRoute({
-    operationId: "environments_list",
-    owner: OWNER,
-    method: "GET",
-    path: "/apps/:appId/envs",
-    summary: "List an App's Environments.",
-    request: { params: AppParams },
-    response: EnvListResponse,
-    auth: AUTH,
-    permission: "read",
-    rateLimit: RATE,
-    idempotency: "none",
-    effects: readOnlyClosed,
-    errors: ["APP_NOT_FOUND", "FORBIDDEN"],
-  }),
-  defineApiRoute({
-    operationId: "environments_create",
-    owner: OWNER,
-    method: "POST",
-    path: "/apps/:appId/envs",
-    summary: "Create an Environment (auto-provisions its Client Key, returned inline).",
-    request: { params: AppParams, body: CreateEnvironmentRequestSchema },
-    response: CreateEnvironmentResponseSchema,
-    auth: AUTH,
-    permission: "write",
-    rateLimit: RATE,
-    idempotency: "none",
-    effects: createClosed,
-    errors: ["APP_NOT_FOUND", "FORBIDDEN", "VALIDATION_ERROR"],
-  }),
-  defineApiRoute({
-    operationId: "environments_get",
-    owner: OWNER,
-    method: "GET",
-    path: "/apps/:appId/envs/:environmentId",
-    summary: "Get one Environment (includes its inline Policy).",
-    request: { params: EnvParams },
-    response: EnvironmentSchema,
-    auth: AUTH,
-    permission: "read",
-    rateLimit: RATE,
-    idempotency: "none",
-    effects: readOnlyClosed,
-    errors: ["APP_NOT_FOUND", "FORBIDDEN"],
-  }),
-  defineApiRoute({
-    operationId: "environments_update",
-    owner: OWNER,
-    method: "PATCH",
-    path: "/apps/:appId/envs/:environmentId",
-    summary: "Rename an Environment or edit its Policy.",
-    request: { params: EnvParams, body: PatchEnvironmentRequestSchema },
-    response: EnvironmentSchema,
-    auth: AUTH,
-    permission: "write",
-    rateLimit: RATE,
-    idempotency: "none",
-    effects: updateClosed,
-    errors: ["APP_NOT_FOUND", "FORBIDDEN", "VALIDATION_ERROR"],
-  }),
-  defineApiRoute({
-    operationId: "environments_delete",
-    owner: OWNER,
-    method: "DELETE",
-    path: "/apps/:appId/envs/:environmentId",
-    summary: "Delete an Environment (blocked if running or last Environment).",
-    request: { params: EnvParams },
-    response: DeletedResponse,
-    auth: AUTH,
-    permission: "delete",
-    rateLimit: RATE,
-    idempotency: "none",
-    effects: deleteClosed,
-    errors: [
-      "APP_NOT_FOUND",
-      "FORBIDDEN",
-      "EXPERIMENT_RUNNING",
-      "LAST_ENVIRONMENT_REQUIRED",
-      "RESOURCE_NOT_EMPTY",
-    ],
-  }),
+  ...environmentRoutes,
   /**
    * App membership is managed HERE, under the App, not under the Organization
    * (screen-inventory.md Settings). Appended at the end of this list on purpose:
@@ -299,4 +215,5 @@ export const appEnvironmentRoutes = [
       "SERVICE_UNAVAILABLE",
     ],
   }),
+  environmentSyncRoute,
 ] as const satisfies readonly ApiRouteContract[];

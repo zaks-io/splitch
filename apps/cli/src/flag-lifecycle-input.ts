@@ -17,10 +17,12 @@ export function applyFlagLifecycleFlags(
 ): void {
   // `tokens create|update` read `--expires-at` themselves (`never`, `90d`, a date).
   if (PERSONAL_ACCESS_TOKEN_OPERATIONS.has(operationId)) return;
+  // Environment create parses its own nested expiry; owner/class remain Flag-only.
+  const environmentExpiry = operationId === "environments_create";
   const given = {
     lifecycleClass: flags.lifecycleClass,
     owner: flags.owner,
-    expiresAt: flags.expiresAt,
+    expiresAt: environmentExpiry ? undefined : flags.expiresAt,
   };
   const present = Object.entries(given).filter(([, value]) => value !== undefined);
   if (present.length === 0) return;

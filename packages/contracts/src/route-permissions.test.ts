@@ -65,6 +65,7 @@ const expectedOperations: Record<RoutePermission, readonly string[]> = {
     "client_key_get",
     "conclusion_promotion_requests_create",
     "environments_create",
+    "environments_sync",
     "environments_update",
     "event_definition_versions_create",
     "event_definitions_create",
@@ -158,15 +159,15 @@ function malformed(overrides: Record<string, unknown>): ApiRouteContract {
 }
 
 describe("route permissions", () => {
-  it("matches the complete audited permission map for all 110 control-plane routes", () => {
+  it("matches the complete audited permission map for all 111 control-plane routes", () => {
     const expected = Object.fromEntries(
       Object.entries(expectedOperations).flatMap(([permission, operations]) =>
         operations.map((operation) => [operation, permission]),
       ),
     );
     const routes = routeRegistry.filter((route) => route.auth === "control-plane-token");
-    expect(routes).toHaveLength(110);
-    expect(Object.keys(expected)).toHaveLength(110);
+    expect(routes).toHaveLength(111);
+    expect(Object.keys(expected)).toHaveLength(111);
     expect(
       Object.fromEntries(routes.map((route) => [route.operationId, route.permission])),
     ).toEqual(expected);

@@ -2,6 +2,7 @@ import { appScope, createRepository, envScope } from "@splitch/db";
 import { expect } from "vitest";
 import { makeConfigStore } from "../src/config-store";
 import { makeSnapshotRevisionCounter } from "../src/config-store-fixture-data";
+import { makeConfigStoreProjectionJournalFixture } from "../src/config-store-projection-journal-fixture";
 import { makeFixtureSigner } from "../src/fixture-signer";
 import {
   type FlagDefinitionHarness,
@@ -54,8 +55,10 @@ export async function setup(): Promise<LifecycleHarness> {
   };
 }
 
-export function configStoreAccess(bindings: PoolBindingsWithConfig) {
-  const repo = createRepository(bindings.d1);
+export function configStoreAccess(
+  bindings: PoolBindingsWithConfig,
+  repo = createRepository(bindings.d1),
+) {
   const nudges: unknown[] = [];
   const stores = new Map<string, ReturnType<typeof makeConfigStore>>();
   const writerFor = (appId: string, environmentId: string) => {
@@ -63,6 +66,7 @@ export function configStoreAccess(bindings: PoolBindingsWithConfig) {
     let store = stores.get(name);
     if (!store) {
       store = makeConfigStore({
+        projectionJournal: makeConfigStoreProjectionJournalFixture(),
         repo,
         kv: bindings.configKv,
         broadcaster: { broadcast: (nudge) => void nudges.push(nudge) },

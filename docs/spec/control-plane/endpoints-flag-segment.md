@@ -307,6 +307,22 @@ the request terminal `stale`.
 
 ## Flag Configuration endpoints (per-Environment)
 
+An expired Temporary Environment remains readable until teardown. Configuration edits, Targeting
+Rule replacement, and Promotion into it return `ENVIRONMENT_EXPIRED`. The shared fence uses
+registry `route.effects.mutates`, independent of HTTP method, and the serialized Config Store
+writer rechecks expiry before changing configuration. Temporary Environment Policy is always
+all-`allow`; it never creates an Approval Request. See
+[Environment lifecycle](endpoints-org-app.md#temporary-environment-lifecycle).
+
+App-wide Flag creation provisioning, Segment republication, and Variant catalog republication
+skip expired Temporary Environments. A Config Store expiry refusal after enumeration is also a
+skip, so an Environment expiring during the operation does not fail the App-wide change. Removals
+still apply: Flag deletion removes configuration in expired Temporary Environments too. Reference
+blockers remain unchanged. A Variant referenced by a Targeting Rule in an expired Temporary
+Environment awaiting teardown still cannot be deleted; the refusal names that Environment, and
+deleting the Environment removes the blocker. Stale/expired Flag and inventory-health exclusions
+remain pending in SPL-771.
+
 ### `GET /apps/{app_id}/envs/{environment_id}/flags/{flag_id}/config`
 
 Returns: the Flag's Configuration in this Environment:
@@ -360,6 +376,11 @@ Returns the Flag Configuration fields plus `approvalRequest: ApprovalRequest | n
 (not wrapped in `config`). The request is null under `allow` and applied under `confirm`.
 
 ## Promotion endpoints
+
+Promotion keeps the target's rollout salts. Whole-Environment Sync is a separate operation with a
+Temporary Environment target: it copies every Flag Configuration, including its per-Environment
+Default Variant, salts, and ordered Targeting Rules, and never copies a live Run or Activation
+bindings. See [Sync](endpoints-org-app.md#post-appsapp_idenvsenvironment_idsync).
 
 ### `POST /apps/{app_id}/envs/{target_environment_id}/flags/{flag_id}/promote`
 
@@ -515,6 +536,10 @@ The append-only `flag_change_events` log is the audit record and the integration
 These reads project stored rows. They never invent a before or after value from live Flag
 Configuration.
 
+Temporary Environment changes, including Sync, are ordinary change-log events. Each row records
+`temporary_environment` at write time so Sentry can skip these events after the Environment row
+has been removed. They remain visible in the change-log API and follow normal log retention.
+
 ### `GET /apps/{app_id}/flag-changes`
 
 Query: `from?`, `to?` (ISO-8601 instants, supplied together), `environmentId?`,
@@ -555,9 +580,10 @@ Returns: `{ segment_id, app_id, name, conditions, created_at }`
 
 Body: `{ name?, description?, conditions? }`
 
-After the D1 update, every dependent live Flag Configuration in every Environment is synchronously
-republished. The request does not succeed until those KV projections contain the new resolved
-Conditions, within the five-second propagation contract.
+After the D1 update, every dependent live Flag Configuration in every unexpired Environment is
+synchronously republished. Expired Temporary Environments are skipped, including one that expires
+between enumeration and its serialized write. The request does not succeed until the remaining
+KV projections contain the new resolved Conditions, within the five-second propagation contract.
 
 ### `DELETE /apps/{app_id}/segments/{segment_id}`
 

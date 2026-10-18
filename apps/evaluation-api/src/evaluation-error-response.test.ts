@@ -18,6 +18,15 @@ const CLIENT_KEY_EVALUATION_CODES = [
 const PUBLIC_EVALUATION_ERROR_BY_CODE: Record<string, ErrorResponse> = {
   UNAUTHORIZED: errorResponse("UNAUTHORIZED", "Client Key or API Key required"),
   CREDENTIAL_REVOKED: errorResponse("CREDENTIAL_REVOKED", "Client Key is revoked"),
+  ENVIRONMENT_EXPIRED: {
+    code: "ENVIRONMENT_EXPIRED",
+    message: "Temporary Environment has expired",
+    details: {
+      environmentId: "env_expired",
+      expiredAt: "2026-10-17T12:00:00.000Z",
+      recommendedAction: "CREATE_TEMPORARY_ENVIRONMENT",
+    },
+  },
   APP_MISMATCH: errorResponse("APP_MISMATCH", "Client Key does not belong to appId"),
   ORIGIN_NOT_ALLOWED: {
     code: "ORIGIN_NOT_ALLOWED",
@@ -115,6 +124,15 @@ describe("evaluation-error-response public disclosure", () => {
           "code": "CREDENTIAL_REVOKED",
           "details": {},
           "message": "Client Key is revoked",
+        },
+        {
+          "code": "ENVIRONMENT_EXPIRED",
+          "details": {
+            "environmentId": "env_expired",
+            "expiredAt": "2026-10-17T12:00:00.000Z",
+            "recommendedAction": "CREATE_TEMPORARY_ENVIRONMENT",
+          },
+          "message": "Temporary Environment has expired",
         },
         {
           "code": "EVENT_ID_CONFLICT",

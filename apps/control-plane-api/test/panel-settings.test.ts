@@ -40,6 +40,7 @@ describe("SignedControlPanelEntrypoint Environment settings", () => {
     expect(await initial.json()).toMatchObject({
       environment: {
         id: ENVIRONMENT_ID,
+        temporary: null,
         policy: {
           variantAvailability: "allow",
           targetingRolloutValue: "allow",
@@ -74,6 +75,7 @@ describe("SignedControlPanelEntrypoint Environment settings", () => {
     expect(listedText).not.toContain(onceOnly.value);
     expect(listedText).not.toContain(keyHash);
     expect(JSON.parse(listedText)).toMatchObject({
+      environment: { temporary: null },
       apiKeys: [
         {
           keyId: onceOnly.credential.keyId,

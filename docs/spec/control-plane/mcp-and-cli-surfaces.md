@@ -151,6 +151,9 @@ splitch apps list --org <org_id>
 splitch apps create --org <org_id> --name <name>   # provisions dev + prod Environments (DX default)
 splitch envs list [--app <app_id>]                  # [ctx]
 splitch envs create [--app <app_id>] --key <key> [--name <name>]  # [ctx]
+splitch envs create [--app <app_id>] --key pr-123 --temporary --from prod [--expires-at 3d]  # [ctx]
+splitch envs sync [--app <app_id>] --env pr-123 --from dev       # [ctx]
+splitch envs delete [--app <app_id>] --env pr-123                # [ctx]
 splitch flags list [--app <app_id>] [--env <environment_id>] [--summary]  # scope-free reads all member Apps; [ctx] scopes
 splitch flags get [--app <app_id>] [--env <environment_id>] <flag_id_or_key> [--summary]  # [ctx]
 splitch flags create [--app <app_id>] --key <key> ...                       # [ctx] App-level definition
@@ -171,6 +174,18 @@ splitch client-key get [--app <app_id>] [--env <environment_id>]            # [c
 splitch api-keys create [--app <app_id>] [--env <environment_id>]           # [ctx]
 splitch api-keys revoke [--app <app_id>] [--env <environment_id>] <key_id>  # [ctx]
 ```
+
+Temporary Environment creation requires `--from` with `--temporary`; `--from` also supplies Sync's
+source. `--expires-at` accepts a day count such as `3d` or an ISO datetime with a UTC or numeric
+offset, more than one minute and at most seven days after creation. It requires `--temporary` on
+Environment create. These Environment flags are independent of Flag lifecycle `--lifecycle-class`, `--owner`,
+and Flag `--expires-at`. `--temporary` is create-only; `--from` is limited to Environment create and
+Sync. Permanent Environment creation stays unchanged. Create returns its Client Key; Sync returns
+the updated provenance and `syncedFlags`. See [Environment lifecycle](endpoints-org-app.md#temporary-environment-lifecycle).
+
+Lifecycle operations use the existing PAT permissions and role gates. SPL-772's
+`temporary_environments` permission and temporary-only narrowing remain pending. The grouped
+Control Panel switcher and expiry/Sync-source displays remain pending in SPL-771.
 
 One command per endpoint. CLI/MCP author and discover Event Definitions and Metrics and manage Flags,
 Environments, Experiments, policies, evaluations, and credentials, but they do not impersonate an SDK
@@ -274,6 +289,12 @@ MCP tool schemas are derived from the same Zod route definitions that validate t
 No hand-written tool definitions exist. Public agent operations registered in `@splitch/contracts`
 become MCP tools at build/startup. Explicit internal operations, including MCP-to-Control-Plane
 binding plumbing, are excluded from tool discovery.
+
+Temporary Environment tools follow this same derivation: `environments_create` accepts nested
+`temporary: { fromEnvironmentId, expiresAt? }`, `environments_sync` accepts `fromEnvironmentId`,
+and `environments_delete` uses the ordinary delete operation. Source selectors accept an
+Environment key or canonical ID in the same App. No separate MCP lifecycle implementation or
+permission is introduced by SPL-770.
 
 The execution schema remains byte-for-byte identical to the Worker schema. The protocol schema may
 make an App or Environment selector optional when MCP session context can fill that selector before

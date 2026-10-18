@@ -1,11 +1,13 @@
 import { formatSdkErrorMessage, SplitchSdkError } from "../errors";
-import type { Logger } from "../evaluate";
+import { type Logger, sdkErrorForFailure } from "../evaluate";
 import { retainRetryableExposures } from "../exposure-retry";
 import type { ExposureBatchItem, ExposureBatchResult } from "../generated/contract-surface.js";
-import type { QueuedExposure } from "./exposure-batch";
+import { type QueuedExposure, takeBatch, toExposureBatchItems } from "./exposure-batch";
+import type { ExposureOverflow } from "./exposure-overflow";
+import type { ExposureRetryPolicy } from "./exposure-retry";
 import type { BrowserExposuresResult, BrowserTransport } from "./transport";
 
-export async function redeemExposureBatch(
+async function redeemExposureBatch(
   transport: Pick<BrowserTransport, "redeemExposures">,
   items: readonly ExposureBatchItem[],
   keepalive: boolean,
@@ -23,7 +25,7 @@ export async function redeemExposureBatch(
   }
 }
 
-export function applyExposureBatchResults(
+function applyExposureBatchResults(
   batch: readonly QueuedExposure[],
   results: readonly ExposureBatchResult[],
   status: number | null,
@@ -64,7 +66,7 @@ export function logZeroProgress(
   return error;
 }
 
-export function logMissingBatchResults(logger: Logger, unmatchedCount: number): void {
+function logMissingBatchResults(logger: Logger, unmatchedCount: number): void {
   const error = new SplitchSdkError({
     code: "SERVICE_UNAVAILABLE",
     causeSummary: `Exposure batch response omitted ${unmatchedCount} sent exposureId(s)`,
@@ -83,7 +85,7 @@ export const EXPOSURE_BATCH_FAILURE_NO_RETRY_REMEDIATION =
 export const EXPOSURE_BATCH_FAILURE_TERMINAL_REMEDIATION =
   "Automatic retries stopped; correct the delivery failure, then call flush() explicitly for the retained batch";
 
-export function logBatchFailure(
+function logBatchFailure(
   logger: Logger,
   result: BrowserExposuresResult,
   count: number,
@@ -105,7 +107,7 @@ export function logBatchFailure(
   return error;
 }
 
-export function logRejectedItem(
+function logRejectedItem(
   logger: Logger,
   item: QueuedExposure,
   row: ExposureBatchResult,
@@ -121,4 +123,85 @@ export function logRejectedItem(
     }),
     { exposureId: item.exposureId, flagKey: item.flagKey, code: row.code },
   );
+}
+
+interface ExposureDrainDeps {
+  readonly transport: Pick<BrowserTransport, "redeemExposures">;
+  readonly logger: Logger;
+  readonly pending: QueuedExposure[];
+  readonly overflow: ExposureOverflow;
+  readonly retryPolicy: ExposureRetryPolicy;
+  readonly isClosed: () => boolean;
+  readonly expiryError: () => SplitchSdkError | null;
+  readonly onEnvironmentExpired: (error: SplitchSdkError) => void;
+}
+
+export async function redeemPendingExposureBatch(
+  deps: ExposureDrainDeps,
+  keepalive: boolean,
+): Promise<{ completed: readonly ExposureBatchResult[]; retainedForRetry: boolean }> {
+  const batch = takeBatch(deps.pending);
+  const wireItems = toExposureBatchItems(batch);
+
+  const result = await redeemExposureBatch(deps.transport, wireItems, keepalive);
+  requireLiveEnvironment(deps, result, batch.length);
+  if (result.results === null) {
+    deps.overflow.retain(batch);
+    throw logBatchFailure(
+      deps.logger,
+      result,
+      batch.length,
+      deps.retryPolicy.remediationForFailure(result, batch.length, deps.isClosed()),
+    );
+  }
+
+  let outcome: ReturnType<typeof applyExposureBatchResults>;
+  try {
+    outcome = applyExposureBatchResults(batch, result.results, result.status, (item, row, status) =>
+      logRejectedItem(deps.logger, item, row, status),
+    );
+  } catch (cause) {
+    deps.overflow.retain(batch);
+    deps.retryPolicy.recordFailure(result, batch.length);
+    throw logZeroProgress(
+      deps.logger,
+      cause instanceof Error ? cause.message : "Exposure batch response is invalid",
+      batch.length,
+      cause,
+    );
+  }
+  if (outcome.retained.length > 0) {
+    deps.overflow.retain(outcome.retained);
+  }
+  if (outcome.unmatchedCount > 0) {
+    deps.retryPolicy.recordFailure(result, outcome.retained.length);
+    if (outcome.completed.length === 0) {
+      throw logZeroProgress(
+        deps.logger,
+        "Exposure batch response made zero progress because it omitted one or more sent exposureIds",
+        outcome.unmatchedCount,
+      );
+    }
+    logMissingBatchResults(deps.logger, outcome.unmatchedCount);
+    return { completed: outcome.completed, retainedForRetry: true };
+  }
+  if (outcome.retained.length > 0) {
+    deps.retryPolicy.recordFailure(result, outcome.retained.length);
+    return { completed: outcome.completed, retainedForRetry: true };
+  }
+  deps.retryPolicy.recordSuccess();
+  return { completed: outcome.completed, retainedForRetry: false };
+}
+
+function requireLiveEnvironment(
+  deps: ExposureDrainDeps,
+  result: BrowserExposuresResult,
+  count: number,
+): void {
+  const expired = deps.expiryError();
+  if (expired !== null) throw expired;
+  if (result.errorCode !== "ENVIRONMENT_EXPIRED") return;
+  const error = sdkErrorForFailure("Exposure redemption", result);
+  deps.onEnvironmentExpired(error);
+  throw logBatchFailure(deps.logger, result, count, error.remediation);
 }

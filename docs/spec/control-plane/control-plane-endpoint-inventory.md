@@ -27,11 +27,23 @@ Two path prefixes, by the App/Environment split:
   immutable published versions, Metric definitions, Segments.
 - **Environment-level** `/apps/{app_id}/envs/{environment_id}/…` — live config + runtime artifacts:
   **Flag Configuration** (available Variants, targeting, rollout, enabled state), SDK credentials,
-  Experiments, Experiment Runs, **Promotion**, test-eval, Experiment analytics reads, and Web
+  Experiments, Experiment Runs, **Promotion**, Temporary Environment **Sync**, test-eval, Experiment analytics reads, and Web
   Analytics reads.
 
 `environment_id` accepts the canonical ID or Environment key in the path. Environment-level writes
 are subject to the Environment Policy (ADR-0029).
+
+Every Environment response includes `temporary`, either `null` for a permanent Environment or
+`{ expiresAt, syncedFromEnvironmentId, syncedAt }` with ISO timestamps. Create accepts optional
+`temporary: { fromEnvironmentId, expiresAt? }`; `POST …/envs/{environment_id}/sync` copies an
+Environment into a Temporary Environment. See
+[Environment lifecycle](endpoints-org-app.md#temporary-environment-lifecycle).
+
+Expired Temporary Environments refuse operations whose registry `route.effects.mutates` is true,
+except Environment delete, which starts teardown. HTTP method does not classify effects:
+`client_key_get` provisions credentials and is fenced, while read-only POST operations remain
+readable until teardown. SDK key authentication applies expiry at the public edge even for
+Control Plane-owned delegated integration routes.
 
 `POST /orgs` sits above both prefixes: the Organization does not exist yet, so there is no `org_id` to scope
 against and the co-scope guard never fires. Authorization there is the handler's alone — see
@@ -41,7 +53,7 @@ against and the co-scope guard never fires. Authorization there is the handler's
 
 | file                                                                     | endpoints                                                                                                                                   |
 | ------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------- |
-| [endpoints-org-app.md](endpoints-org-app.md)                             | Organization **create** + member management; App CRUD; **Environment CRUD**                                                                 |
+| [endpoints-org-app.md](endpoints-org-app.md)                             | Organization **create** + member management; App CRUD; **Environment lifecycle and Sync**                                                   |
 | [endpoints-flag-segment.md](endpoints-flag-segment.md)                   | Flag **definition** (App-level) + **Flag Configuration** (per-Env) + **Promotion** + Flag **change log**; Segment CRUD                      |
 | [endpoints-experiment-run.md](endpoints-experiment-run.md)               | Experiment draft/**start** lifecycle; Experiment Run reads, standalone End, and links to Conclude (per-Env)                                 |
 | [conclusion-and-winner-promotion.md](conclusion-and-winner-promotion.md) | Run conclusion, immutable decision evidence, and Approval Request based winner Promotion                                                    |

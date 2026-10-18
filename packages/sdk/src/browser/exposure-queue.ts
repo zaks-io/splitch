@@ -1,16 +1,9 @@
-import { formatSdkErrorMessage } from "../errors";
+import { formatSdkErrorMessage, type SplitchSdkError } from "../errors";
 import type { Logger } from "../evaluate";
 import type { ExposureBatchResult } from "../generated/contract-surface.js";
 import { admitExposure, rearmExposureFlags } from "./exposure-admission";
-import { type QueuedExposure, takeBatch, toExposureBatchItems } from "./exposure-batch";
-import {
-  applyExposureBatchResults,
-  logBatchFailure,
-  logMissingBatchResults,
-  logRejectedItem,
-  logZeroProgress,
-  redeemExposureBatch,
-} from "./exposure-drain";
+import type { QueuedExposure } from "./exposure-batch";
+import { logZeroProgress, redeemPendingExposureBatch } from "./exposure-drain";
 import { ExposureOverflow } from "./exposure-overflow";
 import { ExposureRetryPolicy } from "./exposure-retry";
 import { resolveDocument, resolveWindow } from "./lifecycle-targets";
@@ -36,6 +29,7 @@ export interface ExposureQueueDeps {
   readonly window?: Window | null;
   /** Test seam: override {@link MAX_BATCHES_PER_DRAIN}. */
   readonly maxBatchesPerDrain?: number;
+  readonly onEnvironmentExpired?: (error: SplitchSdkError) => void;
 }
 
 /**
@@ -49,6 +43,7 @@ export class ExposureQueue {
   private flushTimer: ReturnType<typeof setTimeout> | null = null;
   private lifecycleAttached = false;
   private closed = false;
+  private expiryError: SplitchSdkError | null = null;
   /** Shared so a second close() is a no-op (no second redeem); matches NO_RETRY copy. */
   private closePromise: Promise<readonly ExposureBatchResult[]> | null = null;
   /** In-flight drain; overlapping callers await this then continue. */
@@ -115,11 +110,20 @@ export class ExposureQueue {
     rearmExposureFlags(this.enqueuedFlags, flagKeys);
   }
 
+  expire(error: SplitchSdkError): void {
+    this.expiryError = error;
+    this.pending.length = 0;
+    this.clearTimer();
+    this.detachLifecycle();
+  }
+
   async flush(): Promise<readonly ExposureBatchResult[]> {
+    if (this.expiryError !== null) throw this.expiryError;
     return this.enqueueDrain({ keepalive: false, automatic: false });
   }
 
   async close(): Promise<readonly ExposureBatchResult[]> {
+    if (this.expiryError !== null) return [];
     if (this.closePromise !== null) {
       return this.closePromise;
     }
@@ -153,6 +157,7 @@ export class ExposureQueue {
     keepalive: boolean;
     automatic: boolean;
   }): Promise<readonly ExposureBatchResult[]> {
+    if (this.expiryError !== null) return Promise.reject(this.expiryError);
     this.queuedDrains += 1;
     // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: ownership check/set must stay in one microtask
     return (async () => {
@@ -164,6 +169,7 @@ export class ExposureQueue {
             // The owner logged its failure. A waiter still gets its own send attempt.
           }
         }
+        if (this.expiryError !== null) throw this.expiryError;
         if (options.automatic && !this.retryPolicy.automaticRetryAllowed) {
           return [];
         }
@@ -238,66 +244,32 @@ export class ExposureQueue {
     this.detachLifecycle();
   }
 
-  private async runOneBatch(
-    keepalive: boolean,
-  ): Promise<{ completed: readonly ExposureBatchResult[]; retainedForRetry: boolean }> {
-    const batch = takeBatch(this.pending);
-    const wireItems = toExposureBatchItems(batch);
-
-    const result = await redeemExposureBatch(this.deps.transport, wireItems, keepalive);
-    if (result.results === null) {
-      this.overflow.retain(batch);
-      throw logBatchFailure(
-        this.deps.logger,
-        result,
-        batch.length,
-        this.retryPolicy.remediationForFailure(result, batch.length, this.closed),
-      );
-    }
-
-    let outcome: ReturnType<typeof applyExposureBatchResults>;
-    try {
-      outcome = applyExposureBatchResults(
-        batch,
-        result.results,
-        result.status,
-        (item, row, status) => logRejectedItem(this.deps.logger, item, row, status),
-      );
-    } catch (cause) {
-      this.overflow.retain(batch);
-      this.retryPolicy.recordFailure(result, batch.length);
-      throw logZeroProgress(
-        this.deps.logger,
-        cause instanceof Error ? cause.message : "Exposure batch response is invalid",
-        batch.length,
-        cause,
-      );
-    }
-    if (outcome.retained.length > 0) {
-      this.overflow.retain(outcome.retained);
-    }
-    if (outcome.unmatchedCount > 0) {
-      this.retryPolicy.recordFailure(result, outcome.retained.length);
-      if (outcome.completed.length === 0) {
-        throw logZeroProgress(
-          this.deps.logger,
-          "Exposure batch response made zero progress because it omitted one or more sent exposureIds",
-          outcome.unmatchedCount,
-        );
-      }
-      logMissingBatchResults(this.deps.logger, outcome.unmatchedCount);
-      return { completed: outcome.completed, retainedForRetry: true };
-    }
-    if (outcome.retained.length > 0) {
-      this.retryPolicy.recordFailure(result, outcome.retained.length);
-      return { completed: outcome.completed, retainedForRetry: true };
-    }
-    this.retryPolicy.recordSuccess();
-    return { completed: outcome.completed, retainedForRetry: false };
+  private runOneBatch(keepalive: boolean) {
+    return redeemPendingExposureBatch(
+      {
+        transport: this.deps.transport,
+        logger: this.deps.logger,
+        pending: this.pending,
+        overflow: this.overflow,
+        retryPolicy: this.retryPolicy,
+        isClosed: () => this.closed,
+        expiryError: () => this.expiryError,
+        onEnvironmentExpired: (error) => {
+          this.expire(error);
+          this.deps.onEnvironmentExpired?.(error);
+        },
+      },
+      keepalive,
+    );
   }
 
   private automaticFlushAllowed(): boolean {
-    return !this.closed && this.pending.length > 0 && this.retryPolicy.automaticRetryAllowed;
+    return (
+      this.expiryError === null &&
+      !this.closed &&
+      this.pending.length > 0 &&
+      this.retryPolicy.automaticRetryAllowed
+    );
   }
 
   private ensureTimer(): void {

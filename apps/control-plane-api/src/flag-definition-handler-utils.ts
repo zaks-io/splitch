@@ -6,6 +6,7 @@ import { appNotFound } from "./app-environment-model";
 import type { ConfigStoreAccess } from "./config-store-access";
 import { flagNotFound } from "./flag-definition-errors";
 import { pathParam } from "./handler-input";
+import { environmentHasExpired } from "./temporary-environment-errors";
 
 export interface FlagDefinitionDeps {
   repo: Repository;
@@ -30,6 +31,7 @@ export async function resyncFlagSnapshots(
   if (!deps.configStore) return;
   const envs = await deps.repo.identity.listEnvironments(appScope(appId));
   for (const env of envs) {
+    if (environmentHasExpired(env, deps.nowIso?.() ?? new Date().toISOString())) continue;
     try {
       await deps.configStore.writerFor(appId, env.id).resyncFlagConfig({
         appId,

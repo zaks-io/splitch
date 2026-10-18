@@ -89,6 +89,7 @@ const environmentsSdkRoutes = [
   accountRoutes[17],
   accountRoutes[18],
   accountRoutes[19],
+  accountRoutes[24],
 ] as const;
 
 const credentialsSdkRoutes = [
@@ -156,6 +157,7 @@ const environmentsControlPlaneClientApp = new OpenAPIHono().openapiRoutes([
   { route: environmentsSdkRoutes[2].openapi, handler: emitOnlyHandler(environmentsSdkRoutes[2]) },
   { route: environmentsSdkRoutes[3].openapi, handler: emitOnlyHandler(environmentsSdkRoutes[3]) },
   { route: environmentsSdkRoutes[4].openapi, handler: emitOnlyHandler(environmentsSdkRoutes[4]) },
+  { route: environmentsSdkRoutes[5].openapi, handler: emitOnlyHandler(environmentsSdkRoutes[5]) },
 ] as const);
 
 const credentialsControlPlaneClientApp = new OpenAPIHono().openapiRoutes([

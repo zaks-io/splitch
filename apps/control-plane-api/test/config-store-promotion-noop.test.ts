@@ -11,6 +11,7 @@ import {
   promoteFlagConfig,
   setProdPolicy,
 } from "../src/config-store-harness-core";
+import { makeConfigStoreProjectionJournalFixture } from "../src/config-store-projection-journal-fixture";
 import { allowPolicy } from "./approval-harness";
 import { makePoolHarness } from "./config-store-pool-harness";
 
@@ -59,6 +60,7 @@ describe("Promotion that selects no field group", () => {
   it("previews the version it will actually leave behind", async () => {
     const before = await prodVersion();
     const store = makeConfigStore({
+      projectionJournal: makeConfigStoreProjectionJournalFixture(),
       repo: h.repo,
       kv: h.kv,
       broadcaster: { broadcast: () => undefined },

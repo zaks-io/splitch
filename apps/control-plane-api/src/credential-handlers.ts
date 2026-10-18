@@ -127,7 +127,7 @@ export function makeCredentialHandlers(deps: CredentialHandlerDeps) {
         },
         auditContext(principal, requestId, nowIso(deps)),
       );
-      await writeApiKeyCache(deps, row, false, ctx.organizationId);
+      await writeApiKeyCache(deps, row, false, ctx.organizationId, true);
       return Response.json({ credential: apiKeyResponse(row), value: secret });
     },
 

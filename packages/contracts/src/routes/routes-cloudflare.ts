@@ -23,6 +23,7 @@ const OWNER = "control-plane-api" as const;
 const commonErrors = [
   "UNAUTHORIZED",
   "CREDENTIAL_REVOKED",
+  "ENVIRONMENT_EXPIRED",
   "INSUFFICIENT_SCOPES",
   "VALIDATION_ERROR",
   "RATE_LIMITED",
@@ -53,7 +54,7 @@ export const cloudflareRoutes = [
     rateLimit: "api-key",
     idempotency: "none",
     effects: openWorld(createClosed),
-    errors: [...commonErrors, "IDEMPOTENCY_KEY_CONFLICT"],
+    errors: ["ENVIRONMENT_KIND_UNSUPPORTED", ...commonErrors, "IDEMPOTENCY_KEY_CONFLICT"],
   }),
   defineApiRoute({
     operationId: "cloudflare_installations_get",
@@ -143,6 +144,6 @@ export const cloudflareRoutes = [
     rateLimit: "control-plane-actor",
     idempotency: "none",
     effects: openWorld(deleteClosed),
-    errors: [...panelErrors, "CLOUDFLARE_INSTALLATION_NOT_FOUND"],
+    errors: ["ENVIRONMENT_EXPIRED", ...panelErrors, "CLOUDFLARE_INSTALLATION_NOT_FOUND"],
   }),
 ] as const satisfies readonly ApiRouteContract[];

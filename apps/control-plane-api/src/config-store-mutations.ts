@@ -1,5 +1,6 @@
 import type { PercentageRollout, TargetingRule, Variant } from "@splitch/contracts";
 import { type EnvScope, envScope } from "@splitch/db";
+import { requireWritableEnvironment } from "./config-store-expiry-fence";
 import { promotionFreeze } from "./config-store-freeze";
 import {
   type ConfigStoreRuntimeDeps,
@@ -294,6 +295,7 @@ async function commitPromotion(
   // config-level baseline, which lives on flag_configs — routing it through
   // replaceTargetingRules (a DELETE + re-INSERT) would re-stamp `createdAt` on
   // every rule the caller never touched, destroying their creation history.
+  await requireWritableEnvironment(deps, targetScope);
   if (input.select.targeting) {
     const replaced = await deps.repo.flags.replaceTargetingRules(
       targetScope,

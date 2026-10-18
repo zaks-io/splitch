@@ -9,11 +9,14 @@ import {
   StoredClientKeyRateLimitRpsFieldSchema,
   TERMINAL_CREDENTIAL_REVOCATION_MARKER,
 } from "@splitch/contracts";
+import type { Repository } from "@splitch/db";
+import { credentialEnvironmentExpiry } from "./credential-environment-expiry";
 
 const REVOKED_TOMBSTONE_TTL_SECONDS = 5 * 60;
 const credentialEnvelope = kvEnvelope(CredentialCacheKVSchema);
 
 export interface CredentialCacheDeps {
+  repo?: Pick<Repository, "credentials"> & Partial<Pick<Repository, "identity">>;
   credentialStore?: KVNamespace;
   credentialCacheWriter?: CredentialCacheWriterAccess;
   nowIso?: () => string;
@@ -127,7 +130,14 @@ async function writeCredentialCache(
       return;
     }
     if (!deps.credentialStore) throw new Error("credential cache store is not configured");
-    await putCredentialCacheEntry(deps.credentialStore, write);
+    const identity = deps.repo?.identity;
+    const data = identity
+      ? await credentialEnvironmentExpiry({ identity }, value, nowIso(deps))
+      : value;
+    await putCredentialCacheEntry(deps.credentialStore, {
+      ...write,
+      value: JSON.stringify(envelope(data)),
+    });
   } catch (cause) {
     if (failLoud) throw cause;
   }

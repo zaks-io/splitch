@@ -61,6 +61,7 @@ const settings: PanelEnvironmentSettings = {
     appId: "app_checkout",
     key: "prod",
     name: "Production",
+    temporary: null,
     policy: {
       variantAvailability: "confirm",
       targetingRolloutValue: "confirm",

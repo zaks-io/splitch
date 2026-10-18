@@ -65,6 +65,7 @@ export const dataPlaneRoutes = [
     errors: [
       "UNAUTHORIZED",
       "CREDENTIAL_REVOKED",
+      "ENVIRONMENT_EXPIRED",
       "INSUFFICIENT_SCOPES",
       "ORIGIN_NOT_ALLOWED",
       "VALIDATION_ERROR",
@@ -94,6 +95,7 @@ export const dataPlaneRoutes = [
     errors: [
       "UNAUTHORIZED",
       "CREDENTIAL_REVOKED",
+      "ENVIRONMENT_EXPIRED",
       "INSUFFICIENT_SCOPES",
       "ORIGIN_NOT_ALLOWED",
       "VALIDATION_ERROR",
@@ -123,6 +125,7 @@ export const dataPlaneRoutes = [
     errors: [
       "UNAUTHORIZED",
       "CREDENTIAL_REVOKED",
+      "ENVIRONMENT_EXPIRED",
       "APP_MISMATCH",
       "ORIGIN_NOT_ALLOWED",
       "FLAG_NOT_FOUND",
@@ -146,6 +149,7 @@ export const dataPlaneRoutes = [
     errors: [
       "UNAUTHORIZED",
       "CREDENTIAL_REVOKED",
+      "ENVIRONMENT_EXPIRED",
       "ORIGIN_NOT_ALLOWED",
       "VALIDATION_ERROR",
       "RATE_LIMITED",
@@ -168,6 +172,7 @@ export const dataPlaneRoutes = [
     errors: [
       "UNAUTHORIZED",
       "CREDENTIAL_REVOKED",
+      "ENVIRONMENT_EXPIRED",
       "INSUFFICIENT_SCOPES",
       "APP_MISMATCH",
       "FLAG_NOT_FOUND",
@@ -192,6 +197,7 @@ export const dataPlaneRoutes = [
     errors: [
       "UNAUTHORIZED",
       "CREDENTIAL_REVOKED",
+      "ENVIRONMENT_EXPIRED",
       "INSUFFICIENT_SCOPES",
       "APP_MISMATCH",
       "ORIGIN_NOT_ALLOWED",
@@ -221,6 +227,7 @@ export const dataPlaneRoutes = [
     errors: [
       "UNAUTHORIZED",
       "CREDENTIAL_REVOKED",
+      "ENVIRONMENT_EXPIRED",
       "INSUFFICIENT_SCOPES",
       "APP_MISMATCH",
       "ORIGIN_NOT_ALLOWED",
@@ -262,6 +269,7 @@ export const dataPlaneRoutes = [
     errors: [
       "UNAUTHORIZED",
       "CREDENTIAL_REVOKED",
+      "ENVIRONMENT_EXPIRED",
       "INSUFFICIENT_SCOPES",
       "ORIGIN_NOT_ALLOWED",
       "VALIDATION_ERROR",

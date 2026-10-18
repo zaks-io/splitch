@@ -1,16 +1,21 @@
 import { type EnvScope, envScope } from "@splitch/db";
 import { applyApprovedFlagConfig } from "./config-store-approved-write";
+import {
+  fenceTemporaryEnvironment,
+  type TemporaryEnvironmentFenceInput,
+  teardownTemporaryEnvironmentState,
+} from "./config-store-environment-teardown";
+import {
+  type EnvironmentWriteFailure,
+  type EnvironmentWriteScope,
+  requireWritableEnvironment,
+  runEnvironmentMutation,
+} from "./config-store-expiry-fence";
 import { catchConfigStoreFailure } from "./config-store-failure";
 import { configPatchFreeze, targetingFreeze } from "./config-store-freeze";
-import { makeConfigStoreMutationQueue } from "./config-store-mutation-queue";
 import { promoteFlagConfig } from "./config-store-mutations";
 import { previewSnapshotResult, previewTargetingRules } from "./config-store-preview";
-import {
-  type ExperimentConfigSyncInput,
-  resyncFlagConfig,
-  syncExperimentConfig,
-  writeFlagConfigSnapshot,
-} from "./config-store-snapshot-write";
+import { makeConfigStoreRuntimeDeps } from "./config-store-runtime";
 import {
   type ApplyApprovedFlagConfigInput,
   type ConfigStoreDeps,
@@ -23,8 +28,8 @@ import {
   type PatchFlagConfigInput,
   type PromoteFlagConfigInput,
   type PromoteFlagConfigResult,
-  readFlagConfigPurgeTarget,
   type ReplaceTargetingRulesInput,
+  readFlagConfigPurgeTarget,
   readFlagSnapshot,
   responseFromSnapshot,
   type Snapshot,
@@ -37,6 +42,13 @@ import {
   type FlagConfigResyncInput,
   repairFlagConfigSnapshot,
 } from "./config-store-snapshot-maintenance";
+import {
+  type ExperimentConfigSyncInput,
+  resyncFlagConfig,
+  syncExperimentConfig,
+  writeFlagConfigSnapshot,
+} from "./config-store-snapshot-write";
+import { type SyncFlagConfigInput, syncFlagConfig } from "./config-store-sync";
 import { replaceTargetingRules } from "./config-store-targeting-rules";
 import { baselineIsUnresolvable, nextBaselineRollout } from "./flag-config-rollout";
 
@@ -63,6 +75,7 @@ export interface ConfigStoreWriter {
     | { ok: true; config: FlagConfigResult; snapshotRevision: number }
     | { ok: false; reason: "FLAG_NOT_FOUND" }
     | { ok: false; reason: "SEGMENT_NOT_FOUND"; missingSegmentIds: string[] }
+    | EnvironmentWriteFailure
   >;
   writeFlagConfig(input: PatchFlagConfigInput): Promise<FlagConfigWriteResult>;
   replaceTargetingRules(input: ReplaceTargetingRulesInput): Promise<FlagConfigWriteResult>;
@@ -81,6 +94,11 @@ export interface ConfigStoreWriter {
    * (nothing to resync), not an error.
    */
   resyncFlagConfig(input: FlagConfigResyncInput): Promise<FlagConfigWriteResult>;
+  syncFlagConfig(input: SyncFlagConfigInput): Promise<FlagConfigWriteResult>;
+  fenceTemporaryEnvironment(
+    input: TemporaryEnvironmentFenceInput,
+  ): Promise<{ ok: true } | { ok: false; reason: "ENVIRONMENT_NOT_FOUND" }>;
+  teardownTemporaryEnvironment(input: EnvironmentWriteScope): Promise<void>;
   /**
    * Idempotently remove one Environment's KV Flag snapshot and broadcast cache
    * invalidation. Safe to retry after D1 rows are already gone.
@@ -89,10 +107,9 @@ export interface ConfigStoreWriter {
 }
 
 export function makeConfigStore(deps: ConfigStoreDeps): ConfigStoreWriter {
-  const runtimeDeps: ConfigStoreRuntimeDeps = {
-    ...deps,
-    snapshotMutations: makeConfigStoreMutationQueue(),
-  };
+  const runtimeDeps = makeConfigStoreRuntimeDeps(deps);
+  const mutate = <T>(input: EnvironmentWriteScope, operation: () => Promise<T>) =>
+    runEnvironmentMutation(runtimeDeps, input, operation);
   return {
     async readFlagConfig(input) {
       return catchConfigStoreFailure(runtimeDeps, async () => {
@@ -113,55 +130,69 @@ export function makeConfigStore(deps: ConfigStoreDeps): ConfigStoreWriter {
     },
 
     async repairFlagConfigSnapshot(input) {
-      return catchConfigStoreFailure(runtimeDeps, () =>
-        repairFlagConfigSnapshot(runtimeDeps, input),
-      );
+      return mutate(input, () => repairFlagConfigSnapshot(runtimeDeps, input));
     },
 
     async writeFlagConfig(input) {
-      return catchConfigStoreFailure(runtimeDeps, () => writeFlagConfig(runtimeDeps, input));
+      return mutate(input, () => writeFlagConfig(runtimeDeps, input));
     },
 
     async replaceTargetingRules(input) {
-      return catchConfigStoreFailure(runtimeDeps, () => replaceTargetingRules(runtimeDeps, input));
+      return mutate(input, () => replaceTargetingRules(runtimeDeps, input));
     },
 
     async promoteFlagConfig(input) {
-      return catchConfigStoreFailure(runtimeDeps, () => promoteFlagConfig(runtimeDeps, input));
+      return mutate({ appId: input.appId, environmentId: input.targetEnvironmentId }, () =>
+        promoteFlagConfig(runtimeDeps, input),
+      );
     },
 
     async previewFlagConfig(input) {
-      return catchConfigStoreFailure(runtimeDeps, () => previewFlagConfig(runtimeDeps, input));
+      return mutate(input, () => previewFlagConfig(runtimeDeps, input));
     },
 
     async previewTargetingRules(input) {
-      return catchConfigStoreFailure(runtimeDeps, () => previewTargetingRules(runtimeDeps, input));
+      return mutate(input, () => previewTargetingRules(runtimeDeps, input));
     },
 
     async previewPromotion(input) {
-      return catchConfigStoreFailure(runtimeDeps, () =>
+      return mutate({ appId: input.appId, environmentId: input.targetEnvironmentId }, () =>
         promoteFlagConfig(runtimeDeps, { ...input, preview: true }),
       );
     },
 
     async applyApprovedFlagConfig(input) {
-      return catchConfigStoreFailure(runtimeDeps, () =>
-        applyApprovedFlagConfig(runtimeDeps, input),
-      );
+      return mutate(input, () => applyApprovedFlagConfig(runtimeDeps, input));
     },
 
     async syncExperimentConfig(input) {
-      return syncExperimentConfig(runtimeDeps, input);
+      return mutate(input, () => syncExperimentConfig(runtimeDeps, input));
     },
 
     async resyncFlagConfig(input) {
-      const frozen = await targetingFreeze(runtimeDeps, input);
-      if (frozen) return frozen;
-      return resyncFlagConfig(runtimeDeps, input);
+      return mutate(input, async () => {
+        const frozen = await targetingFreeze(runtimeDeps, input);
+        if (frozen) return frozen;
+        return resyncFlagConfig(runtimeDeps, input);
+      });
+    },
+
+    async syncFlagConfig(input) {
+      return mutate(input, () => syncFlagConfig(runtimeDeps, input));
+    },
+
+    async fenceTemporaryEnvironment(input) {
+      return runtimeDeps.snapshotMutations.run(() => fenceTemporaryEnvironment(runtimeDeps, input));
+    },
+
+    async teardownTemporaryEnvironment(input) {
+      return runtimeDeps.snapshotMutations.run(() =>
+        teardownTemporaryEnvironmentState(runtimeDeps, input),
+      );
     },
 
     async deleteFlagConfig(input) {
-      return deleteFlagConfigFromStore(runtimeDeps, input);
+      return runtimeDeps.snapshotMutations.run(() => deleteFlagConfigFromStore(runtimeDeps, input));
     },
   };
 }
@@ -290,6 +321,7 @@ async function commitFlagConfigPatch(
   // Resolved against the CURRENT stored rollout so an existing salt survives a
   // percentage change (see flag-config-rollout.ts); `undefined` leaves it alone.
   const rollout = nextBaselineRollout(current.flag.rollout, input.rollout);
+  await requireWritableEnvironment(deps, scope);
   const updated = await deps.repo.flags.updateFlagConfig(
     scope,
     input.flagId,

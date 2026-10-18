@@ -31,6 +31,17 @@ scope by `/{orgSlug}/{appSlug}/{env}/...`.
 
 Avoid: stage; tier; instance; deployment.
 
+**Temporary Environment**:
+An Environment created as a copy of another Environment in the same App. It expires at most 7 days
+after creation and is then torn down with its configuration and credentials. Its Policy is always
+all-`allow` and it cannot host Experiments. Every other Environment is permanent; kind is immutable.
+
+**Sync**:
+Replacing every Flag Configuration in a Temporary Environment from a source in the same App,
+including its per-Environment Default Variant and rollout salts, and excluding live Runs and
+Activation bindings. Sync writes only into a Temporary Environment. Promote remains the deployment
+verb. Use temporary, not ephemeral, sandbox, preview, or branch, as the domain term.
+
 **Flag Configuration**:
 The configuration of one Flag within one Environment: available Variant names, Targeting Rules,
 rollout, and enabled state. This is the unit edited, audited, diffed, and promoted. The Flag

@@ -8,6 +8,7 @@ import {
   type Principal,
 } from "@splitch/worker-runtime";
 import type { EnvironmentRow } from "./app-environment-model";
+import { refuseExpiredEnvironmentMutation } from "./environment-expiry-resolution";
 import {
   environmentSelectorFromInput,
   environmentSelectorsFromInput,
@@ -22,8 +23,14 @@ const ENVIRONMENT_ID_PREFIX = "env_";
 const FLAG_ID_PREFIX = "flag_";
 
 /** Resolve human-readable path selectors inside the authenticated request. */
-export function makePathSelectorResolver(repo: Repository): AuthenticatedInputResolver {
-  return (args) => resolveControlPlanePathSelectors(repo, args);
+export function makePathSelectorResolver(
+  repo: Repository,
+  nowIso?: () => string,
+): AuthenticatedInputResolver {
+  return async (args) => {
+    const result = await resolveControlPlanePathSelectors(repo, args);
+    return refuseExpiredEnvironmentMutation(repo, args.contract.id, result, nowIso);
+  };
 }
 
 export async function resolveControlPlanePathSelectors(

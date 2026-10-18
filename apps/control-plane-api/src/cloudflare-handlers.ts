@@ -1,6 +1,6 @@
 import { boundListRead, LIST_READ_LIMIT } from "@splitch/contracts";
 import type { CloudflareInstallationRow, Repository } from "@splitch/db";
-import { envScope } from "@splitch/db";
+import { appScope, envScope } from "@splitch/db";
 import type { HandlerArgs, RouteHandler } from "@splitch/worker-runtime";
 import { renderError } from "@splitch/worker-runtime";
 import { requireAppAdmin } from "./app-authz";
@@ -10,6 +10,7 @@ import {
 } from "./cloudflare-installation-response";
 import { pathParam } from "./handler-input";
 import { encryptIntegrationSecret } from "./integration-secret";
+import { environmentKindUnsupported } from "./temporary-environment-errors";
 
 export interface CloudflareHandlerDeps {
   repo: Repository;
@@ -83,7 +84,7 @@ export function makeCloudflareHandlers(deps: CloudflareHandlerDeps) {
     }) satisfies RouteHandler<PanelInstallationInput>,
 
     create: (async ({ input, principal, requestId }: HandlerArgs<CreateInput>) => {
-      const scope = principalScope(principal, requestId);
+      const scope = await installationCreateScope(deps, principal, requestId);
       if (scope instanceof Response) return scope;
       const endpointError = validateEndpoint(input.body.endpoint, requestId);
       if (endpointError) return endpointError;
@@ -166,6 +167,22 @@ function reusedWithDifferentContent(
 ): boolean {
   if (!existing) return false;
   return existing.endpoint !== endpoint || existing.secretFingerprint !== secretFingerprint;
+}
+
+async function installationCreateScope(
+  deps: CloudflareHandlerDeps,
+  principal: HandlerArgs<unknown>["principal"],
+  requestId: string,
+) {
+  const scope = principalScope(principal, requestId);
+  if (scope instanceof Response) return scope;
+  const environment = await deps.repo.identity.getEnvironment(
+    appScope(scope.appId),
+    scope.environmentId,
+  );
+  if (environment && environment.expiresAt !== null)
+    return environmentKindUnsupported(environment, "cloudflare_installations_create", requestId);
+  return scope;
 }
 
 function principalScope(principal: HandlerArgs<unknown>["principal"], requestId: string) {

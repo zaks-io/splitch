@@ -3,6 +3,7 @@ import { deleteEnvironmentCredentials } from "./app-environment-credentials";
 import type { AppEnvironmentDeps } from "./app-environment-model";
 import type { ConfigStoreAccess } from "./config-store-access";
 import { randomHex } from "./credential-cache";
+import { environmentHasExpired } from "./temporary-environment-errors";
 
 export interface FlagConfigLifecycleDeps {
   repo: Repository;
@@ -69,14 +70,20 @@ export async function initializeFlagConfigsForFlag(
   input: InitialFlagConfigInput,
 ): Promise<void> {
   const environments = await deps.repo.identity.listEnvironments(appScope(input.appId));
-  await inProvisioningBatches(environments, (environment) =>
-    ensureInitialFlagConfig(deps, {
-      appId: input.appId,
-      environmentId: environment.id,
-      flagId: input.flagId,
-      defaultVariantId: input.defaultVariantId,
-    }),
-  );
+  await inProvisioningBatches(environments, (environment) => {
+    if (environmentHasExpired(environment, deps.nowIso?.() ?? new Date().toISOString()))
+      return Promise.resolve();
+    return ensureInitialFlagConfig(
+      deps,
+      {
+        appId: input.appId,
+        environmentId: environment.id,
+        flagId: input.flagId,
+        defaultVariantId: input.defaultVariantId,
+      },
+      environment.expiresAt !== null,
+    );
+  });
 }
 
 export async function initializeFlagConfigsForEnvironment(
@@ -262,7 +269,25 @@ async function ensureInitialFlagConfig(
     flagId: string;
     defaultVariantId: string;
   },
+  skipExpired = false,
 ): Promise<void> {
+  if (deps.configStore) {
+    const result = await deps.configStore
+      .writerFor(input.appId, input.environmentId)
+      .resyncFlagConfig({
+        appId: input.appId,
+        environmentId: input.environmentId,
+        flagId: input.flagId,
+        initialConfig: { defaultVariantId: input.defaultVariantId },
+      });
+    if (
+      result.ok ||
+      (skipExpired &&
+        (result.reason === "ENVIRONMENT_EXPIRED" || result.reason === "ENVIRONMENT_NOT_FOUND"))
+    )
+      return;
+    throw new Error(`flag-config lifecycle: provisioning refused: ${result.reason}`);
+  }
   const scope = envScope(input.appId, input.environmentId);
   const now = deps.nowIso?.() ?? new Date().toISOString();
   await deps.repo.flags.ensureInitialFlagConfig(scope, {
@@ -274,26 +299,6 @@ async function ensureInitialFlagConfig(
     createdAt: now,
     updatedAt: now,
   });
-  await syncFlagConfigToKv(deps, input.appId, input.environmentId, input.flagId);
-}
-
-async function syncFlagConfigToKv(
-  deps: FlagConfigLifecycleDeps,
-  appId: string,
-  environmentId: string,
-  flagId: string,
-): Promise<void> {
-  if (!deps.configStore) return;
-  const result = await deps.configStore.writerFor(appId, environmentId).resyncFlagConfig({
-    appId,
-    environmentId,
-    flagId,
-  });
-  if (!result.ok) {
-    throw new Error(
-      `flag-config lifecycle: KV resync failed for flag ${flagId} in ${environmentId}`,
-    );
-  }
 }
 
 async function purgeFlagConfigKv(
