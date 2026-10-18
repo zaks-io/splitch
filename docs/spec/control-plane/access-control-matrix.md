@@ -238,13 +238,17 @@ A Personal Access Token is not a JWT and is accepted only by the MCP Worker. The
 door resolves its principal from the D1 token row: the owner's live Organization and App memberships,
 kept only where a grant covers them, at min(live role, grant ceiling). Each grant is strictly
 `{ target, role, permissions }`; reading is implicit and `[]` is read-only. The closed permissions
-are `write`, `delete`, `credentials`, `members`, and `privacy`. Each route declares its permission;
+are `write`, `delete`, `credentials`, `members`, `privacy`, and `temporary_environments`. Each route declares its permission;
 a route requiring one narrows the principal to grants carrying it before selector binding and
-co-scope. For a route declared with one of the five permissions, overlapping grants contribute
+co-scope. For a route declared with one of the declared permissions, overlapping grants contribute
 role ceilings only for permissions they carry, and a path without an Organization or App needs an
 `all` grant carrying that permission. Reads use every covering grant at the highest covering ceiling;
 path-less reads never require `all`. Owner cleanup, session-only and derived rules remain separate.
-Refusals name the missing permission and target.
+Refusals name the missing permission and target. An opted-in route may fall back to
+`temporary_environments`, but the shared selector resolver must authorize the checked Environment
+row's App and temporary kind. Missing rows and permanent Environments are refused. This permission
+adds no role and grants no App-level writes or stored Approval Reviews. See
+[Temporary Environment permission](temporary-environments.md#permission).
 
 Approval application derives permission and role from the stored operation and checks the current
 token before applying it; decline needs `write`. Owner PAT cleanup bypasses permission narrowing.

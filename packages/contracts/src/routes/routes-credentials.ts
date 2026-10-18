@@ -36,6 +36,7 @@ const RATE = "control-plane-actor" as const;
 export const credentialRoutes = [
   defineApiRoute({
     operationId: "client_key_get",
+    temporaryEnvironment: true,
     owner: OWNER,
     method: "GET",
     path: "/apps/:appId/envs/:environmentId/client-key",
@@ -51,6 +52,7 @@ export const credentialRoutes = [
   }),
   defineApiRoute({
     operationId: "client_key_update",
+    temporaryEnvironment: true,
     audit: "app",
     owner: OWNER,
     method: "PATCH",
@@ -67,6 +69,7 @@ export const credentialRoutes = [
   }),
   defineApiRoute({
     operationId: "client_key_rotate",
+    temporaryEnvironment: true,
     audit: "app",
     owner: OWNER,
     method: "POST",
@@ -98,6 +101,7 @@ export const credentialRoutes = [
   }),
   defineApiRoute({
     operationId: "api_keys_create",
+    temporaryEnvironment: true,
     audit: "app",
     owner: OWNER,
     method: "POST",
@@ -116,6 +120,7 @@ export const credentialRoutes = [
   }),
   defineApiRoute({
     operationId: "api_keys_revoke",
+    temporaryEnvironment: true,
     audit: "app",
     owner: OWNER,
     method: "POST",

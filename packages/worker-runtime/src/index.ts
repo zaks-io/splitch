@@ -56,6 +56,7 @@ export {
   type NarrowOutcome,
   narrowPersonalAccessTokenForOperation,
   narrowPersonalAccessTokenForPermission,
+  narrowPersonalAccessTokenForRoute,
 } from "./steps/personal-access-token-write";
 export {
   appAccessCovers,

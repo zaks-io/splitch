@@ -200,8 +200,8 @@ Returns `{ ...Environment, syncedFlags: number }` with `temporary.syncedFromEnvi
 
 ## Permission
 
-Pending SPL-772. SPL-770 uses the existing permissions and role gates; it adds no PAT permission,
-route opt-in marker, or temporary-only narrowing.
+Implemented in SPL-772. The permission narrows token authority; role gates and the Temporary
+Environment lifecycle remain unchanged.
 
 `temporary_environments` joins the closed PAT permission set:
 
@@ -235,11 +235,14 @@ source is already permitted to any token that can read the App.
    declared permission on the target. Otherwise, for an opted-in route, a token carrying
    `temporary_environments` on the target is narrowed to that permission's scopes and marked
    temporary-only.
-2. The shared path-selector resolution step loads the checked Environment row for a temporary-only
+2. For an App key, selector discovery includes both ordinary and temporary permission scopes, then
+   repeats narrowing against the canonical App before any Environment authorization. The shared
+   path-selector resolution step loads the checked Environment row for a temporary-only
    principal, whether the selector is a key or a canonical id and with or without `?by=id`, and
    refuses a permanent or foreign-App Environment with `FORBIDDEN`: "personal access token needs
    `<permission>` permission for `app:<id>`; `temporary_environments` covers only Temporary
-   Environments". Enforcement lives in this one seam, never in individual handlers.
+   Environments". A missing or unresolved row is refused with the same error. Enforcement lives
+   in this one seam, never in individual handlers.
 3. `environments_create` is the one body-dependent case: a temporary-only principal must send
    `temporary`, checked in the create handler and covered by a contract test.
 4. `narrowPersonalAccessTokenForOperation`, which re-authorizes a stored Approval Request at Review,
@@ -416,7 +419,8 @@ the existing lifecycle permissions.
   Run in `prod` resolves as it does in `prod` for the same Evaluation Context, rollout buckets
   included.
 - The same agent flips a Flag in its Temporary Environment and sees the new value through both
-  keys, while `dev` and `prod` are unchanged.
+  keys, while `dev` and `prod` are unchanged. The local six-Worker harness runs this flow with
+  only `temporary_environments` on the agent token, after setup through a separate writer token.
 - `envs sync --from dev` makes `flags get` in the Temporary Environment match `dev` for every Flag.
 - The same token is refused with `FORBIDDEN` naming the missing permission when it edits a Flag
   Configuration, replaces Targeting Rules, rotates a key, or promotes into `dev` or `prod`, through

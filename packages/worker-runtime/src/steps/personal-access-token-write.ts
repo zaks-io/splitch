@@ -39,6 +39,15 @@ export function narrowPersonalAccessTokenForRoute(
   const route = getRoute(contract.id);
   if (!route)
     return refuse(`personal access token cannot authorize unregistered operation ${contract.id}`);
+  return narrowForRegisteredRoute(route, principal, params, true);
+}
+
+function narrowForRegisteredRoute(
+  route: ApiRouteContract,
+  principal: Principal,
+  params: Record<string, string>,
+  allowTemporaryEnvironment: boolean,
+): NarrowOutcome {
   switch (route.permission) {
     case "read":
     case "owner-cleanup":
@@ -51,14 +60,49 @@ export function narrowPersonalAccessTokenForRoute(
     case "credentials":
     case "members":
     case "privacy":
-      return narrowPersonalAccessTokenForPermission(route.permission, principal, params, {
+    case "temporary_environments": {
+      const ordinary = narrowPersonalAccessTokenForPermission(route.permission, principal, params, {
         targeted: /:(orgId|appId)\b/.test(route.path),
       });
+      return allowTemporaryEnvironment && route.temporaryEnvironment
+        ? narrowForTemporaryEnvironment(principal, params, ordinary)
+        : ordinary;
+    }
     default:
       return refuse(
-        `personal access token cannot authorize operation ${contract.id} without a permission declaration`,
+        `personal access token cannot authorize operation ${route.id} without a permission declaration`,
       );
   }
+}
+
+function narrowForTemporaryEnvironment(
+  principal: Principal,
+  params: Record<string, string>,
+  ordinary: NarrowOutcome,
+): NarrowOutcome {
+  const temporary = narrowPersonalAccessTokenForPermission(
+    "temporary_environments",
+    principal,
+    params,
+    { targeted: true },
+  );
+  if (!temporary.ok) return ordinary;
+  // A human App selector needs both sets for discovery. The selector resolver
+  // repeats narrowing with the canonical App before any Environment check.
+  if (ordinary.ok && params.appId && !params.appId.startsWith("app_")) {
+    const scopes = [...new Set([...ordinary.principal.scopes, ...temporary.principal.scopes])];
+    return { ok: true, principal: { ...principal, scopes, ...scopeBinding(scopes) } };
+  }
+  if (ordinary.ok) return ordinary;
+  const token = temporary.principal.personalAccessToken;
+  if (!token) throw new Error("temporary Environment authority requires a Personal Access Token");
+  return {
+    ok: true,
+    principal: {
+      ...temporary.principal,
+      personalAccessToken: { ...token, temporaryEnvironmentOnly: true },
+    },
+  };
 }
 
 /** Used for the write permission on a decline, whose route otherwise derives its permission. */
@@ -99,7 +143,7 @@ export function narrowPersonalAccessTokenForOperation(
   const route = getRoute(routeId);
   if (!route)
     return refuse(`personal access token cannot authorize unregistered operation ${operationId}`);
-  const narrowed = narrowPersonalAccessTokenForRoute(route, principal, params);
+  const narrowed = narrowForRegisteredRoute(route, principal, params, false);
   if (!narrowed.ok || !principal.personalAccessToken) return narrowed;
   return enforceOperationRole(route, narrowed.principal, params);
 }
@@ -146,6 +190,11 @@ export function personalAccessTokenSelectorError(
   error: ErrorResponse,
 ): ErrorResponse {
   if (!principal.personalAccessToken) return error;
+  if (
+    error.code === "FORBIDDEN" &&
+    error.message.includes("temporary_environments covers only Temporary Environments")
+  )
+    return error;
   const permission = getRoute(contract.id)?.permission;
   if (!permission || ["read", "owner-cleanup", "session-only", "derived"].includes(permission))
     return error;

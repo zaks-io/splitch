@@ -6,10 +6,13 @@ import {
 import { appScope, envScope } from "@splitch/db";
 import type { Principal } from "@splitch/worker-runtime";
 import { beforeEach, describe, expect, it } from "vitest";
+import { narrowSeededAvailability } from "../src/config-store-fixture-data";
 import {
   type Harness,
   ids,
+  patchFlagConfig,
   promoteFlagConfig,
+  replaceTargetingRules,
   setProdPolicy,
   USER_ID,
 } from "../src/config-store-harness-core";
@@ -66,6 +69,66 @@ function usePat(permissions: PersonalAccessTokenPermission[], role: UserRole = "
 }
 
 describe("PAT authority at stored Approval application", () => {
+  it.each(["configuration", "targeting", "promotion"] as const)(
+    "refuses both Review actions for a session-created %s proposal with temporary authority",
+    async (kind) => {
+      if (kind === "targeting") await narrowSeededAvailability(h.d1);
+      const proposed =
+        kind === "configuration"
+          ? await patchFlagConfig(h, { enabled: true })
+          : kind === "targeting"
+            ? await replaceTargetingRules(h, {
+                targetingRules: [
+                  {
+                    priority: 1,
+                    conditions: [{ attribute: "plan", operator: "eq", value: "paid" }],
+                    id: "rule_temporary_approval",
+                    flagId: ids.flagId,
+                    variantId: ids.treatmentVariantId,
+                  },
+                ],
+              })
+            : await promoteFlagConfig(h, {
+                fromEnvironmentId: ids.devEnvironmentId,
+                select: { enabled: true },
+              });
+      expect(proposed.status, await proposed.clone().text()).toBe(409);
+      const {
+        details: { approvalRequestId },
+      } = (await proposed.json()) as { details: { approvalRequestId: string } };
+      expect(
+        await h.repo.approvals.getRequest(appScope(ids.appId), approvalRequestId),
+      ).toMatchObject({ proposedVia: "device_flow", status: "pending" });
+      const before = await h.repo.flags.getFlagConfig(
+        envScope(ids.appId, ids.environmentId),
+        ids.flagId,
+      );
+      usePat(["temporary_environments"]);
+      for (const action of ["approve_and_apply", "decline"] as const) {
+        const response = await reviewRequest(
+          h,
+          approvalRequestId,
+          `temp-${kind}-${action}`,
+          action,
+        );
+        expect(response.status).toBe(403);
+        expect(await response.json()).toMatchObject({
+          code: "FORBIDDEN",
+          message: expect.stringContaining("write permission"),
+        });
+      }
+      expect(await countApprovalReviews(h)).toBe(0);
+      expect(
+        await h.repo.approvals.getRequest(appScope(ids.appId), approvalRequestId),
+      ).toMatchObject({ status: "pending" });
+      expect(
+        await h.repo.flags.getFlagConfig(envScope(ids.appId, ids.environmentId), ids.flagId),
+      ).toEqual(before);
+    },
+  );
+});
+
+describe("ordinary PAT authority at stored Approval application", () => {
   it.each(["flag", "variant"] as const)(
     "refuses a session-created %s deletion without delete, then applies with delete",
     async (kind) => {

@@ -283,21 +283,24 @@ describe("splitch tokens grant permissions", () => {
     },
   );
 
-  it("sends explicit write and delete permissions on create", async () => {
-    const { dir } = await makeTempHome();
-    const { exitCode, transport } = await run([
-      "tokens",
-      "create",
-      "--name",
-      "x",
-      "--grant",
-      "app:app_1:admin:write,delete",
-      "--output-file",
-      join(dir, "pat.env"),
-    ]);
-    expect(exitCode).toBe(EXIT_OK);
-    expect(transport.requests.at(-1)?.body).toMatchObject({
-      grants: [{ target: "app:app_1", role: "admin", permissions: ["write", "delete"] }],
-    });
-  });
+  it.each([["write", "delete"], ["temporary_environments"]])(
+    "sends explicit permissions %j on create",
+    async (...permissions) => {
+      const { dir } = await makeTempHome();
+      const { exitCode, transport } = await run([
+        "tokens",
+        "create",
+        "--name",
+        "x",
+        "--grant",
+        `app:app_1:admin:${permissions.join(",")}`,
+        "--output-file",
+        join(dir, "pat.env"),
+      ]);
+      expect(exitCode).toBe(EXIT_OK);
+      expect(transport.requests.at(-1)?.body).toMatchObject({
+        grants: [{ target: "app:app_1", role: "admin", permissions }],
+      });
+    },
+  );
 });

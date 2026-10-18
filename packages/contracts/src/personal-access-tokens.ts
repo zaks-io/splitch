@@ -31,6 +31,7 @@ export const personalAccessTokenPermissions = [
   "credentials",
   "members",
   "privacy",
+  "temporary_environments",
 ] as const;
 export const PersonalAccessTokenPermissionSchema = z.enum(personalAccessTokenPermissions);
 export type PersonalAccessTokenPermission = z.infer<typeof PersonalAccessTokenPermissionSchema>;

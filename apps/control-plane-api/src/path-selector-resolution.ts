@@ -1,14 +1,19 @@
-import { type ErrorResponse, MEMBERSHIP_WIDE_READ_AUTHORIZATION } from "@splitch/contracts";
+import {
+  type ErrorResponse,
+  getRoute,
+  MEMBERSHIP_WIDE_READ_AUTHORIZATION,
+} from "@splitch/contracts";
 import { appScope, type Repository } from "@splitch/db";
 import {
   type AuthenticatedInputResolution,
   type AuthenticatedInputResolver,
   type AuthenticatedInputResolverArgs,
   appAccessCovers,
+  narrowPersonalAccessTokenForRoute,
   type Principal,
 } from "@splitch/worker-runtime";
-import type { EnvironmentRow } from "./app-environment-model";
 import { refuseExpiredEnvironmentMutation } from "./environment-expiry-resolution";
+import { resolveEnvironment, resolveEnvironmentSelectors } from "./path-selector-environments";
 import {
   environmentSelectorFromInput,
   environmentSelectorsFromInput,
@@ -19,7 +24,6 @@ import { membershipClaimsInScopes } from "./scope-binding";
 
 const APP_ID_PREFIX = "app_";
 const ORG_ID_PREFIX = "org_";
-const ENVIRONMENT_ID_PREFIX = "env_";
 const FLAG_ID_PREFIX = "flag_";
 
 /** Resolve human-readable path selectors inside the authenticated request. */
@@ -49,25 +53,31 @@ export async function resolveControlPlanePathSelectors(
   const app = await resolveApp(repo, rawPrincipal, params.appId);
   if (!app.ok) return app;
   assignResolved(resolvedParams, "appId", app.appId);
-  const resolvedPrincipal = bindResolvedApp(rawPrincipal, resolvedParams.appId);
-  const resolvedAppError = appScopeError(resolvedPrincipal, resolvedParams.appId);
-  if (resolvedAppError) return { ok: false, error: resolvedAppError };
+  const narrowed = narrowResolvedApp(contract.id, rawPrincipal, resolvedParams);
+  if (!narrowed.ok) return narrowed;
+  const resolvedPrincipal = narrowed.principal;
 
   const forceEnvironmentId = canonicalEnvironmentLookup(request);
-  const environment = await resolveEnvironment(
+  const environment = await resolvePathEnvironment(
     repo,
+    resolvedPrincipal,
+    contract.id,
     resolvedParams.appId,
     params.environmentId,
     forceEnvironmentId,
+    contract.id !== "flags_promote",
   );
   if (!environment.ok) return environment;
   assignResolved(resolvedParams, "environmentId", environment.environmentId);
 
-  const target = await resolveEnvironment(
+  const target = await resolvePathEnvironment(
     repo,
+    resolvedPrincipal,
+    contract.id,
     resolvedParams.appId,
     params.targetEnvironmentId,
     forceEnvironmentId,
+    contract.id === "flags_promote",
   );
   if (!target.ok) return target;
   assignResolved(resolvedParams, "targetEnvironmentId", target.environmentId);
@@ -121,6 +131,57 @@ type SelectorResolverArgs = Pick<
   "input" | "params" | "principal" | "request"
 > & { contract: Pick<AuthenticatedInputResolverArgs["contract"], "id"> };
 
+function narrowResolvedApp(routeId: string, principal: Principal, params: Record<string, string>) {
+  const route = getRoute(routeId);
+  const narrowed = route?.temporaryEnvironment
+    ? narrowPersonalAccessTokenForRoute(route, principal, params)
+    : { ok: true as const, principal };
+  if (!narrowed.ok) return narrowed;
+  const bound = bindResolvedApp(narrowed.principal, params.appId);
+  const error = appScopeError(bound, params.appId);
+  return error ? { ok: false as const, error } : { ok: true as const, principal: bound };
+}
+
+async function resolvePathEnvironment(
+  repo: Repository,
+  principal: Principal,
+  routeId: string,
+  appId: string | undefined,
+  selector: string | undefined,
+  forceCanonicalId: boolean,
+  writeTarget: boolean,
+): ReturnType<typeof resolveEnvironment> {
+  const checkTemporary =
+    writeTarget &&
+    routeId !== "environments_create" &&
+    principal.personalAccessToken?.temporaryEnvironmentOnly === true;
+  const result = await resolveEnvironment(
+    repo,
+    appId,
+    selector,
+    forceCanonicalId,
+    false,
+    "APP_NOT_FOUND",
+    checkTemporary,
+  );
+  if (!checkTemporary) return result;
+  if (
+    result.ok &&
+    result.row &&
+    result.row.appId === appId &&
+    typeof result.row.expiresAt === "string"
+  )
+    return result;
+  return {
+    ok: false,
+    error: {
+      code: "FORBIDDEN",
+      message: `personal access token needs ${getRoute(routeId)?.permission} permission for app:${appId}; temporary_environments covers only Temporary Environments`,
+      details: {},
+    },
+  };
+}
+
 async function resolveApp(
   repo: Repository,
   principal: Principal,
@@ -150,97 +211,6 @@ async function resolveApp(
     };
   }
   return { ok: true, appId: candidates[0]?.appId };
-}
-
-async function resolveEnvironment(
-  repo: Repository,
-  appId: string | undefined,
-  selector: string | undefined,
-  forceCanonicalId: boolean,
-  requireMatch = false,
-  notFoundCode: "APP_NOT_FOUND" | "ENVIRONMENT_NOT_FOUND" = "APP_NOT_FOUND",
-): Promise<
-  | { ok: true; environmentId?: string; row?: EnvironmentRow | null }
-  | { ok: false; error: ErrorResponse }
-> {
-  if (selector === undefined) return { ok: true };
-  if (!appId?.startsWith(APP_ID_PREFIX)) return failure("APP_NOT_FOUND", "app not found");
-  if (forceCanonicalId && selector.startsWith(ENVIRONMENT_ID_PREFIX)) return { ok: true };
-  // Legacy keys can have the same `env_` shape as canonical IDs. One scoped OR
-  // query is required to detect that collision without silently choosing a
-  // plausible wrong Environment; it also avoids the old two-read ID-miss path.
-  // The full row is carried to Environment GET so it can reuse this read.
-  const candidates = await repo.identity.findEnvironmentSelectorCandidates(
-    appScope(appId),
-    selector,
-  );
-  if (candidates.length === 0 && selector.startsWith(ENVIRONMENT_ID_PREFIX) && !requireMatch) {
-    return { ok: true, row: null };
-  }
-  if (candidates.length > 1) {
-    return {
-      ok: false,
-      error: {
-        code: "SELECTOR_AMBIGUOUS",
-        message: `Environment selector "${selector}" matches more than one Environment`,
-        details: {
-          candidates: candidates.map(({ environmentId, environmentKey }) => ({
-            environmentId,
-            environmentKey,
-          })),
-          recommendedAction: "USE_CANONICAL_ID",
-        },
-      },
-    };
-  }
-  // Path selectors keep APP_NOT_FOUND so a caller cannot use a nested route to
-  // disclose whether an Environment exists outside the authorized App. Flag-read
-  // query filters run after the App resolved and passed authorization, so their
-  // miss names the actual filter with ENVIRONMENT_NOT_FOUND.
-  const environment = candidates[0];
-  return environment
-    ? {
-        ok: true,
-        environmentId: environment.environmentId,
-        row: environment.environment,
-      }
-    : failure(
-        notFoundCode,
-        notFoundCode === "ENVIRONMENT_NOT_FOUND" ? "environment not found" : "app not found",
-      );
-}
-
-async function resolveEnvironmentSelectors(
-  repo: Repository,
-  appId: string | undefined,
-  selectors: readonly string[] | undefined,
-): Promise<{ ok: true; environmentIds?: string[] } | { ok: false; error: ErrorResponse }> {
-  if (!selectors) return { ok: true };
-  if (!appId?.startsWith(APP_ID_PREFIX)) return failure("APP_NOT_FOUND", "app not found");
-  const candidates = await repo.identity.findEnvironmentSelectorCandidatesForSelectors(
-    appScope(appId),
-    selectors,
-  );
-  const environmentIds: string[] = [];
-  for (const selector of selectors) {
-    const matches = candidates.filter(
-      (candidate) => candidate.environmentId === selector || candidate.environmentKey === selector,
-    );
-    if (matches.length > 1) {
-      return {
-        ok: false,
-        error: {
-          code: "SELECTOR_AMBIGUOUS",
-          message: `Environment selector "${selector}" matches more than one Environment`,
-          details: { candidates: matches, recommendedAction: "USE_CANONICAL_ID" },
-        },
-      };
-    }
-    const environment = matches[0];
-    if (!environment) return failure("ENVIRONMENT_NOT_FOUND", "environment not found");
-    environmentIds.push(environment.environmentId);
-  }
-  return { ok: true, environmentIds };
 }
 
 async function resolveFlag(
