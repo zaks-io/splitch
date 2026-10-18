@@ -2391,7 +2391,7 @@ Flags:
 
 Request body (--body-json):
   name       required  string
-  grants     required  { target: string; role: string ("owner" | "admin" | "member"); permissions: string ("write" | "delete" | "credentials" | "members" | "privacy")[] }[]
+  grants     required  { target: string; role: string ("owner" | "admin" | "member"); permissions: string ("write" | "delete" | "credentials" | "members" | "privacy" | "temporary_environments")[] }[]
   expiresAt  optional  string | null
   Example:
     {"name":"name","grants":[{"target":"all","role":"owner","permissions":[]}]}
@@ -2477,7 +2477,7 @@ Flags:
 
 Request body (--body-json):
   name       optional  string
-  grants     optional  { target: string; role: string ("owner" | "admin" | "member"); permissions: string ("write" | "delete" | "credentials" | "members" | "privacy")[] }[]
+  grants     optional  { target: string; role: string ("owner" | "admin" | "member"); permissions: string ("write" | "delete" | "credentials" | "members" | "privacy" | "temporary_environments")[] }[]
   expiresAt  optional  string | null
   Example:
     {"name":"name"}

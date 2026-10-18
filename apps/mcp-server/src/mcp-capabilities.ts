@@ -73,7 +73,15 @@ function grantingScopes(authority: McpEffectiveAuthority, toolName: string): rea
     default: {
       const permission = token.permissions[route.permission];
       const targeted = /:(orgId|appId)\b/.test(route.path);
-      return targeted || permission.all ? permission.scopes : [];
+      const scopes = targeted || permission.all ? permission.scopes : [];
+      if (!route.temporaryEnvironment) return scopes;
+      const ordinaryTargets = new Set(
+        scopes.map((scope) => scope.slice(0, scope.lastIndexOf(":"))),
+      );
+      const temporaryScopes = token.permissions.temporary_environments.scopes.filter(
+        (scope) => !ordinaryTargets.has(scope.slice(0, scope.lastIndexOf(":"))),
+      );
+      return [...scopes, ...temporaryScopes];
     }
   }
 }

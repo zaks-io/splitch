@@ -90,6 +90,7 @@ interface ApiRouteInputFields {
   idempotency: IdempotencyMode;
   /** Commits in this domain append an App audit fact with action = operationId. */
   audit?: "app";
+  temporaryEnvironment?: true;
   rawBodyByteLimit?: RawBodyByteLimit;
   errors: readonly ErrorCode[];
   /** Audited effects; never inferred from `method`. */
@@ -288,6 +289,7 @@ export function defineApiRoute<const Input extends DefineApiRouteInput>(input: I
     scopes: input.scopes ?? [],
     rateLimit: input.rateLimit,
     idempotency: input.idempotency,
+    ...(input.temporaryEnvironment ? { temporaryEnvironment: input.temporaryEnvironment } : {}),
     rawBodyByteLimit: input.rawBodyByteLimit,
     errors,
   });

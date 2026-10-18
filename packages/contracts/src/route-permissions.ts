@@ -12,6 +12,7 @@ const permissions: readonly RoutePermission[] = [
 
 /** Reject malformed metadata even when callers bypass the authoring types. */
 export function assertRoutePermission(route: ApiRouteContract): void {
+  assertTemporaryEnvironmentRoute(route);
   if (route.auth !== "control-plane-token") {
     if ("permission" in route) {
       throw new Error(`route-registry: route "${route.operationId}" must not declare permission`);
@@ -33,6 +34,19 @@ export function assertRoutePermission(route: ApiRouteContract): void {
   ) {
     throw new Error(
       `route-registry: destructive irreversible route "${route.operationId}" cannot require write`,
+    );
+  }
+}
+
+function assertTemporaryEnvironmentRoute(route: ApiRouteContract): void {
+  if (
+    route.temporaryEnvironment &&
+    (route.auth !== "control-plane-token" ||
+      (route.operationId !== "environments_create" &&
+        !/:(environmentId|targetEnvironmentId)\b/.test(route.path)))
+  ) {
+    throw new Error(
+      `route-registry: temporary Environment route "${route.operationId}" requires an Environment path parameter`,
     );
   }
 }

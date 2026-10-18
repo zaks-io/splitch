@@ -167,7 +167,7 @@ describe("MCP PAT diagnostics and management isolation", () => {
       {
         target: `app:${TENANT_A.appId}`,
         role: "admin",
-        permissions: ["write", "delete", "credentials", "members", "privacy"],
+        permissions: [...personalAccessTokenPermissions],
       },
       { target: `app:${TENANT_B.appId}`, role: "owner", permissions: [] },
     ]);

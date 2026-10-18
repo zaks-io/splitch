@@ -272,7 +272,14 @@ describe("personal access token request schemas", () => {
   it("canonicalizes permissions without changing their meaning", () => {
     expect(
       PersonalAccessTokenGrantSchema.parse(
-        grant("all", "member", ["privacy", "members", "credentials", "delete", "write"]),
+        grant("all", "member", [
+          "temporary_environments",
+          "privacy",
+          "members",
+          "credentials",
+          "delete",
+          "write",
+        ]),
       ).permissions,
     ).toEqual(personalAccessTokenPermissions);
     expect(PersonalAccessTokenGrantSchema.parse(grant("all", "member", [])).permissions).toEqual(

@@ -215,6 +215,7 @@ export const flagRoutes = [
   }),
   defineApiRoute({
     operationId: "flag_config_update",
+    temporaryEnvironment: true,
     owner: OWNER,
     method: "PATCH",
     path: "/apps/:appId/envs/:environmentId/flags/:flagId/config",
@@ -241,6 +242,7 @@ export const flagRoutes = [
   }),
   defineApiRoute({
     operationId: "flag_targeting_rules_replace",
+    temporaryEnvironment: true,
     owner: OWNER,
     method: "PUT",
     path: "/apps/:appId/envs/:environmentId/flags/:flagId/targeting-rules",
@@ -266,6 +268,7 @@ export const flagRoutes = [
   }),
   defineApiRoute({
     operationId: "flags_promote",
+    temporaryEnvironment: true,
     audit: "app",
     owner: OWNER,
     method: "POST",
