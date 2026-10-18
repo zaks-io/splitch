@@ -1,18 +1,19 @@
 # Temporary Environments, Sync, and the `temporary_environments` permission
 
-**Status:** lifecycle implemented by SPL-770. The Control Panel and app-view changes in SPL-771 and
-PAT permission changes in SPL-772 remain pending. The decision is
+**Status:** implemented by SPL-770 (lifecycle), SPL-771 (App-level views and the Control Panel), and
+SPL-772 (the `temporary_environments` PAT permission). The decision is
 [ADR-0060](../../adr/0060-temporary-environments-are-expiring-scratch-environments-with-their-own-permission.md).
-Canonical lifecycle behavior is documented in [Environment endpoints](endpoints-org-app.md),
-[credentials](credentials-and-keys.md), [CLI and MCP](mcp-and-cli-surfaces.md),
-[D1](../contracts/storage-schemas-d1.md), [KV](../contracts/storage-schemas-kv.md), and
-[errors](../contracts/error-responses.md). This file retains the full design and pending slices.
+Canonical behavior is documented in [Environment endpoints](endpoints-org-app.md),
+[Flag reads](endpoints-flag-segment.md), [credentials](credentials-and-keys.md),
+[PAT permissions](personal-access-token-permissions.md), [CLI and MCP](mcp-and-cli-surfaces.md),
+[screens](../frontend/screen-inventory.md), [D1](../contracts/storage-schemas-d1.md),
+[KV](../contracts/storage-schemas-kv.md), and [errors](../contracts/error-responses.md). This file
+retains the full design and the rollback rule.
 
 Goal: an agent working on one branch creates its own copy of `dev` or `prod`, points its local
 server and client at that copy, changes Flags freely, and never touches an Environment anyone else
-uses. With the pending SPL-772 permission, the token it holds cannot change a permanent Environment.
-The copy and its keys stop working
-on their own within 7 days.
+uses. With the `temporary_environments` permission, the token it holds cannot change a permanent
+Environment. The copy and its keys stop working on their own within 7 days.
 
 ## Glossary additions
 
@@ -367,7 +368,8 @@ One additive D1 migration:
 3. Once creation ships, rolling the Control Plane back past that release is forbidden while any
    Temporary Environment exists: an older writer would mint non-expiring v2 credentials and an
    older cron would not tear down. Delete every Temporary Environment first if a rollback is
-   unavoidable.
+   unavoidable. That release is `21428efa` (#740); the
+   [deployment rollback limits](../platform/deployment-pipeline.md#rollback) carry the same rule.
 
 Each production deploy and the production migration need explicit approval.
 
@@ -383,11 +385,11 @@ blocked by it and can run in parallel; their footprints are disjoint.
    the live and Sync limits, expired-is-read-only, the Config Store fence and the App-wide skip, the
    change-log kind with the Sentry skip, the attention rollup exclusion, teardown on delete and on
    the cron, CLI and MCP.
-2. **[SPL-771](https://linear.app/zaks-io/issue/SPL-771), pending. App-level views and the Control Panel
+2. **[SPL-771](https://linear.app/zaks-io/issue/SPL-771), implemented. App-level views and the Control Panel
    treat Temporary Environments as scratch** (blocked by SPL-770; split for size). Stale and
    expired Flag and inventory health exclusions; the switcher group, expiry and Sync source,
    and unavailable Policy and Experiment affordances.
-3. **[SPL-772](https://linear.app/zaks-io/issue/SPL-772), pending. A PAT with `temporary_environments` can
+3. **[SPL-772](https://linear.app/zaks-io/issue/SPL-772), implemented. A PAT with `temporary_environments` can
    manage Temporary Environments and nothing permanent** (blocked by SPL-770; split for risk and
    authority). Permission enum, route opt-in marker and registry validation, narrowing, the
    path-selector enforcement, the create-body check, the approval exclusion, capabilities,
@@ -411,9 +413,8 @@ blocked by it and can run in parallel; their footprints are disjoint.
 
 ## Done
 
-These are full-design acceptance criteria. The temporary-only token criteria require SPL-772;
-the stale, expired, inventory, and Control Panel criteria require SPL-771. SPL-770 uses tokens with
-the existing lifecycle permissions.
+These are the full-design acceptance criteria. SPL-772 delivered the temporary-only token
+criteria, SPL-771 the stale, expired, inventory, and Control Panel criteria, and SPL-770 the rest.
 
 - From a clean checkout with only `SPLITCH_TOKEN` set to a token granted
   `app:<id>:owner:temporary_environments`, an agent runs `envs create --temporary --from prod`,

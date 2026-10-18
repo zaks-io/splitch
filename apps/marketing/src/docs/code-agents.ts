@@ -41,6 +41,11 @@ export const codeAgentsDoc = {
       kind: "prose",
       text: "A Client Key is public and may evaluate from a browser, mobile client, or server. An API Key is secret, stays on a trusted server, and cannot call `evaluate`. Follow the repository's existing environment-variable convention, never print or commit a secret, and never replace a supplied Client Key with an API Key in client code. See [Credentials](/docs/sdk/credentials).",
     },
+    { kind: "heading", text: "Test in a Temporary Environment" },
+    {
+      kind: "prose",
+      text: "To exercise a Flag change on a branch, create a Temporary Environment with `splitch envs create --key pr-123 --temporary --from dev --json` and point the local server and client at its keys instead of changing a shared Environment. It copies the source's Flag Configurations, rollout buckets included, and stops working on its own within 7 days. A token granted `app:<app id>:owner:temporary_environments` can change only Temporary Environments. The [CLI guide](/docs/cli) covers Sync, expiry, and cleanup.",
+    },
     { kind: "heading", text: "Flags and Exposures" },
     {
       kind: "list",

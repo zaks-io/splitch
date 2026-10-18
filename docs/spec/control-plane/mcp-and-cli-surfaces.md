@@ -183,9 +183,13 @@ and Flag `--expires-at`. `--temporary` is create-only; `--from` is limited to En
 Sync. Permanent Environment creation stays unchanged. Create returns its Client Key; Sync returns
 the updated provenance and `syncedFlags`. See [Environment lifecycle](endpoints-org-app.md#temporary-environment-lifecycle).
 
-Lifecycle operations use the existing PAT permissions and role gates. SPL-772's
-`temporary_environments` permission and temporary-only narrowing remain pending. The grouped
-Control Panel switcher and expiry/Sync-source displays remain pending in SPL-771.
+Lifecycle operations use the existing PAT permissions and role gates. A PAT granted
+`app:<app_id>:owner:temporary_environments` reads the whole App and writes only inside its Temporary
+Environments: create, rename, Sync, Flag Configuration, Promotion into them, SDK keys, and delete.
+The same command against a permanent Environment is refused with `FORBIDDEN` naming the missing
+permission. See [Temporary Environment permission](temporary-environments.md#permission). The
+Control Panel lists Temporary Environments in their own switcher group with expiry and Sync source;
+creating, Sync, and delete stay CLI and MCP operations.
 
 One command per endpoint. CLI/MCP author and discover Event Definitions and Metrics and manage Flags,
 Environments, Experiments, policies, evaluations, and credentials, but they do not impersonate an SDK
@@ -293,8 +297,9 @@ binding plumbing, are excluded from tool discovery.
 Temporary Environment tools follow this same derivation: `environments_create` accepts nested
 `temporary: { fromEnvironmentId, expiresAt? }`, `environments_sync` accepts `fromEnvironmentId`,
 and `environments_delete` uses the ordinary delete operation. Source selectors accept an
-Environment key or canonical ID in the same App. No separate MCP lifecycle implementation or
-permission is introduced by SPL-770.
+Environment key or canonical ID in the same App. There is no separate MCP lifecycle
+implementation or MCP-specific permission; MCP tools use the same PAT permissions as the CLI,
+including `temporary_environments`.
 
 The execution schema remains byte-for-byte identical to the Worker schema. The protocol schema may
 make an App or Environment selector optional when MCP session context can fill that selector before

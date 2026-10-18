@@ -134,7 +134,7 @@ function credentialNotes(command: CliCommandDefinition): string[] {
   }
   if (group === "tokens") {
     return [
-      "A Personal Access Token works only with the MCP server, never with this CLI. Its reach is your live membership, limited by its grants.",
+      "A Personal Access Token authenticates this CLI through SPLITCH_TOKEN and the MCP server. Its reach is your live membership, limited by its grants. Creating, updating, or rotating one needs a login session.",
     ];
   }
   if (group === "api-keys") {

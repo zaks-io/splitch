@@ -31,6 +31,7 @@ describe("CLI docs surface", () => {
     expect(markdown).toContain("--cursor");
     expect(markdown).toContain("--limit");
     expect(markdown).toContain("reserved global flag");
+    expect(markdown).toContain("app:<app id>:owner:temporary_environments");
     expect(markdown).toContain(`Source: ${DOCS_ORIGIN}${docsPath.cli()}`);
   });
 

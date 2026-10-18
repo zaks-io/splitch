@@ -238,8 +238,11 @@ At and after expiry, Environment-addressed mutations return `410 ENVIRONMENT_EXP
 until teardown and `environments_delete` remains allowed. Mutation classification uses the route's
 `effects.mutates`, not its HTTP method: the provisioning `client_key_get` is a mutation, while
 `experiment_plan`, `experiment_results_post`, and `flags_test_eval` remain reads. Existing login
-and PAT permissions and role gates apply. The new PAT permission is pending SPL-772; Control Panel
-and stale/expired/inventory exclusions are pending SPL-771.
+and PAT permissions and role gates apply. A PAT may instead carry `temporary_environments`, which
+authorizes the opted-in lifecycle routes only on Temporary Environments of the granted App; see
+[Temporary Environment permission](temporary-environments.md#permission). Stale and expired Flag
+lists and inventory health exclude Temporary Environments; see
+[Flag endpoints](endpoints-flag-segment.md).
 
 Configuration writes, Sync, and teardown serialize through
 `configWriterName(appId, environmentId)`. The writer re-checks expiry inside serialization, so a

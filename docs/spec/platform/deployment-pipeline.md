@@ -702,6 +702,15 @@ Rollback limits:
   between the current deployment and the target version.
 - D1 point-in-time restore and Tinybird destructive reversal are incident procedures, not routine deploy
   rollback.
+- Never put a Control Plane release older than `21428efa` (#740, Temporary Environments) into
+  production while any Temporary Environment exists, whether by `wrangler rollback`, an older
+  version, or `allow_stale_release`. An older Control Plane mints non-expiring v2 credentials for
+  them and its cron never tears them down. Check first from `packages/db`:
+  `pnpm exec wrangler d1 execute DB --remote --env production --command "SELECT COUNT(*) AS temporary FROM environments WHERE expires_at IS NOT NULL"`.
+  If the count is not zero, delete every Temporary Environment first or roll forward instead. An
+  Evaluation or Event Ingest release older than `21428efa` cannot parse their version 3 credential
+  cache entries and fails closed with a server error for those keys. See
+  [Temporary Environment rollout](../control-plane/temporary-environments.md#rollout).
 
 Default incident policy is roll forward unless the release is code-only and the previous Worker version
 is compatible with current data.
