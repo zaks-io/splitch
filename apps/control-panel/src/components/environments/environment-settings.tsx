@@ -1,9 +1,9 @@
 import type { PanelEnvironmentSettings } from "@splitch/control-plane-sdk/panel-settings";
 import { ApiKeysCard } from "#components/credentials/api-keys-card";
 import { ClientKeyCard } from "#components/credentials/client-key-card";
+import { EnvironmentPolicyEditor } from "#components/environments/environment-policy-editor";
 import { CloudflareIntegrationCard } from "#components/integrations/cloudflare-integration-card";
 import { ConvexIntegrationCard } from "#components/integrations/convex-integration-card";
-import { EnvironmentPolicyEditor } from "#components/environments/environment-policy-editor";
 
 export function EnvironmentSettings({ settings }: { settings: PanelEnvironmentSettings }) {
   const scope = { appId: settings.environment.appId, environmentId: settings.environment.id };
@@ -21,7 +21,15 @@ export function EnvironmentSettings({ settings }: { settings: PanelEnvironmentSe
       </header>
       <ClientKeyCard {...scope} initialClientKey={settings.clientKey} />
       <ApiKeysCard {...scope} initialApiKeys={settings.apiKeys} />
-      <EnvironmentPolicyEditor {...scope} initialPolicy={settings.environment.policy} />
+      <EnvironmentPolicyEditor
+        {...scope}
+        initialPolicy={settings.environment.policy}
+        unavailableReason={
+          settings.environment.temporary
+            ? "Policy editing is unavailable because a Temporary Environment always allows all changes."
+            : undefined
+        }
+      />
       <ConvexIntegrationCard {...scope} />
       <CloudflareIntegrationCard {...scope} environmentKey={settings.environment.key} />
     </div>

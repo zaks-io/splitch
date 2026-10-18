@@ -167,7 +167,13 @@ function scopedContext(): ScopedLoaderContext {
               appId: "app_1",
               appSlug: "checkout",
               environments: [
-                { environmentId: "env_dev", env: "dev", name: "Development", guarded: false },
+                {
+                  environmentId: "env_dev",
+                  env: "dev",
+                  name: "Development",
+                  guarded: false,
+                  temporary: null,
+                },
               ],
             },
           ],

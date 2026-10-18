@@ -1,6 +1,9 @@
+import {
+  EnvironmentPolicySchema,
+  EnvironmentSchema,
+  USER_OWNED_ORGANIZATION_LIMIT,
+} from "@splitch/contracts";
 import { appScope, type Repository } from "@splitch/db";
-import { EnvironmentPolicySchema, USER_OWNED_ORGANIZATION_LIMIT } from "@splitch/contracts";
-import type { EnvironmentResolver } from "#lib/shared/loader-context";
 import {
   type AppMembership,
   type AppRole,
@@ -10,6 +13,7 @@ import {
   type StoredSession,
   serverOnlySessionFields,
 } from "#lib/sessions/session";
+import type { EnvironmentResolver } from "#lib/shared/loader-context";
 
 export interface SessionPrincipalInput {
   userId: string;
@@ -137,6 +141,15 @@ export function createEnvironmentResolver(repo: Repository): EnvironmentResolver
           env: environment.key,
           name: environment.name,
           guarded: Object.values(policy).some((level) => level !== "allow"),
+          temporary: EnvironmentSchema.shape.temporary.parse(
+            environment.expiresAt === null
+              ? null
+              : {
+                  expiresAt: environment.expiresAt,
+                  syncedFromEnvironmentId: environment.syncedFromEnvironmentId,
+                  syncedAt: environment.syncedAt,
+                },
+          ),
         };
       });
     },

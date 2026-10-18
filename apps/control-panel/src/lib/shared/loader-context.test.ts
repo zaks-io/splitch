@@ -11,7 +11,7 @@ import {
 describe("scoped loader context", () => {
   it("resolves URL org, app, and environment through membership and D1 seams", async () => {
     const resolver = resolverFor([
-      { environmentId: "env_1", env: "dev", guarded: false, name: "Development" },
+      { environmentId: "env_1", env: "dev", guarded: false, name: "Development", temporary: null },
     ]);
 
     const context = await resolveScopedLoaderContext(
@@ -28,7 +28,7 @@ describe("scoped loader context", () => {
       env: "dev",
     });
     expect(context.navigation.orgs[0]?.apps[0]?.environments).toEqual([
-      { environmentId: "env_1", env: "dev", guarded: false, name: "Development" },
+      { environmentId: "env_1", env: "dev", guarded: false, name: "Development", temporary: null },
     ]);
   });
 
@@ -100,8 +100,8 @@ describe("scoped loader context", () => {
 describe("App-scoped loader context", () => {
   it("resolves an App and all of its Environments without choosing one", async () => {
     const environments = [
-      { environmentId: "env_1", env: "dev", guarded: false, name: "Development" },
-      { environmentId: "env_2", env: "prod", guarded: true, name: "Production" },
+      { environmentId: "env_1", env: "dev", guarded: false, name: "Development", temporary: null },
+      { environmentId: "env_2", env: "prod", guarded: true, name: "Production", temporary: null },
     ];
 
     const context = await resolveAppLoaderContext(
@@ -165,7 +165,15 @@ describe("scope navigation", () => {
     const navigation = await resolveNavigation(staleSession, {
       async listEnvironments(appId) {
         return appId === "app_1"
-          ? [{ environmentId: "env_1", env: "dev", guarded: false, name: "Development" }]
+          ? [
+              {
+                environmentId: "env_1",
+                env: "dev",
+                guarded: false,
+                name: "Development",
+                temporary: null,
+              },
+            ]
           : [];
       },
     });

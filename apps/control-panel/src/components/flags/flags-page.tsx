@@ -1,18 +1,19 @@
-import { scopedHref } from "#lib/shell/app-shell-navigation";
-import type { FlagsPageItem } from "#lib/flags/flags-page-data";
-import { CreateFlagDialog } from "#components/flags/create-flag-dialog";
 import { EnvironmentSegmentedControl } from "#components/environments/environment-segmented-control";
+import { CreateFlagDialog } from "#components/flags/create-flag-dialog";
 import { FlagsEmptyState } from "#components/flags/flags-empty-state";
 import { FlagsTable } from "#components/flags/flags-table";
 import { FlagsTruncatedNotice } from "#components/flags/flags-truncated-notice";
 import { PanelPageBody } from "#components/shell/panel-page-body";
 import { PanelPageHeader } from "#components/shell/panel-page-header";
+import type { FlagsPageItem } from "#lib/flags/flags-page-data";
+import type { EnvironmentScope } from "#lib/shared/loader-context";
+import { scopedHref } from "#lib/shell/app-shell-navigation";
 
 type FlagsPageProps = {
   appId: string;
   appSlug: string;
   env: string;
-  environments: ReadonlyArray<{ env: string; guarded: boolean }>;
+  environments: ReadonlyArray<Pick<EnvironmentScope, "env" | "guarded" | "temporary">>;
   environmentId: string;
   guarded: boolean;
   orgSlug: string;

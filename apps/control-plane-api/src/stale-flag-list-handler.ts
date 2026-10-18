@@ -53,7 +53,9 @@ export async function listStaleFlags(
   }
 
   const environments = await deps.repo.identity.listEnvironments(scope);
-  const environmentIds = environments.map((environment) => environment.id);
+  const environmentIds = environments
+    .filter((environment) => environment.expiresAt === null)
+    .map((environment) => environment.id);
   if (environmentIds.length === 0) {
     throw new Error(`stale_flags_list: App ${appId} has no Environments`);
   }

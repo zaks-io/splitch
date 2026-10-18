@@ -4,6 +4,7 @@ import { NotFoundPage } from "@splitch/ui/state/not-found-page";
 import { PanelSkeleton } from "@splitch/ui/state/panel-skeleton";
 import { SectionErrorPage } from "@splitch/ui/state/section-error-page";
 import { createFileRoute, notFound, Outlet } from "@tanstack/react-router";
+import { TemporaryEnvironmentNotice } from "#components/environments/temporary-environment-notice";
 import { LiveUpdatesClient } from "#components/live-updates/live-updates-client";
 import { PanelPageBody } from "#components/shell/panel-page-body";
 import { PanelShell } from "#components/shell/panel-shell";
@@ -16,6 +17,7 @@ import {
 import { scopedSessionQuery } from "#lib/sessions/scoped-session-query";
 import {
   AccessDeniedError,
+  activeEnvironment,
   isAccessDeniedError,
   type ScopedLoaderContext,
 } from "#lib/shared/loader-context";
@@ -101,6 +103,11 @@ export const Route = createFileRoute("/$orgSlug/$appSlug/$env")({
 function AppScopeRoute() {
   const context = Route.useLoaderData();
   const { queryClient } = Route.useRouteContext();
+  const environment = activeEnvironment(context);
+  const environments = context.navigation.orgs
+    .flatMap((org) => org.apps)
+    .find((app) => app.appId === context.scope.appId)?.environments;
+  if (!environments) throw new Error("Active App is missing from navigation");
   return (
     <PanelShell
       markers={{
@@ -120,6 +127,11 @@ function AppScopeRoute() {
       }}
     >
       <LiveUpdatesClient queryClient={queryClient} scope={context.scope} />
+      {environment.temporary ? (
+        <PanelPageBody>
+          <TemporaryEnvironmentNotice environment={environment} environments={environments} />
+        </PanelPageBody>
+      ) : null}
       <Outlet />
     </PanelShell>
   );

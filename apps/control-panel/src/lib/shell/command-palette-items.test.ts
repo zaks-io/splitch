@@ -115,8 +115,20 @@ function navigation(): ScopeNavigation {
             appId: "app_checkout",
             appSlug: "checkout-api",
             environments: [
-              { environmentId: "env_prod", env: "prod", name: "Production", guarded: true },
-              { environmentId: "env_dev", env: "dev", name: "Development", guarded: false },
+              {
+                environmentId: "env_prod",
+                env: "prod",
+                name: "Production",
+                guarded: true,
+                temporary: null,
+              },
+              {
+                environmentId: "env_dev",
+                env: "dev",
+                name: "Development",
+                guarded: false,
+                temporary: null,
+              },
             ],
           },
           { appId: "app_billing", appSlug: "billing-api", environments: [] },

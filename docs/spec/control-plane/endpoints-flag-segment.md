@@ -192,6 +192,8 @@ Flags with no `expiresAt` never appear. The list keys on the expiry, not the cla
 `flags_list` and reports `readTruncated`, `readLimit`, and `cursor: null`. CLI:
 `splitch expired-flags list`. MCP: `expired_flags_list`.
 
+Temporary Environment configuration does not affect this App-level definition list.
+
 ### `GET /apps/{app_id}/stale-flags`
 
 `stale_flags_list`: Flags that look stale from **configuration state only** (plan 3.6).
@@ -199,7 +201,7 @@ Each item is a Flag definition plus one or more typed reasons and
 `servingEvidence: "unverified"`. Ordinary Flag reads record no served Variant, so
 this route never claims a Flag is unused. Reasons:
 
-- `uniform_serving`: every Environment has no Targeting Rules and is disabled,
+- `uniform_serving`: every permanent Environment has no Targeting Rules and is disabled,
   default-only (null or 0% baseline rollout), or 100% baseline rollout, and the
   latest of Flag Configuration `updatedAt` and any Run lifecycle instant
   (Start/End/Conclude) for that Flag in that Environment is at least the class
@@ -216,12 +218,13 @@ this route never claims a Flag is unused. Reasons:
   history is complete for the window.
 - `past_expiry`: `expiresAt` is at or before the Worker clock (any class that
   still carries a passed expiry).
-- `unchanged`: no Flag change-log event (falling back to definition `updatedAt`)
+- `unchanged`: no non-Temporary-Environment Flag change-log event (falling back to definition `updatedAt`)
   within the class threshold (90 days for temporary classes; off for permanent).
 
 Suggest only: the route never archives or writes. Bounded like `flags_list`
 (`readTruncated`, `readLimit`, `cursor: null`). CLI: `splitch stale-flags list`.
-MCP: `stale_flags_list`.
+MCP: `stale_flags_list`. Temporary Environments are absent from configuration evidence and their
+change-log events never reset the unchanged window, including after teardown.
 
 ### `GET /apps/{app_id}/flag-inventory-health`
 
@@ -237,7 +240,9 @@ zeroed), and `expiredButLiveCount`. A month is `complete` only when its UTC
 start is at or after `historyCoverageStartsAt`; partial months still report
 counts. Deletions are hard deletes with no `deleted_at` column; create events
 remain so a May addition still counts after a June removal. CLI:
-`splitch flag-inventory-health get`. MCP: `flag_inventory_health_get`.
+`splitch flag-inventory-health get`. MCP: `flag_inventory_health_get`. Temporary Environment
+configuration and change-log events are excluded, including from history coverage. App-level Flag
+definitions still supply class, age, and expired-but-live counts.
 
 ### `GET /apps/{app_id}/flags/{flag_id}/removal-brief`
 
@@ -320,8 +325,8 @@ skip, so an Environment expiring during the operation does not fail the App-wide
 still apply: Flag deletion removes configuration in expired Temporary Environments too. Reference
 blockers remain unchanged. A Variant referenced by a Targeting Rule in an expired Temporary
 Environment awaiting teardown still cannot be deleted; the refusal names that Environment, and
-deleting the Environment removes the blocker. Stale/expired Flag and inventory-health exclusions
-remain pending in SPL-771.
+deleting the Environment removes the blocker. Stale/expired Flag and inventory-health reads exclude Temporary Environment configuration and
+change-log history.
 
 ### `GET /apps/{app_id}/envs/{environment_id}/flags/{flag_id}/config`
 

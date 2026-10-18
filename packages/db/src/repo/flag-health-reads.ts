@@ -1,4 +1,4 @@
-import { and, count, eq, gte, isNotNull, lte, min, sql, type SQL } from "drizzle-orm";
+import { and, count, eq, gte, isNotNull, lte, min, type SQL, sql } from "drizzle-orm";
 import { flagChangeEvents, flags } from "../schema/index";
 import type { Db } from "./client";
 import {
@@ -78,7 +78,11 @@ function flagActionByMonthQuery(
         CHANGE_SCOPE,
         scope,
         requireSql(
-          and(eq(flagChangeEvents.action, action), eq(flagChangeEvents.targetType, "flag")),
+          and(
+            eq(flagChangeEvents.action, action),
+            eq(flagChangeEvents.targetType, "flag"),
+            eq(flagChangeEvents.temporaryEnvironment, false),
+          ),
           label,
         ),
       ),
@@ -151,7 +155,16 @@ async function readInventoryHealthAggregates(
   const earliestQuery = db
     .select({ earliest: min(flagChangeEvents.changedAt) })
     .from(flagChangeEvents)
-    .where(withTenantScope(CHANGE_SCOPE, scope, gte(flagChangeEvents.seq, 0)));
+    .where(
+      withTenantScope(
+        CHANGE_SCOPE,
+        scope,
+        requireSql(
+          and(gte(flagChangeEvents.seq, 0), eq(flagChangeEvents.temporaryEnvironment, false)),
+          "permanent history predicate",
+        ),
+      ),
+    );
   const expiredQuery = db
     .select({ count: count() })
     .from(flags)

@@ -28,8 +28,8 @@ vi.mock("#components/flags/flags-empty-state", () => ({
 
 const { FlagsMatrixPage } = await import("#components/flags/flags-matrix-page");
 const environments: EnvironmentScope[] = [
-  { environmentId: "env_prod", env: "prod", name: "Production", guarded: true },
-  { environmentId: "env_dev", env: "dev", name: "Development", guarded: false },
+  { environmentId: "env_prod", env: "prod", name: "Production", guarded: true, temporary: null },
+  { environmentId: "env_dev", env: "dev", name: "Development", guarded: false, temporary: null },
 ];
 
 describe("FlagsMatrixPage", () => {

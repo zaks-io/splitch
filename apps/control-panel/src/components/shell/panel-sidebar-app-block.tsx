@@ -1,5 +1,6 @@
 import { useRouterState } from "@tanstack/react-router";
 import { AppSplitMark } from "#components/shared/app-split-mark";
+import { PanelSidebarEnvironments } from "#components/shell/panel-sidebar-environments";
 import { panelSidebarLinkClassName } from "#components/shell/panel-sidebar-link-styles";
 import {
   RouterAnchor,
@@ -7,14 +8,8 @@ import {
   ShellMenuGroup,
   ShellMenuLink,
 } from "#components/shell/shell-menu";
-import {
-  appHomeHref,
-  appSectionAtPathname,
-  environmentSwitchHref,
-  scopedHref,
-} from "#lib/shell/app-shell-navigation";
 import type { ScopeNavigation } from "#lib/shared/loader-context";
-import { EnvironmentWarningDot } from "#components/environments/environment-warning-dot";
+import { appHomeHref, appSectionAtPathname, scopedHref } from "#lib/shell/app-shell-navigation";
 
 type NavigationOrg = ScopeNavigation["orgs"][number];
 
@@ -59,31 +54,13 @@ export function PanelSidebarAppBlock({ app, currentOrg, orgSlug }: PanelSidebarA
       </ShellMenu>
 
       {currentApp ? (
-        <div className="flex flex-wrap items-center gap-1 px-1.5">
-          <span className="mr-1 font-mono text-[10px] text-muted-foreground uppercase tracking-[0.14em]">
-            Environment
-          </span>
-          {currentApp.environments.map((environment) => {
-            const active = environment.env === app.env;
-            const stateClassName = active
-              ? environment.guarded
-                ? "bg-warning-muted text-warning-foreground ring-1 ring-warning/40"
-                : "bg-primary text-primary-foreground"
-              : "text-muted-foreground hover:bg-accent hover:text-accent-foreground";
-            return (
-              <RouterAnchor
-                className={`flex h-7 items-center gap-1.5 rounded-md px-2.5 text-xs font-medium focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-2 ${stateClassName}`}
-                data-environment-pill={environment.env}
-                href={environmentPillHref(href, orgSlug, app, environment.env)}
-                key={environment.environmentId}
-                title={environment.name}
-              >
-                {environment.guarded ? <EnvironmentWarningDot /> : null}
-                {environment.env}
-              </RouterAnchor>
-            );
-          })}
-        </div>
+        <PanelSidebarEnvironments
+          appSlug={app.appSlug}
+          active={app.env}
+          currentHref={href}
+          environments={currentApp.environments}
+          orgSlug={orgSlug}
+        />
       ) : null}
     </div>
   );
@@ -152,21 +129,6 @@ function PanelSidebarAppList({
       ) : null}
     </nav>
   );
-}
-
-/**
- * From an Environment-scoped page the pill keeps the section, search, and hash;
- * from App home (no Environment) it opens that Environment's Flags.
- */
-function environmentPillHref(
-  currentHref: string,
-  orgSlug: string,
-  app: ActiveSidebarApp,
-  nextEnv: string,
-): string {
-  return app.env
-    ? environmentSwitchHref(currentHref, { orgSlug, appSlug: app.appSlug, env: app.env }, nextEnv)
-    : scopedHref({ orgSlug, appSlug: app.appSlug, env: nextEnv }, "flags");
 }
 
 function appSummary(appSlug: string) {

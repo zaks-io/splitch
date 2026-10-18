@@ -94,7 +94,8 @@ existing `LIST_READ_LIMIT`.
   that Environment, and deleting it is the remedy.
 - **App-level rollups ignore Temporary Environments:** the attention rollup (its planning, its
   200-Environment budget, and its items), expired and stale Flag detection, and Flag inventory
-  health. Stale, expired, and inventory health exclusions remain pending in SPL-771. The attention
+  health. The stale, expired, and inventory health exclusions are implemented by SPL-771, including
+  configuration and change-log history. The attention
   rollup exclusion ships with creation: without it, an App with more than 150
   permanent Environments could exceed the budget by creating Temporary Environments. The
   last-Environment delete guard counts permanent Environments only, and a Temporary Environment
@@ -321,10 +322,11 @@ splitch api-keys create --env pr-123                                        # [c
 tools derive from the same contracts: `environments_create` with `temporary`, `environments_sync`,
 `environments_delete`.
 
-Control Panel, pending SPL-771: the environment switcher lists Temporary Environments in their own group with their
-expiry, and pages scoped to one show its expiry and Sync source. The Policy editor and Experiment
-creation are unavailable there, with the reason stated. Both reuse existing components and
-treatments. Creating and Sync stay CLI and MCP operations in this release.
+Control Panel, implemented by SPL-771: the environment switchers list Temporary Environments in
+their own group with their expiry, and every page scoped to one shows its expiry and named Sync
+source. A deleted source is shown as unavailable without exposing its ID. The Policy editor and
+Experiment creation are unavailable there, with the reason stated. Both reuse existing components
+and treatments. Creating and Sync stay CLI and MCP operations in this release.
 
 ## Errors
 
@@ -452,5 +454,5 @@ the existing lifecycle permissions.
   installation, including changes made just before teardown.
 - An App with 200 permanent Environments and 50 Temporary Environments gets the same attention
   rollup as without them, never `ATTENTION_FANOUT_LIMIT_EXCEEDED`.
-- Stale and expired Flag lists and inventory health are unchanged by creating 50 Temporary
-  Environments.
+- Implemented by SPL-771: stale and expired Flag lists and inventory health are byte-identical
+  after creating 50 Temporary Environments, including divergent configuration and Sync history.

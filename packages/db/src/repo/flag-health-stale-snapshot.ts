@@ -4,8 +4,8 @@ import type { Db } from "./client";
 import {
   legacyRunsProbeQuery,
   mapRunLifecycleRows,
-  runLifecycleQueries,
   type RunLifecycleAggregateRow,
+  runLifecycleQueries,
 } from "./flag-health-run-history";
 import { idBatches, twoAxisIdBatches } from "./id-batches";
 import { assertMintedScope, type TenantScope, withTenantScope } from "./scope";
@@ -87,7 +87,13 @@ function latestChangeQueries(db: Db, scope: TenantScope, flagIds: readonly strin
         withTenantScope(
           CHANGE_SCOPE,
           scope,
-          requireSql(inArray(flagChangeEvents.flagId, batch), "latest change flagIds"),
+          requireSql(
+            and(
+              inArray(flagChangeEvents.flagId, batch),
+              eq(flagChangeEvents.temporaryEnvironment, false),
+            ),
+            "latest change flagIds",
+          ),
         ),
       )
       .groupBy(flagChangeEvents.flagId),
