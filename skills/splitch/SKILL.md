@@ -155,9 +155,9 @@ splitch envs delete --env pr-123 --json                          # when the work
 - Sync replaces every Flag Configuration with the source's, including rollout salts, so a Targeting
   Key lands in the same bucket as in the source. Live Experiment Runs are never copied.
 - Its Policy always allows every change, and it cannot host Experiments.
-- After expiry, mutations and both keys fail with `ENVIRONMENT_EXPIRED`, and the keys fail with
-  `CREDENTIAL_REVOKED` once teardown finishes. Point the application at a new Temporary
-  Environment; do not fall back to `dev`.
+- After expiry, both keys and every mutation except `envs delete` fail with `ENVIRONMENT_EXPIRED`;
+  once teardown finishes, the keys fail with `CREDENTIAL_REVOKED`. Point the application at a new
+  Temporary Environment; do not fall back to `dev`.
 - A `SPLITCH_TOKEN` granted `app:<app id>:owner:temporary_environments` can change only Temporary
   Environments. A `FORBIDDEN` refusal on `dev`, `prod`, or an App-level resource is that boundary
   working. Report it rather than asking for a broader token, unless the task needs a permanent

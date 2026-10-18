@@ -140,7 +140,7 @@ export const cliDoc = {
     },
     {
       kind: "prose",
-      text: "Creation returns the Client Key. The copy expires 7 days after creation unless `--expires-at` names an earlier day count such as `3d` or an ISO 8601 instant, and expiry cannot be extended. Sync replaces every Flag Configuration with the source's, including rollout salts, and never copies a live Experiment Run. Its Policy allows every change and it cannot host Experiments. After expiry, mutations and its keys fail with `ENVIRONMENT_EXPIRED` until teardown removes it.",
+      text: "Creation returns the Client Key. The copy expires 7 days after creation unless `--expires-at` names an earlier day count such as `3d` or an ISO 8601 instant, and expiry cannot be extended. Sync replaces every Flag Configuration with the source's, including rollout salts, and never copies a live Experiment Run. Its Policy allows every change and it cannot host Experiments. After expiry, its keys and every mutation except `envs delete` fail with `ENVIRONMENT_EXPIRED` until teardown removes it; deleting it starts teardown immediately.",
     },
     {
       kind: "prose",
