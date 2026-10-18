@@ -1,3 +1,4 @@
+import { personalAccessTokenPermissions as PERMISSIONS } from "@splitch/sdk/control-plane";
 import { SplitchCliError } from "./errors.js";
 import { parseExpiry } from "./expiry-input.js";
 import type { ParsedGlobalFlags } from "./parse-args.js";
@@ -20,7 +21,6 @@ export function returnsPersonalAccessTokenSecret(operationId: string): boolean {
 }
 
 const ROLES = new Set(["member", "admin", "owner"]);
-const PERMISSIONS = ["write", "delete", "credentials", "members", "privacy"] as const;
 const GRANT_EXAMPLE = "--grant app:app_123:admin:write,delete, --grant all:member:read";
 
 /**
@@ -71,7 +71,7 @@ function parseGrant(value: string): { target: string; role: string; permissions:
   ) {
     throw usage(
       `--grant ${value} is not <target>:<role>:<permissions>`,
-      `Use --grant <target>:<role>:<permissions>: target all, org:<org id>, or app:<app id>; role member, admin, or owner; permissions read or a comma-separated list of write,delete,credentials,members,privacy (${GRANT_EXAMPLE}). Replace read-write with write,delete,credentials,members,privacy to keep its authority.`,
+      `Use --grant <target>:<role>:<permissions>: target all, org:<org id>, or app:<app id>; role member, admin, or owner; permissions read or a comma-separated list of ${PERMISSIONS.join(",")} (${GRANT_EXAMPLE}). Replace read-write with write,delete,credentials,members,privacy to keep its authority.`,
     );
   }
   return {

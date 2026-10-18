@@ -48,6 +48,15 @@ export function makeEnvironmentHandlers(deps: AppEnvironmentDeps) {
       if (writeError) return writeError;
 
       const body = objectBody(input);
+      if (principal.personalAccessToken?.temporaryEnvironmentOnly && body.temporary === undefined)
+        return renderError(
+          {
+            code: "FORBIDDEN",
+            message: `personal access token needs write permission for app:${appId}; temporary_environments covers only Temporary Environments`,
+            details: {},
+          },
+          { requestId },
+        );
       if (body.temporary !== undefined)
         return createTemporaryEnvironment(deps, app, body, principal, requestId);
       return createPermanentEnvironment(deps, app, body, principal, requestId);

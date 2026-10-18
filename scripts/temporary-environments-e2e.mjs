@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { access } from "node:fs/promises";
+import { access, readdir } from "node:fs/promises";
 import { resolve } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { isDeepStrictEqual } from "node:util";
@@ -12,16 +12,22 @@ import {
   requireSafeOutput,
   writeLocalEvidence,
 } from "./cli-pat-local-fixture.mjs";
+import { checkTemporaryPermissionRefusals } from "./temporary-environment-permission-checks.mjs";
+import {
+  assertTemporaryKey,
+  callTemporaryMcp,
+  publishTemporarySources,
+} from "./temporary-environments-e2e-client.mjs";
 
 // Prerequisite: a fresh CLI build. Only issuer/Tinybird are synthetic; all six
 // API Workers, D1, KV, Durable Objects, auth, CLI and MCP execute their real code.
 const appId = "app_checkout_e2e";
-const sourceEnvironment = "env_checkout_dev_e2e";
+const sourceEnvironment = "env_checkout_prod_e2e";
 const flag = "temporary-e2e-flag";
 const abort = new AbortController();
 for (const signal of ["SIGINT", "SIGTERM"]) process.once(signal, () => abort.abort());
 const passed = [];
-let fleet, client, pat, sessionId, failure, workSignal;
+let fleet, client, pat, setupPat, failure, workSignal;
 let sequence = 0;
 let stage = "prerequisites";
 const pass = (message) => {
@@ -42,7 +48,7 @@ const createTemporary = (key, expiresAt) =>
     key,
     "--temporary",
     "--from",
-    "dev",
+    "prod",
     ...(expiresAt ? ["--expires-at", expiresAt] : []),
   ]);
 
@@ -50,106 +56,22 @@ async function assertKeys(keys, expected, expiresAt) {
   await Promise.all(keys.map((key) => assertKey(key, expected, expiresAt)));
 }
 
-async function assertKey(key, expected, expiresAt) {
-  const status =
-    typeof expected === "boolean" ? 200 : expected === "ENVIRONMENT_EXPIRED" ? 410 : 403;
-  check(typeof key === "string", "Environment omitted credential material");
-  const isClient = key.startsWith("pk_");
-  const response = await fetch(
-    `${fleet.serviceOrigin("evaluation-api")}/api/sdk/${isClient ? "evaluate" : "verify"}`,
-    {
-      method: "POST",
-      headers: {
-        authorization: `Bearer ${key}`,
-        "content-type": "application/json",
-        "idempotency-key": `temporary-e2e-${++sequence}`,
-      },
-      body: JSON.stringify({
-        flagKey: flag,
-        targetingKey: "local-temporary-e2e",
-        idType: "user",
-        attributes: {},
-      }),
-      signal: AbortSignal.any([workSignal, AbortSignal.timeout(30_000)]),
-    },
+const mcpState = { sequence: 0 };
+const mcp = (name, args, expectedCode) =>
+  callTemporaryMcp(
+    { fleet, secret: pat.secret, workSignal, appId, state: mcpState },
+    name,
+    args,
+    expectedCode,
   );
-  const body = await response.json();
-  check(
-    response.status === status,
-    `Data-plane ${isClient ? "Client" : "API"} Key HTTP ${response.status}; expected ${status}`,
-  );
-  const value = isClient ? body.variant : body.value;
-  check(
-    (typeof expected === "boolean" ? value : body.code) === expected,
-    "Data-plane result did not match lifecycle state",
-  );
-  if (expiresAt)
-    check(body.details?.expiredAt === expiresAt, "Expiry response lost its original ISO datetime");
-}
-
-async function mcp(name, args) {
-  async function rpc(method, params) {
-    const response = await fetch(`${fleet.serviceOrigin("mcp-server")}/mcp`, {
-      method: "POST",
-      headers: {
-        authorization: `Bearer ${pat.secret}`,
-        "content-type": "application/json",
-        accept: "application/json, text/event-stream",
-        "mcp-protocol-version": "2025-06-18",
-        ...(sessionId ? { "mcp-session-id": sessionId } : {}),
-      },
-      body: JSON.stringify({ jsonrpc: "2.0", id: ++sequence, method, params }),
-      signal: AbortSignal.any([workSignal, AbortSignal.timeout(45_000)]),
-    });
-    check(response.ok, `MCP HTTP request failed with ${response.status}`);
-    return response;
-  }
-  if (!sessionId) {
-    const initialized = await rpc("initialize", {
-      protocolVersion: "2025-06-18",
-      capabilities: {},
-      clientInfo: { name: "temporary-environments-e2e", version: "1.0.0" },
-    });
-    sessionId = initialized.headers.get("mcp-session-id");
-    check(
-      sessionId && (await initialized.json()).result?.protocolVersion,
-      "MCP initialization omitted session/protocol",
-    );
-  }
-  const body = await (await rpc("tools/call", { name, arguments: { appId, ...args } })).json();
-  check(
-    body.result && !body.error && !body.result.isError,
-    `MCP ${name} failed; private response suppressed`,
-  );
-  check(body.result.structuredContent, "MCP tool omitted structuredContent");
-  return body.result.structuredContent;
-}
+const assertKey = (key, expected, expiresAt) =>
+  assertTemporaryKey({ fleet, flag, workSignal, sequence: ++sequence }, key, expected, expiresAt);
 
 async function lifecycle() {
   stage = "source Flag publication";
-  await cli([
-    "flags",
-    "create",
-    "--key",
-    flag,
-    "--lifecycle-class",
-    "permission",
-    "--variants",
-    "on,off",
-  ]);
-  await cli([
-    "flag-config",
-    "update",
-    flag,
-    "--env",
-    "dev",
-    "--enabled",
-    "true",
-    "--body-json",
-    JSON.stringify({ rollout: { percentage: 100 } }),
-  ]);
-  const source = await cli(["flag-config", "get", flag, "--env", "dev"]);
-  const sourceClient = await cli(["client-key", "get", "--env", "dev"]);
+  await publishTemporarySources(cli, flag);
+  const source = await cli(["flag-config", "get", flag, "--env", "prod"]);
+  const sourceClient = await cli(["client-key", "get", "--env", "prod"]);
   const sourceKeys = [
     sourceClient.keyMaterial,
     await client.apiKey(pat.secret, appId, sourceEnvironment),
@@ -157,13 +79,25 @@ async function lifecycle() {
   const assertSource = async () => {
     await assertKeys(sourceKeys, true);
     check(
-      isDeepStrictEqual(source, await cli(["flag-config", "get", flag, "--env", "dev"])),
+      isDeepStrictEqual(source, await cli(["flag-config", "get", flag, "--env", "prod"])),
       "Temporary operation changed the source Configuration",
     );
   };
   await assertKeys(sourceKeys, true);
   pass("source Configuration published through real ConfigStore and readable with both keys");
 
+  setupPat = pat;
+  pat = await client.mint([
+    { target: `app:${appId}`, role: "owner", permissions: ["temporary_environments"] },
+  ]);
+  const context = await cli(["context"]);
+  check(
+    context.personalAccessToken?.effective.permissions.temporary_environments.scopes.includes(
+      `app:${appId}:owner`,
+    ),
+    "CLI context missed temporary permission",
+  );
+  pass("CLI context reports the temporary-only token's live authority");
   stage = "CLI Temporary Environment create";
   const created = await createTemporary("pr-cli-e2e");
   check(
@@ -172,7 +106,7 @@ async function lifecycle() {
   );
   const keys = await keysFor(created);
   await assertKeys(keys, true);
-  pass("built CLI --temporary --from dev; auto Client Key and private API Key observe the copy");
+  pass("built CLI --temporary --from prod; auto Client Key and private API Key observe the copy");
 
   stage = "temporary Flag flip and source isolation";
   await cli(["flag-config", "update", flag, "--env", "pr-cli-e2e", "--enabled", "false"]);
@@ -183,13 +117,43 @@ async function lifecycle() {
   stage = "CLI Sync";
   const synced = await cli(["envs", "sync", "--env", "pr-cli-e2e", "--from", "dev"]);
   check(
-    synced.syncedFlags > 0 && synced.temporary?.syncedFromEnvironmentId === sourceEnvironment,
+    synced.syncedFlags > 0 && synced.temporary?.syncedFromEnvironmentId === "env_checkout_dev_e2e",
     "CLI Sync missed Flags/source metadata",
   );
   await assertKeys(keys, true);
   await assertSource();
   pass("CLI Sync restores source values through both existing keys");
 
+  stage = "temporary permission refusals";
+  await checkPermissionRefusals(created);
+  await cli([
+    "flags",
+    "promote",
+    flag,
+    "--env",
+    "pr-cli-e2e",
+    "--from-environment-id",
+    sourceEnvironment,
+    "--body-json",
+    JSON.stringify({ select: { enabled: true } }),
+  ]);
+  await mcp("flags_promote", {
+    targetEnvironmentId: created.id,
+    by: "id",
+    flagId: flag,
+    fromEnvironmentId: sourceEnvironment,
+    select: { enabled: true },
+    idempotency_key: "temp-promote-allowed",
+  });
+  await assertKeys(keys, true);
+  await assertSource();
+  check(
+    (await readdir(resolve(fleet.root, "cli"))).length === 0,
+    "Token-only CLI wrote a local credential or context file",
+  );
+  pass(
+    "CLI and MCP promote from prod into the token's Temporary Environment; clean working directory has no credential files",
+  );
   stage = "CLI delete and revocation";
   check((await cli(["envs", "delete", "--env", "pr-cli-e2e"])).deleted, "CLI delete failed");
   await assertKeys(keys, "CREDENTIAL_REVOKED");
@@ -198,7 +162,7 @@ async function lifecycle() {
   stage = "real MCP create, Sync and delete";
   const mcpCreated = await mcp("environments_create", {
     key: "pr-mcp-e2e",
-    temporary: { fromEnvironmentId: "dev" },
+    temporary: { fromEnvironmentId: "prod" },
   });
   check(
     mcpCreated.temporary?.syncedFromEnvironmentId === sourceEnvironment,
@@ -227,6 +191,22 @@ async function lifecycle() {
 
   await expiryLifecycle([created.id, mcpCreated.id]);
   await assertSource();
+}
+
+async function checkPermissionRefusals(created) {
+  await fleet.sql(
+    `INSERT INTO environments (id, app_id, key, name, policy, expires_at, synced_from_environment_id, synced_at, created_at, updated_at)
+    SELECT 'env_temporary_foreign_e2e', 'app_billing_e2e', 'pr-foreign', 'Foreign Temporary', policy, expires_at, 'env_billing_prod_e2e', synced_at, created_at, updated_at FROM environments WHERE id='${created.id}';`,
+    workSignal,
+  );
+  await checkTemporaryPermissionRefusals({
+    client,
+    secret: pat.secret,
+    mcp,
+    appId,
+    flag,
+    root: fleet.root,
+  });
 }
 
 async function expiryLifecycle(deletedIds) {
@@ -287,14 +267,17 @@ try {
 } catch (error) {
   failure = stage;
   const detail =
-    error instanceof FixtureError ? error.message : "private native diagnostics suppressed";
+    error instanceof FixtureError
+      ? error.message
+      : `private exception ${error?.name ?? "unknown"}; diagnostics suppressed`;
   requireSafeOutput(detail);
   console.error(`FAIL temporary-environments-e2e at ${stage}: ${detail}`);
   console.error(JSON.stringify(fleet?.diagnostics() ?? {}));
   process.exitCode = 1;
 } finally {
   try {
-    if (pat) await createPatClient(fleet, abort.signal).revoke(pat.token.id);
+    for (const token of [pat, setupPat].filter(Boolean))
+      await createPatClient(fleet, abort.signal).revoke(token.token.id);
   } catch {
     failure ??= "PAT cleanup";
     process.exitCode = 1;

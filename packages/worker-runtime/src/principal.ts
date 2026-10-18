@@ -56,6 +56,8 @@ export interface Principal {
   /** Read authority stays in `scopes`; each operation selects its permission authority. */
   personalAccessToken?: {
     id: string;
+    /** Set only for this route when its ordinary permission is absent. */
+    temporaryEnvironmentOnly?: true;
     permissions: PersonalAccessTokenAuthority["permissions"];
     metadata?: { name: string; grants: PersonalAccessTokenGrant[]; expiresAt: string | null };
   };

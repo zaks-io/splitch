@@ -26,7 +26,7 @@ A token carries 1 to 32 grants. Each grant is `{ target, role, permissions }`:
   App in it), or `app:<app id>` (that App only). Canonical ids only, never slugs.
 - `role`: `member`, `admin`, or `owner`. A **ceiling**. The effective role on a target is the lower of
   the user's live role and the highest applicable grant ceiling.
-- `permissions`: a subset of `write`, `delete`, `credentials`, `members`, `privacy`, in that
+- `permissions`: a subset of `write`, `delete`, `credentials`, `members`, `privacy`, `temporary_environments`, in that
   canonical order. Reads are implicit; `[]` is read-only. Unknown permissions and duplicates are
   refused. The grant is strict: the former `access` field is not accepted.
 
@@ -68,11 +68,17 @@ without that permission contributes no role ceiling: `org:X:member:write` plus
 `app:Y:admin:credentials` gives `write` on Y at member and `credentials` on Y at admin.
 
 A refusal returns `FORBIDDEN` naming the missing permission and target. Only a route declared with
-one of the five permissions whose path names no Organization or App needs an `all` grant carrying
+one of the declared permissions whose path names no Organization or App needs an `all` grant carrying
 that permission. Reads use every covering grant at the highest covering ceiling, without filtering
 by permission. Path-less reads such as `principal_capabilities_get` work with an App-only token.
 `experiment_plan`, `flags_test_eval`, and `experiment_results_post` also need no extra permission. See the
 [route permission map](personal-access-token-permissions.md#route-permission-map).
+
+`temporary_environments` permits only the opted-in Temporary Environment operations described in
+[the permission spec](temporary-environments.md#permission). Authority comes from the resolved
+Environment row's kind and App. It cannot create permanent Environments, mutate App-level
+resources, or review stored Approval Requests. The ordinary permission still applies first when
+present. Adding this permission is widening under the same step-up rules.
 
 Approval `approve_and_apply` checks the stored proposal operation's permission and role against the
 current token before application; every `ApprovalOperation` has a typed mapping, and winner Promotion

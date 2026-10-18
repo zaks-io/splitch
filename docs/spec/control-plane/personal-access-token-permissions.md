@@ -18,15 +18,16 @@ A grant is `{ target, role, permissions }`:
 - `permissions` is a subset of the closed set below. Reading the target is implicit; an empty set
   is a read-only grant. Order is not significant; duplicates are a validation error.
 
-| permission    | allows                                                                                                                                    |
-| ------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
-| `write`       | Configuration changes: Apps, Environments, Flags, Variants, Targeting, Promotion, Segments, Event Definitions, Experiments, Runs, Metrics |
-| `delete`      | Every irreversible removal of a resource                                                                                                  |
-| `credentials` | Creating, rotating, reconfiguring, or revoking SDK keys and integration credentials                                                       |
-| `members`     | Organization and App membership and roles, and Organization name and plan                                                                 |
-| `privacy`     | Data exports and Entity erasure                                                                                                           |
+| permission               | allows                                                                                                                                    |
+| ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| `write`                  | Configuration changes: Apps, Environments, Flags, Variants, Targeting, Promotion, Segments, Event Definitions, Experiments, Runs, Metrics |
+| `delete`                 | Every irreversible removal of a resource                                                                                                  |
+| `credentials`            | Creating, rotating, reconfiguring, or revoking SDK keys and integration credentials                                                       |
+| `members`                | Organization and App membership and roles, and Organization name and plan                                                                 |
+| `temporary_environments` | Create, rename, Sync, configure, key, promote into, and delete Temporary Environments only                                                |
+| `privacy`                | Data exports and Entity erasure                                                                                                           |
 
-At use time, the principal's authority for a route declared with one of the five permissions is
+At use time, the principal's authority for a route declared with one of the declared permissions is
 the owner's live membership, clamped by the role ceiling of every grant that covers the target AND
 carries that permission. A grant without the permission contributes nothing to that route. When
 several grants cover one target, the highest ceiling among those carrying the permission applies,
@@ -37,7 +38,7 @@ A `read` route uses every grant that covers its target, whatever that grant's pe
 highest covering ceiling. It is never filtered by permission and never needs an `all` grant, so
 an App-only token can still run path-less reads such as `principal_capabilities_get`.
 
-A route declared with one of the five permissions whose path names no Organization or App needs
+A route declared with one of the declared permissions whose path names no Organization or App needs
 an `all` grant carrying that permission. The special rules below are not subject to either rule.
 
 ## Route permission map
@@ -53,7 +54,7 @@ rules, including the POST reads
 **`write`.**
 
 - Organizations and Apps: `organizations_create` (path-less), `apps_create`, `apps_update`
-- Environments: `environments_create`, `environments_update`
+- Environments: `environments_create`, `environments_update`, `environments_sync`
 - Flags: `flags_create`, `flags_update`, `flag_variants_create`, `flag_variants_update`,
   `flag_config_update`, `flag_targeting_rules_replace`, `flags_promote`
 - Segments and events: `segments_create`, `segments_update`, `event_definitions_create`,
@@ -85,11 +86,19 @@ decision, so it sits with access control rather than `write`.
 **`privacy`:** `current_user_privacy_export` (path-less), `organization_privacy_export`,
 `app_privacy_export`, `entity_privacy_export`, `entity_privacy_delete`.
 
+**`temporary_environments` fallback.** The exact opt-in route set and row checks are in
+[Temporary Environment permission](temporary-environments.md#permission). A route uses its declared
+permission first. Only an opted-in route may fall back to `temporary_environments`, with live
+membership and that permission's grant ceiling. The shared selector resolver checks the resolved
+Environment's App and kind for keys, canonical IDs, and `?by=id`; a missing row fails closed.
+Permanent Environment creation is refused. App-level writes and stored Approval Requests never
+use this fallback. Existing `write`, `credentials`, and `delete` authority is unchanged.
+
 **Special rules.**
 
 - `approval_request_reviews_create` derives its permission. `approve_and_apply` requires the
   permission of the stored proposal's operation, at that operation's role, checked against the
-  current token before application. A decline requires `write`. Every `ApprovalOperation` maps to a
+  current token before application. Temporary-only authority cannot apply or decline a stored proposal. A decline requires `write`. Every `ApprovalOperation` maps to a
   permission and role, and a missing mapping fails typecheck. An operation that is a route takes
   that route's entry. `experiment_winner_promote` has no route; it maps to `write` at App admin,
   matching `conclusion_promotion_requests_create`.
@@ -137,7 +146,8 @@ effective authority reported separately.
 - `splitch tokens create` writes `SPLITCH_TOKEN` by default, and that variable serves both the CLI
   and the MCP `Authorization` header.
 - `--grant <target>:<role>:<permissions>` takes a comma-separated permission list or `read`, for
-  example `--grant app:app_x:admin:write,delete` and `--grant all:member:read`.
+  example `--grant app:app_x:admin:write,delete`, `--grant app:app_x:owner:temporary_environments`,
+  and `--grant all:member:read`.
 
 No installed CLI needs to keep working across the change; the CLI and server move to the new grant
 shape together and older CLIs must upgrade.

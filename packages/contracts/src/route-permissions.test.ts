@@ -125,6 +125,7 @@ const expectedOperations: Record<RoutePermission, readonly string[]> = {
     "entity_privacy_export",
     "organization_privacy_export",
   ],
+  temporary_environments: [],
   derived: ["approval_request_reviews_create"],
   "owner-cleanup": [
     "personal_access_tokens_list",

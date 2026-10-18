@@ -223,6 +223,8 @@ interface RouteContractFields<
   scopes: readonly string[];
   rateLimit: RateLimitClass;
   idempotency: IdempotencyMode;
+  /** Allows temporary-only PAT authority after the Environment row is checked. */
+  temporaryEnvironment?: true;
   rawBodyByteLimit?: RawBodyByteLimit;
   errors: readonly ErrorCode[];
 }

@@ -39,6 +39,7 @@ export const environmentRoutes = [
   }),
   defineApiRoute({
     operationId: "environments_create",
+    temporaryEnvironment: true,
     owner: OWNER,
     method: "POST",
     path: "/apps/:appId/envs",
@@ -80,6 +81,7 @@ export const environmentRoutes = [
   }),
   defineApiRoute({
     operationId: "environments_update",
+    temporaryEnvironment: true,
     owner: OWNER,
     method: "PATCH",
     path: "/apps/:appId/envs/:environmentId",
@@ -102,6 +104,7 @@ export const environmentRoutes = [
   }),
   defineApiRoute({
     operationId: "environments_delete",
+    temporaryEnvironment: true,
     owner: OWNER,
     method: "DELETE",
     path: "/apps/:appId/envs/:environmentId",
@@ -129,6 +132,7 @@ export const environmentRoutes = [
 // Appended after App membership routes to preserve typed SDK route indices.
 export const environmentSyncRoute = defineApiRoute({
   operationId: "environments_sync",
+  temporaryEnvironment: true,
   owner: OWNER,
   method: "POST",
   path: "/apps/:appId/envs/:environmentId/sync",

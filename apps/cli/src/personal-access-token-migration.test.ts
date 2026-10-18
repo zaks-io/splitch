@@ -1,12 +1,12 @@
 import {
-  PersonalAccessTokenGrantsSchema,
-  personalAccessTokenAuthority,
-} from "@splitch/sdk/control-plane";
-import {
   applySchema,
   migrationFileStatements,
   migrationStatementsThrough,
 } from "@splitch/db/test-migrations";
+import {
+  PersonalAccessTokenGrantsSchema,
+  personalAccessTokenAuthority,
+} from "@splitch/sdk/control-plane";
 import { Miniflare } from "miniflare";
 import { expect, it } from "vitest";
 
@@ -97,9 +97,11 @@ it("migrates both legacy grant shapes to schema-valid permissions without changi
     for (const [permission, authority] of Object.entries(writeAuthority.permissions)) {
       expect(authority).toEqual({
         scopes:
-          permission === "credentials"
-            ? ["app:app_new:admin", "app:app_write:admin", "org:org_write:admin"]
-            : ["app:app_write:admin", "org:org_write:admin"],
+          permission === "temporary_environments"
+            ? []
+            : permission === "credentials"
+              ? ["app:app_new:admin", "app:app_write:admin", "org:org_write:admin"]
+              : ["app:app_write:admin", "org:org_write:admin"],
         all: false,
       });
     }
