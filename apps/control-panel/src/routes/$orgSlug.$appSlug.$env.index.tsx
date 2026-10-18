@@ -5,6 +5,7 @@ import { SectionUnavailable } from "#components/shared/section-unavailable";
 import { PanelPageBody } from "#components/shell/panel-page-body";
 import { reportRouteError } from "#lib/observability/panel-observability";
 import { loadControlPanelOverview } from "#lib/overview/control-plane-overview-functions";
+import { activeEnvironment } from "#lib/shared/loader-context";
 import { scopedHref } from "#lib/shell/app-shell-navigation";
 import { documentTitle } from "#lib/shell/document-title";
 
@@ -18,12 +19,13 @@ export const Route = createFileRoute("/$orgSlug/$appSlug/$env/")({
       },
     });
     if (!result.ok) throw new Error(result.error.message);
-    const environment = scoped.navigation.orgs
-      .find((org) => org.orgId === scoped.scope.orgId)
-      ?.apps.find((app) => app.appId === scoped.scope.appId)
-      ?.environments.find((candidate) => candidate.environmentId === scoped.scope.environmentId);
-    if (!environment) throw new Error("Active Environment is missing from App navigation");
-    return { overview: result.data, scope: scoped.scope, guarded: environment.guarded };
+    const environment = activeEnvironment(scoped);
+    return {
+      overview: result.data,
+      scope: scoped.scope,
+      guarded: environment.guarded,
+      temporary: environment.temporary !== null,
+    };
   },
   head: ({ params }) => ({
     meta: [{ title: documentTitle("Overview", params.appSlug, params.env) }],
@@ -41,7 +43,7 @@ export const Route = createFileRoute("/$orgSlug/$appSlug/$env/")({
 });
 
 function OverviewSectionRoute() {
-  const { guarded, overview, scope } = Route.useLoaderData();
+  const { guarded, overview, scope, temporary } = Route.useLoaderData();
   const router = useRouter();
 
   return (
@@ -54,6 +56,7 @@ function OverviewSectionRoute() {
         }}
         overview={overview}
         scopeHref={scopedHref(scope)}
+        temporary={temporary}
       />
     </PanelPageBody>
   );
