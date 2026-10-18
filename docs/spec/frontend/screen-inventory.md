@@ -461,6 +461,14 @@ Split exactly as the IA pins it:
 - **Environment settings** (under the active `env`) — the env's **SDK credentials**, its
   **Environment Policy editor**, and Environment management.
 
+Temporary Environments have their own group in both environment switchers, with expiry shown using
+the existing timestamp treatment. Every page scoped to one shows its expiry and named Sync source;
+a deleted source is shown as unavailable without its ID. Policy editing is disabled because its
+Policy always allows all changes. Experiment pages, including the direct creation URL, show that
+creation is unavailable because a Temporary Environment cannot host Experiments. Disabled actions
+stay out of keyboard focus; environment links retain permanent-then-temporary order. Creating,
+Syncing, and deleting Temporary Environments stay in the CLI and MCP.
+
 ### SDK credentials — provision, don't read (ADR-0022)
 
 The active Environment's **Client Key** is **freely displayed and copyable** (public by design). The

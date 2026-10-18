@@ -31,6 +31,23 @@ describe("Overview page", () => {
     expect(html).toContain("Fresh checkout");
   });
 
+  it("makes calm Temporary Environment Experiment creation unavailable and outside keyboard focus", () => {
+    const html = render({}, true);
+
+    expect(html).toContain("Nothing needs your attention");
+    expect(html).toContain(`href="${SCOPE_HREF}/flags"`);
+    expect(html).toContain("Create a Flag");
+    expect(html).not.toContain("run an Experiment");
+    expect(html).toContain(
+      "Experiment creation is unavailable because a Temporary Environment cannot host Experiments.",
+    );
+    expect(html).toMatch(
+      /<button[^>]*disabled=""[^>]*aria-describedby="temporary-overview-experiments-reason"[^>]*>Create an Experiment<\/button>/,
+    );
+    expect(html).toContain('id="temporary-overview-experiments-reason"');
+    expect(html).not.toContain(`href="${SCOPE_HREF}/experiments`);
+  });
+
   it("never shows the calm state when a section could not be read", () => {
     const html = render({
       experiments: { status: "unavailable", reason: "analysis_unavailable", retryable: true },

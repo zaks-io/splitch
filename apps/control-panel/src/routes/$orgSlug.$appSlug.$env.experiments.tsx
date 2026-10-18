@@ -1,7 +1,9 @@
-import { createFileRoute, Outlet } from "@tanstack/react-router";
+import { createFileRoute, getRouteApi, Outlet } from "@tanstack/react-router";
+import { TemporaryEnvironmentExperiments } from "#components/experiments/temporary-environment-experiments";
 import { SectionPending } from "#components/shared/section-pending";
 import { SectionUnavailable } from "#components/shared/section-unavailable";
 import { reportRouteError } from "#lib/observability/panel-observability";
+import { activeEnvironment } from "#lib/shared/loader-context";
 import { documentTitle } from "#lib/shell/document-title";
 
 export const Route = createFileRoute("/$orgSlug/$appSlug/$env/experiments")({
@@ -13,5 +15,10 @@ export const Route = createFileRoute("/$orgSlug/$appSlug/$env/experiments")({
   },
   errorComponent: () => <SectionUnavailable title="Experiments unavailable" />,
   pendingComponent: SectionPending,
-  component: Outlet,
+  component: ExperimentsRoute,
 });
+
+function ExperimentsRoute() {
+  const context = getRouteApi("/$orgSlug/$appSlug/$env").useLoaderData();
+  return activeEnvironment(context).temporary ? <TemporaryEnvironmentExperiments /> : <Outlet />;
+}

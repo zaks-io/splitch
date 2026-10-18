@@ -98,7 +98,13 @@ describe("appScopedVisitCookie", () => {
         appSlug: "checkout-api",
         appRole: "owner" as const,
         environments: [
-          { environmentId: "env_000", env: "production", name: "Production", guarded: true },
+          {
+            environmentId: "env_000",
+            env: "production",
+            name: "Production",
+            guarded: true,
+            temporary: null,
+          },
         ],
       },
     },

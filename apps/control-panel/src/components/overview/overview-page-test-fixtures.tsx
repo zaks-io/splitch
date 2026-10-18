@@ -24,7 +24,7 @@ const ENVIRONMENT: AppOverviewResponse["environment"] = {
  * assertions only mean something against the same baseline the rest of the page
  * is checked on.
  */
-export function renderOverview(overrides: Partial<AppOverviewResponse>): string {
+export function renderOverview(overrides: Partial<AppOverviewResponse>, temporary = false): string {
   const overview: AppOverviewResponse = {
     appId: "app_checkout",
     environmentId: "env_prod",
@@ -45,6 +45,7 @@ export function renderOverview(overrides: Partial<AppOverviewResponse>): string 
       onRetry={() => undefined}
       overview={overview}
       scopeHref={SCOPE_HREF}
+      temporary={temporary}
     />,
   );
 }

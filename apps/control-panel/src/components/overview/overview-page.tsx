@@ -14,12 +14,14 @@ export function OverviewPage({
   onRetry,
   overview,
   scopeHref,
+  temporary,
 }: {
   env: string;
   guarded?: boolean;
   onRetry: () => void;
   overview: AppOverviewResponse;
   scopeHref: string;
+  temporary: boolean;
 }) {
   // Calm is a positive finding, not the absence of one: it requires every section
   // to have been read successfully and to be empty (ADR-0036).
@@ -41,7 +43,7 @@ export function OverviewPage({
       <div className="grid gap-4 lg:grid-cols-2">
         {calm ? (
           <div className="lg:col-span-2" data-overview-state="calm">
-            <OverviewCalmState scopeHref={scopeHref} />
+            <OverviewCalmState scopeHref={scopeHref} temporary={temporary} />
           </div>
         ) : (
           <>

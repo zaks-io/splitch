@@ -25,6 +25,37 @@ vi.mock("#lib/integrations/control-plane-cloudflare-functions", () => ({
 const { EnvironmentSettings } = await import("#components/environments/environment-settings");
 
 describe("EnvironmentSettings", () => {
+  it("disables Policy editing for a Temporary Environment with the reason", () => {
+    const html = renderToStaticMarkup(
+      <QueryClientProvider client={new QueryClient()}>
+        <EnvironmentSettings
+          settings={{
+            ...settings,
+            environment: {
+              ...settings.environment,
+              temporary: {
+                expiresAt: "2026-10-20T12:00:00.000Z",
+                syncedAt: "2026-10-18T12:00:00.000Z",
+                syncedFromEnvironmentId: "env_source",
+              },
+              policy: {
+                variantAvailability: "allow",
+                enabledState: "allow",
+                targetingRolloutValue: "allow",
+                startExperimentRun: "allow",
+              },
+            },
+          }}
+        />
+      </QueryClientProvider>,
+    );
+    expect(html).toContain(
+      "Policy editing is unavailable because a Temporary Environment always allows all changes.",
+    );
+    expect(html.match(/<fieldset disabled=""/g)).toHaveLength(4);
+    expect(html).toMatch(/<button[^>]*disabled=""[^>]*>Save Policy<\/button>/);
+  });
+
   it("renders the open Client Key warning, metadata-only API Keys, and Policy growth path", () => {
     const html = renderToStaticMarkup(
       <QueryClientProvider client={new QueryClient()}>

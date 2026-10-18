@@ -5,12 +5,14 @@ import { SectionUnavailable } from "#components/shared/section-unavailable";
 import { PanelPageBody } from "#components/shell/panel-page-body";
 import { loadControlPanelFlags } from "#lib/flags/control-plane-flag-functions";
 import { reportRouteError } from "#lib/observability/panel-observability";
+import { activeEnvironment } from "#lib/shared/loader-context";
 import { scopedHref } from "#lib/shell/app-shell-navigation";
 import { documentTitle } from "#lib/shell/document-title";
 
 export const Route = createFileRoute("/$orgSlug/$appSlug/$env/experiments/new")({
   loader: async ({ context }) => {
     const scoped = context.scoped;
+    if (activeEnvironment(scoped).temporary) return { flags: [], scope: scoped.scope };
     // An Experiment controls exactly one Flag, so the Flag catalog is what step 1
     // is choosing from. Reusing the Flags page read keeps one source for it.
     const flags = await loadControlPanelFlags({ data: scoped.scope });

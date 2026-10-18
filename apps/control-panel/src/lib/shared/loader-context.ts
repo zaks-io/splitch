@@ -1,3 +1,4 @@
+import type { Environment } from "@splitch/contracts";
 import type { AppMembership, OrgMembership, SessionPrincipal } from "#lib/sessions/session";
 
 const ACCESS_DENIED_MESSAGE = "SPLITCH_ACCESS_DENIED";
@@ -18,6 +19,7 @@ export interface EnvironmentScope {
   env: string;
   name: string;
   guarded: boolean;
+  temporary: Environment["temporary"];
 }
 
 export interface EnvironmentResolver {
@@ -195,4 +197,15 @@ function isErrorWithMessage(error: unknown, message: string): boolean {
     "message" in error &&
     (error as { message?: unknown }).message === message
   );
+}
+
+export function activeEnvironment(
+  context: Pick<ScopedLoaderContext, "navigation" | "scope">,
+): EnvironmentScope {
+  const environment = context.navigation.orgs
+    .find((org) => org.orgId === context.scope.orgId)
+    ?.apps.find((app) => app.appId === context.scope.appId)
+    ?.environments.find((candidate) => candidate.environmentId === context.scope.environmentId);
+  if (!environment) throw new Error("Active Environment is missing from App navigation");
+  return environment;
 }

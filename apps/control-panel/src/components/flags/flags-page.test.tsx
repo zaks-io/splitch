@@ -160,7 +160,7 @@ function renderFlagsPage(guarded: boolean, env: string): string {
       appSlug="checkout-api"
       env={env}
       environmentId={`env_${env}`}
-      environments={[{ env, guarded }]}
+      environments={[{ env, guarded, temporary: null }]}
       guarded={guarded}
       items={[configuredItem("new-checkout", true)]}
       orgSlug="acme-labs"

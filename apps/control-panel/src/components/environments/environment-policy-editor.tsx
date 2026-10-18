@@ -12,20 +12,22 @@ import {
 } from "@splitch/ui/components/card";
 import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { updateControlPanelEnvironmentPolicy } from "#lib/settings/control-plane-settings-functions";
 import { ENVIRONMENT_POLICY_LABELS } from "#lib/environments/environment-policy-labels";
+import { updateControlPanelEnvironmentPolicy } from "#lib/settings/control-plane-settings-functions";
 import { refreshEnvironmentSettings } from "#lib/settings/settings-query";
 
 interface EnvironmentPolicyEditorProps {
   appId: string;
   environmentId: string;
   initialPolicy: EnvironmentPolicy;
+  unavailableReason?: string;
 }
 
 export function EnvironmentPolicyEditor({
   appId,
   environmentId,
   initialPolicy,
+  unavailableReason,
 }: EnvironmentPolicyEditorProps) {
   const queryClient = useQueryClient();
   const [draft, setDraft] = useState(initialPolicy);
@@ -35,6 +37,7 @@ export function EnvironmentPolicyEditor({
   const isDirty = ENVIRONMENT_POLICY_LABELS.some(([key]) => draft[key] !== saved[key]);
 
   async function save() {
+    if (unavailableReason) return;
     setError(undefined);
     setIsSaving(true);
     try {
@@ -71,7 +74,8 @@ export function EnvironmentPolicyEditor({
       <CardHeader>
         <CardTitle>Environment Policy</CardTitle>
         <CardDescription>
-          Choose which change types commit freely and which require Confirmation.
+          {unavailableReason ??
+            "Choose which change types commit freely and which require Confirmation."}
         </CardDescription>
       </CardHeader>
       <CardContent className="grid gap-4">
@@ -84,6 +88,7 @@ export function EnvironmentPolicyEditor({
           </div>
           {ENVIRONMENT_POLICY_LABELS.map(([key, label, note]) => (
             <PolicyRow
+              disabled={!!unavailableReason}
               key={key}
               label={label}
               name={key}
@@ -114,7 +119,7 @@ export function EnvironmentPolicyEditor({
         ) : null}
       </CardContent>
       <CardFooter className="justify-end">
-        <Button disabled={!isDirty || isSaving} onClick={save} type="button">
+        <Button disabled={!!unavailableReason || !isDirty || isSaving} onClick={save} type="button">
           {isSaving ? "Saving…" : "Save Policy"}
         </Button>
       </CardFooter>
@@ -123,12 +128,14 @@ export function EnvironmentPolicyEditor({
 }
 
 function PolicyRow({
+  disabled,
   label,
   name,
   note,
   onChange,
   value,
 }: {
+  disabled: boolean;
   label: string;
   name: string;
   note?: string;
@@ -136,7 +143,10 @@ function PolicyRow({
   value: EnvironmentPolicyLevel;
 }) {
   return (
-    <fieldset className="grid min-w-160 grid-cols-[minmax(15rem,1fr)_repeat(3,8rem)] items-center border-t px-3 py-3">
+    <fieldset
+      disabled={disabled}
+      className="grid min-w-160 grid-cols-[minmax(15rem,1fr)_repeat(3,8rem)] items-center border-t px-3 py-3"
+    >
       <legend className="sr-only">{label}</legend>
       <span className="font-medium text-sm">
         {label}

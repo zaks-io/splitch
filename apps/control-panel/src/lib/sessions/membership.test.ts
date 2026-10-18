@@ -1,5 +1,6 @@
 import type { Repository } from "@splitch/db";
-import { describe, expect, it } from "vitest";
+import { appScope } from "@splitch/db";
+import { describe, expect, it, vi } from "vitest";
 import {
   buildSessionPrincipal,
   createEnvironmentResolver,
@@ -149,6 +150,31 @@ describe("session membership materialization", () => {
 });
 
 describe("Environment navigation policy", () => {
+  it("carries validated expiry and Sync provenance into navigation", async () => {
+    const repo = environmentRepository(policyJson("allow"));
+    const rows = await repo.identity.listEnvironments(appScope("app_1"));
+    const row = rows[0];
+    if (!row) throw new Error("Missing Environment fixture");
+    vi.spyOn(repo.identity, "listEnvironments").mockResolvedValue([
+      {
+        ...row,
+        expiresAt: "2026-10-20T12:00:00.000Z",
+        syncedFromEnvironmentId: "env_prod",
+        syncedAt: "2026-10-18T12:00:00.000Z",
+      },
+    ]);
+    const [environment] = await createEnvironmentResolver(repo).listEnvironments("app_1");
+    expect(environment?.temporary).toEqual({
+      expiresAt: "2026-10-20T12:00:00.000Z",
+      syncedFromEnvironmentId: "env_prod",
+      syncedAt: "2026-10-18T12:00:00.000Z",
+    });
+    vi.mocked(repo.identity.listEnvironments).mockResolvedValue([
+      { ...row, expiresAt: "2026-10-20T12:00:00.000Z", syncedFromEnvironmentId: null },
+    ]);
+    await expect(createEnvironmentResolver(repo).listEnvironments("app_1")).rejects.toThrow();
+  });
+
   it("marks an all-allow Environment as unguarded", async () => {
     const [environment] = await createEnvironmentResolver(
       environmentRepository(policyJson("allow")),
