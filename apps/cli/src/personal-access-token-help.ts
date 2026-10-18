@@ -1,3 +1,4 @@
+import { personalAccessTokenPermissions } from "@splitch/sdk/control-plane";
 import type { HelpFlag } from "./help-flags.js";
 import { DEFAULT_PERSONAL_ACCESS_TOKEN_ENV_VAR } from "./personal-access-token-secret.js";
 
@@ -71,7 +72,7 @@ function grantFlags(defaultValue: string): HelpFlag[] {
       "--grant <target:role:permissions>",
       "string (repeatable)",
       defaultValue,
-      "What the token may reach. Target: all, org:<org id>, or app:<app id>. Role ceiling: member, admin, or owner (never above your own). Permissions: read (read-only), or a comma-separated list of write,delete,credentials,members,privacy. Repeat for more targets; on update the list replaces the current grants.",
+      `What the token may reach. Target: all, org:<org id>, or app:<app id>. Role ceiling: member, admin, or owner (never above your own). Permissions: read (read-only), or a comma-separated list of ${personalAccessTokenPermissions.join(",")}. temporary_environments writes only inside Temporary Environments. Repeat for more targets; on update the list replaces the current grants.`,
     ),
     flag(
       "--expires-at <when>",

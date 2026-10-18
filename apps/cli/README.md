@@ -223,8 +223,13 @@ splitch envs delete --env pr-123 --json
 Creation returns the new Client Key. `--expires-at` accepts a day count or an ISO 8601 instant with
 an offset. Omit it for seven days; a supplied expiry must be more than one minute and at most seven
 days away. Sync replaces the target's Flag Configurations with the source's, including rollout salts
-and excluding live Experiment Runs. Use `api-keys create --env pr-123 --output-file <path>` for a
-server-side API Key that expires with the Environment.
+and excluding live Experiment Runs. For a server-side API Key that expires with the Environment, use
+`api-keys create --env pr-123 --body-json '{"scopes":["data-plane:evaluate"]}' --output-file <path>`.
+
+Give an agent that works this way a token that cannot change anything permanent. From a login
+session, create it with `--grant app:<app id>:owner:temporary_environments` and inject it as
+`SPLITCH_TOKEN`. It reads the whole App and can create, Sync, configure, key, and delete Temporary
+Environments, and the same commands against `dev` or `prod` are refused with `FORBIDDEN`.
 
 ## Approval Policies
 

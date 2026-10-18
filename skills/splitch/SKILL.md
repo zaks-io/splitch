@@ -135,6 +135,34 @@ Before creating or changing an Experiment, inspect the exact command help. The n
 `experiments create`, `experiments update`, `experiments start`, Results reads, then `runs end`.
 A live Run freezes assignment inputs; do not assume a later draft edit changes that Run.
 
+## Test branch work in a Temporary Environment
+
+To try Flag changes for one branch, do not edit a shared Environment such as `dev`. Create a
+Temporary Environment: an expiring copy of another Environment in the same App with its own
+configuration and keys. Name its key after the work.
+
+```bash
+splitch envs create --key pr-123 --temporary --from dev --json   # returns the Client Key
+splitch api-keys create --env pr-123 --body-json '{"scopes":["data-plane:evaluate"]}' \
+  --output-file <secret-file> --json
+splitch flag-config update <flag-key> --env pr-123 --enabled true --json
+splitch envs sync --env pr-123 --from dev --json                 # start over from the source
+splitch envs delete --env pr-123 --json                          # when the work is done
+```
+
+- It expires 7 days after creation; `--expires-at 3d` or an ISO 8601 instant sets an earlier one.
+  Expiry cannot be extended: create a new one from the same source instead.
+- Sync replaces every Flag Configuration with the source's, including rollout salts, so a Targeting
+  Key lands in the same bucket as in the source. Live Experiment Runs are never copied.
+- Its Policy always allows every change, and it cannot host Experiments.
+- After expiry, mutations and both keys fail with `ENVIRONMENT_EXPIRED`, and the keys fail with
+  `CREDENTIAL_REVOKED` once teardown finishes. Point the application at a new Temporary
+  Environment; do not fall back to `dev`.
+- A `SPLITCH_TOKEN` granted `app:<app id>:owner:temporary_environments` can change only Temporary
+  Environments. A `FORBIDDEN` refusal on `dev`, `prod`, or an App-level resource is that boundary
+  working. Report it rather than asking for a broader token, unless the task needs a permanent
+  change.
+
 ## Policies, errors, and retries
 
 An Environment Policy may require confirmation or review. A gated mutation fails without partially

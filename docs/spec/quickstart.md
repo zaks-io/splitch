@@ -56,6 +56,12 @@ This grants reads and configuration changes on that App. Add `delete`, `credenti
 Use `read` for a read-only grant. Unknown and duplicate permissions are refused; `read-write` must be
 replaced with an explicit permission list. Organization creation needs an `all` grant with `write`.
 
+For an agent that tests a branch, prefer `--grant app:<app id>:owner:temporary_environments`. The
+agent reads the whole App but writes only inside Temporary Environments: expiring copies of `dev`
+or `prod` it creates with `splitch envs create --key pr-123 --temporary --from dev`, Syncs, configures,
+keys, and deletes. Any change to a permanent Environment or App-level resource is refused with
+`FORBIDDEN`, and the copy and its keys stop working on their own within seven days.
+
 The file uses `SPLITCH_TOKEN` by default. Inject that variable into each machine's environment using
 your secret manager or a private env file; never pass the secret as a command argument. The CLI
 needs no login file:

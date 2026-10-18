@@ -128,6 +128,24 @@ export const cliDoc = {
       kind: "prose",
       text: "The secret lands in one new `0600` file and the payload reports `value: null` with `valueWrittenTo` naming the path. The command refuses a path that already exists, before the Key is minted. A Client Key is public and needs none of this: read it any time with `splitch client-key get`.",
     },
+    { kind: "heading", text: "Temporary Environments" },
+    {
+      kind: "prose",
+      text: "A Temporary Environment is an expiring copy of another Environment in the same App, with its own Flag Configurations, Client Key, and API Keys. Use one per branch or pull request instead of editing a shared `dev`:",
+    },
+    {
+      kind: "code",
+      lang: "bash",
+      code: "splitch envs create --key pr-123 --temporary --from dev --json\nsplitch envs sync --env pr-123 --from dev --json\nsplitch envs delete --env pr-123 --json",
+    },
+    {
+      kind: "prose",
+      text: "Creation returns the Client Key. The copy expires 7 days after creation unless `--expires-at` names an earlier day count such as `3d` or an ISO 8601 instant, and expiry cannot be extended. Sync replaces every Flag Configuration with the source's, including rollout salts, and never copies a live Experiment Run. Its Policy allows every change and it cannot host Experiments. After expiry, mutations and its keys fail with `ENVIRONMENT_EXPIRED` until teardown removes it.",
+    },
+    {
+      kind: "prose",
+      text: "An agent token created with `--grant app:<app id>:owner:temporary_environments` reads the whole App and writes only inside Temporary Environments. The same command against a permanent Environment or an App-level resource is refused with `FORBIDDEN`.",
+    },
     { kind: "heading", text: "Query flags from the route schema" },
     {
       kind: "prose",

@@ -23,6 +23,7 @@ describe("code-agent docs surface", () => {
     expect(markdown).toContain("Exposure");
     expect(markdown).toContain("Metric Event");
     expect(markdown).toContain("Ratio Metric is derived");
+    expect(markdown).toContain("--temporary --from dev");
     expect(markdown).toContain("Do not deploy to production");
     expect(markdown).toContain(`Source: ${DOCS_ORIGIN}${docsPath.codeAgents()}`);
   });
