@@ -3,7 +3,7 @@ import { negotiateMarkdownRequest } from "./negotiate-markdown";
 
 describe("negotiateMarkdownRequest", () => {
   it.each(["GET", "HEAD"])("serves an accepted Markdown %s request", async (method) => {
-    const result = negotiateMarkdownRequest(
+    const result = await negotiateMarkdownRequest(
       new Request("https://splitch.dev/", {
         method,
         headers: { accept: "text/markdown" },
@@ -22,8 +22,8 @@ describe("negotiateMarkdownRequest", () => {
     }
   });
 
-  it.each(["GET", "HEAD"])("renders a rejected Markdown %s request as HTML", (method) => {
-    const result = negotiateMarkdownRequest(
+  it.each(["GET", "HEAD"])("renders a rejected Markdown %s request as HTML", async (method) => {
+    const result = await negotiateMarkdownRequest(
       new Request("https://splitch.dev/", {
         method,
         headers: { accept: "text/markdown; q=0" },
@@ -35,8 +35,8 @@ describe("negotiateMarkdownRequest", () => {
     expect(result.request.headers.get("accept")).toBe("text/html");
   });
 
-  it("renders an unknown Markdown route as HTML", () => {
-    const result = negotiateMarkdownRequest(
+  it("renders an unknown Markdown route as HTML", async () => {
+    const result = await negotiateMarkdownRequest(
       new Request(new URL("/missing", "https://splitch.dev"), {
         headers: { accept: "text/markdown" },
       }),
@@ -50,7 +50,7 @@ describe("negotiateMarkdownRequest", () => {
   it.each(["GET", "HEAD"])(
     "serves /quickstart.md as markdown for a %s without an Accept hint",
     async (method) => {
-      const result = negotiateMarkdownRequest(
+      const result = await negotiateMarkdownRequest(
         new Request("https://splitch.dev/quickstart.md", { method }),
       );
 

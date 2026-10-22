@@ -33,11 +33,10 @@ import {
 import { callTool, type McpToolCallFault } from "./mcp-tool-call";
 import { withToolCallResultMeta } from "./mcp-tool-result-meta";
 import { corsHeaders, jsonResponse, routeTransportRequest } from "./mcp-transport";
-import { MCP_TOOL_DEFINITIONS } from "./tool-registry";
+import { MCP_TOOL_NAMES, mcpToolDefinitions } from "./tool-registry";
 
 const protocolVersion = "2025-06-18";
 
-const TOOL_NAMES: ReadonlySet<string> = new Set(MCP_TOOL_DEFINITIONS.map((tool) => tool.name));
 const RESOURCE_URIS: ReadonlySet<string> = new Set(MCP_RESOURCE_URIS);
 const PROMPT_NAMES: ReadonlySet<string> = new Set(PROMPT_DEFINITIONS.map((prompt) => prompt.name));
 
@@ -207,7 +206,7 @@ async function dispatch(
  */
 function spanSubject(request: JsonRpcRequest): string | undefined {
   if (request.method === "tools/call") {
-    return knownSubject(TOOL_NAMES, parseToolCall(request.params)?.name);
+    return knownSubject(MCP_TOOL_NAMES, parseToolCall(request.params)?.name);
   }
   if (request.method === "resources/read") {
     return knownSubject(RESOURCE_URIS, stringParam(request.params, "uri"));
@@ -262,7 +261,7 @@ async function dispatchMethod(
     return getMcpPromptRpc(id, request.params);
   }
   if (request.method === "tools/list") {
-    return jsonRpcResult(id, { tools: MCP_TOOL_DEFINITIONS });
+    return jsonRpcResult(id, { tools: mcpToolDefinitions() });
   }
   if (request.method === "tools/call") {
     return withToolCallResultMeta(

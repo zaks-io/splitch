@@ -8,14 +8,14 @@ import { describe, expect, it } from "vitest";
 import { jsonRpcError, jsonRpcResult } from "./json-rpc";
 import { contextUseTool } from "./mcp-session-context";
 import { withToolCallResultMeta } from "./mcp-tool-result-meta";
-import { MCP_TOOL_DEFINITIONS } from "./tool-registry";
+import { mcpToolDefinitions } from "./tool-registry";
 
 describe("context_use annotations", () => {
   it("advertises the same hints and reversibility class as mutating session writes", () => {
     expect(contextUseTool.annotations).toEqual(mcpToolAnnotations(updateClosed));
     expect(contextUseTool._meta).toEqual(mcpReversibilityMeta(updateClosed));
     expect(contextUseTool.annotations.readOnlyHint).toBe(false);
-    expect(MCP_TOOL_DEFINITIONS.some((tool) => tool.name === "context_use")).toBe(true);
+    expect(mcpToolDefinitions().some((tool) => tool.name === "context_use")).toBe(true);
   });
 });
 

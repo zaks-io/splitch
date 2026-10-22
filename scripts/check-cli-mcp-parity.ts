@@ -12,7 +12,7 @@ import {
 import { getPromptPlan } from "../apps/mcp-server/src/mcp-prompts.js";
 import { QUICKSTART_MD } from "../apps/mcp-server/src/mcp-resource-files.generated.js";
 import { listMcpResources } from "../apps/mcp-server/src/mcp-resources.js";
-import { MCP_TOOL_DEFINITIONS } from "../apps/mcp-server/src/tool-registry.js";
+import { mcpToolDefinitions } from "../apps/mcp-server/src/tool-registry.js";
 import {
   deriveMcpProtocolTools,
   operationIds,
@@ -28,10 +28,11 @@ import {
 } from "./lib/cli-mcp-parity.mjs";
 import { assertSharedOperationParity } from "./lib/cli-mcp-shared-operation.js";
 
+const mcpTools = mcpToolDefinitions();
 const cliOperationIds = allCliParityOperationIds();
-const mcpOperationIds = MCP_TOOL_DEFINITIONS.filter((tool) => tool.name !== "context_use").map(
-  (tool) => tool.name,
-);
+const mcpOperationIds = mcpTools
+  .filter((tool) => tool.name !== "context_use")
+  .map((tool) => tool.name);
 
 assertCliMcpParity({
   contractOperationIds: operationIds,
@@ -42,7 +43,7 @@ assertCliMcpParity({
     {
       name: "active context selection",
       cliPresent: META_COMMANDS.includes("use"),
-      mcpPresent: MCP_TOOL_DEFINITIONS.some((tool) => tool.name === "context_use"),
+      mcpPresent: mcpTools.some((tool) => tool.name === "context_use"),
     },
   ],
 });
@@ -100,7 +101,7 @@ assertPublicAgentSurface({
       text: renderCommandHelp(command),
     })),
   ],
-  mcpTools: MCP_TOOL_DEFINITIONS,
+  mcpTools,
   mcpPrompts: promptPlans.flatMap(({ name, plan }) => [
     { name: `${name}:description`, text: plan.description },
     ...plan.messages.map((message, index) => ({
@@ -136,10 +137,9 @@ const derivedSchemas = new Map(
     .map((tool) => [tool.name, { input: tool.inputSchema, output: tool.outputSchema }]),
 );
 const publishedSchemas = new Map(
-  MCP_TOOL_DEFINITIONS.filter((tool) => mcpOperationIds.includes(tool.name)).map((tool) => [
-    tool.name,
-    { input: tool.inputSchema, output: tool.outputSchema },
-  ]),
+  mcpTools
+    .filter((tool) => mcpOperationIds.includes(tool.name))
+    .map((tool) => [tool.name, { input: tool.inputSchema, output: tool.outputSchema }]),
 );
 const sharedSchemas = assertDerivedMcpSchemaParity({ derivedSchemas, publishedSchemas });
 const flagReadOperationIds = ["principal_flags_list", "flags_list", "flags_get"] as const;
@@ -154,9 +154,11 @@ for (const command of CLI_COMMANDS) {
 const sharedFlagReadFields = assertFlagReadSummaryParity({
   cliHelp: cliFlagReadHelp,
   mcpInputSchemas: new Map(
-    MCP_TOOL_DEFINITIONS.filter((tool) =>
-      flagReadOperationIds.includes(tool.name as (typeof flagReadOperationIds)[number]),
-    ).map((tool) => [tool.name, tool.inputSchema]),
+    mcpTools
+      .filter((tool) =>
+        flagReadOperationIds.includes(tool.name as (typeof flagReadOperationIds)[number]),
+      )
+      .map((tool) => [tool.name, tool.inputSchema]),
   ),
 });
 

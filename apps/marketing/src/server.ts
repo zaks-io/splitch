@@ -24,7 +24,7 @@ const marketingHandler = {
       return withHomepageLinkHeaders(request, agentSkillsResponse);
     }
 
-    const negotiation = negotiateMarkdownRequest(request);
+    const negotiation = await negotiateMarkdownRequest(request);
     if (negotiation.kind === "response") {
       return withHomepageLinkHeaders(request, negotiation.response);
     }
