@@ -1,4 +1,4 @@
-import { WorkerEntrypoint } from "cloudflare:workers";
+import { tracing, WorkerEntrypoint } from "cloudflare:workers";
 import {
   type ConvexServerExposureItem,
   createHealthResponse,
@@ -52,6 +52,7 @@ import { makeHttpExposureIngestSink } from "./exposure-redemption";
 import { DurableExposureRedemptionClaimStore } from "./exposure-redemption-claim";
 import { requiredExposureRedemptionClaimsBinding } from "./exposure-redemption-claims-binding";
 import { ExposureRedemptionClaimDurableObject } from "./exposure-redemption-do";
+import { observedKvReads } from "./kv-read-spans";
 import { makeEnvSaltStore } from "./local-salt-store";
 import { exposureTicketKeyFromEnv } from "./local-ticket-key";
 import { runtimeKvProvider } from "./provider/runtime-provider";
@@ -146,7 +147,10 @@ async function handleRequest(
 ): Promise<Response> {
   const url = new URL(request.url);
   const platformTarget = requirePlatformTarget(env.SPLITCH_PLATFORM_TARGET);
-  const saltStore = makeEnvSaltStore(env);
+  const saltStore = makeEnvSaltStore({
+    ...env,
+    CONFIG_STORE: observedKvReads(env.CONFIG_STORE, tracing, "configuration"),
+  });
 
   const exposureRedemptionClaims = requiredExposureRedemptionClaimsBinding(
     env.EXPOSURE_REDEMPTION_CLAIMS,
@@ -162,7 +166,9 @@ async function handleRequest(
   const app = createApp({
     door: authority ? "binding" : "public",
     authResolver: requestAuthResolver(env, url, authority),
-    dataPlaneAuthResolver: makeDataPlaneAuthResolver(env.CREDENTIAL_STORE),
+    dataPlaneAuthResolver: makeDataPlaneAuthResolver(
+      observedKvReads(env.CREDENTIAL_STORE, tracing, "credentials"),
+    ),
     rateLimiter: makeEvaluationRateLimiter(env.EVALUATION_RATE_LIMITER),
     delegationBindings: {
       "event-ingest-api": env.EVENT_INGEST,
@@ -171,10 +177,11 @@ async function handleRequest(
     provider: runtimeKvProvider(
       env,
       (breach) => reportPropagationBreach("flag_config_propagation_breach", { ...breach }),
+      tracing,
       (promise) => ctx.waitUntil(promise),
     ),
     assignmentStore: new KvAssignmentStore(
-      env.ASSIGNMENTS_KV,
+      observedKvReads(env.ASSIGNMENTS_KV, tracing, "assignments"),
       env.ASSIGNMENT_STORE_WRITER,
       saltStore,
       undefined,
