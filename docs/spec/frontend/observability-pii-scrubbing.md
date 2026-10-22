@@ -82,6 +82,14 @@ the authoritative snapshot; Assignment access and the final identity-generation 
 successful admission. `Verify flag configuration` and `Verify identity admission` spans expose the
 overlap without recording request attributes.
 
+`Verify identity revalidation` wraps the trailing identity-version read. KV reads on this path
+record native spans with the bounded `kv.cache_status` attribute when `getWithMetadata` exposes a
+recognized cache status. Missing cache status leaves read duration only. The new attribute remains
+native-only because the Sentry span allow-list would redact it. Hosted identity reads use the
+authoritative Config Store DO, not KV. No additional KV TTL is imposed on mutable configuration or
+identity state. The shared-preview-only [evaluate probe](../../../scripts/evaluate-probe.md)
+records a small latency sample and produces native evaluation traces using existing smoke credentials.
+
 Sources: [Cloudflare custom span attributes](https://developers.cloudflare.com/workers/observability/traces/custom-spans/),
 [Cloudflare waitUntil lifetime](https://developers.cloudflare.com/workers/runtime-apis/context/#waituntil),
 [Sentry OTLP attribute conversion](https://github.com/getsentry/relay/blob/master/relay-spans/src/otel_to_sentry_v2.rs),
