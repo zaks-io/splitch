@@ -127,10 +127,14 @@ export function makeTemporaryEnvironmentRepo(db: Db, d1: D1Database) {
       const rows = await db
         .select()
         .from(environments)
-        .where(lte(environments.expiresAt, now))
+        .where(buildExpiredTemporaryEnvironmentsPredicate(now))
         .orderBy(asc(environments.expiresAt), asc(environments.id))
         .limit(limit);
       return rows;
     },
   };
+}
+
+export function buildExpiredTemporaryEnvironmentsPredicate(now: string) {
+  return lte(environments.expiresAt, now);
 }

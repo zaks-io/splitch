@@ -16,6 +16,7 @@ import { makeIdentityRepo } from "./identity";
 import { makePersonalAccessTokenRepo } from "./personal-access-tokens";
 import { makePrivacyRepo } from "./privacy";
 import { makeRunSrmAlarmRepo } from "./run-srm-alarms";
+import { probeScheduledDueWork, type ScheduledDueWorkInput } from "./scheduled-due-work";
 import { makeSentryIntegrationRepo } from "./sentry-integrations";
 
 /**
@@ -35,6 +36,7 @@ import { makeSentryIntegrationRepo } from "./sentry-integrations";
 export function createRepository(d1: D1Database) {
   const db = createDb(d1);
   return {
+    scheduledDueWork: (input: ScheduledDueWorkInput) => probeScheduledDueWork(db, input),
     auditEvents: makeAuditEventRepo(db, d1),
     flags: makeFlagRepo(db),
     flagEvaluation: makeFlagEvaluationReads(db),

@@ -1,5 +1,13 @@
+import { sql } from "drizzle-orm";
+import { createDb } from "./client";
 import type { personalAccessTokenRotations } from "../schema/personal-access-token-step-up";
 import type { PersonalAccessTokenPatch, PersonalAccessTokenRow } from "./personal-access-tokens";
+import {
+  buildExpiredPersonalAccessTokenRotationsPredicate,
+  buildExpiredPersonalAccessTokenStepUpUsesPredicate,
+  buildPendingPersonalAccessTokenRotationsPredicate,
+  personalAccessTokenRetentionCutoff,
+} from "./scheduled-due-predicates";
 
 export interface PersonalAccessTokenStepUpUse {
   jti: string;
@@ -17,7 +25,7 @@ export class PersonalAccessTokenClaimRefused extends Error {
 
 const TOKEN_COLUMNS = `id, user_id AS userId, name, token_hash AS tokenHash, grants,
   expires_at AS expiresAt, created_at AS createdAt, last_rotated_at AS lastRotatedAt, revoked_at AS revokedAt`;
-const ROTATION_COLUMNS = `id, user_id AS userId, token_id AS tokenId, previous_hash AS previousHash,
+const ROTATION_COLUMNS = sql`id, user_id AS userId, token_id AS tokenId, previous_hash AS previousHash,
   candidate_hash AS candidateHash, operation_hash AS operationHash, step_up_jti AS stepUpJti,
   phase, claimed_at AS claimedAt, updated_at AS updatedAt`;
 const NO_ROTATION = `NOT EXISTS (SELECT 1 FROM personal_access_token_rotations r
@@ -178,12 +186,11 @@ export function makePersonalAccessTokenAuthorizationRepo(d1: D1Database) {
     },
 
     async pendingRotations(before: string, limit: number): Promise<PersonalAccessTokenRotation[]> {
-      const rows = await d1
-        .prepare(`SELECT ${ROTATION_COLUMNS} FROM personal_access_token_rotations
-        WHERE phase NOT IN ('completed','retired') AND updated_at <= ? ORDER BY updated_at,id LIMIT ?`)
-        .bind(before, Math.min(limit, 100))
-        .all<PersonalAccessTokenRotation>();
-      return rows.results;
+      const due = buildPendingPersonalAccessTokenRotationsPredicate(before);
+      return createDb(
+        d1,
+      ).all<PersonalAccessTokenRotation>(sql`SELECT ${ROTATION_COLUMNS} FROM personal_access_token_rotations
+        WHERE ${due} ORDER BY updated_at,id LIMIT ${Math.min(limit, 100)}`);
     },
 
     async retireRotation(userId: string, id: string, now: string): Promise<void> {
@@ -207,20 +214,16 @@ export function makePersonalAccessTokenAuthorizationRepo(d1: D1Database) {
 }
 
 async function purgeStepUpUses(d1: D1Database, now: string, limit: number): Promise<number> {
-  const cutoff = new Date(Date.parse(now) - 24 * 60 * 60 * 1000).toISOString();
+  const cutoff = personalAccessTokenRetentionCutoff(now);
   const bounded = Math.min(Math.max(limit, 1), 100);
+  const rotations = buildExpiredPersonalAccessTokenRotationsPredicate(cutoff);
+  const uses = buildExpiredPersonalAccessTokenStepUpUsesPredicate(cutoff);
   // Terminal operations are removed first to preserve the consumption FK.
-  await d1
-    .prepare(`DELETE FROM personal_access_token_rotations WHERE id IN
-        (SELECT id FROM personal_access_token_rotations WHERE phase IN ('completed','retired') AND updated_at < ? ORDER BY updated_at,id LIMIT ?)`)
-    .bind(cutoff, bounded)
-    .run();
-  const result = await d1
-    .prepare(`DELETE FROM personal_access_token_step_up_uses WHERE jti IN
-        (SELECT jti FROM personal_access_token_step_up_uses u WHERE expires_at < ?
-        AND NOT EXISTS (SELECT 1 FROM personal_access_token_rotations r WHERE r.step_up_jti = u.jti)
-        ORDER BY expires_at,jti LIMIT ?)`)
-    .bind(cutoff, bounded)
-    .run();
+  const db = createDb(d1);
+  await db.run(sql`DELETE FROM personal_access_token_rotations WHERE id IN
+        (SELECT id FROM personal_access_token_rotations WHERE ${rotations} ORDER BY updated_at,id LIMIT ${bounded})`);
+  const result = await db.run(sql`DELETE FROM personal_access_token_step_up_uses WHERE jti IN
+        (SELECT jti FROM personal_access_token_step_up_uses u WHERE ${uses}
+        ORDER BY expires_at,jti LIMIT ${bounded})`);
   return result.meta.changes;
 }

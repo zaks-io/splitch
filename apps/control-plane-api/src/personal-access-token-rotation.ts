@@ -1,7 +1,9 @@
-import type { PersonalAccessTokenRow, Repository, PersonalAccessTokenStepUpUse } from "@splitch/db";
+import type { PersonalAccessTokenRow, PersonalAccessTokenStepUpUse, Repository } from "@splitch/db";
 import { PersonalAccessTokenClaimRefused } from "@splitch/db";
 import { sha256Hex } from "./credential-cache";
 import { writePersonalAccessTokenCache } from "./personal-access-token-store";
+
+export const PERSONAL_ACCESS_TOKEN_RECOVERY_DELAY_MS = 300_000;
 
 /** Every rotation, including ordinary issuance, takes the exclusive D1 claim first. */
 export async function rotatePersonalAccessToken(
@@ -52,7 +54,10 @@ export async function runPersonalAccessTokenRetention(
   nowMs: number,
 ): Promise<void> {
   const now = new Date(nowMs).toISOString();
-  const pending = await tokens.pendingRotations(new Date(nowMs - 300_000).toISOString(), 100);
+  const pending = await tokens.pendingRotations(
+    new Date(nowMs - PERSONAL_ACCESS_TOKEN_RECOVERY_DELAY_MS).toISOString(),
+    100,
+  );
   for (const claim of pending) {
     await tokens.retireRotation(claim.userId, claim.id, now);
     const row = await tokens.getForUser(claim.userId, claim.tokenId);

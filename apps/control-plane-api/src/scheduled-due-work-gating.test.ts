@@ -1,0 +1,143 @@
+import type { ScheduledDueWork } from "@splitch/db";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import type { ControlPlaneApiEnv } from "./env";
+import { runControlPlaneScheduled } from "./scheduled";
+
+const mocks = vi.hoisted(() => ({
+  probe: vi.fn(),
+  jobs: {
+    privacyReconciliation: vi.fn(),
+    privacyArtifactPurge: vi.fn(),
+    personalAccessTokenRetention: vi.fn(),
+    temporaryEnvironmentTeardown: vi.fn(),
+    auditEventForwarding: vi.fn(),
+    convexWebhookDispatch: vi.fn(),
+    cloudflarePushDispatch: vi.fn(),
+    sentryWebhookDispatch: vi.fn(),
+    demo: vi.fn(),
+    adoption: vi.fn(),
+    archive: vi.fn(),
+    flagRetention: vi.fn(),
+    deliveryRetention: vi.fn(),
+    auditRetention: vi.fn(),
+  },
+}));
+vi.mock("@splitch/db", () => ({
+  createRepository: () => ({
+    scheduledDueWork: mocks.probe,
+    identity: { reapExpiredProvisionalOrganizations: mocks.jobs.demo },
+    claim: { purgeExpiredClaimArtifacts: async () => 0 },
+    sentry: { minUndeliveredSeq: async () => null },
+    flagChangeEvents: { pruneBefore: mocks.jobs.flagRetention },
+    auditEvents: { pruneBefore: mocks.jobs.auditRetention },
+  }),
+}));
+vi.mock("./entity-privacy-jobs", () => ({
+  RECONCILE_DELAY_MS: 60_000,
+  reconcilePrivacyJobs: mocks.jobs.privacyReconciliation,
+  purgeExpiredPrivacyArtifacts: mocks.jobs.privacyArtifactPurge,
+}));
+vi.mock("./personal-access-token-rotation", () => ({
+  PERSONAL_ACCESS_TOKEN_RECOVERY_DELAY_MS: 300_000,
+  runPersonalAccessTokenRetention: mocks.jobs.personalAccessTokenRetention,
+}));
+vi.mock("./temporary-environment-teardown-scheduled", () => ({
+  runTemporaryEnvironmentTeardown: mocks.jobs.temporaryEnvironmentTeardown,
+}));
+vi.mock("./audit-events", () => ({ forwardAuditEvents: mocks.jobs.auditEventForwarding }));
+vi.mock("./convex-webhook-dispatch", () => ({
+  dispatchConvexWebhooks: mocks.jobs.convexWebhookDispatch,
+}));
+vi.mock("./cloudflare-push-dispatch", () => ({
+  dispatchCloudflarePushes: mocks.jobs.cloudflarePushDispatch,
+}));
+vi.mock("./sentry-webhook-dispatch", () => ({
+  dispatchSentryWebhooks: mocks.jobs.sentryWebhookDispatch,
+}));
+vi.mock("./approval-archive", () => ({ runApprovalRequestArchival: mocks.jobs.archive }));
+vi.mock("./approval-archive-tinybird", () => ({ approvalArchiveStoreFromEnv: () => ({}) }));
+vi.mock("./delivery-retention", () => ({ runDeliveryRetention: mocks.jobs.deliveryRetention }));
+vi.mock("./privacy-export-cleanup", () => ({ deleteOrphanedPrivacyExports: async () => 0 }));
+
+const keys: Array<keyof ScheduledDueWork> = [
+  "privacyReconciliation",
+  "privacyArtifactPurge",
+  "personalAccessTokenRetention",
+  "temporaryEnvironmentTeardown",
+  "auditEventForwarding",
+  "convexWebhookDispatch",
+  "cloudflarePushDispatch",
+  "sentryWebhookDispatch",
+];
+const daily = [
+  "demo",
+  "adoption",
+  "archive",
+  "flagRetention",
+  "deliveryRetention",
+  "auditRetention",
+] as const;
+const idle = Object.fromEntries(keys.map((key) => [key, false]));
+beforeEach(() => {
+  mocks.probe.mockReset().mockResolvedValue(idle);
+  for (const job of Object.values(mocks.jobs)) job.mockReset().mockResolvedValue(0);
+  mocks.jobs.demo.mockResolvedValue({ candidates: 0, reaped: 0 });
+  vi.spyOn(console, "info").mockImplementation(() => {});
+});
+afterEach(() => vi.restoreAllMocks());
+async function tick(cron = "* * * * *") {
+  const pending: Promise<unknown>[] = [];
+  runControlPlaneScheduled(
+    { cron, scheduledTime: Date.parse("2026-10-22T08:00:00.000Z") } as ScheduledController,
+    {
+      DB: {},
+      EVENT_INGEST_API: { adoptMetricEventClaimRetention: mocks.jobs.adoption },
+    } as unknown as ControlPlaneApiEnv,
+    { waitUntil: (promise) => pending.push(promise) } as unknown as ExecutionContext,
+  );
+  await Promise.all(pending);
+}
+it.each(keys)("runs only %s when it is due", async (key) => {
+  mocks.probe.mockResolvedValue({ ...idle, [key]: true });
+  await tick();
+  for (const [name, job] of Object.entries(mocks.jobs))
+    expect(job).toHaveBeenCalledTimes(name === key ? 1 : 0);
+});
+it("runs no jobs on an idle minute tick", async () => {
+  await tick();
+  for (const job of Object.values(mocks.jobs)) expect(job).not.toHaveBeenCalled();
+});
+it("reports a failed probe and runs every minute job", async () => {
+  mocks.probe.mockRejectedValue(new Error("probe_private_canary"));
+  const error = vi.spyOn(console, "error").mockImplementation(() => {});
+  await tick();
+  for (const key of keys) expect(mocks.jobs[key]).toHaveBeenCalledTimes(1);
+  for (const key of daily) expect(mocks.jobs[key]).not.toHaveBeenCalled();
+  expect(error).toHaveBeenCalledWith(
+    expect.objectContaining({
+      message: "scheduled_due_work_probe_failed",
+      service: "splitch-control-plane-api",
+      cron: "* * * * *",
+      fault: expect.any(String),
+    }),
+  );
+  expect(JSON.stringify(error.mock.calls)).not.toContain("probe_private_canary");
+});
+it.each([false, true])(
+  "keeps daily retention ungated and gates the three every-tick jobs when due=%s",
+  async (due) => {
+    mocks.probe.mockResolvedValue(Object.fromEntries(keys.map((key) => [key, due])));
+    await tick("0 8 * * *");
+    for (const key of keys)
+      expect(mocks.jobs[key]).toHaveBeenCalledTimes(due && keys.indexOf(key) < 3 ? 1 : 0);
+    for (const key of daily) expect(mocks.jobs[key]).toHaveBeenCalledTimes(1);
+  },
+);
+it("keeps the same daily job set when the probe fails", async () => {
+  mocks.probe.mockRejectedValue(new Error("probe failed"));
+  vi.spyOn(console, "error").mockImplementation(() => {});
+  await tick("0 8 * * *");
+  for (const key of keys)
+    expect(mocks.jobs[key]).toHaveBeenCalledTimes(keys.indexOf(key) < 3 ? 1 : 0);
+  for (const key of daily) expect(mocks.jobs[key]).toHaveBeenCalledTimes(1);
+});

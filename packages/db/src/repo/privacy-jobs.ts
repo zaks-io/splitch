@@ -1,7 +1,9 @@
+import { sql } from "drizzle-orm";
+import { createDb } from "./client";
 import type { privacyRequests } from "../schema/index";
 import {
-  stagePrivacyExportArtifact,
   type StagePrivacyExportArtifactInput,
+  stagePrivacyExportArtifact,
 } from "./privacy-job-artifacts";
 import {
   type PrivacyJobDbRow,
@@ -9,6 +11,10 @@ import {
   type PrivacyJobStatus,
   privacyJobRow,
 } from "./privacy-job-row";
+import {
+  buildExpiredPrivacyArtifactsPredicate,
+  buildPrivacyJobsReconciliationPredicate,
+} from "./scheduled-due-predicates";
 
 export type { PrivacyJobRow, PrivacyJobStatus } from "./privacy-job-row";
 
@@ -158,33 +164,28 @@ export function makePrivacyJobRepo(
       updatedBefore: string;
       limit: number;
     }): Promise<PrivacyJobRow[]> {
-      const result = await d1
-        .prepare(
-          `SELECT job_id, request_id, kind, status, store_status_json, delete_before_ts,
+      const due = buildPrivacyJobsReconciliationPredicate(input);
+      const result = await createDb(d1).all<PrivacyJobDbRow>(
+        sql`SELECT job_id, request_id, kind, status, store_status_json, delete_before_ts,
              identity_version, id_type, entity_family_hash, lease_expires_at, claim_token, artifact_key,
              artifact_sha256, artifact_expires_at, error_code, created_at, updated_at
            FROM privacy_jobs
-           WHERE ((status IN ('queued', 'failed') AND updated_at <= ?)
-             OR (status = 'running' AND lease_expires_at <= ?))
-           ORDER BY updated_at, job_id LIMIT ?`,
-        )
-        .bind(input.updatedBefore, input.now, input.limit)
-        .all<PrivacyJobDbRow>();
-      return result.results.map(privacyJobRow);
+           WHERE ${due}
+           ORDER BY updated_at, job_id LIMIT ${input.limit}`,
+      );
+      return result.map(privacyJobRow);
     },
     async listExpiredPrivacyArtifacts(now: string, limit: number): Promise<PrivacyJobRow[]> {
-      const result = await d1
-        .prepare(
-          `SELECT job_id, request_id, kind, status, store_status_json, delete_before_ts,
+      const due = buildExpiredPrivacyArtifactsPredicate(now);
+      const result = await createDb(d1).all<PrivacyJobDbRow>(
+        sql`SELECT job_id, request_id, kind, status, store_status_json, delete_before_ts,
              identity_version, id_type, entity_family_hash, lease_expires_at, claim_token, artifact_key,
              artifact_sha256, artifact_expires_at, error_code, created_at, updated_at
            FROM privacy_jobs
-           WHERE artifact_key IS NOT NULL AND artifact_expires_at <= ?
-           ORDER BY artifact_expires_at, job_id LIMIT ?`,
-        )
-        .bind(now, limit)
-        .all<PrivacyJobDbRow>();
-      return result.results.map(privacyJobRow);
+           WHERE ${due}
+           ORDER BY artifact_expires_at, job_id LIMIT ${limit}`,
+      );
+      return result.map(privacyJobRow);
     },
     async clearPrivacyArtifact(requestId: string, artifactKey: string, updatedAt: string) {
       const result = await d1

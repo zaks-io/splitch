@@ -1,4 +1,8 @@
+import { sql } from "drizzle-orm";
+import { configWebhookDeliveries } from "../schema/integrations";
+import { createDb } from "./client";
 import type { ConfigWebhookDeliveryRow } from "./convex-integrations";
+import { buildDueConvexDeliveriesQuery } from "./scheduled-due-predicates";
 
 export async function claimDueConvexDeliveries(
   d1: D1Database,
@@ -9,48 +13,45 @@ export async function claimDueConvexDeliveries(
 ): Promise<ConfigWebhookDeliveryRow[]> {
   if (!Number.isInteger(limit) || limit < 1)
     throw new Error("Convex delivery claim limit must be a positive integer");
+  const due = buildDueConvexDeliveriesQuery(now);
   // Start with eligible installations so blocked history cannot inflate the due-row scan.
-  const [leased, claimed] = await d1.batch<ConfigWebhookDeliveryRow>([
-    d1
-      .prepare(`UPDATE config_webhook_deliveries
-        SET state = 'leased', lease_owner = ?, lease_expires_at = ?
-        WHERE delivery_id IN (
-          SELECT delivery.delivery_id FROM convex_installations installation
-          CROSS JOIN config_webhook_deliveries delivery
-            ON delivery.installation_id = installation.installation_id
-            AND delivery.environment_version = (
-              SELECT environment_version FROM config_webhook_deliveries newest
-                INDEXED BY config_webhook_delivery_outstanding_idx
-              WHERE newest.installation_id = installation.installation_id
-                AND newest.state IN ('pending', 'leased')
-              ORDER BY environment_version DESC LIMIT 1
-            )
-          WHERE installation.status = 'active'
-            AND (installation.preparation_retry_at IS NULL OR installation.preparation_retry_at <= ?)
-            AND NOT EXISTS (SELECT 1 FROM config_webhook_deliveries busy
-              WHERE busy.installation_id = delivery.installation_id
-                AND busy.state = 'leased' AND busy.lease_expires_at > ?)
-            AND ((delivery.state = 'pending' AND delivery.next_attempt_at <= ?)
-              OR (delivery.state = 'leased' AND delivery.lease_expires_at <= ?))
-          ORDER BY delivery.next_attempt_at, delivery.delivery_id LIMIT ?
-        ) RETURNING delivery_id AS deliveryId`)
-      .bind(leaseOwner, leaseExpiresAt, now, now, now, now, limit),
-    d1
-      .prepare(`SELECT delivery.delivery_id AS deliveryId, delivery.installation_id AS installationId,
-        installation.callback_url AS callbackUrl, installation.secret_ciphertext AS secretCiphertext,
-        installation.secret_key_version AS secretKeyVersion, delivery.environment_version AS environmentVersion,
-        delivery.body_json AS bodyJson, delivery.attempt_count AS attemptCount
-        FROM config_webhook_deliveries delivery JOIN convex_installations installation
-          ON installation.installation_id = delivery.installation_id
-        WHERE delivery.state = 'leased' AND delivery.lease_owner = ?
-          AND installation.status = 'active'
-        ORDER BY delivery.next_attempt_at, delivery.delivery_id`)
-      .bind(leaseOwner),
+  const db = createDb(d1);
+  const [leased, claimed] = await db.batch([
+    db
+      .update(configWebhookDeliveries)
+      .set({ state: "leased", leaseOwner, leaseExpiresAt })
+      .where(sql`delivery_id IN (
+          SELECT delivery.delivery_id FROM convex_installations installation ${due}
+          ORDER BY delivery.next_attempt_at, delivery.delivery_id LIMIT ${limit}
+        )`)
+      .returning({ deliveryId: configWebhookDeliveries.deliveryId }),
+    db
+      .select({
+        deliveryId: sql<ConfigWebhookDeliveryRow["deliveryId"]>`delivery.delivery_id`,
+        installationId: sql<ConfigWebhookDeliveryRow["installationId"]>`delivery.installation_id`,
+        callbackUrl: sql<ConfigWebhookDeliveryRow["callbackUrl"]>`installation.callback_url`,
+        secretCiphertext: sql<
+          ConfigWebhookDeliveryRow["secretCiphertext"]
+        >`installation.secret_ciphertext`,
+        secretKeyVersion: sql<
+          ConfigWebhookDeliveryRow["secretKeyVersion"]
+        >`installation.secret_key_version`,
+        environmentVersion: sql<
+          ConfigWebhookDeliveryRow["environmentVersion"]
+        >`delivery.environment_version`,
+        bodyJson: sql<ConfigWebhookDeliveryRow["bodyJson"]>`delivery.body_json`,
+        attemptCount: sql<ConfigWebhookDeliveryRow["attemptCount"]>`delivery.attempt_count`,
+      })
+      .from(sql`config_webhook_deliveries delivery JOIN convex_installations installation
+          ON installation.installation_id = delivery.installation_id`)
+      .where(sql`delivery.state = 'leased' AND delivery.lease_owner = ${leaseOwner}
+          AND installation.status = 'active'`)
+      .orderBy(sql`delivery.next_attempt_at`, sql`delivery.delivery_id`),
   ]);
   if (!leased || !claimed)
     throw new Error("Convex delivery claim: D1 batch did not return both statement results");
-  const updatedIds = new Set(leased.results.map((row) => row.deliveryId));
-  return claimed.results.filter((row) => updatedIds.has(row.deliveryId));
+  const updatedIds = new Set(leased.map((row) => row.deliveryId));
+  return claimed.filter((row) => updatedIds.has(row.deliveryId));
 }
 
 export interface ConvexDeliveryFinish {
