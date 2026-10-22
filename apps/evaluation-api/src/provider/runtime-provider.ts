@@ -1,4 +1,5 @@
 import type { EvaluationApiEnv } from "../env";
+import { observedKvReads } from "../kv-read-spans";
 import { DurableConfigUpdates, type WaitUntil } from "./config-updates";
 import { KvProvider, type PropagationBreach } from "./kv-provider";
 
@@ -12,6 +13,7 @@ const providers = new WeakMap<object, CachedRuntimeProvider>();
 export function runtimeKvProvider(
   env: EvaluationApiEnv,
   onPropagationBreach: (breach: PropagationBreach) => void,
+  tracing: Pick<Tracing, "enterSpan">,
   waitUntil?: WaitUntil,
 ): KvProvider {
   const cacheKey = env.CONFIG_STORE as object;
@@ -26,7 +28,7 @@ export function runtimeKvProvider(
 
   const updates = new DurableConfigUpdates(env.CONFIG_STORE_WRITER);
   updates.setWaitUntil(waitUntil);
-  const provider = new KvProvider(env.CONFIG_STORE, {
+  const provider = new KvProvider(observedKvReads(env.CONFIG_STORE, tracing, "configuration"), {
     configUpdates: updates,
     onPropagationBreach,
   });

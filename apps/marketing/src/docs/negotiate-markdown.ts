@@ -1,4 +1,3 @@
-import { markdownForPath } from "./markdown-route";
 import {
   acceptsMarkdown,
   hasMarkdownMediaRange,
@@ -10,9 +9,9 @@ type MarkdownNegotiation<TRequest extends Request> =
   | { kind: "response"; response: Response }
   | { kind: "render"; request: TRequest };
 
-export function negotiateMarkdownRequest<TRequest extends Request>(
+export async function negotiateMarkdownRequest<TRequest extends Request>(
   request: TRequest,
-): MarkdownNegotiation<TRequest> {
+): Promise<MarkdownNegotiation<TRequest>> {
   if (request.method !== "GET" && request.method !== "HEAD") {
     return { kind: "render", request };
   }
@@ -21,6 +20,7 @@ export function negotiateMarkdownRequest<TRequest extends Request>(
   // Append `.md` to any page: the URL itself selects the markdown representation.
   // Do not require Accept: text/markdown — agents and curl follow the README rule.
   if (pathname.endsWith(".md")) {
+    const { markdownForPath } = await import("./markdown-route");
     const markdown = markdownForPath(pathname);
     if (markdown !== null) {
       return {
@@ -36,6 +36,7 @@ export function negotiateMarkdownRequest<TRequest extends Request>(
   }
 
   if (acceptsMarkdown(request)) {
+    const { markdownForPath } = await import("./markdown-route");
     const markdown = markdownForPath(pathname);
     if (markdown !== null) {
       return {

@@ -42,9 +42,7 @@ import {
   setSessionContext,
 } from "./mcp-session-context";
 import { controlPlaneContextValidator } from "./mcp-session-context-validator";
-import { MCP_TOOL_DEFINITIONS } from "./tool-registry";
-
-const toolNames = new Set(MCP_TOOL_DEFINITIONS.map((tool) => tool.name));
+import { MCP_TOOL_NAMES } from "./tool-registry";
 
 /** The fault sinks a tool call reports through: Sentry span, and operator log. */
 export interface McpToolCallFault {
@@ -63,7 +61,7 @@ export async function callTool(
   fault: McpToolCallFault,
 ): Promise<JsonRpcResponse> {
   const call = parseToolCall(params);
-  if (!call || !toolNames.has(call.name)) {
+  if (!call || !MCP_TOOL_NAMES.has(call.name)) {
     return recordToolResult(
       fault.span,
       jsonRpcError(id, JSON_RPC_METHOD_NOT_FOUND, "Method not found"),

@@ -30,18 +30,6 @@ const OFREP_AUTH_ERRORS = [
   "SERVICE_UNAVAILABLE",
 ] as const;
 
-/** Body-limit VALIDATION_ERROR plus OFREP evaluation/request failures. */
-const OfrepSingleStatus400Schema = z.union([
-  errorResponseSchemaFor("VALIDATION_ERROR"),
-  OfrepEvaluationFailureSchema,
-]);
-
-const OfrepBulkStatus400Schema = z.union([
-  errorResponseSchemaFor("VALIDATION_ERROR"),
-  errorResponseSchemaFor("UNSUPPORTED_OBJECT_KEY"),
-  OfrepBulkEvaluationFailureSchema,
-]);
-
 export const ofrepRoutes = [
   defineApiRoute({
     operationId: "ofrep_evaluate",
@@ -62,10 +50,12 @@ export const ofrepRoutes = [
     idempotency: "optional",
     effects: exposureWriteClosed,
     errors: [...OFREP_AUTH_ERRORS, "FLAG_NOT_FOUND"],
-    errorResponseSchemas: {
-      400: OfrepSingleStatus400Schema,
-      404: OfrepEvaluationFailureSchema,
-      500: OfrepGeneralErrorSchema,
+    get errorResponseSchemas() {
+      return {
+        400: z.union([errorResponseSchemaFor("VALIDATION_ERROR"), OfrepEvaluationFailureSchema]),
+        404: OfrepEvaluationFailureSchema,
+        500: OfrepGeneralErrorSchema,
+      };
     },
   }),
   defineApiRoute({
@@ -86,9 +76,15 @@ export const ofrepRoutes = [
     idempotency: "optional",
     effects: readOnlyClosed,
     errors: [...OFREP_AUTH_ERRORS, "UNSUPPORTED_OBJECT_KEY"],
-    errorResponseSchemas: {
-      400: OfrepBulkStatus400Schema,
-      500: OfrepGeneralErrorSchema,
+    get errorResponseSchemas() {
+      return {
+        400: z.union([
+          errorResponseSchemaFor("VALIDATION_ERROR"),
+          errorResponseSchemaFor("UNSUPPORTED_OBJECT_KEY"),
+          OfrepBulkEvaluationFailureSchema,
+        ]),
+        500: OfrepGeneralErrorSchema,
+      };
     },
   }),
 ] as const satisfies readonly ApiRouteContract[];
