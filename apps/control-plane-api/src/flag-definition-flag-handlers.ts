@@ -17,7 +17,11 @@ import {
   type Result,
   serializeSchema,
 } from "./flag-definition-handler-utils";
-import { FlagConfigurationMissingError, hydrateFlags } from "./flag-definition-hydration";
+import {
+  FlagConfigurationMissingError,
+  hydrateFlag,
+  hydrateFlags,
+} from "./flag-definition-hydration";
 import {
   flagFrom,
   flagResponse,
@@ -148,23 +152,15 @@ export async function getFlag(
   const include = optionalQueryParam(input, "include");
   // The authenticated resolver owns every key-to-ID lookup, including explicit
   // `by=key`, so the handler has one canonical repository read.
-  const flag = await deps.repo.flags.getFlag(appScope(appId), flagId);
-  if (!flag) return flagNotFound(requestId);
   if (include === "config") {
     const hydrated = await diagnosableHydration(requestId, () =>
-      hydrateFlags(
-        deps,
-        appId,
-        [flag],
-        deps.repo.flags.listVariantsForFlags(appScope(appId), [flag.id]),
-        resolvedEnvironmentIdsFromQuery(input),
-      ),
+      hydrateFlag(deps, appId, flagId, resolvedEnvironmentIdsFromQuery(input)),
     );
     if (hydrated instanceof Response) return hydrated;
-    const response = hydrated[0];
-    if (!response) throw new Error("hydrated flag get: expected one Flag response");
-    return Response.json(response);
+    return hydrated ? Response.json(hydrated) : flagNotFound(requestId);
   }
+  const flag = await deps.repo.flags.getFlag(appScope(appId), flagId);
+  if (!flag) return flagNotFound(requestId);
   return Response.json(await flagResponse(deps.repo, appId, flag));
 }
 

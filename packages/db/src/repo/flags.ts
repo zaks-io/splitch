@@ -5,7 +5,7 @@ import type { ApprovalCommit } from "./approval-types";
 import type { Db } from "./client";
 import { makeFlagConfigOps } from "./flag-config-ops";
 import { makeDeleteFlagCascade } from "./flag-delete-cascade";
-import { makeVariantOps } from "./flag-variant-ops";
+import { makeFlagHydrationReads } from "./flag-hydration-reads";
 import {
   type FlagDefinitionPatch,
   type FlagLifecycleColumns,
@@ -13,6 +13,8 @@ import {
   makeListExpiredFlagPage,
 } from "./flag-lifecycle-reads";
 import { makeFlagMultiAppReads } from "./flag-multi-app-reads";
+import { makeFlagSnapshotReads } from "./flag-snapshot-reads";
+import { makeVariantOps } from "./flag-variant-ops";
 import { idBatches } from "./id-batches";
 import { assertMintedScope, type TenantScope } from "./scope";
 import { type ReadOptions, scopedTable } from "./scoped-table";
@@ -36,6 +38,8 @@ export function makeFlagRepo(db: Db) {
 
   return {
     ...makeFlagMultiAppReads(db),
+    ...makeFlagHydrationReads(db),
+    ...makeFlagSnapshotReads(db),
     flags: flagsTable,
     // Read/insert only: UPDATEs of flag_configs go through makeFlagConfigOps so
     // every writer bumps `version` (SPL-350). Exposing ScopedTable.update here
@@ -48,10 +52,6 @@ export function makeFlagRepo(db: Db) {
     targetingRules: targetingRulesTable,
     segments: segmentsTable,
     listSegments: makeListSegments(segmentsTable),
-
-    getFlag(scope: TenantScope, flagId: string) {
-      return flagsTable.findOne(scope, eq(flags.id, flagId));
-    },
 
     /**
      * The App's Flag with this key, or null. Keyed on the `(app_id, key)` unique

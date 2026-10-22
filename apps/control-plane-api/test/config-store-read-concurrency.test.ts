@@ -30,28 +30,13 @@ describe("config store snapshot reads", () => {
       activeReads -= 1;
       return read();
     };
-    const originalExperimentRead = h.repo.experiments.findRunningExperimentForFlag.bind(
-      h.repo.experiments,
-    );
-    vi.spyOn(h.repo.experiments, "findRunningExperimentForFlag").mockImplementation((...args) =>
-      gatedRead(() => originalExperimentRead(...args)),
-    );
-    const originalGetFlag = h.repo.flags.getFlag.bind(h.repo.flags);
-    vi.spyOn(h.repo.flags, "getFlag").mockImplementation((...args) =>
-      gatedRead(() => originalGetFlag(...args)),
-    );
-    const originalGetFlagConfig = h.repo.flags.getFlagConfig.bind(h.repo.flags);
-    vi.spyOn(h.repo.flags, "getFlagConfig").mockImplementation((...args) =>
-      gatedRead(() => originalGetFlagConfig(...args)),
-    );
-    const originalListVariants = h.repo.flags.listVariantsForFlags.bind(h.repo.flags);
-    vi.spyOn(h.repo.flags, "listVariantsForFlags").mockImplementation((...args) =>
-      gatedRead(() => originalListVariants(...args)),
-    );
-    const originalListRules = h.repo.flags.listTargetingRules.bind(h.repo.flags);
-    vi.spyOn(h.repo.flags, "listTargetingRules").mockImplementation((...args) =>
-      gatedRead(() => originalListRules(...args)),
-    );
+    const originalBatch = h.d1.batch.bind(h.d1);
+    vi.spyOn(h.d1, "batch").mockImplementationOnce(async (statements) => {
+      const reads = statements.map(() => gatedRead(async () => undefined));
+      allReadsStarted.resolve();
+      await Promise.all(reads);
+      return originalBatch(statements);
+    });
 
     const snapshot = buildSnapshotFromD1(
       h.repo,

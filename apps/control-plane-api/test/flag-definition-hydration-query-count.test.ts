@@ -1,5 +1,6 @@
 import { appScope, createRepository, envScope } from "@splitch/db";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { hydrateFlag } from "../src/flag-definition-hydration";
 import {
   appToken,
   baseFlag,
@@ -10,6 +11,7 @@ import {
   makeFlagDefinitionHarness,
   NOW_ISO,
 } from "../src/flag-definition-test-harness";
+import { countD1RoundTrips } from "./d1-round-trips";
 import { makePoolBindings as makeLocalBindings } from "./pool-bindings";
 
 let h: FlagDefinitionHarness;
@@ -21,6 +23,25 @@ beforeEach(async () => {
 afterEach(async () => h.bindings.dispose());
 
 describe("hydrated Flag list query count", () => {
+  it("hydrates one Flag in one D1 round trip, including a selected Environment set", async () => {
+    const createdApp = await createDefaultApp(h);
+    const jwt = await appToken(h, createdApp.app.id);
+    const flag = await createFlag(h, createdApp.app.id, jwt);
+    const counted = countD1RoundTrips(h.bindings.d1);
+    const repo = createRepository(counted.d1);
+
+    for (const environmentIds of [undefined, [createdApp.environments[0].id], []]) {
+      counted.reset();
+      const hydrated = await hydrateFlag({ repo }, createdApp.app.id, flag.id, environmentIds);
+      expect(hydrated).toMatchObject({ id: flag.id, variants: flag.variants });
+      expect(hydrated?.configurations.map((config) => config.environmentId)).toEqual(
+        environmentIds ?? createdApp.environments.map((environment) => environment.id),
+      );
+      expect(counted.statements).toHaveLength(1);
+      expect(counted.statements[0]).toHaveLength(6);
+    }
+  });
+
   it("stays at seven D1 queries for both (N=1, E=2) and (N=4, E=3)", async () => {
     const createdApp = await createDefaultApp(h);
     const jwt = await appToken(h, createdApp.app.id);

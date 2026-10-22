@@ -49,6 +49,7 @@ export function conclusionFixture(
   const commit = vi.fn();
   const readRun = vi.fn(async () => ({ ...runRow("running"), ...options.run }));
   const readTargetConfig = vi.fn(async () => flagConfigRow(options.targetConfigVersion ?? 1));
+  const readFlag = vi.fn(async () => ({ id: FLAG_ID, key: "checkout-flag", version: 1 }));
   const analysis = vi.fn(async () =>
     Response.json(
       options.analysisEnvelope ?? {
@@ -70,7 +71,18 @@ export function conclusionFixture(
       findRunningExperimentForFlag: vi.fn(async () => null),
     },
     flags: {
-      getFlag: vi.fn(async () => ({ id: FLAG_ID, key: "checkout-flag", version: 1 })),
+      getFlag: readFlag,
+      readFlagSnapshotInputs: vi.fn(async () => ({
+        flag: await readFlag(),
+        config: await readTargetConfig(),
+        variants: variantRows(),
+        targetingRules: [],
+        runningExperiment: null,
+      })),
+      readFlagConfigReviewContext: vi.fn(async () => ({
+        config: flagConfigRow(options.targetConfigVersion ?? 1),
+        environment: environmentRow(),
+      })),
       getFlagConfig: readTargetConfig,
       getFlagConfigById: vi.fn(async () => flagConfigRow(options.targetConfigVersion ?? 1)),
       listVariantsForFlags: vi.fn(async () => new Map([[FLAG_ID, variantRows()]])),
