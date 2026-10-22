@@ -169,9 +169,9 @@ function pauseNextSnapshotCapture() {
 
 function pauseSnapshotCapture(shouldPause: () => boolean, disarm: () => void) {
   const deferred = gate();
-  const getFlagConfig = h.repo.flags.getFlagConfig;
-  h.repo.flags.getFlagConfig = async (...args) => {
-    const captured = await getFlagConfig(...args);
+  const readFlagSnapshotInputs = h.repo.flags.readFlagSnapshotInputs;
+  h.repo.flags.readFlagSnapshotInputs = async (...args) => {
+    const captured = await readFlagSnapshotInputs(...args);
     if (shouldPause()) {
       disarm();
       deferred.markPaused();

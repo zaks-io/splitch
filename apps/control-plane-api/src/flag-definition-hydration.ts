@@ -69,6 +69,31 @@ export async function hydrateFlags(
   );
 }
 
+export async function hydrateFlag(
+  deps: FlagDefinitionDeps,
+  appId: string,
+  flagId: string,
+  requestedEnvironmentIds?: readonly string[],
+) {
+  const inputs = await deps.repo.flags.readFlagHydrationInputs(
+    appScope(appId),
+    flagId,
+    requestedEnvironmentIds,
+  );
+  if (!inputs) return null;
+  return (
+    composeHydratedFlags(
+      [inputs.flag],
+      new Map([[flagId, inputs.variants]]),
+      inputs.environments,
+      inputs.configs,
+      inputs.targetingRules,
+      inputs.experiments,
+      requestedEnvironmentIds,
+    )[0] ?? null
+  );
+}
+
 /** Compose the shared hydrated wire shape after either App or multi-App reads. */
 export function composeHydratedFlags(
   rows: readonly FlagRow[],

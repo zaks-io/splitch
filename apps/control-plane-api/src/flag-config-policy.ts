@@ -80,6 +80,15 @@ export async function readEnvironmentPolicy(
 ): Promise<EnvironmentPolicy | null> {
   const row = await repo.identity.getEnvironment(appScope(appId), environmentId);
   if (!row) return null;
+  return parseEnvironmentPolicy(row);
+}
+
+export function parseEnvironmentPolicy(row: {
+  appId: string;
+  id: string;
+  policy: string;
+}): EnvironmentPolicy {
+  const { appId, id: environmentId } = row;
   const parsed = EnvironmentPolicySchema.safeParse(
     parsePolicyJson(appId, environmentId, row.policy),
   );

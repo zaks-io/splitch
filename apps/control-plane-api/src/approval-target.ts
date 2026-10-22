@@ -8,7 +8,7 @@ import {
 } from "@splitch/contracts";
 import { appScope, envScope, type Repository } from "@splitch/db";
 import { experimentTargetProjection } from "./approval-target-experiment";
-import { policyLevel, readEnvironmentPolicy } from "./flag-config-policy";
+import { parseEnvironmentPolicy, policyLevel, readEnvironmentPolicy } from "./flag-config-policy";
 
 export function environmentPolicyContexts(
   environmentId: string,
@@ -192,14 +192,29 @@ export async function approvalTargetVersion(
   },
 ): Promise<`sha256:${string}`> {
   if (target.type === "flag_configuration") {
-    const config = await repo.flags.getFlagConfigById(
+    const { config, environment } = await repo.flags.readFlagConfigReviewContext(
       envScope(appId, reviewEnvironmentId(contexts)),
       target.id,
     );
     if (!config) return absentTargetVersion(target);
+    const policy = environment ? parseEnvironmentPolicy(environment) : null;
     return canonicalHash({
       flagConfigVersion: override?.flagConfigVersion ?? config.version,
-      policy: await currentPolicyProjection(repo, appId, contexts),
+      policy: policy
+        ? contexts
+            .flatMap((context) =>
+              context.changeTypes.map((changeType) => ({
+                environmentId: context.environmentId,
+                changeType,
+                level: policyLevel(policy, changeType),
+              })),
+            )
+            .sort((left, right) =>
+              `${left.environmentId}:${left.changeType}`.localeCompare(
+                `${right.environmentId}:${right.changeType}`,
+              ),
+            )
+        : [],
     });
   }
 

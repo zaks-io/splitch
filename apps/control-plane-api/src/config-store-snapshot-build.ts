@@ -30,12 +30,15 @@ export async function buildSnapshotFromD1(
   scope: EnvScope,
   flagId: string,
 ): Promise<Snapshot | null> {
-  return buildSnapshot(
-    repo,
-    scope,
-    flagId,
-    repo.experiments.findRunningExperimentForFlag(scope, flagId),
-  );
+  const rows = await repo.flags.readFlagSnapshotInputs(scope, flagId);
+  if (!rows?.config) return null;
+  return assembleSnapshot(repo, scope, {
+    experiment: rows.runningExperiment,
+    flag: rows.flag,
+    config: rows.config,
+    variants: rows.variants.map(toVariant),
+    authoringRows: rows.targetingRules,
+  });
 }
 
 export async function buildExperimentSnapshotFromD1(
@@ -135,14 +138,8 @@ export async function loadFlagConfigWriteContext(
   scope: EnvScope,
   flagId: string,
 ) {
-  const [flag, config, variantCatalogs] = await Promise.all([
-    repo.flags.getFlag(appScope(scope.appId), flagId),
-    repo.flags.getFlagConfig(scope, flagId),
-    repo.flags.listVariantsForFlags(appScope(scope.appId), [flagId]),
-  ]);
-  if (!flag || !config) return null;
-  const variants = (variantCatalogs.get(flagId) ?? []).map(toVariant);
-  return { flag, config, variants };
+  const inputs = await repo.flags.readFlagConfigWriteContext(scope, flagId);
+  return inputs ? { ...inputs, variants: inputs.variants.map(toVariant) } : null;
 }
 
 function toVariant(row: SnapshotRows["variants"][number]): Variant {
