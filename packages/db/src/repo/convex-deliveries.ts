@@ -1,4 +1,5 @@
 import type { ConfigWebhookDeliveryRow } from "./convex-integrations";
+import { buildDueConvexDeliveriesQuery } from "./scheduled-due-predicates";
 
 export async function claimDueConvexDeliveries(
   d1: D1Database,
@@ -9,32 +10,17 @@ export async function claimDueConvexDeliveries(
 ): Promise<ConfigWebhookDeliveryRow[]> {
   if (!Number.isInteger(limit) || limit < 1)
     throw new Error("Convex delivery claim limit must be a positive integer");
+  const due = buildDueConvexDeliveriesQuery(now);
   // Start with eligible installations so blocked history cannot inflate the due-row scan.
   const [leased, claimed] = await d1.batch<ConfigWebhookDeliveryRow>([
     d1
       .prepare(`UPDATE config_webhook_deliveries
         SET state = 'leased', lease_owner = ?, lease_expires_at = ?
         WHERE delivery_id IN (
-          SELECT delivery.delivery_id FROM convex_installations installation
-          CROSS JOIN config_webhook_deliveries delivery
-            ON delivery.installation_id = installation.installation_id
-            AND delivery.environment_version = (
-              SELECT environment_version FROM config_webhook_deliveries newest
-                INDEXED BY config_webhook_delivery_outstanding_idx
-              WHERE newest.installation_id = installation.installation_id
-                AND newest.state IN ('pending', 'leased')
-              ORDER BY environment_version DESC LIMIT 1
-            )
-          WHERE installation.status = 'active'
-            AND (installation.preparation_retry_at IS NULL OR installation.preparation_retry_at <= ?)
-            AND NOT EXISTS (SELECT 1 FROM config_webhook_deliveries busy
-              WHERE busy.installation_id = delivery.installation_id
-                AND busy.state = 'leased' AND busy.lease_expires_at > ?)
-            AND ((delivery.state = 'pending' AND delivery.next_attempt_at <= ?)
-              OR (delivery.state = 'leased' AND delivery.lease_expires_at <= ?))
+          SELECT delivery.delivery_id ${due.sql}
           ORDER BY delivery.next_attempt_at, delivery.delivery_id LIMIT ?
         ) RETURNING delivery_id AS deliveryId`)
-      .bind(leaseOwner, leaseExpiresAt, now, now, now, now, limit),
+      .bind(leaseOwner, leaseExpiresAt, ...due.params, limit),
     d1
       .prepare(`SELECT delivery.delivery_id AS deliveryId, delivery.installation_id AS installationId,
         installation.callback_url AS callbackUrl, installation.secret_ciphertext AS secretCiphertext,

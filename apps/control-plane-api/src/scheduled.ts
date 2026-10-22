@@ -1,4 +1,4 @@
-import { createRepository } from "@splitch/db";
+import { createRepository, type ScheduledDueWork } from "@splitch/db";
 import {
   createWorkerFaultReporter,
   serializeFault,
@@ -16,6 +16,7 @@ import type { ControlPlaneApiEnv } from "./env";
 import { FLAG_CHANGE_LOG_RETENTION_MS } from "./flag-change-log-retention";
 import { runPersonalAccessTokenRetention } from "./personal-access-token-rotation";
 import { deleteOrphanedPrivacyExports } from "./privacy-export-cleanup";
+import { scheduledDueWork } from "./scheduled-due-work";
 import { dispatchSentryWebhooks } from "./sentry-webhook-dispatch";
 import { runTemporaryEnvironmentTeardown } from "./temporary-environment-teardown-scheduled";
 
@@ -26,19 +27,26 @@ export function runControlPlaneScheduled(
   env: ControlPlaneApiEnv,
   ctx: ExecutionContext,
 ): void {
-  ctx.waitUntil(reconcilePrivacyJobs(env, new Date(event.scheduledTime)));
-  ctx.waitUntil(purgeExpiredPrivacyArtifacts(env, new Date(event.scheduledTime)));
-  ctx.waitUntil(runPersonalAccessTokenRetentionJob(env, event));
+  const dueWork = scheduledDueWork(env, event, ctx);
+  const runIfDue = (job: keyof ScheduledDueWork, run: () => Promise<unknown>) =>
+    ctx.waitUntil(dueWork.then((due) => (due[job] ? run() : undefined)));
+  runIfDue("privacyReconciliation", () => reconcilePrivacyJobs(env, new Date(event.scheduledTime)));
+  runIfDue("privacyArtifactPurge", () =>
+    purgeExpiredPrivacyArtifacts(env, new Date(event.scheduledTime)),
+  );
+  runIfDue("personalAccessTokenRetention", () => runPersonalAccessTokenRetentionJob(env, event));
   // Integration delivery belongs to the minute cron alone. Running it on every
   // tick would fire a second concurrent dispatch at 08:00, when both crons
   // land: the Convex and Cloudflare paths lease their deliveries and would
   // survive it, but the Sentry cursor has no lease to protect it.
   if (event.cron !== "0 8 * * *") {
-    ctx.waitUntil(runTemporaryEnvironmentTeardown(env, event, ctx));
-    ctx.waitUntil(runAuditEventForwarding(env, event, ctx));
-    ctx.waitUntil(runConvexWebhookDispatch(env, event, ctx));
-    ctx.waitUntil(runCloudflarePushDispatch(env, event, ctx));
-    ctx.waitUntil(runSentryWebhookDispatch(env, event, ctx));
+    runIfDue("temporaryEnvironmentTeardown", () =>
+      runTemporaryEnvironmentTeardown(env, event, ctx),
+    );
+    runIfDue("auditEventForwarding", () => runAuditEventForwarding(env, event, ctx));
+    runIfDue("convexWebhookDispatch", () => runConvexWebhookDispatch(env, event, ctx));
+    runIfDue("cloudflarePushDispatch", () => runCloudflarePushDispatch(env, event, ctx));
+    runIfDue("sentryWebhookDispatch", () => runSentryWebhookDispatch(env, event, ctx));
     return;
   }
   ctx.waitUntil(runDemoReaper(env, event, ctx));

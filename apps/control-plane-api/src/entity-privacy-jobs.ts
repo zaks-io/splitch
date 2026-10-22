@@ -11,7 +11,7 @@ import type { ResolvedEntityPrivacyInput } from "./entity-privacy-service-client
 import type { ControlPlaneApiEnv } from "./env";
 
 const PRIVACY_JOB_LEASE_MS = 15 * 60 * 1000;
-const RECONCILE_DELAY_MS = 60 * 1000;
+export const RECONCILE_DELAY_MS = 60 * 1000;
 const RECONCILE_LIMIT = 100;
 const RETRY_MAX_SECONDS = 15 * 60;
 const PRIVACY_JOB_QUEUE_NAMES = new Set([

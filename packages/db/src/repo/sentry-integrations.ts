@@ -1,3 +1,4 @@
+import { buildDueSentryInstallationsPredicate } from "./scheduled-due-predicates";
 /**
  * Sentry change-tracking installations.
  *
@@ -164,19 +165,13 @@ export function makeSentryIntegrationRepo(d1: D1Database) {
      * nothing that redelivery safety does not already provide.
      */
     async dueInstallations(now: string, limit: number): Promise<SentryInstallationRow[]> {
+      const due = buildDueSentryInstallationsPredicate(now);
       const rows = await d1
         .prepare(
-          `${INSTALLATION_SELECT} WHERE status = 'active' AND next_attempt_at <= ?
-          AND EXISTS (
-            SELECT 1 FROM flag_change_events event
-            WHERE event.app_id IN (
-              SELECT id FROM apps WHERE organization_id = sentry_installations.org_id
-            ) AND event.seq > COALESCE(sentry_installations.last_delivered_seq, 0)
-            AND event.temporary_environment = 0
-          )
+          `${INSTALLATION_SELECT} WHERE ${due.sql}
           ORDER BY next_attempt_at ASC, installation_id ASC LIMIT ?`,
         )
-        .bind(now, limit)
+        .bind(...due.params, limit)
         .all<SentryInstallationRow>();
       return rows.results;
     },

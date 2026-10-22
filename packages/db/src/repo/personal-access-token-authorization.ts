@@ -1,5 +1,11 @@
 import type { personalAccessTokenRotations } from "../schema/personal-access-token-step-up";
 import type { PersonalAccessTokenPatch, PersonalAccessTokenRow } from "./personal-access-tokens";
+import {
+  buildExpiredPersonalAccessTokenRotationsPredicate,
+  buildExpiredPersonalAccessTokenStepUpUsesPredicate,
+  buildPendingPersonalAccessTokenRotationsPredicate,
+  personalAccessTokenRetentionCutoff,
+} from "./scheduled-due-predicates";
 
 export interface PersonalAccessTokenStepUpUse {
   jti: string;
@@ -178,10 +184,11 @@ export function makePersonalAccessTokenAuthorizationRepo(d1: D1Database) {
     },
 
     async pendingRotations(before: string, limit: number): Promise<PersonalAccessTokenRotation[]> {
+      const due = buildPendingPersonalAccessTokenRotationsPredicate(before);
       const rows = await d1
         .prepare(`SELECT ${ROTATION_COLUMNS} FROM personal_access_token_rotations
-        WHERE phase NOT IN ('completed','retired') AND updated_at <= ? ORDER BY updated_at,id LIMIT ?`)
-        .bind(before, Math.min(limit, 100))
+        WHERE ${due.sql} ORDER BY updated_at,id LIMIT ?`)
+        .bind(...due.params, Math.min(limit, 100))
         .all<PersonalAccessTokenRotation>();
       return rows.results;
     },
@@ -207,20 +214,21 @@ export function makePersonalAccessTokenAuthorizationRepo(d1: D1Database) {
 }
 
 async function purgeStepUpUses(d1: D1Database, now: string, limit: number): Promise<number> {
-  const cutoff = new Date(Date.parse(now) - 24 * 60 * 60 * 1000).toISOString();
+  const cutoff = personalAccessTokenRetentionCutoff(now);
   const bounded = Math.min(Math.max(limit, 1), 100);
+  const rotations = buildExpiredPersonalAccessTokenRotationsPredicate(cutoff);
+  const uses = buildExpiredPersonalAccessTokenStepUpUsesPredicate(cutoff);
   // Terminal operations are removed first to preserve the consumption FK.
   await d1
     .prepare(`DELETE FROM personal_access_token_rotations WHERE id IN
-        (SELECT id FROM personal_access_token_rotations WHERE phase IN ('completed','retired') AND updated_at < ? ORDER BY updated_at,id LIMIT ?)`)
-    .bind(cutoff, bounded)
+        (SELECT id FROM personal_access_token_rotations WHERE ${rotations.sql} ORDER BY updated_at,id LIMIT ?)`)
+    .bind(...rotations.params, bounded)
     .run();
   const result = await d1
     .prepare(`DELETE FROM personal_access_token_step_up_uses WHERE jti IN
-        (SELECT jti FROM personal_access_token_step_up_uses u WHERE expires_at < ?
-        AND NOT EXISTS (SELECT 1 FROM personal_access_token_rotations r WHERE r.step_up_jti = u.jti)
+        (SELECT jti FROM personal_access_token_step_up_uses u WHERE ${uses.sql}
         ORDER BY expires_at,jti LIMIT ?)`)
-    .bind(cutoff, bounded)
+    .bind(...uses.params, bounded)
     .run();
   return result.meta.changes;
 }

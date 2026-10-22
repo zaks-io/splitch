@@ -5,6 +5,14 @@ import { assertMintedScope, type TenantScope } from "./scope";
 
 export type AuditEventRow = typeof controlPlaneAuditEvents.$inferSelect;
 
+export function buildPendingAuditEventsPredicate(scope?: TenantScope) {
+  if (scope) assertMintedScope(scope);
+  return and(
+    isNull(controlPlaneAuditEvents.forwardedAt),
+    scope ? eq(controlPlaneAuditEvents.appId, scope.appId) : undefined,
+  );
+}
+
 export function makeAuditEventRepo(db: Db, d1: D1Database) {
   return {
     // System delivery sweep; a returned row carries the App scope for acknowledgment.
@@ -13,12 +21,7 @@ export function makeAuditEventRepo(db: Db, d1: D1Database) {
       return db
         .select()
         .from(controlPlaneAuditEvents)
-        .where(
-          and(
-            isNull(controlPlaneAuditEvents.forwardedAt),
-            scope ? eq(controlPlaneAuditEvents.appId, scope.appId) : undefined,
-          ),
-        )
+        .where(buildPendingAuditEventsPredicate(scope))
         .orderBy(asc(controlPlaneAuditEvents.seq))
         .limit(limit);
     },

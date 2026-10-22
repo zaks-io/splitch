@@ -1,4 +1,5 @@
 import type { CloudflareDeliveryRow } from "./cloudflare-integrations";
+import { buildDueCloudflareDeliveriesQuery } from "./scheduled-due-predicates";
 import type { EnvScope, TenantScope } from "./scope";
 import { assertMintedScope } from "./scope";
 
@@ -13,27 +14,16 @@ export async function claimDueCloudflareDeliveries(
   if (scope) assertMintedScope(scope);
   if (!Number.isInteger(limit) || limit < 1)
     throw new Error("Cloudflare delivery claim limit must be a positive integer");
+  const due = buildDueCloudflareDeliveriesQuery(now, scope);
   const [leased, claimed] = await d1.batch<CloudflareDeliveryRow>([
     d1
       .prepare(`UPDATE cloudflare_config_deliveries
         SET state = 'leased', lease_owner = ?, lease_expires_at = ?
         WHERE delivery_id IN (
-          SELECT delivery.delivery_id FROM cloudflare_config_deliveries delivery
-          JOIN cloudflare_installations installation
-            ON installation.installation_id = delivery.installation_id
-          WHERE installation.status = 'active'
-            ${scope ? "AND delivery.app_id = ?" : ""}
-            AND ((delivery.state = 'pending' AND delivery.next_attempt_at <= ?)
-              OR (delivery.state = 'leased' AND delivery.lease_expires_at <= ?))
-            AND NOT EXISTS (
-              SELECT 1 FROM cloudflare_config_deliveries newer
-              WHERE newer.installation_id = delivery.installation_id
-                AND newer.environment_version > delivery.environment_version
-                AND newer.state IN ('pending', 'leased')
-            )
+          SELECT delivery.delivery_id ${due.sql}
           ORDER BY delivery.next_attempt_at, delivery.delivery_id LIMIT ?
         ) RETURNING delivery_id AS deliveryId`)
-      .bind(leaseOwner, leaseExpiresAt, ...(scope ? [scope.appId] : []), now, now, limit),
+      .bind(leaseOwner, leaseExpiresAt, ...due.params, limit),
     d1
       .prepare(`SELECT delivery.delivery_id AS deliveryId,
         delivery.installation_id AS installationId, delivery.app_id AS appId,
