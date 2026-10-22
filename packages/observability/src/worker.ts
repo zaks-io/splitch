@@ -1,10 +1,5 @@
 import type { SentryEventLike } from "@splitch/privacy";
-import {
-  applyResponseHeaders,
-  HOSTED_PRODUCTION_SECURITY_HEADERS,
-  type Observability,
-  WORKER_BASELINE_SECURITY_HEADERS,
-} from "@splitch/worker-runtime";
+import type { Observability } from "@splitch/worker-runtime";
 import {
   createScrubbedEmitter,
   createSentryBeforeSend,
@@ -22,7 +17,9 @@ import {
 } from "./request-error-sentry.js";
 import { loadSentry, type SentryCloudflare } from "./sentry-module.js";
 import type { ObservabilitySurfaceId } from "./surfaces.js";
+import { type WorkerHealthOptions, workerHealthResponse } from "./worker-health.js";
 import { nameWorkerRouteSpans } from "./worker-route-spans.js";
+import { applyWorkerSecurityHeaders, productionHttpsRedirect } from "./worker-security.js";
 
 // biome-ignore lint/performance/noBarrelFile: shared fault detail is part of the Worker observability API
 export { serializeFault } from "./serialize-fault.js";
@@ -45,6 +42,10 @@ export interface WorkerObservabilityOptions {
   readonly surface: ObservabilitySurfaceId;
   readonly waitUntil?: (promise: Promise<unknown>) => void;
   readonly tracing?: ExecutionContext["tracing"];
+}
+
+export interface WorkerHandlerOptions<E extends WorkerEnv> extends WorkerObservabilityOptions {
+  readonly health?: WorkerHealthOptions<E>;
 }
 
 /** Build Worker observability options from request context. */
@@ -160,7 +161,7 @@ export function workerSentryOptions(
 export function wrapWorkerHandler<E extends WorkerEnv, QueueMessage = unknown>(
   handler: ExportedHandler<E, QueueMessage> &
     Required<Pick<ExportedHandler<E, QueueMessage>, "fetch">>,
-  options: WorkerObservabilityOptions,
+  options: WorkerHandlerOptions<E>,
 ): ExportedHandler<E, QueueMessage> & Required<Pick<ExportedHandler<E, QueueMessage>, "fetch">> {
   const innerFetch = handler.fetch;
   const wrapped: ExportedHandler<E, QueueMessage> &
@@ -177,6 +178,8 @@ export function wrapWorkerHandler<E extends WorkerEnv, QueueMessage = unknown>(
       }
       const transportRedirect = productionHttpsRedirect(request, env);
       if (transportRedirect) return transportRedirect;
+      const healthResponse = await workerHealthResponse(request, env, options.health);
+      if (healthResponse) return applyWorkerSecurityHeaders(healthResponse, request, env);
       if (!env.SENTRY_DSN) {
         return applyWorkerSecurityHeaders(await innerFetch(request, env, ctx), request, env);
       }
@@ -219,37 +222,6 @@ export function wrapWorkerHandler<E extends WorkerEnv, QueueMessage = unknown>(
   }
 
   return wrapped;
-}
-
-function productionHttpsRedirect(request: Request, env: WorkerEnv): Response | null {
-  const url = new URL(request.url);
-  // Build adapters prerender the built Worker through a plain-HTTP loopback server.
-  if (
-    env.SPLITCH_PLATFORM_TARGET !== "production" ||
-    url.protocol !== "http:" ||
-    ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname)
-  ) {
-    return null;
-  }
-  url.protocol = "https:";
-  return applyResponseHeaders(
-    new Response(null, { status: 308, headers: { location: url.toString() } }),
-    WORKER_BASELINE_SECURITY_HEADERS,
-  );
-}
-
-/** Stamp the shared baseline everywhere and HSTS only on production HTTPS. */
-function applyWorkerSecurityHeaders(
-  response: Response,
-  request: Request,
-  env: WorkerEnv,
-): Response {
-  const isProductionHttps =
-    env.SPLITCH_PLATFORM_TARGET === "production" && new URL(request.url).protocol === "https:";
-  return applyResponseHeaders(
-    response,
-    isProductionHttps ? HOSTED_PRODUCTION_SECURITY_HEADERS : WORKER_BASELINE_SECURITY_HEADERS,
-  );
 }
 
 /**

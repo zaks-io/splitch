@@ -54,7 +54,18 @@ const handler = {
   },
 } satisfies ExportedHandler<AnalysisApiEnv>;
 
-export default wrapWorkerHandler(handler, { surface: "analysis-api" });
+export default wrapWorkerHandler(handler, {
+  surface: "analysis-api",
+  health: {
+    paths: ["/", "/health"],
+    respond(env) {
+      const platformTarget = parsePlatformTarget(env.SPLITCH_PLATFORM_TARGET);
+      return Response.json(
+        createHealthResponse(service, platformTarget, env.SPLITCH_DEPLOYED_COMMIT_SHA),
+      );
+    },
+  },
+});
 
 const controlPlaneHandler = {
   async fetch(request, env, ctx): Promise<Response> {
@@ -91,17 +102,6 @@ async function handleRequest(
   ctx: ExecutionContext,
   authority?: AnalysisRequestAuthority,
 ): Promise<Response> {
-  const url = new URL(request.url);
-  if (url.pathname === "/health" || url.pathname === "/") {
-    return Response.json(
-      createHealthResponse(
-        service,
-        parsePlatformTarget(env.SPLITCH_PLATFORM_TARGET),
-        env.SPLITCH_DEPLOYED_COMMIT_SHA,
-      ),
-    );
-  }
-
   const app = createApp({
     door: authority ? "binding" : "public",
     authResolver: requestAuthResolver(authority),

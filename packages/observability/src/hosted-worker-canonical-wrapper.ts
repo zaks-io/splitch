@@ -1,12 +1,17 @@
 import {
   type Expression,
+  isArrayLiteralExpression,
+  isArrowFunction,
   isCallExpression,
+  isFunctionExpression,
   isIdentifier,
+  isMethodDeclaration,
   isObjectLiteralExpression,
   isPropertyAccessExpression,
   isPropertyAssignment,
   isSpreadAssignment,
   isStringLiteral,
+  type ObjectLiteralElementLike,
   type SourceFile,
 } from "typescript";
 import { unwrap } from "./hosted-worker-wrap-ast.js";
@@ -44,9 +49,31 @@ function isCanonicalOptions(expression: Expression): boolean {
       (property) =>
         isPropertyAssignment(property) &&
         isIdentifier(property.name) &&
-        isStringLiteral(unwrap(property.initializer)),
+        (isStringLiteral(unwrap(property.initializer)) ||
+          (property.name.text === "health" && isCanonicalHealth(property.initializer))),
     )
   );
+}
+
+function isCanonicalHealth(expression: Expression): boolean {
+  const health = unwrap(expression, { allowAwait: false });
+  if (!isObjectLiteralExpression(health)) return false;
+  return health.properties.every(isCanonicalHealthProperty);
+}
+
+function isCanonicalHealthProperty(property: ObjectLiteralElementLike): boolean {
+  if (!property.name || !isIdentifier(property.name)) return false;
+  if (isMethodDeclaration(property)) return property.name.text === "respond";
+  if (!isPropertyAssignment(property)) return false;
+  const value = unwrap(property.initializer, { allowAwait: false });
+  if (property.name.text === "paths") {
+    return isArrayLiteralExpression(value) && value.elements.every(isStringLiteral);
+  }
+  return property.name.text === "respond" && isDeferredResponder(value);
+}
+
+function isDeferredResponder(value: Expression): boolean {
+  return isIdentifier(value) || isArrowFunction(value) || isFunctionExpression(value);
 }
 
 function isDirectOfficialWrapperCallee(file: SourceFile, expression: Expression): boolean {

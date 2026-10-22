@@ -1,8 +1,4 @@
-import {
-  createHealthResponse,
-  isLocalPlatformTarget,
-  requirePlatformTarget,
-} from "@splitch/contracts";
+import { isLocalPlatformTarget, requirePlatformTarget } from "@splitch/contracts";
 import type { JsonRpcResponse } from "./json-rpc";
 import type { McpSessionStore } from "./mcp-session-context";
 import { McpSessionNotFoundError } from "./mcp-session-store";
@@ -31,15 +27,6 @@ export async function routeTransportRequest(options: {
   authenticateBearer?: BearerAuthenticator;
 }): Promise<Response | undefined> {
   const url = new URL(options.request.url);
-  if (isHealthRequest(options.request, url)) {
-    return Response.json(
-      createHealthResponse(
-        options.service,
-        requirePlatformTarget(options.platformTarget),
-        options.deployedCommitSha,
-      ),
-    );
-  }
   if (options.request.method === "GET" && isProtectedResourcePath(url.pathname)) {
     return protectedResourceResponse(
       url,
@@ -196,10 +183,6 @@ async function validateSession(
 
 function deadSessionResponse(): Response {
   return new Response("MCP session not found", { status: 404, headers: corsHeaders() });
-}
-
-function isHealthRequest(request: Request, url: URL): boolean {
-  return request.method === "GET" && url.pathname === "/health";
 }
 
 function isMcpPath(url: URL): boolean {

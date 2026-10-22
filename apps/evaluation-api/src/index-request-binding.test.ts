@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { EvaluationApiEnv } from "./env";
-import { evaluationApiHandler } from "./index";
+import evaluationApiHandler from "./index";
 
 const emptyCtx = {
   waitUntil() {},

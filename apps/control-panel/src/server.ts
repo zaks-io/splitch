@@ -1,18 +1,19 @@
 import { addBreadcrumb, captureException, setTag, setUser } from "@sentry/cloudflare";
+import { createHealthResponse, parsePlatformTarget } from "@splitch/contracts";
 import { wrapWorkerHandler } from "@splitch/observability/worker";
 import handler from "@tanstack/react-start/server-entry";
-import { controlPanelLiveUpdateBindings } from "#lib/shared/bindings";
 import { createControlPanelApp } from "#lib/apps/control-plane-app-functions";
+import { withControlPanelSecurityHeaders } from "#lib/auth/security-headers";
 import {
   createControlPanelFlag,
   loadControlPanelFlags,
 } from "#lib/flags/control-plane-flag-functions";
-import { loadControlPanelPaletteIndex } from "#lib/shell/control-plane-palette-functions";
 import { authorizeLiveUpdateUpgrade } from "#lib/live-updates/live-update-authorization";
 import { handleLiveUpdateUpgrade } from "#lib/live-updates/live-update-upgrade";
-import { loadOrgAppList } from "#lib/organizations/org-app-list-functions";
 import { setControlPanelSentryClient } from "#lib/observability/panel-observability";
-import { withControlPanelSecurityHeaders } from "#lib/auth/security-headers";
+import { loadOrgAppList } from "#lib/organizations/org-app-list-functions";
+import { controlPanelLiveUpdateBindings } from "#lib/shared/bindings";
+import { loadControlPanelPaletteIndex } from "#lib/shell/control-plane-palette-functions";
 
 // Keep server functions in the Worker graph so their handlers are deployed with
 // the app. Being imported by a component is not enough: the client graph can
@@ -34,6 +35,8 @@ type ControlPanelWorkerEnv = {
   AUTH_API_ORIGIN: string;
   CONTROL_PANEL_DELEGATION_SECRET: string;
   CONTROL_PLANE_API: Fetcher;
+  SPLITCH_DEPLOYED_COMMIT_SHA?: string;
+  SPLITCH_LOCAL_E2E_RUN_ID?: string;
   SENTRY_DSN?: string;
   SENTRY_RELEASE?: string;
   SPLITCH_PLATFORM_TARGET?: string;
@@ -73,4 +76,22 @@ const controlPanelHandler = {
   },
 } satisfies ExportedHandler<ControlPanelWorkerEnv>;
 
-export default wrapWorkerHandler(controlPanelHandler, { surface: "control-panel" });
+export default wrapWorkerHandler(controlPanelHandler, {
+  surface: "control-panel",
+  health: {
+    paths: ["/health"],
+    respond(env) {
+      const response = Response.json(
+        createHealthResponse(
+          "splitch-control-panel",
+          parsePlatformTarget(env.SPLITCH_PLATFORM_TARGET),
+          env.SPLITCH_DEPLOYED_COMMIT_SHA,
+        ),
+      );
+      if (env.SPLITCH_LOCAL_E2E_RUN_ID) {
+        response.headers.set("x-splitch-local-e2e-run-id", env.SPLITCH_LOCAL_E2E_RUN_ID);
+      }
+      return withControlPanelSecurityHeaders(response);
+    },
+  },
+});

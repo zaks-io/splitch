@@ -109,13 +109,9 @@ const internalRoutes: Readonly<
 };
 
 const handler = {
-  async fetch(request, env): Promise<Response> {
-    const platformTarget = requirePlatformTarget(env.SPLITCH_PLATFORM_TARGET);
+  async fetch(_request, env): Promise<Response> {
+    requirePlatformTarget(env.SPLITCH_PLATFORM_TARGET);
     requireEntityMetricPrivacyBinding(env);
-    const url = new URL(request.url);
-    if (request.method === "GET" && (url.pathname === "/" || url.pathname === "/health")) {
-      return healthResponse(env, platformTarget);
-    }
     return new Response("not found", { status: 404 });
   },
   queue: handleQueue,
@@ -280,7 +276,10 @@ async function completeAppIdentityReset(
   if (!response.ok) throw new Error(`Event identity reset completion returned ${response.status}`);
 }
 
-export default wrapWorkerHandler(handler, { surface: "event-ingest-api" });
+export default wrapWorkerHandler(handler, {
+  surface: "event-ingest-api",
+  health: { paths: ["/", "/health"], respond: healthResponse },
+});
 
 function healthResponse(
   env: Env,

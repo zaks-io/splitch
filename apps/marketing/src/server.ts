@@ -1,11 +1,14 @@
+import { createHealthResponse, parsePlatformTarget } from "@splitch/contracts";
 import { wrapWorkerHandler } from "@splitch/observability/worker";
 import handler from "@tanstack/react-start/server-entry";
-import { handleAgentSkillsRequest } from "./agent-skills";
 import { withHomepageLinkHeaders } from "./agent-discovery";
+import { handleAgentSkillsRequest } from "./agent-skills";
 import { negotiateMarkdownRequest } from "./docs/negotiate-markdown";
 import { withVaryAccept } from "./docs/serve-markdown";
 
 type MarketingWorkerEnv = {
+  SPLITCH_DEPLOYED_COMMIT_SHA?: string;
+  ASSETS: Fetcher;
   SENTRY_DSN?: string;
   SENTRY_RELEASE?: string;
   SPLITCH_PLATFORM_TARGET?: string;
@@ -26,7 +29,13 @@ const marketingHandler = {
       return withHomepageLinkHeaders(request, negotiation.response);
     }
 
-    const response = await startHandler.fetch(negotiation.request, env, ctx);
+    const isHomepage =
+      new URL(request.url).pathname === "/" &&
+      (request.method === "GET" || request.method === "HEAD");
+    const response =
+      isHomepage && !import.meta.env.DEV
+        ? await env.ASSETS.fetch(negotiation.request)
+        : await startHandler.fetch(negotiation.request, env, ctx);
     const negotiatedResponse = response.headers.get("content-type")?.startsWith("text/html")
       ? withVaryAccept(response)
       : response;
@@ -34,4 +43,18 @@ const marketingHandler = {
   },
 } satisfies ExportedHandler<MarketingWorkerEnv>;
 
-export default wrapWorkerHandler(marketingHandler, { surface: "marketing" });
+export default wrapWorkerHandler(marketingHandler, {
+  surface: "marketing",
+  health: {
+    paths: ["/health"],
+    respond(env) {
+      return Response.json(
+        createHealthResponse(
+          "splitch-marketing",
+          parsePlatformTarget(env.SPLITCH_PLATFORM_TARGET),
+          env.SPLITCH_DEPLOYED_COMMIT_SHA,
+        ),
+      );
+    },
+  },
+});
