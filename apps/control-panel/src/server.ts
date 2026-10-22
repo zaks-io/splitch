@@ -91,7 +91,7 @@ export default wrapWorkerHandler(controlPanelHandler, {
       if (env.SPLITCH_LOCAL_E2E_RUN_ID) {
         response.headers.set("x-splitch-local-e2e-run-id", env.SPLITCH_LOCAL_E2E_RUN_ID);
       }
-      return response;
+      return withControlPanelSecurityHeaders(response);
     },
   },
 });

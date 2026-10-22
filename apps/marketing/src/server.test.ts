@@ -75,7 +75,7 @@ describe("marketing Worker", () => {
   it("answers health outside Start and assets, preserving deployment evidence", async () => {
     const assetsFetch = vi.fn();
     const response = await worker.fetch(
-      new Request("https://splitch.dev/health") as never,
+      new Request("https://splitch.test/health") as never,
       {
         ASSETS: { fetch: assetsFetch } as unknown as Fetcher,
         SENTRY_DSN: "https://example@sentry.io/1",

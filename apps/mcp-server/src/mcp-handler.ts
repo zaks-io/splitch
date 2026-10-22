@@ -127,7 +127,12 @@ export async function handleMcpServerRequest(options: McpServerRequestOptions): 
   return jsonResponse(response, 200, responseSessionId);
 }
 
-function defaultTokenVerifier(options: McpServerRequestOptions): McpAccessTokenVerifier {
+export function defaultTokenVerifier(
+  options: Pick<
+    McpServerRequestOptions,
+    "authBaseUrl" | "oauthAuthorizationServer" | "oauthJwksUrl" | "platformTarget"
+  >,
+): McpAccessTokenVerifier {
   const issuer = authIssuer(
     options.oauthAuthorizationServer ?? options.authBaseUrl,
     options.platformTarget,

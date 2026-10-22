@@ -32,6 +32,9 @@ it.each(["GET", "HEAD"])(
     expect(response.status).toBe(200);
     expect(response.headers.get("x-splitch-local-e2e-run-id")).toBe("health-fast-path-test");
     expect(response.headers.get("x-content-type-options")).toBe("nosniff");
+    expect(response.headers.get("content-security-policy")).toBe("frame-ancestors 'none'");
+    expect(response.headers.get("x-frame-options")).toBe("DENY");
+    expect(response.headers.get("x-robots-tag")).toBe("noindex, nofollow");
     if (method === "HEAD") expect(response.body).toBeNull();
     else
       expect(await response.json()).toEqual({
