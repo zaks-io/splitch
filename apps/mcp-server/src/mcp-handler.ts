@@ -4,6 +4,7 @@ import {
   noopPerformanceSpanRecorder,
   type PerformanceSpanRecorder,
 } from "@splitch/observability/performance-spans";
+import { canonicalizeMcpClientName } from "@splitch/privacy";
 import {
   JSON_RPC_METHOD_NOT_FOUND,
   type JsonRpcRequest,
@@ -166,7 +167,7 @@ function initializeClientName(request: JsonRpcRequest): string | undefined {
   const clientInfo = (request.params as Record<string, unknown>).clientInfo;
   if (typeof clientInfo !== "object" || clientInfo === null) return undefined;
   const name = (clientInfo as Record<string, unknown>).name;
-  return typeof name === "string" ? name.trim().slice(0, 64) || undefined : undefined;
+  return typeof name === "string" ? canonicalizeMcpClientName(name) : undefined;
 }
 
 /**

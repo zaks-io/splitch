@@ -310,26 +310,41 @@ async function rpc(method: string, params: unknown, options: ProbeOptions = {}):
   return await response.json();
 }
 
-it("bounds initialize client names and records no client version or extra fields", async () => {
-  const spans = recordingSpans();
-  await rpc(
-    "initialize",
-    {
-      clientInfo: {
-        name: `  ${"a".repeat(80)}  `,
-        version: "private-version",
-        userId: "private-user",
+it.each([
+  ["  CODEX-MCP-CLIENT  ", "codex"],
+  ["codex", "codex"],
+  ["MCP-Inspector", "mcp-inspector"],
+  ["other", "other"],
+  ["user_7f3c9a2b", "other"],
+  ["550e8400-e29b-41d4-a716-446655440000", "other"],
+  ["2001:db8:85a3::8a2e:370:7334", "other"],
+  ["Private workspace for the confidential acquisition planning team. ".repeat(4), "other"],
+  ["person@example.com", "other"],
+  ["codex-mcp-client private workspace", "other"],
+  ["", "other"],
+])(
+  "canonicalizes initialize client %j to %s without client versions or extra fields",
+  async (name, expected) => {
+    const spans = recordingSpans();
+    await rpc(
+      "initialize",
+      {
+        clientInfo: {
+          name,
+          version: "private-version",
+          userId: "private-user",
+        },
       },
-    },
-    { spans },
-  );
-  expect(spans.recorded[0]?.attributes["mcp.client.name"]).toBe("a".repeat(64));
-  expect(JSON.stringify(spans.recorded)).not.toContain("private-");
-  await rpc("initialize", { clientInfo: { name: 42 } }, { spans });
-  await rpc("tools/list", { clientInfo: { name: "ignored" } }, { spans });
-  expect(spans.recorded[1]?.attributes).not.toHaveProperty("mcp.client.name");
-  expect(spans.recorded[2]?.attributes).not.toHaveProperty("mcp.client.name");
-});
+      { spans },
+    );
+    expect(spans.recorded[0]?.attributes["mcp.client.name"]).toBe(expected);
+    expect(JSON.stringify(spans.recorded)).not.toContain("private-");
+    await rpc("initialize", { clientInfo: { name: 42 } }, { spans });
+    await rpc("tools/list", { clientInfo: { name: "ignored" } }, { spans });
+    expect(spans.recorded[1]?.attributes).not.toHaveProperty("mcp.client.name");
+    expect(spans.recorded[2]?.attributes).not.toHaveProperty("mcp.client.name");
+  },
+);
 
 it("keeps unknown method text out of spans while preserving the protocol error", async () => {
   const spans = recordingSpans();

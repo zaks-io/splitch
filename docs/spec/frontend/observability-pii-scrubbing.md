@@ -53,10 +53,13 @@ auth-api fetch, PAT verification, revocation reads, JSON-RPC parsing, and sessio
 operations. Auth and parsing precede the protocol span and remain siblings under the request root.
 `tools/list` returns static definitions, so its duration can be near zero.
 
-The span attribute allow-list also permits `mcp.client.name` from initialize's `clientInfo.name`.
-This caller-supplied string is trimmed, capped at 64 characters, and passed through string
-scrubbing even though its key is allow-listed. Client versions, user identifiers, tokens, and
-session IDs are never recorded by MCP instrumentation. No other client field is allow-listed.
+Only initialize may record `mcp.client.name`. Its caller-supplied `clientInfo.name` maps to the
+shared closed set `codex`, `mcp-inspector`, or `other`. Matching trims whitespace and ignores case;
+the official wire alias `codex-mcp-client` maps to `codex`. Every unrecognized string maps to
+`other`, never raw or truncated caller text. The span export boundary independently accepts only
+exact canonical values from the same definition and replaces everything else with `other`.
+Client versions, user identifiers, tokens, and session IDs are never recorded by MCP
+instrumentation. No other client field is allow-listed.
 
 Current limitations: unwrapped WorkerEntrypoint RPC and Durable Object receivers do not continue SDK
 traces. Queue instrumentation records publish and batch-processing spans without carrying trace
