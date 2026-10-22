@@ -1,21 +1,16 @@
-import { createRoute, type RouteConfig, z } from "@hono/zod-openapi";
+import { type RouteConfig, z } from "@hono/zod-openapi";
 import { errorStatusByCode } from "./error-status";
 import { type ErrorCode, ErrorResponseSchema } from "./errors";
+import { buildOpenApiRoute } from "./openapi-route-config";
 import { derivedErrors, selectorAwareRequest } from "./openapi-route-request";
-import {
-  IDEMPOTENCY_KEY_MAX_LENGTH,
-  IDEMPOTENCY_KEY_PATTERN,
-  IDEMPOTENCY_KEY_SHAPE_MESSAGE,
-} from "./persisted-field-limits";
-import {
-  defineRoute,
-  type HttpMethod,
-  type IdempotencyMode,
-  type RateLimitClass,
-  type RawBodyByteLimit,
-  type RouteAuthorization,
-  type RouteContract,
-  type RouteOwner,
+import type {
+  HttpMethod,
+  IdempotencyMode,
+  RateLimitClass,
+  RawBodyByteLimit,
+  RouteAuthorization,
+  RouteContract,
+  RouteOwner,
 } from "./route-contract";
 import type { RouteEffects } from "./route-effects";
 
@@ -35,7 +30,6 @@ import type { RouteEffects } from "./route-effects";
 
 /** The OpenAPI content-type every splitch route speaks. */
 const JSON_CONTENT = "application/json";
-const IDEMPOTENCY_HEADER = "Idempotency-Key";
 
 /**
  * Request pieces for a route, in @hono/zod-openapi terms. `params`/`query` must
@@ -170,54 +164,20 @@ export function honoPathToOpenApiPath(path: string): string {
 }
 
 /** Type-level Hono `:param` → OpenAPI `{param}` conversion for literal route paths. */
-type HonoToOpenApiPath<S extends string> = S extends `${infer Head}/:${infer Name}/${infer Tail}`
-  ? `${Head}/{${Name}}/${HonoToOpenApiPath<Tail>}`
-  : S extends `${infer Head}/:${infer Name}`
-    ? `${Head}/{${Name}}`
-    : S;
+export type HonoToOpenApiPath<S extends string> =
+  S extends `${infer Head}/:${infer Name}/${infer Tail}`
+    ? `${Head}/{${Name}}/${HonoToOpenApiPath<Tail>}`
+    : S extends `${infer Head}/:${infer Name}`
+      ? `${Head}/{${Name}}`
+      : S;
 
-function buildOpenApiRequestConfig(request: ApiRouteRequest | undefined) {
-  if (!request) return undefined;
-  const parts = buildOpenApiRequestParts(request);
-  return request.headers ? { ...parts, headers: request.headers } : parts;
-}
-
-function buildOpenApiRequestParts(request: ApiRouteRequest) {
-  if (request.params) {
-    return {
-      params: request.params,
-      ...(request.query ? { query: request.query } : {}),
-      ...(request.body ? { body: { content: { [JSON_CONTENT]: { schema: request.body } } } } : {}),
-    };
-  }
-  if (request.query) return { query: request.query };
-  if (request.body) {
-    return { body: { content: { [JSON_CONTENT]: { schema: request.body } } } };
-  }
-  return undefined;
-}
-
-function idempotencyHeader(mode: IdempotencyMode) {
-  if (mode === "none") return undefined;
-  return z.object({
-    [IDEMPOTENCY_HEADER]: z
-      .string()
-      .min(1)
-      .max(IDEMPOTENCY_KEY_MAX_LENGTH)
-      .regex(IDEMPOTENCY_KEY_PATTERN, IDEMPOTENCY_KEY_SHAPE_MESSAGE)
-      .openapi({
-        param: { name: IDEMPOTENCY_HEADER, in: "header", required: mode === "required" },
-        example: "logical-evaluation-123",
-      }),
-  });
-}
-
-const errorSchemaByCode = new Map<ErrorCode, z.ZodTypeAny>(
-  ErrorResponseSchema.options.map((schema) => [schema.shape.code.value, schema]),
-);
+let errorSchemaByCode: Map<ErrorCode, z.ZodTypeAny> | undefined;
 
 /** The ErrorResponse Zod member for one ErrorCode (OpenAPI / custom unions). */
 export function errorResponseSchemaFor(code: ErrorCode): z.ZodTypeAny {
+  errorSchemaByCode ??= new Map(
+    ErrorResponseSchema.options.map((schema) => [schema.shape.code.value, schema]),
+  );
   const schema = errorSchemaByCode.get(code);
   if (!schema) {
     throw new Error(`openapi-route: ErrorCode "${code}" has no ErrorResponse schema`);
@@ -225,108 +185,63 @@ export function errorResponseSchemaFor(code: ErrorCode): z.ZodTypeAny {
   return schema;
 }
 
-function buildOpenApiErrorResponses(
-  codes: readonly ErrorCode[],
-  overrides: Readonly<Record<number, z.ZodTypeAny>> | undefined,
-) {
-  const schemasByStatus = new Map<number, z.ZodTypeAny[]>();
-  for (const code of codes) {
-    const status = errorStatusByCode[code];
-    if (status === undefined) {
+export function defineApiRoute<const Input extends DefineApiRouteInput>(
+  input: Input,
+): RouteContract & {
+  operationId: string;
+  summary: string;
+  exposure: RouteExposure;
+  effects: RouteEffects;
+  openapi: ReturnType<typeof buildOpenApiRoute<Input>>;
+  audit?: "app";
+} {
+  const errors = derivedErrors(input);
+  for (const code of errors) {
+    if (errorStatusByCode[code] === undefined) {
       throw new Error(`openapi-route: ErrorCode "${code}" has no mapped HTTP status`);
     }
-    if (overrides?.[status] !== undefined) {
-      // Route-specific schema owns this status; skip ErrorResponse members.
-      continue;
-    }
-    schemasByStatus.set(status, [
-      ...(schemasByStatus.get(status) ?? []),
-      errorResponseSchemaFor(code),
-    ]);
   }
-
-  const built = Object.fromEntries(
-    [...schemasByStatus].map(([status, schemas]) => [
-      status,
-      {
-        description: "Error response.",
-        content: {
-          [JSON_CONTENT]: { schema: schemas.length === 1 ? schemas[0] : z.union(schemas) },
-        },
-      },
-    ]),
-  );
-
-  if (overrides === undefined) return built;
-
+  const authorization: RouteAuthorization =
+    input.auth === "control-plane-token"
+      ? { auth: input.auth, permission: input.permission }
+      : { auth: input.auth };
+  let selectedRequest: ReturnType<typeof selectorAwareRequest>;
+  let requestInitialized = false;
+  function request() {
+    if (!requestInitialized) {
+      selectedRequest = selectorAwareRequest(input);
+      requestInitialized = true;
+    }
+    return selectedRequest;
+  }
+  let runtimeSchema: z.ZodTypeAny | undefined;
+  let openapi: ReturnType<typeof buildOpenApiRoute<Input>> | undefined;
   return {
-    ...built,
-    ...Object.fromEntries(
-      Object.entries(overrides).map(([status, schema]) => [
-        status,
-        {
-          description: "Error response.",
-          content: { [JSON_CONTENT]: { schema } },
-        },
-      ]),
-    ),
-  };
-}
-
-export function defineApiRoute<const Input extends DefineApiRouteInput>(input: Input) {
-  const errors = derivedErrors(input);
-  const request = selectorAwareRequest(input);
-  const contract = defineRoute({
     id: input.operationId,
     owner: input.owner,
     method: input.method,
     path: input.path,
-    input: runtimeInput(request),
+    get input() {
+      runtimeSchema ??= runtimeInput(request());
+      return runtimeSchema;
+    },
     output: input.response,
-    ...(input.auth === "control-plane-token"
-      ? { auth: input.auth, permission: input.permission }
-      : { auth: input.auth }),
+    ...authorization,
     scopes: input.scopes ?? [],
     rateLimit: input.rateLimit,
     idempotency: input.idempotency,
     ...(input.temporaryEnvironment ? { temporaryEnvironment: input.temporaryEnvironment } : {}),
     rawBodyByteLimit: input.rawBodyByteLimit,
     errors,
-  });
-
-  return {
-    ...contract,
     operationId: input.operationId,
     summary: input.summary,
     exposure: input.exposure ?? "public",
     effects: input.effects,
     ...(input.audit ? { audit: input.audit } : {}),
-    openapi: createRoute({
-      method: input.method.toLowerCase() as Lowercase<HttpMethod>,
-      path: honoPathToOpenApiPath(input.path) as HonoToOpenApiPath<Input["path"]>,
-      operationId: input.operationId,
-      summary: input.summary,
-      request: {
-        ...(buildOpenApiRequestConfig(request) ?? {}),
-        ...(idempotencyHeader(input.idempotency)
-          ? { headers: idempotencyHeader(input.idempotency) }
-          : {}),
-      },
-      responses: {
-        ...buildOpenApiErrorResponses(errors, input.errorResponseSchemas),
-        200: {
-          description: input.summary,
-          content: { [JSON_CONTENT]: { schema: input.response } },
-        },
-        ...(input.notModifiedResponse
-          ? {
-              304: {
-                description: "Not Modified — cached response is still current.",
-              },
-            }
-          : {}),
-      },
-    } as const),
+    get openapi() {
+      openapi ??= buildOpenApiRoute(input, request(), errors);
+      return openapi;
+    },
   };
 }
 

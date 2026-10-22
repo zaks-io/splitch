@@ -25,7 +25,7 @@ import {
   PromptNotFoundError,
   requireString,
 } from "./mcp-prompt-types";
-import { MCP_TOOL_DEFINITIONS } from "./tool-registry";
+import { MCP_TOOL_NAMES } from "./tool-registry";
 
 /**
  * MCP prompts are advisory plan templates (mcp-discovery.md). They return a
@@ -93,7 +93,7 @@ export function allPromptPlans(): readonly McpPromptPlan[] {
 }
 
 export function s08DerivedToolNames(): ReadonlySet<string> {
-  return new Set(MCP_TOOL_DEFINITIONS.map((tool) => tool.name));
+  return MCP_TOOL_NAMES;
 }
 
 /**

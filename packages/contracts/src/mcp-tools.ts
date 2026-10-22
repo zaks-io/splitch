@@ -234,12 +234,16 @@ function toolNarrative(route: ApiRouteContract): string {
  * control-plane route; data-plane and discovery routes are excluded by
  * {@link isMcpToolRoute}. Returns in registry order so the tool list is stable.
  */
+let tools: readonly McpToolDefinition[] | undefined;
+let protocolTools: readonly McpProtocolToolDefinition[] | undefined;
+
 export function deriveMcpTools(): readonly McpToolDefinition[] {
-  return routeRegistry.filter(isMcpToolRoute).map(deriveTool);
+  tools ??= routeRegistry.filter(isMcpToolRoute).map(deriveTool);
+  return tools;
 }
 
 export function deriveMcpProtocolTools(): readonly McpProtocolToolDefinition[] {
-  return routeRegistry.filter(isMcpToolRoute).map((route) => {
+  protocolTools ??= routeRegistry.filter(isMcpToolRoute).map((route) => {
     const tool = deriveTool(route);
     return {
       name: tool.name,
@@ -251,6 +255,7 @@ export function deriveMcpProtocolTools(): readonly McpProtocolToolDefinition[] {
       _meta: mcpReversibilityMeta(route.effects),
     };
   });
+  return protocolTools;
 }
 
 /**

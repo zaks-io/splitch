@@ -4,6 +4,7 @@ import {
   requirePlatformTarget,
 } from "@splitch/contracts";
 import { createMcpSpanRecorder } from "@splitch/observability/mcp-spans";
+import { createPerformanceSpanRecorder } from "@splitch/observability/performance-spans";
 import {
   activeTraceId,
   createWorkerObservability,
@@ -64,6 +65,7 @@ const handler = {
       personalAccessTokens: requiredSessionStore(env.SESSION_STORE),
       sessionStore: durableMcpSessionStore(env.MCP_SESSIONS),
       spans: createMcpSpanRecorder(env),
+      performanceSpans: createPerformanceSpanRecorder(env),
       reportFault: mcpFaultReporter(observability, traceId),
     });
   },

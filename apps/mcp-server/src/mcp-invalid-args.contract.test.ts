@@ -5,7 +5,7 @@ import {
   staticMcpTokenVerifier,
   TEST_MCP_DELEGATION_SECRET,
 } from "./mcp-test-verifier";
-import { MCP_TOOL_DEFINITIONS } from "./tool-registry";
+import { mcpToolDefinitions } from "./tool-registry";
 
 /**
  * SEP-1303: invalid tool arguments are `isError` results with a stable code.
@@ -16,10 +16,10 @@ describe("MCP invalid tool arguments contract", () => {
   it.each([1, null, "string", true, []])(
     "returns an isError result for non-object arguments (%j) on every advertised tool",
     async (invalidArguments) => {
-      expect(MCP_TOOL_DEFINITIONS.length).toBeGreaterThan(0);
+      expect(mcpToolDefinitions().length).toBeGreaterThan(0);
       const seen: Request[] = [];
 
-      for (const tool of MCP_TOOL_DEFINITIONS) {
+      for (const tool of mcpToolDefinitions()) {
         const body = await callTool(tool.name, invalidArguments, seen);
         expect(body.error, `${tool.name} must not be a JSON-RPC protocol error`).toBeUndefined();
         expect(body.result?.isError, `${tool.name} must return isError`).toBe(true);

@@ -32,7 +32,7 @@ export interface McpSpanDescriptor {
   readonly method: string;
   /** Tool name, resource URI, or prompt name, depending on the method. */
   readonly subject?: string;
-  readonly sessionId?: string | null;
+  readonly clientName?: string;
 }
 
 export interface McpSpanHandle {
@@ -48,8 +48,23 @@ export interface McpSpanRecorder {
   record<T>(descriptor: McpSpanDescriptor, run: (span: McpSpanHandle) => Promise<T>): Promise<T>;
 }
 
+function protocolMethod(method: string): string {
+  return (
+    [
+      "initialize",
+      "tools/list",
+      "tools/call",
+      "resources/list",
+      "resources/read",
+      "prompts/list",
+      "prompts/get",
+    ].find((known) => known === method) ?? "unknown"
+  );
+}
+
 export function mcpSpanName(descriptor: McpSpanDescriptor): string {
-  return descriptor.subject ? `${descriptor.method} ${descriptor.subject}` : descriptor.method;
+  const method = protocolMethod(descriptor.method);
+  return descriptor.subject ? `${method} ${descriptor.subject}` : method;
 }
 
 export function mcpSpanAttributes(
@@ -57,10 +72,10 @@ export function mcpSpanAttributes(
 ): Record<string, string | undefined> {
   const subjectAttribute = SUBJECT_ATTRIBUTE_BY_METHOD[descriptor.method];
   return {
-    "mcp.method.name": descriptor.method,
+    "mcp.method.name": protocolMethod(descriptor.method),
     "mcp.transport": MCP_TRANSPORT,
     "network.transport": NETWORK_TRANSPORT,
-    ...(descriptor.sessionId ? { "mcp.session.id": descriptor.sessionId } : {}),
+    ...(descriptor.clientName ? { "mcp.client.name": descriptor.clientName } : {}),
     ...(subjectAttribute && descriptor.subject ? { [subjectAttribute]: descriptor.subject } : {}),
   };
 }

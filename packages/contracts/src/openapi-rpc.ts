@@ -38,29 +38,33 @@ function buildRpcAppFromRoutes<const T extends readonly { openapi: RouteConfig }
   return new OpenAPIHono().openapiRoutes(rpcInputs);
 }
 
-const accountRpcApp = buildRpcAppFromRoutes(accountRoutes);
-const approvalRpcApp = buildRpcAppFromRoutes(approvalRoutes);
-const attentionRpcApp = buildRpcAppFromRoutes(attentionRoutes);
-const flagRpcApp = buildRpcAppFromRoutes(flagRoutes);
-const segmentRpcApp = buildRpcAppFromRoutes(segmentRoutes);
-const experimentRpcApp = buildRpcAppFromRoutes(experimentRoutes);
-const credentialRpcApp = buildRpcAppFromRoutes(credentialRoutes);
-const analysisRpcApp = buildRpcAppFromRoutes(analysisRoutes);
-const privacyRpcApp = buildRpcAppFromRoutes(privacyRoutes);
-const dataPlaneRpcApp = buildRpcAppFromRoutes(dataPlaneRoutes);
+function buildControlPlaneRpcApp() {
+  const accountRpcApp = buildRpcAppFromRoutes(accountRoutes);
+  const approvalRpcApp = buildRpcAppFromRoutes(approvalRoutes);
+  const attentionRpcApp = buildRpcAppFromRoutes(attentionRoutes);
+  const flagRpcApp = buildRpcAppFromRoutes(flagRoutes);
+  const segmentRpcApp = buildRpcAppFromRoutes(segmentRoutes);
+  const experimentRpcApp = buildRpcAppFromRoutes(experimentRoutes);
+  const credentialRpcApp = buildRpcAppFromRoutes(credentialRoutes);
+  const analysisRpcApp = buildRpcAppFromRoutes(analysisRoutes);
+  const privacyRpcApp = buildRpcAppFromRoutes(privacyRoutes);
+  const dataPlaneRpcApp = buildRpcAppFromRoutes(dataPlaneRoutes);
 
-/** Emit-only OpenAPIHono carrying the full Control Plane route schema for `hc`. */
-export const controlPlaneRpcApp = new OpenAPIHono()
-  .route("/", accountRpcApp)
-  .route("/", approvalRpcApp)
-  .route("/", attentionRpcApp)
-  .route("/", flagRpcApp)
-  .route("/", segmentRpcApp)
-  .route("/", experimentRpcApp)
-  .route("/", credentialRpcApp)
-  .route("/", analysisRpcApp)
-  .route("/", privacyRpcApp)
-  .route("/", dataPlaneRpcApp);
+  return new OpenAPIHono()
+    .route("/", accountRpcApp)
+    .route("/", approvalRpcApp)
+    .route("/", attentionRpcApp)
+    .route("/", flagRpcApp)
+    .route("/", segmentRpcApp)
+    .route("/", experimentRpcApp)
+    .route("/", credentialRpcApp)
+    .route("/", analysisRpcApp)
+    .route("/", privacyRpcApp)
+    .route("/", dataPlaneRpcApp);
+}
+
+/** Emit-only app; Workers use its type and must not mount it at import. */
+export const controlPlaneRpcApp = /* @__PURE__ */ buildControlPlaneRpcApp();
 
 /** Hono RPC App type for Control Plane routes — use with `hc<ControlPlaneRpcApp>()`. */
 export type ControlPlaneRpcApp = typeof controlPlaneRpcApp;
