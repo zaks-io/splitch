@@ -1,3 +1,6 @@
+import { sql } from "drizzle-orm";
+import { cloudflareConfigDeliveries } from "../schema/integrations";
+import { createDb } from "./client";
 import type { CloudflareDeliveryRow } from "./cloudflare-integrations";
 import { buildDueCloudflareDeliveriesQuery } from "./scheduled-due-predicates";
 import type { EnvScope, TenantScope } from "./scope";
@@ -15,36 +18,48 @@ export async function claimDueCloudflareDeliveries(
   if (!Number.isInteger(limit) || limit < 1)
     throw new Error("Cloudflare delivery claim limit must be a positive integer");
   const due = buildDueCloudflareDeliveriesQuery(now, scope);
-  const [leased, claimed] = await d1.batch<CloudflareDeliveryRow>([
-    d1
-      .prepare(`UPDATE cloudflare_config_deliveries
-        SET state = 'leased', lease_owner = ?, lease_expires_at = ?
-        WHERE delivery_id IN (
-          SELECT delivery.delivery_id ${due.sql}
-          ORDER BY delivery.next_attempt_at, delivery.delivery_id LIMIT ?
-        ) RETURNING delivery_id AS deliveryId`)
-      .bind(leaseOwner, leaseExpiresAt, ...due.params, limit),
-    d1
-      .prepare(`SELECT delivery.delivery_id AS deliveryId,
-        delivery.installation_id AS installationId, delivery.app_id AS appId,
-        delivery.environment_id AS environmentId, installation.endpoint AS endpoint,
-        installation.secret_ciphertext AS secretCiphertext,
-        installation.secret_key_version AS secretKeyVersion,
-        delivery.environment_version AS environmentVersion,
-        delivery.attempt_count AS attemptCount,
-        installation.last_applied_version AS lastAppliedVersion,
-        installation.created_at AS registeredAt
-        FROM cloudflare_config_deliveries delivery JOIN cloudflare_installations installation
-          ON installation.installation_id = delivery.installation_id
-        WHERE delivery.state = 'leased' AND delivery.lease_owner = ?
-          AND installation.status = 'active'
-        ORDER BY delivery.next_attempt_at, delivery.delivery_id`)
-      .bind(leaseOwner),
+  const db = createDb(d1);
+  const [leased, claimed] = await db.batch([
+    db
+      .update(cloudflareConfigDeliveries)
+      .set({ state: "leased", leaseOwner, leaseExpiresAt })
+      .where(sql`delivery_id IN (
+          SELECT delivery.delivery_id FROM cloudflare_config_deliveries delivery ${due}
+          ORDER BY delivery.next_attempt_at, delivery.delivery_id LIMIT ${limit}
+        )`)
+      .returning({ deliveryId: cloudflareConfigDeliveries.deliveryId }),
+    db
+      .select({
+        deliveryId: sql<CloudflareDeliveryRow["deliveryId"]>`delivery.delivery_id`,
+        installationId: sql<CloudflareDeliveryRow["installationId"]>`delivery.installation_id`,
+        appId: sql<CloudflareDeliveryRow["appId"]>`delivery.app_id`,
+        environmentId: sql<CloudflareDeliveryRow["environmentId"]>`delivery.environment_id`,
+        endpoint: sql<CloudflareDeliveryRow["endpoint"]>`installation.endpoint`,
+        secretCiphertext: sql<
+          CloudflareDeliveryRow["secretCiphertext"]
+        >`installation.secret_ciphertext`,
+        secretKeyVersion: sql<
+          CloudflareDeliveryRow["secretKeyVersion"]
+        >`installation.secret_key_version`,
+        environmentVersion: sql<
+          CloudflareDeliveryRow["environmentVersion"]
+        >`delivery.environment_version`,
+        attemptCount: sql<CloudflareDeliveryRow["attemptCount"]>`delivery.attempt_count`,
+        lastAppliedVersion: sql<
+          CloudflareDeliveryRow["lastAppliedVersion"]
+        >`installation.last_applied_version`,
+        registeredAt: sql<CloudflareDeliveryRow["registeredAt"]>`installation.created_at`,
+      })
+      .from(sql`cloudflare_config_deliveries delivery JOIN cloudflare_installations installation
+          ON installation.installation_id = delivery.installation_id`)
+      .where(sql`delivery.state = 'leased' AND delivery.lease_owner = ${leaseOwner}
+          AND installation.status = 'active'`)
+      .orderBy(sql`delivery.next_attempt_at`, sql`delivery.delivery_id`),
   ]);
   if (!leased || !claimed)
     throw new Error("Cloudflare delivery claim: D1 batch did not return both statement results");
-  const updatedIds = new Set(leased.results.map((row) => row.deliveryId));
-  return claimed.results.filter((row) => updatedIds.has(row.deliveryId));
+  const updatedIds = new Set(leased.map((row) => row.deliveryId));
+  return claimed.filter((row) => updatedIds.has(row.deliveryId));
 }
 
 export interface CloudflareDeliveryFinish {

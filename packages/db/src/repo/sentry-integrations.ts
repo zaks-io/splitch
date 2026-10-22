@@ -1,3 +1,5 @@
+import { sql } from "drizzle-orm";
+import { createDb } from "./client";
 import { buildDueSentryInstallationsPredicate } from "./scheduled-due-predicates";
 /**
  * Sentry change-tracking installations.
@@ -51,10 +53,11 @@ export function makeSentryIntegrationRepo(d1: D1Database) {
       installationId: string,
     ): Promise<SentryInstallationRow | null> {
       assertOrgId(orgId);
-      return d1
-        .prepare(`${INSTALLATION_SELECT} WHERE org_id = ? AND installation_id = ?`)
-        .bind(orgId, installationId)
-        .first<SentryInstallationRow>();
+      return (
+        (await createDb(d1).get<SentryInstallationRow>(
+          sql`${INSTALLATION_SELECT} WHERE org_id = ${orgId} AND installation_id = ${installationId}`,
+        )) ?? null
+      );
     },
 
     /**
@@ -72,20 +75,9 @@ export function makeSentryIntegrationRepo(d1: D1Database) {
       if (limit !== undefined && (!Number.isInteger(limit) || limit < 1)) {
         throw new Error(`listInstallations: limit must be a positive integer, got ${limit}`);
       }
-      const statement =
-        limit === undefined
-          ? d1
-              .prepare(
-                `${INSTALLATION_SELECT} WHERE org_id = ? ORDER BY created_at DESC, installation_id DESC`,
-              )
-              .bind(orgId)
-          : d1
-              .prepare(
-                `${INSTALLATION_SELECT} WHERE org_id = ? ORDER BY created_at DESC, installation_id DESC LIMIT ?`,
-              )
-              .bind(orgId, limit);
-      const rows = await statement.all<SentryInstallationRow>();
-      return rows.results;
+      return createDb(d1).all<SentryInstallationRow>(sql`${INSTALLATION_SELECT}
+        WHERE org_id = ${orgId} ORDER BY created_at DESC, installation_id DESC
+        ${limit === undefined ? sql`` : sql`LIMIT ${limit}`}`);
     },
 
     /**
@@ -166,14 +158,8 @@ export function makeSentryIntegrationRepo(d1: D1Database) {
      */
     async dueInstallations(now: string, limit: number): Promise<SentryInstallationRow[]> {
       const due = buildDueSentryInstallationsPredicate(now);
-      const rows = await d1
-        .prepare(
-          `${INSTALLATION_SELECT} WHERE ${due.sql}
-          ORDER BY next_attempt_at ASC, installation_id ASC LIMIT ?`,
-        )
-        .bind(...due.params, limit)
-        .all<SentryInstallationRow>();
-      return rows.results;
+      return createDb(d1).all<SentryInstallationRow>(sql`${INSTALLATION_SELECT} WHERE ${due}
+          ORDER BY next_attempt_at ASC, installation_id ASC LIMIT ${limit}`);
     },
 
     /** Lowest cursor across active installations; governs audit-log retention. */
@@ -217,7 +203,7 @@ export function makeSentryIntegrationRepo(d1: D1Database) {
   };
 }
 
-const INSTALLATION_SELECT = `SELECT
+const INSTALLATION_SELECT = sql`SELECT
   installation_id AS installationId, org_id AS orgId,
   webhook_url AS webhookUrl, secret_ciphertext AS secretCiphertext,
   secret_key_version AS secretKeyVersion, secret_fingerprint AS secretFingerprint,

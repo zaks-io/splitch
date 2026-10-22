@@ -36,7 +36,6 @@ export interface ScheduledDueWorkInput {
 /** System sweep returning only booleans; job reads and claims retain their existing scopes. */
 export async function probeScheduledDueWork(
   db: Db,
-  d1: D1Database,
   input: ScheduledDueWorkInput,
 ): Promise<ScheduledDueWork> {
   const { now } = input;
@@ -53,51 +52,43 @@ export async function probeScheduledDueWork(
   const cloudflare = buildDueCloudflareDeliveriesQuery(now);
   const sentry = buildDueSentryInstallationsPredicate(now);
   const statements = [
-    {
-      sql: `SELECT 1 FROM privacy_jobs WHERE ${reconciliation.sql} LIMIT 1`,
-      params: reconciliation.params,
-    },
-    { sql: `SELECT 1 FROM privacy_jobs WHERE ${artifacts.sql} LIMIT 1`, params: artifacts.params },
-    {
-      sql: `SELECT 1 FROM personal_access_token_rotations WHERE ${rotations.sql} LIMIT 1`,
-      params: rotations.params,
-    },
-    {
-      sql: `SELECT 1 FROM personal_access_token_rotations WHERE ${expiredRotations.sql} LIMIT 1`,
-      params: expiredRotations.params,
-    },
-    {
-      sql: `SELECT 1 FROM personal_access_token_step_up_uses u WHERE ${expiredUses.sql} LIMIT 1`,
-      params: expiredUses.params,
-    },
+    db.select({ due: sql`1` }).from(sql`privacy_jobs`).where(reconciliation).limit(1),
+    db.select({ due: sql`1` }).from(sql`privacy_jobs`).where(artifacts).limit(1),
+    db.select({ due: sql`1` }).from(sql`personal_access_token_rotations`).where(rotations).limit(1),
+    db
+      .select({ due: sql`1` })
+      .from(sql`personal_access_token_rotations`)
+      .where(expiredRotations)
+      .limit(1),
+    db
+      .select({ due: sql`1` })
+      .from(sql`personal_access_token_step_up_uses u`)
+      .where(expiredUses)
+      .limit(1),
     db
       .select({ due: sql`1` })
       .from(environments)
       .where(buildExpiredTemporaryEnvironmentsPredicate(now))
-      .limit(1)
-      .toSQL(),
+      .limit(1),
     db
       .select({ due: sql`1` })
       .from(controlPlaneAuditEvents)
       .where(buildPendingAuditEventsPredicate())
-      .limit(1)
-      .toSQL(),
-    { sql: `SELECT 1 ${convex.sql} LIMIT 1`, params: convex.params },
-    { sql: `SELECT 1 ${cloudflare.sql} LIMIT 1`, params: cloudflare.params },
-    {
-      sql: `SELECT 1 FROM sentry_installations WHERE ${sentry.sql} LIMIT 1`,
-      params: sentry.params,
-    },
-  ];
-  const results = await d1.batch(
-    statements.map((query) => d1.prepare(query.sql).bind(...query.params)),
-  );
-  if (results.length !== statements.length || results.some((result) => !result.success))
+      .limit(1),
+    db.select({ due: sql`1` }).from(sql`convex_installations installation ${convex}`).limit(1),
+    db
+      .select({ due: sql`1` })
+      .from(sql`cloudflare_config_deliveries delivery ${cloudflare}`)
+      .limit(1),
+    db.select({ due: sql`1` }).from(sql`sentry_installations`).where(sentry).limit(1),
+  ] as const;
+  const results = await db.batch(statements);
+  if (results.length !== statements.length)
     throw new Error("scheduled due-work probe: incomplete D1 batch");
   const due = (index: number) => {
     const result = results[index];
     if (!result) throw new Error("scheduled due-work probe: missing D1 result");
-    return result.results.length > 0;
+    return result.length > 0;
   };
   return {
     privacyReconciliation: due(0),

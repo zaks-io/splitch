@@ -36,7 +36,7 @@ import { makeSentryIntegrationRepo } from "./sentry-integrations";
 export function createRepository(d1: D1Database) {
   const db = createDb(d1);
   return {
-    scheduledDueWork: (input: ScheduledDueWorkInput) => probeScheduledDueWork(db, d1, input),
+    scheduledDueWork: (input: ScheduledDueWorkInput) => probeScheduledDueWork(db, input),
     auditEvents: makeAuditEventRepo(db, d1),
     flags: makeFlagRepo(db),
     flagEvaluation: makeFlagEvaluationReads(db),
