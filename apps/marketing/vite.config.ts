@@ -1,4 +1,5 @@
 import { resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { cloudflare } from "@cloudflare/vite-plugin";
 import tailwindcss from "@tailwindcss/vite";
 import { tanstackStart } from "@tanstack/react-start/plugin/vite";
@@ -37,15 +38,33 @@ export default defineConfig(({ mode }) => {
     plugins: [
       tailwindcss(),
       // `pnpm dev` starts every dev server at once; probing for 9229 races.
-      cloudflare({ inspectorPort: 0, viteEnvironment: { name: "ssr" } }),
+      cloudflare({
+        inspectorPort: 0,
+        viteEnvironment: { name: "ssr" },
+        // Prerender through Start directly, before the homepage asset exists.
+        experimental: {
+          prerenderWorker: {
+            config: {
+              name: "splitch-marketing-prerender",
+              main: fileURLToPath(import.meta.resolve("@tanstack/react-start/server-entry")),
+            },
+            viteEnvironment: { name: "prerender" },
+          },
+        },
+      }),
       tanstackStart({
         prerender: {
           enabled: true,
+          concurrency: 2,
           autoStaticPathsDiscovery: false,
           crawlLinks: false,
           failOnError: true,
         },
-        pages: [{ path: "/", prerender: { enabled: true, outputPath: "/index.html" } }],
+        pages: [
+          { path: "/", prerender: { enabled: true, outputPath: "/index.html" } },
+          { path: "/robots.txt", prerender: { enabled: true, outputPath: "/robots.txt" } },
+          { path: "/sitemap.xml", prerender: { enabled: true, outputPath: "/sitemap.xml" } },
+        ],
       }),
       react(),
     ],

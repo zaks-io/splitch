@@ -1,3 +1,6 @@
+import { isLocalPlatformTarget } from "@splitch/contracts";
+import type { AuthApiEnv } from "./env";
+
 const DEFAULT_ACCESS_TOKEN_KID = "splitch-access-token";
 
 export interface AccessTokenPublicJwk {
@@ -96,7 +99,7 @@ export async function accessTokenSigningKey(jwk: JsonWebKey): Promise<CryptoKey>
  * WebCrypto implementations. Importing then asks the same runtime the signer
  * uses whether the complete key is usable.
  */
-export async function assertAccessTokenSecretCanSign(secret: string): Promise<void> {
+async function assertAccessTokenSecretCanSign(secret: string): Promise<void> {
   const jwk = accessTokenPrivateJwkFromSecret(secret);
   if (!jwk) {
     throw new Error(
@@ -131,4 +134,33 @@ export async function makeEphemeralAccessTokenPrivateJwk(): Promise<string> {
     alg: "RS256",
     use: "sig",
   });
+}
+
+let localAccessTokenSecret: Promise<string> | undefined;
+let signableAccessTokenSecret: string | undefined;
+
+/**
+ * The signer is RS256-only (`accessTokenTrustContract: "rs256-jwks"` above), so a
+ * secret that cannot import as an RS256 signing key can never mint a token.
+ *
+ * WHY this is checked at config time and not left to the signer: a presence-only
+ * check boots a Worker that reports healthy and then throws on every single mint,
+ * which reaches the caller as an opaque `server_error`. Production ran that way
+ * with a leftover HMAC secret and no door could issue a token.
+ *
+ * Memoized on the value: the import is per-isolate work, not per-request.
+ */
+export async function accessTokenSecret(env: AuthApiEnv): Promise<string> {
+  if (env.ACCESS_TOKEN_SECRET) {
+    if (env.ACCESS_TOKEN_SECRET !== signableAccessTokenSecret) {
+      await assertAccessTokenSecretCanSign(env.ACCESS_TOKEN_SECRET);
+      signableAccessTokenSecret = env.ACCESS_TOKEN_SECRET;
+    }
+    return env.ACCESS_TOKEN_SECRET;
+  }
+  if (isLocalPlatformTarget(env.SPLITCH_PLATFORM_TARGET)) {
+    localAccessTokenSecret ??= makeEphemeralAccessTokenPrivateJwk();
+    return localAccessTokenSecret;
+  }
+  throw new Error("ACCESS_TOKEN_SECRET is required for hosted targets");
 }

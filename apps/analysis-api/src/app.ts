@@ -1,4 +1,3 @@
-import { createHealthResponse, parsePlatformTarget } from "@splitch/contracts";
 import {
   type AuthResolver,
   createRegistrar,
@@ -17,8 +16,6 @@ import {
 import { makeResultsHandler, type ResultsDeps } from "./results";
 import { analysisRoute } from "./routes";
 import { makeUsageHandler, type UsageDeps } from "./usage";
-
-const service = "splitch-analysis-api";
 
 /**
  * Which door of this Worker the app instance is serving.
@@ -48,16 +45,6 @@ export interface AnalysisAppDeps
 
 export function createApp(deps: AnalysisAppDeps): Hono {
   const app = new Hono();
-  const health = () =>
-    Response.json(
-      createHealthResponse(
-        service,
-        parsePlatformTarget(deps.platformTarget),
-        deps.deployedCommitSha,
-      ),
-    );
-  app.get("/", health);
-  app.get("/health", health);
   if (deps.door === "public") {
     return app;
   }

@@ -22,6 +22,7 @@ import {
 } from "./request-error-sentry.js";
 import { loadSentry, type SentryCloudflare } from "./sentry-module.js";
 import type { ObservabilitySurfaceId } from "./surfaces.js";
+import { type WorkerHealthOptions, workerHealthResponse } from "./worker-health.js";
 
 // biome-ignore lint/performance/noBarrelFile: shared fault detail is part of the Worker observability API
 export { serializeFault } from "./serialize-fault.js";
@@ -40,6 +41,10 @@ type SentrySpanJson = Parameters<
 export interface WorkerObservabilityOptions {
   readonly surface: ObservabilitySurfaceId;
   readonly waitUntil?: (promise: Promise<unknown>) => void;
+}
+
+export interface WorkerHandlerOptions<E extends WorkerEnv> extends WorkerObservabilityOptions {
+  readonly health?: WorkerHealthOptions<E>;
 }
 
 /** Build Worker observability options from request context. */
@@ -149,7 +154,7 @@ export function workerSentryOptions(
 export function wrapWorkerHandler<E extends WorkerEnv, QueueMessage = unknown>(
   handler: ExportedHandler<E, QueueMessage> &
     Required<Pick<ExportedHandler<E, QueueMessage>, "fetch">>,
-  options: WorkerObservabilityOptions,
+  options: WorkerHandlerOptions<E>,
 ): ExportedHandler<E, QueueMessage> & Required<Pick<ExportedHandler<E, QueueMessage>, "fetch">> {
   const innerFetch = handler.fetch;
   const wrapped: ExportedHandler<E, QueueMessage> &
@@ -166,6 +171,8 @@ export function wrapWorkerHandler<E extends WorkerEnv, QueueMessage = unknown>(
       }
       const transportRedirect = productionHttpsRedirect(request, env);
       if (transportRedirect) return transportRedirect;
+      const healthResponse = await workerHealthResponse(request, env, options.health);
+      if (healthResponse) return applyWorkerSecurityHeaders(healthResponse, request, env);
       if (!env.SENTRY_DSN) {
         return applyWorkerSecurityHeaders(await innerFetch(request, env, ctx), request, env);
       }

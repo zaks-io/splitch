@@ -25,21 +25,6 @@ function makeHarness(rows?: RowsByPipe) {
   return makeResultsHarness(rows);
 }
 
-describe("Analysis Worker health", () => {
-  it("keeps the smoke baseline on /", async () => {
-    const { app } = makeHarness();
-
-    const res = await app.request("/");
-
-    expect(res.status).toBe(200);
-    await expect(res.json()).resolves.toEqual({
-      ok: true,
-      service: "splitch-analysis-api",
-      platformTarget: "local",
-    });
-  });
-});
-
 describe("GET/POST experiment results", () => {
   it("materializes Tinybird rows into StatsInput, calls StatsEngine, and returns StatsOutput", async () => {
     const { app, tinybird } = makeHarness();

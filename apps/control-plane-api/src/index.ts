@@ -69,7 +69,10 @@ const handler = {
   },
 } satisfies ExportedHandler<ControlPlaneApiEnv, PrivacyJobMessage>;
 
-export default wrapWorkerHandler(handler, { surface: "control-plane-api" });
+export default wrapWorkerHandler(handler, {
+  surface: "control-plane-api",
+  health: { paths: ["/", "/health"], respond: controlPlaneHealthResponse },
+});
 
 const mcpHandler = bindingHandler("mcp");
 const signedPanelHandler = bindingHandler("signed");
@@ -161,9 +164,7 @@ async function handleRequest(
   authMode: AuthMode | BindingAuthority = "none",
 ): Promise<Response> {
   const url = new URL(request.url);
-  if (url.pathname === "/health" || url.pathname === "/") {
-    return controlPlaneHealthResponse(env);
-  }
+
   const liveUpdateTestControl = await handleLiveUpdateTestControl(request, env, url);
   if (liveUpdateTestControl) return liveUpdateTestControl;
 

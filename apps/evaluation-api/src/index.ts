@@ -82,10 +82,19 @@ const handler = {
   },
 } satisfies ExportedHandler<EvaluationApiEnv>;
 
-/** Unwrapped fetch handler — tests drive this so startup binding checks stay load-bearing. */
-export const evaluationApiHandler = handler;
-
-export default wrapWorkerHandler(handler, { surface: "evaluation-api" });
+export default wrapWorkerHandler(handler, {
+  surface: "evaluation-api",
+  health: {
+    paths: ["/", "/health"],
+    respond(env) {
+      const platformTarget = requirePlatformTarget(env.SPLITCH_PLATFORM_TARGET);
+      makeEnvSaltStore(env);
+      return Response.json(
+        createHealthResponse(service, platformTarget, env.SPLITCH_DEPLOYED_COMMIT_SHA),
+      );
+    },
+  },
+});
 
 const controlPlaneHandler = {
   async fetch(request, env, ctx): Promise<Response> {
@@ -138,11 +147,7 @@ async function handleRequest(
   const url = new URL(request.url);
   const platformTarget = requirePlatformTarget(env.SPLITCH_PLATFORM_TARGET);
   const saltStore = makeEnvSaltStore(env);
-  if (url.pathname === "/health" || url.pathname === "/") {
-    return Response.json(
-      createHealthResponse(service, platformTarget, env.SPLITCH_DEPLOYED_COMMIT_SHA),
-    );
-  }
+
   const exposureRedemptionClaims = requiredExposureRedemptionClaimsBinding(
     env.EXPOSURE_REDEMPTION_CLAIMS,
   );

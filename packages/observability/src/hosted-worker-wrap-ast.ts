@@ -15,20 +15,20 @@ export function locationOf(file: SourceFile, node: Node): string {
   return `${file.fileName}:${line + 1}:${character + 1}`;
 }
 
-export function unwrap(expression: Expression): Expression {
+export function unwrap(expression: Expression, { allowAwait = true } = {}): Expression {
   let current = expression;
   for (;;) {
-    const next = unwrapOnce(current);
+    const next = unwrapOnce(current, allowAwait);
     if (!next) return current;
     current = next;
   }
 }
 
-function unwrapOnce(expression: Expression): Expression | undefined {
+function unwrapOnce(expression: Expression, allowAwait: boolean): Expression | undefined {
   if (isParenthesizedExpression(expression)) return expression.expression;
   if (isAsExpression(expression) || isSatisfiesExpression(expression)) return expression.expression;
-  if (isNonNullExpression(expression) || isAwaitExpression(expression))
-    return expression.expression;
+  if (isNonNullExpression(expression)) return expression.expression;
+  if (allowAwait && isAwaitExpression(expression)) return expression.expression;
   if (isTypeAssertionExpression(expression)) return expression.expression;
   return undefined;
 }

@@ -1,4 +1,8 @@
-import { readAccessTokenRevocation } from "@splitch/contracts";
+import {
+  createHealthResponse,
+  readAccessTokenRevocation,
+  requirePlatformTarget,
+} from "@splitch/contracts";
 import { createMcpSpanRecorder } from "@splitch/observability/mcp-spans";
 import {
   activeTraceId,
@@ -7,7 +11,7 @@ import {
   wrapWorkerHandler,
 } from "@splitch/observability/worker";
 import { mcpFaultReporter } from "./mcp-fault";
-import { handleMcpServerRequest } from "./mcp-handler";
+import { authIssuer, handleMcpServerRequest } from "./mcp-handler";
 import { McpSessionDurableObject } from "./mcp-session-do";
 import { durableMcpSessionStore, type McpSessionDurableObjectNamespace } from "./mcp-session-store";
 
@@ -70,7 +74,26 @@ const handler = {
   },
 } satisfies ExportedHandler<Env>;
 
-export default wrapWorkerHandler(handler, { surface: "mcp-server" });
+export default wrapWorkerHandler(handler, {
+  surface: "mcp-server",
+  health: {
+    paths: ["/health"],
+    respond(env) {
+      requiredSessionStore(env.SESSION_STORE);
+      authIssuer(
+        env.MCP_OAUTH_AUTHORIZATION_SERVER ?? env.AUTH_API_ORIGIN,
+        env.SPLITCH_PLATFORM_TARGET,
+      );
+      return Response.json(
+        createHealthResponse(
+          service,
+          requirePlatformTarget(env.SPLITCH_PLATFORM_TARGET),
+          env.SPLITCH_DEPLOYED_COMMIT_SHA,
+        ),
+      );
+    },
+  },
+});
 
 export { handleMcpServerRequest, McpSessionDurableObject };
 

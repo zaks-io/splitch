@@ -275,6 +275,16 @@ describe("index.ts: hosted ACCESS_TOKEN_SECRET signability is config, not a mint
         error_description: "ACCESS_TOKEN_SECRET is not a usable RS256 signing key",
       });
     }
+    const health = await worker.fetch(
+      new Request("https://auth.splitch.test/health") as never,
+      { ...hostedEnv, SENTRY_DSN: "https://example@sentry.io/1" },
+      testCtx,
+    );
+    expect(health.status).toBe(500);
+    expect(await health.json()).toEqual({
+      error: "server_error",
+      error_description: "ACCESS_TOKEN_SECRET is not a usable RS256 signing key",
+    });
     expect(logged).toHaveBeenCalled();
   });
 
