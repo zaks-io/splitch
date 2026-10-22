@@ -67,7 +67,14 @@ spec grants no stale identity window or immutable identity read here. Assignment
 separate tolerated window at lines 107-108, but that does not authorize caching flag or identity
 reads. Credential revocation reads retain their existing freshness behavior too.
 
-## Evidence and remaining hosted check
+## Failure policy
+
+The probe fails on transport errors, the 15-second request timeout, non-2xx responses and
+responses without a Variant. It has no latency threshold. The specs define no Evaluation response
+latency SLO, and the five-second propagation contract is not an HTTP latency budget. Latency
+trends come from the probe's native Worker traces. Add a threshold only with an agreed SLO.
+
+## Baseline evidence
 
 A manual run against the existing shared-preview seed on 2026-10-22 completed all five requests.
 Latencies were 5755.47, 1118.71, 801.34, 1403.42 and 1030.91 ms. Median was 1118.71 ms and
@@ -79,8 +86,3 @@ The [native trace for the fifth request](https://zaksio.sentry.io/explore/traces
 has `url.path:/api/sdk/evaluate`, `cloudflare.ray_id:a4eb6ac1df496387` and
 `resource.service.name:splitch-evaluation-api-shared-preview`. Its native invocation took
 1037 ms and contains 43 spans with no errors. The Ray ID matches the probe's fifth measurement.
-
-This branch has not been deployed. After an owner-approved shared-preview deployment, capture a
-verify trace containing the new revalidation span and native `kv.cache_status` on supported
-reads. That screenshot or Sentry link remains required hosted acceptance evidence. No production
-probe or workflow dispatch has run for this change.
