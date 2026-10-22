@@ -1,6 +1,10 @@
 import { isLocalPlatformTarget, requirePlatformTarget } from "@splitch/contracts";
 import { type McpSpanRecorder, noopMcpSpanRecorder } from "@splitch/observability/mcp-spans";
 import {
+  noopPerformanceSpanRecorder,
+  type PerformanceSpanRecorder,
+} from "@splitch/observability/performance-spans";
+import {
   JSON_RPC_METHOD_NOT_FOUND,
   type JsonRpcRequest,
   type JsonRpcResponse,
@@ -13,13 +17,10 @@ import {
   type McpAccessTokenVerifier,
   makeHttpMcpAccessTokenVerifier,
 } from "./mcp-access-token";
+import { authenticateMcpBearer } from "./mcp-authentication";
 import type { McpEffectiveAuthority } from "./mcp-capabilities";
 import { localMcpFaultReporter, type McpFaultReporter } from "./mcp-fault";
 import { createControlPlaneOperationSdk, type OperationSdkResolver } from "./mcp-operation-sdks";
-import {
-  looksLikePersonalAccessToken,
-  verifyPersonalAccessToken,
-} from "./mcp-personal-access-token";
 import { PROMPT_DEFINITIONS } from "./mcp-prompt-types";
 import { getMcpPromptRpc, listMcpPrompts } from "./mcp-prompts";
 import { readJsonRpcRequest } from "./mcp-request";
@@ -30,6 +31,7 @@ import {
   type McpSessionStore,
   parseToolCall,
 } from "./mcp-session-context";
+import { instrumentMcpSessionStore } from "./mcp-session-spans";
 import { callTool, type McpToolCallFault } from "./mcp-tool-call";
 import { withToolCallResultMeta } from "./mcp-tool-result-meta";
 import { corsHeaders, jsonResponse, routeTransportRequest } from "./mcp-transport";
@@ -65,42 +67,36 @@ export interface McpServerRequestOptions {
   readonly fetchAuthMarkdown?: (authBaseUrl: string) => Promise<string>;
   readonly now?: () => number;
   readonly spans?: McpSpanRecorder;
+  readonly performanceSpans?: PerformanceSpanRecorder;
   readonly reportFault?: McpFaultReporter;
 }
 
 export async function handleMcpServerRequest(options: McpServerRequestOptions): Promise<Response> {
   let actor: McpAccessTokenActor | null = null;
+  const performanceSpans = options.performanceSpans ?? noopPerformanceSpanRecorder;
+  const sessionStore = options.sessionStore
+    ? instrumentMcpSessionStore(options.sessionStore, performanceSpans)
+    : undefined;
   const verifier = options.tokenVerifier ?? defaultTokenVerifier(options);
   const transportResponse = await routeTransportRequest({
     ...options,
+    sessionStore,
     authenticateBearer: async (authorization, audience) => {
-      const nowMs = options.now?.() ?? Date.now();
-      if (looksLikePersonalAccessToken(authorization)) {
-        // A PAT is not a session token: CLI logout's session-revocation marker
-        // does not apply to it. It is revoked on its own, durably, in D1.
-        const verified = await verifyPersonalAccessToken(
-          requiredPersonalAccessTokenStore(options.personalAccessTokens),
-          authorization,
-          nowMs,
-        );
-        if (!verified.ok) return { refused: verified.description };
-        actor = verified.actor;
+      const result = await authenticateMcpBearer(options, verifier, authorization, audience);
+      if (result && !("refused" in result)) {
+        actor = result;
         return actor.subject;
       }
-      actor = await verifier.verify(authorization, audience, Math.floor(nowMs / 1000));
-      if (
-        actor &&
-        (await requiredRevocations(options.revocations).isRevoked(actor.subject, actor.issuedAt))
-      ) {
-        actor = null;
-      }
-      return actor?.subject ?? null;
+      return result;
     },
   });
   if (transportResponse) return transportResponse;
   if (!actor) throw new Error("mcp-server: authenticated request has no verified actor");
 
-  const request = await readJsonRpcRequest(options.request);
+  const request = await performanceSpans.record(
+    { name: "mcp.request.parse", op: "serialize" },
+    () => readJsonRpcRequest(options.request),
+  );
   if (!request.ok) {
     return jsonResponse(request.response, request.status);
   }
@@ -109,22 +105,35 @@ export async function handleMcpServerRequest(options: McpServerRequestOptions): 
   }
 
   const controlPlane = createControlPlaneOperationSdk(options);
-  const sessionStore = options.sessionStore ?? unconfiguredSessionStore;
   const sessionId = options.request.headers.get("mcp-session-id");
-  const response = await dispatch(
-    request.value,
-    controlPlane,
-    actor,
-    sessionId,
-    sessionStore,
-    options,
-    options.reportFault ?? localMcpFaultReporter(),
+  const verifiedActor = actor;
+  const protocolSessionStore = sessionStore ?? unconfiguredSessionStore;
+  return (options.spans ?? noopMcpSpanRecorder).record(
+    {
+      method: request.value.method,
+      subject: spanSubject(request.value),
+      clientName: initializeClientName(request.value),
+    },
+    async (span) => {
+      const response = await dispatchMethod(
+        request.value,
+        controlPlane,
+        verifiedActor,
+        sessionId,
+        protocolSessionStore,
+        options,
+        {
+          reportFault: options.reportFault ?? localMcpFaultReporter(),
+          span,
+        },
+      );
+      const responseSessionId =
+        request.value.method === "initialize"
+          ? await createBoundSession(protocolSessionStore, verifiedActor)
+          : undefined;
+      return jsonResponse(response, 200, responseSessionId);
+    },
   );
-  const responseSessionId =
-    request.value.method === "initialize"
-      ? await createBoundSession(sessionStore, actor)
-      : undefined;
-  return jsonResponse(response, 200, responseSessionId);
 }
 
 export function defaultTokenVerifier(
@@ -147,49 +156,17 @@ export function defaultTokenVerifier(
   });
 }
 
-function requiredPersonalAccessTokenStore(
-  store: Pick<KVNamespace, "get"> | undefined,
-): Pick<KVNamespace, "get"> {
-  if (!store)
-    throw new Error("mcp-server: SESSION_STORE personal access token binding is required");
-  return store;
-}
-
-function requiredRevocations(revocations: McpRevocationReader | undefined): McpRevocationReader {
-  if (!revocations) throw new Error("mcp-server: SESSION_STORE revocation binding is required");
-  return revocations;
-}
-
-/**
- * Every MCP method gets a span, not just `tools/call`. From an agent's side
- * `resources/read` and `prompts/get` are the same kind of call and fail the same
- * ways, and the span costs one wrapper either way -- instrumenting only tools
- * would leave two thirds of the protocol surface as an undifferentiated
- * `POST /mcp`.
- *
- * The subject (tool name, resource URI, prompt name) is resolved BEFORE dispatch
- * so a span exists even for a call that then fails validation. `spanSubject`
- * resolves it against a contract-derived closed set, so span names stay bounded
- * in cardinality and carry no caller text.
- */
-async function dispatch(
-  request: JsonRpcRequest,
-  controlPlane: OperationSdkResolver,
-  actor: McpAccessTokenActor,
-  sessionId: string | null,
-  sessionStore: McpSessionStore,
-  options: McpServerRequestOptions,
-  reportFault: McpFaultReporter,
-): Promise<JsonRpcResponse> {
-  const spans = options.spans ?? noopMcpSpanRecorder;
-  return spans.record(
-    { method: request.method, subject: spanSubject(request), sessionId },
-    (span) =>
-      dispatchMethod(request, controlPlane, actor, sessionId, sessionStore, options, {
-        reportFault,
-        span,
-      }),
-  );
+function initializeClientName(request: JsonRpcRequest): string | undefined {
+  if (
+    request.method !== "initialize" ||
+    typeof request.params !== "object" ||
+    request.params === null
+  )
+    return undefined;
+  const clientInfo = (request.params as Record<string, unknown>).clientInfo;
+  if (typeof clientInfo !== "object" || clientInfo === null) return undefined;
+  const name = (clientInfo as Record<string, unknown>).name;
+  return typeof name === "string" ? name.trim().slice(0, 64) || undefined : undefined;
 }
 
 /**

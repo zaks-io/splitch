@@ -214,3 +214,34 @@ describe("activeTraceId", () => {
     ).resolves.toBeUndefined();
   });
 });
+
+it("allows only the bounded MCP client name through and still scrubs its string", () => {
+  const options = workerSentryOptions({}, { surface: "mcp-server" }, mockSentryModule());
+  const scrubbed = options.beforeSendSpan({
+    name: "initialize",
+    attributes: {
+      "mcp.client.name": "Claude Code",
+      "mcp.client.version": "private-version",
+      "clientInfo.version": "private-version",
+      "clientInfo.name": "private-name",
+      "mcp.session.id": "private-session",
+      "user.id": "private-user",
+      authorization: "private-token",
+    },
+  } as never);
+  expect(scrubbed.attributes).toEqual({
+    "resource.service.name": "splitch-mcp-server",
+    "mcp.client.name": "Claude Code",
+    "mcp.client.version": "[Redacted]",
+    "clientInfo.version": "[Redacted]",
+    "clientInfo.name": "[Redacted]",
+    "mcp.session.id": "[Redacted]",
+    "user.id": "[Redacted]",
+    authorization: "[Redacted]",
+  });
+  const sensitive = options.beforeSendSpan({
+    name: "initialize",
+    attributes: { "mcp.client.name": "person@example.com" },
+  } as never);
+  expect(JSON.stringify(sensitive)).not.toContain("person@example.com");
+});

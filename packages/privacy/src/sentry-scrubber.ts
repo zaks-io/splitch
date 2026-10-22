@@ -115,7 +115,8 @@ const ALLOWED_SPAN_KEYS = new Set<string>([
 /**
  * Span attributes vouched for by name. Every one is either a closed set derived
  * from the API contract (tool/prompt/resource names, MCP method names) or a
- * boolean/count, so none can carry customer data.
+ * boolean/count. The caller-supplied MCP client name is the exception: its string
+ * still goes through value scrubbing.
  *
  * `mcp.request.argument.*` and `mcp.tool.result.content` are absent BY DESIGN, not
  * by omission: Sentry gates them behind `recordInputs`/`recordOutputs`, and our
@@ -137,6 +138,7 @@ const ALLOWED_SPAN_ATTRIBUTE_KEYS = new Set<string>([
   "sentry.status.message",
   "db.system.name",
   "mcp.method.name",
+  "mcp.client.name",
   "mcp.tool.name",
   "mcp.resource.uri",
   "mcp.prompt.name",
@@ -180,6 +182,8 @@ function scrubSpanAttribute(
   isHttpClient: boolean,
   options: ScrubOptions,
 ): unknown {
+  if (key === "mcp.client.name")
+    return typeof value === "string" ? scrubValue(value, options) : REDACTED;
   if (ALLOWED_SPAN_ATTRIBUTE_KEYS.has(key)) return value;
   if (key === "sentry.segment.name") return isHttpClient ? REDACTED : scrubValue(value, options);
   // Sentry's fetch integration records full URLs and query strings under
