@@ -22,6 +22,7 @@ import {
 } from "./request-error-sentry.js";
 import { loadSentry, type SentryCloudflare } from "./sentry-module.js";
 import type { ObservabilitySurfaceId } from "./surfaces.js";
+import { nameWorkerRouteSpans } from "./worker-route-spans.js";
 
 // biome-ignore lint/performance/noBarrelFile: shared fault detail is part of the Worker observability API
 export { serializeFault } from "./serialize-fault.js";
@@ -36,19 +37,24 @@ type SentryErrorEvent = import("@sentry/cloudflare").ErrorEvent;
 type SentrySpanJson = Parameters<
   NonNullable<import("@sentry/cloudflare").CloudflareOptions["beforeSendSpan"]>
 >[0];
+type SamplingContext = Parameters<
+  NonNullable<import("@sentry/cloudflare").CloudflareOptions["tracesSampler"]>
+>[0];
 
 export interface WorkerObservabilityOptions {
   readonly surface: ObservabilitySurfaceId;
   readonly waitUntil?: (promise: Promise<unknown>) => void;
+  readonly tracing?: ExecutionContext["tracing"];
 }
 
 /** Build Worker observability options from request context. */
 export function workerObservabilityWithWaitUntil(
   surface: ObservabilitySurfaceId,
-  ctx: Pick<ExecutionContext, "waitUntil">,
+  ctx: Pick<ExecutionContext, "waitUntil"> & Partial<Pick<ExecutionContext, "tracing">>,
 ): WorkerObservabilityOptions {
   return {
     surface,
+    tracing: ctx.tracing,
     waitUntil: (promise) => ctx.waitUntil(promise),
   };
 }
@@ -88,7 +94,12 @@ export function workerSentryOptions(
     dsn: secrets.sentryDsn,
     environment: secrets.environment,
     release: env.SENTRY_RELEASE,
-    tracesSampleRate: 1,
+    tracesSampler({ name, attributes, inheritOrSampleWith }: SamplingContext) {
+      if (name === "scheduled" && attributes["faas.trigger"] === "timer") return 0;
+      return inheritOrSampleWith(1);
+    },
+    // Native tracing owns D1; custom database spans and propagation spans stay.
+    ignoreSpans: [{ attributes: { "sentry.origin": /^auto\.db\.cloudflare\.d1$/ } }],
     propagateTraceparent: true,
     rpcTracePropagationBindings: [/.*/],
     traceLifecycle: "stream" as const,
@@ -272,6 +283,7 @@ export function createWorkerObservability(
   const emitter = workerEmitter(env, options, { onStructuredLogEvents: emitToWorkersLogs });
   return {
     onRequest(ctx: { requestId: string; method: string; path: string }) {
+      nameWorkerRouteSpans(env, options, ctx);
       emitter.log("info", "request", ctx);
     },
     onError(ctx: RequestErrorContext) {

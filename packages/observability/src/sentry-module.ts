@@ -13,6 +13,11 @@ export type SentryCloudflare = typeof import("@sentry/cloudflare");
 let sentryModule: SentryCloudflare | undefined;
 let sentryModuleOverride: SentryCloudflare | undefined;
 
+/** Read the initialized SDK from synchronous hooks without loading it. */
+export function loadedSentry(): SentryCloudflare | undefined {
+  return sentryModule;
+}
+
 /** @internal Injects a Sentry client for unit tests. */
 export function __setSentryModuleForTests(module: SentryCloudflare | undefined): void {
   sentryModuleOverride = module;
