@@ -59,7 +59,9 @@ export function makeVerifyHandler(
       admittedEvaluatePathDeps(deps, admitted.admission),
       provider,
     );
-    const stale = await appIdentityAdmissionValidationError(admitted.admission);
+    const stale = await spans.record({ name: "Verify identity revalidation", op: "auth" }, () =>
+      appIdentityAdmissionValidationError(admitted.admission),
+    );
     if (stale !== null) return renderError(stale, { requestId });
     return verifyResponse(
       evaluated,
