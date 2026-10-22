@@ -10,7 +10,6 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
-import { Route as HealthRouteImport } from './routes/health'
 import { Route as KitchenSinkRouteImport } from './routes/kitchen-sink'
 import { Route as RobotsDottxtRouteImport } from './routes/robots[.]txt'
 import { Route as OrgSlugIndexRouteImport } from './routes/$orgSlug.index'
@@ -49,11 +48,6 @@ import { Route as OrgSlugAppSlugEnvExperimentsExperimentIdRunsRunIdSetupRouteImp
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const HealthRoute = HealthRouteImport.update({
-  id: '/health',
-  path: '/health',
   getParentRoute: () => rootRouteImport,
 } as any)
 const KitchenSinkRoute = KitchenSinkRouteImport.update({
@@ -252,7 +246,6 @@ const OrgSlugAppSlugEnvExperimentsExperimentIdRunsRunIdSetupRoute =
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
-  '/health': typeof HealthRoute
   '/kitchen-sink': typeof KitchenSinkRoute
   '/robots.txt': typeof RobotsDottxtRoute
   '/$orgSlug/billing': typeof OrgSlugBillingRoute
@@ -290,7 +283,6 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
-  '/health': typeof HealthRoute
   '/kitchen-sink': typeof KitchenSinkRoute
   '/robots.txt': typeof RobotsDottxtRoute
   '/$orgSlug/billing': typeof OrgSlugBillingRoute
@@ -324,7 +316,6 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
-  '/health': typeof HealthRoute
   '/kitchen-sink': typeof KitchenSinkRoute
   '/robots.txt': typeof RobotsDottxtRoute
   '/$orgSlug/billing': typeof OrgSlugBillingRoute
@@ -364,7 +355,6 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
-    | '/health'
     | '/kitchen-sink'
     | '/robots.txt'
     | '/$orgSlug/billing'
@@ -402,7 +392,6 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
-    | '/health'
     | '/kitchen-sink'
     | '/robots.txt'
     | '/$orgSlug/billing'
@@ -435,7 +424,6 @@ export interface FileRouteTypes {
   id:
     | '__root__'
     | '/'
-    | '/health'
     | '/kitchen-sink'
     | '/robots.txt'
     | '/$orgSlug/billing'
@@ -474,7 +462,6 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
-  HealthRoute: typeof HealthRoute
   KitchenSinkRoute: typeof KitchenSinkRoute
   RobotsDottxtRoute: typeof RobotsDottxtRoute
   OrgSlugBillingRoute: typeof OrgSlugBillingRoute
@@ -497,13 +484,6 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/health': {
-      id: '/health'
-      path: '/health'
-      fullPath: '/health'
-      preLoaderRoute: typeof HealthRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/kitchen-sink': {
@@ -861,7 +841,6 @@ const OrgSlugAppSlugEnvRouteWithChildren =
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
-  HealthRoute: HealthRoute,
   KitchenSinkRoute: KitchenSinkRoute,
   RobotsDottxtRoute: RobotsDottxtRoute,
   OrgSlugBillingRoute: OrgSlugBillingRoute,

@@ -11,10 +11,7 @@ import {
   workerObservabilityWithWaitUntil,
   wrapWorkerHandler,
 } from "@splitch/observability/worker";
-import {
-  assertAccessTokenSecretCanSign,
-  makeEphemeralAccessTokenPrivateJwk,
-} from "./access-token-key";
+import { accessTokenSecret } from "./access-token-key";
 import { createApp } from "./app";
 import { AuthAbuseRateLimitDurableObject } from "./auth-abuse-rate-limit-do";
 import { makeFixtureDeviceFlow, makeWorkOsDeviceFlow } from "./device-flow";
@@ -52,8 +49,6 @@ const fixtureTurnstile = makeFixtureTurnstile();
 const localAnonymousRateLimiter = makeRateLimiter();
 const localDeviceAuthorizationRateLimiter = makeRateLimiter();
 const idempotency = makeIdempotencyStore();
-let localAccessTokenSecret: Promise<string> | undefined;
-let signableAccessTokenSecret: string | undefined;
 
 const handler = {
   async fetch(request, env, ctx): Promise<Response> {
@@ -62,53 +57,9 @@ const handler = {
       env,
       workerObservabilityWithWaitUntil("auth-api", ctx),
     );
-    const origin = configuredAuthApiOrigin(env);
-    if (!origin) {
-      return Response.json(
-        {
-          error: "server_error",
-          error_description: "AUTH_API_ORIGIN must be a canonical Auth API origin",
-        },
-        { status: 500 },
-      );
-    }
-    if (!authRuntimeConfigured(env, origin)) {
-      return Response.json(
-        { error: "server_error", error_description: "hosted auth configuration is incomplete" },
-        { status: 500 },
-      );
-    }
-    const turnstile = makeRuntimeTurnstile({
-      fixture: fixtureTurnstile,
-      platformTarget: env.SPLITCH_PLATFORM_TARGET,
-      secret: env.TURNSTILE_SECRET,
-    });
-    // Resolved before /health answers: a Worker whose signing key cannot mint a
-    // token is not healthy, and health is the probe an operator reaches for
-    // first. The reason travels in the body so the diagnosis does not require
-    // reading logs; the cause is logged because the body must not carry it.
-    let accessSecret: string;
-    try {
-      accessSecret = await accessTokenSecret(env);
-    } catch (cause) {
-      console.error("auth-api access-token key is unusable", cause);
-      return Response.json(
-        {
-          error: "server_error",
-          error_description: "ACCESS_TOKEN_SECRET is not a usable RS256 signing key",
-        },
-        { status: 500 },
-      );
-    }
-    if (url.pathname === "/health" || url.pathname === "/") {
-      return Response.json(
-        createHealthResponse(
-          service,
-          parsePlatformTarget(env.SPLITCH_PLATFORM_TARGET),
-          env.SPLITCH_DEPLOYED_COMMIT_SHA,
-        ),
-      );
-    }
+    const runtime = await authRuntime(env);
+    if (runtime instanceof Response) return runtime;
+    const { origin, turnstile, accessSecret } = runtime;
 
     const repo = createRepository(env.DB);
     const controlPlaneAudience = env.CONTROL_PLANE_ORIGIN ?? "http://localhost:8787";
@@ -189,7 +140,65 @@ const handler = {
   },
 } satisfies ExportedHandler<AuthApiEnv>;
 
-export default wrapWorkerHandler(handler, { surface: "auth-api" });
+export default wrapWorkerHandler(handler, {
+  surface: "auth-api",
+  health: {
+    paths: ["/", "/health"],
+    async respond(env) {
+      const runtime = await authRuntime(env);
+      if (runtime instanceof Response) return runtime;
+      return Response.json(
+        createHealthResponse(
+          service,
+          parsePlatformTarget(env.SPLITCH_PLATFORM_TARGET),
+          env.SPLITCH_DEPLOYED_COMMIT_SHA,
+        ),
+      );
+    },
+  },
+});
+
+async function authRuntime(env: AuthApiEnv) {
+  const origin = configuredAuthApiOrigin(env);
+  if (!origin) {
+    return Response.json(
+      {
+        error: "server_error",
+        error_description: "AUTH_API_ORIGIN must be a canonical Auth API origin",
+      },
+      { status: 500 },
+    );
+  }
+  if (!authRuntimeConfigured(env, origin)) {
+    return Response.json(
+      { error: "server_error", error_description: "hosted auth configuration is incomplete" },
+      { status: 500 },
+    );
+  }
+  const turnstile = makeRuntimeTurnstile({
+    fixture: fixtureTurnstile,
+    platformTarget: env.SPLITCH_PLATFORM_TARGET,
+    secret: env.TURNSTILE_SECRET,
+  });
+  // Resolved before /health answers: a Worker whose signing key cannot mint a
+  // token is not healthy, and health is the probe an operator reaches for
+  // first. The reason travels in the body so the diagnosis does not require
+  // reading logs; the cause is logged because the body must not carry it.
+  let accessSecret: string;
+  try {
+    accessSecret = await accessTokenSecret(env);
+  } catch (cause) {
+    console.error("auth-api access-token key is unusable", cause);
+    return Response.json(
+      {
+        error: "server_error",
+        error_description: "ACCESS_TOKEN_SECRET is not a usable RS256 signing key",
+      },
+      { status: 500 },
+    );
+  }
+  return { origin, turnstile, accessSecret };
+}
 
 export { AuthAbuseRateLimitDurableObject };
 
@@ -307,30 +316,4 @@ function workosAccessTokenVerifier(env: AuthApiEnv) {
     issuer: env.WORKOS_ISSUER,
     clientId: env.WORKOS_CLIENT_ID,
   });
-}
-
-/**
- * The signer is RS256-only (`accessTokenTrustContract: "rs256-jwks"` above), so a
- * secret that cannot import as an RS256 signing key can never mint a token.
- *
- * WHY this is checked at config time and not left to the signer: a presence-only
- * check boots a Worker that reports healthy and then throws on every single mint,
- * which reaches the caller as an opaque `server_error`. Production ran that way
- * with a leftover HMAC secret and no door could issue a token.
- *
- * Memoized on the value: the import is per-isolate work, not per-request.
- */
-async function accessTokenSecret(env: AuthApiEnv): Promise<string> {
-  if (env.ACCESS_TOKEN_SECRET) {
-    if (env.ACCESS_TOKEN_SECRET !== signableAccessTokenSecret) {
-      await assertAccessTokenSecretCanSign(env.ACCESS_TOKEN_SECRET);
-      signableAccessTokenSecret = env.ACCESS_TOKEN_SECRET;
-    }
-    return env.ACCESS_TOKEN_SECRET;
-  }
-  if (isLocalPlatformTarget(env.SPLITCH_PLATFORM_TARGET)) {
-    localAccessTokenSecret ??= makeEphemeralAccessTokenPrivateJwk();
-    return localAccessTokenSecret;
-  }
-  throw new Error("ACCESS_TOKEN_SECRET is required for hosted targets");
 }

@@ -83,11 +83,9 @@ describe("reserved Organization slugs vs the Panel router", () => {
     // that rejected ordinary route words, would each empty the checked list and
     // pass forever. So assert the raw scan AND the filtered list it checks.
     expect(topLevelStaticSegments()).toEqual(
-      expect.arrayContaining(["auth", "claim", "health", "robots.txt"]),
+      expect.arrayContaining(["auth", "claim", "robots.txt"]),
     );
-    expect(slugShapedSegments()).toEqual(
-      expect.arrayContaining(["auth", "claim", "health", "kitchen-sink"]),
-    );
+    expect(slugShapedSegments()).toEqual(expect.arrayContaining(["auth", "claim", "kitchen-sink"]));
   });
 
   it("fails loud if a directory route appears, whose segment this scan cannot see", () => {

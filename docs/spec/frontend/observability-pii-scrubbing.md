@@ -29,7 +29,11 @@ Trace context propagates across these hops:
 
 Set `propagateTraceparent: true` in the shared Worker and browser options. Preserve browser
 `tracePropagationTargets` restricted to same-origin server functions. Keep the existing sampling rate
-of `1` on both SDK and native traces. Worker `strictTraceContinuation` remains enabled, so traces
+of `1` on native and browser traces. Worker SDK tracing inherits parent sampling decisions and
+otherwise samples at `1`, except scheduled roots (`scheduled` with `faas.trigger: "timer"`), which
+sample at `0`. Scheduled errors still reach `captureException` independently of trace sampling.
+Native tracing owns D1 spans; the SDK drops automatic D1 spans by their exact `sentry.origin`
+`auto.db.cloudflare.d1`. Custom performance, Durable Object, RPC, and service-binding spans remain. Worker `strictTraceContinuation` remains enabled, so traces
 from a different Sentry organization start a new trace. This check is a telemetry policy, not
 authentication: incoming baggage is caller-controlled.
 
@@ -203,6 +207,15 @@ values do not match a PII pattern. Error trace contexts retain Sentry's static `
 still pass through the same strict attribute scrubber. A privacy event processor rejects
 transaction events before Sentry's error-only hook can be bypassed.
 
+In stream mode, `ignoreSpans` matches the automatic D1 origin at span creation. The D1
+`startSpan` callback keeps its retained parent active, so child spans attach to that parent.
+`beforeSendSpan` still scrubs every recorded span. Registrar-matched requests in the Control Plane,
+Evaluation, and Analysis Workers name native and SDK root spans `METHOD /route/template` and set
+`http.route` to the template. Only native export retains the `http.route` attribute; the unchanged
+SDK scrubber redacts it. The SDK root name retains the route template for Sentry grouping.
+Unmatched requests and non-registrar Workers keep their existing names;
+concrete request paths never supply route names.
+
 `rpcTracePropagationBindings: [/.*/]` preserves RPC propagation across all bindings. All eight
 Worker configurations already include `nodejs_compat`, which v11 requires.
 
@@ -256,7 +269,7 @@ Worker configuration contains only destination names.
 
 Native Cloudflare telemetry does not pass through the application Sentry scrubber. Set
 `observability.redact_query_string: true` on every target to remove query strings from native request
-URLs before export. Keep both signals enabled, their existing sampling rate of `1`, and
+URLs before export. Keep both native signals enabled, their existing sampling rate of `1`, and
 `persist: false` so Cloudflare does not also retain them.
 
 See [Cloudflare OpenTelemetry export](https://developers.cloudflare.com/workers/observability/exporting-opentelemetry-data/)

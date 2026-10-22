@@ -7,17 +7,6 @@ const service = "splitch-mcp-server";
 const owner = "user_owner";
 
 describe("MCP transport authenticator requirement", () => {
-  it("serves health without an authenticator", async () => {
-    const response = await routeTransportRequest({
-      request: new Request("https://mcp.test/health"),
-      service,
-      platformTarget: "local",
-    });
-
-    expect(response?.status).toBe(200);
-    expect(await response?.json()).toMatchObject({ service });
-  });
-
   it.each(["GET", "POST", "DELETE"] as const)(
     "fails closed on protected %s when authenticateBearer is missing",
     async (method) => {

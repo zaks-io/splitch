@@ -1,4 +1,8 @@
-import { readAccessTokenRevocation } from "@splitch/contracts";
+import {
+  createHealthResponse,
+  readAccessTokenRevocation,
+  requirePlatformTarget,
+} from "@splitch/contracts";
 import { createMcpSpanRecorder } from "@splitch/observability/mcp-spans";
 import {
   activeTraceId,
@@ -7,7 +11,7 @@ import {
   wrapWorkerHandler,
 } from "@splitch/observability/worker";
 import { mcpFaultReporter } from "./mcp-fault";
-import { handleMcpServerRequest } from "./mcp-handler";
+import { defaultTokenVerifier, handleMcpServerRequest } from "./mcp-handler";
 import { McpSessionDurableObject } from "./mcp-session-do";
 import { durableMcpSessionStore, type McpSessionDurableObjectNamespace } from "./mcp-session-store";
 
@@ -52,12 +56,7 @@ const handler = {
       request,
       service,
       deployedCommitSha: env.SPLITCH_DEPLOYED_COMMIT_SHA,
-      platformTarget: env.SPLITCH_PLATFORM_TARGET,
-      authBaseUrl: env.AUTH_API_ORIGIN,
-      oauthAuthorizationServer: env.MCP_OAUTH_AUTHORIZATION_SERVER,
-      oauthJwksUrl: env.MCP_OAUTH_AUTHORIZATION_SERVER
-        ? `${new URL(env.MCP_OAUTH_AUTHORIZATION_SERVER).origin}/oauth2/jwks`
-        : undefined,
+      ...authOptions(env),
       controlPlaneBaseUrl: env.CONTROL_PLANE_API_ORIGIN,
       controlPlaneFetch: serviceBindingFetch(env.CONTROL_PLANE_API),
       controlPlaneDelegationSecret: env.MCP_CONTROL_PLANE_DELEGATION_SECRET,
@@ -70,9 +69,36 @@ const handler = {
   },
 } satisfies ExportedHandler<Env>;
 
-export default wrapWorkerHandler(handler, { surface: "mcp-server" });
+export default wrapWorkerHandler(handler, {
+  surface: "mcp-server",
+  health: {
+    paths: ["/health"],
+    respond(env) {
+      requiredSessionStore(env.SESSION_STORE);
+      defaultTokenVerifier(authOptions(env));
+      return Response.json(
+        createHealthResponse(
+          service,
+          requirePlatformTarget(env.SPLITCH_PLATFORM_TARGET),
+          env.SPLITCH_DEPLOYED_COMMIT_SHA,
+        ),
+      );
+    },
+  },
+});
 
 export { handleMcpServerRequest, McpSessionDurableObject };
+
+function authOptions(env: Env) {
+  return {
+    platformTarget: env.SPLITCH_PLATFORM_TARGET,
+    authBaseUrl: env.AUTH_API_ORIGIN,
+    oauthAuthorizationServer: env.MCP_OAUTH_AUTHORIZATION_SERVER,
+    oauthJwksUrl: env.MCP_OAUTH_AUTHORIZATION_SERVER
+      ? `${new URL(env.MCP_OAUTH_AUTHORIZATION_SERVER).origin}/oauth2/jwks`
+      : undefined,
+  };
+}
 
 function serviceBindingFetch(service: Fetcher | undefined): typeof fetch | undefined {
   if (!service) {
