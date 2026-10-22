@@ -1,9 +1,9 @@
 import {
-  mcpSpanAttributes,
-  mcpSpanName,
   type McpSpanDescriptor,
   type McpSpanHandle,
   type McpSpanRecorder,
+  mcpSpanAttributes,
+  mcpSpanName,
 } from "@splitch/observability/mcp-spans";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { handleMcpServerRequest, type McpServerRequestOptions } from "./mcp-handler";
@@ -127,12 +127,13 @@ describe("MCP protocol spans", () => {
     ]);
   });
 
-  it("carries the session id when the call runs inside a session", async () => {
+  it("keeps the session id out of spans when the call runs inside a session", async () => {
     const spans = recordingSpans();
     const sessionId = await sessionStore.create("user_local_test", { authDoor: "id_jag" });
     await rpc("tools/list", {}, { spans, sessionId });
 
-    expect(spans.recorded[0]?.attributes["mcp.session.id"]).toBe(sessionId);
+    expect(spans.recorded[0]?.attributes).not.toHaveProperty("mcp.session.id");
+    expect(JSON.stringify(spans.recorded)).not.toContain(sessionId);
   });
 
   /**
@@ -308,3 +309,47 @@ async function rpc(method: string, params: unknown, options: ProbeOptions = {}):
   });
   return await response.json();
 }
+
+it.each([
+  ["  CODEX-MCP-CLIENT  ", "codex"],
+  ["codex", "codex"],
+  ["MCP-Inspector", "mcp-inspector"],
+  ["other", "other"],
+  ["user_7f3c9a2b", "other"],
+  ["550e8400-e29b-41d4-a716-446655440000", "other"],
+  ["2001:db8:85a3::8a2e:370:7334", "other"],
+  ["Private workspace for the confidential acquisition planning team. ".repeat(4), "other"],
+  ["person@example.com", "other"],
+  ["codex-mcp-client private workspace", "other"],
+  ["", "other"],
+])(
+  "canonicalizes initialize client %j to %s without client versions or extra fields",
+  async (name, expected) => {
+    const spans = recordingSpans();
+    await rpc(
+      "initialize",
+      {
+        clientInfo: {
+          name,
+          version: "private-version",
+          userId: "private-user",
+        },
+      },
+      { spans },
+    );
+    expect(spans.recorded[0]?.attributes["mcp.client.name"]).toBe(expected);
+    expect(JSON.stringify(spans.recorded)).not.toContain("private-");
+    await rpc("initialize", { clientInfo: { name: 42 } }, { spans });
+    await rpc("tools/list", { clientInfo: { name: "ignored" } }, { spans });
+    expect(spans.recorded[1]?.attributes).not.toHaveProperty("mcp.client.name");
+    expect(spans.recorded[2]?.attributes).not.toHaveProperty("mcp.client.name");
+  },
+);
+
+it("keeps unknown method text out of spans while preserving the protocol error", async () => {
+  const spans = recordingSpans();
+  const body = await rpc("private-method", {}, { spans });
+  expect(body).toMatchObject({ error: { code: -32601 } });
+  expect(spans.recorded[0]?.name).toBe("unknown");
+  expect(JSON.stringify(spans.recorded)).not.toContain("private-method");
+});

@@ -47,6 +47,20 @@ fields and sibling contexts. Otherwise valid hexadecimal IDs containing digit se
 mistaken for phone numbers and lose their trace association.
 Error-event trace attributes use the same strict attribute allow-list as transaction spans.
 
+MCP protocol spans wrap awaited method handling, response serialization, and session creation.
+Performance spans cover bearer verification, OAuth access-token verification including any JWKS or
+auth-api fetch, PAT verification, revocation reads, JSON-RPC parsing, and session Durable Object
+operations. Auth and parsing precede the protocol span and remain siblings under the request root.
+`tools/list` returns static definitions, so its duration can be near zero.
+
+Only initialize may record `mcp.client.name`. Its caller-supplied `clientInfo.name` maps to the
+shared closed set `codex`, `mcp-inspector`, or `other`. Matching trims whitespace and ignores case;
+the official wire alias `codex-mcp-client` maps to `codex`. Every unrecognized string maps to
+`other`, never raw or truncated caller text. The span export boundary independently accepts only
+exact canonical values from the same definition and replaces everything else with `other`.
+Client versions, user identifiers, tokens, and session IDs are never recorded by MCP
+instrumentation. No other client field is allow-listed.
+
 Current limitations: unwrapped WorkerEntrypoint RPC and Durable Object receivers do not continue SDK
 traces. Queue instrumentation records publish and batch-processing spans without carrying trace
 context in the message body. Alarms start independent traces; durable causal links require an explicit
@@ -218,10 +232,10 @@ transaction events before Sentry's error-only hook can be bypassed.
 In stream mode, `ignoreSpans` matches the automatic D1 origin at span creation. The D1
 `startSpan` callback keeps its retained parent active, so child spans attach to that parent.
 `beforeSendSpan` still scrubs every recorded span. Registrar-matched requests in the Control Plane,
-Evaluation, and Analysis Workers name native and SDK root spans `METHOD /route/template` and set
+Evaluation, and Analysis Workers, plus fixed MCP routes, name native and SDK root spans `METHOD /route/template` and set
 `http.route` to the template. Only native export retains the `http.route` attribute; the unchanged
 SDK scrubber redacts it. The SDK root name retains the route template for Sentry grouping.
-Unmatched requests and non-registrar Workers keep their existing names;
+Unmatched requests and other non-registrar Workers keep their existing names;
 concrete request paths never supply route names.
 
 `rpcTracePropagationBindings: [/.*/]` preserves RPC propagation across all bindings. All eight

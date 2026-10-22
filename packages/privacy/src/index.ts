@@ -82,6 +82,7 @@ export {
 } from "./entity-privacy";
 export type { TargetingKeyHashInput } from "./hash";
 export { computeTargetingKeyHash, keyVersionOf } from "./hash";
+export { canonicalizeMcpClientName } from "./mcp-client-name";
 export { isContainerKey, isLeafPiiKey, isPiiKey, REDACTED } from "./redaction-rules";
 export type { KeyVersion, SaltStore } from "./salt-store";
 export type { ScrubOptions } from "./scrubber";
