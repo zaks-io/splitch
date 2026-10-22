@@ -86,9 +86,14 @@ describe("cross-surface observability wiring", () => {
       join(repoRoot, "packages/observability/src/worker.ts"),
       "utf8",
     );
-    expect(wrapperSource).toContain("applyResponseHeaders");
-    expect(wrapperSource).toContain("WORKER_BASELINE_SECURITY_HEADERS");
-    expect(wrapperSource).toContain("HOSTED_PRODUCTION_SECURITY_HEADERS");
+    const securitySource = readFileSync(
+      join(repoRoot, "packages/observability/src/worker-security.ts"),
+      "utf8",
+    );
+    expect(wrapperSource).toContain('from "./worker-security.js"');
+    expect(securitySource).toContain("applyResponseHeaders");
+    expect(securitySource).toContain("WORKER_BASELINE_SECURITY_HEADERS");
+    expect(securitySource).toContain("HOSTED_PRODUCTION_SECURITY_HEADERS");
     expect(wrapperSource).toContain("productionHttpsRedirect");
     expect(wrapperSource).toContain("applyWorkerSecurityHeaders");
   });

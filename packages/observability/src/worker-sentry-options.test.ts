@@ -29,9 +29,36 @@ describe("workerSentryOptions", () => {
       release: "splitch-auth-api@abc123",
       rpcTracePropagationBindings: [/.*/],
       traceLifecycle: "stream",
-      tracesSampleRate: 1,
+      tracesSampler: expect.any(Function),
       propagateTraceparent: true,
     });
+  });
+
+  it("does not sample scheduled roots even with a sampled parent", () => {
+    const options = workerSentryOptions({}, { surface: "control-plane-api" }, mockSentryModule());
+    const inheritOrSampleWith = vi.fn(() => 1);
+    expect(
+      options.tracesSampler({
+        name: "scheduled",
+        attributes: { "faas.trigger": "timer", "sentry.op": "function" },
+        parentSampled: true,
+        inheritOrSampleWith,
+      }),
+    ).toBe(0);
+    expect(inheritOrSampleWith).not.toHaveBeenCalled();
+  });
+
+  it.each([0, 0.25, 1])("honors the inherited HTTP sampling rate %s", (rate) => {
+    const options = workerSentryOptions({}, { surface: "evaluation-api" }, mockSentryModule());
+    const inheritOrSampleWith = vi.fn(() => rate);
+    expect(
+      options.tracesSampler({
+        name: "GET",
+        attributes: { "sentry.op": "http.server" },
+        inheritOrSampleWith,
+      }),
+    ).toBe(rate);
+    expect(inheritOrSampleWith).toHaveBeenCalledWith(1);
   });
 
   it("drops Sentry's Console integration so fault rows are not double-sent", () => {
@@ -85,6 +112,18 @@ describe("workerSentryOptions", () => {
     expect(scrubbed.attributes["sentry.op"]).toBe("mcp.server");
     expect(scrubbed.attributes["mcp.tool.name"]).toBe("flags_list");
     expect(JSON.stringify(scrubbed).includes("leak@evil.com")).toBe(false);
+  });
+
+  it("preserves templated root names while redacting the SDK http.route attribute", () => {
+    const options = workerSentryOptions({}, { surface: "control-plane-api" }, mockSentryModule());
+    const template = "/api/apps/:appId/flags/:flagKey/config";
+    const scrubbed = options.beforeSendSpan({
+      name: `POST ${template}`,
+      attributes: { "sentry.op": "http.server", "http.route": template },
+    } as never);
+
+    expect(scrubbed.name).toBe(`POST ${template}`);
+    expect(scrubbed.attributes["http.route"]).toBe("[Redacted]");
   });
 
   it.each([

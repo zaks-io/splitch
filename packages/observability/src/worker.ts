@@ -1,10 +1,5 @@
 import type { SentryEventLike } from "@splitch/privacy";
-import {
-  applyResponseHeaders,
-  HOSTED_PRODUCTION_SECURITY_HEADERS,
-  type Observability,
-  WORKER_BASELINE_SECURITY_HEADERS,
-} from "@splitch/worker-runtime";
+import type { Observability } from "@splitch/worker-runtime";
 import {
   createScrubbedEmitter,
   createSentryBeforeSend,
@@ -23,6 +18,8 @@ import {
 import { loadSentry, type SentryCloudflare } from "./sentry-module.js";
 import type { ObservabilitySurfaceId } from "./surfaces.js";
 import { type WorkerHealthOptions, workerHealthResponse } from "./worker-health.js";
+import { nameWorkerRouteSpans } from "./worker-route-spans.js";
+import { applyWorkerSecurityHeaders, productionHttpsRedirect } from "./worker-security.js";
 
 // biome-ignore lint/performance/noBarrelFile: shared fault detail is part of the Worker observability API
 export { serializeFault } from "./serialize-fault.js";
@@ -37,10 +34,14 @@ type SentryErrorEvent = import("@sentry/cloudflare").ErrorEvent;
 type SentrySpanJson = Parameters<
   NonNullable<import("@sentry/cloudflare").CloudflareOptions["beforeSendSpan"]>
 >[0];
+type SamplingContext = Parameters<
+  NonNullable<import("@sentry/cloudflare").CloudflareOptions["tracesSampler"]>
+>[0];
 
 export interface WorkerObservabilityOptions {
   readonly surface: ObservabilitySurfaceId;
   readonly waitUntil?: (promise: Promise<unknown>) => void;
+  readonly tracing?: ExecutionContext["tracing"];
 }
 
 export interface WorkerHandlerOptions<E extends WorkerEnv> extends WorkerObservabilityOptions {
@@ -50,10 +51,11 @@ export interface WorkerHandlerOptions<E extends WorkerEnv> extends WorkerObserva
 /** Build Worker observability options from request context. */
 export function workerObservabilityWithWaitUntil(
   surface: ObservabilitySurfaceId,
-  ctx: Pick<ExecutionContext, "waitUntil">,
+  ctx: Pick<ExecutionContext, "waitUntil"> & Partial<Pick<ExecutionContext, "tracing">>,
 ): WorkerObservabilityOptions {
   return {
     surface,
+    tracing: ctx.tracing,
     waitUntil: (promise) => ctx.waitUntil(promise),
   };
 }
@@ -93,7 +95,12 @@ export function workerSentryOptions(
     dsn: secrets.sentryDsn,
     environment: secrets.environment,
     release: env.SENTRY_RELEASE,
-    tracesSampleRate: 1,
+    tracesSampler({ name, attributes, inheritOrSampleWith }: SamplingContext) {
+      if (name === "scheduled" && attributes["faas.trigger"] === "timer") return 0;
+      return inheritOrSampleWith(1);
+    },
+    // Native tracing owns D1; custom database spans and propagation spans stay.
+    ignoreSpans: [{ attributes: { "sentry.origin": /^auto\.db\.cloudflare\.d1$/ } }],
     propagateTraceparent: true,
     rpcTracePropagationBindings: [/.*/],
     traceLifecycle: "stream" as const,
@@ -217,37 +224,6 @@ export function wrapWorkerHandler<E extends WorkerEnv, QueueMessage = unknown>(
   return wrapped;
 }
 
-function productionHttpsRedirect(request: Request, env: WorkerEnv): Response | null {
-  const url = new URL(request.url);
-  // Build adapters prerender the built Worker through a plain-HTTP loopback server.
-  if (
-    env.SPLITCH_PLATFORM_TARGET !== "production" ||
-    url.protocol !== "http:" ||
-    ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname)
-  ) {
-    return null;
-  }
-  url.protocol = "https:";
-  return applyResponseHeaders(
-    new Response(null, { status: 308, headers: { location: url.toString() } }),
-    WORKER_BASELINE_SECURITY_HEADERS,
-  );
-}
-
-/** Stamp the shared baseline everywhere and HSTS only on production HTTPS. */
-function applyWorkerSecurityHeaders(
-  response: Response,
-  request: Request,
-  env: WorkerEnv,
-): Response {
-  const isProductionHttps =
-    env.SPLITCH_PLATFORM_TARGET === "production" && new URL(request.url).protocol === "https:";
-  return applyResponseHeaders(
-    response,
-    isProductionHttps ? HOSTED_PRODUCTION_SECURITY_HEADERS : WORKER_BASELINE_SECURITY_HEADERS,
-  );
-}
-
 /**
  * The id of the trace this request belongs to.
  *
@@ -279,6 +255,7 @@ export function createWorkerObservability(
   const emitter = workerEmitter(env, options, { onStructuredLogEvents: emitToWorkersLogs });
   return {
     onRequest(ctx: { requestId: string; method: string; path: string }) {
+      nameWorkerRouteSpans(env, options, ctx);
       emitter.log("info", "request", ctx);
     },
     onError(ctx: RequestErrorContext) {
