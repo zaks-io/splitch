@@ -4,6 +4,29 @@ import { createDb } from "./client";
 import type { ConfigWebhookDeliveryRow } from "./convex-integrations";
 import { buildDueConvexDeliveriesQuery } from "./scheduled-due-predicates";
 
+/**
+ * Claims go to the installation that has waited longest, counting a failing installation's wait
+ * from this much later. Healthy installations pass failing ones that started waiting up to this
+ * long before them, so a fan-out to hundreds of dead receivers does not queue ahead of them. It is
+ * an ordering penalty, not a strict priority: a recovered receiver still reaches the front while
+ * healthy work fills every claim. It matches the preparation cooldown and the last retry step.
+ */
+const FAILING_INSTALLATION_CLAIM_DELAY = "+30 minutes";
+
+/**
+ * An installation joins the queue when its oldest outstanding version is created, and rejoins at
+ * the back after each attempt: every owned completion and preparation deferral stamps
+ * `updated_at`. A newer version cannot restart the wait, and a receiver that keeps failing cannot
+ * keep the front.
+ */
+const waitingSince = sql`max(
+  datetime((SELECT oldest.created_at FROM config_webhook_deliveries oldest
+    INDEXED BY config_webhook_delivery_outstanding_idx
+    WHERE oldest.installation_id = installation.installation_id
+      AND oldest.state IN ('pending', 'leased')
+    ORDER BY oldest.environment_version LIMIT 1)),
+  datetime(installation.updated_at))`;
+
 export async function claimDueConvexDeliveries(
   d1: D1Database,
   now: string,
@@ -22,7 +45,11 @@ export async function claimDueConvexDeliveries(
       .set({ state: "leased", leaseOwner, leaseExpiresAt })
       .where(sql`delivery_id IN (
           SELECT delivery.delivery_id FROM convex_installations installation ${due}
-          ORDER BY delivery.next_attempt_at, delivery.delivery_id LIMIT ${limit}
+          ORDER BY datetime(${waitingSince},
+              CASE WHEN installation.latest_delivery_error_json IS NULL THEN '+0 minutes'
+                ELSE ${FAILING_INSTALLATION_CLAIM_DELAY} END),
+            delivery.delivery_id
+          LIMIT ${limit}
         )`)
       .returning({ deliveryId: configWebhookDeliveries.deliveryId }),
     db
@@ -68,6 +95,9 @@ export async function finishConvexDelivery(
   input: ConvexDeliveryFinish,
 ): Promise<void> {
   const delivered = input.state === "delivered";
+  // The body is a version-only nudge (ADR 0049), so an older version cannot succeed where a newer
+  // one was terminally rejected. Left pending, each older version would cost another claim.
+  const supersedesOlder = input.state !== "pending";
   // Installation health must read the owned lease before the outbox update clears it.
   await d1.batch([
     d1
@@ -103,7 +133,7 @@ export async function finishConvexDelivery(
             JOIN convex_installations installation ON installation.installation_id = owned.installation_id
             WHERE owned.delivery_id = ? AND owned.state = 'leased' AND owned.lease_owner = ?
               AND installation.status = 'active')`)
-      .bind(deliveryId, input.now, deliveryId, delivered ? 1 : 0, deliveryId, leaseOwner),
+      .bind(deliveryId, input.now, deliveryId, supersedesOlder ? 1 : 0, deliveryId, leaseOwner),
     d1
       .prepare(`UPDATE config_webhook_deliveries SET state = ?, attempt_count = attempt_count + 1,
         next_attempt_at = COALESCE(?, next_attempt_at), last_error_json = ?, delivered_at = ?,

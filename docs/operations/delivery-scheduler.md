@@ -220,3 +220,25 @@ known timestamps can be initially eligible; legacy failures wait 30 days from mi
 release and permanent pruning need explicit approval. Recover affected secrets through the owning
 installation's existing authenticated rotation operation and matching receiver update. Never
 replace the shared KEK or patch ciphertext as a shortcut.
+
+## Follow-up, October 25: dead preview installations starved Production
+
+Neuron's Production installation sat 20 minutes behind five pending versions while the
+dispatcher claimed only Dev rows. Dev had 437 active installations; 405 last received HTTP 404
+because their Convex previews were deleted. Each tick, a dead installation's newest version went
+terminal and exposed its next older pending version. That row had an earlier `next_attempt_at`
+than Production's, so it sorted ahead again. Twenty ticks produced 496 terminal 404s and no
+Production attempt, with 1,614 older Dev rows still ahead of it. An approved one-row
+`next_attempt_at` change moved Production's newest version to the front; it was delivered on the
+next tick and superseded the four older versions.
+
+Terminal responses now suppress older pending versions, as successes already did. The webhook is
+a version-only nudge, so an older version cannot succeed where the newer one was rejected.
+Claims now go to the installation that has waited longest, and a failing installation's wait
+counts from 30 minutes later. A fan-out to dead receivers no longer queues ahead of healthy
+installations that change within 30 minutes of it, in any App. The penalty orders work; it does
+not bound delay, which still depends on backlog and the 25-row claim. The wait starts at the
+oldest outstanding version and restarts after each attempt (the installation's `updated_at`), so
+config churn cannot starve a recovering installation and a receiver that keeps failing cannot
+hold the front. Dead preview installations still receive one attempt per Environment version
+until they are revoked.
