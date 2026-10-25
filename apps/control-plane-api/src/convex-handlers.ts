@@ -116,11 +116,14 @@ export function makeConvexHandlers(deps: ConvexHandlerDeps) {
     snapshot: (async ({ principal, request, requestId }) => {
       const scope = convexPrincipalScope(principal, requestId);
       if (scope instanceof Response) return scope;
-      const snapshot = await buildConvexSnapshot(deps.repo, scope);
-      const etag = `"${snapshot.environmentVersion}"`;
+      const version = await deps.repo.convex.environmentVersion(scope);
+      const etag = `"${version}"`;
       if (request.headers.get("if-none-match") === etag)
         return new Response(null, { status: 304, headers: { etag } });
-      return Response.json(snapshot, { headers: { etag, "cache-control": "private, no-store" } });
+      const snapshot = await buildConvexSnapshot(deps.repo, scope);
+      return Response.json(snapshot, {
+        headers: { etag: `"${snapshot.environmentVersion}"`, "cache-control": "private, no-store" },
+      });
     }) satisfies RouteHandler<Record<string, never>>,
   };
 }

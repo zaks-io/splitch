@@ -101,6 +101,7 @@ const EXPECTED_GATES: Record<string, string> = {
   sentry_installations_get: "org:admin",
   sentry_installations_delete: "org:admin",
   sentry_secret_rotations_create: "org:admin",
+  integration_deliveries_create: "app:admin",
   convex_installations_list: "app:admin",
   convex_installations_revoke: "app:admin",
   cloudflare_installations_list: "app:admin",

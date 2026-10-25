@@ -1,5 +1,4 @@
 import { buildOpenApiDocument } from "@splitch/contracts";
-import type { Repository } from "@splitch/db";
 import {
   type AuthResolver,
   createRegistrar,
@@ -16,11 +15,7 @@ import { makeApprovalHandlers } from "./approval-handlers";
 import type { AnalysisResultsReader } from "./attention-analysis-reader";
 import { unavailableAnalysisResults } from "./attention-analysis-reader";
 import { makeAttentionRollupHandler } from "./attention-rollup";
-import type { CloudflareHandlerDeps } from "./cloudflare-handlers";
-import { mountCloudflareRoutes } from "./cloudflare-route-mounting";
 import type { ConfigStoreAccess } from "./config-store-access";
-import type { ConvexHandlerDeps } from "./convex-handlers";
-import { mountConvexRoutes } from "./convex-route-mounting";
 import type { CredentialCacheWriterAccess } from "./credential-cache";
 import { makeCredentialHandlers } from "./credential-handlers";
 import { type DelegationBindings, mountDelegatedRoutes } from "./delegated-routes";
@@ -36,6 +31,7 @@ import { makeFlagDefinitionHandlers } from "./flag-definition-handlers";
 import { mountFlagDefinitionRoutes } from "./flag-definition-route-mounting";
 import { makeHandlers } from "./handlers";
 import type { HoldoverWriteOutboxCleanup } from "./holdover-write-outbox-cleanup";
+import { type IntegrationRouteDeps, mountIntegrationRoutes } from "./integration-route-mounting";
 import { mountLiveUpdateRoute } from "./live-updates";
 import { makeMetricSegmentHandlers } from "./metric-segment-handlers";
 import type { MemberProfileResolver } from "./org-handlers";
@@ -43,8 +39,6 @@ import { makePathSelectorResolver } from "./path-selector-resolution";
 import { mountPersonalAccessTokenRoutes } from "./personal-access-token-handlers";
 import { getPrincipalCapabilities } from "./principal-capabilities-handler";
 import { controlPlaneRoute } from "./routes";
-import type { SentryHandlerDeps } from "./sentry-handlers";
-import { mountSentryRoutes } from "./sentry-route-mounting";
 import { mountUnavailableControlPlaneRoutes } from "./unavailable-handler";
 
 /**
@@ -68,8 +62,7 @@ import { mountUnavailableControlPlaneRoutes } from "./unavailable-handler";
  * (ADR-0022).
  */
 
-export interface AppDeps {
-  door?: "public" | "binding";
+export interface AppDeps extends IntegrationRouteDeps {
   /**
    * Deployed build identity stamped into the served OpenAPI document's
    * `info.version`. Lazy: only the discovery route needs it, and resolving it
@@ -79,7 +72,6 @@ export interface AppDeps {
   apiVersion?: () => string;
   authResolver: AuthResolver;
   rateLimiter: RateLimiter;
-  repo: Repository;
   credentialStore?: KVNamespace;
   /** SESSION_STORE; the MCP Worker authenticates Personal Access Tokens from it. */
   personalAccessTokenStore?: KVNamespace;
@@ -103,10 +95,7 @@ export interface AppDeps {
   privacyExports?: R2Bucket;
   privacyExportUrlSecret?: string;
   controlPlaneOrigin?: string;
-  convex?: Omit<ConvexHandlerDeps, "repo">;
-  cloudflare?: Omit<CloudflareHandlerDeps, "repo">;
-  sentry?: Omit<SentryHandlerDeps, "repo">;
-  onResolvedApp?: (appId: string) => void;
+  onResolvedApp?: (appId: string, operationId: string) => void;
 }
 
 /** Build the registrar bound to this Worker's control-plane-token resolver. */
@@ -124,7 +113,7 @@ export function controlPlaneRegistrar(deps: AppDeps): Registrar {
       const result = await resolveInput(args);
       if (result.ok) {
         const appId = result.params.appId ?? result.principal.appId;
-        if (appId) deps.onResolvedApp?.(appId);
+        if (appId) deps.onResolvedApp?.(appId, args.contract.id);
       }
       return result;
     },
@@ -175,14 +164,7 @@ export function createApp(deps: AppDeps): Hono {
   );
   const appEnvironmentHandlers = makeAppEnvironmentHandlers(appEnvironmentHandlerDeps(deps));
   const registrar = controlPlaneRegistrar(deps);
-  mountConvexRoutes(app, registrar, deps.repo, deps.door === "binding" ? deps.convex : undefined);
-  mountCloudflareRoutes(
-    app,
-    registrar,
-    deps.repo,
-    deps.door === "binding" ? deps.cloudflare : undefined,
-  );
-  mountSentryRoutes(app, registrar, deps.repo, deps.sentry ?? {});
+  mountIntegrationRoutes(app, registrar, deps);
   const approvalHandlers = diagnosableHandlers(
     makeApprovalHandlers({
       repo: deps.repo,

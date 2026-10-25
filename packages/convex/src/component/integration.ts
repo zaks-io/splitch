@@ -4,6 +4,7 @@ import { internal } from "./_generated/api";
 import { action, env, internalAction, internalMutation, internalQuery } from "./_generated/server";
 import { configurationCallbackUrl } from "./callback_url";
 import { randomSecret } from "./crypto";
+import { checkSyncHandler, syncBackstopHandler } from "./integration_backstop";
 import { purgeBatchHandler, revokeLocalHandler, uninstallHandler } from "./integration_cleanup";
 import { initializeHandler, installCallbackUrl } from "./integration_initialize";
 import { activateHandler, recoverSyncHandler } from "./integration_recovery";
@@ -111,6 +112,18 @@ export const syncNow = action({
   args: {},
   returns: v.number(),
   handler: syncHandler,
+});
+
+export const syncBackstop = internalMutation({
+  args: { installationId: v.string(), dueAt: v.number() },
+  returns: v.null(),
+  handler: syncBackstopHandler,
+});
+
+export const checkSync = internalAction({
+  args: { installationId: v.string() },
+  returns: v.null(),
+  handler: checkSyncHandler,
 });
 
 export const recoverSync = internalMutation({

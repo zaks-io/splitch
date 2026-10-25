@@ -126,6 +126,7 @@ const MCP_TOOL_MEMBERSHIP_GATES = {
   sentry_installations_get: ORG_ADMIN,
   sentry_installations_delete: ORG_ADMIN,
   sentry_secret_rotations_create: ORG_ADMIN,
+  integration_deliveries_create: APP_ADMIN,
   convex_installations_list: APP_ADMIN,
   convex_installations_revoke: APP_ADMIN,
   cloudflare_installations_list: APP_ADMIN,

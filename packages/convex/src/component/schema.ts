@@ -23,6 +23,8 @@ export default defineSchema({
     environmentId: v.optional(v.string()),
     announcedVersion: v.number(),
     snapshotVersion: v.optional(v.number()),
+    syncBackstopJobId: v.optional(v.id("_scheduled_functions")),
+    syncBackstopDueAt: v.optional(v.number()),
     syncRecoveryJobId: v.optional(v.id("_scheduled_functions")),
     syncRecoveryVersion: v.optional(v.number()),
     syncOverdueVersion: v.optional(v.number()),

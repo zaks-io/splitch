@@ -345,6 +345,15 @@ Neither CLI nor MCP contains any domain logic. The CLI calls those methods throu
 rejects invalid states (frozen Run edits, missing permissions, failed Zod parse). Both surfaces
 inherit correctness from one guardian. (ADR-0023 and ADR-0025's 2026-08-26 amendment)
 
+## Integration delivery
+
+The Environment-scoped `integration_deliveries_create` operation is exposed as the MCP tool of the
+same name and `splitch integration-deliveries create --app <app> --env <environment>`. It requires
+the `credentials` permission plus live App admin or owner membership. It wakes only that Environment's
+coordinator and returns per-provider pending/leased counts and oldest outstanding age. In cron mode,
+`wake: "cron_noop"` accompanies the same summary. In coordinator mode, `wake: "scheduled"` reports
+acceptance, not completed delivery. See the [API contract](../sdk/convex-integration-api.md#deliver-outstanding-integration-configuration).
+
 ## Sources
 
 - [../../adr/0023-remote-mcp-and-cli-as-parity-skins-over-a-shared-typed-client.md](../../adr/0023-remote-mcp-and-cli-as-parity-skins-over-a-shared-typed-client.md)

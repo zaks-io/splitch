@@ -1754,6 +1754,26 @@ Credential semantics:
 
 Example:
   splitch flags verify checkout --targeting-key workspace-123 --id-type workspace --json",
+    "integration-deliveries create": "Wake this Environment's integration delivery coordinator and read outstanding delivery counts. Cron mode returns the summary without a wake.
+
+Formats: appId: required Canonical App ID (app_...) or human-readable App slug. environmentId: required Canonical Environment ID (env_...) or human-readable Environment key. by: optional one of "id".
+
+Terms: Environment — a named deployment context under an App, such as \`dev\` or \`prod\`. App — the product or service surface that groups related Flags and hosts Experiments.
+
+Example arguments: {"appId":"app_1","environmentId":"environment_1"}
+
+Usage:
+  splitch integration-deliveries create [flags]
+
+Flags:
+  --app <app>          [type: string; default: SPLITCH_APP or config] App ID or slug.
+  --env <environment>  [type: string; default: SPLITCH_ENV or config] Environment ID or key.
+  --by <mode>          [type: string; default: automatic] Allowed: id. Resolve a canonical-looking selector explicitly.
+  --json               [type: boolean; default: false] Write machine-readable JSON to stdout.
+  -h, --help           [type: boolean; default: false] Show help and exit.
+
+Example:
+  splitch integration-deliveries create --json",
     "metrics create": "Create a Metric (binomial, count, revenue, ratio, retention, guardrail).
 
 Formats: appId: required canonical id. kind: required one of "binomial", "count", "revenue", "ratio", "retention". eventDefinitionId: optional canonical id. direction: optional one of "higher_is_better", "lower_is_better".
@@ -2898,6 +2918,19 @@ Flags:
 
 Example:
   splitch flags create --help",
+    "integration-deliveries": "Manage integration-deliveries resources.
+
+Usage:
+  splitch integration-deliveries <action> [arguments] [flags]
+
+Commands:
+  create          Wake this Environment's integration delivery coordinator and read outstanding delivery counts. Cron mode returns the summary without a wake.
+
+Flags:
+  -h, --help  [type: boolean; default: false] Show help and exit.
+
+Example:
+  splitch integration-deliveries create --help",
     "metrics": "Manage metrics resources.
 
 Usage:
@@ -3164,6 +3197,7 @@ Resource groups:
   flag-targeting-rules
   flag-variants
   flags
+  integration-deliveries
   metrics
   organization-members
   organization-usage

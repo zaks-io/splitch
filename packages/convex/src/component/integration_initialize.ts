@@ -1,6 +1,7 @@
 import { configurationCallbackUrlError } from "@splitch/sdk/local-evaluation";
 import type { Doc } from "./_generated/dataModel";
 import type { MutationCtx } from "./_generated/server";
+import { ensureSyncBackstopScheduled } from "./integration_backstop";
 import { CURRENT_KEY } from "./integration_state";
 
 interface InitializeArgs {
@@ -27,6 +28,7 @@ export function installCallbackUrl(
 export async function initializeHandler(ctx: MutationCtx, args: InitializeArgs) {
   const existing = await currentIntegration(ctx);
   if (existing) {
+    await ensureSyncBackstopScheduled(ctx);
     if (needsCallbackRepair(existing) && existing.callbackUrl !== args.callbackUrl) {
       await ctx.db.patch(existing._id, { callbackUrl: args.callbackUrl });
       return currentIntegration(ctx);

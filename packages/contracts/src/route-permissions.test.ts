@@ -105,6 +105,7 @@ const expectedOperations: Record<RoutePermission, readonly string[]> = {
     "client_key_update",
     "cloudflare_installations_revoke",
     "convex_installations_revoke",
+    "integration_deliveries_create",
     "sentry_installations_create",
     "sentry_installations_delete",
     "sentry_secret_rotations_create",
@@ -167,8 +168,8 @@ describe("route permissions", () => {
       ),
     );
     const routes = routeRegistry.filter((route) => route.auth === "control-plane-token");
-    expect(routes).toHaveLength(111);
-    expect(Object.keys(expected)).toHaveLength(111);
+    expect(routes).toHaveLength(112);
+    expect(Object.keys(expected)).toHaveLength(112);
     expect(
       Object.fromEntries(routes.map((route) => [route.operationId, route.permission])),
     ).toEqual(expected);

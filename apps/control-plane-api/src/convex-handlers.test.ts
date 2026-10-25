@@ -1,6 +1,6 @@
 import { ConvexInstallationListResponseSchema } from "@splitch/contracts";
 import { createRepository, envScope } from "@splitch/db";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   ALPHA,
   args,
@@ -127,6 +127,26 @@ describe("Convex Panel installations", () => {
       cursor: null,
     });
   });
+});
+
+it("returns 304 after only a version read when the component already has the current snapshot", async () => {
+  const flags = vi.spyOn(repo.flags.flags, "findMany");
+  const request = {
+    ...panelArgs(USER_ADMIN, ALPHA.appId, ALPHA_ENV),
+    input: {},
+    principal: {
+      ...panelArgs(USER_ADMIN, ALPHA.appId, ALPHA_ENV).principal,
+      kind: "api-key" as const,
+      environmentId: ALPHA_ENV,
+    },
+    request: new Request("https://api.test/api/integrations/convex/snapshot", {
+      headers: { "if-none-match": '"0"' },
+    }),
+  };
+  const response = await handlers.snapshot(request);
+  expect(response.status).toBe(304);
+  expect(await response.text()).toBe("");
+  expect(flags).not.toHaveBeenCalled();
 });
 
 async function seedInstallations() {
