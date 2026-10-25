@@ -13,7 +13,7 @@ const CALLBACK = "https://example.convex.site/configuration";
 
 async function dispatchFixture(status: number | Error, usher: boolean) {
   const encrypted = await encryptConvexSecret("secret", KEY, "v1");
-  const finishDelivery = vi.fn();
+  const finishDelivery = vi.fn(async () => "probe-token");
   const markDeploymentMissing = vi.fn();
   const fetcher = vi.fn(async (url: RequestInfo | URL) => {
     if (String(url) === CALLBACK) return new Response(null, { status: 404 });
@@ -62,6 +62,7 @@ describe("dormant Convex deployments", () => {
       if (missing)
         expect(fixture.markDeploymentMissing).toHaveBeenCalledWith(
           "installation",
+          "probe-token",
           NOW.toISOString(),
         );
     },
@@ -93,9 +94,12 @@ describe("dormant Convex deployments", () => {
                 headers: { "convex-usher": "usher" },
               }),
           },
-          "installation",
-          CALLBACK,
-          NOW,
+          {
+            installationId: "installation",
+            callbackUrl: CALLBACK,
+            probeToken: "token",
+            failedAt: NOW,
+          },
         ),
       ).resolves.toBeUndefined();
       expect(error).toHaveBeenCalledWith(
@@ -132,7 +136,7 @@ describe("dormant Convex deployments", () => {
         throw new Error("offline");
       },
     });
-    expect(dormantDeployments).toHaveBeenCalledWith(25);
+    expect(dormantDeployments).toHaveBeenCalledWith(100);
     expect(recordDeploymentCheck).toHaveBeenCalledTimes(3);
     expect(reactivateDeployment).toHaveBeenCalledExactlyOnceWith(
       expect.objectContaining({ appId: "app", environmentId: "env" }),

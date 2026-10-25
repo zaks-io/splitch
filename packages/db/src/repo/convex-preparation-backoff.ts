@@ -16,7 +16,7 @@ export async function deferConvexPreparationFailure(
   await d1.batch([
     d1
       .prepare(`UPDATE convex_installations
-      SET preparation_retry_at = ?, latest_delivery_error_json = ?, updated_at = ?
+      SET preparation_retry_at = ?, latest_delivery_error_json = ?, updated_at = ?, deployment_probe_token = NULL
       WHERE installation_id = ? AND status = 'active'
         AND secret_ciphertext = ? AND secret_key_version = ?
         AND EXISTS (SELECT 1 FROM config_webhook_deliveries

@@ -145,7 +145,7 @@ export function makeConvexIntegrationRepo(d1: D1Database) {
       await d1
         .prepare(`UPDATE convex_installations SET
           secret_ciphertext = ?, secret_key_version = ?, secret_fingerprint = ?,
-          last_rotation_id = ?, last_rotation_fingerprint = ?, updated_at = ?, preparation_retry_at = NULL
+          last_rotation_id = ?, last_rotation_fingerprint = ?, updated_at = ?, preparation_retry_at = NULL, deployment_probe_token = NULL
           WHERE app_id = ? AND environment_id = ? AND installation_id = ? AND status = 'active'`)
         .bind(
           input.secretCiphertext,
@@ -211,8 +211,8 @@ export function makeConvexIntegrationRepo(d1: D1Database) {
       deliveryId: string,
       leaseOwner: string,
       input: ConvexDeliveryFinish,
-    ): Promise<void> {
-      await finishConvexDelivery(d1, deliveryId, leaseOwner, input);
+    ): Promise<string | null> {
+      return finishConvexDelivery(d1, deliveryId, leaseOwner, input);
     },
 
     deferPreparationFailure(

@@ -26,6 +26,7 @@ export const convexInstallations = sqliteTable(
     preparationRetryAt: text("preparation_retry_at"),
     deploymentMissingAt: text("deployment_missing_at"),
     deploymentCheckedAt: text("deployment_checked_at"),
+    deploymentProbeToken: text("deployment_probe_token"),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
     revokedAt: text("revoked_at"),

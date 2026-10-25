@@ -145,6 +145,7 @@ async function registrationResponse(
 ): Promise<Response> {
   const conflict = installationConflict(row, input, fingerprint, requestId);
   if (conflict) return conflict;
+  await deps.repo.convex.recordDeploymentCheck(row.installationId, now.toISOString());
   if (row.deploymentMissingAt && input.callbackVerification)
     await deps.repo.convex.reactivateDeployment(scope, row.installationId, now.toISOString());
   return Response.json({

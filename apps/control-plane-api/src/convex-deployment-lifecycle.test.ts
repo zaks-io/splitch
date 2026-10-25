@@ -95,6 +95,64 @@ async function dispatch(fetcher: typeof fetch) {
 }
 
 describe("Convex deployment HTTP lifecycle on real D1", () => {
+  it("ignores a v1 deletion probe that completes after a successful v2 delivery", async () => {
+    await register();
+    await changeConfig();
+    let releaseProbe!: (response: Response) => void;
+    let started!: () => void;
+    const probeStarted = new Promise<void>((resolve) => {
+      started = resolve;
+    });
+    const pendingProbe = new Promise<Response>((resolve) => {
+      releaseProbe = resolve;
+    });
+    const first = dispatch(async (url) => {
+      if (String(url).endsWith("/version")) {
+        started();
+        return pendingProbe;
+      }
+      return new Response(null, { status: 404 });
+    });
+    await probeStarted;
+    await changeConfig();
+    expect(await dispatch(async () => new Response(null, { status: 204 }))).toBe(1);
+    expect(await health()).toMatchObject({ lastDeliveredVersion: 2 });
+    releaseProbe(new Response(null, { status: 404, headers: { "convex-usher": "usher" } }));
+    await first;
+    expect(await health()).toMatchObject({ deploymentMissingAt: null });
+    await changeConfig();
+    expect(await health()).toMatchObject({ environmentVersion: 3, pendingCount: 1 });
+    expect(await dispatch(async () => new Response(null, { status: 204 }))).toBe(1);
+    expect(await health()).toMatchObject({ lastDeliveredVersion: 3 });
+  });
+
+  it("invalidates a pending deletion probe when an active installation re-registers", async () => {
+    await register();
+    await changeConfig();
+    let releaseProbe!: (response: Response) => void;
+    let started!: () => void;
+    const probeStarted = new Promise<void>((resolve) => {
+      started = resolve;
+    });
+    const pendingProbe = new Promise<Response>((resolve) => {
+      releaseProbe = resolve;
+    });
+    const first = dispatch(async (url) => {
+      if (String(url).endsWith("/version")) {
+        started();
+        return pendingProbe;
+      }
+      return new Response(null, { status: 404 });
+    });
+    await probeStarted;
+    await register();
+    releaseProbe(new Response(null, { status: 404, headers: { "convex-usher": "usher" } }));
+    await first;
+    expect(await health()).toMatchObject({ deploymentMissingAt: null });
+    await changeConfig();
+    expect(await health()).toMatchObject({ pendingCount: 1 });
+  });
+
   it.each(["registration", "reprobe"])(
     "recovers through %s and delivers the current and next versions",
     async (recovery) => {

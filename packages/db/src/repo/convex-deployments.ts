@@ -3,14 +3,18 @@ import { assertMintedScope } from "./scope";
 
 export function makeConvexDeploymentRepo(d1: D1Database) {
   return {
-    async markDeploymentMissing(installationId: string, now: string): Promise<void> {
+    async markDeploymentMissing(
+      installationId: string,
+      probeToken: string,
+      now: string,
+    ): Promise<void> {
       await d1.batch([
         d1
           .prepare(`UPDATE convex_installations SET
           deployment_missing_at = COALESCE(deployment_missing_at, ?),
-          deployment_checked_at = ?, updated_at = ?
-          WHERE installation_id = ? AND status = 'active'`)
-          .bind(now, now, now, installationId),
+          deployment_checked_at = ?, updated_at = ?, deployment_probe_token = NULL
+          WHERE installation_id = ? AND status = 'active' AND deployment_probe_token = ?`)
+          .bind(now, now, now, installationId, probeToken),
         d1
           .prepare(`UPDATE config_webhook_deliveries SET state = 'suppressed',
           lease_owner = NULL, lease_expires_at = NULL
@@ -43,8 +47,8 @@ export function makeConvexDeploymentRepo(d1: D1Database) {
 
     async recordDeploymentCheck(installationId: string, now: string): Promise<void> {
       await d1
-        .prepare(`UPDATE convex_installations SET deployment_checked_at = ?
-        WHERE installation_id = ? AND status = 'active' AND deployment_missing_at IS NOT NULL`)
+        .prepare(`UPDATE convex_installations SET deployment_checked_at = ?, deployment_probe_token = NULL
+        WHERE installation_id = ? AND status = 'active'`)
         .bind(now, installationId)
         .run();
     },
@@ -81,7 +85,7 @@ export function makeConvexDeploymentRepo(d1: D1Database) {
           .bind(deliveryId, deliveryId, now, now, scope.appId, scope.environmentId, installationId),
         d1
           .prepare(`UPDATE convex_installations SET deployment_missing_at = NULL,
-          deployment_checked_at = ?, preparation_retry_at = NULL, updated_at = ?
+          deployment_checked_at = ?, preparation_retry_at = NULL, updated_at = ?, deployment_probe_token = NULL
           WHERE app_id = ? AND environment_id = ? AND installation_id = ?
             AND status = 'active' AND deployment_missing_at IS NOT NULL`)
           .bind(now, now, scope.appId, scope.environmentId, installationId),

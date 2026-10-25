@@ -138,17 +138,25 @@ and the complete latest bounded `DeliveryErrorEnvelope`. The additive, nullable
 The operator list, CLI `convex-installations list` output and MCP `convex_installations_list`
 output expose the same field. It returns no secret or config payload.
 
-A terminal callback `404` triggers one deployment probe for that outcome. Only a validated
+A terminal callback `404` collects one deployment probe candidate for that owned outcome. Probing
+starts only after every claimed delivery in the batch has completed, with at most six probes in
+flight. Probe time never consumes a send slot or a claimed delivery's lease. Only a validated
 `https://<name>.convex.site/.../configuration` callback maps to
 `https://<name>.convex.cloud/version`. The probe has a five-second timeout and follows no redirects.
 A `404` with a `convex-usher` header proves deletion; a `200` proves the deployment is live.
 Other results, missing headers, timeouts, errors and unsupported callback hosts are inconclusive.
 A callback `404` alone cannot establish deletion because a live deployment can lack that route.
 
+A deletion result marks dormancy only if its completion receipt is still current. A newer delivery
+outcome, registration, reactivation or deployment check invalidates the receipt, even when activity
+shares the same timestamp. A stale probe leaves installation health and outstanding deliveries
+unchanged.
+
 Deleted deployments become dormant. Their pending and leased deliveries are suppressed, and config
-commits stop inserting deliveries for them. The daily 08:00 UTC cron re-probes at most 25 active
+commits stop inserting deliveries for them. The daily 08:00 UTC cron re-probes at most 100 active
 dormant installations, oldest checked time first with installation ID as the tie-breaker. Every
 attempt advances that time, including inconclusive results, so later batches rotate fairly.
+The recovery batch runs at most six probes concurrently.
 A live result or successful verified re-registration clears the mark and enqueues the Environment's
 current version atomically. Recovery reuses an existing suppressed or terminal delivery for that
 version if necessary, and repeated recovery is idempotent. Other probe results leave it dormant.

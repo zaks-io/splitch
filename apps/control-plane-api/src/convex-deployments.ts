@@ -1,38 +1,62 @@
 import { envScope, type Repository } from "@splitch/db";
 import { serializeFault } from "@splitch/observability/worker";
+import { mapWithConcurrency } from "./bounded-map";
 import { probeConvexDeployment } from "./convex-deployment-probe";
 
-export async function detectMissingConvexDeployment(
-  deps: { repo: Repository; fetcher?: typeof fetch },
-  installationId: string,
-  callbackUrl: string,
-  now: Date,
+export interface ConvexDeploymentProbeCandidate {
+  installationId: string;
+  callbackUrl: string;
+  probeToken: string;
+  failedAt: Date;
+}
+
+type ProbeDeps = { repo: Repository; fetcher?: typeof fetch };
+
+export async function probeMissingConvexDeployments(
+  deps: ProbeDeps,
+  outcomes: PromiseSettledResult<ConvexDeploymentProbeCandidate | undefined>[],
 ): Promise<void> {
-  if ((await probeConvexDeployment(callbackUrl, deps.fetcher)) !== "deleted") return;
+  const candidates = outcomes.flatMap((outcome) =>
+    outcome.status === "fulfilled" && outcome.value ? [outcome.value] : [],
+  );
+  await mapWithConcurrency(candidates, 6, (candidate) =>
+    detectMissingConvexDeployment(deps, candidate),
+  );
+}
+
+export async function detectMissingConvexDeployment(
+  deps: ProbeDeps,
+  candidate: ConvexDeploymentProbeCandidate,
+): Promise<void> {
+  if ((await probeConvexDeployment(candidate.callbackUrl, deps.fetcher)) !== "deleted") return;
   try {
-    await deps.repo.convex.markDeploymentMissing(installationId, now.toISOString());
+    await deps.repo.convex.markDeploymentMissing(
+      candidate.installationId,
+      candidate.probeToken,
+      candidate.failedAt.toISOString(),
+    );
   } catch (cause) {
     console.error("convex_deployment_dormancy_failed", {
-      installationId,
+      installationId: candidate.installationId,
       cause: serializeFault(cause),
     });
   }
 }
 
-export async function reprobeDormantConvexDeployments(deps: {
-  repo: Repository;
-  now: Date;
-  fetcher?: typeof fetch;
-}): Promise<void> {
-  const installations = await deps.repo.convex.dormantDeployments(25);
-  for (const installation of installations) {
+export async function reprobeDormantConvexDeployments(
+  deps: ProbeDeps & {
+    now: Date;
+  },
+): Promise<void> {
+  const installations = await deps.repo.convex.dormantDeployments(100);
+  await mapWithConcurrency(installations, 6, async (installation) => {
     const now = deps.now.toISOString();
     await deps.repo.convex.recordDeploymentCheck(installation.installationId, now);
-    if ((await probeConvexDeployment(installation.callbackUrl, deps.fetcher)) !== "live") continue;
+    if ((await probeConvexDeployment(installation.callbackUrl, deps.fetcher)) !== "live") return;
     await deps.repo.convex.reactivateDeployment(
       envScope(installation.appId, installation.environmentId),
       installation.installationId,
       now,
     );
-  }
+  });
 }

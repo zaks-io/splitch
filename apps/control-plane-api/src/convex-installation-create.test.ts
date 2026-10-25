@@ -224,7 +224,12 @@ function setup(initial: ConvexInstallationRow | null = null) {
   );
   const repo = {
     identity: { getEnvironment: async () => ({ id: "env_1", appId: "app_1", expiresAt: null }) },
-    convex: { getInstallation, createInstallation, environmentVersion: async () => 7 },
+    convex: {
+      getInstallation,
+      createInstallation,
+      recordDeploymentCheck: vi.fn(),
+      environmentVersion: async () => 7,
+    },
   } as unknown as Repository;
   return {
     repo,

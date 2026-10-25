@@ -20,6 +20,7 @@ create its webhook deliveries in the same D1 transaction. They contain no raw AP
 | `latest_delivery_error_json` | TEXT    | no       | Latest bounded `DeliveryErrorEnvelope`                             |
 | `preparation_retry_at`       | TEXT    | no       | Convex installation preparation cooldown eligibility               |
 | `deployment_missing_at`      | TEXT    | no       | ISO 8601 deleted-deployment detection time; non-null means dormant |
+| `deployment_probe_token`     | TEXT    | no       | Internal receipt for the latest owned terminal delivery outcome    |
 | `deployment_checked_at`      | TEXT    | no       | ISO 8601 most recent deployment probe time for fair rotation       |
 | `created_at`                 | TEXT    | yes      | ISO 8601                                                           |
 | `updated_at`                 | TEXT    | yes      | ISO 8601                                                           |
@@ -37,6 +38,14 @@ Marking and suppression of its pending and leased deliveries run in one D1 batch
 trigger excludes dormant installations, preventing pending rows that retention could never expire.
 The claim query is unchanged because marking suppresses existing work and the trigger creates none.
 A partial `(deployment_checked_at, installation_id)` index covers active dormant installations.
+
+Each owned terminal delivery completion mints a unique `deployment_probe_token` in its D1 batch.
+A deletion probe can mark dormancy only while that exact token remains current, consuming it in the
+marking batch. Later delivery outcomes replace or clear it. Registration, reactivation, deployment
+checks, secret rotation and preparation deferrals clear it. This compare-and-set guard prevents a
+stale probe from overriding newer activity, including operations with identical timestamps.
+Unowned lease completions cannot issue a token. The nullable token is internal and never returned
+in installation health responses.
 
 Successful verified re-registration or a live daily re-probe atomically requeues the current
 Environment version and clears the mark. The unique installation/version index prevents duplicate
