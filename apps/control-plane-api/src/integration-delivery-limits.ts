@@ -4,6 +4,11 @@ export const DELIVERY_SEND_TIMEOUT_MS = 5_000;
 export const DELIVERY_PREPARATION_BUDGET_MS = 5_000;
 export const DELIVERY_COMPLETION_BUDGET_MS = 10_000;
 export const DELIVERY_LEASE_MS = 30_000;
+// Measured cost is 1.34 D1 calls + 1 HTTP per attempt. Even adding a deletion probe
+// and a lease renewal per row, 1,000 rows use about 4,340 of the 10,000 subrequests.
+// Leave the rest for scheduling and other invocation work, including D1 calls.
+// https://developers.cloudflare.com/workers/platform/limits/#subrequests
+export const DELIVERY_RUN_CLAIM_BUDGET = 1_000;
 
 if (
   DELIVERY_BATCH_SIZE > DELIVERY_SEND_CONCURRENCY ||
@@ -23,19 +28,21 @@ export interface IntegrationDeliveryDispatchPolicy {
   clock: {
     now: () => Date;
     outcomeTime: (claimedAt: Date) => Date;
+    leaseTime: () => Date;
   };
 }
 
 export function cronDeliveryPolicy(
   provider: "convex" | "cloudflare",
   now = () => new Date(),
+  leaseNow = () => new Date(),
 ): IntegrationDeliveryDispatchPolicy {
   return {
     claimLimit: 25,
     concurrency: 25,
     sendTimeoutMs: provider === "convex" ? 5_000 : null,
     leaseMs: 30_000,
-    clock: { now, outcomeTime: (claimedAt) => claimedAt },
+    clock: { now, outcomeTime: (claimedAt) => claimedAt, leaseTime: leaseNow },
   };
 }
 
@@ -47,7 +54,7 @@ export function coordinatorDeliveryPolicy(
     concurrency: DELIVERY_SEND_CONCURRENCY,
     sendTimeoutMs: DELIVERY_SEND_TIMEOUT_MS,
     leaseMs: DELIVERY_LEASE_MS,
-    clock: { now, outcomeTime: now },
+    clock: { now, outcomeTime: now, leaseTime: now },
   };
 }
 

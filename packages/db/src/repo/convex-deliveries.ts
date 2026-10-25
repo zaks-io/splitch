@@ -90,6 +90,21 @@ export interface ConvexDeliveryFinish {
   errorJson?: string;
 }
 
+export async function renewConvexDeliveryLease(
+  d1: D1Database,
+  deliveryId: string,
+  leaseOwner: string,
+  now: string,
+  leaseExpiresAt: string,
+): Promise<boolean> {
+  const result = await d1
+    .prepare(`UPDATE config_webhook_deliveries SET lease_expires_at = ?
+      WHERE delivery_id = ? AND state = 'leased' AND lease_owner = ? AND lease_expires_at > ?`)
+    .bind(leaseExpiresAt, deliveryId, leaseOwner, now)
+    .run();
+  return result.meta.changes === 1;
+}
+
 export async function finishConvexDelivery(
   d1: D1Database,
   deliveryId: string,

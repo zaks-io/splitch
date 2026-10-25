@@ -7,6 +7,7 @@ import {
 } from "./configuration-callback-transport";
 import { decryptConvexSecret, signConvexWebhook } from "./convex-secret";
 import type { IntegrationDeliveryDispatchPolicy } from "./integration-delivery-limits";
+import { renewDeliveryLeaseBeforeSend } from "./integration-delivery-lease";
 import { validateIntegrationSecretKey } from "./integration-secret";
 import { retryDelayMs, type WebhookPost } from "./webhook-transport";
 
@@ -18,6 +19,7 @@ export interface ConvexDispatchSummary {
   receiverRejected: number;
   transportFailures: number;
   preparationFailedInstallations: number;
+  skippedLeaseLost: number;
 }
 
 export interface ConvexWebhookDispatchDeps {
@@ -35,10 +37,11 @@ export async function dispatchConvexWebhooks(deps: ConvexWebhookDispatchDeps): P
   validateIntegrationSecretKey(deps.webhookKek, "CONVEX_WEBHOOK_KEK");
   const now = deps.policy.clock.now();
   const leaseOwner = (deps.leaseOwner ?? (() => crypto.randomUUID()))();
+  const leaseExpiresAt = now.getTime() + deps.policy.leaseMs;
   const deliveries = await deps.repo.convex.claimDueDeliveries(
     now.toISOString(),
     leaseOwner,
-    new Date(now.getTime() + deps.policy.leaseMs).toISOString(),
+    new Date(leaseExpiresAt).toISOString(),
     deps.policy.claimLimit,
     deps.scope,
   );
@@ -51,9 +54,18 @@ export async function dispatchConvexWebhooks(deps: ConvexWebhookDispatchDeps): P
     receiverRejected: 0,
     transportFailures: 0,
     preparationFailedInstallations: 0,
+    skippedLeaseLost: 0,
   };
   const settled = await mapWithConcurrency(deliveries, deps.policy.concurrency, (delivery) =>
-    deliverSafely(deps, delivery, leaseOwner, now, secrets, failures, summary).then(
+    deliverSafely(
+      deps,
+      { ...delivery, leaseExpiresAt },
+      leaseOwner,
+      now,
+      secrets,
+      failures,
+      summary,
+    ).then(
       () => ({ status: "fulfilled" as const }),
       (reason: unknown) => ({ status: "rejected" as const, reason }),
     ),
@@ -68,7 +80,9 @@ export async function dispatchConvexWebhooks(deps: ConvexWebhookDispatchDeps): P
   return deliveries.length;
 }
 
-type Delivery = Awaited<ReturnType<Repository["convex"]["claimDueDeliveries"]>>[number];
+type Delivery = Awaited<ReturnType<Repository["convex"]["claimDueDeliveries"]>>[number] & {
+  leaseExpiresAt: number;
+};
 
 async function deliverSafely(
   deps: ConvexWebhookDispatchDeps,
@@ -158,6 +172,17 @@ async function deliverOne(
       code: "CALLBACK_DESTINATION_REJECTED",
       occurredAt: now.toISOString(),
     });
+    return;
+  }
+  if (
+    !(await renewDeliveryLeaseBeforeSend(
+      delivery,
+      leaseOwner,
+      deps.policy,
+      deps.repo.convex.renewDeliveryLease,
+    ))
+  ) {
+    summary.skippedLeaseLost += 1;
     return;
   }
   const result = await postConfigurationCallback(webhook, deps.policy.sendTimeoutMs);

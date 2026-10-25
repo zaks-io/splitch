@@ -276,15 +276,34 @@ D1 remains shared, so database contention still affects both Environments.
 
 A coordinator run claims at most six Convex rows and sends all six concurrently, then does the
 same for Cloudflare. No claimed delivery waits behind another send. It repeats until a pass
-claims nothing or the 60-second budget expires. Each 30-second lease reserves 5 seconds for
-preparation, 5 seconds for HTTP and 10 seconds for D1 completion, leaving 10 seconds of margin.
-A module check includes all three budgets and rejects a claim larger than the send concurrency.
+claims nothing, 60 seconds elapse, or the run claims 1,000 rows. The last claim shrinks to the
+remaining row budget. Once that budget is spent, the run finishes its claimed rows and schedules
+an immediate alarm for a fresh invocation. The measured per-attempt cost is about 1.34 D1 calls
+plus one receiver HTTP call. Allowing one deletion probe and one lease renewal for every row
+still uses about 4,340 subrequests, leaving room below the
+[10,000-per-invocation default](https://developers.cloudflare.com/workers/platform/limits/#subrequests)
+for scheduling and other work.
+
+The nominal 30-second lease budget includes 5 seconds of preparation, 5 seconds of HTTP and
+10 seconds of D1 completion. Preparation can exceed its allowance. Each row carries its claimed
+lease deadline into the send path. Immediately before HTTP, a live clock checks that the lease
+still covers the send allowance plus completion. If fewer than 15 seconds remain, one guarded
+UPDATE renews the lease for 30 seconds only while the row is leased, owned by this dispatcher and
+unexpired. A zero-row renewal skips HTTP and completion, leaves the row with its current owner,
+and increments `skippedLeaseLost` in the provider summary. Cron Cloudflare still has no HTTP
+timeout; its renewal check uses the same nominal 5-second send allowance. This guard applies to
+both policies, independently of cron's fixed claim clock.
+
+A module check includes all three nominal budgets and rejects a claim larger than the send concurrency.
 A real-D1 contention test with 25 rows, 4.8-second responses and 2-second completions proves that
-a competing dispatcher cannot reclaim an in-flight row at 31 seconds.
+a competing dispatcher cannot reclaim an in-flight row at 31 seconds. Additional real-D1 tests
+delay preparation to 27 seconds for both providers and policies, then compete at 31 seconds while
+HTTP is in flight. Preparation that outlasts the lease, or a reclaim by another owner, skips sending.
 
 Dispatch policy comes from the caller. Cron preserves the existing 25-row concurrent batch,
 5-second Convex timeout, no Cloudflare timeout and claim-time outcome/retry timestamps. The
 coordinator uses six-row claims, a 5-second timeout for both providers and response-time outcomes.
+The merge is behavior-neutral in cron mode except a double-send guard on nearly expired leases.
 Claims retain the existing ordering, suppression and lease ownership checks. Environment-selective
 Cloudflare due and expiry indexes prevent another Environment's backlog from amplifying reads.
 Both providers' payload reads use partial lease-owner indexes. Real-D1 rows-read regressions stay
@@ -307,7 +326,8 @@ its Organization-scoped cursor and minute dispatch.
 ### Rollout
 
 1. Deploy the additive indexes and binding with production `INTEGRATION_DELIVERY_MODE=cron`.
-   This preserves global cron dispatch and immediate App-scoped Cloudflare dispatch.
+   This preserves global cron dispatch and immediate App-scoped Cloudflare dispatch, with the
+   double-send guard on nearly expired leases.
 2. Verify `coordinator` mode in shared preview, including alarms, isolation, retries, faults,
    receiver acknowledgments and D1 load. Local and shared-preview Wrangler values already select it.
 3. With explicit production approval, flip production to `coordinator`. Compare healthy receiver
@@ -335,6 +355,6 @@ Latency is `delivered_at - created_at` from D1; trigger commit times have one-se
 Every Env B delivery must complete, including intermediate versions, before results are recorded.
 
 The October 25 run measured 180,004 ms of workload. All 450 Env B deliveries completed, with
-p50 190 ms, p99 1,032 ms and maximum 1,034 ms. Env A attempted 222 deliveries, or 1.23 attempts per
+p50 585 ms, p99 753 ms and maximum 755 ms. Env A attempted 222 deliveries, or 1.23 attempts per
 second, while receivers returned failures or timed out. The healthy Environment met the p99
 10-second target. These local figures do not establish production D1 latency or capacity.

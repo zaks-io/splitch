@@ -8,7 +8,11 @@ import { encryptIntegrationSecret, signIntegrationPayload } from "./integration-
 
 const KEY = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=";
 const NOW = new Date("2026-08-25T12:00:00.000Z");
-const POLICY = cronDeliveryPolicy("cloudflare", () => NOW);
+const POLICY = cronDeliveryPolicy(
+  "cloudflare",
+  () => NOW,
+  () => NOW,
+);
 const DELIVERY_ID = "00000000-0000-4000-8000-000000000001";
 
 describe("Cloudflare dispatch fault detail", () => {

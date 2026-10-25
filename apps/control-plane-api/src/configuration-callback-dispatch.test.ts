@@ -38,7 +38,11 @@ describe("stored configuration callback destinations", () => {
         repo,
         webhookKek: KEY,
         fetcher,
-        policy: cronDeliveryPolicy("convex", () => NOW),
+        policy: cronDeliveryPolicy(
+          "convex",
+          () => NOW,
+          () => NOW,
+        ),
       });
       expect(fetcher).toHaveBeenCalledOnce();
       expect(fetcher).toHaveBeenCalledWith(

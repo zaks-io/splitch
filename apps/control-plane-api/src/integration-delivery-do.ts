@@ -47,18 +47,18 @@ export class IntegrationDeliveryDurableObject extends DurableObject<ControlPlane
           scope: envScope(identity.appId, identity.environmentId),
           now: () => new Date(),
           summary,
-          dispatchConvex: (scope, onDispatch) =>
+          dispatchConvex: (scope, onDispatch, claimLimit) =>
             dispatchConvexWebhooks({
-              policy: coordinatorDeliveryPolicy(),
+              policy: { ...coordinatorDeliveryPolicy(), claimLimit },
               repo,
               scope,
               onDispatch,
               webhookKek: this.env.CONVEX_WEBHOOK_KEK,
               webhookKeyVersion: this.env.CONVEX_WEBHOOK_KEY_VERSION,
             }),
-          dispatchCloudflare: (scope, onDispatch) =>
+          dispatchCloudflare: (scope, onDispatch, claimLimit) =>
             dispatchCloudflarePushes({
-              policy: coordinatorDeliveryPolicy(),
+              policy: { ...coordinatorDeliveryPolicy(), claimLimit },
               repo,
               scope,
               onDispatch,

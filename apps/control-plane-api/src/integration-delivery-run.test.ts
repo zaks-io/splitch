@@ -8,11 +8,41 @@ import {
   DELIVERY_LEASE_MS,
   DELIVERY_SEND_CONCURRENCY,
   DELIVERY_SEND_TIMEOUT_MS,
+  DELIVERY_RUN_CLAIM_BUDGET,
 } from "./integration-delivery-limits";
 import { runIntegrationDelivery } from "./integration-delivery-run";
 
 const scope = envScope("app", "env");
 const now = new Date("2026-10-25T00:00:00.000Z");
+
+it("yields immediately at its claimed-row budget without claiming the remaining backlog", async () => {
+  let backlog = DELIVERY_RUN_CLAIM_BUDGET * 2;
+  let claimed = 0;
+  const dispatch = vi.fn(async (_scope: typeof scope, _onDispatch: unknown, limit = 6) => {
+    const rows = Math.min(limit, backlog);
+    backlog -= rows;
+    claimed += rows;
+    return rows;
+  });
+  const result = await runIntegrationDelivery({
+    scope,
+    now: () => now,
+    repo: {
+      integrationDeliverySchedule: {
+        environmentsWithDueDeliveries: async () => [scope],
+        nextDeliveryWakeAt: async () => {
+          throw new Error("Backlog must wake immediately");
+        },
+      },
+    },
+    dispatchConvex: dispatch,
+    dispatchCloudflare: dispatch,
+  });
+  expect(claimed).toBe(DELIVERY_RUN_CLAIM_BUDGET);
+  expect(backlog).toBe(DELIVERY_RUN_CLAIM_BUDGET);
+  expect(result.nextWakeAt).toBe(now.toISOString());
+  expect(result.durationMs).toBe(0);
+});
 
 it("claims sequentially, drains passes, and returns the next retry", async () => {
   const order: string[] = [];

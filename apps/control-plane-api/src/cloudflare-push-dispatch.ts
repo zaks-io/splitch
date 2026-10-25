@@ -2,6 +2,7 @@ import type { Repository, TenantScope } from "@splitch/db";
 import { envScope } from "@splitch/db";
 import { serializeFault } from "@splitch/observability/worker";
 import { mapWithConcurrency } from "./bounded-map";
+import { renewDeliveryLeaseBeforeSend } from "./integration-delivery-lease";
 import {
   deliverySendSignal,
   type IntegrationDeliveryDispatchPolicy,
@@ -20,6 +21,7 @@ export interface CloudflareDispatchSummary {
   receiverRejected: number;
   transportFailures: number;
   preparationFailures: number;
+  skippedLeaseLost: number;
 }
 
 export interface CloudflarePushDispatchDeps {
@@ -36,10 +38,11 @@ export interface CloudflarePushDispatchDeps {
 export async function dispatchCloudflarePushes(deps: CloudflarePushDispatchDeps): Promise<number> {
   const now = deps.policy.clock.now();
   const leaseOwner = (deps.leaseOwner ?? (() => crypto.randomUUID()))();
+  const leaseExpiresAt = now.getTime() + deps.policy.leaseMs;
   const deliveries = await deps.repo.cloudflare.claimDueDeliveries(
     now.toISOString(),
     leaseOwner,
-    new Date(now.getTime() + deps.policy.leaseMs).toISOString(),
+    new Date(leaseExpiresAt).toISOString(),
     deps.policy.claimLimit,
     deps.scope,
   );
@@ -50,9 +53,10 @@ export async function dispatchCloudflarePushes(deps: CloudflarePushDispatchDeps)
     receiverRejected: 0,
     transportFailures: 0,
     preparationFailures: 0,
+    skippedLeaseLost: 0,
   };
   const settled = await mapWithConcurrency(deliveries, deps.policy.concurrency, (delivery) =>
-    deliverSafely(deps, delivery, leaseOwner, now, snapshots, summary).then(
+    deliverSafely(deps, { ...delivery, leaseExpiresAt }, leaseOwner, now, snapshots, summary).then(
       () => ({ status: "fulfilled" as const }),
       (reason: unknown) => ({ status: "rejected" as const, reason }),
     ),
@@ -67,7 +71,11 @@ export async function dispatchCloudflarePushes(deps: CloudflarePushDispatchDeps)
   return deliveries.length;
 }
 
-type ClaimedDelivery = Awaited<ReturnType<Repository["cloudflare"]["claimDueDeliveries"]>>[number];
+type ClaimedDelivery = Awaited<
+  ReturnType<Repository["cloudflare"]["claimDueDeliveries"]>
+>[number] & {
+  leaseExpiresAt: number;
+};
 type Delivery = ClaimedDelivery & { firstSetup: boolean };
 
 async function deliverSafely(
@@ -105,14 +113,7 @@ async function deliverOne(
   snapshots: Map<string, ReturnType<typeof buildStableSnapshot>>,
   summary: CloudflareDispatchSummary,
 ): Promise<void> {
-  const scope = envScope(delivery.appId, delivery.environmentId);
-  const snapshotKey = `${delivery.appId}\0${delivery.environmentId}`;
-  let snapshotPromise = snapshots.get(snapshotKey);
-  if (!snapshotPromise) {
-    snapshotPromise = buildStableSnapshot(deps.repo, scope);
-    snapshots.set(snapshotKey, snapshotPromise);
-  }
-  const snapshot = await snapshotPromise;
+  const snapshot = await snapshotForDelivery(deps.repo, delivery, snapshots);
   const body = JSON.stringify(snapshot);
   const secret = await decryptIntegrationSecret(
     delivery.secretCiphertext,
@@ -126,6 +127,17 @@ async function deliverOne(
     secret,
     `${timestamp}.${delivery.deliveryId}.${body}`,
   );
+  if (
+    !(await renewDeliveryLeaseBeforeSend(
+      delivery,
+      leaseOwner,
+      deps.policy,
+      deps.repo.cloudflare.renewDeliveryLease,
+    ))
+  ) {
+    summary.skippedLeaseLost += 1;
+    return;
+  }
   const result = await postWebhook({
     url: delivery.endpoint,
     body,
@@ -201,6 +213,20 @@ async function buildStableSnapshot(repo: Repository, scope: ReturnType<typeof en
     if ((await repo.cloudflare.environmentVersion(scope)) === version) return snapshot;
   }
   throw new Error("Cloudflare configuration changed repeatedly while building a push snapshot");
+}
+
+function snapshotForDelivery(
+  repo: Repository,
+  delivery: Delivery,
+  snapshots: Map<string, ReturnType<typeof buildStableSnapshot>>,
+) {
+  const key = `${delivery.appId}\0${delivery.environmentId}`;
+  let snapshot = snapshots.get(key);
+  if (!snapshot) {
+    snapshot = buildStableSnapshot(repo, envScope(delivery.appId, delivery.environmentId));
+    snapshots.set(key, snapshot);
+  }
+  return snapshot;
 }
 
 async function finishFailure(

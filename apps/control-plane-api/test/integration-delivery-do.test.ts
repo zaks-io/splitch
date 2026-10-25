@@ -184,6 +184,7 @@ it("emits one scrubbed run summary with provider outcomes", async () => {
         receiverRejected: 0,
         transportFailures: 0,
         preparationFailedInstallations: 0,
+        skippedLeaseLost: 0,
       },
       cloudflare: {
         claimed: 0,
@@ -191,6 +192,7 @@ it("emits one scrubbed run summary with provider outcomes", async () => {
         receiverRejected: 0,
         transportFailures: 0,
         preparationFailures: 0,
+        skippedLeaseLost: 0,
       },
       durationMs: expect.any(Number),
       nextWakeAt: null,

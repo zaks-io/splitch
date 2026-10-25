@@ -2,6 +2,7 @@ import {
   type ConvexDeliveryFinish,
   claimDueConvexDeliveries,
   finishConvexDelivery,
+  renewConvexDeliveryLease,
 } from "./convex-deliveries";
 import {
   type ConvexPreparationFailure,
@@ -202,6 +203,15 @@ export function makeConvexIntegrationRepo(d1: D1Database) {
       scope?: EnvScope,
     ): Promise<ConfigWebhookDeliveryRow[]> {
       return claimDueConvexDeliveries(d1, now, leaseOwner, leaseExpiresAt, limit, scope);
+    },
+
+    renewDeliveryLease(
+      deliveryId: string,
+      leaseOwner: string,
+      now: string,
+      leaseExpiresAt: string,
+    ) {
+      return renewConvexDeliveryLease(d1, deliveryId, leaseOwner, now, leaseExpiresAt);
     },
 
     async finishDelivery(

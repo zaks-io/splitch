@@ -7,7 +7,11 @@ import { dispatchConvexWebhooks } from "./convex-webhook-dispatch";
 
 const KEY = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=";
 const NOW = new Date("2026-08-25T12:00:00.000Z");
-const POLICY = cronDeliveryPolicy("convex", () => NOW);
+const POLICY = cronDeliveryPolicy(
+  "convex",
+  () => NOW,
+  () => NOW,
+);
 
 describe("Convex preparation isolation", () => {
   it.each([undefined, "invalid", "AA=="])(
@@ -60,6 +64,7 @@ describe("Convex preparation isolation", () => {
       receiverRejected: 0,
       transportFailures: 0,
       preparationFailedInstallations: 1,
+      skippedLeaseLost: 0,
     });
     consoleError.mockRestore();
   });

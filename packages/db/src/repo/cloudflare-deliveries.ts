@@ -70,6 +70,21 @@ export interface CloudflareDeliveryFinish {
   errorJson?: string;
 }
 
+export async function renewCloudflareDeliveryLease(
+  d1: D1Database,
+  deliveryId: string,
+  leaseOwner: string,
+  now: string,
+  leaseExpiresAt: string,
+): Promise<boolean> {
+  const result = await d1
+    .prepare(`UPDATE cloudflare_config_deliveries SET lease_expires_at = ?
+      WHERE delivery_id = ? AND state = 'leased' AND lease_owner = ? AND lease_expires_at > ?`)
+    .bind(leaseExpiresAt, deliveryId, leaseOwner, now)
+    .run();
+  return result.meta.changes === 1;
+}
+
 /**
  * The `(installation, version)` unique index means a terminal delivery for the
  * current version blocks every new one until the Environment version moves.
