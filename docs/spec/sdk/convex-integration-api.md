@@ -43,8 +43,10 @@ Event delivery as well as evaluation. Delivery happens after the caller's Mutati
 an evaluate-only Key would let `track()` return a receipt and then send every Metric Event terminal,
 unobserved. Install refuses it with `INSUFFICIENT_SCOPES` instead, while a human is watching.
 
-An exact retry returns the existing installation without a new challenge and preserves its active
-or revoked status. Reusing `installationId` with a different callback or secret fails
+An exact retry of a non-dormant installation returns the existing installation without a new
+challenge and preserves its active or revoked status. A dormant installation with the verification
+capability requires a fresh receiver proof before reactivation. Legacy retries without that
+capability leave the dormant mark unchanged. Reusing `installationId` with a different callback or secret fails
 `IDEMPOTENCY_KEY_CONFLICT` before verification. The response is:
 
 ```text
@@ -82,7 +84,7 @@ fails verification. The challenge never raises the announced Environment version
 ID, or schedules configuration sync. A missing or invalid proof, redirect, or other permanent
 receiver rejection returns `VALIDATION_ERROR`; transport failures, `429`, and `5xx` return
 `SERVICE_UNAVAILABLE` so the component can retry. No remote installation row is written on failure.
-An exact retry of an already stored installation does not need a reachable receiver.
+An exact retry of a non-dormant stored installation does not need a reachable receiver.
 
 Verification and configuration deliveries use a five-second timeout and `redirect: "manual"`.
 Redirect responses fail rather than changing the destination. The Cloudflare Workers runtime
@@ -131,7 +133,27 @@ rotation. The old secret is never sent back or recoverable from either API.
 
 `GET /api/integrations/convex/installations/:installationId` returns status, callback URL, current
 Environment version, last delivered version/time, pending count, oldest pending age, terminal count,
-and the complete latest bounded `DeliveryErrorEnvelope`. It returns no secret or config payload.
+and the complete latest bounded `DeliveryErrorEnvelope`. The additive, nullable
+`deploymentMissingAt` timestamp identifies a dormant installation while `status` stays `active`.
+The operator list, CLI `convex-installations list` output and MCP `convex_installations_list`
+output expose the same field. It returns no secret or config payload.
+
+A terminal callback `404` triggers one deployment probe for that outcome. Only a validated
+`https://<name>.convex.site/.../configuration` callback maps to
+`https://<name>.convex.cloud/version`. The probe has a five-second timeout and follows no redirects.
+A `404` with a `convex-usher` header proves deletion; a `200` proves the deployment is live.
+Other results, missing headers, timeouts, errors and unsupported callback hosts are inconclusive.
+A callback `404` alone cannot establish deletion because a live deployment can lack that route.
+
+Deleted deployments become dormant. Their pending and leased deliveries are suppressed, and config
+commits stop inserting deliveries for them. The daily 08:00 UTC cron re-probes at most 25 active
+dormant installations, oldest checked time first with installation ID as the tie-breaker. Every
+attempt advances that time, including inconclusive results, so later batches rotate fairly.
+A live result or successful verified re-registration clears the mark and enqueues the Environment's
+current version atomically. Recovery reuses an existing suppressed or terminal delivery for that
+version if necessary, and repeated recovery is idempotent. Other probe results leave it dormant.
+Dormant installations, including those older than 30 days, remain stored for a later retention
+decision. Neither probing nor recovery revokes or deletes installations.
 
 `DELETE /api/integrations/convex/installations/:installationId` first marks the installation revoked and
 suppresses every undelivered row, then returns `204`. It is idempotent. The component deletes local

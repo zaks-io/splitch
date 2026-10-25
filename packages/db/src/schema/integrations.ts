@@ -24,11 +24,16 @@ export const convexInstallations = sqliteTable(
     lastDeliveredAt: text("last_delivered_at"),
     latestDeliveryErrorJson: text("latest_delivery_error_json"),
     preparationRetryAt: text("preparation_retry_at"),
+    deploymentMissingAt: text("deployment_missing_at"),
+    deploymentCheckedAt: text("deployment_checked_at"),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
     revokedAt: text("revoked_at"),
   },
   (table) => [
+    index("convex_installations_dormant_check_idx")
+      .on(table.deploymentCheckedAt, table.installationId)
+      .where(sql`${table.status} = 'active' AND ${table.deploymentMissingAt} IS NOT NULL`),
     index("convex_installations_preparation_due_idx").on(table.status, table.preparationRetryAt),
     index("convex_installations_scope_status_idx").on(
       table.appId,

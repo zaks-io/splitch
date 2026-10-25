@@ -4,6 +4,7 @@ import {
   configurationCallbackDestinationError,
   postConfigurationCallback,
 } from "./configuration-callback-transport";
+import { detectMissingConvexDeployment } from "./convex-deployments";
 import { decryptConvexSecret, signConvexWebhook } from "./convex-secret";
 import { validateIntegrationSecretKey } from "./integration-secret";
 import { retryDelayMs, type WebhookPost } from "./webhook-transport";
@@ -190,6 +191,8 @@ async function deliverOne(
     httpStatus: result.status,
     occurredAt: now.toISOString(),
   });
+  if (result.status === 404)
+    await detectMissingConvexDeployment(deps, delivery.installationId, delivery.callbackUrl, now);
 }
 
 async function finishFailure(

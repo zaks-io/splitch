@@ -1,4 +1,4 @@
-import { appScope, type ConvexInstallationRow } from "@splitch/db";
+import { appScope, type ConvexInstallationRow, type EnvScope } from "@splitch/db";
 import type { HandlerArgs, RouteHandler } from "@splitch/worker-runtime";
 import { renderError } from "@splitch/worker-runtime";
 import { configurationCallbackDestinationError } from "./configuration-callback-transport";
@@ -45,16 +45,14 @@ export function makeConvexInstallationCreateHandler(
         secretFingerprint: encrypted.fingerprint,
         now: now().toISOString(),
       }));
-    const racedConflict = installationConflict(row, input.body, encrypted.fingerprint, requestId);
-    return (
-      racedConflict ??
-      Response.json({
-        installationId: row.installationId,
-        appId: scope.appId,
-        environmentId: scope.environmentId,
-        environmentVersion: await deps.repo.convex.environmentVersion(scope),
-        status: row.status,
-      })
+    return registrationResponse(
+      deps,
+      scope,
+      row,
+      input.body,
+      encrypted.fingerprint,
+      now(),
+      requestId,
     );
   }) satisfies RouteHandler<ConvexInstallationCreateInput>;
 }
@@ -125,7 +123,8 @@ async function validateReceiver(
   now: Date,
   requestId: string,
 ): Promise<Response | null> {
-  if (existing || !input.callbackVerification) return null;
+  if (!input.callbackVerification) return null;
+  if (existing && !existing.deploymentMissingAt) return null;
   const verified = await verifyConfigurationCallback(input, now, deps.fetcher);
   if (verified.ok) return null;
   if (!verified.retryable) return callbackValidationError(verified.message, requestId);
@@ -133,4 +132,26 @@ async function validateReceiver(
     { code: "SERVICE_UNAVAILABLE", message: verified.message, details: { retryAfterMs: 1_000 } },
     { requestId },
   );
+}
+
+async function registrationResponse(
+  deps: ConvexHandlerDeps,
+  scope: EnvScope,
+  row: ConvexInstallationRow,
+  input: ConvexInstallationCreateInput["body"],
+  fingerprint: string,
+  now: Date,
+  requestId: string,
+): Promise<Response> {
+  const conflict = installationConflict(row, input, fingerprint, requestId);
+  if (conflict) return conflict;
+  if (row.deploymentMissingAt && input.callbackVerification)
+    await deps.repo.convex.reactivateDeployment(scope, row.installationId, now.toISOString());
+  return Response.json({
+    installationId: row.installationId,
+    appId: scope.appId,
+    environmentId: scope.environmentId,
+    environmentVersion: await deps.repo.convex.environmentVersion(scope),
+    status: row.status,
+  });
 }

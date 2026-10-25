@@ -5,23 +5,25 @@ create its webhook deliveries in the same D1 transaction. They contain no raw AP
 
 ## `convex_installations`
 
-| Column                       | Type    | Required | Meaning                                                    |
-| ---------------------------- | ------- | -------- | ---------------------------------------------------------- |
-| `installation_id`            | TEXT PK | yes      | Component-generated UUID                                   |
-| `app_id`                     | TEXT FK | yes      | Credential-derived App                                     |
-| `environment_id`             | TEXT FK | yes      | Credential-derived Environment                             |
-| `callback_url`               | TEXT    | yes      | Validated `*.convex.site` component route                  |
-| `secret_ciphertext`          | BLOB    | yes      | Authenticated encryption of the webhook secret             |
-| `secret_key_version`         | TEXT    | yes      | Webhook KEK version used for encryption                    |
-| `secret_fingerprint`         | TEXT    | yes      | Keyed fingerprint for idempotency comparison, not delivery |
-| `status`                     | TEXT    | yes      | `active` or `revoked`                                      |
-| `last_delivered_version`     | INTEGER | no       | Most recent acknowledged Environment version               |
-| `last_delivered_at`          | TEXT    | no       | ISO 8601 acknowledgement time                              |
-| `latest_delivery_error_json` | TEXT    | no       | Latest bounded `DeliveryErrorEnvelope`                     |
-| `preparation_retry_at`       | TEXT    | no       | Convex installation preparation cooldown eligibility       |
-| `created_at`                 | TEXT    | yes      | ISO 8601                                                   |
-| `updated_at`                 | TEXT    | yes      | ISO 8601                                                   |
-| `revoked_at`                 | TEXT    | no       | ISO 8601                                                   |
+| Column                       | Type    | Required | Meaning                                                            |
+| ---------------------------- | ------- | -------- | ------------------------------------------------------------------ |
+| `installation_id`            | TEXT PK | yes      | Component-generated UUID                                           |
+| `app_id`                     | TEXT FK | yes      | Credential-derived App                                             |
+| `environment_id`             | TEXT FK | yes      | Credential-derived Environment                                     |
+| `callback_url`               | TEXT    | yes      | Validated `*.convex.site` component route                          |
+| `secret_ciphertext`          | BLOB    | yes      | Authenticated encryption of the webhook secret                     |
+| `secret_key_version`         | TEXT    | yes      | Webhook KEK version used for encryption                            |
+| `secret_fingerprint`         | TEXT    | yes      | Keyed fingerprint for idempotency comparison, not delivery         |
+| `status`                     | TEXT    | yes      | `active` or `revoked`                                              |
+| `last_delivered_version`     | INTEGER | no       | Most recent acknowledged Environment version                       |
+| `last_delivered_at`          | TEXT    | no       | ISO 8601 acknowledgement time                                      |
+| `latest_delivery_error_json` | TEXT    | no       | Latest bounded `DeliveryErrorEnvelope`                             |
+| `preparation_retry_at`       | TEXT    | no       | Convex installation preparation cooldown eligibility               |
+| `deployment_missing_at`      | TEXT    | no       | ISO 8601 deleted-deployment detection time; non-null means dormant |
+| `deployment_checked_at`      | TEXT    | no       | ISO 8601 most recent deployment probe time for fair rotation       |
+| `created_at`                 | TEXT    | yes      | ISO 8601                                                           |
+| `updated_at`                 | TEXT    | yes      | ISO 8601                                                           |
+| `revoked_at`                 | TEXT    | no       | ISO 8601                                                           |
 
 Indexes: `(app_id, environment_id, status)` and unique
 `(app_id, environment_id, installation_id)`. Callback URL is not unique because named component
@@ -29,6 +31,18 @@ instances may mount distinct paths on one Convex deployment.
 
 Secret rotation replaces ciphertext, key version, and fingerprint in one transaction. Routine KEK
 rotation rewraps ciphertext without changing the underlying secret. No read path returns plaintext.
+
+A non-null `deployment_missing_at` makes an active installation dormant without revoking it.
+Marking and suppression of its pending and leased deliveries run in one D1 batch. The config-version
+trigger excludes dormant installations, preventing pending rows that retention could never expire.
+The claim query is unchanged because marking suppresses existing work and the trigger creates none.
+A partial `(deployment_checked_at, installation_id)` index covers active dormant installations.
+
+Successful verified re-registration or a live daily re-probe atomically requeues the current
+Environment version and clears the mark. The unique installation/version index prevents duplicate
+nudges. If that version already has a terminal or suppressed delivery, recovery resets it to pending
+and preserves its original delivery ID and body. Repeated recovery cannot reset a leased delivery.
+Revoked installations never reactivate. Installations are never deleted by this lifecycle.
 
 ## `config_webhook_deliveries`
 
@@ -96,7 +110,7 @@ stored completely rather than truncated.
   error are its equivalent health criteria. Indexed state reads exclude completed history.
   Lag-read failures report `integration_delivery_lag_read_failed` without blocking dispatch.
 
-- A successful config mutation inserts one row for every active installation in the same D1
+- A successful config mutation inserts one row for every active, non-dormant installation in the same D1
   transaction as the config change. A transaction that rolls back creates no delivery.
 - Dispatch starts immediately after commit and is also recoverable by the Control Plane Worker's
   once-per-minute scheduled lease scanner. Immediate Cloudflare scans use the authenticated

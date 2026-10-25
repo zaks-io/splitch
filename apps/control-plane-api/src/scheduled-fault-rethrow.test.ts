@@ -4,6 +4,7 @@ import type { ControlPlaneApiEnv } from "./env";
 import { runControlPlaneScheduled } from "./scheduled";
 
 const jobs = vi.hoisted(() => ({
+  deploymentReprobes: vi.fn(),
   cloudflare: vi.fn(),
   sentry: vi.fn(),
   adoption: vi.fn(),
@@ -14,7 +15,7 @@ const jobs = vi.hoisted(() => ({
 
 vi.mock("@splitch/db", () => ({
   createRepository: () => ({
-    convex: { deliveryLag: async () => [] },
+    convex: { deliveryLag: async () => [], dormantDeployments: jobs.deploymentReprobes },
     cloudflare: { deliveryLag: async () => [] },
     identity: {
       reapExpiredProvisionalOrganizations: async () => ({ candidates: 0, reaped: 0 }),
@@ -45,12 +46,14 @@ vi.mock("./personal-access-token-rotation", () => ({
 
 beforeEach(() => {
   for (const job of Object.values(jobs)) job.mockReset().mockResolvedValue(0);
+  jobs.deploymentReprobes.mockResolvedValue([]);
 });
 afterEach(() => vi.restoreAllMocks());
 
 it.each([
   ["cloudflare", "* * * * *", "cloudflare_push_dispatch_failed"],
   ["sentry", "* * * * *", "sentry_webhook_dispatch_failed"],
+  ["deploymentReprobes", "0 8 * * *", "convex_deployment_reprobe_failed"],
   ["adoption", "0 8 * * *", "metric_event_claim_retention_adoption_failed"],
   ["archive", "0 8 * * *", "approval_request_archive_failed"],
   ["auditForward", "* * * * *", "audit_event_forward_failed"],

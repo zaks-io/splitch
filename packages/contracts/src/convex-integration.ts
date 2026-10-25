@@ -36,6 +36,7 @@ export const ConvexInstallationSchema = z
 
 export const ConvexInstallationStatusSchema = ConvexInstallationSchema.extend({
   callbackUrl: z.url(),
+  deploymentMissingAt: z.iso.datetime().nullable().optional(),
   lastDeliveredVersion: EnvironmentVersionSchema.nullable(),
   lastDeliveredAt: z.iso.datetime().nullable(),
   pendingCount: z.number().int().nonnegative(),

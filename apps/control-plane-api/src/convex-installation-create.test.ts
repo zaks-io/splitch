@@ -98,6 +98,43 @@ describe("installation retries and old components", () => {
     },
   );
 
+  it("reactivates a dormant installation only after a fresh receiver proof", async () => {
+    const existing = { ...(await stored("active")), deploymentMissingAt: NOW.toISOString() };
+    const fixture = setup(existing);
+    const reactivateDeployment = vi.fn();
+    fixture.repo.convex.reactivateDeployment = reactivateDeployment;
+    const fetcher: typeof fetch = async (_url, init) => {
+      expect(reactivateDeployment).not.toHaveBeenCalled();
+      const { installationId, challenge } = JSON.parse(init?.body as string);
+      return new Response(null, {
+        status: 204,
+        headers: {
+          "splitch-callback-proof": createHmac("sha256", SECRET)
+            .update(`callback.verify:${installationId}:${challenge}`)
+            .digest("hex"),
+        },
+      });
+    };
+    expect((await fixture.handlers(fetcher).create(args(INPUT))).status).toBe(200);
+    expect(reactivateDeployment).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({ appId: "app_1", environmentId: "env_1" }),
+      INPUT.installationId,
+      NOW.toISOString(),
+    );
+  });
+
+  it("keeps a dormant installation dormant when verification fails or the capability is missing", async () => {
+    const existing = { ...(await stored("active")), deploymentMissingAt: NOW.toISOString() };
+    const fixture = setup(existing);
+    const reactivateDeployment = vi.fn();
+    fixture.repo.convex.reactivateDeployment = reactivateDeployment;
+    const fetcher = vi.fn(async () => new Response(null, { status: 404 }));
+    expect((await fixture.handlers(fetcher).create(args(INPUT))).status).toBe(400);
+    const { callbackVerification: _capability, ...legacy } = INPUT;
+    expect((await fixture.handlers(fetcher).create(args(legacy))).status).toBe(400);
+    expect(reactivateDeployment).not.toHaveBeenCalled();
+  });
+
   it("rejects changed registration content before a challenge", async () => {
     const fixture = setup(await stored("active"));
     const fetcher = vi.fn();
@@ -190,6 +227,7 @@ function setup(initial: ConvexInstallationRow | null = null) {
     convex: { getInstallation, createInstallation, environmentVersion: async () => 7 },
   } as unknown as Repository;
   return {
+    repo,
     getInstallation,
     createInstallation,
     handlers: (fetcher: typeof fetch) =>
