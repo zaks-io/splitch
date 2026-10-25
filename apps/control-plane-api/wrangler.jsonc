@@ -283,7 +283,7 @@
       },
       "vars": {
         "SPLITCH_PLATFORM_TARGET": "production",
-        "INTEGRATION_DELIVERY_MODE": "cron",
+        "INTEGRATION_DELIVERY_MODE": "coordinator",
         "TINYBIRD_API_URL": "https://api.us-west-2.aws.tinybird.co",
         "AUTH_JWKS_URI": "https://auth.splitch.dev/.well-known/jwks.json",
         "CONTROL_PLANE_ORIGIN": "https://api.splitch.dev",

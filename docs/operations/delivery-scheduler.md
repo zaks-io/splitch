@@ -354,7 +354,10 @@ its Organization-scoped cursor and minute dispatch.
    using the same leases if needed. A stale coordinator alarm in cron mode sends nothing.
 4. Delete the global dispatcher one release after production runs in coordinator mode.
 
-No deployment or production mode flip is part of this PR.
+Steps 1 and 3 shipped on 2026-10-25: #755 deployed the binding and indexes in `cron` mode, and
+production then switched to `coordinator` by explicit approval. The shared-preview check in step 2
+was skipped by that decision, so production observation after the switch is the first
+non-local evidence. Roll back by setting production `INTEGRATION_DELIVERY_MODE` to `cron`.
 
 ### Local workerd load test
 
