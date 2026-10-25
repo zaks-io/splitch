@@ -2,6 +2,20 @@ import { sql } from "drizzle-orm";
 import type { Db } from "./client";
 import { assertMintedScope, type EnvScope } from "./scope";
 
+// Literal sql.raw arguments keep the flag_configs writer sweep able to resolve every raw table.
+const PROVIDER_TABLES = {
+  convex: {
+    table: sql.raw("config_webhook_deliveries"),
+    installation: sql.raw("convex_installations"),
+    index: sql.raw("config_webhook_delivery_outstanding_idx"),
+  },
+  cloudflare: {
+    table: sql.raw("cloudflare_config_deliveries"),
+    installation: sql.raw("cloudflare_installations"),
+    index: sql.raw("cloudflare_config_delivery_outstanding_idx"),
+  },
+} as const;
+
 export async function readIntegrationDeliverySummary(db: Db, scope: EnvScope, nowMs: number) {
   assertMintedScope(scope);
   const [convex, cloudflare] = await Promise.all([
@@ -17,14 +31,7 @@ async function readProviderSummary(
   nowMs: number,
   provider: "convex" | "cloudflare",
 ) {
-  const convex = provider === "convex";
-  const table = sql.raw(convex ? "config_webhook_deliveries" : "cloudflare_config_deliveries");
-  const installation = sql.raw(convex ? "convex_installations" : "cloudflare_installations");
-  const index = sql.raw(
-    convex
-      ? "config_webhook_delivery_outstanding_idx"
-      : "cloudflare_config_delivery_outstanding_idx",
-  );
+  const { table, installation, index } = PROVIDER_TABLES[provider];
   // Unlike healthy-only lag alerts, this operator read includes failing deliveries. Start from
   // scoped installations and their outstanding index so retained history is never scanned.
   const [rows] = await db.batch([
