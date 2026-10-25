@@ -136,9 +136,12 @@ stored completely rather than truncated.
 - Each `(App, Environment)` has an `IntegrationDeliveryDurableObject`, named
   `${appId}:${environmentId}`. It persists only its identity and alarm. D1 remains authoritative.
   The coordinator claims Convex then Cloudflare work sequentially, with at most six sends,
-  six rows per claim, a 5-second send timeout, a 60-second run budget and a 1,000-claimed-row budget.
-  Each claim is limited by the remaining row budget. It finishes in-flight rows before yielding;
-  reaching the row budget returns an immediate wake for a fresh invocation's subrequest allowance.
+  six rows per claim, a 5-second send timeout and a 60-second run budget. The coordinator counts
+  actual D1 binding calls and outbound HTTP requests, including renewals and deletion probes.
+  At 5,000 subrequests it stops claiming, finishes in-flight rows and returns an immediate wake
+  for a fresh invocation. The remaining half of the default allowance covers the in-flight batch
+  and scheduling. Cloudflare snapshots are cached per run by App, Environment and Environment
+  version, with version checks before and after building. Cron keeps its existing snapshot lifetime.
 - Alarms schedule the next claimable retry, lease expiry or Convex preparation cooldown. Work
   still due at budget exhaustion schedules another alarm immediately. A wake during a run cannot
   be postponed by that run's completion. Handler failures report `integration_delivery_run_failed`
@@ -172,8 +175,10 @@ stored completely rather than truncated.
   5 seconds for preparation, 5 seconds for HTTP and 10 seconds for D1 completion. Preparation
   can take longer, so both policies carry the claimed deadline to a live-clock pre-send check.
   With less than the send allowance plus completion budget remaining, one UPDATE renews the lease
-  only if the row remains leased to this owner and unexpired. A zero-row renewal skips HTTP and
-  completion, leaves the row with its current owner, and increments `skippedLeaseLost`. Cron
+  only if the row remains leased to this owner and unexpired, using a clock read immediately before
+  the call. After renewal returns, another live-clock check deducts its latency from the renewed
+  deadline. A zero-row renewal or insufficient remaining time skips HTTP and completion, preserves
+  ownership and attempt count, and increments `skippedLeaseLost`. Cron
   Cloudflare retains unbounded HTTP; only its lease check uses the nominal 5-second send allowance.
   A module check requires the nominal budget to fit and the claim limit to be no larger than the
   send concurrency. Other `4xx`

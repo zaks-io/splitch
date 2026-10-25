@@ -27,7 +27,7 @@ it("measures healthy delivery latency under an unrelated 1,000-installation fail
     }
     const index = Number(/^failing(\d+)\./.exec(host)?.[1]);
     if (!Number.isInteger(index)) throw new Error(`Unexpected load-test receiver: ${host}`);
-    attemptedA++;
+    if (host.endsWith(".convex.site")) attemptedA++;
     const latency = [100, 100, 1200, 4800, 5200][index % 5];
     if (latency === undefined) throw new Error("Load-test latency missing");
     await delay(latency, init?.signal);

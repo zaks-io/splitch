@@ -1,3 +1,4 @@
+import type { ConfigSnapshot } from "@splitch/contracts";
 import type { Repository, TenantScope } from "@splitch/db";
 import { envScope } from "@splitch/db";
 import { serializeFault } from "@splitch/observability/worker";
@@ -33,6 +34,7 @@ export interface CloudflarePushDispatchDeps {
   leaseOwner?: () => string;
   scope?: TenantScope;
   onDispatch?: (summary: CloudflareDispatchSummary) => void;
+  snapshotCache?: Map<string, Promise<ConfigSnapshot>>;
 }
 
 export async function dispatchCloudflarePushes(deps: CloudflarePushDispatchDeps): Promise<number> {
@@ -113,7 +115,7 @@ async function deliverOne(
   snapshots: Map<string, ReturnType<typeof buildStableSnapshot>>,
   summary: CloudflareDispatchSummary,
 ): Promise<void> {
-  const snapshot = await snapshotForDelivery(deps.repo, delivery, snapshots);
+  const snapshot = await snapshotForDelivery(deps, delivery, snapshots);
   const body = JSON.stringify(snapshot);
   const secret = await decryptIntegrationSecret(
     delivery.secretCiphertext,
@@ -206,24 +208,42 @@ function inFirstSetupWindow(delivery: ClaimedDelivery, now: Date): boolean {
   return now.getTime() - registeredAt < FIRST_SETUP_WINDOW_MS;
 }
 
-async function buildStableSnapshot(repo: Repository, scope: ReturnType<typeof envScope>) {
+async function buildStableSnapshot(
+  repo: Repository,
+  scope: ReturnType<typeof envScope>,
+  cache?: Map<string, Promise<ConfigSnapshot>>,
+) {
   for (let attempt = 0; attempt < 3; attempt += 1) {
     const version = await repo.cloudflare.environmentVersion(scope);
-    const snapshot = await buildIntegrationSnapshot(repo, scope, version);
+    const key = `${scope.appId}\0${scope.environmentId}\0${version}`;
+    let building = cache?.get(key);
+    if (!building) {
+      building = buildIntegrationSnapshot(repo, scope, version).catch((error: unknown) => {
+        cache?.delete(key);
+        throw error;
+      });
+      cache?.set(key, building);
+    }
+    const snapshot = await building;
     if ((await repo.cloudflare.environmentVersion(scope)) === version) return snapshot;
+    cache?.delete(key);
   }
   throw new Error("Cloudflare configuration changed repeatedly while building a push snapshot");
 }
 
 function snapshotForDelivery(
-  repo: Repository,
+  deps: CloudflarePushDispatchDeps,
   delivery: Delivery,
   snapshots: Map<string, ReturnType<typeof buildStableSnapshot>>,
 ) {
   const key = `${delivery.appId}\0${delivery.environmentId}`;
   let snapshot = snapshots.get(key);
   if (!snapshot) {
-    snapshot = buildStableSnapshot(repo, envScope(delivery.appId, delivery.environmentId));
+    snapshot = buildStableSnapshot(
+      deps.repo,
+      envScope(delivery.appId, delivery.environmentId),
+      deps.snapshotCache,
+    );
     snapshots.set(key, snapshot);
   }
   return snapshot;

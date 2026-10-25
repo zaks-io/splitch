@@ -55,6 +55,7 @@ it.each(["convex", "cloudflare"] as const)(
     const run = runIntegrationDelivery({
       repo: repository,
       scope,
+      subrequests: { count: 0 },
       now: () => new Date(),
       dispatchConvex: provider === "convex" ? dispatch : async () => 0,
       dispatchCloudflare: provider === "cloudflare" ? dispatch : async () => 0,

@@ -1,4 +1,3 @@
-import { coordinatorDeliveryPolicy } from "./integration-delivery-limits";
 import { DurableObject } from "cloudflare:workers";
 import { createRepository, envScope } from "@splitch/db";
 import {
@@ -11,7 +10,9 @@ import { dispatchCloudflarePushes } from "./cloudflare-push-dispatch";
 import { integrationDeliveryMode } from "./control-plane-runtime-config";
 import { dispatchConvexWebhooks } from "./convex-webhook-dispatch";
 import type { ControlPlaneApiEnv } from "./env";
+import { coordinatorDeliveryPolicy } from "./integration-delivery-limits";
 import { integrationDeliverySummary, runIntegrationDelivery } from "./integration-delivery-run";
+import { integrationDeliverySubrequests } from "./integration-delivery-subrequests";
 
 interface Identity {
   appId: string;
@@ -34,6 +35,7 @@ export class IntegrationDeliveryDurableObject extends DurableObject<ControlPlane
   override async alarm(): Promise<void> {
     const startedAt = Date.now();
     const summary = integrationDeliverySummary();
+    let subrequests: ReturnType<typeof integrationDeliverySubrequests> | undefined;
     let identity: Identity | undefined;
     let nextWakeAt: string | null = null;
     const options = workerObservabilityWithWaitUntil("control-plane-api", this.ctx);
@@ -41,27 +43,34 @@ export class IntegrationDeliveryDurableObject extends DurableObject<ControlPlane
       identity = await this.ctx.storage.get<Identity>("identity");
       if (!identity) throw new Error("Integration delivery alarm has no persisted identity");
       if (integrationDeliveryMode(this.env) === "coordinator") {
-        const repo = createRepository(this.env.DB);
+        subrequests = integrationDeliverySubrequests(this.env.DB, fetch);
+        const repo = createRepository(subrequests.db);
+        const fetcher = subrequests.fetcher;
+        const snapshotCache = new Map();
         const result = await runIntegrationDelivery({
           repo,
           scope: envScope(identity.appId, identity.environmentId),
           now: () => new Date(),
           summary,
-          dispatchConvex: (scope, onDispatch, claimLimit) =>
+          subrequests,
+          dispatchConvex: (scope, onDispatch) =>
             dispatchConvexWebhooks({
-              policy: { ...coordinatorDeliveryPolicy(), claimLimit },
+              policy: coordinatorDeliveryPolicy(),
               repo,
               scope,
               onDispatch,
+              fetcher,
               webhookKek: this.env.CONVEX_WEBHOOK_KEK,
               webhookKeyVersion: this.env.CONVEX_WEBHOOK_KEY_VERSION,
             }),
-          dispatchCloudflare: (scope, onDispatch, claimLimit) =>
+          dispatchCloudflare: (scope, onDispatch) =>
             dispatchCloudflarePushes({
-              policy: { ...coordinatorDeliveryPolicy(), claimLimit },
+              policy: coordinatorDeliveryPolicy(),
               repo,
               scope,
               onDispatch,
+              fetcher,
+              snapshotCache,
               secretKek: this.env.INTEGRATION_SECRET_KEK,
               secretKeyVersion: this.env.INTEGRATION_SECRET_KEY_VERSION,
             }),
@@ -95,6 +104,7 @@ export class IntegrationDeliveryDurableObject extends DurableObject<ControlPlane
         ...summary,
         durationMs: Date.now() - startedAt,
         nextWakeAt,
+        subrequests: subrequests?.count,
       });
     } catch (logError) {
       console.error("integration_delivery_log_failed", serializeFault(logError));

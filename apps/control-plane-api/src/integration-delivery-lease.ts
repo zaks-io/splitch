@@ -16,10 +16,17 @@ export async function renewDeliveryLeaseBeforeSend(
   const sendBudget = policy.sendTimeoutMs ?? DELIVERY_SEND_TIMEOUT_MS;
   if (delivery.leaseExpiresAt - now.getTime() >= sendBudget + DELIVERY_COMPLETION_BUDGET_MS)
     return true;
-  return renewLease(
+  const renewalNow = policy.clock.leaseTime();
+  const renewedDeadline = renewalNow.getTime() + policy.leaseMs;
+  const renewed = await renewLease(
     delivery.deliveryId,
     leaseOwner,
-    now.toISOString(),
-    new Date(now.getTime() + policy.leaseMs).toISOString(),
+    renewalNow.toISOString(),
+    new Date(renewedDeadline).toISOString(),
+  );
+  return (
+    renewed &&
+    renewedDeadline - policy.clock.leaseTime().getTime() >=
+      sendBudget + DELIVERY_COMPLETION_BUDGET_MS
   );
 }

@@ -87,6 +87,34 @@ it.each(cases)("renews %s %s leases after 27 seconds of preparation", async (pro
   expect(competing).toEqual([]);
 });
 
+it.each(cases)("skips %s %s sends after a slow renewal", async (provider, mode) => {
+  const test = await prepare(provider, mode);
+  const renewed = Promise.withResolvers<void>();
+  const renewalResponse = Promise.withResolvers<void>();
+  const renew = test.repository[provider].renewDeliveryLease;
+  vi.spyOn(test.repository[provider], "renewDeliveryLease").mockImplementation(async (...args) => {
+    const result = await renew(...args);
+    renewed.resolve();
+    await renewalResponse.promise;
+    return result;
+  });
+  vi.setSystemTime(test.claimedAt + 27_000);
+  test.ready.resolve();
+  await renewed.promise;
+  vi.setSystemTime(test.claimedAt + 54_000);
+  renewalResponse.resolve();
+  await vi.waitFor(() =>
+    expect(test.onDispatch.mock.calls.length + test.fetcher.mock.calls.length).toBeGreaterThan(0),
+  );
+  vi.setSystemTime(test.claimedAt + 58_000);
+  const [competing] = await test.compete();
+  test.response.resolve();
+  await test.run;
+  expect(test.fetcher).not.toHaveBeenCalled();
+  expect(test.onDispatch).toHaveBeenCalledWith(expect.objectContaining({ skippedLeaseLost: 1 }));
+  expect(competing).toMatchObject({ attemptCount: 0 });
+});
+
 it.each(cases)("skips %s %s sends after the owned lease expires", async (provider, mode) => {
   const test = await prepare(provider, mode);
   vi.setSystemTime(test.claimedAt + 31_000);

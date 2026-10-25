@@ -3,45 +3,46 @@ import { expect, it, vi } from "vitest";
 import { integrationDeliveryMode } from "./control-plane-runtime-config";
 import {
   DELIVERY_BATCH_SIZE,
-  DELIVERY_PREPARATION_BUDGET_MS,
   DELIVERY_COMPLETION_BUDGET_MS,
   DELIVERY_LEASE_MS,
+  DELIVERY_PREPARATION_BUDGET_MS,
+  DELIVERY_RUN_SUBREQUEST_BUDGET,
   DELIVERY_SEND_CONCURRENCY,
   DELIVERY_SEND_TIMEOUT_MS,
-  DELIVERY_RUN_CLAIM_BUDGET,
 } from "./integration-delivery-limits";
 import { runIntegrationDelivery } from "./integration-delivery-run";
 
 const scope = envScope("app", "env");
 const now = new Date("2026-10-25T00:00:00.000Z");
 
-it("yields immediately at its claimed-row budget without claiming the remaining backlog", async () => {
-  let backlog = DELIVERY_RUN_CLAIM_BUDGET * 2;
-  let claimed = 0;
-  const dispatch = vi.fn(async (_scope: typeof scope, _onDispatch: unknown, limit = 6) => {
-    const rows = Math.min(limit, backlog);
-    backlog -= rows;
-    claimed += rows;
-    return rows;
+it("finishes its batch and yields once counted subrequests reach the budget", async () => {
+  const subrequests = { count: DELIVERY_RUN_SUBREQUEST_BUDGET - 1 };
+  let completed = false;
+  const dispatchConvex = vi.fn(async () => {
+    subrequests.count += 20;
+    await Promise.resolve();
+    completed = true;
+    return 6;
   });
+  const dispatchCloudflare = vi.fn(async () => 6);
+  const schedule = {
+    environmentsWithDueDeliveries: vi.fn(),
+    nextDeliveryWakeAt: vi.fn(),
+  };
   const result = await runIntegrationDelivery({
     scope,
+    subrequests,
     now: () => now,
-    repo: {
-      integrationDeliverySchedule: {
-        environmentsWithDueDeliveries: async () => [scope],
-        nextDeliveryWakeAt: async () => {
-          throw new Error("Backlog must wake immediately");
-        },
-      },
-    },
-    dispatchConvex: dispatch,
-    dispatchCloudflare: dispatch,
+    repo: { integrationDeliverySchedule: schedule },
+    dispatchConvex,
+    dispatchCloudflare,
   });
-  expect(claimed).toBe(DELIVERY_RUN_CLAIM_BUDGET);
-  expect(backlog).toBe(DELIVERY_RUN_CLAIM_BUDGET);
+  expect(completed).toBe(true);
+  expect(dispatchConvex).toHaveBeenCalledTimes(1);
+  expect(dispatchCloudflare).not.toHaveBeenCalled();
+  expect(schedule.environmentsWithDueDeliveries).not.toHaveBeenCalled();
   expect(result.nextWakeAt).toBe(now.toISOString());
-  expect(result.durationMs).toBe(0);
+  expect(result.subrequests).toBe(5_019);
 });
 
 it("claims sequentially, drains passes, and returns the next retry", async () => {
@@ -66,6 +67,7 @@ it("claims sequentially, drains passes, and returns the next retry", async () =>
   const result = await runIntegrationDelivery({
     scope,
     repo: { integrationDeliverySchedule: schedule },
+    subrequests: { count: 0 },
     dispatchConvex,
     dispatchCloudflare,
     now: () => now,
@@ -80,6 +82,7 @@ it("yields to an immediate alarm when the run budget is spent and work remains",
   const result = await runIntegrationDelivery({
     scope,
     now: () => new Date(time),
+    subrequests: { count: 0 },
     repo: {
       integrationDeliverySchedule: {
         environmentsWithDueDeliveries: async () => [{ appId: "app", environmentId: "env" }],

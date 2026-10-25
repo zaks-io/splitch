@@ -276,20 +276,37 @@ D1 remains shared, so database contention still affects both Environments.
 
 A coordinator run claims at most six Convex rows and sends all six concurrently, then does the
 same for Cloudflare. No claimed delivery waits behind another send. It repeats until a pass
-claims nothing, 60 seconds elapse, or the run claims 1,000 rows. The last claim shrinks to the
-remaining row budget. Once that budget is spent, the run finishes its claimed rows and schedules
-an immediate alarm for a fresh invocation. The measured per-attempt cost is about 1.34 D1 calls
-plus one receiver HTTP call. Allowing one deletion probe and one lease renewal for every row
-still uses about 4,340 subrequests, leaving room below the
-[10,000-per-invocation default](https://developers.cloudflare.com/workers/platform/limits/#subrequests)
-for scheduling and other work.
+claims nothing, 60 seconds elapse, or its counted subrequests reach 5,000. The coordinator wraps
+its D1 binding and fetcher for each run. Every D1 `batch`, `run`, `all`, `first`, `raw` or `exec`
+call and every HTTP request counts once, including failures, lease renewals and deletion probes.
+Preparing or binding a statement does not count, and a batch counts once rather than once per
+statement. At the threshold the run starts no further claim, finishes the in-flight six-row batch,
+and schedules an immediate alarm for a fresh invocation. The threshold is half the
+[10,000-per-invocation default](https://developers.cloudflare.com/workers/platform/limits/#subrequests),
+leaving headroom for that batch's preparation, sends, renewals, completions and probes, plus
+scheduling, logging and fault reporting. The structured run summary includes the measured count.
+
+Cloudflare snapshots are cached only within a coordinator run, keyed by App, Environment and
+Environment version. Every pass still checks the current version, and a build spanning a version
+change is discarded and retried. A stable version is built once across all six-row passes.
+Cron keeps its existing per-dispatch snapshot lifetime. A per-row estimate cannot bound this
+work: 1,000 Flags require batched snapshot reads that would otherwise repeat for every pass.
+
+A real-D1 regression seeds 1,000 Flags and 3,001 Cloudflare installations with pending work.
+With the run cache, it built one snapshot and completed 1,860 deliveries using 3,149 D1 calls
+and 1,860 HTTP calls, 5,009 total. An uncached replay completed 462 deliveries with 77 snapshot
+builds, 4,543 D1 calls and 462 HTTP calls, 5,005 total. Both started every claim below the
+5,000 threshold, finished the last batch and returned an immediate wake. These measured counts
+include the final batch's overshoot and demonstrate why the counter must include preparation.
 
 The nominal 30-second lease budget includes 5 seconds of preparation, 5 seconds of HTTP and
 10 seconds of D1 completion. Preparation can exceed its allowance. Each row carries its claimed
 lease deadline into the send path. Immediately before HTTP, a live clock checks that the lease
 still covers the send allowance plus completion. If fewer than 15 seconds remain, one guarded
 UPDATE renews the lease for 30 seconds only while the row is leased, owned by this dispatcher and
-unexpired. A zero-row renewal skips HTTP and completion, leaves the row with its current owner,
+unexpired. The UPDATE uses a clock read immediately before the call. After it returns, another live-clock
+check deducts the renewal round trip from the new deadline. A zero-row renewal or a response
+leaving less than 15 seconds skips HTTP and completion, preserves ownership and attempt count,
 and increments `skippedLeaseLost` in the provider summary. Cron Cloudflare still has no HTTP
 timeout; its renewal check uses the same nominal 5-second send allowance. This guard applies to
 both policies, independently of cron's fixed claim clock.
@@ -298,7 +315,9 @@ A module check includes all three nominal budgets and rejects a claim larger tha
 A real-D1 contention test with 25 rows, 4.8-second responses and 2-second completions proves that
 a competing dispatcher cannot reclaim an in-flight row at 31 seconds. Additional real-D1 tests
 delay preparation to 27 seconds for both providers and policies, then compete at 31 seconds while
-HTTP is in flight. Preparation that outlasts the lease, or a reclaim by another owner, skips sending.
+HTTP is in flight. Slow-renewal cases commit the renewal at 27 seconds with expiry at 57, return
+at 54 seconds, and skip HTTP before a competitor reclaims at 58 seconds. Preparation that outlasts
+the lease, or a reclaim by another owner, also skips sending.
 
 Dispatch policy comes from the caller. Cron preserves the existing 25-row concurrent batch,
 5-second Convex timeout, no Cloudflare timeout and claim-time outcome/retry timestamps. The
@@ -353,8 +372,10 @@ The last group exercises the real 5-second abort signal. Env B has five HTTP-200
 30 ms receiver latency and a config change every two seconds. Only outbound receivers are faked.
 Latency is `delivered_at - created_at` from D1; trigger commit times have one-second precision.
 Every Env B delivery must complete, including intermediate versions, before results are recorded.
+Env A throughput counts callback attempts; SPL-789 deployment probes are excluded.
 
-The October 25 run measured 180,004 ms of workload. All 450 Env B deliveries completed, with
-p50 585 ms, p99 753 ms and maximum 755 ms. Env A attempted 222 deliveries, or 1.23 attempts per
-second, while receivers returned failures or timed out. The healthy Environment met the p99
+The October 25 run after main integration and the round-3 fixes measured 180,004 ms of workload.
+All 450 Env B deliveries completed, with p50 534 ms, p99 706 ms and maximum 708 ms. Env A attempted
+138 deliveries, or 0.77 attempts per second, while receivers returned failures or timed out.
+This run includes SPL-789's post-batch deletion probes, which are excluded from delivery throughput. The healthy Environment met the p99
 10-second target. These local figures do not establish production D1 latency or capacity.

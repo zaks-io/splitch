@@ -195,8 +195,10 @@ it("emits one scrubbed run summary with provider outcomes", async () => {
         skippedLeaseLost: 0,
       },
       durationMs: expect.any(Number),
+      subrequests: expect.any(Number),
       nextWakeAt: null,
     }),
   ]);
+  expect(summaries[0]?.subrequests).toBeGreaterThan(0);
   expect(JSON.stringify(summaries)).not.toContain("synthetic-callback-secret");
 });
