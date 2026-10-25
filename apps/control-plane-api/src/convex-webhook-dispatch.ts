@@ -1,18 +1,22 @@
-import type { Repository } from "@splitch/db";
+import type { EnvScope, Repository } from "@splitch/db";
 import { serializeFault } from "@splitch/observability/worker";
+import { mapWithConcurrency } from "./bounded-map";
 import {
   configurationCallbackDestinationError,
   postConfigurationCallback,
 } from "./configuration-callback-transport";
 import { decryptConvexSecret, signConvexWebhook } from "./convex-secret";
+import {
+  DELIVERY_BATCH_SIZE,
+  DELIVERY_LEASE_MS,
+  DELIVERY_SEND_CONCURRENCY,
+} from "./integration-delivery-limits";
 import { validateIntegrationSecretKey } from "./integration-secret";
 import { retryDelayMs, type WebhookPost } from "./webhook-transport";
 
-const LEASE_MS = 30_000;
-const BATCH_SIZE = 25;
 const PREPARATION_RETRY_MS = 30 * 60_000;
 
-interface ConvexDispatchSummary {
+export interface ConvexDispatchSummary {
   claimed: number;
   received2xx: number;
   receiverRejected: number;
@@ -22,6 +26,7 @@ interface ConvexDispatchSummary {
 
 export interface ConvexWebhookDispatchDeps {
   repo: Repository;
+  scope?: EnvScope;
   webhookKek?: string;
   webhookKeyVersion?: string;
   fetcher?: typeof fetch;
@@ -37,8 +42,9 @@ export async function dispatchConvexWebhooks(deps: ConvexWebhookDispatchDeps): P
   const deliveries = await deps.repo.convex.claimDueDeliveries(
     now.toISOString(),
     leaseOwner,
-    new Date(now.getTime() + LEASE_MS).toISOString(),
-    BATCH_SIZE,
+    new Date(now.getTime() + DELIVERY_LEASE_MS).toISOString(),
+    DELIVERY_BATCH_SIZE,
+    deps.scope,
   );
 
   const secrets = new Map<string, Promise<string>>();
@@ -50,9 +56,10 @@ export async function dispatchConvexWebhooks(deps: ConvexWebhookDispatchDeps): P
     transportFailures: 0,
     preparationFailedInstallations: 0,
   };
-  const settled = await Promise.allSettled(
-    deliveries.map((delivery) =>
-      deliverSafely(deps, delivery, leaseOwner, now, secrets, failures, summary),
+  const settled = await mapWithConcurrency(deliveries, DELIVERY_SEND_CONCURRENCY, (delivery) =>
+    deliverSafely(deps, delivery, leaseOwner, now, secrets, failures, summary).then(
+      () => ({ status: "fulfilled" as const }),
+      (reason: unknown) => ({ status: "rejected" as const, reason }),
     ),
   );
   deps.onDispatch?.(summary);
@@ -158,6 +165,7 @@ async function deliverOne(
     return;
   }
   const result = await postConfigurationCallback(webhook);
+  now = (deps.now ?? (() => new Date()))();
 
   if (result.outcome === "transport-failed") {
     summary.transportFailures += 1;

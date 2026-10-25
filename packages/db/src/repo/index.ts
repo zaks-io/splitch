@@ -13,6 +13,7 @@ import { makeFlagEvaluationReads } from "./flag-evaluation-reads";
 import { makeFlagHealthReads } from "./flag-health-reads";
 import { makeFlagRepo } from "./flags";
 import { makeIdentityRepo } from "./identity";
+import { makeIntegrationDeliveryScheduleRepo } from "./integration-delivery-schedule";
 import { makePersonalAccessTokenRepo } from "./personal-access-tokens";
 import { makePrivacyRepo } from "./privacy";
 import { makeRunSrmAlarmRepo } from "./run-srm-alarms";
@@ -45,6 +46,7 @@ export function createRepository(d1: D1Database) {
     experimentConclusions: makeExperimentConclusionRepo(db, d1),
     eventDefinitions: makeEventDefinitionRepo(db, d1),
     credentials: makeCredentialRepo(db),
+    integrationDeliverySchedule: makeIntegrationDeliveryScheduleRepo(db),
     convex: makeConvexIntegrationRepo(d1),
     cloudflare: makeCloudflareIntegrationRepo(d1),
     sentry: makeSentryIntegrationRepo(d1),

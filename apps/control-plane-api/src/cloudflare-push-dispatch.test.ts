@@ -214,7 +214,7 @@ describe("Cloudflare first setup push window", () => {
     }
   });
 
-  it("retries first setup on the next dispatcher tick instead of climbing the backoff ladder", async () => {
+  it("retries first setup after 30 seconds instead of climbing the backoff ladder", async () => {
     for (const [status, lastAppliedVersion, registeredAt, nextAttemptAt] of [
       [404, null, "2026-08-25T11:59:00.000Z", "2026-08-25T12:00:30.000Z"],
       [503, null, "2026-08-25T11:59:00.000Z", "2026-08-25T12:00:30.000Z"],

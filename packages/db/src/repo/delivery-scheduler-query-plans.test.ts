@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { appScope, createRepository } from "../index";
+import { appScope, createRepository, envScope } from "../index";
 import {
   claim,
   DELIVERY_PROVIDERS,
@@ -58,7 +58,7 @@ describe("delivery scheduler index plans", () => {
         expect(plan).toContain(`USING INDEX ${prefix}_lease_idx (state=? AND next_attempt_at<?)`);
         expect(plan).toContain(`USING INDEX ${prefix}_expiry_idx (state=? AND lease_expires_at<?)`);
         expect(plan).toContain(
-          `USING INDEX ${prefix}_installation_version_unique (installation_id=? AND environment_version>?)`,
+          `USING INDEX ${prefix}_outstanding_idx (installation_id=? AND environment_version>?)`,
         );
       }
     },
@@ -107,6 +107,26 @@ describe("delivery scheduler index plans", () => {
     const query = observed.queries[0];
     if (!query) throw new Error("Claim did not prepare an update");
     expect(await explain(query)).toContain("cloudflare_config_delivery_app_due_idx");
+  });
+
+  it.each(DELIVERY_PROVIDERS)("uses indexed Environment-scoped %s claims", async (provider) => {
+    await insertDeliveries(local.d1, seed, provider, 1);
+    const observed = observeD1(local.d1);
+    await createRepository(observed.database)[provider].claimDueDeliveries(
+      NOW,
+      "scoped",
+      LATER,
+      25,
+      envScope(seed.a.appId, seed.a.environmentId),
+    );
+    const query = observed.queries[0];
+    if (!query) throw new Error("Claim did not prepare an update");
+    const plan = await explain(query);
+    expect(plan).toContain(
+      provider === "convex"
+        ? "convex_installations_scope_status_idx (app_id=? AND environment_id=? AND status=?)"
+        : "cloudflare_config_delivery_app_due_idx (app_id=? AND state=? AND next_attempt_at<?)",
+    );
   });
 
   it("uses App and cursor ranges for Sentry due selection and pending event reads", async () => {

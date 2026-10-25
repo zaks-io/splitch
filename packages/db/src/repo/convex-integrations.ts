@@ -197,8 +197,9 @@ export function makeConvexIntegrationRepo(d1: D1Database) {
       leaseOwner: string,
       leaseExpiresAt: string,
       limit: number,
+      scope?: EnvScope,
     ): Promise<ConfigWebhookDeliveryRow[]> {
-      return claimDueConvexDeliveries(d1, now, leaseOwner, leaseExpiresAt, limit);
+      return claimDueConvexDeliveries(d1, now, leaseOwner, leaseExpiresAt, limit, scope);
     },
 
     async finishDelivery(

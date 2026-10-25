@@ -9,11 +9,13 @@ import { runApprovalRequestArchival } from "./approval-archive";
 import { approvalArchiveStoreFromEnv } from "./approval-archive-tinybird";
 import { forwardAuditEvents } from "./audit-events";
 import { dispatchCloudflarePushes } from "./cloudflare-push-dispatch";
+import { integrationDeliveryMode } from "./control-plane-runtime-config";
 import { dispatchConvexWebhooks } from "./convex-webhook-dispatch";
 import { runDeliveryRetention } from "./delivery-retention";
 import { purgeExpiredPrivacyArtifacts, reconcilePrivacyJobs } from "./entity-privacy-jobs";
 import type { ControlPlaneApiEnv } from "./env";
 import { FLAG_CHANGE_LOG_RETENTION_MS } from "./flag-change-log-retention";
+import { runIntegrationDeliverySweep } from "./integration-delivery-sweep";
 import { runPersonalAccessTokenRetention } from "./personal-access-token-rotation";
 import { deleteOrphanedPrivacyExports } from "./privacy-export-cleanup";
 import { scheduledDueWork } from "./scheduled-due-work";
@@ -27,6 +29,7 @@ export function runControlPlaneScheduled(
   env: ControlPlaneApiEnv,
   ctx: ExecutionContext,
 ): void {
+  const mode = integrationDeliveryMode(env);
   const dueWork = scheduledDueWork(env, event, ctx);
   const runIfDue = (job: keyof ScheduledDueWork, run: () => Promise<unknown>) =>
     ctx.waitUntil(dueWork.then((due) => (due[job] ? run() : undefined)));
@@ -44,8 +47,12 @@ export function runControlPlaneScheduled(
       runTemporaryEnvironmentTeardown(env, event, ctx),
     );
     runIfDue("auditEventForwarding", () => runAuditEventForwarding(env, event, ctx));
-    runIfDue("convexWebhookDispatch", () => runConvexWebhookDispatch(env, event, ctx));
-    runIfDue("cloudflarePushDispatch", () => runCloudflarePushDispatch(env, event, ctx));
+    if (mode === "coordinator") {
+      ctx.waitUntil(runIntegrationDeliverySweep(env, event, ctx));
+    } else {
+      runIfDue("convexWebhookDispatch", () => runConvexWebhookDispatch(env, event, ctx));
+      runIfDue("cloudflarePushDispatch", () => runCloudflarePushDispatch(env, event, ctx));
+    }
     runIfDue("sentryWebhookDispatch", () => runSentryWebhookDispatch(env, event, ctx));
     return;
   }

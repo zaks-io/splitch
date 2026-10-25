@@ -218,6 +218,9 @@ export const cloudflareConfigDeliveries = sqliteTable(
       table.installationId,
       table.environmentVersion,
     ),
+    index("cloudflare_config_delivery_outstanding_idx")
+      .on(table.installationId, table.environmentVersion)
+      .where(sql`${table.state} IN ('pending', 'leased')`),
     index("cloudflare_config_delivery_app_due_idx").on(
       table.appId,
       table.state,

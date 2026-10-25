@@ -23,6 +23,7 @@ import { parseControlPanelBindingOperation } from "./control-panel-operation";
 import { handleControlPlaneAppRequest } from "./control-plane-app-request";
 import {
   controlPanelAuthOptions,
+  integrationDeliveryMode,
   requiredMcpDelegationSecret,
   requiredMcpReplayBinding,
 } from "./control-plane-runtime-config";
@@ -37,6 +38,7 @@ import {
   resetCompromisedAppIdentityFromEnv,
 } from "./exposure-verification-entrypoint";
 import { controlPlaneHealthResponse } from "./health";
+import { IntegrationDeliveryDurableObject } from "./integration-delivery-do";
 import { handleLiveUpdateTestControl } from "./internal-routes";
 import { makeCachedJwksVerifier } from "./jwks-verify";
 import { PanelDelegationReplayDurableObject } from "./panel-delegation-replay-do";
@@ -163,6 +165,7 @@ async function handleRequest(
   ctx: ExecutionContext,
   authMode: AuthMode | BindingAuthority = "none",
 ): Promise<Response> {
+  integrationDeliveryMode(env);
   const url = new URL(request.url);
 
   const liveUpdateTestControl = await handleLiveUpdateTestControl(request, env, url);
@@ -258,6 +261,7 @@ async function handleRequest(
 export {
   ConfigStoreDurableObject,
   CredentialCacheWriterDurableObject,
+  IntegrationDeliveryDurableObject,
   McpDelegationReplayDurableObject,
   PanelDelegationReplayDurableObject,
 };

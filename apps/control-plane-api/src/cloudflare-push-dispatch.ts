@@ -1,16 +1,28 @@
 import type { Repository, TenantScope } from "@splitch/db";
 import { envScope } from "@splitch/db";
 import { serializeFault } from "@splitch/observability/worker";
+import { mapWithConcurrency } from "./bounded-map";
+import {
+  DELIVERY_BATCH_SIZE,
+  DELIVERY_LEASE_MS,
+  DELIVERY_SEND_CONCURRENCY,
+  DELIVERY_SEND_TIMEOUT_MS,
+} from "./integration-delivery-limits";
 import { decryptIntegrationSecret, signIntegrationPayload } from "./integration-secret";
 import { buildIntegrationSnapshot } from "./integration-snapshot";
 import { postWebhook, retryDelayMs } from "./webhook-transport";
 
-const LEASE_MS = 30_000;
-const BATCH_SIZE = 25;
 const FIRST_SETUP_WINDOW_MS = 10 * 60_000;
-// Shorter than the one-minute dispatcher tick, so first setup retries every tick
-// rather than climbing the backoff ladder past the CLI's wait.
+// Keep route propagation retries within the CLI first-setup wait window.
 const FIRST_SETUP_RETRY_MS = 30_000;
+
+export interface CloudflareDispatchSummary {
+  claimed: number;
+  received2xx: number;
+  receiverRejected: number;
+  transportFailures: number;
+  preparationFailures: number;
+}
 
 export interface CloudflarePushDispatchDeps {
   repo: Repository;
@@ -20,6 +32,7 @@ export interface CloudflarePushDispatchDeps {
   now?: () => Date;
   leaseOwner?: () => string;
   scope?: TenantScope;
+  onDispatch?: (summary: CloudflareDispatchSummary) => void;
 }
 
 export async function dispatchCloudflarePushes(deps: CloudflarePushDispatchDeps): Promise<number> {
@@ -28,14 +41,25 @@ export async function dispatchCloudflarePushes(deps: CloudflarePushDispatchDeps)
   const deliveries = await deps.repo.cloudflare.claimDueDeliveries(
     now.toISOString(),
     leaseOwner,
-    new Date(now.getTime() + LEASE_MS).toISOString(),
-    BATCH_SIZE,
+    new Date(now.getTime() + DELIVERY_LEASE_MS).toISOString(),
+    DELIVERY_BATCH_SIZE,
     deps.scope,
   );
   const snapshots = new Map<string, ReturnType<typeof buildStableSnapshot>>();
-  const settled = await Promise.allSettled(
-    deliveries.map((delivery) => deliverSafely(deps, delivery, leaseOwner, now, snapshots)),
+  const summary: CloudflareDispatchSummary = {
+    claimed: deliveries.length,
+    received2xx: 0,
+    receiverRejected: 0,
+    transportFailures: 0,
+    preparationFailures: 0,
+  };
+  const settled = await mapWithConcurrency(deliveries, DELIVERY_SEND_CONCURRENCY, (delivery) =>
+    deliverSafely(deps, delivery, leaseOwner, now, snapshots, summary).then(
+      () => ({ status: "fulfilled" as const }),
+      (reason: unknown) => ({ status: "rejected" as const, reason }),
+    ),
   );
+  deps.onDispatch?.(summary);
   const rejected = settled.filter((result) => result.status === "rejected");
   if (rejected.length > 0)
     throw new AggregateError(
@@ -54,12 +78,14 @@ async function deliverSafely(
   leaseOwner: string,
   now: Date,
   snapshots: Map<string, ReturnType<typeof buildStableSnapshot>>,
+  summary: CloudflareDispatchSummary,
 ): Promise<void> {
   // Outside the try, so a malformed registration time fails the run before anything is sent.
   const delivery = { ...claimed, firstSetup: inFirstSetupWindow(claimed, now) };
   try {
-    await deliverOne(deps, delivery, leaseOwner, now, snapshots);
+    await deliverOne(deps, delivery, leaseOwner, now, snapshots, summary);
   } catch (cause) {
+    summary.preparationFailures += 1;
     console.error("cloudflare_push_delivery_preparation_failed", {
       deliveryId: delivery.deliveryId,
       cause: serializeFault(cause),
@@ -79,6 +105,7 @@ async function deliverOne(
   leaseOwner: string,
   now: Date,
   snapshots: Map<string, ReturnType<typeof buildStableSnapshot>>,
+  summary: CloudflareDispatchSummary,
 ): Promise<void> {
   const scope = envScope(delivery.appId, delivery.environmentId);
   const snapshotKey = `${delivery.appId}\0${delivery.environmentId}`;
@@ -111,8 +138,11 @@ async function deliverOne(
       "splitch-timestamp": timestamp,
     },
     fetcher: deps.fetcher,
+    signal: AbortSignal.timeout(DELIVERY_SEND_TIMEOUT_MS),
   });
+  now = dispatchNow(deps);
   if (result.outcome === "transport-failed") {
+    summary.transportFailures += 1;
     await finishFailure(deps, delivery, leaseOwner, now, true, {
       kind: "transport",
       code: result.cause instanceof Error ? result.cause.name : "UnknownError",
@@ -121,6 +151,7 @@ async function deliverOne(
     return;
   }
   if (result.outcome === "delivered") {
+    summary.received2xx += 1;
     const appliedVersion = Number(result.response.headers.get("splitch-environment-version"));
     if (!Number.isInteger(appliedVersion) || appliedVersion < delivery.environmentVersion) {
       await finishFailure(deps, delivery, leaseOwner, now, true, {
@@ -137,6 +168,7 @@ async function deliverOne(
     });
     return;
   }
+  summary.receiverRejected += 1;
   const awaitingRoute = result.status === 404 && delivery.firstSetup;
   await finishFailure(deps, delivery, leaseOwner, now, result.retryable || awaitingRoute, {
     kind: "http",
@@ -152,7 +184,7 @@ async function deliverOne(
  * of a Worker deleted moments before, minutes after the CLI's colo saw the new
  * route. Until an installation first applies a version, and only within the
  * window after its registration, a 404 reads as that lag and every retry runs
- * on the next tick. The CLI waits out the same window.
+ * after 30 seconds. The CLI waits out the same window.
  */
 function inFirstSetupWindow(delivery: ClaimedDelivery, now: Date): boolean {
   if (delivery.lastAppliedVersion !== null) return false;
@@ -188,4 +220,8 @@ async function finishFailure(
     ...(retryable ? { nextAttemptAt: new Date(now.getTime() + delay).toISOString() } : {}),
     errorJson: JSON.stringify(error),
   });
+}
+
+function dispatchNow(deps: CloudflarePushDispatchDeps): Date {
+  return (deps.now ?? (() => new Date()))();
 }

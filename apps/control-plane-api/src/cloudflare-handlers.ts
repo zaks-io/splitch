@@ -1,5 +1,5 @@
 import { boundListRead, LIST_READ_LIMIT } from "@splitch/contracts";
-import type { CloudflareInstallationRow, Repository } from "@splitch/db";
+import type { CloudflareInstallationRow, EnvScope, Repository } from "@splitch/db";
 import { appScope, envScope } from "@splitch/db";
 import type { HandlerArgs, RouteHandler } from "@splitch/worker-runtime";
 import { renderError } from "@splitch/worker-runtime";
@@ -14,6 +14,7 @@ import { environmentKindUnsupported } from "./temporary-environment-errors";
 
 export interface CloudflareHandlerDeps {
   repo: Repository;
+  wakeDelivery?: (scope: EnvScope) => void;
   secretKek?: string;
   secretKeyVersion?: string;
   now?: () => Date;
@@ -124,6 +125,7 @@ export function makeCloudflareHandlers(deps: CloudflareHandlerDeps) {
           now: now().toISOString(),
         }));
       const environmentVersion = await deps.repo.cloudflare.environmentVersion(scope);
+      deps.wakeDelivery?.(scope);
       return Response.json({
         installationId: row.installationId,
         appId: scope.appId,

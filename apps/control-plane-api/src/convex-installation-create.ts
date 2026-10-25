@@ -1,4 +1,4 @@
-import { appScope, type ConvexInstallationRow } from "@splitch/db";
+import { appScope, type ConvexInstallationRow, type EnvScope } from "@splitch/db";
 import type { HandlerArgs, RouteHandler } from "@splitch/worker-runtime";
 import { renderError } from "@splitch/worker-runtime";
 import { configurationCallbackDestinationError } from "./configuration-callback-transport";
@@ -46,16 +46,7 @@ export function makeConvexInstallationCreateHandler(
         now: now().toISOString(),
       }));
     const racedConflict = installationConflict(row, input.body, encrypted.fingerprint, requestId);
-    return (
-      racedConflict ??
-      Response.json({
-        installationId: row.installationId,
-        appId: scope.appId,
-        environmentId: scope.environmentId,
-        environmentVersion: await deps.repo.convex.environmentVersion(scope),
-        status: row.status,
-      })
-    );
+    return installationResponse(deps, scope, row, racedConflict);
   }) satisfies RouteHandler<ConvexInstallationCreateInput>;
 }
 
@@ -133,4 +124,22 @@ async function validateReceiver(
     { code: "SERVICE_UNAVAILABLE", message: verified.message, details: { retryAfterMs: 1_000 } },
     { requestId },
   );
+}
+
+async function installationResponse(
+  deps: ConvexHandlerDeps,
+  scope: EnvScope,
+  row: ConvexInstallationRow,
+  conflict: Response | null,
+) {
+  if (conflict) return conflict;
+  const environmentVersion = await deps.repo.convex.environmentVersion(scope);
+  deps.wakeDelivery?.(scope);
+  return Response.json({
+    installationId: row.installationId,
+    appId: scope.appId,
+    environmentId: scope.environmentId,
+    environmentVersion,
+    status: row.status,
+  });
 }

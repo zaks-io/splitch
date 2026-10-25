@@ -3,6 +3,7 @@ import { configWebhookDeliveries } from "../schema/integrations";
 import { createDb } from "./client";
 import type { ConfigWebhookDeliveryRow } from "./convex-integrations";
 import { buildDueConvexDeliveriesQuery } from "./scheduled-due-predicates";
+import type { EnvScope } from "./scope";
 
 /**
  * Claims go to the installation that has waited longest, counting a failing installation's wait
@@ -33,10 +34,11 @@ export async function claimDueConvexDeliveries(
   leaseOwner: string,
   leaseExpiresAt: string,
   limit: number,
+  scope?: EnvScope,
 ): Promise<ConfigWebhookDeliveryRow[]> {
   if (!Number.isInteger(limit) || limit < 1)
     throw new Error("Convex delivery claim limit must be a positive integer");
-  const due = buildDueConvexDeliveriesQuery(now);
+  const due = buildDueConvexDeliveriesQuery(now, scope);
   // Start with eligible installations so blocked history cannot inflate the due-row scan.
   const db = createDb(d1);
   const [leased, claimed] = await db.batch([

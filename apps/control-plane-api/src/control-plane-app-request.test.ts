@@ -33,6 +33,14 @@ let repo: ReturnType<typeof createRepository>;
 beforeEach(async () => {
   dispatch.mockClear();
   auditForward.mockReset().mockResolvedValue(0);
+  await env.DB.batch(
+    [
+      "config_webhook_deliveries",
+      "cloudflare_config_deliveries",
+      "convex_installations",
+      "cloudflare_installations",
+    ].map((table) => env.DB.prepare(`DELETE FROM ${table}`)),
+  );
   await resetOrganizationGraph(env.DB);
   await seedReachableApp(APP_A, "neuron");
   repo = createRepository(env.DB);
@@ -164,12 +172,47 @@ it("dispatches credential-bound Cloudflare registration without an App path para
   await expectMintedDispatch(APP_A);
 });
 
+it("wakes due Environment coordinators after credential-bound registration", async () => {
+  await seedEnvironment(env.DB, { appId: APP_A, environmentId: ENVIRONMENT, key: "prod" });
+  const wake = vi.fn(async () => {});
+  const actor = {
+    ...principal(APP_A, [APP_A]),
+    kind: "api-key" as const,
+    scopes: ["data-plane:evaluate"],
+    environmentId: ENVIRONMENT,
+  };
+  const { response } = await request(
+    "/api/integrations/cloudflare/installations",
+    "POST",
+    {
+      installationId: "44444444-4444-4444-8444-444444444444",
+      endpoint: "https://config.customer.workers.dev/integrations/splitch/configuration",
+      pushSecret: "p".repeat(43),
+    },
+    actor,
+    undefined,
+    {
+      INTEGRATION_DELIVERY_MODE: "coordinator",
+      INTEGRATION_DELIVERY: {
+        getByName: (name) => {
+          expect(name).toBe(`${APP_A}:${ENVIRONMENT}`);
+          return { wake };
+        },
+      },
+    },
+  );
+  expect(response.status).toBe(200);
+  expect(wake).toHaveBeenCalledWith(APP_A, ENVIRONMENT);
+  expect(dispatch).not.toHaveBeenCalled();
+});
+
 async function request(
   path: string,
   method: string,
   body?: unknown,
   actor = principal(APP_A, [APP_A]),
   expectedBackgroundFailure?: string,
+  overrides: Partial<ControlPlaneApiEnv> = {},
 ) {
   const pending: Promise<unknown>[] = [];
   const waitUntil = vi.fn((promise: Promise<unknown>) => {
@@ -179,8 +222,10 @@ async function request(
   const runtime = {
     ...env,
     SPLITCH_PLATFORM_TARGET: "local",
+    INTEGRATION_DELIVERY_MODE: "cron",
     INTEGRATION_SECRET_KEK: KEK,
     INTEGRATION_SECRET_KEY_VERSION: "v1",
+    ...overrides,
   } as ControlPlaneApiEnv;
   const response = await handleControlPlaneAppRequest({
     request: new Request(`https://control-plane.test${path}`, {

@@ -30,7 +30,11 @@ const idle = {
 beforeEach(async () => {
   local = await makePoolBindings();
   await resetDueWork(local.d1);
-  env = { DB: local.d1, SESSION_STORE: local.kv } as ControlPlaneApiEnv;
+  env = {
+    INTEGRATION_DELIVERY_MODE: "cron",
+    DB: local.d1,
+    SESSION_STORE: local.kv,
+  } as ControlPlaneApiEnv;
 });
 afterEach(async () => {
   vi.restoreAllMocks();

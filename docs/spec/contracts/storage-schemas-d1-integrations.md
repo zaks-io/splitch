@@ -88,9 +88,25 @@ stored completely rather than truncated.
 
 - A successful config mutation inserts one row for every active installation in the same D1
   transaction as the config change. A transaction that rolls back creates no delivery.
-- Dispatch starts immediately after commit and is also recoverable by the Control Plane Worker's
-  once-per-minute scheduled lease scanner. Immediate Cloudflare scans use the authenticated
-  resolved App, including credential-bound registration; the recovery cron remains global.
+- `INTEGRATION_DELIVERY_MODE` is required and accepts only `coordinator` or `cron`. Local and
+  shared preview use `coordinator`; production remains `cron` until a separately approved flip.
+- In coordinator mode, successful mutating Control Plane requests wake the resolved App's
+  Environments with due work immediately after commit. Convex and Cloudflare installation
+  registration and Convex secret rotation also wake their Environment. Cloudflare has no separate
+  secret-rotation operation; its existing registration path wakes delivery.
+- Each `(App, Environment)` has an `IntegrationDeliveryDurableObject`, named
+  `${appId}:${environmentId}`. It persists only its identity and alarm. D1 remains authoritative.
+  The coordinator claims Convex then Cloudflare work sequentially, with at most six sends,
+  25 rows per claim, a 5-second send timeout, and a 60-second run budget. It finishes an in-flight
+  batch before yielding. Each new pass checks the budget.
+- Alarms schedule the next claimable retry, lease expiry or Convex preparation cooldown. Work
+  still due at budget exhaustion schedules another alarm immediately. A wake during a run cannot
+  be postponed by that run's completion. Handler failures report `integration_delivery_run_failed`
+  and reschedule after 30 seconds without throwing to the platform's capped retry mechanism.
+- The once-per-minute coordinator sweep finds due Environments and wakes them without sending
+  receiver HTTP. It recovers dropped post-commit wakes within 60 seconds, subject to cron execution.
+  In cron mode, the existing global Convex/Cloudflare dispatch and App-scoped immediate Cloudflare
+  dispatch remain active. Both modes share D1 leases, excluding concurrent claims of a leased row.
 - One delivery's preparation or transport failure is isolated from every other claimed delivery. A
   preparation failure records the delivery ID and bounded error envelope before releasing its lease;
   healthy siblings still complete and acknowledge their responses.
@@ -106,11 +122,14 @@ stored completely rather than truncated.
   for 30 minutes, preserving pending work and allowing other installations to claim slots.
   Scoped secret rotation clears the cooldown. A stale worker with an old ciphertext or key version
   cannot defer the repaired installation. Missing or malformed KEK configuration fails before claims.
-- Transient transport, `408`, `429`, and `5xx` failures retry after `5s`, `30s`, `2m`, `10m`, then
-  `30m` with up to 20% jitter on every capped retry. Cloudflare claim leases last 60 seconds; Convex claim leases last 30 seconds. Other `4xx`
+- Transient transport, `408`, `429`, and `5xx` failures use the existing `1s`, `5s`, `30s`, `2m`,
+  `10m`, then capped `30m` retry ladder. Both providers' claim leases last 30 seconds. Six concurrent
+  timed sends drain a 25-row batch in at most 25 seconds of send time, leaving 5 seconds for
+  preparation and D1 acknowledgments. Other `4xx`
   responses are terminal until the installation is repaired or replaced, except a Cloudflare
   installation's first setup: until it first applies a version, and within 10 minutes of its
-  registration, a `404` retries and every retry runs on the next dispatcher tick.
+  registration, a `404` retries after 30 seconds. Coordinator alarms follow that time; cron mode
+  picks it up on the next eligible minute tick.
 - A successful newer Environment version suppresses older pending rows and expired older leases
   for the same installation. An unexpired older lease may finish and is harmless because the
   component version-gates it. A terminal Convex response suppresses them the same way: the
@@ -148,3 +167,22 @@ stored completely rather than truncated.
 - [ADR-0049](../../adr/0049-convex-local-evaluation-uses-nudge-pull-sync-and-transactional-exposure-delivery.md)
 - [convex-integration-api.md](../sdk/convex-integration-api.md)
 - [privacy-data-lifecycle.md](../platform/privacy-data-lifecycle.md)
+
+## Config-version wake audit
+
+The config-version triggers in migration 0024 cover Flag Configuration, Targeting Rules,
+Experiments, Runs, Flags, Variants and Segments. Both provider outboxes insert in that same
+transaction. The request-level App wake covers their public, MCP and Panel mutations, including
+approval application and Temporary Environment create/sync, even when one request changes several
+Environments. A failed response after a D1 commit relies on the minute sweep.
+
+Background paths are deliberately covered by the sweep within 60 seconds, subject to cron
+execution. These include scheduled Temporary Environment teardown and provisional Organization
+reaping, which can delete config-bearing rows, and direct internal ConfigStore RPC writes made
+without a Control Plane request. App/Environment deletion suppresses or removes obsolete work.
+The current `ConfigStoreDurableObject.alarm()` only revalidates WebSocket authorization and does
+not mutate config or `environments.config_version`. Approval archival, delivery retention,
+privacy reconciliation, audit forwarding and personal-access-token retention do not bump config
+versions. ConfigStore projection journals track cache keys and do not independently apply D1
+configuration changes. Future background config writers must wake their Environment or retain
+this documented sweep recovery policy.

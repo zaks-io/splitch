@@ -90,6 +90,7 @@ async function tick(cron = "* * * * *") {
   runControlPlaneScheduled(
     { cron, scheduledTime: Date.parse("2026-10-22T08:00:00.000Z") } as ScheduledController,
     {
+      INTEGRATION_DELIVERY_MODE: "cron",
       DB: {},
       EVENT_INGEST_API: { adoptMetricEventClaimRetention: mocks.jobs.adoption },
     } as unknown as ControlPlaneApiEnv,

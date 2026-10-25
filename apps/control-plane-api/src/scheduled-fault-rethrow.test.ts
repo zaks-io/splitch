@@ -67,6 +67,7 @@ it.each([
     runControlPlaneScheduled(
       { cron, scheduledTime: Date.parse("2026-10-05T08:00:00Z") } as ScheduledController,
       {
+        INTEGRATION_DELIVERY_MODE: "cron",
         DB: {},
         EVENT_INGEST_API: { adoptMetricEventClaimRetention: jobs.adoption },
         PRIVACY_EXPORTS: { list: async () => ({ objects: [], truncated: false }) },

@@ -242,3 +242,66 @@ oldest outstanding version and restarts after each attempt (the installation's `
 config churn cannot starve a recovering installation and a receiver that keeps failing cannot
 hold the front. Dead preview installations still receive one attempt per Environment version
 until they are revoked.
+
+## Per-Environment coordination, October 25
+
+[SPL-788](https://linear.app/zaks-io/issue/SPL-788) implements
+[ADR-0061](../adr/0061-integration-delivery-runs-on-a-per-environment-coordinator.md).
+Each Environment's `IntegrationDeliveryDurableObject` claims and sends its own Convex and
+Cloudflare work. Another Environment's backlog cannot spend its claim slots or executor time.
+D1 remains shared, so database contention still affects both Environments.
+
+A run claims 25 Convex rows, sends at concurrency six, then does the same for Cloudflare. It
+repeats until a pass claims nothing or the 60-second budget expires. Both sends time out after
+5 seconds. A batch has five waves of sends, fitting inside the existing 30-second lease with
+5 seconds left for preparation and acknowledgments. Claims retain the existing ordering,
+suppression and lease ownership checks. An additive partial Cloudflare outstanding-version index
+keeps the next-wake query out of completed history; Convex uses its existing partial index.
+
+The only coordinator storage is its identity and alarm. Alarms follow outstanding retries,
+lease expiry and preparation cooldowns directly. A wake received during a run retains its earlier
+alarm. Cloudflare documents that `getAlarm()` inside a running handler returns null until a new
+alarm is set, so a consumed alarm does not cause a retry loop. Handler errors report
+`integration_delivery_run_failed` and schedule 30 seconds later. Each run emits
+`integration-delivery-run` with scope, provider claim/outcome counts, duration and next wake.
+
+Successful mutating requests wake due Environments in the resolved App. Registration and Convex
+secret rotation wake the credential-bound Environment. The minute job only wakes due
+Environments in coordinator mode and sends no receiver HTTP. It recovers dropped wakes and
+background mutations listed in the storage contract's config-version wake audit. Sentry retains
+its Organization-scoped cursor and minute dispatch.
+
+### Rollout
+
+1. Deploy the additive index and binding with production `INTEGRATION_DELIVERY_MODE=cron`.
+   This preserves global cron dispatch and immediate App-scoped Cloudflare dispatch.
+2. Verify `coordinator` mode in shared preview, including alarms, isolation, retries, faults,
+   receiver acknowledgments and D1 load. Local and shared-preview Wrangler values already select it.
+3. With explicit production approval, flip production to `coordinator`. Compare healthy receiver
+   delivery latency, claim/outcome logs, outstanding age and D1 contention. Roll back to `cron`
+   using the same leases if needed. A stale coordinator alarm in cron mode sends nothing.
+4. Delete the global dispatcher one release after production runs in coordinator mode.
+
+No deployment or production mode flip is part of this PR.
+
+### Local workerd load test
+
+Run on demand, outside CI:
+
+```sh
+pnpm --filter @splitch/control-plane-api exec vitest run --config vitest.config.delivery-load.ts --maxWorkers=1
+```
+
+The three-minute run uses real local workerd alarms, migrated D1, encrypted installation secrets,
+config-version triggers, claims and acknowledgments. Env A has 1,000 Convex installations, split
+evenly between HTTP 404 and 500, with a config change every 10 seconds. Deterministic receiver
+latencies are 100 ms for 40%, 1.2 seconds for 20%, 4.8 seconds for 20%, and 5.2 seconds for 20%.
+The last group exercises the real 5-second abort signal. Env B has five HTTP-200 installations,
+30 ms receiver latency and a config change every two seconds. Only outbound receivers are faked.
+Latency is `delivered_at - created_at` from D1; trigger commit times have one-second precision.
+Every Env B delivery must complete, including intermediate versions, before results are recorded.
+
+The October 25 run measured 180,004 ms of workload. All 450 Env B deliveries completed, with
+p50 305 ms, p99 502 ms and maximum 509 ms. Env A attempted 413 deliveries, or 2.29 attempts per
+second, while receivers returned failures or timed out. The healthy Environment met the p99
+10-second target. These local figures do not establish production D1 latency or capacity.
