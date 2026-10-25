@@ -38,6 +38,7 @@ describe("verified callback installation", () => {
       environmentId: "env_1",
       environmentVersion: 7,
       status: "active",
+      deploymentMissingAt: null,
     });
     expect(fixture.createInstallation).toHaveBeenCalledOnce();
   });
@@ -119,6 +120,7 @@ describe("installation retries and old components", () => {
     expect(reactivateDeployment).toHaveBeenCalledExactlyOnceWith(
       expect.objectContaining({ appId: "app_1", environmentId: "env_1" }),
       INPUT.installationId,
+      "generation",
       NOW.toISOString(),
     );
   });
@@ -207,27 +209,30 @@ async function stored(status: "active" | "revoked") {
     appId: "app_1",
     environmentId: "env_1",
     status,
+    deploymentMissingAt: null,
     secretFingerprint: secret.fingerprint,
   } as unknown as ConvexInstallationRow;
 }
 
 function setup(initial: ConvexInstallationRow | null = null) {
-  const getInstallation = vi.fn(async () => initial);
-  const createInstallation = vi.fn(
-    async (_scope: unknown, input: Record<string, unknown>) =>
-      ({
-        ...input,
-        appId: "app_1",
-        environmentId: "env_1",
-        status: "active",
-      }) as unknown as ConvexInstallationRow,
-  );
+  let current = initial;
+  const getInstallation = vi.fn(async () => current);
+  const createInstallation = vi.fn(async (_scope: unknown, input: Record<string, unknown>) => {
+    current = {
+      ...input,
+      appId: "app_1",
+      environmentId: "env_1",
+      status: "active",
+      deploymentMissingAt: null,
+    } as unknown as ConvexInstallationRow;
+    return current;
+  });
   const repo = {
     identity: { getEnvironment: async () => ({ id: "env_1", appId: "app_1", expiresAt: null }) },
     convex: {
       getInstallation,
       createInstallation,
-      recordDeploymentCheck: vi.fn(),
+      recordDeploymentCheck: vi.fn(async () => ({ ...current, probeToken: "generation" })),
       environmentVersion: async () => 7,
     },
   } as unknown as Repository;

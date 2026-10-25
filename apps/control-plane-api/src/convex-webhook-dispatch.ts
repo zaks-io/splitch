@@ -59,6 +59,7 @@ export async function dispatchConvexWebhooks(deps: ConvexWebhookDispatchDeps): P
       deliverSafely(deps, delivery, leaseOwner, now, secrets, failures, summary),
     ),
   );
+  // Fulfilled values carry lifecycle generations, so policy scheduling must preserve them.
   await probeMissingConvexDeployments(deps, settled);
   deps.onDispatch?.(summary);
   const rejected = settled.filter((result) => result.status === "rejected");

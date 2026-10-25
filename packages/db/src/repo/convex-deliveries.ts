@@ -94,7 +94,7 @@ export async function finishConvexDelivery(
   leaseOwner: string,
   input: ConvexDeliveryFinish,
 ): Promise<string | null> {
-  // An owned outcome replaces the receipt atomically. Registrations and checks clear it too,
+  // An owned outcome invalidates the lifecycle generation atomically. Registrations and checks replace it too,
   // so a delayed deletion probe cannot override newer activity, even at the same timestamp.
   const probeToken = input.state === "terminal" ? crypto.randomUUID() : null;
   const delivered = input.state === "delivered";

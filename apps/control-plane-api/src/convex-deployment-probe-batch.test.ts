@@ -81,7 +81,12 @@ it("re-probes 100 dormant installations with at most six concurrent requests", a
     callbackUrl: `https://deployment-${index}.convex.site/configuration`,
   }));
   const dormantDeployments = vi.fn(async () => installations);
-  const recordDeploymentCheck = vi.fn();
+  const recordDeploymentCheck = vi.fn(async (_scope, id) => ({
+    status: "active",
+    deploymentMissingAt: NOW.toISOString(),
+    callbackUrl: `https://deployment-${id.replace("installation-", "")}.convex.site/configuration`,
+    probeToken: `generation-${id}`,
+  }));
   const reactivateDeployment = vi.fn();
   const repo = {
     convex: { dormantDeployments, recordDeploymentCheck, reactivateDeployment },

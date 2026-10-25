@@ -121,7 +121,12 @@ describe("dormant Convex deployments", () => {
         callbackUrl: `https://${id}.convex.site/configuration`,
       })),
     );
-    const recordDeploymentCheck = vi.fn();
+    const recordDeploymentCheck = vi.fn(async (_scope, id) => ({
+      status: "active",
+      deploymentMissingAt: NOW.toISOString(),
+      callbackUrl: `https://${id}.convex.site/configuration`,
+      probeToken: `generation-${id}`,
+    }));
     const reactivateDeployment = vi.fn();
     const repo = {
       convex: { dormantDeployments, recordDeploymentCheck, reactivateDeployment },
@@ -141,6 +146,7 @@ describe("dormant Convex deployments", () => {
     expect(reactivateDeployment).toHaveBeenCalledExactlyOnceWith(
       expect.objectContaining({ appId: "app", environmentId: "env" }),
       "live",
+      "generation-live",
       NOW.toISOString(),
     );
   });

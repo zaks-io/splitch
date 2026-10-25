@@ -37,6 +37,12 @@ async function markMissing(installationId: string, now: string) {
   await repo.convex.markDeploymentMissing(installationId, token, now);
 }
 
+async function checkReceipt(installationId: string) {
+  const checked = await repo.convex.recordDeploymentCheck(scope(), installationId, NOW);
+  if (!checked) throw new Error("Expected a deployment check");
+  return checked.probeToken;
+}
+
 async function terminalReceipt(owner: string) {
   const [delivery] = await repo.convex.claimDueDeliveries(
     "2099-01-01T00:00:00.000Z",
@@ -135,8 +141,9 @@ describe("Convex deployment dormancy on real D1", () => {
       await markMissing("dormant", NOW);
       if (!existingDelivery) await changeConfig();
       const version = await repo.convex.environmentVersion(scope());
-      await repo.convex.reactivateDeployment(scope(), "dormant", LATER);
-      await repo.convex.reactivateDeployment(scope(), "dormant", LATER);
+      const token = await checkReceipt("dormant");
+      await repo.convex.reactivateDeployment(scope(), "dormant", token, LATER);
+      await repo.convex.reactivateDeployment(scope(), "dormant", token, LATER);
       expect(await repo.convex.getInstallation(scope(), "dormant")).toMatchObject({
         status: "active",
         deploymentMissingAt: null,
@@ -162,10 +169,23 @@ describe("Convex deployment dormancy on real D1", () => {
     await markMissing("dormant", NOW);
     await repo.convex.revokeInstallation(scope(), "revoked", NOW);
     await markMissing("revoked", NOW);
-    await repo.convex.reactivateDeployment(scope(), "revoked", LATER);
+    await repo.convex.reactivateDeployment(
+      scope(),
+      "revoked",
+      await checkReceipt("revoked"),
+      LATER,
+    );
+    expect(
+      await repo.convex.recordDeploymentCheck(
+        envScope(seed.b.appId, seed.b.environmentId),
+        "dormant",
+        LATER,
+      ),
+    ).toBeNull();
     await repo.convex.reactivateDeployment(
       envScope(seed.b.appId, seed.b.environmentId),
       "dormant",
+      await checkReceipt("dormant"),
       LATER,
     );
     expect(await repo.convex.getInstallation(scope(), "revoked")).toMatchObject({
@@ -186,10 +206,15 @@ describe("Convex deployment probe receipts on real D1", () => {
       await install("guarded");
       await changeConfig();
       const token = await terminalReceipt("owner");
-      if (activity === "check") await repo.convex.recordDeploymentCheck("guarded", NOW);
+      if (activity === "check") await repo.convex.recordDeploymentCheck(scope(), "guarded", NOW);
       if (activity === "reactivation") {
         await repo.convex.markDeploymentMissing("guarded", token, NOW);
-        await repo.convex.reactivateDeployment(scope(), "guarded", NOW);
+        await repo.convex.reactivateDeployment(
+          scope(),
+          "guarded",
+          await checkReceipt("guarded"),
+          NOW,
+        );
       }
       if (activity === "newer-terminal") {
         await changeConfig();
@@ -211,7 +236,8 @@ describe("Convex deployment probe receipts on real D1", () => {
       await markMissing(id, "2026-01-01T00:00:00.000Z");
     }
     const first = await repo.convex.dormantDeployments(2);
-    for (const row of first) await repo.convex.recordDeploymentCheck(row.installationId, NOW);
+    for (const row of first)
+      await repo.convex.recordDeploymentCheck(scope(), row.installationId, NOW);
     const second = await repo.convex.dormantDeployments(2);
     expect(new Set([...first, ...second].map((row) => row.installationId)).size).toBe(3);
     expect(second[0]?.installationId).not.toBe(first[0]?.installationId);

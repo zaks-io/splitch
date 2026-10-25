@@ -45,13 +45,21 @@ unobserved. Install refuses it with `INSUFFICIENT_SCOPES` instead, while a human
 
 An exact retry of a non-dormant installation returns the existing installation without a new
 challenge and preserves its active or revoked status. A dormant installation with the verification
-capability requires a fresh receiver proof before reactivation. Legacy retries without that
+capability requires a fresh receiver proof before reactivation. Registration atomically replaces
+the lifecycle generation and reads the current state before deciding whether verification is
+needed. A deletion committed after the initial read therefore cannot be overlooked. Verification
+failure leaves the installation dormant and returns the existing validation or availability error.
+Legacy retries without that
 capability leave the dormant mark unchanged. Reusing `installationId` with a different callback or secret fails
 `IDEMPOTENCY_KEY_CONFLICT` before verification. The response is:
 
 ```text
-{ installationId, appId, environmentId, environmentVersion, status: "active" | "revoked" }
+{ installationId, appId, environmentId, environmentVersion, status: "active" | "revoked", deploymentMissingAt: string | null }
 ```
+
+`deploymentMissingAt` is additive and optional in the response contract. The response uses a fresh
+installation read after recovery, so it reports the real state if a newer lifecycle event makes
+recovery lose its compare-and-set guard.
 
 The component then pulls the snapshot. Installation is not complete locally until that snapshot is
 validated and committed.
@@ -83,7 +91,8 @@ Splitch compares this independent proof in constant time. A `2xx` response witho
 fails verification. The challenge never raises the announced Environment version, claims a delivery
 ID, or schedules configuration sync. A missing or invalid proof, redirect, or other permanent
 receiver rejection returns `VALIDATION_ERROR`; transport failures, `429`, and `5xx` return
-`SERVICE_UNAVAILABLE` so the component can retry. No remote installation row is written on failure.
+`SERVICE_UNAVAILABLE` so the component can retry. A failed new installation never inserts a row.
+A failed retry can replace the lifecycle generation but never clears dormancy or enqueues a delivery.
 An exact retry of a non-dormant stored installation does not need a reachable receiver.
 
 Verification and configuration deliveries use a five-second timeout and `redirect: "manual"`.
@@ -147,8 +156,8 @@ A `404` with a `convex-usher` header proves deletion; a `200` proves the deploym
 Other results, missing headers, timeouts, errors and unsupported callback hosts are inconclusive.
 A callback `404` alone cannot establish deletion because a live deployment can lack that route.
 
-A deletion result marks dormancy only if its completion receipt is still current. A newer delivery
-outcome, registration, reactivation or deployment check invalidates the receipt, even when activity
+A deletion result marks dormancy only if its lifecycle generation is still current. A newer delivery
+outcome, registration, reactivation or deployment check invalidates that generation, even when activity
 shares the same timestamp. A stale probe leaves installation health and outstanding deliveries
 unchanged.
 
@@ -156,9 +165,12 @@ Deleted deployments become dormant. Their pending and leased deliveries are supp
 commits stop inserting deliveries for them. The daily 08:00 UTC cron re-probes at most 100 active
 dormant installations, oldest checked time first with installation ID as the tie-breaker. Every
 attempt advances that time, including inconclusive results, so later batches rotate fairly.
-The recovery batch runs at most six probes concurrently.
-A live result or successful verified re-registration clears the mark and enqueues the Environment's
-current version atomically. Recovery reuses an existing suppressed or terminal delivery for that
+The recovery batch runs at most six probes concurrently. Each probe captures a new lifecycle
+generation at startup. A live result or successful verified re-registration clears the mark and
+enqueues the Environment's current version atomically, only while its captured generation still
+matches. Both writes share this guard. A newer registration, dormancy, terminal outcome or successful
+delivery invalidates an older daily live result, which cannot clear a newer deletion mark or requeue
+its current version. Recovery reuses an existing suppressed or terminal delivery for that
 version if necessary, and repeated recovery is idempotent. Other probe results leave it dormant.
 Dormant installations, including those older than 30 days, remain stored for a later retention
 decision. Neither probing nor recovery revokes or deletes installations.

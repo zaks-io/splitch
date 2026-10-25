@@ -5,26 +5,26 @@ create its webhook deliveries in the same D1 transaction. They contain no raw AP
 
 ## `convex_installations`
 
-| Column                       | Type    | Required | Meaning                                                            |
-| ---------------------------- | ------- | -------- | ------------------------------------------------------------------ |
-| `installation_id`            | TEXT PK | yes      | Component-generated UUID                                           |
-| `app_id`                     | TEXT FK | yes      | Credential-derived App                                             |
-| `environment_id`             | TEXT FK | yes      | Credential-derived Environment                                     |
-| `callback_url`               | TEXT    | yes      | Validated `*.convex.site` component route                          |
-| `secret_ciphertext`          | BLOB    | yes      | Authenticated encryption of the webhook secret                     |
-| `secret_key_version`         | TEXT    | yes      | Webhook KEK version used for encryption                            |
-| `secret_fingerprint`         | TEXT    | yes      | Keyed fingerprint for idempotency comparison, not delivery         |
-| `status`                     | TEXT    | yes      | `active` or `revoked`                                              |
-| `last_delivered_version`     | INTEGER | no       | Most recent acknowledged Environment version                       |
-| `last_delivered_at`          | TEXT    | no       | ISO 8601 acknowledgement time                                      |
-| `latest_delivery_error_json` | TEXT    | no       | Latest bounded `DeliveryErrorEnvelope`                             |
-| `preparation_retry_at`       | TEXT    | no       | Convex installation preparation cooldown eligibility               |
-| `deployment_missing_at`      | TEXT    | no       | ISO 8601 deleted-deployment detection time; non-null means dormant |
-| `deployment_probe_token`     | TEXT    | no       | Internal receipt for the latest owned terminal delivery outcome    |
-| `deployment_checked_at`      | TEXT    | no       | ISO 8601 most recent deployment probe time for fair rotation       |
-| `created_at`                 | TEXT    | yes      | ISO 8601                                                           |
-| `updated_at`                 | TEXT    | yes      | ISO 8601                                                           |
-| `revoked_at`                 | TEXT    | no       | ISO 8601                                                           |
+| Column                       | Type    | Required | Meaning                                                                 |
+| ---------------------------- | ------- | -------- | ----------------------------------------------------------------------- |
+| `installation_id`            | TEXT PK | yes      | Component-generated UUID                                                |
+| `app_id`                     | TEXT FK | yes      | Credential-derived App                                                  |
+| `environment_id`             | TEXT FK | yes      | Credential-derived Environment                                          |
+| `callback_url`               | TEXT    | yes      | Validated `*.convex.site` component route                               |
+| `secret_ciphertext`          | BLOB    | yes      | Authenticated encryption of the webhook secret                          |
+| `secret_key_version`         | TEXT    | yes      | Webhook KEK version used for encryption                                 |
+| `secret_fingerprint`         | TEXT    | yes      | Keyed fingerprint for idempotency comparison, not delivery              |
+| `status`                     | TEXT    | yes      | `active` or `revoked`                                                   |
+| `last_delivered_version`     | INTEGER | no       | Most recent acknowledged Environment version                            |
+| `last_delivered_at`          | TEXT    | no       | ISO 8601 acknowledgement time                                           |
+| `latest_delivery_error_json` | TEXT    | no       | Latest bounded `DeliveryErrorEnvelope`                                  |
+| `preparation_retry_at`       | TEXT    | no       | Convex installation preparation cooldown eligibility                    |
+| `deployment_missing_at`      | TEXT    | no       | ISO 8601 deleted-deployment detection time; non-null means dormant      |
+| `deployment_probe_token`     | TEXT    | no       | Internal lifecycle generation for deletion and recovery                 |
+| `deployment_checked_at`      | TEXT    | no       | ISO 8601 latest deployment check or registration time for fair rotation |
+| `created_at`                 | TEXT    | yes      | ISO 8601                                                                |
+| `updated_at`                 | TEXT    | yes      | ISO 8601                                                                |
+| `revoked_at`                 | TEXT    | no       | ISO 8601                                                                |
 
 Indexes: `(app_id, environment_id, status)` and unique
 `(app_id, environment_id, installation_id)`. Callback URL is not unique because named component
@@ -39,13 +39,19 @@ trigger excludes dormant installations, preventing pending rows that retention c
 The claim query is unchanged because marking suppresses existing work and the trigger creates none.
 A partial `(deployment_checked_at, installation_id)` index covers active dormant installations.
 
-Each owned terminal delivery completion mints a unique `deployment_probe_token` in its D1 batch.
-A deletion probe can mark dormancy only while that exact token remains current, consuming it in the
-marking batch. Later delivery outcomes replace or clear it. Registration, reactivation, deployment
-checks, secret rotation and preparation deferrals clear it. This compare-and-set guard prevents a
-stale probe from overriding newer activity, including operations with identical timestamps.
-Unowned lease completions cannot issue a token. The nullable token is internal and never returned
-in installation health responses.
+The nullable `deployment_probe_token` is one lifecycle generation shared by deletion and recovery.
+An owned terminal delivery completion issues a generation in its D1 batch. Registration and daily
+probe startup replace it through a scoped `UPDATE ... RETURNING`, which also returns the current
+installation state. Registration makes that atomic update before receiver verification, so no
+receipt issued before the update can mark dormancy afterward. It decides verification and recovery
+from the returned state, never the earlier installation read.
+
+Both the current-version requeue and mark-clearing statements compare-and-set the captured
+generation in one D1 batch. Dormancy and reactivation consume the generation; later delivery
+outcomes, checks, registrations, secret rotation and preparation deferrals replace or invalidate it.
+This prevents stale deletion results and stale daily live results from overriding newer activity,
+including operations at identical timestamps. Unowned lease completions cannot issue a generation.
+The generation is internal and never appears in API responses.
 
 Successful verified re-registration or a live daily re-probe atomically requeues the current
 Environment version and clears the mark. The unique installation/version index prevents duplicate

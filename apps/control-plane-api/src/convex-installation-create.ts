@@ -33,7 +33,13 @@ export function makeConvexInstallationCreateHandler(
     const existing = await deps.repo.convex.getInstallation(scope, input.body.installationId);
     const conflict = installationConflict(existing, input.body, encrypted.fingerprint, requestId);
     if (conflict) return conflict;
-    const verificationError = await validateReceiver(existing, input.body, deps, now(), requestId);
+    const verificationError = await verifyNewInstallation(
+      existing,
+      input.body,
+      deps,
+      now(),
+      requestId,
+    );
     if (verificationError) return verificationError;
     const row =
       existing ??
@@ -99,7 +105,7 @@ function callbackValidationError(message: string, requestId: string): Response {
 }
 
 function installationConflict(
-  row: ConvexInstallationRow | null,
+  row: Pick<ConvexInstallationRow, "callbackUrl" | "secretFingerprint"> | null,
   input: ConvexInstallationCreateInput["body"],
   fingerprint: string,
   requestId: string,
@@ -116,8 +122,19 @@ function installationConflict(
   );
 }
 
-async function validateReceiver(
+async function verifyNewInstallation(
   existing: ConvexInstallationRow | null,
+  input: ConvexInstallationCreateInput["body"],
+  deps: ConvexHandlerDeps,
+  now: Date,
+  requestId: string,
+) {
+  if (existing) return null;
+  return validateReceiver(null, input, deps, now, requestId);
+}
+
+async function validateReceiver(
+  existing: Pick<ConvexInstallationRow, "deploymentMissingAt"> | null,
   input: ConvexInstallationCreateInput["body"],
   deps: ConvexHandlerDeps,
   now: Date,
@@ -145,14 +162,31 @@ async function registrationResponse(
 ): Promise<Response> {
   const conflict = installationConflict(row, input, fingerprint, requestId);
   if (conflict) return conflict;
-  await deps.repo.convex.recordDeploymentCheck(row.installationId, now.toISOString());
-  if (row.deploymentMissingAt && input.callbackVerification)
-    await deps.repo.convex.reactivateDeployment(scope, row.installationId, now.toISOString());
+  const current = await deps.repo.convex.recordDeploymentCheck(
+    scope,
+    row.installationId,
+    now.toISOString(),
+  );
+  if (!current) throw new Error("Convex registration: installation disappeared");
+  const currentConflict = installationConflict(current, input, fingerprint, requestId);
+  if (currentConflict) return currentConflict;
+  const verificationError = await validateReceiver(current, input, deps, now, requestId);
+  if (verificationError) return verificationError;
+  if (current.deploymentMissingAt && input.callbackVerification)
+    await deps.repo.convex.reactivateDeployment(
+      scope,
+      row.installationId,
+      current.probeToken,
+      now.toISOString(),
+    );
+  const result = await deps.repo.convex.getInstallation(scope, row.installationId);
+  if (!result) throw new Error("Convex registration: installation disappeared");
   return Response.json({
     installationId: row.installationId,
     appId: scope.appId,
     environmentId: scope.environmentId,
     environmentVersion: await deps.repo.convex.environmentVersion(scope),
-    status: row.status,
+    status: result.status,
+    deploymentMissingAt: result.deploymentMissingAt,
   });
 }

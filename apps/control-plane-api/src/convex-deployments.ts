@@ -51,11 +51,18 @@ export async function reprobeDormantConvexDeployments(
   const installations = await deps.repo.convex.dormantDeployments(100);
   await mapWithConcurrency(installations, 6, async (installation) => {
     const now = deps.now.toISOString();
-    await deps.repo.convex.recordDeploymentCheck(installation.installationId, now);
-    if ((await probeConvexDeployment(installation.callbackUrl, deps.fetcher)) !== "live") return;
-    await deps.repo.convex.reactivateDeployment(
-      envScope(installation.appId, installation.environmentId),
+    const scope = envScope(installation.appId, installation.environmentId);
+    const observed = await deps.repo.convex.recordDeploymentCheck(
+      scope,
       installation.installationId,
+      now,
+    );
+    if (observed?.status !== "active" || !observed.deploymentMissingAt) return;
+    if ((await probeConvexDeployment(observed.callbackUrl, deps.fetcher)) !== "live") return;
+    await deps.repo.convex.reactivateDeployment(
+      scope,
+      installation.installationId,
+      observed.probeToken,
       now,
     );
   });

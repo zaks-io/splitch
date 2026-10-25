@@ -1,5 +1,11 @@
+import type { ConvexInstallationRow } from "./convex-integrations";
 import type { EnvScope } from "./scope";
 import { assertMintedScope } from "./scope";
+
+type DeploymentCheck = Pick<
+  ConvexInstallationRow,
+  "installationId" | "status" | "deploymentMissingAt" | "callbackUrl" | "secretFingerprint"
+> & { probeToken: string };
 
 export function makeConvexDeploymentRepo(d1: D1Database) {
   return {
@@ -45,17 +51,23 @@ export function makeConvexDeploymentRepo(d1: D1Database) {
       return rows.results;
     },
 
-    async recordDeploymentCheck(installationId: string, now: string): Promise<void> {
-      await d1
-        .prepare(`UPDATE convex_installations SET deployment_checked_at = ?, deployment_probe_token = NULL
-        WHERE installation_id = ? AND status = 'active'`)
-        .bind(now, installationId)
-        .run();
+    async recordDeploymentCheck(scope: EnvScope, installationId: string, now: string) {
+      assertMintedScope(scope);
+      // One lifecycle generation fences both directions: an older deletion or live result
+      // cannot override activity committed after its observation began.
+      return d1
+        .prepare(`UPDATE convex_installations SET deployment_checked_at = ?, deployment_probe_token = ?
+        WHERE app_id = ? AND environment_id = ? AND installation_id = ?
+        RETURNING installation_id AS installationId, status, deployment_missing_at AS deploymentMissingAt,
+          callback_url AS callbackUrl, secret_fingerprint AS secretFingerprint, deployment_probe_token AS probeToken`)
+        .bind(now, crypto.randomUUID(), scope.appId, scope.environmentId, installationId)
+        .first<DeploymentCheck>();
     },
 
     async reactivateDeployment(
       scope: EnvScope,
       installationId: string,
+      probeToken: string,
       now: string,
     ): Promise<void> {
       assertMintedScope(scope);
@@ -76,19 +88,28 @@ export function makeConvexDeploymentRepo(d1: D1Database) {
             ON environment.id = installation.environment_id AND environment.app_id = installation.app_id
           WHERE installation.app_id = ? AND installation.environment_id = ?
             AND installation.installation_id = ? AND installation.status = 'active'
-            AND installation.deployment_missing_at IS NOT NULL
+            AND installation.deployment_missing_at IS NOT NULL AND installation.deployment_probe_token = ?
           ON CONFLICT(installation_id, environment_version) DO UPDATE SET
             state = 'pending', attempt_count = 0, next_attempt_at = excluded.next_attempt_at,
             lease_owner = NULL, lease_expires_at = NULL, last_error_json = NULL,
             completed_at = NULL
           WHERE config_webhook_deliveries.state IN ('suppressed', 'terminal')`)
-          .bind(deliveryId, deliveryId, now, now, scope.appId, scope.environmentId, installationId),
+          .bind(
+            deliveryId,
+            deliveryId,
+            now,
+            now,
+            scope.appId,
+            scope.environmentId,
+            installationId,
+            probeToken,
+          ),
         d1
           .prepare(`UPDATE convex_installations SET deployment_missing_at = NULL,
           deployment_checked_at = ?, preparation_retry_at = NULL, updated_at = ?, deployment_probe_token = NULL
           WHERE app_id = ? AND environment_id = ? AND installation_id = ?
-            AND status = 'active' AND deployment_missing_at IS NOT NULL`)
-          .bind(now, now, scope.appId, scope.environmentId, installationId),
+            AND status = 'active' AND deployment_missing_at IS NOT NULL AND deployment_probe_token = ?`)
+          .bind(now, now, scope.appId, scope.environmentId, installationId, probeToken),
       ]);
     },
   };
