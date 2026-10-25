@@ -199,46 +199,6 @@ describe("provider-specific delivery claim contracts", () => {
     ]);
   });
 
-  it("lets healthy Convex installations pass failing ones that began waiting up to 30 minutes earlier", async () => {
-    await insertWaitingDelivery("healthy", 1, NOW);
-    await insertWaitingDelivery("failing_recent", 1, "2026-08-24 23:31:00", true);
-    await insertWaitingDelivery("failing_overdue", 1, "2026-08-24 23:29:00", true);
-    expect(await claimOrder(3)).toEqual(["failing_overdue", "healthy", "failing_recent"]);
-  });
-
-  it("keeps a failing Convex installation's wait when newer versions arrive", async () => {
-    await insertWaitingDelivery("recovering", 1, "2026-08-24 23:29:00", true);
-    await insertWaitingDelivery("recovering", 2, NOW, true);
-    await insertWaitingDelivery("healthy", 1, NOW);
-    const rows = await claim(createRepository(local.d1), "convex", "owner", 1);
-    expect(
-      rows.map(({ installationId, environmentVersion }) => ({
-        installationId,
-        environmentVersion,
-      })),
-    ).toEqual([{ installationId: "recovering", environmentVersion: 2 }]);
-  });
-
-  it("reaches a failing Convex installation while healthy churn fills every claim", async () => {
-    await insertWaitingDelivery("recovering", 1, NOW, true);
-    const repo = createRepository(local.d1);
-    let reachedAtMinute: number | null = null;
-    for (let minute = 0; minute <= 45 && reachedAtMinute === null; minute++) {
-      const tick = new Date(Date.parse(NOW) + minute * 60_000).toISOString();
-      await insertWaitingDelivery("healthy", minute + 1, tick);
-      await insertWaitingDelivery("recovering", minute + 2, tick, true);
-      const [row] = await claim(repo, "convex", `tick-${minute}`, 1, tick, LATER);
-      if (row?.installationId === "recovering") reachedAtMinute = minute;
-      else if (row)
-        await repo.convex.finishDelivery(row.deliveryId, `tick-${minute}`, {
-          state: "delivered",
-          now: tick,
-        });
-    }
-    expect(reachedAtMinute).toBeGreaterThanOrEqual(30);
-    expect(reachedAtMinute).toBeLessThanOrEqual(31);
-  });
-
   it.each(DELIVERY_PROVIDERS)(
     "blocks an older %s delivery while a newer pending version is backed off",
     async (provider) => {
@@ -265,37 +225,3 @@ describe("provider-specific delivery claim contracts", () => {
     expect(rows.map((row) => row.environmentVersion)).toEqual([1]);
   });
 });
-
-async function insertWaitingDelivery(
-  installationId: string,
-  version: number,
-  createdAt: string,
-  failing = false,
-) {
-  const exists = await local.d1
-    .prepare("SELECT 1 FROM convex_installations WHERE installation_id = ?")
-    .bind(installationId)
-    .first();
-  if (!exists) await insertInstallation(local.d1, seed, "convex", installationId);
-  const { deliveryId } = await insertDelivery(local.d1, seed, "convex", installationId, version);
-  await local.d1
-    .prepare("UPDATE config_webhook_deliveries SET created_at = ? WHERE delivery_id = ?")
-    .bind(createdAt, deliveryId)
-    .run();
-  if (failing)
-    await local.d1
-      .prepare(`UPDATE convex_installations SET latest_delivery_error_json = '{"code":"HTTP_STATUS"}'
-        WHERE installation_id = ?`)
-      .bind(installationId)
-      .run();
-}
-
-async function claimOrder(ticks: number) {
-  const repo = createRepository(local.d1);
-  const order: string[] = [];
-  for (let tick = 0; tick < ticks; tick++)
-    order.push(
-      ...(await claim(repo, "convex", `tick-${tick}`, 1)).map((row) => row.installationId),
-    );
-  return order;
-}

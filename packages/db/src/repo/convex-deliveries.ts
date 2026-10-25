@@ -13,6 +13,20 @@ import { buildDueConvexDeliveriesQuery } from "./scheduled-due-predicates";
  */
 const FAILING_INSTALLATION_CLAIM_DELAY = "+30 minutes";
 
+/**
+ * An installation joins the queue when its oldest outstanding version is created, and rejoins at
+ * the back after each attempt: every owned completion and preparation deferral stamps
+ * `updated_at`. A newer version cannot restart the wait, and a receiver that keeps failing cannot
+ * keep the front.
+ */
+const waitingSince = sql`max(
+  datetime((SELECT oldest.created_at FROM config_webhook_deliveries oldest
+    INDEXED BY config_webhook_delivery_outstanding_idx
+    WHERE oldest.installation_id = installation.installation_id
+      AND oldest.state IN ('pending', 'leased')
+    ORDER BY oldest.environment_version LIMIT 1)),
+  datetime(installation.updated_at))`;
+
 export async function claimDueConvexDeliveries(
   d1: D1Database,
   now: string,
@@ -24,8 +38,6 @@ export async function claimDueConvexDeliveries(
     throw new Error("Convex delivery claim limit must be a positive integer");
   const due = buildDueConvexDeliveriesQuery(now);
   // Start with eligible installations so blocked history cannot inflate the due-row scan.
-  // The wait starts at the oldest outstanding version: keying on the claimed newest version
-  // would restart it on every config change and let steady churn starve the installation.
   const db = createDb(d1);
   const [leased, claimed] = await db.batch([
     db
@@ -33,12 +45,7 @@ export async function claimDueConvexDeliveries(
       .set({ state: "leased", leaseOwner, leaseExpiresAt })
       .where(sql`delivery_id IN (
           SELECT delivery.delivery_id FROM convex_installations installation ${due}
-          ORDER BY datetime(
-              (SELECT oldest.created_at FROM config_webhook_deliveries oldest
-                INDEXED BY config_webhook_delivery_outstanding_idx
-              WHERE oldest.installation_id = installation.installation_id
-                AND oldest.state IN ('pending', 'leased')
-              ORDER BY oldest.environment_version LIMIT 1),
+          ORDER BY datetime(${waitingSince},
               CASE WHEN installation.latest_delivery_error_json IS NULL THEN '+0 minutes'
                 ELSE ${FAILING_INSTALLATION_CLAIM_DELAY} END),
             delivery.delivery_id
