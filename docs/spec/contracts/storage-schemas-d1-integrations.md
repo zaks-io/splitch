@@ -127,8 +127,8 @@ stored completely rather than truncated.
 
 - A successful config mutation inserts one row for every active, non-dormant installation in the same D1
   transaction as the config change. A transaction that rolls back creates no delivery.
-- `INTEGRATION_DELIVERY_MODE` is required and accepts only `coordinator` or `cron`. Local and
-  shared preview use `coordinator`; production remains `cron` until a separately approved flip.
+- `INTEGRATION_DELIVERY_MODE` is required and accepts only `coordinator` or `cron`. Every
+  Wrangler environment uses `coordinator`; `cron` is the rollback mode and shares the same leases.
 - In coordinator mode, successful mutating Control Plane requests wake the resolved App's
   Environments with due work immediately after commit. Convex and Cloudflare installation
   registration and Convex secret rotation also wake their Environment. Cloudflare has no separate

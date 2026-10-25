@@ -8,7 +8,7 @@ describe("Control Plane API Wrangler runtime config", () => {
   it.each([
     ["local", config, "coordinator"],
     ["shared-preview", config.env?.["shared-preview"], "coordinator"],
-    ["production", config.env?.production, "cron"],
+    ["production", config.env?.production, "coordinator"],
   ])("selects integration delivery mode for %s", (_name, target, mode) => {
     expect(target?.vars?.INTEGRATION_DELIVERY_MODE).toBe(mode);
     expect(target?.durable_objects?.bindings).toContainEqual({
