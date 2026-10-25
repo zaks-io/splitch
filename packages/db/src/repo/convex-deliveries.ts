@@ -5,10 +5,11 @@ import type { ConfigWebhookDeliveryRow } from "./convex-integrations";
 import { buildDueConvexDeliveriesQuery } from "./scheduled-due-predicates";
 
 /**
- * Claim order treats a failing installation's row as due this much later. Hundreds of dead
- * receivers cannot hold a healthy installation behind them, and a recovered receiver still
- * reaches a slot within this bound while healthy work fills every claim. It matches the
- * preparation cooldown and the last retry step, the existing maximum recovery delay.
+ * Claims go to the installation that has waited longest, counting a failing installation's wait
+ * from this much later. Healthy installations pass failing ones that started waiting up to this
+ * long before them, so a fan-out to hundreds of dead receivers does not queue ahead of them. It is
+ * an ordering penalty, not a strict priority: a recovered receiver still reaches the front while
+ * healthy work fills every claim. It matches the preparation cooldown and the last retry step.
  */
 const FAILING_INSTALLATION_CLAIM_DELAY = "+30 minutes";
 
@@ -23,7 +24,8 @@ export async function claimDueConvexDeliveries(
     throw new Error("Convex delivery claim limit must be a positive integer");
   const due = buildDueConvexDeliveriesQuery(now);
   // Start with eligible installations so blocked history cannot inflate the due-row scan.
-  // datetime() also puts trigger-written and dispatcher-written timestamps on one format.
+  // The wait starts at the oldest outstanding version: keying on the claimed newest version
+  // would restart it on every config change and let steady churn starve the installation.
   const db = createDb(d1);
   const [leased, claimed] = await db.batch([
     db
@@ -31,9 +33,14 @@ export async function claimDueConvexDeliveries(
       .set({ state: "leased", leaseOwner, leaseExpiresAt })
       .where(sql`delivery_id IN (
           SELECT delivery.delivery_id FROM convex_installations installation ${due}
-          ORDER BY datetime(delivery.next_attempt_at, CASE
-              WHEN installation.latest_delivery_error_json IS NULL THEN '+0 minutes'
-              ELSE ${FAILING_INSTALLATION_CLAIM_DELAY} END),
+          ORDER BY datetime(
+              (SELECT oldest.created_at FROM config_webhook_deliveries oldest
+                INDEXED BY config_webhook_delivery_outstanding_idx
+              WHERE oldest.installation_id = installation.installation_id
+                AND oldest.state IN ('pending', 'leased')
+              ORDER BY oldest.environment_version LIMIT 1),
+              CASE WHEN installation.latest_delivery_error_json IS NULL THEN '+0 minutes'
+                ELSE ${FAILING_INSTALLATION_CLAIM_DELAY} END),
             delivery.delivery_id
           LIMIT ${limit}
         )`)

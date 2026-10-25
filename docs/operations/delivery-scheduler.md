@@ -234,8 +234,10 @@ next tick and superseded the four older versions.
 
 Terminal responses now suppress older pending versions, as successes already did. The webhook is
 a version-only nudge, so an older version cannot succeed where the newer one was rejected.
-Claim order treats a row whose installation has a latest delivery error as due 30 minutes later,
-so failing receivers no longer hold healthy installations behind them in any App. The delay is
-bounded rather than a strict priority, so an installation recovering from one transient failure
-cannot be starved while healthy work fills every claim. Dead preview installations still receive
-one attempt per Environment version until they are revoked.
+Claims now go to the installation whose oldest outstanding version has waited longest, and a
+failing installation's wait counts from 30 minutes later. A fan-out to dead receivers no longer
+queues ahead of healthy installations that change within 30 minutes of it, in any App. The
+penalty orders work; it does not bound delay, which still depends on backlog and the 25-row
+claim. Keying on the oldest outstanding version means config churn cannot restart a recovering
+installation's wait, so it is reached even while healthy work fills every claim. Dead preview
+installations still receive one attempt per Environment version until they are revoked.
