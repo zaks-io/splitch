@@ -93,19 +93,22 @@ export async function finishConvexDelivery(
   deliveryId: string,
   leaseOwner: string,
   input: ConvexDeliveryFinish,
-): Promise<void> {
+): Promise<string | null> {
+  // An owned outcome invalidates the lifecycle generation atomically. Registrations and checks replace it too,
+  // so a delayed deletion probe cannot override newer activity, even at the same timestamp.
+  const probeToken = input.state === "terminal" ? crypto.randomUUID() : null;
   const delivered = input.state === "delivered";
   // The body is a version-only nudge (ADR 0049), so an older version cannot succeed where a newer
   // one was terminally rejected. Left pending, each older version would cost another claim.
   const supersedesOlder = input.state !== "pending";
   // Installation health must read the owned lease before the outbox update clears it.
-  await d1.batch([
+  const results = await d1.batch([
     d1
       .prepare(`UPDATE convex_installations SET
         last_delivered_version = CASE WHEN ? THEN MAX(COALESCE(last_delivered_version, 0), (SELECT environment_version FROM config_webhook_deliveries WHERE delivery_id = ?)) ELSE last_delivered_version END,
         last_delivered_at = CASE WHEN ? THEN ? ELSE last_delivered_at END,
         latest_delivery_error_json = CASE WHEN ? THEN NULL ELSE ? END,
-        updated_at = ?
+        updated_at = ?, deployment_probe_token = ?
         WHERE installation_id = (SELECT installation_id FROM config_webhook_deliveries WHERE delivery_id = ?)
           AND status = 'active'
           AND EXISTS (SELECT 1 FROM config_webhook_deliveries
@@ -118,6 +121,7 @@ export async function finishConvexDelivery(
         delivered ? 1 : 0,
         input.errorJson ?? null,
         input.now,
+        probeToken,
         deliveryId,
         deliveryId,
         leaseOwner,
@@ -150,4 +154,10 @@ export async function finishConvexDelivery(
         leaseOwner,
       ),
   ]);
+  return ownedProbeToken(results[0], probeToken);
+}
+
+function ownedProbeToken(observation: D1Result | undefined, probeToken: string | null) {
+  if (!observation) throw new Error("Convex delivery completion: missing D1 result");
+  return observation.meta.changes > 0 ? probeToken : null;
 }

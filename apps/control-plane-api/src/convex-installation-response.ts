@@ -39,6 +39,7 @@ export function convexInstallationStatusResponse(
     environmentId: row.environmentId,
     environmentVersion,
     status: row.status,
+    deploymentMissingAt: row.deploymentMissingAt,
     callbackUrl: row.callbackUrl,
     lastDeliveredVersion: row.lastDeliveredVersion,
     lastDeliveredAt: row.lastDeliveredAt,

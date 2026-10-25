@@ -38,6 +38,7 @@ describe("verified callback installation", () => {
       environmentId: "env_1",
       environmentVersion: 7,
       status: "active",
+      deploymentMissingAt: null,
     });
     expect(fixture.createInstallation).toHaveBeenCalledOnce();
   });
@@ -97,6 +98,44 @@ describe("installation retries and old components", () => {
       expect(fixture.createInstallation).not.toHaveBeenCalled();
     },
   );
+
+  it("reactivates a dormant installation only after a fresh receiver proof", async () => {
+    const existing = { ...(await stored("active")), deploymentMissingAt: NOW.toISOString() };
+    const fixture = setup(existing);
+    const reactivateDeployment = vi.fn();
+    fixture.repo.convex.reactivateDeployment = reactivateDeployment;
+    const fetcher: typeof fetch = async (_url, init) => {
+      expect(reactivateDeployment).not.toHaveBeenCalled();
+      const { installationId, challenge } = JSON.parse(init?.body as string);
+      return new Response(null, {
+        status: 204,
+        headers: {
+          "splitch-callback-proof": createHmac("sha256", SECRET)
+            .update(`callback.verify:${installationId}:${challenge}`)
+            .digest("hex"),
+        },
+      });
+    };
+    expect((await fixture.handlers(fetcher).create(args(INPUT))).status).toBe(200);
+    expect(reactivateDeployment).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({ appId: "app_1", environmentId: "env_1" }),
+      INPUT.installationId,
+      "generation",
+      NOW.toISOString(),
+    );
+  });
+
+  it("keeps a dormant installation dormant when verification fails or the capability is missing", async () => {
+    const existing = { ...(await stored("active")), deploymentMissingAt: NOW.toISOString() };
+    const fixture = setup(existing);
+    const reactivateDeployment = vi.fn();
+    fixture.repo.convex.reactivateDeployment = reactivateDeployment;
+    const fetcher = vi.fn(async () => new Response(null, { status: 404 }));
+    expect((await fixture.handlers(fetcher).create(args(INPUT))).status).toBe(400);
+    const { callbackVerification: _capability, ...legacy } = INPUT;
+    expect((await fixture.handlers(fetcher).create(args(legacy))).status).toBe(400);
+    expect(reactivateDeployment).not.toHaveBeenCalled();
+  });
 
   it("rejects changed registration content before a challenge", async () => {
     const fixture = setup(await stored("active"));
@@ -170,26 +209,35 @@ async function stored(status: "active" | "revoked") {
     appId: "app_1",
     environmentId: "env_1",
     status,
+    deploymentMissingAt: null,
     secretFingerprint: secret.fingerprint,
   } as unknown as ConvexInstallationRow;
 }
 
 function setup(initial: ConvexInstallationRow | null = null) {
-  const getInstallation = vi.fn(async () => initial);
-  const createInstallation = vi.fn(
-    async (_scope: unknown, input: Record<string, unknown>) =>
-      ({
-        ...input,
-        appId: "app_1",
-        environmentId: "env_1",
-        status: "active",
-      }) as unknown as ConvexInstallationRow,
-  );
+  let current = initial;
+  const getInstallation = vi.fn(async () => current);
+  const createInstallation = vi.fn(async (_scope: unknown, input: Record<string, unknown>) => {
+    current = {
+      ...input,
+      appId: "app_1",
+      environmentId: "env_1",
+      status: "active",
+      deploymentMissingAt: null,
+    } as unknown as ConvexInstallationRow;
+    return current;
+  });
   const repo = {
     identity: { getEnvironment: async () => ({ id: "env_1", appId: "app_1", expiresAt: null }) },
-    convex: { getInstallation, createInstallation, environmentVersion: async () => 7 },
+    convex: {
+      getInstallation,
+      createInstallation,
+      recordDeploymentCheck: vi.fn(async () => ({ ...current, probeToken: "generation" })),
+      environmentVersion: async () => 7,
+    },
   } as unknown as Repository;
   return {
+    repo,
     getInstallation,
     createInstallation,
     handlers: (fetcher: typeof fetch) =>
