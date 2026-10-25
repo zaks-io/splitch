@@ -124,3 +124,20 @@ it("excludes future Convex preparation cooldowns and includes expired cooldowns"
     },
   ]);
 });
+
+it.each(DELIVERY_PROVIDERS)(
+  "%s orders trigger and application timestamps chronologically",
+  async (provider) => {
+    await waiting(provider, "application", NOW);
+    await waiting(provider, "trigger", "2026-08-25 00:05:00");
+    const rows = await createRepository(local.d1)[provider].deliveryLag(TICK);
+    expect(rows).toEqual([
+      {
+        appId: seed.a.appId,
+        environmentId: seed.a.environmentId,
+        oldestOutstandingAt: NOW,
+        healthyInstallationsWaiting: 2,
+      },
+    ]);
+  },
+);

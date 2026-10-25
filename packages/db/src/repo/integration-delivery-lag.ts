@@ -21,9 +21,10 @@ export async function readIntegrationDeliveryLag(
   const preparation = convex
     ? "AND (installation.preparation_retry_at IS NULL OR installation.preparation_retry_at <= ?)"
     : "";
+  // Triggers use CURRENT_TIMESTAMP; application inserts use ISO timestamps.
   const statement = d1.prepare(`SELECT delivery.app_id AS appId,
       delivery.environment_id AS environmentId,
-      MIN(delivery.created_at) AS oldestOutstandingAt,
+      MIN(strftime('%Y-%m-%dT%H:%M:%fZ', delivery.created_at)) AS oldestOutstandingAt,
       COUNT(DISTINCT delivery.installation_id) AS healthyInstallationsWaiting
     FROM ${deliveryTable} delivery INDEXED BY ${deliveryIndex}
     CROSS JOIN ${installationTable} installation
