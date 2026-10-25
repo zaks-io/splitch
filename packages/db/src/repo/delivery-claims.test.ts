@@ -199,6 +199,27 @@ describe("provider-specific delivery claim contracts", () => {
     ]);
   });
 
+  it("claims healthy Convex installations before older work for failing receivers", async () => {
+    for (const id of ["failing_a", "failing_b"]) {
+      await insertInstallation(local.d1, seed, "convex", id);
+      await insertDelivery(local.d1, seed, "convex", id, 1, "2026-08-24T00:00:00.000Z");
+    }
+    await local.d1
+      .prepare(`UPDATE convex_installations SET latest_delivery_error_json = '{"code":"HTTP_STATUS"}'
+        WHERE installation_id LIKE 'failing_%'`)
+      .run();
+    await insertInstallation(local.d1, seed, "convex", "healthy");
+    await insertDelivery(local.d1, seed, "convex", "healthy");
+    const repo = createRepository(local.d1);
+    expect((await claim(repo, "convex", "first", 1)).map((row) => row.installationId)).toEqual([
+      "healthy",
+    ]);
+    expect((await claim(repo, "convex", "rest")).map((row) => row.installationId)).toEqual([
+      "failing_a",
+      "failing_b",
+    ]);
+  });
+
   it.each(DELIVERY_PROVIDERS)(
     "blocks an older %s delivery while a newer pending version is backed off",
     async (provider) => {

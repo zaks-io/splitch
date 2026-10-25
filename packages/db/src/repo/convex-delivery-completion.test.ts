@@ -66,9 +66,35 @@ describe("Convex acknowledgment suppression", () => {
     }
   });
 
-  it.each(["stale", "revoked"] as const)(
-    "cannot suppress older pending rows on a %s acknowledgment",
-    async (condition) => {
+  it("suppresses older pending work after the newest version is terminally rejected", async () => {
+    await repo.convex.finishDelivery(deliveryId, "owner", { state: "pending", now: NOW });
+    const newest = await insertDelivery(local.d1, seed, "convex", "installation", 2);
+    expect(await claim(repo, "convex", "newest-owner")).toEqual([
+      expect.objectContaining({ deliveryId: newest.deliveryId }),
+    ]);
+
+    await repo.convex.finishDelivery(newest.deliveryId, "newest-owner", {
+      state: "terminal",
+      now: NOW,
+      errorJson: '{"kind":"http","code":"HTTP_STATUS","httpStatus":404}',
+    });
+
+    const rows = await completionRows();
+    expect(rows.map(({ delivery_id, state }) => ({ delivery_id, state }))).toEqual([
+      { delivery_id: deliveryId, state: "suppressed" },
+      { delivery_id: newest.deliveryId, state: "terminal" },
+    ]);
+    expect(await claim(repo, "convex", "after", 25, LATER)).toEqual([]);
+  });
+
+  it.each([
+    ["stale", "delivered"],
+    ["stale", "terminal"],
+    ["revoked", "delivered"],
+    ["revoked", "terminal"],
+  ] as const)(
+    "cannot suppress older pending rows on a %s %s completion",
+    async (condition, state) => {
       await insertDelivery(local.d1, seed, "convex", "installation", 0);
       if (condition === "revoked") {
         await local.d1
@@ -83,7 +109,7 @@ describe("Convex acknowledgment suppression", () => {
         deliveryId,
         condition === "stale" ? "stale-owner" : "owner",
         {
-          state: "delivered",
+          state,
           now: LATER,
         },
       );

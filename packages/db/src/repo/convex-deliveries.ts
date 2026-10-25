@@ -15,6 +15,9 @@ export async function claimDueConvexDeliveries(
     throw new Error("Convex delivery claim limit must be a positive integer");
   const due = buildDueConvexDeliveriesQuery(now);
   // Start with eligible installations so blocked history cannot inflate the due-row scan.
+  // Healthy installations claim first: hundreds of failing receivers in one Environment must not
+  // hold a healthy installation's delivery behind theirs. A success clears the error, so a
+  // recovered receiver rejoins the healthy group.
   const db = createDb(d1);
   const [leased, claimed] = await db.batch([
     db
@@ -22,7 +25,9 @@ export async function claimDueConvexDeliveries(
       .set({ state: "leased", leaseOwner, leaseExpiresAt })
       .where(sql`delivery_id IN (
           SELECT delivery.delivery_id FROM convex_installations installation ${due}
-          ORDER BY delivery.next_attempt_at, delivery.delivery_id LIMIT ${limit}
+          ORDER BY installation.latest_delivery_error_json IS NOT NULL,
+            delivery.next_attempt_at, delivery.delivery_id
+          LIMIT ${limit}
         )`)
       .returning({ deliveryId: configWebhookDeliveries.deliveryId }),
     db
@@ -68,6 +73,9 @@ export async function finishConvexDelivery(
   input: ConvexDeliveryFinish,
 ): Promise<void> {
   const delivered = input.state === "delivered";
+  // The body is a version-only nudge (ADR 0049), so an older version cannot succeed where a newer
+  // one was terminally rejected. Left pending, each older version would cost another claim.
+  const supersedesOlder = input.state !== "pending";
   // Installation health must read the owned lease before the outbox update clears it.
   await d1.batch([
     d1
@@ -103,7 +111,7 @@ export async function finishConvexDelivery(
             JOIN convex_installations installation ON installation.installation_id = owned.installation_id
             WHERE owned.delivery_id = ? AND owned.state = 'leased' AND owned.lease_owner = ?
               AND installation.status = 'active')`)
-      .bind(deliveryId, input.now, deliveryId, delivered ? 1 : 0, deliveryId, leaseOwner),
+      .bind(deliveryId, input.now, deliveryId, supersedesOlder ? 1 : 0, deliveryId, leaseOwner),
     d1
       .prepare(`UPDATE config_webhook_deliveries SET state = ?, attempt_count = attempt_count + 1,
         next_attempt_at = COALESCE(?, next_attempt_at), last_error_json = ?, delivered_at = ?,

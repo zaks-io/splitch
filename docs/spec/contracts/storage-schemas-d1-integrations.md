@@ -95,7 +95,9 @@ stored completely rather than truncated.
   preparation failure records the delivery ID and bounded error envelope before releasing its lease;
   healthy siblings still complete and acknowledge their responses.
 - Convex claims select only the newest pending or leased version per installation and exclude
-  installations with an unexpired delivery lease. A preparation failure defers the installation
+  installations with an unexpired delivery lease. Installations without a latest delivery error
+  claim before failing installations, then by next attempt time, so failing receivers cannot delay
+  healthy ones. A success clears the error. A preparation failure defers the installation
   for 30 minutes, preserving pending work and allowing other installations to claim slots.
   Scoped secret rotation clears the cooldown. A stale worker with an old ciphertext or key version
   cannot defer the repaired installation. Missing or malformed KEK configuration fails before claims.
@@ -106,7 +108,8 @@ stored completely rather than truncated.
   registration, a `404` retries and every retry runs on the next dispatcher tick.
 - A successful newer Environment version suppresses older pending rows and expired older leases
   for the same installation. An unexpired older lease may finish and is harmless because the
-  component version-gates it.
+  component version-gates it. A terminal Convex response suppresses them the same way: the
+  version-only nudge cannot succeed for an older version where the newer one was rejected.
 - A bounded delivery claim uses one transactional D1 batch containing the lease update and joined
   payload read. Active installation eligibility is checked before the limit. Concurrent claims
   cannot acquire the same unexpired lease.
