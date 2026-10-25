@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import type { Db } from "./client";
+import { readIntegrationDeliverySummary } from "./integration-delivery-summary";
 import {
   buildDueCloudflareDeliveriesQuery,
   buildDueConvexDeliveriesQuery,
@@ -8,6 +9,8 @@ import { assertMintedScope, type EnvScope, type TenantScope } from "./scope";
 
 export function makeIntegrationDeliveryScheduleRepo(db: Db) {
   return {
+    outstandingSummary: (scope: EnvScope, nowMs: number) =>
+      readIntegrationDeliverySummary(db, scope, nowMs),
     async environmentsWithDueDeliveries(input: { now: string; scope?: TenantScope }) {
       const convex = buildDueConvexDeliveriesQuery(input.now, input.scope);
       const cloudflare = buildDueCloudflareDeliveriesQuery(input.now, input.scope);

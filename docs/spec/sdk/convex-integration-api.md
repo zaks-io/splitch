@@ -123,6 +123,48 @@ The strict `ConfigSnapshot` shape is owned by
 the current snapshot and version ETag, or `304` only when the component already holds that exact
 version. The request has no App, Environment, field-selection, or public-cache parameters.
 
+## Periodic sync backstop
+
+Activation starts one durable scheduler chain per deployment. Initializing an already active
+installation also repairs a missing or failed chain. Repeated initialization or activation reuses
+its pending or in-progress job, and redeploys preserve the job and integration row. Existing
+installations start the chain when `install()` runs after upgrading to `@splitch/convex` 0.4.0.
+
+The chain checks at most ten minutes apart, with the existing delivery retry jitter capped to an
+eight-to-ten-minute interval. Each tick commits its successor before scheduling the network action,
+so a failed fetch does not stop later checks. The action uses the existing conditional snapshot
+request with the local version ETag. Equal versions return `304` after a cheap Environment version
+read, without constructing or downloading a snapshot. A newer version commits through the normal
+validated snapshot path. Signed nudges and their one-minute recovery remain the prompt path.
+
+`uninstall()` revokes local state and cancels the pending backstop before bounded cleanup. Revoked
+or removed local integration state prevents further scheduling and makes queued checks inert.
+Uninstalling the Convex component itself removes its component state and scheduled work. Redeploying
+an installed component preserves the chain; removing and reinstalling it starts a new chain.
+
+## Deliver outstanding integration configuration
+
+```text
+POST /apps/:appId/envs/:environmentId/integrations/deliveries
+```
+
+`integration_deliveries_create` wakes only the named Environment's delivery coordinator and returns
+`{ appId, environmentId, wake, providers: { convex, cloudflare } }`. Each provider summary contains
+`pendingCount`, `leasedCount`, and nullable `oldestOutstandingAgeMs` across outstanding deliveries.
+Terminal, delivered, and suppressed rows do not participate. This is an observation after the wake,
+not a promise that every delivery has completed. Existing leases and retry cooldowns remain intact.
+
+The operation requires the `credentials` permission and live App admin or owner membership, matching
+integration revocation. Waking outbound work is integration management, so a read-only grant cannot
+trigger it. A missing or failed coordinator returns `SERVICE_UNAVAILABLE`. In `cron` mode, the wake
+is an explicit no-op, `wake: "cron_noop"`, and the summary is still returned. This preserves diagnostic
+access during mode transitions without claiming delivery was scheduled. In `coordinator` mode,
+`wake: "scheduled"` means the Environment coordinator accepted the wake.
+
+CLI: `splitch integration-deliveries create --app <app> --env <environment> --json`.
+MCP: `integration_deliveries_create` with `appId` and `environmentId`. Both derive from the same
+additive Control Plane route. The existing `create` verb follows the integration resource convention.
+
 ## Secret rotation
 
 The component creates and temporarily accepts a second secret, then calls:

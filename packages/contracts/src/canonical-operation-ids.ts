@@ -117,6 +117,7 @@ export const CANONICAL_OPERATION_IDS = [
   "convex_snapshot_get",
   "convex_exposures_create",
   // Convex operator door (MCP tools)
+  "integration_deliveries_create",
   "convex_installations_list",
   "convex_installations_revoke",
   // Cloudflare integration data plane (API Key only, not MCP tools)

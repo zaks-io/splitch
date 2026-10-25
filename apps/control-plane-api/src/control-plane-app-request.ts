@@ -38,6 +38,7 @@ export async function handleControlPlaneAppRequest(input: {
 }): Promise<Response> {
   const { request, env, ctx, authResolver, repo, door, delegated } = input;
   let resolvedAppId: string | undefined;
+  let resolvedOperationId: string | undefined;
   const mode = integrationDeliveryMode(env);
   const wakeDelivery = integrationRegistrationWake(env, ctx);
   const configStore = durableConfigStoreAccess(env.CONFIG_STORE_WRITER, env.CONFIG_STORE, {
@@ -45,8 +46,9 @@ export async function handleControlPlaneAppRequest(input: {
     waitUntil: (promise) => ctx.waitUntil(promise),
   });
   const app = createApp({
-    onResolvedApp: (appId) => {
+    onResolvedApp: (appId, operationId) => {
       resolvedAppId = appId;
+      resolvedOperationId = operationId;
     },
     door,
     apiVersion: () => apiDocumentVersion(env),
@@ -56,6 +58,7 @@ export async function handleControlPlaneAppRequest(input: {
       env.CONTROL_PLANE_ACTOR_RATE_LIMITER,
     ),
     repo,
+    integrationDelivery: env,
     credentialStore: env.CREDENTIAL_STORE,
     personalAccessTokenStore: env.SESSION_STORE,
     credentialCacheWriter: durableCredentialCacheWriterAccess(env.CREDENTIAL_CACHE_WRITER),
@@ -130,7 +133,15 @@ export async function handleControlPlaneAppRequest(input: {
       }),
     );
   }
-  if (response.ok && resolvedAppId && request.method !== "GET" && request.method !== "HEAD") {
+  // Deliver-now already wakes exactly one Environment; the App-wide mutation wake would
+  // also dispatch unrelated Environments and would defeat the explicit cron no-op.
+  if (
+    response.ok &&
+    resolvedAppId &&
+    request.method !== "GET" &&
+    request.method !== "HEAD" &&
+    resolvedOperationId !== "integration_deliveries_create"
+  ) {
     ctx.waitUntil(
       dispatchAppIntegrationDelivery(env, repo, resolvedAppId).catch((error) => {
         reportMutationBackgroundFault(

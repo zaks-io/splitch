@@ -18,6 +18,7 @@ const existing = {
   environmentId: "env_1",
   announcedVersion: 165,
   snapshotVersion: 165,
+  syncBackstopJobId: "existing_backstop",
   state: "active",
 };
 const installed = {
@@ -146,7 +147,9 @@ function installContext(initial: typeof existing | null) {
   const insert = vi.fn(async (_table: string, fields: Record<string, unknown>) => {
     row = { ...existing, ...fields };
   });
-  const mutationCtx = { db: { query, patch, insert } } as unknown as MutationCtx;
+  const mutationCtx = {
+    db: { query, patch, insert, system: { get: async () => ({ state: { kind: "pending" } }) } },
+  } as unknown as MutationCtx;
   const runMutation = vi
     .fn()
     .mockImplementationOnce((_reference, args) => initializeHandler(mutationCtx, args))

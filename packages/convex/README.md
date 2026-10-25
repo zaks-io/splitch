@@ -207,10 +207,26 @@ These four are Action-only:
 `flags.deleteEntity(ctx, { targetingKey, idType })` inside a Mutation removes one Entity's local
 holdovers and suppresses its queued Exposures.
 
-Background recovery is activity-driven. Configuration nudges and new Exposure outbox rows schedule
-one installation-scoped batch drainer, which stops once the work is complete. Retained claims and
-terminal Exposure rows share one scheduled cleanup job set for the earliest expiry. The component
-registers no cron jobs and invokes nothing periodically while idle.
+Configuration nudges schedule immediate sync and version-scoped recovery. Exposure outbox rows
+schedule one installation-scoped batch drainer, which stops once the work is complete. Retained
+claims and terminal Exposure rows share one scheduled cleanup job set for the earliest expiry.
+
+Starting with 0.4.0, activation also maintains one durable configuration backstop chain per
+deployment. Every eight to ten minutes, capped at ten minutes, it makes a conditional version
+check and downloads a snapshot only when the Environment has changed. Equal versions return
+`304` without constructing or downloading a snapshot. The next tick is committed before the
+network action, so a failed check does not stop later checks. This uses `ctx.scheduler`, not a
+cron job.
+
+After upgrading an existing installation, rerun `flags.install(ctx)` to start the backstop.
+Repeated activation or initialization reuses its pending or in-progress job; redeploys preserve
+it. `flags.uninstall(ctx)` revokes local state and cancels the pending job before cleanup.
+Revoked or removed state makes queued callbacks inert, and removing the component stops its work.
+
+Operators can also request delivery for one Environment with
+`splitch integration-deliveries create --app <app> --env <environment> --json` or MCP
+`integration_deliveries_create`. Both require integration-management authority and return the
+outstanding Convex/Cloudflare delivery summary. Cron mode reports an explicit `cron_noop`.
 
 ## When to use `@splitch/sdk` instead
 

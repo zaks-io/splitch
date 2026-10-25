@@ -17,6 +17,7 @@ export async function commitSnapshotHandler(
   // References are checked here, not only at read time, so a broken pull never displaces good state.
   const snapshot = parseSnapshot(args.payload);
   const integration = await requiredIntegration(ctx);
+  if (integration.state !== "active") throw new Error("@splitch/convex is not active");
   if (
     integration.appId !== snapshot.appId ||
     integration.environmentId !== snapshot.environmentId

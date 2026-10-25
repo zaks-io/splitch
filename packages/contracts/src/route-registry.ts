@@ -18,6 +18,7 @@ import { flagChangeRoutes } from "./routes/routes-flag-changes";
 import { flagHealthRoutes } from "./routes/routes-flag-health";
 import { flagLifecycleReadRoutes } from "./routes/routes-flag-lifecycle-reads";
 import { flagRoutes } from "./routes/routes-flags";
+import { integrationDeliveryRoutes } from "./routes/routes-integration-delivery";
 import { ofrepRoutes } from "./routes/routes-ofrep";
 import { personalAccessTokenRoutes } from "./routes/routes-personal-access-tokens";
 import { privacyRoutes } from "./routes/routes-privacy";
@@ -98,6 +99,7 @@ export const routeRegistry = assertRegistry([
   ...personalAccessTokenRoutes,
   ...cloudflareRoutes,
   ...convexRoutes,
+  ...integrationDeliveryRoutes,
   ...sentryRoutes,
   ...analysisRoutes,
   ...appAuditRoutes,

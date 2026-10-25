@@ -3,6 +3,7 @@ import { internal } from "./_generated/api";
 import type { Doc } from "./_generated/dataModel";
 import { internalMutation, type MutationCtx } from "./_generated/server";
 import { ensureExposureDrainScheduled } from "./exposure_batch";
+import { ensureSyncBackstopScheduled } from "./integration_backstop";
 import { CURRENT_KEY, requiredIntegration } from "./integration_state";
 import { scheduleMetricEventDeliveryWatch } from "./metric_event_delivery";
 import { ensureRetentionScheduled } from "./retention";
@@ -37,6 +38,7 @@ export async function activateHandler(
     SYNC_RECOVERY_DELAY_MS,
   );
   await scheduleSyncDeadline(ctx, { ...integration, announcedVersion });
+  await ensureSyncBackstopScheduled(ctx);
   await ensureRetentionScheduled(ctx);
   await scheduleRecoveryAdoption(ctx, { ...integration, state: "active" });
 }

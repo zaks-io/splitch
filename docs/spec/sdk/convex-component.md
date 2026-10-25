@@ -56,7 +56,8 @@ are specified in [callback receiver verification](./convex-integration-api.md#ca
 `install()` is an exact-retry-safe upgrade entrypoint as well as the initial installation call.
 After a package upgrade, rerunning it resumes stale configuration sync, schedules retention for
 existing retained rows, and activates one bounded adoption chain for pending or delivering work
-created by the prior component version.
+created by the prior component version. From 0.4.0 it also starts or repairs the durable
+configuration backstop chain.
 
 Each additional Splitch Environment uses another named component instance, API Key, HTTP prefix,
 configuration store, local Assignment Store, and outbox. No instance can read another instance's
@@ -121,7 +122,12 @@ current snapshot commits. The deadline is described in
 [Local holdover and freshness](#local-holdover-and-freshness). Duplicate or older versions return
 `202` without another pull.
 
-There is no reconciliation cron. Configuration recovery and one installation-scoped Exposure batch
+There is no reconciliation cron. A durable, deduplicated scheduler chain also checks the remote
+Environment version every eight to ten minutes, bounded at ten minutes, to recover lost nudges.
+It uses a conditional snapshot request and downloads no snapshot when versions match.
+Activation and active initialization ensure the chain; redeploys retain it. Local revoke cancels
+the pending job, and cleanup or component removal stops it. See
+[the backstop lifecycle](./convex-integration-api.md#periodic-sync-backstop). Configuration recovery and one installation-scoped Exposure batch
 successor are created atomically with the durable work they protect. The drainer claims up to 25
 Exposures within the 32 KiB request bound and settles the batch in one Mutation. Retained claims and
 terminal Exposure rows share one scheduled cleanup Mutation set for the earliest expiry; it
