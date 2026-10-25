@@ -1,3 +1,4 @@
+import { coordinatorDeliveryPolicy, cronDeliveryPolicy } from "./integration-delivery-limits";
 import { envScope, type Repository } from "@splitch/db";
 import { expect, it, vi } from "vitest";
 import { dispatchCloudflarePushes } from "./cloudflare-push-dispatch";
@@ -7,11 +8,16 @@ import { wakeIntegrationDelivery } from "./integration-delivery-access";
 
 const KEY = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=";
 
-it.each(["convex", "cloudflare"] as const)(
-  "bounds %s sends at six and completes a whole claimed batch",
-  async (provider) => {
+it.each([
+  ["convex", "coordinator", 6],
+  ["cloudflare", "coordinator", 6],
+  ["convex", "cron", 25],
+  ["cloudflare", "cron", 25],
+] as const)(
+  "%s %s claims and concurrently sends exactly %i rows",
+  async (provider, mode, limit) => {
     const secret = await encryptConvexSecret("synthetic-secret", KEY, "v1");
-    const deliveries = Array.from({ length: 25 }, (_, index) => ({
+    const deliveries = Array.from({ length: limit }, (_, index) => ({
       deliveryId: `delivery${index}`,
       installationId: `installation${index}`,
       appId: "app",
@@ -27,9 +33,10 @@ it.each(["convex", "cloudflare"] as const)(
       registeredAt: "2026-01-01T00:00:00.000Z",
     }));
     const finishDelivery = vi.fn(async () => {});
+    const claimDueDeliveries = vi.fn(async (..._args: unknown[]) => deliveries);
     const repo = {
       [provider]: {
-        claimDueDeliveries: async () => deliveries,
+        claimDueDeliveries,
         finishDelivery,
         environmentVersion: async () => 1,
       },
@@ -38,18 +45,27 @@ it.each(["convex", "cloudflare"] as const)(
     let active = 0;
     let peak = 0;
     const fetcher = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
-      expect(init?.signal).toBeInstanceOf(AbortSignal);
+      if (provider === "cloudflare" && mode === "cron") expect(init?.signal).toBeUndefined();
+      else expect(init?.signal).toBeInstanceOf(AbortSignal);
       active++;
       peak = Math.max(peak, active);
       await new Promise((resolve) => setTimeout(resolve, 5));
       active--;
       return new Response(null, { status: 200, headers: { "splitch-environment-version": "1" } });
     });
-    const deps = { repo, scope: envScope("app", "env"), fetcher, webhookKek: KEY, secretKek: KEY };
+    const deps = {
+      policy: mode === "cron" ? cronDeliveryPolicy(provider) : coordinatorDeliveryPolicy(),
+      repo,
+      scope: envScope("app", "env"),
+      fetcher,
+      webhookKek: KEY,
+      secretKek: KEY,
+    };
     await (provider === "convex" ? dispatchConvexWebhooks(deps) : dispatchCloudflarePushes(deps));
-    expect(peak).toBe(6);
-    expect(fetcher).toHaveBeenCalledTimes(25);
-    expect(finishDelivery).toHaveBeenCalledTimes(25);
+    expect(peak).toBe(limit);
+    expect(claimDueDeliveries.mock.calls[0]?.[3]).toBe(limit);
+    expect(fetcher).toHaveBeenCalledTimes(limit);
+    expect(finishDelivery).toHaveBeenCalledTimes(limit);
   },
 );
 

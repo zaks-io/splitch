@@ -3,10 +3,8 @@ import { envScope } from "@splitch/db";
 import { serializeFault } from "@splitch/observability/worker";
 import { mapWithConcurrency } from "./bounded-map";
 import {
-  DELIVERY_BATCH_SIZE,
-  DELIVERY_LEASE_MS,
-  DELIVERY_SEND_CONCURRENCY,
-  DELIVERY_SEND_TIMEOUT_MS,
+  deliverySendSignal,
+  type IntegrationDeliveryDispatchPolicy,
 } from "./integration-delivery-limits";
 import { decryptIntegrationSecret, signIntegrationPayload } from "./integration-secret";
 import { buildIntegrationSnapshot } from "./integration-snapshot";
@@ -29,20 +27,20 @@ export interface CloudflarePushDispatchDeps {
   secretKek?: string;
   secretKeyVersion?: string;
   fetcher?: typeof fetch;
-  now?: () => Date;
+  policy: IntegrationDeliveryDispatchPolicy;
   leaseOwner?: () => string;
   scope?: TenantScope;
   onDispatch?: (summary: CloudflareDispatchSummary) => void;
 }
 
 export async function dispatchCloudflarePushes(deps: CloudflarePushDispatchDeps): Promise<number> {
-  const now = (deps.now ?? (() => new Date()))();
+  const now = deps.policy.clock.now();
   const leaseOwner = (deps.leaseOwner ?? (() => crypto.randomUUID()))();
   const deliveries = await deps.repo.cloudflare.claimDueDeliveries(
     now.toISOString(),
     leaseOwner,
-    new Date(now.getTime() + DELIVERY_LEASE_MS).toISOString(),
-    DELIVERY_BATCH_SIZE,
+    new Date(now.getTime() + deps.policy.leaseMs).toISOString(),
+    deps.policy.claimLimit,
     deps.scope,
   );
   const snapshots = new Map<string, ReturnType<typeof buildStableSnapshot>>();
@@ -53,7 +51,7 @@ export async function dispatchCloudflarePushes(deps: CloudflarePushDispatchDeps)
     transportFailures: 0,
     preparationFailures: 0,
   };
-  const settled = await mapWithConcurrency(deliveries, DELIVERY_SEND_CONCURRENCY, (delivery) =>
+  const settled = await mapWithConcurrency(deliveries, deps.policy.concurrency, (delivery) =>
     deliverSafely(deps, delivery, leaseOwner, now, snapshots, summary).then(
       () => ({ status: "fulfilled" as const }),
       (reason: unknown) => ({ status: "rejected" as const, reason }),
@@ -138,9 +136,9 @@ async function deliverOne(
       "splitch-timestamp": timestamp,
     },
     fetcher: deps.fetcher,
-    signal: AbortSignal.timeout(DELIVERY_SEND_TIMEOUT_MS),
+    signal: deliverySendSignal(deps.policy.sendTimeoutMs),
   });
-  now = dispatchNow(deps);
+  now = deps.policy.clock.outcomeTime(now);
   if (result.outcome === "transport-failed") {
     summary.transportFailures += 1;
     await finishFailure(deps, delivery, leaseOwner, now, true, {
@@ -220,8 +218,4 @@ async function finishFailure(
     ...(retryable ? { nextAttemptAt: new Date(now.getTime() + delay).toISOString() } : {}),
     errorJson: JSON.stringify(error),
   });
-}
-
-function dispatchNow(deps: CloudflarePushDispatchDeps): Date {
-  return (deps.now ?? (() => new Date()))();
 }

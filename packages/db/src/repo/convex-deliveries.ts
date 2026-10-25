@@ -71,7 +71,7 @@ export async function claimDueConvexDeliveries(
         bodyJson: sql<ConfigWebhookDeliveryRow["bodyJson"]>`delivery.body_json`,
         attemptCount: sql<ConfigWebhookDeliveryRow["attemptCount"]>`delivery.attempt_count`,
       })
-      .from(sql`config_webhook_deliveries delivery JOIN convex_installations installation
+      .from(sql`config_webhook_deliveries delivery INDEXED BY config_webhook_delivery_owner_idx JOIN convex_installations installation
           ON installation.installation_id = delivery.installation_id`)
       .where(sql`delivery.state = 'leased' AND delivery.lease_owner = ${leaseOwner}
           AND installation.status = 'active'`)

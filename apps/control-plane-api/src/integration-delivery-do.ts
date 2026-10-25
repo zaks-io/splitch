@@ -1,3 +1,4 @@
+import { coordinatorDeliveryPolicy } from "./integration-delivery-limits";
 import { DurableObject } from "cloudflare:workers";
 import { createRepository, envScope } from "@splitch/db";
 import {
@@ -48,6 +49,7 @@ export class IntegrationDeliveryDurableObject extends DurableObject<ControlPlane
           summary,
           dispatchConvex: (scope, onDispatch) =>
             dispatchConvexWebhooks({
+              policy: coordinatorDeliveryPolicy(),
               repo,
               scope,
               onDispatch,
@@ -56,6 +58,7 @@ export class IntegrationDeliveryDurableObject extends DurableObject<ControlPlane
             }),
           dispatchCloudflare: (scope, onDispatch) =>
             dispatchCloudflarePushes({
+              policy: coordinatorDeliveryPolicy(),
               repo,
               scope,
               onDispatch,
@@ -83,7 +86,11 @@ export class IntegrationDeliveryDurableObject extends DurableObject<ControlPlane
       }
     }
     try {
-      workerEmitter(this.env, options).log("info", "integration-delivery-run", {
+      workerEmitter(this.env, options, {
+        onStructuredLogEvents: (events) => {
+          for (const row of events) console.info(row);
+        },
+      }).log("info", "integration-delivery-run", {
         ...identity,
         ...summary,
         durationMs: Date.now() - startedAt,

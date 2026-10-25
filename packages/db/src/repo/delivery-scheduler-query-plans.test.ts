@@ -3,6 +3,7 @@ import { appScope, createRepository, envScope } from "../index";
 import {
   claim,
   DELIVERY_PROVIDERS,
+  deliveryTable,
   insertDeliveries,
   insertDelivery,
   insertInstallation,
@@ -167,7 +168,7 @@ describe("delivery scheduler index plans", () => {
     expect(plan).toContain(
       provider === "convex"
         ? "convex_installations_scope_status_idx (app_id=? AND environment_id=? AND status=?)"
-        : "cloudflare_config_delivery_app_due_idx (app_id=? AND state=? AND next_attempt_at<?)",
+        : "cloudflare_config_delivery_env_due_idx (app_id=? AND environment_id=? AND state=? AND next_attempt_at<?)",
     );
   });
 
@@ -192,3 +193,66 @@ describe("delivery scheduler index plans", () => {
     }
   });
 });
+
+it.each(DELIVERY_PROVIDERS)(
+  "keeps scoped %s reads flat as another Environment grows",
+  async (provider) => {
+    const repo = createRepository(local.d1);
+    const scope = envScope(seed.a.appId, seed.a.environmentId);
+    await insertInstallation(local.d1, seed, provider, "target");
+    await insertDelivery(local.d1, seed, provider, "target");
+    const observed = observeD1(local.d1);
+    const reading = createRepository(observed.database);
+    async function measure(owner: string) {
+      const rows = await reading[provider].claimDueDeliveries(NOW, owner, LATER, 6, scope);
+      expect(rows.map((row) => row.installationId)).toEqual(["target"]);
+      const claimReads = observed.batchRowsRead.at(-1);
+      await repo[provider].finishDelivery("target_1", owner, {
+        state: "pending",
+        now: NOW,
+        nextAttemptAt: LATER,
+      });
+      expect(await reading.integrationDeliverySchedule.nextDeliveryWakeAt(scope, NOW)).toBe(LATER);
+      const wakeReads = observed.batchRowsRead.at(-1);
+      await local.d1
+        .prepare(
+          `UPDATE ${deliveryTable(provider)} SET next_attempt_at = ? WHERE installation_id = 'target'`,
+        )
+        .bind(NOW)
+        .run();
+      return { claimReads, wakeReads };
+    }
+    await repo.identity.environments.insert(appScope(seed.a.appId), {
+      id: "env_other",
+      appId: seed.a.appId,
+      key: "other",
+      name: "Other",
+      createdAt: NOW,
+      updatedAt: NOW,
+    });
+    const other = { ...seed, a: { ...seed.a, environmentId: "env_other" } };
+    await insertInstallation(local.d1, other, provider, "other0");
+    await insertDelivery(local.d1, other, provider, "other0");
+    if (provider === "convex")
+      await local.d1
+        .prepare(
+          "UPDATE config_webhook_deliveries SET state = 'leased', lease_owner = 'unrelated', lease_expires_at = ? WHERE environment_id = 'env_other'",
+        )
+        .bind(LATER)
+        .run();
+    const before = await measure("before");
+    for (let i = 1; i < 1000; i++) {
+      await insertInstallation(local.d1, other, provider, `other${i}`);
+      await insertDelivery(local.d1, other, provider, `other${i}`);
+    }
+    if (provider === "convex") {
+      await local.d1
+        .prepare(
+          "UPDATE config_webhook_deliveries SET state = 'leased', lease_owner = 'unrelated', lease_expires_at = ? WHERE environment_id = 'env_other'",
+        )
+        .bind(LATER)
+        .run();
+    }
+    expect(await measure("after")).toEqual(before);
+  },
+);

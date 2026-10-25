@@ -1,3 +1,4 @@
+import { cronDeliveryPolicy } from "./integration-delivery-limits";
 import { appScope, type EnvScope, type Repository } from "@splitch/db";
 import {
   createWorkerFaultReporter,
@@ -17,6 +18,7 @@ export async function dispatchAppIntegrationDelivery(
   const scope = appScope(appId);
   if (integrationDeliveryMode(env) === "cron") {
     await dispatchCloudflarePushes({
+      policy: cronDeliveryPolicy("cloudflare"),
       repo,
       scope,
       secretKek: env.INTEGRATION_SECRET_KEK,

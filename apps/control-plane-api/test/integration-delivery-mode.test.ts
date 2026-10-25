@@ -1,3 +1,4 @@
+import { cronDeliveryPolicy } from "../src/integration-delivery-limits";
 import { env, runDurableObjectAlarm, runInDurableObject } from "cloudflare:test";
 import { envScope } from "@splitch/db";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
@@ -78,6 +79,7 @@ it.each(["convex", "cloudflare"] as const)(
       appliedVersion: 1,
     });
     const deps = {
+      policy: cronDeliveryPolicy(provider),
       repo: repo(),
       scope,
       webhookKek: env.CONVEX_WEBHOOK_KEK,

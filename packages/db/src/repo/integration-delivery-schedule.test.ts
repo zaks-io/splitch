@@ -76,7 +76,9 @@ describe("integration delivery schedule", () => {
         "convex_installations_scope_status_idx (app_id=? AND environment_id=? AND status=?)",
       );
       expect(plan).toContain("config_webhook_delivery_outstanding_idx (installation_id=?)");
-      expect(plan).toContain("cloudflare_config_delivery_app_due_idx (app_id=? AND state=?)");
+      expect(plan).toMatch(
+        /cloudflare_config_delivery_env_(due|expiry)_idx \(app_id=\? AND environment_id=\? AND state=\?\)/,
+      );
       expect(plan).toContain(
         "cloudflare_config_delivery_outstanding_idx (installation_id=? AND environment_version>?)",
       );

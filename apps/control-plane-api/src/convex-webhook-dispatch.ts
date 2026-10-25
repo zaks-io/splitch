@@ -6,11 +6,7 @@ import {
   postConfigurationCallback,
 } from "./configuration-callback-transport";
 import { decryptConvexSecret, signConvexWebhook } from "./convex-secret";
-import {
-  DELIVERY_BATCH_SIZE,
-  DELIVERY_LEASE_MS,
-  DELIVERY_SEND_CONCURRENCY,
-} from "./integration-delivery-limits";
+import type { IntegrationDeliveryDispatchPolicy } from "./integration-delivery-limits";
 import { validateIntegrationSecretKey } from "./integration-secret";
 import { retryDelayMs, type WebhookPost } from "./webhook-transport";
 
@@ -30,20 +26,20 @@ export interface ConvexWebhookDispatchDeps {
   webhookKek?: string;
   webhookKeyVersion?: string;
   fetcher?: typeof fetch;
-  now?: () => Date;
+  policy: IntegrationDeliveryDispatchPolicy;
   leaseOwner?: () => string;
   onDispatch?: (summary: ConvexDispatchSummary) => void;
 }
 
 export async function dispatchConvexWebhooks(deps: ConvexWebhookDispatchDeps): Promise<number> {
   validateIntegrationSecretKey(deps.webhookKek, "CONVEX_WEBHOOK_KEK");
-  const now = (deps.now ?? (() => new Date()))();
+  const now = deps.policy.clock.now();
   const leaseOwner = (deps.leaseOwner ?? (() => crypto.randomUUID()))();
   const deliveries = await deps.repo.convex.claimDueDeliveries(
     now.toISOString(),
     leaseOwner,
-    new Date(now.getTime() + DELIVERY_LEASE_MS).toISOString(),
-    DELIVERY_BATCH_SIZE,
+    new Date(now.getTime() + deps.policy.leaseMs).toISOString(),
+    deps.policy.claimLimit,
     deps.scope,
   );
 
@@ -56,7 +52,7 @@ export async function dispatchConvexWebhooks(deps: ConvexWebhookDispatchDeps): P
     transportFailures: 0,
     preparationFailedInstallations: 0,
   };
-  const settled = await mapWithConcurrency(deliveries, DELIVERY_SEND_CONCURRENCY, (delivery) =>
+  const settled = await mapWithConcurrency(deliveries, deps.policy.concurrency, (delivery) =>
     deliverSafely(deps, delivery, leaseOwner, now, secrets, failures, summary).then(
       () => ({ status: "fulfilled" as const }),
       (reason: unknown) => ({ status: "rejected" as const, reason }),
@@ -164,8 +160,8 @@ async function deliverOne(
     });
     return;
   }
-  const result = await postConfigurationCallback(webhook);
-  now = (deps.now ?? (() => new Date()))();
+  const result = await postConfigurationCallback(webhook, deps.policy.sendTimeoutMs);
+  now = deps.policy.clock.outcomeTime(now);
 
   if (result.outcome === "transport-failed") {
     summary.transportFailures += 1;

@@ -1,3 +1,4 @@
+import { cronDeliveryPolicy } from "./integration-delivery-limits";
 import { createRepository, type ScheduledDueWork } from "@splitch/db";
 import {
   createWorkerFaultReporter,
@@ -39,10 +40,7 @@ export function runControlPlaneScheduled(
     purgeExpiredPrivacyArtifacts(env, new Date(event.scheduledTime)),
   );
   runIfDue("personalAccessTokenRetention", () => runPersonalAccessTokenRetentionJob(env, event));
-  // Integration delivery belongs to the minute cron alone. Running it on every
-  // tick would fire a second concurrent dispatch at 08:00, when both crons
-  // land: the Convex and Cloudflare paths lease their deliveries and would
-  // survive it, but the Sentry cursor has no lease to protect it.
+  // At 08:00 both crons fire; Sentry has no lease against overlapping dispatch.
   if (event.cron !== "0 8 * * *") {
     ctx.waitUntil(runIntegrationDeliveryLag(env, event, ctx));
     runIfDue("temporaryEnvironmentTeardown", () =>
@@ -124,10 +122,10 @@ async function runCloudflarePushDispatch(
 ): Promise<void> {
   try {
     const dispatched = await dispatchCloudflarePushes({
+      policy: cronDeliveryPolicy("cloudflare", () => new Date(event.scheduledTime)),
       repo: createRepository(env.DB),
       secretKek: env.INTEGRATION_SECRET_KEK,
       secretKeyVersion: env.INTEGRATION_SECRET_KEY_VERSION,
-      now: () => new Date(event.scheduledTime),
     });
     workerEmitter(env, workerObservabilityWithWaitUntil("control-plane-api", ctx)).log(
       "info",
@@ -210,10 +208,10 @@ async function runConvexWebhookDispatch(
   ctx: Pick<ExecutionContext, "waitUntil">,
 ): Promise<void> {
   const dispatched = await dispatchConvexWebhooks({
+    policy: cronDeliveryPolicy("convex", () => new Date(event.scheduledTime)),
     repo: createRepository(env.DB),
     webhookKek: env.CONVEX_WEBHOOK_KEK,
     webhookKeyVersion: env.CONVEX_WEBHOOK_KEY_VERSION,
-    now: () => new Date(event.scheduledTime),
     onDispatch: (summary) =>
       workerEmitter(env, workerObservabilityWithWaitUntil("control-plane-api", ctx)).log(
         "info",

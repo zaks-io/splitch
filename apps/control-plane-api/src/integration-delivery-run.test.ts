@@ -3,6 +3,8 @@ import { expect, it, vi } from "vitest";
 import { integrationDeliveryMode } from "./control-plane-runtime-config";
 import {
   DELIVERY_BATCH_SIZE,
+  DELIVERY_PREPARATION_BUDGET_MS,
+  DELIVERY_COMPLETION_BUDGET_MS,
   DELIVERY_LEASE_MS,
   DELIVERY_SEND_CONCURRENCY,
   DELIVERY_SEND_TIMEOUT_MS,
@@ -70,8 +72,9 @@ it("yields to an immediate alarm when the run budget is spent and work remains",
 });
 
 it("keeps a whole batch of timed sends inside its lease", () => {
+  expect(DELIVERY_BATCH_SIZE).toBeLessThanOrEqual(DELIVERY_SEND_CONCURRENCY);
   expect(
-    Math.ceil(DELIVERY_BATCH_SIZE / DELIVERY_SEND_CONCURRENCY) * DELIVERY_SEND_TIMEOUT_MS,
+    DELIVERY_PREPARATION_BUDGET_MS + DELIVERY_SEND_TIMEOUT_MS + DELIVERY_COMPLETION_BUDGET_MS,
   ).toBeLessThan(DELIVERY_LEASE_MS);
 });
 

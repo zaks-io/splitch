@@ -50,7 +50,7 @@ export async function claimDueCloudflareDeliveries(
         >`installation.last_applied_version`,
         registeredAt: sql<CloudflareDeliveryRow["registeredAt"]>`installation.created_at`,
       })
-      .from(sql`cloudflare_config_deliveries delivery JOIN cloudflare_installations installation
+      .from(sql`cloudflare_config_deliveries delivery INDEXED BY cloudflare_config_delivery_owner_idx JOIN cloudflare_installations installation
           ON installation.installation_id = delivery.installation_id`)
       .where(sql`delivery.state = 'leased' AND delivery.lease_owner = ${leaseOwner}
           AND installation.status = 'active'`)

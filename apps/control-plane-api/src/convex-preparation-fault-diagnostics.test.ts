@@ -1,3 +1,4 @@
+import { cronDeliveryPolicy } from "./integration-delivery-limits";
 import { inspect } from "node:util";
 import type { Repository } from "@splitch/db";
 import { afterEach, expect, it, vi } from "vitest";
@@ -43,7 +44,12 @@ it("withholds native parse causes at the Convex secret preparation boundary", as
     },
   } as unknown as Repository;
 
-  await dispatchConvexWebhooks({ repo, webhookKek: key, fetcher });
+  await dispatchConvexWebhooks({
+    repo,
+    webhookKek: key,
+    fetcher,
+    policy: cronDeliveryPolicy("convex"),
+  });
 
   expect(fetcher).not.toHaveBeenCalled();
   expect(defer).toHaveBeenCalledOnce();

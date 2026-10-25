@@ -274,12 +274,22 @@ Each Environment's `IntegrationDeliveryDurableObject` claims and sends its own C
 Cloudflare work. Another Environment's backlog cannot spend its claim slots or executor time.
 D1 remains shared, so database contention still affects both Environments.
 
-A run claims 25 Convex rows, sends at concurrency six, then does the same for Cloudflare. It
-repeats until a pass claims nothing or the 60-second budget expires. Both sends time out after
-5 seconds. A batch has five waves of sends, fitting inside the existing 30-second lease with
-5 seconds left for preparation and acknowledgments. Claims retain the existing ordering,
-suppression and lease ownership checks. An additive partial Cloudflare outstanding-version index
-keeps the next-wake query out of completed history; Convex uses its existing partial index.
+A coordinator run claims at most six Convex rows and sends all six concurrently, then does the
+same for Cloudflare. No claimed delivery waits behind another send. It repeats until a pass
+claims nothing or the 60-second budget expires. Each 30-second lease reserves 5 seconds for
+preparation, 5 seconds for HTTP and 10 seconds for D1 completion, leaving 10 seconds of margin.
+A module check includes all three budgets and rejects a claim larger than the send concurrency.
+A real-D1 contention test with 25 rows, 4.8-second responses and 2-second completions proves that
+a competing dispatcher cannot reclaim an in-flight row at 31 seconds.
+
+Dispatch policy comes from the caller. Cron preserves the existing 25-row concurrent batch,
+5-second Convex timeout, no Cloudflare timeout and claim-time outcome/retry timestamps. The
+coordinator uses six-row claims, a 5-second timeout for both providers and response-time outcomes.
+Claims retain the existing ordering, suppression and lease ownership checks. Environment-selective
+Cloudflare due and expiry indexes prevent another Environment's backlog from amplifying reads.
+Both providers' payload reads use partial lease-owner indexes. Real-D1 rows-read regressions stay
+flat as another Environment grows from one to 1,000 pending rows or leases. The partial outstanding
+indexes keep next-wake reads out of completed history.
 
 The only coordinator storage is its identity and alarm. Alarms follow outstanding retries,
 lease expiry and preparation cooldowns directly. A wake received during a run retains its earlier
@@ -296,7 +306,7 @@ its Organization-scoped cursor and minute dispatch.
 
 ### Rollout
 
-1. Deploy the additive index and binding with production `INTEGRATION_DELIVERY_MODE=cron`.
+1. Deploy the additive indexes and binding with production `INTEGRATION_DELIVERY_MODE=cron`.
    This preserves global cron dispatch and immediate App-scoped Cloudflare dispatch.
 2. Verify `coordinator` mode in shared preview, including alarms, isolation, retries, faults,
    receiver acknowledgments and D1 load. Local and shared-preview Wrangler values already select it.
@@ -325,6 +335,6 @@ Latency is `delivered_at - created_at` from D1; trigger commit times have one-se
 Every Env B delivery must complete, including intermediate versions, before results are recorded.
 
 The October 25 run measured 180,004 ms of workload. All 450 Env B deliveries completed, with
-p50 305 ms, p99 502 ms and maximum 509 ms. Env A attempted 413 deliveries, or 2.29 attempts per
+p50 190 ms, p99 1,032 ms and maximum 1,034 ms. Env A attempted 222 deliveries, or 1.23 attempts per
 second, while receivers returned failures or timed out. The healthy Environment met the p99
 10-second target. These local figures do not establish production D1 latency or capacity.

@@ -163,3 +163,38 @@ it("catches a dependency failure, reports a fault, and reschedules in 30 s", asy
   await expect(runDurableObjectAlarm(stub)).resolves.toBe(true);
   expect(await alarmAt(environmentB)).toBeGreaterThanOrEqual(before + 30_000);
 });
+
+it("emits one scrubbed run summary with provider outcomes", async () => {
+  await install("convex", "summary", environmentB);
+  await bump(environmentB);
+  statuses.set("summary.convex.site", 200);
+  const logs = vi.spyOn(console, "info").mockImplementation(() => {});
+  await coordinator(environmentB).wake(appId, environmentB);
+  await runDurableObjectAlarm(coordinator(environmentB));
+  const summaries = logs.mock.calls
+    .map(([row]) => row)
+    .filter((row) => row?.message === "integration-delivery-run");
+  expect(summaries).toEqual([
+    expect.objectContaining({
+      appId,
+      environmentId: environmentB,
+      convex: {
+        claimed: 1,
+        received2xx: 1,
+        receiverRejected: 0,
+        transportFailures: 0,
+        preparationFailedInstallations: 0,
+      },
+      cloudflare: {
+        claimed: 0,
+        received2xx: 0,
+        receiverRejected: 0,
+        transportFailures: 0,
+        preparationFailures: 0,
+      },
+      durationMs: expect.any(Number),
+      nextWakeAt: null,
+    }),
+  ]);
+  expect(JSON.stringify(summaries)).not.toContain("synthetic-callback-secret");
+});

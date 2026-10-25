@@ -1,3 +1,4 @@
+import { cronDeliveryPolicy } from "./integration-delivery-limits";
 import { ConvexInstallationStatusSchema } from "@splitch/contracts";
 import type { Repository } from "@splitch/db";
 import { describe, expect, it, vi } from "vitest";
@@ -6,6 +7,7 @@ import { dispatchConvexWebhooks } from "./convex-webhook-dispatch";
 
 const KEY = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=";
 const NOW = new Date("2026-08-25T12:00:00.000Z");
+const POLICY = cronDeliveryPolicy("convex", () => NOW);
 
 describe("Convex preparation isolation", () => {
   it.each([undefined, "invalid", "AA=="])(
@@ -13,7 +15,7 @@ describe("Convex preparation isolation", () => {
     async (webhookKek) => {
       const claimDueDeliveries = vi.fn();
       const repo = { convex: { claimDueDeliveries } } as unknown as Repository;
-      await expect(dispatchConvexWebhooks({ repo, webhookKek })).rejects.toThrow();
+      await expect(dispatchConvexWebhooks({ repo, webhookKek, policy: POLICY })).rejects.toThrow();
       expect(claimDueDeliveries).not.toHaveBeenCalled();
     },
   );
@@ -40,7 +42,7 @@ describe("Convex preparation isolation", () => {
       dispatchConvexWebhooks({
         repo,
         webhookKek: KEY,
-        now: () => NOW,
+        policy: POLICY,
         fetcher: async () => new Response(null, { status: 202 }),
         onDispatch,
       }),
@@ -80,7 +82,7 @@ describe("Convex config webhook dispatch", () => {
     });
 
     await expect(
-      dispatchConvexWebhooks({ repo, webhookKek: KEY, fetcher, now: () => NOW }),
+      dispatchConvexWebhooks({ repo, webhookKek: KEY, fetcher, policy: POLICY }),
     ).resolves.toBe(1);
     expect(finishes).toEqual([
       expect.objectContaining({ state: "delivered", now: NOW.toISOString() }),
@@ -97,7 +99,7 @@ describe("Convex config webhook dispatch", () => {
         repo,
         webhookKek: KEY,
         fetcher: async () => new Response(null, { status }),
-        now: () => NOW,
+        policy: POLICY,
       });
       expect(finishes[0]).toMatchObject({ state });
     }
@@ -136,7 +138,7 @@ describe("Convex config webhook dispatch", () => {
     } as unknown as Repository;
 
     await expect(
-      dispatchConvexWebhooks({ repo, webhookKek: KEY, fetcher, now: () => NOW }),
+      dispatchConvexWebhooks({ repo, webhookKek: KEY, fetcher, policy: POLICY }),
     ).resolves.toBe(2);
 
     expect(fetcher).toHaveBeenCalledOnce();
@@ -190,7 +192,7 @@ describe("Convex config webhook dispatch", () => {
         repo,
         webhookKek: KEY,
         fetcher: async () => new Response(null, { status: 202 }),
-        now: () => NOW,
+        policy: POLICY,
       }),
     ).rejects.toThrow("1 Convex delivery lease updates failed");
 
@@ -211,7 +213,12 @@ describe("Convex preparation diagnostics", () => {
     const differentKey = "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=";
     const fetcher = vi.fn(async () => new Response(null, { status: 202 }));
 
-    await dispatchConvexWebhooks({ repo, webhookKek: differentKey, fetcher, now: () => NOW });
+    await dispatchConvexWebhooks({
+      repo,
+      webhookKek: differentKey,
+      fetcher,
+      policy: POLICY,
+    });
 
     expect(fetcher).not.toHaveBeenCalled();
     expect(consoleError).toHaveBeenCalledWith("convex_webhook_delivery_preparation_failed", {

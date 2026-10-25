@@ -107,7 +107,7 @@ stored completely rather than truncated.
 - Each `(App, Environment)` has an `IntegrationDeliveryDurableObject`, named
   `${appId}:${environmentId}`. It persists only its identity and alarm. D1 remains authoritative.
   The coordinator claims Convex then Cloudflare work sequentially, with at most six sends,
-  25 rows per claim, a 5-second send timeout, and a 60-second run budget. It finishes an in-flight
+  six rows per claim, a 5-second send timeout, and a 60-second run budget. It finishes an in-flight
   batch before yielding. Each new pass checks the budget.
 - Alarms schedule the next claimable retry, lease expiry or Convex preparation cooldown. Work
   still due at budget exhaustion schedules another alarm immediately. A wake during a run cannot
@@ -116,7 +116,10 @@ stored completely rather than truncated.
 - The once-per-minute coordinator sweep finds due Environments and wakes them without sending
   receiver HTTP. It recovers dropped post-commit wakes within 60 seconds, subject to cron execution.
   In cron mode, the existing global Convex/Cloudflare dispatch and App-scoped immediate Cloudflare
-  dispatch remain active. Both modes share D1 leases, excluding concurrent claims of a leased row.
+  dispatch remain active. Cron claims 25 rows and sends all concurrently, keeps the existing
+  5-second Convex timeout, adds no Cloudflare timeout, and timestamps outcomes and retries from
+  the claim clock. Coordinator outcomes use the response clock. Both modes share D1 leases,
+  excluding concurrent claims of a leased row.
 - One delivery's preparation or transport failure is isolated from every other claimed delivery. A
   preparation failure records the delivery ID and bounded error envelope before releasing its lease;
   healthy siblings still complete and acknowledge their responses.
@@ -134,8 +137,10 @@ stored completely rather than truncated.
   cannot defer the repaired installation. Missing or malformed KEK configuration fails before claims.
 - Transient transport, `408`, `429`, and `5xx` failures use the existing `1s`, `5s`, `30s`, `2m`,
   `10m`, then capped `30m` retry ladder. Both providers' claim leases last 30 seconds. Six concurrent
-  timed sends drain a 25-row batch in at most 25 seconds of send time, leaving 5 seconds for
-  preparation and D1 acknowledgments. Other `4xx`
+  sends have no queued claimed rows in coordinator mode. Its 30-second lease reserves
+  5 seconds for preparation, 5 seconds for HTTP and 10 seconds for D1 completion, with 10 seconds
+  of margin. A module check requires the whole budget to fit and the claim limit to be no larger
+  than the send concurrency. Other `4xx`
   responses are terminal until the installation is repaired or replaced, except a Cloudflare
   installation's first setup: until it first applies a version, and within 10 minutes of its
   registration, a `404` retries after 30 seconds. Coordinator alarms follow that time; cron mode
