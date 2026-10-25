@@ -20,6 +20,37 @@ beforeEach(async () => {
 afterEach(async () => local.dispose());
 
 describe("integration delivery schedule", () => {
+  it("does not report a dormant installation's Environment as due", async () => {
+    const repo = createRepository(local.d1);
+    const scope = envScope(seed.a.appId, seed.a.environmentId);
+    await insertInstallation(local.d1, seed, "convex", "dormant");
+    await insertDelivery(local.d1, seed, "convex", "dormant");
+    expect(
+      await repo.integrationDeliverySchedule.environmentsWithDueDeliveries({ now: NOW }),
+    ).toEqual([scope]);
+    const [delivery] = await repo.convex.claimDueDeliveries(NOW, "owner", LATER, 6, scope);
+    if (!delivery) throw new Error("Expected an owned delivery before dormancy");
+    const token = await repo.convex.finishDelivery(delivery.deliveryId, "owner", {
+      state: "terminal",
+      now: NOW,
+    });
+    if (!token) throw new Error("Expected a lifecycle generation for the terminal delivery");
+    await repo.convex.markDeploymentMissing("dormant", token, NOW);
+    expect(await repo.convex.getInstallation(scope, "dormant")).toMatchObject({
+      deploymentMissingAt: NOW,
+    });
+    await local.d1
+      .prepare(
+        "UPDATE environments SET config_version = config_version + 1 WHERE app_id = ? AND id = ?",
+      )
+      .bind(scope.appId, scope.environmentId)
+      .run();
+    expect(
+      await repo.integrationDeliverySchedule.environmentsWithDueDeliveries({ now: NOW }),
+    ).toEqual([]);
+    expect(await repo.integrationDeliverySchedule.nextDeliveryWakeAt(scope, NOW)).toBeNull();
+  });
+
   it.each(DELIVERY_PROVIDERS)(
     "isolates %s claims and deduplicates due Environments",
     async (provider) => {

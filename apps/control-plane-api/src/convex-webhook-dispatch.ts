@@ -5,6 +5,10 @@ import {
   configurationCallbackDestinationError,
   postConfigurationCallback,
 } from "./configuration-callback-transport";
+import {
+  type ConvexDeploymentProbeCandidate,
+  probeMissingConvexDeployments,
+} from "./convex-deployments";
 import { decryptConvexSecret, signConvexWebhook } from "./convex-secret";
 import type { IntegrationDeliveryDispatchPolicy } from "./integration-delivery-limits";
 import { renewDeliveryLeaseBeforeSend } from "./integration-delivery-lease";
@@ -66,10 +70,12 @@ export async function dispatchConvexWebhooks(deps: ConvexWebhookDispatchDeps): P
       failures,
       summary,
     ).then(
-      () => ({ status: "fulfilled" as const }),
+      (value) => ({ status: "fulfilled" as const, value }),
       (reason: unknown) => ({ status: "rejected" as const, reason }),
     ),
   );
+  // Fulfilled values carry lifecycle generations, so policy scheduling must preserve them.
+  await probeMissingConvexDeployments(deps, settled);
   deps.onDispatch?.(summary);
   const rejected = settled.filter((result) => result.status === "rejected");
   if (rejected.length > 0)
@@ -92,7 +98,7 @@ async function deliverSafely(
   secrets: Map<string, Promise<string>>,
   failures: Map<string, Promise<void>>,
   summary: ConvexDispatchSummary,
-): Promise<void> {
+): Promise<ConvexDeploymentProbeCandidate | undefined> {
   let webhook: WebhookPost;
   try {
     let prepared = secrets.get(delivery.installationId);
@@ -132,7 +138,7 @@ async function deliverSafely(
     await failure;
     return;
   }
-  await deliverOne(deps, delivery, leaseOwner, now, webhook, summary);
+  return deliverOne(deps, delivery, leaseOwner, now, webhook, summary);
 }
 
 async function prepareWebhook(
@@ -163,7 +169,7 @@ async function deliverOne(
   now: Date,
   webhook: WebhookPost,
   summary: ConvexDispatchSummary,
-): Promise<void> {
+): Promise<ConvexDeploymentProbeCandidate | undefined> {
   const destinationError = configurationCallbackDestinationError(webhook.url);
   if (destinationError) {
     summary.receiverRejected += 1;
@@ -213,12 +219,20 @@ async function deliverOne(
   }
 
   summary.receiverRejected += 1;
-  await finishFailure(deps, delivery, leaseOwner, now, result.retryable, {
+  const probeToken = await finishFailure(deps, delivery, leaseOwner, now, result.retryable, {
     kind: "http",
     code: "HTTP_STATUS",
     httpStatus: result.status,
     occurredAt: now.toISOString(),
   });
+  if (result.status === 404 && probeToken)
+    return {
+      installationId: delivery.installationId,
+      callbackUrl: delivery.callbackUrl,
+      probeToken,
+      failedAt: now,
+    };
+  return;
 }
 
 async function finishFailure(
@@ -228,9 +242,9 @@ async function finishFailure(
   now: Date,
   retryable: boolean,
   error: Record<string, unknown>,
-): Promise<void> {
+): Promise<string | null> {
   const retryDelay = retryDelayMs(delivery.attemptCount);
-  await deps.repo.convex.finishDelivery(delivery.deliveryId, leaseOwner, {
+  return deps.repo.convex.finishDelivery(delivery.deliveryId, leaseOwner, {
     state: retryable ? "pending" : "terminal",
     now: now.toISOString(),
     ...(retryable ? { nextAttemptAt: new Date(now.getTime() + retryDelay).toISOString() } : {}),

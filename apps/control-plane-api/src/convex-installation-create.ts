@@ -33,7 +33,13 @@ export function makeConvexInstallationCreateHandler(
     const existing = await deps.repo.convex.getInstallation(scope, input.body.installationId);
     const conflict = installationConflict(existing, input.body, encrypted.fingerprint, requestId);
     if (conflict) return conflict;
-    const verificationError = await validateReceiver(existing, input.body, deps, now(), requestId);
+    const verificationError = await verifyNewInstallation(
+      existing,
+      input.body,
+      deps,
+      now(),
+      requestId,
+    );
     if (verificationError) return verificationError;
     const row =
       existing ??
@@ -45,8 +51,15 @@ export function makeConvexInstallationCreateHandler(
         secretFingerprint: encrypted.fingerprint,
         now: now().toISOString(),
       }));
-    const racedConflict = installationConflict(row, input.body, encrypted.fingerprint, requestId);
-    return installationResponse(deps, scope, row, racedConflict);
+    return registrationResponse(
+      deps,
+      scope,
+      row,
+      input.body,
+      encrypted.fingerprint,
+      now(),
+      requestId,
+    );
   }) satisfies RouteHandler<ConvexInstallationCreateInput>;
 }
 
@@ -92,7 +105,7 @@ function callbackValidationError(message: string, requestId: string): Response {
 }
 
 function installationConflict(
-  row: ConvexInstallationRow | null,
+  row: Pick<ConvexInstallationRow, "callbackUrl" | "secretFingerprint"> | null,
   input: ConvexInstallationCreateInput["body"],
   fingerprint: string,
   requestId: string,
@@ -109,14 +122,26 @@ function installationConflict(
   );
 }
 
-async function validateReceiver(
+async function verifyNewInstallation(
   existing: ConvexInstallationRow | null,
   input: ConvexInstallationCreateInput["body"],
   deps: ConvexHandlerDeps,
   now: Date,
   requestId: string,
+) {
+  if (existing) return null;
+  return validateReceiver(null, input, deps, now, requestId);
+}
+
+async function validateReceiver(
+  existing: Pick<ConvexInstallationRow, "deploymentMissingAt"> | null,
+  input: ConvexInstallationCreateInput["body"],
+  deps: ConvexHandlerDeps,
+  now: Date,
+  requestId: string,
 ): Promise<Response | null> {
-  if (existing || !input.callbackVerification) return null;
+  if (!input.callbackVerification) return null;
+  if (existing && !existing.deploymentMissingAt) return null;
   const verified = await verifyConfigurationCallback(input, now, deps.fetcher);
   if (verified.ok) return null;
   if (!verified.retryable) return callbackValidationError(verified.message, requestId);
@@ -126,13 +151,36 @@ async function validateReceiver(
   );
 }
 
-async function installationResponse(
+async function registrationResponse(
   deps: ConvexHandlerDeps,
   scope: EnvScope,
   row: ConvexInstallationRow,
-  conflict: Response | null,
-) {
+  input: ConvexInstallationCreateInput["body"],
+  fingerprint: string,
+  now: Date,
+  requestId: string,
+): Promise<Response> {
+  const conflict = installationConflict(row, input, fingerprint, requestId);
   if (conflict) return conflict;
+  const current = await deps.repo.convex.recordDeploymentCheck(
+    scope,
+    row.installationId,
+    now.toISOString(),
+  );
+  if (!current) throw new Error("Convex registration: installation disappeared");
+  const currentConflict = installationConflict(current, input, fingerprint, requestId);
+  if (currentConflict) return currentConflict;
+  const verificationError = await validateReceiver(current, input, deps, now, requestId);
+  if (verificationError) return verificationError;
+  if (current.deploymentMissingAt && input.callbackVerification)
+    await deps.repo.convex.reactivateDeployment(
+      scope,
+      row.installationId,
+      current.probeToken,
+      now.toISOString(),
+    );
+  const result = await deps.repo.convex.getInstallation(scope, row.installationId);
+  if (!result) throw new Error("Convex registration: installation disappeared");
   const environmentVersion = await deps.repo.convex.environmentVersion(scope);
   deps.wakeDelivery?.(scope);
   return Response.json({
@@ -140,6 +188,7 @@ async function installationResponse(
     appId: scope.appId,
     environmentId: scope.environmentId,
     environmentVersion,
-    status: row.status,
+    status: result.status,
+    deploymentMissingAt: result.deploymentMissingAt,
   });
 }

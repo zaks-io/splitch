@@ -16,6 +16,7 @@ const mocks = vi.hoisted(() => ({
     convexWebhookDispatch: vi.fn(),
     cloudflarePushDispatch: vi.fn(),
     sentryWebhookDispatch: vi.fn(),
+    deploymentReprobes: vi.fn(),
     demo: vi.fn(),
     adoption: vi.fn(),
     archive: vi.fn(),
@@ -49,6 +50,9 @@ vi.mock("./temporary-environment-teardown-scheduled", () => ({
   runTemporaryEnvironmentTeardown: mocks.jobs.temporaryEnvironmentTeardown,
 }));
 vi.mock("./audit-events", () => ({ forwardAuditEvents: mocks.jobs.auditEventForwarding }));
+vi.mock("./convex-deployments-scheduled", () => ({
+  runConvexDeploymentReprobes: mocks.jobs.deploymentReprobes,
+}));
 vi.mock("./convex-webhook-dispatch", () => ({
   dispatchConvexWebhooks: mocks.jobs.convexWebhookDispatch,
 }));
@@ -74,6 +78,7 @@ const keys: Array<keyof ScheduledDueWork> = [
   "sentryWebhookDispatch",
 ];
 const daily = [
+  "deploymentReprobes",
   "demo",
   "adoption",
   "archive",

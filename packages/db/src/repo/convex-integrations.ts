@@ -4,6 +4,7 @@ import {
   finishConvexDelivery,
   renewConvexDeliveryLease,
 } from "./convex-deliveries";
+import { makeConvexDeploymentRepo } from "./convex-deployments";
 import {
   type ConvexPreparationFailure,
   deferConvexPreparationFailure,
@@ -34,6 +35,8 @@ export interface ConvexInstallationRow {
   lastRotationId: string | null;
   lastRotationFingerprint: string | null;
   status: "active" | "revoked";
+  deploymentMissingAt: string | null;
+  deploymentCheckedAt: string | null;
   lastDeliveredVersion: number | null;
   lastDeliveredAt: string | null;
   latestDeliveryErrorJson: string | null;
@@ -57,6 +60,7 @@ export interface ConfigWebhookDeliveryRow {
 export function makeConvexIntegrationRepo(d1: D1Database) {
   return {
     deliveryLag: (now: string) => readIntegrationDeliveryLag(d1, "convex", now),
+    ...makeConvexDeploymentRepo(d1),
     async environmentVersion(scope: EnvScope): Promise<number> {
       assertMintedScope(scope);
       const row = await d1
@@ -142,7 +146,7 @@ export function makeConvexIntegrationRepo(d1: D1Database) {
       await d1
         .prepare(`UPDATE convex_installations SET
           secret_ciphertext = ?, secret_key_version = ?, secret_fingerprint = ?,
-          last_rotation_id = ?, last_rotation_fingerprint = ?, updated_at = ?, preparation_retry_at = NULL
+          last_rotation_id = ?, last_rotation_fingerprint = ?, updated_at = ?, preparation_retry_at = NULL, deployment_probe_token = NULL
           WHERE app_id = ? AND environment_id = ? AND installation_id = ? AND status = 'active'`)
         .bind(
           input.secretCiphertext,
@@ -218,8 +222,8 @@ export function makeConvexIntegrationRepo(d1: D1Database) {
       deliveryId: string,
       leaseOwner: string,
       input: ConvexDeliveryFinish,
-    ): Promise<void> {
-      await finishConvexDelivery(d1, deliveryId, leaseOwner, input);
+    ): Promise<string | null> {
+      return finishConvexDelivery(d1, deliveryId, leaseOwner, input);
     },
 
     deferPreparationFailure(
@@ -241,6 +245,7 @@ const INSTALLATION_SELECT = `SELECT
   callback_url AS callbackUrl, secret_ciphertext AS secretCiphertext,
   secret_key_version AS secretKeyVersion, secret_fingerprint AS secretFingerprint,
   last_rotation_id AS lastRotationId, last_rotation_fingerprint AS lastRotationFingerprint,
+  deployment_missing_at AS deploymentMissingAt, deployment_checked_at AS deploymentCheckedAt,
   status, last_delivered_version AS lastDeliveredVersion, last_delivered_at AS lastDeliveredAt,
   latest_delivery_error_json AS latestDeliveryErrorJson, created_at AS createdAt,
   updated_at AS updatedAt, revoked_at AS revokedAt FROM convex_installations`;

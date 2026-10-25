@@ -11,6 +11,7 @@ import { approvalArchiveStoreFromEnv } from "./approval-archive-tinybird";
 import { forwardAuditEvents } from "./audit-events";
 import { dispatchCloudflarePushes } from "./cloudflare-push-dispatch";
 import { integrationDeliveryMode } from "./control-plane-runtime-config";
+import { runConvexDeploymentReprobes } from "./convex-deployments-scheduled";
 import { dispatchConvexWebhooks } from "./convex-webhook-dispatch";
 import { runIntegrationDeliveryLag } from "./integration-delivery-lag";
 import { runDeliveryRetention } from "./delivery-retention";
@@ -56,6 +57,7 @@ export function runControlPlaneScheduled(
     runIfDue("sentryWebhookDispatch", () => runSentryWebhookDispatch(env, event, ctx));
     return;
   }
+  ctx.waitUntil(runConvexDeploymentReprobes(env, event, ctx));
   ctx.waitUntil(runDemoReaper(env, event, ctx));
   ctx.waitUntil(runMetricEventClaimRetentionAdoption(env, event, ctx));
   ctx.waitUntil(runApprovalArchive(env, event, ctx));

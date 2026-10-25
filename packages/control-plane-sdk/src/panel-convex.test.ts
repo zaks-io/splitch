@@ -21,6 +21,7 @@ const INSTALLATION = {
   environmentId: SCOPE.environmentId,
   environmentVersion: 43,
   status: "active" as const,
+  deploymentMissingAt: "2026-10-25T08:00:00.000Z",
   callbackUrl: "https://example.convex.site/splitch/config-changed",
   lastDeliveredVersion: 41,
   lastDeliveredAt: "2026-08-26T00:00:00.000Z",
@@ -43,6 +44,9 @@ describe("panel Convex client", () => {
       "https://control-plane.internal/apps/app_1/envs/env_prod/integrations/convex/installations",
     );
     expect(result.ok && result.data.items[0]?.lastDeliveredVersion).toBe(41);
+    expect(result.ok && result.data.items[0]?.deploymentMissingAt).toBe(
+      INSTALLATION.deploymentMissingAt,
+    );
   });
 
   it("reads a 204 revoke as the success it is", async () => {
