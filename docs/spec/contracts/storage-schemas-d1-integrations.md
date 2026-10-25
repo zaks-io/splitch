@@ -86,6 +86,16 @@ stored completely rather than truncated.
 
 ## Commit and delivery rules
 
+- A healthy installation receives each committed Environment version within 10 s at p99
+  and 60 s worst case as the delivery objective. The minute cron emits
+  `integration-delivery-lag` per provider, App, and Environment with outstanding healthy work,
+  and reports `integration_delivery_lagging` when its oldest delivery exceeds 5 minutes.
+  Waiting counts deduplicate installations across pending and leased versions. Healthy means
+  active with no `latest_delivery_error_json`; Convex also excludes future `preparation_retry_at`.
+  Cloudflare has no preparation cooldown field, so active status and the absence of a delivery
+  error are its equivalent health criteria. Indexed state reads exclude completed history.
+  Lag-read failures report `integration_delivery_lag_read_failed` without blocking dispatch.
+
 - A successful config mutation inserts one row for every active installation in the same D1
   transaction as the config change. A transaction that rolls back creates no delivery.
 - Dispatch starts immediately after commit and is also recoverable by the Control Plane Worker's

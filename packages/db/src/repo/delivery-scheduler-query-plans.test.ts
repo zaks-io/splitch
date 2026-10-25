@@ -30,6 +30,48 @@ async function explain(query: { sql: string; values: unknown[] }) {
   return result.results.map((row) => row.detail).join("\n");
 }
 
+it.each(DELIVERY_PROVIDERS)(
+  "bounds %s lag reads to outstanding state index ranges",
+  async (provider) => {
+    await insertDeliveries(local.d1, seed, provider, 1);
+    const observed = observeD1(local.d1);
+    await createRepository(observed.database)[provider].deliveryLag(NOW);
+    expect(observed.queries).toHaveLength(1);
+    const query = observed.queries[0];
+    if (!query) throw new Error("Lag read did not prepare a query");
+    const plan = await explain(query);
+    const prefix = provider === "convex" ? "config_webhook_delivery" : "cloudflare_config_delivery";
+    expect(plan).toContain(`SEARCH delivery USING INDEX ${prefix}_lease_idx (state=?)`);
+    expect(plan).toContain(
+      `SEARCH installation USING INDEX ${provider}_installations_scope_id_unique (app_id=? AND environment_id=? AND installation_id=?)`,
+    );
+    expect(plan).not.toMatch(/SCAN (delivery|installation)/);
+    const statement = () =>
+      local.d1
+        .prepare(query.sql)
+        .bind(...query.values)
+        .all();
+    await insertDelivery(local.d1, seed, provider, "installation_000", 2);
+    const table =
+      provider === "convex" ? "config_webhook_deliveries" : "cloudflare_config_deliveries";
+    await local.d1
+      .prepare(`UPDATE ${table} SET state = 'suppressed' WHERE environment_version = 2`)
+      .run();
+    const before = await statement();
+    for (let version = 3; version <= 102; version++) {
+      await insertDelivery(local.d1, seed, provider, "installation_000", version);
+    }
+    await local.d1
+      .prepare(
+        `UPDATE ${table} SET state = CASE environment_version % 3 WHEN 0 THEN 'delivered' WHEN 1 THEN 'terminal' ELSE 'suppressed' END WHERE environment_version > 1`,
+      )
+      .run();
+    const after = await statement();
+    expect(after.results).toEqual(before.results);
+    expect(after.meta.rows_read).toBe(before.meta.rows_read);
+  },
+);
+
 describe("delivery scheduler index plans", () => {
   it.each(DELIVERY_PROVIDERS)(
     "uses bounded indexed outstanding selection for %s",

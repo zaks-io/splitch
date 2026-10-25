@@ -2,6 +2,29 @@
 
 Reviewed October 5, 2026 for [SPL-690](https://linear.app/zaks-io/issue/SPL-690/reduce-delivery-scheduler-d1-query-amplification).
 
+## Delivery-lag objective
+
+A healthy installation should receive each committed Environment version within
+10 s at p99 and 60 s worst case. These are delivery objectives, not measured
+latencies established by this change.
+
+The minute cron reads outstanding `pending` and `leased` work once per provider,
+using delivery state indexes and scoped installation index lookups. It never scans
+delivered, terminal, or suppressed history. It emits one `integration-delivery-lag`
+event per provider, App, and Environment with healthy work, including `provider`,
+`appId`, `environmentId`, `oldestAgeMs`, and `healthyInstallationsWaiting`.
+Multiple outstanding versions count as one waiting installation.
+
+Healthy means active with no `latest_delivery_error_json`. Convex also requires
+`preparation_retry_at` to be absent or at or before the tick time. Cloudflare has
+no preparation cooldown field, so its recorded delivery error is the equivalent
+health signal. Retry schedules and unexpired leases do not hide outstanding work.
+
+An oldest age strictly greater than 5 minutes reports `integration_delivery_lagging`
+once per provider and Environment per minute tick. A failed provider read reports
+`integration_delivery_lag_read_failed` independently and cannot block dispatch or
+the other provider's report. The daily 08:00 UTC cron does not run this check.
+
 ## What the live evidence says
 
 The production database is 15,360,000 bytes. D1 reported 22,956 read queries and
