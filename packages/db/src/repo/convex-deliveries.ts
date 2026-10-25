@@ -4,6 +4,14 @@ import { createDb } from "./client";
 import type { ConfigWebhookDeliveryRow } from "./convex-integrations";
 import { buildDueConvexDeliveriesQuery } from "./scheduled-due-predicates";
 
+/**
+ * Claim order treats a failing installation's row as due this much later. Hundreds of dead
+ * receivers cannot hold a healthy installation behind them, and a recovered receiver still
+ * reaches a slot within this bound while healthy work fills every claim. It matches the
+ * preparation cooldown and the last retry step, the existing maximum recovery delay.
+ */
+const FAILING_INSTALLATION_CLAIM_DELAY = "+30 minutes";
+
 export async function claimDueConvexDeliveries(
   d1: D1Database,
   now: string,
@@ -15,9 +23,7 @@ export async function claimDueConvexDeliveries(
     throw new Error("Convex delivery claim limit must be a positive integer");
   const due = buildDueConvexDeliveriesQuery(now);
   // Start with eligible installations so blocked history cannot inflate the due-row scan.
-  // Healthy installations claim first: hundreds of failing receivers in one Environment must not
-  // hold a healthy installation's delivery behind theirs. A success clears the error, so a
-  // recovered receiver rejoins the healthy group.
+  // datetime() also puts trigger-written and dispatcher-written timestamps on one format.
   const db = createDb(d1);
   const [leased, claimed] = await db.batch([
     db
@@ -25,8 +31,10 @@ export async function claimDueConvexDeliveries(
       .set({ state: "leased", leaseOwner, leaseExpiresAt })
       .where(sql`delivery_id IN (
           SELECT delivery.delivery_id FROM convex_installations installation ${due}
-          ORDER BY installation.latest_delivery_error_json IS NOT NULL,
-            delivery.next_attempt_at, delivery.delivery_id
+          ORDER BY datetime(delivery.next_attempt_at, CASE
+              WHEN installation.latest_delivery_error_json IS NULL THEN '+0 minutes'
+              ELSE ${FAILING_INSTALLATION_CLAIM_DELAY} END),
+            delivery.delivery_id
           LIMIT ${limit}
         )`)
       .returning({ deliveryId: configWebhookDeliveries.deliveryId }),

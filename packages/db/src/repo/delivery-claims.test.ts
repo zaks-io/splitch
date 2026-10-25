@@ -199,25 +199,34 @@ describe("provider-specific delivery claim contracts", () => {
     ]);
   });
 
-  it("claims healthy Convex installations before older work for failing receivers", async () => {
-    for (const id of ["failing_a", "failing_b"]) {
+  it("holds failing Convex installations behind healthy work for at most 30 minutes", async () => {
+    const rows = [
+      ["healthy", NOW],
+      ["failing_recent", "2026-08-24T23:31:00.000Z"],
+      ["failing_overdue", "2026-08-24T23:29:00.000Z"],
+    ] as const;
+    for (const [id, nextAttemptAt] of rows) {
       await insertInstallation(local.d1, seed, "convex", id);
-      await insertDelivery(local.d1, seed, "convex", id, 1, "2026-08-24T00:00:00.000Z");
+      await insertDelivery(local.d1, seed, "convex", id, 1, nextAttemptAt);
     }
     await local.d1
       .prepare(`UPDATE convex_installations SET latest_delivery_error_json = '{"code":"HTTP_STATUS"}'
         WHERE installation_id LIKE 'failing_%'`)
       .run();
-    await insertInstallation(local.d1, seed, "convex", "healthy");
-    await insertDelivery(local.d1, seed, "convex", "healthy");
     const repo = createRepository(local.d1);
-    expect((await claim(repo, "convex", "first", 1)).map((row) => row.installationId)).toEqual([
-      "healthy",
-    ]);
-    expect((await claim(repo, "convex", "rest")).map((row) => row.installationId)).toEqual([
-      "failing_a",
-      "failing_b",
-    ]);
+    const order: string[] = [];
+    for (const owner of ["first", "second", "third"])
+      order.push(...(await claim(repo, "convex", owner, 1)).map((row) => row.installationId));
+    expect(order).toEqual(["failing_overdue", "healthy", "failing_recent"]);
+  });
+
+  it("orders trigger-written and dispatcher-written Convex timestamps chronologically", async () => {
+    await insertInstallation(local.d1, seed, "convex", "retried");
+    await insertDelivery(local.d1, seed, "convex", "retried", 1, "2026-08-24T23:00:00.000Z");
+    await insertInstallation(local.d1, seed, "convex", "enqueued");
+    await insertDelivery(local.d1, seed, "convex", "enqueued", 1, "2026-08-24 23:30:00");
+    const rows = await claim(createRepository(local.d1), "convex", "owner", 1);
+    expect(rows.map((row) => row.installationId)).toEqual(["retried"]);
   });
 
   it.each(DELIVERY_PROVIDERS)(

@@ -234,6 +234,8 @@ next tick and superseded the four older versions.
 
 Terminal responses now suppress older pending versions, as successes already did. The webhook is
 a version-only nudge, so an older version cannot succeed where the newer one was rejected.
-Claims order installations without a latest delivery error first, so failing receivers no longer
-delay healthy ones in any App. Dead preview installations still receive one attempt per
-Environment version until they are revoked.
+Claim order treats a row whose installation has a latest delivery error as due 30 minutes later,
+so failing receivers no longer hold healthy installations behind them in any App. The delay is
+bounded rather than a strict priority, so an installation recovering from one transient failure
+cannot be starved while healthy work fills every claim. Dead preview installations still receive
+one attempt per Environment version until they are revoked.

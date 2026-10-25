@@ -95,9 +95,10 @@ stored completely rather than truncated.
   preparation failure records the delivery ID and bounded error envelope before releasing its lease;
   healthy siblings still complete and acknowledge their responses.
 - Convex claims select only the newest pending or leased version per installation and exclude
-  installations with an unexpired delivery lease. Installations without a latest delivery error
-  claim before failing installations, then by next attempt time, so failing receivers cannot delay
-  healthy ones. A success clears the error. A preparation failure defers the installation
+  installations with an unexpired delivery lease. Claims order by next attempt time, treating a
+  row whose installation has a latest delivery error as due 30 minutes later. Failing receivers
+  cannot hold healthy installations behind them, and a failing installation waits at most 30
+  minutes behind healthy work. A success clears the error. A preparation failure defers the installation
   for 30 minutes, preserving pending work and allowing other installations to claim slots.
   Scoped secret rotation clears the cooldown. A stale worker with an old ciphertext or key version
   cannot defer the repaired installation. Missing or malformed KEK configuration fails before claims.
