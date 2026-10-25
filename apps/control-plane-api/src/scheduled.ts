@@ -11,6 +11,7 @@ import { forwardAuditEvents } from "./audit-events";
 import { dispatchCloudflarePushes } from "./cloudflare-push-dispatch";
 import { integrationDeliveryMode } from "./control-plane-runtime-config";
 import { dispatchConvexWebhooks } from "./convex-webhook-dispatch";
+import { runIntegrationDeliveryLag } from "./integration-delivery-lag";
 import { runDeliveryRetention } from "./delivery-retention";
 import { purgeExpiredPrivacyArtifacts, reconcilePrivacyJobs } from "./entity-privacy-jobs";
 import type { ControlPlaneApiEnv } from "./env";
@@ -43,6 +44,7 @@ export function runControlPlaneScheduled(
   // land: the Convex and Cloudflare paths lease their deliveries and would
   // survive it, but the Sentry cursor has no lease to protect it.
   if (event.cron !== "0 8 * * *") {
+    ctx.waitUntil(runIntegrationDeliveryLag(env, event, ctx));
     runIfDue("temporaryEnvironmentTeardown", () =>
       runTemporaryEnvironmentTeardown(env, event, ctx),
     );
@@ -178,15 +180,8 @@ async function runSentryWebhookDispatch(
   }
 }
 
-/**
- * The flag-change log is unbounded by construction: triggers write, nothing
- * deletes. Retention prunes rows older than 90 days that every active
- * integration has already consumed.
- *
- * With no active installation the cursor floor is `Number.MAX_SAFE_INTEGER`, so
- * age alone governs. `minUndeliveredSeq()` returning null means exactly that;
- * passing 0 instead would be a silent no-op that let the table grow forever.
- */
+// With no active installation, age alone governs retention. A zero cursor
+// would instead prevent pruning any events.
 async function runFlagChangeLogRetention(
   env: ControlPlaneApiEnv,
   event: ScheduledController,

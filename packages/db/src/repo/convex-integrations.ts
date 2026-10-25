@@ -8,6 +8,7 @@ import {
   deferConvexPreparationFailure,
 } from "./convex-preparation-backoff";
 import { type DeliveryRetentionInput, pruneConvexDeliveries } from "./delivery-retention";
+import { readIntegrationDeliveryLag } from "./integration-delivery-lag";
 import { listPushInstallations, listPushInstallationsByIds } from "./push-installation-list";
 import type { EnvScope } from "./scope";
 import { assertMintedScope } from "./scope";
@@ -54,6 +55,7 @@ export interface ConfigWebhookDeliveryRow {
 // biome-ignore lint/complexity/noExcessiveLinesPerFunction: This cohesive D1 adapter keeps all Convex integration SQL behind one scoped repository seam.
 export function makeConvexIntegrationRepo(d1: D1Database) {
   return {
+    deliveryLag: (now: string) => readIntegrationDeliveryLag(d1, "convex", now),
     async environmentVersion(scope: EnvScope): Promise<number> {
       assertMintedScope(scope);
       const row = await d1

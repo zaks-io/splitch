@@ -50,7 +50,7 @@ it.each(PROBE_CASES)("does not flag $name before it is due", async ({ seed }) =>
   await seed(local.d1, false);
   expect(await scheduledDueWork(env, event, ctx)).toEqual(idle);
 });
-it("makes exactly one D1 call and runs no jobs on an idle minute tick", async () => {
+it("runs only the due probe and two lag reads on an idle minute tick", async () => {
   const batch = vi.spyOn(local.d1, "batch");
   const prepare = vi.spyOn(local.d1, "prepare");
   const pending: Promise<unknown>[] = [];
@@ -59,7 +59,7 @@ it("makes exactly one D1 call and runs no jobs on an idle minute tick", async ()
   } as unknown as ExecutionContext);
   await Promise.all(pending);
   expect(batch).toHaveBeenCalledTimes(1);
-  expect(prepare).toHaveBeenCalledTimes(10);
+  expect(prepare).toHaveBeenCalledTimes(12);
   expect(batch.mock.calls[0]?.[0]).toHaveLength(10);
 });
 it("keeps referenced step-up uses until their rotation can be removed", async () => {
@@ -176,3 +176,33 @@ it("cleans terminal PAT rotations through a real minute tick", async () => {
     await local.d1.prepare("SELECT 1 FROM personal_access_token_rotations").first(),
   ).toBeNull();
 });
+
+it.each(["convex", "cloudflare"] as const)(
+  "reports real D1 %s lag while an unexpired lease keeps dispatch idle",
+  async (provider) => {
+    await delivery(local.d1, provider, false, true);
+    const table =
+      provider === "convex" ? "config_webhook_deliveries" : "cloudflare_config_deliveries";
+    await local.d1.prepare(`UPDATE ${table} SET created_at = '2026-10-22T07:54:00.000Z'`).run();
+    const info = vi.spyOn(console, "info").mockImplementation(() => {});
+    const faults = vi.spyOn(console, "error").mockImplementation(() => {});
+    const pending: Promise<unknown>[] = [];
+    runControlPlaneScheduled(event, env, {
+      waitUntil: (promise) => pending.push(promise),
+    } as unknown as ExecutionContext);
+    await Promise.all(pending);
+    const fields = {
+      provider,
+      appId: "app_probe",
+      environmentId: "env_probe",
+      oldestAgeMs: 360_000,
+      healthyInstallationsWaiting: 1,
+    };
+    expect(info).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({ message: "integration-delivery-lag", ...fields }),
+    );
+    expect(faults).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({ message: "integration_delivery_lagging", ...fields }),
+    );
+  },
+);

@@ -5,6 +5,8 @@ import { runControlPlaneScheduled } from "./scheduled";
 
 const mocks = vi.hoisted(() => ({
   probe: vi.fn(),
+  convexLag: vi.fn(),
+  cloudflareLag: vi.fn(),
   jobs: {
     privacyReconciliation: vi.fn(),
     privacyArtifactPurge: vi.fn(),
@@ -25,6 +27,8 @@ const mocks = vi.hoisted(() => ({
 vi.mock("@splitch/db", () => ({
   createRepository: () => ({
     scheduledDueWork: mocks.probe,
+    convex: { deliveryLag: mocks.convexLag },
+    cloudflare: { deliveryLag: mocks.cloudflareLag },
     identity: { reapExpiredProvisionalOrganizations: mocks.jobs.demo },
     claim: { purgeExpiredClaimArtifacts: async () => 0 },
     sentry: { minUndeliveredSeq: async () => null },
@@ -79,6 +83,8 @@ const daily = [
 ] as const;
 const idle = Object.fromEntries(keys.map((key) => [key, false]));
 beforeEach(() => {
+  mocks.convexLag.mockReset().mockResolvedValue([]);
+  mocks.cloudflareLag.mockReset().mockResolvedValue([]);
   mocks.probe.mockReset().mockResolvedValue(idle);
   for (const job of Object.values(mocks.jobs)) job.mockReset().mockResolvedValue(0);
   mocks.jobs.demo.mockResolvedValue({ candidates: 0, reaped: 0 });
@@ -141,4 +147,96 @@ it("keeps the same daily job set when the probe fails", async () => {
   for (const key of keys)
     expect(mocks.jobs[key]).toHaveBeenCalledTimes(keys.indexOf(key) < 3 ? 1 : 0);
   for (const key of daily) expect(mocks.jobs[key]).toHaveBeenCalledTimes(1);
+});
+
+it("logs every healthy Environment and faults once per lagging Environment on an idle minute", async () => {
+  mocks.convexLag.mockResolvedValue([
+    {
+      appId: "app_a",
+      environmentId: "env_lag",
+      oldestOutstandingAt: "2026-10-22T07:54:00.000Z",
+      healthyInstallationsWaiting: 3,
+    },
+    {
+      appId: "app_a",
+      environmentId: "env_recent",
+      oldestOutstandingAt: "2026-10-22T07:59:00.000Z",
+      healthyInstallationsWaiting: 1,
+    },
+    {
+      appId: "app_a",
+      environmentId: "env_boundary",
+      oldestOutstandingAt: "2026-10-22T07:55:00.000Z",
+      healthyInstallationsWaiting: 1,
+    },
+  ]);
+  mocks.cloudflareLag.mockResolvedValue([
+    {
+      appId: "app_b",
+      environmentId: "env_lag",
+      oldestOutstandingAt: "2026-10-22T07:53:00.000Z",
+      healthyInstallationsWaiting: 2,
+    },
+  ]);
+  const faults = vi.spyOn(console, "error").mockImplementation(() => {});
+  await tick();
+  expect(mocks.convexLag).toHaveBeenCalledExactlyOnceWith("2026-10-22T08:00:00.000Z");
+  expect(mocks.cloudflareLag).toHaveBeenCalledExactlyOnceWith("2026-10-22T08:00:00.000Z");
+  expect(console.info).toHaveBeenCalledTimes(4);
+  expect(console.info).toHaveBeenCalledWith(
+    expect.objectContaining({
+      message: "integration-delivery-lag",
+      provider: "convex",
+      appId: "app_a",
+      environmentId: "env_recent",
+      oldestAgeMs: 60_000,
+      healthyInstallationsWaiting: 1,
+    }),
+  );
+  expect(faults.mock.calls.map(([row]) => row)).toEqual([
+    expect.objectContaining({
+      message: "integration_delivery_lagging",
+      provider: "convex",
+      appId: "app_a",
+      environmentId: "env_lag",
+      oldestAgeMs: 360_000,
+      healthyInstallationsWaiting: 3,
+    }),
+    expect.objectContaining({
+      message: "integration_delivery_lagging",
+      provider: "cloudflare",
+      appId: "app_b",
+      environmentId: "env_lag",
+      oldestAgeMs: 420_000,
+      healthyInstallationsWaiting: 2,
+    }),
+  ]);
+});
+it.each(["convex", "cloudflare"] as const)(
+  "reports a failed %s lag read without blocking dispatch or the other read",
+  async (provider) => {
+    mocks[provider === "convex" ? "convexLag" : "cloudflareLag"].mockRejectedValue(
+      new Error("lag_private_canary"),
+    );
+    mocks.probe.mockResolvedValue({
+      ...idle,
+      convexWebhookDispatch: true,
+      cloudflarePushDispatch: true,
+    });
+    const faults = vi.spyOn(console, "error").mockImplementation(() => {});
+    await tick();
+    expect(mocks.jobs.convexWebhookDispatch).toHaveBeenCalledTimes(1);
+    expect(mocks.jobs.cloudflarePushDispatch).toHaveBeenCalledTimes(1);
+    expect(mocks.convexLag).toHaveBeenCalledTimes(1);
+    expect(mocks.cloudflareLag).toHaveBeenCalledTimes(1);
+    expect(faults).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({ message: "integration_delivery_lag_read_failed", provider }),
+    );
+    expect(JSON.stringify(faults.mock.calls)).not.toContain("lag_private_canary");
+  },
+);
+it("does not read delivery lag on the daily cron", async () => {
+  await tick("0 8 * * *");
+  expect(mocks.convexLag).not.toHaveBeenCalled();
+  expect(mocks.cloudflareLag).not.toHaveBeenCalled();
 });

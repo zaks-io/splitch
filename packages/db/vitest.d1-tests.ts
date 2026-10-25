@@ -16,6 +16,7 @@ export const D1_TEST_FILES = defineTestFileManifest(import.meta.url, [
   "src/repo/delivery-claims.test.ts",
   "src/repo/convex-preparation-backoff.test.ts",
   "src/repo/delivery-retention.test.ts",
+  "src/repo/integration-delivery-lag.test.ts",
   "src/repo/delivery-scheduler-query-plans.test.ts",
   "src/repo/integration-delivery-schedule.test.ts",
   "src/repo/cross-environment-reads.test.ts",
