@@ -14,6 +14,8 @@ const jobs = vi.hoisted(() => ({
 
 vi.mock("@splitch/db", () => ({
   createRepository: () => ({
+    convex: { deliveryLag: async () => [] },
+    cloudflare: { deliveryLag: async () => [] },
     identity: {
       reapExpiredProvisionalOrganizations: async () => ({ candidates: 0, reaped: 0 }),
       listExpiredTemporaryEnvironments: async () => [],

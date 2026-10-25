@@ -5,6 +5,7 @@ import {
   retryTerminalCloudflareDelivery,
 } from "./cloudflare-deliveries";
 import { type DeliveryRetentionInput, pruneCloudflareDeliveries } from "./delivery-retention";
+import { readIntegrationDeliveryLag } from "./integration-delivery-lag";
 import { listPushInstallations, listPushInstallationsByIds } from "./push-installation-list";
 import type { EnvScope, TenantScope } from "./scope";
 import { assertMintedScope } from "./scope";
@@ -51,6 +52,7 @@ export interface CloudflareDeliveryRow {
 
 export function makeCloudflareIntegrationRepo(d1: D1Database) {
   return {
+    deliveryLag: (now: string) => readIntegrationDeliveryLag(d1, "cloudflare", now),
     pruneDeliveries(input: DeliveryRetentionInput) {
       return pruneCloudflareDeliveries(d1, input);
     },
