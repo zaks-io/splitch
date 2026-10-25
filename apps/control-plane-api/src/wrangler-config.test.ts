@@ -6,6 +6,18 @@ const config = readWranglerConfig();
 
 describe("Control Plane API Wrangler runtime config", () => {
   it.each([
+    ["local", config, "coordinator"],
+    ["shared-preview", config.env?.["shared-preview"], "coordinator"],
+    ["production", config.env?.production, "cron"],
+  ])("selects integration delivery mode for %s", (_name, target, mode) => {
+    expect(target?.vars?.INTEGRATION_DELIVERY_MODE).toBe(mode);
+    expect(target?.durable_objects?.bindings).toContainEqual({
+      name: "INTEGRATION_DELIVERY",
+      class_name: "IntegrationDeliveryDurableObject",
+    });
+  });
+
+  it.each([
     ["local", config],
     ["shared-preview", config.env?.["shared-preview"]],
     ["production", config.env?.production],
@@ -112,6 +124,7 @@ describe("Control Plane API Wrangler runtime config", () => {
   ])("declaratively provisions the live Durable Objects for %s", (_target, target) => {
     expect(effectiveExports(target)).toEqual({
       ConfigStoreDurableObject: { type: "durable-object", storage: "sqlite" },
+      IntegrationDeliveryDurableObject: { type: "durable-object", storage: "sqlite" },
       CredentialCacheWriterDurableObject: { type: "durable-object", storage: "sqlite" },
       PanelDelegationReplayDurableObject: { type: "durable-object", storage: "sqlite" },
       McpDelegationReplayDurableObject: { type: "durable-object", storage: "sqlite" },

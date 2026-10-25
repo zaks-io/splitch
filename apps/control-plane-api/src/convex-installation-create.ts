@@ -181,11 +181,13 @@ async function registrationResponse(
     );
   const result = await deps.repo.convex.getInstallation(scope, row.installationId);
   if (!result) throw new Error("Convex registration: installation disappeared");
+  const environmentVersion = await deps.repo.convex.environmentVersion(scope);
+  deps.wakeDelivery?.(scope);
   return Response.json({
     installationId: row.installationId,
     appId: scope.appId,
     environmentId: scope.environmentId,
-    environmentVersion: await deps.repo.convex.environmentVersion(scope),
+    environmentVersion,
     status: result.status,
     deploymentMissingAt: result.deploymentMissingAt,
   });

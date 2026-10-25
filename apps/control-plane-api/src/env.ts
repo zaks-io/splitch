@@ -1,5 +1,6 @@
 import type { McpDelegationReplayDurableObjectNamespace } from "@splitch/worker-runtime";
 import type { ConfigStoreDurableObjectNamespace } from "./config-store-access";
+import type { IntegrationDeliveryDurableObjectNamespace } from "./integration-delivery-access";
 
 interface AnalysisControlPlaneBinding extends Fetcher {
   purgeAppIdentityAnalytics(
@@ -41,6 +42,8 @@ import type { PanelDelegationReplayDurableObjectNamespace } from "./panel-identi
 export interface ControlPlaneApiEnv {
   /** D1 binding — wrapped by createRepository, never used raw. */
   DB: D1Database;
+  INTEGRATION_DELIVERY: IntegrationDeliveryDurableObjectNamespace;
+  INTEGRATION_DELIVERY_MODE: string;
   /** KV namespace backing session-validation revocation markers and session identity profiles. */
   SESSION_STORE: KVNamespace;
   /** KV namespace backing schema-versioned config cache reads. */

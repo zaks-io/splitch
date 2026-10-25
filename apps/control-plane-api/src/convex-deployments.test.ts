@@ -1,4 +1,5 @@
 import type { Repository } from "@splitch/db";
+import { coordinatorDeliveryPolicy, cronDeliveryPolicy } from "./integration-delivery-limits";
 import { describe, expect, it, vi } from "vitest";
 import {
   detectMissingConvexDeployment,
@@ -11,7 +12,11 @@ const KEY = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=";
 const NOW = new Date("2026-10-25T08:00:00.000Z");
 const CALLBACK = "https://example.convex.site/configuration";
 
-async function dispatchFixture(status: number | Error, usher: boolean) {
+async function dispatchFixture(
+  status: number | Error,
+  usher: boolean,
+  mode: "cron" | "coordinator",
+) {
   const encrypted = await encryptConvexSecret("secret", KEY, "v1");
   const finishDelivery = vi.fn(async () => "probe-token");
   const markDeploymentMissing = vi.fn();
@@ -38,11 +43,23 @@ async function dispatchFixture(status: number | Error, usher: boolean) {
       markDeploymentMissing,
     },
   } as unknown as Repository;
-  await dispatchConvexWebhooks({ repo, webhookKek: KEY, fetcher, now: () => NOW });
+  await dispatchConvexWebhooks({
+    repo,
+    webhookKek: KEY,
+    fetcher,
+    policy:
+      mode === "cron"
+        ? cronDeliveryPolicy(
+            "convex",
+            () => NOW,
+            () => NOW,
+          )
+        : coordinatorDeliveryPolicy(() => NOW),
+  });
   return { finishDelivery, markDeploymentMissing, fetcher };
 }
 
-describe("dormant Convex deployments", () => {
+describe.each(["cron", "coordinator"] as const)("dormant Convex deployments under %s", (mode) => {
   it.each([
     [404, true, true],
     [404, false, false],
@@ -51,7 +68,7 @@ describe("dormant Convex deployments", () => {
   ])(
     "probes a terminal callback 404 and uses probe status %s with usher=%s",
     async (status, usher, missing) => {
-      const fixture = await dispatchFixture(status as number, usher as boolean);
+      const fixture = await dispatchFixture(status as number, usher as boolean, mode);
       expect(fixture.finishDelivery).toHaveBeenCalledWith(
         "delivery",
         expect.any(String),
@@ -69,7 +86,7 @@ describe("dormant Convex deployments", () => {
   );
 
   it("does not fail dispatch or mark dormancy on a probe timeout", async () => {
-    const fixture = await dispatchFixture(new DOMException("timeout", "TimeoutError"), false);
+    const fixture = await dispatchFixture(new DOMException("timeout", "TimeoutError"), false, mode);
     expect(fixture.markDeploymentMissing).not.toHaveBeenCalled();
     expect(fixture.finishDelivery).toHaveBeenCalledOnce();
   });

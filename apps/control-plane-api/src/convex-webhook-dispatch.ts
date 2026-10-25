@@ -1,5 +1,6 @@
-import type { Repository } from "@splitch/db";
+import type { EnvScope, Repository } from "@splitch/db";
 import { serializeFault } from "@splitch/observability/worker";
+import { mapWithConcurrency } from "./bounded-map";
 import {
   configurationCallbackDestinationError,
   postConfigurationCallback,
@@ -9,40 +10,44 @@ import {
   probeMissingConvexDeployments,
 } from "./convex-deployments";
 import { decryptConvexSecret, signConvexWebhook } from "./convex-secret";
+import type { IntegrationDeliveryDispatchPolicy } from "./integration-delivery-limits";
+import { renewDeliveryLeaseBeforeSend } from "./integration-delivery-lease";
 import { validateIntegrationSecretKey } from "./integration-secret";
 import { retryDelayMs, type WebhookPost } from "./webhook-transport";
 
-const LEASE_MS = 30_000;
-const BATCH_SIZE = 25;
 const PREPARATION_RETRY_MS = 30 * 60_000;
 
-interface ConvexDispatchSummary {
+export interface ConvexDispatchSummary {
   claimed: number;
   received2xx: number;
   receiverRejected: number;
   transportFailures: number;
   preparationFailedInstallations: number;
+  skippedLeaseLost: number;
 }
 
 export interface ConvexWebhookDispatchDeps {
   repo: Repository;
+  scope?: EnvScope;
   webhookKek?: string;
   webhookKeyVersion?: string;
   fetcher?: typeof fetch;
-  now?: () => Date;
+  policy: IntegrationDeliveryDispatchPolicy;
   leaseOwner?: () => string;
   onDispatch?: (summary: ConvexDispatchSummary) => void;
 }
 
 export async function dispatchConvexWebhooks(deps: ConvexWebhookDispatchDeps): Promise<number> {
   validateIntegrationSecretKey(deps.webhookKek, "CONVEX_WEBHOOK_KEK");
-  const now = (deps.now ?? (() => new Date()))();
+  const now = deps.policy.clock.now();
   const leaseOwner = (deps.leaseOwner ?? (() => crypto.randomUUID()))();
+  const leaseExpiresAt = now.getTime() + deps.policy.leaseMs;
   const deliveries = await deps.repo.convex.claimDueDeliveries(
     now.toISOString(),
     leaseOwner,
-    new Date(now.getTime() + LEASE_MS).toISOString(),
-    BATCH_SIZE,
+    new Date(leaseExpiresAt).toISOString(),
+    deps.policy.claimLimit,
+    deps.scope,
   );
 
   const secrets = new Map<string, Promise<string>>();
@@ -53,10 +58,20 @@ export async function dispatchConvexWebhooks(deps: ConvexWebhookDispatchDeps): P
     receiverRejected: 0,
     transportFailures: 0,
     preparationFailedInstallations: 0,
+    skippedLeaseLost: 0,
   };
-  const settled = await Promise.allSettled(
-    deliveries.map((delivery) =>
-      deliverSafely(deps, delivery, leaseOwner, now, secrets, failures, summary),
+  const settled = await mapWithConcurrency(deliveries, deps.policy.concurrency, (delivery) =>
+    deliverSafely(
+      deps,
+      { ...delivery, leaseExpiresAt },
+      leaseOwner,
+      now,
+      secrets,
+      failures,
+      summary,
+    ).then(
+      (value) => ({ status: "fulfilled" as const, value }),
+      (reason: unknown) => ({ status: "rejected" as const, reason }),
     ),
   );
   // Fulfilled values carry lifecycle generations, so policy scheduling must preserve them.
@@ -71,7 +86,9 @@ export async function dispatchConvexWebhooks(deps: ConvexWebhookDispatchDeps): P
   return deliveries.length;
 }
 
-type Delivery = Awaited<ReturnType<Repository["convex"]["claimDueDeliveries"]>>[number];
+type Delivery = Awaited<ReturnType<Repository["convex"]["claimDueDeliveries"]>>[number] & {
+  leaseExpiresAt: number;
+};
 
 async function deliverSafely(
   deps: ConvexWebhookDispatchDeps,
@@ -163,7 +180,19 @@ async function deliverOne(
     });
     return;
   }
-  const result = await postConfigurationCallback(webhook);
+  if (
+    !(await renewDeliveryLeaseBeforeSend(
+      delivery,
+      leaseOwner,
+      deps.policy,
+      deps.repo.convex.renewDeliveryLease,
+    ))
+  ) {
+    summary.skippedLeaseLost += 1;
+    return;
+  }
+  const result = await postConfigurationCallback(webhook, deps.policy.sendTimeoutMs);
+  now = deps.policy.clock.outcomeTime(now);
 
   if (result.outcome === "transport-failed") {
     summary.transportFailures += 1;

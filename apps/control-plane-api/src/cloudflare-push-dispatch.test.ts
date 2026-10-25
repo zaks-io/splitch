@@ -1,3 +1,4 @@
+import { cronDeliveryPolicy } from "./integration-delivery-limits";
 import { inspect } from "node:util";
 import { createRepository, type Repository } from "@splitch/db";
 import { serializeFault } from "@splitch/observability/worker";
@@ -7,6 +8,11 @@ import { encryptIntegrationSecret, signIntegrationPayload } from "./integration-
 
 const KEY = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=";
 const NOW = new Date("2026-08-25T12:00:00.000Z");
+const POLICY = cronDeliveryPolicy(
+  "cloudflare",
+  () => NOW,
+  () => NOW,
+);
 const DELIVERY_ID = "00000000-0000-4000-8000-000000000001";
 
 describe("Cloudflare dispatch fault detail", () => {
@@ -29,7 +35,7 @@ describe("Cloudflare dispatch fault detail", () => {
       const failure = await dispatchCloudflarePushes({
         repo,
         secretKek: KEY,
-        now: () => NOW,
+        policy: POLICY,
         fetcher: async () => new Response(null, { status: 503 }),
       }).catch((error: unknown) => error);
       expect(failure).toBeInstanceOf(AggregateError);
@@ -103,7 +109,7 @@ describe("Cloudflare configuration push dispatch", () => {
     });
 
     await expect(
-      dispatchCloudflarePushes({ repo, secretKek: KEY, fetcher, now: () => NOW }),
+      dispatchCloudflarePushes({ repo, secretKek: KEY, fetcher, policy: POLICY }),
     ).resolves.toBe(1);
     expect(finishes).toEqual([
       expect.objectContaining({ state: "delivered", appliedVersion: 2, now: NOW.toISOString() }),
@@ -116,7 +122,7 @@ describe("Cloudflare configuration push dispatch", () => {
       repo,
       secretKek: KEY,
       fetcher: async () => new Response(null, { status: 204 }),
-      now: () => NOW,
+      policy: POLICY,
     });
     expect(finishes[0]).toMatchObject({ state: "pending" });
     expect(JSON.parse(String(finishes[0]?.errorJson))).toMatchObject({
@@ -133,7 +139,7 @@ describe("Cloudflare configuration push dispatch", () => {
       fetcher: async () => {
         throw new TypeError("connection failed");
       },
-      now: () => NOW,
+      policy: POLICY,
     });
     expect(JSON.parse(String(finishes[0]?.errorJson))).toMatchObject({
       kind: "transport",
@@ -158,7 +164,7 @@ describe("Cloudflare configuration push dispatch", () => {
     );
 
     await expect(
-      dispatchCloudflarePushes({ repo, secretKek: KEY, fetcher, now: () => NOW }),
+      dispatchCloudflarePushes({ repo, secretKek: KEY, fetcher, policy: POLICY }),
     ).resolves.toBe(2);
 
     expect(fetcher).toHaveBeenCalledTimes(1);
@@ -185,7 +191,7 @@ describe("Cloudflare configuration push dispatch", () => {
         repo,
         secretKek: KEY,
         fetcher: async () => new Response(null, { status }),
-        now: () => NOW,
+        policy: POLICY,
       });
       expect(finishes[0]).toMatchObject({ state });
     }
@@ -207,14 +213,14 @@ describe("Cloudflare first setup push window", () => {
         repo,
         secretKek: KEY,
         fetcher: async () => new Response(null, { status: 404 }),
-        now: () => NOW,
+        policy: POLICY,
       });
       expect(finishes[0]).toMatchObject({ state });
       expect(JSON.parse(String(finishes[0]?.errorJson))).toMatchObject({ httpStatus: 404 });
     }
   });
 
-  it("retries first setup on the next dispatcher tick instead of climbing the backoff ladder", async () => {
+  it("retries first setup after 30 seconds instead of climbing the backoff ladder", async () => {
     for (const [status, lastAppliedVersion, registeredAt, nextAttemptAt] of [
       [404, null, "2026-08-25T11:59:00.000Z", "2026-08-25T12:00:30.000Z"],
       [503, null, "2026-08-25T11:59:00.000Z", "2026-08-25T12:00:30.000Z"],
@@ -227,7 +233,7 @@ describe("Cloudflare first setup push window", () => {
         repo,
         secretKek: KEY,
         fetcher: async () => new Response(null, { status }),
-        now: () => NOW,
+        policy: POLICY,
       });
       expect(finishes[0]).toMatchObject({ state: "pending", nextAttemptAt });
     }
@@ -239,7 +245,7 @@ describe("Cloudflare first setup push window", () => {
     const fetcher = vi.fn(async () => new Response(null, { status: 404 }));
 
     await expect(
-      dispatchCloudflarePushes({ repo, secretKek: KEY, fetcher, now: () => NOW }),
+      dispatchCloudflarePushes({ repo, secretKek: KEY, fetcher, policy: POLICY }),
     ).rejects.toThrow("1 Cloudflare delivery lease updates failed");
     expect(fetcher).not.toHaveBeenCalled();
     expect(finishes).toEqual([]);

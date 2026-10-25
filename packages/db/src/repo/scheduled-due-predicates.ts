@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import type { TenantScope } from "./scope";
+import { assertMintedScope, type TenantScope } from "./scope";
 
 export function buildPrivacyJobsReconciliationPredicate(input: {
   now: string;
@@ -26,7 +26,8 @@ export function buildExpiredPersonalAccessTokenStepUpUsesPredicate(cutoff: strin
         AND NOT EXISTS (SELECT 1 FROM personal_access_token_rotations r WHERE r.step_up_jti = u.jti)`;
 }
 
-export function buildDueConvexDeliveriesQuery(now: string) {
+export function buildDueConvexDeliveriesQuery(now: string, scope?: TenantScope) {
+  if (scope) assertMintedScope(scope);
   return sql`CROSS JOIN config_webhook_deliveries delivery
             ON delivery.installation_id = installation.installation_id
             AND delivery.environment_version = (
@@ -37,6 +38,7 @@ export function buildDueConvexDeliveriesQuery(now: string) {
               ORDER BY environment_version DESC LIMIT 1
             )
           WHERE installation.status = 'active'
+            ${deliveryScopePredicate(scope, "installation")}
             AND (installation.preparation_retry_at IS NULL OR installation.preparation_retry_at <= ${now})
             AND NOT EXISTS (SELECT 1 FROM config_webhook_deliveries busy
               WHERE busy.installation_id = delivery.installation_id
@@ -46,10 +48,11 @@ export function buildDueConvexDeliveriesQuery(now: string) {
 }
 
 export function buildDueCloudflareDeliveriesQuery(now: string, scope?: TenantScope) {
+  if (scope) assertMintedScope(scope);
   return sql`JOIN cloudflare_installations installation
             ON installation.installation_id = delivery.installation_id
           WHERE installation.status = 'active'
-            ${scope ? sql`AND delivery.app_id = ${scope.appId}` : sql``}
+            ${deliveryScopePredicate(scope, "delivery")}
             AND ((delivery.state = 'pending' AND delivery.next_attempt_at <= ${now})
               OR (delivery.state = 'leased' AND delivery.lease_expires_at <= ${now}))
             AND NOT EXISTS (
@@ -73,4 +76,16 @@ export function buildDueSentryInstallationsPredicate(now: string) {
 
 export function personalAccessTokenRetentionCutoff(now: string) {
   return new Date(Date.parse(now) - 24 * 60 * 60 * 1000).toISOString();
+}
+
+function deliveryScopePredicate(
+  scope: TenantScope | undefined,
+  alias: "installation" | "delivery",
+) {
+  if (!scope) return sql``;
+  const appId = alias === "installation" ? sql`installation.app_id` : sql`delivery.app_id`;
+  const environmentId =
+    alias === "installation" ? sql`installation.environment_id` : sql`delivery.environment_id`;
+  return sql`AND ${appId} = ${scope.appId}
+    ${"environmentId" in scope ? sql`AND ${environmentId} = ${scope.environmentId}` : sql``}`;
 }

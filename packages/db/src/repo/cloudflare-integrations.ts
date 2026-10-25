@@ -3,6 +3,7 @@ import {
   claimDueCloudflareDeliveries,
   finishCloudflareDelivery,
   retryTerminalCloudflareDelivery,
+  renewCloudflareDeliveryLease,
 } from "./cloudflare-deliveries";
 import { type DeliveryRetentionInput, pruneCloudflareDeliveries } from "./delivery-retention";
 import { readIntegrationDeliveryLag } from "./integration-delivery-lag";
@@ -188,6 +189,15 @@ export function makeCloudflareIntegrationRepo(d1: D1Database) {
       scope?: TenantScope,
     ): Promise<CloudflareDeliveryRow[]> {
       return claimDueCloudflareDeliveries(d1, now, leaseOwner, leaseExpiresAt, limit, scope);
+    },
+
+    renewDeliveryLease(
+      deliveryId: string,
+      leaseOwner: string,
+      now: string,
+      leaseExpiresAt: string,
+    ) {
+      return renewCloudflareDeliveryLease(d1, deliveryId, leaseOwner, now, leaseExpiresAt);
     },
 
     async finishDelivery(

@@ -24,7 +24,11 @@
     "apps/marketing": {},
     "apps/control-plane-api": {
       "vitest": {
-        "config": ["vitest.config.ts", "vitest.config.audit-integration.ts"]
+        "config": [
+          "vitest.config.ts",
+          "vitest.config.audit-integration.ts",
+          "vitest.config.delivery-load.ts"
+        ]
       }
     },
     "packages/stats": {

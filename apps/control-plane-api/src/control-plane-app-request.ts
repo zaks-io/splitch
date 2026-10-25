@@ -12,12 +12,16 @@ import { createApp } from "./app";
 import { approvalArchiveStoreFromEnv } from "./approval-archive-tinybird";
 import { createAnalysisResultsReader } from "./attention-analysis-reader";
 import { forwardAuditEvents } from "./audit-events";
-import { dispatchCloudflarePushes } from "./cloudflare-push-dispatch";
 import { durableConfigStoreAccess } from "./config-store-access";
+import { integrationDeliveryMode } from "./control-plane-runtime-config";
 import { durableCredentialCacheWriterAccess } from "./credential-cache-writer-do";
 import { createEntityPrivacyConsumer } from "./entity-privacy-consumer";
 import type { ControlPlaneApiEnv } from "./env";
 import { createHoldoverWriteOutboxCleanup } from "./holdover-write-outbox-cleanup";
+import {
+  dispatchAppIntegrationDelivery,
+  integrationRegistrationWake,
+} from "./integration-delivery-mutation";
 import { makeSessionCacheMemberProfileResolver } from "./member-profile-cache";
 import { rateLimiterForTarget } from "./rate-limit";
 import { runSnapshotDeliveryFromEnv } from "./run-snapshot";
@@ -34,6 +38,8 @@ export async function handleControlPlaneAppRequest(input: {
 }): Promise<Response> {
   const { request, env, ctx, authResolver, repo, door, delegated } = input;
   let resolvedAppId: string | undefined;
+  const mode = integrationDeliveryMode(env);
+  const wakeDelivery = integrationRegistrationWake(env, ctx);
   const configStore = durableConfigStoreAccess(env.CONFIG_STORE_WRITER, env.CONFIG_STORE, {
     repo,
     waitUntil: (promise) => ctx.waitUntil(promise),
@@ -95,10 +101,12 @@ export async function handleControlPlaneAppRequest(input: {
     ...(delegated
       ? {
           convex: {
+            wakeDelivery,
             webhookKek: env.CONVEX_WEBHOOK_KEK,
             webhookKeyVersion: env.CONVEX_WEBHOOK_KEY_VERSION,
           },
           cloudflare: {
+            wakeDelivery,
             secretKek: env.INTEGRATION_SECRET_KEK,
             secretKeyVersion: env.INTEGRATION_SECRET_KEY_VERSION,
           },
@@ -124,20 +132,17 @@ export async function handleControlPlaneAppRequest(input: {
   }
   if (response.ok && resolvedAppId && request.method !== "GET" && request.method !== "HEAD") {
     ctx.waitUntil(
-      dispatchCloudflarePushes({
-        repo,
-        scope: appScope(resolvedAppId),
-        secretKek: env.INTEGRATION_SECRET_KEK,
-        secretKeyVersion: env.INTEGRATION_SECRET_KEY_VERSION,
-      }).catch((error) => {
+      dispatchAppIntegrationDelivery(env, repo, resolvedAppId).catch((error) => {
         reportMutationBackgroundFault(
           env,
           ctx,
           error,
-          "cloudflare-push-dispatch",
-          "cloudflare_push_dispatch_failed",
+          mode === "cron" ? "cloudflare-push-dispatch" : "integration-delivery-wake",
+          mode === "cron" ? "cloudflare_push_dispatch_failed" : "integration_delivery_wake_failed",
         );
-        throw new Error("cloudflare_push_dispatch_failed");
+        throw new Error(
+          mode === "cron" ? "cloudflare_push_dispatch_failed" : "integration_delivery_wake_failed",
+        );
       }),
     );
   }

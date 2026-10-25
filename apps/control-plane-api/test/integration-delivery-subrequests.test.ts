@@ -1,0 +1,31 @@
+import { env } from "cloudflare:test";
+import { expect, it, vi } from "vitest";
+import { integrationDeliverySubrequests } from "../src/integration-delivery-subrequests";
+
+it("counts executed D1 requests, sessions and HTTP without counting prepare, bind or batch members", async () => {
+  const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response("ok"));
+  const requests = integrationDeliverySubrequests(env.DB, fetcher);
+  const statement = requests.db.prepare("SELECT ? AS value").bind(7);
+  expect(requests.count).toBe(0);
+  expect(await statement.first("value")).toBe(7);
+  expect((await statement.all()).results).toEqual([{ value: 7 }]);
+  expect(await statement.raw()).toEqual([[7]]);
+  expect(await statement.raw({ columnNames: true })).toEqual([["value"], [7]]);
+  await statement.run();
+  expect(requests.d1).toBe(5);
+  const batch = await requests.db.batch([statement, statement]);
+  expect(batch.map((row) => row.results)).toEqual([[{ value: 7 }], [{ value: 7 }]]);
+  expect(requests.d1).toBe(6);
+  const session = requests.db.withSession("first-primary");
+  await session.prepare("SELECT 1").first();
+  await session.batch([session.prepare("SELECT 2")]);
+  await requests.db.exec("SELECT 3");
+  expect(requests.d1).toBe(9);
+  await requests.fetcher("https://receiver.example");
+  fetcher.mockRejectedValueOnce(new Error("receiver unavailable"));
+  await expect(requests.fetcher("https://receiver.example")).rejects.toThrow("unavailable");
+  await expect(requests.db.prepare("SELECT missing_column").all()).rejects.toThrow();
+  expect(requests.d1).toBe(10);
+  expect(requests.http).toBe(2);
+  expect(requests.count).toBe(12);
+});

@@ -265,3 +265,117 @@ oldest outstanding version and restarts after each attempt (the installation's `
 config churn cannot starve a recovering installation and a receiver that keeps failing cannot
 hold the front. Dead preview installations still receive one attempt per Environment version
 until they are revoked.
+
+## Per-Environment coordination, October 25
+
+[SPL-788](https://linear.app/zaks-io/issue/SPL-788) implements
+[ADR-0061](../adr/0061-integration-delivery-runs-on-a-per-environment-coordinator.md).
+Each Environment's `IntegrationDeliveryDurableObject` claims and sends its own Convex and
+Cloudflare work. Another Environment's backlog cannot spend its claim slots or executor time.
+D1 remains shared, so database contention still affects both Environments.
+
+A coordinator run claims at most six Convex rows and sends all six concurrently, then does the
+same for Cloudflare. No claimed delivery waits behind another send. It repeats until a pass
+claims nothing, 60 seconds elapse, or its counted subrequests reach 5,000. The coordinator wraps
+its D1 binding and fetcher for each run. Every D1 `batch`, `run`, `all`, `first`, `raw` or `exec`
+call and every HTTP request counts once, including failures, lease renewals and deletion probes.
+Preparing or binding a statement does not count, and a batch counts once rather than once per
+statement. At the threshold the run starts no further claim, finishes the in-flight six-row batch,
+and schedules an immediate alarm for a fresh invocation. The threshold is half the
+[10,000-per-invocation default](https://developers.cloudflare.com/workers/platform/limits/#subrequests),
+leaving headroom for that batch's preparation, sends, renewals, completions and probes, plus
+scheduling, logging and fault reporting. The structured run summary includes the measured count.
+
+Cloudflare snapshots are cached only within a coordinator run, keyed by App, Environment and
+Environment version. Every pass still checks the current version, and a build spanning a version
+change is discarded and retried. A stable version is built once across all six-row passes.
+Cron keeps its existing per-dispatch snapshot lifetime. A per-row estimate cannot bound this
+work: 1,000 Flags require batched snapshot reads that would otherwise repeat for every pass.
+
+A real-D1 regression seeds 1,000 Flags and 3,001 Cloudflare installations with pending work.
+With the run cache, it built one snapshot and completed 1,860 deliveries using 3,149 D1 calls
+and 1,860 HTTP calls, 5,009 total. An uncached replay completed 462 deliveries with 77 snapshot
+builds, 4,543 D1 calls and 462 HTTP calls, 5,005 total. Both started every claim below the
+5,000 threshold, finished the last batch and returned an immediate wake. These measured counts
+include the final batch's overshoot and demonstrate why the counter must include preparation.
+
+The nominal 30-second lease budget includes 5 seconds of preparation, 5 seconds of HTTP and
+10 seconds of D1 completion. Preparation can exceed its allowance. Each row carries its claimed
+lease deadline into the send path. Immediately before HTTP, a live clock checks that the lease
+still covers the send allowance plus completion. If fewer than 15 seconds remain, one guarded
+UPDATE renews the lease for 30 seconds only while the row is leased, owned by this dispatcher and
+unexpired. The UPDATE uses a clock read immediately before the call. After it returns, another live-clock
+check deducts the renewal round trip from the new deadline. A zero-row renewal or a response
+leaving less than 15 seconds skips HTTP and completion, preserves ownership and attempt count,
+and increments `skippedLeaseLost` in the provider summary. Cron Cloudflare still has no HTTP
+timeout; its renewal check uses the same nominal 5-second send allowance. This guard applies to
+both policies, independently of cron's fixed claim clock.
+
+A module check includes all three nominal budgets and rejects a claim larger than the send concurrency.
+A real-D1 contention test with 25 rows, 4.8-second responses and 2-second completions proves that
+a competing dispatcher cannot reclaim an in-flight row at 31 seconds. Additional real-D1 tests
+delay preparation to 27 seconds for both providers and policies, then compete at 31 seconds while
+HTTP is in flight. Slow-renewal cases commit the renewal at 27 seconds with expiry at 57, return
+at 54 seconds, and skip HTTP before a competitor reclaims at 58 seconds. Preparation that outlasts
+the lease, or a reclaim by another owner, also skips sending.
+
+Dispatch policy comes from the caller. Cron preserves the existing 25-row concurrent batch,
+5-second Convex timeout, no Cloudflare timeout and claim-time outcome/retry timestamps. The
+coordinator uses six-row claims, a 5-second timeout for both providers and response-time outcomes.
+The merge is behavior-neutral in cron mode except a double-send guard on nearly expired leases.
+Claims retain the existing ordering, suppression and lease ownership checks. Environment-selective
+Cloudflare due and expiry indexes prevent another Environment's backlog from amplifying reads.
+Both providers' payload reads use partial lease-owner indexes. Real-D1 rows-read regressions stay
+flat as another Environment grows from one to 1,000 pending rows or leases. The partial outstanding
+indexes keep next-wake reads out of completed history.
+
+The only coordinator storage is its identity and alarm. Alarms follow outstanding retries,
+lease expiry and preparation cooldowns directly. A wake received during a run retains its earlier
+alarm. Cloudflare documents that `getAlarm()` inside a running handler returns null until a new
+alarm is set, so a consumed alarm does not cause a retry loop. Handler errors report
+`integration_delivery_run_failed` and schedule 30 seconds later. Each run emits
+`integration-delivery-run` with scope, provider claim/outcome counts, duration and next wake.
+
+Successful mutating requests wake due Environments in the resolved App. Registration and Convex
+secret rotation wake the credential-bound Environment. The minute job only wakes due
+Environments in coordinator mode and sends no receiver HTTP. It recovers dropped wakes and
+background mutations listed in the storage contract's config-version wake audit. Sentry retains
+its Organization-scoped cursor and minute dispatch.
+
+### Rollout
+
+1. Deploy the additive indexes and binding with production `INTEGRATION_DELIVERY_MODE=cron`.
+   This preserves global cron dispatch and immediate App-scoped Cloudflare dispatch, with the
+   double-send guard on nearly expired leases.
+2. Verify `coordinator` mode in shared preview, including alarms, isolation, retries, faults,
+   receiver acknowledgments and D1 load. Local and shared-preview Wrangler values already select it.
+3. With explicit production approval, flip production to `coordinator`. Compare healthy receiver
+   delivery latency, claim/outcome logs, outstanding age and D1 contention. Roll back to `cron`
+   using the same leases if needed. A stale coordinator alarm in cron mode sends nothing.
+4. Delete the global dispatcher one release after production runs in coordinator mode.
+
+No deployment or production mode flip is part of this PR.
+
+### Local workerd load test
+
+Run on demand, outside CI:
+
+```sh
+pnpm --filter @splitch/control-plane-api exec vitest run --config vitest.config.delivery-load.ts --maxWorkers=1
+```
+
+The three-minute run uses real local workerd alarms, migrated D1, encrypted installation secrets,
+config-version triggers, claims and acknowledgments. Env A has 1,000 Convex installations, split
+evenly between HTTP 404 and 500, with a config change every 10 seconds. Deterministic receiver
+latencies are 100 ms for 40%, 1.2 seconds for 20%, 4.8 seconds for 20%, and 5.2 seconds for 20%.
+The last group exercises the real 5-second abort signal. Env B has five HTTP-200 installations,
+30 ms receiver latency and a config change every two seconds. Only outbound receivers are faked.
+Latency is `delivered_at - created_at` from D1; trigger commit times have one-second precision.
+Every Env B delivery must complete, including intermediate versions, before results are recorded.
+Env A throughput counts callback attempts; SPL-789 deployment probes are excluded.
+
+The October 25 run after main integration and the round-3 fixes measured 180,004 ms of workload.
+All 450 Env B deliveries completed, with p50 534 ms, p99 706 ms and maximum 708 ms. Env A attempted
+138 deliveries, or 0.77 attempts per second, while receivers returned failures or timed out.
+This run includes SPL-789's post-batch deletion probes, which are excluded from delivery throughput. The healthy Environment met the p99
+10-second target. These local figures do not establish production D1 latency or capacity.

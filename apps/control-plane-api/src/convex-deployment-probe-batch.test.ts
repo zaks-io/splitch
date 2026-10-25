@@ -1,4 +1,5 @@
 import type { Repository } from "@splitch/db";
+import { coordinatorDeliveryPolicy, cronDeliveryPolicy } from "./integration-delivery-limits";
 import { afterEach, expect, it, vi } from "vitest";
 import { reprobeDormantConvexDeployments } from "./convex-deployments";
 import { encryptConvexSecret } from "./convex-secret";
@@ -8,70 +9,76 @@ const KEY = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=";
 const NOW = new Date("2026-10-25T08:00:00.000Z");
 afterEach(() => vi.useRealTimers());
 
-it("finishes slow callback 404s within their leases before running bounded slow probes", async () => {
-  const encrypted = await encryptConvexSecret("secret", KEY, "v1");
-  const deliveries = Array.from({ length: 25 }, (_, index) => ({
-    deliveryId: `delivery-${index}`,
-    installationId: `installation-${index}`,
-    callbackUrl: `https://deployment-${index}.convex.site/configuration`,
-    secretCiphertext: encrypted.ciphertext,
-    secretKeyVersion: "v1",
-    environmentVersion: 1,
-    bodyJson: "{}",
-    attemptCount: 0,
-  }));
-  const started: number[] = [];
-  const completedAtProbe: number[] = [];
-  let completed = 0;
-  let activeProbes = 0;
-  let maxProbes = 0;
-  let leaseExpiresAt = 0;
-  let firstStarted!: () => void;
-  const firstCallback = new Promise<void>((resolve) => {
-    firstStarted = resolve;
-  });
-  const repo = {
-    convex: {
-      claimDueDeliveries: async (_now: string, _owner: string, expires: string) => {
-        leaseExpiresAt = Date.parse(expires);
-        return deliveries;
+it.each([
+  ["cron", 25],
+  ["coordinator", 6],
+] as const)(
+  "%s finishes all %i callback 404s before running bounded slow probes",
+  async (mode, limit) => {
+    const encrypted = await encryptConvexSecret("secret", KEY, "v1");
+    const deliveries = Array.from({ length: limit }, (_, index) => ({
+      deliveryId: `delivery-${index}`,
+      installationId: `installation-${index}`,
+      callbackUrl: `https://deployment-${index}.convex.site/configuration`,
+      secretCiphertext: encrypted.ciphertext,
+      secretKeyVersion: "v1",
+      environmentVersion: 1,
+      bodyJson: "{}",
+      attemptCount: 0,
+    }));
+    const started: number[] = [];
+    const completedAtProbe: number[] = [];
+    let completed = 0;
+    let activeProbes = 0;
+    let maxProbes = 0;
+    let leaseExpiresAt = 0;
+    let firstStarted!: () => void;
+    const firstCallback = new Promise<void>((resolve) => {
+      firstStarted = resolve;
+    });
+    const repo = {
+      convex: {
+        claimDueDeliveries: async (_now: string, _owner: string, expires: string) => {
+          leaseExpiresAt = Date.parse(expires);
+          return deliveries;
+        },
+        finishDelivery: vi.fn(async () => {
+          completed += 1;
+          return crypto.randomUUID();
+        }),
+        markDeploymentMissing: vi.fn(),
       },
-      finishDelivery: vi.fn(async () => {
-        completed += 1;
-        return crypto.randomUUID();
-      }),
-      markDeploymentMissing: vi.fn(),
-    },
-  } as unknown as Repository;
-  vi.useFakeTimers();
-  vi.setSystemTime(NOW);
-  const sending = dispatchConvexWebhooks({
-    repo,
-    webhookKek: KEY,
-    now: () => new Date(),
-    fetcher: async (url) => {
-      if (String(url).endsWith("/configuration")) {
-        started.push(Date.now());
-        firstStarted();
-        await new Promise((resolve) => setTimeout(resolve, 4_900));
-        return new Response(null, { status: 404 });
-      }
-      completedAtProbe.push(completed);
-      activeProbes += 1;
-      maxProbes = Math.max(maxProbes, activeProbes);
-      await new Promise((resolve) => setTimeout(resolve, 5_000));
-      activeProbes -= 1;
-      throw new DOMException("timeout", "TimeoutError");
-    },
-  });
-  await firstCallback;
-  await vi.advanceTimersByTimeAsync(60_000);
-  expect(await sending).toBe(25);
-  expect(started).toHaveLength(25);
-  expect(started.every((time) => time < leaseExpiresAt)).toBe(true);
-  expect(completedAtProbe).toEqual(Array(25).fill(25));
-  expect(maxProbes).toBeLessThanOrEqual(6);
-});
+    } as unknown as Repository;
+    vi.useFakeTimers();
+    vi.setSystemTime(NOW);
+    const sending = dispatchConvexWebhooks({
+      repo,
+      webhookKek: KEY,
+      policy: mode === "cron" ? cronDeliveryPolicy("convex") : coordinatorDeliveryPolicy(),
+      fetcher: async (url) => {
+        if (String(url).endsWith("/configuration")) {
+          started.push(Date.now());
+          firstStarted();
+          await new Promise((resolve) => setTimeout(resolve, 4_900));
+          return new Response(null, { status: 404 });
+        }
+        completedAtProbe.push(completed);
+        activeProbes += 1;
+        maxProbes = Math.max(maxProbes, activeProbes);
+        await new Promise((resolve) => setTimeout(resolve, 5_000));
+        activeProbes -= 1;
+        throw new DOMException("timeout", "TimeoutError");
+      },
+    });
+    await firstCallback;
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(await sending).toBe(limit);
+    expect(started).toHaveLength(limit);
+    expect(started.every((time) => time < leaseExpiresAt)).toBe(true);
+    expect(completedAtProbe).toEqual(Array(limit).fill(limit));
+    expect(maxProbes).toBeLessThanOrEqual(6);
+  },
+);
 
 it("re-probes 100 dormant installations with at most six concurrent requests", async () => {
   const installations = Array.from({ length: 100 }, (_, index) => ({

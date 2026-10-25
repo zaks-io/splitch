@@ -3,6 +3,7 @@ import { configWebhookDeliveries } from "../schema/integrations";
 import { createDb } from "./client";
 import type { ConfigWebhookDeliveryRow } from "./convex-integrations";
 import { buildDueConvexDeliveriesQuery } from "./scheduled-due-predicates";
+import type { EnvScope } from "./scope";
 
 /**
  * Claims go to the installation that has waited longest, counting a failing installation's wait
@@ -33,10 +34,11 @@ export async function claimDueConvexDeliveries(
   leaseOwner: string,
   leaseExpiresAt: string,
   limit: number,
+  scope?: EnvScope,
 ): Promise<ConfigWebhookDeliveryRow[]> {
   if (!Number.isInteger(limit) || limit < 1)
     throw new Error("Convex delivery claim limit must be a positive integer");
-  const due = buildDueConvexDeliveriesQuery(now);
+  const due = buildDueConvexDeliveriesQuery(now, scope);
   // Start with eligible installations so blocked history cannot inflate the due-row scan.
   const db = createDb(d1);
   const [leased, claimed] = await db.batch([
@@ -69,7 +71,7 @@ export async function claimDueConvexDeliveries(
         bodyJson: sql<ConfigWebhookDeliveryRow["bodyJson"]>`delivery.body_json`,
         attemptCount: sql<ConfigWebhookDeliveryRow["attemptCount"]>`delivery.attempt_count`,
       })
-      .from(sql`config_webhook_deliveries delivery JOIN convex_installations installation
+      .from(sql`config_webhook_deliveries delivery INDEXED BY config_webhook_delivery_owner_idx JOIN convex_installations installation
           ON installation.installation_id = delivery.installation_id`)
       .where(sql`delivery.state = 'leased' AND delivery.lease_owner = ${leaseOwner}
           AND installation.status = 'active'`)
@@ -86,6 +88,21 @@ export interface ConvexDeliveryFinish {
   now: string;
   nextAttemptAt?: string;
   errorJson?: string;
+}
+
+export async function renewConvexDeliveryLease(
+  d1: D1Database,
+  deliveryId: string,
+  leaseOwner: string,
+  now: string,
+  leaseExpiresAt: string,
+): Promise<boolean> {
+  const result = await d1
+    .prepare(`UPDATE config_webhook_deliveries SET lease_expires_at = ?
+      WHERE delivery_id = ? AND state = 'leased' AND lease_owner = ? AND lease_expires_at > ?`)
+    .bind(leaseExpiresAt, deliveryId, leaseOwner, now)
+    .run();
+  return result.meta.changes === 1;
 }
 
 export async function finishConvexDelivery(

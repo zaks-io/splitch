@@ -1,3 +1,4 @@
+import { cronDeliveryPolicy } from "./integration-delivery-limits";
 import { ConvexInstallationStatusSchema } from "@splitch/contracts";
 import type { Repository } from "@splitch/db";
 import { describe, expect, it, vi } from "vitest";
@@ -33,7 +34,16 @@ describe("stored configuration callback destinations", () => {
           finishDelivery,
         },
       } as unknown as Repository;
-      await dispatchConvexWebhooks({ repo, webhookKek: KEY, fetcher, now: () => NOW });
+      await dispatchConvexWebhooks({
+        repo,
+        webhookKek: KEY,
+        fetcher,
+        policy: cronDeliveryPolicy(
+          "convex",
+          () => NOW,
+          () => NOW,
+        ),
+      });
       expect(fetcher).toHaveBeenCalledOnce();
       expect(fetcher).toHaveBeenCalledWith(
         "https://example.convex.site/integrations/splitch/configuration",

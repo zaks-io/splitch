@@ -50,7 +50,7 @@ export async function claimDueCloudflareDeliveries(
         >`installation.last_applied_version`,
         registeredAt: sql<CloudflareDeliveryRow["registeredAt"]>`installation.created_at`,
       })
-      .from(sql`cloudflare_config_deliveries delivery JOIN cloudflare_installations installation
+      .from(sql`cloudflare_config_deliveries delivery INDEXED BY cloudflare_config_delivery_owner_idx JOIN cloudflare_installations installation
           ON installation.installation_id = delivery.installation_id`)
       .where(sql`delivery.state = 'leased' AND delivery.lease_owner = ${leaseOwner}
           AND installation.status = 'active'`)
@@ -68,6 +68,21 @@ export interface CloudflareDeliveryFinish {
   appliedVersion?: number;
   nextAttemptAt?: string;
   errorJson?: string;
+}
+
+export async function renewCloudflareDeliveryLease(
+  d1: D1Database,
+  deliveryId: string,
+  leaseOwner: string,
+  now: string,
+  leaseExpiresAt: string,
+): Promise<boolean> {
+  const result = await d1
+    .prepare(`UPDATE cloudflare_config_deliveries SET lease_expires_at = ?
+      WHERE delivery_id = ? AND state = 'leased' AND lease_owner = ? AND lease_expires_at > ?`)
+    .bind(leaseExpiresAt, deliveryId, leaseOwner, now)
+    .run();
+  return result.meta.changes === 1;
 }
 
 /**

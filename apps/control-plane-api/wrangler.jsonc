@@ -77,6 +77,7 @@
   "durable_objects": {
     "bindings": [
       { "name": "CONFIG_STORE_WRITER", "class_name": "ConfigStoreDurableObject" },
+      { "name": "INTEGRATION_DELIVERY", "class_name": "IntegrationDeliveryDurableObject" },
       { "name": "CREDENTIAL_CACHE_WRITER", "class_name": "CredentialCacheWriterDurableObject" },
       { "name": "PANEL_DELEGATION_REPLAY", "class_name": "PanelDelegationReplayDurableObject" },
       { "name": "MCP_DELEGATION_REPLAY", "class_name": "McpDelegationReplayDurableObject" }
@@ -84,6 +85,7 @@
   },
   "exports": {
     "ConfigStoreDurableObject": { "type": "durable-object", "storage": "sqlite" },
+    "IntegrationDeliveryDurableObject": { "type": "durable-object", "storage": "sqlite" },
     "CredentialCacheWriterDurableObject": { "type": "durable-object", "storage": "sqlite" },
     "PanelDelegationReplayDurableObject": { "type": "durable-object", "storage": "sqlite" },
     "McpDelegationReplayDurableObject": { "type": "durable-object", "storage": "sqlite" }
@@ -98,6 +100,7 @@
   },
   "vars": {
     "SPLITCH_PLATFORM_TARGET": "local",
+    "INTEGRATION_DELIVERY_MODE": "coordinator",
     "EVALUATION_PRIVACY_SALT": "local-app-identity-reset-fixture",
     "TINYBIRD_API_URL": "http://127.0.0.1:18788",
     "CONTROL_PLANE_ORIGIN": "http://localhost:8787",
@@ -184,6 +187,7 @@
       },
       "vars": {
         "SPLITCH_PLATFORM_TARGET": "shared-preview",
+        "INTEGRATION_DELIVERY_MODE": "coordinator",
         "TINYBIRD_API_URL": "https://api.us-west-2.aws.tinybird.co",
         "AUTH_JWKS_URI": "https://auth.preview.splitch.dev/.well-known/jwks.json",
         "CONTROL_PLANE_ORIGIN": "https://api.preview.splitch.dev",
@@ -205,6 +209,7 @@
       "durable_objects": {
         "bindings": [
           { "name": "CONFIG_STORE_WRITER", "class_name": "ConfigStoreDurableObject" },
+          { "name": "INTEGRATION_DELIVERY", "class_name": "IntegrationDeliveryDurableObject" },
           { "name": "CREDENTIAL_CACHE_WRITER", "class_name": "CredentialCacheWriterDurableObject" },
           {
             "name": "PANEL_DELEGATION_REPLAY",
@@ -278,6 +283,7 @@
       },
       "vars": {
         "SPLITCH_PLATFORM_TARGET": "production",
+        "INTEGRATION_DELIVERY_MODE": "cron",
         "TINYBIRD_API_URL": "https://api.us-west-2.aws.tinybird.co",
         "AUTH_JWKS_URI": "https://auth.splitch.dev/.well-known/jwks.json",
         "CONTROL_PLANE_ORIGIN": "https://api.splitch.dev",
@@ -306,6 +312,7 @@
       "durable_objects": {
         "bindings": [
           { "name": "CONFIG_STORE_WRITER", "class_name": "ConfigStoreDurableObject" },
+          { "name": "INTEGRATION_DELIVERY", "class_name": "IntegrationDeliveryDurableObject" },
           { "name": "CREDENTIAL_CACHE_WRITER", "class_name": "CredentialCacheWriterDurableObject" },
           {
             "name": "PANEL_DELEGATION_REPLAY",

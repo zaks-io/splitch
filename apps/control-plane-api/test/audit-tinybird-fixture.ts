@@ -59,6 +59,7 @@ export function makeAuditTinybirdReader(input: {
   const env = {
     DB: bindings.d1,
     SESSION_STORE: bindings.kv,
+    INTEGRATION_DELIVERY_MODE: "cron",
     SPLITCH_PLATFORM_TARGET: "local",
     TINYBIRD_API_URL: apiUrl,
     TINYBIRD_APPROVAL_ARCHIVE_WRITE_TOKEN: token,

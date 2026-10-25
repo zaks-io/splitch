@@ -142,6 +142,9 @@ export const configWebhookDeliveries = sqliteTable(
     index("config_webhook_delivery_outstanding_idx")
       .on(table.installationId, table.environmentVersion)
       .where(sql`${table.state} IN ('pending', 'leased')`),
+    index("config_webhook_delivery_owner_idx")
+      .on(table.leaseOwner)
+      .where(sql`${table.state} = 'leased'`),
     index("config_webhook_delivery_expiry_idx").on(table.state, table.leaseExpiresAt),
     index("config_webhook_delivery_installation_lease_idx").on(
       table.installationId,
@@ -223,6 +226,25 @@ export const cloudflareConfigDeliveries = sqliteTable(
     uniqueIndex("cloudflare_config_delivery_installation_version_unique").on(
       table.installationId,
       table.environmentVersion,
+    ),
+    index("cloudflare_config_delivery_outstanding_idx")
+      .on(table.installationId, table.environmentVersion)
+      .where(sql`${table.state} IN ('pending', 'leased')`),
+    index("cloudflare_config_delivery_owner_idx")
+      .on(table.leaseOwner)
+      .where(sql`${table.state} = 'leased'`),
+    index("cloudflare_config_delivery_env_due_idx").on(
+      table.appId,
+      table.environmentId,
+      table.state,
+      table.nextAttemptAt,
+      table.leaseExpiresAt,
+    ),
+    index("cloudflare_config_delivery_env_expiry_idx").on(
+      table.appId,
+      table.environmentId,
+      table.state,
+      table.leaseExpiresAt,
     ),
     index("cloudflare_config_delivery_app_due_idx").on(
       table.appId,

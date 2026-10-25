@@ -40,3 +40,13 @@ function requiredPanelDelegationSecret(env: ControlPlaneApiEnv): string {
   if (env.CONTROL_PANEL_DELEGATION_SECRET) return env.CONTROL_PANEL_DELEGATION_SECRET;
   throw new Error("control-plane-api: CONTROL_PANEL_DELEGATION_SECRET is required");
 }
+
+export function integrationDeliveryMode(
+  env: Pick<ControlPlaneApiEnv, "INTEGRATION_DELIVERY_MODE">,
+): "coordinator" | "cron" {
+  const mode = env.INTEGRATION_DELIVERY_MODE;
+  if (mode !== "coordinator" && mode !== "cron") {
+    throw new Error("control-plane-api: INTEGRATION_DELIVERY_MODE must be coordinator or cron");
+  }
+  return mode;
+}

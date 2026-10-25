@@ -1,5 +1,5 @@
 import { boundListRead, LIST_READ_LIMIT } from "@splitch/contracts";
-import type { Repository } from "@splitch/db";
+import type { EnvScope, Repository } from "@splitch/db";
 import type { HandlerArgs, RouteHandler } from "@splitch/worker-runtime";
 import { renderError } from "@splitch/worker-runtime";
 import { requireAppAdmin } from "./app-authz";
@@ -15,6 +15,7 @@ import { pathParam } from "./handler-input";
 
 export interface ConvexHandlerDeps {
   repo: Repository;
+  wakeDelivery?: (scope: EnvScope) => void;
   webhookKek?: string;
   webhookKeyVersion?: string;
   now?: () => Date;
@@ -89,6 +90,7 @@ export function makeConvexHandlers(deps: ConvexHandlerDeps) {
             { requestId },
           );
         }
+        deps.wakeDelivery?.(scope);
         return Response.json({
           installationId: existing.installationId,
           rotationId: input.body.rotationId,
@@ -103,6 +105,7 @@ export function makeConvexHandlers(deps: ConvexHandlerDeps) {
         now: now().toISOString(),
       });
       if (!rotated) return notFound(requestId);
+      deps.wakeDelivery?.(scope);
       return Response.json({
         installationId: rotated.installationId,
         rotationId: input.body.rotationId,

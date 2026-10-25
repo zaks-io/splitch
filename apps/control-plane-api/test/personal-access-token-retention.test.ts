@@ -104,6 +104,7 @@ async function scheduledRetention(now: number): Promise<void> {
         delete: () => Promise.resolve(),
         list: () => Promise.resolve({ objects: [], truncated: false, delimitedPrefixes: [] }),
       },
+      INTEGRATION_DELIVERY_MODE: "cron",
       SPLITCH_PLATFORM_TARGET: "local",
     } as unknown as ControlPlaneApiEnv,
     {

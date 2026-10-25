@@ -1,3 +1,4 @@
+import { cronDeliveryPolicy } from "./integration-delivery-limits";
 import { createRepository, type ScheduledDueWork } from "@splitch/db";
 import {
   createWorkerFaultReporter,
@@ -9,6 +10,7 @@ import { runApprovalRequestArchival } from "./approval-archive";
 import { approvalArchiveStoreFromEnv } from "./approval-archive-tinybird";
 import { forwardAuditEvents } from "./audit-events";
 import { dispatchCloudflarePushes } from "./cloudflare-push-dispatch";
+import { integrationDeliveryMode } from "./control-plane-runtime-config";
 import { runConvexDeploymentReprobes } from "./convex-deployments-scheduled";
 import { dispatchConvexWebhooks } from "./convex-webhook-dispatch";
 import { runIntegrationDeliveryLag } from "./integration-delivery-lag";
@@ -16,6 +18,7 @@ import { runDeliveryRetention } from "./delivery-retention";
 import { purgeExpiredPrivacyArtifacts, reconcilePrivacyJobs } from "./entity-privacy-jobs";
 import type { ControlPlaneApiEnv } from "./env";
 import { FLAG_CHANGE_LOG_RETENTION_MS } from "./flag-change-log-retention";
+import { runIntegrationDeliverySweep } from "./integration-delivery-sweep";
 import { runPersonalAccessTokenRetention } from "./personal-access-token-rotation";
 import { deleteOrphanedPrivacyExports } from "./privacy-export-cleanup";
 import { scheduledDueWork } from "./scheduled-due-work";
@@ -29,6 +32,7 @@ export function runControlPlaneScheduled(
   env: ControlPlaneApiEnv,
   ctx: ExecutionContext,
 ): void {
+  const mode = integrationDeliveryMode(env);
   const dueWork = scheduledDueWork(env, event, ctx);
   const runIfDue = (job: keyof ScheduledDueWork, run: () => Promise<unknown>) =>
     ctx.waitUntil(dueWork.then((due) => (due[job] ? run() : undefined)));
@@ -37,18 +41,19 @@ export function runControlPlaneScheduled(
     purgeExpiredPrivacyArtifacts(env, new Date(event.scheduledTime)),
   );
   runIfDue("personalAccessTokenRetention", () => runPersonalAccessTokenRetentionJob(env, event));
-  // Integration delivery belongs to the minute cron alone. Running it on every
-  // tick would fire a second concurrent dispatch at 08:00, when both crons
-  // land: the Convex and Cloudflare paths lease their deliveries and would
-  // survive it, but the Sentry cursor has no lease to protect it.
+  // At 08:00 both crons fire; Sentry has no lease against overlapping dispatch.
   if (event.cron !== "0 8 * * *") {
     ctx.waitUntil(runIntegrationDeliveryLag(env, event, ctx));
     runIfDue("temporaryEnvironmentTeardown", () =>
       runTemporaryEnvironmentTeardown(env, event, ctx),
     );
     runIfDue("auditEventForwarding", () => runAuditEventForwarding(env, event, ctx));
-    runIfDue("convexWebhookDispatch", () => runConvexWebhookDispatch(env, event, ctx));
-    runIfDue("cloudflarePushDispatch", () => runCloudflarePushDispatch(env, event, ctx));
+    if (mode === "coordinator") {
+      ctx.waitUntil(runIntegrationDeliverySweep(env, event, ctx));
+    } else {
+      runIfDue("convexWebhookDispatch", () => runConvexWebhookDispatch(env, event, ctx));
+      runIfDue("cloudflarePushDispatch", () => runCloudflarePushDispatch(env, event, ctx));
+    }
     runIfDue("sentryWebhookDispatch", () => runSentryWebhookDispatch(env, event, ctx));
     return;
   }
@@ -119,10 +124,10 @@ async function runCloudflarePushDispatch(
 ): Promise<void> {
   try {
     const dispatched = await dispatchCloudflarePushes({
+      policy: cronDeliveryPolicy("cloudflare", () => new Date(event.scheduledTime)),
       repo: createRepository(env.DB),
       secretKek: env.INTEGRATION_SECRET_KEK,
       secretKeyVersion: env.INTEGRATION_SECRET_KEY_VERSION,
-      now: () => new Date(event.scheduledTime),
     });
     workerEmitter(env, workerObservabilityWithWaitUntil("control-plane-api", ctx)).log(
       "info",
@@ -205,10 +210,10 @@ async function runConvexWebhookDispatch(
   ctx: Pick<ExecutionContext, "waitUntil">,
 ): Promise<void> {
   const dispatched = await dispatchConvexWebhooks({
+    policy: cronDeliveryPolicy("convex", () => new Date(event.scheduledTime)),
     repo: createRepository(env.DB),
     webhookKek: env.CONVEX_WEBHOOK_KEK,
     webhookKeyVersion: env.CONVEX_WEBHOOK_KEY_VERSION,
-    now: () => new Date(event.scheduledTime),
     onDispatch: (summary) =>
       workerEmitter(env, workerObservabilityWithWaitUntil("control-plane-api", ctx)).log(
         "info",
