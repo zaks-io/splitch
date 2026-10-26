@@ -50,18 +50,22 @@ it.each(PROBE_CASES)("does not flag $name before it is due", async ({ seed }) =>
   await seed(local.d1, false);
   expect(await scheduledDueWork(env, event, ctx)).toEqual(idle);
 });
-it("runs only the due probe and two lag reads on an idle minute tick", async () => {
-  const batch = vi.spyOn(local.d1, "batch");
-  const prepare = vi.spyOn(local.d1, "prepare");
-  const pending: Promise<unknown>[] = [];
-  runControlPlaneScheduled(event, env, {
-    waitUntil: (promise) => pending.push(promise),
-  } as unknown as ExecutionContext);
-  await Promise.all(pending);
-  expect(batch).toHaveBeenCalledTimes(1);
-  expect(prepare).toHaveBeenCalledTimes(12);
-  expect(batch.mock.calls[0]?.[0]).toHaveLength(10);
-});
+it.each(["cron", "coordinator"] as const)(
+  "uses one D1 batch on an idle %s minute tick",
+  async (mode) => {
+    env.INTEGRATION_DELIVERY_MODE = mode;
+    const batch = vi.spyOn(local.d1, "batch");
+    const prepare = vi.spyOn(local.d1, "prepare");
+    const pending: Promise<unknown>[] = [];
+    runControlPlaneScheduled(event, env, {
+      waitUntil: (promise) => pending.push(promise),
+    } as unknown as ExecutionContext);
+    await Promise.all(pending);
+    expect(batch).toHaveBeenCalledTimes(1);
+    expect(prepare).toHaveBeenCalledTimes(mode === "coordinator" ? 12 : 13);
+    expect(batch.mock.calls[0]?.[0]).toHaveLength(mode === "coordinator" ? 11 : 12);
+  },
+);
 it("keeps referenced step-up uses until their rotation can be removed", async () => {
   await insertProbeRow(local.d1, "personal_access_token_step_up_uses", {
     jti: "use_probe",
@@ -177,9 +181,15 @@ it("cleans terminal PAT rotations through a real minute tick", async () => {
   ).toBeNull();
 });
 
-it.each(["convex", "cloudflare"] as const)(
-  "reports real D1 %s lag while an unexpired lease keeps dispatch idle",
-  async (provider) => {
+it.each([
+  ["convex", "cron"],
+  ["cloudflare", "cron"],
+  ["convex", "coordinator"],
+  ["cloudflare", "coordinator"],
+] as const)(
+  "reports real D1 %s lag in %s mode while an unexpired lease keeps dispatch idle",
+  async (provider, mode) => {
+    env.INTEGRATION_DELIVERY_MODE = mode;
     await delivery(local.d1, provider, false, true);
     const table =
       provider === "convex" ? "config_webhook_deliveries" : "cloudflare_config_deliveries";
