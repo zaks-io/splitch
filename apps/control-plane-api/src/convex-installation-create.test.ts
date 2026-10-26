@@ -156,7 +156,7 @@ describe("installation retries and old components", () => {
     expect(reactivateDeployment).not.toHaveBeenCalled();
   });
 
-  it("rejects changed registration content before a challenge", async () => {
+  it("rejects changed registration content before a challenge or deployment check", async () => {
     const fixture = setup(await stored("active"));
     const fetcher = vi.fn();
     const response = await fixture
@@ -165,6 +165,7 @@ describe("installation retries and old components", () => {
     expect(response.status).toBe(409);
     expect(fetcher).not.toHaveBeenCalled();
     expect(fixture.createInstallation).not.toHaveBeenCalled();
+    expect(fixture.repo.convex.recordDeploymentCheck).not.toHaveBeenCalled();
   });
 
   it("checks the winning insert after concurrent different registration content", async () => {
