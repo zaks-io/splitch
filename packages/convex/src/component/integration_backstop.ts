@@ -56,7 +56,7 @@ export async function cancelSyncBackstop(ctx: MutationCtx, integration: Doc<"int
 }
 
 async function scheduleNext(ctx: MutationCtx, integration: Doc<"integrations">) {
-  // Jitter the backstop interval directly, capped at ten minutes.
+  // The cap keeps the documented promise that checks run at most ten minutes apart.
   const delay = Math.min(
     SYNC_BACKSTOP_INTERVAL_MS,
     deterministicJitter(SYNC_BACKSTOP_INTERVAL_MS, `${integration.installationId}:${Date.now()}`),
