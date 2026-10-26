@@ -1,4 +1,5 @@
 import { envScope, type Repository } from "@splitch/db";
+import { type createWorkerFaultReporter, serializeFault } from "@splitch/observability/worker";
 import { type RouteHandler, renderError } from "@splitch/worker-runtime";
 import { requireAppAdmin } from "./app-authz";
 import { appNotFound } from "./app-environment-model";
@@ -15,6 +16,7 @@ export type IntegrationDeliveryAccess = Pick<
 export function makeIntegrationDeliveryHandler(deps: {
   repo: Repository;
   delivery?: IntegrationDeliveryAccess;
+  onFault?: ReturnType<typeof createWorkerFaultReporter>;
   nowMs?: () => number;
 }): RouteHandler<{ params: { appId: string; environmentId: string } }> {
   return async ({ input, principal, requestId }) => {
@@ -22,7 +24,7 @@ export function makeIntegrationDeliveryHandler(deps: {
     if (denied) return denied;
     const scope = envScope(input.params.appId, input.params.environmentId);
     if (!(await environmentExists(deps, scope))) return appNotFound(requestId);
-    const wake = await requestWake(deps.delivery, scope, requestId);
+    const wake = await requestWake(deps.delivery, scope, requestId, deps.onFault);
     if (wake instanceof Response) return wake;
     const providers = await deps.repo.integrationDeliverySchedule.outstandingSummary(
       scope,
@@ -40,13 +42,20 @@ async function requestWake(
   delivery: IntegrationDeliveryAccess | undefined,
   scope: ReturnType<typeof envScope>,
   requestId: string,
+  onFault: ReturnType<typeof createWorkerFaultReporter> | undefined,
 ): Promise<"scheduled" | "cron_noop" | Response> {
   if (!delivery) return unavailable(requestId);
   if (integrationDeliveryMode(delivery) === "cron") return "cron_noop";
   try {
     await wakeIntegrationDelivery(delivery, [scope]);
     return "scheduled";
-  } catch {
+  } catch (error) {
+    onFault?.("integration_delivery_wake_failed", {
+      appId: scope.appId,
+      environmentId: scope.environmentId,
+      requestId,
+      fault: serializeFault(error),
+    });
     return unavailable(requestId);
   }
 }

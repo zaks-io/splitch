@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import { cloudflareConfigDeliveries } from "../schema/integrations";
 import { createDb } from "./client";
 import type { CloudflareDeliveryRow } from "./cloudflare-integrations";
+import { renewDeliveryLease } from "./delivery-lease";
 import { buildDueCloudflareDeliveriesQuery } from "./scheduled-due-predicates";
 import type { EnvScope, TenantScope } from "./scope";
 import { assertMintedScope } from "./scope";
@@ -77,12 +78,14 @@ export async function renewCloudflareDeliveryLease(
   now: string,
   leaseExpiresAt: string,
 ): Promise<boolean> {
-  const result = await d1
-    .prepare(`UPDATE cloudflare_config_deliveries SET lease_expires_at = ?
-      WHERE delivery_id = ? AND state = 'leased' AND lease_owner = ? AND lease_expires_at > ?`)
-    .bind(leaseExpiresAt, deliveryId, leaseOwner, now)
-    .run();
-  return result.meta.changes === 1;
+  return renewDeliveryLease(
+    d1,
+    cloudflareConfigDeliveries,
+    deliveryId,
+    leaseOwner,
+    now,
+    leaseExpiresAt,
+  );
 }
 
 /**

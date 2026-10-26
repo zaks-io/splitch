@@ -37,7 +37,7 @@ export function makeConvexDeploymentRepo(d1: D1Database) {
         throw new Error("Convex deployment probe limit must be a positive integer");
       const rows = await d1
         .prepare(`SELECT installation_id AS installationId,
-          app_id AS appId, environment_id AS environmentId, callback_url AS callbackUrl
+          app_id AS appId, environment_id AS environmentId
         FROM convex_installations
         WHERE status = 'active' AND deployment_missing_at IS NOT NULL
         ORDER BY deployment_checked_at, installation_id LIMIT ?`)
@@ -46,7 +46,6 @@ export function makeConvexDeploymentRepo(d1: D1Database) {
           installationId: string;
           appId: string;
           environmentId: string;
-          callbackUrl: string;
         }>();
       return rows.results;
     },

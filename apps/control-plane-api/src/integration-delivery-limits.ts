@@ -1,9 +1,10 @@
-export const DELIVERY_SEND_CONCURRENCY = 6;
-export const DELIVERY_BATCH_SIZE = 6;
+const DELIVERY_SEND_CONCURRENCY = 6;
+const DELIVERY_BATCH_SIZE = 6;
+const CRON_DELIVERY_BATCH_SIZE = 25;
 export const DELIVERY_SEND_TIMEOUT_MS = 5_000;
-export const DELIVERY_PREPARATION_BUDGET_MS = 5_000;
+const DELIVERY_PREPARATION_BUDGET_MS = 5_000;
 export const DELIVERY_COMPLETION_BUDGET_MS = 10_000;
-export const DELIVERY_LEASE_MS = 30_000;
+const DELIVERY_LEASE_MS = 30_000;
 // Count actual D1 calls and HTTP requests. Stop claiming at half the default limit,
 // leaving room for the six in-flight rows, snapshot reads, renewals, completions,
 // deletion probes, scheduling and fault reporting.
@@ -38,10 +39,10 @@ export function cronDeliveryPolicy(
   leaseNow = () => new Date(),
 ): IntegrationDeliveryDispatchPolicy {
   return {
-    claimLimit: 25,
-    concurrency: 25,
-    sendTimeoutMs: provider === "convex" ? 5_000 : null,
-    leaseMs: 30_000,
+    claimLimit: CRON_DELIVERY_BATCH_SIZE,
+    concurrency: CRON_DELIVERY_BATCH_SIZE,
+    sendTimeoutMs: provider === "convex" ? DELIVERY_SEND_TIMEOUT_MS : null,
+    leaseMs: DELIVERY_LEASE_MS,
     clock: { now, outcomeTime: (claimedAt) => claimedAt, leaseTime: leaseNow },
   };
 }

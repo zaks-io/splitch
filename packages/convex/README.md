@@ -212,7 +212,7 @@ schedule one installation-scoped batch drainer, which stops once the work is com
 claims and terminal Exposure rows share one scheduled cleanup job set for the earliest expiry.
 
 Starting with 0.4.0, activation also maintains one durable configuration backstop chain per
-deployment. Every eight to ten minutes, capped at ten minutes, it makes a conditional version
+installed component instance. Every eight to ten minutes, it makes a conditional version
 check and downloads a snapshot only when the Environment has changed. Equal versions return
 `304` without constructing or downloading a snapshot. The next tick is committed before the
 network action, so a failed check does not stop later checks. This uses `ctx.scheduler`, not a

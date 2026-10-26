@@ -8,9 +8,13 @@ export function isRetryableHttpStatus(status: number): boolean {
 export function deliveryRetryDelay(deliveryId: string, attempt: number): number {
   const delays = [1_000, 5_000, 30_000, 120_000, 600_000, 1_800_000];
   const base = delays[Math.min(Math.max(attempt - 1, 0), delays.length - 1)] ?? 1_800_000;
-  const seed = [...`${deliveryId}:${attempt}`].reduce(
+  return deterministicJitter(base, `${deliveryId}:${attempt}`);
+}
+
+export function deterministicJitter(baseDelayMs: number, seed: string): number {
+  const hash = [...seed].reduce(
     (value, character) => (value * 31 + character.charCodeAt(0)) >>> 0,
     0,
   );
-  return Math.round(base * (0.8 + (seed / 0xffffffff) * 0.4));
+  return Math.round(baseDelayMs * (0.8 + (hash / 0xffffffff) * 0.4));
 }

@@ -31,15 +31,9 @@ export function makeConvexInstallationCreateHandler(
       deps.webhookKeyVersion,
     );
     const existing = await deps.repo.convex.getInstallation(scope, input.body.installationId);
-    const conflict = installationConflict(existing, input.body, encrypted.fingerprint, requestId);
-    if (conflict) return conflict;
-    const verificationError = await verifyNewInstallation(
-      existing,
-      input.body,
-      deps,
-      now(),
-      requestId,
-    );
+    const verificationError = existing
+      ? null
+      : await validateReceiver(null, input.body, deps, now(), requestId);
     if (verificationError) return verificationError;
     const row =
       existing ??
@@ -120,17 +114,6 @@ function installationConflict(
     },
     { requestId },
   );
-}
-
-async function verifyNewInstallation(
-  existing: ConvexInstallationRow | null,
-  input: ConvexInstallationCreateInput["body"],
-  deps: ConvexHandlerDeps,
-  now: Date,
-  requestId: string,
-) {
-  if (existing) return null;
-  return validateReceiver(null, input, deps, now, requestId);
 }
 
 async function validateReceiver(

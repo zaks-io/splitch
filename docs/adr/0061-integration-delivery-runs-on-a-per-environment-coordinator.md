@@ -31,7 +31,10 @@ pushes.
   nothing itself, so the sweep cannot be monopolized.
 - **Mode switch.** `INTEGRATION_DELIVERY_MODE` is `coordinator` or `cron` and is required in every
   Wrangler environment. `cron` restores the global dispatcher and the App-scoped immediate
-  Cloudflare dispatch. Both modes use the same leases, so a switch cannot deliver a row twice.
+  Cloudflare dispatch. Both modes share D1 leases, which exclude concurrent claims of an unexpired
+  leased row. Delivery remains at-least-once, including across a mode switch. Duplicate Convex
+  nudges are harmless because they carry only a version and the component version-gates sync
+  ([ADR-0049](./0049-convex-local-evaluation-uses-nudge-pull-sync-and-transactional-exposure-delivery.md)).
 - **Delivery-lag objective.** A healthy installation receives each committed version within 10
   seconds at p99 and 60 seconds at worst, whatever happens in other Environments. The minute job
   reports a fault when a healthy installation's oldest outstanding delivery is older than 5

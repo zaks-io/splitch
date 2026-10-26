@@ -1,8 +1,9 @@
 import { internal } from "./_generated/api";
 import type { Doc } from "./_generated/dataModel";
 import type { ActionCtx, MutationCtx } from "./_generated/server";
-import { deliveryRetryDelay } from "./delivery_policy";
+import { deterministicJitter } from "./delivery_policy";
 import { syncHandler } from "./integration_remote";
+import { currentIntegration } from "./integration_state";
 
 export const SYNC_BACKSTOP_INTERVAL_MS = 600_000;
 
@@ -55,10 +56,10 @@ export async function cancelSyncBackstop(ctx: MutationCtx, integration: Doc<"int
 }
 
 async function scheduleNext(ctx: MutationCtx, integration: Doc<"integrations">) {
-  // Reuse delivery jitter, capped at ten minutes so the backstop has a bounded interval.
+  // Jitter the backstop interval directly, capped at ten minutes.
   const delay = Math.min(
     SYNC_BACKSTOP_INTERVAL_MS,
-    deliveryRetryDelay(`${integration.installationId}:${Date.now()}`, 5),
+    deterministicJitter(SYNC_BACKSTOP_INTERVAL_MS, `${integration.installationId}:${Date.now()}`),
   );
   const dueAt = Date.now() + delay;
   const jobId = await ctx.scheduler.runAfter(delay, internal.integration.syncBackstop, {
@@ -66,11 +67,4 @@ async function scheduleNext(ctx: MutationCtx, integration: Doc<"integrations">) 
     dueAt,
   });
   await ctx.db.patch(integration._id, { syncBackstopJobId: jobId, syncBackstopDueAt: dueAt });
-}
-
-function currentIntegration(ctx: MutationCtx) {
-  return ctx.db
-    .query("integrations")
-    .withIndex("by_key", (q) => q.eq("key", "current"))
-    .unique();
 }

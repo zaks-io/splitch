@@ -10,8 +10,8 @@ import {
   probeMissingConvexDeployments,
 } from "./convex-deployments";
 import { decryptConvexSecret, signConvexWebhook } from "./convex-secret";
-import type { IntegrationDeliveryDispatchPolicy } from "./integration-delivery-limits";
 import { renewDeliveryLeaseBeforeSend } from "./integration-delivery-lease";
+import type { IntegrationDeliveryDispatchPolicy } from "./integration-delivery-limits";
 import { validateIntegrationSecretKey } from "./integration-secret";
 import { retryDelayMs, type WebhookPost } from "./webhook-transport";
 
@@ -24,6 +24,17 @@ export interface ConvexDispatchSummary {
   transportFailures: number;
   preparationFailedInstallations: number;
   skippedLeaseLost: number;
+}
+
+export function emptyConvexDispatchSummary(): ConvexDispatchSummary {
+  return {
+    claimed: 0,
+    received2xx: 0,
+    receiverRejected: 0,
+    transportFailures: 0,
+    preparationFailedInstallations: 0,
+    skippedLeaseLost: 0,
+  };
 }
 
 export interface ConvexWebhookDispatchDeps {
@@ -52,14 +63,7 @@ export async function dispatchConvexWebhooks(deps: ConvexWebhookDispatchDeps): P
 
   const secrets = new Map<string, Promise<string>>();
   const failures = new Map<string, Promise<void>>();
-  const summary: ConvexDispatchSummary = {
-    claimed: deliveries.length,
-    received2xx: 0,
-    receiverRejected: 0,
-    transportFailures: 0,
-    preparationFailedInstallations: 0,
-    skippedLeaseLost: 0,
-  };
+  const summary = { ...emptyConvexDispatchSummary(), claimed: deliveries.length };
   const settled = await mapWithConcurrency(deliveries, deps.policy.concurrency, (delivery) =>
     deliverSafely(
       deps,

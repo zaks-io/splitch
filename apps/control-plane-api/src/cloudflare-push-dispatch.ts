@@ -25,6 +25,17 @@ export interface CloudflareDispatchSummary {
   skippedLeaseLost: number;
 }
 
+export function emptyCloudflareDispatchSummary(): CloudflareDispatchSummary {
+  return {
+    claimed: 0,
+    received2xx: 0,
+    receiverRejected: 0,
+    transportFailures: 0,
+    preparationFailures: 0,
+    skippedLeaseLost: 0,
+  };
+}
+
 export interface CloudflarePushDispatchDeps {
   repo: Repository;
   secretKek?: string;
@@ -49,14 +60,7 @@ export async function dispatchCloudflarePushes(deps: CloudflarePushDispatchDeps)
     deps.scope,
   );
   const snapshots = new Map<string, ReturnType<typeof buildStableSnapshot>>();
-  const summary: CloudflareDispatchSummary = {
-    claimed: deliveries.length,
-    received2xx: 0,
-    receiverRejected: 0,
-    transportFailures: 0,
-    preparationFailures: 0,
-    skippedLeaseLost: 0,
-  };
+  const summary = { ...emptyCloudflareDispatchSummary(), claimed: deliveries.length };
   const settled = await mapWithConcurrency(deliveries, deps.policy.concurrency, (delivery) =>
     deliverSafely(deps, { ...delivery, leaseExpiresAt }, leaseOwner, now, snapshots, summary).then(
       () => ({ status: "fulfilled" as const }),

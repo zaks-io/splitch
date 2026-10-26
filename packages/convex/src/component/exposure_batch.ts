@@ -9,6 +9,7 @@ import {
   isRetryableHttpStatus,
 } from "./delivery_policy";
 import { commitTimestampIso, makeExposureTerminal } from "./exposure_delivery_state";
+import { currentIntegration } from "./integration_state";
 
 export const EXPOSURE_BATCH_MAX_ITEMS = 25;
 export const EXPOSURE_BATCH_MAX_BODY_BYTES = 32 * 1024;
@@ -276,11 +277,4 @@ function resultFor(
     outcome: result.retryable ? "retry" : "terminal",
     error: "Exposure delivery was rejected",
   };
-}
-
-async function currentIntegration(ctx: MutationCtx) {
-  return ctx.db
-    .query("integrations")
-    .withIndex("by_key", (q) => q.eq("key", "current"))
-    .unique();
 }
