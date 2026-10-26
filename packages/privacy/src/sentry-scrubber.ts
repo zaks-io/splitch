@@ -183,6 +183,7 @@ function scrubSpanAttribute(
   isHttpClient: boolean,
   options: ScrubOptions,
 ): unknown {
+  if (key === "sentry.link.type") return value === "previous_trace" ? value : REDACTED;
   if (key === "mcp.client.name") return isCanonicalMcpClientName(value) ? value : "other";
   if (ALLOWED_SPAN_ATTRIBUTE_KEYS.has(key)) return value;
   if (key === "sentry.segment.name") return isHttpClient ? REDACTED : scrubValue(value, options);
@@ -190,6 +191,27 @@ function scrubSpanAttribute(
   // several evolving attribute names. Fail closed for every attribute that
   // has not been explicitly vouched for above.
   return REDACTED;
+}
+
+function scrubSpanLinks(links: unknown, options: ScrubOptions): unknown {
+  if (!Array.isArray(links)) return scrubValue(links, options);
+  return links.map((link: unknown) => {
+    if (typeof link !== "object" || link === null || Array.isArray(link)) {
+      return scrubValue(link, options);
+    }
+    const output: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(link)) {
+      output[key] = scrubSpanLinkField(key, value, options);
+    }
+    return output;
+  });
+}
+
+function scrubSpanLinkField(key: string, value: unknown, options: ScrubOptions): unknown {
+  // Link identity is protocol data, just like the root span's identity.
+  if (key === "trace_id" || key === "span_id" || key === "sampled") return value;
+  if (key === "attributes") return scrubSpanAttributes(value, options);
+  return scrubValue(value, options);
 }
 
 /**
@@ -216,6 +238,7 @@ function scrubSpanField(
 ): unknown {
   if (ALLOWED_SPAN_KEYS.has(key)) return value;
   if (key === "attributes" || key === "data") return scrubSpanAttributes(value, options);
+  if (key === "links") return scrubSpanLinks(value, options);
   const op = (span.attributes as Record<string, unknown> | undefined)?.["sentry.op"] ?? span.op;
   if ((key === "name" || key === "description") && op === "http.client") return REDACTED;
   return scrubValue(value, options);
