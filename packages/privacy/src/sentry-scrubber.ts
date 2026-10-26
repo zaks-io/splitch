@@ -199,19 +199,32 @@ function scrubSpanLinks(links: unknown, options: ScrubOptions): unknown {
     if (typeof link !== "object" || link === null || Array.isArray(link)) {
       return scrubValue(link, options);
     }
-    const output: Record<string, unknown> = {};
+    const output = scrubValue(link, options) as Record<string, unknown>;
     for (const [key, value] of Object.entries(link)) {
-      output[key] = scrubSpanLinkField(key, value, options);
+      output[key] = scrubSpanLinkField(key, value, output[key], options);
     }
     return output;
   });
 }
 
-function scrubSpanLinkField(key: string, value: unknown, options: ScrubOptions): unknown {
-  // Link identity is protocol data, just like the root span's identity.
-  if (key === "trace_id" || key === "span_id" || key === "sampled") return value;
-  if (key === "attributes") return scrubSpanAttributes(value, options);
-  return scrubValue(value, options);
+function scrubSpanLinkField(
+  key: string,
+  original: unknown,
+  scrubbed: unknown,
+  options: ScrubOptions,
+): unknown {
+  // Restore only validated protocol fields after the generic scrub pass.
+  if (key === "trace_id" || key === "span_id") {
+    return scrubSpanLinkId(key, original);
+  }
+  if (key === "sampled") return typeof original === "boolean" ? original : REDACTED;
+  if (key === "attributes") return scrubSpanAttributes(scrubbed, options);
+  return scrubbed;
+}
+
+function scrubSpanLinkId(key: string, value: unknown): unknown {
+  const shape = key === "trace_id" ? /^[a-f\d]{32}$/i : /^[a-f\d]{16}$/i;
+  return typeof value === "string" && shape.test(value) ? value : REDACTED;
 }
 
 /**

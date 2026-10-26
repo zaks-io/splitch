@@ -69,6 +69,40 @@ describe("Sentry span links", () => {
     expect(scrubSentrySpan({ links: [] }).links).toEqual([]);
   });
 
+  it.each(["private@example.com", { email: "private@example.com" }, ["private@example.com"]])(
+    "redacts malformed identity fields: %j",
+    (value) => {
+      expect(
+        scrubSentrySpan({ links: [{ trace_id: value, span_id: value, sampled: value }] }).links,
+      ).toEqual([{ trace_id: "[Redacted]", span_id: "[Redacted]", sampled: "[Redacted]" }]);
+    },
+  );
+
+  it("retains key and value scrubbing for allowed attributes and unknown link fields", () => {
+    const link = {
+      attributes: {
+        "http.response.status_code": "private@example.com",
+        "sentry.status.message": "private@example.com",
+        "db.system": { targetingKey: "ordinary-private-value" },
+      },
+      targetingKey: "ordinary-private-value",
+      authorization: "ordinary-private-value",
+      evaluationContext: { private: "ordinary-private-value" },
+    };
+    expect(scrubSentrySpan({ links: [link] }).links).toEqual([
+      {
+        attributes: {
+          "http.response.status_code": "[Redacted]",
+          "sentry.status.message": "[Redacted]",
+          "db.system": { targetingKey: "[Redacted]" },
+        },
+        targetingKey: "[Redacted]",
+        authorization: "[Redacted]",
+        evaluationContext: "[Redacted]",
+      },
+    ]);
+  });
+
   it.each([null, "private@example.com", ["private@example.com", null]])(
     "scrubs malformed links: %j",
     (links) => {

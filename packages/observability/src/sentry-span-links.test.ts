@@ -2,19 +2,19 @@ import { expect, it } from "vitest";
 import { loadSentry } from "./sentry-module.js";
 import { workerSentryOptions } from "./worker.js";
 
-it("serializes streamed span-v2 links with intact IDs and scrubbed typed attributes", async () => {
+it.each([false, true])("serializes private span-v2 links with malformed=%s", async (malformed) => {
   const Sentry = await loadSentry();
   Sentry.setAsyncLocalStorageAsyncContextStrategy();
   const bodies: string[] = [];
   const links = [1, 0].map((traceFlags) => ({
     context: {
-      traceId: "123456789abcdef0123456789abcdef0",
-      spanId: "123456789abcdef0",
+      traceId: malformed ? "private@example.com" : "123456789abcdef0123456789abcdef0",
+      spanId: malformed ? "private@example.com" : "123456789abcdef0",
       traceFlags,
     },
     attributes: {
       "sentry.link.type": "previous_trace",
-      "http.response.status_code": 200,
+      "http.response.status_code": malformed ? "private@example.com" : 200,
       note: "ordinary private text",
       targetingKey: "customer-secret",
       email: "private@example.com",
@@ -59,12 +59,14 @@ it("serializes streamed span-v2 links with intact IDs and scrubbed typed attribu
     expect(payload.items[0]).toMatchObject({ name: "linked request", is_segment: true });
     expect(payload.items[0].links).toEqual(
       [true, false].map((sampled) => ({
-        trace_id: "123456789abcdef0123456789abcdef0",
-        span_id: "123456789abcdef0",
+        trace_id: malformed ? "[Redacted]" : "123456789abcdef0123456789abcdef0",
+        span_id: malformed ? "[Redacted]" : "123456789abcdef0",
         sampled,
         attributes: {
           "sentry.link.type": { type: "string", value: "previous_trace" },
-          "http.response.status_code": { type: "integer", value: 200 },
+          "http.response.status_code": malformed
+            ? { type: "string", value: "[Redacted]" }
+            : { type: "integer", value: 200 },
           note: { type: "string", value: "[Redacted]" },
           targetingKey: { type: "string", value: "[Redacted]" },
           email: { type: "string", value: "[Redacted]" },
