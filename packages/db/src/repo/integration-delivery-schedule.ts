@@ -12,18 +12,7 @@ export function makeIntegrationDeliveryScheduleRepo(db: Db) {
     outstandingSummary: (scope: EnvScope, nowMs: number) =>
       readIntegrationDeliverySummary(db, scope, nowMs),
     async environmentsWithDueDeliveries(input: { now: string; scope?: TenantScope }) {
-      const convex = buildDueConvexDeliveriesQuery(input.now, input.scope);
-      const cloudflare = buildDueCloudflareDeliveriesQuery(input.now, input.scope);
-      const [rows] = await db.batch([
-        db
-          .select({ appId: sql<string>`appId`, environmentId: sql<string>`environmentId` })
-          .from(sql`(
-          SELECT DISTINCT installation.app_id AS appId, installation.environment_id AS environmentId
-          FROM convex_installations installation ${convex}
-          UNION
-          SELECT DISTINCT delivery.app_id AS appId, delivery.environment_id AS environmentId
-          FROM cloudflare_config_deliveries delivery ${cloudflare})`),
-      ]);
+      const [rows] = await db.batch([buildDueDeliveryEnvironmentsQuery(db, input)]);
       return rows;
     },
 
@@ -77,4 +66,20 @@ export function makeIntegrationDeliveryScheduleRepo(db: Db) {
       return row.wakeAt;
     },
   };
+}
+
+export function buildDueDeliveryEnvironmentsQuery(
+  db: Db,
+  input: { now: string; scope?: TenantScope },
+) {
+  const convex = buildDueConvexDeliveriesQuery(input.now, input.scope);
+  const cloudflare = buildDueCloudflareDeliveriesQuery(input.now, input.scope);
+  return db
+    .select({ appId: sql<string>`appId`, environmentId: sql<string>`environmentId` })
+    .from(sql`(
+      SELECT DISTINCT installation.app_id AS appId, installation.environment_id AS environmentId
+      FROM convex_installations installation ${convex}
+      UNION
+      SELECT DISTINCT delivery.app_id AS appId, delivery.environment_id AS environmentId
+      FROM cloudflare_config_deliveries delivery ${cloudflare})`);
 }

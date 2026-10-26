@@ -11,13 +11,14 @@ export async function runIntegrationDeliverySweep(
   env: ControlPlaneApiEnv,
   event: ScheduledController,
   ctx: Pick<ExecutionContext, "waitUntil">,
+  preloadedScopes?: Array<{ appId: string; environmentId: string }>,
 ): Promise<void> {
   try {
-    const scopes = await createRepository(
-      env.DB,
-    ).integrationDeliverySchedule.environmentsWithDueDeliveries({
-      now: new Date(event.scheduledTime).toISOString(),
-    });
+    const scopes =
+      preloadedScopes ??
+      (await createRepository(env.DB).integrationDeliverySchedule.environmentsWithDueDeliveries({
+        now: new Date(event.scheduledTime).toISOString(),
+      }));
     await wakeIntegrationDelivery(env, scopes);
   } catch (error) {
     createWorkerFaultReporter(env, workerObservabilityWithWaitUntil("control-plane-api", ctx))(

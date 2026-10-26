@@ -52,7 +52,7 @@ export type {
   PersonalAccessTokenPatch,
   PersonalAccessTokenRow,
 } from "./repo/personal-access-tokens";
-export type { ScheduledDueWork } from "./repo/scheduled-due-work";
+export type { ScheduledDueWork, ScheduledDueWorkResult } from "./repo/scheduled-due-work";
 export type { EnvScope, MultiAppScope, TenantScope } from "./repo/scope";
 export { appScope, envScope, multiAppScope } from "./repo/scope";
 export type { ScopedTable } from "./repo/scoped-table";

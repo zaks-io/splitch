@@ -1,4 +1,4 @@
-import { createRepository } from "@splitch/db";
+import { createRepository, type ScheduledDueWorkResult } from "@splitch/db";
 import {
   createWorkerFaultReporter,
   serializeFault,
@@ -13,10 +13,11 @@ export async function runIntegrationDeliveryLag(
   env: ControlPlaneApiEnv,
   event: ScheduledController,
   ctx: Pick<ExecutionContext, "waitUntil">,
+  preloaded?: ScheduledDueWorkResult["delivery"],
 ): Promise<void> {
   await Promise.all(
     (["convex", "cloudflare"] as const).map((provider) =>
-      reportProviderLag(provider, env, event, ctx),
+      reportProviderLag(provider, env, event, ctx, preloaded?.lag[provider]),
     ),
   );
 }
@@ -26,6 +27,7 @@ async function reportProviderLag(
   env: ControlPlaneApiEnv,
   event: ScheduledController,
   ctx: Pick<ExecutionContext, "waitUntil">,
+  preloadedRows?: NonNullable<ScheduledDueWorkResult["delivery"]>["lag"]["convex"],
 ): Promise<void> {
   const observability = workerObservabilityWithWaitUntil("control-plane-api", ctx);
   const reportFault = createWorkerFaultReporter(env, observability);
@@ -36,9 +38,11 @@ async function reportProviderLag(
     },
   });
   try {
-    const rows = await createRepository(env.DB)[provider].deliveryLag(
-      new Date(event.scheduledTime).toISOString(),
-    );
+    const rows =
+      preloadedRows ??
+      (await createRepository(env.DB)[provider].deliveryLag(
+        new Date(event.scheduledTime).toISOString(),
+      ));
     for (const row of rows) {
       const oldestMs = Date.parse(row.oldestOutstandingAt);
       if (!Number.isFinite(oldestMs)) throw new Error("Invalid outstanding delivery timestamp");

@@ -33,7 +33,7 @@ export function runControlPlaneScheduled(
   ctx: ExecutionContext,
 ): void {
   const mode = integrationDeliveryMode(env);
-  const dueWork = scheduledDueWork(env, event, ctx);
+  const dueWork = scheduledDueWork(env, event, ctx, event.cron !== "0 8 * * *");
   const runIfDue = (job: keyof ScheduledDueWork, run: () => Promise<unknown>) =>
     ctx.waitUntil(dueWork.then((due) => (due[job] ? run() : undefined)));
   runIfDue("privacyReconciliation", () => reconcilePrivacyJobs(env, new Date(event.scheduledTime)));
@@ -43,13 +43,15 @@ export function runControlPlaneScheduled(
   runIfDue("personalAccessTokenRetention", () => runPersonalAccessTokenRetentionJob(env, event));
   // At 08:00 both crons fire; Sentry has no lease against overlapping dispatch.
   if (event.cron !== "0 8 * * *") {
-    ctx.waitUntil(runIntegrationDeliveryLag(env, event, ctx));
+    ctx.waitUntil(dueWork.then((due) => runIntegrationDeliveryLag(env, event, ctx, due.delivery)));
     runIfDue("temporaryEnvironmentTeardown", () =>
       runTemporaryEnvironmentTeardown(env, event, ctx),
     );
     runIfDue("auditEventForwarding", () => runAuditEventForwarding(env, event, ctx));
     if (mode === "coordinator") {
-      ctx.waitUntil(runIntegrationDeliverySweep(env, event, ctx));
+      ctx.waitUntil(
+        dueWork.then((due) => runIntegrationDeliverySweep(env, event, ctx, due.delivery?.scopes)),
+      );
     } else {
       runIfDue("convexWebhookDispatch", () => runConvexWebhookDispatch(env, event, ctx));
       runIfDue("cloudflarePushDispatch", () => runCloudflarePushDispatch(env, event, ctx));

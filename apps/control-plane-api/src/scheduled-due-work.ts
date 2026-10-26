@@ -1,9 +1,10 @@
-import { createRepository, type ScheduledDueWork } from "@splitch/db";
+import { createRepository, type ScheduledDueWorkResult } from "@splitch/db";
 import {
   createWorkerFaultReporter,
   serializeFault,
   workerObservabilityWithWaitUntil,
 } from "@splitch/observability/worker";
+import { integrationDeliveryMode } from "./control-plane-runtime-config";
 import { RECONCILE_DELAY_MS } from "./entity-privacy-jobs";
 import type { ControlPlaneApiEnv } from "./env";
 import { PERSONAL_ACCESS_TOKEN_RECOVERY_DELAY_MS } from "./personal-access-token-rotation";
@@ -12,9 +13,11 @@ export async function scheduledDueWork(
   env: ControlPlaneApiEnv,
   event: ScheduledController,
   ctx: Pick<ExecutionContext, "waitUntil">,
-): Promise<ScheduledDueWork> {
+  includeMinuteReads = false,
+): Promise<ScheduledDueWorkResult> {
   try {
     return await createRepository(env.DB).scheduledDueWork({
+      minuteDeliveryMode: includeMinuteReads ? integrationDeliveryMode(env) : undefined,
       now: new Date(event.scheduledTime).toISOString(),
       privacyUpdatedBefore: new Date(event.scheduledTime - RECONCILE_DELAY_MS).toISOString(),
       rotationUpdatedBefore: new Date(
