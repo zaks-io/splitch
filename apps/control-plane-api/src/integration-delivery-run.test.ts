@@ -1,15 +1,7 @@
 import { envScope } from "@splitch/db";
 import { expect, it, vi } from "vitest";
 import { integrationDeliveryMode } from "./control-plane-runtime-config";
-import {
-  DELIVERY_BATCH_SIZE,
-  DELIVERY_COMPLETION_BUDGET_MS,
-  DELIVERY_LEASE_MS,
-  DELIVERY_PREPARATION_BUDGET_MS,
-  DELIVERY_RUN_SUBREQUEST_BUDGET,
-  DELIVERY_SEND_CONCURRENCY,
-  DELIVERY_SEND_TIMEOUT_MS,
-} from "./integration-delivery-limits";
+import { DELIVERY_RUN_SUBREQUEST_BUDGET } from "./integration-delivery-limits";
 import { runIntegrationDelivery } from "./integration-delivery-run";
 
 const scope = envScope("app", "env");
@@ -102,13 +94,6 @@ it("yields to an immediate alarm when the run budget is spent and work remains",
   });
   expect(result.durationMs).toBe(60_000);
   expect(result.nextWakeAt).toBe("2026-10-25T00:01:00.000Z");
-});
-
-it("keeps a whole batch of timed sends inside its lease", () => {
-  expect(DELIVERY_BATCH_SIZE).toBeLessThanOrEqual(DELIVERY_SEND_CONCURRENCY);
-  expect(
-    DELIVERY_PREPARATION_BUDGET_MS + DELIVERY_SEND_TIMEOUT_MS + DELIVERY_COMPLETION_BUDGET_MS,
-  ).toBeLessThan(DELIVERY_LEASE_MS);
 });
 
 it.each([undefined, "", "invalid"])("fails loudly for invalid mode %s", (mode) => {

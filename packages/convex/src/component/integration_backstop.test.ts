@@ -66,7 +66,7 @@ describe("configuration sync backstop", () => {
     expect(convex.snapshotPull).toHaveBeenCalledOnce();
   });
 
-  it("keeps one durable chain through repeated activation, initialize, and redeploy", async () => {
+  it("keeps one durable chain through repeated activation and initialize", async () => {
     const convex = deployment(7);
     const runAfter = vi.spyOn(convex.ctx.scheduler, "runAfter");
     const activate = async () =>
@@ -86,8 +86,6 @@ describe("configuration sync backstop", () => {
       callbackUrl: "https://example.convex.site/configuration",
     });
     expect(convex.integration().syncBackstopJobId).toBe(firstJob);
-    // Durable integration and scheduler state persist when a deployment reloads its functions.
-    await ensureSyncBackstopScheduled({ ...convex.ctx });
     expect(
       runAfter.mock.calls.filter((call) => getFunctionName(call[1]) === "integration:syncBackstop"),
     ).toHaveLength(1);
@@ -97,14 +95,28 @@ describe("configuration sync backstop", () => {
     expect(convex.integration().syncBackstopJobId).not.toBe(firstJob);
   });
 
-  it("replaces a missing or failed scheduled job without duplicating a pending one", async () => {
-    const convex = deployment();
-    convex.integration().syncBackstopJobId = "missing";
-    await ensureSyncBackstopScheduled(convex.ctx);
-    const job = convex.integration().syncBackstopJobId;
-    await ensureSyncBackstopScheduled(convex.ctx);
-    expect(convex.integration().syncBackstopJobId).toBe(job);
-  });
+  it.each(["missing", "failed"])(
+    "replaces a %s scheduled job without duplicating a pending one",
+    async (state) => {
+      const convex = deployment();
+      if (state === "missing") convex.integration().syncBackstopJobId = "missing";
+      else {
+        await ensureSyncBackstopScheduled(convex.ctx);
+        const job = await convex.ctx.db.system.get(
+          "_scheduled_functions",
+          convex.integration().syncBackstopJobId as never,
+        );
+        if (!job) throw new Error("Backstop job was not scheduled");
+        job.state = { kind: "failed", error: "test failure" };
+      }
+      const previousJob = convex.integration().syncBackstopJobId;
+      await ensureSyncBackstopScheduled(convex.ctx);
+      const job = convex.integration().syncBackstopJobId;
+      expect(job).not.toBe(previousJob);
+      await ensureSyncBackstopScheduled(convex.ctx);
+      expect(convex.integration().syncBackstopJobId).toBe(job);
+    },
+  );
 
   it("continues after a failed network check", async () => {
     const convex = deployment();

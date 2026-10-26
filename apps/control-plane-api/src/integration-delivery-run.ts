@@ -1,26 +1,15 @@
 import type { EnvScope, Repository } from "@splitch/db";
-import type { CloudflareDispatchSummary } from "./cloudflare-push-dispatch";
-import type { ConvexDispatchSummary } from "./convex-webhook-dispatch";
+import {
+  type CloudflareDispatchSummary,
+  emptyCloudflareDispatchSummary,
+} from "./cloudflare-push-dispatch";
+import { type ConvexDispatchSummary, emptyConvexDispatchSummary } from "./convex-webhook-dispatch";
 import { DELIVERY_RUN_SUBREQUEST_BUDGET } from "./integration-delivery-limits";
 
 export function integrationDeliverySummary() {
   return {
-    convex: {
-      claimed: 0,
-      received2xx: 0,
-      receiverRejected: 0,
-      transportFailures: 0,
-      preparationFailedInstallations: 0,
-      skippedLeaseLost: 0,
-    } satisfies ConvexDispatchSummary,
-    cloudflare: {
-      claimed: 0,
-      received2xx: 0,
-      receiverRejected: 0,
-      transportFailures: 0,
-      preparationFailures: 0,
-      skippedLeaseLost: 0,
-    } satisfies CloudflareDispatchSummary,
+    convex: emptyConvexDispatchSummary(),
+    cloudflare: emptyCloudflareDispatchSummary(),
   };
 }
 

@@ -87,16 +87,35 @@ it("does not wake an Environment outside the App", async () => {
 });
 
 it("fails loudly when the coordinator rejects the wake", async () => {
-  wake.mockRejectedValueOnce(new Error("unavailable"));
-  const response = await makeIntegrationDeliveryHandler({ repo, delivery: access() })(input());
+  const error = new Error("unavailable");
+  wake.mockRejectedValueOnce(error);
+  const onFault = vi.fn();
+  const request = input();
+  const response = await makeIntegrationDeliveryHandler({ repo, delivery: access(), onFault })(
+    request,
+  );
+  expect(onFault).toHaveBeenCalledExactlyOnceWith("integration_delivery_wake_failed", {
+    appId: ALPHA.appId,
+    environmentId: "env_one",
+    requestId: request.requestId,
+    fault: expect.stringContaining("Aggregate member: Error: [message withheld]"),
+  });
   expect(response.status).toBe(503);
-  expect(await response.json()).toMatchObject({ code: "SERVICE_UNAVAILABLE" });
+  expect(response.headers.get("x-request-id")).toBe(request.requestId);
+  expect(response.headers.get("retry-after")).toBe("30");
+  expect(await response.json()).toMatchObject({
+    code: "SERVICE_UNAVAILABLE",
+    message: "Integration delivery coordinator is unavailable",
+    details: { retryAfterMs: 30_000 },
+  });
 });
 
 it("mounts the public API operation through the registrar", async () => {
+  const onIntegrationDeliveryFault = vi.fn();
   const app = createApp({
     repo,
     integrationDelivery: access(),
+    onIntegrationDeliveryFault,
     authResolver: async () => ({
       ok: true as const,
       principal: principalFor(USER_ADMIN, ALPHA.appId),
@@ -108,6 +127,21 @@ it("mounts the public API operation through the registrar", async () => {
   });
   expect(response.status).toBe(200);
   expect(wake).toHaveBeenCalledWith(ALPHA.appId, "env_one");
+  wake.mockRejectedValueOnce(new Error("unavailable"));
+  const unavailable = await app.request(
+    `/apps/${ALPHA.appId}/envs/env_one/integrations/deliveries`,
+    { method: "POST" },
+  );
+  expect(unavailable.status).toBe(503);
+  expect(onIntegrationDeliveryFault).toHaveBeenCalledExactlyOnceWith(
+    "integration_delivery_wake_failed",
+    expect.objectContaining({
+      appId: ALPHA.appId,
+      environmentId: "env_one",
+      requestId: expect.any(String),
+      fault: expect.stringContaining("AggregateError"),
+    }),
+  );
 });
 
 it.each([false, true])(

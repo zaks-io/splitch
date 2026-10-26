@@ -2,7 +2,7 @@ import { configurationCallbackUrlError } from "@splitch/sdk/local-evaluation";
 import type { Doc } from "./_generated/dataModel";
 import type { MutationCtx } from "./_generated/server";
 import { ensureSyncBackstopScheduled } from "./integration_backstop";
-import { CURRENT_KEY } from "./integration_state";
+import { CURRENT_KEY, currentIntegration } from "./integration_state";
 
 interface InitializeArgs {
   installationId: string;
@@ -42,11 +42,4 @@ export async function initializeHandler(ctx: MutationCtx, args: InitializeArgs) 
     state: "pending",
   });
   return currentIntegration(ctx);
-}
-
-function currentIntegration(ctx: MutationCtx) {
-  return ctx.db
-    .query("integrations")
-    .withIndex("by_key", (q) => q.eq("key", CURRENT_KEY))
-    .unique();
 }

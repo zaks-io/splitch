@@ -1,5 +1,4 @@
 import type { Repository } from "@splitch/db";
-import { coordinatorDeliveryPolicy, cronDeliveryPolicy } from "./integration-delivery-limits";
 import { describe, expect, it, vi } from "vitest";
 import {
   detectMissingConvexDeployment,
@@ -7,6 +6,7 @@ import {
 } from "./convex-deployments";
 import { encryptConvexSecret } from "./convex-secret";
 import { dispatchConvexWebhooks } from "./convex-webhook-dispatch";
+import { coordinatorDeliveryPolicy, cronDeliveryPolicy } from "./integration-delivery-limits";
 
 const KEY = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=";
 const NOW = new Date("2026-10-25T08:00:00.000Z");
@@ -90,7 +90,9 @@ describe.each(["cron", "coordinator"] as const)("dormant Convex deployments unde
     expect(fixture.markDeploymentMissing).not.toHaveBeenCalled();
     expect(fixture.finishDelivery).toHaveBeenCalledOnce();
   });
+});
 
+describe("Convex deployment probes", () => {
   it("isolates a failed dormancy write from dispatch completion", async () => {
     const error = vi.spyOn(console, "error").mockImplementation(() => {});
     const repo = {
@@ -135,7 +137,6 @@ describe.each(["cron", "coordinator"] as const)("dormant Convex deployments unde
         installationId: id,
         appId: "app",
         environmentId: "env",
-        callbackUrl: `https://${id}.convex.site/configuration`,
       })),
     );
     const recordDeploymentCheck = vi.fn(async (_scope, id) => ({

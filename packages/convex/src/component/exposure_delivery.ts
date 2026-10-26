@@ -9,6 +9,7 @@ import {
 } from "./delivery_policy";
 import { ensureExposureDrainScheduled } from "./exposure_batch";
 import { commitTimestampIso, makeExposureTerminal } from "./exposure_delivery_state";
+import { currentIntegration } from "./integration_state";
 
 export async function scheduleDeliveryWatch(
   ctx: MutationCtx,
@@ -35,10 +36,7 @@ export async function claimDeliveryHandler(ctx: MutationCtx, args: { exposureId:
     return null;
   }
   if (row.nextAttemptAt > now) return null;
-  const integration = await ctx.db
-    .query("integrations")
-    .withIndex("by_key", (q) => q.eq("key", "current"))
-    .unique();
+  const integration = await currentIntegration(ctx);
   if (integration?.state !== "active" || !row.targetingKey || row.attributesJson === undefined)
     return null;
   if (row.targetingKeyHash) {

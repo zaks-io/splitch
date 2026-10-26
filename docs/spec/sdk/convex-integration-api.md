@@ -125,12 +125,12 @@ version. The request has no App, Environment, field-selection, or public-cache p
 
 ## Periodic sync backstop
 
-Activation starts one durable scheduler chain per deployment. Initializing an already active
+Activation starts one durable scheduler chain per installed component instance. Initializing an already active
 installation also repairs a missing or failed chain. Repeated initialization or activation reuses
 its pending or in-progress job, and redeploys preserve the job and integration row. Existing
 installations start the chain when `install()` runs after upgrading to `@splitch/convex` 0.4.0.
 
-The chain checks at most ten minutes apart, with the existing delivery retry jitter capped to an
+The chain checks at most ten minutes apart, with deterministic jitter capped to an
 eight-to-ten-minute interval. Each tick commits its successor before scheduling the network action,
 so a failed fetch does not stop later checks. The action uses the existing conditional snapshot
 request with the local version ETag. Equal versions return `304` after a cheap Environment version
