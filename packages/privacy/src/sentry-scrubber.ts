@@ -192,6 +192,55 @@ function scrubSpanAttribute(
   return REDACTED;
 }
 
+function scrubSpanLinks(links: unknown, options: ScrubOptions): unknown {
+  if (!Array.isArray(links)) return scrubValue(links, options);
+  return links.map((link: unknown) => {
+    if (typeof link !== "object" || link === null || Array.isArray(link)) {
+      return scrubValue(link, options);
+    }
+    const output = scrubValue(link, options) as Record<string, unknown>;
+    for (const [key, value] of Object.entries(link)) {
+      output[key] = scrubSpanLinkField(key, value, output[key], options);
+    }
+    return output;
+  });
+}
+
+function scrubSpanLinkField(
+  key: string,
+  original: unknown,
+  scrubbed: unknown,
+  options: ScrubOptions,
+): unknown {
+  // Restore only validated protocol fields after the generic scrub pass.
+  if (key === "trace_id" || key === "span_id") {
+    return scrubSpanLinkId(key, original);
+  }
+  if (key === "sampled") return typeof original === "boolean" ? original : REDACTED;
+  if (key === "attributes") return scrubSpanLinkAttributes(scrubbed, options);
+  return scrubbed;
+}
+
+function scrubSpanLinkId(key: string, value: unknown): unknown {
+  const shape = key === "trace_id" ? /^[a-f\d]{32}$/i : /^[a-f\d]{16}$/i;
+  return typeof value === "string" && shape.test(value) ? value : REDACTED;
+}
+
+function scrubSpanLinkAttributes(attributes: unknown, options: ScrubOptions): unknown {
+  if (typeof attributes !== "object" || attributes === null || Array.isArray(attributes)) {
+    return scrubValue(attributes, options);
+  }
+  return Object.fromEntries(
+    Object.entries(attributes).map(([key, value]) => [key, scrubSpanLinkAttribute(key, value)]),
+  );
+}
+
+function scrubSpanLinkAttribute(key: string, value: unknown): unknown {
+  if (key === "sentry.link.type" && value === "previous_trace") return value;
+  if (key !== "http.response.status_code" || typeof value !== "number") return REDACTED;
+  return Number.isInteger(value) && value >= 100 && value <= 599 ? value : REDACTED;
+}
+
 /**
  * Scrub a Sentry span payload — the `beforeSendSpan` body, which the SDK invokes
  * as each streamed span finishes.
@@ -216,6 +265,7 @@ function scrubSpanField(
 ): unknown {
   if (ALLOWED_SPAN_KEYS.has(key)) return value;
   if (key === "attributes" || key === "data") return scrubSpanAttributes(value, options);
+  if (key === "links") return scrubSpanLinks(value, options);
   const op = (span.attributes as Record<string, unknown> | undefined)?.["sentry.op"] ?? span.op;
   if ((key === "name" || key === "description") && op === "http.client") return REDACTED;
   return scrubValue(value, options);
