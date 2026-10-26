@@ -15,6 +15,7 @@ it.each([false, true])("serializes private span-v2 links with malformed=%s", asy
     attributes: {
       "sentry.link.type": "previous_trace",
       "http.response.status_code": malformed ? "private@example.com" : 200,
+      "mcp.tool.name": malformed ? "private@example.com" : "ordinary-private-value",
       note: "ordinary private text",
       targetingKey: "customer-secret",
       email: "private@example.com",
@@ -67,6 +68,7 @@ it.each([false, true])("serializes private span-v2 links with malformed=%s", asy
           "http.response.status_code": malformed
             ? { type: "string", value: "[Redacted]" }
             : { type: "integer", value: 200 },
+          "mcp.tool.name": { type: "string", value: "[Redacted]" },
           note: { type: "string", value: "[Redacted]" },
           targetingKey: { type: "string", value: "[Redacted]" },
           email: { type: "string", value: "[Redacted]" },

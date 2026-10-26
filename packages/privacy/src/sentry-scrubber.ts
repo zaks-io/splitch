@@ -183,7 +183,6 @@ function scrubSpanAttribute(
   isHttpClient: boolean,
   options: ScrubOptions,
 ): unknown {
-  if (key === "sentry.link.type") return value === "previous_trace" ? value : REDACTED;
   if (key === "mcp.client.name") return isCanonicalMcpClientName(value) ? value : "other";
   if (ALLOWED_SPAN_ATTRIBUTE_KEYS.has(key)) return value;
   if (key === "sentry.segment.name") return isHttpClient ? REDACTED : scrubValue(value, options);
@@ -218,13 +217,28 @@ function scrubSpanLinkField(
     return scrubSpanLinkId(key, original);
   }
   if (key === "sampled") return typeof original === "boolean" ? original : REDACTED;
-  if (key === "attributes") return scrubSpanAttributes(scrubbed, options);
+  if (key === "attributes") return scrubSpanLinkAttributes(scrubbed, options);
   return scrubbed;
 }
 
 function scrubSpanLinkId(key: string, value: unknown): unknown {
   const shape = key === "trace_id" ? /^[a-f\d]{32}$/i : /^[a-f\d]{16}$/i;
   return typeof value === "string" && shape.test(value) ? value : REDACTED;
+}
+
+function scrubSpanLinkAttributes(attributes: unknown, options: ScrubOptions): unknown {
+  if (typeof attributes !== "object" || attributes === null || Array.isArray(attributes)) {
+    return scrubValue(attributes, options);
+  }
+  return Object.fromEntries(
+    Object.entries(attributes).map(([key, value]) => [key, scrubSpanLinkAttribute(key, value)]),
+  );
+}
+
+function scrubSpanLinkAttribute(key: string, value: unknown): unknown {
+  if (key === "sentry.link.type" && value === "previous_trace") return value;
+  if (key !== "http.response.status_code" || typeof value !== "number") return REDACTED;
+  return Number.isInteger(value) && value >= 100 && value <= 599 ? value : REDACTED;
 }
 
 /**

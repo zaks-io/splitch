@@ -69,14 +69,17 @@ describe("Sentry span links", () => {
     expect(scrubSentrySpan({ links: [] }).links).toEqual([]);
   });
 
-  it.each(["private@example.com", { email: "private@example.com" }, ["private@example.com"]])(
-    "redacts malformed identity fields: %j",
-    (value) => {
-      expect(
-        scrubSentrySpan({ links: [{ trace_id: value, span_id: value, sampled: value }] }).links,
-      ).toEqual([{ trace_id: "[Redacted]", span_id: "[Redacted]", sampled: "[Redacted]" }]);
-    },
-  );
+  it.each([
+    "private@example.com",
+    "12345678",
+    "z".repeat(32),
+    { email: "private@example.com" },
+    ["private@example.com"],
+  ])("redacts malformed identity fields: %j", (value) => {
+    expect(
+      scrubSentrySpan({ links: [{ trace_id: value, span_id: value, sampled: value }] }).links,
+    ).toEqual([{ trace_id: "[Redacted]", span_id: "[Redacted]", sampled: "[Redacted]" }]);
+  });
 
   it("retains key and value scrubbing for allowed attributes and unknown link fields", () => {
     const link = {
@@ -94,13 +97,31 @@ describe("Sentry span links", () => {
         attributes: {
           "http.response.status_code": "[Redacted]",
           "sentry.status.message": "[Redacted]",
-          "db.system": { targetingKey: "[Redacted]" },
+          "db.system": "[Redacted]",
         },
         targetingKey: "[Redacted]",
         authorization: "[Redacted]",
         evaluationContext: "[Redacted]",
       },
     ]);
+  });
+
+  it.each([
+    "ordinary-private-value",
+    "private@example.com",
+    { email: "private@example.com" },
+    ["private@example.com"],
+    99,
+    600,
+    200.5,
+    Number.NaN,
+    Number.POSITIVE_INFINITY,
+  ])("redacts invalid HTTP status and unvalidated string attributes: %j", (value) => {
+    const attributes = { "http.response.status_code": value, "mcp.tool.name": value };
+    expect(scrubSentrySpan({ links: [{ attributes }] }).links[0]?.attributes).toEqual({
+      "http.response.status_code": "[Redacted]",
+      "mcp.tool.name": "[Redacted]",
+    });
   });
 
   it.each([null, "private@example.com", ["private@example.com", null]])(
