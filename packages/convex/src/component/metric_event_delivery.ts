@@ -8,6 +8,7 @@ import {
   deliveryRetryDelay,
   isRetryableHttpStatus,
 } from "./delivery_policy";
+import { currentIntegration } from "./integration_state";
 import { ensureRetentionScheduled } from "./retention";
 
 type MetricEventFieldValue = boolean | string | number | null | unknown[] | Record<string, unknown>;
@@ -53,10 +54,7 @@ export async function claimMetricEventDeliveryHandler(ctx: MutationCtx, args: { 
     return null;
   }
   if (row.nextAttemptAt > now) return null;
-  const integration = await ctx.db
-    .query("integrations")
-    .withIndex("by_key", (q) => q.eq("key", "current"))
-    .unique();
+  const integration = await currentIntegration(ctx);
   if (
     integration?.state !== "active" ||
     !row.targetingKey ||

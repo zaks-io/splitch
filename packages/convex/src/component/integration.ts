@@ -15,7 +15,7 @@ import {
   responseJson,
   syncHandler,
 } from "./integration_remote";
-import { CURRENT_KEY, requiredIntegration } from "./integration_state";
+import { currentIntegration, requiredIntegration } from "./integration_state";
 import { announceHandler, commitSnapshotHandler } from "./integration_sync";
 import schema from "./schema";
 import { installationResultValidator } from "./validators";
@@ -25,11 +25,7 @@ const DEFAULT_ENDPOINT = "https://edge.splitch.dev";
 export const get = internalQuery({
   args: {},
   returns: v.union(schema.doc("integrations"), v.null()),
-  handler: async (ctx) =>
-    ctx.db
-      .query("integrations")
-      .withIndex("by_key", (q) => q.eq("key", CURRENT_KEY))
-      .unique(),
+  handler: async (ctx) => currentIntegration(ctx),
 });
 
 export const initialize = internalMutation({

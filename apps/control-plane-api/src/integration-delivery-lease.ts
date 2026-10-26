@@ -1,4 +1,3 @@
-import type { Repository } from "@splitch/db";
 import {
   DELIVERY_COMPLETION_BUDGET_MS,
   DELIVERY_SEND_TIMEOUT_MS,
@@ -9,7 +8,12 @@ export async function renewDeliveryLeaseBeforeSend(
   delivery: { deliveryId: string; leaseExpiresAt: number },
   leaseOwner: string,
   policy: IntegrationDeliveryDispatchPolicy,
-  renewLease: Repository["convex"]["renewDeliveryLease"],
+  renewLease: (
+    deliveryId: string,
+    leaseOwner: string,
+    now: string,
+    leaseExpiresAt: string,
+  ) => Promise<boolean>,
 ): Promise<boolean> {
   const now = policy.clock.leaseTime();
   // Cron Cloudflare HTTP stays unbounded; its pre-send check uses the normal send allowance.

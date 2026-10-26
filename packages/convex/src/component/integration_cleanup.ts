@@ -2,12 +2,10 @@ import { internal } from "./_generated/api";
 import type { ActionCtx, MutationCtx } from "./_generated/server";
 import { env } from "./_generated/server";
 import { cancelSyncBackstop } from "./integration_backstop";
+import { currentIntegration } from "./integration_state";
 
 export async function revokeLocalHandler(ctx: MutationCtx): Promise<void> {
-  const integration = await ctx.db
-    .query("integrations")
-    .withIndex("by_key", (q) => q.eq("key", "current"))
-    .unique();
+  const integration = await currentIntegration(ctx);
   if (!integration) throw new Error("@splitch/convex is not initialized");
   await cancelSyncBackstop(ctx, integration);
   await ctx.db.patch(integration._id, { state: "revoked" });

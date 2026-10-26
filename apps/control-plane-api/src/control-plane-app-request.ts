@@ -59,6 +59,10 @@ export async function handleControlPlaneAppRequest(input: {
     ),
     repo,
     integrationDelivery: env,
+    onIntegrationDeliveryFault: createWorkerFaultReporter(
+      env,
+      workerObservabilityWithWaitUntil("control-plane-api", ctx),
+    ),
     credentialStore: env.CREDENTIAL_STORE,
     personalAccessTokenStore: env.SESSION_STORE,
     credentialCacheWriter: durableCredentialCacheWriterAccess(env.CREDENTIAL_CACHE_WRITER),

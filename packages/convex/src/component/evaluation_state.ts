@@ -7,6 +7,7 @@ import { internal } from "./_generated/api";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 import { hmacHex, stableUuid } from "./crypto";
 import { ensureExposureDrainScheduled } from "./exposure_batch";
+import { currentIntegration } from "./integration_state";
 import { ensureRetentionScheduled } from "./retention";
 import { parseSnapshot } from "./snapshot";
 
@@ -104,10 +105,7 @@ export async function runtimeState(
   flagKey: string,
   context: EvaluationContext,
 ) {
-  const integration = await ctx.db
-    .query("integrations")
-    .withIndex("by_key", (q) => q.eq("key", "current"))
-    .unique();
+  const integration = await currentIntegration(ctx);
   if (integration?.state !== "active" || !integration.appId || !integration.environmentId)
     throw new Error("@splitch/convex is not installed");
   const stored = await ctx.db

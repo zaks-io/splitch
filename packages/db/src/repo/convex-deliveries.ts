@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import { configWebhookDeliveries } from "../schema/integrations";
 import { createDb } from "./client";
 import type { ConfigWebhookDeliveryRow } from "./convex-integrations";
+import { renewDeliveryLease } from "./delivery-lease";
 import { buildDueConvexDeliveriesQuery } from "./scheduled-due-predicates";
 import type { EnvScope } from "./scope";
 
@@ -97,12 +98,14 @@ export async function renewConvexDeliveryLease(
   now: string,
   leaseExpiresAt: string,
 ): Promise<boolean> {
-  const result = await d1
-    .prepare(`UPDATE config_webhook_deliveries SET lease_expires_at = ?
-      WHERE delivery_id = ? AND state = 'leased' AND lease_owner = ? AND lease_expires_at > ?`)
-    .bind(leaseExpiresAt, deliveryId, leaseOwner, now)
-    .run();
-  return result.meta.changes === 1;
+  return renewDeliveryLease(
+    d1,
+    configWebhookDeliveries,
+    deliveryId,
+    leaseOwner,
+    now,
+    leaseExpiresAt,
+  );
 }
 
 export async function finishConvexDelivery(

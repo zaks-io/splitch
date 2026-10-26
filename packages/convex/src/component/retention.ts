@@ -1,6 +1,7 @@
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import { internalMutation, type MutationCtx } from "./_generated/server";
+import { currentIntegration } from "./integration_state";
 
 const RETENTION_MS = 30 * 86_400_000;
 const BATCH_SIZE = 100;
@@ -152,11 +153,4 @@ function completedDueAt(row: { completedAt?: number } | null): number | null {
   if (row.completedAt === undefined)
     throw new Error("Completed Convex Metric Event claim is missing completedAt");
   return row.completedAt + RETENTION_MS;
-}
-
-async function currentIntegration(ctx: MutationCtx) {
-  return ctx.db
-    .query("integrations")
-    .withIndex("by_key", (q) => q.eq("key", "current"))
-    .unique();
 }

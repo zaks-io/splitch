@@ -1,4 +1,5 @@
 import type { Repository } from "@splitch/db";
+import type { createWorkerFaultReporter } from "@splitch/observability/worker";
 import type { Registrar, RouteHandler } from "@splitch/worker-runtime";
 import type { Hono } from "hono";
 import type { CloudflareHandlerDeps } from "./cloudflare-handlers";
@@ -17,6 +18,7 @@ export interface IntegrationRouteDeps {
   door?: "public" | "binding";
   repo: Repository;
   integrationDelivery?: IntegrationDeliveryAccess;
+  onIntegrationDeliveryFault?: ReturnType<typeof createWorkerFaultReporter>;
   convex?: Omit<ConvexHandlerDeps, "repo">;
   cloudflare?: Omit<CloudflareHandlerDeps, "repo">;
   sentry?: Omit<SentryHandlerDeps, "repo">;
@@ -33,6 +35,7 @@ export function mountIntegrationRoutes(
     makeIntegrationDeliveryHandler({
       repo: deps.repo,
       delivery: deps.integrationDelivery,
+      onFault: deps.onIntegrationDeliveryFault,
     }) as RouteHandler<unknown>,
   );
   mountConvexRoutes(app, registrar, deps.repo, deps.door === "binding" ? deps.convex : undefined);

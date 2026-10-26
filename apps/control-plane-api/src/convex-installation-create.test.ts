@@ -125,19 +125,38 @@ describe("installation retries and old components", () => {
     );
   });
 
-  it("keeps a dormant installation dormant when verification fails or the capability is missing", async () => {
+  it("keeps a dormant custom-domain installation dormant when verification fails", async () => {
     const existing = { ...(await stored("active")), deploymentMissingAt: NOW.toISOString() };
     const fixture = setup(existing);
     const reactivateDeployment = vi.fn();
     fixture.repo.convex.reactivateDeployment = reactivateDeployment;
     const fetcher = vi.fn(async () => new Response(null, { status: 404 }));
     expect((await fixture.handlers(fetcher).create(args(INPUT))).status).toBe(400);
-    const { callbackVerification: _capability, ...legacy } = INPUT;
-    expect((await fixture.handlers(fetcher).create(args(legacy))).status).toBe(400);
+    expect(fetcher).toHaveBeenCalledOnce();
+    expect(existing.deploymentMissingAt).toBe(NOW.toISOString());
     expect(reactivateDeployment).not.toHaveBeenCalled();
   });
 
-  it("rejects changed registration content before a challenge", async () => {
+  it("preserves dormancy on a convex.site registration without receiver verification", async () => {
+    const callbackUrl = "https://example.convex.site/configuration";
+    const existing = {
+      ...(await stored("active")),
+      callbackUrl,
+      deploymentMissingAt: NOW.toISOString(),
+    };
+    const fixture = setup(existing);
+    const reactivateDeployment = vi.fn();
+    fixture.repo.convex.reactivateDeployment = reactivateDeployment;
+    const fetcher = vi.fn();
+    const { callbackVerification: _capability, ...legacy } = INPUT;
+    const response = await fixture.handlers(fetcher).create(args({ ...legacy, callbackUrl }));
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ deploymentMissingAt: NOW.toISOString() });
+    expect(fetcher).not.toHaveBeenCalled();
+    expect(reactivateDeployment).not.toHaveBeenCalled();
+  });
+
+  it("rejects changed registration content before a challenge or deployment check", async () => {
     const fixture = setup(await stored("active"));
     const fetcher = vi.fn();
     const response = await fixture
@@ -146,6 +165,7 @@ describe("installation retries and old components", () => {
     expect(response.status).toBe(409);
     expect(fetcher).not.toHaveBeenCalled();
     expect(fixture.createInstallation).not.toHaveBeenCalled();
+    expect(fixture.repo.convex.recordDeploymentCheck).not.toHaveBeenCalled();
   });
 
   it("checks the winning insert after concurrent different registration content", async () => {

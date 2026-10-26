@@ -39,6 +39,7 @@ import {
   finishDeliveryHandler,
   watchDeliveryHandler,
 } from "./exposure_delivery";
+import { currentIntegration } from "./integration_state";
 import { ensureRetentionScheduled } from "./retention";
 import { snapshotProvider } from "./snapshot";
 import {
@@ -177,10 +178,7 @@ export const deleteEntity = mutation({
   args: { targetingKey: v.string(), idType: v.string() },
   returns: v.null(),
   handler: async (ctx, args): Promise<void> => {
-    const integration = await ctx.db
-      .query("integrations")
-      .withIndex("by_key", (q) => q.eq("key", "current"))
-      .unique();
+    const integration = await currentIntegration(ctx);
     if (!integration) return;
     const targetingKeyHash = await localTargetingKeyHash(integration.componentIdentityKey, {
       targetingKey: args.targetingKey,

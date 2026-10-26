@@ -4,7 +4,7 @@ import type { Doc } from "./_generated/dataModel";
 import { internalMutation, type MutationCtx } from "./_generated/server";
 import { ensureExposureDrainScheduled } from "./exposure_batch";
 import { ensureSyncBackstopScheduled } from "./integration_backstop";
-import { CURRENT_KEY, requiredIntegration } from "./integration_state";
+import { currentIntegration, requiredIntegration } from "./integration_state";
 import { scheduleMetricEventDeliveryWatch } from "./metric_event_delivery";
 import { ensureRetentionScheduled } from "./retention";
 
@@ -226,11 +226,4 @@ export async function cancelPendingSyncRecovery(
   if (!integration.syncRecoveryJobId) return;
   const job = await ctx.db.system.get("_scheduled_functions", integration.syncRecoveryJobId);
   if (job?.state.kind === "pending") await ctx.scheduler.cancel(integration.syncRecoveryJobId);
-}
-
-async function currentIntegration(ctx: MutationCtx): Promise<Doc<"integrations"> | null> {
-  return ctx.db
-    .query("integrations")
-    .withIndex("by_key", (q) => q.eq("key", CURRENT_KEY))
-    .unique();
 }
