@@ -14,12 +14,15 @@ The two can momentarily disagree (the DO write guesses first-touch; the batch de
 ## DO key structure
 
 ```
-key = (experiment_id, id_type, targeting_key_hash)
+slot = (app_id, id_type, targeting_key_hash, experiment_id)
+writer_do_name = app_id + ":" + id_type + ":" + targeting_key_hash
 ```
 
 - `id_type` is the request `idType` after validation against the Run config in KV — see [edge-ingest-contract.md](./edge-ingest-contract.md).
 - The key uniquely identifies one Entity's slot for one Experiment across all Runs.
-- One DO instance exists per unique key (fine-grained DOs, ADR-0009).
+- One writer DO exists per App/Entity identity, with Experiment-keyed entries inside it.
+  `assignmentWriterName` in contracts defines the physical name; this serialization prevents
+  different Experiments from racing on the same Entity-level KV blob.
 
 ## DO value written
 
@@ -37,13 +40,15 @@ The DO executes `get → decide → put` atomically (no intervening non-storage 
 1. **Get** the current value for this key from DO storage.
 2. **If absent**: write `{ run_id, variant }` (first-touch winner).
 3. **If present and same `run_id`**: no-op (Entity already has a holdover for this Run).
-4. **If present with different `run_id`**: the Entity is a holdover from a prior Run. The evaluate path handles the replay decision — the DO write here is for the _new_ Run's first-touch only if the new Run's `run_id` is not yet recorded. On Run boundary, a returning holdover Entity is NOT re-counted in the new Run; it keeps its prior Variant (sticky experience, ADR-0006). The DO stores only the most recent `(run_id, variant)` per key.
+4. **If present with different `run_id`**: preserve and return the existing Assignment. The writer
+   does not inspect Run identity to decide whether the key exists. The evaluate path replays the
+   prior Variant without counting a new Exposure (ADR-0006).
 
 ## Write-through to KV
 
-After a successful `putIfAbsent`, the DO writes `(run_id, variant)` to Workers KV under the same key. All subsequent evaluate calls from any POP read KV directly (no DO hop on the hot path, ADR-0009).
+After a successful `putIfAbsent`, the DO writes `(run_id, variant)` to the Entity-level Workers KV blob under its Experiment entry. All subsequent evaluate calls from any POP read KV directly (no DO hop on the hot path, ADR-0009).
 
-KV propagation window: up to ~60s. During this window, a cross-POP evaluate may miss the holdover and recompute `assign()`. Because `assign()` is deterministic (ADR-0001), the same Variant is computed — the miss is cosmetic, not a correctness failure.
+KV propagation window: up to ~60s. During this window, a cross-POP evaluate may miss the holdover and recompute `assign()`. For a new Entity, `assign()` is deterministic (ADR-0001), so the same Variant is computed and the miss is cosmetic. For an Entity held over across a Run boundary, the miss resolves under the new Run and seals a new-Run Exposure before `put` reports the earlier winner, so the Entity can count in both Runs (ADR-0064, SPL-812).
 
 ## Timing in the hot path
 
@@ -125,11 +130,13 @@ resume pending finalize; an ambiguous successful D1 response never enters cancel
 
 ## Holdover retention policy
 
-The DO stores one `(run_id, variant)` per `(experiment_id, id_type, targeting_key_hash)` key — always the most recent Run's assignment. Prior Run assignments are overwritten when the Entity first-touches a new Run.
+The DO retains the first stored `(run_id, variant)` per logical Experiment/Entity slot until
+explicit cleanup. Starting a new Run never overwrites an existing Assignment.
 
-The KV entry follows the same overwrite semantics (the DO's write-through always writes the current `(run_id, variant)`).
+The KV write-through publishes that retained first Assignment, including when a later put carries
+a different Run or Variant.
 
-There is no multi-Run holdover history in the DO. The pipeline's `raw_events` log is the history; the DO is the live pointer. When an Experiment is archived or deleted, cleanup of DO/KV entries is an operational task (the control plane issues a DO delete when the Experiment is deleted). This is bounded — one DO instance per active Entity per Experiment.
+There is no multi-Run holdover history in the DO. The pipeline's `raw_events` log is the history; the DO is the live pointer. When an Experiment is archived or deleted, cleanup of DO/KV entries is an operational task (the control plane issues a DO delete when the Experiment is deleted). This is bounded by one writer DO per active App/Entity identity.
 
 ## Port contract summary (seam interface)
 
@@ -152,6 +159,7 @@ transaction.
 ## Sources
 
 - [ADR-0005](../../adr/0005-exposure-dedup-first-touch-pipeline-authoritative.md) — pipeline drives holdover put
-- [ADR-0009](../../adr/0009-assignment-store-substrate-kv-read-do-write.md) — KV read, per-key DO write, get-then-put-if-absent atomicity, ~60s propagation window
+- [ADR-0009](../../adr/0009-assignment-store-substrate-kv-read-do-write.md) — KV read, get-then-put-if-absent atomicity, ~60s propagation window
+- [ADR-0064](../../adr/0064-assignment-store-is-app-scoped-with-one-writer-per-entity.md) — App-scoped interface, one writer per Entity, Run-boundary window caveat (SPL-812)
 - [ADR-0006](../../adr/0006-run-boundary-sticky-experience-counted-in-old-run.md) — holdover Entity keeps prior Run's Variant
-- [ADR-0043](../../adr/0043-event-ingest-will-use-durable-queue-backed-tinybird-microbatches.md) — pending queue-backed Tinybird delivery refactor
+- [ADR-0043](../../adr/0043-event-ingest-will-use-durable-queue-backed-tinybird-microbatches.md) — queue-backed Tinybird delivery and recovery contract

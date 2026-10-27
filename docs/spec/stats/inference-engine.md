@@ -17,8 +17,8 @@ per-Entity Metric values (one row per Entity, aggregated upstream — ADR-0015)
        [absolute_ci_lower_N, absolute_ci_upper_N] (valid at any N for aCS)
   ▼ 6. Relative-lift interval (Fieller inversion of the absolute decision interval):
        [relative_lift_ci_lower, relative_lift_ci_upper]
-  ▼ 7. Guardrail bound check (CI lower-bound vs. downside threshold) → guardrail_status
-  ▼ 8. Family FDR (BH default; BH-G available as a typed comparator)  → is_significant (post-FDR)
+  ▼ 7. Guardrail bound check (version-selected relative bound or contrast) → guardrail_status
+  ▼ 8. Family FDR (BH for legacy/v1; BH-G for analysis-v2)  → is_significant (post-FDR)
 ```
 
 Note: step 1 winsorizes input values _before_ variance computation (effective ordering:
@@ -55,8 +55,8 @@ p-value inversion (including the point mass at 1), and adapter requirements live
 
 ### Fixed-horizon opt-in
 
-When `horizon = 'fixed'` and `sample_size_locked = S`: standard frequentist t-test / z-test
-(not aCS), p-value output instead of a CI sequence; stopping rule is to collect exactly S Entities
+When `horizon = 'fixed'` and `sample_size_locked = S`: a two-sample z-test
+(not aCS), with a one-look CI and p-value; stopping rule is to collect exactly S Entities
 per arm then read once. Peeking is disabled in the UI while fixed-horizon is active (no
 intermediate results rendered).
 
@@ -132,12 +132,13 @@ rank. Relative-lift reporting and relative Guardrail bounds are the **Fieller in
 same absolute interval**, never a second independent estimate (ADR-0015 rule 4). The
 implementation (`packages/stats/src/relative-ci.ts`) recovers the critical multiplier from the
 decision interval's half-width, so sequential Runs carry the aCS boundary into the ratio interval
-and fixed-horizon Runs carry the t (or z) critical value. If the Control estimate is zero,
+and fixed-horizon Runs carry the z critical value. If the Control estimate is zero,
 relative lift and its interval are undefined, while the absolute-lift decision remains available.
 
-Guardrail breach is `ci_lower < downside_threshold_pct` on this Fieller relative lower bound
-(`packages/stats/src/guardrail-bound-check.ts`). The relative interval is therefore
-**decision-bearing for Guardrails**. Time-uniform coverage of the Fieller inversion as a
+For legacy-unversioned and analysis-v1, Guardrail breach is
+`ci_lower < downside_threshold_pct` on this Fieller relative lower bound
+(`packages/stats/src/guardrail-bound-check.ts`). The relative interval is
+**decision-bearing for those Guardrails**. analysis-v2 uses the contrast below. Time-uniform coverage of the Fieller inversion as a
 confidence sequence is unproven (no directly applicable Fieller CS construction was found;
 Waudby-Smith Proposition 3.5 is a delta-method alternative, not a refutation). D1 keeps Fieller
 and schedules that audit before any replacement.
@@ -167,7 +168,8 @@ it, so an unbounded relative interval means "uninformative", never "no effect".
 Because a ratio of 1 reduces Fieller's quadratic to the absolute test, the published relative
 interval contains 0% if and only if the decision interval contains zero, **when `a > 0`**. The
 unbounded case carries no such equivalence, which is why significance, stopping, and BH still
-read the absolute-lift interval. Guardrails still read the relative lower bound when it is finite.
+read the absolute-lift interval. Legacy-unversioned and analysis-v1 Guardrails read the relative
+lower bound when it is finite.
 
 For a Binomial comparison with a non-zero effect but a zero plug-in variance at a boundary, the
 decision or relative-reporting standard error uses the documented Agresti-Caffo plus-two variance

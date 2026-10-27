@@ -5,11 +5,53 @@ The [navigation-and-ia.md](./navigation-and-ia.md) doc pins the URL spine and si
 this doc pins the **screens** that hang off them. Terms are used exactly as
 [`CONTEXT.md`](../../../CONTEXT.md) defines them.
 
-> **Status: laid out.** The Control Panel UX session settled the screen map below, including the
-> Overview card set (ship all; thresholds tuned from real data later) and onboarding (agent-first is
-> the primary path). What remains is **data-dependent tuning** (numeric thresholds for the attention
-> cards) and the **detailed onboarding screen sequence** (its shape — parity, agent-primary — is
-> pinned; the individual screens are not). Neither blocks implementation of the screens.
+The route inventory below records what is wired in `apps/control-panel/src/routeTree.gen.ts`.
+The detailed sections also specify intended behavior; Web Analytics is explicitly unbuilt, and
+self-serve SSO/SCIM is a visible stub. Onboarding's create/Connect/verify/Exposure-status components
+are implemented within existing screens, not a separate wizard route.
+
+## Implemented route inventory
+
+These are all destinations in `FileRoutesByTo`, with trailing index slashes normalized away.
+`__root__`, Environment, Experiments, Experiment detail, pinned Run, and Settings layouts wrap
+their children; they do not add separate destinations. `$param` is TanStack's path notation.
+
+| Route                                                                   | Screen or handler                                                          |
+| ----------------------------------------------------------------------- | -------------------------------------------------------------------------- |
+| `/`                                                                     | Organization redirect, or chooser when empty, truncated, or resync-pending |
+| `/kitchen-sink`                                                         | Shared UI component gallery                                                |
+| `/robots.txt`                                                           | Robots response                                                            |
+| `/auth/login`                                                           | Starts WorkOS sign-in                                                      |
+| `/auth/callback`                                                        | Completes sign-in and creates the panel session                            |
+| `/auth/logout`                                                          | POST sign-out handler                                                      |
+| `/claim/consent/$attemptId`                                             | GET account-link consent, POST consent forwarding                          |
+| `/$orgSlug`                                                             | Organization Home                                                          |
+| `/$orgSlug/members`                                                     | Organization membership and SSO/SCIM stub                                  |
+| `/$orgSlug/integrations`                                                | Organization Sentry change-tracking installation                           |
+| `/$orgSlug/billing`                                                     | Evaluation usage and deferred payment/quota UI                             |
+| `/$orgSlug/claim`                                                       | Provisional Organization claim ceremony                                    |
+| `/$orgSlug/$appSlug`                                                    | App Flag matrix across Environments                                        |
+| `/$orgSlug/$appSlug/$env`                                               | Environment Overview                                                       |
+| `/$orgSlug/$appSlug/$env/flags`                                         | Environment Flag list                                                      |
+| `/$orgSlug/$appSlug/$env/flags/$flagKey`                                | Flag Configuration and shared definition                                   |
+| `/$orgSlug/$appSlug/$env/flags/$flagKey/promote`                        | Promotion diff and Policy gate                                             |
+| `/$orgSlug/$appSlug/$env/experiments`                                   | Environment Experiment list                                                |
+| `/$orgSlug/$appSlug/$env/experiments/new`                               | Create Experiment draft                                                    |
+| `/$orgSlug/$appSlug/$env/experiments/$experimentId`                     | Lifecycle-adaptive latest Run view                                         |
+| `/$orgSlug/$appSlug/$env/experiments/$experimentId/results`             | Latest Run Results                                                         |
+| `/$orgSlug/$appSlug/$env/experiments/$experimentId/setup`               | Latest Run Setup                                                           |
+| `/$orgSlug/$appSlug/$env/experiments/$experimentId/draft`               | Persisted Experiment/next-Run draft editor                                 |
+| `/$orgSlug/$appSlug/$env/experiments/$experimentId/runs/$runId`         | Lifecycle-adaptive pinned Run view                                         |
+| `/$orgSlug/$appSlug/$env/experiments/$experimentId/runs/$runId/results` | Pinned Run Results                                                         |
+| `/$orgSlug/$appSlug/$env/experiments/$experimentId/runs/$runId/setup`   | Pinned Run Setup                                                           |
+| `/$orgSlug/$appSlug/$env/segments`                                      | App-level Segment list/editor                                              |
+| `/$orgSlug/$appSlug/$env/metrics`                                       | App-level Metric list/editor                                               |
+| `/$orgSlug/$appSlug/$env/settings`                                      | App settings tab                                                           |
+| `/$orgSlug/$appSlug/$env/settings/environment`                          | Environment credentials, Policy, integrations, Exposure status             |
+
+Outside the generated route tree, `src/server.ts` intercepts `/health` and the scoped `/live`
+WebSocket upgrade. TanStack Start owns `/_serverFn/` RPC transport. Creation dialogs, Approval gates,
+and onboarding cards add no routes.
 
 ## Every screen is one skin of a three-skin operation
 
@@ -38,9 +80,11 @@ inline as **CLI/MCP parity**.
 
 ## One shell
 
-One persistent sidebar wraps every authenticated Organization and App screen. The App switcher and
+One shared sidebar wraps Organization Home, Members, Integrations, Billing and App screens. Claim,
+consent, the root chooser, and the component gallery use minimal frames. The App switcher and
 Environment pills live at the top, App sections follow when an App is active, and the Organization
-block plus user row stay at the bottom. The App home resolves `appId` and shows every Environment;
+block sits at the foot on App screens and above direct App links on Organization screens; the user
+row stays at the foot. The App home resolves `appId` and shows every Environment;
 everything below it remains scoped to `(appId, environmentId)` resolved from the URL. The shipped hierarchy and slice boundaries are
 pinned in [navigation-redesign.md](./navigation-redesign.md).
 
@@ -50,8 +94,8 @@ New Flag, which opens the existing Create Flag dialog.
 
 ## Org-level screens
 
-The Organization level hangs three screens off `/{orgSlug}`: **Home**, **Members**, and
-**Billing & Usage**. Org-scope role gates are the Org role matrix in
+The Organization level has **Home**, **Members**, **Integrations**, **Billing & Usage**, and the
+provisional Organization **Claim** ceremony. Org-scope role gates are the Org role matrix in
 [../control-plane/organization-and-membership.md](../control-plane/organization-and-membership.md);
 the panel renders locked affordances, the Worker is the guardian (ADR-0023).
 
@@ -89,7 +133,9 @@ The Org membership list (`org_memberships`): each member's identity (resolved fr
 role (`owner` | `admin` | `member`). Invite / change-role / remove are **owner/admin** only ("Manage
 Org members" in the matrix); a `member` sees the list read-only ("View Org settings"). SSO/SCIM config
 for enterprise Orgs lives here too, gated to the roles the matrix allows (`Configure SSO/SCIM`:
-owner/admin; `Manage trusted IdPs`: owner). Parity: the same membership operations over CLI/MCP.
+owner/admin; `Manage trusted IdPs`: owner). Self-serve SSO/SCIM is not wired; `SsoScimCard` states
+that configuration is managed by the account team without claiming a checked connection state.
+Parity: the same membership operations over CLI/MCP.
 
 > **App membership vs Org membership.** This screen manages who is in the _Org_. Who can touch a
 > specific App's config (`app_memberships`, its own role matrix) is managed under that App's Settings,
@@ -309,13 +355,13 @@ the easy path is the safe one and the destructive path is deliberately effortful
 the same invariant on all three skins:
 
 - An assignment-field edit against a running Run **fails at the Worker** with a clear, actionable
-  error (ADR-0002/0003), so `splitch experiment edit --allocation ...` on a running Experiment is
+  error (ADR-0002/0003), so `splitch experiments update <experimentId> --body-json '<patch>'` is
   rejected, not silently obeyed — the same refusal the panel renders as a locked field.
-- Opening Run N+1 is its own explicit command (e.g. `splitch experiment start-run`), the terminal
-  analogue of the draft→Start flow. When Policy requires Review, an interactive `--confirm`/prompt
-  names the data loss ("Run N abandoned, fresh sample from zero") and maps to
-  `review.action = "approve_and_apply"`. The non-interactive form requires that same action
-  explicitly. The MCP tool exposes the same typed Review action.
+- Opening Run N+1 is its own explicit command (`splitch experiments start <experimentId>`), the terminal
+  analogue of the draft→Start flow. When Policy requires Review, explicit `--confirm` maps to
+  `review.action = "approve_and_apply"`; without it, the CLI returns the pending request for Review.
+  The Review must name the consequence ("Run N abandoned, fresh sample from zero"). The MCP tool
+  exposes the same typed Review action.
 - Measurement edits succeed plainly on every skin (no gate), matching the panel's inline save.
 
 So "make it hard to nuke a Run" holds whether the operator is in the panel, at a terminal, or an
@@ -400,6 +446,10 @@ applies across all Environments — the same defined-once honesty device the Fla
 user never thinks they are editing just this env's Segment.
 
 ## Web Analytics
+
+Status: specified, not implemented in the panel. None of the four URLs below is in
+`routeTree.gen.ts`, and `appSectionRegistry` has no Web Analytics entry. These are intended routes,
+not existing destinations.
 
 Web Analytics is an Environment-scoped read-only surface, separate from Experiment results. Every App
 role may view it under the existing **View config/results** permission.
@@ -488,7 +538,7 @@ kill-switch-off is shown as **never gated** (incident control always wins) and i
 
 ## Onboarding — agent and developer paths, co-equal and parity-shaped
 
-Signup → personal **Organization** → first **App** (provisions `dev` + `prod`) → first **Flag** →
+Signup → choose or create an **Organization** → first **App** (provisions `dev` + `prod`) → first **Flag** →
 copy an **SDK key** → **verify it resolves** → first real **evaluation**.
 
 **Two first-run personas, one journey.** splitch is built agent-first — the auth.md in-band handshake
@@ -504,8 +554,9 @@ and vice versa.
 
 Each step names the CLI/MCP parity it mirrors. No step is panel-only.
 
-1. **Signup → personal Org** (auto). Lands on an **empty Apps screen** whose empty state is the first
-   teaching surface: one primary "Create your first App" action, a one-line explanation of
+1. **Signup → choose or create an Org.** A fresh user with no Organizations sees the root chooser;
+   Organization creation is explicit. An empty Organization Home is the first App teaching surface:
+   one primary "Create your first App" action, a one-line explanation of
    App→Environment→Flag, and a "prefer your terminal / agent?" link revealing the equivalent
    `splitch login` + `apps create` + MCP connect snippet. (Parity: `apps_create`.)
 2. **Create App.** On submit, **`dev` and `prod` are provisioned automatically** (ADR-0027 default,
@@ -553,8 +604,11 @@ Each step names the CLI/MCP parity it mirrors. No step is panel-only.
    unreachable config shows a distinct, self-explaining error, never a silent "looks fine"
    (ADR-0036). The dev confirms the wiring before deploying a single user. (Parity: `splitch flags
 verify`; the agent uses `flags_test_eval` for the full-reason tier.)
-6. **First real evaluation.** The dev runs their app; the dashboard's empty Exposures state flips to
-   "first Exposure received," closing the loop.
+6. **First real Exposure.** Create an Experiment around the Flag and Start its Run, then evaluate
+   through the SDK. A plain Flag evaluation has no Run and records no Exposure. Environment Settings
+   shows "First Exposure received" after ingestion; the check polls every five seconds while waiting.
+   See [quickstart.md](../quickstart.md#10-start-an-experiment-run-wire-the-sdk-and-fire-the-first-real-exposure)
+   for the complete sequence.
 
 ### Empty states teach, not just decorate
 
@@ -582,9 +636,9 @@ Policy context, and lifecycle state. It commits only through an authorized Revie
 This workflow ships at the `confirm` Policy level (single operator) but is **structured for the
 future `approve` level without a rewrite** (ADR-0029):
 
-- The **Approval Request object exists from day one**, even under `confirm`. Under `confirm` the
-  proposer invokes `approve_and_apply` in the same step — feels like one action, but the durable
-  Approval Request and successful Review are written.
+- The **Approval Request object exists from day one**, even under `confirm`. The panel submits the
+  proposal, reads the durable request, and presents its gate; the proposer's explicit Confirm invokes
+  `approve_and_apply`. CLI/MCP can supply the canonical inline Review action explicitly.
 - Growing to `approve` (a known future direction — reviewer roles, multi-user) is then a
   **permission change** (self-review disallowed → a second principal must Review), not a new
   pipeline. The diff screen, the Approval Request, the audit trail are already there.
@@ -637,9 +691,10 @@ The cross-env "all Flags' dev-vs-prod drift at once" bulk view is a useful **sec
 surface, not the primary promote flow.
 
 **CLI/MCP parity (ADR-0023, Worker-enforced).** Promotion and the approval gate are operations, not
-panel features. `splitch flag promote --from dev --to prod --flag checkout-model [--only availability]`
-creates the same Approval Request; when the target Policy is `confirm` it prompts and sends
-`review.action = "approve_and_apply"`, and when it is `approve` (future) the command reports the
+panel features. `splitch flags promote checkout-model --env prod --from-environment-id <devId>
+--body-json '{"select":{"availability":["on"]}}'` uses the same operation. When the target Policy is
+`confirm`, an explicit `--confirm` sends `review.action = "approve_and_apply"`; omitting it reports
+the durable pending request. When Policy is `approve` (future), the command reports the
 request as pending a distinct reviewer rather than applying. The MCP tool returns the Approval
 Request as a structured result. The diff, target version, request, Review action, and application
 result live in the Worker; every skin inherits them.

@@ -2,11 +2,15 @@
 
 D1 column shapes for identity references, Flag definitions, and Event Definitions
 (Drizzle-migrated; structurally trusted, not Zod-re-parsed). Experiment-side tables are in
-[storage-schemas-d1-experiment.md](./storage-schemas-d1-experiment.md); Convex integration and
+[storage-schemas-d1-experiment.md](./storage-schemas-d1-experiment.md); integration and
 delivery tables are in [storage-schemas-d1-integrations.md](./storage-schemas-d1-integrations.md).
 
 Storage shapes carry internals (timestamps, audit, immutability markers) that wire shapes must not
-expose. D1 columns are trusted without re-parsing. (ADR-0025 "reuse at the leaf, not the envelope".)
+expose. D1 column structure is trusted; serialized JSON and composed response contracts may still be parsed. (ADR-0025 "reuse at the leaf, not the envelope".)
+
+D1 stores every `timestamptz` below as ISO 8601 `TEXT`, and every `boolean` as `INTEGER` 0/1.
+These are logical type labels, not native SQLite types. User-reference columns are nullable unless
+explicitly marked not null.
 
 ---
 
@@ -19,13 +23,22 @@ Org-scoped tables use `org_id`. No table has RLS; scoping is enforced by the Wor
 
 ### `organizations`
 
-| Column       | Type        | Constraints                |
-| ------------ | ----------- | -------------------------- |
-| `id`         | text        | PK                         |
-| `name`       | text        | not null                   |
-| `plan`       | text        | not null, default `'free'` |
-| `created_at` | timestamptz | not null                   |
-| `updated_at` | timestamptz | not null                   |
+| Column                       | Type        | Constraints                                             |
+| ---------------------------- | ----------- | ------------------------------------------------------- |
+| `id`                         | text        | PK                                                      |
+| `name`                       | text        | not null                                                |
+| `slug`                       | text        | not null; globally unique (`organizations_slug_unique`) |
+| `stripe_customer_id`         | text        | nullable; billing seam                                  |
+| `stripe_subscription_id`     | text        | nullable; billing seam                                  |
+| `sso_enabled`                | boolean     | not null, default false                                 |
+| `is_provisional`             | boolean     | not null, default false                                 |
+| `demo_expires_at`            | timestamptz | nullable                                                |
+| `claim_acquired_at`          | timestamptz | nullable                                                |
+| `claim_acquisition_token`    | text        | nullable                                                |
+| `claim_acquisition_key_hash` | text        | nullable                                                |
+| `plan`                       | text        | not null, default `'free'`                              |
+| `created_at`                 | timestamptz | not null                                                |
+| `updated_at`                 | timestamptz | not null                                                |
 
 ### No `users` profile table
 
@@ -42,7 +55,7 @@ PII unless a new ADR replaces this lifecycle contract.
 | `role`       | text        | not null                     |
 | `created_at` | timestamptz | not null                     |
 
-Composite PK: `(org_id, user_id)`.
+Composite PK: `(org_id, user_id)`. Index: `org_memberships_user_id_idx(user_id)`.
 
 ### `app_memberships`
 
@@ -88,6 +101,7 @@ and Flag CONFIGURATION are scoped to one Environment.
 | `key`                        | text        | not null, unique per `(app_id)` (e.g. `'production'`, `'staging'`)        |
 | `name`                       | text        | not null                                                                  |
 | `policy`                     | text        | not null JSON Environment Policy (`allow \| confirm`; `approve` reserved) |
+| `config_version`             | integer     | not null, default 0; monotonic integration snapshot version               |
 | `expires_at`                 | timestamptz | nullable; null means permanent; indexed for teardown                      |
 | `synced_from_environment_id` | text        | nullable; no FK, so provenance survives source deletion                   |
 | `synced_at`                  | timestamptz | nullable; time of the last completed Sync                                 |
@@ -103,7 +117,11 @@ is the teardown manifest and is deleted last. See
 
 ### `flag_change_events`
 
-The append-only Flag change log adds `temporary_environment INTEGER NOT NULL DEFAULT 0`.
+The trigger-written log has `seq INTEGER PRIMARY KEY AUTOINCREMENT`; required text `app_id`,
+`flag_id`, `flag_key`, `action`, `target_type`, `changed_at`; nullable text `environment_id`,
+`actor_ref`, `actor_via`, `diff_json`; and `temporary_environment INTEGER NOT NULL DEFAULT 0`.
+It has no foreign keys so it survives resource deletion. Indexes cover `(app_id, seq)`,
+`(app_id, environment_id, seq)`, and `changed_at`.
 Every write captures whether its Environment is temporary while that Environment row still exists,
 including configuration removal. The value stays with the event after Environment teardown.
 Sentry skips events with `temporary_environment = 1`; the normal change-log API and retention
@@ -117,27 +135,27 @@ value edit, and Experiment Run Start. `allow` does not create an Approval Reques
 same validated application seam directly. `confirm` and future `approve` both create this row and
 differ only in who may Review it.
 
-| Column                     | Type        | Constraints                                                                |
-| -------------------------- | ----------- | -------------------------------------------------------------------------- |
-| `id`                       | text        | PK; `apr_` + 26-character ULID                                             |
-| `app_id`                   | text        | FK → apps, not null                                                        |
-| `operation`                | text        | not null; canonical route `operationId`                                    |
-| `target_type`              | text        | not null; `flag \| flag_configuration \| flag_variant \| experiment_draft` |
-| `target_id`                | text        | not null                                                                   |
-| `target_version`           | text        | not null; RFC 8785 JCS SHA-256 token for the complete target projection    |
-| `policy_contexts`          | text        | not null; immutable JSON `ApprovalPolicyContext[]`                         |
-| `policy_guard_contexts`    | text        | nullable immutable raw Policy contexts for an effective Review floor       |
-| `diff`                     | text        | not null; immutable canonical JSON `ApprovalDiff`                          |
-| `status`                   | text        | not null; `pending \| applied \| declined \| stale`                        |
-| `proposed_by`              | text        | not null; resolved WorkOS user ID or deleted-user tombstone                |
-| `proposed_via`             | text        | not null; resolved auth door                                               |
-| `proposed_at`              | timestamptz | not null                                                                   |
-| `resolved_at`              | timestamptz | nullable; set once on `applied`, `declined`, or `stale`                    |
-| `resulting_target_version` | text        | nullable; set only on `applied`                                            |
-| `resulting_resource_type`  | text        | nullable; canonical applied resource type, set only on `applied`           |
-| `resulting_resource_id`    | text        | nullable; canonical applied resource ID, set only on `applied`             |
-| `idempotency_key`          | text        | not null                                                                   |
-| `request_hash`             | text        | not null; SHA-256 of UTF-8 RFC 8785 JCS proposal input                     |
+| Column                     | Type        | Constraints                                                                           |
+| -------------------------- | ----------- | ------------------------------------------------------------------------------------- |
+| `id`                       | text        | PK; `apr_` + 26-character ULID                                                        |
+| `app_id`                   | text        | FK → apps, not null                                                                   |
+| `operation`                | text        | not null; canonical route `operationId`                                               |
+| `target_type`              | text        | not null; `flag \| flag_configuration \| flag_variant \| segment \| experiment_draft` |
+| `target_id`                | text        | not null                                                                              |
+| `target_version`           | text        | not null; RFC 8785 JCS SHA-256 token for the complete target projection               |
+| `policy_contexts`          | text        | not null; immutable JSON `ApprovalPolicyContext[]`                                    |
+| `policy_guard_contexts`    | text        | nullable immutable raw Policy contexts for an effective Review floor                  |
+| `diff`                     | text        | not null; immutable canonical JSON `ApprovalDiff`                                     |
+| `status`                   | text        | not null; `pending \| applied \| declined \| stale`                                   |
+| `proposed_by`              | text        | not null; resolved WorkOS user ID or deleted-user tombstone                           |
+| `proposed_via`             | text        | not null; resolved auth door                                                          |
+| `proposed_at`              | timestamptz | not null                                                                              |
+| `resolved_at`              | timestamptz | nullable; set once on `applied`, `declined`, or `stale`                               |
+| `resulting_target_version` | text        | nullable; set only on `applied`                                                       |
+| `resulting_resource_type`  | text        | nullable; canonical applied resource type, set only on `applied`                      |
+| `resulting_resource_id`    | text        | nullable; canonical applied resource ID, set only on `applied`                        |
+| `idempotency_key`          | text        | not null                                                                              |
+| `request_hash`             | text        | not null; SHA-256 of UTF-8 RFC 8785 JCS proposal input                                |
 
 UNIQUE constraint: `(app_id, proposed_by, idempotency_key)`. Reusing the key with the same
 `request_hash` returns the existing Approval Request. Reusing it with a different hash fails with
@@ -184,24 +202,25 @@ authentication or authorization rejection creates no `approval_reviews` row and 
 ordinary security audit path. There is one positive action, `approve_and_apply`; there is no
 approve-only or deferred-application state. `decline` is the terminal negative disposition.
 
-| Column                     | Type        | Constraints                                                       |
-| -------------------------- | ----------- | ----------------------------------------------------------------- |
-| `id`                       | text        | PK; `rev_` + 26-character ULID                                    |
-| `app_id`                   | text        | FK → apps, not null                                               |
-| `approval_request_id`      | text        | FK → approval_requests, not null                                  |
-| `action`                   | text        | not null; `approve_and_apply \| decline`                          |
-| `outcome`                  | text        | not null; `applied \| declined \| stale \| failed`                |
-| `reviewed_by`              | text        | not null; resolved WorkOS user ID or deleted-user tombstone       |
-| `reviewed_via`             | text        | not null; resolved auth door                                      |
-| `reviewed_at`              | timestamptz | not null                                                          |
-| `reason`                   | text        | nullable; bounded human or agent Review rationale                 |
-| `idempotency_key`          | text        | not null                                                          |
-| `request_hash`             | text        | not null; SHA-256 of UTF-8 RFC 8785 JCS Review input              |
-| `resulting_target_version` | text        | nullable; populated only for `outcome = applied`                  |
-| `resulting_resource_type`  | text        | nullable; canonical applied resource type on success              |
-| `resulting_resource_id`    | text        | nullable; canonical applied resource ID on success                |
-| `error_code`               | text        | nullable; machine-stable application error for `outcome = failed` |
-| `error_details`            | text        | nullable; bounded JSON matching the error code's detail contract  |
+| Column                     | Type        | Constraints                                                                                                  |
+| -------------------------- | ----------- | ------------------------------------------------------------------------------------------------------------ |
+| `id`                       | text        | PK; `rev_` + 26-character ULID                                                                               |
+| `app_id`                   | text        | FK → apps, not null                                                                                          |
+| `approval_request_id`      | text        | FK → approval_requests, not null                                                                             |
+| `action`                   | text        | not null; `approve_and_apply \| decline`                                                                     |
+| `outcome`                  | text        | not null; `applied \| declined \| stale \| failed`                                                           |
+| `reviewed_by`              | text        | not null; resolved WorkOS user ID or deleted-user tombstone                                                  |
+| `reviewed_via`             | text        | not null; resolved auth door                                                                                 |
+| `reviewed_at`              | timestamptz | not null                                                                                                     |
+| `reason`                   | text        | nullable; bounded human or agent Review rationale                                                            |
+| `idempotency_key`          | text        | not null                                                                                                     |
+| `request_hash`             | text        | not null; SHA-256 of UTF-8 RFC 8785 JCS Review input                                                         |
+| `resulting_target_version` | text        | nullable; populated only for `outcome = applied`                                                             |
+| `resulting_resource_type`  | text        | nullable; canonical applied resource type on success                                                         |
+| `resulting_resource_id`    | text        | nullable; canonical applied resource ID on success                                                           |
+| `error_code`               | text        | nullable; machine-stable application error for `outcome = failed`                                            |
+| `target_state`             | text        | nullable; failed attempt left `rolled_back`, `applied`, or `unknown`; migration 0019_targeting_rule_segments |
+| `error_details`            | text        | nullable; bounded JSON matching the error code's detail contract                                             |
 
 UNIQUE constraint: `(approval_request_id, reviewed_by, idempotency_key)`. An identical retry
 returns the recorded Review. A different payload under the same key fails with
@@ -228,12 +247,11 @@ Steps 2 and 3 happen before any target mutation. A mismatch records a `stale` Re
 request to `stale` without applying. A decline inserts the `declined` Review and moves the request
 to `declined` without applying.
 
-If step 4, 5, or 6 fails, the transaction rolls back, including the target mutation. A separate
-failure-record transaction conditionally appends a `failed` Review only while the Approval Request
-is still `pending`, with a machine-stable error. It does not change the request status. If another
-Review resolved the request first, the failed attempt cannot overwrite that terminal result and
-the caller receives the resolved-request result instead. Failure to record the attempt fails loud,
-but cannot commit the target mutation. The Review row and Approval Request audit fields are the
+A transactional failure rolls back the target mutation. A later projection failure may follow a
+durable target write, so a failed attempt records `target_state` as `rolled_back`, `applied`, or
+`unknown`. A separate failure-record transaction appends a `failed` Review only while the Request
+is still `pending`; it cannot overwrite a concurrent terminal result. Exact retries preserve the
+recorded failure and target state. Failure to record the attempt fails loud. The Review row and Approval Request audit fields are the
 durable atomic audit metadata; the unbounded Tinybird audit row is emitted after commit and is
 never the mutation authority.
 
@@ -259,7 +277,7 @@ CONFIGURATION (enabled state, available Variant subset, targeting, rollout) live
 | `name`                   | text        | not null                                                               |
 | `description`            | text        | nullable                                                               |
 | `schema`                 | text        | nullable (JSON Schema); value contract Variant `value`s must satisfy   |
-| `default_variant_id`     | text        | FK → variants                                                          |
+| `default_variant_id`     | text        | nullable; repository-enforced reference to variants                    |
 | `lifecycle_class`        | text        | not null, CHECK in the D9 classes plus `unclassified` (migration 0036) |
 | `owner`                  | text        | nullable; required by the Worker for `release` and `experiment`        |
 | `expires_at`             | text        | nullable ISO 8601 UTC; partial index `(app_id, expires_at)`            |
@@ -281,20 +299,20 @@ Event Definitions are shared by every Environment in one App. The stable `name` 
 developer-facing event name. The client names it but cannot choose a version. `family` is selected
 once and cannot be updated.
 
-| Column                         | Type        | Constraints                                                                           |
-| ------------------------------ | ----------- | ------------------------------------------------------------------------------------- |
-| `id`                           | text        | PK                                                                                    |
-| `app_id`                       | text        | FK → apps, not null                                                                   |
-| `name`                         | text        | not null, unique per `(app_id)`                                                       |
-| `family`                       | text        | not null; immutable `metric \| web`                                                   |
-| `display_name`                 | text        | not null                                                                              |
-| `description`                  | text        | nullable                                                                              |
-| `state`                        | text        | not null; `draft \| incomplete \| published`                                          |
-| `current_published_version_id` | text        | nullable, FK → event_definition_versions; must belong to this definition and `app_id` |
-| `created_at`                   | timestamptz | not null                                                                              |
-| `updated_at`                   | timestamptz | not null                                                                              |
-| `created_by`                   | text        | WorkOS user ID or deleted-user tombstone                                              |
-| `updated_by`                   | text        | WorkOS user ID or deleted-user tombstone                                              |
+| Column                         | Type        | Constraints                                                               |
+| ------------------------------ | ----------- | ------------------------------------------------------------------------- |
+| `id`                           | text        | PK                                                                        |
+| `app_id`                       | text        | FK → apps, not null                                                       |
+| `name`                         | text        | not null, unique per `(app_id)`                                           |
+| `family`                       | text        | not null; immutable `metric \| web`                                       |
+| `display_name`                 | text        | not null                                                                  |
+| `description`                  | text        | nullable                                                                  |
+| `state`                        | text        | not null; `draft \| incomplete \| published`                              |
+| `current_published_version_id` | text        | nullable; repository-enforced same-definition, same-App version reference |
+| `created_at`                   | timestamptz | not null                                                                  |
+| `updated_at`                   | timestamptz | not null                                                                  |
+| `created_by`                   | text        | WorkOS user ID or deleted-user tombstone                                  |
+| `updated_by`                   | text        | WorkOS user ID or deleted-user tombstone                                  |
 
 `published` requires a non-null `current_published_version_id`; `draft` and `incomplete` require
 null. Migration 0019 uses `incomplete` for a legacy Metric Event binding because the source row has
@@ -320,7 +338,8 @@ versions only after the normal App data purge has removed dependent Metric Event
 | `published_at`        | timestamptz | not null; also the immutable creation timestamp                  |
 | `published_by`        | text        | WorkOS user ID or deleted-user tombstone                         |
 
-UNIQUE constraints: `(event_definition_id, version)` and `(event_definition_id, schema_hash)`.
+Implemented UNIQUE constraint: `(event_definition_id, version)`. The intended additional
+`(event_definition_id, schema_hash)` uniqueness is not enforced by the current schema or migrations.
 Every repository query carries `app_id` first even when it also has `event_definition_id`.
 
 The Worker rejects null `entity_type` for a `metric` parent. For a `web` parent, null prohibits Entity
@@ -348,9 +367,11 @@ Variant catalog, targeting, rollout, and enabled state. One row per `(flag_id, e
 | `app_id`                  | text        | FK → apps, not null                                                  |
 | `environment_id`          | text        | FK → environments, not null (co-scoped with `app_id`)                |
 | `flag_id`                 | text        | FK → flags, not null                                                 |
+| `updated_by`              | text        | nullable actor reference for configuration writes                    |
+| `updated_via`             | text        | nullable auth door                                                   |
 | `enabled`                 | boolean     | not null, default false                                              |
 | `available_variant_names` | text        | not null (JSON string array; subset of the Flag's Variant catalog)   |
-| `default_variant_id`      | text        | FK → variants                                                        |
+| `default_variant_id`      | text        | nullable; repository-enforced reference to variants                  |
 | `rollout`                 | text        | nullable (JSON `PercentageRollout`); baseline rollout, `null` = none |
 | `created_at`              | timestamptz | not null                                                             |
 | `updated_at`              | timestamptz | not null                                                             |
@@ -374,6 +395,8 @@ malformed value is corrupt config, not "no rollout", so reads fail loud rather t
 | `description` | text        | nullable                   |
 | `created_at`  | timestamptz | not null                   |
 
+UNIQUE constraint on Variants: `(flag_id, name)` (`variants_flag_name_unique`).
+
 ### `targeting_rules` (per-Environment Flag CONFIGURATION)
 
 | Column               | Type        | Constraints                                                     |
@@ -385,7 +408,7 @@ malformed value is corrupt config, not "no rollout", so reads fail loud rather t
 | `priority`           | integer     | not null                                                        |
 | `conditions`         | text        | not null (JSON array of Condition)                              |
 | `segment_id`         | text        | nullable; same-App FK → segments, restrictive delete            |
-| `variant_id`         | text        | FK → variants                                                   |
+| `variant_id`         | text        | nullable; repository-enforced reference to variants             |
 | `percentage_rollout` | text        | nullable (JSON PercentageRollout)                               |
 | `created_at`         | timestamptz | not null                                                        |
 | `updated_at`         | timestamptz | not null                                                        |
@@ -413,6 +436,36 @@ deletion while a live Flag Configuration depends on the Segment.
 | `updated_at`  | timestamptz | not null              |
 
 UNIQUE constraint: `(app_id, id)`, the parent key for same-App Targeting Rule references.
+
+### Other identity and audit state
+
+`packages/db/src/schema/identity.ts` also defines the following bounded tables. Text timestamps use
+ISO 8601; `?` marks nullable columns.
+
+| Table                     | Columns and constraints                                                                                                                                                                                                                                    |
+| ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `app_deletion_sagas`      | `app_id` PK; required `generation_id`, `phase`, `created_at`, `updated_at`; nullable `organization_id`, `actor_id`, `delete_before_ts`, `retry_actor_hash`, `organization_scope_hash`; no App FK so recovery survives deletion                             |
+| `device_refresh_sessions` | `refresh_token_hash` PK; required `provider_session_id`, `user_id`, `provider_organization_id`, `selected_app_scope`, `created_at`, all text                                                                                                               |
+| `claim_verifications`     | `id` PK; required `provisional_user_hash`, `email_hash`, `expires_at`, `created_at`; `selected_resource?`, `verified_at?`, `consumed_at?`; integer `attempts` defaults 0; index `(provisional_user_hash, email_hash)`                                      |
+| `claim_consent_attempts`  | `id` PK; required FK `verification_id`, `existing_user_hash`, `expires_at`, `created_at`; `approved_at?`, `consumed_at?`; index `verification_id`                                                                                                          |
+| `claim_idempotency`       | Composite PK `(key_hash, provisional_user_hash, email_hash, organization_hash, app_hash, verified_user_hash)`; required FK `verification_id`, `expires_at`; `selected_resource?`, `completed_at?`, `provider_confirmation_started_at?`; index `expires_at` |
+| `trusted_idps`            | `idp_id` PK; `org_id?`; required text `issuer`, `jwks_uri`, JSON `client_ids`, `created_at`; integer `enabled` defaults 1; unique `(org_id, issuer)`                                                                                                       |
+
+`control_plane_audit_events` is the D1 outbox for ordinary audit facts, defined in
+`packages/db/src/schema/control-plane-audit-events.ts`. Its integer `seq` is an autoincrement PK;
+text `event_id` is required and unique. Required text fields are `app_id`, `organization_id`,
+`action`, `resource_type`, `resource_id`, `outcome`, `changes_json`, and `changed_at`. Nullable text
+fields are `environment_id`, `actor_ref`, `actor_via`, `target_version`, `request_id`,
+`approval_request_id`, `run_id`, and `forwarded_at`. There are no FKs. Indexes cover
+`(forwarded_at, seq)`, `(app_id, seq)`, and `changed_at WHERE forwarded_at IS NOT NULL`.
+Personal Access Token tables use text columns from `personal-access-tokens.ts` and
+`personal-access-token-step-up.ts`:
+
+| Table                                | Columns and constraints                                                                                                                                                                                                                                                          |
+| ------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `personal_access_tokens`             | `id` PK; required `user_id`, `name`, unique `token_hash`, JSON `grants`, `created_at`; nullable `expires_at`, `last_rotated_at`, `revoked_at`; index `user_id`                                                                                                                   |
+| `personal_access_token_step_up_uses` | `jti` PK; required `user_id`, `consumed_at`, `expires_at`; index `(expires_at, jti)`                                                                                                                                                                                             |
+| `personal_access_token_rotations`    | `id` PK; required `user_id`, cascade FK `token_id`, `previous_hash`, `candidate_hash`, `operation_hash`, `phase`, `claimed_at`, `updated_at`; nullable FK `step_up_jti`; partial unique `token_id` while phase is neither `completed` nor `retired`; index `(phase, updated_at)` |
 
 ## Sources
 

@@ -8,7 +8,13 @@ shared conventions are described in [control-plane-endpoint-inventory.md](contro
 
 ## Organization endpoints
 
-The Organization envelope is `{ id, name, slug, plan, created_at, updated_at }` for every endpoint
+### `GET /orgs`
+
+Operation ID: `organizations_list`. Returns the shared bounded list of reachable Organizations,
+filtered by live membership and token authority. Device-flow discovery and membership-wide read
+can discover the principal's complete live membership set. See [access-control-matrix.md](access-control-matrix.md).
+
+The Organization envelope is `{ id, name, slug, plan, createdAt, updatedAt }` for every endpoint
 below. It is a whitelist: `sso_enabled`, the Stripe ids, the claim-ceremony columns, and the
 provisional-reaper columns (`is_provisional`, `demo_expires_at`) stay in D1 and never reach the wire.
 
@@ -28,9 +34,9 @@ bound. Creation at the ceiling returns `409 QUOTA_EXCEEDED` with the current cou
 `details.recommendedAction: "REDUCE_OWNED_ORGANIZATIONS"`. Member and admin memberships do not count.
 
 A **provisional** (anonymous, unclaimed) principal is rejected with `403 FORBIDDEN`. It reached the
-control plane through an unauthenticated `POST /register`, so allowing it here would make Organization
+control plane through an unauthenticated `POST /agent/identity`, so allowing it here would make Organization
 creation an unauthenticated operation. Its one demo Organization is the limit until the
-claim ceremony (`POST /api/auth/claim/start`) yields an identified principal.
+claim ceremony (`POST /agent/identity/claim`) yields an identified principal.
 
 ### `GET /orgs/{org_id}`
 
@@ -39,22 +45,22 @@ Auth: any member of the Org.
 
 ### `PATCH /orgs/{org_id}`
 
-Body: `{ name?: string, plan?: string }` (billing plan changes gated by Stripe seam in future)
+Body: `{ name?: string, plan?: "free" | "pro" | "enterprise" }` (billing plan changes gated by Stripe seam in future)
 Returns: updated Org object.
 Auth: Org `owner`.
 
 ### `GET /orgs/{org_id}/members`
 
-Returns: `{ items: [{ user_id, email: string | null, role, created_at }], total, limit, offset }`
+Returns: `{ items: [{ id, organizationId, email: string | null, role, createdAt }], readLimit, readTruncated, cursor }`
 Auth: Org `owner` or `admin`.
 `email` is resolved from WorkOS at read time or from the session identity cache; it is not stored in D1.
 `email: null` means the member has not signed in yet. The membership remains in the roster.
 
 ### `POST /orgs/{org_id}/members`
 
-Body: `{ user_id: string, role: "owner" | "admin" | "member" }`
-Returns: `{ user_id, role, created_at }`
-Auth: Org `owner` or `admin`.
+Body: `{ userId: string, role: "owner" | "admin" | "member" }`
+Returns: `{ id, organizationId, email: string | null, role, createdAt }`
+Auth: Org `owner` or `admin`; granting `owner` is owner-only.
 An existing membership returns `409 MEMBERSHIP_CONFLICT` with `details.existingRole`; add never
 changes an existing role.
 
@@ -76,8 +82,9 @@ Auth: Org member (any role).
 
 ### `POST /orgs/{org_id}/apps`
 
-Body: `{ name: string, slug?: string }` (slug auto-derived from name if omitted; unique within Org)
-Returns: `{ app, environments, client_keys }` with the two default Environments and their public
+Body: `{ name: string, key?: string, description?: string, idempotency_key?: string }`
+(`key` auto-derived from name if omitted; unique within Org).
+Returns: `{ app, environments, clientKeys }` with the two default Environments and their public
 Client Keys.
 Auth: Org `owner` or `admin`.
 On create, **two Environments are provisioned by default: `dev` and `prod`**. `dev` ships with an
@@ -96,7 +103,7 @@ Client Key the same way.
 
 ### `GET /apps/{app_id}`
 
-Returns: `{ app_id, org_id, name, slug, created_at, updated_at }`
+Returns: `{ id, organizationId, name, key, description?, createdAt, updatedAt }`
 Auth: App member.
 
 ### `GET /apps/{app_id}/attention-rollup`
@@ -147,17 +154,17 @@ actor/App/Environment/Experiment/Run service identity.
 
 ### `PATCH /apps/{app_id}`
 
-Body: `{ name?: string, slug?: string }`
+Body: `{ name?: string, key?: string, description?: string }`
 Auth: App `owner` or `admin`.
 
-`slug` is the App's URL segment. It is unique within the Organization; a collision returns
+`key` is the App's URL segment. It is unique within the Organization; a collision returns
 `409 SLUG_CONFLICT` with `details: { resourceType: "app", conflictingSlug, recommendedAction:
 "CHOOSE_DIFFERENT_SLUG" }`. It is never silently deduplicated, and changing it moves every URL for
 the App, so the surface that offers it says so.
 
 ### `GET /apps/{app_id}/members`
 
-Returns: `{ items: [{ app_id, user_id, email, role, created_at }] }`
+Returns: `{ items: [{ appId, userId, email, role, createdAt }], readLimit, readTruncated, cursor }`
 Auth: App member (any role) — the App role matrix grants "view config" to every role.
 `email` is resolved from the session identity cache, exactly as the Org member list resolves it. A
 member who has been granted access but has not signed in yet has no cached profile, so `email` is
@@ -165,7 +172,7 @@ member who has been granted access but has not signed in yet has no cached profi
 
 ### `POST /apps/{app_id}/members`
 
-Body: `{ user_id: string, role: "owner" | "admin" | "member" }`
+Body: `{ userId: string, role: "owner" | "admin" | "member" }`
 Returns: the App member envelope.
 Auth: App `owner` or `admin`. Only an `owner` may grant `owner`.
 The user must already be a member of the App's Organization; otherwise `USER_NOT_FOUND`. App
@@ -203,7 +210,7 @@ Approval Requests / Reviews, archived Experiments (and their Runs), memberships,
 inside one atomic D1 batch — so a late FK failure cannot remove memberships or credential rows while
 leaving the App stranded. A failed delete must leave App membership and credential management intact
 (no partial cascade). Auth: App `owner`.
-Account-closure privacy deletion is the only exception; see
+Account-closure privacy deletion is intended but not exposed by this route; see
 [endpoints-privacy-data.md](endpoints-privacy-data.md).
 
 ## Environment endpoints (App-level resource; ADR-0027)

@@ -2,8 +2,8 @@
 
 ## Principle: no optimistic cache writes
 
-The panel applies **zero** optimistic updates. A cache mutation happens only by refetch after a
-server 200. The UI always reflects persisted, DO-validated state. This is the frontend mirror of
+The panel applies **zero** optimistic updates. Persisted domain data changes only after a successful
+write and reread. The UI reflects server-confirmed state. This is the frontend mirror of
 the "persisted-before-announced" contract in the DO (ADR-0019).
 
 "Optimistic" is any update to Query cache state before the server has confirmed persistence.
@@ -13,25 +13,24 @@ Even a flag toggle that feels instant must wait for the DO 200 before the cache 
 
 ```
 1. User submits form
-2. Mutation POSTs to control-plane read/write API
-3. Worker routes request through per-(App, Environment) DO (idFromName(`${appId}:${environmentId}`))
-4. DO validates → commits D1/KV → broadcasts nudge to all connected clients
-5a. On 200: mutation caller triggers immediate refetch of the affected entity
+2. Panel POSTs to a TanStack Start server function
+3. Server function authorizes an Environment-pinned delegation and calls the typed Control Plane SDK
+4. Worker validates and persists the operation; config changes use the per-(App, Environment) DO
+5a. On success: caller revalidates its route or invalidates and refetches its Query keys
 5b. On 4xx: mutation caller surfaces structured error to the form; no cache change
-6. Echoed nudge arrives: version gate skips refetch for the editor (version already current)
+6. Echoed nudge arrives: version gate skips refetch only if a versioned detail is already cached
 7. Other editors' sockets receive nudge → their caches invalidate → they refetch
 ```
 
 ## On 200: immediate refetch, no wait for nudge
 
 The mutation caller does not wait for the nudge to trigger a refetch. It immediately invalidates
-and refetches after receiving a 200, using the version from the 200 response:
+and refetches after receiving success. `useFlagEditing` calls `router.invalidate()` because its
+screen uses route-loader data; Query-backed callers invalidate the affected keys:
 
 ```
 onSuccess: (data) => {
-  // data.version is the new version from the DO
-  queryClient.invalidateQueries({ queryKey: keys[entity].prefix(appId, environmentId) })
-  // The refetch result will carry data.version, so the echoed nudge is version-gated to a no-op
+  queryClient.invalidateQueries({ queryKey: queryKeys.flag.prefix(appId, environmentId) })
 }
 ```
 
@@ -40,34 +39,36 @@ of nudge → invalidate → refetch.
 
 ## Mutation response shape (200)
 
-The control-plane API returns the full updated entity on 200, including the new version:
+Responses are operation-specific resource shapes, not a generic `{ data, version }` wire envelope.
+For example, `FlagConfigMutationResponseSchema` extends the config read shape:
 
 ```
-MutationResponse<T> {
-  data:    T         // full updated entity (Experiment, Flag, Metric, Segment, Run, ...)
-  version: number    // monotone version for version-gating
+FlagConfigMutationResponse {
+  flagId, environmentId, version, enabled, availableVariantNames,
+  targetingRules, rollout, experiment,
+  approvalRequest: ApprovalRequest | null,
+  next?: MutationNext
 }
 ```
 
-The version is stored in the Query cache as part of the entity shape so the nudge handler can
-compare against it. Entities served by the read API must carry `version` on their response shape.
+The SDK wraps this in its typed success result; panel server functions may project it further
+(`FlagWriteResult` returns status and Approval Request data). A cached detail's `version` lets the
+nudge handler skip an echo; route-loader-only data does not imply that cache entry exists.
 
 ## On 4xx: structured error, form renders inline
 
-The DO returns validation errors as a structured response body:
+The Worker returns the canonical `ErrorResponse` discriminated union from `@splitch/contracts`:
 
 ```
 ErrorResponse {
-  code:    string                          // machine-readable e.g. 'VALIDATION_ERROR'
-  message: string                          // human summary
-  errors:  FieldError[]                    // field-level details (may be empty)
+  code:    ErrorCode
+  message: string
+  details: object     // shape selected by code; always present
+  outcome?: ErrorOutcome
 }
 
-FieldError {
-  field:   string    // dot-path e.g. 'allocation.controlVariant', 'name'
-  code:    string    // e.g. 'REQUIRED', 'VARIANT_NOT_DEFINED', 'DUPLICATE_KEY'
-  message: string    // human-readable hint
-}
+// VALIDATION_ERROR details:
+{ issues: Array<{ path: string[], message: string, code?: string }> }
 ```
 
 HTTP status codes:
@@ -76,10 +77,15 @@ HTTP status codes:
 - `409` — conflict (e.g. edit-version mismatch, optimistic lock)
 - `403` — caller lacks App role required for the operation
 
-**The form renders `errors` inline, one per field.** The panel may show cheap client-side hints
+`mutationErrorSurface` in `src/lib/shared/api.ts` maps `details.issues` to inline fields and keeps
+Approval Request IDs, Policy contexts, frozen fields, and terminal dispositions actionable.
+The panel may show cheap client-side hints
 (Zod parse of the same schema) as UX feedback while typing, but the DO's `ErrorResponse` is the
-authoritative source. Client-side hints MUST NOT duplicate the DO's logic — they are cheap,
-best-effort, and may diverge if the DO adds a new constraint.
+authoritative source. Client-side hints must not duplicate domain decisions made by the Worker.
+
+`APPROVAL_REVIEW_REQUIRED` is a 409 with a durable request ID. The panel reads that request, shows
+its recorded diff, and only sends `approve_and_apply` after an explicit Confirm. It never inserts
+an inline Review automatically on the first submit (`control-plane-flag-mutations.ts`).
 
 ## Form-level ephemeral state
 

@@ -2,8 +2,9 @@
 
 The canonical first-run narrative — the same steps for a human at the CLI, an agent over MCP, and a
 developer in the control panel (three skins over one typed contract). The
-`onboard_new_app` MCP prompt automates this sequence, and the `splitch://quickstart` MCP resource
-serves this file verbatim, so an agent never needs the docs site to onboard.
+`onboard_new_app` MCP prompt returns an advisory tool plan for this sequence; it never executes
+tools itself. The `splitch://quickstart` resource serves the generated copy of this file, so an
+agent never needs the docs site to onboard.
 
 > Glossary note: **Flag**, **Variant**, **Run**, **Exposure**, **Targeting Key**, **Environment** all
 > mean exactly what the `splitch://context` MCP resource says. That resource is the glossary.
@@ -120,8 +121,11 @@ splitch apps create --org <orgId> --name "My App"     # CLI
 apps_create { orgId, name }                            # MCP tool
 ```
 
-This **auto-provisions a `dev` and a `prod` Environment** — you do not create Environments by hand
-for the common case. The response includes the App **and** its two Environments:
+This **auto-provisions a `dev` and a `prod` Environment**, a public Client Key for each, and owner
+membership for the creator. Dev Policy is all-`allow`; prod Policy is `confirm` for Variant
+availability, targeting/rollout/value, enabled state, and Start a Run. Turning a Flag off remains
+exempt. You do not create Environments by hand for the common case. The response includes the App,
+Environments, and Client Keys (selected fields shown):
 
 ```json
 {
@@ -209,8 +213,9 @@ appear in `splitch stale-flags list` / `stale_flags_list` with typed reasons and
 Before deleting, `splitch flag-removal brief` / `flag_removal_brief` returns an advisory brief
 (served Variants per Environment, SDK search shapes, caveats); splitch never writes customer code.
 
-Flag definition is App-level; serving config is per-Environment. Promote it into your
-Environment with `flags promote` / `flags_promote` when you are ready to serve it there.
+Flag definition is App-level; serving config is per-Environment. Creation initializes a disabled
+Flag Configuration in every existing Environment. `splitch flags promote` / `flags_promote` later
+copies selected Configuration fields from a source Environment into a target.
 
 A new Flag starts with Configuration `enabled: false` and `rollout: null`. Until you change those,
 every evaluation returns the Default Variant (`off`) with `reason: "DISABLED"` — an inert Flag, not
@@ -258,8 +263,10 @@ is not serving. After step 7 you should see:
 { "value": true, "variantName": "on", "reason": "SPLIT" }
 ```
 
-- `verify` uses the **same credential your code holds** — it answers "is _my_ setup wired?" Under a
-  Client Key the reason is non-revealing; under an API Key it names the matched rule.
+- The CLI's `flags verify` fetches the active Environment's **Client Key** and calls the data-plane
+  verify endpoint with it, like the panel. It does not accept an API Key override. The SDK's
+  `verify()` can use either credential tier: Client Key reasons are non-revealing; API Key reasons
+  can name the matched rule.
 - `flags_test_eval` is the control-plane, full-reason tier — use it when rule identity matters.
 
 A green verify with `reason: "SPLIT"` (or `DEFAULT` if you enabled without a rollout) is your
@@ -288,7 +295,7 @@ bucketing salt on the first write and never regenerates it, so 10 → 25 only _a
 treatment. Nobody already inside the rollout is silently moved out. Clearing the rollout to `null` is
 the one visible way to drop the cohort, and re-establishing it starts a fresh one.
 
-In an Environment whose Policy gates `targeting_rollout_value`, the CLI Confirmation supplies the
+In an Environment whose Policy gates `targeting_rollout_value`, explicit CLI `--confirm` supplies the
 canonical `review: { action: "approve_and_apply" }`. If Review is omitted, the call answers
 `409 APPROVAL_REVIEW_REQUIRED` with the durable request ID. Review that request; do not resend a
 parallel confirmation mutation.
@@ -328,6 +335,7 @@ product:
 import { createSplitchClient } from "@splitch/sdk";
 
 const splitch = createSplitchClient({ clientKey: "pk_..." }); // paste keyMaterial from `splitch client-key get`
+const userId = "user-1"; // replace with the real Entity's Targeting Key
 
 const variant = await splitch.evaluate("new-checkout", {
   targetingKey: userId,
@@ -347,8 +355,10 @@ baseline rollout; only the Exposure is skipped. Holdovers replay their prior Var
 a new Exposure. Defaults and the full status→result mapping are in the public SDK methods guide at
 https://splitch.dev/docs/sdk/methods.
 
-**The loop closes here.** Deploy, call `evaluate()` with a real user, and the dashboard's empty
-Exposures state flips to "first Exposure received." Verify proves wiring; the first real `evaluate`
+**The loop closes here.** Call `evaluate()` with a real user under the live Run. Environment
+Settings shows "First Exposure received"; its status check polls every five seconds while waiting
+and stops on success or error. The `onboard_new_app` plan additionally reads `experiment_results_get`
+until the deduped Exposure total is exactly one with no conflict. Verify proves wiring; the first real `evaluate`
 proves the integration. They are different milestones — onboarding is done at the first real Exposure.
 
 ---
@@ -360,15 +370,15 @@ splitch is fail-loud then guide. Every operational `409` carries a machine-stabl
 under https://splitch.dev/docs/error/{code}. The `recover_from_error` MCP prompt turns a token into
 a full remediation plan.
 
-| You hit…                      | It means…                                             | Do…                                                                              |
-| ----------------------------- | ----------------------------------------------------- | -------------------------------------------------------------------------------- |
-| `APPROVAL_REVIEW_REQUIRED`    | the durable request awaits an authorized Review       | review `details.approvalRequestId`                                               |
-| `APPROVAL_REQUEST_STALE`      | the target changed after proposal                     | refresh current state and create a new request                                   |
-| `APPROVAL_APPLICATION_FAILED` | application did not complete; request remains pending | inspect `details.applicationError`, then retry Review with a new idempotency key |
-| `VARIANT_NOT_AVAILABLE`       | the Variant is not promoted to this Environment       | `flags_promote`, then retry                                                      |
-| `RUN_FROZEN`                  | the edit touches a running Run                        | clone into a new draft Run and apply it there                                    |
-| `APP_MISMATCH` on verify      | wrong key for this App / Environment                  | fetch the credential for _this_ Env (step 5)                                     |
-| `401` / `403` on evaluate     | bad or revoked Client Key, or origin not allowed      | check the key and its origin allow-list (step 5)                                 |
+| You hit…                      | It means…                                             | Do…                                                                                              |
+| ----------------------------- | ----------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| `APPROVAL_REVIEW_REQUIRED`    | the durable request awaits an authorized Review       | review `details.approvalRequestId`                                                               |
+| `APPROVAL_REQUEST_STALE`      | the target changed after proposal                     | refresh current state and create a new request                                                   |
+| `APPROVAL_APPLICATION_FAILED` | application did not complete; request remains pending | inspect `details.applicationError`, then retry Review with a new idempotency key                 |
+| `VARIANT_NOT_AVAILABLE`       | the Variant is not promoted to this Environment       | `flags_promote`, then retry                                                                      |
+| `RUN_FROZEN`                  | the edit touches a running Run                        | follow `details.recommendedAction`; Flag Configuration locks require ending the owning Run first |
+| `APP_MISMATCH` on verify      | wrong key for this App / Environment                  | fetch the credential for _this_ Env (step 5)                                                     |
+| `401` / `403` on evaluate     | bad or revoked Client Key, or origin not allowed      | check the key and its origin allow-list (step 5)                                                 |
 
 ## Sources
 

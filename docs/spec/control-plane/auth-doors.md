@@ -79,7 +79,8 @@ token on the ID-JAG path. Every runtime target uses the RS256/JWKS trust contrac
    traffic justifies the paid plan (ADR-0034).
 2. Create WorkOS user (unverified email placeholder)
 3. Create provisional Org: `is_provisional = 1`, `demo_expires_at = now + 24h`
-4. Create provisional App under the Org (with a default Environment; Environment is per-App, ADR-0027)
+4. Create provisional App under the Org with `production` and `development` Environments
+   (`register.ts`); this path differs from Control Plane App creation, which provisions `dev` and `prod`.
 5. Issue `identity_assertion` scoped to `pre_claim_scopes = ["app:{app_id}:member"]`
 6. Return: `{ identity_assertion, user_id, org_id, app_id, demo_expires_at }`
 
@@ -166,7 +167,7 @@ claim with the returned `verification_id` and idempotency key; no fixture OTP is
 ### Provisional demo reaping
 
 Cron Trigger Worker runs daily. Query:
-`SELECT org_id FROM organizations WHERE is_provisional = 1 AND demo_expires_at < now()`
+`SELECT id FROM organizations WHERE is_provisional = 1 AND demo_expires_at < now()`
 
 For each row: delete Apps under the Org (and their Environments), delete Org memberships, delete the
 Org — all through the D1 data-access seam (app_id scoping enforced, never bypassed).
@@ -251,8 +252,8 @@ For ordinary sessions, Auth API stores only a hash of the provider refresh token
 User grant (and Organization grant when one exists), and the canonical selected App ID or none.
 Roles are never stored — the scope's role is reintersected with live membership at every mint.
 Missing or changed authority, expired/revoked provider sessions, and removed membership fail
-loud. The CLI stores the resulting **refresh token** in keychain or `~/.splitch/credentials.json`
-(mode 0600). The MCP server does not touch disk or forward the client bearer; MCP clients present
+loud. The CLI stores the resulting **refresh token** in `~/.splitch/credentials.json`
+(mode 0600, parent 0700); keychain support remains intended work. The MCP server does not touch disk or forward the client bearer; MCP clients present
 their exact-resource access token on transport requests.
 
 ## Remote MCP browser OAuth

@@ -49,14 +49,16 @@ keeps one App's data from another's.
 - Every read and write is scoped by `app_id` in the data-access seam; that
   scoping **is** the security boundary, not a convenience.
 - Canonical contract: **ADR-0018** + [`multi-tenant-isolation`](./multi-tenant-isolation.md).
-- Enforced in code by the `splitch-tenant-scoping-required` Semgrep rule.
+- Enforced by minted repository scopes and scope predicates. The
+  `splitch-tenant-scoping-required` Semgrep rule provides an additional advisory scan;
+  Semgrep is not currently a merge gate.
 
 ### 3. Credentials
 
-Two key classes with different blast radii.
+Two SDK key classes plus user-bound management tokens have different blast radii.
 
 - **API Key** (secret, server-side): provisioned, never read back after
-  creation, never returned in a response, never logged.
+  creation, returned only by the provisioning response, never logged.
 - **Client Key** (public, client-side): safe to embed; open-by-default with loud origin surfacing
   (ADR-0034 §1); Exposure-bearing `evaluate` plus strict write-only Metric Event `track()` and Web
   Event `web.track()`; no Flag Configuration, Event Definition, or analytics reads.

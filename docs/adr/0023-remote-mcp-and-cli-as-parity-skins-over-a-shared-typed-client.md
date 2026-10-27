@@ -1,6 +1,8 @@
 # Remote MCP server and CLI as parity skins over the Control Plane SDK; thin 1:1; invariants in the Worker
 
-**Status:** accepted; amended 2026-07-19
+**Status:** accepted; amended 2026-07-19; the amendment's per-owner transport is superseded by
+[ADR-0065](./0065-mcp-reaches-every-owner-worker-through-the-control-plane.md) (MCP binds only the
+Control Plane)
 
 ## 2026-07-19 amendment: MCP is its own protected resource
 

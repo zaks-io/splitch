@@ -43,7 +43,7 @@ warning** plus a one-action "lock to origins" affordance:
 
 - The control panel shows a persistent banner on any open (`origin_allowlist = null`) Client Key
   ("This key accepts requests from any origin — lock it to your domains").
-- The CLI/MCP `client_key_get` response carries an `is_origin_open: true` flag and a warning line.
+- The CLI/MCP `client_key_get` response carries an `isOriginOpen: true` flag and a warning line.
 - The per-key rate limit (default 100 rps) is the volume backstop while a key is open.
 
 `origin_allowlist = null` = open to all origins; `origin_allowlist = []` = closed, serves nothing;
@@ -59,7 +59,7 @@ friction-free to start and one click to fix.
 | `key_id`          | TEXT PK | yes      | Splitch-generated (`ak_<ulid>`)                                       |
 | `app_id`          | TEXT FK | yes      | Owning App                                                            |
 | `environment_id`  | TEXT FK | yes      | Owning Environment — the key reaches only this Environment (ADR-0027) |
-| `key_hash`        | TEXT    | yes      | bcrypt or SHA-256 hash of the secret; the secret is never stored      |
+| `key_hash`        | TEXT    | yes      | SHA-256 hash of the secret; the secret is never stored                |
 | `scopes`          | TEXT    | yes      | JSON array; see scope format below                                    |
 | `revoked_at`      | TEXT    | no       | ISO 8601; null = active                                               |
 | `last_rotated_at` | TEXT    | no       | ISO 8601; set on each rotation                                        |
@@ -74,8 +74,9 @@ receives `key_id`, `scopes`, and lifecycle fields — never `key_hash` and never
 Control-plane token scopes: `app:{app_id}:{role}` where role is `owner`, `admin`,
 or `member`.
 
-API Key scopes for data-plane: `["data-plane:evaluate", "data-plane:write"]`. All API Keys have
-both. Granular scopes are future work.
+API Key scopes for data-plane are selected at creation from
+`"data-plane:evaluate"` and `"data-plane:write"`. The CLI defaults to both when none are supplied;
+the HTTP create body requires `scopes`. Evaluation and write routes enforce their required scope.
 
 ## KV hot-validation cache
 
@@ -88,8 +89,8 @@ Key:   ck:{sha256(key_material)}
 Value: CredentialCacheKV { kind: "client_key", appId, environmentId, organizationId, scopes, originAllowlist, rateLimitRps, revoked, cachedAt, credentialSchemaVersion, ... }
 ```
 
-The `track` capability authorizes `POST /api/sdk/events` for Metric Events. There is no Web Events
-route. Any future route that authenticates a Client Key or API Key inherits the shared credential
+The `track` capability authorizes `POST /api/sdk/events` for Metric Events. The Web Events
+route described below is intended but not yet registered. Any future route that authenticates a Client Key or API Key inherits the shared credential
 expiry check. Tracking does not authorize configuration or analytics reads.
 
 **API Key cache entry:**
@@ -228,7 +229,8 @@ justifies the plan cost.
   silent peek). Under an API Key, `/verify` returns the full resolution reason. See
   [../sdk/exposure-accessor.md](../sdk/exposure-accessor.md) and ADR-0037.
 - **Event ingest is a narrow Client Key surface:** `POST /api/sdk/events` accepts only strict Metric
-  Event writes and `POST /api/sdk/web-events` accepts only strict Web Event writes. Both inject App
+  Event writes. The intended `POST /api/sdk/web-events` route accepts only strict Web Event writes
+  and is not yet registered. Both inject App
   and Environment from the credential, reveal no Event Definition, configuration, or analytics
   data, and apply the same origin and rate-limit controls as evaluate. See
   [../pipeline/metric-event-contract.md](../pipeline/metric-event-contract.md) and

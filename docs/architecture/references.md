@@ -19,7 +19,7 @@ vendors' own words — annotated below.
 - **OpenFeature — full spec**: https://openfeature.dev/specification/
 - **OFREP — protocol**: https://github.com/open-feature/protocol
   Core single-Flag and bulk evaluation HTTP shape. splitch implements those two
-  paths as a projection of evaluate / evaluate-all (ADR-0059).
+  paths as a projection of evaluate / evaluate-all (ADR-0062).
 
 ## Experiment side
 
@@ -81,7 +81,9 @@ vendors' own words — annotated below.
 All three platforms ship **Sticky Bucketing / Persistent Assignment** (keep a user in their original
 Variant across a config change). splitch's answer: **both, at different layers.**
 
-- A **material** edit opens a **new Run** → fresh, clean dataset (dataset cleanliness).
+- An **assignment-affecting** edit requires a **new Run** with a fresh dataset; supported edits
+  stage a draft for Start.
+  Measurement edits recompute over the existing Run, subject to its locked decision spec (ADR-0003).
 - At the Run boundary, a holdover Entity (one already _exposed_ under a prior Run) keeps its prior
   Variant for **experience** but is **not re-counted** in the new Run (continuity _without_
   contaminating the new dataset).
@@ -93,7 +95,7 @@ per-Entity state on the seam. See [assignment-exposure-seam.md](./assignment-exp
 
 ## Cloudflare storage primitives (Assignment Store substrate grill, 2026-06-20)
 
-Verified for ADR-0009 (KV read + per-key Durable Object write). The substrate split is Cloudflare's own
+Verified for ADR-0009 (KV read + Durable Object write; the writer grain is now per Entity, ADR-0064). The substrate split is Cloudflare's own
 documented control-plane/data-plane pattern.
 
 - **Workers KV — how it works** (eventually consistent, edge-cached, ~10ms hot reads, up to ~60s
@@ -256,5 +258,6 @@ written next to it.
   asymptotic confidence sequences.** Annals of Statistics 52(6).
   https://arxiv.org/abs/2103.06476
   Claim: Proposition 3.5 is a sequential delta-method construction and an alternative to
-  Fieller, not a refutation. Time-uniform coverage of the current Fieller inversion is unproven
-  and scheduled for audit (D1: keep Fieller).
+  Fieller, not a refutation. The seeded coverage audit is recorded in ADR-0015 and implemented in
+  `packages/stats/src/relative-ci.simulation.test.ts`. It found no replacement-triggering failure
+  within its stated fixtures and tolerance; that simulation is not a general coverage proof.

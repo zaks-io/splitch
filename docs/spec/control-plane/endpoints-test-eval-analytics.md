@@ -4,8 +4,9 @@ Request/response shapes for the dry-run test-evaluation endpoint, the Tinybird E
 Analytics proxy reads, and the unauthenticated OpenAPI schema discovery endpoint.
 
 These endpoints share control-plane auth and contracts, but they do not all live on one Worker.
-Dry-run test-evaluation is mounted on the **Evaluation Worker**. Analytics proxy reads are mounted
-on the **Analysis Worker**. OpenAPI schema discovery is served by the **Control Plane API Worker**.
+Dry-run test-evaluation executes on the **Evaluation Worker**. Analytics proxy reads execute
+on the **Analysis Worker**. Both are addressed at the **Control Plane API Worker**, which validates
+authority and path scope before delegating over service bindings. OpenAPI schema discovery is served by the **Control Plane API Worker**.
 All require a control-plane bearer token unless noted. All requests/responses are
 `Content-Type: application/json`. Error shape, pagination, and the shared conventions are described
 in [control-plane-endpoint-inventory.md](control-plane-endpoint-inventory.md).
@@ -54,8 +55,9 @@ endpoint must never reveal.
         ruleName: string | null,
         priority: number,
         selection: "direct" | "percentage_rollout",
-        rollout?: { variantWeights: { variantName: string, weight: number }[] }
+        rollout: { variantWeights: { variantName: string, weight: number }[] } | null
       }
+    | { type: "baseline_rollout", rollout: { variantWeights: { variantName: string, weight: number }[] } }
     | { type: "fresh_assignment" }
     | { type: "default_disabled" }
     | { type: "no_match_default" }
@@ -89,7 +91,11 @@ contracts live in [endpoints-web-analytics.md](./endpoints-web-analytics.md).
 
 Returns an `AnalysisResultsEnvelope` for the live Run, or a specified `runId`, over
 this Environment's Exposures. `GET` accepts `?runId=...`; `POST` accepts
-`{ "runId": "..." }`. The caller never supplies `app_id` or `environment_id` as
+`{ "runId": "..." }`. POST additionally accepts `dataWatermark`. Both accept
+`view: "detailed" | "concise"`, and `includeExploratory`; GET encodes them as query parameters.
+The shared Results producer adds readiness, `blockedBy`, and `reasons`, plus a ship recommendation
+when the Run is pre-registered. `view=concise` selects the verdict contract; `includeExploratory`
+can attach the detailed statistics. GET has no `dataWatermark` query field. The caller never supplies `app_id` or `environment_id` as
 Tinybird parameters. On the public Control Plane door (`api.splitch.dev` / CLI /
 Panel), the Control Plane resolves Experiment existence and Run selection in D1
 first (ADR-0018): a missing or out-of-scope Experiment is `EXPERIMENT_NOT_FOUND`;
@@ -98,12 +104,10 @@ a draft Experiment with no Run answers `200` with `state: "no_run"` and
 injects App/Environment from the validated control-plane token and path context,
 then calls the app-scoped Tinybird pipes and `StatsEngine.analyze`. A locked Run
 still missing Exposures or Metric Events answers `200` with `state: "no_data"`
-naming `missing` (SPL-302). MCP tools for this operation dispatch straight at
-the Analysis Worker over a service binding and do not yet run that D1 gate; that
-topology gap is tracked separately and is not closed by SPL-305.
+naming `missing` (SPL-302). MCP tools use the same Control Plane delegation path and D1 gate.
 
 The conclusion-capable Results read adds the server `data_watermark` and deterministic `result_token`
-defined in [result-contracts.md](../stats/result-contracts.md#analysis-results-envelope) to a
+defined in [result-contracts.md](../stats/result-contracts.md#analysis-results-envelope-analysis-worker) to a
 `state: "ready"` response. The current ordinary read may omit both; such a response cannot be
 concluded and yields `DECISION_RESULT_UNAVAILABLE`. Reading Results never Ends the Run or writes a
 Flag Configuration. Conclude must recompute at the observed watermark and match the token; it never
@@ -111,6 +115,7 @@ accepts caller-supplied Stats output.
 
 ### `POST /apps/{app_id}/envs/{environment_id}/experiments/{experiment_id}/runs/{run_id}/decision-diagnostics`
 
+**Implementation status:** intended contract; no route is registered yet.
 Returns the read-only SRM trend and paginated Dimension auto-cuts for one result token. The strict
 request, response, ranking, watermark, and tenant-isolation rules are canonical in
 [decision-diagnostics.md](../stats/decision-diagnostics.md).
@@ -133,11 +138,21 @@ Usage rows are deduplicated by the caller-owned logical Evaluation identity befo
 window is applied. The canonical first-received row owns the month, so a retry received after a
 month boundary cannot appear in both months.
 
+## Exposure status
+
+### `GET /apps/{appId}/envs/{environmentId}/exposure-status`
+
+Operation ID: `environment_exposure_status_get`. Requires App membership and PAT `read` authority.
+Returns `{ state: "not_received", firstExposureAt: null }` or
+`{ state: "received", firstExposureAt: string }` through the same Control Plane to Analysis
+delegation path. The response contract is `EnvironmentExposureStatusResponseSchema` in
+`packages/contracts/src/environment-exposure-status.ts`.
+
 ## Schema discovery
 
 ### `GET /.well-known/openapi.json`
 
-Unauthenticated. Returns the OpenAPI 3.1 document generated from Zod schemas at build time.
+Unauthenticated. Returns the OpenAPI 3.1 document derived from the Zod route registry when requested.
 Agents can fetch this at handshake time to discover all tool schemas.
 
 `info.version` carries the deployed commit SHA, the same build identity `GET /health` reports as

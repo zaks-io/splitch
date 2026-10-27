@@ -12,14 +12,14 @@ assign(run: RunConfig, targetingKey: string) -> string   // returns Variant name
 
 `RunConfig` is the frozen snapshot the Provider delivers. Its fields:
 
-| Field            | Type                                        | Required | Meaning                                                            |
-| ---------------- | ------------------------------------------- | -------- | ------------------------------------------------------------------ |
-| `runId`          | string                                      | yes      | Unique, immutable Run identity                                     |
-| `salt`           | string                                      | yes      | Per-experiment bucketing seed; changes mean a different split      |
-| `allocation`     | `{ variantName: string; weight: number }[]` | yes      | Weights sum to 1.0; deterministic split                            |
-| `variantSet`     | `string[]`                                  | yes      | Ordered list of Variant names; frozen for the Run                  |
-| `targetingRules` | `TargetingRule[]`                           | yes      | Priority-ordered; first match wins                                 |
-| `targetingKey`   | string                                      | yes      | The attribute name in EvaluationContext that identifies the Entity |
+| Field            | Type                      | Required | Meaning                                                          |
+| ---------------- | ------------------------- | -------- | ---------------------------------------------------------------- |
+| `runId`          | string                    | yes      | Unique, immutable Run identity                                   |
+| `salt`           | string                    | yes      | Per-experiment bucketing seed; changes mean a different split    |
+| `allocation`     | `Record<string, number>`  | yes      | Variant-name keys; percentage weights sum to 100                 |
+| `variantSet`     | `Variant[]`               | yes      | Frozen Variant catalog with id, name, and value                  |
+| `targetingRules` | `ResolvedTargetingRule[]` | yes      | Priority-ordered; first match wins                               |
+| `targetingKey`   | string                    | yes      | Frozen Targeting Key field; assign receives its value explicitly |
 
 ## Determinism contract
 
@@ -32,6 +32,11 @@ assign(run: RunConfig, targetingKey: string) -> string   // returns Variant name
   `salt + ":" + targetingKey` (implementation detail; the principle is: one hash target, the
   Targeting Key). Mismatched bucketing (e.g. hashing on something other than the configured
   Targeting Key) is a config error caught at design time, not runtime polymorphism.
+
+`assign` sorts allocation entries lexicographically by Variant name before cumulative percentage
+bucketing. `hashToUnitInterval` hashes UTF-8 bytes with FNV-1a, applies the 32-bit avalanche mix,
+and divides by `2^32` to produce a point in `[0, 1)`. Fractional Evaluation multiplies it by 100.
+The implementation is `packages/evaluation-core/src/assignment.ts` and `hash.ts`.
 
 ## Return type
 

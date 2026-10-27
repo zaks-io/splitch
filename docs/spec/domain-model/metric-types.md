@@ -6,19 +6,19 @@ A **Metric** = a fact (the event/action measured) combined with an aggregation (
 
 ## ExperimentMetric shape
 
-| Field                   | Type                                   | Req   | Meaning                                                |
-| ----------------------- | -------------------------------------- | ----- | ------------------------------------------------------ |
-| `metric_id`             | `string` (ULID)                        | ✓     | Internal identifier                                    |
-| `app_id`                | `string`                               | ✓     | Owning App                                             |
-| `name`                  | `string`                               | ✓     | Display name                                           |
-| `metric_type`           | `MetricType`                           | ✓     | See below                                              |
-| `event_definition_id`   | `string \| null`                       | cond. | Required for non-Ratio Metrics                         |
-| `event_field_name`      | `string \| null`                       | cond. | Named number field; required for Count and Revenue     |
-| `numerator_metric_id`   | `string \| null`                       | cond. | Ratio-only reference to a same-App non-Ratio Metric    |
-| `denominator_metric_id` | `string \| null`                       | cond. | Ratio-only reference to a same-App non-Ratio Metric    |
-| `aggregation`           | `AggregationConfig`                    | ✓     | Per-Entity aggregation spec (sum, binary, mean, ratio) |
-| `role`                  | `"goal" \| "guardrail" \| "secondary"` | ✓     | Role in this Experiment's analysis                     |
-| `guardrail_config`      | `GuardrailConfig \| null`              | ✗     | Required when `role = "guardrail"`                     |
+| Field                    | Type                                   | Req   | Meaning                                                      |
+| ------------------------ | -------------------------------------- | ----- | ------------------------------------------------------------ |
+| `metric_id`              | `string` (ULID)                        | ✓     | Internal identifier                                          |
+| `app_id`                 | `string`                               | ✓     | Owning App                                                   |
+| `name`                   | `string`                               | ✓     | Display name                                                 |
+| `metric_type`            | `MetricType`                           | ✓     | See below                                                    |
+| `event_definition_id`    | `string \| null`                       | cond. | Required for non-Ratio Metrics                               |
+| `event_field_name`       | `string \| null`                       | cond. | Named number field; required for Count and Revenue           |
+| `numerator_metric_id`    | `string \| null`                       | cond. | Ratio-only reference to a same-App non-Ratio Metric          |
+| `denominator_metric_id`  | `string \| null`                       | cond. | Ratio-only reference to a same-App non-Ratio Metric          |
+| `aggregation`            | `AggregationConfig`                    | ✓     | Per-Entity aggregation spec (sum, binary, mean, ratio)       |
+| `role`                   | `"goal" \| "guardrail" \| "secondary"` | ✓     | Role in this Experiment's analysis                           |
+| `downside_threshold_pct` | `number \| null`                       | cond. | Required on a Guardrail Metric; frozen into the Run decision |
 
 ## Metric types
 
@@ -81,11 +81,14 @@ Public online evidence for this exact eligibility rule is thin; it is the produc
 
 ### Guardrail Metric
 
-Any Metric type watched for unintended harm. Warns when the lower-bound of the Confidence Interval breaches a downside threshold.
+Any Metric type watched for unintended harm. The Run's analysis version selects the bound check.
 
 `role = "guardrail"`
 
-`GuardrailConfig = { threshold: number; direction: "lower_bound_above" | "upper_bound_below" }`
+`downside_threshold_pct: number` is the locked relative-lift margin in percent. Legacy-unversioned
+and analysis-v1 compare the Fieller lower bound with that margin. analysis-v2 uses the one-sided
+oriented contrast and returns safe, breached, or undecided; see
+[inference-engine.md](../stats/inference-engine.md).
 
 A Guardrail firing does not invalidate the Experiment; it is a warning signal. Guardrail Metrics are excluded from the BH FDR family (goal-metric × Variant family only).
 
@@ -104,7 +107,8 @@ Metric contracts.
 
 ## BH FDR family
 
-The Benjamini-Hochberg FDR family = goal-metric × Variant, locked at Experiment design time.
+The FDR family is goal-metric × non-Control Variant, locked at Run Start. Legacy-unversioned and
+analysis-v1 apply BH; analysis-v2, current for new Runs, applies BH-G.
 Guardrail and secondary Metrics are excluded from the family. Primary Dimensions multiply the
 comparison family only when their values are declared before Run Start. Adding Dimensions
 mid-Run never expands the decision family retroactively; those outputs are Secondary /

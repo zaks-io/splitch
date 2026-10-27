@@ -14,26 +14,27 @@ conventions live in [request-response-envelopes-conventions.md](./request-respon
 
 ### CreateEventDefinitionRequest
 
-| Field         | Required | Notes                                       |
-| ------------- | -------- | ------------------------------------------- |
-| `appId`       | yes      | —                                           |
-| `name`        | yes      | Stable event name; unique per App           |
-| `family`      | yes      | Immutable `'metric' \| 'web'` selected once |
-| `displayName` | yes      | —                                           |
-| `description` | no       | —                                           |
+`appId` is a path parameter, not a body field. MCP flattens it alongside the body.
 
-### CreateEventDefinitionVersionRequest
+| Field             | Required | Notes                                       |
+| ----------------- | -------- | ------------------------------------------- |
+| `name`            | yes      | Stable event name; unique per App           |
+| `family`          | yes      | Immutable `'metric' \| 'web'` selected once |
+| `displayName`     | yes      | —                                           |
+| `idempotency_key` | no       | Exact retry identity                        |
+| `description`     | no       | —                                           |
 
-The parent Event Definition supplies immutable `family`; a version request cannot override it. The
-request is a family-discriminated branch:
+### CreateEventDefinitionVersionRequest (`PublishEventDefinitionVersionRequestSchema`)
 
-| Field               | Required | Notes                                                                                       |
-| ------------------- | -------- | ------------------------------------------------------------------------------------------- |
-| `appId`             | yes      | —                                                                                           |
-| `eventDefinitionId` | yes      | Must belong to `appId`                                                                      |
-| `entityType`        | yes      | `metric`: non-empty string; `web`: non-empty string or explicit null                        |
-| `fields`            | yes      | `EventFieldDefinition[]`; strings are allowlisted; numbers have kind/domain; JSON is closed |
-| `dimensions`        | yes      | `DimensionDefinition[]`; strings are allowlisted; numbers have kind/domain                  |
+The path supplies `appId` and `eventDefinitionId`. The parent supplies immutable `family`; the
+strict version body cannot override it. The Worker checks the family-dependent `entityType`:
+
+| Field             | Required | Notes                                                                                       |
+| ----------------- | -------- | ------------------------------------------------------------------------------------------- |
+| `idempotency_key` | no       | Exact retry identity                                                                        |
+| `entityType`      | yes      | `metric`: non-empty string; `web`: non-empty string or explicit null                        |
+| `fields`          | yes      | `EventFieldDefinition[]`; strings are allowlisted; numbers have kind/domain; JSON is closed |
+| `dimensions`      | yes      | `DimensionDefinition[]`; strings are allowlisted; numbers have kind/domain                  |
 
 The Worker assigns the version and stamps publication metadata. No request can supply
 `version`, `schemaHash`, `publishedAt`, or `publishedBy`.
@@ -59,42 +60,52 @@ combined with a numeric allowlist, and participate in `schemaHash`.
 
 ### CreateMetricRequest
 
-| Field                | Required | Notes                                                          |
-| -------------------- | -------- | -------------------------------------------------------------- |
-| `appId`              | yes      | —                                                              |
-| `name`               | yes      | —                                                              |
-| `key`                | yes      | Unique per App                                                 |
-| `kind`               | yes      | `'binomial' \| 'count' \| 'revenue' \| 'ratio' \| 'retention'` |
-| `eventDefinitionId`  | cond.    | Required except for ratio; same App                            |
-| `eventFieldName`     | cond.    | Declared top-level number field; count/revenue only            |
-| `numerator`          | cond.    | Ratio only; `{ metricId }`, same App, non-Ratio                |
-| `denominator`        | cond.    | Ratio only; `{ metricId }`, same App, non-Ratio                |
-| `horizonStartMs`     | cond.    | Retention only                                                 |
-| `horizonEndMs`       | cond.    | Retention only; greater than `horizonStartMs`                  |
-| `conversionWindowMs` | no       | Null/absent inherits Experiment default                        |
-| `winsorize`          | no       | Type-specific default                                          |
-| `winsorizePct`       | no       | Default 99.9                                                   |
-| `description`        | no       | —                                                              |
+| Field                       | Required | Notes                                                          |
+| --------------------------- | -------- | -------------------------------------------------------------- |
+| `appId`                     | yes      | —                                                              |
+| `name`                      | yes      | —                                                              |
+| `key`                       | yes      | Unique per App                                                 |
+| `kind`                      | yes      | `'binomial' \| 'count' \| 'revenue' \| 'ratio' \| 'retention'` |
+| `eventDefinitionId`         | cond.    | Required except for ratio; same App                            |
+| `eventFieldName`            | cond.    | Declared top-level number field; count/revenue only            |
+| `numerator`                 | cond.    | Ratio only; `{ metricId }`, same App, non-Ratio                |
+| `denominator`               | cond.    | Ratio only; `{ metricId }`, same App, non-Ratio                |
+| `horizonStartMs`            | cond.    | Retention only                                                 |
+| `horizonEndMs`              | cond.    | Retention only; greater than `horizonStartMs`                  |
+| `winsorize`                 | no       | Type-specific default                                          |
+| `winsorizePct`              | no       | Default 99.9                                                   |
+| `direction`                 | no       | `higher_is_better`, `lower_is_better`, or null                 |
+| `downsideThresholdPct`      | no       | Guardrail harm threshold, or null                              |
+| `cuped`                     | no       | Null/absent selects engine default true                        |
+| `cupedCoverageThresholdPct` | no       | > 0 and <= 100; null/absent selects 70                         |
+| `idempotency_key`           | no       | Exact retry identity                                           |
+| `description`               | no       | —                                                              |
 
 ### PatchMetricRequest
 
 All fields optional. No Run-frozen check — Metric patches are measurement edits that recompute over
 the existing Run (ADR-0003). Never returns `RUN_FROZEN`.
 
-| Field                | Required |
-| -------------------- | -------- |
-| `name`               | no       |
-| `key`                | no       |
-| `eventDefinitionId`  | no       |
-| `eventFieldName`     | no       |
-| `numerator`          | no       |
-| `denominator`        | no       |
-| `conversionWindowMs` | no       |
-| `winsorize`          | no       |
-| `winsorizePct`       | no       |
-| `description`        | no       |
+| Field                       | Required |
+| --------------------------- | -------- |
+| `kind`                      | no       |
+| `name`                      | no       |
+| `key`                       | no       |
+| `eventDefinitionId`         | no       |
+| `eventFieldName`            | no       |
+| `numerator`                 | no       |
+| `denominator`               | no       |
+| `winsorize`                 | no       |
+| `winsorizePct`              | no       |
+| `horizonStartMs`            | no       |
+| `horizonEndMs`              | no       |
+| `direction`                 | no       |
+| `downsideThresholdPct`      | no       |
+| `cuped`                     | no       |
+| `cupedCoverageThresholdPct` | no       |
+| `description`               | no       |
 
-`kind` is immutable. The Worker validates the complete post-patch object, so a partial patch cannot
+The schema accepts `kind` so the Worker can explain its immutability; changing it is rejected. The Worker validates the complete post-patch object, so a partial patch cannot
 leave an invalid combination. No field accepts a JSON path or expression.
 
 ---
@@ -103,12 +114,14 @@ leave an invalid combination. No field accepts a JSON path or expression.
 
 ### CreateAppRequest
 
-| Field            | Required |
-| ---------------- | -------- |
-| `organizationId` | yes      |
-| `name`           | yes      |
-| `key`            | yes      |
-| `description`    | no       |
+The owning `orgId` is a path parameter, not a body member.
+
+| Field             | Required                          |
+| ----------------- | --------------------------------- |
+| `name`            | yes                               |
+| `key`             | no; derived from name when absent |
+| `description`     | no                                |
+| `idempotency_key` | no                                |
 
 ### CreateAppResponse
 
@@ -143,7 +156,7 @@ Keys are not auto-provisioned here; they are minted through the per-Environment 
 }
 ```
 
-API Key responses never include a raw secret value. Client Key responses include `keyMaterial`.
+List responses never include a raw API Key value. Client Key responses include `keyMaterial`.
 `readTruncated` reports whether the bounded read omitted additional keys, `readLimit` reports
 that bound, and `cursor` is present-with-null because this list is not paginated.
 

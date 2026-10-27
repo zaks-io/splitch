@@ -1,6 +1,6 @@
 # Identity and operational state in D1; hot validation in KV; audit log in Tinybird
 
-**Status:** accepted
+**Status:** accepted; amended by [ADR-0034](./0034-edge-abuse-controls-are-a-cloudflare-enforced-product-contract.md)
 
 ADR-0017 pinned config, the hot-path assignment substrate, and analytics, but left the boring
 relational layer — users, Apps, membership, API keys, billing — without a home. That state lands on

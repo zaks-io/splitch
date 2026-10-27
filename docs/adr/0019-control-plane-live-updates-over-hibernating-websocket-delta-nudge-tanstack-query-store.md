@@ -1,6 +1,6 @@
 # Control-plane live updates over hibernating WebSocket; delta-nudge + TanStack Query as the store
 
-**Status:** accepted
+**Status:** accepted; amended by [ADR-0020](./0020-tanstack-start-for-both-control-panel-and-marketing-shared-component-layer.md)
 
 ADR-0017 said a Durable Object fans out live config updates "(SSE/WebSocket)" to subscribed
 dashboards but left the slash unresolved. This ADR resolves it: the control-panel live-update

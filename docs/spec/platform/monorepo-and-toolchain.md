@@ -19,11 +19,15 @@ package contracts, and the toolchain/quality-gate stack.
 | Deploy                                | Wrangler + GitHub Actions                                                                               |
 | Observability                         | Sentry (errors, distributed traces) + Axiom (structured logs, dashboards)                               |
 
+The root pins `pnpm@11.8.0` and requires Node `>=24` through `devEngines.runtime`; published
+packages also declare Node `>=24`. Workflows pin Node `24.17.0`; no `.nvmrc` is committed. The
+lockfile resolves Turbo `2.11.5`, Vite `8.3.4`, and the directly pinned Wrangler `4.145.0`
+(the lockfile also retains transitive Wrangler `4.124.0`).
+
 pnpm is also the supply-chain policy gate. Workspace installs require package versions to be at least
 3 days old, enforce that rule strictly for direct and transitive dependencies, fail when registry
-publish time is missing, and block transitive exotic dependency sources. **Parked in the build-fast
-phase** (the four keys are commented out in `pnpm-workspace.yaml` so installs don't fail on dependency
-churn); re-enabled at the lockdown milestone. Current gate reality:
+publish time is missing, and block transitive exotic dependency sources. All four controls are
+enabled in `pnpm-workspace.yaml`. Current gate reality:
 [local-quality-gates.md](./local-quality-gates.md).
 
 ## Turborepo task graph
@@ -44,6 +48,8 @@ Cached root guards (explicit input globs, so unrelated changes replay from cache
 
 | Task                   | Cache | Contract                                                                                                                                                        |
 | ---------------------- | ----- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `depcruise`            | yes   | root architecture import graph gate; inputs include apps, packages, and dependency config                                                                       |
+| `docs:lint`            | yes   | inputs: every tracked file (`$TURBO_DEFAULT$`), including link targets                                                                                          |
 | `spec:lint`            | yes   | inputs: `docs/spec/**` and the linter script                                                                                                                    |
 | `check:cli-mcp-parity` | yes   | inputs: CLI/MCP/contracts source trees and the parity scripts; `dependsOn` `@splitch/sdk#build` (help → command-positionals → errors imports the SDK)           |
 | `test:scripts`         | yes   | inputs: `scripts/**`, `.github/workflows/**`, and the files those tests assert, including `tests/shared-preview/**` and the smoke device-authorization contract |
@@ -59,7 +65,6 @@ Uncached or root-wide tasks:
 
 | Task                                  | Cache | Contract                                                               |
 | ------------------------------------- | ----- | ---------------------------------------------------------------------- |
-| `depcruise`                           | no    | root architecture import graph gate                                    |
 | `check:request-contract-compat`       | no    | request contracts vs the newest CLI version on npm                     |
 | `duplicates`                          | no    | root duplicate-code detection over source-bearing paths                |
 | `secrets:*`                           | no    | Gitleaks scans working tree or git history; never cache security scans |
@@ -97,6 +102,11 @@ packages/
   bounded-body/        @splitch/bounded-body        Shared raw-body byte/content-type gate
   contracts/           @splitch/contracts           Zod schemas, z.infer types, @hono/zod-openapi routes
   worker-runtime/      @splitch/worker-runtime      Contract-mounted Hono request guard and shared error/status helpers
+  db/                  @splitch/db                  D1 schema, migrations, and scoped repositories
+  evaluation-core/     @splitch/evaluation-core     Pure assignment and resolution logic
+  observability/       @splitch/observability       Shared scrubbing, faults, and Worker instrumentation
+  privacy/             @splitch/privacy             App identity epochs, hashing, and lifecycle contracts
+  stats/               @splitch/stats               Statistical inference and result calculations
   control-plane-sdk/   @splitch/control-plane-sdk   Hono hc transport SDK for control-plane consumers
   sdk/                 @splitch/sdk                 Public JS/TS data-plane SDK package
   convex/              @splitch/convex              First-party Convex Component for synced local evaluation
@@ -141,14 +151,14 @@ The ownership table describes the accepted target. ADR-0043's Queue and Ingest A
 transport is implemented for `raw_events`, `raw_evaluations`, and Metric Events. Web Event intake
 remains pending and must use the same transport rather than introducing a direct write path.
 
-| Worker                   | Boundary                     | Owns                                                                                                                                                                                                                                                            | Does not own                                                     |
-| ------------------------ | ---------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
-| Control Plane API Worker | Authenticated management API | Org, App, Environment, Flag, Flag Configuration, Promotion, Experiment, Run, Event Definition, Metric, Segment, and SDK credential mutations                                                                                                                    | MCP transport, SDK evaluate, event ingest, Tinybird result reads |
-| MCP Worker               | Agent protocol adapter       | Remote MCP auth handshake, tool registry, calls through `@splitch/control-plane-sdk`                                                                                                                                                                            | D1/KV/Tinybird bindings, domain invariants                       |
-| Evaluation Worker        | SDK/data-plane resolution    | Client Key/API Key evaluate, API-Key-only peek (ADR-0034), control-plane dry-run test-eval, Provider + Assignment Store reads                                                                                                                                   | Config writes, analysis queries, direct Metric computation       |
-| Event Ingest Worker      | Append-only event intake     | Evaluation usage and Exposure/Activation/Metric/Web Event validation, version stamping, per-scope SQLite Admission Gate DOs, four datasource-specific durable queues, sharded DO claim/outbox/write-ahead recovery, bounded Tinybird NDJSON microbatch delivery | Variant resolution, result calculation, control-plane CRUD       |
-| Analysis Worker          | Result read model            | Tinybird proxy endpoints, SRM/Metric/statistical result reads, `app_id`/`environment_id` injection from auth/path context                                                                                                                                       | SDK evaluate, event ingest, config mutation                      |
-| Auth API Worker          | Identity/token surface       | AuthKit/auth.md/OAuth endpoints, token/revocation flows, provisional create handoff                                                                                                                                                                             | Post-create Org/App management, SDK credentials, analytics       |
+| Worker                   | Boundary                     | Owns                                                                                                                                                                                                                                                            | Does not own                                                               |
+| ------------------------ | ---------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
+| Control Plane API Worker | Authenticated management API | Org, App, Environment, Flag, Flag Configuration, Promotion, Experiment, Run, Event Definition, Metric, Segment, and SDK credential mutations                                                                                                                    | MCP transport, SDK evaluate, event ingest, direct Tinybird result reads    |
+| MCP Worker               | Agent protocol adapter       | Remote MCP auth handshake, tool registry, calls through `@splitch/control-plane-sdk`                                                                                                                                                                            | Domain D1/Tinybird bindings and invariants; session KV/DO remain MCP-owned |
+| Evaluation Worker        | SDK/data-plane resolution    | Client Key/API Key evaluate, API-Key-only peek (ADR-0034), control-plane dry-run test-eval, Provider + Assignment Store reads                                                                                                                                   | Config writes, analysis queries, direct Metric computation                 |
+| Event Ingest Worker      | Append-only event intake     | Evaluation usage and Exposure/Activation/Metric/Web Event validation, version stamping, per-scope SQLite Admission Gate DOs, four datasource-specific durable queues, sharded DO claim/outbox/write-ahead recovery, bounded Tinybird NDJSON microbatch delivery | Variant resolution, result calculation, control-plane CRUD                 |
+| Analysis Worker          | Result read model            | Tinybird proxy endpoints, SRM/Metric/statistical result reads, `app_id`/`environment_id` injection from auth/path context                                                                                                                                       | SDK evaluate, event ingest, config mutation                                |
+| Auth API Worker          | Identity/token surface       | AuthKit/auth.md/OAuth endpoints, token/revocation flows, provisional create handoff                                                                                                                                                                             | Post-create Org/App management, SDK credentials, analytics                 |
 
 Worker bindings and capability-specific orchestration stay local to the owning Worker. Shared library
 code belongs in `packages/` when it is imported through a stable package API or published as a customer
@@ -251,10 +261,11 @@ Failed background refetch is a low-severity breadcrumb, not a page break.
 Scheduled jobs run on the Worker that owns the capability. Do not create cron-only app workspaces just
 because the trigger is a timer.
 
-| Owner Worker             | Cadence                        | What it does                                                                                         |
-| ------------------------ | ------------------------------ | ---------------------------------------------------------------------------------------------------- |
-| Control Plane API Worker | Configurable (default: daily)  | Deletes provisional/demo Organizations past their TTL; routes through D1 data-access seam (ADR-0022) |
-| Analysis Worker          | Configurable (default: hourly) | Triggers Copy Pipe run to refresh first-touch snapshot (ADR-0024)                                    |
+| Owner Worker             | Cadence             | What it does                                                                                                                                                                  |
+| ------------------------ | ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Control Plane API Worker | Every minute        | Due-work-gated privacy recovery, PAT recovery/retention, Temporary Environment teardown, audit forwarding, integration coordinator wakes and lag reports, and Sentry dispatch |
+| Control Plane API Worker | Daily, 08:00 UTC    | Demo cleanup, dormant Convex re-probes, Metric claim-retention adoption, Approval Request archival, and change-log, audit, and delivery retention                             |
+| Analysis Worker          | Hourly, on the hour | Triggers the first-touch snapshot Copy Pipe; shared preview disables this cron                                                                                                |
 
 Both are Cloudflare Cron Triggers declared in the owning Worker's Wrangler config, not separate
 cron-only deploy units.

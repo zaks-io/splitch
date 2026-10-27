@@ -6,6 +6,10 @@ not Zod-re-parsed). Identity and flag-side tables are in [storage-schemas-d1.md]
 Storage shapes carry internals (timestamps, audit, immutability markers) that wire shapes must not
 expose. D1 columns are trusted without re-parsing. (ADR-0025 "reuse at the leaf, not the envelope".)
 
+D1 stores every `timestamptz` below as ISO 8601 `TEXT`, and every `boolean` as `INTEGER` 0/1.
+These are logical type labels, not native SQLite types. User-reference columns are nullable unless
+explicitly marked not null.
+
 ---
 
 ## D1 tables (Drizzle-migrated; structurally trusted, not Zod-re-parsed)
@@ -32,17 +36,17 @@ No table has RLS — app_id scoping is enforced by the Worker data-access layer 
 | `targeting_key_field`   | text        | not null; Evaluation Context **field name** read as the Targeting Key (e.g. `"userId"`)                                                               |
 | `targeting_key_type`    | text        | not null; **Entity type label** the key identifies (e.g. `"user"`); stamped as `id_type` on every Exposure row and validated against inbound requests |
 | `confidence_level`      | real        | not null, default 0.95                                                                                                                                |
-| `default_variant_id`    | text        | FK → variants                                                                                                                                         |
+| `default_variant_id`    | text        | nullable; repository-enforced reference to variants                                                                                                   |
 | `metrics`               | text        | not null (JSON array of MetricRef)                                                                                                                    |
 | `guardrail_metrics`     | text        | not null (JSON array of MetricRef)                                                                                                                    |
-| `activation_metric_id`  | text        | nullable, FK → metrics                                                                                                                                |
+| `activation_metric_id`  | text        | nullable; repository-enforced reference to metrics                                                                                                    |
 | `conversion_window_ms`  | integer     | not null, default 0                                                                                                                                   |
 | `dimensions`            | text        | not null (JSON string array)                                                                                                                          |
 | `draft_allocation`      | text        | nullable (JSON `{ [variantName]: number }`); staged allocation for the next Run                                                                       |
 | `draft_salt`            | text        | nullable; optional salt override staged for the next Run                                                                                              |
 | `draft_targeting_rules` | text        | nullable (JSON `TargetingRule[]`); staged targeting for the next Run                                                                                  |
 | `draft_segment_ids`     | text        | nullable (JSON string array); staged Segments to resolve into rules at Start                                                                          |
-| `live_run_id`           | text        | nullable, FK → runs                                                                                                                                   |
+| `live_run_id`           | text        | nullable; repository-enforced reference to runs                                                                                                       |
 | `created_at`            | timestamptz | not null                                                                                                                                              |
 | `updated_at`            | timestamptz | not null                                                                                                                                              |
 | `created_by`            | text        | WorkOS user ID or deleted-user tombstone                                                                                                              |
@@ -177,29 +181,28 @@ automatic replacement.
 
 ### `metrics`
 
-| Column                         | Type        | Constraints                                                                                              |
-| ------------------------------ | ----------- | -------------------------------------------------------------------------------------------------------- |
-| `id`                           | text        | PK                                                                                                       |
-| `app_id`                       | text        | FK → apps, not null                                                                                      |
-| `key`                          | text        | not null, unique per `(app_id)`                                                                          |
-| `name`                         | text        | not null                                                                                                 |
-| `description`                  | text        | nullable                                                                                                 |
-| `kind`                         | text        | not null                                                                                                 |
-| `event_definition_id`          | text        | nullable, FK → `metric` event_definitions (same app); required except for ratio                          |
-| `event_field_name`             | text        | nullable; declared numeric field, required for count/revenue                                             |
-| `numerator_metric_id`          | text        | nullable, FK → metrics (same app); ratio only; must ≠ `denominator_metric_id`; operand must be non-Ratio |
-| `denominator_metric_id`        | text        | nullable, FK → metrics (same app); ratio only; must ≠ `numerator_metric_id`; operand must be non-Ratio   |
-| `conversion_window_ms`         | integer     | nullable; inherits Experiment default when null                                                          |
-| `winsorize`                    | boolean     | nullable; null means the engine default                                                                  |
-| `winsorize_pct`                | real        | nullable; percent, null means the engine default                                                         |
-| `downside_threshold_pct`       | real        | nullable; percent, on the same scale as `relative_lift_pct`. Set to make this a Guardrail Metric         |
-| `direction`                    | text        | nullable; `higher_is_better` or `lower_is_better`. Null means unstated, read as neutral                  |
-| `cuped`                        | boolean     | nullable; null means the engine default                                                                  |
-| `cuped_coverage_threshold_pct` | real        | nullable; percent, null means the engine default                                                         |
-| `created_at`                   | timestamptz | not null                                                                                                 |
-| `updated_at`                   | timestamptz | not null                                                                                                 |
-| `created_by`                   | text        | WorkOS user ID or deleted-user tombstone                                                                 |
-| `updated_by`                   | text        | WorkOS user ID or deleted-user tombstone                                                                 |
+| Column                         | Type        | Constraints                                                                                                                    |
+| ------------------------------ | ----------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| `id`                           | text        | PK                                                                                                                             |
+| `app_id`                       | text        | FK → apps, not null                                                                                                            |
+| `key`                          | text        | not null, unique per `(app_id)`                                                                                                |
+| `name`                         | text        | not null                                                                                                                       |
+| `description`                  | text        | nullable                                                                                                                       |
+| `kind`                         | text        | not null                                                                                                                       |
+| `event_definition_id`          | text        | nullable; repository-enforced same-App Metric Event Definition, required except for ratio                                      |
+| `event_field_name`             | text        | nullable; declared numeric field, required for count/revenue                                                                   |
+| `numerator_metric_id`          | text        | nullable; repository-enforced same-App Metric reference; ratio only; must ≠ `denominator_metric_id`; operand must be non-Ratio |
+| `denominator_metric_id`        | text        | nullable; repository-enforced same-App Metric reference; ratio only; must ≠ `numerator_metric_id`; operand must be non-Ratio   |
+| `winsorize`                    | boolean     | nullable; null means the engine default                                                                                        |
+| `winsorize_pct`                | real        | nullable; percent, null means the engine default                                                                               |
+| `downside_threshold_pct`       | real        | nullable; percent, on the same scale as `relative_lift_pct`. Set to make this a Guardrail Metric                               |
+| `direction`                    | text        | nullable; `higher_is_better` or `lower_is_better`. Null means unstated, read as neutral                                        |
+| `cuped`                        | boolean     | nullable; null means the engine default                                                                                        |
+| `cuped_coverage_threshold_pct` | real        | nullable; percent, null means the engine default                                                                               |
+| `horizon_start_ms`             | integer     | nullable; Retention-only, nonnegative inclusive start                                                                          |
+| `horizon_end_ms`               | integer     | nullable; Retention-only exclusive end, greater than start                                                                     |
+| `created_at`                   | timestamptz | not null                                                                                                                       |
+| `created_by`                   | text        | WorkOS user ID or deleted-user tombstone                                                                                       |
 
 The Worker first requires `event_definitions.family = 'metric'`, then resolves `event_field_name`
 against the Event Definition's current published version and records only a named top-level field,
@@ -226,6 +229,9 @@ Client Keys are public publishable values. The control plane can retrieve and di
 | `revoked_at`       | timestamptz | nullable                                                                                                                                                                                                                                   |
 | `created_at`       | timestamptz | not null                                                                                                                                                                                                                                   |
 | `created_by`       | text        | WorkOS user ID or deleted-user tombstone                                                                                                                                                                                                   |
+
+One active Client Key per `(app_id, environment_id)` is enforced by the partial unique
+`client_keys_active_env_unique` index where `revoked_at IS NULL`.
 
 ### `api_keys`
 

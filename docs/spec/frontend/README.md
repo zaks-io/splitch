@@ -12,6 +12,9 @@ both share one `ui` package and the `contracts` package.
 | -------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
 | [screen-inventory.md](./screen-inventory.md)                                           | The complete UX map: every screen/route, what it shows, the prod-change safety model        |
 | [navigation-redesign.md](./navigation-redesign.md)                                     | One shell, App home as Flags across Environments, Home with Continue and Needs-you, palette |
+| [navigation-and-ia.md](./navigation-and-ia.md)                                         | URL scopes, sidebar controls, Organization and App navigation                               |
+| [environments-and-promotion.md](./environments-and-promotion.md)                       | Environment and Promotion domain summary and screen references                              |
+| [flag-editing-ux.md](./flag-editing-ux.md)                                             | Live edits, baseline rollout, Policy Review, and running-Experiment locks                   |
 | [appid-is-the-spine.md](./appid-is-the-spine.md)                                       | The spine concept: four jobs driven by one URL param, and why not session state             |
 | [session-loader-isolation.md](./session-loader-isolation.md)                           | Cookie format, KV validation, loader context shape, membership check, 403 contract          |
 | [query-key-factory.md](./query-key-factory.md)                                         | Deterministic cache-key hierarchy, factory interface, nudge-to-invalidation mapping         |
@@ -39,4 +42,4 @@ both share one `ui` package and the `contracts` package.
   shell root (App, Org, Organization chooser) publishes `data-hydrated`, and Control Panel e2e
   specs call `waitForHydration()` before their first interaction so a hydration failure times out
   loudly instead of dropping input.
-- **Branding guide location** — `docs/branding/design-tokens.md` (to be created by design; token names pinned in `packages/ui/src/theme.css`, values deferred)
+- **Branding guide location** — `docs/branding/design-tokens.md`; `packages/ui/src/theme.css` imports the palette and semantic role definitions in `src/styles/`

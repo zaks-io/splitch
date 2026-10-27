@@ -1,17 +1,18 @@
-# MCP tool derivation: Zod → tool schemas, 1:1 parity, no hand-written schemas
+# MCP tool derivation: Zod → route tool schemas
 
-Every MCP tool's `inputSchema` and `outputSchema` is derived from the Zod schemas in
-`@splitch/contracts`. No tool schema is hand-written. A new endpoint becomes a new tool
-mechanically. (ADR-0025, ADR-0023.)
+Route tools derive `inputSchema` and `outputSchema` from the Zod schemas in
+`@splitch/contracts`. The skin-local `context_use` tool is authored in the MCP server. Eligible
+control-plane endpoints become tools mechanically. (ADR-0025, ADR-0023.)
 
 ## Naming rule
 
-For each `@hono/zod-openapi` route registered in the control-plane contract:
+For each eligible `control-plane-token` route in the registry (excluding unavailable, internal,
+and CLI-only operations):
 
 ```
 tool name   = route.operationId
 operationId = resource_operation, lower snake_case
-inputSchema = route.request.body Zod schema (or query + path params for GET)
+inputSchema = flat merge of path params, query params, and JSON body fields
 outputSchema = route.responses[200] Zod schema
 errorSchema = shared ErrorResponse discriminated union (same for all tools)
 ```
@@ -60,7 +61,10 @@ Resource naming:
 - Avoid transport words in names. Use `update`, not `patch`; use domain verbs like `start`,
   `end`, `promote`, `revoke`, and `test_eval`.
 
-Derivation runs at MCP server startup, not build time. No committed tool-definitions file.
+Derivation is lazy and cached. `apps/mcp-server/src/tool-registry.ts` requests JSON schemas on
+`tools/list`; initialization and calls use the name set. No committed tool-definitions file.
+Required App/Environment path inputs become optional in the protocol schema because session
+context can supply them. Flag reads add a skin-level `summary?` input to control hydration.
 
 ## Tool annotations and reversibility
 
@@ -121,6 +125,7 @@ Grouped by resource. All are thin 1:1 wrappers — no per-tool invariant logic (
 | `app_attention_rollup_get` | GET    | `/apps/:appId/attention-rollup` |
 | `apps_update`              | PATCH  | `/apps/:appId`                  |
 | `apps_delete`              | DELETE | `/apps/:appId`                  |
+| `app_audit_list`           | GET    | `/apps/:appId/audit`            |
 
 ### App members
 
@@ -133,13 +138,14 @@ Grouped by resource. All are thin 1:1 wrappers — no per-tool invariant logic (
 
 ### Environments
 
-| Tool                  | Method | Path                               |
-| --------------------- | ------ | ---------------------------------- |
-| `environments_list`   | GET    | `/apps/:appId/envs`                |
-| `environments_create` | POST   | `/apps/:appId/envs`                |
-| `environments_get`    | GET    | `/apps/:appId/envs/:environmentId` |
-| `environments_update` | PATCH  | `/apps/:appId/envs/:environmentId` |
-| `environments_delete` | DELETE | `/apps/:appId/envs/:environmentId` |
+| Tool                  | Method | Path                                    |
+| --------------------- | ------ | --------------------------------------- |
+| `environments_list`   | GET    | `/apps/:appId/envs`                     |
+| `environments_create` | POST   | `/apps/:appId/envs`                     |
+| `environments_get`    | GET    | `/apps/:appId/envs/:environmentId`      |
+| `environments_update` | PATCH  | `/apps/:appId/envs/:environmentId`      |
+| `environments_delete` | DELETE | `/apps/:appId/envs/:environmentId`      |
+| `environments_sync`   | POST   | `/apps/:appId/envs/:environmentId/sync` |
 
 **Reading the Environment Policy.** There is no separate policy endpoint or tool: the Environment
 Policy (the per-change-type `allow | confirm` map, ADR-0029) is returned inline by `environments_get`
@@ -172,6 +178,7 @@ three tools to exist.
 | Tool                        | Method | Path                                       |
 | --------------------------- | ------ | ------------------------------------------ |
 | `flags_list`                | GET    | `/apps/:appId/flags`                       |
+| `principal_flags_list`      | GET    | `/flags`                                   |
 | `expired_flags_list`        | GET    | `/apps/:appId/expired-flags`               |
 | `stale_flags_list`          | GET    | `/apps/:appId/stale-flags`                 |
 | `flag_inventory_health_get` | GET    | `/apps/:appId/flag-inventory-health`       |
@@ -246,14 +253,17 @@ Targeting Rule CRUD is intentionally not exposed until there is a separate endpo
 | `experiments_update` | PATCH  | `/apps/:appId/envs/:environmentId/experiments/:experimentId`       |
 | `experiments_start`  | POST   | `/apps/:appId/envs/:environmentId/experiments/:experimentId/start` |
 | `experiments_delete` | DELETE | `/apps/:appId/envs/:environmentId/experiments/:experimentId`       |
+| `experiment_plan`    | POST   | `/apps/:appId/envs/:environmentId/experiment-plan`                 |
 
 ### Experiment Runs (Experiment sub-resource, per-Environment)
 
-| Tool        | Method | Path                                                                     | Note                                    |
-| ----------- | ------ | ------------------------------------------------------------------------ | --------------------------------------- |
-| `runs_list` | GET    | `/apps/:appId/envs/:environmentId/experiments/:experimentId/runs`        | —                                       |
-| `runs_get`  | GET    | `/apps/:appId/envs/:environmentId/experiments/:experimentId/runs/:runId` | —                                       |
-| `runs_end`  | POST   | `/apps/:appId/envs/:environmentId/runs/:runId/end`                       | Standalone End; no conclusion or winner |
+| Tool                                   | Method | Path                                                                                                                  | Note                                    |
+| -------------------------------------- | ------ | --------------------------------------------------------------------------------------------------------------------- | --------------------------------------- |
+| `runs_list`                            | GET    | `/apps/:appId/envs/:environmentId/experiments/:experimentId/runs`                                                     | —                                       |
+| `runs_get`                             | GET    | `/apps/:appId/envs/:environmentId/experiments/:experimentId/runs/:runId`                                              | —                                       |
+| `runs_end`                             | POST   | `/apps/:appId/envs/:environmentId/runs/:runId/end`                                                                    | Standalone End; no conclusion or winner |
+| `runs_conclude`                        | POST   | `/apps/:appId/envs/:environmentId/experiments/:experimentId/runs/:runId/conclusions`                                  | Immutable conclusion                    |
+| `conclusion_promotion_requests_create` | POST   | `/apps/:appId/envs/:environmentId/experiments/:experimentId/runs/:runId/conclusions/:conclusionId/promotion-requests` | Winner promotion                        |
 
 ### Metrics
 
@@ -287,6 +297,23 @@ Targeting Rule CRUD is intentionally not exposed until there is a separate endpo
 | `api_keys_list`     | GET    | `/apps/:appId/envs/:environmentId/api-keys`               | No secret value                      |
 | `api_keys_create`   | POST   | `/apps/:appId/envs/:environmentId/api-keys`               | Secret value surfaced once           |
 | `api_keys_revoke`   | POST   | `/apps/:appId/envs/:environmentId/api-keys/:keyId/revoke` | —                                    |
+
+### Integrations
+
+| Tool                              | Method | Path                                                                                     |
+| --------------------------------- | ------ | ---------------------------------------------------------------------------------------- |
+| `integration_deliveries_create`   | POST   | `/apps/:appId/envs/:environmentId/integrations/deliveries`                               |
+| `convex_installations_list`       | GET    | `/apps/:appId/envs/:environmentId/integrations/convex/installations`                     |
+| `convex_installations_revoke`     | DELETE | `/apps/:appId/envs/:environmentId/integrations/convex/installations/:installationId`     |
+| `cloudflare_installations_list`   | GET    | `/apps/:appId/envs/:environmentId/integrations/cloudflare/installations`                 |
+| `cloudflare_installations_revoke` | DELETE | `/apps/:appId/envs/:environmentId/integrations/cloudflare/installations/:installationId` |
+| `sentry_installations_list`       | GET    | `/orgs/:orgId/integrations/sentry/installations`                                         |
+| `sentry_installations_create`     | POST   | `/orgs/:orgId/integrations/sentry/installations`                                         |
+| `sentry_installations_get`        | GET    | `/orgs/:orgId/integrations/sentry/installations/:installationId`                         |
+| `sentry_installations_delete`     | DELETE | `/orgs/:orgId/integrations/sentry/installations/:installationId`                         |
+| `sentry_secret_rotations_create`  | POST   | `/orgs/:orgId/integrations/sentry/installations/:installationId/secret-rotations`        |
+
+Convex and Cloudflare adapter-authenticated `/api/integrations/*` routes are not MCP tools.
 
 ### Test-evaluation (dry-run)
 
@@ -323,7 +350,8 @@ come from this route registry entry.
 Control-plane HTTP routes that are not implemented end to end are not advertised as MCP tools or
 CLI commands. This currently excludes Organization deletion and the privacy export/deletion routes;
 the route contracts remain typed so direct HTTP callers receive a stable unavailable response rather
-than discovering a tool that cannot complete.
+than discovering a tool that cannot complete. Internal `principal_capabilities_get` and CLI-only
+Personal Access Token management operations also derive no MCP tool.
 
 ## Error handling in MCP tools
 
@@ -333,7 +361,7 @@ All tools share the same error shape — the `ErrorResponse` discriminated union
 naming the next step, so the agent's recovery branch is a token lookup, not prose parsing
 (canonical mapping in [error-responses.md](./error-responses.md#recommendedaction-machine-stable-recovery-guidance)):
 
-- `RUN_FROZEN` → `details.frozenFields`, `details.currentRunId`, `details.recommendedAction`: `'CREATE_NEW_RUN'` for an assignment edit (agent opens a new Run, not patch), `'END_RUNNING_RUN_FIRST'` when the frozen field is App-level or Flag-Configuration (`flagConfig.*`, `variant.value`) and no draft Run can carry it. Branch on the token that arrived, never on the code alone
+- `RUN_FROZEN` → `details.frozenFields`, `details.currentRunId`, `details.recommendedAction`: `'CREATE_NEW_RUN'` for an assignment edit (agent re-sends it with `stageForNextRun: true`, then Starts the next Run; ADR-0063), `'END_RUNNING_RUN_FIRST'` when the frozen field is App-level or Flag-Configuration (`flagConfig.*`, `variant.value`) and no draft Run can carry it. Branch on the token that arrived, never on the code alone
 - `EXPERIMENT_RUNNING` → `details.runningRunId`, `details.recommendedAction: 'END_RUNNING_RUN_FIRST'`
 - `RUN_NOT_RUNNING` → `details.currentState`, `details.recommendedAction: 'START_A_RUN'`
 - `VARIANT_NOT_AVAILABLE` → `details.missingVariants`, `details.recommendedAction: 'ADD_VARIANT_TO_ENV'`
@@ -363,7 +391,7 @@ confirmation pipeline. Canonical shape in
 
 Every `*_list` tool returns the shared `ListResponse<T>` wrapper
 (`items`, `readLimit`, `readTruncated`, `cursor`). Only paginated routes (today:
-`approval_requests_list`) accept `limit?` and `cursor?` query params (default `limit` 50, schema-max
+`approval_requests_list`, `flag_changes_list`, and `app_audit_list`) accept `limit?` and `cursor?` query params (default `limit` 50, schema-max
 500). An agent paginates those by resending the returned `cursor` until `cursor === null`. On every
 other list, `cursor` is always null; if `readTruncated` is true the catalog is incomplete and the
 query must be narrowed. Lists with no catalog-reducing filter (`organizations_list`, and
@@ -417,14 +445,18 @@ vocabulary.
 
 ## Authorization
 
-Each tool call carries an exact MCP-resource token in the transport (MCP OAuth PRM/auth.md
-handshake, ADR-0022). MCP validates that client token at its own boundary, then calls the owning
-Worker through a named service-binding entrypoint with a separate signed, one-use, short-lived
-delegation bound to the operation, Worker owner, exact downstream target, body digest, verified
-actor, and scopes. The client bearer is never forwarded. Public Worker entrypoints never accept the
-delegation credential. The owning Worker verifies the signature, consumes the replay identifier,
-through a strongly consistent Durable Object claim, and still enforces the delegated principal's
-scopes — MCP tool schemas do NOT encode auth. Missing signing secrets or replay bindings, storage
+Each tool call carries either an exact MCP-resource OAuth token (PRM/auth.md handshake,
+ADR-0022) or a Personal Access Token. MCP validates that client token at its own boundary, then calls the
+Control Plane, its only binding, through the `McpEntrypoint` service-binding entrypoint
+([ADR-0065](../../adr/0065-mcp-reaches-every-owner-worker-through-the-control-plane.md)). Each call
+carries a separate signed, one-use, short-lived delegation addressed to that public surface and
+bound to the operation, method, exact target, body digest, verified actor, auth door, and scopes. The
+client bearer is never forwarded. Public Worker entrypoints never accept the delegation credential.
+The Control Plane verifies the signature, consumes the replay identifier through a strongly
+consistent Durable Object claim, runs its guard chain, and enforces the delegated principal's scopes.
+For a route the Analysis or Evaluation Worker owns, it then forwards the authorized identity to that
+Worker's `ControlPlaneEntrypoint` as a delegated route (ADR-0046). MCP tool schemas do NOT encode
+auth. Missing signing secrets or replay bindings, storage
 failures, and duplicate identifiers all fail closed before route dispatch. If auth fails, MCP returns
 HTTP `401`; if Worker scopes are insufficient, the Worker returns
 `INSUFFICIENT_SCOPES`. The agent never needs to know "this tool requires role X" — the Worker says
@@ -444,10 +476,10 @@ App/Environment in the transport session (see [../control-plane/mcp-and-cli-surf
 **Port:** `@splitch/contracts` Zod route schemas ↔ MCP server tool registry.
 
 - Left (contracts): `@hono/zod-openapi` route definitions with Zod request/response schemas.
-- Right (MCP server): reads those schemas at startup, generates tool definitions, forwards calls via `@splitch/control-plane-sdk`.
+- Right (MCP server): lazily derives and caches tool definitions, forwards calls via `@splitch/control-plane-sdk`.
 
 **Failure contract:** a schema change in contracts is reflected in the tool definition on the next
-server restart. Drift between "what the tool says it accepts" and "what the Worker enforces" is
+server restart and first schema derivation. Drift between "what the tool says it accepts" and "what the Worker enforces" is
 impossible by construction — both consume the same Zod source.
 
 ## Tool descriptions

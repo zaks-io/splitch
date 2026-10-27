@@ -9,24 +9,32 @@ must not expose. Every Zod-parsed surface is listed here. (ADR-0025 "reuse at th
 
 ## KV namespaces (Zod-parsed on every read)
 
-Every KV value is a JSON blob Zod-parsed on read inside a `schemaVersion` envelope whose version is
+Config, SDK credential, and Assignment Store payloads use a Zod-parsed `schemaVersion` envelope whose version is
 **pinned to the current version** (`z.literal`, see `CURRENT_KV_SCHEMA_VERSION`). A malformed blob
 or an unknown/future schema version fails loud. Evaluation recovers Flag Configuration through the
 authoritative Config Store DO; control-plane readers rebuild KV from D1 (see
 [../platform/contracts-and-validation.md](../platform/contracts-and-validation.md)).
 (ADR-0025 "every KV read is Zod-parsed, including hot-path reads".)
 
-| Namespace key pattern                                            | Value schema                              | TTL                          | Notes                                                                                        |
-| ---------------------------------------------------------------- | ----------------------------------------- | ---------------------------- | -------------------------------------------------------------------------------------------- |
-| `app:{appId}:{environmentId}:flag:{flagKey}`                     | `FlagConfigKV`                            | none (invalidated on change) | Hot-path flag config read; Flag CONFIGURATION is per-Environment (ADR-0027)                  |
-| `app:{appId}:{environmentId}:control-plane-flag-config:{flagId}` | control-plane Flag Configuration snapshot | present: none; deleted: 62s  | Revisioned control-plane read snapshot; carries explicit present/deleted state               |
-| `app:{appId}:{environmentId}:run:{runId}`                        | `RunConfigKV`                             | none                         | Hot-path live Experiment Run config, read only from `ExperimentConfigKV.liveRunId`           |
-| `app:{appId}:{environmentId}:experiment:{experimentId}`          | `ExperimentConfigKV`                      | none (invalidated on change) | Edge Experiment config read; carries nullable `liveRunId` for evaluation and ingest          |
-| `live_run:{appId}:{environmentId}:{experimentId}`                | `LiveRunKV`                               | none                         | Explicit live Run pointer written on Start and cleared on End; never inferred from latest D1 |
-| `ck:{keyMaterialHash}` / `ak:{keyHash}`                          | `CredentialCacheKV`                       | active: none; revoked: 5m    | Mutable credential entry; prefixes distinguish Client Keys from API Keys                     |
-| `revoked:{credentialCacheKey}`                                   | presence marker                           | none                         | Terminal revocation marker; checked before the mutable credential entry                      |
-| `member-profile:{userId}`                                        | `{ email }`                               | none                         | SESSION_STORE identity cache for Org member email; written at login, never in D1             |
-| `revoked:{sub}`                                                  | revocation time, Unix seconds             | 1h                           | SESSION_STORE token revocation; rejects the subject's tokens with `iat` at or before it      |
+| Namespace key pattern                                            | Value schema                              | TTL                          | Notes                                                                                                                 |
+| ---------------------------------------------------------------- | ----------------------------------------- | ---------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| `app:{appId}:{environmentId}:flag:{flagKey}`                     | `FlagConfigKV`                            | none (invalidated on change) | Hot-path flag config read; Flag CONFIGURATION is per-Environment (ADR-0027)                                           |
+| `app:{appId}:{environmentId}:control-plane-flag-config:{flagId}` | control-plane Flag Configuration snapshot | present: none; deleted: 62s  | Revisioned control-plane read snapshot; carries explicit present/deleted state                                        |
+| `app:{appId}:{environmentId}:run:{runId}`                        | `RunConfigKV`                             | none                         | Hot-path live Experiment Run config, read only from `ExperimentConfigKV.liveRunId`                                    |
+| `app:{appId}:{environmentId}:experiment:{experimentId}`          | `ExperimentConfigKV`                      | none (invalidated on change) | Edge Experiment config read; carries nullable `liveRunId` for evaluation and ingest                                   |
+| `app:{appId}:event-definition:{eventName}`                       | `EventDefinitionHotConfig`                | none                         | App-level current published definition and version; `eventDefinitionConfigKey`                                        |
+| `app:{appId}:{environmentId}:activation-config`                  | `ActivationConfigKV`                      | none                         | `{ bindings: { eventDefinitionId, experimentId, runId, idType }[] }`; `activationConfigKey`                           |
+| `live_run:{appId}:{environmentId}:{experimentId}`                | `LiveRunKV`                               | none                         | Explicit live Run pointer written on Start and cleared on End; never inferred from latest D1                          |
+| `ck:{keyMaterialHash}` / `ak:{keyHash}`                          | `CredentialCacheKV`                       | active: none; revoked: 5m    | Mutable credential entry; prefixes distinguish Client Keys from API Keys                                              |
+| `revoked:{credentialCacheKey}`                                   | presence marker                           | none                         | Terminal revocation marker; checked before the mutable credential entry                                               |
+| `member-profile:{userId}`                                        | `{ email }`                               | none                         | SESSION_STORE identity cache for Org member email; written at login, never in D1                                      |
+| `pat:{sha256Hex(secret)}`                                        | `PersonalAccessTokenCache`                | token expiry, or none        | SESSION_STORE; `personalAccessTokenCacheKey`; strict `{ version: 1, tokenId, userId, createdAt, expiresAt, revoked }` |
+| `revoked:{sub}`                                                  | revocation time, Unix seconds             | 1h                           | SESSION_STORE token revocation; rejects the subject's tokens with `iat` at or before it                               |
+
+Presence markers, Unix-second revocation values, and the strict `{ email }` member-profile cache
+do not use `kvEnvelope`. The PAT cache pins its own `version: 1`; D1 is re-read for delegated
+authority. Its expiration is floored at 60 seconds after the write when expiry is closer or past.
+The control-plane Flag Configuration snapshot uses its own flat envelope.
 
 App identity is not a KV read model. The App-scoped Config Store Durable Object stores the
 AES-GCM-wrapped `app:{appId}:entity-identity` atom in strongly consistent DO storage and owns
@@ -97,7 +105,7 @@ validates `schemaVersion` and the embedded App, Environment, and Flag identity. 
   flagId:         string
   revision:       number
   state:          'present'
-  data:           FlagConfiguration
+  data:           FlagConfigResponse
 }
 
 {
@@ -119,9 +127,14 @@ initial-refetch-plus-five-retries propagation window. After expiry, the missing 
 to authoritative D1; because the Flag row is gone, the read returns `FLAG_NOT_FOUND` and does not
 repair the snapshot.
 
-`ResolvedTargetingRule` contains concrete Conditions and cannot contain `segmentId`. Snapshot writes
-resolve authoring Segment references before this blob is stored; edge evaluation performs no
-Segment read or recursive evaluation.
+`ResolvedTargetingRule` contains concrete Conditions and cannot contain `segmentId`. Evaluation
+projection writes resolve authoring Segment references; edge evaluation performs no Segment read.
+The control-plane snapshot retains the authoring shape.
+
+`schemaVersion` on this flat snapshot is pinned to
+`CURRENT_KV_SCHEMA_VERSION` (1), and `revision` is a positive
+integer. `data` is `FlagConfigResponse`, which retains authoring Segment references. Only the
+separate evaluation `FlagConfigKV` and Run snapshots require `ResolvedTargetingRule`.
 
 ### RunConfigKV
 
@@ -235,9 +248,9 @@ handlers. Future routes inherit the shared check. See
 
 ---
 
-## Assignment Store (KV + Durable Object, per ADR-0009)
+## Assignment Store (KV + Durable Object, per ADR-0009 and ADR-0064)
 
-Not a D1 table. The per-key Durable Object is the serialized writer; KV is the read replica.
+Not a D1 table. The per-Entity Durable Object is the serialized writer; KV is the read replica.
 
 KV key pattern: `assignment:{appId}:{idType}:{targetingKeyHash}` — per-Entity, NO `experimentId`.
 One read returns all experiments' holdovers for the Entity. `targetingKeyHash` is derived by the
@@ -252,20 +265,24 @@ AssignmentStoreValue = Map<experimentId, {
 }>
 ```
 
-The per-key Durable Object writer is keyed per `(appId, experimentId, idType, targetingKeyHash)` and
-merges its record into the Entity-keyed KV map under its `experimentId`. Read granularity
-(per-Entity) and write granularity (per-Experiment) differ by design (ADR-0008/0009).
+The Durable Object writer is keyed per Entity, `assignmentWriterName` = `{appId}:{idType}:{targetingKeyHash}`,
+the same grain as the KV value. It stores one first-touch winner per `experimentId` and merges each
+into the Entity-keyed KV map. Per-Experiment writers would race on that shared map and overwrite
+sibling entries (ADR-0064).
 
 Written at first-touch Exposure (NOT at assignment time). `runId` is stamped from the live Run at
 fire-time, so holdovers keep their original Run attribution across Run boundaries.
 
-The Durable Object id is derived from the per-Experiment writer key. Its `putIfAbsent` is atomic (one
-winner for concurrent POPs). KV miss on a subsequent read is self-healing — `assign()` is deterministic
-and recomputes the same Variant.
+The Durable Object id is derived from the per-Entity writer key. Its `putIfAbsent` is atomic per
+Experiment (one winner for concurrent POPs). A KV miss on a later read recomputes the same Variant for
+a new Entity, because `assign()` is deterministic. For an Entity held over across a Run boundary it
+does not: see the consistency window in
+[assignment-store-substrate.md](../platform/assignment-store-substrate.md#consistency-window) (SPL-812).
 
 ## Sources
 
 - [../../adr/0025-zod-first-contract-hono-openapi-hc-client-derived-everywhere.md](../../adr/0025-zod-first-contract-hono-openapi-hc-client-derived-everywhere.md)
 - [../../adr/0009-assignment-store-substrate-kv-read-do-write.md](../../adr/0009-assignment-store-substrate-kv-read-do-write.md)
+- [../../adr/0064-assignment-store-is-app-scoped-with-one-writer-per-entity.md](../../adr/0064-assignment-store-is-app-scoped-with-one-writer-per-entity.md)
 - [../../adr/0027-environment-is-a-first-class-axis-under-app.md](../../adr/0027-environment-is-a-first-class-axis-under-app.md)
 - [../platform/privacy-data-lifecycle.md](../platform/privacy-data-lifecycle.md)

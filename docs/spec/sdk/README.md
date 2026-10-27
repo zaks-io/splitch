@@ -5,7 +5,8 @@ client, `evaluate`/`evaluateDetails` fire an Exposure, `peekVariant` and `verify
 one, and `evaluateAll` fetches the non-exposing Precomputed Evaluations (ADR-0048). The
 static-context browser client holds those Precomputed Evaluations for one Evaluation Context,
 serves synchronous reads, and fires Exposure on first read by redeeming Exposure Tickets.
-Top-level `track()` submits a strictly validated Metric Event, `web.track()` queues an explicitly
+Top-level `track()` submits a strictly validated Metric Event and `activate()` also materializes
+matching Activations. The specified Web Analytics API (not yet implemented) has `web.track()` queue an explicitly
 submitted Web Event, and `web.flush()` awaits an acknowledged batch result. `web.instrument()` separately registers explicitly selected automatic
 browser signals and returns their scoped cleanup. Browser Web Events use a tab-scoped Web Session by
 default and remain outside Experiment measurement. Every evaluation accessor speaks the OpenFeature
@@ -25,7 +26,7 @@ deferred; the `ResolutionDetails` _shape_ and the OFREP provider are not.
 | [exposure-accessor.md](./exposure-accessor.md#peek-endpoint-shape)           | `POST /api/sdk/peek` contract: API-Key-only non-exposing Variant resolution                                                             |
 | [verify-endpoint.md](./verify-endpoint.md)                                   | `POST /api/sdk/verify` contract: non-exposing setup confirmation, reason tiered by credential (ADR-0037)                                |
 | [evaluate-all-endpoint.md](./evaluate-all-endpoint.md)                       | `POST /api/sdk/evaluate-all` contract: Precomputed Evaluations, non-exposing, Exposure Tickets, ETag (ADR-0048)                         |
-| [ofrep-endpoint.md](./ofrep-endpoint.md)                                     | OFREP Core single-Flag and bulk evaluation, billing, and Exposure-on-prefetch rule (ADR-0059)                                           |
+| [ofrep-endpoint.md](./ofrep-endpoint.md)                                     | OFREP Core single-Flag and bulk evaluation, billing, and Exposure-on-prefetch rule (ADR-0062)                                           |
 | [exposures-endpoint.md](./exposures-endpoint.md)                             | `POST /api/sdk/exposures` contract: batched Exposure Ticket redemption, forgery-proof, deferred Assignment Store write                  |
 | [convex-integration-api.md](./convex-integration-api.md)                     | API-Key installation, config snapshot, signed webhook lifecycle, status, and uninstall                                                  |
 | [convex-component.md](./convex-component.md)                                 | `@splitch/convex`: signed nudge/pull sync and local query/mutation evaluation                                                           |

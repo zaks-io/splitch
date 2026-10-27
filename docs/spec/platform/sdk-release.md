@@ -121,7 +121,8 @@ Use this only after a human approves the package release.
 
 ### 1. Candidate and metadata
 
-- [ ] The target manifest has the expected package name and the target's `allowedVersion`.
+- [ ] The target manifest has the expected package name and reviewed semver;
+      `scripts/release/resolve-version.mjs` derives the version and tag from that manifest.
 - [ ] Description, Apache-2.0 SPDX license, repository directory, ESM export, Node engine, public
       access, and dist-only files whitelist are correct.
 - [ ] The consumer README and license appear in the actual package tarball.

@@ -7,21 +7,23 @@ The input boundary between the Exposure pipeline / Activation gate and the stats
 ## Input contract from Exposure pipeline
 
 The engine reads **per-Entity rows** — one per (Entity, Run) — from the shared first-touch dedup
-query (ADR-0010); `__multiple__` Entities are already excluded upstream.
+query (ADR-0010). `exposures` retains `__multiple__` rows for health counts; the engine excludes
+them from analysis and SRM populations.
 
 ### Deduped Exposure row
 
-| Field                | Type        | Required | Meaning                                                                                                                                            |
-| -------------------- | ----------- | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `app_id`             | `string`    | yes      | Tenant scope; carried from the dedup output (every dedup row is `app_id`-scoped, ADR-0018)                                                         |
-| `targeting_key_hash` | `string`    | yes      | Hash of the Targeting Key — the randomization unit. The raw Targeting Key value is PII and never leaves the pipeline; the engine joins on the hash |
-| `environment_id`     | `string`    | yes      | Per-Environment scope (ADR-0027); run-implied, carried from the dedup output for scope-complete handoff                                            |
-| `id_type`            | `string`    | yes      | Entity type label (e.g. `"user"`, `"workspace"`)                                                                                                   |
-| `run_id`             | `string`    | yes      | The Run this Exposure belongs to                                                                                                                   |
-| `variant`            | `string`    | yes      | Variant name assigned to this Entity in this Run                                                                                                   |
-| `first_exposure_ts`  | `timestamp` | yes      | `MIN(exposure_at)` — the Conversion Window anchor (ungated)                                                                                        |
-| `window_anchor`      | `timestamp` | yes      | `COALESCE(activation_ts, first_exposure_ts)` — effective anchor                                                                                    |
-| `dimension_values`   | `object`    | no       | Attribute values available for Dimension slicing, keyed by Dimension id                                                                            |
+| Field                | Type        | Required    | Meaning                                                                                                                                            |
+| -------------------- | ----------- | ----------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `app_id`             | `string`    | yes         | Tenant scope; carried from the dedup output (every dedup row is `app_id`-scoped, ADR-0018)                                                         |
+| `targeting_key_hash` | `string`    | yes         | Hash of the Targeting Key — the randomization unit. The raw Targeting Key value is PII and never leaves the pipeline; the engine joins on the hash |
+| `environment_id`     | `string`    | yes         | Per-Environment scope (ADR-0027); run-implied, carried from the dedup output for scope-complete handoff                                            |
+| `id_type`            | `string`    | yes         | Entity type label (e.g. `"user"`, `"workspace"`)                                                                                                   |
+| `run_id`             | `string`    | yes         | The Run this Exposure belongs to                                                                                                                   |
+| `variant`            | `string`    | yes         | Variant name assigned to this Entity in this Run                                                                                                   |
+| `first_exposure_ts`  | `timestamp` | yes         | `MIN(exposure_at)` — the Conversion Window anchor (ungated)                                                                                        |
+| `first_ingest_ts`    | `timestamp` | analysis-v2 | Sticky earliest Exposure ingestion clock; required for sequential SRM                                                                              |
+| `window_anchor`      | `timestamp` | yes         | `COALESCE(activation_ts, first_exposure_ts)` — effective anchor                                                                                    |
+| `dimension_values`   | `object`    | no          | Attribute values available for Dimension slicing, keyed by Dimension id                                                                            |
 
 `window_anchor` is computed by the Activation gate layer (see
 [../pipeline/activation-gate-query-contract.md](../pipeline/activation-gate-query-contract.md));
@@ -37,9 +39,6 @@ Ratio inputs remain paired per Entity so the covariance term required by ADR-001
 
 | Field                | Type      | Required | Meaning                                                                      |
 | -------------------- | --------- | -------- | ---------------------------------------------------------------------------- |
-| `app_id`             | `string`  | yes      | Same App as the deduped Exposure and Run                                     |
-| `environment_id`     | `string`  | yes      | Same Environment as the deduped Exposure and Run                             |
-| `id_type`            | `string`  | yes      | Must equal the Run's `targeting_key_type`                                    |
 | `targeting_key_hash` | `string`  | yes      | Matches the deduped Exposure row                                             |
 | `run_id`             | `string`  | yes      | Same Run scope                                                               |
 | `metric_id`          | `string`  | yes      | References Metric definition                                                 |
@@ -48,6 +47,9 @@ Ratio inputs remain paired per Entity so the covariance term required by ADR-001
 | `num_value`          | `number`  | cond.    | Ratio numerator per-Entity sum (required when `metric_type=ratio`)           |
 | `denom_value`        | `number`  | cond.    | Ratio denominator per-Entity sum (required when `metric_type=ratio`)         |
 | `in_window`          | `boolean` | yes      | True if event fell within `[window_anchor, window_anchor + window_duration)` |
+
+App, Environment, and Entity-type equality are enforced by the Analysis Worker and query before
+materialization; `PerEntityMetricRowSchema` does not carry those three scope fields.
 
 The `num_value` / `denom_value` pair for Ratio Metrics is the **hard input-contract rule**: it must
 arrive as a per-Entity pair so the delta-method covariance term is computable — unrecoverable after
@@ -79,7 +81,7 @@ Count, and Revenue Metrics decision-family-complete without inventing event rows
 
 ### Pre-period covariate row (CUPED input)
 
-Supplied only when CUPED applies (pre-period data present, coverage above threshold).
+Supplied before CUPED gating. The engine computes coverage from these rows and chooses a method.
 
 | Field                | Type     | Required | Meaning                                                             |
 | -------------------- | -------- | -------- | ------------------------------------------------------------------- |
@@ -87,6 +89,9 @@ Supplied only when CUPED applies (pre-period data present, coverage above thresh
 | `metric_id`          | `string` | yes      | Same Metric                                                         |
 | `pre_period_value`   | `number` | yes      | Metric value in `[first_exposure_ts - lookback, first_exposure_ts)` |
 | `covariate_source`   | `enum`   | yes      | `pre_period \| declared_attribute \| historical_attribute`          |
+
+Covariate rows may also carry `attribute`, `locked`, `attribute_source`, and `observed_at`
+for attribute selection and pre-Exposure timing validation (`CupedCovariateRowSchema`).
 
 Pre-period is **always anchored at `first_exposure_ts`**, even when the Conversion Window re-anchors
 to `activation_ts`. Immutable: it captures what the Entity did before
@@ -96,13 +101,14 @@ emit.
 
 ### Activation rows (when Activation gate is set)
 
-| Field                | Type        | Required | Meaning                                                                    |
-| -------------------- | ----------- | -------- | -------------------------------------------------------------------------- |
-| `targeting_key_hash` | `string`    | yes      |                                                                            |
-| `run_id`             | `string`    | yes      |                                                                            |
-| `activation_ts`      | `timestamp` | yes      | Earliest candidate satisfying `activation_ts > first_exposure_ts`          |
-| `counterfactual`     | `boolean`   | yes      | `true` for Control-arm would-have-activated; defaults to `false`           |
-| `activated`          | `boolean`   | yes      | `true` if activation event exists with `activation_ts > first_exposure_ts` |
+| Field                  | Type                | Required    | Meaning                                                                    |
+| ---------------------- | ------------------- | ----------- | -------------------------------------------------------------------------- |
+| `targeting_key_hash`   | `string`            | yes         |                                                                            |
+| `run_id`               | `string`            | yes         |                                                                            |
+| `activation_ts`        | `timestamp`         | yes         | Earliest candidate satisfying `activation_ts > first_exposure_ts`          |
+| `activation_ingest_ts` | `timestamp \| null` | analysis-v2 | Pairwise eligibility-ingest clock; required and non-null under analysis-v2 |
+| `counterfactual`       | `boolean`           | yes         | `true` for Control-arm would-have-activated; defaults to `false`           |
+| `activated`            | `boolean`           | yes         | `true` if activation event exists with `activation_ts > first_exposure_ts` |
 
 Un-activated Entities (`activated = false`) are excluded from gated analysis but still counted in
 the full-exposed SRM denominator. The pipeline applies the post-Exposure predicate to candidate
@@ -128,6 +134,8 @@ interface StatsInput {
   control_variant: string;               // locked Control Variant name
   decision_family: DecisionFamilyMember[]; // locked goal Metric × Variant × Primary Dimension family
   guardrail_decisions?: GuardrailDecision[]; // locked Guardrails; defaults to []
+  metric_variance_config?: MetricVarianceConfig[]; // frozen variance knobs; defaults to []
+  pre_registration?: PreRegistration;    // frozen ROPE, ship rule, and futility commitments
   metric_conversion_windows?: { metric_id: string; window_duration_ms: number }[];
   metric_retention_horizons?: { metric_id: string; horizon_start_ms: number; horizon_end_ms: number }[];
   data_watermark?: string;               // required when any analyzed Metric is Retention
@@ -171,17 +179,17 @@ interface StatsOutput {
 `StatsOutput` member shapes (`ArmResult`, `SrmResult`, `GuardrailResult`, `HealthMetrics`,
 `DimensionResult`) are defined in [result-contracts.md](result-contracts.md).
 
-The Run-mode fields are immutable inputs from Run Start. `analysis_version` selects the SRM gate
-and family-correction procedure (ADR-0059 version table). `horizon='fixed'` requires
+The Run-mode fields are immutable inputs from Run Start. `analysis_version` selects the SRM gate,
+family-correction procedure, and Guardrail bound (ADR-0059 version table). `horizon='fixed'` requires
 `sample_size_locked` and disables peeking until that locked sample size is reached; sequential Runs
 may set `target_n` but must not send `sample_size_locked`. `allocation` and `control_variant` come
 from the same locked Run snapshot so SRM, Control selection, and decision families cannot drift
 mid-experiment.
 
 `guardrail_decisions` is the optional locked Guardrail family. When omitted, the engine treats it as
-empty. When present, Guardrail breach evaluation uses the treatment Arm's Fieller relative-lift CI
-lower bound (derived from the absolute decision interval, ADR-0015 rule 4) and only emits a breach
-once the Arm is decisionable. The relative interval is decision-bearing for that check; see
+empty. When present, legacy-unversioned and analysis-v1 use the treatment Arm's Fieller relative-lift
+CI lower bound once the Arm is decisionable. analysis-v2 uses the one-sided oriented contrast;
+the Fieller interval remains reporting-only for that version. See
 [inference-engine.md](inference-engine.md) §Relative-lift CI.
 
 The engine is a **pure function**: same input → same output, no internal state. All retained facts and
@@ -215,9 +223,10 @@ Environment (`infra/tinybird/pipes/analysis_run_inputs.pipe`). A Results read ma
 watermark are in the result ([result-contracts.md](result-contracts.md)).
 
 The Exposure snapshot Copy Pipe (`infra/tinybird/copies/cp_deduped_exposures.pipe`) is
-`COPY_MODE replace`, triggered from `apps/analysis-api/src/scheduled.ts`. Each run rebuilds
-`deduped_exposures` from `raw_events` with `ingest_ts <= copy_watermark`. It does not append a
-delta. A later snapshot can change an Entity's `variant`, `first_exposure_ts`, and arm membership
+`COPY_MODE replace`, triggered from `apps/analysis-api/src/scheduled.ts`. Each run replaces
+`deduped_exposures` by merging `raw_events` with `ingest_ts <= copy_watermark` and the previous
+snapshot. Membership, quarantine, and earliest ingestion/eligibility clocks survive raw TTL;
+identity-generation tombstones suppress destroyed generations. It does not append a delta. A later snapshot can change an Entity's `variant`, `first_exposure_ts`, and arm membership
 that an earlier snapshot already published.
 
 Serving (`infra/tinybird/pipes/serve_deduped_exposures.pipe`) unions that snapshot with the raw

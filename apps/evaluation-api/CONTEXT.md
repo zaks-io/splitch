@@ -10,6 +10,7 @@ behavior, or test evaluation.
 - Assignment, Experiment Run, and holdover replay.
 - Provider and Assignment Store seams.
 - Non-exposing test evaluation behavior.
+- OFREP projections of evaluation and non-exposing bulk prefetch.
 
 ## Flag and targeting terms
 
@@ -36,7 +37,8 @@ Avoid: variation outside the Flagship adapter; arm; bucket; group; treatment for
 itself.
 
 **Default Variant**:
-The Variant returned when a Flag is disabled or no Targeting Rule matches.
+The per-Environment Variant returned when a Flag is disabled, or when neither a Targeting Rule nor
+the baseline Percentage Rollout selects another Variant.
 
 **Targeting Rule**:
 A priority-ordered rule of Conditions that serves a Variant when matched, optionally with a
@@ -67,20 +69,23 @@ configured percentage. This is the concept behind percentage rollouts and A/B sp
 Avoid: bucketing or hashing as domain terms.
 
 **Provider**:
-An implementation that resolves flag values from a flag management system. splitch's default Provider
-is Cloudflare Flagship, but the Provider is swappable. Provider is a stateless read-side resolver. Its
-only state is an invalidatable cache of flag config, never per-Entity assignment memory.
+A stateless read-side resolver that retrieves Flag and Run configuration. The Evaluation Worker
+uses `KvProvider`; local Convex and Cloudflare integrations use `configSnapshotProvider` from
+`@splitch/evaluation-core`. The shared evaluate path owns rule matching and Fractional Evaluation.
+The Provider may cache flag config, never per-Entity assignment memory.
 
 Per-Entity holdover state lives in the Assignment Store, a sibling seam, not behind the Provider.
 
 **Evaluation vs Resolution**:
-Evaluation is the full retrieval of a flag value, including hooks and default fallback. Resolution is
-the Provider retrieving the value from its source of truth. Evaluation wraps Resolution.
+OpenFeature Evaluation is the full retrieval of a flag value, including hooks and the caller's
+default value. Resolution supplies the value and Resolution Details. Within splitch's internal
+evaluate path, the Provider retrieves configuration and the shared evaluator resolves it. Errors
+remain explicit in Resolution Details.
 
 ## Experiment and assignment terms
 
 **Experiment**:
-A test that compares Variants of one or more Flags to measure their effect on Metrics for a
+A test that compares Variants of one Flag to measure their effect on Metrics for a
 population of Entities. First-class and sibling to Flags under an App. It controls Flags while
 running; it does not own them.
 
@@ -114,11 +119,12 @@ Avoid: allocation; bucketing; assignment-as-an-event.
 **Experiment Run**:
 A time-boxed, immutable window of an Experiment with a start and an end. Inside a Run, assignment
 config is frozen: salt, allocation, Variant set, Targeting, Targeting Key, and Activation Metric.
-Started and ended are its lifecycle verbs. The Run is the unit of analysis. Every Exposure is stamped
-with its `runId`.
+Start, End, and Conclude are its lifecycle verbs. The Run is the unit of analysis. Every Exposure is
+stamped with its `runId`.
 
-An assignment edit ends the current Run and opens the next, so each Run yields a clean dataset. A
-measurement edit recomputes over the existing Run because raw events are the system of record.
+Assignment edits stage on the Experiment draft; Start ends the live Run and opens the next. An edit
+alone never resets the sample. A measurement edit recomputes over the existing Run because raw
+events are the system of record.
 The decision spec is locked at Run start for decision-valid results: confidence level, horizon mode
 and tuning, goal Metric family, Guardrail thresholds, and Primary Dimensions. Post-start changes to
 those fields are exploratory for the current Run. Non-material edits apply in place. Runs are
@@ -133,10 +139,11 @@ showing its prior Variant for sticky experience, but is not re-counted in the ne
 Avoid: phase; version; configVersion; analysis window; publish as the start verb; bare Run where
 experiment context is unclear.
 
-**Assignment Store** (Holdover Store):
+### Assignment Store (Holdover Store)
+
 The durable per-Entity memory that makes holdover sticky experience possible. It is keyed by
-`(Experiment, idType, Targeting Key)` and stores `(runId, Variant)`, written once at an Entity's first
-Exposure and read on the evaluate path.
+`(App, Experiment, idType, Targeting Key hash)` and stores `(runId, Variant)`, written once at an
+Entity's first Exposure and read on the evaluate path. Raw Targeting Keys are never stored.
 
 The Assignment Store is dumb storage with zero policy. It answers what this Entity saw and under
 which Run. The evaluate path owns the replay vs `assign()` decision. It is a sibling seam to the
@@ -153,7 +160,8 @@ Avoid: assignment cache; putting it behind the Provider.
 OFREP Core (`POST /ofrep/v1/evaluate/flags/{key}` and `POST /ofrep/v1/evaluate/flags`) is a
 projection of evaluate and evaluate-all. Single-Flag OFREP fires Exposure. Bulk OFREP is a
 non-exposing prefetch; Exposure Tickets ride in `metadata` and are redeemed on first local
-read. Billing follows ADR-0033.
+read. Billing follows ADR-0033. The projection decision is
+[ADR-0062](../../docs/adr/0062-ofrep-core-is-a-data-plane-projection-of-evaluate.md).
 
 ## Exposure behavior on evaluation
 
@@ -169,7 +177,7 @@ Exposure event ownership lives in [`../event-ingest-api/CONTEXT.md`](../event-in
 - Targeting who receives a Flag and selecting the bucketing unit both use the Targeting Key.
 - Variant wins over Variation in all public and domain language.
 - Experiment Run is canonical. Bare Run is allowed only in clearly experimental context.
-- Start and End are Experiment Run lifecycle verbs. Publish is retired.
+- Start, End, and Conclude are Experiment Run lifecycle verbs. Publish is retired.
 
 ## Related context
 

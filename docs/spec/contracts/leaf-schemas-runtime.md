@@ -39,8 +39,9 @@ The only event on the Assignment/Exposure seam. Appended to Tinybird. Every fiel
 | `targetingKeyHash` | `string`                     | yes      | HMAC-derived Entity identifier for storage; raw Targeting Key is never persisted                                                                                                        |
 | `variantName`      | `string`                     | yes      | The Variant name served (string; Exposure logs name not id)                                                                                                                             |
 | `type`             | `'exposure' \| 'activation'` | yes      | Discriminator; activations share this schema                                                                                                                                            |
+| `entityFamilyHash` | `string`                     | yes      | Stable Entity-family identity across legacy/local hash forms                                                                                                                            |
 | `sourceId`         | `string`                     | yes      | Edge POP identifier; component of `dedupKey`                                                                                                                                            |
-| `counterfactual`   | `boolean`                    | yes      | `false` for real Exposures; reserved for future counterfactual triggering                                                                                                               |
+| `counterfactual`   | `boolean`                    | yes      | Defaults to `false` when omitted; reserved for counterfactual triggering                                                                                                                |
 | `clientTimestamp`  | `string` (ISO 8601)          | no       | When the SDK fired the event (diagnostic only; subject to clock skew)                                                                                                                   |
 | `exposureAt`       | `string` (ISO 8601)          | yes      | Canonical encounter time; remote receive time or verified trusted server commit                                                                                                         |
 | `serverReceivedAt` | `string` (ISO 8601)          | yes      | When Splitch durably accepted the row; delivery diagnostics and retention                                                                                                               |
@@ -58,22 +59,23 @@ An Event Definition is App-level and shared by every Environment. `name` is the 
 event name and is unique within the App. `family` selects the Metric Event or Web Event contract and
 cannot change after creation.
 
-The `$` name prefix is reserved for the Splitch-provisioned built-in `web` definitions
+The intended built-in contract reserves the `$` name prefix for Splitch-provisioned `web` definitions
 (`$page_view`, `$web_vital`, `$browser_error`). User-supplied create requests reject names starting
 with `$`, and the control plane rejects every edit, republish, or delete of a `$`-prefixed
 definition. The prefix is the sole built-in marker; there is no ownership column.
 
-| Field                       | Type                | Required | Meaning                                                             |
-| --------------------------- | ------------------- | -------- | ------------------------------------------------------------------- |
-| `id`                        | `string`            | yes      | Stable ID (`evtdef_<ulid>`)                                         |
-| `appId`                     | `string`            | yes      | Owning App                                                          |
-| `name`                      | `string`            | yes      | Stable event name, unique within the App                            |
-| `family`                    | `'metric' \| 'web'` | yes      | Immutable event family selected at creation                         |
-| `displayName`               | `string`            | yes      | Human-readable label                                                |
-| `description`               | `string`            | no       | —                                                                   |
-| `currentPublishedVersionId` | `string \| null`    | yes      | Version the Event Ingest Worker resolves; null before first publish |
-| `createdAt`                 | `string` (ISO 8601) | yes      | —                                                                   |
-| `updatedAt`                 | `string` (ISO 8601) | yes      | Metadata update timestamp                                           |
+| Field                       | Type                                     | Required | Meaning                                                             |
+| --------------------------- | ---------------------------------------- | -------- | ------------------------------------------------------------------- |
+| `id`                        | `string`                                 | yes      | Stable ID (`evtdef_<ulid>`)                                         |
+| `appId`                     | `string`                                 | yes      | Owning App                                                          |
+| `name`                      | `string`                                 | yes      | Stable event name, unique within the App                            |
+| `family`                    | `'metric' \| 'web'`                      | yes      | Immutable event family selected at creation                         |
+| `displayName`               | `string`                                 | yes      | Human-readable label                                                |
+| `description`               | `string`                                 | no       | —                                                                   |
+| `state`                     | `'draft' \| 'incomplete' \| 'published'` | yes      | Publication readiness                                               |
+| `currentPublishedVersionId` | `string \| null`                         | yes      | Version the Event Ingest Worker resolves; null before first publish |
+| `createdAt`                 | `string` (ISO 8601)                      | yes      | —                                                                   |
+| `updatedAt`                 | `string` (ISO 8601)                      | yes      | Metadata update timestamp                                           |
 
 ## Event Definition Version
 
@@ -87,7 +89,6 @@ The parent Event Definition supplies the family. A version request never carries
 | Field               | Type                     | Required | Meaning                                                        |
 | ------------------- | ------------------------ | -------- | -------------------------------------------------------------- |
 | `id`                | `string`                 | yes      | Stable ID (`evtver_<ulid>`)                                    |
-| `appId`             | `string`                 | yes      | Owning App; must match the Event Definition                    |
 | `eventDefinitionId` | `string`                 | yes      | Parent Event Definition                                        |
 | `version`           | positive integer         | yes      | Dense, server-assigned ordinal within the Event Definition     |
 | `entityType`        | `string \| null`         | yes      | Family-specific Entity identity contract, defined below        |
@@ -95,7 +96,6 @@ The parent Event Definition supplies the family. A version request never carries
 | `dimensions`        | `DimensionDefinition[]`  | yes      | Declared slice fields; names unique and disjoint from `fields` |
 | `schemaHash`        | `string` (sha256)        | yes      | Hash of the canonical fields/dimensions/entityType contract    |
 | `publishedAt`       | `string` (ISO 8601)      | yes      | Server timestamp                                               |
-| `publishedBy`       | `string`                 | yes      | WorkOS user ID or deleted-user tombstone                       |
 
 For a `metric` Event Definition, `entityType` must be a non-empty string and every inbound Metric
 Event must carry a matching `idType`. For a `web` Event Definition:
@@ -248,7 +248,7 @@ participate in `schemaHash`; changing either requires a new immutable Event Defi
 
 ## Built-in Web Instrumentation Adapter templates
 
-`@splitch/contracts` exports a canonical immutable manifest used by the SDK, control panel, and CLI.
+The canonical immutable manifest for the SDK, control panel, and CLI is not implemented yet.
 Each template contains only:
 
 | Field        | Type                                            | Required | Meaning                                  |
@@ -320,6 +320,7 @@ The Event Ingest Worker constructs this shape only after the complete request va
 | `eventName`                | `string`                                      | yes      | Denormalized stable definition name                  |
 | `idType`                   | `string`                                      | yes      | Validated Entity type                                |
 | `targetingKeyHash`         | `string`                                      | yes      | Stable App Entity HMAC; raw Targeting Key is absent  |
+| `entityFamilyHash`         | `string`                                      | yes      | Stable Entity-family identity across hash forms      |
 | `fields`                   | `Record<string, JsonValue>`                   | yes      | Validated values serialized canonically              |
 | `dimensions`               | `Record<string, boolean \| string \| number>` | yes      | Validated scalar Dimensions                          |
 | `serverReceivedAt`         | `string` (ISO 8601)                           | yes      | Canonical Metric event time                          |
@@ -332,6 +333,9 @@ The physical Tinybird projection adds server-assigned insertion timestamp `inges
 ---
 
 ## Web Event batch request
+
+This section and the accepted Web Event row below specify unbuilt contracts. No Web Event Zod
+schemas or `/api/sdk/web-events` route are registered in the current checkout.
 
 `POST /api/sdk/web-events` accepts only this strict outer envelope:
 
@@ -459,7 +463,7 @@ verify and error contracts reference; defined here once.
 | `reason`       | `ResolutionReason` | yes      | Why this value was returned (enum below)                                                                      |
 | `ruleId`       | `string`           | no       | Present iff `reason === 'TARGETING_MATCH'`; API-Key/control-plane only                                        |
 | `errorCode`    | `ErrorCode`        | no       | Present iff `reason === 'ERROR'`; the canonical `ErrorCode` enum ([error-responses.md](./error-responses.md)) |
-| `errorMessage` | `string`           | no       | Human-readable; present iff `reason === 'ERROR'`                                                              |
+| `errorMessage` | `string`           | no       | Human-readable; allowed only when `reason === 'ERROR'`                                                        |
 
 `ResolutionReason` enum:
 `'SPLIT' | 'TARGETING_MATCH' | 'DEFAULT' | 'DISABLED' | 'CACHED' | 'STALE' | 'ERROR'`.
@@ -479,13 +483,14 @@ See [two-packages-topology.md](./two-packages-topology.md) for credential consum
 
 ### Organization
 
-| Field       | Type                | Required | Meaning                |
-| ----------- | ------------------- | -------- | ---------------------- |
-| `id`        | `string`            | yes      | WorkOS Organization ID |
-| `name`      | `string`            | yes      | —                      |
-| `plan`      | `OrgPlan`           | yes      | Default `'free'`       |
-| `createdAt` | `string` (ISO 8601) | yes      | —                      |
-| `updatedAt` | `string` (ISO 8601) | yes      | —                      |
+| Field       | Type                | Required | Meaning                                            |
+| ----------- | ------------------- | -------- | -------------------------------------------------- |
+| `id`        | `string`            | yes      | WorkOS Organization ID                             |
+| `name`      | `string`            | yes      | —                                                  |
+| `slug`      | `string`            | yes      | Globally unique URL handle; OrganizationSlugSchema |
+| `plan`      | `OrgPlan`           | yes      | No leaf default; create defaults to `free`         |
+| `createdAt` | `string` (ISO 8601) | yes      | —                                                  |
+| `updatedAt` | `string` (ISO 8601) | yes      | —                                                  |
 
 `OrgPlan` enum: `'free' | 'pro' | 'enterprise'`
 
@@ -506,14 +511,16 @@ See [two-packages-topology.md](./two-packages-topology.md) for credential consum
 A first-class axis under App (ADR-0027). Experiments, Experiment Runs, Exposures, SDK credentials, and
 Flag CONFIGURATION are scoped to one Environment.
 
-| Field       | Type                | Required | Meaning                                           |
-| ----------- | ------------------- | -------- | ------------------------------------------------- |
-| `id`        | `string`            | yes      | Stable UUID                                       |
-| `appId`     | `string`            | yes      | Owning App                                        |
-| `key`       | `string`            | yes      | Unique per App (e.g. `'production'`, `'staging'`) |
-| `name`      | `string`            | yes      | Display label                                     |
-| `createdAt` | `string` (ISO 8601) | yes      | —                                                 |
-| `updatedAt` | `string` (ISO 8601) | yes      | —                                                 |
+| Field       | Type                | Required | Meaning                                                                                                                       |
+| ----------- | ------------------- | -------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| `id`        | `string`            | yes      | Stable UUID                                                                                                                   |
+| `appId`     | `string`            | yes      | Owning App                                                                                                                    |
+| `key`       | `string`            | yes      | Unique per App (e.g. `'production'`, `'staging'`)                                                                             |
+| `name`      | `string`            | yes      | Display label                                                                                                                 |
+| `policy`    | `EnvironmentPolicy` | yes      | Strict map of `variantAvailability`, `targetingRolloutValue`, `enabledState`, `startExperimentRun`; each `allow` or `confirm` |
+| `temporary` | `object \| null`    | yes      | Null for permanent; otherwise required `expiresAt`, `syncedFromEnvironmentId`, `syncedAt`                                     |
+| `createdAt` | `string` (ISO 8601) | yes      | —                                                                                                                             |
+| `updatedAt` | `string` (ISO 8601) | yes      | —                                                                                                                             |
 
 ### User
 
@@ -544,6 +551,7 @@ data.
 | `environmentId`   | `string`                                          | yes      | Scoped to one Environment; co-scoped with `appId` (ADR-0027)                                                                                                                                              |
 | `keyMaterial`     | `string`                                          | yes      | Public value shipped to client code                                                                                                                                                                       |
 | `originAllowlist` | `string[] \| null`                                | no       | `null` = open to all origins (auto-provision default, loudly flagged); `[]` = closed, serves nothing; non-empty = closed except listed origins. Lock down via `PATCH …/client-key` (ADR-0034 §1)          |
+| `isOriginOpen`    | `boolean`                                         | yes      | Explicit warning bit from `originAllowlist === null`                                                                                                                                                      |
 | `rateLimitRps`    | exact integer `1–100` that divides 300, or `null` | no       | PATCH/write set: `1, 2, 3, 4, 5, 6, 10, 12, 15, 20, 25, 30, 50, 60, 75, 100`. `null` = ADR 100 rps default. Read-side KV may still carry a legacy number; Evaluation fail-closes those as `RATE_LIMITED`. |
 | `revokedAt`       | `string \| null` (ISO 8601)                       | no       | —                                                                                                                                                                                                         |
 | `createdAt`       | `string` (ISO 8601)                               | yes      | —                                                                                                                                                                                                         |

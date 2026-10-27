@@ -17,10 +17,11 @@ per-route — it is a convention enforced by the panel app's routing config.
 ### Tier 2 — Segment error boundaries (layout + major sections)
 
 - **Location:** `/{orgSlug}/{appSlug}/{env}` layout route AND each major section (Flags, Experiments, Settings)
-- **Catches:** designed domain failures — 403 (no App access), 404 (resource not found),
+- **Catches:** designed domain failures — 403 (no Organization access), 404 (App/resource not found),
   session expiry (redirect to login), App not found
 - **Examples:**
-  - User navigates to `/{org}/{oldApp}/{env}/...` where they lost membership → 403
+  - User navigates to an Organization where they lost membership → 403
+  - App is absent from the authorized Organization membership snapshot → 404
   - Experiment ID in URL no longer exists → 404
 - **UI:** purpose-built empty states ("you don't have access to this App", "experiment not found")
   with a back-link; no stack trace, no Sentry error
@@ -34,35 +35,41 @@ per-route — it is a convention enforced by the panel app's routing config.
 - **Examples:** transient read API timeout, Cloudflare zone hiccup
 - **UI:** stale data remains visible; dismissable toast appears ("couldn't refresh, retrying")
   The good data is NEVER unmounted. A failed refetch is always a degradation, never a crash.
-- **Retry:** exponential backoff, 3 attempts (2 s / 4 s / 8 s ± 20% jitter), then stop
+- **Retry:** initial refetch plus five retries (2 s / 4 s / 8 s / 16 s / 32 s, each ±20% jitter),
+  then stop and keep the stale indication. Socket recovery uses its separate 2 s / 4 s / 8 s schedule.
 - **Sentry:** low-severity breadcrumb (`level: 'debug'`). A pattern of these (read API down)
   will surface as signal in Axiom; one blip is noise.
 - **Rule:** failed background refetch MUST NOT unmount cached data or bubble to Tier 1/2
 
 ## Pending / loading UI
 
-| Scenario                                | Loading treatment                                       |
-| --------------------------------------- | ------------------------------------------------------- |
-| First paint, loader-seeded route        | No spinner. Data is SSR'd into the Query cache.         |
-| Client-side navigation to loaded route  | No spinner. Query cache has the data already.           |
-| Client-side navigation, data not loaded | `pendingComponent` shows skeleton from `ui` package.    |
-| Suspense boundary (lazy component)      | `<Suspense fallback={<Skeleton />}>` from `ui` package  |
-| Form submit in progress                 | Submit button disabled + loading state (local useState) |
+| Scenario                                | Loading treatment                                                |
+| --------------------------------------- | ---------------------------------------------------------------- |
+| First paint, loader-seeded route        | SSR renders loader data; Query-backed reads also seed the cache. |
+| Client-side navigation to loaded route  | Existing data may render while loaders revalidate.               |
+| Client-side navigation, data not loaded | `pendingComponent` shows skeleton from `ui` package.             |
+| Suspense boundary (lazy component)      | `<Suspense fallback={<Skeleton />}>` from `ui` package           |
+| Form submit in progress                 | Submit button disabled + loading state (local useState)          |
 
 Skeletons are **brand components** living in `packages/ui`. The panel app uses them but does not
-define them. There is one skeleton shape per major content type (list, detail card, data table).
+define them. Shared components include `Skeleton`, `PanelSkeleton`, `TableSkeleton`, and `TextSkeleton`.
 
 ## Error boundary visual components
 
 Error page and empty-state visuals live in `packages/ui` (they are brand surfaces). The panel
-app places them behind the appropriate boundary at the right tier. The `ui` package exports:
+app places them behind the appropriate boundary at the right tier. The `ui` package exposes these
+through its `state/*` subpath exports:
 
 - `<AppErrorPage />` — Tier 1 (catastrophic)
+- `<SectionErrorPage />` for unexpected section failures; `<WidgetErrorState />` isolates a widget
 - `<AccessDeniedPage />` — Tier 2 (403)
 - `<NotFoundPage />` — Tier 2 (404)
 - `<StaleDataToast />` — Tier 3 (non-fatal, nudge failure)
 
 ## Sentry severity summary
+
+Unexpected section failures are captured at `error`; isolated widget failures use `warning`.
+Expected 403/404 states remain breadcrumbs only (`panel-observability.ts`).
 
 | Tier | Failure type               | Sentry level       |
 | ---- | -------------------------- | ------------------ |

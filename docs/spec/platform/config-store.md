@@ -6,7 +6,7 @@ KV/D1 store** — no separate config-copy seam (ADR-0017). This file pins what "
 
 ## Live config shape (what the edge reads from KV)
 
-KV key: `config:app:{appId}:{environmentId}:flag:{flagKey}` — Flag Configuration is per-Environment
+KV key: `app:{appId}:{environmentId}:flag:{flagKey}` — Flag Configuration is per-Environment
 (ADR-0027); the same Flag Key resolves to a distinct config per Environment.
 
 ```
@@ -40,7 +40,8 @@ Activation Metric). The live Run's config remains unchanged at the edge until St
 3. Writes the new `liveRunId` into `AppFlagConfig` and creates active Convex installation delivery
    rows in the same D1 transaction.
 4. Projects `AppFlagConfig` into KV.
-5. Broadcasts a delta-nudge from the per-App DO and starts Convex webhook dispatch.
+5. Broadcasts a delta-nudge from the per-Environment DO. The successful request wakes due
+   integration coordinators for the App; the minute sweep recovers dropped wakes.
 
 N draft edits = **one** sample reset (one new Run), never N.
 
@@ -60,11 +61,12 @@ per Run.
 
 ```
 Worker validates input
-  → calls DO(appId).write(configDelta)
+  → calls DO(appId, environmentId).write(configDelta)
     → DO validates invariants (Run immutability, schema shape)
     → DO commits config plus active Convex delivery rows to D1 in one transaction
     → DO writes through to KV (read replica)
-    → DO broadcasts the internal version-carrying delta-nudge and starts external webhook dispatch
+    → DO broadcasts the internal version-carrying delta-nudge
+    → request wakes due per-Environment integration coordinators
   → Worker returns 200 with new version to caller
 ```
 
@@ -81,10 +83,10 @@ D1 is the authoritative source. KV is a read-replica cache.
 - **D1 succeeds, KV write fails:** Config is durable in D1. The Evaluation Worker reads the current
   snapshot through the Config Store DO and never treats a stale or malformed KV payload as current.
   Control-plane reads rebuild the KV projection from D1.
-- **D1 succeeds, broadcast fails:** Evaluation fails loud while live updates are unavailable.
-  Reconnect invalidates the Environment cache and obtains the current committed version before
-  serving. Panel clients retain their full reconnect behavior, which invalidates and refetches
-  (ADR-0019).
+- **D1 succeeds, broadcast fails:** config remains committed. Evaluation reconnect invalidates the
+  Environment cache and obtains the current authoritative snapshot before serving. When subscription
+  fails, each request drops the Environment cache and reads through the DO; an authoritative-read
+  failure remains fail loud. Panel reconnect invalidates and refetches (ADR-0019).
 - **D1 succeeds, Convex delivery fails:** config remains committed. The durable delivery row retries
   independently; installation health shows the complete latest bounded `DeliveryErrorEnvelope`.
   The component keeps its last validated snapshot until a newer version is announced, serves it

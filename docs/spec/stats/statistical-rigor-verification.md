@@ -16,9 +16,9 @@ call an Experiment Run result decision-valid.
 
 These names are package scripts and CI jobs. Math slices add their own fixtures to the matching gate.
 
-`stats:audit` is deliberately outside CI on CPU cost. Its files run as parallel Monte Carlo loops
-that use every available core for 2–3 minutes, which roughly doubles the wall clock of any graph it
-shares a machine with. Run it on its own, by hand, before a statistics change ships; see
+`stats:audit` is deliberately outside CI on CPU cost. Its files run parallel Monte Carlo loops;
+the root `pnpm stats:audit` command caps the run at two workers. Run it on its own, by hand, before
+a statistics change ships; see
 [packages/stats/audit/README.md](../../../packages/stats/audit/README.md). Its sources are
 type-checked on every CI run, so a contract change breaks it loudly rather than leaving it to rot.
 
@@ -35,7 +35,8 @@ type-checked on every CI run, so a contract change breaks it loudly rather than 
   write; Queue publication failure after the seal is recovered from the outbox without SDK re-fire.
 - Retrying the same raw row with the same `event_id` yields the same `dedup_key`.
 - Exposure and Activation rows with the same identity and `event_id` do not collide because `type` is
-  included in the key.
+  included in the key. Generated Activation keys omit `targeting_key_hash` so an exact retry remains
+  stable across retained identity epochs (`metric-event-activation.ts`).
 - Two physical `metric_events` rows with the same `dedup_key`, inserted in separate blocks and held
   in separate aggregate-state parts, produce one row from `serve_deduped_metric_events` before
   Binomial, Count, Revenue, or Ratio aggregation and therefore cannot inflate a result.
@@ -89,9 +90,9 @@ activation_ts)` or its exact types fails contract tests.
   inputs so final UNION dedup returns it once, never zero or twice.
 - Every Exposure serving source requires injected `app_id` and `environment_id` predicates before
   snapshot read, watermark aggregation, raw-tail read, or final aggregation.
-- Exposure tail `EXPLAIN` fixtures require insertion-month partition pruning and the
-  `(app_id, environment_id, ingest_ts, ...)` primary-key prefix; rows read may scale with the scoped
-  post-snapshot tail, not total retained event-time history.
+- Exposure tail `EXPLAIN` fixtures must prove App/Environment/Experiment/Run pruning and the
+  post-snapshot scan budget on the retained receipt-month/receipt-time physical layout. The
+  `ingest_ts` predicate remains the insertion boundary; it is not the partition or sorting key.
 - Replacing the same Exposure snapshot twice and rebuilding `cp_srm_counts` and
   `cp_activation_rate` leaves identical rollup counts. No rollup materialized view is attached to
   either `raw_events` or `deduped_exposures`.
@@ -111,25 +112,25 @@ activation_ts)` or its exact types fails contract tests.
 
 ## Golden tests
 
-Golden tests use small hand-auditable fixtures with exact expected output. They should live next to the
-stats engine implementation once code exists.
+Golden tests use small hand-auditable fixtures with exact expected output. The suites live next to
+the stats engine implementation in `packages/stats/src/*.golden.test.ts`.
 
-| Area               | Required fixture                                                              |
-| ------------------ | ----------------------------------------------------------------------------- |
-| Binomial           | two-arm conversion rates with known Bernoulli variance                        |
-| Count              | per-Entity sums, not event counts, drive variance                             |
-| Revenue            | per-Entity revenue sums, reported as mean across Entities                     |
-| Ratio              | `(num_value, denom_value)` covariance term changes CI versus naive variance   |
-| Zero denominator   | `denom_i = 0` rows retained; arm-level `B = 0` fails loud                     |
-| Relative lift      | `R_t / R_c - 1`; `R_c = 0` returns undefined relative lift, not fake infinity |
-| Winsorization      | pooled cap is applied, sample size unchanged, arm-specific cap fixture fails  |
-| CUPED              | pre-period covariate adjusts variance; insufficient coverage reports `none`   |
-| CUPED fallback     | only locked/pre-period/historical covariates can be selected                  |
-| BH FDR             | locked family rank/order produces expected adjusted significance              |
-| Guardrail          | CI lower-bound breach triggers independently of BH significance               |
-| SRM                | observed counts versus allocation triggers at `p < 0.001`                     |
-| Activation balance | activated / not-activated by arm triggers at `p < 0.001`                      |
-| `__multiple__`     | conflicted Entity excluded from arms and counted in health output             |
+| Area               | Required fixture                                                               |
+| ------------------ | ------------------------------------------------------------------------------ |
+| Binomial           | two-arm conversion rates with known Bernoulli variance                         |
+| Count              | per-Entity sums, not event counts, drive variance                              |
+| Revenue            | per-Entity revenue sums, reported as mean across Entities                      |
+| Ratio              | `(num_value, denom_value)` covariance term changes CI versus naive variance    |
+| Zero denominator   | `denom_i = 0` rows retained; arm-level `B = 0` fails loud                      |
+| Relative lift      | `R_t / R_c - 1`; `R_c = 0` returns undefined relative lift, not fake infinity  |
+| Winsorization      | pooled cap is applied, sample size unchanged, arm-specific cap fixture fails   |
+| CUPED              | pre-period covariate adjusts variance; insufficient coverage reports `none`    |
+| CUPED fallback     | only locked/pre-period/historical covariates can be selected                   |
+| BH FDR             | locked family rank/order produces expected adjusted significance               |
+| Guardrail          | version-selected relative or one-sided contrast bound, independent of goal FDR |
+| SRM                | legacy/v1 chi-square and v2 sequential crossing use the locked allocation      |
+| Activation balance | activated / not-activated by arm triggers at `p < 0.001`                       |
+| `__multiple__`     | conflicted Entity excluded from arms and counted in health output              |
 
 ## Property and metamorphic tests
 

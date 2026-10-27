@@ -1,4 +1,4 @@
-# D1 storage schemas: Convex installations and config webhook delivery
+# D1 storage schemas: integration installations and config delivery
 
 These tables live beside authoritative App and Environment configuration so a config commit can
 create its webhook deliveries in the same D1 transaction. They contain no raw API Key.
@@ -11,9 +11,11 @@ create its webhook deliveries in the same D1 transaction. They contain no raw AP
 | `app_id`                     | TEXT FK | yes      | Credential-derived App                                                  |
 | `environment_id`             | TEXT FK | yes      | Credential-derived Environment                                          |
 | `callback_url`               | TEXT    | yes      | Validated `*.convex.site` component route                               |
-| `secret_ciphertext`          | BLOB    | yes      | Authenticated encryption of the webhook secret                          |
+| `secret_ciphertext`          | TEXT    | yes      | Authenticated encryption of the webhook secret                          |
 | `secret_key_version`         | TEXT    | yes      | Webhook KEK version used for encryption                                 |
 | `secret_fingerprint`         | TEXT    | yes      | Keyed fingerprint for idempotency comparison, not delivery              |
+| `last_rotation_id`           | TEXT    | no       | Exact rotation retry identity                                           |
+| `last_rotation_fingerprint`  | TEXT    | no       | Fingerprint of the last rotation payload                                |
 | `status`                     | TEXT    | yes      | `active` or `revoked`                                                   |
 | `last_delivered_version`     | INTEGER | no       | Most recent acknowledged Environment version                            |
 | `last_delivered_at`          | TEXT    | no       | ISO 8601 acknowledgement time                                           |
@@ -101,7 +103,7 @@ a partial `completed_at` index for delivered, terminal and suppressed rows. Orga
 {
   kind: "transport" | "http" | "internal"
   code: "DNS_ERROR" | "CONNECT_TIMEOUT" | "TLS_ERROR" | "HTTP_STATUS" |
-        "DELIVERY_PREPARATION_FAILED"
+        "DELIVERY_PREPARATION_FAILED" | "CALLBACK_DESTINATION_REJECTED"
   httpStatus?: integer
   retryAfterMs?: integer
   occurredAt: ISO 8601
@@ -112,6 +114,39 @@ It is an allowlisted, at-most-1-KiB UTF-8 JSON value. The dispatcher never captu
 request body, callback query string, arbitrary header, stack, secret, configuration value, or Entity
 data. Enum and numeric validation makes the envelope bounded before serialization, so fields are
 stored completely rather than truncated.
+
+## Cloudflare and Sentry storage
+
+`cloudflare_installations` uses the same required identity, encrypted-secret, status and timestamp
+columns as `convex_installations`, with `endpoint TEXT NOT NULL` instead of `callback_url`.
+It has nullable integer `last_applied_version` and text `last_applied_at`,
+`latest_delivery_error_json`, `revoked_at`. It has no rotation, preparation, or dormancy columns.
+Indexes are `(app_id, environment_id, status)` and unique
+`(app_id, environment_id, installation_id)`.
+
+`cloudflare_config_deliveries` has the same columns, nullability and installation/version uniqueness
+as `config_webhook_deliveries` except it has no `body_json`; the dispatcher builds the snapshot.
+Its `installation_id` FK references `cloudflare_installations`. In addition to the common lease,
+expiry, completion, outstanding-version and leased-owner indexes, it indexes
+`(app_id, environment_id, state, next_attempt_at, lease_expires_at)` and
+`(app_id, environment_id, state, lease_expires_at)` for coordinator scheduling (migration 0046).
+Both providers have a partial `lease_owner` index where `state = 'leased'`.
+
+`sentry_installations` is Organization-scoped. Required text columns are `installation_id` PK,
+`org_id` FK to Organizations, `webhook_url`, `secret_ciphertext`, `secret_key_version`,
+`secret_fingerprint`, `status`, `next_attempt_at`, `created_at`, `updated_at`. Nullable text columns
+are `last_rotation_id`, `last_rotation_fingerprint`, `last_delivered_at`,
+`latest_delivery_error_json`, `revoked_at`. Nullable integer `last_delivered_seq` is its cursor;
+required integer `attempt_count` defaults to 0. Indexes cover `(status, next_attempt_at)` and
+unique `(org_id, installation_id)`; a partial unique `org_id` index permits only one active
+installation per Organization. Sentry has no separate delivery table.
+
+## Coordinator state
+
+`IntegrationDeliveryDurableObject` stores `{ appId, environmentId }` under `identity` and schedules
+its durable alarm. It has no D1 coordinator-state table. D1 installation and delivery rows remain
+the authority for eligibility, retries, lease ownership and completion. The immutable identity and
+earlier-alarm transaction are implemented in `apps/control-plane-api/src/integration-delivery-do.ts`.
 
 ## Commit and delivery rules
 

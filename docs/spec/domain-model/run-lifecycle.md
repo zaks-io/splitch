@@ -2,32 +2,35 @@
 
 ## Experiment Run entity fields
 
-| Field                | Type                             | Req | Meaning                                                            |
-| -------------------- | -------------------------------- | --- | ------------------------------------------------------------------ |
-| `run_id`             | `string` (ULID)                  | ✓   | Unique, monotonically increasing within Experiment                 |
-| `experiment_id`      | `string` (ULID)                  | ✓   | Owning Experiment                                                  |
-| `app_id`             | `string` (ULID)                  | ✓   | Owning App                                                         |
-| `environment_id`     | `string` (ULID)                  | ✓   | Owning Environment; Experiment Runs are per-Environment (ADR-0027) |
-| `run_number`         | `integer`                        | ✓   | 1-based ordinal within Experiment; Run 1 = first Start             |
-| `status`             | `RunStatus`                      | ✓   | `"running" \| "ended"`                                             |
-| `salt`               | `string`                         | ✓   | Frozen at Run creation; drives Fractional Evaluation hash          |
-| `allocation`         | `AllocationMap`                  | ✓   | `{ variantName: percentage }` summing to 100; frozen               |
-| `control_variant_id` | `string` (ULID)                  | ✓   | Control identity frozen from the Experiment at Start               |
-| `targeting_key_type` | `string`                         | ✓   | Frozen entity-type name                                            |
-| `targeting_rules`    | `TargetingRule[]`                | ✓   | Priority-ordered; frozen at Run creation                           |
-| `activation_metric`  | `ActivationMetricConfig \| null` | ✓   | Frozen at Run creation                                             |
-| `started_at`         | `timestamp`                      | ✓   | When this Run went live (Start timestamp)                          |
-| `ended_at`           | `timestamp \| null`              | ✓   | Set when a subsequent assignment edit starts a new Run             |
+| Field                  | Type                | Req | Meaning                                                            |
+| ---------------------- | ------------------- | --- | ------------------------------------------------------------------ |
+| `run_id`               | `string`            | ✓   | Opaque identifier; `run_number` carries the Experiment ordinal     |
+| `experiment_id`        | `string`            | ✓   | Owning Experiment                                                  |
+| `app_id`               | `string`            | ✓   | Owning App                                                         |
+| `environment_id`       | `string`            | ✓   | Owning Environment; Experiment Runs are per-Environment (ADR-0027) |
+| `run_number`           | `integer`           | ✓   | 1-based ordinal within Experiment; Run 1 = first Start             |
+| `status`               | `RunStatus`         | ✓   | `"running" \| "ended"`                                             |
+| `salt`                 | `string`            | ✓   | Frozen at Run creation; drives Fractional Evaluation hash          |
+| `allocation`           | `AllocationMap`     | ✓   | `{ variantName: percentage }` summing to 100; frozen               |
+| `control_variant_id`   | `string`            | ✓   | Control identity frozen from the Experiment at Start               |
+| `targeting_key_type`   | `string`            | ✓   | Frozen entity-type name                                            |
+| `targeting_rules`      | `TargetingRule[]`   | ✓   | Priority-ordered; frozen at Run creation                           |
+| `activation_metric_id` | `string \| null`    | ✓   | Frozen at Run creation                                             |
+| `started_at`           | `timestamp`         | ✓   | When this Run went live (Start timestamp)                          |
+| `ended_at`             | `timestamp \| null` | ✓   | Set on End, Conclude, or Start of the next Run                     |
 
 `AllocationMap` example: `{ "control": 50, "treatment": 50 }`. Values are percentages (not fractions).
 
 ## Experiment status
 
-`ExperimentStatus = "draft" | "running" | "ended"`
+`ExperimentStatus = "draft" | "running" | "ended" | "archived"`
 
-- `"draft"` — created, never started. Entities receive the Flag's Default Variant.
+- `"draft"` means no live Run, including after End or Conclude. Fresh Entities receive the
+  Flag's configured fallback; retained holdovers remain eligible for replay.
 - `"running"` — started at least once; has a live Run. `live_run_id` is non-null.
-- `"ended"` — deliberately stopped; no live Run. Historical Runs remain as frozen archives.
+- `"ended"` is an accepted compatibility status. Current End and Conclude end the Run and return
+  the Experiment to `"draft"`, clearing `live_run_id`. Historical Runs remain frozen.
+- `"archived"` is the soft-deleted Experiment status; it has no live Run.
 
 ## Experiment Run state machine
 
@@ -75,6 +78,11 @@ the same retry-collapsed logical facts.
 | Guardrail Metric config (add/remove/change threshold)         |
 | Secondary Metric config                                       |
 
+Decision-bearing confidence, horizon/tuning, goal family, Guardrail thresholds, variance rules,
+and pre-registration are locked at Start. Measurement edits do not replace those commitments for
+the current Run; changes to locked decision fields are refused with `DECISION_LOCKED`. New Runs
+freeze `analysis-v2`; legacy Runs retain their explicit compatibility label (ADR-0059).
+
 **Recompute timing:** eventual. Recomputing reads the deduped Exposure snapshot plus tail and
 `serve_deduped_metric_events`, not a full physical Metric Event log scan. The UI shows stale results
 with a "recomputing" state indicator and refreshes when ready. There is no blocking SLA; the recompute
@@ -98,7 +106,10 @@ The live config the edge reads (KV) carries `liveRunId`. The edge stamps Exposur
 
 ## Concurrent assignment edits
 
-Assignment-affecting edits are serialized: only one draft per Experiment at a time. The control plane rejects a second concurrent assignment edit while a first is awaiting Start. This is the correct posture: `__multiple__` quarantine catches defects, not expected concurrency races.
+Assignment-affecting edits accumulate in one next-Run draft per Experiment. An incremental staged
+PATCH preserves fields already staged by earlier edits. The control plane guards writes against a
+concurrent Start with a compare-and-set on the live Run identity and retries the decision when it
+changes. `__multiple__` quarantine catches defects, not expected concurrency races.
 
 ## Sources
 

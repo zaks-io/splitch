@@ -10,18 +10,22 @@ control-plane terminology exactly and should not introduce friendlier aliases.
 ## Terms to preserve
 
 - Organization, App, Environment.
+- Temporary Environment, Sync.
 - Flag, Variant, Flag Configuration.
 - Promotion.
 - Environment Policy.
 - Approval Request, Review, Confirmation.
 - Experiment, Experiment Run.
+- Conclusion, Run commitments, Analysis version.
 - Metric, Dimension, Segment.
 - Client Key, API Key.
 
 ## Behavior language
 
-- Normal consumers call typed route groups on `createControlPlaneSdk()` (`flags`, `experiments`, …) backed by Hono `hc<ControlPlaneClientApp>()`.
-- MCP and other dynamic tool executors import `@splitch/control-plane-sdk/mcp-operation-adapter` and call `callOperationById(operationId, input)` — operation-id dispatch is internal to that adapter, not the public SDK surface.
+- Normal consumers call typed route groups on `createControlPlaneSdk()` (`flags`, `experiments`, …)
+  backed by Hono `hc` clients typed to each route group, such as `FlagsControlPlaneClientApp`.
+- MCP and other dynamic tool executors import `@splitch/control-plane-sdk/mcp-operation-adapter`
+  and call `callOperationById(operationId, input)`. Operation-id dispatch is internal to that adapter.
 - Creating an API Key may return its secret value once.
 - Listing or retrieving API Key records must not expose an existing secret value.
 - Client Keys are public and may be returned freely.

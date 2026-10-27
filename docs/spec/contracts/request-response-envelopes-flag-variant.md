@@ -76,10 +76,15 @@ requests the App-level catalog alone. Supplying a selector requests the same bou
 ```
 
 The summary is exact and intentionally smaller than `FlagConfigResponse`: `rollout` is the baseline
-percentage or `null`, `defaultVariant` is the Variant name, and availability and Targeting Rules are
-absent. `flagConfiguration` is absent from every item when `environmentId` is omitted and required
+percentage or `null`, `defaultVariant` is the Variant name, and the summary also carries availability,
+per-rule rollout percentages, and the running Experiment reference. Complete Targeting Rules are absent. `flagConfiguration` is absent from every item when `environmentId` is omitted and required
 on every item when it is supplied. An empty `environmentId` is invalid rather than equivalent to
 omission.
+
+`include=config` selects `HydratedFlagResponse` / `HydratedFlagListResponse`, with a required
+`configurations` array. Each item has `environmentId`, `enabled`, `availableVariantNames`, authoring
+`targetingRules`, full nullable `rollout`, and nullable `experiment: { id, key }`. Optional `envs`
+selects a comma-separated Environment subset. This is distinct from the compact summary above.
 
 The App has already resolved and passed authorization before this query filter resolves. A miss
 therefore returns `ENVIRONMENT_NOT_FOUND`; unlike an Environment path segment, the filter does not
@@ -146,14 +151,16 @@ has to special-case the verb. A pending future `approve` or omitted required Rev
 
 ### CreateVariantRequest
 
-| Field         | Required | Notes                                                           |
-| ------------- | -------- | --------------------------------------------------------------- |
-| `appId`       | yes      | Duplicates the path for derived MCP tool input; must match path |
-| `flagId`      | yes      | Duplicates the path for derived MCP tool input; must match path |
-| `name`        | yes      | —                                                               |
-| `value`       | yes      | `boolean \| string \| number \| object`                         |
-| `isDefault`   | no       | If true, this Variant becomes the one Default Variant           |
-| `description` | no       | —                                                               |
+| Field             | Required | Notes                                                           |
+| ----------------- | -------- | --------------------------------------------------------------- |
+| `appId`           | yes      | Duplicates the path for derived MCP tool input; must match path |
+| `flagId`          | yes      | Duplicates the path for derived MCP tool input; must match path |
+| `name`            | yes      | —                                                               |
+| `value`           | yes      | `boolean \| string \| number \| object`                         |
+| `isDefault`       | no       | If true, this Variant becomes the one Default Variant           |
+| `review`          | no       | `{ action: 'approve_and_apply' }` for Policy-gated creation     |
+| `idempotency_key` | yes      | Exact retry identity                                            |
+| `description`     | no       | —                                                               |
 
 ### PatchVariantRequest
 

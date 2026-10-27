@@ -7,11 +7,16 @@ Read this when touching `apps/mcp-server`, agent tools, or MCP prompts.
 The MCP server is an agent-facing control-plane skin over the shared typed client. It does not create
 new domain terms. It should make the correct existing terms easy for agents to use.
 
+Management tools use the Control Plane binding, including operations delegated onward to Analysis
+or Evaluation. `context_use` stores the active App and Environment in the caller's MCP session;
+`splitch://active-context` reports that scope. `splitch://context` serves the root glossary.
+
 ## Agent wording
 
 - Use Organization, App, and Environment as the scope chain.
 - Use Promote for moving Flag Configuration or Variant availability across Environments.
-- Use Start and End for Experiment Run lifecycle.
+- Use Start, End, and Conclude for Experiment Run lifecycle.
+- Use Temporary Environment and Sync for the expiring whole-Environment copy workflow.
 - Use Client Key for public client SDK wiring.
 - Use API Key for secret server SDK wiring.
 - Say test evaluation or dry-run when no Exposure should be recorded.
@@ -26,7 +31,7 @@ new domain terms. It should make the correct existing terms easy for agents to u
 ## Avoid
 
 - Do not invent friendlier synonyms for canonical terms.
-- Do not use publish.
+- Use publish only for immutable Event Definition Versions.
 - Do not imply the agent can access Targeting Rules through a Client Key.
 - Do not call dry-run evaluation an Exposure.
 

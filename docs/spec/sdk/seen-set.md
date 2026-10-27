@@ -85,8 +85,8 @@ inputs that would resolve identically.
 
 The Exposure key above assumes the SDK already knows the **current** `runId` before it decides to
 suppress. A pure-HTTP client does not: the public data-plane response is the bare
-`{ variant, variantName }` (non-revealing, ADR-0018: which arm, never how it was chosen) and the
-SDK only learns the live `runId` **from** an evaluate call — the very call a seen-set hit is trying
+`{ variant }` (non-revealing, ADR-0018: which arm, never how it was chosen) and the
+SDK learns `variantName` from `X-Variant-Name` and the live `runId` **from** an evaluate call — the very call a seen-set hit is trying
 to skip. The `runId` is surfaced as non-revealing operational metadata alongside the body (an
 `X-Run-Id` response header), not inside it, so the response schema stays closed.
 
@@ -150,7 +150,7 @@ same request context produces extra raw Exposure rows that are safely deduplicat
 When the SDK suppresses an Exposure due to a seen-set hit, it MUST emit a DEBUG-level log:
 
 ```
-[splitch] seen-set hit: suppress Exposure for flagKey=<key> runId=<id> targetingKey=<tk>
+logger.debug("[splitch] seen-set hit: suppress Exposure", { flagKey, targetingKey })
 ```
 
 This allows pipeline operators to verify that SDK suppression and raw log volume are

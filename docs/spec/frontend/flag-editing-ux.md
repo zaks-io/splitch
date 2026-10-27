@@ -4,7 +4,8 @@
 
 Flag editing is **live and per-change**. There is no client-held staged apply cycle for Flags. Under
 `allow`, a validated edit applies immediately. Under `confirm`, submit creates the durable Approval
-Request and the proposer performs `approve_and_apply` in the same user action. Future `approve`
+Request; the panel reads that record and renders its gate before an explicit Confirm performs
+`approve_and_apply`. Future `approve`
 leaves that request `pending` until a distinct authorized principal performs the identical Review.
 No batching and no client-held pending draft.
 

@@ -1,14 +1,14 @@
 # Public evaluate endpoint: `POST /api/sdk/evaluate`
 
-The single data-plane endpoint the client-side SDK calls. Safe under a public Client Key:
-returns the resolved Variant and a **non-revealing** `reason` (OpenFeature `ResolutionDetails`,
+The single-Flag Exposure-bearing data-plane endpoint. Accepts a Client Key or API Key and is safe
+under a public Client Key. It returns the resolved Variant and a **non-revealing** `reason` (OpenFeature `ResolutionDetails`,
 ADR-0036) — never config, rules, allocation, salt, or which rule matched (ADR-0018).
 
 ## Endpoint
 
 ```
 POST /api/sdk/evaluate
-Authorization: Bearer <clientKey>
+Authorization: Bearer <clientKey | apiKey>
 Content-Type: application/json
 ```
 
@@ -21,11 +21,9 @@ EvaluateRequest {
   idType:            string        -- required on the wire; the Entity type label (e.g. 'user',
                                    -- 'workspace'); carried through to Exposure row and
                                    -- Assignment Store key. SDK defaults it to 'user' (see below).
-  evaluationContext: {             -- required object; attributes for Targeting Rule evaluation
-    targetingKey: string           -- must equal top-level targetingKey (redundant but required
-                                   -- for OpenFeature context shape compatibility)
-    [key: string]: unknown         -- arbitrary attributes; available to Targeting Rule Conditions
-  }
+  attributes: Record<string, boolean | string | number | unknown[]>
+                                   -- defaults to {}; Targeting Rule attributes
+  appId?: string                   -- optional credential-scope assertion
 }
 ```
 
@@ -37,7 +35,7 @@ default is applied client-side before the request is sent; the wire contract sti
 the field. This removes the most common DX paper cut (a hello-world evaluate is `flagKey` +
 `targetingKey`) without weakening the server's disambiguation guarantee.
 
-The **Environment is resolved from the Client Key**, not a request field: a Client Key is per
+The **Environment is resolved from the credential**, not a request field: an SDK credential is per
 `(app_id, environment_id)` (ADR-0027), and the edge reads `environment_id` from the key's validation
 cache value to select which Environment's Flag Configuration and live Experiment Runs to serve.
 
@@ -73,23 +71,24 @@ fallback caused by failure is never disguised as a real resolution.
 
 ```
 EvaluateResponse {
-  variant:      VariantValue   -- the resolved Variant value for this Entity (see Variant type below)
-  variantName:  string         -- the Variant name (immutable arm label; public-safe)
+  value:        VariantValue   -- the resolved value or caller default
+  variantName:  string | null  -- the Variant name when resolved
   reason:       Reason         -- why this value (NON-REVEALING set under a Client Key, see below)
-  errorCode?:   ErrorCode      -- present only when reason = ERROR (OpenFeature enum)
+  errorCode?:   SplitchSdkErrorCode -- present on failure; wire or SDK-local code
   errorMessage?: string        -- present only when reason = ERROR
 }
 ```
 
 This is the **SDK-synthesized** return shape, not the HTTP wire body. The wire response is
-`{ variant: VariantValue | null, variantName: string | null }` (see [contracts/request-response-envelopes-conventions.md](../contracts/request-response-envelopes-conventions.md));
-`variantName` rides the wire because it is not derivable client-side (two arms may share a value),
+`{ variant: VariantValue | null }` (see [contracts/request-response-envelopes-conventions.md](../contracts/request-response-envelopes-conventions.md));
+`variantName` rides the percent-encoded `x-variant-name` header because it is not derivable
+client-side (two Variants may share a value),
 while the SDK synthesizes the rest of `ResolutionDetails` (`reason`, `errorCode`, …) from that wire
 body, HTTP status, and non-revealing response metadata. The `x-reason` header carries the resolution
 kind without changing the frozen body (see [contracts/leaf-schemas-runtime.md](../contracts/leaf-schemas-runtime.md)). `Reason` is the
 `ResolutionReason` enum from `contracts/leaf-schemas-runtime.md` — do not redefine it.
 
-`evaluate` (value accessor) unwraps this to `variant`; `evaluateDetails` returns the whole
+`evaluate` (value accessor) unwraps this to `value`; `evaluateDetails` returns the whole
 shape. See [exposure-accessor.md](./exposure-accessor.md).
 
 ### Reason under a public Client Key (ADR-0018, ADR-0036)
@@ -102,8 +101,8 @@ Reason = 'SPLIT' | 'DEFAULT' | 'DISABLED' | 'CACHED' | 'STALE' | 'ERROR'
 ```
 
 `TARGETING_MATCH` (which names rule-driven resolution) and the rule identity are reserved for
-the API-Key and control-plane tiers (peek, test-eval — ADR-0026, ADR-0037). A rule-driven
-result under a Client Key reports `SPLIT` or `TARGETING_MATCH` **without** naming the rule.
+API-Key `verify` and control-plane test-eval (ADR-0026, ADR-0037). This endpoint returns
+`SPLIT` for rule-driven results under either credential tier, without naming the rule.
 
 ### Variant value type
 
@@ -134,8 +133,11 @@ design. This is a hard endpoint-design constraint, not a later policy bolt-on.
 
 Calling this endpoint (via the `evaluate` SDK accessor) for a successful live Experiment Run
 resolution fires an Exposure as a side effect. Before returning `200`, the Evaluation Worker waits
-only for the retry-stable Exposure and payload to be sealed in the Event Ingest `raw_events` outbox;
-Queue publication and Tinybird remain asynchronous. Outbox-seal failure returns a fail-loud error and
+for the retry-stable Exposure and payload to be sealed in the Event Ingest `raw_events` outbox,
+then awaits the Assignment Store first-touch write and KV write-through. A holdover-write failure
+returns `503 SERVICE_UNAVAILABLE` after the Exposure has committed; the caller must reuse its
+idempotency key for a retry. Queue publication and Tinybird remain asynchronous. Outbox-seal
+failure returns a fail-loud error and
 begins no Assignment Store write. The client never appends the Exposure. Disabled Flags, Flags without
 a controlling Experiment, Experiments without a live Run, holdovers, and failed resolutions record no
 new Exposure.
@@ -155,9 +157,10 @@ SRM-invisible read under a public key is an allocation oracle. This public endpo
   asynchronously posts privacy-minimal, non-billable telemetry so cached/local reporting dimensions
   remain visible. Its failure is loud in the SDK logger and never changes the cached result.
 - If the endpoint is unreachable and no cached value exists, the SDK returns the **Default
-  Variant** (CONTEXT.md) with `reason: ERROR` + an `errorCode`, fires **no** Exposure, and
-  emits a loud error log / error hook (ADR-0036). **This is never silent** — the caller can
-  always tell a failure-fallback from a real resolution via `reason`. A degraded-to-default
+  Variant** (CONTEXT.md) with `reason: ERROR` + an `errorCode` and
+  emits a loud error log (ADR-0036). **This is never silent** — the caller can
+  always tell a failure-fallback from a real resolution via `reason`. An uncertain request may
+  already have committed its Exposure. A degraded-to-default
   result keeps the customer's app running; a _hidden_ one is forbidden.
 - Single-flag-per-call. Bulk resolution is the separate non-exposing
   [`POST /api/sdk/evaluate-all`](./evaluate-all-endpoint.md) (Precomputed Evaluations, ADR-0048);
@@ -204,9 +207,10 @@ ErrorResponse {
 **Failure (loud) vs. legitimate default (normal), per ADR-0036:**
 
 - **503 `SERVICE_UNAVAILABLE`** and network/parse errors are _failures_: the SDK returns the
-  Default Variant with `reason: ERROR` + `errorCode: PROVIDER_NOT_READY`, fires no Exposure, and
-  logs loudly. Not silent. The 503 carries a `Retry-After` header; the SDK does not auto-retry the
-  Exposure-bearing call (a retry would be a fresh resolution, not a replay).
+  Default Variant with `reason: ERROR` and the wire or local transport error code, and logs loudly.
+  A transport failure after durable acceptance cannot undo the Exposure; reuse the idempotency key
+  when retrying an uncertain request. Not silent. The 503 carries a `Retry-After` header; the SDK does not auto-retry the
+  Exposure-bearing call. An application retry must reuse its idempotency key for replay.
 - **404 `FLAG_NOT_FOUND`** is a _failure_ too (a flagKey that does not exist is a setup bug,
   not a normal value): `reason: ERROR`, `errorCode: FLAG_NOT_FOUND`, no Exposure, loud.
 - A flag that **exists but is disabled** or **has no Configuration in this Environment**, or
@@ -214,9 +218,9 @@ ErrorResponse {
   Default Variant with `reason: DISABLED` / `DEFAULT` (not `ERROR`) and the dev still learns
   why. These are normal, not alarmist.
 
-`errorCode` uses the OpenFeature standard enum (`PROVIDER_NOT_READY`, `FLAG_NOT_FOUND`,
-`PARSE_ERROR`, `TYPE_MISMATCH`, `TARGETING_KEY_MISSING`, `INVALID_CONTEXT`, `PROVIDER_FATAL`,
-`GENERAL`), mapped from the HTTP `ErrorResponse.code` at the SDK boundary.
+`errorCode` preserves a valid HTTP `ErrorResponse.code`. Without a parsed server code, the SDK
+maps the status as below. Local failures use `SDK_TRANSPORT_NETWORK`, `SDK_TRANSPORT_TIMEOUT`,
+or `SDK_TRANSPORT_PARSE`. The OpenFeature provider separately maps these to OpenFeature codes.
 
 ### HTTP status to ResolutionDetails mapping
 
@@ -224,18 +228,18 @@ This is the contract that makes fail-loud **usable**: the SDK turns every transp
 structured [`ResolutionDetails`](../contracts/leaf-schemas-runtime.md#resolutiondetails-openfeature-sdk-return-shape)
 the caller can branch on. The caller never has to inspect HTTP status itself.
 
-| Transport outcome                          | `reason`   | `value`           | `errorCode`          | Exposure |
-| ------------------------------------------ | ---------- | ----------------- | -------------------- | -------- |
-| `200`, rule/rollout resolved               | `SPLIT`    | resolved Variant  | —                    | fires    |
-| `200`, no rule matched                     | `DEFAULT`  | Default Variant   | —                    | fires    |
-| `200`, Flag disabled / no Env config       | `DISABLED` | Default Variant   | —                    | fires    |
-| in-memory cache hit (same instance)        | `CACHED`   | cached Variant    | —                    | no       |
-| served from stale cache after failure      | `STALE`    | last-good Variant | `PROVIDER_NOT_READY` | no       |
-| `401` / `403`                              | `ERROR`    | Default Variant   | `PROVIDER_FATAL`     | no       |
-| `404 FLAG_NOT_FOUND`                       | `ERROR`    | Default Variant   | `FLAG_NOT_FOUND`     | no       |
-| `400 VALIDATION_ERROR`                     | `ERROR`    | Default Variant   | `INVALID_CONTEXT`    | no       |
-| `429 RATE_LIMITED`                         | `ERROR`    | Default Variant   | `GENERAL`            | no       |
-| `503` / outbox / network / timeout / parse | `ERROR`    | Default Variant   | `PROVIDER_NOT_READY` | no       |
+| Transport outcome                    | `reason`   | `value`          | `errorCode`                          | Exposure                              |
+| ------------------------------------ | ---------- | ---------------- | ------------------------------------ | ------------------------------------- |
+| `200`, rule/rollout resolved         | `SPLIT`    | resolved Variant | —                                    | only a fresh live-Run resolution      |
+| `200`, no rule matched               | `DEFAULT`  | Default Variant  | —                                    | only under a live Run                 |
+| `200`, Flag disabled / no Env config | `DISABLED` | Default Variant  | —                                    | no                                    |
+| in-memory cache hit                  | `CACHED`   | cached Variant   | —                                    | no                                    |
+| `401` / `403`, without a parsed code | `ERROR`    | caller default   | `UNAUTHORIZED` / `FORBIDDEN`         | no                                    |
+| `404 FLAG_NOT_FOUND`                 | `ERROR`    | caller default   | `FLAG_NOT_FOUND`                     | no                                    |
+| `400 VALIDATION_ERROR`               | `ERROR`    | caller default   | `VALIDATION_ERROR`                   | no                                    |
+| `429 RATE_LIMITED`                   | `ERROR`    | caller default   | `RATE_LIMITED`                       | no                                    |
+| `503 SERVICE_UNAVAILABLE`            | `ERROR`    | caller default   | `SERVICE_UNAVAILABLE`                | may already be sealed                 |
+| network / timeout / parse failure    | `ERROR`    | caller default   | corresponding `SDK_TRANSPORT_*` code | acceptance may already have committed |
 
 Every `ERROR` row returns the **Default Variant** so the caller's UI still renders, carries a
 non-null `errorCode`, and logs loudly — never a silent default (ADR-0036). The recommended caller
@@ -246,13 +250,13 @@ branch is a single check on `details.reason === 'ERROR'`.
 So a hello-world is genuinely copy-paste, the SDK ships sane defaults; each is overridable at
 construction:
 
-| Setting          | Default                                                                                  | Notes                                                                                                                                                                      |
-| ---------------- | ---------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `endpoint`       | `https://edge.splitch.dev` (the public Evaluation Worker, ADR-0038)                      | Override for self-hosted / preview Workers.                                                                                                                                |
-| `timeoutMs`      | `5000`                                                                                   | Sized for a cold call, not a warm one: a first evaluation against healthy production measures ~2s. On timeout the SDK fails loud to the Default Variant (`reason: ERROR`). |
-| `retries`        | `0` automatic retries on Exposure-bearing `evaluate`; peek/verify may retry idempotently | An application-managed retry supplies and reuses the same logical Evaluation idempotency key.                                                                              |
-| `idType`         | `'user'`                                                                                 | Overridable per call.                                                                                                                                                      |
-| `idempotencyKey` | a UUID generated with `crypto.randomUUID()` for each call                                | Supply a non-empty key when the application manages retries. The wire header remains required.                                                                             |
+| Setting          | Default                                                             | Notes                                                                                                                                                                      |
+| ---------------- | ------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `endpoint`       | `https://edge.splitch.dev` (the public Evaluation Worker, ADR-0038) | Override for self-hosted / preview Workers.                                                                                                                                |
+| `timeoutMs`      | `5000`                                                              | Sized for a cold call, not a warm one: a first evaluation against healthy production measures ~2s. On timeout the SDK fails loud to the Default Variant (`reason: ERROR`). |
+| `retries`        | `0` automatic retries; any other value throws `SDK_RETRIES_INVALID` | An application-managed retry supplies and reuses the same logical Evaluation idempotency key.                                                                              |
+| `idType`         | `'user'`                                                            | Overridable per call.                                                                                                                                                      |
+| `idempotencyKey` | a UUID generated with `crypto.randomUUID()` for each call           | Supply a non-empty key when the application manages retries. The wire header remains required.                                                                             |
 
 ```ts
 import { createSplitchClient } from "@splitch/sdk";
@@ -275,8 +279,8 @@ else render(d.value);
 
 ## Seam contract
 
-- **Port:** `evaluate(appId, clientKey, flagKey, targetingKey, idType, evaluationContext) -> VariantValue`
-- **Left side:** SDK HTTP client (presents Client Key in Authorization header)
+- **Port:** `evaluate(credential, flagKey, targetingKey, idType, attributes) -> VariantValue`
+- **Left side:** SDK HTTP client (presents Client Key or API Key in the Authorization header)
 - **Right side:** Worker that validates credential, loads Provider config + Assignment Store
   holdover, calls `assign()`, durably seals Exposure when required, then returns Variant value
 - **Failure contract (fail-loud, ADR-0036):** credential invalid → 401; flag missing → 404 +

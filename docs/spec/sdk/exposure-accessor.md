@@ -17,7 +17,9 @@ EvaluationContext {
   idType?:      string         -- optional in the SDK; defaults to 'user'. Required on the wire,
                                -- so the SDK fills the default before sending (ADR-0036).
   idempotencyKey?: string      -- optional in the SDK; caller-owned retry identity when supplied
-  [key: string]: unknown       -- arbitrary attributes for Targeting Rule Conditions
+  attributes?: Record<string, boolean | string | number | readonly unknown[]>
+                               -- Targeting Rule attributes; defaults to {}
+  defaultValue?: VariantValue  -- caller fallback; defaults to false
 }
 ```
 
@@ -53,19 +55,22 @@ branch on `reason` / `errorCode` (e.g. surface a banner on `STALE`, throw in you
    `SDK_CONTEXT_INVALID`. When the key is omitted, the SDK generates one with
    `crypto.randomUUID()` or throws `SDK_IDEMPOTENCY_KEY_UNAVAILABLE` if that API is unavailable.
    These local failures happen before any request rather than degrading to a Default Variant.
-2. Checks SDK seen-set for `(flagKey, runId, targetingKey)`. If present, returns the cached
+2. Checks the SDK seen-set Exposure identity and attributes fingerprint. If both match, returns the cached
    Variant without a second Exposure (`reason: CACHED`) and asynchronously sends only the Flag Key,
    resolved idempotency key, and SDK/runtime to non-billable cache telemetry. That telemetry never
    carries a Targeting Key; a telemetry failure is logged loudly but cannot change the cached result.
+   Changed attributes within a fresh Exposure slot re-resolve through non-exposing `verify`.
 3. On seen-set miss: calls `POST /api/sdk/evaluate` (see [public-evaluate-endpoint.md](./public-evaluate-endpoint.md)).
 4. When the result carries a live Run, the Worker seals the retry-stable Exposure in the Event Ingest
-   `raw_events` outbox before returning success; the client does not send a separate track call. Seal
-   failure returns `reason: ERROR` and records no holdover. An application-managed retry can reuse an
-   explicit idempotency key. A disabled, no-Experiment, or no-live-Run result records none.
+   `raw_events` outbox, then awaits the Assignment Store write and identity revalidation before
+   returning success; the client does not send a separate track call. Seal failure records no
+   holdover. A later holdover-write failure returns `503` with the Exposure already sealed. An
+   application-managed retry can reuse an explicit idempotency key. A disabled, no-Experiment, or no-live-Run result records none.
 5. SDK updates seen-set with `(flagKey, runId, targetingKey) -> VariantValue`.
 6. Returns resolved Variant (or full details).
 7. **On failure (network, 503, 404): returns Default Variant with `reason: ERROR` + an
-   `errorCode`, fires NO Exposure, and emits a loud error log / error hook (ADR-0036). Never
+   `errorCode` and emits a loud error log (ADR-0036). A transport or holdover-write failure can
+   happen after durable Exposure acceptance; it cannot undo that row. Never
    silent** — the caller can always distinguish a failure-fallback from a real resolution. A
    _disabled / no-config / no-match_ flag is not a failure: it returns the Default Variant
    with `reason: DISABLED` / `DEFAULT`, no error.
@@ -87,8 +92,8 @@ distinctly named — `peekVariant` is not a variant of `evaluate` with a suppres
 that resolves a Variant while firing no Exposure leaves no SRM trace, which under a public
 Client Key is a silent allocation oracle: sweep Targeting Keys, read each variant, and
 reconstruct the rollout without polluting analysis or tripping SRM. So `peekVariant` requires
-an **API Key** (trusted server runtime). The public Client Key has no silent allocation-read
-capability: Variant resolution is Exposure-bearing `evaluate`. Its separate write-only event-ingest
+an **API Key** (trusted server runtime). The public Client Key cannot call this diagnostic endpoint. Its non-exposing `verify` and
+`evaluateAll` accessors remain available under their own contracts. Its separate write-only event-ingest
 capabilities from ADR-0040 return no allocation or configuration. Client-side below-the-fold
 deferral is served by firing
 `evaluate` when the element scrolls into view, not by a silent client peek. Peek still returns
@@ -122,7 +127,7 @@ A Client Key presented to this endpoint is rejected `403 INSUFFICIENT_SCOPES` (t
 structurally lacks the peek scope; a missing/invalid credential is `401 UNAUTHORIZED`). The Worker
 gates peek on an API Key's `data-plane:evaluate` scope, the same credential the server-side SDK holds.
 
-All other error responses (`400 VALIDATION_ERROR`, `404 NOT_FOUND` for an unknown Flag,
+All other error responses (`400 VALIDATION_ERROR`, `404 FLAG_NOT_FOUND` for an unknown Flag,
 `429 RATE_LIMITED`, `503` on an unreachable Provider) follow the canonical error contract in
 [contracts/error-responses.md](../contracts/error-responses.md) — peek does not define its own. Unlike
 `evaluate`, peek has no Default-Variant fallback: disabled, no-live-Run, null-Experiment, and
@@ -178,6 +183,8 @@ This table is a cross-reference only; do not duplicate the authoritative definit
 | `experiment_id`      | string                     | resolved from Flag's controlling Experiment                         |
 | `run_id`             | string                     | live Run at evaluation time (stamped at server-received time)       |
 | `targeting_key_hash` | string                     | derived server-side from request Targeting Key                      |
+| `entity_family_hash` | string                     | stable Entity family pseudonym                                      |
+| `counterfactual`     | boolean                    | false for these real Exposures                                      |
 | `id_type`            | string                     | validated request `idType`; must match the Run config               |
 | `variant`            | string                     | Variant name (not value), an immutable experimental Variant label   |
 | `source_id`          | string                     | edge POP identifier                                                 |
@@ -211,8 +218,9 @@ at-least-once ingest); see [../pipeline/exposure-event-contract.md](../pipeline/
 - **Left side:** SDK consumer (application code)
 - **Right side:** Cloudflare Worker (calls Provider, Assignment Store, fires Exposure)
 - **Failure contract (fail-loud, ADR-0036):** for `evaluate` and `verify`, network or server
-  failure returns the Default Variant with `reason: ERROR` + `errorCode`, fires no Exposure, and
-  emits a loud error log/hook. Never a silent default. Disabled/no-config/no-match returns the
+  failure returns the Default Variant with `reason: ERROR` + `errorCode` and emits a loud error log.
+  An uncertain evaluate failure can follow durable Exposure acceptance; `verify` never exposes.
+  Never a silent default. Disabled/no-config/no-match returns the
   Default Variant with `reason: DISABLED`/`DEFAULT`. Peek is stricter: failures and Default Variant
   fallbacks return the canonical error envelope instead of a Variant value.
 - **No manual exposure():** there is no `fireExposure(flagKey, variant)` call. Exposure is

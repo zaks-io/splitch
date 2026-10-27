@@ -13,7 +13,7 @@ Vocabulary: domain terms per [CONTEXT.md](../../CONTEXT.md). Builds directly on
 ## Where this came from
 
 The ADRs pin the rendering _substrate_ — TanStack Start on two Workers, a shared `ui` package, TanStack
-Query as the sole synced server-state store, a hibernating WebSocket per App for live updates. They do not
+Query as the sole synced server-state store, a hibernating WebSocket per (App, Environment) for live updates. They do not
 pin the _contracts between the pieces_: how code is split into packages, how the panel knows who you are,
 how a WebSocket nudge maps to the caches it invalidates, when the socket connects, how errors and loading
 are handled, or how mutations flow. This is that layer — below the ADRs, above the screens. It is not a UX
@@ -27,14 +27,15 @@ Configuration, Experiments, Exposures, credentials) means the resolved `(appId, 
 drives four otherwise-independent mechanisms, and because they all read the same URL-derived source they
 cannot disagree:
 
-1. **Isolation check** — the loader resolves `orgSlug → appSlug → env` and validates the session's
-   membership against the App (or 403s); a resolved `env` that is not an Environment of that App is a 404
-   (no separate membership check — Environment access follows App access). This is the
+1. **Isolation check** resolves `orgSlug → appSlug → env` against the session's memberships.
+   An inaccessible Organization is a 403; an App absent from that membership or an unknown
+   Environment is a 404. Environment access follows App access. This is the
    application-enforced `(app_id, environment_id)` boundary of ADR-0018/0027, made explicit at the loader
    seam.
-2. **Query-cache root** — every TanStack Query key is rooted at `['app', appId, 'env', envId, ...]`
-   (`query-key-factory.md`), so one Environment's cache can never serve another's, and an App or
-   Environment switch / logout can purge by prefix.
+2. **Query-cache root** for Environment data is `['app', appId, 'env', envId, ...]`, so one
+   Environment's cache cannot serve another's. App Settings and Organization integrations use
+   their own App/Organization roots; session scope keys use the URL slugs. The canonical factory
+   is `apps/control-panel/src/lib/shared/query-keys.ts`.
 3. **Live-update DO** — the per-`(App, Environment)` fan-out DO is `idFromName(`${appId}:${envId}`)`
    (ADR-0019); the socket connects to the DO named by the same pair, so a dev edit never nudges a prod
    dashboard.
@@ -56,8 +57,9 @@ speculative indirection.
   mentions a Run, Experiment, or Exposure. Two real consumers (panel, marketing) → a real seam. **`ui` is
   the single source of brand.** Tokens live here and nowhere else; both apps compose from them. A color
   changes in one place and both surfaces move.
-- **`contracts`** — shared types and the typed read-API client (ADR-0017's contracts-first OpenAPI/Zod).
-  Consumed by both apps (and the SDK), so it is its own package independent of the frontend.
+- **`contracts`** owns Zod schemas, route definitions, and inferred types. The private
+  **`control-plane-sdk`** owns typed transport. The panel uses it server-side over signed
+  service-binding delegation; published consumers use `@splitch/sdk/control-plane` (ADR-0025).
 - **panel app / marketing app** — each owns its **own** feature/page components, _composed from_ `ui`
   primitives. Anything domain-aware (a `RunStatusBadge`, an SRM panel) lives **inside** the app that uses
   it, not in a shared package — one consumer, so extracting it would be speculative indirection.
@@ -67,25 +69,28 @@ tokens; they are not the _same_ compositions (marketing's gradient hero, the pan
 When marketing wants a treatment the panel never uses, that is a marketing-only **component** built from
 shared **tokens** — the palette is never forked, only the composition differs.
 
-Brand drift is kept out by structure plus a forthcoming **branding guide** (the human reference for how to
-apply the system), not by CI lint rules.
+The [branding guide](../branding/ui-usage.md) and [design tokens](../branding/design-tokens.md)
+describe how both apps use `packages/ui/src/theme.css`.
 
 ## Auth and the session boundary
 
 Panel routes are SSR with loader-seeded Query caches (ADR-0020); the loader runs server-side on the Worker
 on first paint, so it needs the authenticated identity at request time, before any client JS.
 
-- **Session is a cookie**, validated server-side in the TanStack Start server handler against the D1
-  identity/membership store (ADR-0018). The validated `{ userId, appId-memberships, role }` enters the
-  **loader context**. Loaders never trust a client-supplied `appId`.
+- **Session is an opaque cookie**, resolved server-side to a `SESSION_STORE` KV record. Its
+  Organization/App membership snapshot comes from D1 at sign-in and explicit resync; legacy records
+  rehydrate from D1. The loader resolves Environments through the D1 repository. Loaders never
+  trust a client-supplied `appId`.
 - **Active App and Environment are the URL** (`/{orgSlug}/{appSlug}/{env}/...`). The loader resolves the
-  slugs to ids, checks the session has access to the App (or 403), and treats an `env` that is not one of
-  the App's Environments as a 404 — Environment access follows App access, no separate membership check
+  slugs to ids, returns 403 for an inaccessible Organization, and returns 404 for an App absent
+  from its membership or an `env` outside that App — Environment access follows App access, no separate membership check
   (ADR-0027). Switching App or Environment is a navigation.
 
-**Session issuer — WorkOS (ADR-0022).** WorkOS issues the session: AuthKit (email/password + social
-OAuth) for self-serve, SSO/SCIM for enterprise. The `cookie → server validation → loader context` seam is
-issuer-agnostic — WorkOS plugs in only at session creation, and the loader never calls WorkOS per request.
+**Authentication uses WorkOS AuthKit (ADR-0022).** The callback exchanges the code, materializes
+D1 memberships, and creates the panel's opaque KV session. Loads normally use that record; when its
+WorkOS access token nears expiry, `loadSessionFromRequest` rotates the refresh token through
+WorkOS. Management calls use signed, operation-bound delegation to the Control Plane, which checks
+live membership again.
 
 ## Query keys and the nudge → invalidation mapping
 
@@ -95,15 +100,16 @@ module, the single source of truth for key shapes — and the WebSocket handler 
 never by hand-assembling key arrays.
 
 - **Entity-rooted hierarchical keys** under the spine: `['app', appId, 'env', envId, 'experiment', expId, ...]`
-  (`appId` at index 1, `envId` at index 3 — any key without the `(appId, envId)` root is a bug). The
-  factory exposes `keys.experiment.detail / .list / .runs`, etc. Components and loaders both construct keys
+  (`appId` at index 1, `envId` at index 3 for Environment data). The factory exposes
+  `queryKeys.experiment.detail / .list / .runs`, etc. Components and loaders both construct keys
   only through the factory.
 - **Invalidate by prefix.** A nudge for `experiment/abc` invalidates the
   `['app', appId, 'env', envId, 'experiment']` prefix, catching list + detail + sub-resources in one call
   — no enumerating every dependent key.
 - **Version-gated against self-edits.** The nudge carries `version` (ADR-0019). A client whose cached
-  version is already ≥ the nudge's skips the refetch — so the editor who just wrote the change (and got the
-  new version on its 200) treats the echoed nudge as a no-op; other editors refetch.
+  detail version is already ≥ the nudge's skips the refetch. Otherwise it invalidates and refetches
+  Query data and route loaders, retrying below-target versions through the bounded convergence
+  window. Deleted resources always invalidate.
 
 The factory is domain-aware → it lives in the panel app, not `ui`.
 
@@ -162,10 +168,10 @@ persisted-before-announced (the per-`(App, Environment)` DO validates, commits K
 
 The frontend mirrors that discipline: **server-confirmed mutations, no optimistic cache writes.**
 
-- A config edit POSTs to the read/write API → through the DO → commit → broadcast → every client (including
-  the writer) invalidates and refetches. The UI **always** shows persisted state and can never display an
-  edit that failed validation. The writer's own 200 already carries the new version; the echoed nudge is a
-  no-op (version gate). The nudge is what updates _other_ editors.
+- A config edit calls a panel server function, which delegates through `SignedControlPanelEntrypoint`
+  to the Control Plane and Config Store DO. Commit precedes broadcast. The writer refetches after
+  success, and nudges update other editors. The version gate skips an echo only when the cached
+  detail already contains its version; a successful write alone does not guarantee that.
 - **Form-level state is ephemeral `useState`** — typing in an edit form is local UI state; only _committed_
   config is ever written to the Query cache, and only by refetch.
 - **Validation is the DO's, surfaced to the form.** The DO is the authoritative gate; a rejected write
@@ -175,7 +181,7 @@ The frontend mirrors that discipline: **server-confirmed mutations, no optimisti
 ## Deliberately not decided here
 
 - **Screens / information architecture** — this is the architecture spec, not the UX spec.
-- **Brand token _values_** — coming in the branding guide; this document pins _where_ tokens live, not what
-  they are.
+- **Brand token values** live in the [design token guide](../branding/design-tokens.md) and shared theme.
+  This document pins where they live.
 - **Marketing's live-data touchpoints** (pricing, status) — ADR-0020 routes them through the same Query
   store; specifics are a marketing-spec concern.

@@ -9,14 +9,14 @@ Any field addition here propagates to every envelope automatically.
 
 ## Variant
 
-The possible value a Flag can return. `value` is frozen per Run because changing it is an assignment edit.
+The possible value a Flag can return. Name and value are frozen while a running Run includes the Variant.
 
-| Field         | Type                                    | Required | Meaning                                                                                                                                                                                                             |
-| ------------- | --------------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `id`          | `string`                                | yes      | Unique per Flag                                                                                                                                                                                                     |
-| `name`        | `string`                                | yes      | Semantic label; used as the identifier in analysis and Exposure logs. Write-bound: 200 characters.                                                                                                                  |
-| `value`       | `boolean \| string \| number \| object` | yes      | JSON value served at evaluation; type tag is `z.union([z.boolean(), z.string(), z.number(), z.record(z.unknown())])`. String values are write-bound to 4096 characters; object values to 64 keys of 128 characters. |
-| `description` | `string`                                | no       | Human label. Write-bound: 2000 characters.                                                                                                                                                                          |
+| Field         | Type                                    | Required | Meaning                                                                                                                                                                                                                         |
+| ------------- | --------------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `id`          | `string`                                | yes      | Unique per Flag                                                                                                                                                                                                                 |
+| `name`        | `string`                                | yes      | Semantic label; used as the identifier in analysis and Exposure logs. Write-bound: 200 characters.                                                                                                                              |
+| `value`       | `boolean \| string \| number \| object` | yes      | JSON value served at evaluation; type tag is `z.union([z.boolean(), z.string(), z.number(), z.record(z.string(), z.unknown())])`. String values are write-bound to 4096 characters; object values to 64 keys of 128 characters. |
+| `description` | `string`                                | no       | Human label. Write-bound: 2000 characters.                                                                                                                                                                                      |
 
 `assign()` returns the Variant **name** (string). The value/metadata lives on the Flag definition.
 Exposure logs the Variant name.
@@ -99,11 +99,11 @@ reshuffling a live cohort is exactly the invisible-change failure ADR-0036 forbi
 
 ## Condition
 
-| Field       | Type                                       | Required | Meaning                                                                                                   |
-| ----------- | ------------------------------------------ | -------- | --------------------------------------------------------------------------------------------------------- |
-| `attribute` | `string`                                   | yes      | Key from EvaluationContext attributes. Write-bound: 128 characters.                                       |
-| `operator`  | `ConditionOperator`                        | yes      | See enum below                                                                                            |
-| `value`     | `boolean \| string \| number \| unknown[]` | yes      | Comparison target. String values are write-bound to 1024 characters; `in` / `not_in` arrays to 100 items. |
+| Field       | Type                                                             | Required | Meaning                                                                                          |
+| ----------- | ---------------------------------------------------------------- | -------- | ------------------------------------------------------------------------------------------------ |
+| `attribute` | `string`                                                         | yes      | Key from EvaluationContext attributes. Write-bound: 128 characters.                              |
+| `operator`  | `ConditionOperator`                                              | yes      | See enum below                                                                                   |
+| `value`     | `boolean \| string \| number \| (boolean \| string \| number)[]` | yes      | Comparison target. String values are write-bound to 1024 characters; arrays to 100 scalar items. |
 
 `ConditionOperator` enum: `'eq' | 'neq' | 'gt' | 'lt' | 'gte' | 'lte' | 'in' | 'not_in' | 'matches' | 'not_matches'`
 
@@ -131,15 +131,15 @@ elements. See
 
 A named, reusable set of Conditions an Entity must satisfy.
 
-| Field         | Type                | Required | Meaning                                         |
-| ------------- | ------------------- | -------- | ----------------------------------------------- |
-| `id`          | `string`            | yes      | Stable UUID                                     |
-| `appId`       | `string`            | yes      | —                                               |
-| `name`        | `string`            | yes      | —                                               |
-| `conditions`  | `Condition[]`       | yes      | AND-combined; Entity "in Segment" iff all match |
-| `description` | `string`            | no       | —                                               |
-| `createdAt`   | `string` (ISO 8601) | yes      | —                                               |
-| `updatedAt`   | `string` (ISO 8601) | yes      | —                                               |
+| Field         | Type                | Required | Meaning                                                |
+| ------------- | ------------------- | -------- | ------------------------------------------------------ |
+| `id`          | `string`            | yes      | Stable UUID                                            |
+| `appId`       | `string`            | yes      | —                                                      |
+| `name`        | `string`            | yes      | —                                                      |
+| `conditions`  | `Condition[]`       | yes      | Min 1; AND-combined; Entity "in Segment" iff all match |
+| `description` | `string`            | no       | —                                                      |
+| `createdAt`   | `string` (ISO 8601) | yes      | —                                                      |
+| `updatedAt`   | `string` (ISO 8601) | yes      | —                                                      |
 
 (Segments are Conditions.)
 

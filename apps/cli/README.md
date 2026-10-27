@@ -33,8 +33,8 @@ export SPLITCH_PLATFORM_TARGET=local
 origin for a hosted target, or select a `127.0.0.1` port for `local` and `pr-ci`. Hosted credentials
 are never sent to an arbitrary origin.
 
-There are only these three. Which origin a command uses follows the credential it presents, not
-which Worker implements it: everything you authenticate for with `splitch login` goes to
+These are the three service origins. Which origin a command uses follows the credential it presents,
+not which Worker implements it: everything you authenticate for with `splitch login` goes to
 `api.splitch.dev`, and only SDK-credentialled operations go to `edge.splitch.dev`.
 
 ## Authenticate and select an Environment
@@ -63,7 +63,11 @@ exists. The file contains canonical scope IDs and is safe to commit:
 `environment` is optional. The command reports the selected scope:
 
 ```json
-{ "path": "/path/to/product/splitch.json", "app": "checkout", "environment": "dev" }
+{
+  "path": "/path/to/product/splitch.json",
+  "app": { "id": "app_...", "key": "checkout", "name": "Checkout" },
+  "environment": { "id": "env_...", "key": "dev", "name": "Development" }
+}
 ```
 
 The CLI login is separate from the credentials used by your application at runtime:
@@ -143,8 +147,9 @@ List commands answer one envelope, so a truncated read is visible rather than in
 { "items": [], "readLimit": 200, "readTruncated": false, "cursor": null }
 ```
 
-`readLimit` is 200. When `readTruncated` is `true` there is more to read; pass `cursor` back to
-continue. Never treat a full page as the whole set.
+`readLimit` is at most 200. When `readTruncated` is `true`, the result is incomplete. Use
+`--cursor` only when that command supports continuation; otherwise narrow the read. Never treat
+a full page as the whole set.
 
 Typed flags cover the common fields (`--key`, `--name`, `--variants`, `--enabled`, `--rollout`,
 `--targeting-key`, `--context-json`). Anything a route accepts that has no typed flag goes through
@@ -168,42 +173,47 @@ Two more worth knowing:
 
 Run `splitch --help` for the root map, `splitch <resource> --help` for a resource group, or
 `splitch <resource> <action> --help` for typed flags, defaults, credential semantics, and an example.
-The full generated reference, rendered from the binary's own command registry, is at
+The table lists common command groups. The full generated reference, rendered from the binary's
+own command registry, is at
 <https://splitch.dev/docs/cli>.
 
-| Command group                 | Actions                                                                       |
-| ----------------------------- | ----------------------------------------------------------------------------- |
-| `login`, `logout`             | Authenticate or clear the control-plane session                               |
-| `use`, `context`, `health`    | Select scope, inspect scope, or check API health                              |
-| `orgs`                        | `list`, `create`, `get`, `update`                                             |
-| `organization-members`        | `list`, `add`, `update`, `remove`                                             |
-| `organization-usage`          | `get`                                                                         |
-| `apps`                        | `list`, `create`, `get`, `update`, `delete`                                   |
-| `app-members`                 | `list`, `add`, `update`, `remove`                                             |
-| `app-attention-rollup`        | `get`                                                                         |
-| `envs`                        | `list`, `create`, `get`, `update`, `delete`, `sync`                           |
-| `env-policy`                  | `get`, `set`                                                                  |
-| `environment-exposure-status` | `get`                                                                         |
-| `flags`                       | `list`, `create`, `get`, `update`, `delete`, `promote`, `test-eval`, `verify` |
-| `flag-variants`               | `create`, `update`, `delete`                                                  |
-| `flag-config`                 | `get`, `update`                                                               |
-| `flag-targeting-rules`        | `add`, `replace`                                                              |
-| `segments`                    | `list`, `create`, `get`, `update`, `delete`                                   |
-| `experiments`                 | `list`, `create`, `get`, `update`, `start`, `delete`                          |
-| `runs`                        | `list`, `get`, `end`                                                          |
-| `metrics`                     | `list`, `create`, `get`, `update`, `delete`                                   |
-| `event-definitions`           | `list`, `create`, `get`, `update`                                             |
-| `event-definition-versions`   | `create`, `list`, `get`                                                       |
-| `experiment-results`          | `get`, `post`                                                                 |
-| `client-key`                  | `get`, `update`, `rotate`                                                     |
-| `api-keys`                    | `list`, `create`, `revoke`                                                    |
-| `approval-requests`           | `list`, `get`                                                                 |
-| `approval-request-reviews`    | `create`                                                                      |
-| `cloudflare`                  | `setup`, `status`, `remove`                                                   |
-| `cloudflare-installations`    | `list`, `revoke`                                                              |
-| `convex-installations`        | `list`, `revoke`                                                              |
-| `sentry-installations`        | `create`, `get`, `list`, `delete`                                             |
-| `sentry-secret-rotations`     | `create`                                                                      |
+| Command group                   | Actions                                                                       |
+| ------------------------------- | ----------------------------------------------------------------------------- |
+| `login`, `logout`               | Authenticate or clear the control-plane session                               |
+| `use`, `context`, `health`      | Select scope, inspect scope, or check API health                              |
+| `orgs`                          | `list`, `create`, `get`, `update`                                             |
+| `organization-members`          | `list`, `add`, `update`, `remove`                                             |
+| `organization-usage`            | `get`                                                                         |
+| `apps`                          | `list`, `create`, `get`, `update`, `delete`                                   |
+| `app-members`                   | `list`, `add`, `update`, `remove`                                             |
+| `app-attention-rollup`          | `get`                                                                         |
+| `envs`                          | `list`, `create`, `get`, `update`, `delete`, `sync`                           |
+| `env-policy`                    | `get`, `set`                                                                  |
+| `environment-exposure-status`   | `get`                                                                         |
+| `flags`                         | `list`, `create`, `get`, `update`, `delete`, `promote`, `test-eval`, `verify` |
+| `flag-variants`                 | `create`, `update`, `delete`                                                  |
+| `flag-config`                   | `get`, `update`                                                               |
+| `flag-targeting-rules`          | `add`, `replace`                                                              |
+| `segments`                      | `list`, `create`, `get`, `update`, `delete`                                   |
+| `experiments`                   | `list`, `create`, `get`, `update`, `start`, `delete`                          |
+| `runs`                          | `list`, `get`, `end`, `conclude`                                              |
+| `conclusion-promotion-requests` | `create`                                                                      |
+| `app-audit`                     | `list`                                                                        |
+| `integration-deliveries`        | `create`                                                                      |
+| `tokens`                        | `list`, `create`, `update`, `rotate`, `revoke`, `revoke-all`                  |
+| `metrics`                       | `list`, `create`, `get`, `update`, `delete`                                   |
+| `event-definitions`             | `list`, `create`, `get`, `update`                                             |
+| `event-definition-versions`     | `create`, `list`, `get`                                                       |
+| `experiment-results`            | `get`, `post`                                                                 |
+| `client-key`                    | `get`, `update`, `rotate`                                                     |
+| `api-keys`                      | `list`, `create`, `revoke`                                                    |
+| `approval-requests`             | `list`, `get`                                                                 |
+| `approval-request-reviews`      | `create`                                                                      |
+| `cloudflare`                    | `setup`, `status`, `remove`                                                   |
+| `cloudflare-installations`      | `list`, `revoke`                                                              |
+| `convex-installations`          | `list`, `revoke`                                                              |
+| `sentry-installations`          | `create`, `get`, `list`, `delete`                                             |
+| `sentry-secret-rotations`       | `create`                                                                      |
 
 `splitch cloudflare setup` deploys the Cloudflare integration Worker into your own Cloudflare account; see
 [`@splitch/cloudflare`](https://www.npmjs.com/package/@splitch/cloudflare). The `*-installations`
@@ -241,9 +251,10 @@ splitch approval-requests get <id>
 ```
 
 Reruns with `--confirm` apply it if you hold approver rights. The commands that wire `--confirm` are
-`experiments start`, `flag-config update`, `flag-targeting-rules replace`, `flag-variants create`,
-`flag-variants update`, `flags promote`, and `segments update`. The two delete routes carry no body
-and cannot honor it, so they never suggest it.
+`experiments start`, `flag-config update`, `flag-targeting-rules add`, `flag-targeting-rules replace`,
+`flag-variants create`, `flag-variants update`, `flags promote`, `segments update`, `runs conclude`,
+and `conclusion-promotion-requests create`. Delete routes carry no confirmation body and cannot
+honor it, so they never suggest it.
 
 ## Errors and exit codes
 

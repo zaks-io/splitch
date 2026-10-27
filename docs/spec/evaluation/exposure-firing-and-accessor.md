@@ -29,10 +29,11 @@ Variant, and the `reason`); the public value accessors unwrap it. `peekVariant`/
 distinct method names, not a parameter on `evaluate()`. A `{ withoutExposure: true }` boolean
 option is rejected — it is the suppressible-flag footgun ADR-0004 designed out.
 
-**Fail-loud (ADR-0036):** on a resolution _failure_ (provider unreachable, KV miss, network),
+**Fail-loud (ADR-0036):** on a resolution _failure_ (provider unreachable or Assignment Store read error),
 `evaluate()` returns the Default Variant with `reason: ERROR` + `errorCode`, fires no Exposure,
 and logs loudly — never a silent default. A disabled / no-config / no-match flag is a normal
-`DISABLED`/`DEFAULT`, not an error. See [../sdk/exposure-accessor.md](../sdk/exposure-accessor.md).
+`DISABLED`/`DEFAULT`, not an error. A transport or holdover-write failure can follow durable
+Exposure acceptance; it cannot undo that event. See [../sdk/exposure-accessor.md](../sdk/exposure-accessor.md).
 
 ## Exposure fires on read
 
@@ -45,22 +46,24 @@ The side effect **must be documented prominently** in the SDK reference.
 
 ## Exposure event shape
 
-| Field              | Type     | Required | Meaning                                                                                    |
-| ------------------ | -------- | -------- | ------------------------------------------------------------------------------------------ |
-| `eventId`          | string   | yes      | Retry-stable physical raw-row id generated once before any retry                           |
-| `dedupKey`         | string   | yes      | Wire-level idempotency key; hashes row type, identity fields, source id, and `eventId`     |
-| `appId`            | string   | yes      | Isolation scope                                                                            |
-| `environmentId`    | string   | yes      | Co-scoped with `appId`; Exposures are per-Environment (ADR-0027)                           |
-| `experimentId`     | string   | yes      | The Experiment being evaluated                                                             |
-| `runId`            | string   | yes      | The Run that produced this Exposure (stamped at fire time from `EvaluateResult.liveRunId`) |
-| `flagKey`          | string   | yes      | The Flag evaluated                                                                         |
-| `targetingKey`     | string   | yes      | The Entity identifier                                                                      |
-| `idType`           | string   | yes      | Entity type; matches Assignment Store key (guards cross-type collisions)                   |
-| `variant`          | string   | yes      | The resolved Variant name                                                                  |
-| `sourceId`         | string   | yes      | Edge POP identifier                                                                        |
-| `exposureAt`       | ISO 8601 | yes      | Canonical encounter time; remote receive time or verified trusted server commit            |
-| `serverReceivedAt` | ISO 8601 | yes      | Splitch durable-acceptance time; delivery diagnostics and retention                        |
-| `clientTimestamp`  | ISO 8601 | no       | Optional client wall-clock; maps to physical `client_timestamp`; diagnostics only          |
+| Field              | Type       | Required | Meaning                                                                                    |
+| ------------------ | ---------- | -------- | ------------------------------------------------------------------------------------------ |
+| `eventId`          | string     | yes      | Retry-stable physical raw-row id generated once before any retry                           |
+| `dedupKey`         | string     | yes      | Wire-level idempotency key; hashes row type, identity fields, source id, and `eventId`     |
+| `appId`            | string     | yes      | Isolation scope                                                                            |
+| `environmentId`    | string     | yes      | Co-scoped with `appId`; Exposures are per-Environment (ADR-0027)                           |
+| `experimentId`     | string     | yes      | The Experiment being evaluated                                                             |
+| `runId`            | string     | yes      | The Run that produced this Exposure (stamped at fire time from `EvaluateResult.liveRunId`) |
+| `targetingKeyHash` | string     | yes      | App-scoped pseudonym; raw Targeting Key is not logged                                      |
+| `entityFamilyHash` | string     | yes      | Stable Entity family pseudonym                                                             |
+| `idType`           | string     | yes      | Entity type; matches Assignment Store key (guards cross-type collisions)                   |
+| `variantName`      | string     | yes      | The resolved Variant name                                                                  |
+| `type`             | `exposure` | yes      | Exposure discriminator                                                                     |
+| `counterfactual`   | boolean    | yes      | Defaults to false                                                                          |
+| `sourceId`         | string     | yes      | Edge POP identifier                                                                        |
+| `exposureAt`       | ISO 8601   | yes      | Canonical encounter time; remote receive time or verified trusted server commit            |
+| `serverReceivedAt` | ISO 8601   | yes      | Splitch durable-acceptance time; delivery diagnostics and retention                        |
+| `clientTimestamp`  | ISO 8601   | no       | Optional client wall-clock; maps to physical `client_timestamp`; diagnostics only          |
 
 `runId` is stamped from `EvaluateResult.liveRunId` at fire time — set by the evaluate path,
 not the pipeline.
@@ -90,11 +93,11 @@ across Runs. The check is inside `evaluate()` before any Exposure is queued.
 
 ## SDK seen-set (hot-path optimization only)
 
-The SDK may keep a per-request in-memory set of `(experimentId, runId)` pairs for which
-it has already fired an Exposure, to avoid redundant network writes within one request.
-This is a wire-efficiency optimization only. The pipeline dedup is authoritative.
-The seen-set is per-`(experiment, runId)` so a Run boundary correctly lets a fresh Exposure
-fire under the new Run.
+The dynamic-context SDK keeps a per-instance cache for `(flagKey, runId, idType, targetingKey)`
+with values scoped by an attributes fingerprint. Its default 60-second revalidation window bounds
+optimistic suppression against the last observed Run. Changed attributes re-resolve through
+non-exposing `verify` while the Exposure slot is fresh. This is a wire-efficiency optimization;
+pipeline first-touch remains authoritative. See [seen-set.md](../sdk/seen-set.md).
 
 ## Peek: no Exposure, no Assignment Store write
 
@@ -117,15 +120,14 @@ Exposure-pipeline orchestration hosted by the Evaluation Worker. That orchestrat
 1. The Evaluation Worker resolves `EvaluateResult` with `liveRunId`.
 2. Event Ingest atomically seals the scoped Evaluation claim, result fingerprint, retry-stable
    Exposure row, and `raw_events` outbox payload.
-3. Only after that seal does the Worker return success to the SDK.
-4. The outbox publishes to Queue asynchronously, and Exposure-pipeline orchestration invokes
-   `AssignmentStore.put()`, whose DO adapter calls
-   `DO.putIfAbsent(key, { runId, variant })`, without waiting for the DO commit.
-5. The DO commits and writes through to KV; future `getAll()` reads return the holdover record.
+3. The Worker awaits `AssignmentStore.put()` for the durable first-touch winner and KV write-through.
+4. After identity revalidation, the Worker returns success to the SDK.
+5. The outbox publishes to Queue asynchronously; Tinybird delivery is outside the response path.
 
-Step 2 is the durable analysis acceptance boundary on the response path. Queue publication, Tinybird
-delivery, and the DO/KV write in steps 4-5 are asynchronous. If step 2 fails, the response is
-fail-loud and no Assignment Store write begins.
+Step 2 is the durable analysis acceptance boundary. If it fails, no Assignment Store write begins.
+If step 3 fails, the Worker returns `503 SERVICE_UNAVAILABLE` with the Exposure already committed.
+The caller retries with the same idempotency key. Queue publication and Tinybird delivery remain
+asynchronous, and a successful KV write can still take time to propagate to other POPs.
 
 ## Seam boundary
 
@@ -137,7 +139,8 @@ the Assignment Store DO adapter), rule matching (evaluate policy module).
 
 **No caller-controlled suppression:** `evaluate()` fires an Exposure for every successful fresh
 assignment under a live Experiment Run. Holdovers, disabled Flags, no-Experiment, no-live-Run, and
-error/default branches fire none because no new measurable assignment occurred. `peekVariant()` and
+error branches fire none because no new measurable assignment occurred. A no-match Default Variant
+under a live Run does fire an Exposure. `peekVariant()` and
 `verify()` never fire. A caller cannot accidentally skip Exposure for a successful fresh assignment
 on the `evaluate()` path.
 

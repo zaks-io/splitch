@@ -48,12 +48,13 @@ on, and a login handshake that happens in-band with zero install.
 
 Built to scale to enterprise volumes (millions of evaluation requests) on
 Cloudflare's edge. The hot path is a read-optimized data plane (KV reads,
-per-key Durable Objects serializing first-touch writes, durable queue-backed
-Tinybird microbatches) kept entirely separate from the control plane. The
-current direct one-row Tinybird transport is known implementation debt tracked
-by [ADR-0043](./adr/0043-event-ingest-will-use-durable-queue-backed-tinybird-microbatches.md)
+per-Entity Durable Objects serializing first-touch writes, durable queue-backed
+Tinybird microbatches) kept entirely separate from the control plane
 ([ADR-0017](./adr/0017-all-cloudflare-stack-workers-serving-and-control-tinybird-analytics.md),
 [ADR-0018](./adr/0018-identity-and-operational-state-in-d1-hot-validation-in-kv-audit-in-tinybird.md)).
+Exposures, Evaluation usage, and Metric Events already travel that queue path; Web Event intake is
+specified but not yet built
+([ADR-0043](./adr/0043-event-ingest-will-use-durable-queue-backed-tinybird-microbatches.md)).
 
 ### Statistical rigor: the data must never lie
 

@@ -20,7 +20,10 @@ In the current checkout:
 - remote Evaluation commit idempotency is scoped to Organization, App, Environment, the admitted
   App identity version, and the caller's key, so a replacement identity cannot replay a destroyed
   generation's redacted commit;
+- `INGEST_ADMISSION_GATE` binds the SQLite-backed per-App/Environment/stream admission authority;
 - Metric Event intake uses write-ahead attempts and scoped reconciliation for ambiguous delivery;
+- raw-stream consumers transfer indeterminate delivery to their DLQs for operator review; shared
+  write-ahead attempt and reconciliation machinery below remains a target for those streams;
 - Web Event intake remains specified but not implemented.
 
 The remaining shared recovery-store work must extend these queue boundaries, not add another direct
@@ -31,7 +34,7 @@ them to the separate `metric_events` datasource. Its strict request, identity, E
 version, idempotency, and no-write contract is
 [metric-event-contract.md](./metric-event-contract.md).
 
-The same Worker accepts Web Events through the distinct `POST /api/sdk/web-events` route and appends
+The Web Event target uses the same Worker through the distinct `POST /api/sdk/web-events` route and appends
 them only to `web_events`. The route accepts only a non-empty `{ events: [...] }` batch envelope,
 including for one event, with at most 25 items and a 32 KiB UTF-8 body. Each Web Event item has a
 separate strict request schema and family-scoped retry claim; Web Events do not use the Exposure or
@@ -117,36 +120,37 @@ sequencing:
 2. Synchronously hand the raw Exposure row to the Event Ingest Worker and wait only until its scoped
    Evaluation idempotency claim, resolved-result fingerprint, retry-stable row, and delivery payload
    are sealed atomically in the durable `raw_events` outbox. The request handler never waits for Queue
-   Queue handoff or Tinybird. This step is skipped on a holdover replay because a holdover fires no
+   handoff or Tinybird. This step is skipped on a holdover replay because a holdover fires no
    Exposure (see
    [evaluation/exposure-firing-and-accessor.md](../evaluation/exposure-firing-and-accessor.md)
    §Holdover path).
-3. Return the Variant only after step 2 succeeds.
-4. If no KV entry was found: asynchronously call `AssignmentStore.put(key, run_id, variant)`;
-   the DO adapter executes `DO.putIfAbsent` with a short timeout.
+3. If no KV entry was found, await `AssignmentStore.put(key, run_id, variant)` through the
+   App-scoped Assignment authority and writer DO, including KV write-through.
+4. Validate the captured App identity generation and return the Variant only after the required
+   Assignment commit succeeds.
 
 The durable Exposure seal is the analysis acceptance boundary and is on the response path; Queue and
 Tinybird delivery remain asynchronous. If the seal fails, evaluation fails loud, no Assignment Store
-write begins, and an application retry reuses the same explicit Evaluation idempotency key. The DO write remains
-non-blocking after acceptance: it executes with a short timeout (~100ms) and does not delay the
-response. A DO write failure is a holdover miss only for the KV propagation window; `assign()` remains
-deterministic on retry.
+write begins, and an application retry reuses the same explicit Evaluation idempotency key.
+A required DO/KV commit failure also fails Evaluation before success. The sealed Exposure remains
+retry-stable. Ticket redemption has a separate durable holdover-write outbox with alarm retries;
+see [holdover-write-contract.md](./holdover-write-contract.md).
 
 ## Ingest failure contract
 
-| Failure                                                  | Effect                                                        | Recovery                                                                       |
-| -------------------------------------------------------- | ------------------------------------------------------------- | ------------------------------------------------------------------------------ |
-| Durable Exposure outbox seal fails before response       | Evaluation fails loud; no Assignment Store write begins       | Application retries with the same explicit Evaluation idempotency key          |
-| Queue handoff fails after durable outbox seal            | Accepted rows remain unavailable to analysis until handoff    | Durable outbox retries Queue handoff                                           |
-| Retryable Tinybird `429`/`500`/`503` after queue handoff | Accepted rows remain unavailable to analysis until redelivery | Bounded queue retry with stable per-row dedup keys                             |
-| Tinybird timeout or other no-response outcome            | Commit status is indeterminate                                | Durable reconciliation or datasource DLQ transfer; no ordinary retry           |
-| Tinybird `422` materialized-view interruption            | Raw and derived commit status is indeterminate                | Durable reconciliation record; no ordinary retry                               |
-| Permanent Tinybird failure or quarantined rows           | Affected delivery leaves the primary queue                    | Durable datasource DLQ copy plus critical alert; manual replay only            |
-| DO write fails after durable outbox seal                 | Holdover miss for up to ~60s + retry window                   | `assign()` is deterministic — same Variant computed on miss; DO retry picks up |
-| KV write-through from DO fails                           | KV miss for ~60s                                              | Next KV read recomputes and re-propagates via DO (self-healing)                |
+| Failure                                                  | Effect                                                        | Recovery                                                                           |
+| -------------------------------------------------------- | ------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| Durable Exposure outbox seal fails before response       | Evaluation fails loud; no Assignment Store write begins       | Application retries with the same explicit Evaluation idempotency key              |
+| Queue handoff fails after durable outbox seal            | Accepted rows remain unavailable to analysis until handoff    | Durable outbox retries Queue handoff                                               |
+| Retryable Tinybird `429`/`500`/`503` after queue handoff | Accepted rows remain unavailable to analysis until redelivery | Bounded queue retry with stable per-row dedup keys                                 |
+| Tinybird timeout or other no-response outcome            | Commit status is indeterminate                                | Durable reconciliation or datasource DLQ transfer; no ordinary retry               |
+| Tinybird `422` materialized-view interruption            | Raw and derived commit status is indeterminate                | Durable reconciliation record; no ordinary retry                                   |
+| Permanent Tinybird failure or quarantined rows           | Affected delivery leaves the primary queue                    | Durable datasource DLQ copy plus critical alert; manual replay only                |
+| DO write fails after durable outbox seal                 | Evaluation fails before success; Exposure remains sealed      | Application retries with the same explicit Evaluation idempotency key              |
+| KV write-through from DO fails                           | Evaluation fails before success                               | Application retry repairs write-through; ticket redemption uses its durable outbox |
 
-There is no distributed transaction across Tinybird + DO + KV. DO and KV propagation failures are
-cosmetic and self-healing within the ~60s propagation window. Ingest failures are different:
+There is no distributed transaction across Tinybird + DO + KV. The Evaluation path awaits the
+required DO/KV commit; cross-POP KV visibility may still lag by ~60s. Ingest failures are different:
 retryable delivery remains unavailable until queue redelivery succeeds, and permanent or quarantined
 delivery remains unavailable until an operator completes manual DLQ replay. Indeterminate `422`
 delivery remains blocked until scoped reconciliation proves or repairs its state. Accepted delivery
@@ -351,8 +355,8 @@ either cost cannot be admitted. A zero-row, zero-byte exact replay is allowed wi
 tokens.
 
 If either aggregate budget is unavailable, the Event Ingest Worker rejects the complete request with
-`429 RATE_LIMITED` and canonical `Retry-After` before any new claim, outbox write, or queue
-Queue handoff. A Web Event batch does not partially admit otherwise valid siblings when this
+`429 RATE_LIMITED` and canonical `Retry-After` before any new claim, outbox write, or Queue
+handoff. A Web Event batch does not partially admit otherwise valid siblings when this
 batch-level gate fails. A missing or failed Admission Gate fails closed.
 
 Accepted valid rows are never sampled, thinned, or silently dropped to protect Tinybird. When input
@@ -432,4 +436,4 @@ Peek (`sdk.peekVariant`) and test-evaluation (ADR-0026) MUST NOT call the ingest
 - [ADR-0009](../../adr/0009-assignment-store-substrate-kv-read-do-write.md) — DO write trigger, KV propagation window, failure modes
 - [ADR-0010](../../adr/0010-exposure-pipeline-is-a-raw-append-only-log-deduped-at-query-time.md) — at-least-once, no global ordering
 - [ADR-0024](../../adr/0024-physical-exposure-dedup-engine-lambda-snapshot-plus-realtime.md) — Tinybird physical ingest
-- [ADR-0043](../../adr/0043-event-ingest-will-use-durable-queue-backed-tinybird-microbatches.md) — accepted queue microbatch target and current direct-write debt
+- [ADR-0043](../../adr/0043-event-ingest-will-use-durable-queue-backed-tinybird-microbatches.md) — accepted queue microbatch and recovery contract

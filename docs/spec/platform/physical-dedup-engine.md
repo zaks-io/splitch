@@ -29,17 +29,20 @@ result.
 
 ```sql
 SELECT
-  app_id, environment_id, experiment_id, run_id, id_type, targeting_key_hash,
+  app_id, environment_id, experiment_id, run_id, id_type, entity_family_hash,
+  argMin(targeting_key_hash, exposure_at) AS targeting_key_hash,
   MIN(exposure_at) AS first_exposure_ts,
-  CASE WHEN COUNT(DISTINCT variant) > 1 THEN '__multiple__'
-       ELSE MAX(variant) END AS variant
+  if(countIf(isNull(variant)) > 0 OR countDistinct(variant) > 1,
+     '__multiple__', max(assumeNotNull(variant))) AS variant
 FROM raw_events
 WHERE type = 'exposure'
   AND ingest_ts <= {snapshot_watermark_ts}
-GROUP BY app_id, environment_id, experiment_id, run_id, id_type, targeting_key_hash
+GROUP BY app_id, environment_id, experiment_id, run_id, id_type, entity_family_hash
 ```
 
-Both layers use `MIN(exposure_at)` for first-touch and the same conflict-aware aggregate that emits
+The sketch omits privacy joins and sticky snapshot merging; the committed Copy Pipe is authoritative.
+`entity_family_hash` collapses compatible retained identity spellings, while `targeting_key_hash`
+carries the representative first-touch hash. Both layers use `MIN(exposure_at)` for first-touch and the same conflict-aware aggregate that emits
 `__multiple__` when an Entity has more than one Variant in a Run. The snapshot uses the predicate
 shown above. The tail applies the same selection with
 `ingest_ts >= coalesce(last_snapshot_watermark_ts, epoch)`. These ranges deliberately overlap at the
@@ -62,10 +65,14 @@ ExposureSnapshot {
   environment_id:   string    // required — SORTING_KEY position 2; co-scoped, per-Environment (ADR-0027)
   experiment_id:    string    // required — SORTING_KEY position 3
   run_id:           string    // required
-  targeting_key_hash:    string    // required, HMAC-derived Entity identity
+  targeting_key_hash: string    // required, representative HMAC-derived Entity identity
+  entity_family_hash: string    // required, canonical Entity family across retained spellings
   id_type:          string    // required
   variant:          string    // required — '__multiple__' if conflict
-  first_exposure_ts: datetime  // required — MIN(exposure_at) from raw log
+  first_exposure_ts: datetime  // required, sticky earliest encounter
+  first_ingest_ts: datetime    // required, sticky earliest ingestion for SRM ordering
+  activation_ingest_ts: datetime // required, sticky eligibility clock; epoch means unset
+  snapshot_ts: datetime        // required, copy execution time
   watermark_ts:     datetime  // required — inclusive ingest boundary captured at snapshot start
 }
 ```
@@ -74,7 +81,7 @@ The inclusive boundary puts rows at `watermark_ts` in both layers so final UNION
 the overlap instead of risking a missed boundary row.
 
 `ENGINE_SORTING_KEY`:
-`(app_id, environment_id, experiment_id, run_id, variant, targeting_key_hash)`. `app_id` is first for
+`(app_id, environment_id, experiment_id, run_id, variant, entity_family_hash)`. `app_id` is first for
 tenant isolation; `environment_id` is co-scoped; low-cardinality `variant` precedes the
 high-cardinality Entity hash for per-arm Run reads (ADR-0027).
 
@@ -91,75 +98,37 @@ The snapshot cadence is a freshness/cost dial, not a correctness one. A slower s
 staler batch layer and a larger real-time tail to dedup inline — never wrong results. Recommended
 default: hourly for moderate volume, more frequent under high load.
 
-## v0 vs production path
+## Implemented serving path
 
-v0 ships pure query-time dedup (ADR-0010 as written, no snapshot layer). The v0 query is structured
-as a drop-in tail of the eventual UNION so the snapshot can be added without rewriting analysis
-queries:
+The lambda layer is implemented in `infra/tinybird/copies/cp_deduped_exposures.pipe` and
+`infra/tinybird/pipes/serve_deduped_exposures.pipe`. The Analysis Worker triggers the on-demand
+replace Copy Pipe hourly with `copy_watermark_ts`; shared preview disables the scheduled trigger.
 
-```sql
--- v0 query (full history, no snapshot):
-SELECT ... FROM raw_events
-WHERE type = 'exposure'
-  AND app_id = {{String(app_id)}}
-  AND environment_id = {{String(environment_id)}}
-GROUP BY app_id, environment_id, experiment_id, run_id, id_type, targeting_key_hash
--- MIN(exposure_at), __multiple__ quarantine, etc.
+The Copy Pipe does not discard prior snapshot evidence when raw rows expire. It merges retained
+raw evidence with its previous snapshot and carries forward previous-only membership. Earliest
+encounter and ingestion clocks remain sticky, an existing `__multiple__` quarantine cannot clear,
+and activated-SRM eligibility survives expiry of the original raw pair. Generation tombstones
+exclude destroyed App identity epochs from both inputs.
 
--- production query (tenant-scoped snapshot + derived watermark + tail + final dedup):
-WITH
-snapshot AS (
-  SELECT
-    app_id, environment_id, experiment_id, run_id, id_type, targeting_key_hash,
-    variant, first_exposure_ts
-  FROM deduped_exposures
-  WHERE app_id = {{String(app_id)}}
-    AND environment_id = {{String(environment_id)}}
-),
-watermark AS (
-  SELECT coalesce(
-    MAX(watermark_ts),
-    toDateTime64('1970-01-01 00:00:00', 3, 'UTC')
-  ) AS watermark_ts
-  FROM deduped_exposures
-  WHERE app_id = {{String(app_id)}}
-    AND environment_id = {{String(environment_id)}}
-),
-tail AS (
-  SELECT
-    app_id, environment_id, experiment_id, run_id, id_type, targeting_key_hash,
-    CASE WHEN COUNT(DISTINCT variant) > 1 THEN '__multiple__'
-         ELSE MAX(variant) END AS variant,
-    MIN(exposure_at) AS first_exposure_ts
-  FROM raw_events
-  CROSS JOIN watermark
-  WHERE type = 'exposure'
-    AND app_id = {{String(app_id)}}
-    AND environment_id = {{String(environment_id)}}
-    AND ingest_ts >= watermark.watermark_ts
-  GROUP BY app_id, environment_id, experiment_id, run_id, id_type, targeting_key_hash
-)
-SELECT
-  app_id, environment_id, experiment_id, run_id, id_type, targeting_key_hash,
-  MIN(first_exposure_ts) AS first_exposure_ts,
-  CASE WHEN COUNT(DISTINCT variant) > 1 THEN '__multiple__'
-       ELSE MAX(variant) END AS variant
-FROM (
-  SELECT * FROM snapshot
-  UNION ALL
-  SELECT * FROM tail
-)
-GROUP BY app_id, environment_id, experiment_id, run_id, id_type, targeting_key_hash
-```
+The serving pipe performs these steps:
 
-Introducing the lambda layer is a performance optimization, not a correctness change. Trigger: when
-`pipe_stats_rt` shows scan cost growing with raw log volume.
+1. Read snapshot rows scoped by App, Environment, Experiment, and Run, excluding Entity deletion
+   cutoffs and destroyed identity generations.
+2. Read raw Exposure rows at or after the App/Environment snapshot watermark, with the same scope
+   and privacy filters. A pinned `ingest_watermark_ts` also bounds both layers above.
+3. UNION both layers and dedup again by `(app_id, environment_id, experiment_id, run_id, id_type,
+entity_family_hash)`. Keep the earliest encounter and ingestion clocks, preserve quarantine,
+   and carry the snapshotted eligibility clock.
+
+The snapshot is retained analysis evidence, not a disposable cache. A rebuild from retained raw
+alone cannot recover membership whose raw Exposure has expired. Backup and repair procedures must
+preserve that evidence; see [tinybird-backup-export.md](./tinybird-backup-export.md).
 
 ## Raw log TTL
 
-Once the snapshot is authoritative, the raw log can carry a retention TTL sized to "longer than any
-rule-change replay window promised." The snapshot is always rebuildable from the raw log within its
-TTL window.
+The raw Exposure log has a 90-day TTL on `server_received_at`. The snapshot retains membership
+beyond that window. Results that need expired Metric Event or Activation outcomes fail loud rather
+than turning expired facts into zeros; see [privacy-data-lifecycle.md](./privacy-data-lifecycle.md).
 
 ## Sources
 

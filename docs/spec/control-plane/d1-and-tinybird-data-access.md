@@ -8,32 +8,36 @@ D1 holds bounded mutable relational state. Not on the per-request hot path — h
 
 **What lives in D1:**
 
-| table                       | purpose                                                                                             |
-| --------------------------- | --------------------------------------------------------------------------------------------------- |
-| `organizations`             | Org records (see [organization-and-membership.md](organization-and-membership.md))                  |
-| `apps`                      | App records                                                                                         |
-| `org_memberships`           | Org-level user roles                                                                                |
-| `app_memberships`           | App-level user roles                                                                                |
-| `privacy_requests`          | Bounded privacy request ledger (IDs/hashes only; no raw Targeting Keys)                             |
-| `entity_deletions`          | Entity deletion tombstones for immediate analysis exclusion                                         |
-| `trusted_idps`              | Trusted IdP allow-list for ID-JAG validation                                                        |
-| `client_keys`               | Client Key records (public key material + revocation; per `(app_id, environment_id)`)               |
-| `api_keys`                  | API Key records (hash only; secret never stored; per `(app_id, environment_id)`)                    |
-| `environments`              | Environment records (per App; the live axis under App, ADR-0027)                                    |
-| `flags`                     | Flag **definitions** (App-level: key, schema, Variant catalog as JSON)                              |
-| `flag_configs`              | Flag **Configuration** per Environment (available Variants, targeting, rollout, enabled)            |
-| `experiments`               | Experiment records + draft assignment config (per `(app_id, environment_id)`)                       |
-| `runs`                      | Run records (frozen assignment config snapshot, status, timestamps; per `(app_id, environment_id)`) |
-| `segments`                  | Segment definitions (Conditions as JSON)                                                            |
-| `event_definitions`         | App-level Event Definition identity and current published version pointer                           |
-| `event_definition_versions` | Immutable published Event Definition schemas shared across Environments                             |
-| `metrics`                   | Metric definitions referencing Event Definitions and named typed fields                             |
-| `convex_installations`      | Environment-scoped callback and encrypted webhook-secret metadata                                   |
-| `config_webhook_deliveries` | Durable config-change nudges inserted atomically with the owning config commit                      |
+| table                        | purpose                                                                                             |
+| ---------------------------- | --------------------------------------------------------------------------------------------------- |
+| `organizations`              | Org records (see [organization-and-membership.md](organization-and-membership.md))                  |
+| `apps`                       | App records                                                                                         |
+| `org_memberships`            | Org-level user roles                                                                                |
+| `app_memberships`            | App-level user roles                                                                                |
+| `privacy_requests`           | Bounded privacy request ledger (IDs/hashes only; no raw Targeting Keys)                             |
+| `entity_deletions`           | Entity deletion tombstones for immediate analysis exclusion                                         |
+| `trusted_idps`               | Trusted IdP allow-list for ID-JAG validation                                                        |
+| `client_keys`                | Client Key records (public key material + revocation; per `(app_id, environment_id)`)               |
+| `api_keys`                   | API Key records (hash only; secret never stored; per `(app_id, environment_id)`)                    |
+| `environments`               | Environment records (per App; the live axis under App, ADR-0027)                                    |
+| `flags`                      | Flag **definitions** (App-level: key, schema, Variant catalog as JSON)                              |
+| `flag_configs`               | Flag **Configuration** per Environment (available Variants, targeting, rollout, enabled)            |
+| `experiments`                | Experiment records + draft assignment config (per `(app_id, environment_id)`)                       |
+| `runs`                       | Run records (frozen assignment config snapshot, status, timestamps; per `(app_id, environment_id)`) |
+| `segments`                   | Segment definitions (Conditions as JSON)                                                            |
+| `event_definitions`          | App-level Event Definition identity and current published version pointer                           |
+| `event_definition_versions`  | Immutable published Event Definition schemas shared across Environments                             |
+| `metrics`                    | Metric definitions referencing Event Definitions and named typed fields                             |
+| `convex_installations`       | Environment-scoped callback and encrypted webhook-secret metadata                                   |
+| `control_plane_audit_events` | Bounded transactional audit outbox                                                                  |
+| `flag_change_events`         | Flag history and integration outbox                                                                 |
+| `personal_access_tokens`     | User-owned PAT hashes, grants, expiry and revocation                                                |
+| `config_webhook_deliveries`  | Durable config-change nudges inserted atomically with the owning config commit                      |
 
 **What does NOT live in D1:**
 
-- Audit events (unbounded; Tinybird)
+- Unbounded audit history (Tinybird); bounded D1 audit/change outboxes and retained Approval
+  evidence remain transactional state
 - Exposure log (unbounded; Tinybird)
 - Metric Event log (unbounded; Tinybird)
 - Assignment Store (KV + Durable Object — different seam entirely)
@@ -66,15 +70,17 @@ type Repository = {
 
 **What the seam enforces:**
 
-- Every query scopes `WHERE app_id = ?` in the SQL (never omitted)
+- Every ordinary App query scopes `WHERE app_id = ?` in the SQL (never omitted)
 - No raw Drizzle client is used outside this layer
-- Cross-App queries do not exist; the seam has no multi-App query methods
+- Ordinary queries are App-scoped. Selector-free Flag reads use the explicit multi-App repository
+  scope minted from live membership; every statement binds that bounded App set with `app_id IN (...)`
 - The seam is the designated migration boundary: if Postgres + RLS is ever required, this layer
   changes; callers are unaffected
 
 **Failure contract:** If `app_id` is not in the auth context, the request fails at the Worker
 before reaching the repository (auth middleware extracts app_id from the control-plane token scopes
-and attaches it to request context). Repository methods are never called without app_id.
+and attaches it to request context). App-domain methods require either the ordinary App scope or the explicit authorized multi-App
+scope; principal and Organization identity lookups have their own scopes.
 
 ## KV hot-validation reads
 
@@ -92,7 +98,8 @@ the config store and KV is the credential cache only.
 Exception: `live_run:{app_id}:{environment_id}:{experiment_id}` → `run_id` is written by the
 control-plane at Start time (see [run-state-machine.md](run-state-machine.md)) for the edge to read.
 The key carries `environment_id` because Experiments and Experiment Runs are per-Environment (ADR-0027).
-This is a one-way write; the control-plane does not read it back.
+The projection is read and reconciled through Config Store; D1 remains the canonical live-Run
+authority.
 
 ## Tinybird: audit log
 

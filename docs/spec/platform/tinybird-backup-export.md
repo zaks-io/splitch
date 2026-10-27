@@ -59,7 +59,7 @@ before a destructive deploy when a sink cannot run, and for nothing scheduled.
 
 ### AWS resources
 
-Provisioned by hand once, recorded here so a rebuild has the exact names:
+Proposed resources to provision once; these names are not evidence of live setup:
 
 | Resource                             | Value                                                                                                                                                                                                                                                                |
 | ------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -74,7 +74,8 @@ Provisioned by hand once, recorded here so a rebuild has the exact names:
 
 ### Sink pipes
 
-`infra/tinybird/connections/backups_s3.connection`:
+Planned file `infra/tinybird/connections/backups_s3.connection` (not yet committed). The sink
+files below are also not implemented:
 
 ```text
 TYPE s3
@@ -86,7 +87,8 @@ One `infra/tinybird/sinks/sink_{datasource}.pipe` per exported datasource, `TYPE
 `EXPORT_CONNECTION_NAME backups_s3`, `EXPORT_BUCKET_URI s3://splitch-backups-tinybird/tinybird/{datasource}`,
 `EXPORT_FORMAT "parquet"`, `EXPORT_COMPRESSION "zst"`, `EXPORT_STRATEGY "replace"`, and
 `EXPORT_SCHEDULE` at the daily low, staggered one minute apart so the 6-active-job limit is never
-hit. Enterprise allows 10 sinks per workspace; nine datasources are exported, leaving one spare.
+hit. The recorded Enterprise limit is 10 sinks per workspace; the nine listed exports would leave one
+spare. Web Event intake is pending; its datasource must be added to this inventory when implemented.
 The deploy script keeps `--allow-destructive-operations` out; the sinks deploy through the normal
 pipeline like any other pipe.
 
@@ -103,7 +105,7 @@ pipeline like any other pipe.
 | `environment_exposure_status_deletions`                            | none                 | `full`                             | yes                            |
 | `deduped_metric_events_state`, `environment_exposure_status_state` | n/a                  | n/a                                | no, aggregating state; rebuilt |
 
-Day-partitioned sinks select the last 30 days of the datasource each night and replace the day
+The planned day-partitioned sinks select the last 30 days of the datasource each night and replace the day
 files, so late-arriving rows are captured and a deleted Entity is gone from every backup within
 one cycle. Full-table sinks replace one object nightly. Each sink pipe takes a `day_from` and
 `day_to` parameter so `tb sink run <pipe> --wait --param day_from=... --param day_to=...` can
@@ -149,9 +151,10 @@ must carry `app_id`; the backup carries every App by design and never serves a u
 
 ## Open items
 
-- `deduped_exposures` is a `replace` copy re-derived from `raw_events` on every run, so a first
-  touch older than 90 days survives only in this backup. Whether it should survive at all is an
-  ADR-0032 retention question; the nightly full-table export keeps it either way for 365 days.
+- `cp_deduped_exposures` is a replace copy that also reads its prior snapshot. Sticky first-touch
+  membership and quarantine survive the raw log's 90-day TTL, so `deduped_exposures` is required
+  recovery input, not fully rebuildable from retained raw rows. The planned full-table export
+  retains that evidence for 365 days.
 - The 30-day re-export window on the event families is bounded by the 300 s sink run limit. At a
   volume where one datasource's 30 days no longer sinks in 300 s, narrow the window to 7 days and
   rely on the bucket's own retention for the rest; the manifest sizes make that visible early.

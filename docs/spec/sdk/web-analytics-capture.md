@@ -3,8 +3,8 @@
 Web Analytics emits explicitly submitted or instrumented Web Events for exploratory analysis. It is
 not activated by creating a normal Splitch client and never contributes to Experiment measurement.
 
-**Implementation status:** specified, not implemented. Web Event intake must be built on the
-ADR-0043 durable queue transport and must not copy the current direct Tinybird append helper.
+**Implementation status:** SDK capture and Web Event intake are specified, not implemented.
+Web Event intake must use the ADR-0043 durable queue transport already used by Metric Events.
 
 ## Disabled by default
 

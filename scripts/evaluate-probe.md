@@ -59,12 +59,12 @@ Identity reads are not KV reads in hosted environments. Configuration uses KV on
 authoritative-read failure, and never serves it as the current configuration. Local identity KV
 reads also use the native read adapter.
 
-No `cacheTtl` is added. [Config store lines 94-105](../docs/spec/platform/config-store.md#five-second-evaluation-propagation-contract)
+No `cacheTtl` is added. [Config store propagation rules](../docs/spec/platform/config-store.md#five-second-evaluation-propagation-contract)
 require authoritative reads after misses or reconnects and fail at five seconds from announcement.
 KV's minimum configurable TTL of 30 seconds cannot satisfy that contract for mutable flag keys.
 Identity generation must remain current to preserve the reset admission fence. The config-store
 spec grants no stale identity window or immutable identity read here. Assignment holdovers have a
-separate tolerated window at lines 107-108, but that does not authorize caching flag or identity
+separate tolerated window in the same contract, but that does not authorize caching flag or identity
 reads. Credential revocation reads retain their existing freshness behavior too.
 
 ## Failure policy

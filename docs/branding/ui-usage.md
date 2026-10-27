@@ -60,8 +60,9 @@ tracking-wide text-arm-control` (see marketing `SectionEyebrow`). Prose stays
 
 ## Layout recipes
 
-- Page container: `mx-auto w-full max-w-6xl px-4 sm:px-6` (marketing) or
-  `PageShell` (panel).
+- Page container: `mx-auto w-full max-w-6xl px-4 sm:px-6` (marketing). The panel
+  uses its app-owned `PanelShell`, `PanelPageHeader`, and `PanelPageBody`; shared
+  `PageShell` remains available for simple layouts.
 - Section rhythm: `py-16 sm:py-20`, alternating `bg-background` / `bg-muted`,
   separated by `border-t border-border`.
 - Cards: `rounded-xl border border-border bg-card p-5 shadow-xs` (quiet) or
@@ -103,7 +104,8 @@ needs a line there too.
   Badge, code blocks, step sequence).
 - **The Split signature:** `apps/marketing/src/components/split-visual.tsx` —
   the only place both brand hues go loud together. Reuse the arm tokens; do not
-  invent new split renderings per screen.
+  invent new split renderings per screen. `BrandMark` alone uses fixed raw brand
+  hues for its identity divider; product controls and charts use semantic roles.
 
 ## Extending the library
 

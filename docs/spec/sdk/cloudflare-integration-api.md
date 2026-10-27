@@ -60,8 +60,10 @@ The row contains scope and version, not the full server configuration. At dispat
 strict snapshot at least as new as the target version and signs the exact body. A successful newer
 snapshot suppresses obsolete pending versions for that installation.
 
-The dispatcher starts after successful mutation responses and a once-per-minute scheduled scanner
-recovers missed or failed attempts. It follows no redirects. Transport failure, `408`, `429`, and
+In `coordinator` mode, configuration commits and registration wake the Environment-scoped
+Integration Delivery Durable Object. Its alarms dispatch due work, and the once-per-minute
+scheduled sweep wakes Environments with outstanding deliveries. `cron` mode retains direct
+post-mutation dispatch and scheduled scanning as the fallback. Delivery follows no redirects. Transport failure, `408`, `429`, and
 `5xx` retry with bounded exponential backoff. Other `4xx` responses are terminal, except during an
 installation's first setup: until it first applies a version, and within 10 minutes of its
 registration, a `404` retries and every retry runs on the next dispatcher run rather than on the

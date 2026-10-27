@@ -1,8 +1,8 @@
 # @splitch/sdk
 
-Typed feature flags and experiments, evaluated at the edge. One HTTP call per
-evaluation, no local config to sync, and every failure is loud: an error is
-always observable, never a silently disguised default.
+Typed feature flags and experiments, evaluated at the edge. Remote evaluation
+with local result caching, no rule configuration to sync, and loud failures:
+an error is always observable, never a silently disguised default.
 
 - Full SDK guide: <https://splitch.dev/docs/sdk/install>
 - Platform quickstart (create an App, mint keys, first Flag):
@@ -21,21 +21,22 @@ runtimes.
 
 ### Export surface
 
-| Import                          | What it is                                                                                    | Extra install  |
-| ------------------------------- | --------------------------------------------------------------------------------------------- | -------------- |
-| `@splitch/sdk`                  | server client: `evaluate`, `evaluateDetails`, `peekVariant`, `verify`, `evaluateAll`, `track` | none           |
-| `@splitch/sdk/browser`          | static-context browser client with synchronous reads                                          | none           |
-| `@splitch/sdk/react`            | `SplitchProvider` and the `useFlag` hooks                                                     | `react`        |
-| `@splitch/sdk/sentry`           | mirror resolutions into Sentry's flag context                                                 | `@sentry/core` |
-| `@splitch/sdk/local-evaluation` | the local evaluator the Convex component runs on                                              | `zod`          |
-| `@splitch/sdk/control-plane`    | typed control-plane client and contract schemas                                               | `zod`          |
+| Import                          | What it is                                                                                                | Extra install             |
+| ------------------------------- | --------------------------------------------------------------------------------------------------------- | ------------------------- |
+| `@splitch/sdk`                  | server client: `evaluate`, `evaluateDetails`, `peekVariant`, `verify`, `evaluateAll`, `track`, `activate` | none                      |
+| `@splitch/sdk/browser`          | static-context browser client with synchronous reads                                                      | none                      |
+| `@splitch/sdk/react`            | `SplitchProvider` and the `useFlag` hooks                                                                 | `react`                   |
+| `@splitch/sdk/sentry`           | mirror resolutions into Sentry's flag context                                                             | `@sentry/core`            |
+| `@splitch/sdk/local-evaluation` | the local evaluator the Convex component runs on                                                          | none                      |
+| `@splitch/sdk/control-plane`    | typed control-plane client and contract schemas                                                           | none                      |
+| `@splitch/sdk/openfeature`      | `SplitchOfrepProvider` for OpenFeature over OFREP Core                                                    | `@openfeature/server-sdk` |
 
-The three evaluation entrypoints (`.`, `./browser`, `./react`) bundle their
-implementation and pull in no runtime dependency, so adding the SDK to an app
-adds nothing to its dependency tree beyond React if you use the hooks.
-`./sentry`, `./local-evaluation`, and `./control-plane` deliberately leave theirs
-external: a second bundled copy of `@sentry/core` would not share a client with
-the host app's, and a second `zod` would not share schema identity.
+The evaluation entrypoints (`.`, `./browser`, `./react`) bundle their
+implementation without runtime imports of Zod or Hono. The package installs
+`zod`, `hono`, and `@hono/zod-openapi` for its platform subpaths.
+`./sentry` uses the host app's `@sentry/core` so both share a Sentry client.
+React 18 or 19, Sentry Core 10 or 11, and OpenFeature Server SDK `^1.23.0` are
+optional peers for the corresponding integrations.
 
 `@splitch/cli` consumes `@splitch/sdk/control-plane`. `@splitch/convex` consumes
 `@splitch/sdk/local-evaluation`. Those package interfaces keep published Splitch
@@ -171,7 +172,7 @@ Environment for one Evaluation Context and returns them together with the
 const precomputed = await splitch.evaluateAll({ targetingKey: user.id });
 
 precomputed.context; // { targetingKey, idType, attributes }, defaults applied
-precomputed.evaluations; // { [flagKey]: { variant, variantName, reason, errorCode, exposureTicket } }
+precomputed.evaluations; // { [flagKey]: { variant, variantName, reason, errorCode, exposureTicket, exposureIdentity } }
 precomputed.etag; // strong validator for revalidation
 ```
 
@@ -234,15 +235,15 @@ Exposure-bearing Evaluation.
   unavailable. Your own `onResolution` reporter is also called synchronously
   with its exception uncaught, so it propagates out of the evaluate call.
   These cases are deliberate, and `onResolution` is covered below.
-- The browser client has one throw: it resolves from the payload `init()`
-  fetched, so `evaluate`, `evaluateDetails`, and the `useFlag` /
+- Without a bootstrap payload, the browser client resolves from the payload
+  `init()` fetched, so `evaluate`, `evaluateDetails`, and the `useFlag` /
   `useFlagDetails` hooks throw `SDK_NOT_INITIALIZED` when read before `init()`
-  resolves, and `init()` itself throws on a failed fetch. In React that surfaces
+  resolves. `init()` itself throws on a failed fetch. In React that surfaces
   during render, so await `init()` before mounting `SplitchProvider`. After
-  init, reads never throw: a failed revalidation marks the payload degraded
-  rather than clearing it.
-- `peekVariant`, `evaluateAll`, and `track` throw a `SplitchSdkError` carrying
-  `code`, `status`, and `docsUrl`. None of them has a Default Variant to serve,
+  init, a failed revalidation marks the payload degraded. Temporary Environment
+  expiry clears held values and returns error details, as described below.
+- `peekVariant`, `evaluateAll`, `track`, and `activate` throw a `SplitchSdkError`
+  carrying `code`, `status`, and `docsUrl`. None of them has a Default Variant to serve,
   so a failure is a throw rather than a value you cannot distinguish from a real
   resolution. Every code resolves to a page at
   `https://splitch.dev/docs/error/{code}`, and the error message prints it.
@@ -360,7 +361,8 @@ the payload cannot break out of the `<script>` element. Read it back with
 
 The browser constructs the static-context client with the matching Evaluation
 Context. A valid bootstrap makes `init()` perform no fetch. The first local read
-queues one Exposure, and `flush()` acknowledges its delivery.
+queues one Exposure when the Flag carries a ticket, and `flush()` acknowledges
+its delivery.
 
 ```js
 // browser.mjs
@@ -393,9 +395,9 @@ The complete framework-neutral Node fixture is in
 server and hydrated values, zero bootstrap fetches, one first-read Exposure, and
 the fail-loud `SDK_BOOTSTRAP_CONTEXT_MISMATCH` path.
 
-Reading before `init()` throws `SDK_NOT_INITIALIZED`. An unknown Flag Key returns
-your default with `reason: "ERROR"` / `FLAG_NOT_FOUND` and a loud log, never a
-silent invented default.
+Reading without bootstrap before `init()` resolves throws
+`SDK_NOT_INITIALIZED`. An unknown Flag Key returns your default with
+`reason: "ERROR"` / `FLAG_NOT_FOUND` and a loud log, never a silent invented default.
 
 Bootstrap must carry the exact normalized Evaluation Context used to construct
 the browser client. A mismatch throws `SDK_BOOTSTRAP_CONTEXT_MISMATCH` during
@@ -412,7 +414,13 @@ item count; retained items are not additionally bounded by the byte cap. Only
 the excess tail is dropped loudly (`RATE_LIMITED`). A single-batch queue that
 fails once drops nothing. Retryable delivery failures make at most three automatic
 delivery attempts; a non-retryable 4xx stops automatic delivery after its first attempt.
-Both terminal paths log loudly and retain the items for an explicit `flush()`.
+Both terminal paths log loudly and retain the items for an explicit `flush()`,
+except Temporary Environment expiry. An `ENVIRONMENT_EXPIRED` response stops
+polling and Exposure delivery, clears pending Exposures and held values, and
+notifies subscribers. Subsequent reads return the caller's Default Variant with
+`reason: "ERROR"` and `errorCode: "ENVIRONMENT_EXPIRED"`; `init()` and `flush()`
+throw that error. Create a new Temporary Environment and client instead of retrying.
+Expiry logs once per client.
 
 ## React bindings (`@splitch/sdk/react`)
 

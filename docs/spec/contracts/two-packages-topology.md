@@ -25,7 +25,8 @@ versioned dependency spine. (ADR-0025 and its 2026-08-26 amendment.)
 **Dependencies:** `zod`, `@hono/zod-openapi`, `hono` (for the exported RPC App type). No transport
 runtime. No `fetch`. No `node-fetch`.
 
-**Build step:** None. Zod schemas + types are source. Consumed directly as TypeScript.
+**Exports:** private, source TypeScript at `.`, `./route-types`, `./client-app`, and `./testing`.
+A `build` script runs `tsc -p tsconfig.json`; workspace exports still point at `src`, not `dist`.
 
 **Deletion test (4+ real consumers):**
 
@@ -35,28 +36,28 @@ runtime. No `fetch`. No `node-fetch`.
    mount a uniform request guard for Hono Workers.
 3. MCP server: imports Zod schemas to derive `inputSchema`/`outputSchema` for every tool.
 4. CLI: imports types for type-safe argument construction; imports error schema for error parsing.
-5. Marketing site / docs: imports types for example shapes in documentation; imports no transport.
+5. Marketing site / docs: imports runtime error schemas and route metadata as well as types; imports no transport.
 
 ### `@splitch/control-plane-sdk`
 
 **What it exports:**
 
-- Hono `hc<ControlPlaneRpcApp>()` typed client using the **contract-owned** App type from
-  `@splitch/contracts` (not the Worker implementation in `apps/*`)
+- Grouped Hono `hc` typed clients using contract-owned types from
+  `@splitch/contracts/client-app` (not the Worker implementation in `apps/*`)
 - Thin wrappers: auth header injection, credential management, error parsing (unwraps `ErrorResponse`)
-- Re-exports `@splitch/contracts` types for convenience
+- Client types and selected contract types, plus domain and control-panel subpath exports
 
-**Dependencies:** `@splitch/contracts`, `hono` (for `hc` only). Optionally `node-fetch` polyfill
-for non-browser environments. No other transport frameworks.
+**Dependencies:** `@splitch/contracts`, `hono`, and `zod`. Uses the platform `fetch` or an injected
+fetch implementation; no `node-fetch` dependency.
 
-**Build step:** Builds to ESM + CommonJS for Node.js consumers (CLI, MCP server). Browser consumers
-(control panel) import ESM directly.
+**Build step:** `tsc -p tsconfig.json`. This private ESM package exports source TypeScript; it has
+no CommonJS export. The published SDK bundles its supported public interface.
 
 **Consumers:**
 
 - Published SDK control-plane entry — bundles the typed client for CLI consumers.
 - MCP server — calls the control-plane API via the typed client; never imports Worker code directly.
-- Control panel (TanStack Start) — uses the typed client for SSR/RSC data fetching.
+- Control panel (TanStack Start) — uses the typed client for server and browser data fetching.
 
 ### `@splitch/sdk/control-plane`
 
@@ -79,14 +80,15 @@ they need narrower build graphs.
 | MCP server               | yes (Zod schemas for tool derivation) | yes (API calls)           | no                      |
 | CLI                      | through `@splitch/sdk/control-plane`  | through the same subpath  | no                      |
 | Control panel            | yes (types for forms/display)         | yes (data fetching)       | no                      |
-| Marketing site           | yes (types for examples)              | no                        | no                      |
+| Marketing site           | yes (schemas, route metadata, types)  | no                        | no                      |
 
 ---
 
 ## `hc` client: type-inferred, zero codegen
 
-`@splitch/control-plane-sdk` wraps `hc<ControlPlaneRpcApp>()` where `ControlPlaneRpcApp` is exported
-by `@splitch/contracts` and derived from the same Zod route inputs as the route registry. A contract
+`@splitch/control-plane-sdk/src/hc-client.ts` wraps grouped `hc` clients, such as
+`hc<FlagsControlPlaneClientApp>()`. These types come from `@splitch/contracts/client-app` and
+derive from the same route inputs as the registry. A contract
 change that adds, removes, or renames a route fails `tsc` immediately in every consumer — the client
 cannot drift from the authored routes by construction, and the SDK never imports `apps/*` (dependency-cruiser).
 
@@ -102,7 +104,7 @@ a committed file that agents or humans would edit.
   npm interface is the versioned `@splitch/sdk/control-plane` subpath.
 - No OpenAPI → codegen client. The deletion test found no external consumer that would need it.
   Building it would be speculative indirection. (ADR-0025.)
-- No shared MCP tool definition file committed to the repo. MCP schemas derive at startup from
+- No shared MCP tool definition file committed to the repo. MCP route schemas derive lazily from
   `@splitch/contracts` schemas. See [mcp-tool-derivation.md](./mcp-tool-derivation.md).
 - No per-Worker hand-written auth/scope/rate-limit/error guard chains. Capability Workers mount
   route contracts through `@splitch/worker-runtime`; domain invariants still live in the Worker.

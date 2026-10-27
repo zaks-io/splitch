@@ -10,6 +10,8 @@ configuration mutations.
 - Promotion and Environment Policy gates.
 - Approval Request, Review, and Confirmation.
 - Credential provisioning and revocation semantics.
+- Experiment authoring, Run lifecycle, and frozen Run commitments.
+- Convex and Cloudflare integration delivery coordination.
 
 ## Ownership and configuration terms
 
@@ -19,7 +21,8 @@ product share a single App: define a Flag once, consume it everywhere. An App be
 Organization. App is not an ownership unit. `app_id` is splitch's data-isolation seam.
 
 An App spans one or more Environments. A Flag's definition is App-level: key, schema, full Variant
-catalog, and Default Variant. A Flag's configuration is per-Environment.
+catalog, and the initial Default Variant. A Flag's configuration, including its effective Default
+Variant, is per-Environment.
 
 Avoid: Site; Project; Tenant; Workspace; treating App as an Organization; treating App as one
 environment.
@@ -43,9 +46,9 @@ Activation bindings. Sync writes only into a Temporary Environment. Promote rema
 verb. Use temporary, not ephemeral, sandbox, preview, or branch, as the domain term.
 
 **Flag Configuration**:
-The configuration of one Flag within one Environment: available Variant names, Targeting Rules,
-rollout, and enabled state. This is the unit edited, audited, diffed, and promoted. The Flag
-definition is App-level and shared; Flag Configuration is per-Environment and can diverge freely.
+The configuration of one Flag within one Environment: available Variant names, Default Variant,
+Targeting Rules, rollout, and enabled state. This is the unit edited, audited, diffed, and promoted.
+The Flag definition is App-level and shared; Flag Configuration is per-Environment and can diverge freely.
 
 Avoid: env config; flag state; putting availability on the Variant itself.
 
@@ -62,6 +65,14 @@ creation.
 
 Avoid: separate Metric Event and Web Event definition catalogs; changing an Event Definition's
 family after creation.
+
+**Integration delivery coordinator**:
+The per-`(App, Environment)` `IntegrationDeliveryDurableObject`, bound as `INTEGRATION_DELIVERY`,
+that delivers Convex nudges and Cloudflare pushes from D1 outbox rows. D1 owns delivery state; the
+coordinator persists its scope identity and alarm. In `coordinator` mode, mutations wake it and the
+minute cron sweeps for due work. The `cron` rollback mode uses the global dispatcher. Sentry delivery
+is Organization-scoped and separate. See
+[ADR-0061](../../docs/adr/0061-integration-delivery-runs-on-a-per-environment-coordinator.md).
 
 ## Policy and review terms
 
@@ -85,10 +96,10 @@ Avoid: guardrail for policy; a separate approval flow; hardcoding prod as specia
 The durable pending-change record for a Policy-gated mutation while it awaits Review. Carries the
 immutable proposed-vs-current diff, target version, Policy context, proposer, status
 (`pending -> applied | declined | stale`), application result, and audit trail. It exists from day
-one under `confirm`, where the proposer creates and self-reviews the request in one action. Every
-gated change type becomes an Approval Request: Promotion, direct Flag Configuration edit, Variant
-value change, and Start an Experiment Run. This lets splitch grow into second-person approval
-without a domain rewrite.
+one under `confirm`, where the proposer may create and self-review the request inline, or leave it
+pending for a later Review. Gated changes include Promotion, direct Flag Configuration edits,
+Variant value changes, Flag or Variant deletion, and Start an Experiment Run. This lets splitch grow
+into second-person approval without a domain rewrite.
 
 Avoid: change proposal; change request; pending change.
 

@@ -37,11 +37,10 @@ the legacy `*.convex.site` hostname rule and does not send a challenge. Splitch 
 request body from logs, encrypts the secret under the Control Plane Worker's required 32-byte
 base64 `CONVEX_WEBHOOK_KEK`, and never returns it.
 
-Installation requires both `data-plane:evaluate` and `data-plane:write`, unlike every other route
-here. The Key mounted at install is the Component's only credential, and it authenticates Metric
-Event delivery as well as evaluation. Delivery happens after the caller's Mutation has committed, so
-an evaluate-only Key would let `track()` return a receipt and then send every Metric Event terminal,
-unobserved. Install refuses it with `INSUFFICIENT_SCOPES` instead, while a human is watching.
+Installation requires `data-plane:evaluate`. The mounted Key authenticates configuration sync and
+Exposure delivery. The component exposes no Metric Event `track()` API; Actions and HTTP Actions
+send Metric Events directly through `@splitch/sdk` with a `data-plane:write` credential
+([convex-metric-event-delivery.md](./convex-metric-event-delivery.md)).
 
 An exact retry of a non-dormant installation returns the existing installation without a new
 challenge and preserves its active or revoked status. A dormant installation with the verification

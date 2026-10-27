@@ -11,13 +11,13 @@ the effect using Exposures and Metric Events.
 
 ## Use the CLI first
 
-Use the `splitch` CLI for Splitch work. It exposes every control-plane operation with stable JSON
+Use the `splitch` CLI for Splitch work. It exposes control-plane operations with stable JSON
 output, actionable errors, and command-specific help. Never open or operate the Control Panel, and
 never hand the user Control Panel steps to finish a task for you.
 
-The user is needed only to approve the `splitch login` OAuth device flow or an Approval Request an
-Environment Policy requires. Anything else you cannot complete is a Splitch defect: report the
-exact command, CLI version, and error, and stop.
+The user may need to approve the `splitch login` OAuth device flow, Personal Access Token step-up,
+or an Approval Request an Environment Policy requires. Anything else you cannot complete is a Splitch
+defect: report the exact command, CLI version, and error, and stop.
 
 Check the installed CLI and current scope before acting:
 
@@ -114,8 +114,8 @@ splitch flags verify <flag-key> --targeting-key <test-key> --json
 
 Lifecycle inputs are optional. An unnamed class is `release`, with the owner defaulting to you
 and the expiry to 90 days out (30 for `experiment`). Pass `--lifecycle-class ops` for a kill switch
-or `permission` for an entitlement gate; those are permanent. Read the defaults back from the
-response.
+or `permission` for an entitlement gate; those classes are permanent and may omit owner and
+expiry. Read the defaults back from the response.
 
 `flags test-eval` tests resolution through the authenticated control plane. `flags verify` makes a
 real data-plane round trip with the selected Environment's Client Key. Neither fires an Exposure.

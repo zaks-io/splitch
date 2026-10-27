@@ -49,8 +49,8 @@ same principal-keyed check as selector-bound tokens. The Auth API refuses this a
 MCP audience.
 
 **Scope format:** `app:{app_id}:{role}` where role is `owner`, `admin`, or `member`.
-A token may carry multiple App scopes (e.g. user is admin on two Apps). Org-level operations require
-`org:{org_id}:owner` or `org:{org_id}:admin`.
+A token may carry multiple App scopes (e.g. user is admin on two Apps). Org-level operations use `org:{org_id}:{role}` with the role required by the operation;
+Organization reads and usage accept `member`, while owner/admin gates protect management.
 
 **Principal-keyed discovery:** `GET /orgs` is the one collection whose tenant key is the principal
 itself rather than a path id. It answers "which Organizations am I a member of?" from live D1
@@ -116,13 +116,17 @@ scopes; it does not require or mint a membership-wide MCP bearer token.
 | column       | type    | required | meaning                                                       |
 | ------------ | ------- | -------- | ------------------------------------------------------------- |
 | `idp_id`     | TEXT PK | yes      | Splitch-generated identifier                                  |
-| `issuer`     | TEXT    | yes      | JWT `iss` value; must be unique                               |
+| `org_id`     | TEXT    | no       | Owning Organization; null for internal global seeds           |
+| `issuer`     | TEXT    | yes      | JWT `iss` value; unique per Organization scope                |
 | `jwks_uri`   | TEXT    | yes      | URL to fetch JWKS for signature verification                  |
 | `client_ids` | TEXT    | yes      | JSON array of expected `aud` values (client IDs for this IdP) |
 | `enabled`    | INTEGER | yes      | 0 \| 1; disabled IdPs are rejected, not silently skipped      |
 | `created_at` | TEXT    | yes      | ISO 8601                                                      |
 
-**Seed rows:** Anthropic, OpenAI, Cursor.
+**Intended global seeds:** Anthropic, OpenAI, Cursor. Door A is paused. Auth API still mounts
+`GET`/`POST /orgs/{orgId}/trusted-idps` and
+`DELETE /orgs/{orgId}/trusted-idps/{idpId}` behind exact Org-owner scope and live membership.
+These routes are outside the shared route registry and do not derive CLI commands or MCP tools.
 
 **Who can CRUD:** Org `owner` role only. CRUD is an Org-level operation (not App-level). An org owner
 can add/remove trusted IdPs for their Organization. Global (cross-Org) IdP config is splitch-internal
@@ -137,10 +141,13 @@ only (seeded at deploy; not user-facing).
 **Auth-issuer Worker** owns (minimal surface, stable `aud`, isolated for security review):
 
 - `/.well-known/oauth-protected-resource`
+- `/.well-known/jwks.json`
 - `/.well-known/oauth-authorization-server`
 - `POST /agent/identity` (ID-JAG and anonymous door entry points)
 - `POST /agent/identity/claim`
-- `GET /claim` (human claim UI redirect)
+- `GET /claim` (JSON claim instructions, not a UI redirect)
+- `POST /claim` and `POST /claim/consent/{attemptId}`
+- Trusted-IdP list/create/delete under `/orgs/{orgId}/trusted-idps`
 - `POST /oauth2/device_authorization`
 - `POST /oauth2/token`
 - `POST /oauth2/revoke` (RFC 7009)
@@ -184,7 +191,7 @@ deploying, and missing secrets or replay bindings fail closed.
   ADR-0034). For delegated `POST /api/sdk/events`, Evaluation authenticates the data-plane
   credential and enforces the Client Key origin allow-list at the public edge, then forwards caller
   identity to Event Ingest over the service binding.
-- Control-plane dry-run test-evaluation using the control-plane bearer token
+- Control-plane dry-run test-evaluation through a Control Plane-authorized binding delegation
 - Provider and Assignment Store read orchestration
 - No config writes, no analytics reads, and no direct result calculation
 
@@ -193,7 +200,8 @@ deploying, and missing secrets or replay bindings fail closed.
 - Delegated public SDK Metric Event `track` (`POST /api/sdk/events`): Event Ingest owns schema,
   rate, identity, and storage validation and persistence after Evaluation forwards the authenticated
   caller identity over the service binding
-- Public SDK Web Event `web.track` (`POST /api/sdk/web-events`) under Client Key or API Key
+- Intended SDK Web Event `web.track` (`POST /api/sdk/web-events`) under Client Key or API Key;
+  this route is not yet registered
 - Evaluation usage, Exposure, Activation, Metric Event, and Web Event validation
 - Per-scope Admission Gate Durable Objects, durable claim/outbox shards, datasource queues, write-ahead
   Tinybird attempt/reconciliation state, DLQs, and microbatch delivery
@@ -201,7 +209,8 @@ deploying, and missing secrets or replay bindings fail closed.
 
 **Analysis Worker** owns result reads:
 
-- Experiment and Web Analytics proxy endpoints
+- Experiment results, usage, Exposure-status, and App-audit reads through Control Plane delegation
+- Intended Web Analytics reads, not yet registered
 - Tinybird-backed Web Session, Web Event, SRM, Metric, and statistical result reads
 - App `owner`, `admin`, and `member` roles may read Web Analytics under the existing **View
   config/results** permission
@@ -234,8 +243,8 @@ deploying, and missing secrets or replay bindings fail closed.
 
 ## Personal Access Token authority
 
-A Personal Access Token is not a JWT and is accepted only by the MCP Worker. The MCP Control Plane
-door resolves its principal from the D1 token row: the owner's live Organization and App memberships,
+A Personal Access Token is not a JWT and is accepted by the MCP Worker and the Control Plane public
+bearer door. Both paths resolve its principal from the authoritative D1 token row: the owner's live Organization and App memberships,
 kept only where a grant covers them, at min(live role, grant ceiling). Each grant is strictly
 `{ target, role, permissions }`; reading is implicit and `[]` is read-only. The closed permissions
 are `write`, `delete`, `credentials`, `members`, `privacy`, and `temporary_environments`. Each route declares its permission;

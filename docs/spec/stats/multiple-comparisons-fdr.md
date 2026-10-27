@@ -38,8 +38,8 @@ looking at results.
 `alpha = 1 - confidence_level` (e.g., 0.05 at 95% confidence level).
 
 Johari, Pekelis, Walsh Theorem 7.3: BH over always-valid p-values controls FDR under a
-sufficient condition on the stopping time and independence. That is the current production
-procedure.
+sufficient condition on the stopping time and independence. Legacy-unversioned and analysis-v1
+retain this procedure; new Runs use analysis-v2 and BH-G.
 
 ## BH-G algorithm (Benjamini-Yekutieli / harmonic BH)
 

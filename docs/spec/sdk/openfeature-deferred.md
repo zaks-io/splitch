@@ -1,8 +1,10 @@
 # OpenFeature full provider surface: explicitly deferred
 
-The SDK is a thin JS/TS HTTP client — `evaluate` and `peekVariant`.
+The root SDK is a thin JS/TS HTTP client with dynamic-context accessors. Browser and React
+entry points serve static-context Precomputed Evaluations; `local-evaluation` exports the shared
+evaluator used by the Convex and Cloudflare integrations.
 OFREP Core and `@splitch/sdk/openfeature` (`SplitchOfrepProvider`) are implemented
-(ADR-0059). This file pins what is still deferred so implementing agents do not guess.
+(ADR-0062). This file pins what is still deferred so implementing agents do not guess.
 
 ## Thin SDK scope
 
@@ -13,16 +15,17 @@ OFREP Core and `@splitch/sdk/openfeature` (`SplitchOfrepProvider`) are implement
 - `idType` defaults to `'user'` in the SDK; overridable per call (ADR-0036)
 - Lazy-fetch-on-first-evaluate init
 - **Fail-loud** fallback behavior: `evaluate`/`verify` failure fallbacks return the Default Variant with `reason: ERROR` + `errorCode`; peek failures and Default Variant fallbacks return the canonical error envelope instead (ADR-0036).
-- Single-flag-per-call; batch evaluation is deferred
+- Single-Flag `evaluate` calls; `evaluateAll` fetches all Flags without Exposure (ADR-0048)
 - In-memory seen-set (LRU, per-instance)
 - `sdk.track(eventName, { targetingKey, idType, eventId, fields, dimensions })` for Metric Events
-- `sdk.web.track(eventName, webEvent)` for explicit schema-defined Web Events
+- Specified, unbuilt Web Analytics: `sdk.web.track(eventName, webEvent)` for schema-defined Web Events
 - `sdk.web.instrument({ captures }) -> () => void` for scoped automatic browser signals and cleanup
 - `sdk.web.flush() -> Promise<WebEventBatchResult>` for acknowledged Web Event delivery
 - Client Key / API Key auth (runtime-appropriate)
 
 The SDK speaks the OpenFeature `ResolutionDetails` shape (`value`, `variantName`, `reason`,
-`errorCode?`, `errorMessage?`) and the standard `reason` / error-code enums. Conforming to
+`errorCode?`, `errorMessage?`). The thin SDK preserves wire error codes and local `SDK_TRANSPORT_*`
+codes; `SplitchOfrepProvider` maps failures to the official OpenFeature error-code enum. Conforming to
 _that shape_ is **not** deferred — it is the contract (ADR-0036). What remains deferred is the
 full OpenFeature _provider/client API_ below.
 
@@ -31,11 +34,11 @@ full OpenFeature _provider/client API_ below.
 The following are not part of the thin SDK contract. Do not scaffold, stub, or add TODOs for these in
 SDK code unless a separate decision record reopens the surface.
 
-**1. Standard OpenFeature SDK library** — **partially resolved by ADR-0059.**
+**1. Standard OpenFeature SDK library** — **partially resolved by ADR-0062.**
 `SplitchOfrepProvider` is an OpenFeature-shaped Provider that talks OFREP. It does not
-depend on `@openfeature/server-sdk`; callers pass it to `OpenFeature.setProvider()` if
-they already have that library. A first-party peer dependency on the official SDK remains
-deferred.
+import `@openfeature/server-sdk` at runtime; callers pass it to `OpenFeature.setProvider()` if
+they already have that library. `@openfeature/server-sdk` is an optional peer dependency used
+for type compatibility; the provider does not import it at runtime.
 
 **2. Language clients beyond JS/TS**
 The SDK is JS/TS only. Go, Python, and other language clients are
@@ -60,12 +63,13 @@ streams to clients — only "revalidate now" signals.
 
 **6. Targeting Context _attribute typing_ validation**
 OpenFeature defines a typed `EvaluationContext` with well-known fields. The thin SDK constrains
-`evaluationContext` to `{ targetingKey: string, idType?: string, [key: string]: unknown }`.
+the SDK context to `{ targetingKey: string, idType?: string, attributes?: Record<string,
+boolean | string | number | readonly unknown[]> }`.
 Per-Flag / per-Experiment **attribute-type** validation (e.g. enforcing `plan: string`) is
 deferred. (The `ResolutionDetails` _output_ shape and the `reason`/error enums are **not**
 deferred — they are in scope per ADR-0036.)
 
-**7. Full OpenFeature `track()` compatibility** — **partially resolved by ADR-0059.**
+**7. Full OpenFeature `track()` compatibility** — **partially resolved by ADR-0062.**
 `SplitchOfrepProvider.track()` maps the OpenFeature tracking API onto `POST /api/sdk/events`
 (Metric Events) using `context.targetingKey` and an optional `eventId`. Hook-ordered track
 details and `web.track()` stay deferred.

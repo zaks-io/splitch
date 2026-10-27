@@ -16,13 +16,13 @@ versus fail-loud operator repair.**
 | [assignment-store-substrate.md](./assignment-store-substrate.md)     | KV-read / DO-write split for holdover sticky experience; consistency window and failure semantics                         |
 | [exposure-pipeline.md](./exposure-pipeline.md)                       | Raw append-only log as system of record; dedup at query time; Exposure row schema; SRM denominator                        |
 | [physical-dedup-engine.md](./physical-dedup-engine.md)               | Lambda architecture: Copy Pipe snapshot + real-time tail UNION; ordered replace-mode rollups                              |
-| [live-updates-do.md](./live-updates-do.md)                           | Per-App fan-out DO: hibernating WebSocket, write-through, delta-nudge, persisted-before-announced                         |
+| [live-updates-do.md](./live-updates-do.md)                           | Per-Environment fan-out DO: hibernating WebSocket, write-through, delta-nudge, persisted-before-announced                 |
 | [multi-tenant-isolation.md](./multi-tenant-isolation.md)             | App-enforced `app_id` isolation in D1 (Drizzle seam) and Tinybird (two-seam enforcement)                                  |
 | [security-model.md](./security-model.md)                             | Trust boundaries, threat model, and the enforced security contracts (ties together ADR-0018/0022/0032/0034)               |
 | [contracts-and-validation.md](./contracts-and-validation.md)         | Zod-first authoring; package split; KV schema-version envelope; one canonical ErrorResponse                               |
 | [worker-runtime.md](./worker-runtime.md)                             | Shared contract-mounted request guard for auth, scopes, rate limits, idempotency, and error envelopes                     |
 | [monorepo-and-toolchain.md](./monorepo-and-toolchain.md)             | pnpm + Turborepo layout; capability Workers; shared `ui` seam; TanStack Query; cron Workers; StrykerJS policy             |
-| [local-quality-gates.md](./local-quality-gates.md)                   | Git hooks, CI-parity pre-push, Biome, TypeScript, Knip, Gitleaks, dependency-cruiser, local validation policy             |
+| [local-quality-gates.md](./local-quality-gates.md)                   | Git hooks, lean pre-push and full CI, Biome, TypeScript, Knip, Gitleaks, dependency-cruiser, local validation policy      |
 | [agent-verification.md](./agent-verification.md)                     | Slice-level Done proof, local Worker smoke, remote Cursor requirements, and verification ladder                           |
 | [deployment-pipeline.md](./deployment-pipeline.md)                   | GitHub Actions on Blacksmith with Turborepo cache; PR CI with Tinybird Local; shared preview; production rollback rules   |
 | [backup-and-disaster-recovery.md](./backup-and-disaster-recovery.md) | What is and is not backed up, per-store recovery tiers, RPO/RTO, nightly bundle design, restore paths, drill cadence      |
@@ -44,14 +44,15 @@ Worker fleet, trust boundaries, runtime flows, and dependency-cruiser enforcemen
 6. **One authored contract source: Zod.** Types, client, OpenAPI, and MCP schemas are derived.
    Generated framework and runtime sources may be committed when repository tooling consumes them;
    each is labeled as generated and has one owning generator.
-7. **DO writes are persisted-before-announced** (both the per-App fan-out DO and the Assignment
+7. **DO writes are persisted-before-announced** (both the per-Environment fan-out DO and the Assignment
    Store DO). Broadcasts only describe durable state.
 8. **Privacy tombstones win immediately.** Delete requests stop future use before every physical
    purge finishes.
 9. **PR CI is local; shared preview is explicit.** PRs validate against disposable local services by
    default; the hosted shared preview target is updated only on maintainer intent.
 10. **Bad commits should fail before they leave the machine.** Commit hooks block format/lint/type
-    drift and secret leaks; pre-push mirrors CI except hosted smoke/deploy steps.
+    drift and secret leaks; pre-push runs the lean static and local backing-resource graph, while CI
+    owns tests, builds, documentation, parity, and dependency-cruiser checks.
 11. **Route contracts are load-bearing.** HTTP routes are mounted through the shared request guard
     so auth, scopes, rate limits, idempotency, and `ErrorResponse` status mapping cannot drift per Worker.
 12. **Done means locally proven.** Every executable slice names the command, fixture, expected result,

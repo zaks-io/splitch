@@ -6,33 +6,56 @@ not the source of raw customer Entity data.
 Storage shapes carry internals that wire shapes must not expose. The product lifecycle is defined in
 [../platform/privacy-data-lifecycle.md](../platform/privacy-data-lifecycle.md).
 
+D1 stores every `timestamptz` below as ISO 8601 `TEXT`, and every `boolean` as `INTEGER` 0/1.
+These are logical type labels, not native SQLite types. User-reference columns are nullable unless
+explicitly marked not null.
+
 ---
 
 ## `privacy_requests`
 
 Bounded request ledger. Stores hashes and IDs, not raw Targeting Keys or email.
 
-| Column                    | Type        | Constraints                                        |
-| ------------------------- | ----------- | -------------------------------------------------- |
-| `request_id`              | text        | PK                                                 |
-| `org_id`                  | text        | FK to organizations, not null                      |
-| `app_id`                  | text        | nullable, FK to apps                               |
-| `request_type`            | text        | not null                                           |
-| `subject_type`            | text        | not null                                           |
-| `subject_ref`             | text        | not null; ID, Entity-hash array, or reset sentinel |
-| `subject_ref_redacted_at` | timestamptz | nullable                                           |
-| `requested_by`            | text        | WorkOS user ID, not null                           |
-| `status`                  | text        | not null                                           |
-| `received_at`             | timestamptz | not null                                           |
-| `ack_due_at`              | timestamptz | not null                                           |
-| `response_due_at`         | timestamptz | not null                                           |
-| `completed_at`            | timestamptz | nullable                                           |
-| `denial_reason`           | text        | nullable                                           |
+| Column                    | Type        | Constraints                                                                  |
+| ------------------------- | ----------- | ---------------------------------------------------------------------------- |
+| `request_id`              | text        | PK                                                                           |
+| `org_id`                  | text        | FK to organizations, not null                                                |
+| `app_id`                  | text        | nullable, FK to apps                                                         |
+| `request_type`            | text        | not null                                                                     |
+| `subject_type`            | text        | not null                                                                     |
+| `subject_ref`             | text        | not null; ID, Entity-hash array, or reset sentinel                           |
+| `subject_ref_redacted_at` | timestamptz | nullable                                                                     |
+| `requested_by`            | text        | WorkOS user ID, not null                                                     |
+| `status`                  | text        | not null                                                                     |
+| `received_at`             | timestamptz | not null                                                                     |
+| `ack_due_at`              | timestamptz | not null                                                                     |
+| `response_due_at`         | timestamptz | not null                                                                     |
+| `completed_at`            | timestamptz | nullable                                                                     |
+| `result_json`             | text        | nullable legacy export payload; new artifacts live in private object storage |
+| `idempotency_key`         | text        | nullable retry identity                                                      |
+| `request_hash`            | text        | nullable canonical payload hash                                              |
+| `denial_reason`           | text        | nullable                                                                     |
 
 `subject_ref` is a WorkOS user ID, Org/App ID, JSON array of `targeting_key_hash` values, or the
 literal `redacted:app-identity-reset`. A destructive App identity reset must replace every matching
 Entity hash array with that sentinel and stamp `subject_ref_redacted_at` before destroying the old
 identity key.
+
+UNIQUE index: `(app_id, requested_by, request_type, idempotency_key)`.
+
+## `privacy_jobs`
+
+Durable job and artifact state from migrations 0030 through 0032. `job_id TEXT` is the PK;
+`request_id TEXT NOT NULL UNIQUE` references `privacy_requests.request_id`.
+
+| Columns                                                                                | Physical type | Nullability |
+| -------------------------------------------------------------------------------------- | ------------- | ----------- |
+| `kind`, `status`, `store_status_json`, `identity_version`, `created_at`, `updated_at`  | TEXT          | not null    |
+| `delete_before_ts`, `id_type`, `entity_family_hash`, `lease_expires_at`, `claim_token` | TEXT          | nullable    |
+| `artifact_key`, `artifact_sha256`, `artifact_expires_at`, `error_code`                 | TEXT          | nullable    |
+
+The job records per-store progress, a fenced lease claim, and private export artifact metadata.
+It stores no raw Targeting Key.
 
 ## `entity_deletions`
 

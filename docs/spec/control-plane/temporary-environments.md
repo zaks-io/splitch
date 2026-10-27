@@ -346,12 +346,12 @@ and treatments. Creating and Sync stay CLI and MCP operations in this release.
 
 One additive D1 migration:
 
-| Table                | Column                       | Type        | Constraints                                      |
-| -------------------- | ---------------------------- | ----------- | ------------------------------------------------ |
-| `environments`       | `expires_at`                 | timestamptz | null = permanent; indexed for teardown           |
-| `environments`       | `synced_from_environment_id` | text        | no FK; non-null exactly when `expires_at` is set |
-| `environments`       | `synced_at`                  | timestamptz | non-null exactly when `expires_at` is set        |
-| `flag_change_events` | `temporary_environment`      | integer     | not null, default 0; 1 when written for one      |
+| Table                | Column                       | Type    | Constraints                                      |
+| -------------------- | ---------------------------- | ------- | ------------------------------------------------ |
+| `environments`       | `expires_at`                 | TEXT    | null = permanent; indexed for teardown           |
+| `environments`       | `synced_from_environment_id` | text    | no FK; non-null exactly when `expires_at` is set |
+| `environments`       | `synced_at`                  | TEXT    | non-null exactly when `expires_at` is set        |
+| `flag_change_events` | `temporary_environment`      | integer | not null, default 0; 1 when written for one      |
 
 `CredentialCacheKV` gains version 3 (see Credentials).
 

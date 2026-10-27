@@ -16,7 +16,7 @@ Kohavi/Microsoft experimentation literature, not just vendor docs (see [referenc
 ## What's settled (the literature is unanimous)
 
 - **Ordering — activation must follow Exposure** (ADR-0012): `activation_ts > first_exposure_ts` per
-  `(Entity, Run)`. A pre-exposure activation is post-treatment selection bias and never counts.
+  `(Entity, Run)`. A pre-exposure Activation does not establish entry after the encounter and never counts.
 - **Pipeline locus — a query-time filter composing with first-touch dedup** (ADR-0010): dedup to first
   Exposure, then JOIN activation events. No separate pipeline; it drops into the ELT model.
 
@@ -35,7 +35,8 @@ is the true entry moment (Eppo's automatic behavior; Statsig's toggle). The anch
 Metric — and the **full-population SRM does not catch it** (GrowthBook's explicit warning). The assignment
 split can read a clean 50/50 while the activated subpopulation is skewed. splitch goes past every vendor:
 
-- **Activated-population SRM** — chi-square on activated Entities per arm per Run (p < 0.001), _separate_
+- **Activated-population SRM** uses the Run's frozen analysis version: an ingestion-ordered sequential
+  martingale for `analysis-v2`, chi-square for legacy and `analysis-v1` (p < 0.001). It is _separate_
   from the full-exposed SRM. A gated-scorecard SRM with a clean full-exposed SRM is the canonical
   fingerprint of a Treatment-affected gate.
 - **Per-arm activation rate as a first-class Metric** — chi-square over activated / not-activated by
@@ -84,10 +85,9 @@ removes that risk:
   activated) is then **additive** — the Control arm emits an activation-shaped event with
   `counterfactual: true`. A new column _value_, flowing through the **same** log, JOIN, anchor, and SRM.
   Zero schema change, zero query rewrite.
-- **Deferred, and only because it's un-buildable now:** the SDK-side Control-arm would-have-activated
-  _evaluation logic_ needs a running SDK/pipeline/experiment to build and test. Building it blind today adds
-  untestable code, not production-readiness. The activated-population SRM is precisely the signal that tells
-  you which real experiment justifies building it.
+- **Deferred:** SDK-side Control-arm would-have-activated evaluation logic. The current producer
+  stamps `counterfactual: 0`, and `analysis_activation_rows` excludes counterfactual rows. The marker
+  exists for the extension; current analysis uses only real Activations.
 
 ## Why this is a deep seam
 

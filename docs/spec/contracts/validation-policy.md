@@ -7,13 +7,13 @@ trusts are not optional. Each rule here is non-negotiable; the reasoning is in t
 
 ## Layer matrix
 
-| Layer                              | What it receives                                | Zod parse?          | Failure action                                                                                                 |
-| ---------------------------------- | ----------------------------------------------- | ------------------- | -------------------------------------------------------------------------------------------------------------- |
-| Worker HTTP edge                   | Every request (body, path params, query params) | **Always**          | `ErrorResponse { code: 'VALIDATION_ERROR', details: { issues } }` — no partial accepts                         |
-| KV reads (all, including hot path) | JSON blobs                                      | **Always**          | `ErrorResponse { code: 'INTERNAL_SERVER_ERROR' }` + loud log — blob is corrupted cache, not user error         |
-| D1 reads                           | Drizzle ORM rows                                | **Never** (trusted) | — column schema enforced by Drizzle migrations; structurally sound by construction                             |
-| Tinybird reads                     | Raw event rows                                  | **Never**           | Query-time filtering is on values; append-only log corruption is a platform incident, not app-boundary concern |
-| Assignment Store KV                | `AssignmentStoreValue` blobs                    | **Always**          | `INTERNAL_SERVER_ERROR` + loud log — present-but-corrupt blob is never treated as a miss                       |
+| Layer                              | What it receives                                | Zod parse?                   | Failure action                                                                                         |
+| ---------------------------------- | ----------------------------------------------- | ---------------------------- | ------------------------------------------------------------------------------------------------------ |
+| Worker HTTP edge                   | Every request (body, path params, query params) | **Always**                   | `ErrorResponse { code: 'VALIDATION_ERROR', details: { issues } }` — no partial accepts                 |
+| KV reads (all, including hot path) | JSON blobs                                      | **Always**                   | `ErrorResponse { code: 'INTERNAL_SERVER_ERROR' }` + loud log — blob is corrupted cache, not user error |
+| D1 reads                           | Drizzle ORM rows                                | Structurally trusted         | Serialized JSON and composed response shapes may still be Zod-parsed                                   |
+| Tinybird reads                     | Raw logs and serving results                    | At typed consumer boundaries | Raw column types are enforced at ingest; malformed serving results fail boundary parsing               |
+| Assignment Store KV                | `AssignmentStoreValue` blobs                    | **Always**                   | `INTERNAL_SERVER_ERROR` + loud log — present-but-corrupt blob is never treated as a miss               |
 
 ---
 
@@ -57,19 +57,22 @@ Assignment Store miss (key not found, not corrupt) is NOT an error — it means 
 
 ## Rule 3: D1 reads — structurally trusted
 
-D1 rows are written only through Drizzle migrations and the Worker's data-access layer. They are not
-Zod-re-parsed on read. Structural correctness is enforced by the migration system, not runtime checks.
+D1 column structure is enforced by Drizzle migrations. This does not validate serialized JSON
+contents: `experiment-model.ts` parses persisted pre-registration with `PreRegistrationSchema` and
+validates composed Experiment and Run responses. Trust in column structure does not waive those checks.
 
 This trust is bounded: the Worker's data-access layer is the **only** write path into D1. No direct
 SQL access, no external migration tools that bypass Drizzle.
 
 ---
 
-## Rule 4: Tinybird reads — unvalidated
+## Rule 4: Tinybird reads
 
 Raw Exposure/Activation rows are append-only. The Tinybird schema enforces column types at ingest;
 corruption is a platform incident, not an application-boundary concern. Query-time filtering is on
-values (e.g. `WHERE app_id = ?`), not schema validation.
+values (e.g. `WHERE app_id = ?`). This does not exempt typed query-result boundaries: analysis
+parses `StatsInputSchema`, Retention reads parse `DedupeExposureRowSchema`, and App audit reads
+parse `AppAuditStorageRowSchema` plus the JSON changes contract.
 
 ---
 
@@ -79,8 +82,8 @@ All domain invariants live in the Worker — both skins (MCP, CLI) inherit corre
 
 | Invariant                                     | Enforcement                                                                                                                                                                                                                                                                                     | Error code                                   |
 | --------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------- |
-| **Run frozen fields**                         | Reject `PatchRunRequest` with any of `{salt, allocation, variantSet, targetingRules, targetingSegmentId}`                                                                                                                                                                                       | `RUN_FROZEN`                                 |
-| **Variant frozen per Run**                    | Reject `PatchVariantRequest.value` if any running Run's `variantSet` includes this variant                                                                                                                                                                                                      | `RUN_FROZEN`                                 |
+| **Run frozen fields**                         | The strict `PatchRunRequest` schema excludes frozen assignment fields; no Run PATCH route is mounted                                                                                                                                                                                            | `VALIDATION_ERROR` at schema parse           |
+| **Variant frozen per Run**                    | Reject changes to `PatchVariantRequest.name` or `.value` if any running Run's `variantSet` includes this Variant                                                                                                                                                                                | `RUN_FROZEN`                                 |
 | **Flag availability/baseline frozen per Run** | Reject `PatchFlagConfigRequest.availableVariantNames` or `.rollout` when a running Experiment owns this Flag in this Environment; `enabled` is exempt so the kill switch always works. Checked BEFORE the Environment Policy gate, so a refused change never becomes a pending Approval Request | `RUN_FROZEN`                                 |
 | **Flag Targeting frozen per Run**             | Reject `ReplaceTargetingRulesRequest` when a running Experiment owns this Flag in this Environment. Same ordering: ahead of the Environment Policy gate                                                                                                                                         | `RUN_FROZEN`                                 |
 | **Allocation sums to 100**                    | Sum check on the staged Experiment draft allocation when Start freezes it into a Run                                                                                                                                                                                                            | `ALLOCATION_INVALID`                         |
@@ -116,7 +119,9 @@ not a partial resolution.
 When `POST /apps/{app_id}/envs/{environment_id}/experiments/:id/start` fires:
 
 1. Worker validates the lifecycle request body (Zod): optional
-   `review: { action: 'approve_and_apply' }`, optional `reason`, and required `idempotency_key` only.
+   `review: { action: 'approve_and_apply' }`, `reason`, `horizon`, `sampleSizeLocked`, `targetN`,
+   `plannedDurationDays`, `plannedDurationOverrideReason`, and `preRegistration`, plus required
+   `idempotency_key`.
    Assignment config is rejected here and must already be staged on the Experiment draft via
    create/patch. The CLI `--confirm` affordance derives the inline canonical Review; there is no
    stateless confirmation-retry body.

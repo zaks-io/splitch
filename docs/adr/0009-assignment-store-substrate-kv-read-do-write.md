@@ -1,6 +1,8 @@
 # Assignment Store substrate: KV for the read, a per-key Durable Object for the write
 
-**Status:** accepted
+**Status:** accepted for the KV read; the per-key writer and the consistency-window guarantee are
+superseded by [ADR-0064](./0064-assignment-store-is-app-scoped-with-one-writer-per-entity.md)
+(one writer per Entity; the window can affect a held-over Entity's Run, SPL-812)
 
 The Assignment Store port (ADR-0008) maps onto two Cloudflare primitives, split by its two halves:
 

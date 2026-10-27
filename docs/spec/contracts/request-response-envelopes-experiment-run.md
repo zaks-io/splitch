@@ -35,6 +35,7 @@ live in [request-response-envelopes-conventions.md](./request-response-envelopes
 | `activationMetricId` | no       | Assignment-affecting when set                                                                                                                                              |
 | `conversionWindowMs` | no       | Defaults to `0` (unbounded)                                                                                                                                                |
 | `dimensions`         | no       | Defaults to `[]`                                                                                                                                                           |
+| `idempotency_key`    | no       | Exact create retry identity                                                                                                                                                |
 | `allocation`         | no       | Draft assignment field staged for the first Start; must sum to 100 at Start                                                                                                |
 | `salt`               | no       | Draft assignment field staged for the first Start; generated at Start when omitted                                                                                         |
 | `targetingRules`     | no       | Draft assignment field staged for the first Start                                                                                                                          |
@@ -104,6 +105,7 @@ with `VALIDATION_ERROR`; callers end a Run with `POST .../runs/{run_id}/end`.
 | `hypothesis`         | no       | non-material                     |
 | `owner`              | no       | non-material                     |
 | `tags`               | no       | non-material                     |
+| `flagId`             | no       | assignment                       |
 | `targetingKey`       | no       | assignment                       |
 | `targetingKeyType`   | no       | assignment                       |
 | `activationMetricId` | no       | assignment                       |
@@ -141,7 +143,7 @@ The Start action ends the current running Experiment Run (if any) and opens a ne
 is the only path to open an Experiment Run (first-Start Run rule "first Experiment Run opens on first
 Start"). Assignment config is not supplied in the Start body. It lives on the Experiment draft,
 staged by `CreateExperimentRequest` or `PatchExperimentRequest` fields such as `allocation`, `salt`,
-`variantSet`, `targetingRules`, and `segmentIds`. Start validates that staged draft, freezes it onto
+`targetingRules`, and `segmentIds`. Start derives `variantSet` from the Flag catalog, validates that staged draft, freezes it onto
 the new Run, and then consumes the draft so an unchanged second Start returns `EXPERIMENT_NO_DRAFT`.
 
 The request body is lifecycle metadata plus the Run-only half of the decision spec. `horizon` and
@@ -157,7 +159,7 @@ Start (ADR-0002 Run immutability, ADR-0003 assignment-vs-measurement edits):
 | `horizon`                       | no       | `sequential` (default) or `fixed`; frozen onto `runs.horizon`                                                              |
 | `sampleSizeLocked`              | no       | Required when `horizon = 'fixed'`, refused when `sequential`; frozen onto `runs.sample_size_locked`                        |
 | `targetN`                       | no       | Sequential tuning target; defaults to 5000 and is recorded as defaulted (ADR-0059)                                         |
-| `plannedDurationDays`           | no       | Planned duration; defaults to 7; non-whole-weeks need an override reason                                                   |
+| `plannedDurationDays`           | no       | Integer 1 to 365; defaults to 7; non-whole-weeks need a non-empty override reason                                          |
 | `plannedDurationOverrideReason` | no       | Label when the planned duration is not whole weeks                                                                         |
 | `preRegistration`               | no       | Optional pre-registration (hypothesis, primary Metric, per-Metric MDE/ROPE, ship rule, futility mode); frozen when present |
 | `idempotency_key`               | yes      | Idempotently owns Approval Request creation and any inline Review; no assignment config is accepted                        |
@@ -265,6 +267,8 @@ Start.
 
 ### PatchRunRequest (non-material only)
 
+This schema exists in contracts, but no Run PATCH route is registered.
+
 Explicitly rejects all assignment-config fields.
 Accepted Zod shape uses `.strict()` to fail on any unrecognized key.
 
@@ -274,12 +278,13 @@ Accepted Zod shape uses `.strict()` to fail on any unrecognized key.
 | `owner`       | no       | —          |
 | `tags`        | no       | `string[]` |
 
-**Rejected fields** (Worker returns `RUN_FROZEN` if present):
+**Rejected fields** (strict schema returns `VALIDATION_ERROR` if parsed):
 `salt`, `allocation`, `variantSet`, `targetingSegmentId`, `targetingRules`, `targetingKey`
 
 ### RunResponse
 
-Returns full Run leaf. `configHash` included for integrity verification. `variantSet` and `allocation`
+Returns the Run leaf plus optional frozen `preRegistration`, also carried by nested Start /
+Conclude responses. `configHash` included for integrity verification. `variantSet` and `allocation`
 are included (immutable snapshots). `endedAt` is `null` on running Runs.
 
 GET also returns `draftTargetingRules` (nullable): the Experiment's current next-Run draft Targeting

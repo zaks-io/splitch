@@ -1,6 +1,6 @@
 # Variance correctness: delta method over per-Entity aggregates; no naive ratio-of-means path
 
-**Status:** accepted
+**Status:** accepted; Guardrail rule amended for `analysis-v2` by [ADR-0059](./0059-runs-freeze-an-analysis-version-and-legacy-runs-read-under-a-labeled-one.md)
 
 This ADR records the **non-negotiable** correctness rules of the variance computation. They are not
 preferences — all three reference platforms (Statsig, Eppo, GrowthBook) implement exactly this method

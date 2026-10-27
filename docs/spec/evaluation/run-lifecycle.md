@@ -2,18 +2,19 @@
 
 A Run is the immutable unit of analysis for an Experiment. Its assignment config (salt,
 allocation, Variant set, Control identity, Targeting rules, Targeting Key) is frozen for its entire
-life.
+life. The analysis engine version is also frozen at Start; later engine releases do not silently
+change an existing Run's analysis contract (ADR-0059).
 
 ## Identity
 
-| Field           | Type     | Required | Meaning                                                                |
-| --------------- | -------- | -------- | ---------------------------------------------------------------------- |
-| `runId`         | string   | yes      | Unique per Experiment; immutable once created                          |
-| `experimentId`  | string   | yes      | Parent Experiment                                                      |
-| `appId`         | string   | yes      | Isolation boundary; always scoped                                      |
-| `environmentId` | string   | yes      | Co-scoped with `appId`; Experiment Runs are per-Environment (ADR-0027) |
-| `startedAt`     | ISO 8601 | yes      | When the Run went live (explicit Start action)                         |
-| `endedAt`       | ISO 8601 | optional | Set when the Run closes; absent means live                             |
+| Field           | Type             | Required | Meaning                                                                |
+| --------------- | ---------------- | -------- | ---------------------------------------------------------------------- |
+| `runId`         | string           | yes      | Unique per Experiment; immutable once created                          |
+| `experimentId`  | string           | yes      | Parent Experiment                                                      |
+| `appId`         | string           | yes      | Isolation boundary; always scoped                                      |
+| `environmentId` | string           | yes      | Co-scoped with `appId`; Experiment Runs are per-Environment (ADR-0027) |
+| `startedAt`     | ISO 8601         | yes      | When the Run went live (explicit Start action)                         |
+| `endedAt`       | ISO 8601 \| null | yes      | Set when the Run closes; null means live                               |
 
 ## State machine
 
@@ -30,7 +31,7 @@ life.
                          v
                        running  <------- assignment edit accumulates on next draft
                          |
-                  [assignment edit started]
+                  [End, Conclude, or next Start]
                          v
                        ended
                   (frozen archive)
@@ -42,7 +43,7 @@ States: `draft → running → ended`
   and no live Run. Entities receive the Flag's Default Variant until Start.
 - **running**: Started at least once; one Run is live. `running` is the only state in
   which Exposures stamp with this Run's `runId`.
-- **ended**: Closed by a subsequent Start. Permanently frozen; `endedAt` is set; prior
+- **ended**: Closed by End, Conclude, or a subsequent Start. Permanently frozen; `endedAt` is set; prior
   Exposures remain attributed here.
 
 The draft is not a Run state; it is the staging area that accumulates edits before the

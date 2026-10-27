@@ -11,8 +11,8 @@ The dedup query detects this at analysis time — not at ingest, not at SDK fire
 Given:
 
 - Pure deterministic `assign()` (ADR-0001)
-- Authoritative per-key holdover DO with atomic put-if-absent (ADR-0009)
-- Assignment-affecting edits open a new Run (ADR-0003)
+- Authoritative per-Entity holdover DO with atomic put-if-absent per Experiment (ADR-0009, ADR-0064)
+- Assignment-affecting edits take effect only at Start, which opens a new Run (ADR-0003, ADR-0063)
 
 A same-Run Variant conflict can **only** be one of three defects:
 
@@ -26,7 +26,8 @@ All three are defects. None are expected concurrency or normal operation. `__mul
 
 ## Quarantine action
 
-When `COUNT(DISTINCT variant) > 1` for `(app_id, environment_id, experiment_id, run_id, id_type, targeting_key_hash)`:
+When a Variant is null or `COUNT(DISTINCT variant) > 1` for
+`(app_id, environment_id, experiment_id, run_id, id_type, entity_family_hash)`:
 
 1. The Entity's `assigned_variant` is set to `__multiple__` (sentinel string, not a real Variant name)
 2. Excluded from all real arms
@@ -60,7 +61,8 @@ Metric aggregation  = over analysis population
 activated analysis  = filter on activated Entities within analysis population
 ```
 
-The `__multiple__` rate is the only thing computed _on_ the quarantined Entities.
+The `__multiple__` count and rate remain health diagnostics. The Copy Pipe retains quarantine
+across raw TTL, so expiry of an older conflicting Exposure cannot return the Entity to an arm.
 
 ## Sources
 

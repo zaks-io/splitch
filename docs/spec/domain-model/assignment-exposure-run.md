@@ -19,30 +19,35 @@ The **only event recorded on this seam.**
 
 ### Canonical Exposure row shape
 
-| Field                | Type                         | Req | Meaning                                                                                                 |
-| -------------------- | ---------------------------- | --- | ------------------------------------------------------------------------------------------------------- |
-| `app_id`             | `string`                     | ✓   | Data-isolation key (injected at ingest, not from SDK)                                                   |
-| `environment_id`     | `string`                     | ✓   | Environment scope; Exposures are per-Environment (injected at ingest, not from SDK) (ADR-0027)          |
-| `experiment_id`      | `string`                     | ✓   | Experiment identifier                                                                                   |
-| `run_id`             | `string`                     | ✓   | Experiment Run that owns this Exposure; stamped at SDK fire-time from the live Run config the SDK holds |
-| `targeting_key_hash` | `string`                     | ✓   | HMAC-derived Entity identifier                                                                          |
-| `id_type`            | `string`                     | ✓   | Entity type (e.g. `"user"`, `"workspace"`); always explicit, never derived                              |
-| `variant`            | `string`                     | ✓   | Variant **name** assigned; never the value                                                              |
-| `exposure_at`        | `timestamp`                  | ✓   | Canonical encounter time; remote receive time or verified trusted server commit (ADR-0049)              |
-| `server_received_at` | `timestamp`                  | ✓   | When Splitch durably accepted the row; delivery diagnostics and retention                               |
-| `client_timestamp`   | `timestamp \| null`          | ✗   | Client-fired time; diagnostics only                                                                     |
-| `type`               | `"exposure" \| "activation"` | ✓   | Row type discriminator (unified event log; see [activation-event.md](./activation-event.md))            |
-| `counterfactual`     | `boolean`                    | ✓   | `true` only on Control-arm would-have-activated events (additive deferred extension; false by default)  |
+| Field                | Type                         | Req | Meaning                                                                                                   |
+| -------------------- | ---------------------------- | --- | --------------------------------------------------------------------------------------------------------- |
+| `app_id`             | `string`                     | ✓   | Data-isolation key (injected at ingest, not from SDK)                                                     |
+| `environment_id`     | `string`                     | ✓   | Environment scope; Exposures are per-Environment (injected at ingest, not from SDK) (ADR-0027)            |
+| `experiment_id`      | `string`                     | ✓   | Experiment identifier                                                                                     |
+| `run_id`             | `string`                     | ✓   | Experiment Run resolved by Splitch or bound by a server-minted Exposure Ticket / verified trusted adapter |
+| `entity_family_hash` | `string`                     | ✓   | Server-derived identity-family pseudonym for retained aliases                                             |
+| `targeting_key_hash` | `string`                     | ✓   | HMAC-derived Entity identifier                                                                            |
+| `id_type`            | `string`                     | ✓   | Entity type (e.g. `"user"`, `"workspace"`); always explicit, never derived                                |
+| `variant`            | `string`                     | ✓   | Variant **name** assigned; never the value                                                                |
+| `exposure_at`        | `timestamp`                  | ✓   | Canonical encounter time; remote receive time or verified trusted server commit (ADR-0049)                |
+| `server_received_at` | `timestamp`                  | ✓   | When Splitch durably accepted the row; delivery diagnostics and retention                                 |
+| `client_timestamp`   | `timestamp \| null`          | ✗   | Client-fired time; diagnostics only                                                                       |
+| `type`               | `"exposure" \| "activation"` | ✓   | Row type discriminator (unified event log; see [activation-event.md](./activation-event.md))              |
+| `counterfactual`     | `boolean`                    | ✓   | `true` only on Control-arm would-have-activated events (additive deferred extension; false by default)    |
 
-**`run_id` stamping:** stamped at SDK fire-time using the live Run config the SDK currently holds. The SDK is responsible for carrying `run_id` from its most recent flag resolution. The pipeline validates `run_id` is a known Run for the Experiment at ingest; malformed rows are quarantined.
+**`run_id` stamping:** ordinary remote Evaluation uses the live Run configuration read by the
+Evaluation Worker. Prefetched client reads redeem a server-minted Exposure Ticket bound to its
+resolved Run. Trusted adapters submit a verified server commit. Callers never choose an arbitrary
+Run for an Exposure; invalid input is rejected before durable acceptance.
 
 **`id_type` is always required.** It is explicit on every Exposure row (not derived from Experiment config) to guard against Targeting Key value collisions across Entity types.
 
 ### First-touch identity
 
-`(app_id, environment_id, experiment_id, run_id, id_type, targeting_key_hash)`
+`(app_id, environment_id, experiment_id, run_id, id_type, entity_family_hash)`
 
-This is the first-touch identity, resolved by `MIN(exposure_at)` at query time. (`environment_id` co-scopes alongside `app_id` since Exposures are per-Environment, ADR-0027.) Many raw Exposures for the same Entity/Run share it; the earliest encounter wins. Variant is **excluded** so that different-Variant Exposures for the same Entity/Run are not suppressed; they arrive at the `__multiple__` quarantine query downstream (see [exposure-dedup.md](./exposure-dedup.md)). This is distinct from the wire-level `dedup_key` (a per-physical-row sha256 idempotency key for at-least-once ingest); see [../pipeline/exposure-event-contract.md](../pipeline/exposure-event-contract.md).
+The physical pipeline groups retained identity aliases by `entity_family_hash` and carries the
+earliest `targeting_key_hash` into the stats handoff. This is the first-touch identity, resolved by `MIN(exposure_at)` at query time. (`environment_id` co-scopes alongside `app_id` since Exposures are per-Environment, ADR-0027.) Many raw Exposures for the same Entity/Run share it; the earliest encounter wins. Variant is **excluded** so that different-Variant Exposures for the same Entity/Run are not suppressed; they arrive at the `__multiple__` quarantine query downstream (see [exposure-dedup.md](./exposure-dedup.md)). This is distinct from the wire-level `dedup_key` (a per-physical-row sha256 idempotency key for at-least-once ingest); see [../pipeline/exposure-event-contract.md](../pipeline/exposure-event-contract.md).
 
 ### Exposure fires on read
 

@@ -21,8 +21,8 @@
 
 ## Where these screens are designed (see [screen-inventory.md](./screen-inventory.md))
 
-- **The environment switcher** — placement, contents, dev-vs-prod affordance: in the App-shell top
-  bar alongside the org and app switchers, absent from the Org shell
+- **The environment switcher** — placement, contents, dev-vs-prod affordance: sidebar Environment
+  pills below the App switcher, absent on Organization screens
   ([screen-inventory.md](./screen-inventory.md), [navigation-and-ia.md](./navigation-and-ia.md)).
 - **The promotion screen + diff view** — the dev-vs-prod Flag Configuration diff that drives a
   Promotion (the safest entry point per ADR-0028), including availability-only vs whole-config

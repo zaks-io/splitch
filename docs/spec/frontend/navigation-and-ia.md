@@ -15,12 +15,12 @@ in the URL, never in hidden session state:
   and lands you on that Organization's Home. Apps are **never merged across orgs** in any list.
 - **`appSlug`** — the active App, the spine (see [appid-is-the-spine.md](./appid-is-the-spine.md)).
 - **`env`** — the active Environment (dev, prod, …), changed via the **environment switcher**
-  (ADR-0027). It is absent only on the App home, which shows every Environment. Per-Environment
+  (ADR-0027). Within an App it is absent on the App home, which shows every Environment. Per-Environment
   Flag Configuration, experiments, and data hang off this segment.
 
 `orgSlug`/`appSlug`/`env` are **human/agent-readable handles only** — resolved to `orgId`/`appId`/
-`environment_id` once at the loader; everything below speaks IDs, and no cache, DO, or data lookup is
-ever keyed on a slug. (There is no `/app/` path prefix — the two bare slugs are unambiguous, GitHub's
+`environment_id` once at the loader; domain caches and DOs use IDs. Session-resolution Query keys
+use URL handles before those IDs are known and always revalidate access. (There is no `/app/` path prefix — the two bare slugs are unambiguous, GitHub's
 `/{org}/{repo}` shape.)
 
 Both roots follow the same discipline: scope lives in the URL so a pasted link is unambiguous
@@ -35,15 +35,18 @@ not exist _under this org_), rather than switching the user's org out from under
 
 ## The sidebar
 
-- **App switcher, top** — lists Apps within the **current Organization only**. Switching Apps lands
-  on the target App home without inventing an Environment.
+- **App switcher, top on App screens** — lists Apps within the **current Organization only**.
+  From an Environment screen it preserves the section, using the matching Environment key or the
+  target App's first Environment. Detail links step back to their section. From the App home it
+  opens the target App home. Organization screens list direct App-home links instead of a switcher.
 - **Environment pills, below the App** — list the active App's Environments and preserve the current
-  path, query, and hash when `env` changes. They also render on the App home with no active pill;
+  section, query, and hash when `env` changes; pinned Run routes step back to the Experiment's latest
+  view because Run IDs belong to one Environment. They also render on the App home with no active pill;
   from there each opens that Environment's Flags list.
 - **Organization switcher, bottom** — present only for users in more than one Organization. It
   changes `orgSlug` and lands on that Organization's Home. A single-Organization user sees the
-  Organization name without a switcher, and `/` redirects directly to that Organization's Home
-  when no resync is pending and the session Organization list is complete.
+  Organization name without a switcher. `/` redirects to the last-visited authorized Organization,
+  else the first, when no resync is pending and the session Organization list is complete.
 
 ## Sidebar: scoped to the active App + Environment
 
@@ -60,12 +63,13 @@ the App's first-class children plus settings, in this order:
 - **Settings** — App config + per-Environment settings: the active Environment's SDK keys
   (Client/API), its **Environment Policy** (confirm gates), and Environment management
 
-The bottom Organization block remains visible from every authenticated screen. It contains the
+The Organization block remains visible, at the sidebar foot on App screens and above the App list
+on Organization screens. It contains the
 Organization name or multi-Organization switcher, then Apps, Members, Integrations, Billing & Usage,
 and the user row with Sign out. Organization screens show the same shell without App sections or Environment
 pills.
 
-Org-level concerns live at the org root, one level up from any App, as four screens (detailed in
+Org-level concerns live at the org root, one level up from any App (detailed in
 [screen-inventory.md](./screen-inventory.md)):
 
 - `/{orgSlug}` — **Home**; each App name in the Apps table links to the App home and each

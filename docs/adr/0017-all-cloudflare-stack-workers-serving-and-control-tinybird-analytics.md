@@ -1,6 +1,6 @@
 # All-Cloudflare stack: Workers edge for serving + control plane, Tinybird for analytics
 
-**Status:** accepted
+**Status:** accepted; amended by [ADR-0019](./0019-control-plane-live-updates-over-hibernating-websocket-delta-nudge-tanstack-query-store.md), [ADR-0020](./0020-tanstack-start-for-both-control-panel-and-marketing-shared-component-layer.md), and [ADR-0024](./0024-physical-exposure-dedup-engine-lambda-snapshot-plus-realtime.md)
 
 splitch adopts the agent-paste scaffolding — pnpm + Turborepo monorepo, TypeScript strict,
 React 19 + TanStack Router/Query + Tailwind 4 on the front, Hono on Cloudflare Workers for the
