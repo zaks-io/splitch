@@ -6,19 +6,19 @@ diagnostics. The spine is one CI object flowing through a fixed deterministic se
 
 ## Files
 
-| File                                                                   | Purpose                                                                                                                                                       |
-| ---------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [inference-engine.md](inference-engine.md)                             | The one CI object: winsorize -> type-variance -> delta-method -> CUPED -> aCS -> relative-lift -> Guardrail -> BH FDR; per-type estimators; failure contracts |
-| [multiple-comparisons-fdr.md](multiple-comparisons-fdr.md)             | Family FDR over the goal-metric × Variant family; BH default and BH-G comparator; family lock; "None" mode; excluded members                                  |
-| [metric-types.md](metric-types.md)                                     | Metric taxonomy (Binomial / Count / Revenue / Ratio / Guardrail), per-Entity aggregation shapes, Conversion Window anchoring                                  |
-| [variance-reduction.md](variance-reduction.md)                         | CUPED gating and pre-period anchor; attribute-covariate fallback; winsorization defaults and application order                                                |
-| [srm-and-health.md](srm-and-health.md)                                 | Full-exposed SRM + activated-population SRM; sequential Dirichlet-multinomial martingale (not yet the gate); `__multiple__` quarantine; health metrics object |
-| [decision-diagnostics.md](decision-diagnostics.md)                     | Tenant-scoped SRM trend and Dimension auto-cut contract; first-exposure-day cohort-effect diagnostic on detailed Results                                      |
-| [sequential-testing-mechanics.md](sequential-testing-mechanics.md)     | aCS construction, boundary/tuning parameters, stopping rules; fixed-horizon opt-in; SequentialCI / FixedHorizonCI adapter interface                           |
-| [dimension-slicing.md](dimension-slicing.md)                           | Primary vs. secondary Dimensions; BH family expansion; composition with Activation gate                                                                       |
-| [data-contracts.md](data-contracts.md)                                 | Input rows from Exposure pipeline (deduped Exposure, per-Entity Metric values, pre-period covariates, activation rows); StatsEngine seam interface            |
-| [result-contracts.md](result-contracts.md)                             | Output shapes the engine writes: per-arm result, VarianceTechniques, SRM, Guardrail, and health objects                                                       |
-| [statistical-rigor-verification.md](statistical-rigor-verification.md) | Required unit, golden, property, simulation, and spec-lint gates for decision-valid stats                                                                     |
+| File                                                                   | Purpose                                                                                                                                                             |
+| ---------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [inference-engine.md](inference-engine.md)                             | The one CI object: winsorize -> type-variance -> delta-method -> CUPED -> aCS -> relative-lift -> Guardrail -> BH FDR; per-type estimators; failure contracts       |
+| [multiple-comparisons-fdr.md](multiple-comparisons-fdr.md)             | Family FDR over the goal-metric × Variant family; version-selected BH or BH-G; family lock; "None" mode; excluded members                                           |
+| [metric-types.md](metric-types.md)                                     | Metric taxonomy (Binomial / Count / Revenue / Ratio / Guardrail), per-Entity aggregation shapes, Conversion Window anchoring                                        |
+| [variance-reduction.md](variance-reduction.md)                         | CUPED gating and pre-period anchor; attribute-covariate fallback; winsorization defaults and application order                                                      |
+| [srm-and-health.md](srm-and-health.md)                                 | Full-exposed SRM + activated-population SRM; analysis-v2 sequential Dirichlet-multinomial gate and durable alarms; `__multiple__` quarantine; health metrics object |
+| [decision-diagnostics.md](decision-diagnostics.md)                     | Tenant-scoped SRM trend and Dimension auto-cut contract; first-exposure-day cohort-effect diagnostic on detailed Results                                            |
+| [sequential-testing-mechanics.md](sequential-testing-mechanics.md)     | aCS construction, boundary/tuning parameters, stopping rules; fixed-horizon opt-in; SequentialCI / FixedHorizonCI adapter interface                                 |
+| [dimension-slicing.md](dimension-slicing.md)                           | Primary vs. secondary Dimensions; BH family expansion; composition with Activation gate                                                                             |
+| [data-contracts.md](data-contracts.md)                                 | Input rows from Exposure pipeline (deduped Exposure, per-Entity Metric values, pre-period covariates, activation rows); StatsEngine seam interface                  |
+| [result-contracts.md](result-contracts.md)                             | Output shapes the engine writes: per-arm result, VarianceTechniques, SRM, Guardrail, and health objects                                                             |
+| [statistical-rigor-verification.md](statistical-rigor-verification.md) | Required unit, golden, property, simulation, and spec-lint gates for decision-valid stats                                                                           |
 
 ## Spine idea
 
@@ -41,8 +41,8 @@ coverage threshold (with documented fallback). Nothing degrades silently.
 ## Out of scope for this area
 
 - **Power / MDE calculator** (pre-experiment planning): consumes the same per-type variance model
-  as the stats engine but is a pre-experiment tool, not a run-time analysis object. It is a
-  thread handed forward from `metric-analysis-seam.md`. The variance estimators in
+  as the stats engine but is a pre-experiment tool, not a run-time analysis object. Its implemented
+  read contract is [experiment-power-planner.md](experiment-power-planner.md). The variance estimators in
   [inference-engine.md](inference-engine.md) are the shared contract both sides read.
 - **Bayesian results view** (chance-to-win, credible intervals): a future opt-in surface.
   Not the default; deferred unless a separate decision changes the inference contract.
@@ -51,8 +51,9 @@ coverage threshold (with documented fallback). Nothing degrades silently.
 
 - Confidence Level: **95% per-Experiment**, locked at Run Start for decision-valid results.
 - CUPED pre-period: **always anchored at `first_exposure_ts`**, even under Activation gate.
-- CUPED fallback: **automatic within the locked eligible covariate set**, ranked by pre-period or historical variance-reduction; chosen method reported in output.
+- CUPED fallback: **automatic within the locked eligible covariate set**, ranked by declared source, min-arm coverage, then attribute name; chosen method reported in output.
 - Winsorization: **99.9th percentile, default-on** for Count/Revenue/Ratio; pooled cap, never per-arm, never for Binomial (ADR-0016).
 - BH FDR family: **goal-metric × Variant, locked at Run Start**; Primary Dimensions included only if declared before Start; Guardrails and secondary Dimensions excluded.
 - Ratio Metric covariance: **per-Entity `(num_value, denom_value)` pair** delivered by pipeline — non-negotiable, unrecoverable after aggregation.
+- Analysis version: **analysis-v2 for new Runs**; sequential SRM, BH-G, and one-sided Guardrail contrasts. Legacy and analysis-v1 retain chi-square SRM, BH, and two-sided relative Guardrails.
 - Statistical rigor gates: decision-valid stats require the verification ladder in [statistical-rigor-verification.md](statistical-rigor-verification.md).

@@ -116,7 +116,9 @@ FROM <gate_output>               -- the INNER JOIN result above
 GROUP BY run_id, variant
 ```
 
-Compare `activated_count` per Variant against the Run's `declared_allocation` using chi-square (p < 0.001 threshold). A skewed activated population with a clean full-exposed SRM is the canonical fingerprint of a Treatment-affected gate (ADR-0012, Microsoft OCE).
+Compare `activated_count` per Variant against the Run's frozen allocation. Legacy-unversioned
+and analysis-v1 use chi-square (`p < 0.001`); analysis-v2 uses the ingestion-ordered sequential
+martingale (`p <= 0.001`), as defined in [srm-and-health.md](../stats/srm-and-health.md). A skewed activated population with a clean full-exposed SRM is the canonical fingerprint of a Treatment-affected gate (ADR-0012, Microsoft OCE).
 
 ### Guardrail 2: per-arm activation rate
 
@@ -138,8 +140,7 @@ GROUP BY run_id, e.variant
 ```
 
 Activation-rate balance is tested with a chi-square test over the 2 × Variant table
-`activated` / `not_activated` by arm, threshold `p < 0.001`. The output also reports the largest
-absolute activation-rate gap across arms. The p-value is the alert; the rate gap explains WHY the
+`activated` / `not_activated` by arm, threshold `p < 0.001`. The per-arm rates permit computing the largest absolute gap; `HealthMetrics` has no separate gap field. The p-value is the alert; the rate gap explains WHY the
 activated-population SRM fired.
 
 **Either guardrail firing → gated results are untrusted.** Both guardrails always compute when a gate is set; they are not opt-in.

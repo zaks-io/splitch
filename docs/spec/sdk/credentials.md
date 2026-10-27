@@ -12,8 +12,8 @@ the two kinds is determined by the runtime context — trusted server vs untrust
 | -------------------------- | ------------------------------------ | ---------------------------------------------------- |
 | Secrecy                    | Secret — never shipped client-side   | Public by design — safe in browser / mobile          |
 | Runtime                    | Server-side trusted environment      | Client-side (browser, mobile, any untrusted runtime) |
-| Capability                 | Full data-plane access               | Evaluate plus strict write-only Metric/Web ingest    |
-| Can read config/rules/salt | Yes                                  | No                                                   |
+| Capability                 | Scoped data-plane access             | Evaluate plus strict write-only Metric/Web ingest    |
+| Can read config/rules/salt | Yes, via integration snapshot routes | No                                                   |
 | Can write / mint keys      | No (SDK-only; control plane manages) | No                                                   |
 | Cross-App access           | No (scoped to issuing App)           | No                                                   |
 | Edge binding               | Per-key rate limiting                | Origin/referrer allow-list + per-key rate limiting   |
@@ -48,34 +48,31 @@ origin-bound and rate-limited.
 
 Both credential types follow the same D1/KV pattern (ADR-0018):
 
-**D1 record shape** (system of record, not on hot path):
+**D1 records** (`packages/db/src/schema/credentials.ts`):
+
+- `client_keys`: `key_id`, `app_id`, `environment_id`, public `key_material`, nullable
+  `origin_allowlist` and `rate_limit_rps`, `revoked_at`, `created_at`, `created_by`.
+- `api_keys`: `key_id`, `app_id`, `environment_id`, SHA-256 `key_hash`, JSON `scopes`,
+  `revoked_at`, `last_rotated_at`, `created_at`, `created_by`. The raw secret is never stored.
+
+**KV hot-validation cache**:
 
 ```
-CredentialRecord {
-  id:         string        -- UUID, primary key
-  app_id:     string        -- owning App (required, every query scoped here)
-  environment_id: string    -- owning Environment (required; the key reaches only this Environment, ADR-0027)
-  type:       'api_key' | 'client_key'
-  key_hash:   string        -- SHA-256 of the raw credential value; raw value never stored
-  scopes:     string[]      -- API Key scopes; Client Key capabilities are structural
-  revoked:    boolean
-  created_at: timestamp
-  revoked_at: timestamp | null
+KV key:   ck:{sha256(clientKeyMaterial)} or ak:{sha256(apiKey)}
+KV value: { schemaVersion, data: CredentialCacheKV }
+CredentialCacheKV {
+  credentialSchemaVersion: 3,
+  organizationId, appId, environmentId, kind, scopes,
+  originAllowlist?, rateLimitRps, revoked, cachedAt, expiresAt
 }
 ```
 
-**KV hot-validation cache** (per-request hot path):
-
-```
-KV key:   sha256(rawCredentialValue)
-KV value: { app_id, environment_id, type, scopes, revoked }   -- Zod-parsed on every read (ADR-0025)
-TTL:      synced from D1 on write/revoke; no fixed TTL
-```
-
-Every SDK call validates the presented credential against KV before proceeding. The
-`environment_id` in the cache value is how the edge resolves which Environment's config to serve
-from the key (ADR-0027). A revoked key propagates to KV immediately on revoke (write-through), so
-revocation is effective at the next request.
+The resolver also accepts older cache schemas. Active entries have no fixed TTL; revoked cache
+entries use a bounded tombstone TTL. A separate terminal `revoked:{cacheKey}` marker takes
+precedence over the mutable cache entry. Credential writes and revocations use the serialized
+credential-cache writer; hot authentication reads KV only and does not fall back to D1 on a miss.
+The cache supplies the Environment and Organization scope. Expired Temporary Environment
+credentials fail `ENVIRONMENT_EXPIRED`.
 
 ## Lifecycle
 
@@ -107,7 +104,7 @@ Client Key controls. Host/method-scoped WAF rules, progressive challenge-before-
 per-credential header counters remain paid target-state debt under ADR-0034.
 
 Client Keys are **auto-provisioned open to all origins** (`origin_allowlist = null`) so the public SDK
-works with zero setup; the open state is never silent — it is loudly surfaced (`is_origin_open` flag +
+works with zero setup; the open state is never silent — it is loudly surfaced (`isOriginOpen` flag +
 control-panel banner) and one `PATCH …/client-key` from locked (ADR-0034; see
 [../control-plane/credentials-and-keys.md](../control-plane/credentials-and-keys.md)). Lock to your app's
 origins before shipping to production. Abuse surface is bounded by rate limiting regardless.
@@ -116,8 +113,8 @@ origins before shipping to production. Abuse surface is bounded by rate limiting
 
 - **Port:** `validateCredential(rawValue) -> { app_id, environment_id, type, scopes } | Error`
 - **Left side (caller):** the evaluate Worker, which presents the credential from the
-  request header (`Authorization: Bearer <value>`)
-- **Right side (adapter):** KV lookup + Zod parse; falls through to D1 only on KV miss
+  request header (`Authorization: Bearer <value>` or `X-API-Key: <value>`)
+- **Right side (adapter):** KV lookup + schema parse; missing cache entry fails authentication
 - **Failure contract:** missing or invalid credential → `401` with
   `ErrorResponse { code: 'UNAUTHORIZED' }`; revoked credential → `403` with
   `ErrorResponse { code: 'CREDENTIAL_REVOKED' }` (canonical codes, ADR-0025 error shape —

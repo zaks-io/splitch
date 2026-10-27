@@ -16,13 +16,13 @@ Three domain terms, one immutable relationship between them:
   Never an event, never recorded on its own. Recomputable anywhere, anytime (any of the five
   runtimes, offline, in a backfill).
 - **Exposure** — the **only event recorded on this seam**. Carries
-  `(app_id, environment_id, Targeting Key, Experiment, Run, Variant, timestamp)`. Deduped to **unique
+  `(app_id, environment_id, id_type, targeting_key_hash, Experiment, Run, Variant, exposure_at)`. Deduped to **unique
   Entities per Run, first-touch**. This is the denominator for all analysis. `app_id` and
   `environment_id` co-scope every record because Experiments and their Runs are per-Environment
   (ADR-0027); they ride through dedup as carried scope columns, never collapsing rows.
 - **Run** — a **time-boxed, immutable window** of an Experiment. Config (salt, allocation, Variant
-  set, Control identity, Targeting) is frozen for the Run's life. The **unit of analysis**. A material config edit ends
-  one Run and opens the next, keeping each Run's dataset clean. Because the Run is immutable,
+  set, Control identity, Targeting) is frozen for the Run's life. The **unit of analysis**. Supported assignment edits stage the next Run's draft; Start ends
+  the current Run and opens the next, keeping each Run's dataset clean. Because the Run is immutable,
   assignment is pure over it and re-bucketing within a Run cannot happen by construction.
 
 ## Why this is a deep module
@@ -43,7 +43,7 @@ its keep — it _is_ the "this dataset is analyzable as a unit" invariant, made 
 
 2. **The Run is the unit of analysis; Exposure is stamped with `runId`.** Replaces an ad-hoc
    `configVersion`. The immutability invariant is what SRM, significance, and Conversion Windows all
-   silently depend on. Config edits open a new Run rather than mutating in place.
+   silently depend on. Supported assignment edits stage a draft for a new Run rather than mutating the live Run.
 
 3. **Exposure fires on read (safe default).** Reading a Variant through the SDK accessor fires the
    Exposure as a side effect — you cannot branch on the Variant without having been exposed. Kills the
@@ -59,25 +59,29 @@ its keep — it _is_ the "this dataset is analyzable as a unit" invariant, made 
    Across five edge runtimes the SDK set is per-node and _cannot_ be the source of truth, so the
    pipeline dedup is the only correct one. Session is a **Dimension**, never the denominator unit.
 
-5. **SRM is a standard query, not a built mechanism.** Chi-square of observed Exposure counts per
-   Variant against the Run's **declared** allocation. No second event stream. (Deterministic replay of
+5. **SRM reads the shared Exposure denominator** against the Run's **declared** allocation.
+   `analysis-v2` uses an ingestion-ordered sequential martingale and sticky D1 alarms; legacy and
+   `analysis-v1` use chi-square. No second event stream. (Deterministic replay of
    `assign()` over the exposed keys is a future root-causing tool if SRM ever fires — not a design
    commitment.)
 
 ## Run lifecycle
 
 The Run freezes **bucketing**: a Run means _assignment_ was frozen for its entire life. Measurement is
-**not** frozen into the Run; it recomputes losslessly over the Run's raw log (ADR-0003).
+recomputed over the Run's retained facts, while the decision spec is locked at Start (ADR-0003).
 
 ### Assignment vs measurement vs non-material edits
 
-- **Assignment edit → ends the current Run, opens the next** (changes `assign()` or how its result is
+- **Assignment edit → requires a new Run** (changes `assign()` or how its result is
   interpreted, so prior data is no longer comparable): salt, allocation, Variant set, Control identity,
-  Targeting/Segment, Targeting Key.
+  Targeting/Segment, Targeting Key, Activation Metric config. Salt, allocation, Targeting Rules, and
+  Segment references support staging a draft; Start ends the current Run and opens the next. Flag,
+  Targeting Key, and Activation Metric changes are refused while a Run is running. The Variant set
+  cannot be patched.
 - **Measurement edit → recompute over the existing Run, no reset** (changes what the numbers mean, not who is
-  in which arm): Metric definitions, Conversion Window, Guardrail/Activation config. The raw Exposure/event
-  log is the system of record (ADR-0010), so the dedup/metric query simply re-runs with the new definition —
-  Eppo/Statsig/GrowthBook all do this.
+  in which arm): Secondary Metric definitions, Conversion Window, exploratory Guardrail config. Analysis joins the
+  deduped Exposure and Metric Event serving layers. Confidence level, horizon/tuning, goal Metric
+  family, Guardrail thresholds, and Primary Dimensions stay locked for decision-valid results.
 - **Non-material → mutate in place, same Run**: description, display name, owner, tags, notes, dashboard
   layout.
 
@@ -89,9 +93,8 @@ must warn loudly, because the prior Run's exposures do not count toward the new 
 measurement edit does not reset; it recomputes.) This is the statistically honest default (GrowthBook "be
 very careful with phases") and is the only choice coherent with "assignment edit → new Run": pooling across a
 bucketing change would hand back the integrity the Run exists to protect. Pooling, if ever needed, is a
-future explicit feature with loud guardrails — not the default. A future opt-in **locked-analysis /
-pre-registration** mode could additionally freeze measurement per experiment for teams that want that
-discipline; that is additive, not the default (ADR-0003).
+future explicit feature with loud guardrails. Start already freezes the decision spec and analysis
+version; recomputed post-start additions are exploratory for that Run (ADR-0003/0059).
 
 ### Boundary behavior: sticky experience, counted in the old Run
 
@@ -125,7 +128,7 @@ exposure already carries its `runId`.
   Run N+1 (correct, and free). Only an **Exposure** marks entry into a Run.
 - **Sticky experience requires persisting the holdover's original Variant.** `assign()` cannot recompute
   it (Run N's config may be gone). So the system keeps exactly one piece of durable per-Entity state:
-  `(Experiment, Targeting Key) -> (runId, Variant)`, written at first Exposure. This is precisely what
+  `(app_id, Experiment, idType, targeting_key_hash) -> (runId, Variant)`, written at first Exposure. This is precisely what
   Statsig "Persistent Assignment" / GrowthBook "Sticky Bucketing" store. Bounded (only exposed Entities).
 - **This is the ONLY per-Entity durable state on the seam.** Everything else is pure-compute or
   append-only events. It needs a low-latency read on the evaluate path — on a five-runtime edge that is

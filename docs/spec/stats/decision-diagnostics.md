@@ -2,6 +2,8 @@
 
 Canonical read contract for diagnosing a blocked Experiment conclusion. These reads never End a Run,
 select a Variant, create an Approval Request, or mutate a Flag Configuration.
+The trend/auto-cut endpoint below remains a target contract; it is not registered in the current
+Control Plane. The first-exposure-day cohort diagnostic later in this document is implemented.
 
 ## Endpoint and request
 
@@ -90,7 +92,7 @@ Stats engine's mismatch boolean is authoritative; `p < 0.001` is only the shippe
 when that boolean is absent, so this read never reimplements the threshold. Activation members are
 null only when the Run has no Activation Metric.
 
-`SrmSignal` is the shipped signal shape; it has no `observedCounts` or `expectedCounts` members. The
+`SrmSignal` reuses the shipped decision-gate signal shape; it has no `observedCounts` or `expectedCounts` members. The
 activated signal carries `deviations: []` because `SrmResultSchema` does not surface the Stats
 engine's activated counts today. Per-Variant activated observed and expected counts are a named
 result-contract gap; this read does not invent them.

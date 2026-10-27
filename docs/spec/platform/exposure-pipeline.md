@@ -20,12 +20,13 @@ implemented for the current Exposure, Evaluation, and Metric Event paths.
   `(app_id, environment_id, raw_events)`. Existing idempotent retries that require no new delivery
   consume zero capacity. Gate failure returns `429 RATE_LIMITED` before durable acceptance; valid
   rows are never sampled or silently dropped.
-- **First-touch identity** = the tuple `(app_id, environment_id, experiment_id, run_id, id_type, targeting_key_hash)`,
+- **First-touch identity** = the tuple `(app_id, environment_id, experiment_id, run_id, id_type, entity_family_hash)`,
   resolved by `MIN(exposure_at)` at query time. Many raw Exposure rows for the same Entity/Run share
   this identity; the query picks the earliest `exposure_at` as the first-touch winner. The tuple is
-  schema-stable — new fields do not change it. This is distinct from the wire-level `dedup_key`
+  represented physically by `entity_family_hash` to collapse compatible retained identity spellings;
+  `targeting_key_hash` remains the representative HMAC-derived hash. This is distinct from the wire-level `dedup_key`
   (a per-physical-row idempotency key); see the pipeline contract for the `dedup_key` construction.
-- **Three timestamps per Exposure row:**
+- **Exposure timestamps:**
   - `exposure_at` (canonical): when the Entity durably encountered the Variant. Remote Evaluation
     uses Splitch receive time; a verified trusted adapter may use a bounded server commit timestamp
     (ADR-0049). Used for `MIN(ts)` first-touch ordering and the Conversion Window anchor.
@@ -44,10 +45,10 @@ Tinybird form in [contracts/storage-schemas-tinybird.md](../../spec/contracts/st
 **Do not redefine the row here.** What matters at this layer:
 
 - **First-touch identity components** (resolved by `MIN(exposure_at)` at query time):
-  `(app_id, environment_id, experiment_id, run_id, id_type, targeting_key_hash)`. `environment_id`
+  `(app_id, environment_id, experiment_id, run_id, id_type, entity_family_hash)`. `environment_id`
   is co-scoped with `app_id` — Exposures are per-Environment (ADR-0027). `environment_id`,
   `experiment_id`, and `id_type` are functionally determined by `run_id`; the determinant is
-  `(targeting_key_hash, run_id)`.
+  `(entity_family_hash, run_id)`.
 - **`run_id`** is stamped at SDK fire-time from the `liveRunId` present in the resolved flag config.
   It is never inferred at pipeline ingest-time. This ensures the Run boundary is anchored to the
   config the SDK actually evaluated against, not a server-side lookup at log time.
@@ -61,8 +62,8 @@ The lambda snapshot and the real-time tail both derive from that one definition 
 copy in this file would be exactly the drift the "never hand-copied" rule forbids.
 
 The dedup groups over the first-touch identity tuple
-`(app_id, environment_id, experiment_id, run_id, id_type, targeting_key_hash)`, with
-`(targeting_key_hash, run_id)` as the determinant (the rest are run-implied carry-through columns).
+`(app_id, environment_id, experiment_id, run_id, id_type, entity_family_hash)`, with
+`(entity_family_hash, run_id)` as the determinant (the rest are run-implied carry-through columns).
 Reads `raw_events` rows where `type = 'exposure'`.
 
 ## Variant conflict: `__multiple__` quarantine (ADR-0011)

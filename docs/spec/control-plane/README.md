@@ -11,7 +11,7 @@ capability Workers. Shared contracts come from `@splitch/contracts`; skins stay 
 | [organization-and-membership.md](organization-and-membership.md)             | Organization tier, App ownership, membership roles, D1 table shapes (`organizations`, `apps`, `org_memberships`, `app_memberships`)                                                                                               |
 | [credentials-and-keys.md](credentials-and-keys.md)                           | SDK credential types (Client Key vs API Key), D1 record shapes, KV hot-validation cache, edge abuse controls, capability matrix                                                                                                   |
 | [auth-doors.md](auth-doors.md)                                               | How a principal authenticates: the three identity doors (ID-JAG, anonymous/pre-claim, device flow), shared-preview `client_credentials` smoke grant, claim ceremony, `interaction_required` error shape, provisional demo reaping |
-| [personal-access-tokens.md](personal-access-tokens.md)                       | Personal Access Tokens for headless MCP access: grants, live-membership clamp, CLI-only management routes, file-only secret output                                                                                                |
+| [personal-access-tokens.md](personal-access-tokens.md)                       | Personal Access Tokens for headless MCP and CLI access: grants, live-membership clamp, CLI-only management routes, file-only secret output                                                                                        |
 | [personal-access-token-permissions.md](personal-access-token-permissions.md) | PAT grant permissions, the route permission map, Control Plane bearer acceptance, CLI token mode (`SPLITCH_TOKEN`), and rollout                                                                                                   |
 | [temporary-environments.md](temporary-environments.md)                       | Temporary Environments (expiring scratch copies), Sync, credential expiry at the edge, the `temporary_environments` PAT permission, teardown, and rollout                                                                         |
 | [access-control-matrix.md](access-control-matrix.md)                         | Scopes + `app:{app_id}:{role}` format, control-plane token claims/validation, trusted-IdP D1 table, Worker responsibility split, revocation                                                                                       |
@@ -25,11 +25,11 @@ capability Workers. Shared contracts come from `@splitch/contracts`; skins stay 
 | [endpoints-credentials.md](endpoints-credentials.md)                         | Client Key + API Key management (per-Env) — request/response shapes                                                                                                                                                               |
 | [endpoints-test-eval-analytics.md](endpoints-test-eval-analytics.md)         | Dry-run test-evaluation, analytics proxy reads, OpenAPI schema discovery — request/response shapes                                                                                                                                |
 | [endpoints-web-analytics.md](endpoints-web-analytics.md)                     | Purpose-built Web Analytics overview, paginated Web Session summary and event-journey reads, and Web Vitals reads through the Analysis Worker                                                                                     |
-| [mcp-and-cli-surfaces.md](mcp-and-cli-surfaces.md)                           | CLI credential storage format (keychain + 0600 JSON), CLI command structure, MCP OAuth PRM + auth.md discovery chain, MCP tool naming, parity guarantee                                                                           |
+| [mcp-and-cli-surfaces.md](mcp-and-cli-surfaces.md)                           | CLI credential storage format (0600 JSON; keychain intended), CLI command structure, MCP OAuth PRM + auth.md discovery chain, MCP tool naming, parity guarantee                                                                   |
 | [mcp-discovery.md](mcp-discovery.md)                                         | MCP prompts (guided workflows) + resources (glossary, auth, active context, capabilities) over the derived tools; the error → recovery prompt loop; onboarding discovery handshake                                                |
 | [endpoints-privacy-data.md](endpoints-privacy-data.md)                       | Privacy request, export, deletion, and Entity data subject request endpoints                                                                                                                                                      |
 | [d1-and-tinybird-data-access.md](d1-and-tinybird-data-access.md)             | D1 as OLTP system of record, app-enforced tenancy seam contract, KV hot-validation scope, Tinybird audit log shape and isolation                                                                                                  |
-| [zod-contract-architecture.md](zod-contract-architecture.md)                 | Package split (`@splitch/contracts` vs `@splitch/control-plane-sdk`), derivation chain (Zod → types → OpenAPI → MCP schemas → hc client), error shape, PATCH-Run omit pattern                                                     |
+| [zod-contract-architecture.md](zod-contract-architecture.md)                 | Package split (`@splitch/contracts` vs `@splitch/control-plane-sdk`), derivation chain (Zod → types → OpenAPI → MCP schemas → hc client), error shape, explicit non-material-only Run contract                                    |
 
 ## Key Invariants
 
@@ -46,11 +46,11 @@ capability Workers. Shared contracts come from `@splitch/contracts`; skins stay 
   derived from latest D1 row.
 - WorkOS is the session issuer for humans and agents; one principal, three identity doors. The
   shared-preview `client_credentials` grant is smoke-only and resolves to a seeded WorkOS user.
-- Auth API vs Control Plane API split: Auth API handles identity endpoints only;
+- Auth API vs Control Plane API split: Auth API handles identity endpoints and trusted-IdP CRUD;
   management CRUD, including post-create Org management, lives on the Control Plane API Worker.
 - Client Key immediately usable at creation; `origin_allowlist = null` means no origin restriction
-- Client Key has one Variant-resolution capability, Exposure-bearing `evaluate`, plus strict
-  write-only Metric Event `track` and Web Event `web.track`; it cannot read Event Definitions,
+- Client Keys support Exposure-bearing `evaluate`, non-exposing `evaluate-all`/`verify`, and strict
+  write-only Metric Event `track`. Web Event `web.track` remains intended work; it cannot read Event Definitions,
   Metric Events, Web Events, Metrics, Web Analytics, or Flag Configuration.
 - Tinybird never queried directly; Analysis Worker injects `app_id` and `environment_id` from
   control-plane auth/path context.

@@ -6,7 +6,7 @@ caller must accept.
 
 ## The five runtimes
 
-An App's five runtimes (CONTEXT.md):
+The hosted evaluation and analytics stack:
 
 | Runtime                | Role                            | SDK usage                                |
 | ---------------------- | ------------------------------- | ---------------------------------------- |
@@ -16,8 +16,10 @@ An App's five runtimes (CONTEXT.md):
 | Workers KV (read path) | Config / holdover reads         | Read-only; no evaluate calls             |
 | Tinybird               | Exposure + metric store         | Receives raw Exposure rows; no SDK calls |
 
-All five runtimes that call the SDK use the same App, the same Client Key (or API Key for
-server Workers), and the same flag config. Flags are defined once and consumed everywhere.
+SDK callers use the same App and the credential for their Environment. Flags are defined once
+and configured per Environment. Customer-owned Convex and Cloudflare integrations also run the
+shared evaluator locally from signed or authenticated configuration snapshots; they do not make
+a hosted evaluation request for every read.
 
 ## Consistency properties
 
@@ -41,8 +43,9 @@ seconds or more emits an actionable propagation breach.
 Holdover entries written by the DO propagate to KV in ~60s. A returning Entity evaluated
 at a POP that hasn't received the KV write yet will compute `assign()` instead of replaying
 the holdover. Because `assign()` is deterministic (ADR-0001), the computed Variant is
-identical to the holdover Variant — the experience is consistent. The analysis impact is
-at most a duplicate raw Exposure (the pipeline dedup collapses it).
+identical within the same frozen Run. Across a Run boundary a returning Entity can temporarily
+receive a different Variant until KV propagates; this is the accepted boundary window in
+[holdover-and-replay-policy.md](../evaluation/holdover-and-replay-policy.md).
 
 ### Cross-POP dedup: pipeline is authoritative
 
@@ -65,8 +68,8 @@ The hash function underlying `assign(run, targetingKey)` is deterministic — th
 `(run.salt, targetingKey)` always produces the same bucket, regardless of POP, Worker
 instance, or clock. This is a correctness requirement for the five-runtime model:
 
-- A stale KV miss falls through to `assign()` and computes the same Variant the holdover
-  would have replayed.
+- A KV miss within the same Run falls through to `assign()` and computes the same Variant.
+  A KV read failure instead fails loudly; it is not a miss.
 - Any POP evaluating the same flag for the same Entity in the same Run gets the same Variant.
 - Config propagation delays cause temporary inconsistency at Run boundaries, not permanent
   inconsistency within a Run.

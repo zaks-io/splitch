@@ -15,9 +15,10 @@ Authored (in tree):       Zod schemas + @hono/zod-openapi route definitions
                           → @splitch/worker-runtime request guard (runtime enforcement)
 ```
 
-No generated artifact is committed to the repo. Only Zod schemas live in the tree. Agents that
-hand-edit a generated artifact or "fix a drift" by editing the generated output are inverting the
-source-of-truth discipline — the Zod source is the fix target.
+Contract schemas are authored only in Zod. Generated framework/runtime sources may be committed
+when repository tooling consumes them, such as TanStack route trees and MCP resource files. Each
+has an owning generator and a generated-file label. Regenerate those files from their source; do
+not hand-edit them to fix drift.
 
 ## Package split
 
@@ -28,7 +29,7 @@ source-of-truth discipline — the Zod source is the fix target.
 - Route metadata for runtime enforcement: auth requirement, scopes, rate-limit class,
   idempotency policy, and allowed error codes
 - `z.infer` types re-exported for consumers
-- Dependencies: `zod`, `@hono/zod-openapi` only
+- Dependencies: `zod`, `@hono/zod-openapi`, and `hono`
 - Consumers: `@splitch/worker-runtime`, capability Workers, `@splitch/control-plane-sdk`, CLI/MCP,
   control panel, marketing site
 
@@ -138,10 +139,11 @@ schema's** — and it differs by binding:
   from the authoritative source) and log the schema mismatch as a warning. Not silent — operators
   can detect drift and schedule a KV backfill. This is what enables rolling upgrades: the writer
   bumps the version, old readers rebuild from D1, no synchronized cutover.
-- **Evaluation edge reader (no D1 binding):** there is nothing to fall back TO, so it **fails loud
-  with `INTERNAL_SERVER_ERROR`** — the evaluate path returns the Default Variant with
-  `reason: ERROR` + the code and fires no Exposure (see [evaluation/provider-port.md](../evaluation/provider-port.md)).
-  A half-valid or wrong-version blob never reaches `assign()`.
+- **Evaluation edge reader (no D1 binding):** Flag Configuration reads recover through the
+  authoritative Config Store DO snapshot; a malformed KV projection is never served. Assignment
+  Store and credential blobs have no equivalent D1 fallback and fail loud on invalid data. An
+  unresolved evaluation failure returns the Default Variant with `reason: ERROR`, an error code,
+  and no Exposure (see [evaluation/provider-port.md](../evaluation/provider-port.md)).
 
 **On KV write:** always write with `CURRENT_KV_SCHEMA_VERSION`.
 

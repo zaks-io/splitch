@@ -112,8 +112,9 @@ Wired (advisory phase):
 
 Still open before any hard gate:
 
-- [ ] Each included package has a documented baseline score, runtime, and exclusions (needs a real
-      test suite first; the suite is empty today).
+- [ ] Each included package has a documented baseline score, runtime, and exclusions. Only
+      `@splitch/stats` has one; `@splitch/sdk` and `@splitch/contracts` have test suites but no
+      recorded baseline.
 - [ ] Any hard gate names the package scope and threshold it enforces (`break` flips from `null` to
       a number for that one package).
 - [ ] Survived mutants in critical domain logic are either tested, simplified away, or marked

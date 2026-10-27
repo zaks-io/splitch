@@ -1,6 +1,6 @@
 # Agent Config
 
-Last updated: 2026-09-04
+Last updated: 2026-10-27
 
 The repo is a pnpm/Turborepo workspace with
 package scripts, Lefthook local gates, Blacksmith-backed GitHub Actions config,
@@ -77,9 +77,11 @@ in this config; refresh them from Linear during each workflow run.
   `knip`, `format:check`, `lint`, `typecheck`, `secrets:range`,
   `tinybird:local`, `d1:migrate:local`, `d1:migrate:populated`).
 - CI gate: `.github/workflows/ci.yml` job `Verify` runs `pnpm secrets:range` and
-  then affected `pnpm verify:ci` (`format:check`, `lint`, `typecheck`, `knip`,
-  `depcruise`, `spec:lint`, `check:request-contract-compat`, `test:scripts`, `test`,
-  `stats:golden`, `stats:property`, `build`, and the SDK bundle-size `size:check`).
+  then affected `pnpm verify:ci` (`pnpm audit --audit-level=high`, then `format:check`,
+  `lint`, `typecheck`, `knip`, `depcruise`, `spec:lint`, `docs:lint`,
+  `check:cli-mcp-parity`, `check:request-contract-compat`, `test:scripts`, `test`,
+  `test:connect-snippet`, `stats:golden`, `stats:property`, `build`, and the SDK bundle-size
+  `size:check`).
   `check:request-contract-compat` fails when HEAD would refuse a request the newest
   installable CLI (the highest `cli-v*` tag whose version is on the public npm
   registry) can send; reviewed exceptions, each scoped to the release tag it
@@ -90,13 +92,15 @@ in this config; refresh them from Linear during each workflow run.
   `pnpm exec wrangler`) but not Tinybird (`tb` is curl-installed and the
   validator imports node builtins only).
 - Separate hosted checks: `Control Panel E2E` runs the local full-stack
-  Playwright harness weekly in the `e2e` workflow and on manual dispatch while
-  SPL-181 is open; a red run is signal-only. The stats
+  Playwright harness weekly in the `e2e` workflow and on manual dispatch; a red run is
+  signal-only. `nightly-verify` reruns the full graph daily without the Turbo cache,
+  `mutation` runs advisory mutation testing weekly (ADR-0031), and `evaluate-probe` probes the
+  shared preview hourly; all three are signal-only. The stats
   full simulation audit runs on manual dispatch in `stats-simulation-audit` (`--mode=audit`);
   regular `@splitch/stats` tests include simulation files at smoke settings. There is no
   standalone `Spec Lint` job (`spec:lint` lives inside `Verify`).
-- Commit gate: Lefthook runs `node scripts/check-file-size.mjs` and
-  `CI=true pnpm verify:commit` (one parallel Turbo graph: `knip`,
+- Commit gate: Lefthook runs `node scripts/check-file-size.mjs`,
+  `node scripts/check-binary-assets.mjs`, and `CI=true pnpm verify:commit` (one parallel Turbo graph: `knip`,
   `format:check`, `lint`, `typecheck`, `secrets:staged`).
 - Build: `pnpm build`
 - Test: `pnpm test`
@@ -155,26 +159,34 @@ Apps are graph entrypoints and deployable or executable surfaces. Packages are l
 workspaces; they can be internal-only or publishable. App-owned code stays local unless there is a
 real package API boundary.
 
-| Path                         | Name                         | Status                                    |
-| ---------------------------- | ---------------------------- | ----------------------------------------- |
-| `apps/cli`                   | `@splitch/cli`               | public ESM CLI package, `bin: splitch`    |
-| `apps/control-panel`         | `@splitch/control-panel`     | Control Panel Worker                      |
-| `apps/marketing`             | `@splitch/marketing`         | Marketing Worker                          |
-| `apps/control-plane-api`     | `@splitch/control-plane-api` | Control Plane API Worker                  |
-| `apps/mcp-server`            | `@splitch/mcp-server`        | MCP Worker                                |
-| `apps/evaluation-api`        | `@splitch/evaluation-api`    | Evaluation Worker                         |
-| `apps/event-ingest-api`      | `@splitch/event-ingest-api`  | Event Ingest Worker                       |
-| `apps/analysis-api`          | `@splitch/analysis-api`      | Analysis Worker                           |
-| `apps/auth-api`              | `@splitch/auth-api`          | Auth API Worker                           |
-| `packages/bounded-body`      | `@splitch/bounded-body`      | shared raw-body byte/content-type gate    |
-| `packages/contracts`         | `@splitch/contracts`         | shared Zod/platform contracts             |
-| `packages/control-plane-sdk` | `@splitch/control-plane-sdk` | shared Control Plane SDK transport        |
-| `packages/cloudflare`        | `@splitch/cloudflare`        | public customer-owned Cloudflare Worker   |
-| `packages/convex`            | `@splitch/convex`            | public Convex Component package           |
-| `packages/repo-lint`         | `@splitch/repo-lint`         | private workspace publishing policy gates |
-| `packages/sdk`               | `@splitch/sdk`               | public JS/TS data-plane SDK               |
-| `packages/ui`                | `@splitch/ui`                | shared UI primitives                      |
-| `infra/tinybird`             | (not a pnpm workspace)       | Tinybird analytics project files          |
+| Path                         | Name                         | Status                                      |
+| ---------------------------- | ---------------------------- | ------------------------------------------- |
+| `apps/cli`                   | `@splitch/cli`               | public ESM CLI package, `bin: splitch`      |
+| `apps/control-panel`         | `@splitch/control-panel`     | Control Panel Worker                        |
+| `apps/marketing`             | `@splitch/marketing`         | Marketing Worker                            |
+| `apps/control-plane-api`     | `@splitch/control-plane-api` | Control Plane API Worker                    |
+| `apps/mcp-server`            | `@splitch/mcp-server`        | MCP Worker                                  |
+| `apps/evaluation-api`        | `@splitch/evaluation-api`    | Evaluation Worker                           |
+| `apps/event-ingest-api`      | `@splitch/event-ingest-api`  | Event Ingest Worker                         |
+| `apps/analysis-api`          | `@splitch/analysis-api`      | Analysis Worker                             |
+| `apps/auth-api`              | `@splitch/auth-api`          | Auth API Worker                             |
+| `packages/bounded-body`      | `@splitch/bounded-body`      | shared raw-body byte/content-type gate      |
+| `packages/contracts`         | `@splitch/contracts`         | shared Zod/platform contracts               |
+| `packages/control-plane-sdk` | `@splitch/control-plane-sdk` | shared Control Plane SDK transport          |
+| `packages/cloudflare`        | `@splitch/cloudflare`        | public customer-owned Cloudflare Worker     |
+| `packages/convex`            | `@splitch/convex`            | public Convex Component package             |
+| `packages/db`                | `@splitch/db`                | Drizzle schema, repositories, D1 migrations |
+| `packages/evaluation-core`   | `@splitch/evaluation-core`   | pure assignment and resolution logic        |
+| `packages/observability`     | `@splitch/observability`     | Sentry wiring and scrubbed logging          |
+| `packages/privacy`           | `@splitch/privacy`           | salts, pseudonymous keys, scrubbing         |
+| `packages/repo-lint`         | `@splitch/repo-lint`         | private workspace publishing policy gates   |
+| `packages/sdk`               | `@splitch/sdk`               | public JS/TS data-plane SDK                 |
+| `packages/stats`             | `@splitch/stats`             | statistics engine                           |
+| `packages/ui`                | `@splitch/ui`                | shared UI primitives                        |
+| `packages/worker-runtime`    | `@splitch/worker-runtime`    | shared Worker routing, auth, rate limits    |
+| `examples/convex`            | `@splitch/example-convex`    | private Convex example App                  |
+| `examples/sentry`            | `@splitch/example-sentry`    | private Sentry integration example          |
+| `infra/tinybird`             | (not a pnpm workspace)       | Tinybird analytics project files            |
 
 - Internal workspace packages remain `version: 0.0.0`; `@splitch/sdk`, `@splitch/cli`,
   `@splitch/convex`, and `@splitch/cloudflare` are independently versioned public packages.
@@ -403,7 +415,7 @@ real package API boundary.
   graph, while Tinybird Local and D1 local validators run conditionally from the same exact
   changed-path plan. Fork runs receive no repository secrets and never deploy shared preview.
   `Control Panel E2E` runs weekly in the `e2e` workflow and on manual dispatch as a signal-only
-  check while SPL-181 is open.
+  check.
 - Shared Preview / Production: workflows are wired. Shared Preview is one
   maintainer-triggered hosted target backed by non-production Cloudflare
   resources plus one Tinybird Branch. Production starts automatically after
@@ -411,9 +423,10 @@ real package API boundary.
   job in that CI run, validates the current-main exact CI
   commit, then deploys Tinybird, D1 migrations, and Workers through the GitHub
   `production` environment.
-- Planned backing services not yet wired: Cloudflare Flagship and Queues. Cloudflare D1/KV resources
-  are provisioned for shared-preview and production, and Durable Object namespaces are created by the
-  Worker deploys that declare their migrations. Tinybird Cloud workspaces `splitch_dev` and
+- Planned backing service not yet wired: Cloudflare Flagship. Cloudflare D1/KV resources
+  are provisioned for shared-preview and production, Cloudflare Queues back event ingest and privacy
+  jobs, and Durable Object namespaces are created by the Worker deploys that declare their
+  migrations. Tinybird Cloud workspaces `splitch_dev` and
   `splitch_prod` exist; both have the committed datasources deployed, and production Tinybird deploy
   is wired through GitHub Actions.
 - Production: the deploy workflow is active once merged. GitHub environment

@@ -53,10 +53,9 @@ VerifyRequest {
   flagKey:           string        -- required; Flag Key unique within the App
   targetingKey:      string        -- required; the Entity identifier (CONTEXT.md: Targeting Key)
   idType:            string        -- required on the wire; SDK defaults it to 'user' (ADR-0036)
-  evaluationContext: {
-    targetingKey: string           -- must equal top-level targetingKey
-    [key: string]: unknown         -- arbitrary attributes for Targeting Rule Conditions
-  }
+  attributes: Record<string, boolean | string | number | unknown[]>
+                                   -- defaults to {}; Targeting Rule attributes
+  appId?: string                   -- optional credential-scope assertion
 }
 ```
 
@@ -70,10 +69,11 @@ The OpenFeature `ResolutionDetails` shape (ADR-0036) — same as `evaluateDetail
 
 ```
 VerifyResponse {
-  variant:       VariantValue   -- the resolved Variant value (already public via evaluate, ADR-0018)
-  variantName:   string         -- the Variant name (immutable arm label; public-safe)
+  value:         VariantValue   -- the resolved Variant value
+  variantName:   string | null  -- the resolved Variant name
+  ruleId?:       string         -- present iff reason = TARGETING_MATCH (API Key only)
   reason:        Reason         -- tiered by credential (see below)
-  errorCode?:    ErrorCode      -- present only when reason = ERROR (OpenFeature enum)
+  errorCode?:    ErrorCode      -- wire error code; failures use the error envelope
   errorMessage?: string         -- present only when reason = ERROR
 }
 ```
@@ -94,7 +94,7 @@ allocation fraction, or the salt — the identical non-revealing constraint `eva
 ## Fail-loud (ADR-0036)
 
 `verify` uses the same fail-loud rule as `evaluate`: a failure to reach config returns
-`reason: ERROR` + an `errorCode`, loudly (loud error log / error hook). A green verify is an
+`reason: ERROR` + an `errorCode`, loudly (loud error log). A green verify is an
 unambiguous `reason` in the success set — there is no silent "looks fine" that was actually a
 fallback. A disabled / no-config / no-match Flag is **not** a failure: it returns the Default
 Variant with `reason: DISABLED` / `DEFAULT`, no error. This is the whole point of `verify` —
@@ -160,10 +160,10 @@ This endpoint backs the `verify` SDK accessor (full contract in
 sdk.verify(flagKey: string, context: EvaluationContext): Promise<ResolutionDetails>
 ```
 
-It surfaces in the CLI for developers testing with the credential their code holds:
+The CLI fetches the Environment's public Client Key automatically, then calls the SDK accessor:
 
 ```
-splitch flags verify [--app <app_id>] [--env <environment_id>] <flag_id> --targeting-key <key> [--context-json <json>]
+splitch flags verify [--app <app_id>] [--env <environment_id>] <flag_key> --targeting-key <key> [--context-json <json>]
 ```
 
 `verify` is **not** an MCP tool — like `evaluate`, it is a data-plane endpoint called by SDK
@@ -187,10 +187,10 @@ All errors use the shared `ErrorResponse` shape (canonical registry:
 | 429         | `RATE_LIMITED`        | Per-key rate limit exceeded                                  |
 | 503         | `SERVICE_UNAVAILABLE` | Provider config unresolvable; retryable (Retry-After header) |
 
-A config-resolution failure is reported two ways by design: a transport/`503` failure surfaces as
-an HTTP error, while an in-band resolve failure returns `200` with `reason: ERROR` + `errorCode`
-(fail-loud, ADR-0036). The SDK accessor normalizes both into `ResolutionDetails` so the caller
-always reads one shape. Like `evaluate`, the SDK does **not** auto-retry; the caller decides.
+A resolution failure returns the canonical HTTP error envelope, including an error returned by
+the shared evaluator. The SDK accessor normalizes HTTP and transport failures into
+`ResolutionDetails` with `reason: ERROR` and the caller's default value. Like `evaluate`,
+the SDK does **not** auto-retry; the caller decides.
 
 Note: `verify` never returns `RUN_FROZEN` or other operational 409s (it is a read, not a mutation)
 and never returns `INSUFFICIENT_SCOPES` under a Client Key (the Client Key structurally holds

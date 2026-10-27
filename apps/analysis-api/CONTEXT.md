@@ -10,6 +10,7 @@ experiment health.
 - SRM and health diagnostics.
 - Sequential, always-valid inference language.
 - Variance, CUPED, FDR, and Dimension slicing terms.
+- Analysis versions and Run commitments used to interpret decision evidence.
 
 ## Metric terms
 
@@ -65,7 +66,7 @@ independently.
 
 **Guardrail Metric**:
 A Metric watched for unintended harm. It warns when its confidence-interval bound breaches a
-threshold.
+threshold. The bound procedure is selected by the Run's frozen Analysis version.
 
 **Activation Metric**:
 A gate that filters analysis to Entities who first performed a defined activation action. An Entity
@@ -106,19 +107,39 @@ A formal statement of what an Experiment changes and the effect it is expected t
 
 ## Statistics terms
 
+**Run commitments**:
+The Analysis version, sequential tuning target (`target_n` and its caller/default source), planned
+duration, and optional Pre-registration frozen at Start and returned as `run_commitments`. The
+default sequential target is 5000; fixed-horizon Runs have none. Planned duration defaults to seven
+days, is at most 365 days, and needs an override reason outside whole weeks. The duration gate uses
+the selected evidence watermark minus Run start, never elapsed wall-clock time.
+
+**Analysis version**:
+The named implementation frozen for a Run. New Runs use `analysis-v2`, which selects sequential
+Dirichlet-multinomial SRM, BH-G family correction, and a one-sided Guardrail contrast.
+`analysis-v1` and `legacy-unversioned` retain chi-square SRM, BH, and the two-sided relative
+Guardrail bound. Legacy Runs have no invented target or duration commitment. Unknown versions are
+refused. See [ADR-0059](../../docs/adr/0059-runs-freeze-an-analysis-version-and-legacy-runs-read-under-a-labeled-one.md).
+
+**Pre-registration**:
+An optional immutable Run-start commitment to a hypothesis, Primary Metric, per-Metric desirability,
+optional MDE and region of practical equivalence (ROPE), a ship rule, and a futility mode. It informs
+the ship recommendation and advisory futility verdict; neither automatically Ends or Concludes a Run.
+
 **Statistical Significance**:
 An indicator that the difference between Control and Treatment is unlikely to be due to chance.
 splitch defaults to sequential, always-valid, frequentist inference. You may peek continuously
 without inflating the false-positive rate. Fixed-horizon is opt-in for a pre-committed sample size.
 
-Across many Metrics and Variants, false positives are controlled by Benjamini-Hochberg FDR over the
-goal-metric by Variant family. Guardrail and secondary Metrics are excluded.
+Across many Metrics and Variants, false positives are controlled over the goal-metric by Variant
+family using the Run's frozen procedure: BH-G for `analysis-v2`, Benjamini-Hochberg for legacy and
+`analysis-v1`. Guardrail and secondary Metrics are excluded.
 
 Avoid: fixed-horizon as the default; saying peeking is unsafe when always-valid inference is in use.
 
 **P-Value**:
 The statistical measure of whether the difference between two Variants is significant. In splitch it
-is an always-valid p-value, not a fixed-horizon one.
+is an always-valid p-value for sequential Runs. Fixed-horizon Runs use their locked sample-size plan.
 
 **Confidence Interval**:
 The range in which the true effect is estimated to lie at a chosen Confidence Level. splitch's CI is
@@ -144,8 +165,10 @@ The smallest effect an Experiment is powered to detect at the chosen significanc
 A diagnostic failure where observed traffic split across Variants deviates significantly from the
 expected split. It signals broken bucketing or Assignment and invalidates Experiment results.
 
-SRM is computed by chi-square over the same deduped denominator analysis uses: first-touch unique
-Entities per arm per Run, excluding `__multiple__`, against the Run's declared allocation.
+SRM uses the same deduped denominator analysis uses: first-touch unique Entities per arm per Run,
+excluding `__multiple__`, against the Run's declared allocation. `analysis-v2` orders the sequential
+test by ingestion and keeps observed alarms sticky in D1 `run_srm_alarms`; legacy and `analysis-v1`
+use chi-square. Activation-rate balance remains chi-square under every version.
 
 ## Relationships
 

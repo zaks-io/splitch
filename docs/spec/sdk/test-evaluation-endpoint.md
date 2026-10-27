@@ -77,8 +77,9 @@ EvaluationReason =
       ruleName: string | null
       priority: number
       selection: 'direct' | 'percentage_rollout'
-      rollout?: { variantWeights: { variantName: string; weight: number }[] }
+      rollout: { variantWeights: { variantName: string; weight: number }[] } | null
     }
+  | { type: 'baseline_rollout'; rollout: { variantWeights: { variantName: string; weight: number }[] } }
   | { type: 'fresh_assignment' }     -- Empty Run targetingRules; assign(Run, Targeting Key) served
   | { type: 'default_disabled' }    -- Flag is disabled; Default Variant returned
   | { type: 'no_match_default' }    -- No Targeting Rule matched; Default Variant returned
@@ -95,7 +96,7 @@ every evaluation produces exactly one. Rule details (`ruleId`, `ruleName`, `prio
 - Fires an Exposure to the raw log
 - Writes to the Assignment Store (DO or KV)
 - Counts the Entity in any Run's analysis denominator
-- Returns the full Targeting Rule conditions or Percentage Rollout configuration
+- Returns Targeting Rule conditions or rollout salts; diagnostic rollout weights are included
 - Returns hash bucket or salt
 
 The endpoint reads the same live edge config the data-plane `evaluate` endpoint uses, so the result

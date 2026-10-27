@@ -111,9 +111,9 @@ coverage meets the threshold but the covariate cannot be fit (singular design or
    (e.g., `signup_date`, `plan_tier`, `device_type`, `cohort`).
 2. Keep only covariates declared at Run Start or selected from pre-period / historical data
    without using post-exposure outcomes. Unlocked rows are ineligible.
-3. Drop a candidate when min-arm coverage is below `cuped_coverage_threshold_pct`, when
-   within-arm covariate variance is zero (singular design), or when every arm has fewer than two
-   covered Entities (low sample: a slope cannot be fit).
+3. Drop a candidate when min-arm coverage is below `cuped_coverage_threshold_pct`, or when no
+   arm has at least two covered Entities with distinct covariate values. Between-arm variation
+   alone cannot identify the within-arm slope.
 4. Rank remaining candidates by:
    1. `attribute_source`: `declared`, then `pre_period_selected`, then `historical_selected`
    2. higher min-arm coverage
@@ -152,10 +152,14 @@ reports an applied CUPED for a zero-slope singular fit.
 CUPED replaces the variance estimate before the aCS step:
 
 ```
-theta     = cov(Y_metric, X_covariate) / var(X_covariate)
+theta     = sum_arm sum_covered_i ((Y_i - Y_bar_arm) * (X_i - X_bar_arm))
+            / sum_arm sum_covered_i (X_i - X_bar_arm)^2
 Y_cuped_i = Y_i - theta * (X_i - X_bar)
 sampling_var_cuped = sample_variance(Y_cuped_i) / n
 ```
+
+The centering constant `X_bar` pools covered Entities across all arms. Uncovered Entities retain
+their unadjusted values (`cuped-fit.ts`).
 
 `sampling_var_cuped` feeds the aCS in place of the raw sampling variance. The CI object downstream
 is unchanged.

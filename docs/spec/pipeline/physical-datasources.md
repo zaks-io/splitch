@@ -4,7 +4,8 @@ Pins the Tinybird datasource shapes: the Exposure/Activation raw log, the separa
 Web Event logs, Activation/Metric/Web aggregate-state targets, and retention. The physical serving
 layer lives in [physical-dedup-pipes.md](./physical-dedup-pipes.md). ADR-0024 defines Exposure
 first-touch snapshot-plus-tail dedup and Activation state; ADR-0045 defines continuous
-aggregate-state retry dedup for Metric and Web Events.
+aggregate-state retry dedup for Metric and Web Events. Metric retry state is implemented;
+Activation and Web state datasources and serving Pipes below remain target contracts.
 
 ## Raw events datasource (`raw_events`)
 
@@ -15,14 +16,15 @@ ENGINE_PARTITION_KEY: toYYYYMM(server_received_at)
 ENGINE_SORTING_KEY: app_id, environment_id, experiment_id, run_id, server_received_at, targeting_key_hash
 
 SCHEMA:
-  type                 String                  -- 'exposure' | 'activation'
+  type                 LowCardinality(String)  -- 'exposure' | 'activation'
   app_id               String                  -- data-isolation key; mandatory, non-defaulted
   environment_id       String                  -- co-scoped with app_id; per-Environment (ADR-0027)
   experiment_id        String
   run_id               String
   id_type              String
   targeting_key_hash   String
-  variant              Nullable(String)        -- present on 'exposure' rows; NULL on 'activation' rows
+  entity_family_hash   String                  -- server-derived retained-identity family
+  variant              Nullable(String)        -- present on Exposure and generated Activation rows
   event_id             String                  -- retry-stable physical row id, generated before any retry
   exposure_at          DateTime64(3)           -- canonical Exposure encounter time; activation rows equal server_received_at
   server_received_at   DateTime64(3)           -- UTC, milliseconds
@@ -49,8 +51,9 @@ The producer omits `ingest_ts`; Tinybird assigns the physical insertion timestam
 snapshot watermark. This prevents Queue delay or manual replay from preserving a stale
 pre-publication watermark. The JSONPath precedes `DEFAULT` for valid datasource-file syntax.
 
-The `dedup_key` column is the wire-level sha256 idempotency key (at-least-once ingest)
-over `(type, app_id, experiment_id, run_id, id_type, targeting_key_hash, source_id, event_id)`.
+The `dedup_key` column is the wire-level sha256 idempotency key (at-least-once ingest). Exposure
+keys cover `(type, app_id, experiment_id, run_id, id_type, targeting_key_hash, source_id, event_id)`;
+generated Activation keys omit `targeting_key_hash` to remain stable across retained identity epochs.
 The `DEDUP_KEY` comment is repository metadata consumed by Splitch contract tests, not a Tinybird
 datasource instruction or uniqueness guarantee.
 The canonical first-touch identity is the tuple resolved by `MIN(exposure_at)` at query time,
@@ -61,7 +64,7 @@ defined in [exposure-event-contract.md](./exposure-event-contract.md).
 ```
 datasource: deduped_exposures
 ENGINE: MergeTree
-ENGINE_SORTING_KEY: app_id, environment_id, experiment_id, run_id, variant, targeting_key_hash
+ENGINE_SORTING_KEY: app_id, environment_id, experiment_id, run_id, variant, entity_family_hash
 
 SCHEMA:
   app_id          String
@@ -70,8 +73,11 @@ SCHEMA:
   run_id          String
   id_type         String
   targeting_key_hash String
+  entity_family_hash String
   variant         String               -- may be '__multiple__'
   first_exposure_ts  DateTime64(3)
+  first_ingest_ts    DateTime64(3)        -- sticky earliest Exposure ingest; epoch DEFAULT for old rows
+  activation_ingest_ts DateTime64(3)      -- sticky activated-SRM eligibility; epoch when unset
   snapshot_ts     DateTime64(3)        -- when this snapshot was written; metadata only
   watermark_ts    DateTime64(3)        -- inclusive ingest boundary captured at snapshot start
 ```
@@ -80,10 +86,12 @@ The inclusive boundary puts rows at `watermark_ts` in both the snapshot and tail
 dedup can collapse the overlap instead of risking a missed boundary row.
 
 This is the replace-mode Copy Pipe target. **Only deduped first-touch rows live here** — one row per
-`(app_id, environment_id, experiment_id, run_id, targeting_key_hash)` (`environment_id`,
-`experiment_id`, and `id_type` are run-implied carry-through columns; the dedup determinant is
-`(targeting_key_hash, run_id)`). Ordered replace-mode rollup Copy Pipes rebuild from this completed
-snapshot. No materialized view attaches to this datasource or `raw_events`. The snapshot, serving
+`(app_id, environment_id, experiment_id, run_id, id_type, entity_family_hash)`.
+The stored `targeting_key_hash` is the earliest-encounter alias (`argMin`). The Copy Pipe merges
+the previous snapshot with retained raw rows to preserve membership, quarantine, and ingestion
+clocks across raw TTL, while identity-generation tombstones suppress destroyed generations. Ordered replace-mode rollup Copy Pipes rebuild from this completed
+snapshot. No Exposure-population rollup materialized view attaches to this datasource or
+`raw_events`. The snapshot, serving
 UNION, and rollup contracts are specified in
 [physical-dedup-pipes.md](./physical-dedup-pipes.md).
 
@@ -142,6 +150,7 @@ SCHEMA:
   event_name                 String
   id_type                    LowCardinality(String)
   targeting_key_hash         String
+  entity_family_hash         String
   fields                     String
   dimensions                 String
   server_received_at         DateTime64(3)
@@ -174,6 +183,7 @@ SCHEMA:
   id_type                     LowCardinality(String)
   server_received_at          DateTime64(3)
   targeting_key_hash          String
+  entity_family_hash          String
   dedup_key                   String
   canonical_state             AggregateFunction(argMin, Tuple(String, String, String, String, String, DateTime64(3), DateTime64(6)), DateTime64(6))
 
@@ -181,11 +191,12 @@ BACKFILL skip
 ```
 
 `event_date` is `toDate(server_received_at)` in the materialized Pipe. The full timestamp is also a
-grouping dimension so the state TTL exactly matches the raw row TTL and precise time bounds can filter
-before `argMinMerge`. The canonical tuple order is
+grouping dimension so the state TTL matches the raw row TTL and precise time bounds can filter
+before `argMinMerge`. `entity_family_hash` is also carried and grouped by the materialization
+and serving Pipe; the sorting key remains the one shown above. The canonical tuple order is
 `(event_id, event_definition_version_id, event_name, fields, dimensions, server_received_at,
 ingest_ts)` with the exact types declared above. The materialized Pipe groups each inserted block by
-the complete sorting key and writes that tuple with `argMinState(..., ingest_ts)`. Exact retries have
+the complete sorting key plus identity family and writes that tuple with `argMinState(..., ingest_ts)`. Exact retries have
 the same event date, definition, Entity identity, and canonical content. Every Analysis Worker query reads
 `serve_deduped_metric_events`, which filters by injected tenant, date, and precise event-time bounds,
 applies `argMinMerge(canonical_state)` per retry key, and flattens only the required columns. The full
@@ -299,16 +310,17 @@ key.
 
 ```
 -- Applied to raw_events datasource
-TTL: server_received_at + INTERVAL {retention_days} DAY  -- default: 90 days
+TTL: toDateTime(server_received_at) + toIntervalDay(90)  -- checked-in raw/Metric TTL
 
 -- Applied independently to metric_events datasource
-TTL: server_received_at + INTERVAL {retention_days} DAY  -- default: 90 days
+TTL: toDateTime(server_received_at) + toIntervalDay(90)  -- checked-in raw/Metric TTL
 
 -- Applied independently to web_events datasource
 TTL: server_received_at + INTERVAL {web_retention_days} DAY  -- default: 30 days
 
 -- Applied independently to deduped_metric_events_state and deduped_web_events_state
-TTL: server_received_at + INTERVAL {matching_family_retention_days} DAY
+TTL: toDateTime(server_received_at) + toIntervalDay(90)  -- implemented Metric state
+TTL: server_received_at + INTERVAL {web_retention_days} DAY  -- Web state target
 
 -- Applied to deduped_activations_state
 TTL: activation_ts + INTERVAL {retention_days} DAY

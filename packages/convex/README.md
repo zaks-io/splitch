@@ -14,7 +14,8 @@ installs `@splitch/sdk`, which owns the shared local evaluator and contract type
 npm install @splitch/convex
 ```
 
-Peers: `convex` >= 1.43, and `react` 18 or 19 if you use `@splitch/convex/react`.
+Requires Node.js 24 or newer for tooling. Peers: `convex` `^1.43.0`, and `react` 18 or 19 if you
+use `@splitch/convex/react`.
 
 ## Mount the component
 
@@ -71,7 +72,7 @@ The API Key you mount needs the `data-plane:evaluate` scope. Metric Events use a
 
 ```bash
 splitch api-keys create --env production \
-  --body-json '{"scopes":["data-plane:evaluate"]}'
+  --body-json '{"scopes":["data-plane:evaluate"]}' --output-file <secret-file>
 ```
 
 ```ts
@@ -133,8 +134,8 @@ export const completeCheckout = mutation({
 ```
 
 `idType` defaults to `user` and `attributes` to `{}`. The fourth argument is the Default Variant this
-call falls back to; a resolution that could not be computed reports `reason: "ERROR"` with its
-`errorCode` rather than returning a plausible value.
+call falls back to. The Details methods report `reason: "ERROR"` with an `errorCode` when a
+resolution cannot be computed; value-only methods return that Default Variant.
 
 When Splitch announces a newer configuration version, peeks and existing holdovers keep serving the
 last synced snapshot with `reason: "STALE"` for up to five seconds while the component pulls the new

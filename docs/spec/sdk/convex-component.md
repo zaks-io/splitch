@@ -135,8 +135,9 @@ schedules its successor only while retained data remains. Activation separately 
 version-scoped recovery and the sync deadline when configuration is stale.
 
 D1 triggers insert the webhook outbox in the same transaction as the authoritative Flag Configuration
-commit and increment the Environment configuration version. A lease scanner dispatches immediately
-due rows every minute and retries with bounded exponential backoff. Delivery failure never rolls back
+commit and increment the Environment configuration version. Environment-scoped Integration Delivery
+Durable Objects dispatch due rows through alarms, with a once-per-minute recovery sweep. `cron` mode
+retains the lease-scanner fallback. Both use bounded exponential backoff. Delivery failure never rolls back
 durable config and is visible on the integration status surface.
 
 ## Evaluation surface

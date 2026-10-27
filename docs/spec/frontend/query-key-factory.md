@@ -7,21 +7,31 @@ A nudge arriving from the WebSocket (`{ entity: 'experiment', id: expId }`) must
 set of cache key prefixes to invalidate. That mapping must be **one module, one source of truth**;
 hand-assembled key arrays in components or loaders break the guarantee.
 
-The factory lives in the Control Panel app (`apps/control-panel/lib/query-keys.ts`), not in
+The factory lives in the Control Panel app (`apps/control-panel/src/lib/shared/query-keys.ts`), not in
 `packages/ui` or `packages/contracts`. It is domain-aware and has one consumer (Control Panel), so it
 stays in the Control Panel app.
 If a second consumer needs it the deletion test is re-evaluated.
 
 ## Spine: (appId, environmentId) at the root
 
-Every key in the factory MUST start with `['app', appId, 'env', environmentId, ...]`. This invariant
+Every Environment-scoped domain key in the factory starts with `['app', appId, 'env', environmentId, ...]`. This invariant
 enables:
 
-- **Prefix invalidation** by (App, Environment): `invalidateQueries({ queryKey: ['app', appId, 'env', environmentId] })` clears all of one App+Environment's cache
-- **App/Environment-switch purge**: `invalidateQueries({ queryKey: ['app', previousAppId, 'env', previousEnvironmentId] })` on `(appId, environmentId)` change
+- **Prefix invalidation** by (App, Environment): `invalidateQueries({ queryKey: ['app', appId, 'env', environmentId] })` marks matching cached queries stale and refetches active queries
+- **App/Environment-switch invalidation**: `invalidateQueries({ queryKey: ['app', previousAppId, 'env', previousEnvironmentId] })` on `(appId, environmentId)` change
 - **Isolation**: queries for App A can never accidentally serve App B, and dev's cache can never serve prod
 
+Other scopes have their own roots: `queryKeys.app.settings(appId)` returns
+`['app', appId, 'settings']`, and `queryKeys.org.sentryInstallations(orgId)` returns
+`['org', orgId, 'sentry-installations']`. Session-resolution keys use URL handles under
+`['session', 'scope', orgSlug, appSlug, env, ...]`, because IDs are not resolved yet;
+`scopedSessionQuery` sets `staleTime: 0` so cached resolution never grants access.
+
 ## Key hierarchy
+
+Environment-scoped keys below exist in the factory, except Web Analytics, whose keys and routes
+remain specified work. The factory also provides Environment settings, Exposure status, Convex and
+Cloudflare installation keys, and an Experiment Run `results` suffix.
 
 ```
 ['app', appId, 'env', envId]                                        // App+Environment root (prefix only)
@@ -50,10 +60,10 @@ enables:
 ['app', appId, 'env', envId, 'web-analytics', 'vitals', window]     // Web Vitals aggregate
 ```
 
-## Factory interface (pseudo-signature)
+## Factory interface (Environment-scoped subset, pseudo-signature)
 
 ```
-keys = {
+queryKeys = {
   app: {
     root:  (appId: string, envId: string) => ['app', appId, 'env', envId]
   },
@@ -97,31 +107,32 @@ keys = {
 
 ## Nudge-to-invalidation mapping
 
-When the WebSocket delivers `NudgePayload { type, entity, id, version }`, the handler:
+When the WebSocket delivers `DeltaNudge { type, entity, id, version, deleted? }`, the handler:
 
-1. Checks the version gate when the entity has a directly addressable detail key. A `run` nudge skips this optimization because the canonical payload does not carry its parent Experiment ID.
-2. Calls `queryClient.invalidateQueries({ queryKey: keys[entity].prefix(appId, environmentId) })`.
+1. Checks the version gate for non-deletion nudges when the entity has a directly addressable cached detail. A `run` nudge skips this optimization because the canonical payload does not carry its parent Experiment ID.
+2. Calls `queryClient.invalidateQueries({ queryKey: nudgeInvalidationPrefix[entity](appId, environmentId) })`.
 
 This single prefix call invalidates the mapped list, detail, and sub-resources in one operation. No
 individual keys are enumerated.
 
 Mapping table (nudge entity → invalidated prefix):
 
-| nudge `entity` | prefix invalidated                             |
-| -------------- | ---------------------------------------------- |
-| `experiment`   | `keys.experiment.prefix(appId, environmentId)` |
-| `flag`         | `keys.flag.prefix(appId, environmentId)`       |
-| `run`          | `keys.experiment.prefix(appId, environmentId)` |
-| `segment`      | `keys.segment.prefix(appId, environmentId)`    |
+| nudge `entity` | prefix invalidated                                  |
+| -------------- | --------------------------------------------------- |
+| `experiment`   | `queryKeys.experiment.prefix(appId, environmentId)` |
+| `flag`         | `queryKeys.flag.prefix(appId, environmentId)`       |
+| `run`          | `queryKeys.experiment.prefix(appId, environmentId)` |
+| `segment`      | `queryKeys.segment.prefix(appId, environmentId)`    |
 
 `run` invalidates the Environment's Experiment prefix because the canonical nudge carries a Run ID,
 not its parent Experiment ID. The subsequent read remains the source of truth; the client does not
 maintain a Run-to-Experiment index.
 
-## Version gating (no double-refetch for the editor)
+## Version gating (skip an echo when the cache is current)
 
-The mutation 200 response carries `{ version: number }`. The editor stores this in the Query cache
-as part of the refetch it triggers after 200 (see [mutation-data-flow.md](./mutation-data-flow.md)).
+Versioned resource responses carry `version`. A successful reread can put that version in the
+Query cache (see [mutation-data-flow.md](./mutation-data-flow.md)). Route-loader-only writes do not
+synthesize a cached version, so their echoed nudge may still refetch.
 When an echoed Flag, Experiment, or Segment nudge arrives, a cached version equal to the nudge's
 version skips the redundant refetch. Other editors have older cached versions, so they refetch. Run
 nudges always refetch the Experiment prefix because the payload cannot address a Run detail key by
@@ -144,8 +155,8 @@ builder returns a key array unconditionally. Malformed usage is caught at compil
 
 - No component or loader constructs a key array by hand. All keys come from this factory.
 - The factory is the only import site for cache keys in the Control Panel app.
-- `appId` is always at index 1 and `environmentId` at index 3 (after the `'env'` tag) of every key;
-  any key without the `(appId, environmentId)` root is a bug.
+- Environment-scoped domain keys place `appId` at index 1 and `environmentId` at index 3.
+  App settings, Organization integrations, and session resolution use the separate roots above.
 - Web Analytics keys include the complete normalized time window, route-specific filters, and
   pagination limit. Cursor pages belong to the corresponding infinite query and never create
   hand-authored component keys.

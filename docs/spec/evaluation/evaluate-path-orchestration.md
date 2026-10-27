@@ -8,73 +8,67 @@ branch is visible, every ADR maps to one pointable line.
 
 ```
 function evaluate(appId, environmentId, flagKey, evalContext):
-  // evalContext: { targetingKey, idType, ...attributes }
-  // environmentId is resolved from the SDK key before the evaluate path runs (ADR-0027).
-  // The request carries flagKey, NOT experimentId — flag -> experiment is resolved below from the
-  // flag config the Provider already reads (no separate lookup).
+  // evalContext: { targetingKey, idType, attributes }
+  // environmentId comes from the authenticated SDK credential.
+  flag = await Provider.getFlag(appId, environmentId, flagKey)
+  if not flag.enabled:
+    return disabled(flag.defaultVariant)              // no Exposure decision
 
-  // 1. Provider resolves live flag config (stateless, cached). flagConfig.experimentId is the
-  //    controlling Experiment (nullable) — denormalized onto the flag config, read in this same call.
-  flagConfig = Provider.getFlag(appId, environmentId, flagKey)
-  experimentId = flagConfig.experimentId               // string | null; null = no Experiment controls this Flag
+  if flag.experimentId is null:
+    return evaluateFlagOnly(flag, evalContext)         // no Exposure decision
 
-  // 2. Flag disabled → Default Variant, no Exposure.
-  if not flagConfig.enabled:
-    return { variant: flagConfig.defaultVariant, reason: { type: 'default_disabled' } }
-
-  // 3. No Experiment controls this Flag → plain flag resolution, no Run, no Exposure.
-  if experimentId is null:
-    return { variant: flagConfig.defaultVariant, reason: { type: 'default_disabled' } }
-
-  // 4. Resolve the Experiment so the request idType can be validated against the pinned Entity type.
-  experiment = Provider.getExperiment(appId, environmentId, experimentId)
+  experiment = await Provider.getExperiment(appId, environmentId, flag.experimentId)
   if evalContext.idType != experiment.targetingKeyType:
-    return { variant: flagConfig.defaultVariant, reason: 'ERROR', errorCode: 'VALIDATION_ERROR' }
+    return error(flag.defaultVariant, 'VALIDATION_ERROR')
 
-  // 5. One edge-local KV read, all Experiments for this validated Entity.
-  held = AssignmentStore.getAll(appId, experiment.targetingKeyType, evalContext.targetingKey)
-  //    held: Map<experimentId, { runId, variant }>
+  held = await AssignmentStore.getAll({ appId, idType: evalContext.idType,
+                                        targetingKey: evalContext.targetingKey })
+  // AssignmentStoreError fails loud; an untyped adapter throw warns and uses an empty map.
+  holdover = held.get(flag.experimentId)
+  if holdover exists:
+    return { kind: 'holdover_replay', variant: holdover.variant,
+             reason: { type: 'holdover_replay', priorRunId: holdover.runId },
+             isHoldover: true, priorRunId: holdover.runId, liveRunId: null, exposure: null }
 
-  // 6. Holdover check: has this Entity been exposed under any prior Run of this Experiment?
-  if held.has(experimentId):                          // ADR-0006: sticky experience
-    holdover = held.get(experimentId)
-    return { variant: holdover.variant, isHoldover: true, priorRunId: holdover.runId }
-    // No new Exposure fired. No Assignment Store write.
+  run = experiment.liveRun
+  if run is null:
+    return evaluateFlagOnly(flag, evalContext)         // no Exposure decision
 
-  // 7. No holdover → new or never-exposed Entity. Must be a live Run.
-  liveRun = experiment.liveRun
-  if liveRun is null:
-    return { variant: flagConfig.defaultVariant, reason: { type: 'default_disabled' } }
-
-  // 8. Targeting: empty Run targetingRules means all Entities are eligible.
-  if liveRun.targetingRules is empty:
-    variant = assign(liveRun, evalContext.targetingKey)
-    return { variant, reason: { type: 'fresh_assignment' }, liveRunId: liveRun.runId }
-
-  // 9. Targeting Rules: iterate rules in priority order, first match wins.
-  for rule in sorted(liveRun.targetingRules, by: priority ascending):
+  if run.targetingRules is empty:
+    return fresh(assign(run, evalContext.targetingKey), run.runId) // Exposure decision
+  for rule in sorted(run.targetingRules, by: priority ascending):
     if matchesConditions(rule.conditions, evalContext):
+      direct = variantNameForId(flag.variants, rule.variantId)
+      variant = direct
       if rule.percentageRollout is not null:
-        variant = fractionalEval(liveRun.salt, evalContext.targetingKey, rule.percentageRollout)
-        selection = 'percentage_rollout'
-      else:
-        variant = rule.variant
-        selection = 'direct'
-      return { variant, reason: { type: 'rule_matched', ruleId: rule.ruleId, ruleName: rule.ruleName, priority: rule.priority, selection }, liveRunId: liveRun.runId }
+        rollout = rule.percentageRollout
+        variant = fractionalEval(rollout.salt, evalContext.targetingKey,
+          [{ variantName: direct, weight: rollout.percentage },
+           { variantName: flag.defaultVariant, weight: 100 - rollout.percentage }])
+      return ruleMatch(variant, rule.id, run.runId)    // Exposure decision
+  return noMatch(flag.defaultVariant, run.runId)      // Exposure decision, even for Default
 
-  // 10. No rule matched → Default Variant.
-  return { variant: flagConfig.defaultVariant, reason: { type: 'no_match_default' }, liveRunId: liveRun.runId }
+function evaluateFlagOnly(flag, evalContext):
+  // Match flag.targetingRules first, using the same rule resolver as above.
+  // If none matches, apply flag.rollout using its own salt and percentage.
+  // Baseline rollout requires exactly one available non-Default Variant.
+  // Without a baseline rollout, serve flag.defaultVariant with no_match_default.
+  // Every result here has liveRunId: null and exposure: null.
 ```
 
 ## Return shape
 
 ```
 EvaluateResult {
-  variant: string                // Variant name (always present)
-  reason?: ReasonDetail          // present for non-holdover paths
-  isHoldover?: true              // set when replay path taken
-  priorRunId?: string            // set on holdover path; which Run owns this Entity's Exposures
-  liveRunId?: string             // set on non-holdover paths where a live Run exists
+  kind: string                   // discriminates the resolution branch
+  variant: string | null         // null is possible on a Provider error
+  reason: ReasonDetail | 'ERROR' | 'STALE'
+  exposure: ExposureDecision | null
+  liveRunId: string | null
+  isHoldover?: true
+  priorRunId?: string
+  errorCode?: ErrorCode          // error branch only
+  errorMessage?: string
 }
 ```
 
@@ -115,7 +109,7 @@ Fractional Evaluation, holdover predicate, replay decision. One code location fo
 policy.
 
 **Exposure pipeline** (downstream orchestration hosted by the Evaluation Worker): fires Exposure
-events on read via the `read-variant()` accessor. After durable Event Ingest acceptance, it calls
+events on read via the `evaluate()` accessor. After durable Event Ingest acceptance, it calls
 `AssignmentStore.put()` at apparent first-touch. The evaluate policy module does not write to the
 Assignment Store.
 
@@ -171,11 +165,11 @@ actual and do not iterate elements.
 ## Fractional Evaluation
 
 ```
-fractionalEval(salt: string, targetingKey: string, rollout: PercentageRollout) -> string
+fractionalEval(salt: string, targetingKey: string, rollout: { variantName: string; weight: number }[]) -> string
 ```
 
 Hash input: `salt + ":" + targetingKey`. Output: deterministic bucket assignment across
-`rollout.weights`. The Targeting Key is always the hash input — no runtime polymorphism
+the rollout entries, whose percentage weights sum to 100. The Targeting Key is always the hash input — no runtime polymorphism
 on the hashing identity.
 
 ## Cross-runtime invariant

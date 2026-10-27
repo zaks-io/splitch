@@ -10,11 +10,12 @@ referenced from each spec file's `## Sources`, but the spec is what you build ag
   then follow the domain-specific context link for the area you are touching. Use these terms exactly;
   never invent synonyms.
 - **First-run narrative:** [`quickstart.md`](./quickstart.md) — zero to a resolving Flag, the same
-  steps for human/agent/panel. It is the canonical text the `splitch://quickstart` MCP resource and
-  the `onboard_new_app` prompt serve.
+  steps for human/agent/panel. The `splitch://quickstart` MCP resource embeds a generated copy;
+  the `onboard_new_app` prompt returns an advisory tool plan for the sequence.
 
-Each area is a directory with a thin `README.md` index and small, single-concern files
-(≤165 lines) so an implementing agent reads only what its ticket touches.
+Each area is a directory with a thin `README.md` index and single-concern files. Aim for
+165 lines or fewer so an implementing agent reads only what its ticket touches; some reference
+specs and the first-run narrative are longer.
 
 ## What splitch is
 
@@ -22,13 +23,13 @@ Unified feature flags + A/B experimentation on Cloudflare's edge, built to be ag
 scale to millions of events. Two planes:
 
 - **Data plane (hot path):** the public SDK calls the Evaluation Worker, which resolves a Variant
-  (`assign()` + holdover replay) and fires an Exposure. KV serves reads; per-key Durable Objects
+  (`assign()` + holdover replay) and fires an Exposure. KV serves reads; per-Entity Durable Objects
   serialize first-touch writes. The Event Ingest Worker owns strict Metric/Web Event intake,
   aggregate admission, durable acceptance, and append-only Tinybird delivery. The accepted target is
   four isolated durable queue-backed NDJSON streams
   ([ADR-0043](../adr/0043-event-ingest-will-use-durable-queue-backed-tinybird-microbatches.md));
-  the current implemented `raw_events` and `raw_evaluations` paths still post one row per request
-  and have no Queue or Admission Gate binding.
+  `raw_events`, `raw_evaluations`, and `metric_events` already have Queue producers/consumers,
+  DLQs, and an Admission Gate binding. Web Event intake and its fourth stream remain unbuilt.
 - **Convex local path:** the first-party Convex Component pulls signed-nudge-triggered server config,
   evaluates locally in queries and mutations, and transactionally records an Exposure outbox only
   when an exposing application mutation commits. Splitch verifies and ingests the delayed Exposure.
@@ -69,7 +70,7 @@ The [vision](../vision.md) says _what_ to build; these are the non-negotiable ru
                                       └── after seal: AssignmentStore.put
                                                        │
                                                        ▼
-                                          per-key DO ──write-through──▶ KV
+                                       per-Entity DO ──write-through──▶ KV
 
   Convex Component ◀──signed nudge / authenticated config pull── Splitch
        │ local peek in query
@@ -84,7 +85,8 @@ The [vision](../vision.md) says _what_ to build; these are the non-negotiable ru
                         ▼
                  D1 (identity, config) · KV (hot validation, edge config) · Tinybird (events, audit)
 
-  Panel + Marketing (TanStack Start, 2 Workers, shared ui) ── hibernating WebSocket nudges ── per-App DO
+  Panel (TanStack Start, shared ui) ── hibernating WebSocket nudges ── per-(App, Environment) DO
+  Marketing (TanStack Start, separate Worker, shared ui) ── prerendered routes
 ```
 
 ## Areas
@@ -133,8 +135,8 @@ Some topics are touched by more than one area, each from its own angle. The cano
   Session, optional Entity identity, and Experiment-exclusion rules.
 - **Event Ingest transport** → [`pipeline/edge-ingest-contract.md`](./pipeline/edge-ingest-contract.md)
   owns the four queues, DLQs, fixed Tinybird drain governor, Admission Gate, durable acceptance, and
-  write-ahead Tinybird recovery boundary. ADR-0043 records why the current direct path must be
-  replaced.
+  write-ahead Tinybird recovery boundary. ADR-0043 records the decision to replace direct delivery
+  with durable microbatches; the pipeline spec distinguishes implemented streams from remaining work.
 - **Metric/Web physical retry collapse** →
   [`pipeline/physical-dedup-pipes.md`](./pipeline/physical-dedup-pipes.md) owns aggregate-state
   materialization, merged serving reads, performance gates, and replacement-safe repair. ADR-0045

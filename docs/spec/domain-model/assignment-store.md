@@ -11,57 +11,57 @@ The Assignment Store persists `(Experiment, idType, Targeting Key) -> (runId, Va
 ## Interface
 
 ```
-AssignmentStore.getAll(
-  app_id:         string,
-  environment_id: string,
-  id_type:        string,
-  targetingKey:   string
-) -> Map<experiment_id, { run_id: string; variant: string }>
+AssignmentStore.getAll({ appId, idType, targetingKey, identityVersion? })
+  -> Map<experimentId, { runId: string; variant: string }>
+
+AssignmentStore.put({ appId, experimentId, idType, targetingKey, runId, variant,
+                      identityVersion?, sourceCreatedAtMs? })
+  -> { status: "stored" | "existing"; assignment: { runId; variant } }
+
+AssignmentStore.putHashed({ appId, experimentId, idType, targetingKeyHash, runId, variant,
+                            identityVersion?, sourceCreatedAtMs? })
+  -> { status: "stored" | "existing"; assignment: { runId; variant } }
 ```
 
-Returns all holdovers for this Entity across all Experiments in the Environment in one edge-local read. `environment_id` co-scopes alongside `app_id` since Experiments and their Runs are per-Environment (ADR-0027). The evaluate path calls this once per request, before iterating flags.
+`getAll` returns all holdovers for this Entity across every Experiment in the App in one edge-local
+read. It takes no `environmentId`: an Experiment belongs to exactly one Environment (ADR-0027), so
+`experimentId` already implies it, and the evaluate path only looks up the controlling Experiment's
+entry. Bulk resolution memoizes the read per Entity.
 
-```
-AssignmentStore.put(
-  experiment_id: string,
-  id_type:       string,
-  targetingKey:  string,
-  run_id:        string,
-  variant:       string
-) -> void
-```
+`put` is the first-touch write with put-if-absent semantics: a second put for the same Entity and
+Experiment returns `existing` with the stored winner. `putHashed` serves Exposure Ticket redemption,
+where the raw Targeting Key never rides in the ticket.
 
-First-touch write. Called by the Exposure pipeline after the first raw Exposure for this Entity/Experiment. The store enforces put-if-absent semantics — a second put for the same key is a no-op.
-
-**Map key:** `experiment_id` string. The evaluate path looks up `held[experiment_id]`. The key is always the `experiment_id` string, never the full object.
+**Map key:** `experimentId` string. The evaluate path looks up `held[experimentId]`.
 
 ## Key structure
 
-Logical key: `(experiment_id, id_type, Targeting Key)`.
-Physical key: `(experiment_id, id_type, targeting_key_hash)`, where the hash is derived by the
-Assignment Store substrate before constructing KV keys or DO names. `environment_id` is not part of
-the key because an Experiment belongs to exactly one Environment (ADR-0027); `experiment_id` already
-implies it. `getAll` filters to the request's Environment via that binding.
+Logical key: `(appId, experimentId, idType, Targeting Key)`.
+Physical KV key: `assignment:{appId}:{idType}:{targetingKeyHash}`, one per-Entity blob holding an
+entry per Experiment. The substrate derives `targetingKeyHash` before constructing KV keys or DO
+names; the raw Targeting Key is never stored.
 
 **Why `id_type` is in the key:** guards against Targeting Key value collision across Entity types. If two Experiments use different `id_type`s, their Targeting Key namespaces may overlap (a userId `"abc"` and a workspaceId `"abc"` are different Entities). `id_type` is always required, never defaulted from Experiment config, even when the Experiment pins one Entity type.
 
 ## Value structure
 
-`{ run_id: string; variant: string }`
+`{ runId: string; variant: string }`
 
 Both fields are load-bearing:
 
 - `variant` — what to replay when serving a holdover (the Variant name, not value)
-- `run_id` — which Run owns this Entity's Exposures; without it, "counted in old Run" is unimplementable
+- `runId` — which Run owns this Entity's Exposures; without it, "counted in old Run" is unimplementable
 
 ## Storage substrate
 
-| Operation                 | Substrate                                     | Why                                                                                                   |
-| ------------------------- | --------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
-| `getAll` (hot-path read)  | Workers KV                                    | Edge-local (~10ms hot reads), read-heavy; no DO hop on evaluate                                       |
-| `put` (first-touch write) | Durable Object per key, then KV write-through | Single-threaded, globally-unique; atomic get-then-put-if-absent; two POPs cannot both win first-touch |
+| Operation                 | Substrate                                                | Why                                                                                                   |
+| ------------------------- | -------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| `getAll` (hot-path read)  | Workers KV                                               | Edge-local (~10ms hot reads), read-heavy; no DO hop on evaluate                                       |
+| `put` (first-touch write) | Durable Object per Entity, then awaited KV write-through | Single-threaded, globally unique; atomic get-then-put-if-absent; two POPs cannot both win first-touch |
 
-DO grain: one DO per `(experiment_id, id_type, targeting_key_hash)`. Fine-grained is correct — coarser DOs create a bottleneck; per-key DOs have zero cross-key contention, idle cheaply, and are the Cloudflare-documented pattern. (ADR-0009)
+DO grain: one writer per `(appId, idType, targetingKeyHash)`, storing one entry per Experiment. Every
+Experiment write for an Entity shares that serialization point so concurrent read-merge-writes
+cannot clobber the shared KV blob.
 
 ## DO atomicity rule
 
@@ -69,11 +69,12 @@ The DO's `get → decide → put-if-absent` must execute within `blockConcurrenc
 
 ## Failure contract
 
-| Failure                                            | Behavior                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
-| -------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| KV write-through fails after DO commit             | DO is truth; KV miss is self-healing. Next `getAll` from any POP misses KV and recomputes `assign()` fresh. Because `assign()` is deterministic (ADR-0001) and the salt/allocation are frozen (same Run), the recomputed Variant is identical to what the DO stored. **No Run dataset is corrupted; no Entity sees the wrong Variant.** The cosmetic glitch (one extra Exposure fired by the fresh assign path) deduplicates in the pipeline; the DO still stamps the holdover on the next put attempt. |
-| DO process crash mid-write (after get, before put) | DO state is Cloudflare-durable; the Evaluation Worker's background Assignment Store retry re-executes put-if-absent idempotently. The accepted Exposure remains owned independently by its durable outbox.                                                                                                                                                                                                                                                                                              |
-| KV read returns stale value near Run boundary      | At most ~60s window. The fresh `assign()` is deterministic and yields the correct Variant (same as what would have been replayed). Accepted cosmetic glitch; self-healing. (ADR-0009)                                                                                                                                                                                                                                                                                                                   |
+| Failure                                       | Behavior                                                                                                                                                                          |
+| --------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Holdover write fails after the Exposure seals | Remote `evaluate` awaits `put` and returns `503`; the durably accepted Exposure is not undone. Exposure Ticket redemption also retries through the durable holdover-write outbox. |
+| KV write-through fails after DO commit        | DO is truth. The awaited write fails the request; a later `put` returns the stored winner and reasserts it in KV.                                                                 |
+| KV read misses near a Run boundary            | A miss is an empty read and may cause fresh resolution until propagation catches up. The fresh `assign()` is deterministic for the same Run.                                      |
+| KV read error or malformed record             | `AssignmentStoreError`; evaluation fails loudly and produces no Exposure decision. Conflicting retained-epoch records fail the same way.                                          |
 
 **No distributed transaction on the hot path.** The experience (DO) and analysis (log) each self-correct independently.
 
@@ -92,7 +93,7 @@ durably accepts the Exposure. (ADR-0008)
 
 ## Retention
 
-Holdover records for ended Runs are retained until the Experiment is archived or deleted. On Experiment archive, all Assignment Store records for that `experiment_id` are pruned (hard-delete, since the Experiment's raw log is the system of record for replay).
+Holdover records for ended Runs are retained until the Experiment is archived or deleted. On Experiment archive, all Assignment Store records for that `experiment_id` are pruned (hard-delete, since the Experiment's raw log is the system of record for replay). Archive pruning is not implemented yet: Experiment archive does not touch the Assignment Store, so records currently persist until App or Entity deletion purges them.
 
 ## Seam cleanliness
 

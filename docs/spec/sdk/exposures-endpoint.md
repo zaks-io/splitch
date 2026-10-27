@@ -14,13 +14,16 @@ An opaque string minted by the Evaluation Worker during `evaluate-all`, only for
 assignments. Structure (server-internal; clients must treat it as opaque):
 
 ```
-ExposureTicket = base64url( payload ) + "." + base64url( HMAC-SHA256(payload, ticketKey) )
+encoded = base64url(payload)
+ExposureTicket = encoded + "." + base64url(HMAC-SHA256(encoded, ticketKey))
 
 payload {
   app_id, environment_id, experiment_id, run_id, flag_key,
   variant:            string      -- Variant NAME (immutable arm label), never the value
   id_type:            string
   targeting_key_hash: string      -- derived server-side; the raw Targeting Key is never in a ticket
+  entity_family_hash: string      -- stable Entity family pseudonym
+  identity_version:   string      -- identity generation used for reset fencing
   issued_at:          timestamp   -- UTC; server clock
 }
 ```
@@ -101,7 +104,7 @@ For each accepted item, in order:
 2. Verify ticket tenant == credential tenant               -> EXPOSURE_TICKET_INVALID
 3. Seal the canonical Exposure payload in the Event Ingest raw_events outbox
    (field-for-field the table in exposure-accessor.md; exposure_at = server_received_at = now;
-    event_id / dedup_key generated per row as for evaluate)
+    event_id = exposureId; dedup_key derived from the canonical row identity)
 4. Await Assignment Store holdover-write ownership on the Evaluation Worker:
    seal durable outbox ownership for the ticket, then attempt putIfAbsent → KV
    write-through inline. Ownership or KV-complete success may ack; transport /

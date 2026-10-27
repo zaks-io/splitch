@@ -42,9 +42,9 @@ the asymptotically normal estimator produced by the variance layer. The adapter 
 3. Inversion from boundary to p-value.
 4. Numerical stability and monotonicity checks.
 
-For bounded Binomial and winsorized additive Metrics, Waudby-Smith and Ramdas style empirical-
-Bernstein / betting CSs are the reference family. For delta-method estimators (Ratio Metrics),
-the adapter uses the same always-valid interface over the asymptotic normal estimator and is
+The implemented `SequentialCI` uses the normal-mixture asymptotic confidence sequence for
+Binomial, additive, and delta-method Ratio estimators. Empirical-Bernstein / betting CSs are
+reference alternatives, not the implemented adapter. The normal-mixture adapter is
 validated by simulation under null and alternative data-generating processes. Relative lift is
 the Fieller inversion of that absolute interval, not a second sequential adapter.
 
@@ -131,7 +131,7 @@ When `horizon = 'fixed'` and `sample_size_locked = S`:
    and then by targeting_key_hash so Entities exposed in the same millisecond
    still have one fixed order.
    Entities that arrive past the lock are excluded, not weighted down.
-3. Compute standard two-sample t-test (or z-test for large N).
+3. Compute the two-sample z-test using the estimated sampling variance.
 4. Report: point_estimate, absolute_ci, p_value.
 5. No aCS; no peeking supported.
 ```
@@ -180,7 +180,7 @@ decision results.
 Two real adapters exist:
 
 1. `SequentialCI` — implements the aCS; output is `{ci_lower, ci_upper, p_value}` valid at any N.
-2. `FixedHorizonCI` — implements the t-test; output is `{ci_lower, ci_upper, p_value}` valid only at declared N.
+2. `FixedHorizonCI` implements the two-sample z-test; output is `{ci_lower, ci_upper, p_value}` valid only at declared N.
 
 Both implement the same interface:
 

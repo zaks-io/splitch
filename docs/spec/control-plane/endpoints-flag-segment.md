@@ -13,6 +13,9 @@ All endpoints live on the **Control Plane API Worker** and require a control-pla
 requests/responses are `Content-Type: application/json`. Error shape, pagination, and the shared
 conventions are described in [control-plane-endpoint-inventory.md](control-plane-endpoint-inventory.md).
 
+Reads require App membership. Flag, Variant, Configuration, Promotion, and Segment mutations
+require App admin or owner; the PAT permission map and Environment Policy add their own gates.
+
 Every route in this document that exposes `{app_id}`, `{environment_id}` /
 `{target_environment_id}`, or `{flag_id}` accepts either that resource's canonical ID or its
 human-readable selector (App slug, Environment key, or Flag key). This applies to reads and writes.
@@ -101,7 +104,10 @@ Returns exactly:
     flagConfiguration?: {
       enabled: boolean,
       rollout: number | null,
-      defaultVariant: string
+      defaultVariant: string,
+      availableVariantNames: string[],
+      targetingRuleRolloutPercentages: number[],
+      experiment: { id: string, name: string } | null
     }
   }>,
   readTruncated: boolean,
@@ -111,8 +117,8 @@ Returns exactly:
 ```
 
 `flagConfiguration` is absent from every item when `environmentId` is omitted and present on every
-item when it is supplied. `rollout` is the baseline percentage only, or `null`; full availability
-and Targeting Rules remain absent from this legacy summary. When `include=config` is present, every
+item when it is supplied. `rollout` is the baseline percentage only, or `null`; full Targeting Rules remain absent from this legacy summary; availability, rule rollout
+percentages, and the controlling Experiment name are included. When `include=config` is present, every
 item instead uses the required hydrated envelope above. `readTruncated` reports whether the bounded
 read omitted additional Flags, and `readLimit` reports that bound. Hydration never changes which Flag
 rows are in the bounded page or any field of the list envelope.
@@ -261,10 +267,10 @@ MCP: `flag_removal_brief`.
 ### `POST /apps/{app_id}/flags/{flag_id}/variants`
 
 Adds a Variant to the **catalog** (App-level). Body:
-`{ appId, flagId, name, value, isDefault? }`; `appId` and `flagId` duplicate the path for derived MCP
+`{ appId, flagId, name, value, isDefault?, description?, review?, idempotency_key }`; `appId` and `flagId` duplicate the path for derived MCP
 tools and must match it. `value` must satisfy the Flag's `schema`. A new catalog Variant is **not**
 available in any Environment until **promoted** (ADR-0028).
-Returns: updated Flag definition.
+Requires an `Idempotency-Key` header. Returns Flag fields with `approvalRequest` alongside.
 
 ### `PATCH /apps/{app_id}/flags/{flag_id}/variants/{variant_name}`
 
@@ -279,7 +285,7 @@ Environments wins. Its version token covers the parent `flags.version` plus the 
 Flag Configuration and Policy vector. Any vector change before Review makes the request terminal
 `stale`. See
 [../contracts/request-response-envelopes-flag-variant.md](../contracts/request-response-envelopes-flag-variant.md#app-level-variant-value-approval-target).
-Returns: `{ flag: FlagObject, approval_request: ApprovalRequest | null }`. The request is null under
+Returns Flag fields with `approvalRequest: ApprovalRequest | null` alongside. The request is null under
 `allow` and applied under `confirm`.
 
 ### `DELETE /apps/{app_id}/flags/{flag_id}/variants/{variant_name}`
@@ -331,8 +337,8 @@ change-log history.
 ### `GET /apps/{app_id}/envs/{environment_id}/flags/{flag_id}/config`
 
 Returns: the Flag's Configuration in this Environment:
-`{ flag_id, environment_id, enabled, available_variant_names: string[], targeting_rules: TargetingRule[],
-rollout: { percentage: number, salt: string } | null }`.
+`{ flagId, environmentId, version, enabled, availableVariantNames: string[], targetingRules: TargetingRule[],
+rollout: { percentage: number, salt: string } | null, experiment: { id, name } | null }`.
 
 `rollout` is the config-level **baseline** and is `null` when no baseline is set. The `salt` is
 returned for transparency and diffing; it is server-owned and cannot be written (see PATCH).
@@ -340,8 +346,8 @@ returned for transparency and diffing; it is server-owned and cannot be written 
 ### `PATCH /apps/{app_id}/envs/{environment_id}/flags/{flag_id}/config`
 
 Body:
-`{ enabled?: boolean, available_variant_names?: string[], rollout?: { percentage: number } | null, review?: { action: "approve_and_apply" }, idempotency_key: string }`.
-`available_variant_names` must be a subset of the Flag's catalog (ADR-0028). Subject to this
+`{ enabled?: boolean, availableVariantNames?: string[], rollout?: { percentage: number } | null, review?: { action: "approve_and_apply" }, idempotency_key: string }`.
+`availableVariantNames` must be a subset of the Flag's catalog (ADR-0028). Subject to this
 Environment's Policy (ADR-0029): the "Variant availability" and "enabled state" change types may
 require Review. Turning a Flag Config off applies without approval regardless of this level.
 
@@ -349,12 +355,12 @@ require Review. Turning a Flag Config off applies without approval regardless of
 assignment, so the server mints it once when the baseline is first established and carries it through
 every later percentage change; letting a caller set it would silently reshuffle who is in the rollout.
 `rollout: null` clears the baseline (and drops that cohort); omitting the field leaves it untouched.
-A baseline change is a rollout **value** change, so it falls under the `targeting_rollout_value`
+A baseline change is a rollout **value** change, so it falls under the `targetingRolloutValue`
 Policy gate. Rejected with `VALIDATION_ERROR` on `rollout` when the resulting state has anything other
 than exactly one non-Default candidate to roll into (see the ambiguity rule below).
-Blocked while a running Experiment owns this Flag in this Environment: `available_variant_names` and
-`rollout` are frozen by the live Run and return `RUN_FROZEN` with `recommended_action:
-"END_RUNNING_RUN_FIRST"`, naming the Run in `current_run_id`. `enabled` is exempt — the kill switch is
+Blocked while a running Experiment owns this Flag in this Environment: `availableVariantNames` and
+`rollout` are frozen by the live Run and return `RUN_FROZEN` with `recommendedAction:
+"END_RUNNING_RUN_FIRST"`, naming the Run in `currentRunId`. `enabled` is exempt — the kill switch is
 never frozen. The freeze is checked **before** the Policy gate, so a change the Run forbids never
 becomes a pending Approval Request.
 Returns the Flag Configuration fields plus `approvalRequest: ApprovalRequest | null` alongside
@@ -365,7 +371,7 @@ omitted when not determinable. Additive for older clients (`parseResponseToleran
 ### `PUT /apps/{app_id}/envs/{environment_id}/flags/{flag_id}/targeting-rules`
 
 Full replace of this Environment's Targeting Rule list (ordered; first match wins). Body:
-`{ targetingRules: TargetingRule[], review?: { action: "approve_and_apply" }, idempotency_key: string }`.
+`{ targetingRules: TargetingRuleInput[], review?: { action: "approve_and_apply" }, idempotency_key: string }`.
 Rules may only reference Variants in this Environment's available set. Subject to the Environment's
 "targeting/rollout/value" Policy. Blocked while a running Experiment owns this Flag in this
 Environment, with the same `RUN_FROZEN` refusal and the same ordering ahead of the Policy gate.
@@ -395,7 +401,7 @@ only if it is being promoted, so absence means "leave the target's value untouch
 
 ```
 {
-  from_environment_id: string,
+  fromEnvironmentId: string,
   select: {
     availability?: string[],           // Variant names whose source availability to copy (per-Variant act)
     targeting?: true,                   // promote the whole ordered targeting-rule list (atomic; never per-rule)
@@ -436,8 +442,8 @@ at `flags_test_eval` with `args.flagKey` (plan 1.5); omitted when not determinab
   endpoint returns `APPROVAL_REVIEW_REQUIRED`.
 - **Run freeze (target Environment):** a Promotion writes into the target, so it is the **target's**
   live Run that decides. While a running Experiment owns this Flag there, `select.availability`,
-  `select.rollout`, and `select.targeting` are refused with `RUN_FROZEN`, `recommended_action:
-"END_RUNNING_RUN_FIRST"`, and the target's Run in `current_run_id`; `frozen_fields` names only the
+  `select.rollout`, and `select.targeting` are refused with `RUN_FROZEN`, `recommendedAction:
+"END_RUNNING_RUN_FIRST"`, and the target's Run in `currentRunId`; `frozenFields` names only the
   field-groups the caller actually ticked. `select.enabled` is exempt, so promoting a kill switch
   alone still succeeds. The refusal covers the whole request — no field-group is partially promoted —
   and it is checked before the Policy gate, so a frozen Promotion never becomes a pending Approval
@@ -478,12 +484,11 @@ back, records a failed Review attempt, and leaves the request `pending`. Exact r
 idempotency key; a later application retry uses a new Review key. Error details are canonical in
 [../contracts/error-responses.md](../contracts/error-responses.md#approval-request-and-review-errors).
 
-A Run that starts after a Request is minted does not change the target's version, so version
-validation cannot see it. `approve_and_apply` therefore re-checks the freeze at the application seam
-and, when a Run now owns a proposed field, returns `RUN_FROZEN` and resolves the Request `stale`.
-Resolving it is deliberate: leaving it `pending` would make it approvable the moment the Run ended,
-which is the silent delayed write the freeze exists to prevent. The remedy is to re-propose against
-the state the operator can currently see, not to retry the Review.
+A Run that starts after a Request is minted may freeze its proposed fields without changing the
+target version. `approve_and_apply` rechecks the freeze at the application seam. For ordinary
+Flag Configuration proposals a freeze refusal resolves the Request `stale`; winner Promotion
+uses the distinct application-failure behavior in
+[conclusion-and-winner-promotion.md](conclusion-and-winner-promotion.md).
 
 Multiple pending Approval Requests for the same target are allowed. Each is an independent immutable
 proposal against its captured target version. Applying one changes the live target version, so every
@@ -491,8 +496,9 @@ other pending request for the prior version subsequently renders `stale`.
 
 ## Approval Request endpoints
 
-### `GET /apps/{app_id}/approval-requests?status=&target_kind=&environmentId=&limit=&cursor=`
+### `GET /apps/{app_id}/approval-requests`
 
+Query: `status?`, `target_kind?`, `environmentId?`, `limit?`, `cursor?`.
 Lists full Approval Request wire projections in the App. `status` optionally filters
 `pending | applied | declined | stale`; `target_kind` optionally filters
 `flag | flag_configuration | flag_variant | experiment_draft`; `environmentId` optionally
@@ -576,14 +582,14 @@ Segment, so authoring surfaces can show the full republish impact.
 
 ### `POST /apps/{app_id}/segments`
 
-Body: `{ name: string, description?: string, conditions: Condition[] }`
-Returns: `{ segment_id, app_id, name, conditions, created_at }`
+Body: `{ name: string, description?: string, conditions: Condition[], idempotency_key?: string }`
+Returns: `{ id, appId, name, description?, conditions, createdAt, updatedAt }`
 
 ### `GET /apps/{app_id}/segments/{segment_id}`
 
 ### `PATCH /apps/{app_id}/segments/{segment_id}`
 
-Body: `{ name?, description?, conditions? }`
+Body: `{ name?, description?, conditions?, review?: { action: "approve_and_apply" }, idempotency_key?: string }`
 
 After the D1 update, every dependent live Flag Configuration in every unexpired Environment is
 synchronously republished. Expired Temporary Environments are skipped, including one that expires

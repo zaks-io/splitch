@@ -23,7 +23,7 @@ breaking change. Released clients parse responses with `parseResponseTolerantly`
 re-validated; a missing required field or a wrong type still fails loud. Removing a response field
 or changing its type is a breaking change. Response contract schemas may remain `.strict()` so the
 documented shape stays exact and server tests can assert it; the tolerance lives only in the client
-parse helper. Storage schemas stay permissive so retained KV/D1 rows remain readable.
+parse helper. Storage validation follows each schema; strict KV payloads reject unknown keys.
 
 **Persisted field bounds.** Write envelopes compose named limits from `persisted-field-limits.ts`
 (names 200, descriptions 2000, identifiers 128, Condition values 1024, Variant strings 4096, salts
@@ -31,11 +31,11 @@ parse helper. Storage schemas stay permissive so retained KV/D1 rows remain read
 Experiment draft Segment refs 256, Idempotency Keys 255 printable ASCII without whitespace).
 Over-limit values fail at parse. Stored values are not truncated.
 
-**Optional fields are present-with-null, never omitted.** A field marked optional (`no`) in any
-envelope or leaf schema appears in the JSON with a `null` value rather than being absent. Consumers
-never need `hasOwnProperty` checks; the field always exists, the value may be `null`. The only
-exception is a field explicitly documented as "omitted when X" in its own schema — for example
-mutation `next` (plan 1.5), omitted when the next step is not determinable.
+**Optional and nullable are distinct.** A Zod `.optional()` field may be omitted. A required
+`.nullable()` field must appear with either its value or `null`. Request omission leaves a patch
+field unchanged; explicit null clears only fields whose schemas permit it. Response fields such
+as `cursor`, `liveRunId`, and `approvalRequest` are required and nullable. Mutation `next` and other
+explicitly optional members may be absent.
 
 **Standard response headers.** Every JSON response carries:
 
@@ -48,8 +48,9 @@ mutation `next` (plan 1.5), omitted when the next step is not determinable.
 Clients and agents read `Retry-After` for backoff and surface `X-Request-Id` on failures so a human
 can find the request in logs.
 
-**Timestamps.** All timestamps are ISO 8601, UTC, millisecond precision (`YYYY-MM-DDTHH:mm:ss.sssZ`),
-server-normalized. Clients never supply a timezone.
+**Timestamps.** Server timestamps use UTC ISO 8601, typically millisecond precision
+(`YYYY-MM-DDTHH:mm:ss.sssZ`). Write schemas that accept instants, such as Flag expiry and query
+time bounds, permit ISO 8601 offsets; the server normalizes stored values.
 
 **API versioning.** The control-plane API is **unversioned** (one canonical version per release;
 ADR-0025 makes the Zod contract the single source). Breaking changes ship behind a minor release with
@@ -92,8 +93,9 @@ the disguised shape ADR-0036 forbids. A real count, if wanted, is a `*_count` op
 The applied cap is `LIST_READ_LIMIT` (200). Requested `limit` may differ. The two caps are
 distinct: the request schema maximum is 500; the applied read never exceeds 200. A caller asking
 `limit=500` (the request maximum) against the 200-cap sees `readLimit: 200`. Request `limit` stays
-a query param on paginated routes (`approval_requests_list`: default 50, schema-max 500;
-`limit > 500` → `INVALID_PAGINATION { field: 'limit' }`). Other `*_list` routes are unpaginable:
+a query param on paginated routes (`approval_requests_list`, `flag_changes_list`, and
+`app_audit_list`: default 50, schema-max 500; `limit > 500` →
+`INVALID_PAGINATION { field: 'limit' }`). Other `*_list` routes are unpaginable:
 they always return `cursor: null` and report truncation when the scan hits the cap.
 
 **Cursor contract (paginated lists).** The `cursor` is an opaque, server-encoded string. Do not
@@ -131,6 +133,7 @@ identifier; `EvaluationContext.idType` must match the Experiment's configured En
 {
   variantName: string
   value:       VariantValue
+  resolutionReason: ResolutionReason // excludes STALE and ERROR
   reason:      TestEvaluationReason
   liveRunId:   string | null
 }
@@ -155,10 +158,11 @@ TestEvaluationReason =
       ruleName: string | null
       priority: number
       selection: 'direct' | 'percentage_rollout'
-      rollout?: { variantWeights: { variantName: string; weight: number }[] }
+      rollout: { variantWeights: { variantName: string; weight: number }[] } | null
     }
   | { type: 'fresh_assignment' } // empty Run targetingRules; assign(Run, Targeting Key) served
   | { type: 'default_disabled' } // Flag.enabled = false
+  | { type: 'baseline_rollout'; rollout: { variantWeights: { variantName: string; weight: number }[] } }
   | { type: 'no_match_default' } // no rule matched; Default Variant served
 ```
 
@@ -173,31 +177,29 @@ No Exposure-related fields. Writes nothing.
 
 ### DataPlaneEvaluateRequest
 
-| Field          | Required | Notes            |
-| -------------- | -------- | ---------------- |
-| `flagKey`      | yes      | —                |
-| `targetingKey` | yes      | —                |
-| `idType`       | yes      | —                |
-| `attributes`   | no       | Defaults to `{}` |
+| Field          | Required | Notes                                                   |
+| -------------- | -------- | ------------------------------------------------------- |
+| `appId`        | no       | Optional non-empty assertion; must match credential App |
+| `flagKey`      | yes      | —                                                       |
+| `targetingKey` | yes      | —                                                       |
+| `idType`       | yes      | —                                                       |
+| `attributes`   | no       | Defaults to `{}`                                        |
 
 ### DataPlaneEvaluateResponse
 
 ```
 {
-  variant:     VariantValue | null  // null if Flag not found or disabled and no Default Variant
-  variantName: string | null        // the resolved arm's label; null when no arm resolved
+  variant: VariantValue | null
 }
 ```
 
-`variantName` is the immutable arm label and is public-safe on every credential tier (the verify
-endpoint already returns it under a Client Key). It rides the wire because the SDK cannot derive it
-— two arms may carry the same value — and `ResolutionDetails.variantName` is part of the documented
-return shape.
+The body is strict and frozen for released clients that reject added keys. Evaluation metadata
+travels in response headers: `x-variant-name`, `x-reason`, and `x-run-id`. The SDK combines the
+body, headers, and HTTP status into `ResolutionDetails`. Neither rules nor salts are returned.
 
-No `reason`. No rule set. No `salt`. No config. Safe under public Client Key (ADR-0018): the response
-names WHICH arm was served, never HOW it was chosen.
-Peek uses a separate SDK path/endpoint with the same response shape and no Exposure side effect,
-never a caller-supplied `deferExposure` flag.
+Peek uses a separate API-Key-only endpoint, writes no Exposure or Assignment, and returns the
+strict non-null `{ variant: VariantValue }` body. It never accepts a caller-supplied
+`deferExposure` flag.
 
 ## Sources
 

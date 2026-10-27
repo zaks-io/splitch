@@ -1,6 +1,6 @@
 # Backup and disaster recovery
 
-Status: designed, not wired. As of 2026-09-08 nothing in this repository backs up production data.
+Status: designed, not wired. No backup workflow or scheduled export implementation is committed.
 The only recovery primitives are the ones Cloudflare provides by default (D1 Time Travel and Durable
 Object point-in-time recovery, both 30 days, both in place) and
 [deployment-pipeline.md](./deployment-pipeline.md) explicitly scopes those as incident procedures,
@@ -50,7 +50,7 @@ Ordered by blast radius. Tier 0 is unrecoverable by any means once lost.
   Tinybird, every Assignment Store key, and every privacy tombstone
   ([privacy-data-lifecycle.md](./privacy-data-lifecycle.md), "Rules"). The wrapped record lives in
   the per-App Config Store Durable Object (`apps/control-plane-api/src/config-store-app-identity.ts`)
-  with a replica in the `CONFIG_STORE` KV namespace under `app:{appId}:entity-identity`
+  with a non-authoritative replica in the `CONFIG_STORE` KV namespace under `app:{appId}:entity-identity`
   (`packages/contracts/src/storage-keys-kv.ts`).
 - It is wrapped under `EVALUATION_PRIVACY_SALT`. That secret, plus `INTEGRATION_SECRET_KEK`,
   `CONVEX_WEBHOOK_KEK`, `EXPOSURE_TICKET_KEY`, `ACCESS_TOKEN_SECRET`, `ASSERTION_SIGNING_SECRET`,
@@ -70,7 +70,7 @@ the flag change log. Everything the KV projections are rebuilt from.
 
 ### Tier 2: Tinybird datasources that are the only copy
 
-Production holds very little today. Sizes from `tinybird.datasources_storage` on 2026-09-08:
+Historical production sizes from `tinybird.datasources_storage` on 2026-09-08:
 
 | Datasource                                                                                 | Rows  | Size    |
 | ------------------------------------------------------------------------------------------ | ----- | ------- |
@@ -80,16 +80,16 @@ Production holds very little today. Sizes from `tinybird.datasources_storage` on
 | `environment_exposure_status_state`, `environment_exposure_status_deletions`               | 13    | 1 KiB   |
 | `deduped_exposures`, `audit_log`, `entity_deletions`, `app_identity_generation_tombstones` | 0     | 0       |
 
-The design below is sized for growth, not for today's 230 KiB; at today's size every option works.
+The design below is sized for growth, not for the 230 KiB recorded in that snapshot.
 
-| Datasource                           | Why it is irreplaceable                                                                                                                                 |
-| ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `deduped_exposures`                  | `replace` Copy Pipe re-derived from `raw_events` on every run; once a first touch ages past the 90-day TTL, a backup taken before that is its only copy |
-| `run_snapshots`                      | Run inputs frozen at Start (ADR-0047); no other copy                                                                                                    |
-| `audit_log`                          | Who/what/when compliance record                                                                                                                         |
-| `entity_deletions`                   | Privacy obligation record; must survive to keep deletions enforced                                                                                      |
-| `app_identity_generation_tombstones` | Identity epoch fences; needed to keep old-epoch rows excluded                                                                                           |
-| `environment_exposure_status_state`  | Aggregating state; rebuildable from `raw_events` only inside the 90-day window                                                                          |
+| Datasource                           | Why it is irreplaceable                                                                                                                                                          |
+| ------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `deduped_exposures`                  | Replace Copy Pipe merges retained raw rows with its previous snapshot; first-touch membership and quarantine survive raw TTL and cannot be reconstructed from retained raw alone |
+| `run_snapshots`                      | Run inputs frozen at Start (ADR-0047); no other copy                                                                                                                             |
+| `audit_log`                          | Who/what/when compliance record                                                                                                                                                  |
+| `entity_deletions`                   | Privacy obligation record; must survive to keep deletions enforced                                                                                                               |
+| `app_identity_generation_tombstones` | Identity epoch fences; needed to keep old-epoch rows excluded                                                                                                                    |
+| `environment_exposure_status_state`  | Aggregating state; rebuildable from `raw_events` only inside the 90-day window                                                                                                   |
 
 The 90-day TTL families (`raw_events`, `raw_evaluations`, `metric_events`,
 `deduped_metric_events_state`) are a product retention decision (ADR-0032), not a backup gap. Backups
@@ -240,7 +240,7 @@ per-table row counts with the manifest. Any mismatch fails the run.
 
 ## Open items
 
-- No AWS account exists today; phase 3 starts with creating one. The R2 finding and the
+- No AWS account was recorded in the September 8 investigation; phase 3 requires verified provisioning. The R2 finding and the
   retention question on `deduped_exposures` are tracked in
   [tinybird-backup-export.md](./tinybird-backup-export.md).
 - `ASSIGNMENTS_KV` key count is unknown; the first bundle run reports it.

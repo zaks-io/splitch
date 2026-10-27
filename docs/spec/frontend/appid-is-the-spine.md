@@ -13,8 +13,8 @@ diverging.
 
 **Scope resolution.** `orgSlug` and `appSlug` are human/agent-readable URL handles only (ADR-0027 /
 navigation-and-ia.md). The panel Worker resolves `orgSlug → orgId` and `appSlug → appId` once, at the
-loader seam; every mechanism below speaks IDs (`appId`, `environment_id`). Slugs never key a cache,
-a DO, or a data lookup. The `env` segment resolves to `environment_id` the same way.
+loader seam; every mechanism below speaks IDs (`appId`, `environment_id`). Domain caches and DOs use IDs. The session-resolution Query key uses URL handles before
+IDs are known; it is always stale and revalidates authorization on every load. The `env` segment resolves to `environment_id` the same way.
 
 **Environment is a co-spine.** Per-Environment data (Flag Configuration, experiments, Exposures,
 credentials — ADR-0027) means the active Environment joins `appId` in keying the four mechanisms below:
@@ -37,13 +37,15 @@ See [session-loader-isolation.md](./session-loader-isolation.md) for the full co
 
 ### 2. Query-cache root
 
-Every TanStack Query key in the panel starts with `['app', appId, 'env', environmentId, ...]`. This
+Every Environment-scoped domain Query key starts with
+`['app', appId, 'env', environmentId, ...]`. App settings, Organization integrations, and
+session resolution have separate roots (see the query-key factory). This
 ensures:
 
 - App A's cache can never serve App B, and dev's cache can never serve prod (wrong `appId` or
   `environmentId` in the prefix → cache miss, not contamination)
-- Logout, App switch, or Environment switch can purge the relevant cache with one `invalidateQueries`
-  call by prefix
+- App or Environment switch invalidates the previous scope with one `invalidateQueries`
+  call by prefix; invalidation marks data stale rather than removing it
 - Nudge invalidation is scoped to the correct App + Environment without enumeration
 
 The query-key factory enforces this invariant. No component or loader assembles a key by hand.
@@ -69,7 +71,7 @@ The socket's mount/unmount is driven by `(appId, environmentId)`. When either ch
 Environment switch), the layout effect:
 
 1. Closes the socket connected to `DO(prev)`
-2. Purges the cache for the previous scope: `invalidateQueries({ queryKey: ['app', appId, 'env', envId] })`
+2. Invalidates the cache for the previous scope: `invalidateQueries({ queryKey: ['app', appId, 'env', envId] })`
 3. Opens a new socket to `DO(next)`
 4. Triggers full invalidate-and-refetch for the new scope
 
@@ -87,10 +89,10 @@ its owning `(appId, environmentId)`.
 The URL is the only state that is simultaneously visible to the SSR loader (server) and the
 client. Persisting "current app" anywhere else creates a second source of truth.
 
-## No appId or environment in the session cookie
+## No active App or Environment in the session cookie
 
-The session cookie carries `userId`, `memberships` (every Org and App the user can access, across all
-their Orgs), and roles. It does NOT carry a "current app," "current org," or "current environment"
+The session cookie carries an opaque token. Its server-side KV record carries `userId`,
+`orgs` with App memberships and roles, plus `orgsTruncated` when the bounded snapshot is incomplete. It does NOT carry a "current app," "current org," or "current environment"
 pointer. The active Org, App, and Environment are always URL segments (a user may belong to multiple
 Orgs — the org switcher changes `orgSlug`, it does not mutate a cookie). See
 [navigation-and-ia.md](./navigation-and-ia.md) and [session-loader-isolation.md](./session-loader-isolation.md).

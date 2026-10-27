@@ -1,7 +1,8 @@
 # MCP and CLI surfaces: parity skins over the Control Plane SDK
 
-Both surfaces are thin wrappers over the same `@splitch/control-plane-sdk`. Capability is identical; only
-presentation differs. New endpoint → new CLI command + new MCP tool, by construction.
+Both surfaces are thin wrappers over the same `@splitch/control-plane-sdk`. Shared management operations use the same contracts. Explicit parity exceptions cover CLI-only
+PAT management, local Cloudflare setup, unavailable workflows, and internal/data-plane operations.
+New operations must declare their CLI/MCP coverage in the parity gate.
 
 ## Package structure
 
@@ -46,10 +47,9 @@ PAT can still list and revoke its owner's tokens. See
 
 ### Credential storage
 
-When `SPLITCH_TOKEN` is unset, credentials are stored in order of preference:
-
-1. System keychain (macOS Keychain, Linux Secret Service)
-2. `~/.splitch/credentials.json` (mode 0600, fallback for sandboxes without keychain)
+When `SPLITCH_TOKEN` is unset, the CLI stores credentials in
+`~/.splitch/credentials.json`, with mode 0600 and a mode-0700 parent
+directory. Reads and writes repair these modes. System-keychain support remains intended work.
 
 **Credential file format (`~/.splitch/credentials.json`):**
 
@@ -57,33 +57,22 @@ When `SPLITCH_TOKEN` is unset, credentials are stored in order of preference:
 {
   "version": 1,
   "principal": {
-    "user_id": "wos_user_...",
+    "userId": "user_...",
     "email": "user@example.com"
   },
   "credential": {
     "type": "device_flow",
-    "refresh_token": "<WorkOS refresh token>",
-    "access_token": "<short-lived; cached>",
-    "access_token_expires_at": "2026-06-20T14:00:00Z",
-    "selected_app_id": "app_..."
+    "refreshToken": "<WorkOS refresh token>",
+    "accessToken": "<short-lived; cached>",
+    "accessTokenExpiresAt": "2026-06-20T14:00:00Z",
+    "selectedAppId": "app_..."
   }
 }
 ```
 
-For ID-JAG path:
-
-```json
-{
-  "version": 1,
-  "principal": { "user_id": "...", "email": "..." },
-  "credential": {
-    "type": "id_jag",
-    "identity_assertion": "<splitch identity_assertion>",
-    "access_token": "<short-lived; cached>",
-    "access_token_expires_at": "..."
-  }
-}
-```
+The implemented credential union contains `device_flow` only. ID-JAG is paused and has no CLI
+credential branch. `accessTokenBinding` additionally records an unbound, App-bound, Org-bound,
+or membership-wide cached access token; `email` is optional when unavailable.
 
 **One credential per principal** (not per App). App scope is carried in the token's `scopes` claim,
 not in separate credential files.
@@ -118,15 +107,17 @@ splitch context                                                  # print the pri
 `splitch use` accepts slugs (human/agent-readable) and resolves them to canonical IDs (CONTEXT.md:
 slugs for URLs, IDs canonical in storage). It never stores credentials — only the target selection.
 
-**MCP active context.** The MCP server carries the active App/Environment in the **transport
-session** (alongside the token, which already lives there — line above). A `context_use` tool sets
-it; subsequent tool calls inherit `app_id`/`environment_id` from the session unless the call passes
+**MCP active context.** The MCP server carries the active App/Environment in a subject-bound **transport
+session** stored by the `MCP_SESSIONS` Durable Object binding. Bearers are verified on each request and are
+not stored in the session. A `context_use` tool sets
+it; subsequent tool calls inherit `appId`/`environmentId` from the session unless the call passes
 them explicitly. This is what stops an agent from re-passing full scope on every tool call. The
-session context is never persisted server-side beyond the session and never widens token scope.
+Durable Object retains context for the 24-hour session lifetime; ending the session clears it.
+Context never widens token scope.
 
 **Session auto-refresh on 401:** With `SPLITCH_TOKEN` unset, the CLI silently exchanges the refresh
-token or identity_assertion for a new access token. Device refresh tokens rotate. Auth API retains the canonical selected App authority and
-reintersects it with the WorkOS Organization grant and live membership before minting. A dead or
+token for a new access token. Device refresh tokens rotate. Auth API retains the canonical selected App authority and
+reintersects it with live D1 membership before minting. A dead or
 missing provider session fails with `CLI_SESSION_EXPIRED` (exit 2) and remediates with re-login. An
 `invalid_grant` that refuses an App/Org rebind against an otherwise-live session fails with
 `CLI_TOKEN_BINDING_REFUSED` (exit 3), surfaces the server's reason verbatim, and remediates with
@@ -246,8 +237,8 @@ human/agent-readable companion. Connecting triggers the handshake (401 + WWW-Aut
 → agent follows PRM + AuthKit authorization-server metadata → authorization code with S256 PKCE →
 exact MCP-resource token → subsequent tool calls carry that token in the Authorization header).
 The MCP Worker validates the AuthKit signature, exact issuer and audience, expiry, not-before time,
-and subject before JSON-RPC dispatch. No on-disk credential; the client token lives only in the
-transport session and is never forwarded downstream.
+and subject before JSON-RPC dispatch. No on-disk credential; the client bearer is verified per request, never persisted in session state, and never forwarded
+downstream.
 **Deployment:** Remote Worker URL (not stdio/subprocess). Zero install for agents.
 
 ### OAuth PRM + auth.md discovery chain
@@ -287,11 +278,12 @@ OAuth. Dynamically registered AuthKit clients cannot use the first-party device 
 
 MCP tool schemas are derived from the same Zod route definitions that validate the Worker:
 
-- Tool `inputSchema` = Zod request body schema (converted to JSON Schema)
+- Tool `inputSchema` = flattened path, query, and JSON body fields (converted to JSON Schema),
+  with required idempotency input and the shared Flag-read `summary` affordance
 - Tool `outputSchema` = Zod response body schema
 
-No hand-written tool definitions exist. Public agent operations registered in `@splitch/contracts`
-become MCP tools at build/startup. Explicit internal operations, including MCP-to-Control-Plane
+Endpoint tool schemas are derived; `context_use` is the separate authored session tool. Public agent operations registered in `@splitch/contracts`
+derive MCP tools in memory when discovered, subject to the exposure exclusions above. Explicit internal operations, including MCP-to-Control-Plane
 binding plumbing, are excluded from tool discovery.
 
 Temporary Environment tools follow this same derivation: `environments_create` accepts nested
@@ -314,8 +306,8 @@ The MCP tool name is the route `operationId` from `@splitch/contracts`. It uses
 
 The canonical naming rule and complete tool list live in
 [../contracts/mcp-tool-derivation.md](../contracts/mcp-tool-derivation.md). This file must not carry
-a second tool-name table. Experiment, Run, credential, and test-eval tools take `app_id` +
-`environment_id` inputs (per-Env, ADR-0027); the schemas are derived from the per-Env route
+a second tool-name table. Experiment, Run, credential, and test-eval tools take `appId` +
+`environmentId` inputs (per-Env, ADR-0027); the schemas are derived from the per-Env route
 definitions, so parity with the CLI holds by construction.
 At the MCP protocol boundary, those selectors may be omitted when session context supplies them.
 The resolved Worker request always contains both IDs and passes the unchanged execution schema.
@@ -330,8 +322,13 @@ endpoint skins. The full design is in [mcp-discovery.md](./mcp-discovery.md).
 
 ### Parity guarantee
 
-A capability available through the CLI must be available through an MCP tool and vice versa.
-Divergence only in presentation:
+`pnpm check:cli-mcp-parity` checks both directions against the route registry, compares derived
+MCP input/output schemas and shared Flag-read fields, exercises shared operations, and checks
+published descriptions, prompts, resources, and help. Intentional differences are explicit in
+`scripts/lib/cli-mcp-contract-exceptions.ts`: PAT management and local Cloudflare installation
+setup are CLI-only; internal/data-plane operations and unavailable workflows are excluded as
+declared there. `principal_capabilities_get` supports context/authority resolution without a
+standalone command or tool. The shared operations differ in presentation:
 
 - CLI: labeled sections for hydrated Flag reads, aligned columns under `--summary`, compact JSON
   with `--json`, indented JSON for other human output, and exit codes

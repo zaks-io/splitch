@@ -16,15 +16,17 @@ lifecycle verb is **Start** (not "publish").
 draft ──[start]──► running ──[end]──► ended
 ```
 
-- **`draft`**: Experiment created; no live Run; Entities receive the Flag's Default Variant.
+- **`draft`**: Experiment has no live Run; normal Flag Configuration resolution applies and records
+  no Experiment Exposure.
   Only one draft exists per Experiment at a time (the staging area for the next Run's config).
 - **`running`**: The started Run; edge reads this config; Exposures are stamped with this `run_id`.
   Exactly one Run per Experiment is `running` at any time.
 - **`ended`**: Run closed; config frozen archive; no new Exposures stamped against it; analysis still
   reads it.
 
-There is no `paused` state. Pausing is modeled as editing allocation to 0% (effectively stops
-new Entities from being assigned) without closing the Run.
+There is no `paused` state or pause endpoint. Allocation is frozen on a live Run and must sum
+to 100%; an all-zero allocation is invalid. Standalone End closes measurement; the Flag
+Configuration enabled state remains the separate kill switch.
 
 ## Transitions
 
@@ -83,7 +85,8 @@ What happens:
 1. Assert Run is `running`; reject with `RUN_NOT_RUNNING` if already ended
 2. Set `status = ended`, `ended_at = now()` in D1
 3. Clear `live_run_id` from KV (or write a sentinel value indicating no running Run)
-4. Experiment reverts to draft state (receiving future edits as staging for Run N+2)
+4. In the same guarded D1 batch as End, clear the Experiment's canonical `live_run_id` and return
+   it to `draft` for the next Run
 5. Return the ended Run object
 
 Required role: App `owner` or `admin` (member cannot end a Run).
@@ -102,15 +105,17 @@ conclusion evidence and selects no winner.
 - `draft → ended` (no Run to end)
 - Editing frozen fields on a `running` Run (rejected; draft fields are the staging area)
 
+`draft` is the Experiment's state, not a persisted Run status. Run rows are only `running` or
+`ended`. A completed Run remains ended when Start creates its successor.
+
 ## Assignment config fields (frozen in a Run)
 
-These fields are copied from the Experiment draft to the Run row at Start time. They cannot be
-PATCH'd on a Run — the PATCH-Run Zod schema omits them (Run-immutability enforced at parse time,
-not just Worker logic):
+These fields are copied from the Experiment draft to the Run row at Start time. They cannot be PATCH'd on a Run: no Run PATCH route is registered.
+`PatchRunRequestSchema` is a non-material-only contract, not a live endpoint.
 
 - `salt` (string) — random per-Run seed for Fractional Evaluation
 - `allocation` (object `{ [variant_name]: number }`) — percentages, must sum to 100
-- `variant_set` (string[]) — names of Variants participating in this Run
+- `variant_set` (Variant[]) — frozen catalog Variants, including IDs, names, and values
 - `targeting_key_field` (string) — which attribute from Evaluation Context is the Targeting Key
 - `targeting_key_type` (string) — Entity type label (the Run's `id_type`); changes require a new Run
 - `targeting_rules` (TargetingRule[]) — the resolved rule snapshot. Any draft `segment_ids` are
@@ -145,7 +150,7 @@ the current decision-valid result with `DECISION_LOCKED`.
 
 | column                             | type    | required | meaning                                                                        |
 | ---------------------------------- | ------- | -------- | ------------------------------------------------------------------------------ |
-| `run_id`                           | TEXT PK | yes      | `run_<ulid>`                                                                   |
+| `id`                               | TEXT PK | yes      | `run_<ulid>`                                                                   |
 | `experiment_id`                    | TEXT FK | yes      | Parent Experiment                                                              |
 | `app_id`                           | TEXT    | yes      | Denormalized for isolation seam scoping                                        |
 | `environment_id`                   | TEXT    | yes      | Denormalized; co-scope with `app_id` (ADR-0027)                                |
@@ -154,7 +159,7 @@ the current decision-valid result with `DECISION_LOCKED`.
 | `ended_at`                         | TEXT    | no       | ISO 8601; set at End                                                           |
 | `salt`                             | TEXT    | yes      | Frozen assignment seed                                                         |
 | `allocation`                       | TEXT    | yes      | JSON: `{ [variant_name]: number }`                                             |
-| `variant_set`                      | TEXT    | yes      | JSON: string[]                                                                 |
+| `variant_set`                      | TEXT    | yes      | JSON: Variant[]                                                                |
 | `targeting_key_field`              | TEXT    | yes      | Frozen Targeting Key field name                                                |
 | `targeting_key_type`               | TEXT    | yes      | Frozen Entity type label (the Run's `id_type`)                                 |
 | `targeting_rules`                  | TEXT    | yes      | JSON: TargetingRule[]; resolved snapshot (draft segments resolved in at Start) |
@@ -169,6 +174,14 @@ the current decision-valid result with `DECISION_LOCKED`.
 | `sample_size_locked`               | INTEGER | no       | Fixed-horizon sample size; required when `horizon = fixed`                     |
 | `decision_family`                  | TEXT    | yes      | JSON: locked goal Metric × Variant × Primary Dimension members                 |
 | `guardrail_decisions`              | TEXT    | yes      | JSON: locked Guardrail Metric thresholds/directions                            |
+| `run_number`                       | INTEGER | yes      | Dense 1-based ordinal within the Experiment                                    |
+| `control_variant_id`               | TEXT    | yes      | Frozen Control Variant identity                                                |
+| `config_hash`                      | TEXT    | yes      | Frozen assignment configuration hash                                           |
+| `metric_variance_config`           | TEXT    | yes      | JSON: resolved per-Metric variance-reduction settings                          |
+| `pre_registration`                 | TEXT    | no       | JSON: immutable pre-registration intent                                        |
+| `start_reason`                     | TEXT    | no       | Optional Start note                                                            |
+| `end_reason`                       | TEXT    | no       | Optional End note                                                              |
+| `created_by`                       | TEXT    | no       | WorkOS User reference                                                          |
 | `created_at`                       | TEXT    | yes      | ISO 8601                                                                       |
 
 ## Error codes for Run invariants
@@ -186,7 +199,7 @@ the `recovery` column below mirrors it for quick reference.
 | `RUN_FROZEN`            | Attempt to mutate a frozen **assignment** field on a running Run (App-level and Flag-Configuration fields also return `RUN_FROZEN`, with `END_RUNNING_RUN_FIRST`) | `CREATE_NEW_RUN`        |
 | `RUN_NOT_RUNNING`       | Attempt to end (or otherwise run-only-op) a Run that is not `running`                                                                                             | `START_A_RUN`           |
 | `ALLOCATION_INVALID`    | Allocation percentages do not sum to 100, or unknown variant name                                                                                                 | — (fix the request)     |
-| `EXPERIMENT_NO_DRAFT`   | Start attempted when draft has no changes from current Run                                                                                                        | `EDIT_DRAFT_THEN_START` |
+| `EXPERIMENT_NO_DRAFT`   | Start attempted without a staged allocation                                                                                                                       | `EDIT_DRAFT_THEN_START` |
 | `VARIANT_NOT_AVAILABLE` | A referenced Variant is not in the Flag's available set for this Environment (ADR-0028)                                                                           | `ADD_VARIANT_TO_ENV`    |
 
 ## Sources

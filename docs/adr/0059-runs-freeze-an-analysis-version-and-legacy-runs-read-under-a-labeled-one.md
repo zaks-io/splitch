@@ -106,7 +106,7 @@ read before a later quarantine removes it.
 
 - [Conclusion and decision gate](../spec/control-plane/conclusion-and-winner-promotion.md)
 - [Run commitments contract](../../packages/contracts/src/run-commitments.ts)
-- [Planned-duration check](../../packages/contracts/src/experiment-decision-gate-duration.ts)
+- [Planned-duration check](../../packages/stats/src/decision-gate-duration.ts)
 - [Start resolver](../../apps/control-plane-api/src/experiment-start-commitments.ts)
 - [Run Snapshot bridge](0047-run-inputs-reach-analysis-as-a-tinybird-run-snapshot-written-at-start.md)
 - Kohavi and Longbotham, run at least one full weekly cycle; Waudby-Smith et al. (aCS miscoverage at

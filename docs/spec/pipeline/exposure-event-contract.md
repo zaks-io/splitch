@@ -17,14 +17,15 @@ datasource and contract; Web Events use another separate family. A peek or test-
 | `app_id`             | `string`        | yes      | Data-isolation key; injected by the Evaluation Worker, never from the client                                                                                                      |
 | `environment_id`     | `string`        | yes      | Co-scoped with `app_id`; Exposures are per-Environment (ADR-0027). Injected by the Evaluation Worker, never from the client                                                       |
 | `experiment_id`      | `string`        | yes      | Stable identifier of the Experiment                                                                                                                                               |
-| `run_id`             | `string`        | yes      | Stamped at SDK fire-time from the live Run config in KV; the live `liveRunId` the Evaluation Worker read when it evaluated                                                        |
+| `run_id`             | `string`        | yes      | Resolved by the Evaluation Worker, server-minted Exposure Ticket, or verified trusted adapter                                                                                     |
 | `id_type`            | `string`        | yes      | Request `idType` after validation against the Run's declared Entity type (e.g. `'user'`, `'workspace'`); guards holdover DO key                                                   |
 | `targeting_key_hash` | `string`        | yes      | HMAC-derived Entity identifier; computed from the Targeting Key, never client-supplied                                                                                            |
+| `entity_family_hash` | `string`        | yes      | Server-derived identity-family pseudonym used for alias-aware dedup and privacy suppression                                                                                       |
 | `variant`            | `string`        | yes      | The Variant name (string, never the value/metadata) assigned to this Entity                                                                                                       |
 | `event_id`           | `string`        | yes      | Retry-stable physical event id generated once when the Worker creates this raw row                                                                                                |
 | `exposure_at`        | `DateTime64(3)` | yes      | Canonical encounter time. Remote Evaluation uses `server_received_at`; a verified trusted adapter may supply a bounded durable commit timestamp (ADR-0049)                        |
 | `server_received_at` | `DateTime64(3)` | yes      | Timestamp when Splitch durably accepts the Exposure request; delivery diagnostics and retention, not encounter ordering                                                           |
-| `ingest_ts`          | `DateTime64(3)` | yes      | Tinybird-assigned physical insertion timestamp; used only for snapshot/tail watermarks, never for analysis ordering                                                               |
+| `ingest_ts`          | `DateTime64(3)` | yes      | Tinybird-assigned physical insertion timestamp; snapshot/tail watermark and analysis-v2 SRM arrival clock; never the first-touch clock                                            |
 | `client_timestamp`   | `DateTime64(3)` | no       | Client-fired timestamp; carried for diagnostics only, never used for ordering                                                                                                     |
 | `dedup_key`          | `string`        | yes      | Idempotent at-least-once key; see Dedup Key section below                                                                                                                         |
 | `source_id`          | `string`        | yes      | Edge POP identifier (e.g. `'sea01'`); included in `dedup_key`                                                                                                                     |
@@ -47,27 +48,33 @@ dedup_key = sha256(type + ':' + app_id + ':' + experiment_id + ':' + run_id + ':
 
 ### Idempotency invariant
 
-The dedup key is for wire-level ingest deduplication only. The first-touch dedup (query-time `GROUP BY` over the first-touch identity tuple `(app_id, environment_id, experiment_id, run_id, id_type, targeting_key_hash)` + `MIN(exposure_at)`) is the **authoritative** first-touch definition and supersedes it. `environment_id`, `experiment_id`, and `id_type` are functionally determined by `run_id` (a Run belongs to exactly one Experiment in exactly one Environment with one declared Entity type); they are carried through the grouping, not independent keys. `environment_id` is intentionally **not** part of the wire `dedup_key` for the same reason — it adds nothing to per-row idempotency. Two rows with different `dedup_key` values for the same `(targeting_key_hash, run_id)` are expected — the query picks `MIN(exposure_at)` among them.
+The dedup key is for wire-level ingest deduplication only. The first-touch dedup (query-time `GROUP BY` over `(app_id, environment_id, experiment_id, run_id, id_type, entity_family_hash)` + `MIN(exposure_at)`) is the **authoritative** first-touch definition and supersedes it. `environment_id`, `experiment_id`, and `id_type` are functionally determined by `run_id` (a Run belongs to exactly one Experiment in exactly one Environment with one declared Entity type); they are carried through the grouping, not independent keys. `environment_id` is intentionally **not** part of the wire `dedup_key` for the same reason — it adds nothing to per-row idempotency. Two rows with different `dedup_key` values for the same `(targeting_key_hash, run_id)` are expected — the query picks `MIN(exposure_at)` among them.
 
 ## Activation row (`type = 'activation'`)
 
-| Field                | Type            | Required | Meaning                                                                                                |
-| -------------------- | --------------- | -------- | ------------------------------------------------------------------------------------------------------ |
-| `type`               | `'activation'`  | yes      | Row discriminator                                                                                      |
-| `app_id`             | `string`        | yes      | Data-isolation key                                                                                     |
-| `environment_id`     | `string`        | yes      | Co-scoped with `app_id`; per-Environment (ADR-0027)                                                    |
-| `experiment_id`      | `string`        | yes      | Experiment this activation belongs to                                                                  |
-| `run_id`             | `string`        | yes      | Run under which the activation occurred                                                                |
-| `id_type`            | `string`        | yes      | Must match the Run's declared `id_type`                                                                |
-| `targeting_key_hash` | `string`        | yes      | HMAC-derived Entity identifier                                                                         |
-| `event_id`           | `string`        | yes      | Retry-stable physical event id generated once when the Worker creates this raw row                     |
-| `exposure_at`        | `DateTime64(3)` | yes      | Canonical encounter time; equals `server_received_at` for server-received Activations                  |
-| `server_received_at` | `DateTime64(3)` | yes      | Server-received-at timestamp; equals `activation_ts` for server-received activations                   |
-| `ingest_ts`          | `DateTime64(3)` | yes      | Tinybird-assigned physical insertion timestamp; used only for snapshot/tail watermarks                 |
-| `activation_ts`      | `DateTime64(3)` | yes      | When the activation event occurred (server-received-at)                                                |
-| `dedup_key`          | `string`        | yes      | Same construction as Exposure dedup key                                                                |
-| `source_id`          | `string`        | yes      | Edge POP identifier; included in `dedup_key`                                                           |
-| `counterfactual`     | `boolean`       | yes      | `false` by default; `true` when emitted by the SDK counterfactual evaluation path (additive, ADR-0013) |
+| Field                | Type            | Required | Meaning                                                                                                     |
+| -------------------- | --------------- | -------- | ----------------------------------------------------------------------------------------------------------- |
+| `type`               | `'activation'`  | yes      | Row discriminator                                                                                           |
+| `app_id`             | `string`        | yes      | Data-isolation key                                                                                          |
+| `environment_id`     | `string`        | yes      | Co-scoped with `app_id`; per-Environment (ADR-0027)                                                         |
+| `experiment_id`      | `string`        | yes      | Experiment this activation belongs to                                                                       |
+| `run_id`             | `string`        | yes      | Run under which the activation occurred                                                                     |
+| `id_type`            | `string`        | yes      | Must match the Run's declared `id_type`                                                                     |
+| `targeting_key_hash` | `string`        | yes      | HMAC-derived Entity identifier                                                                              |
+| `entity_family_hash` | `string`        | yes      | Server-derived identity-family pseudonym                                                                    |
+| `variant`            | `string`        | yes      | Variant from the existing Exposure-backed Assignment                                                        |
+| `event_id`           | `string`        | yes      | Caller-stable Metric Event UUID reused for its Activation row                                               |
+| `exposure_at`        | `DateTime64(3)` | yes      | Canonical encounter time; equals `server_received_at` for server-received Activations                       |
+| `server_received_at` | `DateTime64(3)` | yes      | Server-received-at timestamp; equals `activation_ts` for server-received activations                        |
+| `ingest_ts`          | `DateTime64(3)` | yes      | Tinybird-assigned physical insertion timestamp; snapshot/tail watermark and activated-SRM eligibility clock |
+| `activation_ts`      | `DateTime64(3)` | yes      | When the activation event occurred (server-received-at)                                                     |
+| `dedup_key`          | `string`        | yes      | Activation-specific key below; independent of identity-epoch hash                                           |
+| `source_id`          | `string`        | yes      | Edge POP identifier; included in `dedup_key`                                                                |
+| `counterfactual`     | `boolean`       | yes      | `false` by default; `true` when emitted by the SDK counterfactual evaluation path (additive, ADR-0013)      |
+
+Activation rows use
+`sha256("activation:" + app_id + ":" + experiment_id + ":" + run_id + ":" + id_type + ":" + source_id + ":" + event_id)`
+(`metric-event-activation.ts`). This keeps an exact retry stable across retained identity epochs.
 
 `ingest_ts` is required on every stored physical row but absent from the canonical producer, outbox,
 and Queue payload. The `raw_events` datasource assigns it with `DEFAULT now64(3)` when Tinybird

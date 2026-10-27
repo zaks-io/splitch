@@ -3,9 +3,9 @@
 The single source of truth for splitch's visual identity. The control panel and
 the marketing site compose from **one** token set defined here; neither forks the
 palette (per `docs/spec/frontend/package-boundaries-ui-component-layer.md`). The
-token **names** are pinned in `packages/ui/src/theme.css` (Tailwind 4 `@theme`
-block); the **values** below are authoritative. When a value changes, change it
-here and in `theme.css` together.
+token **names** are pinned in `packages/ui/src/styles/palette.css` (Tailwind 4 `@theme`)
+and `styles/semantic.css`, both imported by `src/theme.css`. The **values** below are authoritative.
+When a value changes, change it here and in the corresponding stylesheet together.
 
 Terms (`Control`, `Treatment`, `Variant`, `Flag`, `Experiment`, `Environment`,
 `Client Key`, `API Key`) are used exactly as `CONTEXT.md` defines them.
@@ -43,7 +43,7 @@ assigned the same way, everywhere:
   proposed, the new, "what could be."
 
 This assignment is **load-bearing, not aesthetic.** A confidence-interval plot, a
-promotion diff, an allocation bar, and the marketing hero gradient all read
+allocation bar and the marketing Split visual read
 left-to-right as Control→Treatment because the colors are consistent. Do not swap
 them per screen.
 
@@ -63,7 +63,7 @@ them per screen.
 | `--color-brand-treatment-100` | `#ECF9B5` | chartreuse tint                                                  |
 | `--color-brand-treatment-300` | `#CEEF4F` | chartreuse — borders, secondary marks                            |
 | `--color-brand-treatment-500` | `#B4F000` | **chartreuse — the Treatment hue.** Treatment arm, signal accent |
-| `--color-brand-treatment-600` | `#94C500` | chartreuse — pressed / on-white text-safe step                   |
+| `--color-brand-treatment-600` | `#94C500` | chartreuse, light-mode chart series and pressed fills            |
 | `--color-brand-treatment-700` | `#6E9300` | chartreuse — text-on-light (AA), badges                          |
 | `--color-brand-treatment-900` | `#374A00` | chartreuse ink                                                   |
 
@@ -168,7 +168,7 @@ theme from a flipped one:
   `--color-dark-raised-2`. Depth comes from these rungs, not from shadows.
 - **Cobalt steps up for text/icons.** Cobalt `500` as _fill_ stays (white text on
   it is still AA). But cobalt-as-_text/icon_ on near-black is muddy and sub-AA, so
-  `--color-brand-text` and `--color-arm-control` resolve to
+  `--color-arm-control` and `--accent-foreground` resolve to
   `--color-brand-control-400` (`#4F86E8`) in dark.
 - **Chartreuse glows — the signature is loudest here.** `--color-arm-treatment`
   stays `treatment-500`; chartreuse-as-text steps to `treatment-400`. Dark is
@@ -181,35 +181,36 @@ theme from a flipped one:
 - **Status stays loud.** SRM-firing red, guardrail amber, and the success check
   all keep AA contrast on dark via the `*-400` rungs.
 
-### 2.5 The semantic role layer — the only tokens components touch
+### 2.5 The semantic role layer
 
-Components **never** reference raw palette tokens (`--color-neutral-900`,
-`--color-brand-control-500`). They reference **roles**, which resolve per mode.
+Product controls reference **roles**, which resolve per mode, rather than raw palette tokens
+(`--color-neutral-900`, `--color-brand-control-500`). The shared `BrandMark` identity divider
+uses the fixed raw brand hues.
 This is what lets every component theme for free and guarantees neither app
 forks the palette. Role names follow **shadcn's variable contract** (ADR-0020),
 so stock shadcn components drop in unmodified; splitch-only roles (arms, status,
 charts) extend the same layer.
 
-| role token                                       | means                                | light → dark                           |
-| ------------------------------------------------ | ------------------------------------ | -------------------------------------- |
-| `--background` / `--foreground`                  | page surface / primary ink           | `neutral-0/900` → `neutral-950/50`     |
-| `--card` / `--card-foreground`                   | card, panel                          | `neutral-0` → `dark-raised`            |
-| `--popover` / `--popover-foreground`             | menus, popovers                      | `neutral-0` → `dark-raised-2`          |
-| `--primary` / `--primary-foreground`             | primary action fill (cobalt)         | `control-500` + white (both)           |
-| `--secondary` / `--secondary-foreground`         | quiet fill button, chips             | `neutral-50` → `dark-hover`            |
-| `--muted` / `--muted-foreground`                 | inset well / captions, meta          | `neutral-50/500` → `#0D1015`/`#7C8492` |
-| `--accent` / `--accent-foreground`               | compact brand wash (badges, hovers)  | `control-50/700` → `.16-alpha/400`     |
-| `--destructive`                                  | errors, kill switch, removed-in-diff | `500` → `400`                          |
-| `--border` / `--input`                           | hairline / control border            | `neutral-200` → `dark-border(-strong)` |
-| `--ring`                                         | keyboard focus                       | `control-500` → `control-400`          |
-| `--overlay`                                      | modal scrim                          | `rgb(ink/.45)` → `rgb(0 0 0/.6)`       |
-| `--arm-control` / `-contrast`                    | **Control arm** (plots, allocation)  | `control-500` → `control-400`          |
-| `--arm-treatment` / `-contrast`                  | **Treatment arm**                    | `treatment-500` (both — glows on dark) |
-| `--arm-treatment-foreground`                     | chartreuse as text                   | `treatment-700` → `treatment-400`      |
-| `--success` / `-foreground` / `-muted`           | passing / resolves                   | `500/700/50` → `400/400/.16-alpha`     |
-| `--warning` / `-foreground` / `-muted`           | SRM caution / guardrail near         | `500/700/50` → `400/400/.18-alpha`     |
-| `--chart-1..5`                                   | series colors (1=cobalt, 2=chartr.)  | `500s` → `400s`                        |
-| `--sidebar*` (8 tokens, shadcn sidebar contract) | panel navigation shell               | `neutral-50`-family → `#0D1015`-family |
+| role token                                       | means                                | light → dark                                                                                           |
+| ------------------------------------------------ | ------------------------------------ | ------------------------------------------------------------------------------------------------------ |
+| `--background` / `--foreground`                  | page surface / primary ink           | `neutral-0/900` → `neutral-950/50`                                                                     |
+| `--card` / `--card-foreground`                   | card, panel                          | `neutral-0` → `dark-raised`                                                                            |
+| `--popover` / `--popover-foreground`             | menus, popovers                      | `neutral-0` → `dark-raised-2`                                                                          |
+| `--primary` / `--primary-foreground`             | primary action fill (cobalt)         | `control-500` + white (both)                                                                           |
+| `--secondary` / `--secondary-foreground`         | quiet fill button, chips             | `neutral-50` → `dark-hover`                                                                            |
+| `--muted` / `--muted-foreground`                 | inset well / captions, meta          | `neutral-50/500` → `#0D1015`/`#7C8492`                                                                 |
+| `--accent` / `--accent-foreground`               | compact brand wash (badges, hovers)  | `control-50/700` → `.16-alpha/400`                                                                     |
+| `--destructive`                                  | errors, kill switch, removed-in-diff | `500` → `400`                                                                                          |
+| `--border` / `--input`                           | hairline / control border            | `neutral-200` → `dark-border(-strong)`                                                                 |
+| `--ring`                                         | keyboard focus                       | `control-500` → `control-400`                                                                          |
+| `--overlay`                                      | modal scrim                          | `rgb(ink/.45)` → `rgb(0 0 0/.6)`                                                                       |
+| `--arm-control` / `-contrast`                    | **Control arm** (plots, allocation)  | `control-500` → `control-400`                                                                          |
+| `--arm-treatment` / `-contrast`                  | **Treatment arm**                    | `treatment-500` (both — glows on dark)                                                                 |
+| `--arm-treatment-foreground`                     | chartreuse as text                   | `treatment-700` → `treatment-400`                                                                      |
+| `--success` / `-foreground` / `-muted`           | passing / resolves                   | `500/700/50` → `400/400/.16-alpha`                                                                     |
+| `--warning` / `-foreground` / `-muted`           | SRM caution / guardrail near         | `500/700/50` → `400/400/.18-alpha`                                                                     |
+| `--chart-1..5`                                   | series colors                        | control `500→400`, treatment `600→500`, violet `#7C3AED→#A78BFA`, warning `500→400`, neutral `500→400` |
+| `--sidebar*` (8 tokens, shadcn sidebar contract) | panel navigation shell               | `neutral-50`-family → `#0D1015`-family                                                                 |
 
 Authoritative values live in `packages/ui/src/styles/semantic.css` (the
 `light-dark()` role layer); the raw palette is `packages/ui/src/styles/palette.css`.
@@ -230,7 +231,7 @@ that this is a tool built by and for engineers.
 
 | token            | stack                                                             | role                                         |
 | ---------------- | ----------------------------------------------------------------- | -------------------------------------------- |
-| `--font-display` | `"Inter Variable", "Inter", system-ui, sans-serif`                | headings, hero, large numerals               |
+| `--font-display` | `"Inter Variable", "Inter", system-ui, -apple-system, sans-serif` | headings, hero, large numerals               |
 | `--font-sans`    | `"Inter Variable", "Inter", system-ui, -apple-system, sans-serif` | body, UI labels, controls                    |
 | `--font-mono`    | `"IBM Plex Mono", ui-monospace, "SFMono-Regular", monospace`      | **keys, code, IDs, metrics, CLI, plot axes** |
 
@@ -341,7 +342,8 @@ shadow, never pure black.
 ### 4.4 Motion — deliberate, reduced-motion respected
 
 Motion confirms state changes; it does not perform. One signature moment (§5),
-everything else is a quiet 150ms.
+other transitions use the duration tokens below. Marketing also defines a 480ms fade-up and
+240ms/360ms animation delays in its `app.css`.
 
 | token               | value                        | use                              |
 | ------------------- | ---------------------------- | -------------------------------- |
@@ -375,15 +377,15 @@ Control (cobalt) and Treatment (chartreuse).**
 1. **Allocation control** — the Experiment setup allocation slider _is_ this
    track. Dragging the divider sets the split; the colors are the arm colors.
    The signature and the control are the same object.
-2. **Hero (marketing)** — on load, a single cobalt bar splits into cobalt +
-   chartreuse over `--duration-slow` with `--ease-emphasized` (reduced-motion:
-   renders already-split). This is the page-load moment.
+2. **Hero (marketing)**: `SplitVisual` draws a neutral input path and two labeled
+   branches in Control and Treatment colors. Each path draws over `--duration-slow`
+   with `--ease-emphasized`; the branches have a 240ms delay. Reduced motion shows
+   the completed paths.
 3. **CI plot** — Control series cobalt, Treatment series chartreuse, same
    assignment as the track. The plot reads as the split, measured.
-4. **Logo mark** — a vertical hairline dividing a square into cobalt | chartreuse
-   halves. The `|` in `split|ch` is the divider. Wordmark is
-   `--font-family-display`, weight 700, `--letter-spacing-tight`, lowercase, with
-   the pipe rendered in the two-tone divider.
+4. **Logo mark**: `BrandMark` renders the raster glyph `/brand/splitch-mark.png`
+   beside the lowercase `split|ch` wordmark. The divider stacks cobalt above
+   chartreuse. The wordmark uses `--font-display`, weight 700, and `--tracking-tight`.
 
 **Restraint rule.** The split is the _only_ place both brand hues appear together
 loud. Everywhere else: cobalt for action, chartreuse held back to arm-identity
@@ -450,17 +452,17 @@ docs/branding/design-tokens.md      ← authoritative values (this file)
 packages/ui/src/theme.css           ← entry: tailwind, fonts, @custom-variant dark, base layer
   ├── src/styles/palette.css        ← @theme raw palette + type/radius/shadow/motion (mode-agnostic)
   └── src/styles/semantic.css       ← role layer (shadcn names), light-dark(), [data-theme]
-        │  consumed by — components reference ROLE tokens only
+        │  consumed by product controls through ROLE tokens
         ├── packages/ui/src/components  ← shadcn (base-nova on Base UI) component copies
         ├── apps/control-panel      ← composes role tokens; never forks; /kitchen-sink gallery
         └── apps/marketing          ← split hero / quickstart are compositions from these tokens
 ```
 
 **Two layers, one rule.** The `@theme` block is the raw palette and never changes
-between modes. The role layer (`--color-surface`, `--color-text`, `--color-arm-*`,
-…) flips per mode. Components touch **only** roles — a hardcoded
-`--color-neutral-*` / `--color-brand-control-*` in a component is a bug, because
-it will not theme. Set `data-theme` on `<html>` to override the OS (§2.4).
+between modes. The role layer (`--color-background`, `--color-foreground`, `--color-arm-*`)
+flips per mode. Product UI components use roles so they theme. `BrandMark` deliberately fixes its
+two-color logo divider to the raw brand hues; it is the shared identity treatment.
+Set `data-theme` on `<html>` to override the OS (§2.4).
 
 Marketing-only treatments (the split hero, large-format CTA) are
 **marketing-owned compositions built from these shared tokens** — never a forked
@@ -468,6 +470,6 @@ palette, never a one-consumer `ui` component
 (`docs/spec/frontend/package-boundaries-ui-component-layer.md`).
 
 **Preview:** `docs/branding/preview.html` is the full brand sheet with a
-Light / Dark / System toggle — the same components driven by the semantic layer,
+Light / Dark / System toggle, an HTML reference sheet driven by the semantic layer,
 so flipping the toggle shows every surface theme in place. The toggle sets
 `data-theme` on `<html>`; System clears it and follows the OS.

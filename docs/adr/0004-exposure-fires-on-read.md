@@ -1,6 +1,6 @@
 # Exposure fires on read (safe default), deferral is an explicit accessor
 
-**Status:** accepted
+**Status:** accepted; extended by [ADR-0048](./0048-precomputed-evaluations-decouple-resolution-from-exposure-via-exposure-tickets.md)
 
 Reading a Variant through the SDK accessor fires the Exposure event as a side effect — you cannot
 branch on the Variant without having been exposed. This makes the safe path the default and structurally

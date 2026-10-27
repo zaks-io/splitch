@@ -6,7 +6,10 @@ Convex configuration nudges and Cloudflare configuration pushes run on a deliver
 for each App and Environment. D1 remains the transactional outbox and source of delivery state.
 Successful mutating Control Plane requests wake due Environments in the resolved App;
 installation registration and Convex secret rotation wake their credential-bound Environment.
-The minute cron recovers dropped wakes by waking due Environments. Sentry keeps its separate
+The minute cron recovers dropped wakes by waking due Environments. Its `scheduledDueWork` probe
+batches due-job checks, due delivery scopes, and both providers' lag rows in one D1 call. The
+coordinator path uses 11 statements; idle ticks start no gated jobs. A failed or incomplete probe
+reports a fault and falls back to standalone reads and ungated work. Sentry keeps its separate
 Organization-scoped cursor and minute dispatch.
 
 Every Wrangler environment selects `INTEGRATION_DELIVERY_MODE=coordinator`. The global cron

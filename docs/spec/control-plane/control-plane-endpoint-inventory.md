@@ -5,10 +5,12 @@ conventions live here; per-resource shapes live in the linked files.
 
 Management CRUD endpoints live on the **Control Plane API Worker**. Auth endpoints live on the
 **Auth API Worker** (see [auth-doors.md](auth-doors.md) and
-[access-control-matrix.md](access-control-matrix.md)). Dry-run test-evaluation is
-control-plane-authorized but mounted on the **Evaluation Worker**. Analytics reads are
-control-plane-authorized but mounted on the **Analysis Worker**. All require a control-plane bearer
-token unless noted. All requests/responses are `Content-Type: application/json`.
+[access-control-matrix.md](access-control-matrix.md)). Dry-run test-evaluation executes on the **Evaluation Worker** and analytics reads execute on the
+**Analysis Worker**. Their public address is the Control Plane API Worker, which authorizes each
+request and delegates over a service binding (ADR-0046). MCP uses that same Control Plane gate. All require a control-plane bearer
+token unless noted. JSON requests/responses use `Content-Type: application/json`; the live-update stream
+uses SSE. Wire fields follow the Zod schemas, normally camelCase; `idempotency_key` is an explicit
+exception. Path placeholders below are descriptive, not a different wire naming convention.
 
 Error shape for all endpoints: `{ code: string, message: string, details?: unknown }`.
 Zod parse failures and domain-invariant failures (e.g. `RUN_FROZEN`) share this shape.
@@ -62,6 +64,42 @@ against and the co-scope guard never fires. Authorization there is the handler's
 | [endpoints-test-eval-analytics.md](endpoints-test-eval-analytics.md)     | Dry-run test-evaluation (Evaluation Worker), Experiment and Web Analytics proxy reads (Analysis Worker), OpenAPI schema discovery (per-Env) |
 | [endpoints-web-analytics.md](endpoints-web-analytics.md)                 | Web Analytics overview, cursor-paginated Web Session summaries and event journeys, and Web Vitals reads (Analysis Worker, per-Env)          |
 | [endpoints-privacy-data.md](endpoints-privacy-data.md)                   | Privacy requests, export jobs, delete jobs, and Entity data subject requests                                                                |
+
+## Non-registry HTTP routes
+
+`GET /apps/{appId}/envs/{environmentId}/live` is the authenticated Control Plane SSE connection.
+`GET /privacy/requests/{requestId}/download` is the application-signed, bearer-free export capability
+route. Neither derives a management tool. Health and Auth API routes are also outside the shared
+registry.
+
+## Additional registered operations
+
+The registry in `packages/contracts/src/route-registry.ts` is the complete method, path,
+operation-id, permission, effect, and error catalog. These control-plane operations supplement
+those detailed in the resource files above:
+
+| operation                         | method + path                                                                                      | contract/detail                                                     |
+| --------------------------------- | -------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------- |
+| `principal_capabilities_get`      | `GET /principal/capabilities`                                                                      | [PAT authority](personal-access-tokens.md#request-path)             |
+| `experiment_plan`                 | `POST /apps/{appId}/envs/{environmentId}/experiment-plan`                                          | [Planning](endpoints-experiment-run.md#experiment-planning)         |
+| `environment_exposure_status_get` | `GET /apps/{appId}/envs/{environmentId}/exposure-status`                                           | [Exposure status](endpoints-test-eval-analytics.md#exposure-status) |
+| `app_audit_list`                  | `GET /apps/{appId}/audit`                                                                          | [App audit read](d1-and-tinybird-data-access.md#app-audit-read)     |
+| `cloudflare_installations_list`   | `GET /apps/{appId}/envs/{environmentId}/integrations/cloudflare/installations`                     | [Cloudflare integration](../sdk/cloudflare-worker.md)               |
+| `cloudflare_installations_revoke` | `DELETE /apps/{appId}/envs/{environmentId}/integrations/cloudflare/installations/{installationId}` | `routes/routes-cloudflare.ts`                                       |
+| `convex_installations_list`       | `GET /apps/{appId}/envs/{environmentId}/integrations/convex/installations`                         | [Convex integration](../sdk/convex-integration-api.md)              |
+| `convex_installations_revoke`     | `DELETE /apps/{appId}/envs/{environmentId}/integrations/convex/installations/{installationId}`     | `routes/routes-convex.ts`                                           |
+| `integration_deliveries_create`   | `POST /apps/{appId}/envs/{environmentId}/integrations/deliveries`                                  | [Delivery](mcp-and-cli-surfaces.md#integration-delivery)            |
+| `sentry_installations_list`       | `GET /orgs/{orgId}/integrations/sentry/installations`                                              | [Sentry](../sdk/sentry-integration.md)                              |
+| `sentry_installations_create`     | `POST /orgs/{orgId}/integrations/sentry/installations`                                             | `routes/routes-sentry.ts`                                           |
+| `sentry_installations_get`        | `GET /orgs/{orgId}/integrations/sentry/installations/{installationId}`                             | `routes/routes-sentry.ts`                                           |
+| `sentry_installations_delete`     | `DELETE /orgs/{orgId}/integrations/sentry/installations/{installationId}`                          | `routes/routes-sentry.ts`                                           |
+| `sentry_secret_rotations_create`  | `POST /orgs/{orgId}/integrations/sentry/installations/{installationId}/secret-rotations`           | `routes/routes-sentry.ts`                                           |
+
+PAT management routes are cataloged in [personal-access-tokens.md](personal-access-tokens.md#routes).
+Web Analytics and decision-diagnostics routes remain intended contracts, not registered operations.
+User/Organization/App privacy workflows and Organization deletion have registered placeholders;
+Entity privacy workflows and request-status reads are implemented. See
+[endpoints-privacy-data.md](endpoints-privacy-data.md).
 
 ## Sources
 

@@ -58,27 +58,27 @@ the 3-day policy.
 
 The root `package.json` exposes these scripts:
 
-| Script                 | Command contract                                                   |
-| ---------------------- | ------------------------------------------------------------------ |
-| `format:check`         | `biome format . && prettier --check "**/*.md"`                     |
-| `format:write`         | `biome format --write . && prettier --write "**/*.md"`             |
-| `lint`                 | `turbo run lint` (includes `@splitch/repo-lint` publishing policy) |
-| `typecheck`            | `turbo run typecheck`                                              |
-| `test`                 | `turbo run test`                                                   |
-| `build`                | `turbo run build`                                                  |
-| `dev:api`              | API/MCP Worker local dev set on stable ports                       |
-| `smoke:local`          | local Wrangler smoke for selected Workers                          |
-| `smoke:local:api`      | local Wrangler smoke for API/MCP Workers                           |
-| `shared-preview:smoke` | hosted shared-preview route, auth, MCP, and binding smoke          |
-| `depcruise`            | `dependency-cruiser --config .dependency-cruiser.cjs`              |
-| `duplicates`           | `jscpd --config .jscpd.json --exit-code`                           |
-| `knip`                 | `knip --treat-config-hints-as-errors`                              |
-| `secrets:staged`       | `gitleaks git --redact --no-banner --staged .`                     |
-| `secrets:range`        | scan only the change's commit range (CI/pre-push)                  |
-| `secrets:git`          | `gitleaks git --redact --no-banner .` (full history)               |
-| `verify:commit`        | commit hook entrypoint                                             |
-| `verify:push`          | lean pre-push validation entrypoint                                |
-| `verify:ci`            | CI entrypoint                                                      |
+| Script                 | Command contract                                                                     |
+| ---------------------- | ------------------------------------------------------------------------------------ |
+| `format:check`         | `biome format . && prettier --check "**/*.md"`                                       |
+| `format:write`         | `biome format --write . && prettier --write "**/*.md"`                               |
+| `lint`                 | `turbo run lint` (includes `@splitch/repo-lint` publishing policy)                   |
+| `typecheck`            | `turbo run typecheck`                                                                |
+| `test`                 | `turbo run test`                                                                     |
+| `build`                | `turbo run build`                                                                    |
+| `dev:api`              | API/MCP Worker local dev set on stable ports                                         |
+| `smoke:local`          | local Wrangler smoke for selected Workers                                            |
+| `smoke:local:api`      | local Wrangler smoke for API/MCP Workers                                             |
+| `shared-preview:smoke` | hosted shared-preview route, auth, MCP, and binding smoke                            |
+| `depcruise`            | `dependency-cruiser --config .dependency-cruiser.cjs apps packages`                  |
+| `duplicates`           | `jscpd --config .jscpd.json --exit-code --no-tips --no-colors apps packages scripts` |
+| `knip`                 | `knip --treat-config-hints-as-errors`                                                |
+| `secrets:staged`       | `gitleaks git --redact --no-banner --staged .`                                       |
+| `secrets:range`        | scan only the change's commit range (CI/pre-push)                                    |
+| `secrets:git`          | `gitleaks git --redact --no-banner .` (full history)                                 |
+| `verify:commit`        | commit hook entrypoint                                                               |
+| `verify:push`          | lean pre-push validation entrypoint                                                  |
+| `verify:ci`            | CI entrypoint                                                                        |
 
 Root scripts own repository-wide static analysis commands that do not belong to one runtime package.
 Biome formats code/config. Prettier formats Markdown only.
@@ -94,6 +94,7 @@ an explicit command described in [agent-verification.md](./agent-verification.md
 
 `pre-commit` blocks bad commits:
 
+- Run the file-size ratchet and binary-asset guard from `lefthook.yml`, then `verify:commit`.
 - Run `format:check`, `lint`, and `typecheck`.
 - Run `knip` after generated files needed for module graph discovery exist.
 - Run `secrets:staged` (Gitleaks over staged changes) before the commit is written.
@@ -122,7 +123,8 @@ back. `verify:push` is not a substitute for the required `verify:ci` graph in ho
 
 ## CI policy
 
-The required CI check runs on Blacksmith and executes `pnpm audit --audit-level=high` before the
+The required CI check uses Blacksmith for trusted runs and GitHub-hosted runners for fork PRs.
+`verify:ci` executes `pnpm audit --audit-level=high` before the
 affected `verify:ci` graph, including dependency-cruiser over the repository's app and package
 sources. The workflow
 adds `tinybird:local`, `d1:migrate:local`, and `d1:migrate:populated` when their inputs change;
@@ -194,7 +196,7 @@ the shared default Tinybird Local user accumulating workspaces across agent runs
 ## Local Worker smoke policy
 
 `pnpm smoke:local:api` is the first HTTP-level proof for API/MCP Workers. It builds the selected
-workspace graph, starts each Worker with `wrangler dev --local` on its stable port, calls `/`, checks
+workspace graph, starts each Worker with `wrangler dev --local` on its stable port, calls `/` (`/health` for MCP), checks
 the response, and stops the Worker.
 
 Stable local ports:

@@ -103,8 +103,9 @@ mechanism.
 
 **Failure contract:** if D1 commit fails → error returned to Worker → no KV write, no broadcast,
 caller retries. If KV write fails after D1 commit → the authoritative DO read still serves the D1
-snapshot and control-plane reads repair KV. If the subscriber cannot connect or cannot read at least
-the announced version → Evaluation fails loud. A five-second lag emits a propagation breach with
+snapshot and control-plane reads repair KV. If the subscriber cannot connect, Evaluation drops the Environment cache on every request and
+reads through the authoritative DO snapshot. If that read fails or cannot meet the announced
+version, Evaluation fails loud. A five-second lag emits a propagation breach with
 App, Environment, announced version, served version, and elapsed time.
 
 ## Sources

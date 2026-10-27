@@ -1,6 +1,8 @@
 # The Assignment Store is dumb storage; replay policy lives on the evaluate path
 
-**Status:** accepted
+**Status:** accepted; the interface below is superseded by
+[ADR-0064](./0064-assignment-store-is-app-scoped-with-one-writer-per-entity.md), which is App-scoped
+and returns the write outcome. The dumb-storage decision stands.
 
 The Assignment Store interface promises exactly two operations and **zero policy**:
 

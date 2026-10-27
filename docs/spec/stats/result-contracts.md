@@ -11,25 +11,25 @@ The statistics unit, golden, property, simulation, and audit gates cover this im
 
 ## Per-arm result object (one per (Variant, Metric))
 
-| Field                 | Type                 | Meaning                                                                                                              |
-| --------------------- | -------------------- | -------------------------------------------------------------------------------------------------------------------- |
-| `variant`             | `string`             | Variant name                                                                                                         |
-| `metric_id`           | `string`             |                                                                                                                      |
-| `sample_size_n`       | `integer`            | Unique Entities in this arm (deduped). For Retention, eligible Entities only                                         |
-| `point_estimate`      | `number`             | Per-Entity mean for this arm                                                                                         |
-| `relative_lift_pct`   | `number \| null`     | `(treatment / control - 1) × 100`; null for Control or undefined Control estimate                                    |
-| `ci_lower`            | `number \| null`     | Always-valid CI lower bound (relative-lift %); null for Control or undefined relative lift                           |
-| `ci_upper`            | `number \| null`     | Always-valid CI upper bound (relative-lift %); null for Control or undefined relative lift                           |
-| `p_value`             | `number`             | Sequential: always-valid boundary-inversion p-value (super-uniform, mass at 1). Fixed-horizon: one-look t/z p-value. |
-| `is_significant`      | `boolean`            | After Benjamini-Hochberg FDR correction                                                                              |
-| `in_bh_family`        | `boolean`            | True only for locked goal Metric × Variant family members                                                            |
-| `exploratory`         | `boolean`            | True for post-start additions or Secondary outputs                                                                   |
-| `decision_valid`      | `boolean`            | True only when the result belongs to the locked decision spec                                                        |
-| `status`              | `enum`               | `running \| ready \| stopped \| insufficient_denominator \| insufficient_n \| error`                                 |
-| `variance_techniques` | `VarianceTechniques` | Which variance-reduction methods applied (see below)                                                                 |
-| `estimand`            | `EstimandDisclosure` | What the published estimate measures and what the cap changed (see below)                                            |
-| `eligible_n`          | `integer`            | Retention only: unique Entities whose horizon matured. Absent on other kinds. Equals `sample_size_n`                 |
-| `immature_excluded_n` | `integer`            | Retention only: unique Entities omitted from this Metric because the horizon has not matured. Absent otherwise       |
+| Field                 | Type                 | Meaning                                                                                                                 |
+| --------------------- | -------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| `variant`             | `string`             | Variant name                                                                                                            |
+| `metric_id`           | `string`             |                                                                                                                         |
+| `sample_size_n`       | `integer`            | Unique Entities in this arm (deduped). For Retention, eligible Entities only                                            |
+| `point_estimate`      | `number`             | Per-Entity mean for this arm                                                                                            |
+| `relative_lift_pct`   | `number \| null`     | `(treatment / control - 1) × 100`; null for Control or undefined Control estimate                                       |
+| `ci_lower`            | `number \| null`     | Always-valid CI lower bound (relative-lift %); null for Control or undefined relative lift                              |
+| `ci_upper`            | `number \| null`     | Always-valid CI upper bound (relative-lift %); null for Control or undefined relative lift                              |
+| `p_value`             | `number`             | Sequential: always-valid boundary-inversion p-value (super-uniform, mass at 1). Fixed-horizon: one-look z-test p-value. |
+| `is_significant`      | `boolean`            | After version-selected BH or BH-G FDR correction                                                                        |
+| `in_bh_family`        | `boolean`            | True only for locked goal Metric × Variant family members                                                               |
+| `exploratory`         | `boolean`            | True for post-start additions or Secondary outputs                                                                      |
+| `decision_valid`      | `boolean`            | True only when the result belongs to the locked decision spec                                                           |
+| `status`              | `enum`               | `running \| ready \| stopped \| insufficient_denominator \| insufficient_n \| error`                                    |
+| `variance_techniques` | `VarianceTechniques` | Which variance-reduction methods applied (see below)                                                                    |
+| `estimand`            | `EstimandDisclosure` | What the published estimate measures and what the cap changed (see below)                                               |
+| `eligible_n`          | `integer`            | Retention only: unique Entities whose horizon matured. Absent on other kinds. Equals `sample_size_n`                    |
+| `immature_excluded_n` | `integer`            | Retention only: unique Entities omitted from this Metric because the horizon has not matured. Absent otherwise          |
 
 ## VarianceTechniques object (never silent)
 
@@ -94,14 +94,16 @@ with its slope refit on uncapped outcomes, so `cuped_applied` matches the arm's
 
 ## SRM result object
 
-| Field                    | Type                       | Meaning                                                                                          |
-| ------------------------ | -------------------------- | ------------------------------------------------------------------------------------------------ |
-| `srm_p_value`            | `number`                   | Full-exposed SRM p-value: chi-square under legacy/analysis-v1; anytime p-value under analysis-v2 |
-| `srm_is_mismatch`        | `boolean`                  | `true` when the version's gate fires (chi-square p < 0.001, or sequential threshold crossed)     |
-| `observed_counts`        | `Record<variant, integer>` | Deduped first-touch Entity counts per arm                                                        |
-| `expected_counts`        | `Record<variant, integer>` | Expected counts per declared allocation                                                          |
-| `activated_srm_p_value`  | `number \| null`           | Activated-population SRM under the same version rule; null if no gate                            |
-| `activated_srm_mismatch` | `boolean \| null`          | Activated mismatch under the same version rule; null if no gate                                  |
+| Field                                        | Type                         | Meaning                                                                                                   |
+| -------------------------------------------- | ---------------------------- | --------------------------------------------------------------------------------------------------------- |
+| `srm_p_value`                                | `number`                     | Full-exposed SRM p-value: chi-square under legacy/analysis-v1; anytime p-value under analysis-v2          |
+| `srm_is_mismatch`                            | `boolean`                    | `true` when the version's gate fires (chi-square p < 0.001, or sequential threshold crossed)              |
+| `observed_counts`                            | `Record<variant, integer>`   | Deduped first-touch Entity counts per arm                                                                 |
+| `expected_counts`                            | `Record<variant, integer>`   | Expected counts per declared allocation                                                                   |
+| `activated_srm_p_value`                      | `number \| null`             | Activated-population SRM under the same version rule; null if no gate                                     |
+| `activated_srm_mismatch`                     | `boolean \| null`            | Activated mismatch under the same version rule; null if no gate                                           |
+| `srm_sequential_threshold_crossed`           | `boolean` (optional)         | analysis-v2 only: genuine Exposure martingale crossing                                                    |
+| `activated_srm_sequential_threshold_crossed` | `boolean \| null` (optional) | analysis-v2 only: genuine activated crossing; false for the zero-Activation sentinel, null without a gate |
 
 ## Guardrail result object
 
@@ -111,7 +113,7 @@ with its slope refit on uncapped outcomes, so `cuped_applied` matches the arm's
 | `variant`        | `string`          |                                                                    |
 | `ci_lower`       | `number \| null`  | Relative-lift CI lower bound; null when relative lift is undefined |
 | `threshold`      | `number`          | Downside threshold declared on the Metric                          |
-| `is_breached`    | `boolean \| null` | `true` if `ci_lower < threshold`; null when undefined              |
+| `is_breached`    | `boolean \| null` | Version-selected breach verdict; see Guardrail `ci_lower` below    |
 | `in_bh_family`   | `boolean`         | Always false for Guardrails; carried so outputs self-audit         |
 | `exploratory`    | `boolean`         | True for post-start or non-decision Guardrail outputs              |
 | `decision_valid` | `boolean`         | True only if the Guardrail and threshold were locked at Run Start  |
@@ -119,16 +121,16 @@ with its slope refit on uncapped outcomes, so `cuped_applied` matches the arm's
 
 ## Health metrics object
 
-| Field                         | Type                              | Meaning                                                   |
-| ----------------------------- | --------------------------------- | --------------------------------------------------------- |
-| `multiple_rate`               | `number`                          | Fraction of Entities in `__multiple__` bucket             |
-| `multiple_count`              | `integer`                         | Raw count of `__multiple__` Entities                      |
-| `activation_rates`            | `Record<variant, number> \| null` | Per-arm activation rate; null if no gate                  |
-| `activation_balance_p_value`  | `number \| null`                  | Chi-square p-value for activated / not-activated by arm   |
-| `activation_balance_mismatch` | `boolean \| null`                 | `true` if `activation_balance_p_value < 0.001`            |
-| `exposure_counts`             | `Record<variant, integer>`        | Raw (pre-dedup) Exposure counts per arm                   |
-| `deduped_counts`              | `Record<variant, integer>`        | First-touch deduped Entity counts per arm (the SRM input) |
-| `low_n_warning`               | `boolean`                         | `true` if any arm has deduped n < 100                     |
+| Field                         | Type                              | Meaning                                                              |
+| ----------------------------- | --------------------------------- | -------------------------------------------------------------------- |
+| `multiple_rate`               | `number`                          | Fraction of Entities in `__multiple__` bucket                        |
+| `multiple_count`              | `integer`                         | Raw count of `__multiple__` Entities                                 |
+| `activation_rates`            | `Record<variant, number> \| null` | Per-arm activation rate; null if no gate                             |
+| `activation_balance_p_value`  | `number \| null`                  | Chi-square p-value for activated / not-activated by arm              |
+| `activation_balance_mismatch` | `boolean \| null`                 | `true` if `activation_balance_p_value < 0.001`                       |
+| `exposure_counts`             | `Record<variant, integer>`        | Counts of input Exposure rows per arm; Results supplies deduped rows |
+| `deduped_counts`              | `Record<variant, integer>`        | First-touch deduped Entity counts per arm (the SRM input)            |
+| `low_n_warning`               | `boolean`                         | `true` if any arm has deduped n < 100                                |
 
 Dimension result shapes (`DimensionResult`) are defined in
 [dimension-slicing.md](dimension-slicing.md).
@@ -149,7 +151,7 @@ p-value ever reaches `alpha` across the declared look schedule must not exceed `
 adapter's own simulated null distribution can supplement that check but never replaces it, since an
 adapter that over-rejects would match its own reference.
 
-Fixed-horizon `p_value` is a one-look t/z tail and is not this inversion.
+Fixed-horizon `p_value` is a one-look z tail and is not this inversion.
 
 ## Guardrail `ci_lower`
 
@@ -309,11 +311,15 @@ the Control Plane strips unknown fields with `parseResponseBody`, including nest
 while required fields and their types remain enforced. Removals, renames, and type changes still
 need a staged rollout. Inbound requests and Control Plane response schemas remain strict.
 
+The engine permits infinite CI bounds in memory. The Analysis Worker serializes those bounds to
+JSON null before schema validation and token hashing, so wire bounds and token inputs agree.
+
 The Analysis Worker returns `AnalysisResultsEnvelopeSchema`. Its strict `state: "ready"` member
-contains `run_id`, `control_variant`, and `stats`. It admits `data_watermark` and `result_token`
-only as an all-or-nothing pair. A Results read that supports Conclude returns both; the
-result-delivery runtime slice owns populating them. Their absence keeps the current read compatible
-but provides no evidence inputs for Conclude.
+contains `run_id`, `control_variant`, and `stats`, with optional `run_commitments` and
+`cohort_effect` for additive rollout compatibility. It admits `data_watermark` and `result_token`
+only as an all-or-nothing pair. The implemented Results handler returns both when a watermark is available
+(`apps/analysis-api/src/results.ts`). Their absence permits older envelopes to parse but provides
+no evidence inputs for Conclude.
 
 `data_watermark` is the server-selected inclusive `ingest_ts` boundary used by the complete read. It
 comes from the inclusive `deduped_exposures.watermark_ts` Copy Pipe boundary, so rows whose
@@ -336,6 +342,7 @@ A ready envelope also carries `run_commitments`, what the Run froze at Start
 
 | Field                              | Versioned Run (`analysis_version_source: "frozen"`)               | Legacy Run (`"legacy"`) |
 | ---------------------------------- | ----------------------------------------------------------------- | ----------------------- |
+| `analysis_version_source`          | `frozen`                                                          | `legacy`                |
 | `analysis_version`                 | The frozen version                                                | `legacy-unversioned`    |
 | `target_n`                         | Frozen target; null on a fixed horizon                            | null                    |
 | `target_n_source`                  | `caller` or `default`; null on a fixed horizon                    | null                    |

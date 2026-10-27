@@ -11,11 +11,11 @@ An Entity is **activated** when it performs the activation action with `activati
 Activation is its own row type on the same append-only Exposure log (ADR-0010, ADR-0013), identified by `type = "activation"`. See [assignment-exposure-run.md](./assignment-exposure-run.md) for the unified row shape.
 
 Applications create it through `activate(eventName, event)`. The call validates
-and durably claims the declared Metric Event, resolves every live Run whose
-frozen Activation Metric uses that Event Definition, and appends one Activation
-row per match. Callers provide Entity identity and the product event only. They
-never provide Experiment, Run, or Variant identity. A call with no matching live
-Run fails before claiming the Metric Event, so a retry after configuration
+and durably claims the declared Metric Event, resolves matching published Run bindings for the
+Event Definition, and appends one Activation row per Exposure-backed match. Holdovers are attributed
+to their original exposed Run, including an ended Run with a retained binding. Callers provide Entity identity and the product event only. They
+never provide Experiment, Run, or Variant identity. A call with no matching published
+Run binding fails before claiming the Metric Event, so a retry after configuration
 propagates can still succeed. Splitch likewise waits for an Exposure-backed
 Assignment in each matching Run and derives the Variant from it. A call with no
 matching exposed Run fails without claiming the Metric Event, so a retry after
@@ -42,7 +42,7 @@ Counterfactual triggering is additive: the future Kohavi-correct gate is impleme
 
 `ActivationMetricConfig = { event_name: string; conditions?: Condition[] }`
 
-The Activation Metric config is **frozen at Run creation** — it is an assignment-affecting edit. Setting or changing it opens a new Run on Start.
+The Activation Metric config is **frozen at Run creation** — it is an assignment-affecting edit. Setting or changing it takes effect at the next Start. It cannot be staged while a Run is running: End the Run, change it, then Start ([ADR-0063](../../adr/0063-assignment-edits-stage-on-the-draft-and-start-is-the-only-run-boundary.md)).
 
 If the gate is set but no activation events are logged at analysis time, the activated population is empty (0 Entities); both guardrails fire. Analysis runs on an empty set — this is the correct, permissive behavior. No upfront requirement to wire the event before setting the gate.
 
@@ -96,7 +96,9 @@ candidate. It never scans physical `raw_events`.
 
 ### 1. Activated-population SRM
 
-Chi-square on the activated Entities per arm per Run (p < 0.001), separate from the full-exposed SRM.
+Activated Entities per Variant per Run are tested separately from full-exposed SRM.
+Legacy-unversioned and analysis-v1 use chi-square (`p < 0.001`); analysis-v2 uses the
+ingestion-ordered sequential martingale (`p <= 0.001`).
 
 - Full-exposed SRM clean + activated-population SRM fires = canonical fingerprint of a Treatment-affected gate (GrowthBook/Microsoft OCE diagnosis)
 - Either SRM (full-exposed or activated-population) firing → gated results are **untrusted**
@@ -106,7 +108,7 @@ Chi-square on the activated Entities per arm per Run (p < 0.001), separate from 
 `activation_rate = COUNT(activated) / COUNT(exposed)` per arm.
 
 Divergence across arms is tested with a chi-square test over activated / not-activated by arm,
-threshold `p < 0.001`. The result also reports the largest absolute activation-rate gap. This
+threshold `p < 0.001`. `HealthMetrics` reports the per-Variant rates; it has no separate gap field. This
 Metric is always computed alongside goal Metrics when a gate is set.
 
 **Either guardrail firing means the gated results are untrusted.** The system surfaces this prominently; the gated scorecard is visually flagged "UNTRUSTED" when either fires.

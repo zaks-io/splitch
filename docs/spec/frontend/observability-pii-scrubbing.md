@@ -2,15 +2,16 @@
 
 ## Sentry context: set once at session seam
 
-At session validation (the `cookie → KV → LoaderContext` step), Sentry scope is set for the
-entire request (SSR) and hydrated on the client. Every downstream event inherits this context
-without per-event tagging:
+After App scope resolves, the App home and Environment route `beforeLoad` hooks call
+`configureControlPanelSentryScope`. The Worker installs the Cloudflare Sentry adapter in
+`src/server.ts`; the browser initializes `@sentry/react` in `panel-sentry-client.ts` and runs the
+same route hook. Subsequent events inherit the resolved context without per-event tagging:
 
 ```
-Sentry.setUser({ id: ctx.userId })
+Sentry.setUser({ id: ctx.session.userId })
 Sentry.setTag('appId', appId)      // set after requireAppAccess() succeeds
-Sentry.setTag('orgId', ctx.orgId)
-Sentry.setTag('role',  membership.role)
+Sentry.setTag('orgId', ctx.scope.orgId)
+Sentry.setTag('role', ctx.scope.appRole)
 ```
 
 The `appId` tag is set by the loader after `requireAppAccess` succeeds, not at session parse time
@@ -128,11 +129,13 @@ When a Tier 1 or Tier 2 boundary catches an unexpected error:
 
 ```
 Sentry.captureException(error, {
-  tags: { boundary: 'root' | 'segment', route: currentRoute },
+  level: 'error',
+  tags: { boundary: 'app' | 'section', route: currentRoute },
 })
 ```
 
-These are real defects. They must page.
+These are real defects. They must page. An isolated widget uses `boundary: 'widget'` and
+`level: 'warning'` (`reportBoundaryError`). Expected 403/404 states stay breadcrumbs.
 
 ## Background refetch failures: debug breadcrumb
 
@@ -168,23 +171,19 @@ targetingKey         // the bare Targeting Key value itself, at any level
 
 ### Implementation
 
-Use Sentry's `beforeSend` hook to scrub:
+Use the shared hooks from `@splitch/observability/emitter`, backed by `@splitch/privacy`:
 
 ```
-beforeSend(event) {
-  scrubFieldPaths(event, [
-    /^targeting\./,
-    /^context\./,
-    /^evaluationContext\./,
-    /targetingKey/i,
-  ])
-  return event
-}
+beforeSend: createSentryBeforeSend({ surface: 'control-panel' }),
+beforeSendSpan: createSentryBeforeSendSpan({ surface: 'control-panel' }),
 ```
 
-`scrubFieldPaths` replaces matched field values with `'[Redacted]'` (not deletion — deletion
-can break schema validation in Sentry ingest). The function must recurse through `extra`,
-`contexts`, `breadcrumbs.values[].data`, and stringified exception messages.
+`scrubSentryEvent` preserves an explicit operational allow-list and scrubs all other event fields
+through `scrubValue`, including messages, exceptions, `extra`, contexts, and breadcrumbs.
+`redaction-rules.ts` normalizes case and `_`/`-` separators; matching container and sensitive leaf
+values become `'[Redacted]'` without deleting keys. Strings also pass through embedded-JSON and
+PII-pattern scrubbing. `scrubSentrySpan` separately preserves structural trace fields and uses a
+strict attribute allow-list. Panel options add opaque-session and fixture Targeting Key patterns.
 
 ### Worker fault detail
 

@@ -79,7 +79,8 @@ entry equality or re-arms an already-read Exposure.
 `SPLIT | DEFAULT | DISABLED | ERROR` here (`CACHED`/`STALE` are SDK-local states). Unlike
 single-flag `evaluate` — whose wire body omits `reason` because the SDK synthesizes it from HTTP
 status and the non-revealing `x-reason` response header — a bulk response must carry `reason` per entry; the `verify` endpoint already returns this
-set under a Client Key, so no new disclosure is introduced.
+set under a Client Key, so no new disclosure is introduced. The single-Flag wire body is
+`{ variant }`; `x-variant-name` carries its percent-encoded Variant name.
 
 ### Per-entry outcomes
 
@@ -104,7 +105,7 @@ Both credential tiers receive the **same non-revealing reason set**. This delibe
 Evaluations are designed to be serialized into HTML for browser bootstrap
 ([browser-client.md](./browser-client.md)), so the payload's disclosure level must be safe for its
 **destination** (a public page), regardless of which credential fetched it. An API Key holder who
-wants rule identity uses `peek` or the control-plane test-eval (ADR-0026).
+wants rule identity uses `verify` or the control-plane test-eval (ADR-0026).
 
 The response NEVER includes — same hard constraint as
 [public-evaluate-endpoint.md](./public-evaluate-endpoint.md) (ADR-0018):
@@ -133,7 +134,7 @@ commit step removed):
 ```
 
 There is **no second evaluation engine**: step 4 is the single resolver `evaluate` uses, invoked
-per Flag. The route is wired to no Exposure or Assignment Store write path — the same structural
+per Flag. The route is wired to no Exposure or Assignment Store write path, the same structural
 guarantee `verify` documents (ADR-0026 pattern).
 
 ## Billing (ADR-0033)
@@ -142,8 +143,8 @@ A successful `evaluate-all` that resolves N Flags consumes **N Evaluations** ("a
 resolves 10 Flags consumes 10 Evaluations"). Local SDK reads of the result, bootstrap hydration,
 and `304` revalidations consume **zero**. The required `Idempotency-Key` header is the billing
 replay identity: retrying with the same key must not double-charge (ADR-0033 ledger rules). The SDK
-mints a fresh UUID per logical fetch and reuses it for its own retry of that fetch; callers may
-supply their own. Ticket redemption bills zero ("Exposure side effects consume zero extra"). OFREP bulk
+mints a fresh UUID per fetch and does not retry automatically; callers may supply and reuse their
+own key for an uncertain fetch. Ticket redemption bills zero ("Exposure side effects consume zero extra"). OFREP bulk
 evaluation uses the same counting rule: see [ofrep-endpoint.md](./ofrep-endpoint.md).
 
 ## Edge binding (ADR-0034)
@@ -176,11 +177,12 @@ never a silent swap to defaults (ADR-0036).
 
 ## Seam contract
 
-- **Port:** `evaluateAll(credential, evaluationContext) -> { evaluations, etag }` — no side effects
+- **Port:** `evaluateAll(credential, evaluationContext) -> { evaluations, etag }` — no Exposure or holdover write
 - **Left side:** browser client init/revalidation; server SDK `evaluateAll` (SSR bootstrap)
 - **Right side:** Evaluation Worker: validates credential, loads all Flag configs (KV), reads
   holdovers once (`getAll`), resolves per Flag with the shared resolver, mints opaque Exposure
-  identities and Exposure Tickets for fresh live-Run assignments; wired to NO write path
+  identities and Exposure Tickets for fresh live-Run assignments; records billable usage without
+  writing Exposures or holdovers
 - **Failure contract:** per-Flag resolve failure → entry with `reason: ERROR` (fetch succeeds);
   whole-request failure → canonical error envelope, no partial body; ETag miss never fabricates a
   `304`

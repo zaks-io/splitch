@@ -14,14 +14,16 @@ Read this when touching `apps/auth-api` or auth-owned Organization and membershi
 The account and ownership unit. It owns one or more Apps and has Users as members with roles. Every
 account is an Organization: self-serve signups get a personal Organization; enterprise accounts are
 sibling Organizations of the same shape that additionally carry SSO/SCIM. The term is adopted from
-WorkOS, where the Organization physically lives on the identity side. Distinct from App:
+WorkOS. splitch stores Organizations and authorization memberships in D1; WorkOS owns User
+authentication. Distinct from App:
 Organization is organizational ownership, not a product.
 
 Avoid: using App for this; Tenant; Workspace; Account.
 
 **User**:
 A human principal that can be a member of one or more Organizations. Users do not own Flags or
-Experiments directly. Organization membership and role grants determine what a User can do.
+Experiments directly. Organization and App memberships, role grants, and credential permissions
+determine what a User can do. An agent acts as a User, not as a separate principal class.
 
 **App**:
 A product or service surface owned by exactly one Organization. Auth may authorize access to an App,

@@ -1,6 +1,6 @@
 # Test-evaluation (dry-run) endpoint on the control plane: resolves and explains, never exposes
 
-**Status:** accepted
+**Status:** accepted; extended by [ADR-0037](./0037-client-side-configuration-verification-tiered-by-credential.md)
 
 The agent-first lifecycle (configure an App → wire up an SDK → **verify it's working**) needs a way to confirm
 a Flag resolves correctly end-to-end **without deploying the customer's service**. splitch ships a

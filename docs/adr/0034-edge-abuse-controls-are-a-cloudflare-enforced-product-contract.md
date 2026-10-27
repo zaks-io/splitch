@@ -1,6 +1,6 @@
 # Edge abuse controls are a Cloudflare-enforced product contract
 
-**Status:** accepted; the Client Key capability clause is superseded by ADR-0040
+**Status:** accepted; the Client Key capability clause is superseded by [ADR-0040](./0040-client-keys-can-write-public-event-ingest.md)
 
 Splitch's code is public, so its security posture cannot rely on obscurity. The public data-plane
 surfaces (evaluate, peek, anonymous registration) and the secret-key revocation path are the highest

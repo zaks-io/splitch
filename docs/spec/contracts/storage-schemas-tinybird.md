@@ -16,7 +16,7 @@ Primary engine partition key: `toYYYYMM(server_received_at)`. Sorting key:
 `(app_id, environment_id, experiment_id, run_id, server_received_at,
 targeting_key_hash)`. This preserves the deployed receipt-time layout during the additive
 `exposure_at` rollout. `ingest_ts` remains the insertion watermark for snapshot/tail boundaries,
-while `exposure_at` is available for the later consumer cutover.
+and current analysis consumers use `exposure_at` for first-touch and Activation ordering.
 
 | Column               | Type                    | Notes                                                                                                                                                                                                                     |
 | -------------------- | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -27,13 +27,14 @@ while `exposure_at` is available for the later consumer cutover.
 | `run_id`             | String                  | Stamped at SDK fire-time from the resolved live Run                                                                                                                                                                       |
 | `id_type`            | String                  | Entity type; part of Assignment Store key                                                                                                                                                                                 |
 | `targeting_key_hash` | String                  | HMAC-derived Entity identifier; raw Targeting Key is not persisted                                                                                                                                                        |
-| `variant`            | Nullable(String)        | Variant name (not id) on Exposure rows; NULL on Activation rows                                                                                                                                                           |
+| `entity_family_hash` | String                  | Stable Entity-family identity; legacy/local forms normalize in the datasource default                                                                                                                                     |
+| `variant`            | Nullable(String)        | Variant name (not id); current Activation producers retain the Exposure-backed name                                                                                                                                       |
 | `type`               | LowCardinality(String)  | `'exposure'` or `'activation'`                                                                                                                                                                                            |
 | `event_id`           | String                  | Retry-stable physical raw-row id                                                                                                                                                                                          |
 | `counterfactual`     | UInt8                   | 0/1; reserved for future counterfactual triggering                                                                                                                                                                        |
 | `source_id`          | String                  | Edge POP identifier; component of the wire `dedup_key`                                                                                                                                                                    |
 | `client_timestamp`   | Nullable(DateTime64(3)) | Optional SDK fire time; diagnostic only                                                                                                                                                                                   |
-| `exposure_at`        | DateTime64(3)           | Canonical encounter timestamp; used for `MIN` first-touch and Conversion Window anchoring                                                                                                                                 |
+| `exposure_at`        | DateTime64(3)           | Canonical encounter timestamp; defaults to `server_received_at`; used for first-touch and Conversion Windows                                                                                                              |
 | `server_received_at` | DateTime64(3)           | Splitch durable-acceptance timestamp; delivery diagnostics and retention                                                                                                                                                  |
 | `ingest_ts`          | DateTime64(3)           | Tinybird insertion watermark; `DEFAULT now64(3)` and omitted from NDJSON                                                                                                                                                  |
 | `activation_ts`      | Nullable(DateTime64(3)) | Activation timestamp; equals `server_received_at` for server-received activations                                                                                                                                         |
@@ -49,7 +50,11 @@ The `type` column discriminates Exposures from Activations on the same log. Acti
 carry `counterfactual = 0` by default; future counterfactual triggering sets `counterfactual = 1` with
 no schema change. (ADR-0013.)
 
-### `deduped_activations_state` (derived Activation state)
+### `deduped_activations_state` (planned derived Activation state)
+
+This datasource, materialization and serving pipe are not present in `infra/tinybird` yet. Current
+`analysis_activation_rows.pipe` reads `raw_events`, rejects pre-Exposure candidates and computes
+first valid Activation membership. The paragraph below specifies the intended replacement.
 
 `mv_deduped_activations_state` filters `raw_events` to Activation rows and writes
 `minState(activation_ts)` into an `AggregatingMergeTree` target partitioned by activation event month.
@@ -70,21 +75,22 @@ cannot enter first-touch Exposure dedup.
 Primary sorting key:
 `(app_id, environment_id, event_definition_id, server_received_at, id_type, targeting_key_hash)`.
 
-| Column                        | Type                   | Notes                                                               |
-| ----------------------------- | ---------------------- | ------------------------------------------------------------------- |
-| `dedup_key`                   | String                 | SHA-256 over App, Environment, and caller-stable `event_id`         |
-| `event_id`                    | String                 | Validated caller-stable UUID logical fact/retry ID                  |
-| `app_id`                      | String                 | Isolation; injected from credential; always first in WHERE          |
-| `environment_id`              | String                 | Co-scoped with `app_id`; injected from credential                   |
-| `event_definition_id`         | String                 | Resolved App-level Event Definition                                 |
-| `event_definition_version_id` | String                 | Immutable version that validated and accepted the row               |
-| `event_name`                  | String                 | Denormalized stable Event Definition name                           |
-| `id_type`                     | LowCardinality(String) | Validated against the accepting Event Definition Version            |
-| `targeting_key_hash`          | String                 | Stable App Entity HMAC; raw Targeting Key is not persisted          |
-| `fields`                      | String                 | Canonical JSON object validated against declared named typed fields |
-| `dimensions`                  | String                 | Canonical JSON object validated against declared scalar Dimensions  |
-| `server_received_at`          | DateTime64(3)          | Canonical Metric Event time                                         |
-| `ingest_ts`                   | DateTime64(6)          | Tinybird insertion time; `DEFAULT now64(6)` and omitted from NDJSON |
+| Column                        | Type                   | Notes                                                                 |
+| ----------------------------- | ---------------------- | --------------------------------------------------------------------- |
+| `dedup_key`                   | String                 | SHA-256 over App, Environment, and caller-stable `event_id`           |
+| `event_id`                    | String                 | Validated caller-stable UUID logical fact/retry ID                    |
+| `app_id`                      | String                 | Isolation; injected from credential; always first in WHERE            |
+| `environment_id`              | String                 | Co-scoped with `app_id`; injected from credential                     |
+| `event_definition_id`         | String                 | Resolved App-level Event Definition                                   |
+| `event_definition_version_id` | String                 | Immutable version that validated and accepted the row                 |
+| `event_name`                  | String                 | Denormalized stable Event Definition name                             |
+| `id_type`                     | LowCardinality(String) | Validated against the accepting Event Definition Version              |
+| `targeting_key_hash`          | String                 | Stable App Entity HMAC; raw Targeting Key is not persisted            |
+| `entity_family_hash`          | String                 | Stable Entity-family identity; default normalizes legacy/local hashes |
+| `fields`                      | String                 | Canonical JSON object validated against declared named typed fields   |
+| `dimensions`                  | String                 | Canonical JSON object validated against declared scalar Dimensions    |
+| `server_received_at`          | DateTime64(3)          | Canonical Metric Event time                                           |
+| `ingest_ts`                   | DateTime64(6)          | Tinybird insertion time; `DEFAULT now64(6)` and omitted from NDJSON   |
 
 Tinybird does not enforce uniqueness for `dedup_key`. The sharded ingest idempotency seam rejects a
 reused `event_id` with different canonical content, while `serve_deduped_metric_events` applies
@@ -92,7 +98,9 @@ reused `event_id` with different canonical content, while `serve_deduped_metric_
 raw rows and aggregate states are retained for the configured replay window, default 90 days, and
 must never expire before the longest promised Conversion Window or analysis replay window.
 
-### `web_events` (Web Event log)
+### `web_events` (planned Web Event log)
+
+The Web Event datasource, retry-state datasource and serving pipe below are unbuilt.
 
 Web Events live in their own datasource. They do not add a discriminator to `raw_events` or
 `metric_events` and never enter Experiment measurement.
@@ -146,7 +154,7 @@ Session identifiers follow those filters rather than blocking time-range data sk
 | `resource_type` | LowCardinality(String) | `'flag' \| 'run' \| 'experiment' \| 'metric' \| 'credential' \| ...`          |
 | `resource_id`   | String                 | —                                                                             |
 | `changes`       | String                 | Canonical allowlisted event metadata (archive payloads are separate)          |
-| `timestamp`     | DateTime               | Event time                                                                    |
+| `timestamp`     | DateTime64(3)          | Event time                                                                    |
 
 The physical datasource also carries archive-only indexing and verification columns:
 `dedup_key`, `archive_version`, `archived_d1_row_count`, `archive_checksum`, `request_status`,
@@ -200,8 +208,26 @@ contracted audit period, whichever is longer. Archived read pipes preserve the R
 projection, require `app_id`, and apply the same deleted-user tombstone values carried by the
 canonical audit rows.
 
-Not in D1 — unbounded, append-only workload fits Tinybird (ADR-0018). Audit reads must apply the
+The unbounded archive lives in Tinybird; ordinary mutation facts first commit in the bounded D1
+`control_plane_audit_events` outbox (ADR-0018). Audit reads must apply the
 deleted-user tombstone rules in [../platform/privacy-data-lifecycle.md](../platform/privacy-data-lifecycle.md).
+
+## Other implemented datasources and readers
+
+| Datasource                              | Physical contract and consumers                                                                                                                                                                                                                                                                                                                        |
+| --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `deduped_exposures`                     | MergeTree sorted by `(app_id, environment_id, experiment_id, run_id, variant, entity_family_hash)`; carries `id_type`, `targeting_key_hash`, `first_exposure_ts`, sticky `first_ingest_ts` and `activation_ingest_ts`, `snapshot_ts`, `watermark_ts`; COPY `cp_deduped_exposures` refreshes it; `serve_deduped_exposures` merges snapshot and raw tail |
+| `deduped_metric_events_state`           | AggregatingMergeTree with `canonical_state AggregateFunction(argMin, Tuple(...), DateTime64(6))`; partition by event month, 90-day TTL; `materialize_deduped_metric_events` feeds `serve_deduped_metric_events`                                                                                                                                        |
+| `run_snapshots`                         | MergeTree sorted by `(app_id, environment_id, experiment_id, started_at)`; freezes Run analysis config, Metric query/variance configs, Control identity, analysis version, target source, planned duration and pre-registration; `analysis_run_inputs` / `analysis_run_bootstrap` read it                                                              |
+| `raw_evaluations`                       | MergeTree usage facts; `analysis_evaluation_usage` groups counts by Flag, SDK runtime, batch mode, source and Exposure state                                                                                                                                                                                                                           |
+| `entity_deletions`                      | App/Entity deletion boundaries used by analysis exclusion and privacy reads                                                                                                                                                                                                                                                                            |
+| `app_identity_generation_tombstones`    | App identity generation deletion boundaries used by privacy and analysis readers                                                                                                                                                                                                                                                                       |
+| `environment_exposure_status_state`     | Aggregated Exposure health state from `materialize_environment_exposure_status`; read by `environment_exposure_status`                                                                                                                                                                                                                                 |
+| `environment_exposure_status_deletions` | App/Environment deletion boundaries applied by the Exposure health read                                                                                                                                                                                                                                                                                |
+
+Exact column and aggregate-state types live in `infra/tinybird/datasources/*.datasource`; serving,
+analysis and privacy SQL live in `infra/tinybird/pipes/*.pipe`. No `web_*` files are deployed by the
+current project.
 
 ## Sources
 

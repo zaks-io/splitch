@@ -13,9 +13,10 @@ Read this when touching `apps/control-panel`, frontend specs, or UI copy for aut
 - Use Organization for account ownership.
 - Use App for product or service surface.
 - Use Environment for `dev`, `prod`, and other deployment contexts.
+- Use Temporary Environment for an expiring copy, with its expiry and Sync source visible.
 - Use Flag Configuration for the per-Environment editable state of a Flag.
 - Use Promote for moving configuration across Environments.
-- Use Start and End for Experiment Run lifecycle.
+- Use Start, End, and Conclude for Experiment Run lifecycle.
 - Use Approval Request for the pending-change object.
 - Use Review for approving or declining an Approval Request.
 - Use Confirmation for self-review under a `confirm` Policy.

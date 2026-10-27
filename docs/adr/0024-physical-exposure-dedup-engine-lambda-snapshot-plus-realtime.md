@@ -1,6 +1,9 @@
 # Physical Exposure dedup engine: lambda architecture (Copy Pipe snapshot + real-time UNION)
 
-**Status:** accepted
+**Status:** accepted; built for Exposures (`deduped_exposures` snapshot plus
+`serve_deduped_exposures` tail), so the "Deferred, not pre-built" consequence is past. Not built yet:
+the Activation `minState` materialization (`analysis_activation_rows.pipe` reads `raw_events`
+directly) and the rollup copies.
 
 ADR-0010 decided the Exposure pipeline _logically_ — ELT, raw append-only log as the system of
 record, first-touch dedup as a re-runnable windowed query at analysis time. It deliberately left the

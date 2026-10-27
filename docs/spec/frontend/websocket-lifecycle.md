@@ -89,11 +89,12 @@ navigating from `/{org}/A/dev/...` to `/{org}/B/dev/...` or `/{org}/A/dev/...` t
 The DO broadcasts a small, schema-opaque signal. The panel consumes:
 
 ```
-NudgePayload {
-  type:    string    // e.g. 'config.changed'
-  entity:  string    // 'experiment' | 'flag' | 'run' | 'segment'
+DeltaNudge {
+  type:    'config.changed'
+  entity:  'experiment' | 'flag' | 'run' | 'segment'
   id:      string    // entity ID
   version: number    // monotone counter on the entity
+  deleted?: true
 }
 ```
 
@@ -106,15 +107,16 @@ control-plane socket into a per-event invalidation channel.
 ## Nudge handler
 
 ```
-function handleNudge(nudge: NudgePayload, appId: string, environmentId: string, qc: QueryClient) {
-  const detail = qc.getQueryData(keys[nudge.entity].detail(appId, environmentId, nudge.id))
+function handleNudge(nudge: DeltaNudge, appId: string, environmentId: string, qc: QueryClient) {
+  const detail = directlyAddressableCachedDetail(nudge, appId, environmentId, qc)
   if (!nudge.deleted && detail?.version >= nudge.version) return // version gate: no-op for editor
-  invalidateQueryAndActiveRoute(keys[nudge.entity].prefix(appId, environmentId))
+  invalidateQueryAndActiveRoute(nudgeInvalidationPrefix[nudge.entity](appId, environmentId))
   retryUntilReturnedVersionReaches(nudge.version)
 }
 ```
 
-Deletion nudges bypass the version gate. They carry `version: 0`, so applying the gate to a cached
+This is simplified pseudocode. Run nudges have no parent Experiment ID and cannot address a cached
+detail; uncached details also skip the version check. Deletion nudges bypass the version gate. They carry `version: 0`, so applying the gate to a cached
 detail with a higher version would discard the deletion. Their invalidation converges when the
 refetch succeeds; only non-deletion nudges additionally require the returned detail version to reach
 the nudge version.
@@ -128,8 +130,10 @@ A failed nudge-triggered refetch is **non-fatal**:
 - The failed refetch never unmounts existing data
 - The UI degrades to stale + dismissable toast ("couldn't refresh, retrying")
 - Retry policy: the initial refetch plus five retry attempts after 2 s / 4 s / 8 s / 16 s / 32 s
-- A successful response below the nudge version is stale, not a successful refetch
-- The stale indicator remains asserted through the complete 62-second retry window
+- Each delay has ±20% jitter. The base delays total 62 seconds, excluding request time
+- For an existing versioned detail cache entry, a response below the nudge version stays stale.
+  Run nudges and uncached details cannot apply that version check; they require successful reads
+- The stale indicator remains asserted through the retry window
 - After the fifth retry fails or remains below target: stop retrying and keep the stale indicator
   asserted until a later nudge, reconnect, or manual refresh succeeds
 - Sentry: low-severity breadcrumb, not an error event
@@ -144,7 +148,8 @@ active-route refetches from the read API are the only mechanisms that change pan
 
 ## Marketing live-data routes
 
-Marketing uses the same per-(App, Environment) DO (`idFromName(`${appId}:${environmentId}`)`) if it
+No marketing live-config Query/socket is implemented in `apps/marketing/src`. A future route uses
+the same per-(App, Environment) DO (`idFromName(`${appId}:${environmentId}`)`) if it
 fetches live config data (e.g. live pricing from a specific Environment's configuration). If a marketing
 route is fully prerendered (static HTML at build time), it has no socket and needs none. Live-data
 marketing routes follow the same nudge model;

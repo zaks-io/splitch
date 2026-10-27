@@ -64,8 +64,8 @@ rules, including the POST reads
 - Metrics: `metrics_create`, `metrics_update`
 - Client Key: `client_key_get`
 
-`client_key_get` provisions the public Client Key on first read. Today it requires `read-write`,
-and it stays a `write` route so a read-only token's behavior does not change. App and
+`client_key_get` provisions the public Client Key on first read and requires `write`.
+Read-only grants cannot call it. App and
 Environment creation also provision a Client Key. That is not secret minting, so they need
 `write` only.
 
@@ -75,7 +75,7 @@ Environment creation also provision a Client Key. That is not secret minting, so
 **`credentials`:** `client_key_update` (origin allow-list and rate limit), `client_key_rotate`,
 `api_keys_create`, `api_keys_revoke`, `cloudflare_installations_revoke`,
 `convex_installations_revoke`, `sentry_installations_create`, `sentry_installations_delete`,
-`sentry_secret_rotations_create`. Revoking or deleting a credential is `credentials`, not
+`sentry_secret_rotations_create`, `integration_deliveries_create`. Revoking or deleting a credential is `credentials`, not
 `delete`, so one permission covers a credential's whole lifecycle.
 
 **`members`:** `organization_members_add`, `organization_members_update`,

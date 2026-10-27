@@ -9,14 +9,14 @@ same Evaluation Worker, owns write timing after durable Event Ingest acceptance.
 
 ```
 interface AssignmentStore {
-  // Eager pre-load: one edge-local read fetches all holdovers for this Entity.
-  // Returns a map keyed by experimentId (string). Empty map if Entity has no holdovers.
-  getAll(appId: string, idType: string, targetingKey: string): Map<string, HoldoverRecord>
-
-  // First-touch write: called by Exposure orchestration after durable Event Ingest acceptance.
-  // Durable Object ensures exactly one winner per key across concurrent POPs.
-  put(appId: string, experimentId: string, idType: string, targetingKey: string, runId: string, variant: string): void
+  getAll(input: { appId, idType, targetingKey, identityVersion? }): Promise<Map<string, HoldoverRecord>>
+  put(input: { appId, experimentId, idType, targetingKey, runId, variant,
+               identityVersion?, sourceCreatedAtMs? }): Promise<PutResult>
+  putHashed(input: { appId, experimentId, idType, targetingKeyHash, runId, variant,
+                     identityVersion?, sourceCreatedAtMs? }): Promise<PutResult>
 }
+
+type PutResult = { status: 'stored' | 'existing'; assignment: HoldoverRecord }
 
 interface HoldoverRecord {
   runId: string    // which Run owns this Entity's Exposures
@@ -28,7 +28,9 @@ interface HoldoverRecord {
 
 Logical key: `(appId, experimentId, idType, targetingKey)` — four components, all required.
 Physical key: `(appId, experimentId, idType, targetingKeyHash)`, derived inside the substrate before
-touching KV or Durable Objects. Callers never pass the hash.
+touching KV or Durable Objects. Exposure Ticket redemption uses `putHashed` because the ticket
+contains no raw Targeting Key. Production writes require `sourceCreatedAtMs`; the inventory-backed
+writer also requires the admitted `identityVersion` for deletion and reset fencing.
 
 | Component      | Type   | Why load-bearing                                                                                                                                                                                                                |
 | -------------- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -47,14 +49,17 @@ holdovers for **all Experiments** this Entity has been exposed in, as a map keye
 
 - **`runId`** — which Run owns this Entity's Exposures. Without it, ADR-0006's
   "counted in the old Run" is unimplementable. The Exposure pipeline stamps new Exposures
-  with the stored `runId` for holdovers (they remain attributed to the original Run).
+  with the live `runId` for fresh assignments. Holdover replays fire no new Exposure; the
+  existing Exposure remains attributed to its original Run.
 - **`variant`** — what Variant to replay for sticky experience. `assign()` cannot recompute
   it once the Run's frozen config is archived.
 
 ## Read model (eager pre-load)
 
-One `getAll` call at request start pre-loads all holdovers into an in-memory map before
-any flag is resolved. Each per-flag decision is then a map lookup: `O(1)`, no I/O.
+The evaluate path calls `getAll` after identifying the controlling Experiment and validating
+`idType`. Bulk resolution memoizes this call per Entity; each per-Flag holdover decision then
+uses the returned map. Retained identity epochs can require more than one KV key read;
+conflicting retained-epoch records fail loudly.
 Chosen over lazy per-Experiment fetch because the hot path across five edge runtimes
 benefits from front-loaded round-trips.
 
@@ -65,19 +70,24 @@ Object is touched on the read path.
 
 `put()` is called by **Exposure-pipeline orchestration hosted in the Evaluation Worker**, not by the
 evaluate policy module or public SDK accessor. The policy module resolves and hands off the Exposure.
-After Event Ingest durably seals it, the orchestration schedules `put()` at apparent first-touch.
+After Event Ingest durably seals it, remote `evaluate` awaits `put()` at apparent first-touch
+before returning success. A write failure returns `503` without undoing the accepted Exposure.
 
-Substrate: one Durable Object per `(appId, experimentId, idType, targetingKeyHash)`. The DO's
+Substrate: one Durable Object per `(appId, idType, targetingKeyHash)`, with one stored entry per
+Experiment. All Experiment writes for an Entity share this serialization point so concurrent
+read-merge-writes cannot clobber the shared KV blob. The DO's
 `get-then-put-if-absent` is atomic (single-threaded, globally unique per key), so two
 concurrent POPs cannot both win first-touch. On commit, the DO write-throughs to KV.
 
 ## Holdover write failure contract
 
 - **DO is truth.** `putIfAbsent` is the authoritative first-touch winner.
-- **KV write-through failure is self-healing.** A KV miss causes the next `evaluate()` to
-  recompute `assign()` deterministically (same Variant for a new Entity; same Variant for a
-  returning holdover if KV misses until propagation). No dataset corruption — the DO still
-  holds the one true first-touch winner.
+- **KV write-through completion is awaited.** The DO retains the authoritative first-touch result
+  if write-through fails; a later `put` reasserts that winner in KV. Ticket redemption additionally
+  has a durable holdover-write outbox retry path.
+  A KV miss is an empty read and may temporarily cause fresh resolution while propagation catches
+  up. A KV read exception, malformed blob, or conflicting retained-epoch record instead raises
+  `AssignmentStoreError`; evaluation fails loudly and produces no Exposure decision.
 - **Raw-log append is independent, at-least-once.** Retried with the wire-level `dedup_key`
   (per-physical-row idempotency key; see [../pipeline/exposure-event-contract.md](../pipeline/exposure-event-contract.md)).
 - **No distributed transaction on the hot path.** Experience (DO) and analysis (log) each

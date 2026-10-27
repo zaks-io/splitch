@@ -1,17 +1,19 @@
 # Control Panel navigation redesign
 
-Status: agreed 2026-08-21; Slice 1 shipped 2026-08-21 (#393); Slices 2 to 4 implemented. Clickable mocks
-that this doc describes live outside the repo (`~/.t3/userdata/attachments/splitch-nav-mocks`, served
-locally); this doc is the durable record. When it disagrees with `navigation-and-ia.md` or
-`screen-inventory.md`, this doc wins and those two are amended as each slice ships.
+Status: Slices 1 to 4 shipped (#393, #396, #398, #399, #400). The root redirect also shipped in
+PR #403; sidebar section stability was revised in #533. This document records the design and slice
+boundaries. [navigation-and-ia.md](./navigation-and-ia.md) and
+[screen-inventory.md](./screen-inventory.md) describe the current route map. Phase 2 remains proposed
+work. Clickable design mocks were
+external artifacts; they are not needed to implement the current navigation.
 
 ## Why
 
 Agents (CLI, MCP) are the primary operator. The panel is the human surface, and it should make the
-happy paths short. The shipped panel is correct but bog-standard and click-heavy. Measured against a
-cold landing at `/`:
+happy paths short. The baseline before these slices was click-heavy. Its cold landing at `/` had
+the following costs; these are the motivating measurements, not the current UI:
 
-| Task                                  | Clicks today                   | Root cause                                                                                                                                                |
+| Task                                  | Baseline clicks                | Root cause                                                                                                                                                |
 | ------------------------------------- | ------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Create a Flag                         | 5, and you must pick an env    | `/` is a chooser, `/{org}` is a card grid whose App name is a label, the only way in is an Environment link (`app-list-card.tsx`, `environment-link.tsx`) |
 | Flip a Flag                           | 5 + toggle                     | Flags list shows Enabled as a Badge, no inline control (`flags-table-row.tsx`)                                                                            |
@@ -20,8 +22,8 @@ cold landing at `/`:
 | Switch App, keep your section         | lost                           | App switcher drops to the Overview (`app-shell-switcher.tsx` builds `scopedHref` with no section)                                                         |
 | Jump anywhere by name                 | n/a                            | `packages/ui/src/components/command.tsx` (cmdk) exists and is unused                                                                                      |
 
-The root layout (`__root.tsx`) adds a third layer of chrome (a `max-w-6xl` top bar with a second
-Sign out) around whichever shell renders inside it, so every screen is a card inside a card.
+The baseline root layout added another top bar and Sign out around the two shells. The shipped
+`__root.tsx` now provides the document, shared providers, pending/error components, and Toaster.
 
 ## Decisions
 
@@ -31,7 +33,7 @@ Sign out) around whichever shell renders inside it, so every screen is a card in
    its Environment pills are the first thing on the page. Sections follow in order of use:
    Flags, Experiments, Overview, Segments, Metrics, Settings. Overview is demoted from first to
    third; it stays a destination and remains the landing for a bare `/{org}/{app}/{env}`.
-3. **The Organization block is at the bottom of the sidebar**: Apps, Members, Billing & Usage, the
+3. **The Organization block is at the bottom on App screens and above the App list on Org screens**: Apps, Members, Integrations, Billing & Usage, the
    Organization switcher (multi-org only), the command palette trigger, and the user row with Sign
    out. Rare things are furthest from where the eye starts.
 4. **A bare App route exists: `/{org}/{app}` is the App home.** It renders Flags across every
@@ -42,7 +44,8 @@ Sign out) around whichever shell renders inside it, so every screen is a card in
 key)`, `packages/db/src/schema/flags.ts:41`); keys can collide across Apps, so a merged list would
    mislead. "All Environments within one App" is the only valid aggregate, and it is the App home.
 6. **Environment is a visible control, not a dropdown.** Pills in the sidebar; a segmented control
-   next to the page title on Flags/Experiments pages (All environments | dev | prod). The prod
+   next to the page title on Flags pages (All environments | dev | prod). Experiments currently has
+   an active-Environment badge; its segmented control remains in Phase 2. The prod
    pill carries the warning token and a ring when active; the page header takes a warning tint and
    a "Production: Policy confirms changes" badge. Switching Environment preserves the path
    (`environmentSwitchHref`, unchanged).
@@ -66,7 +69,7 @@ key)`, `packages/db/src/schema/flags.ts:41`); keys can collide across Apps, so a
     a new row on the App home with a disabled Switch in every Environment cell (the Control Plane
     initializes a disabled Flag Configuration per Environment at creation), so the first time prod
     is touched is a deliberate click on a cell labeled prod. The
-    CLI equivalent (`splitch flags config set <key> --env dev --enabled`) is shown inline for
+    CLI equivalent (`splitch flag-config update <key> --env dev --enabled true`) is shown inline for
     parity.
 12. **Promote is reachable from the source.** The App home matrix carries a per-row "Promote
     dev → prod" that opens the existing Promotion screen on the target with `?from=` set.
@@ -103,17 +106,18 @@ versus the static App-level routes; reserve those slugs at App creation (follow-
 Top to bottom:
 
 1. **App block**: the split signature, the `APP` label, the App name. Clicking the name opens the
-   App switcher (Apps of the current Org only; choosing one keeps your section when the target has
-   it, otherwise lands on that App's home). Under it, one Environment pill per Environment of the
+   App switcher (Apps of the current Org only). From an Environment screen it keeps the section,
+   using the matching Environment key or the target App's first Environment; a detail steps back to
+   its section. From an App home it opens the target App home. Under it, one pill per Environment of the
    App; the active one is filled (primary, or warning for prod); `All` marks the App home.
-   On Org screens (Home, Members, Billing) the App block shows the last-visited App of this Org
-   when one is known, otherwise "Choose an App" with the switcher.
+   On Organization screens there is no active App; the Organization block comes first, followed by
+   direct App-home links (`panel-sidebar.tsx`, `panel-sidebar-app-block.tsx`).
 2. **Sections**: Flags, Experiments, Overview, Segments (App), Metrics (App), Settings. Hrefs are
    `scopedHref(scope, section)` for the active Environment; when no Environment is active (App
-   home, Org screens) Flags links to the App home and the other sections link to the last-visited
-   or first non-prod Environment of the App. Never prod by default.
-3. **Organization block** (bottom, above the palette): `ORGANIZATION` label + name + switcher
-   (multi-org only), then Apps (`/{org}`), Members, Billing & Usage.
+   home) Flags links to the App home and other sections use the App's first Environment. Organization
+   screens have no App sections. No last-visited App/Environment selects sidebar scope.
+3. **Organization block** (bottom on App screens, top on Organization screens): name + switcher
+   (multi-org only), then Apps (`/{org}`), Members, Integrations, Billing & Usage.
 4. **Palette trigger** ("Search or jump to" with ⌘K) and the **user row** (user id, Sign out as a
    POST form, never a link).
 
@@ -124,7 +128,7 @@ sidebar renders from so `shell-navigation.spec.ts` keeps proving every destinati
 ### Page header (`PanelPageHeader`)
 
 Left: optional crumb (`ORGANIZATION` on Org screens), the title, the Environment segmented control
-where the page has one (Flags, Experiments), and the Environment badge when the active Environment
+where the page has one (Flags), and the Environment badge when the active Environment
 is guarded (its Policy confirms writes; prod by default). Right: primary action, a divider, rarer
 actions. Height 14 (3.5rem); a guarded Environment tints the header with `bg-warning-muted/40`.
 The guard tint and badge land with the first Environment-scoped header (slice 3b); slice 1 ships
@@ -224,9 +228,9 @@ merged before the next starts unless marked parallel.
   App/Environment navigation the sidebar needs (`resolveScopedLoaderContext`'s navigation half,
   extracted into `resolveNavigation(session, resolver)` so both scopes share it).
 - `$orgSlug.$appSlug.$env.tsx` renders `PanelShell` with the App block active; `AppShell`,
-  `AppShellSwitchers`, `OrgShell`, `ShellMenu` are deleted. The App switcher keeps the section:
+  `AppShellSwitchers`, and `OrgShell` are deleted; `ShellMenu` remains a shared switcher primitive. The App switcher keeps the section:
   target href is `scopedHref(targetScope, currentSection)` when the target App has an Environment
-  with the same `env`, else that App's home.
+  with the same `env`, else its first Environment; from an App home it opens the target App home.
 - `appSectionRegistry` reordered: Flags, Experiments, Overview, Segments, Metrics, Settings.
 - Sign out lives in the sidebar user row only (POST form).
 - Tests: `app-shell-navigation.test.ts` order; `shell-navigation.spec.ts` (header assertions move
@@ -239,8 +243,8 @@ merged before the next starts unless marked parallel.
 
 - Follow-up (found in review, not blocking): `resolveNavigation` resolves Environments for every
   App in every Organization of the session, one D1 query per App, and only the current App's
-  Environments are rendered. Slice 2 moves the App switcher to App-home hrefs, after which
-  navigation needs Environments for the current App only; scope the resolver then.
+  Environments are rendered. This optimization remains pending: the shipped App switcher preserves
+  Environment sections and still needs target-App Environment data.
 
 ### Slice 2: App home (Flags across all Environments)
 
@@ -266,8 +270,8 @@ merged before the next starts unless marked parallel.
       card.
 - [x] Apps table replaces the card grid; Needs-you column from the existing attention rollup; Create
       App top-right of the table.
-- [x] `/` redirects to `/{org}` for an exact one-Organization session only when no resync is pending
-      and the session Organization list is complete (`routes/index.tsx` loader).
+- [x] `/` redirects to the last-visited authorized Organization, else the first, when no resync is
+      pending and the session Organization list is complete (`routes/index.tsx` loader).
 - [x] Tests: Home component and loader unit coverage; e2e `org-shell.spec.ts`, `shell.spec.ts`, and
       `create-organization.spec.ts` updated for Home and the redirect. A fresh user has zero
       Organizations and still sees the chooser/sign-up surface.
@@ -301,7 +305,7 @@ merged before the next starts unless marked parallel.
   - [x] "New Flag" opens the dialog.
   - [x] Keyboard-only operation proven in `e2e/control-panel/command-palette.spec.ts`.
 
-### Phase 2 (not started, in priority order)
+### Phase 2 (remaining proposals, in priority order)
 
 - Flags master-detail on the Environment page (Direction D).
 - Experiments list: inline Start / End / Conclude / Results on rows; Environment segmented control;
@@ -325,7 +329,7 @@ merged before the next starts unless marked parallel.
 
 ## Out of scope
 
-- Web Analytics section (still not shipped; the registry keeps it out).
+- Web Analytics section (not shipped; it has no route or `appSectionRegistry` entry).
 - Any change to Control Plane routes, the SDK, CLI, or MCP. Everything here is panel-only and uses
   existing operations. The Phase 2 Needs-you items are the first that would not be.
 - Mobile layout beyond the sidebar collapsing to a top strip under `md`.

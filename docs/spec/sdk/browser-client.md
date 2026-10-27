@@ -36,15 +36,15 @@ const splitch = createSplitchBrowserClient({
 await splitch.init(); // one evaluate-all fetch
 ```
 
-| Option                     | Required | Default                    | Notes                                                                                 |
-| -------------------------- | -------- | -------------------------- | ------------------------------------------------------------------------------------- |
-| `clientKey`                | yes      | —                          | `pk_…` only. A secret key throws `SDK_CREDENTIAL_CONFIGURATION_INVALID`.              |
-| `context`                  | yes      | —                          | `{ targetingKey, idType?, ...attributes }`; `idType` defaults to `'user'` (ADR-0036). |
-| `bootstrap`                | no       | `null`                     | A server-produced `evaluateAll` result + its context (see Bootstrap).                 |
-| `revalidateMs`             | no       | `60_000`                   | ETag revalidation interval; `0` disables the loop.                                    |
-| `endpoint`                 | no       | `https://edge.splitch.dev` | Same default table as the root client.                                                |
-| `timeoutMs`                | no       | `5000`                     | Per network call.                                                                     |
-| `fetch` / `logger` / `now` | no       | platform / console / Date  | The root client's injectable seams, unchanged.                                        |
+| Option                     | Required | Default                    | Notes                                                                               |
+| -------------------------- | -------- | -------------------------- | ----------------------------------------------------------------------------------- |
+| `clientKey`                | yes      | —                          | `pk_…` only. A secret key throws `SDK_CREDENTIAL_CONFIGURATION_INVALID`.            |
+| `context`                  | yes      | —                          | `{ targetingKey, idType?, attributes? }`; `idType` defaults to `'user'` (ADR-0036). |
+| `bootstrap`                | no       | `null`                     | A server-produced `evaluateAll` result + its context (see Bootstrap).               |
+| `revalidateMs`             | no       | `60_000`                   | ETag revalidation interval; `0` disables the loop.                                  |
+| `endpoint`                 | no       | `https://edge.splitch.dev` | Same default table as the root client.                                              |
+| `timeoutMs`                | no       | `5000`                     | Per network call.                                                                   |
+| `fetch` / `logger` / `now` | no       | platform / console / Date  | The root client's injectable seams, unchanged.                                      |
 
 Construction performs no I/O and touches no browser API (same rule as the root client). The context
 is fixed for the client's lifetime — changing user means constructing a new client (static-context
@@ -56,7 +56,7 @@ paradigm; no `setContext` in v1).
 await splitch.init(); // fetch; no-op when bootstrapped
 const value = splitch.evaluate("new-checkout", false); // sync; queues Exposure redemption
 const details = splitch.evaluateDetails("new-checkout", false); // sync; full ResolutionDetails
-const stop = splitch.subscribe("new-checkout", (details) => rerender());
+const stop = splitch.subscribe("new-checkout", () => rerender());
 await splitch.flush(); // acknowledged queue flush
 await splitch.close(); // final flush; stops timers/listeners
 ```
@@ -65,8 +65,9 @@ The accessor names keep the repo's exposure vocabulary: **`evaluate` is the expo
 paradigms (`packages/sdk/CONTEXT.md`); only the transport moment differs. There is no `peek` on the
 browser client (Client Key, ADR-0034) and no per-call `idempotencyKey` — the SDK owns fetch and
 redemption identity (see [evaluate-all-endpoint.md](./evaluate-all-endpoint.md) Billing and
-[exposures-endpoint.md](./exposures-endpoint.md) retry identity). The second parameter is the
-caller's Default Variant, same as the root client.
+[exposures-endpoint.md](./exposures-endpoint.md) retry identity). The optional second parameter is
+the caller's Default Variant, defaulting to `false`. The root
+client instead takes `defaultValue` inside its per-call context.
 
 Fail-loud rules (ADR-0036):
 
@@ -104,7 +105,7 @@ Event queue contract (`packages/sdk/CONTEXT.md`) verbatim:
   the queue is empty.
 - Page-lifecycle delivery uses authenticated `fetch` with `keepalive` (an `Authorization` header is
   required, which rules out `sendBeacon`).
-- `flush()` awaits an acknowledged `ExposureBatchResponse` and resolves with the per-item results;
+- `flush()` awaits an acknowledged batch and resolves with `readonly ExposureBatchResult[]`;
   an empty queue resolves without network I/O.
 - A failed flush is logged loudly. Batch-level transport failure and per-item
   `SERVICE_UNAVAILABLE` retain the same `exposureId`s for the next flush and make at most three
@@ -140,8 +141,9 @@ splitch.evaluate("new-checkout", false); // sync, immediately — init() not req
   another Entity's Variants. Fail-loud, never a silent refetch that masks a wiring bug upstream.
 - A valid bootstrap makes reads available synchronously pre-`init()`; the revalidation loop still
   starts (first tick validates the bootstrap's `etag`). Bootstrap reads bill zero (ADR-0033).
-- The serialized object is public page content by design: evaluated results, non-revealing reasons,
-  opaque Exposure identities, and tickets only — never rules or salt
+- The serialized object includes the original Evaluation Context, including its Targeting Key and
+  every supplied attribute, as well as evaluated results, non-revealing reasons, opaque Exposure
+  identities, and tickets. Pass only context attributes safe to publish. It never includes rules or salt
   ([evaluate-all-endpoint.md](./evaluate-all-endpoint.md), "destination-fixed"). The API Key stays
   server-side; only `pk_…` reaches the page.
 

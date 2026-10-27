@@ -38,12 +38,13 @@ Toggle a Flag and it shows up in Sentry's flag audit log within a minute. Check 
 ## 2. Evaluation tracking (app → Sentry)
 
 ```bash
-pnpm install
-SENTRY_DSN=... SPLITCH_CLIENT_KEY=pk_... pnpm start
+# From the repository root, with workspace dependencies installed and @splitch/sdk built:
+SENTRY_DSN=... SPLITCH_CLIENT_KEY=pk_... pnpm --filter @splitch/example-sentry start
 ```
 
-`src/main.ts` evaluates one boolean and one multivariate Flag, then throws. The resulting Sentry
-issue's **Feature Flags** section should list `new-checkout` and `checkout-flow:<variant>`.
+`src/main.ts` evaluates one boolean and one multivariate Flag, then captures a synthetic exception.
+The resulting Sentry issue's **Feature Flags** section should list `new-checkout` and
+`checkout-flow:<variant>`.
 
 With both halves installed, toggling a Flag shortly before an error makes Sentry surface it as a
 **suspect flag** on the issue. That is the actual product outcome, and the only check that proves the

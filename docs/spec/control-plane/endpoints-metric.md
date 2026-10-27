@@ -7,8 +7,11 @@ are `Content-Type: application/json`. Shared errors and pagination are defined i
 [control-plane-endpoint-inventory.md](control-plane-endpoint-inventory.md).
 
 Event Definitions and Metrics are App-level. Metric Events are per-Environment data-plane facts and
-are accepted only by the Event Ingest Worker route in
+execute on the Event Ingest Worker through the Evaluation public address described in
 [metric-event-contract.md](../pipeline/metric-event-contract.md).
+
+Reads require App membership; authoring, publication, and Metric deletion require App admin or
+owner. PAT permissions are `read`, `write`, and `delete` respectively.
 
 ## Event Definition endpoints
 
@@ -24,12 +27,13 @@ Body:
 {
   name: string; // stable SDK eventName; unique per App
   family: "metric" | "web"; // immutable
-  display_name: string;
+  displayName: string;
   description?: string;
+  idempotency_key?: string;
 }
 ```
 
-Returns the Event Definition with `state: "draft"` and `current_published_version_id: null`.
+Returns the Event Definition with `state: "draft"` and `currentPublishedVersionId: null`.
 Creating the definition does not create an implicit schema. A legacy Metric migration instead
 reports `state: "incomplete"`: the Event binding is preserved for edits, but the operator must
 publish a complete schema before the Event Definition can accept Metric Events.
@@ -40,7 +44,7 @@ Returns the Event Definition plus its published version summaries.
 
 ### `PATCH /apps/{app_id}/event-definitions/{event_definition_id}`
 
-Body may update `display_name` and `description` only. `name` is stable after creation because it is
+Body may update `displayName` and `description` only. `name` is stable after creation because it is
 the SDK event key. `family` is also stable because it selects the wire contract, validation branch,
 and physical datasource.
 
@@ -54,12 +58,12 @@ type NumberKind = "measurement" | "count" | "amount" | "duration" | "ratio" | "s
 
 type NumericDomain =
   | {
-      allowed_values: number[];
+      allowedValues: number[];
       minimum?: never;
       maximum?: never;
     }
   | {
-      allowed_values?: never;
+      allowedValues?: never;
       minimum: number;
       maximum: number;
     };
@@ -69,19 +73,19 @@ type ScalarDefinitionRequest =
       name: string;
       type: "boolean";
       required: boolean;
-      allowed_values?: boolean[];
+      allowedValues?: boolean[];
     }
   | {
       name: string;
       type: "string";
       required: boolean;
-      allowed_values: string[];
+      allowedValues: string[];
     }
   | ({
       name: string;
       type: "number";
       required: boolean;
-      number_kind: NumberKind;
+      numberKind: NumberKind;
     } & NumericDomain);
 
 type EventFieldDefinitionRequest =
@@ -90,32 +94,33 @@ type EventFieldDefinitionRequest =
       name: string;
       type: "json";
       required: boolean;
-      json_schema: ClosedJsonSchema;
+      jsonSchema: ClosedJsonSchema;
     };
 
 type MetricEventDefinitionVersionRequest = {
-  entity_type: string; // required identity
+  entityType: string; // required identity
   fields: EventFieldDefinitionRequest[];
   dimensions: ScalarDefinitionRequest[];
+  idempotency_key?: string;
 };
 
 type WebEventDefinitionVersionRequest = {
-  entity_type: string | null; // null prohibits identity; string permits matching optional identity
+  entityType: string | null; // null prohibits identity; string permits matching optional identity
   fields: MetricEventDefinitionVersionRequest["fields"];
   dimensions: MetricEventDefinitionVersionRequest["dimensions"];
 };
 ```
 
 The Worker enforces unique field names, unique Dimension names, disjoint sets, a JSON Schema only for
-`type = "json"`, and `additionalProperties: false` at every object node. An `allowed_values` list
+`type = "json"`, and `additionalProperties: false` at every object node. An `allowedValues` list
 must be non-empty, unique, and exactly match its scalar declaration; it is required for every string
 field or Dimension, one valid numeric-domain branch, and prohibited on a JSON field, whose every
-string node requires a JSON Schema `enum`. Every number declares `number_kind` and either a numeric
+string node requires a JSON Schema `enum`. Every number declares `numberKind` and either a numeric
 allowlist or both finite bounds; recursive JSON number nodes declare the equivalent `numberKind` and
 `enum` or bounds. String values must be bounded machine tokens, and top-level or nested property
 names matching the direct-PII denylist fail publication. The exact token and denylist rules live in
 [leaf-schemas-runtime.md](../contracts/leaf-schemas-runtime.md#closed-json-schema). Allowlists
-participate in `schema_hash`.
+participate in `schemaHash`.
 
 `ClosedJsonSchema` is the exact recursive subset defined in
 [leaf-schemas-runtime.md](../contracts/leaf-schemas-runtime.md#closed-json-schema). Unknown schema
@@ -124,16 +129,16 @@ keywords, references, composition, open object nodes, and malformed bounds fail 
 
 `minimum` and `maximum` are the required pair when a number has no numeric allowlist. They are finite
 and inclusive, cannot be combined with a numeric allowlist, and are invalid on non-number
-declarations. Publication rejects `minimum > maximum`. `number_kind` and numeric domains participate
-in `schema_hash`.
+declarations. Publication rejects `minimum > maximum`. `numberKind` and numeric domains participate
+in `schemaHash`.
 
-The Worker assigns the dense version ordinal, computes `schema_hash`, inserts the version, and
-advances `current_published_version_id` in one transaction.
+The Worker assigns the dense version ordinal, computes `schemaHash`, inserts the version, and
+advances `currentPublishedVersionId` in one transaction.
 
 Returns the published `EventDefinitionVersion`.
 
 The shared version resource dispatches by the parent Event Definition's family. A `metric` version
-rejects null `entity_type`. A `web` version requires either explicit null for an anonymous-only
+rejects null `entityType`. A `web` version requires either explicit null for an anonymous-only
 definition or a non-empty Entity type. Clients cannot submit or override `family` on a version
 request.
 
@@ -169,29 +174,30 @@ Body:
   description?: string;
   kind: "binomial" | "count" | "revenue" | "ratio" | "retention";
 
+  appId: string;
   // Required for binomial/count/revenue/retention; absent for ratio.
-  event_definition_id?: string;
+  eventDefinitionId?: string;
 
   // Required for count/revenue. Must be a declared top-level number field.
-  event_field_name?: string;
+  eventFieldName?: string;
 
   // Required for ratio. Both must name distinct same-App non-Ratio Metrics; cycles rejected.
-  numerator_metric_id?: string;
-  denominator_metric_id?: string;
+  numerator?: MetricRef;
+  denominator?: MetricRef;
 
-  // Required for retention. Window is [anchor + horizon_start_ms, anchor + horizon_end_ms).
-  horizon_start_ms?: number;
-  horizon_end_ms?: number;
+  // Required for retention. Window is [anchor + horizonStartMs, anchor + horizonEndMs).
+  horizonStartMs?: number;
+  horizonEndMs?: number;
 
-  conversion_window_ms?: number;
+  idempotency_key?: string;
 
   // Analysis knobs. Null means "engine default"; Run Start resolves each one and
   // freezes the answer on the Run. Every threshold below is a percent.
   winsorize?: boolean | null;         // rejected on binomial and retention: 0/1 has no tail to cap
-  winsorize_pct?: number | null;      // > 0, <= 100
+  winsorizePct?: number | null;      // > 0, <= 100
   cuped?: boolean | null;             // ignored on ratio: the delta method is never CUPED-adjusted
-  cuped_coverage_threshold_pct?: number | null;  // > 0, <= 100
-  downside_threshold_pct?: number | null;    // set to make this a Guardrail Metric
+  cupedCoverageThresholdPct?: number | null;  // > 0, <= 100
+  downsideThresholdPct?: number | null;    // set to make this a Guardrail Metric
   direction?: "higher_is_better" | "lower_is_better" | null;  // which way a move is good; null reads as neutral
 }
 ```
@@ -199,8 +205,8 @@ Body:
 The Worker resolves the current published Event Definition Version before writing a Metric that
 directly references an Event Definition. The Event Definition must have `family = "metric"`:
 
-- Binomial and Retention reference the definition and leave `event_field_name` absent. Retention
-  also requires `horizon_start_ms` and `horizon_end_ms` (`end > start`).
+- Binomial and Retention reference the definition and leave `eventFieldName` absent. Retention
+  also requires `horizonStartMs` and `horizonEndMs` (`end > start`).
 - Count and Revenue reference a declared `number` field by exact name on that published version.
   JSON paths and expressions are rejected.
 - Ratio references two same-App non-Ratio, non-Retention Metrics with distinct ids, rejects Ratio
@@ -214,19 +220,23 @@ span versions remain lossless after later measurement edits. A later publish tha
 a referenced field rejects new Metric create/patch and new ingest against the current version; it
 does not rewrite already-accepted rows.
 
-Metric responses include `configuration_status = ready`. A Ratio migrated from the former direct
-Event Definition shape has `configuration_status = needs_configuration`, keeps its former binding
+Metric responses include `configurationStatus = ready`. A Ratio migrated from the former direct
+Event Definition shape has `configurationStatus = needs_configuration`, keeps its former binding
 visible for diagnosis, and remains readable through the SDK and Control Panel. Run Start rejects it
 until an operator supplies distinct numerator and denominator Metrics; that repair clears the legacy
 direct binding instead of inferring an operand.
 
-Returns the canonical `Metric`.
+Returns the canonical `Metric`. Ratio operands are `MetricRef` objects such as
+`{ metricId: string }`, as defined by `MetricRefSchema`. Conversion Window belongs to the
+Experiment, not to Metric create or patch.
 
 ### `GET /apps/{app_id}/metrics/{metric_id}`
 
 ### `PATCH /apps/{app_id}/metrics/{metric_id}`
 
-All create fields except `kind` are patchable subject to the same cross-field validation. A migrated
+The patch schema accepts `kind`, but the Worker refuses a change to the stored kind with
+`VALIDATION_ERROR`. Other create fields except `appId` and `idempotency_key` are patchable subject
+to the same cross-field validation. A migrated
 Metric may update metadata and analysis settings while its Event Definition is `incomplete`, but it
 cannot change that Event binding until the operator publishes a complete schema. A patch is
 a measurement edit and recomputes over canonical logical facts from `serve_deduped_exposures` and
@@ -245,7 +255,7 @@ callers that delete a Metric a draft still names will fail loud at Start rather 
 ## Entity compatibility guard
 
 When a Metric is attached to an Experiment and again when a Run starts, the Worker resolves every
-referenced Event Definition's current published version. Its `entity_type` must equal the
+referenced Event Definition's current published version. Its `entityType` must equal the
 Experiment/Run `targeting_key_type`. A mismatch returns `400 ENTITY_TYPE_MISMATCH` and writes no
 Experiment, Run, or Metric-reference mutation.
 

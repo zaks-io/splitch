@@ -72,7 +72,8 @@ Content-Type: application/json
 ```
 
 Each item contains `exposureId`, `installationId`, `flagKey`, `experimentId`, `runId`,
-`runConfigHash`, `idType`, `targetingKey`, complete `attributes`, `variantName`, and `exposureAt`, the
+`runConfigHash`, `evaluationContext: { idType, targetingKey, attributes }`, `variantName`, and
+`exposureAt`, the
 millisecond UTC conversion of the Convex commit timestamp. The API Key supplies App and Environment
 scope; the body cannot select either. The endpoint is unavailable to Client Keys and never accepts a
 `targeting_key_hash` from the caller.

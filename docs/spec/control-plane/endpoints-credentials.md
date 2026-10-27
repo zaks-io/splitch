@@ -9,7 +9,10 @@ See [credentials-and-keys.md](credentials-and-keys.md) for the credential model 
 
 **Per-Environment (ADR-0027).** Both keys are scoped to one Environment, so all credential endpoints
 live under `/apps/{app_id}/envs/{environment_id}/…`. A prod Client/API Key reaches prod config only;
-keys never span Environments. `environment_id` is the canonical ID in the path.
+keys never span Environments. `environment_id` accepts a canonical ID or Environment key in the path.
+Every route requires App admin or owner. PAT permission is `write` for `client_key_get`, `read`
+for `api_keys_list`, and `credentials` for every other operation. The Temporary Environment
+permission fallback applies to the opted-in writes.
 
 ## Auto-provisioning
 
@@ -27,35 +30,42 @@ API Keys are **not** auto-provisioned — they are secret and minted on demand v
 
 ### `GET /apps/{app_id}/envs/{environment_id}/client-key`
 
-Returns: `{ key_id, key_material, origin_allowlist, is_origin_open, created_at, revoked_at? }`
-`key_material` is the public value; safely returned. `is_origin_open` is `true` when
-`origin_allowlist = null` (open to all origins) — the skins surface it as a loud warning with a
+Operation ID: `client_key_get`.
+Returns: `{ keyId, appId, environmentId, keyMaterial, originAllowlist?, isOriginOpen, rateLimitRps, createdAt, revokedAt? }`
+`keyMaterial` is the public value; safely returned. `isOriginOpen` is `true` when
+`originAllowlist = null` (open to all origins) — the skins surface it as a loud warning with a
 "lock to origins" action.
 
 ### `PATCH /apps/{app_id}/envs/{environment_id}/client-key`
 
-Body: `{ origin_allowlist?: string[] | null, rate_limit_rps?: 1 | 2 | 3 | 4 | 5 | 6 | 10 | 12 | 15 | 20 | 25 | 30 | 50 | 60 | 75 | 100 }`
+Operation ID: `client_key_update`.
+Body: `{ originAllowlist?: string[] | null, rateLimitRps?: 1 | 2 | 3 | 4 | 5 | 6 | 10 | 12 | 15 | 20 | 25 | 30 | 50 | 60 | 75 | 100 }`
 Returns: updated Client Key record. Zero, negative, fractional, and non-exact integers are
 `VALIDATION_ERROR` before any D1 or KV mutation.
 
 ### `POST /apps/{app_id}/envs/{environment_id}/client-key/revoke`
 
 Revokes current Client Key, creates a replacement.
-Returns: `{ new_key: { key_id, key_material }, revoked_key_id: string }`
+Operation ID: `client_key_rotate`.
+Returns: `{ newKey: { keyId, keyMaterial }, revokedKeyId: string }`
 
 ### `POST /apps/{app_id}/envs/{environment_id}/api-keys`
 
+Operation ID: `api_keys_create`. Body: `{ scopes: ApiKeyScope[] }`.
 Creates a new API Key. The raw secret is returned **once only**.
-Returns: `{ key_id, secret: string, scopes, created_at }` — the `secret` field is omitted on all future reads.
+Returns: `{ credential: { keyId, appId, environmentId, scopes, createdAt, revokedAt? }, value: string }`.
+`value` is the raw secret and is absent on every future read. This operation has no idempotent replay.
 
 ### `GET /apps/{app_id}/envs/{environment_id}/api-keys`
 
-Returns list of API Key metadata (no secrets): `{ key_id, scopes, created_at, revoked_at? }`
+Operation ID: `api_keys_list`.
+Returns the shared list envelope of API Key metadata (no secrets):
+`{ keyId, appId, environmentId, scopes, createdAt, revokedAt? }`.
 
 ### `POST /apps/{app_id}/envs/{environment_id}/api-keys/{key_id}/revoke`
 
-Body: `{}`
-Returns: `{ key_id, revoked_at }`
+Operation ID: `api_keys_revoke`. Body: `{}`.
+Returns: `{ keyId, revokedAt }`.
 
 ## Sources
 

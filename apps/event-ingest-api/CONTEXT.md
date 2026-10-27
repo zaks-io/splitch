@@ -17,7 +17,8 @@ activation events, Metric Events, Web Events, or dedup handoff.
 **Exposure**:
 The event that an Entity actually encountered its assigned Variant: the variant-bearing UI rendered
 or the branched codepath executed. Exposure is the only event recorded on the assignment seam. It
-carries Targeting Key, Experiment, Run, Variant, and timestamp.
+carries the Targeting Key hash, Experiment, Run, Variant, and timestamp. The raw Targeting Key is
+never stored.
 
 Analysis counts Exposures, not Assignments, as the denominator. Exposures are scoped to a Run and
 deduped to unique Entities per Run, first-touch. The earliest Exposure in a Run anchors the

@@ -14,10 +14,10 @@ excluded (ADR-0010/0011), each with per-Entity Metric values windowed on `window
 trusts: point estimate, uncertainty, significance call. It is where peeking bias, clustered-data variance,
 ratio-metric variance, heavy tails, and multiple comparisons all live — each a known, often _silent_, trap.
 
-## The one CI object
+## The shared estimation path
 
-The engine's spine is a single confidence-interval object that every Metric type flows through. Reading it
-top to bottom is reading the whole engine:
+Every Metric type uses the same per-Entity estimation path. The absolute interval, relative reporting
+interval, and versioned Guardrail bound use those shared estimates:
 
 Every step below runs per `(app_id, environment_id, run_id)` — `app_id` and `environment_id` co-scope the
 analysis population because Experiments and their Runs are per-Environment (ADR-0027); the
@@ -36,14 +36,14 @@ per-Entity Metric values (aggregated to the randomization unit — ADR-0015)
         │
         ▼  asymptotic confidence sequence (always-valid, peek anytime)     (ADR-0014)
         │
-        ▼  relative-lift CI (itself a delta-method ratio)                  (ADR-0015)
+        ▼  relative-lift CI by Fieller inversion of the absolute interval   (ADR-0015)
         │
-        ▼  Guardrail = CI lower-bound breach of a downside threshold       (ADR-0015)
+        ▼  Guardrail verdict from the versioned bound                     (ADR-0015/0059)
         │
-        ▼  Benjamini-Hochberg FDR across goal-metric × variant family      (see below)
+        ▼  BH-G for analysis-v2; BH for legacy and analysis-v1              (see below)
 ```
 
-One object, one place each correctness rule lives. The deletion test: collapse this seam and the variance
+One estimation path, one place each correctness rule lives. The deletion test: collapse this seam and the variance
 rules, the peeking correction, and the multiple-comparison control smear across every per-Metric query.
 
 ## The locked decisions
@@ -70,24 +70,34 @@ rules, the peeking correction, and the multiple-comparison control smear across 
 
 ### Variance reduction — default-on but conditional (ADR-0016)
 
-- **CUPED** on by default, gated on pre-period data + coverage, attribute-covariate fallback for the
-  new-Entity slice this platform's own upstream produces.
+- **CUPED** on by default for eligible non-Ratio Metrics, gated on pre-period data + coverage, with
+  locked attribute-covariate fallback for new Entities. Candidate ranking uses pre-treatment data,
+  never current outcomes; the slope and centering constant are pooled across arms.
 - **Winsorization** default-on for additive Metrics (99.9%), never binary.
 
-### Multiple comparisons — Benjamini-Hochberg FDR
+### Multiple comparisons: versioned FDR control
 
 Many Metrics × many Variants inflates false positives (5 Metrics × 2 Variants ≈ 40% FWER). splitch controls
-the **false discovery rate via Benjamini-Hochberg** across the goal-metric × Variant family locked at Run
-Start — more powerful than Bonferroni, widely adopted (Statsig, GrowthBook), Kohavi-endorsed. Guardrail
-and secondary Metrics are excluded from the family; post-start additions are exploratory for the current
-Run. (Eppo's preferential-Bonferroni/FWER was the considered alternative — stricter,
-primary-metric-weighted; we chose FDR for power and adoption.)
+the **false discovery rate** across the goal-metric × Variant family locked at Run Start, including
+locked Primary Dimension members. `analysisVersionPolicy` selects BH-G for `analysis-v2`, applying BH
+at `alpha / H_m` for arbitrary dependence and stopping. Legacy and `analysis-v1` retain plain BH.
+Guardrail and Secondary Metrics are excluded; post-start additions are exploratory for the current
+Run (ADR-0014/0059).
+
+### Relative intervals and Guardrails
+
+`fiellerRelativeCi` derives the published relative interval from the absolute decision interval.
+A Control mean not separated from zero yields an unbounded interval; an exactly zero Control mean
+has no defined relative lift. For `analysis-v2`, Guardrail decisions use a one-sided oriented
+contrast with a separate Control-sign check and split alpha budget. `is_breached` reports harm,
+safety, or undecided; `ci_lower` remains the Fieller reporting bound. Legacy and `analysis-v1` keep
+the two-sided relative-lower-bound rule (ADR-0015/0059).
 
 ## Why this is a deep seam
 
 A narrow interface — "given windowed per-Entity Metric values, return the trusted result" — sits in front of
 the entire statistical apparatus: clustered-variance correctness, the delta method, always-valid peeking
-safety, two gated variance-reduction techniques, and FDR control. All of it concentrated in one CI object.
+safety, two gated variance-reduction techniques, and FDR control. All of it uses the same per-Metric estimates.
 Every default is the safe / fail-loud one, consistent with the rest of the architecture (exposure-on-read,
 `__multiple__`, the activated-population SRM).
 
@@ -95,7 +105,8 @@ Every default is the safe / fail-loud one, consistent with the rest of the archi
 
 - **Power / sample-size & MDE planning** (pre-experiment) — consumes the same variance model; its own grill.
 - **Dimension slicing** (per-Dimension results) multiplies the comparison family — must compose with the FDR
-  control here.
+  control here. Dimension slicing is implemented in `packages/stats/src/dimension-slicing.ts`;
+  production Run snapshots currently lock an empty Primary Dimension list.
 - A **Bayesian results view** (chance-to-win, credible intervals) as an opt-in alternative surface.
 
 ## Sources

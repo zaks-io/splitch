@@ -13,8 +13,9 @@ security.
 
 - Query builder calls made through the repository interface, where `app_id` is injected as a
   mandatory WHERE clause parameter for all tenant-scoped tables
-- Repository methods accept an explicit `appId: string` parameter that the implementation binds
-  into every query
+- Tenant repository methods accept a minted `TenantScope` or `EnvScope`, created after
+  authorization and bound into every query (`packages/db/src/repo/scope.ts`). Organization and
+  system-sweep repositories have their own explicit authority boundaries.
 
 **Forbidden patterns:**
 
@@ -24,7 +25,8 @@ security.
 
 **Tenant-scoped tables** (every query must carry `app_id`):
 
-- `apps`, `environments`, `flags`, `flag_configs`, `experiments`, `runs`, `api_keys`, `client_keys`, `segments`, `metrics`
+- `environments`, `flags`, `flag_configs`, `experiments`, `runs`, `api_keys`, `client_keys`, `segments`, `metrics`
+- The `apps` table uses its primary key `id` plus Organization authority instead of an `app_id` column.
 - Per-Environment tables (`experiments`, `runs`, `flag_configs`, `api_keys`, `client_keys`) also carry
   `environment_id` co-scoped with `app_id` (ADR-0027); `app_id` remains the isolation boundary.
 
@@ -40,7 +42,7 @@ Postgres+RLS calls is a mechanical seam swap, not a cross-system refactor.
 
 KV keys are namespaced by `app_id` at the key-construction level:
 
-- Flag config: `config:app:{appId}:{environmentId}:flag:{flagKey}` (Flag Configuration is
+- Flag config: `app:{appId}:{environmentId}:flag:{flagKey}` (Flag Configuration is
   per-Environment, ADR-0027)
 - Assignment Store: `assignment:{appId}:{idType}:{targetingKeyHash}` (per-Entity read key; `appId`
   first for tenant isolation; one read returns all of the Entity's holdovers. `targetingKeyHash` is
@@ -49,9 +51,10 @@ KV keys are namespaced by `app_id` at the key-construction level:
   The hash and destructive compromised-key replacement boundary are defined in
   [privacy-data-lifecycle.md](./privacy-data-lifecycle.md); see
   [assignment-store-substrate.md](./assignment-store-substrate.md))
-- Session cache: `session:{sessionToken}` (global; carries `{ userId, appMemberships }`)
-- API Key cache: `apikey:{keyHash}` (global; carries `{ appId, environmentId, scopes, revoked }`;
-  `environmentId` resolves which Environment's config the key serves, ADR-0027)
+- Session/auth records use the `SESSION_STORE` namespace; their role-specific keys and values
+  are defined in [storage-schemas-kv.md](../contracts/storage-schemas-kv.md).
+- API Key cache: `ak:{keyHash}`; Client Key cache: `ck:{keyMaterialHash}`. Validated entries
+  carry App and Environment scope; `revoked:{credentialCacheKey}` terminal markers take precedence.
 
 ## Tinybird isolation: two-seam enforcement
 
@@ -69,9 +72,9 @@ carries App scope). A client or agent cannot supply an `app_id` that differs fro
 Worker validates membership before forwarding to Tinybird.
 
 **Seam 2 — `app_id` first in `ENGINE_SORTING_KEY`:**
-Every tenant-scoped Tinybird datasource has `app_id` as the first column in its
+Every App-scoped Tinybird datasource has `app_id` as the first column in its
 `ENGINE_SORTING_KEY`. Low-cardinality-first ordering makes per-tenant range scans physically
-efficient and ensures the index structure isolates data by tenant at the storage layer. For
+efficient. Sorting is a performance contract, not an authorization boundary. For
 per-Environment datasources (Exposures), `environment_id` is co-scoped immediately after `app_id`
 in the sorting key (ADR-0027).
 
@@ -82,8 +85,8 @@ tenants and makes per-tenant scans full-table scans.
 
 - The parameter is the conceptual boundary: `app_id` is an explicit typed input that can be
   validated and logged.
-- The SORTING_KEY is the physical boundary: the index structure provides query-level isolation even
-  if the parameter were accidentally omitted.
+- The SORTING_KEY supports scoped range scans. It does not prevent cross-App reads if a WHERE
+  predicate is omitted; mandatory parameter binding and query predicates enforce authorization.
 - Missing either is a spec violation. Review gates must check both on any new Tinybird pipe.
 
 ## Tinybird is never queried directly by clients or agents

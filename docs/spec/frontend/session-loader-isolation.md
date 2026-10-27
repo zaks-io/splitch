@@ -2,8 +2,9 @@
 
 ## Cookie format and validation location
 
-The panel Worker validates an HTTP-only session cookie on every SSR request before any loader runs.
-Validation hits **Workers KV** (the `session:<token>` key caches the validated identity) not D1 on the
+Authenticated route loaders call session server functions, which validate an HTTP-only session
+cookie before returning protected data.
+Validation hits **Workers KV** (the `session:<sha256(token)>` key caches the validated identity) not D1 on the
 hot path. D1 is the system of record; KV is the edge replica written through on session creation/revoke.
 
 Cookie: `Set-Cookie: __session=<opaque_token>; HttpOnly; Secure; SameSite=Lax; Path=/`
@@ -26,6 +27,8 @@ key:   session:<sha256(token)>
 value: {
   userId: string,
   orgs: OrgMembership[],
+  orgsTruncated?: boolean,
+  version: 2,
   expiresAt: number,
   workosSessionId?: string,
   workosAccessToken?: string,
@@ -36,24 +39,28 @@ ttl:   30 days absolute; the WorkOS JWT is refreshed server-side inside it
 ```
 
 A user may belong to **multiple Orgs** (personal + enterprise siblings, ADR-0021); the session carries
-all of them. There is **no single "current org"** in the cookie — the active Org is the `orgSlug` URL
+a bounded snapshot and explicitly marks truncation. There is **no single "current org"** in the cookie — the active Org is the `orgSlug` URL
 segment (navigation-and-ia.md). The org switcher lists `orgs`; each App switcher lists only the active
 Org's Apps.
 
 `OrgMembership`:
 
-| field     | type            | req | meaning                              |
-| --------- | --------------- | --- | ------------------------------------ |
-| `orgId`   | string          | yes | Org the user belongs to              |
-| `orgRole` | OrgRole         | yes | `owner \| admin \| member`           |
-| `apps`    | AppMembership[] | yes | Apps in this Org the user can access |
+| field           | type            | req | meaning                                    |
+| --------------- | --------------- | --- | ------------------------------------------ |
+| `orgId`         | string          | yes | Org the user belongs to                    |
+| `orgSlug`       | string          | yes | Persisted Organization URL handle          |
+| `isProvisional` | boolean         | yes | Whether this is a provisional Organization |
+| `demoExpiresAt` | string or null  | yes | Provisional expiry                         |
+| `orgRole`       | OrgRole         | yes | `owner \| admin \| member`                 |
+| `apps`          | AppMembership[] | yes | Apps in this Org the user can access       |
 
 `AppMembership`:
 
-| field   | type    | req | meaning                              |
-| ------- | ------- | --- | ------------------------------------ |
-| `appId` | string  | yes | App the user is a member of          |
-| `role`  | AppRole | yes | `owner \| admin \| member \| viewer` |
+| field     | type    | req | meaning                              |
+| --------- | ------- | --- | ------------------------------------ |
+| `appId`   | string  | yes | App the user is a member of          |
+| `appSlug` | string  | yes | App key used in URLs                 |
+| `role`    | AppRole | yes | `owner \| admin \| member \| viewer` |
 
 `OrgRole`: `owner | admin | member`
 
@@ -63,13 +70,14 @@ at the control-plane commit seam, not at the session layer).
 
 ## Loader context shape
 
-The TanStack Start server handler deserializes the cookie, fetches from KV, and injects a **loader
-context** object available to every route loader:
+The router context holds the QueryClient. Session server functions load and sanitize the KV
+record; the App/Environment route `beforeLoad` resolves scope and returns a **loader context**:
 
 ```
-LoaderContext {
-  userId: string         // WorkOS user ID
-  orgs:   OrgMembership[] // every Org (and its Apps) this user can access
+ScopedLoaderContext {
+  session: { userId: string, orgs: OrgMembership[], orgsTruncated?: boolean }
+  navigation: ScopeNavigation
+  scope: { orgId, orgSlug, orgRole, appId, appSlug, appRole, environmentId, env }
 }
 ```
 
@@ -83,15 +91,15 @@ The check is layered to match the URL spine `/{orgSlug}/{appSlug}/{env}/...`. Ea
 any work and feeds the next:
 
 ```
-function requireOrgAccess(ctx: LoaderContext, orgSlug: string): OrgMembership {
-  const o = ctx.orgs.find(o => o.slug === orgSlug)   // slug→membership resolved here
-  if (!o) throw redirect(403)
+function requireOrgAccess(session: SessionPrincipal, orgSlug: string): OrgMembership {
+  const o = session.orgs.find(o => o.orgSlug === orgSlug)
+  if (!o) throw new AccessDeniedError()
   return o
 }
 
 function requireAppAccess(org: OrgMembership, appSlug: string): AppMembership {
-  const m = org.apps.find(a => a.slug === appSlug)
-  if (!m) throw redirect(404)   // app does not exist *under this org* — the appId∈org invariant
+  const m = org.apps.find(a => a.appSlug === appSlug)
+  if (!m) throw new ScopedNotFoundError("app")
   return m
 }
 ```
@@ -105,14 +113,13 @@ the Environment Policy at the commit seam, not a read-isolation check).
 The loader **never trusts client-supplied IDs**: slugs come from the URL, are resolved to memberships
 by these checks, and the resulting `AppMembership` (including `role`) is what child loaders receive.
 
-Implementation note for the current D1 schema: Organizations do not yet have a persisted slug/key
-column. The Control Panel derives `orgSlug` from `organizations.name` at session materialization
-time; a rename intentionally makes old URLs stale (403), and duplicate derived handles fail session
-creation instead of choosing a silent default.
+`buildSessionPrincipal` reads the persisted, globally unique `organizations.slug` and the App's
+`key`. Organization names do not derive URL handles at session materialization. The resolver and
+session functions live under `apps/control-panel/src/lib/shared/` and `src/lib/sessions/`.
 
 **Failure contract:** a 403 from `requireOrgAccess` is a **designed state** (user lacks Org
 membership, e.g. was removed from the Org or navigated to a stale renamed-Org link). It MUST be
-caught by the segment error boundary at the `/{orgSlug}/{appSlug}` layout — not the root boundary —
+caught by the App home or `/{orgSlug}/{appSlug}/{env}` segment boundary, rather than the root boundary,
 and must NOT generate a Sentry error (breadcrumb only). The `appId ∈ org` / app-slug 404 is likewise
 a designed state. See [error-loading-tiers.md](./error-loading-tiers.md).
 
@@ -124,7 +131,9 @@ The issuer behind the cookie is **WorkOS**:
 - Enterprise: WorkOS SSO/SCIM
 
 The `cookie → KV validation → loader context` seam is issuer-agnostic. WorkOS plugs in at session
-creation (it issues the token splitch stores in the cookie). The loader never calls WorkOS per-request.
+creation (WorkOS supplies the identity and server-held access/refresh tokens). Splitch mints the
+opaque cookie token itself (`createSession`). Session loads refresh the WorkOS JWT when needed;
+they do not call WorkOS on every request.
 
 ## App/Org switch and browser history
 
@@ -135,7 +144,7 @@ Navigating back to a URL with a stale `orgSlug`/`appSlug` the user no longer has
 - Session remains valid; user can navigate to any Org/App they do have access to
 - No redirect to "last accessible app" (avoids session state)
 
-## Query cache purge on App or Environment change
+## Query cache invalidation on App or Environment change
 
 When `(appId, environmentId)` changes (App switch or Environment switch):
 
@@ -143,8 +152,9 @@ When `(appId, environmentId)` changes (App switch or Environment switch):
 queryClient.invalidateQueries({ queryKey: ['app', previousAppId, 'env', previousEnvId] })
 ```
 
-This must run before the new scope's loader seeds the cache, preventing stale entries from bleeding
-across Apps or Environments. The layout route effect owns this call on `(appId, environmentId)` change.
+`LiveUpdateConnection.stop()` invalidates the previous scope during the layout effect cleanup;
+startup and socket open refetch the new scope. Invalidation does not remove cached entries. Separate
+scope keys prevent cross-App or cross-Environment reads regardless of effect/loader ordering.
 See [appid-is-the-spine.md](./appid-is-the-spine.md).
 
 ## Sources

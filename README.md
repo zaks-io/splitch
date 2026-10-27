@@ -38,9 +38,10 @@ gap is recorded as a reviewed exception.
   randomly and sticks each one to their Variant.
 - **Statistics you can act on.** Runs default to always-valid sequential intervals, so
   checking results early does not inflate false positives; a fixed horizon is opt-in. CUPED
-  variance reduction, SRM checks, Benjamini-Hochberg correction across a Run's decision
-  Metrics, and Guardrail checks are built in.
-- **Built for scale.** KV serves reads, per-key Durable Objects serialize first-touch
+  variance reduction, SRM checks, false-discovery-rate control across a Run's decision
+  Metrics, and Guardrail checks are built in. Each Run freezes its analysis version at Start,
+  so a later engine change never re-decides it.
+- **Built for scale.** KV serves reads, per-Entity Durable Objects serialize first-touch
   writes, and events reach Tinybird through queue-backed microbatches.
 
 ### Why "splitch"
@@ -125,6 +126,7 @@ their own. The typed control-plane client ships inside `@splitch/sdk/control-pla
 | `@splitch/sdk/browser`          | Browser client hydrated once, then synchronous reads with a batched Exposure queue |
 | `@splitch/sdk/react`            | `SplitchProvider`, `useFlag`, `useFlagDetails`, `useSplitchClient`                 |
 | `@splitch/sdk/sentry`           | Resolution reporter that feeds Flag values into Sentry's feature-flag context      |
+| `@splitch/sdk/openfeature`      | `SplitchOfrepProvider`, an OpenFeature server Provider over OFREP                  |
 | `@splitch/sdk/control-plane`    | Typed control-plane client and Zod contracts, the same ones the CLI and MCP use    |
 | `@splitch/sdk/local-evaluation` | Snapshot schemas and the pure evaluator behind `@splitch/convex`                   |
 
@@ -214,15 +216,16 @@ npx skills add https://github.com/zaks-io/splitch/tree/main/skills/splitch
 Every command takes `--json` for a single machine-readable document, and `--help` lists the
 exact flags it accepts. Unknown flags are rejected. The command groups:
 
-| Area                     | Commands                                                                                                                                                                 |
-| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Session                  | `login`, `logout`, `use`, `context`, `health`                                                                                                                            |
-| Organizations and access | `orgs`, `organization-members`, `organization-usage`, `app-members`                                                                                                      |
-| Apps and Environments    | `apps`, `envs`, `env-policy`, `client-key`, `api-keys`, `app-attention-rollup`                                                                                           |
-| Flags                    | `flags` (including `promote`, `test-eval`, `verify`), `flag-variants`, `flag-config`, `flag-targeting-rules`, `segments`                                                 |
-| Experiments              | `experiments`, `runs`, `experiment-results`, `metrics`, `event-definitions`, `event-definition-versions`, `conclusion-promotion-requests`, `environment-exposure-status` |
-| Approvals                | `approval-requests`, `approval-request-reviews`                                                                                                                          |
-| Integrations             | `cloudflare` (`setup`, `status`, `remove`), `cloudflare-installations`, `convex-installations`, `sentry-installations`, `sentry-secret-rotations`                        |
+| Area                     | Commands                                                                                                                                                                                    |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Session                  | `login`, `logout`, `use`, `context`, `health`, `tokens` (Personal Access Tokens)                                                                                                            |
+| Organizations and access | `orgs`, `organization-members`, `organization-usage`, `app-members`, `app-audit`                                                                                                            |
+| Apps and Environments    | `apps`, `envs` (including `sync` for Temporary Environments), `env-policy`, `client-key`, `api-keys`, `app-attention-rollup`                                                                |
+| Flags                    | `flags` (including `promote`, `test-eval`, `verify`), `flag-variants`, `flag-config`, `flag-targeting-rules`, `segments`, `flag-changes`                                                    |
+| Flag lifecycle           | `stale-flags`, `expired-flags`, `flag-inventory-health`, `flag-removal`                                                                                                                     |
+| Experiments              | `experiment plan`, `experiments`, `runs`, `experiment-results`, `metrics`, `event-definitions`, `event-definition-versions`, `conclusion-promotion-requests`, `environment-exposure-status` |
+| Approvals                | `approval-requests`, `approval-request-reviews`                                                                                                                                             |
+| Integrations             | `cloudflare` (`setup`, `status`, `remove`), `cloudflare-installations`, `convex-installations`, `sentry-installations`, `sentry-secret-rotations`, `integration-deliveries`                 |
 
 Full reference: [splitch.dev/docs/cli](https://splitch.dev/docs/cli).
 
@@ -263,8 +266,8 @@ apps/
   auth-api/            OAuth device flow, ID-JAG, anonymous bootstrap and claim, JWKS
   control-plane-api/   Authenticated management API: Flags, Experiments, approvals,
                        Promotion, integrations, privacy jobs
-  evaluation-api/      Data-plane Worker: evaluate, evaluateAll, peek, verify
-  event-ingest-api/    Append-only Exposure / Metric / Web Event intake into Tinybird
+  evaluation-api/      Data-plane Worker: evaluate, evaluateAll, peek, verify, OFREP
+  event-ingest-api/    Append-only Exposure and Metric Event intake, queued into Tinybird
   analysis-api/        Statistical results over Tinybird; reachable only by service binding
   mcp-server/          Remote MCP server (mcp.splitch.dev)
   control-panel/       The web app (app.splitch.dev), TanStack Start on Workers

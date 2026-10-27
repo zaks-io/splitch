@@ -5,35 +5,43 @@ Exposure snapshot plus tail, Activation/Metric/Web aggregate states, and replace
 rollups.
 Datasource shapes are in [physical-datasources.md](./physical-datasources.md). ADR-0024 defines the
 Exposure lambda architecture and Activation state; ADR-0045 defines Metric/Web retry states.
+The checkout implements Exposure snapshot/tail and Metric retry state. Activation/Web state
+serving and the ordered Exposure rollup copies below remain target architecture.
 
 ## Copy Pipe (batch layer)
 
 ```
 pipe: cp_deduped_exposures
 COPY_MODE: replace                  -- mandatory full rebuild; incremental append is forbidden
-COPY_SCHEDULE: @hourly              -- freshness/cost dial; not a correctness dial (tail covers the gap)
+COPY_SCHEDULE: @on-demand              -- freshness/cost dial; not a correctness dial (tail covers the gap)
 
-SOURCE QUERY (the canonical dedup definition):
+RAW-LAYER QUERY (condensed; snapshot merge and privacy predicates described below):
   SELECT
-    app_id, environment_id, experiment_id, run_id, id_type, targeting_key_hash,
+    app_id, environment_id, experiment_id, run_id, id_type, entity_family_hash,
+    argMin(targeting_key_hash, exposure_at) AS targeting_key_hash,
     MIN(exposure_at)                                               AS first_exposure_ts,
-    CASE WHEN COUNT(DISTINCT variant) > 1 THEN '__multiple__'
+    CASE WHEN countIf(isNull(variant)) > 0 OR COUNT(DISTINCT variant) > 1 THEN '__multiple__'
          ELSE MAX(variant) END                           AS variant,
     now64(3)                                              AS snapshot_ts,
     {copy_watermark_ts: DateTime64(3)}                    AS watermark_ts
   FROM raw_events
   WHERE type = 'exposure'
     AND ingest_ts <= {copy_watermark_ts: DateTime64(3)}
-  GROUP BY app_id, environment_id, experiment_id, run_id, id_type, targeting_key_hash
+  GROUP BY app_id, environment_id, experiment_id, run_id, id_type, entity_family_hash
 
 TARGET: deduped_exposures
 ```
 
-The schedule is hourly by default. The real-time tail covers the window since the last snapshot, so a slower schedule never produces incorrect results, only a larger tail at query time.
+The Worker cron invokes this on-demand Copy Pipe hourly in local and production targets
+(`apps/analysis-api/src/scheduled.ts`, `wrangler.jsonc`); shared-preview disables the cron. The real-time tail covers the window since the last snapshot, so a slower schedule never produces incorrect results, only a larger tail at query time.
 
 `copy_watermark_ts` is captured at the start of the Copy Pipe run. It is an ingest-time watermark,
-not an event-time watermark. `exposure_at` remains the analysis clock; `ingest_ts` only answers
-"did this raw row fall at or before the snapshot's inclusive insertion boundary?" Equality also stays
+not an event-time watermark. The Copy also records `first_ingest_ts` and
+`activation_ingest_ts`, merging their earliest non-epoch values with the previous snapshot.
+Previous-only membership, earliest Exposure time, and `__multiple__` quarantine survive raw TTL.
+Identity-generation tombstones exclude destroyed generations from raw and snapshot layers.
+`exposure_at` remains the analysis clock; `ingest_ts` sets the snapshot insertion boundary and
+the analysis-v2 SRM arrival order. Equality also stays
 in the tail, deliberately overlapping the boundary so final UNION dedup prevents a concurrent
 insertion at the exact watermark from being missed. This prevents a late-arriving row with an old
 `exposure_at` from falling between the snapshot and the tail.
@@ -49,7 +57,7 @@ the consumer cannot switch modes as a tuning change.
 pipe: serve_deduped_exposures
 
 NODE snapshot_layer:
-  SELECT app_id, environment_id, experiment_id, run_id, id_type, targeting_key_hash, variant, first_exposure_ts
+  SELECT app_id, environment_id, experiment_id, run_id, id_type, entity_family_hash, targeting_key_hash, variant, first_exposure_ts
   FROM deduped_exposures
   WHERE app_id = {app_id: String}
     AND environment_id = {environment_id: String}
@@ -57,8 +65,9 @@ NODE snapshot_layer:
 NODE tail_layer:
   -- dedup query applied only to raw rows since the last snapshot
   SELECT
-    app_id, environment_id, experiment_id, run_id, id_type, targeting_key_hash,
-    CASE WHEN COUNT(DISTINCT variant) > 1 THEN '__multiple__'
+    app_id, environment_id, experiment_id, run_id, id_type, entity_family_hash,
+    argMin(targeting_key_hash, exposure_at) AS targeting_key_hash,
+    CASE WHEN countIf(isNull(variant)) > 0 OR COUNT(DISTINCT variant) > 1 THEN '__multiple__'
          ELSE MAX(variant) END                           AS variant,
     MIN(exposure_at)                                               AS first_exposure_ts
   FROM raw_events
@@ -74,22 +83,28 @@ NODE tail_layer:
       WHERE app_id = {app_id: String}
         AND environment_id = {environment_id: String}
     )
-  GROUP BY app_id, environment_id, experiment_id, run_id, id_type, targeting_key_hash
+  GROUP BY app_id, environment_id, experiment_id, run_id, id_type, entity_family_hash
 
 NODE union_and_final_dedup:
   -- UNION ALL, then re-dedup to handle rows straddling the snapshot boundary
   SELECT
-    app_id, environment_id, experiment_id, run_id, id_type, targeting_key_hash,
+    app_id, environment_id, experiment_id, run_id, id_type, entity_family_hash,
+    argMin(targeting_key_hash, first_exposure_ts) AS targeting_key_hash,
     MIN(first_exposure_ts)                                AS first_exposure_ts,
-    CASE WHEN COUNT(DISTINCT variant) > 1 THEN '__multiple__'
+    CASE WHEN countIf(isNull(variant)) > 0 OR COUNT(DISTINCT variant) > 1 THEN '__multiple__'
          ELSE MAX(variant) END                           AS variant
   FROM (
     SELECT * FROM snapshot_layer
     UNION ALL
     SELECT * FROM tail_layer
   )
-  GROUP BY app_id, environment_id, experiment_id, run_id, id_type, targeting_key_hash
+  GROUP BY app_id, environment_id, experiment_id, run_id, id_type, entity_family_hash
 ```
+
+These abbreviated queries omit mandatory Experiment/Run predicates, sticky ingestion clocks,
+Entity deletion cutoffs, and identity-generation tombstones implemented by
+`serve_deduped_exposures.pipe`. Final serving chooses `argMin(targeting_key_hash, encounter_ts)`
+within the identity family.
 
 The snapshot uses `ingest_ts <= watermark`; the tail uses `ingest_ts >= watermark`. These ranges
 deliberately overlap at the exact watermark instant so a concurrent insertion cannot fall between the
@@ -114,11 +129,11 @@ full-history Copy jobs. Activation state preserves retry-deduplicated candidate 
 can select the earliest valid post-Exposure Activation; Metric and Web states preserve the
 earliest-ingested canonical row per retry key.
 
-| Family       | Raw log         | State datasource              | Materialized Pipe                | Serving Pipe                  |
-| ------------ | --------------- | ----------------------------- | -------------------------------- | ----------------------------- |
-| Activation   | `raw_events`    | `deduped_activations_state`   | `mv_deduped_activations_state`   | `serve_deduped_activations`   |
-| Metric Event | `metric_events` | `deduped_metric_events_state` | `mv_deduped_metric_events_state` | `serve_deduped_metric_events` |
-| Web Event    | `web_events`    | `deduped_web_events_state`    | `mv_deduped_web_events_state`    | `serve_deduped_web_events`    |
+| Family       | Raw log         | State datasource              | Materialized Pipe                   | Serving Pipe                  |
+| ------------ | --------------- | ----------------------------- | ----------------------------------- | ----------------------------- |
+| Activation   | `raw_events`    | `deduped_activations_state`   | `mv_deduped_activations_state`      | `serve_deduped_activations`   |
+| Metric Event | `metric_events` | `deduped_metric_events_state` | `materialize_deduped_metric_events` | `serve_deduped_metric_events` |
+| Web Event    | `web_events`    | `deduped_web_events_state`    | `mv_deduped_web_events_state`       | `serve_deduped_web_events`    |
 
 The Activation materialized Pipe writes this state:
 
@@ -172,6 +187,7 @@ SELECT
   event_definition_id,
   server_received_at,
   targeting_key_hash,
+  entity_family_hash,
   dedup_key,
   argMinState(
     tuple(
@@ -194,6 +210,7 @@ GROUP BY
   event_definition_id,
   server_received_at,
   targeting_key_hash,
+  entity_family_hash,
   dedup_key
 ```
 
@@ -219,6 +236,11 @@ SELECT
       event_definition_version_id,
       event_name,
       sdk_version,
+      visitor_hash,
+      pathname,
+      referrer_hostname,
+      country,
+      device_class,
       trace_id,
       span_id,
       fields,
@@ -246,8 +268,9 @@ GROUP BY
 The targets use `AggregatingMergeTree` and monthly `event_date` partitions. Metric/Web sorting keys
 start with mandatory `app_id`, `environment_id`, and `event_date`, then proceed from lower- to
 higher-cardinality family dimensions. Activation starts with mandatory `app_id`, `environment_id`,
-exact-query `run_id`, and `event_date`. The materialized query selects explicit columns and performs no
-JSON extraction, join, sort, or downstream aggregation.
+exact-query `run_id`, and `event_date`. The materialized query selects explicit columns without JSON extraction, sorting, or downstream
+Metric aggregation. The implemented Metric materialization also filters identity-generation
+tombstones with a join.
 
 The durable ingest claim guarantees that rows sharing one `dedup_key` have identical canonical
 content. A payload mismatch for the same event ID fails before append. Tinybird assigns physical
@@ -261,7 +284,9 @@ Each Metric/Web serving Pipe:
 1. filters the state datasource by injected `app_id`, injected `environment_id`, and inclusive
    event-date partitions covering the requested interval, then by inclusive
    `server_received_at >= from` and exclusive `server_received_at < to`;
-2. groups by the complete family sorting key and applies `argMinMerge(canonical_state)`;
+2. groups by retry identity and applies `argMinMerge(canonical_state)`; Metric serving groups
+   App, Environment, Event Definition, Entity type, Entity hash, identity family, and `dedup_key`,
+   while the Web target uses the complete family sorting key;
 3. flattens only endpoint-required tuple fields; and
 4. performs JSON extraction or downstream aggregation only after the retry-key merge.
 
@@ -280,7 +305,7 @@ dimensions are generated from one definition per family (ADR-0045). Activation m
 dimensions, state type, sorting key, and serving identity are generated from one Activation
 definition. Contract tests fail if any type, column, or ordering drifts.
 
-All three aggregate-state destination `.datasource` files declare `BACKFILL skip`. Before promotion,
+All three aggregate-state destination `.datasource` files must declare `BACKFILL skip`. Before promotion,
 `tb deploy --check` must prove Forward will skip its default all-history materialized-view backfill.
 The first deployment keeps Activation/Metric/Web intake and reads blocked, deploys the linked
 materialized Pipes, then populates one App, Environment, and source month per job. Metric/Web
@@ -328,8 +353,9 @@ Before enabling a serving Pipe in an Environment:
 - `tb build` must validate each datasource, materialized Pipe, serving Pipe, and duplicate fixture;
 - `?explain=true` must show App, Environment, and `event_date` partition filters before
   `minMerge`/`argMinMerge`, with no physical raw-log read;
-- `serve_deduped_exposures?explain=true` must show App/Environment primary-key pruning plus
-  `ingest_ts` partition/range pruning on the raw tail before first-touch aggregation;
+- `serve_deduped_exposures?explain=true` must show App/Environment/Experiment/Run primary-key
+  pruning and meet the raw-tail scan budget on the receipt-month/receipt-time layout, with
+  the `ingest_ts` boundary applied before first-touch aggregation;
 - `tinybird.pipe_stats_rt` must track p50/p95 latency, `read_bytes`, rows read, rows returned, and
   errors for all three state serving Pipes;
 - `tinybird.datasources_ops_log` must alert on materialization or populate errors; and
@@ -400,7 +426,7 @@ dashboard.
 
 | Layer                                 | Latency                                                                | Correctness                          |
 | ------------------------------------- | ---------------------------------------------------------------------- | ------------------------------------ |
-| Raw ingest (`raw_events`)             | Near-real-time (Workers → Tinybird Events API)                         | Always correct (raw is truth)        |
+| Raw ingest (`raw_events`)             | Queue-backed Tinybird microbatches; backlog delays availability        | Always correct (raw is truth)        |
 | Snapshot (`deduped_exposures`)        | Up to 1 hour stale                                                     | Correct — tail covers the gap        |
 | Activation/Metric/Web state           | Near-real-time with acknowledged materialization                       | Correct through explicit state merge |
 | Serving queries                       | Tail covers since last snapshot; ~1h lag for bulk + real-time for tail | Always correct                       |

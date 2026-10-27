@@ -13,7 +13,7 @@ Use the same names as the Control Plane API and contracts.
 - Organization, App, Environment.
 - Flag, Variant, Flag Configuration.
 - Promote for Environment-to-Environment configuration movement.
-- Start and End for Experiment Run lifecycle.
+- Start, End, and Conclude for Experiment Run lifecycle.
 - Client Key for public client-side SDK credentials.
 - API Key for secret server-side SDK credentials.
 

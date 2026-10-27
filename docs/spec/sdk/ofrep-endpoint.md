@@ -27,8 +27,8 @@ Idempotency-Key: <optional>
 `idType` is optional and defaults to `user`. Other context fields become Targeting
 attributes. Nested object attributes fail `INVALID_CONTEXT`.
 
-This path is Exposure-bearing, same as `evaluate`. A successful resolution that
-assembles an Exposure writes that Exposure and one Evaluation.
+This path is Exposure-bearing, same as `evaluate`. Every successful resolution records one
+Evaluation; a fresh live-Run resolution also records its Exposure.
 
 ### Success (200)
 
@@ -125,13 +125,13 @@ the header is a new logical Evaluation.
 
 `@splitch/sdk/openfeature` exports `SplitchOfrepProvider`. It POSTs single-Flag
 OFREP for each typed resolve and maps `track()` to `POST /api/sdk/events`
-(Metric Events). Hook lifecycle and a full `@openfeature/server-sdk` dependency
-stay deferred ([openfeature-deferred.md](./openfeature-deferred.md)).
+(Metric Events). `@openfeature/server-sdk` is an optional peer for type compatibility,
+with no runtime import. Thin-client hook lifecycle remains deferred ([openfeature-deferred.md](./openfeature-deferred.md)).
 
 ## Sources
 
 - [ADR-0033](../../adr/0033-v1-billing-is-an-organization-scoped-evaluation-quota.md)
 - [ADR-0036](../../adr/0036-evaluation-is-fail-loud-no-silent-fallback-openfeature-resolution-details.md)
 - [ADR-0048](../../adr/0048-precomputed-evaluations-decouple-resolution-from-exposure-via-exposure-tickets.md)
-- [ADR-0059](../../adr/0059-ofrep-core-is-a-data-plane-projection-of-evaluate.md)
+- [ADR-0062](../../adr/0062-ofrep-core-is-a-data-plane-projection-of-evaluate.md)
 - [OpenFeature protocol](https://github.com/open-feature/protocol)

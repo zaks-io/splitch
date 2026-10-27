@@ -5,39 +5,40 @@ subject requests. The lifecycle rules live in
 [../platform/privacy-data-lifecycle.md](../platform/privacy-data-lifecycle.md).
 
 All endpoints live on the **Control Plane API Worker** unless noted. They require a control-plane bearer
-token and write an audit event plus a `privacy_requests` D1 row.
+token. Entity export/delete and request-status reads are implemented. User/Organization/App exports,
+User deletion, and Organization deletion remain authorized HTTP placeholders returning
+`503 SERVICE_UNAVAILABLE`; the lifecycle rules below describe their intended final behavior.
+Entity intake writes a `privacy_requests` row and durable job checkpoints. The CLI/MCP parity
+allowlist still excludes all privacy operations, including the implemented Entity routes and status.
+Normal App deletion is implemented separately and returns the removal contract in
+[endpoints-org-app.md](endpoints-org-app.md#delete-appsapp_id), not a privacy-job envelope.
 
 ## Shared shapes
 
 ```
 PrivacyRequest {
-  request_id: string
-  org_id: string
-  app_id?: string
-  request_type: 'access' | 'export' | 'correct' | 'delete' | 'opt_out_sale_share' | 'limit_sensitive'
-  subject_type: 'user' | 'organization' | 'app' | 'entity'
-  subject_ref: string | string[]
+  requestId: string
+  organizationId: string
+  appId: string | null
+  requestType: 'access' | 'export' | 'correct' | 'delete' | 'opt_out_sale_share' | 'limit_sensitive'
+  subjectType: 'user' | 'organization' | 'app' | 'entity'
   status: 'received' | 'verifying' | 'processing' | 'completed' | 'denied'
-  received_at: string
-  ack_due_at: string
-  response_due_at: string
-  completed_at?: string
-  denial_reason?: string
+  receivedAt: string
 }
 
 PrivacyJob {
-  job_id: string
-  request_id: string
+  jobId: string
+  requestId: string
   kind: 'export' | 'delete'
   status: 'queued' | 'running' | 'completed' | 'failed'
-  store_status: Record<string, 'pending' | 'done' | 'failed' | 'skipped'>
-  download_url?: string
-  expires_at?: string
+  storeStatus: Record<string, 'pending' | 'done' | 'failed' | 'skipped'>
+  downloadUrl?: string
+  expiresAt?: string
 }
 ```
 
-`subject_ref` for Entity requests is the server-computed `targeting_key_hash` set, never the raw
-Targeting Key.
+D1 `subject_ref` for Entity requests is the server-computed hash set, never the raw Targeting Key.
+It is not returned in the wire projection; acknowledgment and response deadlines remain D1 fields.
 
 ## User privacy endpoints
 
@@ -104,11 +105,14 @@ Normal App deletion remains blocked by running Experiments unless this is an acc
 delete. In privacy-delete mode, the job ends running Runs with reason `app_delete`, revokes credentials,
 commits tombstones, then purges stores.
 
-Returns: `{ request: PrivacyRequest, job: PrivacyJob }`
+The privacy-job result above is intended account-closure behavior. The current `apps_delete`
+route returns the ordinary removal result and accepts no privacy-delete mode.
 
 ## Entity requests
 
-Entity requests are customer data subject operations. Auth: App `owner` or `admin`.
+Entity requests are customer data subject operations. Auth: App `owner` or `admin` and PAT
+`privacy` permission. Both intake routes require an `Idempotency-Key` header; exact retries reuse
+the same durable request, while changed intent returns `IDEMPOTENCY_KEY_CONFLICT`.
 
 ### `POST /apps/{app_id}/privacy/entities/export`
 
@@ -116,7 +120,7 @@ Body:
 
 ```
 {
-  id_type: string,
+  idType: string,
   targetingKey: string
 }
 ```
@@ -130,7 +134,7 @@ Returns: `{ request: PrivacyRequest, job: PrivacyJob }`
 
 The response reports a queued job. Processing reads each backing store in bounded pages and streams
 the artifact into private object storage. Completed status responses include a newly minted
-15-minute `download_url`; the raw artifact expires after 24 hours. D1 stores only its object key,
+15-minute `downloadUrl`; the raw artifact expires after 24 hours. D1 stores only its object key,
 SHA-256 digest, and expiry.
 
 ### `POST /apps/{app_id}/privacy/entities/delete`
@@ -139,7 +143,7 @@ Body:
 
 ```
 {
-  id_type: string,
+  idType: string,
   targetingKey: string
 }
 ```
@@ -167,7 +171,7 @@ path persists the raw Targeting Key.
 Auth: requester for User-scoped requests, current Org `owner`, or current App `owner/admin` when the
 request is App-scoped.
 
-Returns: `{ request: PrivacyRequest, job?: PrivacyJob }`
+Returns: `{ request: PrivacyRequest, job: PrivacyJob | null }`
 
 For a completed, unexpired export, this read mints a fresh 15-minute
 `/privacy/requests/{request_id}/download` URL. The signed download does not require a bearer token,

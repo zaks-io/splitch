@@ -7,12 +7,13 @@ The canonical first-touch dedup query is the **single place** where first-touch,
 - `raw_events` rows with `type = 'exposure'` (see [exposure-event-contract.md](./exposure-event-contract.md))
 - Scoped to one `app_id` and `environment_id` (both mandatory, non-defaulted, and injected by the
   analytics proxy)
-- Optionally scoped to `experiment_id` and/or `run_id`
+- Serving requires exact `experiment_id` and `run_id` in addition to App and Environment.
 
 ## Canonical first-touch query
 
 ```sql
--- Produces one row per (targeting_key_hash, run_id).
+-- Raw-layer shape; physical serving also merges the previous snapshot and tail.
+-- Produces one row per (entity_family_hash, run_id).
 -- This is the analysis unit: the deduped denominator.
 SELECT
   app_id,
@@ -20,20 +21,21 @@ SELECT
   experiment_id,
   run_id,
   id_type,
-  targeting_key_hash,
+  entity_family_hash,
+  argMin(targeting_key_hash, exposure_at) AS targeting_key_hash,
   MIN(exposure_at)                                               AS first_exposure_ts,
   CASE
-    WHEN COUNT(DISTINCT variant) > 1 THEN '__multiple__'
+    WHEN countIf(isNull(variant)) > 0 OR COUNT(DISTINCT variant) > 1 THEN '__multiple__'
     ELSE MAX(variant)
   END                                                   AS variant
 FROM raw_events
 WHERE type = 'exposure'
   AND app_id = {app_id: String}
   AND environment_id = {environment_id: String}
-GROUP BY app_id, environment_id, experiment_id, run_id, id_type, targeting_key_hash
+GROUP BY app_id, environment_id, experiment_id, run_id, id_type, entity_family_hash
 ```
 
-The dedup determinant is `(targeting_key_hash, run_id)`: a Run belongs to exactly one Experiment
+The physical dedup determinant is `(entity_family_hash, run_id)`: a Run belongs to exactly one Experiment
 in exactly one Environment with one declared Entity type, so `app_id`, `environment_id`,
 `experiment_id`, and `id_type` are functionally determined by `run_id`. They appear in the
 `GROUP BY` so they pass through to the output as carried scope columns, not because they change
@@ -43,23 +45,23 @@ which rows collapse. `environment_id` is in the tuple because Exposures are per-
 ### Invariants
 
 1. `exposure_at` is the canonical encounter timestamp. Remote producers set it from Splitch receive time; verified trusted adapters may use a bounded durable commit timestamp (ADR-0049). `client_timestamp` is never used in the dedup.
-2. `MIN(exposure_at)` per `(targeting_key_hash, run_id)` determines first-touch. Late delivery with an earlier encounter time is incorporated on the next query run — this is correct per ADR-0010 (replayability).
-3. `COUNT(DISTINCT variant) > 1` within one `(targeting_key_hash, run_id)` produces `variant = '__multiple__'`. Given pure `assign()` + authoritative holdover DO + material-edit-opens-new-Run, a variant conflict within one Run is always a defect (config race, SDK bug, or ADR-0003 violation) and must be surfaced loudly, not silently resolved.
+2. `MIN(exposure_at)` per `(entity_family_hash, run_id)` determines first-touch. Late delivery with an earlier encounter time is incorporated on the next query run — this is correct per ADR-0010 (replayability).
+3. A null Variant or `COUNT(DISTINCT variant) > 1` within one `(entity_family_hash, run_id)` produces `variant = '__multiple__'`. Given pure `assign()` + authoritative holdover DO + material-edit-opens-new-Run, a variant conflict within one Run is always a defect (config race, SDK bug, or ADR-0003 violation) and must be surfaced loudly, not silently resolved.
 4. The query is fully replayable over the complete raw log. Changing the dedup rule (e.g., adding a filter) means rerunning the query — no migration of raw data.
 
 ## `__multiple__` handling
 
-| Population                  | Included in SRM denominator? | Included in analysis arms? | Reported separately?                           |
-| --------------------------- | ---------------------------- | -------------------------- | ---------------------------------------------- |
-| `variant != '__multiple__'` | YES                          | YES                        | —                                              |
-| `variant = '__multiple__'`  | NO                           | NO                         | YES — as `variant_conflict_rate` health metric |
+| Population                  | Included in SRM denominator? | Included in analysis arms? | Reported separately?                          |
+| --------------------------- | ---------------------------- | -------------------------- | --------------------------------------------- |
+| `variant != '__multiple__'` | YES                          | YES                        | —                                             |
+| `variant = '__multiple__'`  | NO                           | NO                         | YES — as `health.multiple_rate` health metric |
 
-`variant_conflict_rate` = `COUNT(*) WHERE variant = '__multiple__'` / `COUNT(*)` per `(run_id)`. Threshold: ~1% triggers an alert; above that signals a real defect.
+`health.multiple_rate` = `COUNT(*) WHERE variant = '__multiple__'` / `COUNT(*)` per `(run_id)`. Threshold: ~1% triggers an alert; above that signals a real defect.
 
 ## SRM denominator shape
 
 ```sql
--- Input to chi-square SRM test (per arm vs declared allocation)
+-- Per-arm totals for SRM; analysis-v2 additionally requires the Entity arrival path
 SELECT
   run_id,
   variant,
@@ -85,6 +87,11 @@ Serving pipes `UNION ALL` the snapshot with the tail result and re-dedup the uni
 The dedup output (`first_exposure_ts`, `variant`) is the direct input to the activation gate JOIN. See [activation-gate-query-contract.md](./activation-gate-query-contract.md).
 
 ## Stats engine handoff
+
+The physical serving query groups historical identity aliases by `entity_family_hash`, chooses
+the earliest `targeting_key_hash` with `argMin`, and applies Entity deletion cutoffs and App
+identity-generation tombstones. The Analysis Worker canonicalizes retained shared-root aliases
+before building strict stats rows.
 
 The dedup output feeds the stats engine as per-Entity rows:
 

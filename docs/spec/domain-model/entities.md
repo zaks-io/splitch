@@ -4,31 +4,32 @@
 
 Account / ownership / billing / membership unit. Every account is an Organization — no null case.
 
-| Field           | Type                                 | Req | Meaning                                                                    |
-| --------------- | ------------------------------------ | --- | -------------------------------------------------------------------------- |
-| `org_id`        | `string` (ULID)                      | ✓   | Globally unique; WorkOS Organization ID mirrors this                       |
-| `name`          | `string`                             | ✓   | Display name                                                               |
-| `slug`          | `string`                             | ✓   | URL-safe identifier, unique across all orgs                                |
-| `plan`          | `"free" \| "growth" \| "enterprise"` | ✓   | Billing tier; default `"free"`                                             |
-| `personal`      | `boolean`                            | ✓   | `true` for self-serve single-user orgs; `false` for shared/enterprise      |
-| `workos_org_id` | `string \| null`                     | ✓   | WorkOS Organization reference; null until first SSO/SCIM wiring (ADR-0021) |
-| `created_at`    | `timestamp`                          | ✓   | ISO 8601 UTC                                                               |
+| Field           | Type                              | Req | Meaning                                                                    |
+| --------------- | --------------------------------- | --- | -------------------------------------------------------------------------- |
+| `org_id`        | `string`                          | ✓   | Opaque Organization identifier                                             |
+| `name`          | `string`                          | ✓   | Display name                                                               |
+| `slug`          | `string`                          | ✓   | URL-safe identifier, unique across all orgs                                |
+| `plan`          | `"free" \| "pro" \| "enterprise"` | ✓   | Billing tier; default `"free"`                                             |
+| `personal`      | `boolean`                         | ✓   | `true` for self-serve single-user orgs; `false` for shared/enterprise      |
+| `workos_org_id` | `string \| null`                  | ✓   | WorkOS Organization reference; null until first SSO/SCIM wiring (ADR-0021) |
+| `created_at`    | `timestamp`                       | ✓   | ISO 8601 UTC                                                               |
 
-**Invariant:** every App belongs to exactly one Organization. There is no App without an Org (`org_id` is never null on App).
+**Invariant:** every App belongs to exactly one Organization. There is no App without an Org (`organization_id` is never null on App).
 
 ## App
 
 Product / service surface. Groups Flags and hosts Experiments. The `app_id` is splitch's data-isolation boundary (ADR-0018).
 
-| Field        | Type            | Req | Meaning                                                       |
-| ------------ | --------------- | --- | ------------------------------------------------------------- |
-| `app_id`     | `string` (ULID) | ✓   | Data-isolation key; injected into every D1 and Tinybird query |
-| `org_id`     | `string` (ULID) | ✓   | Owning Organization                                           |
-| `name`       | `string`        | ✓   | Display name                                                  |
-| `slug`       | `string`        | ✓   | URL-safe; unique within an Org                                |
-| `created_at` | `timestamp`     | ✓   | ISO 8601 UTC                                                  |
+| Field             | Type        | Req | Meaning                                                       |
+| ----------------- | ----------- | --- | ------------------------------------------------------------- |
+| `app_id`          | `string`    | ✓   | Data-isolation key; injected into every D1 and Tinybird query |
+| `organization_id` | `string`    | ✓   | Owning Organization                                           |
+| `name`            | `string`    | ✓   | Display name                                                  |
+| `key`             | `string`    | ✓   | URL-safe; unique within an Org                                |
+| `created_at`      | `timestamp` | ✓   | ISO 8601 UTC                                                  |
 
-SDK credentials (the public `client_key`) are per-Environment, not App-level; see the Environment entity (ADR-0027).
+SDK credentials are separate per-Environment records, not fields on App or Environment; see
+[credentials-and-keys.md](../control-plane/credentials-and-keys.md) (ADR-0027).
 
 The five runtimes of one product share a single App. An App is not an ownership unit (that is the Organization).
 
@@ -36,34 +37,33 @@ The five runtimes of one product share a single App. An App is not an ownership 
 
 First-class axis under App (ADR-0027). Experiments, Experiment Runs, Exposures, and SDK credentials are per-Environment. Flag DEFINITION (key, schema, Variant catalog) is App-level; Flag CONFIGURATION (available variants, targeting, rollout, enabled state) is per-Environment.
 
-| Field            | Type            | Req | Meaning                                                                                 |
-| ---------------- | --------------- | --- | --------------------------------------------------------------------------------------- |
-| `environment_id` | `string` (ULID) | ✓   | Co-scoping key alongside `app_id` for experiments, runs, exposures, and SDK credentials |
-| `app_id`         | `string` (ULID) | ✓   | Owning App                                                                              |
-| `name`           | `string`        | ✓   | Display name (e.g. `"production"`, `"staging"`)                                         |
-| `slug`           | `string`        | ✓   | URL-safe; unique within an App                                                          |
-| `client_key`     | `string`        | ✓   | Public, non-secret SDK key; per-Environment                                             |
-| `created_at`     | `timestamp`     | ✓   | ISO 8601 UTC                                                                            |
+| Field            | Type        | Req | Meaning                                                                                 |
+| ---------------- | ----------- | --- | --------------------------------------------------------------------------------------- |
+| `environment_id` | `string`    | ✓   | Co-scoping key alongside `app_id` for experiments, runs, exposures, and SDK credentials |
+| `app_id`         | `string`    | ✓   | Owning App                                                                              |
+| `name`           | `string`    | ✓   | Display name (e.g. `"production"`, `"staging"`)                                         |
+| `key`            | `string`    | ✓   | URL-safe; unique within an App                                                          |
+| `created_at`     | `timestamp` | ✓   | ISO 8601 UTC                                                                            |
 
 ## Flag
 
 Named feature toggle with a key, Variants, Targeting Rules, and enabled/disabled state.
 
-| Field             | Type              | Req | Meaning                                                       |
-| ----------------- | ----------------- | --- | ------------------------------------------------------------- |
-| `flag_id`         | `string` (ULID)   | ✓   | Internal identifier                                           |
-| `app_id`          | `string` (ULID)   | ✓   | Owning App                                                    |
-| `key`             | `string`          | ✓   | Flag Key — unique within App; stable across renames           |
-| `name`            | `string`          | ✓   | Display name                                                  |
-| `description`     | `string`          | ✗   | Human note; non-material                                      |
-| `enabled`         | `boolean`         | ✓   | When `false`, all evaluations return Default Variant          |
-| `default_variant` | `string`          | ✓   | Name of the Variant returned when disabled or no rule matches |
-| `variants`        | `Variant[]`       | ✓   | Ordered list; at least one (the Default Variant)              |
-| `targeting_rules` | `TargetingRule[]` | ✓   | Priority-ordered; first-match-wins; may be empty              |
-| `created_at`      | `timestamp`       | ✓   | ISO 8601 UTC                                                  |
-| `updated_at`      | `timestamp`       | ✓   | Last non-material or structural edit                          |
+| Field                | Type              | Req | Meaning                                                     |
+| -------------------- | ----------------- | --- | ----------------------------------------------------------- |
+| `flag_id`            | `string`          | ✓   | Internal identifier                                         |
+| `app_id`             | `string`          | ✓   | Owning App                                                  |
+| `key`                | `string`          | ✓   | Flag Key — unique within App; stable across renames         |
+| `name`               | `string`          | ✓   | Display name                                                |
+| `description`        | `string`          | ✗   | Human note; non-material                                    |
+| `enabled`            | `boolean`         | ✓   | When `false`, all evaluations return Default Variant        |
+| `default_variant_id` | `string`          | ✓   | ID of the Variant returned when disabled or no rule matches |
+| `variants`           | `Variant[]`       | ✓   | Ordered list; at least one (the Default Variant)            |
+| `targeting_rules`    | `TargetingRule[]` | ✓   | Priority-ordered; first-match-wins; may be empty            |
+| `created_at`         | `timestamp`       | ✓   | ISO 8601 UTC                                                |
+| `updated_at`         | `timestamp`       | ✓   | Last non-material or structural edit                        |
 
-**Definition vs configuration (ADR-0027).** Flag DEFINITION — `key`, value schema, and the Variant catalog — is App-level and shared across Environments. Flag CONFIGURATION — `enabled` state, `default_variant`, the subset of available variants, `targeting_rules`, and rollout — is per-Environment. The configuration fields above are resolved against a specific `environment_id`.
+**Definition vs configuration (ADR-0027).** Flag DEFINITION — `key`, value schema, and the Variant catalog — is App-level and shared across Environments. Flag CONFIGURATION — `enabled` state, `default_variant_id`, the subset of available variants, `targeting_rules`, and rollout — is per-Environment. The configuration fields above are resolved against a specific `environment_id`.
 
 ## Variant
 
@@ -71,6 +71,7 @@ A possible value a Flag can return, referenced by a semantic name.
 
 | Field         | Type                                    | Req | Meaning                                                     |
 | ------------- | --------------------------------------- | --- | ----------------------------------------------------------- |
+| `id`          | `string`                                | ✓   | Opaque Variant identifier                                   |
 | `name`        | `string`                                | ✓   | Semantic identifier; the value `assign()` and Exposures log |
 | `value`       | `boolean \| string \| number \| object` | ✓   | JSON-typed payload                                          |
 | `description` | `string`                                | ✗   | Human note; non-material                                    |
@@ -81,25 +82,25 @@ A possible value a Flag can return, referenced by a semantic name.
 
 Test comparing Variants of a Flag to measure their effect on Metrics for a population of Entities. First-class sibling to Flags under an App; controls Flags while running, does not own them.
 
-| Field                | Type                             | Req | Meaning                                                                        |
-| -------------------- | -------------------------------- | --- | ------------------------------------------------------------------------------ |
-| `experiment_id`      | `string` (ULID)                  | ✓   | Internal identifier                                                            |
-| `app_id`             | `string` (ULID)                  | ✓   | Owning App                                                                     |
-| `environment_id`     | `string` (ULID)                  | ✓   | Owning Environment; Experiments are per-Environment (ADR-0027)                 |
-| `flag_id`            | `string` (ULID)                  | ✓   | The single controlled Flag                                                     |
-| `name`               | `string`                         | ✓   | Display name                                                                   |
-| `description`        | `string`                         | ✗   | Non-material                                                                   |
-| `hypothesis`         | `string`                         | ✗   | Formal expected-effect statement                                               |
-| `targeting_key_type` | `string`                         | ✓   | Entity type name the Targeting Key identifies (e.g. `"user"`, `"workspace"`)   |
-| `status`             | `ExperimentStatus`               | ✓   | See Run lifecycle spec                                                         |
-| `live_run_id`        | `string \| null`                 | ✓   | The Experiment Run currently serving Entities; null when no Start has occurred |
-| `confidence_level`   | `number`                         | ✓   | Default `0.95`; per-Experiment                                                 |
-| `metrics`            | `ExperimentMetric[]`             | ✓   | Goal, guardrail, and secondary Metrics                                         |
-| `activation_metric`  | `ActivationMetricConfig \| null` | ✗   | Gate config; when set, freezes per Run                                         |
-| `dimensions`         | `string[]`                       | ✗   | Attribute names used to slice results                                          |
-| `owner`              | `string`                         | ✗   | Non-material                                                                   |
-| `tags`               | `string[]`                       | ✗   | Non-material                                                                   |
-| `created_at`         | `timestamp`                      | ✓   | ISO 8601 UTC                                                                   |
+| Field                  | Type                 | Req | Meaning                                                                                    |
+| ---------------------- | -------------------- | --- | ------------------------------------------------------------------------------------------ |
+| `experiment_id`        | `string`             | ✓   | Internal identifier                                                                        |
+| `app_id`               | `string`             | ✓   | Owning App                                                                                 |
+| `environment_id`       | `string`             | ✓   | Owning Environment; Experiments are per-Environment (ADR-0027)                             |
+| `flag_id`              | `string`             | ✓   | The single controlled Flag                                                                 |
+| `name`                 | `string`             | ✓   | Display name                                                                               |
+| `description`          | `string`             | ✗   | Non-material                                                                               |
+| `hypothesis`           | `string`             | ✗   | Formal expected-effect statement                                                           |
+| `targeting_key_type`   | `string`             | ✓   | Entity type name the Targeting Key identifies (e.g. `"user"`, `"workspace"`)               |
+| `status`               | `ExperimentStatus`   | ✓   | See Run lifecycle spec                                                                     |
+| `live_run_id`          | `string \| null`     | ✓   | The Experiment Run currently serving Entities; null before Start and after End or Conclude |
+| `confidence_level`     | `number`             | ✓   | Default `0.95`; per-Experiment                                                             |
+| `metrics`              | `ExperimentMetric[]` | ✓   | Goal, guardrail, and secondary Metrics                                                     |
+| `activation_metric_id` | `string \| null`     | ✗   | Activation Metric reference; freezes per Run                                               |
+| `dimensions`           | `string[]`           | ✗   | Attribute names used to slice results                                                      |
+| `owner`                | `string`             | ✗   | Non-material                                                                               |
+| `tags`                 | `string[]`           | ✗   | Non-material                                                                               |
+| `created_at`           | `timestamp`          | ✓   | ISO 8601 UTC                                                                               |
 
 **Experiment constraint:** exactly one Flag per Experiment. The schema uses a single `flag_id` field. A multi-Flag extension adds a `flag_ids: string[]`, but implementations must not assume it.
 
@@ -116,7 +117,8 @@ A `string` that logically identifies the subject of evaluation. First-class requ
 ```
 EvaluationContext = {
   targetingKey: string   // required; the single identifier splitch buckets on AND measures against
-  [attribute: string]: unknown  // arbitrary attributes available for Targeting Rule Conditions
+  idType: string         // required Entity type
+  attributes: Record<string, boolean | string | number | unknown[]>
 }
 ```
 

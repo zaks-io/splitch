@@ -36,7 +36,8 @@ files, and GitHub environment settings are the release contract.
 | `production`     | Customer-serving platform                     | Persistent Cloudflare resources, Tinybird Cloud main workspace, production routes/domains | GitHub `production` environment approval |
 
 PRs do not get hosted previews by default. The shared preview target is intentionally mutable and
-single-tenant: when a maintainer deploys a branch or PR there, it replaces the previous preview.
+single target: each protected default-branch deployment replaces the previous preview. The workflow
+rejects branch and PR refs.
 
 Local API Worker smoke is an explicit handoff check described in
 [agent-verification.md](./agent-verification.md); it is not part of `verify:push` or `verify:ci`.
@@ -70,8 +71,8 @@ caching for task outputs.
 
 Required Turbo shape:
 
-- PR CI runs `turbo run lint typecheck test build --affected` with enough git history for affected
-  detection.
+- PR CI runs `pnpm verify:ci --affected` with enough git history for affected detection. The graph
+  includes `//#docs:lint` and `//#check:cli-mcp-parity` alongside the other root and package gates.
 - Deploy jobs build the exact deployable graph with `turbo run build --filter=<workspace>...` before
   Wrangler deploys that Worker or app.
 - `build` tasks depend on `^build` and declare outputs such as `dist/**`, `.output/**`, build cache
@@ -104,7 +105,7 @@ false`. Anything that mutates Cloudflare, Tinybird, GitHub deployments, or secre
 | Workflow                | Trigger                                                       | Concurrency                      | Required result                                                                                                                                                                                                                 |
 | ----------------------- | ------------------------------------------------------------- | -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `ci`                    | PR and push to main                                           | cancel in-progress per branch/PR | wired: affected `verify:ci`, format, lint, typecheck, test, build, dependency-cruiser, Knip, Gitleaks, conditional local D1/Tinybird checks, and an exact-SHA reusable production call                                          |
-| `e2e`                   | weekly schedule, manual dispatch                              | `e2e-main`, queued               | wired: full-stack Control Panel Playwright harness against `main`; signal-only while SPL-181 remains open, never blocks deploys                                                                                                 |
+| `e2e`                   | weekly schedule, manual dispatch                              | `e2e-main`, queued               | wired: full-stack Control Panel Playwright harness against `main`; signal-only, never blocks deploys                                                                                                                            |
 | `deploy-shared-preview` | daily 00:17 `America/Los_Angeles`; manual from protected main | `shared-preview-deploy`, queued  | wired: deploy the protected default-branch ref to the one hosted preview target through Tinybird Branch build, D1 migrations, Turborepo Worker deploy tasks, and hosted smoke                                                   |
 | `reset-shared-preview`  | manual dispatch                                               | `shared-preview-deploy`, queued  | wired: rebuild the Tinybird Branch, migrate and clear preview-only D1/KV state, reseed fixtures, run Copy Pipe on demand, and verify hosted smoke                                                                               |
 | `deploy-production`     | reusable call from successful `ci` on `main`, manual dispatch | `production-deploy`, queued      | wired: current-main and exact-SHA validation, successful CI verification, affected-phase and Worker planning from the latest successful production deployment, conditional Tinybird/D1/Worker mutation, and Linear release sync |
@@ -153,17 +154,20 @@ Per-Worker configs must declare only the bindings owned by that Worker:
 | Worker                   | Binding rule                                                                                                                                                                                                                                                                      |
 | ------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Control Plane API Worker | D1 system-of-record binding, KV config/credential cache bindings, live-update and D1-backed Durable Object bindings                                                                                                                                                               |
-| MCP Worker               | No D1, KV, Tinybird, or Durable Object data bindings; calls public APIs by origin and Analysis by service binding through `@splitch/control-plane-sdk`                                                                                                                            |
+| MCP Worker               | No domain D1/Tinybird bindings; `SESSION_STORE` KV and `MCP_SESSIONS` DO own auth/transport state; signed delegation calls Control Plane's `McpEntrypoint` service binding                                                                                                        |
 | Evaluation Worker        | Provider/config KV, Assignment Store KV/DO, Event Ingest service binding                                                                                                                                                                                                          |
 | Event Ingest Worker      | Four datasource-specific Queue producer/consumer bindings, four matching DLQ producer bindings, one SQLite Admission Gate Durable Object class binding, sharded ingest/outbox/recovery Durable Objects, scoped Tinybird write, reconciliation-read, and state-repair copy secrets |
 | Analysis Worker          | Tinybird read secret; no SDK evaluate or ingest bindings                                                                                                                                                                                                                          |
 | Auth API Worker          | D1 identity/session binding plus auth/session/token bindings; no post-create App management bindings                                                                                                                                                                              |
-| Control Panel Worker     | D1 binding for server-side auth, session, and claim flows plus UI/session/client bindings; no direct KV/Tinybird access                                                                                                                                                           |
+| Control Panel Worker     | D1 and `SESSION_STORE` KV for auth/session/claim flows; Config Store DO and signed Control Plane service binding; no direct Tinybird access                                                                                                                                       |
 | Marketing Worker         | Static/public bindings only; no authenticated App data                                                                                                                                                                                                                            |
-| Scheduled jobs           | Cron triggers stay on owning Workers: Control Plane API demo cleanup and Analysis snapshot refresh                                                                                                                                                                                |
+| Scheduled jobs           | Cron triggers stay on owning Workers: Control Plane API minute recovery and daily maintenance; Analysis hourly snapshot refresh (disabled in shared preview)                                                                                                                      |
 
-Each Event Ingest queue consumer is checked into every Wrangler target with
-`max_concurrency = 1`, `max_batch_size = 100`, and `max_batch_timeout = 1` second. Preview and
+The four-family transport is the target. Current Wrangler configs bind `raw_events`,
+`raw_evaluations`, and `metric_events`, plus a separate Metric reconciliation queue; Web Event
+intake is pending. Every current consumer has `max_concurrency = 1` and
+`max_batch_timeout = 1` second. Primary delivery queues use `max_batch_size = 100`; the Metric
+reconciliation queue uses `max_batch_size = 10`. Preview and
 production may use different queue resource IDs, but may not weaken the drain governor. A capacity
 change is a reviewed config mutation, not an autoscaling response to backlog.
 
@@ -299,7 +303,8 @@ or any Durable Object migration.
 ### D1 migrations
 
 - D1 migrations are committed SQL generated from the Drizzle schema toolchain.
-- CI runs migrations locally before tests.
+- CI runs fresh and populated local migration validators after `Verify` when the changed-path
+  plan selects D1. Database test suites also own their migrated fixtures.
 - Shared preview applies migrations remotely to the shared-preview D1 database before Worker deployment.
 - Production applies migrations remotely as part of `deploy-production`, after approval and before code
   that requires the new schema is serving traffic.
@@ -405,8 +410,8 @@ updates and confirms that a further rewrite is a no-op.
   that bundle directory to Sentry with `sentry-cli sourcemaps upload`.
 - Production pins `SENTRY_RELEASE` to the exact deployed commit SHA and passes the same value to
   Linear Release as its version. A validation step requires the Linear access key before any
-  production mutation. The Linear sync runs in a separate post-deploy job with no production
-  credentials, so one immutable release ID joins the deployed code, Sentry events, source maps, and
+  production mutation. The Linear sync runs in a separate post-deploy job in the `production` environment, with only
+  its release credential mapped into the action, so one immutable release ID joins the deployed code, Sentry events, source maps, and
   Linear issues discovered from the deployed commit range without exposing deploy secrets to the
   release action.
 - `SENTRY_RELEASE` is non-secret deploy metadata. It is injected at deploy time, not committed in
@@ -418,8 +423,9 @@ updates and confirms that a further rewrite is a no-op.
 
 ## Tinybird policy
 
-PR CI uses Tinybird Local, not Tinybird Cloud Branches. Run Tinybird Local as a GitHub Actions service
-container, build the project locally, load fixture data, and run endpoint/data-quality tests. This is
+PR CI uses Tinybird Local, not Tinybird Cloud Branches. The conditional validator starts a disposable Docker
+container through `scripts/check-tinybird-local.mjs`, builds the project locally, and runs
+endpoint/data-quality tests. This is
 the right PR default because it is fast, disposable, parallelizable, and does not consume Tinybird Branch
 quota.
 
@@ -440,16 +446,15 @@ Tinybird flow:
 
 1. PR CI runs `pnpm tinybird:local`, which starts disposable Tinybird Local with generated local-only
    tokens, runs `tb build` through `tinybird.config.json` (`dev_mode=local`), runs tests when present,
-   and removes the Local container. Trusted PR workflows may also run `tb deploy --check` when
-   cloud credentials are available.
+   and removes the Local container. The required PR workflow does not run a Cloud deploy check.
 2. Shared preview creates or updates `shared_preview --last-partition`, then runs `tb --branch=shared_preview build`
    and endpoint smoke tests against that branch.
 3. Production release starts automatically after the `ci` workflow succeeds for a same-repository
    push to `main`, or manually from `main`. Automatic runs call the reusable deployment workflow with
    the CI run's exact SHA and remain visible as part of that CI run. Manual runs use the dispatch
    event's `github.sha`. Both paths check out and verify that immutable release SHA. Manual runs query
-   GitHub Actions and require a successful `ci` push run on `main` for that exact SHA. Both paths reject
-   a release that is no longer current `main`, unless a human explicitly enables `allow_stale_release`
+   GitHub Actions and require a successful `ci` push run on `main` for that exact SHA. Automatic calls skip
+   a superseded release; manual calls reject it unless a human explicitly enables `allow_stale_release`
    for incident recovery. That override authorizes an older code release only; it does not roll back
    D1, KV, Durable Objects, Queues, or Tinybird. The workflow compares the release to the latest
    successful GitHub `production` deployment. Non-runtime
@@ -507,8 +512,8 @@ recovery. That override does not provide data rollback.
    `Verify` dependency in the same CI run and require the reusable call's run ID and SHA to match.
    Manual runs query the `ci` workflow's successful `main` push runs. The production deploy planner
    selects the exact Worker graph, and the deploy job builds it with production-target inputs after
-   the environment gate. The Playwright harness runs weekly in `e2e` as a signal-only check while
-   SPL-181 is open, so a red run never blocks a release.
+   the environment gate. The Playwright harness runs weekly in `e2e` as a signal-only check, so a red
+   run never blocks a release.
 2. Resolve the latest successful `production` deployment SHA, compute the exact changed path set, and
    stop when no production deploy input changed.
 3. Wait for GitHub `production` environment approval. Required reviewers and prevent-self-review should
@@ -528,13 +533,12 @@ recovery. That override does not provide data rollback.
    Evaluation, Control Plane, Control Panel, then the remaining independent Workers together.
    `scripts/deploy-worker-order.test.mjs` derives these edges from the Workers' own wrangler configs
    and fails when an added binding has no ordering entry.
-7. Verify cron trigger registration on Control Plane API and Analysis Workers when Workers changed.
-8. Run route and binding smoke checks before marking the GitHub deployment complete when Workers
-   changed.
-9. Record the selected phases, baseline and release SHAs, Worker version IDs, D1 migration names,
-   Tinybird deployment URL, and smoke results
-   in the GitHub deployment summary.
-10. Sync the completed release to Linear in a separate job using the same commit SHA as Sentry.
+7. Target requirement, not yet automated: verify cron registration and run production route and
+   binding smoke for changed Workers before marking the deployment complete.
+8. The current summary records selected phase outcomes and baseline/release SHAs. Worker version
+   IDs, migration names, Tinybird deployment URL, and production smoke evidence remain target
+   summary requirements.
+9. Sync the completed release to Linear in a separate job using the same commit SHA as Sentry.
 
 Production smoke must assert `platformTarget = "production"` on every public Worker health or route
 probe that exposes it. A production deployment is not complete if the summary lacks route-level smoke

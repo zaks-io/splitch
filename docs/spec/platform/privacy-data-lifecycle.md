@@ -25,7 +25,7 @@ root-derived salt.
 | Data class              | Examples                                                                                 | Role                                                       | Durable stores                                                                                                    |
 | ----------------------- | ---------------------------------------------------------------------------------------- | ---------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
 | Control-plane User data | WorkOS user ID, email in WorkOS, memberships, sessions, device-flow tokens               | Splitch-controlled                                         | WorkOS, D1 IDs, KV sessions, keychain/CLI                                                                         |
-| Organization/App config | Orgs, Apps, Environments, Flags, Experiments, Metrics, Segments, credential metadata     | Customer-controlled                                        | D1, KV config cache, per-App DO                                                                                   |
+| Organization/App config | Orgs, Apps, Environments, Flags, Experiments, Metrics, Segments, credential metadata     | Customer-controlled                                        | D1, KV config cache, per-Environment DO                                                                           |
 | Entity data             | Targeting Key, idType, Exposures, Activations, Metric Events, Assignment Store holdovers | Customer-controlled; Splitch is processor/service provider | Tinybird raw/derived data, KV, Assignment Store DO, customer Convex component outbox, ingest recovery/queues/DLQs |
 | Browser analytics data  | Web Events, Web Sessions, optional Entity identity                                       | Customer-controlled; Splitch is processor/service provider | Tinybird `web_events` plus retry state, ingest recovery/queues/DLQ                                                |
 | Audit/security data     | control-plane mutation audit, auth door, actor ID, request logs                          | shared legal/security record                               | Tinybird audit log, D1 privacy request log                                                                        |
@@ -152,7 +152,7 @@ D1 owns a bounded `privacy_requests` table:
 
 | column                    | meaning                                                                                               |
 | ------------------------- | ----------------------------------------------------------------------------------------------------- |
-| `request_id`              | ULID                                                                                                  |
+| `request_id`              | Stable request ID; Entity intake uses `prv_` plus the SHA-256 idempotency digest                      |
 | `org_id`                  | Organization receiving the request                                                                    |
 | `app_id`                  | nullable; present for App/Entity requests                                                             |
 | `request_type`            | `access` \| `export` \| `correct` \| `delete` \| `opt_out_sale_share` \| `limit_sensitive`            |
@@ -252,7 +252,7 @@ Every delete job must record per-store status for:
 - D1: Organization/App/config/membership/credential metadata/privacy ledgers, including destructive
   reset purge of old-epoch `entity_deletions` and irreversible Entity `subject_ref` redaction.
 - KV: sessions, credential caches, config cache, liveRun keys, Assignment Store read keys.
-- Durable Objects: per-App identity atoms and live-update state, Assignment Store writer rows,
+- Durable Objects: per-App identity atoms and per-Environment live-update state, Assignment Store writer rows,
   ingest claims/outbox
   payloads, Admission Gate state, write-ahead Tinybird attempts, indeterminate records, and
   `poison_pending`/`poison_transferred` records.

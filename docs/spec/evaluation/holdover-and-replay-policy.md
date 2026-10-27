@@ -7,7 +7,7 @@ assignment-for-experience from assignment-for-analysis.
 ## Holdover definition
 
 An Entity is a **holdover** if and only if it has a first-touch Exposure recorded under a
-prior Run of the same Experiment — i.e. `AssignmentStore.getAll()` returns a record for
+Run of the same Experiment, including the current Run, i.e. `AssignmentStore.getAll()` returns a record for
 this `(appId, experimentId, idType, targetingKey)`.
 
 The predicate is purely fact-based: "does an Exposure record exist?" Because Assignment is
@@ -42,14 +42,14 @@ Holdovers cannot pollute it because they fire no new Exposures (nothing stamped 
 
 ## No re-counting invariant
 
-A holdover's reads through `read-variant()` do **not** fire a new Exposure event. The
+A holdover's reads through `evaluate()` do **not** fire a new Exposure event. The
 Exposure pipeline receives nothing new for a holdover request. The dedup query counts the
 Entity exactly once: under the Run whose `runId` is stored in `holdoverRecord.runId`.
 
 This is a load-bearing implementation invariant. The pipeline must enforce it:
 
 - Evaluate path returns `isHoldover: true` to signal "do not fire Exposure."
-- `read-variant()` accessor checks `isHoldover` before firing (see
+- `evaluate()` accessor checks `isHoldover` before firing (see
   [exposure-firing-and-accessor.md](./exposure-firing-and-accessor.md)).
 - If the pipeline ever fires an Exposure for a holdover with the new `runId`, that Entity
   would appear in two Runs' denominators — a silent analysis corruption. Fail-loud if detected.
@@ -59,9 +59,11 @@ This is a load-bearing implementation invariant. The pipeline must enforce it:
 For up to ~60s after a Run-boundary first-touch write, a concurrent cross-POP KV read may
 miss the holdover and fall through to `assign(liveRun, targetingKey)` instead of replaying.
 Since `assign()` is deterministic, a brand-new Entity gets the identical Variant the DO is
-about to store — no corruption. A _returning_ holdover in this exact window may momentarily
-get a fresh assignment instead of a replay — cosmetic and self-healing once KV propagates.
-No Run dataset is corrupted; only momentary experience near a boundary. (ADR-0009 accepted.)
+about to store — no corruption. A _returning_ holdover in this exact window may get a fresh
+assignment under the new Run instead of a replay. That is not only momentary experience: evaluate
+seals the new Run's Exposure before `put` returns the earlier Run's winner, so the Entity can count
+in both Runs against ADR-0006. ADR-0064 withdrew ADR-0009's "no Run dataset is corrupted"; SPL-812
+tracks the fix.
 
 ## Sources
 

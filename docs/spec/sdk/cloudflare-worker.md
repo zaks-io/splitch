@@ -81,13 +81,16 @@ Wrangler-generated types make `env.SPLITCH` a typed service binding. The public 
 
 ```ts
 interface SplitchCloudflareService {
-  evaluate(flagKey: string, context: EvaluationContext): Promise<VariantValue>;
-  evaluateDetails(flagKey: string, context: EvaluationContext): Promise<ResolutionDetails>;
+  evaluate(flagKey: string, context: CloudflareEvaluationContext): Promise<VariantValue>;
+  evaluateDetails(
+    flagKey: string,
+    context: CloudflareEvaluationContext,
+  ): Promise<CloudflareResolutionDetails>;
   status(): Promise<CloudflareRuntimeStatus>;
 }
 ```
 
-`EvaluationContext` matches `@splitch/sdk`: `targetingKey` is required, `idType` defaults to `user`,
+`CloudflareEvaluationContext` follows the root SDK context except for required retry identity: `targetingKey` is required, `idType` defaults to `user`,
 `attributes` defaults to `{}`, `defaultValue` defaults to `false`, and `idempotencyKey` is required.
 The same call handles ordinary Flags, Targeting Rules, baseline rollouts, live Experiments, and
 holdover replay. There is no `remote`, `experiment`, `sendExposure`, or fallback option.
@@ -141,12 +144,13 @@ for server Exposure delivery.
 
 ## Exposure delivery
 
-The Durable Object alarm sends pending rows in bounded batches to
+The Durable Object alarm processes at most 25 due rows and sends each row in a one-item batch to
 `POST /api/integrations/cloudflare/exposures`. Splitch verifies installation scope, immutable Run
 configuration hash, Evaluation Context, and resolved Variant before accepting the Exposure. A stable
 Exposure ID makes retry idempotent.
 
-`408`, `429`, `5xx`, and transport failure retry with capped deterministic jitter. Other `4xx`
+`408`, `429`, `5xx`, transport failure, and retryable per-item rejection retry with capped
+deterministic jitter. Other `4xx`
 responses become terminal. Accepted and deduplicated rows are deleted. A row older than 24 hours
 becomes terminal and erases its Targeting Key and attributes.
 

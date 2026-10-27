@@ -4,8 +4,9 @@ Metric Events are App/Environment/Entity product facts used as Metric inputs. Th
 Exposures, Activations, or Web Events, and they never become an Experiment Run's analysis
 denominator.
 
-**Implementation status:** specified, not implemented. When implemented, this route must use the
-ADR-0043 durable queue transport and must not copy the current direct Tinybird append helper.
+**Implementation status:** implemented through the Evaluation Worker delegation and Event Ingest
+`handleAuthorizedMetricEvent` handler. Intake uses aggregate admission,
+a durable Metric Event outbox, and the ADR-0043 queue-backed Tinybird microbatch transport.
 
 ## SDK surface and route
 
@@ -177,7 +178,7 @@ response omits both IDs. The public SDK `track()` projection never returns them.
 never returns the raw Targeting Key or its hash.
 
 `activate()` returns `409 ACTIVATION_NOT_AVAILABLE` without `Retry-After` when the Metric Event
-cannot activate a matching Experiment Run. Under a Client Key, unpublished Activation configuration,
+cannot activate a matching Exposure-backed Experiment Run. Under a Client Key, unpublished Activation configuration,
 no binding for the Event Definition, an incompatible Entity type, and no Exposure-backed Assignment
 all use the same message and empty details so the response cannot identify an Entity's enrollment.
 An API Key receives the same code with a message naming the permanent failed condition, except for

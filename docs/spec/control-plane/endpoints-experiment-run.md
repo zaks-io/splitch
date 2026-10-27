@@ -5,8 +5,9 @@ draft/start lifecycle.
 
 **Environment-scoped.** Experiments, Experiment Runs, and their Exposures are per-Environment
 (ADR-0027), so these endpoints live under `/apps/{app_id}/envs/{environment_id}/…`. An Experiment in
-`dev` and one in `prod` are distinct; their data never mixes. `environment_id` is the canonical ID
-(slugs are URL-presentation only — these are API paths, so they carry the ID).
+`dev` and one in `prod` are distinct; their data never mixes. `environment_id` accepts an Environment ID or key. App and Experiment path selectors also
+resolve through the shared authenticated selector resolver. Reads require App membership; create,
+update, Start, End, Conclude, and archive require App admin or owner plus the route's PAT permission.
 
 The lifecycle verb is **Start** (not "publish"): `draft → running → ended`. See
 [run-state-machine.md](run-state-machine.md).
@@ -28,15 +29,29 @@ Body (create draft):
   name: string,
   description?: string,
   hypothesis?: string,
-  flag_id: string,
-  targeting_key_field: string,       // which attribute is the Targeting Key
-  variants: [{ name: string, is_control: boolean }],   // must be available in this Environment (ADR-0028)
-  segment_ids?: string[],
-  confidence_level?: number           // default 0.95
+  appId: string,
+  environmentId: string,
+  key: string,
+  flagId: string,
+  targetingKey: string,                 // Evaluation Context field
+  targetingKeyType: string,             // Entity type
+  metrics: MetricRef[],                 // may be empty
+  guardrailMetrics?: MetricRef[],
+  activationMetricId?: string | null,
+  conversionWindowMs?: number,          // default 0
+  dimensions?: string[],
+  allocation?: { [variantName: string]: number },
+  salt?: string,
+  targetingRules?: TargetingRuleInput[],
+  segmentIds?: string[],
+  confidenceLevel?: number,             // default 0.95
+  idempotency_key?: string
 }
 ```
 
-Returns: `{ experiment_id, app_id, environment_id, flag_id, name, status: "draft", variants, created_at }`
+Returns the `ExperimentResponse` contract, including `id`, `appId`, `environmentId`, `flagId`,
+`key`, `name`, `status: "draft"`, `liveRunId: null`, and draft fields. The Control Variant derives
+from the bound Flag Configuration; there is no create-time `variants` field.
 Status is always `draft` on creation; no Run yet.
 
 **Variant availability invariant:** every Variant referenced must be in the Flag's available set for
@@ -49,7 +64,7 @@ holders also include `details.archivedExperimentId` (keys are not freed or renam
 
 ### `GET /apps/{app_id}/envs/{environment_id}/experiments/{experiment_id}`
 
-Returns: Experiment including `live_run_id` (null if no running Run), draft allocation, draft targeting.
+Returns: Experiment including `liveRunId` (null if no running Run), draft allocation, draft targeting.
 
 ### `PATCH /apps/{app_id}/envs/{environment_id}/experiments/{experiment_id}`
 
@@ -57,12 +72,12 @@ Returns: Experiment including `live_run_id` (null if no running Run), draft allo
 
 ```
 {
-  allocation?: { [variant_name]: number },  // must sum to 100
+  allocation?: { [variantName: string]: number },  // must sum to 100
   salt?: string,                             // override auto-generated salt
-  targeting_key_field?: string,
-  targeting_rules?: TargetingRule[],
-  segment_ids?: string[],
-  activation_metric_id?: string | null       // assignment-affecting
+  targetingKey?: string,
+  targetingRules?: TargetingRuleInput[],
+  segmentIds?: string[],
+  activationMetricId?: string | null       // assignment-affecting
 }
 ```
 
@@ -76,12 +91,12 @@ reference staged by an earlier one. Start remains the only operation that ends t
 What happens to a field the draft has **no** value for is not uniform, and the difference is
 material:
 
-| Staged field      | Draft empty at Start                                                            |
-| ----------------- | ------------------------------------------------------------------------------- |
-| `allocation`      | Carried forward from the running Run's frozen allocation.                       |
-| `targeting_rules` | Carried forward from the running Run's frozen (already Segment-resolved) rules. |
-| `salt`            | **Not** carried forward. Start mints a fresh salt.                              |
-| `segment_ids`     | **Not** carried forward. Defaults to the empty list.                            |
+| Staged field     | Draft empty at Start                                                            |
+| ---------------- | ------------------------------------------------------------------------------- |
+| `allocation`     | Carried forward from the running Run's frozen allocation.                       |
+| `targetingRules` | Carried forward from the running Run's frozen (already Segment-resolved) rules. |
+| `salt`           | **Not** carried forward. Start mints a fresh salt.                              |
+| `segmentIds`     | **Not** carried forward. Defaults to the empty list.                            |
 
 The salt row is the consequential one. A staged PATCH that does not set `salt` explicitly leaves
 the draft salt null, and Start then generates a new one — so **the next Run re-randomizes the
@@ -90,31 +105,31 @@ That is deliberate: a new Run is a new bucketing boundary, so an allocation chan
 reshuffle only part of the audience. If the next Run must reuse the current Run's bucketing, send
 `salt` explicitly with the running Run's salt value (readable from the Run) in the staged PATCH.
 
-`segment_ids` does not carry forward because a Run stores no Segment references at all: Start
+`segmentIds` does not carry forward because a Run stores no Segment references at all: Start
 resolves Segments into concrete Targeting Rules and freezes those. The resolved rules are what
-`targeting_rules` carries forward, so traffic is not silently widened; the references themselves
+`targetingRules` carries forward, so traffic is not silently widened; the references themselves
 have to be re-staged if the next Run should track a live Segment.
 
-`flag_id`, `targeting_key_field`, `targeting_key_type`, and `activation_metric_id` have no draft
+`flagId`, `targetingKey`, `targetingKeyType`, and `activationMetricId` have no draft
 column of their own. While a Run is running they are rejected with `409 RUN_FROZEN` even under
-`stageForNextRun: true`; the stageable set is exactly `allocation`, `salt`, `targeting_rules`, and
-`segment_ids`, and nothing else.
+`stageForNextRun: true`; the stageable set is exactly `allocation`, `salt`, `targetingRules`, and
+`segmentIds`, and nothing else.
 
 **Measurement-config fields** (apply to live Run in place, no reset):
 
 ```
 {
   metrics?: MetricRef[],                  // post-start additions are Secondary / exploratory
-  conversion_window_hours?: number,
-  guardrail_config?: GuardrailConfig[]     // thresholds locked for decision-valid Guardrails
+  conversionWindowMs?: number,
+  guardrailMetrics?: MetricRef[]     // thresholds locked for decision-valid Guardrails
 }
 ```
 
-Decision-locked fields (`confidence_level`, `horizon`, `target_n`, `sample_size_locked`,
-`analysis_version`, `planned_duration_days`, goal
+Decision-locked fields (`confidenceLevel`, goal
 Metric membership, Guardrail thresholds, and Primary Dimensions) cannot be changed for the current
-running Run's decision-valid result after Start. They may be drafted for the next Run or surfaced
-as exploratory analysis.
+running Run's decision-valid result after Start. Run-only commitments (`horizon`, `targetN`, `sampleSizeLocked`, analysis version, and planned
+duration) are chosen at Start, not accepted on Experiment PATCH. Locked decision-family changes
+return `DECISION_LOCKED`; exploratory additions do not rewrite the frozen family.
 
 **Non-material fields** (apply in place):
 
@@ -122,7 +137,8 @@ as exploratory analysis.
 { name?, description?, hypothesis?, owner?, tags? }
 ```
 
-Returns: updated Experiment.
+Returns: updated Experiment, with `liveRunUnaffected: { runId, frozenTargetingRules }` when
+assignment fields were staged under a live Run.
 
 ### `POST /apps/{app_id}/envs/{environment_id}/experiments/{experiment_id}/start`
 
@@ -180,8 +196,9 @@ See [run-state-machine.md](run-state-machine.md) for transition details.
 Auth: App `owner` or `admin`. **Subject to the Environment Policy** (ADR-0029): if this Environment's
 Policy gates "Start an Experiment Run" at `confirm`, the proposer is authorized to perform the
 inline `approve_and_apply` Review. If the Review is omitted, the server persists the immutable
-Approval Request and returns `409 APPROVAL_REVIEW_REQUIRED`; no Run state changes. The CLI/MCP
-`--confirm` affordance derives `review.action = "approve_and_apply"` (see
+Approval Request and returns `409 APPROVAL_REVIEW_REQUIRED`; no Run state changes. The CLI
+`--confirm` affordance derives `review.action = "approve_and_apply"`; MCP callers supply that
+`review` input directly (see
 [../contracts/mcp-tool-derivation.md](../contracts/mcp-tool-derivation.md)).
 
 Under `allow`, no Review is required and Start enters the same validated application seam directly.
@@ -204,6 +221,16 @@ control-plane list of archived Experiments or their Runs in this surface. `GET �
 id remains readable. Parent teardown (Flag / Environment / App delete) hard-deletes archived
 Experiments and their Runs as part of the cascade once no non-archived Experiment remains.
 
+## Experiment planning
+
+### `POST /apps/{appId}/envs/{environmentId}/experiment-plan`
+
+Operation ID: `experiment_plan`. This is a read-only POST requiring App membership and PAT `read`.
+`ExperimentPlanRequestSchema` and `ExperimentPlanResponseSchema` in
+`packages/contracts/src/experiment-plan.ts` define the strict request and response. It plans from a
+predeclared MDE or solves MDE from sample size; it never computes post-hoc power. Pass the returned
+`targetN` to Start. Invalid inputs return `VALIDATION_ERROR`.
+
 ## Experiment Run endpoints
 
 ### `GET /apps/{app_id}/envs/{environment_id}/experiments/{experiment_id}/runs`
@@ -212,7 +239,8 @@ Returns: list of Runs (all statuses), newest first.
 
 ### `GET /apps/{app_id}/envs/{environment_id}/experiments/{experiment_id}/runs/{run_id}`
 
-Returns: full Run object (frozen assignment config + measurement config snapshot + status).
+Returns the full Run wire object, optional `preRegistration`, and `draftTargetingRules` for
+comparison with the Run's frozen rules. Storage-only decision columns are not all wire fields.
 
 ### `POST /apps/{app_id}/envs/{environment_id}/runs/{run_id}/end`
 

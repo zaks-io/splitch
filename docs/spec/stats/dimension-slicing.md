@@ -28,7 +28,7 @@ When a Primary Dimension with D declared values is added, the BH family expands:
 
 ```
 m = (n_goal_metrics × n_treatment_variants)          # base family
-  + (n_primary_dimensions × D × n_treatment_variants) # per declared dim + values
+  + (n_goal_metrics × n_treatment_variants × sum_declared_dimension_values)
 ```
 
 `m` is computed at design time and locked when the Run starts. `D` is the number
@@ -42,7 +42,7 @@ not declared at design time are secondary and excluded from `m`.
 Each `(dimension_value, variant)` pair is an independent analysis:
 
 1. Filter deduped Exposure rows to `entity.dimension_attribute = dimension_value`.
-2. Run the full CI pipeline (winsorize -> type-variance -> delta-method -> CUPED -> aCS -> relative-lift -> Guardrail).
+2. Run the Metric CI pipeline (winsorize -> type-variance -> delta-method -> CUPED -> aCS -> relative-lift).
 3. Collect the `p_value` for BH correction if the Dimension is Primary.
 
 Per-Dimension n may be small; `health.low_n_warning = true` is set per slice.
@@ -54,7 +54,7 @@ When an Activation gate is set, the Activation filter applies **before** Dimensi
 ```
 population = activated_entities             # gated population first
   |> group_by dimension_attribute           # then slice
-  |> per_value: compute CI + SRM_check
+  |> per_value: compute Metric CI
 ```
 
 Dimensions slice the _activated_ population, not the full-exposed population. This preserves
@@ -80,7 +80,7 @@ interface DimensionResult {
 }
 ```
 
-`DimensionResult.arm_results[].is_significant` reflects BH correction over the unified family
+`DimensionResult.arm_results[].is_significant` reflects the version-selected BH or BH-G correction over the unified family
 (top-level goal Metrics + Primary Dimension slices). Secondary Dimension `is_significant` is
 reported as a raw `p_value < alpha` — no BH — with `exploratory: true` and
 `decision_valid: false`.
@@ -96,10 +96,10 @@ its per-arm result reports `status = 'insufficient_n'`.
 A Dimension analysis can always determine:
 
 - Whether a Dimension is Primary or Secondary (declared at design time, not inferred).
-- Whether Activation filter was applied before slicing (from the input row's `activated` field).
+- Whether Activation filtering applies (from the Run input's `activation_rows`; Exposure rows have no `activated` field).
 - Whether `is_significant` was BH-corrected or raw (from `in_bh_family` flag).
 
-No caller needs to guess. The output shape carries all three facts explicitly.
+The decision flags are explicit in the output; the Run input supplies Activation provenance.
 
 ## Sources
 

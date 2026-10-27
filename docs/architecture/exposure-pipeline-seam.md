@@ -13,7 +13,7 @@ the raw stream is many-per-Entity), ADR-0005 (dedup is first-touch and the pipel
 deliberately un-collapsed on the wire), and ADR-0009 (the pipeline drives the holdover `put`). This grill
 specifies the seam: how the raw stream becomes the trustworthy analysis denominator.
 
-## The spine (ADR-0010): raw append-only log, dedup at query time
+## The spine (ADR-0010/0024): raw append-only log, snapshot plus deduped tail
 
 ELT, not ETL. Verified against Eppo / GrowthBook / Statsig and general streaming practice (see
 [references.md](./references.md)) — it is the unanimous warehouse-native pattern, and the only sane choice
@@ -22,7 +22,7 @@ for an edge origin.
 ```
   5 edge runtimes                                          analysis time
        |                                                        |
-   append raw Exposure          +------------------+      windowed dedup query
+   append raw Exposure          +------------------+      snapshot + raw-tail query
    (at-least-once,    ───────▶  | raw Exposure log | ───▶  first-touch per (entity, run)
     idempotent key)             |  (append-only,   |       QUALIFY ROW_NUMBER() ... = 1
                                 |  system of record)|       (== GROUP BY + MIN(ts))
@@ -33,8 +33,10 @@ for an edge origin.
 ```
 
 - **System of record** = the raw append-only log. Each POP just appends; no global ordering needed.
-- **Dedup** = a re-runnable windowed query at analysis time, not a collapse at ingest. First-touch
-  (`MIN(ts)`) per `(entity, run)`.
+- **Dedup** = a re-runnable first-touch reducer, not a collapse at ingest.
+  `cp_deduped_exposures` replaces the snapshot; `serve_deduped_exposures` unions it with raw
+  rows whose `ingest_ts` is at or after the snapshot watermark, then re-dedups the overlap.
+  First-touch is `MIN(exposure_at)`, the encounter clock, not delivery receipt time (ADR-0049).
 - **Delivery** = at-least-once + idempotent dedup key. Never exactly-once. Downstream dedup by
   key and earliest timestamp owns first-touch.
 
@@ -45,19 +47,20 @@ _input_ to an ELT deduper.
 
 ## The dedup query is the one place all the rules live
 
-First-touch, the conflict quarantine, the SRM denominator, and the Conversion Window anchor are all
-expressed in (or read from) the single shared dedup query — one definition, centralized per ADR-0005:
+First-touch, conflict quarantine, the SRM denominator, and the Conversion Window anchor share the
+logical reducer below. The deployed Copy and serving Pipes apply it across the snapshot and raw tail:
 
 ```sql
 -- one row per (entity, run): the analysis unit
 SELECT
-  app_id, environment_id, entity, run,                             -- app_id + environment_id co-scope (ADR-0027)
-  MIN(ts)                                   AS first_exposure_ts,   -- Conversion Window anchor
-  CASE WHEN COUNT(DISTINCT variant) > 1
-       THEN '__multiple__'                                          -- ADR-0011 quarantine
-       ELSE MAX(variant) END                AS variant
-FROM raw_exposures
-GROUP BY app_id, environment_id, entity, run
+  app_id, environment_id, experiment_id, run_id, id_type, entity_family_hash,
+  MIN(exposure_at) AS first_exposure_ts,
+  CASE WHEN countIf(isNull(variant)) > 0 OR COUNT(DISTINCT variant) > 1
+       THEN '__multiple__'
+       ELSE MAX(assumeNotNull(variant)) END AS variant
+FROM raw_events
+WHERE type = 'exposure'
+GROUP BY app_id, environment_id, experiment_id, run_id, id_type, entity_family_hash
 ```
 
 `app_id` and `environment_id` ride the `GROUP BY` as carried scope columns, not because they change which
@@ -72,26 +75,28 @@ metric (~1% tolerated). Given pure `assign()` + the authoritative holdover DO + 
 a conflict can _only_ be a config race, an SDK bug, or an ADR-0003 violation — all defects to surface
 loudly. "First-touch wins" would silently bias the timestamp-winning arm; SRM wouldn't catch it. Fail loud.
 
-## Holdover write timing: eager edge write, pipeline reconciles
+## Holdover write timing: after durable Exposure acceptance
 
 ADR-0009 has the pipeline drive the holdover `put`, but authoritative first-touch is only known _after_ the
 batch dedup runs. Splitting the two jobs resolves the timing:
 
 - **Experience (replay now):** after Event Ingest durably seals the retry-stable Exposure outbox row,
-  the edge fires `DO.putIfAbsent(key, run, variant)` optimistically on apparent first-touch. The DO's
-  get-then-put-if-absent (ADR-0009) makes concurrent writers safe — first writer wins — so replay
-  works for the _very next_ request without waiting for Queue or Tinybird.
-- **Analysis (the denominator):** the raw log + batch dedup remains authoritative for SRM and all metrics.
+  the Evaluation Worker writes through the App inventory to the Assignment Store. The per-Entity
+  DO keeps one first writer per Experiment and awaits KV write-through. A failed inline write
+  returns an error for retry; Exposure Ticket redemption additionally uses a durable holdover
+  outbox. KV propagation can still delay replay on a later request.
+- **Analysis (the denominator):** the raw log + snapshot/tail dedup remains authoritative for SRM and all metrics.
 
-So **the DO is for experience, the log is for analysis** — the same separation the Assignment Store seam
-already draws, now extended to the write path. The two can momentarily disagree (the eager write guesses
-first-touch; the batch confirms it), and that is fine: the DO only governs what a returning Entity _sees_,
-never what the analysis _counts_.
+The DO governs replay experience; the log governs analysis. Their winners may differ because the
+DO serializes write arrival while first-touch analysis uses the earliest encounter time. Analysis
+does not reconcile its denominator by overwriting the holdover winner.
 
 ## SRM reads the same denominator as everything else
 
 SRM compares **observed deduped first-touch unique Entities per arm per Run** (the `__multiple__` bucket
-excluded) against the Run's **declared allocation**, via chi-square. Crucially it uses the _same_
+excluded) against the Run's **declared allocation**. `analysis-v2` uses an ingestion-ordered sequential
+Dirichlet-multinomial martingale; legacy and `analysis-v1` use chi-square. The Control Plane persists
+observed v2 alarm crossings in D1 `run_srm_alarms`. Every version uses the _same_
 denominator definition as every metric and the Conversion Window anchor — one notion of "how many Entities
 in each arm," never two. A second (raw-count) denominator was rejected as a reconciliation/debt source.
 
@@ -99,7 +104,7 @@ in each arm," never two. A second (raw-count) denominator was rejected as a reco
 
 A narrow interface — "append a raw Exposure" in, "deduped first-touch denominator" out — sits in front of:
 at-least-once edge ingestion across five runtimes, idempotent dedup, first-touch anchoring, conflict
-quarantine, SRM, and the holdover write reconciliation. All the correctness lives in one re-runnable query
+quarantine, SRM, and post-seal holdover writes. All the correctness lives in one re-runnable query
 plus one idempotent append, which is exactly the locality the deletion test rewards: delete the seam and
 this logic smears across every analysis query and every edge runtime.
 

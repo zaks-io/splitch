@@ -38,6 +38,9 @@ otherwise:
 - `entity`
 - `assignment`
 - `experimentRun` / `runId`
+- `conclusion`
+- `run_commitments` / `analysis_version`
+- `pre_registration`
 - `exposure`
 - `eventDefinition` / `eventDefinitionVersion`
 - `metricEvent`
@@ -59,6 +62,9 @@ otherwise:
   mapping.
 - Use Experiment Run in public docs when context is not already experimental. `runId` is acceptable
   as a field name.
+- Use Analysis version for the named implementation frozen at Run Start, not as a synonym for an
+  Experiment Run. Run commitments are returned in `run_commitments`; optional Pre-registration
+  is frozen within them.
 - Use Targeting Key for the domain term. `targetingKey` is the field name.
 - Use Client Key for public SDK credential contracts.
 - Use API Key for secret server-side SDK credential contracts.

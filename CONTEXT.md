@@ -1,7 +1,7 @@
 # splitch
 
-Unified feature flags and A/B experimentation across the edge. splitch builds on
-**Cloudflare Flagship** as the default Provider and the **OpenFeature** standard.
+Unified feature flags and A/B experimentation across the edge. splitch uses the
+**OpenFeature** standard and adopts **Cloudflare Flagship** terminology for flags.
 Use Flagship and OpenFeature terms verbatim for flags. Use splitch terms for
 experimentation where those standards are silent.
 
@@ -83,11 +83,12 @@ user, session, workspace, service, or another Entity depending on the desired un
 
 **Evaluation Context**: the object carrying the Targeting Key and attributes used at evaluation time.
 
-**Provider**: the OpenFeature resolver that retrieves flag values from a source of truth. In splitch,
-the default Provider is Cloudflare Flagship. See
+**Provider**: the stateless read-side resolver that retrieves Flag and Run configuration. The
+Evaluation Worker uses `KvProvider`; local integrations use `configSnapshotProvider`. The shared
+evaluate path owns rule matching and Fractional Evaluation. See
 [`apps/evaluation-api/CONTEXT.md`](./apps/evaluation-api/CONTEXT.md).
 
-**Experiment**: a test that compares Variants of one or more Flags to measure their effect on
+**Experiment**: a test that compares Variants of one Flag to measure their effect on
 Metrics for a population of Entities. See
 [`apps/evaluation-api/CONTEXT.md`](./apps/evaluation-api/CONTEXT.md).
 
@@ -104,9 +105,23 @@ winning Variant. It is a durable D1 domain object, appears as the `conclusion` r
 uses the `con_` id prefix. A standalone End creates no Conclusion.
 
 **Run Snapshot**: the frozen Experiment Run configuration (allocation, Control Variant, decision
-family, guardrails, dimensions) written to the analytics store at Start as the analysis engine's
-Run input. Not the exposure-side "snapshot refresh" rollups and not `snapshot_ts`; those describe
+family, guardrails, dimensions, Run commitments) written to the analytics store at Start as the
+analysis engine's Run input. Not the exposure-side "snapshot refresh" rollups and not `snapshot_ts`; those describe
 Exposure data, never Run config.
+
+**Run commitments**: the analysis version, sequential tuning target (`target_n`), planned duration,
+and optional Pre-registration frozen at Start. Defaults are a sequential target of 5000 and a
+seven-day plan; a duration outside whole weeks needs an explicit override reason. Legacy Runs have
+no invented target or duration commitment. See
+[`apps/analysis-api/CONTEXT.md`](./apps/analysis-api/CONTEXT.md).
+
+**Analysis version**: the named analysis implementation frozen for a Run. New Runs use
+`analysis-v2`; legacy Runs read under `legacy-unversioned`. Unsupported versions fail loud rather
+than using the newest engine. See [`apps/analysis-api/CONTEXT.md`](./apps/analysis-api/CONTEXT.md).
+
+**Integration delivery coordinator**: the per-Environment coordinator that delivers Convex nudges
+and Cloudflare pushes from D1 outbox rows. See
+[`apps/control-plane-api/CONTEXT.md`](./apps/control-plane-api/CONTEXT.md).
 
 **Exposure**: the event that an Entity actually encountered its assigned Variant. Analysis counts
 Exposures, not Assignments. See [`apps/event-ingest-api/CONTEXT.md`](./apps/event-ingest-api/CONTEXT.md).
@@ -120,6 +135,10 @@ Targeting Rules, salts, or allocation. See [`packages/sdk/CONTEXT.md`](./package
 one fresh live-Run assignment. Redeeming it on first local read is what fires the Exposure; a
 client cannot report an Exposure the server did not resolve. See
 [`packages/sdk/CONTEXT.md`](./packages/sdk/CONTEXT.md).
+
+**OFREP**: the OpenFeature Remote Evaluation Protocol. Its Core endpoints project the same
+single-Flag evaluation and non-exposing bulk prefetch behavior as splitch's SDK endpoints. See
+[`apps/evaluation-api/CONTEXT.md`](./apps/evaluation-api/CONTEXT.md#ofrep).
 
 **Event Definition**: an App-level schema for one named Metric Event or Web Event. Its immutable
 family is selected when created, and its immutable published versions are shared across
@@ -180,8 +199,9 @@ from a CLI login session (`splitch tokens`); a token can list and revoke its own
 - Experiment controls Flags while running. It does not own them.
 - Experiment randomizes Entities across Variants. One Variant is the Control; the rest are Treatments.
 - Assignment is pure. Exposure is the assignment seam's recorded event and analysis denominator.
-- Experiment Runs freeze assignment config. Assignment edits open a new Run; measurement edits
-  recompute over the existing Run.
+- Experiment Runs freeze assignment config. Assignment edits stage on a draft, and Start opens the
+  next Run; measurement edits recompute over the existing Run without changing locked decision
+  evidence.
 - Event Definitions are App-level and have one immutable `metric` or `web` family. Each accepted
   Metric Event or Web Event is stamped with one immutable published Event Definition Version.
 - Event payload strings are immutable definition-time machine-token allowlists; free-form strings and
@@ -219,6 +239,6 @@ from a CLI login session (`splitch tokens`); a token can list and revoke its own
 
 ## Notes
 
-- This (`~/src/splitch`) is the canonical repo.
+- This is the canonical repository.
 - Context files are glossary and lookup files only. Implementation details, storage seams, package
   layout, and deployment workflow live in specs and repo config.

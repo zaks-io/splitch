@@ -4,7 +4,8 @@ Canonical shapes, field lists, invariants, and lifecycle contracts for splitch's
 
 ## Spine idea
 
-Assignment is pure. Exposure is the only event. The Run freezes bucketing (not measurement). These three facts compose into everything else: holdover semantics, dedup correctness, SRM, analysis denominators, and the Activation gate.
+Assignment is pure. Exposure is the only event. The Run freezes Assignment configuration and its decision specification. Measurement edits
+recompute the same Run while locked decision fields retain their Start-time values. These three facts compose into everything else: holdover semantics, dedup correctness, SRM, analysis denominators, and the Activation gate.
 
 ## Files
 

@@ -99,7 +99,9 @@ A regular Metric (any type) annotated with a `downside_threshold_pct`.
 | `base_metric_id`         | `string` | The underlying Metric being guarded                                                                   |
 | `downside_threshold_pct` | `number` | Minimum acceptable relative-lift lower bound, in percent (e.g., `-0.5` for "no worse than 0.5% down") |
 
-Guardrail fires when `ci_lower < downside_threshold_pct`. Excluded from the BH FDR family (see
+Legacy-unversioned and analysis-v1 fire when `ci_lower < downside_threshold_pct`. analysis-v2
+uses the one-sided oriented contrast in [inference-engine.md](inference-engine.md). Guardrails
+are excluded from the FDR family (see
 [multiple-comparisons-fdr.md](multiple-comparisons-fdr.md)).
 
 ## Conversion Window
@@ -168,7 +170,8 @@ losslessly by joining `serve_deduped_exposures` to `serve_deduped_metric_events`
 logs remain replay and repair truth, not the request-time serving path. No new Run, no sample reset.
 
 Exception: changing the **Activation Metric** (the gate definition) is an **assignment edit** and
-opens a new Run. The Activation Metric is frozen per Run.
+takes effect only in a new Run. It cannot be staged while a Run is running: End the Run, change it,
+then Start (ADR-0063). The Activation Metric is frozen per Run.
 
 ## Sources
 

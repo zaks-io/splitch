@@ -1,9 +1,8 @@
 # MCP discovery: prompts and resources over the derived tools
 
 The derived tools (one per endpoint, [mcp-tool-derivation.md](../contracts/mcp-tool-derivation.md))
-give an agent the full capability surface, but a flat list of 85 typed tools (84 derived plus
-`context_use`) does not tell an
-agent **where to start**, **what order things go in**, or **what the nouns mean**. An agent
+give an agent the registered management capabilities, with exclusions from `isMcpToolRoute` and
+the parity allowlist. The derived tool list plus `context_use` does not tell an agent **where to start**, **what order things go in**, or **what the nouns mean**. An agent
 landing on splitch cold should not have to infer the first-run sequence from tool schemas or read
 the docs site. This layer closes that: MCP **prompts** carry the canonical workflows, MCP
 **resources** carry the read-only context (glossary, auth, the agent's own active scope).
@@ -74,7 +73,7 @@ cacheable, read-only, and carry no side effects.
 | Resource URI               | MIME             | Content                                                                                                                                                                                                                                                                 |
 | -------------------------- | ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `splitch://context`        | text/markdown    | The CONTEXT.md ubiquitous-language glossary (Flag, Variant, Run, Exposure, Targeting Key, …). One source.                                                                                                                                                               |
-| `splitch://auth`           | text/markdown    | The `auth.md` companion: the three identity doors, how the agent authenticated, how to widen scope (ADR-0022).                                                                                                                                                          |
+| `splitch://auth`           | text/markdown    | Auth API `/auth.md` fetched on read, describing enabled doors and scope widening; ID-JAG remains paused.                                                                                                                                                                |
 | `splitch://active-context` | application/json | The resolved active `{ app, environment, source }` for this session — the same data `context` returns. Includes `demoExpiresAt` (ISO 8601) when the Org is a provisional anon-door demo, so the agent can see the 24h deadline and prompt the human to claim before it. |
 | `splitch://capabilities`   | application/json | The principal's effective live scopes + which tools they gate, so the agent knows up front what it can and cannot do.                                                                                                                                                   |
 | `splitch://quickstart`     | text/markdown    | The agent-first quickstart: transports [../quickstart.md](../quickstart.md) verbatim — the canonical first-run narrative the `onboard_new_app` prompt automates.                                                                                                        |
@@ -87,8 +86,8 @@ Notes:
 - `splitch://active-context` and `splitch://capabilities` are **session-scoped**. `context_use`
   selects the active App/Environment carried in the session; it does not set or carry authority.
   `splitch://capabilities` resolves effective scopes from the principal's current Control Plane
-  membership, so session context cannot preserve stale authority or widen scope. Neither resource is
-  persisted server-side ([mcp-and-cli-surfaces.md](./mcp-and-cli-surfaces.md)).
+  membership, so session context cannot preserve stale authority or widen scope. Active context is stored in the subject-bound Durable Object for the session lifetime;
+  capabilities are resolved on read ([mcp-and-cli-surfaces.md](./mcp-and-cli-surfaces.md)).
 - Resources are read-only by protocol; an agent reading `splitch://capabilities` to plan before
   acting cannot change anything by reading it.
 
@@ -112,7 +111,13 @@ RETRY_AFTER                → wait details.retryAfterMs → retry
 REVIEW_APPROVAL_REQUEST    → review details.approvalRequestId with the canonical Review action
 REFRESH_AND_REPROPOSE      → read current target state → retry the original mutation with a fresh idempotency key → Review as required
 RETRY_REVIEW               → retry the pending request with a new Review idempotency key
-READ_PER_ENVIRONMENT       → experiments_list per Environment (App-wide attention rollup over fan-out budget; do not retry)
+READ_PER_ENVIRONMENT       → experiments_list per Environment → experiment_results_get for each running Experiment (do not retry the rollup)
+CREATE_TEMPORARY_ENVIRONMENT → environments_list → environments_create with temporary source
+DELETE_TEMPORARY_ENVIRONMENT → environments_list → environments_delete
+CHOOSE_DIFFERENT_SLUG      → retry with a different slug
+CHOOSE_DIFFERENT_KEY       → retry with a different key
+USE_CANONICAL_ID           → retry with one returned canonical ID
+REDUCE_OWNED_ORGANIZATIONS → organizations_list → transfer or delete an owned Organization
 ```
 
 The token is the contract; the prompt is the convenience. An agent that already knows the token
@@ -143,7 +148,7 @@ the canonical workflows are all in-band MCP capabilities.
    onboarding sequence (ADR-0023).
 4. **Every workflow ends on verify.** Time-to-first-confidence is one round-trip (ADR-0037).
 5. **Session-scoped, scope-respecting.** Resources reflect the session's active context and effective
-   live scopes; reading them never widens scope or persists server-side.
+   live scopes; reading them never widens scope. Active context persists only for the subject-bound session.
 
 ## Sources
 

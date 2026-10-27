@@ -15,7 +15,7 @@ authenticated principal can touch lives here, not in WorkOS org claims.
 
 | column                   | type    | required | meaning                                                               |
 | ------------------------ | ------- | -------- | --------------------------------------------------------------------- |
-| `org_id`                 | TEXT PK | yes      | WorkOS Organization ID (wos prefix); stable across all ops            |
+| `id`                     | TEXT PK | yes      | Splitch Organization ID (`org_`); stable across all ops               |
 | `name`                   | TEXT    | yes      | Display name                                                          |
 | `slug`                   | TEXT    | yes      | URL handle the Control Panel routes on; UNIQUE across all Orgs        |
 | `plan`                   | TEXT    | yes      | `free` \| `pro` \| `enterprise`; defaults to `free`                   |
@@ -46,7 +46,7 @@ between the two writes would leak exactly that, so both commit or neither does.
 
 Authorization is the handler's alone — the path has no `{org_id}`, so the co-scope guard never fires.
 Any authenticated non-provisional principal may create. A **provisional** principal may not: it came
-through the anonymous door, where the token was minted by an unauthenticated `POST /register`, and
+through the anonymous door, where the token was minted by an unauthenticated `POST /agent/identity`, and
 allowing it would make unbounded tenant creation an unauthenticated operation. The `auth_door` claim
 carries this, and it parses **fail-closed** — a missing or unrecognized door reads as `anonymous`.
 
@@ -57,42 +57,46 @@ isolation boundary for all data in D1 and Tinybird.
 
 ### D1: `apps` table
 
-| column       | type    | required | meaning                                                  |
-| ------------ | ------- | -------- | -------------------------------------------------------- |
-| `app_id`     | TEXT PK | yes      | Splitch-generated, stable identifier (e.g. `app_<ulid>`) |
-| `org_id`     | TEXT FK | yes      | Owner Organization; never nullable                       |
-| `name`       | TEXT    | yes      | Display name; must be unique within the Org              |
-| `created_at` | TEXT    | yes      | ISO 8601                                                 |
-| `updated_at` | TEXT    | yes      | ISO 8601                                                 |
+| column            | type    | required | meaning                                      |
+| ----------------- | ------- | -------- | -------------------------------------------- |
+| `id`              | TEXT PK | yes      | Splitch-generated, stable App identifier     |
+| `organization_id` | TEXT FK | yes      | Owner Organization; never nullable           |
+| `key`             | TEXT    | yes      | URL selector; unique within the Organization |
+| `description`     | TEXT    | no       | Optional description                         |
+| `name`            | TEXT    | yes      | Display name                                 |
+| `created_at`      | TEXT    | yes      | ISO 8601                                     |
+| `updated_at`      | TEXT    | yes      | ISO 8601                                     |
 
 **Invariants:**
 
-- `org_id` is never null; every App has exactly one Organization
+- `organization_id` is never null; every App has exactly one Organization
 - App deletion cascades or blocks depending on running Run state (policy: block if running Experiments)
 
 ## Org Membership
 
-Org membership controls who can manage the Organization itself (billing, SSO config, create/delete Apps).
+Org membership controls Organization management and App creation. App deletion requires its own
+App-owner membership; an Organization role alone does not grant it.
 
 ### D1: `org_memberships` table
 
 | column       | type    | required | meaning                                    |
 | ------------ | ------- | -------- | ------------------------------------------ |
 | `org_id`     | TEXT FK | yes      | Organization; composite PK with `user_id`  |
-| `user_id`    | TEXT FK | yes      | WorkOS User ID; composite PK with `org_id` |
+| `user_id`    | TEXT    | yes      | WorkOS User ID; composite PK with `org_id` |
 | `role`       | TEXT    | yes      | `owner` \| `admin` \| `member`             |
 | `created_at` | TEXT    | yes      | ISO 8601                                   |
 
 **Role matrix (Org scope):**
 
-| operation           | owner | admin | member |
-| ------------------- | ----- | ----- | ------ |
-| Manage billing/plan | yes   | no    | no     |
-| Configure SSO/SCIM  | yes   | yes   | no     |
-| Create/delete Apps  | yes   | yes   | no     |
-| Manage Org members  | yes   | yes   | no     |
-| View Org settings   | yes   | yes   | yes    |
-| Manage trusted IdPs | yes   | no    | no     |
+| operation                                     | owner | admin | member |
+| --------------------------------------------- | ----- | ----- | ------ |
+| Manage billing/plan                           | yes   | no    | no     |
+| Configure SSO/SCIM                            | yes   | yes   | no     |
+| Create Apps                                   | yes   | yes   | no     |
+| Add Org members (except owners)               | yes   | yes   | no     |
+| Grant owner, change roles, remove Org members | yes   | no    | no     |
+| View Org settings                             | yes   | yes   | yes    |
+| Manage trusted IdPs (Auth API)                | yes   | no    | no     |
 
 Control Panel operations stay server-side. After the signed-binding rollout, the Panel validates its
 opaque session cookie and issues a signed, short-lived delegation bound to one allowlisted operation,
@@ -113,7 +117,7 @@ App membership controls who can read/write Flag, Experiment, and Run config for 
 | column       | type    | required | meaning                                    |
 | ------------ | ------- | -------- | ------------------------------------------ |
 | `app_id`     | TEXT FK | yes      | App; composite PK with `user_id`           |
-| `user_id`    | TEXT FK | yes      | WorkOS User ID; composite PK with `app_id` |
+| `user_id`    | TEXT    | yes      | WorkOS User ID; composite PK with `app_id` |
 | `role`       | TEXT    | yes      | `owner` \| `admin` \| `member`             |
 | `created_at` | TEXT    | yes      | ISO 8601                                   |
 
@@ -122,12 +126,12 @@ App membership controls who can read/write Flag, Experiment, and Run config for 
 | operation                            | owner | admin | member |
 | ------------------------------------ | ----- | ----- | ------ |
 | Start, End, or Conclude Runs         | yes   | yes   | no     |
-| Edit Flags/Experiments (draft)       | yes   | yes   | yes    |
+| Edit Flags/Experiments (draft)       | yes   | yes   | no     |
 | Promote Flag Config across Envs      | yes   | yes   | no     |
 | Edit Environment Policy              | yes   | yes   | no     |
 | Manage SDK credentials               | yes   | yes   | no     |
 | View config/results                  | yes   | yes   | yes    |
-| Delete Flags/Experiments             | yes   | no    | no     |
+| Delete Flags/Experiments             | yes   | yes   | no     |
 | Rename the App / change its URL slug | yes   | yes   | no     |
 | View who has access to the App       | yes   | yes   | yes    |
 | Grant App access                     | yes   | yes   | no     |
@@ -153,13 +157,14 @@ satisfy a confirm gate before an Environment-level write commits.
 Users are identified by their WorkOS User ID. Persistent across all three identity doors. The
 shared-preview `client_credentials` grant resolves to a configured seeded WorkOS user, not a separate
 principal class. No separate splitch user table for user-data — user attributes (email, display name)
-are resolved from the WorkOS session token at login and cached in the control-plane token's claims;
-D1 stores only the `user_id` foreign key in membership tables.
+are resolved from the WorkOS session token at login and cached in the session identity profile store;
+D1 stores only the opaque `user_id` reference in membership tables.
 
 ## Isolation seam
 
 Every D1 query is routed through the single repository/data-access seam. No code path queries D1
-bypassing it. `app_id` is the required scope param on every non-Org query. See
+bypassing it. App-scoped queries require an App scope. The selector-free Flag read uses a separately minted,
+live-membership-bounded multi-App scope with explicit `app_id IN (...)` predicates. See
 [d1-and-tinybird-data-access.md](d1-and-tinybird-data-access.md) for the seam contract.
 
 ## Sources

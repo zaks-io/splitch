@@ -37,8 +37,10 @@ by hiding the value.
 Avoid: treating it as secret; calling it an API Key; using it for server-side full access.
 
 **API Key**:
-The secret credential a server-side SDK presents for full data-plane access. It is scoped to exactly
-one Environment. Never ship it to a browser or mobile client.
+The secret credential a server-side SDK presents for scoped data-plane access, including
+non-exposing reads and Metric Event writes. Exposure-bearing `evaluate` and `evaluateDetails` use a
+Client Key instead. An API Key is scoped to exactly one Environment. Never ship it to a browser or
+mobile client.
 
 Avoid: using it client-side; reading back an existing API Key value after creation.
 
@@ -58,7 +60,9 @@ Provider retrieving a value from its source of truth.
 **Resolution Details**:
 The OpenFeature result shape every accessor speaks: `value`, `variantName`, `reason`,
 `errorCode?`, `errorMessage?`. `evaluate` returns the value; `evaluateDetails` returns the full
-shape. `reason` and `errorCode` use the OpenFeature standard enums. See ADR-0036.
+shape. `reason` uses the OpenFeature vocabulary; `errorCode` uses Splitch wire and SDK error codes,
+plus `PROVIDER_NOT_READY` for stale browser results. The OFREP Provider maps errors to OpenFeature
+standard codes. See ADR-0036.
 
 **Reason**:
 Why an evaluation produced its value (`SPLIT`, `TARGETING_MATCH`, `DEFAULT`, `DISABLED`,

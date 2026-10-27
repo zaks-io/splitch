@@ -5,7 +5,8 @@
 ```
 packages/
   ui/              design system — brand + primitives
-  contracts/       shared types + typed API client
+  contracts/       schemas + route registry
+  control-plane-sdk/ typed Hono clients + operations
 apps/
   control-panel/   Control Panel Worker
   marketing/  Marketing Worker
@@ -18,7 +19,7 @@ apps/
 - Tailwind 4 `@theme` token definitions (the brand palette, spacing, typography, shadows, radii)
 - Framework primitives: `Button`, `Card`, `Input`, `Select`, `Dialog`, `Badge`, `Tooltip`, `Table`
 - Layout primitives: `Stack`, `Grid`, `Divider`, `PageShell`
-- State surfaces: `Skeleton` (per content type), `EmptyState`, `ErrorPage`
+- State surfaces: `Skeleton`, `PanelSkeleton`, `TableSkeleton`, `TextSkeleton`, `EmptyState`, `ErrorPage`
 - Named empty-state / error components: `<AccessDeniedPage />`, `<NotFoundPage />`, `<AppErrorPage />`,
   `<StaleDataToast />`
 
@@ -36,36 +37,38 @@ Both apps compose from the same token set; neither forks the palette. Marketing-
 (gradient hero, large-format CTA) are **marketing-owned compositions** built from shared `ui` tokens —
 never a fork of the palette, never a new `ui` component with one consumer.
 
-**Token location:** `packages/ui/src/theme.css` (Tailwind 4 `@theme` block). The actual token values
-are defined by the branding guide. Placeholder token names are pinned here; values are filled in from
+**Token location:** `packages/ui/src/theme.css` imports `src/styles/palette.css` (Tailwind 4
+`@theme`) and `src/styles/semantic.css` (the mode-aware role layer). Values are defined together with
 [`docs/branding/design-tokens.md`](../../branding/design-tokens.md).
 
-Token categories (names pinned, values deferred to branding guide):
+Token categories (implemented names; see the branding guide for values):
 
-| category   | example tokens                                                                       |
-| ---------- | ------------------------------------------------------------------------------------ |
-| color      | `--color-brand-*`, `--color-neutral-*`, `--color-destructive-*`, `--color-success-*` |
-| spacing    | `--spacing-*` (4 px grid)                                                            |
-| typography | `--font-family-*`, `--font-size-*`, `--font-weight-*`, `--line-height-*`             |
-| radius     | `--radius-sm`, `--radius-md`, `--radius-lg`, `--radius-full`                         |
-| shadow     | `--shadow-sm`, `--shadow-md`, `--shadow-lg`                                          |
+| category   | example tokens                                                                               |
+| ---------- | -------------------------------------------------------------------------------------------- |
+| color      | `--color-brand-*`, `--color-neutral-*`, `--color-destructive-*`, `--color-success-*`         |
+| spacing    | Tailwind's `--spacing: 0.25rem` (4 px grid)                                                  |
+| typography | `--font-display`, `--font-sans`, `--font-mono`, `--text-*`, `--font-weight-*`, `--leading-*` |
+| radius     | `--radius-sm`, `--radius-md`, `--radius-lg`, `--radius-full`                                 |
+| shadow     | `--shadow-sm`, `--shadow-md`, `--shadow-lg`                                                  |
 
 **Component API stability:** breaking changes to `ui` component props (removed props, renamed
 variants, changed slot layout) require sign-off from both consumer teams (Control Panel + Marketing
 Site) before merging. Additive changes (new optional prop, new variant) do not require cross-consumer
 sign-off.
 
-### `packages/contracts` — shared types + typed API client
+### `packages/contracts` and `packages/control-plane-sdk`
 
 **What it contains:**
 
 - Zod schemas for all API request/response shapes (shared between server and client)
-- The typed `hc` client (Hono RPC client generated from the schemas)
-- `ErrorResponse` and `FieldError` shapes (see [mutation-data-flow.md](./mutation-data-flow.md))
-- `NudgePayload` type
-- `AppMembership`, `OrgRole`, `AppRole` types
+- Route registry and OpenAPI derivation
+- `ErrorResponse`, including validation `details.issues` (see [mutation-data-flow.md](./mutation-data-flow.md))
+- `DeltaNudge` and `DeltaNudgeSchema`
 
-**Consumed by:** Control Panel app, Marketing app (for read-only API calls), SDK (types only)
+The typed `hc` clients and operation groups live in `packages/control-plane-sdk`, derived from the
+contracts. Panel session membership types live in `src/lib/sessions/session.ts`.
+
+**Consumed by:** Workers, Control Panel, Marketing's documentation/catalog code, and SDK packages.
 **Does not contain:** React components, Tailwind classes, routing logic, query-key factory
 
 The contracts package is independent of the frontend. It is safe for the SDK to import only the
@@ -75,7 +78,7 @@ type definitions without pulling in React or Tailwind.
 
 - Owns all domain-aware components: `RunStatusBadge`, `SRMIndicator`, `AllocationSlider`,
   `ExperimentCard`, `MetricResultRow`, `VariantPill`, etc.
-- Owns the query-key factory (`lib/query-keys.ts`)
+- Owns the query-key factory (`src/lib/shared/query-keys.ts`)
 - Owns the WebSocket lifecycle (the `/{orgSlug}/{appSlug}/{env}` layout route)
 - Owns all route loaders and server-side logic
 - Imports from `packages/ui` and `packages/contracts`; never the reverse
@@ -86,10 +89,10 @@ to `ui` would fail the deletion test (one consumer = speculative indirection).
 ### `apps/marketing` — Marketing Worker
 
 - Mostly prerendered (static HTML at build time via TanStack Start per-route prerender)
-- Where it fetches live data (e.g. live pricing), it uses TanStack Query with the same discipline
-  as the Control Panel (no Redux/Zustand, refetch-on-nudge)
+- The homepage, robots.txt, and sitemap.xml are explicitly prerendered in `vite.config.ts`;
+  documentation routes render through TanStack Start. No live pricing Query/socket is wired.
 - Shares `packages/ui` primitives with the Control Panel; marketing-specific compositions (hero
-  sections, feature grids, testimonial blocks) live in `apps/marketing/components/`
+  sections, feature grids, documentation layouts) live in `apps/marketing/src/components/`
 - Does NOT import from `apps/control-panel`
 
 ## What the deletion test gates

@@ -4,9 +4,10 @@ Reviewed October 5, 2026 at approximately 21:45 UTC. Scope is the `splitch`
 project in the `zaksio` Sentry organization. This is a plan, not authorization
 to change production, rotate secrets, delete data, or change issue statuses.
 
-Start with failed Convex installation recovery. The scheduler query fix is
-already deployed and early latency measurements improved, but failed preparation
-continues to create repeated database work.
+The October 5 evidence below is historical. Bounded preparation cooldowns, App-scoped dispatch,
+completion-based retention, per-Environment coordinators, and batched minute-cron reads are now
+implemented. Production installation recovery and historical Sentry cleanup remain unverified by
+the recorded evidence; the old measurements do not establish their current status.
 
 ## Evidence and limits
 
@@ -20,7 +21,7 @@ continues to create repeated database work.
   deliveries and selecting Sentry installations.
 - [SPL-690](https://linear.app/zaks-io/issue/SPL-690/reduce-delivery-scheduler-d1-query-amplification)
   is Done. Commit `84d63afe2c484cdf546da10d4b055cde1bfc4e8d` is both this
-  worktree's head and current `origin/main`. GitHub production deployment
+  review's checkout and `origin/main` at the time. GitHub production deployment
   `6866300195` reports success at 18:01:59 UTC on October 5.
 - SPLITCH-1A/1B/1C/1D's latest inspected events used Worker version
   `3d2a3dd1-4490-446f-8cab-f8971ebbb676`, before the deployment completed.
@@ -69,45 +70,41 @@ decrease, preparation failures must stop, and a healthy sibling must still deliv
 
 ## Priority 2: bound repeated failed delivery work
 
-Make a follow-up slice after SPL-690. Its scope is failed preparation and
-unnecessary dispatch work, not another rewrite of the completed claim optimization.
+Implemented by SPL-695 and the coordinator follow-ups. The remaining work is production
+verification of the recovery and workload objectives below.
 
-- Diagnose repeated preparation failure once per installation and introduce a
-  bounded installation-level retry/backoff policy. Retain outstanding deliveries
-  and provide an explicit recovery path after credentials or configuration change.
-  Decide and document the retry policy before implementation. The current
-  `retryDelayMs()` caps the delay but does not cap attempts.
-- Keep bounded cause-type diagnostics and add operational counts for preparation
-  failures, successful acknowledgments, pending age, and retry volume. Extend
-  existing observability emitters; retain current scrubbing.
-- Scope immediate Cloudflare dispatch to the App affected by the committed
-  mutation. `control-plane-app-request.ts` currently starts a global scan after
-  every successful non-GET/non-HEAD request. Keep the bounded global recovery cron.
-- Preserve independent completion transactions, lease-owner checks, revocation,
-  and healthy-sibling isolation. SPLITCH-1E/1F/1G alone do not justify combining
+- Convex preparation failure now records a 30-minute installation cooldown, retains outstanding
+  deliveries, and retries only the newest version. Scoped secret rotation clears the cooldown.
+  The policy bounds work per time window, not total attempts (`convex-webhook-dispatch.ts`).
+- Bounded cause-type diagnostics remain. Coordinator runs emit claim/outcome counts, duration,
+  subrequests, and next wake; minute lag reports expose healthy outstanding age and count. These
+  signals support production verification without treating a receiver 2xx as a committed D1 ack.
+- Successful mutations now wake due coordinators only within the resolved App. Cron rollback
+  mode keeps App-scoped immediate Cloudflare dispatch. The minute recovery sweep and both provider
+  lag reads share the scheduled due-work D1 batch (`scheduled.ts`, `scheduled-due-work.ts`).
+- Independent completion transactions, lease-owner checks, revocation,
+  and healthy-sibling isolation are preserved. SPLITCH-1E/1F/1G alone do not justify combining
   acknowledgments into one transaction.
 
-Expected files include `convex-webhook-dispatch.ts`, `webhook-transport.ts`,
-`control-plane-app-request.ts`, integration repositories, contracts, and their tests.
-Installation-level scheduling may require an additive migration. Keep that change
-explicit and review its recovery and Organization isolation behavior.
+The implementation lives in `convex-webhook-dispatch.ts`, `integration-delivery-do.ts`,
+`control-plane-app-request.ts`, integration repositories, and additive D1 migrations. The
+[delivery scheduler runbook](./delivery-scheduler.md) describes current scheduling and rollback.
 
 Verify against real D1 with two healthy installations and one permanently failing
 installation, concurrent claimants, expired leases, revocation, and a repaired
 installation. A failure must not monopolize claim capacity or roll back a healthy
 acknowledgment. Exercise signed HTTPS delivery, not only mocked repository tests.
 
-## Priority 3: implement the existing delivery retention contract
+## Priority 3: enforce the delivery retention contract
 
-The integration storage spec already requires 30-day retention for delivered,
-terminal, and suppressed rows. The current repositories have no scheduled
-delivery-row retention operation. Flag change-log retention is a different job.
+Implemented by `delivery-retention.ts` and the two repositories' `pruneDeliveries` operations.
+The daily 08:00 UTC job deletes at most 1,000 completed rows per provider strictly older than
+30 days. Pending and leased rows are excluded. Saturation emits an explicit fault; this is a
+bounded pruning budget, not a guarantee that every expired row disappears that day.
 
-Add indexed, bounded daily pruning for both `config_webhook_deliveries` and
-`cloudflare_config_deliveries`. Establish an accurate terminal timestamp before
-using it as the retention boundary; do not infer terminal age from row creation
-when a row may have retried for months. Preserve pending and leased rows and retain
-the complete bounded diagnostic envelope for the specified 30 days.
+Both `config_webhook_deliveries` and `cloudflare_config_deliveries` use indexed `completed_at`
+cutoffs. Migration `0041_delivery_retention.sql` stamps legacy terminal rows at
+migration time so long-lived retries retain a full diagnostic window after completion.
 
 This can proceed independently of installation recovery. Validate cutoff
 boundaries, long-lived retries, concurrent completion, batch limits, and schema
@@ -135,9 +132,9 @@ browser check. No application browser flow was exercised for this planning task.
 
 ## Order and Done
 
-Recover the affected installations first. Measure the repaired workload, then
-implement bounded failure handling and scoped dispatch. Retention can run as a
-separate slice. Historical verification can proceed alongside these steps.
+Verify affected installation recovery and measure the current bounded coordinator workload.
+Failure handling, scoped wakes, and retention are implemented. Historical verification can
+proceed alongside production workload verification.
 
 After an approved release, compare equal 24-hour windows of scheduler duration,
 D1 calls and rows read/written, overload errors, oldest pending age, and successful
@@ -153,9 +150,9 @@ The remediation is done when:
 - Historical groups have current reproduction evidence or a documented fix before
   their Sentry status changes. Unexpected production failures remain observable.
 
-Consider a per-Environment Durable Object coordinator only if the repaired,
-bounded workload still overloads D1. Preserve the transactional outbox and recovery
-sweep. Queue, sharding, and PostgreSQL migrations are conditional follow-ups.
+Per-Environment Durable Object coordinators are implemented and selected in every Wrangler
+target (ADR-0061, #757 through #759). D1 remains the transactional outbox, and the minute recovery sweep
+remains. Queue, sharding, and PostgreSQL migrations are conditional follow-ups.
 
 ## Implementation status
 
@@ -176,14 +173,14 @@ A pre-migration count-only retention query with cutoff `2026-09-05T22:00:00.000Z
 eligible Convex delivered rows and zero Cloudflare rows. All 298 outstanding Convex rows remain
 preserved; 16,330 legacy Convex terminal rows and one Cloudflare terminal row receive migration-time
 completion timestamps and wait a full 30 days. Refresh these counts at the approved run cutoff.
-No production writes or deletion ran.
+No production writes or deletion ran during that October 5 preparation.
 
 Local signed HTTPS recovery passed with 300 versions on a broken installation and one healthy
 sibling. Repair delivered the newest version and suppressed 299 older pending rows. Seeded Control Panel browser checks also loaded the Flag matrix with `id`, `path` and tracking
 parameters, and rendered an intentional 404 surface for a missing Experiment. These checks do not
-replace production verification. Production
-installation recovery, release, the first deletion run and historical Sentry status changes remain
-separate actions requiring the applicable verification and approval.
+replace production verification. Production installation recovery, first-deletion evidence, and historical Sentry status changes
+require separate verification. Later coordinator rollout is recorded in the delivery scheduler
+runbook; the October 5 preparation is not evidence that the current code is unreleased.
 
 ## Local validation and handoff
 

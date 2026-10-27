@@ -1,6 +1,6 @@
 # Worker runtime: contract-mounted request guard
 
-Status: planned before domain implementation.
+Status: implemented in `packages/worker-runtime` and used by the capability Workers.
 Vocabulary follows [CONTEXT.md](../../../CONTEXT.md).
 
 ## Problem
@@ -52,7 +52,7 @@ import Hono app instances, repositories, Cloudflare bindings, or runtime helpers
 The registrar API is conceptually:
 
 ```typescript
-createRegistrar(deps).mount(contract, handler);
+createRegistrar(deps).mount(app, contract, handler);
 ```
 
 `deps` contains Worker-local adapters:
@@ -195,7 +195,8 @@ a service layer.
 | MCP Worker               | not for MCP JSON-RPC transport; it calls the Control Plane SDK instead                | PRM/auth.md handshake, MCP registry, session transport                       |
 
 The MCP Worker can import `@splitch/contracts` for tool schemas and `@splitch/control-plane-sdk` for
-calls, but it does not mount control-plane route contracts or bind D1/KV/Tinybird.
+calls, but it does not mount control-plane route contracts or bind domain D1/Tinybird stores.
+Its `SESSION_STORE` KV and `MCP_SESSIONS` Durable Object own authentication and MCP transport state.
 
 ## Import rules
 
@@ -213,7 +214,7 @@ capability Workers
 `@splitch/worker-runtime`. Apps may import the runtime to mount their own routes, but apps still
 must not import another app's source.
 
-Dependency-cruiser should gain rules when the package lands:
+Dependency-cruiser enforces these rules in `.dependency-cruiser.cjs`:
 
 - `worker-runtime-does-not-import-apps`: runtime helpers cannot import deploy units.
 - `worker-runtime-does-not-own-storage`: runtime helpers cannot import D1 schema modules, Tinybird

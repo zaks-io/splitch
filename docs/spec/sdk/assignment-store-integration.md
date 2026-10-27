@@ -1,52 +1,57 @@
 # SDK integration with the Assignment Store
 
 How the evaluate path consumes the Assignment Store (holdover pre-load, ordering, fallback).
-The SDK is a **consumer** of the Assignment Store, never a writer — reads only.
+The Evaluation Worker consumes the Assignment Store. The HTTP SDK does not access KV or Durable
+Objects directly.
 
 ## Assignment Store interface (from architecture seam)
 
 ```
 interface AssignmentStore:
-  getAll(appId: string, idType: string, targetingKey: string)
-    -> Map<experimentId: string, { runId: string; variantName: string }>
-  put(appId: string, experimentId: string, idType: string, targetingKey: string, runId: string, variantName: string)
-    -> void
+  getAll({ appId, idType, targetingKey, identityVersion? })
+    -> Promise<Map<experimentId: string, { runId: string; variant: string }>>
+  put({ appId, experimentId, idType, targetingKey, runId, variant,
+        identityVersion?, sourceCreatedAtMs? }) -> Promise<{ status, assignment }>
+  putHashed({ appId, experimentId, idType, targetingKeyHash, runId, variant,
+              identityVersion?, sourceCreatedAtMs? }) -> Promise<{ status, assignment }>
 ```
 
-The SDK only calls `getAll`. Exposure-pipeline orchestration hosted by the Evaluation Worker calls
-`put` after Event Ingest durably accepts the Exposure; the per-key Durable Object resolves concurrent
-apparent first-touch writes (ADR-0009). The SDK never writes, and Event Ingest never owns this call.
+The evaluate policy calls only `getAll`. Exposure-pipeline orchestration hosted by the Evaluation Worker calls
+`put` after Event Ingest durably accepts the Exposure; the per-Entity Durable Object resolves concurrent
+apparent first-touch writes (ADR-0064). The SDK never accesses the store, and Event Ingest never owns this call.
 
 `getAll` is a **per-Entity batch read**: its logical key is `(appId, idType, targetingKey)` — note it
 does **not** take `experimentId`. One round-trip returns every Experiment's holdover for this
-Entity as `Map<experimentId, {runId, variantName}>`, so the evaluate path reads holdovers once
+Entity as `Map<experimentId, {runId, variant}>`, so the evaluate path reads holdovers once
 per request, not once per flag. The Map key is an `experimentId` string; the evaluate path
-accesses `held[experimentId]`. (The per-key Durable Object that serializes `put` is keyed by
-the full logical `(appId, experimentId, idType, targetingKey)` — write granularity differs from
-read granularity, by design: ADR-0008/0009.) The Assignment Store substrate derives
-`targetingKeyHash` before touching KV or Durable Objects; the SDK never sends the hash.
+accesses `held.get(experimentId)`. The Durable Object that serializes `put` is addressed by
+`(appId, idType, targetingKeyHash)` and stores entries per Experiment. One Entity's Experiment
+writes share a serializer so their read-merge-writes cannot overwrite the same KV blob. The
+Assignment Store derives `targetingKeyHash` before touching KV or Durable Objects. Ticket
+redemption calls `putHashed` because a ticket contains only the pseudonym, never the raw key.
 
 ## Evaluate-path ordering (no superposition)
 
 The Worker executes in this order for every `evaluate` call:
 
 ```
-1. Validate credential (Client Key via KV)
+1. Validate credential (Client Key or API Key via KV)
 2. Load Provider Flag Configuration for `flagKey` (version-aware cache; committed changes
    propagate within five seconds)
 3. Determine if flagKey is controlled by a live Experiment; get experimentId and liveRunId
 4. Validate request idType against the Experiment's pinned idType
-5. held = AssignmentStore.getAll(appId, validatedIdType, targetingKey)   [KV read, edge-local, all experiments]
+5. held = AssignmentStore.getAll({appId, idType: validatedIdType, targetingKey})
+   [KV read, edge-local, all experiments]
 
 6. if experimentId in held:
-     variant = held[experimentId].variantName      // holdover: replay prior Variant
+     variant = held[experimentId].variant      // holdover: replay prior Variant
      // no Exposure fires, no Assignment Store write: already counted under held[experimentId].runId
    else:
      variant = assign(liveRun, targetingKey)        // pure hash (ADR-0001)
      // Atomically seal Evaluation claim + retry-stable Exposure in Event Ingest outbox
      // Seal failure returns fail-loud and performs no Assignment Store write
-7. Return VariantValue, then Exposure orchestration asynchronously calls
-   AssignmentStore.put → DO.putIfAbsent → KV write-through
+7. For a fresh Exposure, await AssignmentStore.put → durable first-touch winner → KV write-through
+   Return VariantValue only after the write and identity revalidation succeed
 ```
 
 Each step has exactly one outcome — no superposition. The holdover branch returns the prior
@@ -68,7 +73,7 @@ provided; the Worker validates it matches the Experiment's pinned idType and ret
 
 ## Holdover invariants
 
-- **Replay, no re-compute:** holdover always returns `held[exp].variantName` verbatim.
+- **Replay, no re-compute:** holdover always returns `held[exp].variant` verbatim.
   `assign()` is never called for a holdover Entity. This is correct even if the new Run's
   assignment config differs — the holdover Entity keeps its prior Variant (sticky experience,
   ADR-0006).
@@ -79,54 +84,53 @@ provided; the Worker validates it matches the Experiment's pinned idType and ret
   holdover. The entry already exists; the DO's `putIfAbsent` would be a no-op anyway, but
   the Worker skips the round-trip.
 
-## Fallback: Assignment Store read failure
+## Assignment Store read failure
 
-`getAll` reads Workers KV, which is edge-local and fast. If the KV read fails before a blob
-is returned (transient platform error), the evaluate path falls through to `assign()` as if
-there were no holdover. This may briefly break sticky experience for a returning Entity but
-is self-healing on the next request. Without the KV data, the Worker cannot distinguish a
-holdover from a new Entity. Acceptable trade: a transient KV failure causes at most one
-mismatched experience, which converges.
+A KV infrastructure read failure or a present-but-malformed blob raises `AssignmentStoreError`.
+The evaluate path returns `reason: ERROR` with `INTERNAL_SERVER_ERROR`, logs the failure, and
+produces no Exposure decision. It never treats a failed production KV read as an empty holdover map.
+Conflicting records across retained identity epochs fail the same way.
 
-A present-but-malformed Assignment Store blob is different: schema or JSON corruption fails
-loud with `INTERNAL_SERVER_ERROR`, logs the parse failure, and produces no Exposure decision.
-Corruption is never treated as an empty holdover map.
+A KV miss is different: it returns an empty map and allows the normal new-Entity path. The shared
+evaluator still warns and falls through for an untyped error from another adapter; production
+`KvAssignmentStore` wraps infrastructure and parse failures in the typed error.
 
-On KV miss (not failure — the Entity has no prior entry), `assign()` runs normally and the
-Exposure pipeline creates the first-touch Assignment Store entry.
-
-## Transient boundary window (accepted, self-healing — ADR-0009)
+## Transient boundary window (ADR-0009, ADR-0064)
 
 For up to ~60s after a Run-boundary first-touch write (DO → KV write-through), a concurrent
 cross-POP read may miss the holdover in KV and compute a fresh `assign()`. Because `assign()`
-is deterministic (ADR-0001), the result is the same Variant the DO just stored. The analysis
-denominator (raw log, pipeline dedup) is unaffected. This window is **cosmetic and
-self-healing**, bounded to returning Entity × Run boundary × cross-POP × within propagation.
+is deterministic within one frozen Run (ADR-0001), same-Run repeats agree. Across a Run boundary,
+a returning Entity may temporarily receive a fresh Variant instead of its prior one, and its
+Exposure can count in the new Run (SPL-812). See the propagation window in
+[holdover-and-replay-policy.md](../evaluation/holdover-and-replay-policy.md); different Runs are not
+guaranteed to produce the same Variant.
 
 ## Write path: not SDK's concern
 
 The `put` call that creates holdover entries flows:
 
 ```
-evaluate() → atomically seal Evaluation claim + Exposure outbox → return success
-           → async Queue/Tinybird delivery
-           → Exposure orchestration: async AssignmentStore.put → DO.putIfAbsent → KV write-through
+evaluate() → atomically seal Evaluation claim + Exposure outbox
+           → await AssignmentStore.put → durable winner + KV write-through → return success
+           → Queue/Tinybird delivery proceeds asynchronously
 ```
 
-The SDK client is not involved in this write path. The SDK reads holdovers via `getAll`;
-it relies on Evaluation Worker Exposure orchestration to establish them. This means there is a lag between an Exposure
-firing and the holdover being readable in KV (the DO → KV propagation). During this lag,
+The SDK client is not involved in this write path. The Evaluation Worker reads holdovers via
+`getAll` and establishes them through Exposure
+orchestration. An Assignment Store failure after the Exposure seal returns `503 SERVICE_UNAVAILABLE`;
+the accepted Exposure remains durable. Even after a successful KV write, there is a lag before the
+holdover is readable at other POPs (the DO to KV propagation). During this lag,
 a second evaluate call from a different POP may re-compute `assign()` (new Entity path) and
 fire a second raw Exposure — both raw Exposures resolve to first-touch in the pipeline.
 The sticky experience converges once KV propagates.
 
 ## Seam boundary
 
-- **Port:** `AssignmentStore.getAll(appId, idType, targetingKey) -> Map<experimentId, {runId, variantName}>`
+- **Port:** `AssignmentStore.getAll({ appId, idType, targetingKey }) -> Promise<Map<experimentId, {runId, variant}>>`
 - **Left side:** the evaluate Worker (consumer)
 - **Right side:** Workers KV (read replica of first-touch records)
-- **Failure contract:** KV error → fall through to `assign()` (self-healing, may momentarily
-  break holdover); missing entry → normal new-Entity path
+- **Failure contract:** KV read/parse failure → fail-loud error and no Exposure; missing entry →
+  normal new-Entity path
 - **Deletion test:** passes — KV is the real read adapter; an in-memory map (test fake) is
   the test-time substitute; both implement the same `getAll` interface
 
