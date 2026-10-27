@@ -112,9 +112,11 @@ an edge case (ADR-0009).
 
 ## Holdover retention
 
-Holdovers for ended Runs are retained in the DO and KV until the Experiment is archived or deleted.
-Experiment cleanup removes its entries from the shared Entity value rather than deleting sibling
-Experiment holdovers. Entity deletion purges matching writer rows and rewrites or deletes the KV
+Holdovers for ended Runs are meant to be retained in the DO and KV until the Experiment is archived
+or deleted, with Experiment cleanup removing its entries from the shared Entity value rather than
+deleting sibling Experiment holdovers. That cleanup is not implemented yet: Experiment archive only
+updates the D1 row, and the writer exposes no Experiment-scoped removal, so records persist until App
+or Entity deletion purges them. Entity deletion purges matching writer rows and rewrites or deletes the KV
 value after the tombstone is committed; a durable cutoff rejects stale writes while preserving
 newly collected Assignments. App identity reset separately fences destroyed identity versions.
 

@@ -3,7 +3,9 @@
 **Status:** accepted (supersedes the original "measurement edits open a new Run" decision, 2026-06-20);
 the assignment-edit mechanics are superseded by
 [ADR-0063](./0063-assignment-edits-stage-on-the-draft-and-start-is-the-only-run-boundary.md): an
-edit stages on the draft, and only Start ends a Run
+edit stages on the draft, and only Start ends a Run. Not built yet: editing an existing Metric's
+definition mid-Run, which the Metric PATCH refuses while a running Experiment references it
+(SPL-819)
 
 A config edit is sorted by **what it invalidates**, and the two cases get different treatment:
 

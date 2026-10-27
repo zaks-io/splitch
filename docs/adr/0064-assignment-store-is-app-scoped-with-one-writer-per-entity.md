@@ -6,8 +6,11 @@ writer and consistency-window guarantee in
 [ADR-0009](./0009-assignment-store-substrate-kv-read-do-write.md)
 
 ADR-0008's core stands: the Assignment Store is dumb storage, and the evaluate path owns holdover,
-replay, and write policy. ADR-0009's read half stands: `getAll` is Workers KV only, and evaluate
-touches no Durable Object to read. Two decisions change.
+replay, and write policy. ADR-0009's read half stands: `getAll` reads holdovers from Workers KV
+only, with no Assignment Store Durable Object on the read path. (Evaluate can still read the App
+identity authority to load an identity lease, per
+[ADR-0057](./0057-evaluation-hot-path-uses-identity-leases-and-a-usage-outbox.md); that is not the
+Assignment Store.) Two decisions change.
 
 **The interface is App-scoped and reports the write outcome.**
 

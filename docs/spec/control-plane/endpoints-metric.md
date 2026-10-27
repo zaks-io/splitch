@@ -238,12 +238,15 @@ The patch schema accepts `kind`, but the Worker refuses a change to the stored k
 `VALIDATION_ERROR`. Other create fields except `appId` and `idempotency_key` are patchable subject
 to the same cross-field validation. A migrated
 Metric may update metadata and analysis settings while its Event Definition is `incomplete`, but it
-cannot change that Event binding until the operator publishes a complete schema. A patch is
-a measurement edit and recomputes over canonical logical facts from `serve_deduped_exposures` and
-`serve_deduped_metric_events`; it never returns `RUN_FROZEN`. The append-only physical logs remain
-replay and reconciliation truth, not direct request-time serving inputs. If the Metric is in a
-running Run's locked decision family, changing its decision-valid contract returns
-`DECISION_LOCKED`; exploratory views may still use the proposed definition separately.
+cannot change that Event binding until the operator publishes a complete schema. A patch never
+returns `RUN_FROZEN`.
+
+While any running Experiment in the App references the Metric (as a goal or Secondary Metric, a
+Guardrail, or the Activation Metric), every PATCH returns `DECISION_LOCKED`, metadata-only edits
+included. The ADR-0003 target, where a measurement edit recomputes over the existing Run from
+`serve_deduped_exposures` and `serve_deduped_metric_events` and only a change to a running Run's
+decision-family contract is refused, is not built (SPL-819). To measure something new mid-Run, add a
+Metric reference to the Experiment instead; that is exploratory for the current Run.
 
 ### `DELETE /apps/{app_id}/metrics/{metric_id}`
 

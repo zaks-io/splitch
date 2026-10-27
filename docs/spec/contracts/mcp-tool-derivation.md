@@ -446,13 +446,17 @@ vocabulary.
 ## Authorization
 
 Each tool call carries either an exact MCP-resource OAuth token (PRM/auth.md handshake,
-ADR-0022) or a Personal Access Token. MCP validates that client token at its own boundary, then calls the owning
-Worker through a named service-binding entrypoint with a separate signed, one-use, short-lived
-delegation bound to the operation, Worker owner, exact downstream target, body digest, verified
-actor, and scopes. The client bearer is never forwarded. Public Worker entrypoints never accept the
-delegation credential. The owning Worker verifies the signature, consumes the replay identifier,
-through a strongly consistent Durable Object claim, and still enforces the delegated principal's
-scopes — MCP tool schemas do NOT encode auth. Missing signing secrets or replay bindings, storage
+ADR-0022) or a Personal Access Token. MCP validates that client token at its own boundary, then calls the
+Control Plane, its only binding, through the `McpEntrypoint` service-binding entrypoint
+([ADR-0065](../../adr/0065-mcp-reaches-every-owner-worker-through-the-control-plane.md)). Each call
+carries a separate signed, one-use, short-lived delegation addressed to that public surface and
+bound to the operation, method, exact target, body digest, verified actor, auth door, and scopes. The
+client bearer is never forwarded. Public Worker entrypoints never accept the delegation credential.
+The Control Plane verifies the signature, consumes the replay identifier through a strongly
+consistent Durable Object claim, runs its guard chain, and enforces the delegated principal's scopes.
+For a route the Analysis or Evaluation Worker owns, it then forwards the authorized identity to that
+Worker's `ControlPlaneEntrypoint` as a delegated route (ADR-0046). MCP tool schemas do NOT encode
+auth. Missing signing secrets or replay bindings, storage
 failures, and duplicate identifiers all fail closed before route dispatch. If auth fails, MCP returns
 HTTP `401`; if Worker scopes are insufficient, the Worker returns
 `INSUFFICIENT_SCOPES`. The agent never needs to know "this tool requires role X" — the Worker says

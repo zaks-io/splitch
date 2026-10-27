@@ -169,6 +169,11 @@ Metric definition changes are **measurement edits** (ADR-0002). They recompute o
 losslessly by joining `serve_deduped_exposures` to `serve_deduped_metric_events`. The append-only raw
 logs remain replay and repair truth, not the request-time serving path. No new Run, no sample reset.
 
+Not built for existing Metrics yet: a Metric PATCH is refused with `DECISION_LOCKED` while any
+running Experiment references the Metric (SPL-819, see
+[endpoints-metric.md](../control-plane/endpoints-metric.md)). Conversion Window edits and adding
+Metric references to the Experiment already recompute over the existing Run.
+
 Exception: changing the **Activation Metric** (the gate definition) is an **assignment edit** and
 takes effect only in a new Run. It cannot be staged while a Run is running: End the Run, change it,
 then Start (ADR-0063). The Activation Metric is frozen per Run.

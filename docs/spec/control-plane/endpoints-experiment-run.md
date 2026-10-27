@@ -102,8 +102,10 @@ The salt row is the consequential one. A staged PATCH that does not set `salt` e
 the draft salt null, and Start then generates a new one — so **the next Run re-randomizes the
 entire sample**. Every subject may land in a different Variant than it did in the previous Run.
 That is deliberate: a new Run is a new bucketing boundary, so an allocation change cannot silently
-reshuffle only part of the audience. If the next Run must reuse the current Run's bucketing, send
-`salt` explicitly with the running Run's salt value (readable from the Run) in the staged PATCH.
+reshuffle only part of the audience. Reusing an earlier Run's bucketing is not supported: salts are
+unique per Experiment (`runs_experiment_salt_unique`), so an explicit `salt` must be one no earlier
+Run of the Experiment used. Today a colliding staged salt is accepted by the PATCH and then fails
+Start with `500 INTERNAL_SERVER_ERROR` (SPL-820).
 
 `segmentIds` does not carry forward because a Run stores no Segment references at all: Start
 resolves Segments into concrete Targeting Rules and freezes those. The resolved rules are what

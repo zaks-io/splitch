@@ -17,9 +17,12 @@ consistent replay object (`MCP_DELEGATION_REPLAY`). A route another Worker owns 
 Plane runs the full guard chain, then forwards over its own binding to the owner's
 `ControlPlaneEntrypoint`. This is the same door the CLI uses at `api.splitch.dev`.
 
-The rest of the amendment stands. MCP is its own protected resource with its own PRM and exact `aud`,
-verifies the bearer locally through Auth API JWKS, and never forwards it. ADR-0023's parity,
-remote-only, and Worker-owned-invariant decisions are unchanged.
+MCP remains its own protected resource with its own PRM and exact `aud`, and never forwards the
+client bearer. It verifies that bearer locally against its authorization server's JWKS: AuthKit on
+hosted targets, per the 2026-08-31 amendment to
+[ADR-0022](./0022-agent-and-human-auth-via-auth-md-one-principal-three-doors.md), and Auth API only when no OAuth
+authorization server is configured. ADR-0023's parity, remote-only, and Worker-owned-invariant
+decisions are unchanged.
 
 ## Considered options
 

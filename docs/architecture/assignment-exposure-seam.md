@@ -81,7 +81,9 @@ recomputed over the Run's retained facts, while the decision spec is locked at S
 - **Measurement edit → recompute over the existing Run, no reset** (changes what the numbers mean, not who is
   in which arm): Secondary Metric definitions, Conversion Window, exploratory Guardrail config. Analysis joins the
   deduped Exposure and Metric Event serving layers. Confidence level, horizon/tuning, goal Metric
-  family, Guardrail thresholds, and Primary Dimensions stay locked for decision-valid results.
+  family, Guardrail thresholds, and Primary Dimensions stay locked for decision-valid results. Editing
+  an existing Metric's definition mid-Run is not built yet: Metric PATCH is refused while a running
+  Experiment references it (SPL-819).
 - **Non-material → mutate in place, same Run**: description, display name, owner, tags, notes, dashboard
   layout.
 
