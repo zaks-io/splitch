@@ -98,6 +98,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
         {},
         {
           appId: string;
+          deploymentMissingAt?: string | null;
           environmentId: string;
           environmentVersion: number;
           installationId: string;

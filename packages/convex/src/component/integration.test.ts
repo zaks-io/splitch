@@ -1,7 +1,9 @@
+import { ConvexInstallationSchema } from "@splitch/sdk/local-evaluation";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ActionCtx, MutationCtx } from "./_generated/server";
 import { install } from "./integration";
 import { initializeHandler } from "./integration_initialize";
+import { installationResultValidator } from "./validators";
 
 const callbackUrl = "https://dashing-rook-238.convex.site/integrations/splitch/configuration";
 const customCallbackUrl = "https://gateway.chat.zaks.io/integrations/splitch/configuration";
@@ -27,6 +29,7 @@ const installed = {
   environmentId: "env_1",
   environmentVersion: 165,
   status: "active",
+  deploymentMissingAt: null,
 };
 
 afterEach(() => {
@@ -35,6 +38,13 @@ afterEach(() => {
 });
 
 describe("install", () => {
+  it("declares every field of the parsed registration response it returns", () => {
+    // Convex rejects extra properties against the returns validator, which _handler skips.
+    expect(Object.keys(installationResultValidator.fields).sort()).toEqual(
+      Object.keys(ConvexInstallationSchema.shape).sort(),
+    );
+  });
+
   it.each([
     ["active", callbackUrl],
     ["revoked", callbackUrl],

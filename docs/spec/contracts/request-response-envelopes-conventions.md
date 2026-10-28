@@ -24,6 +24,10 @@ re-validated; a missing required field or a wrong type still fails loud. Removin
 or changing its type is a breaking change. Response contract schemas may remain `.strict()` so the
 documented shape stays exact and server tests can assert it; the tolerance lives only in the client
 parse helper. Storage validation follows each schema; strict KV payloads reject unknown keys.
+Clients released before that helper (2026-10-02) still parse strictly. `@splitch/convex` 0.2.0 and
+earlier reject unknown keys on the Convex installation response, so that response adds fields only
+for registrations that send `callbackVerification`
+([convex-integration-api.md](../sdk/convex-integration-api.md)).
 
 **Persisted field bounds.** Write envelopes compose named limits from `persisted-field-limits.ts`
 (names 200, descriptions 2000, identifiers 128, Condition values 1024, Variant strings 4096, salts

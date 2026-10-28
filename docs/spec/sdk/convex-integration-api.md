@@ -53,12 +53,14 @@ capability leave the dormant mark unchanged. Reusing `installationId` with a dif
 `IDEMPOTENCY_KEY_CONFLICT` before verification. The response is:
 
 ```text
-{ installationId, appId, environmentId, environmentVersion, status: "active" | "revoked", deploymentMissingAt: string | null }
+{ installationId, appId, environmentId, environmentVersion, status: "active" | "revoked", deploymentMissingAt?: string | null }
 ```
 
-`deploymentMissingAt` is additive and optional in the response contract. The response uses a fresh
-installation read after recovery, so it reports the real state if a newer lifecycle event makes
-recovery lose its compare-and-set guard.
+`deploymentMissingAt` is additive and optional in the response contract. Only registrations that
+send `callbackVerification` receive it. `@splitch/convex` 0.2.0 and earlier omit that capability and
+reject unknown response keys, so their responses keep the original five fields. The response uses a
+fresh installation read after recovery, so it reports the real state if a newer lifecycle event
+makes recovery lose its compare-and-set guard.
 
 The component then pulls the snapshot. Installation is not complete locally until that snapshot is
 validated and committed.
