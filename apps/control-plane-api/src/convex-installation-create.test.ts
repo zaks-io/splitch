@@ -38,7 +38,6 @@ describe("verified callback installation", () => {
       environmentId: "env_1",
       environmentVersion: 7,
       status: "active",
-      deploymentMissingAt: null,
     });
     expect(fixture.createInstallation).toHaveBeenCalledOnce();
   });
@@ -151,7 +150,13 @@ describe("installation retries and old components", () => {
     const { callbackVerification: _capability, ...legacy } = INPUT;
     const response = await fixture.handlers(fetcher).create(args({ ...legacy, callbackUrl }));
     expect(response.status).toBe(200);
-    expect(await response.json()).toMatchObject({ deploymentMissingAt: NOW.toISOString() });
+    expect(await response.json()).toEqual({
+      installationId: INPUT.installationId,
+      appId: "app_1",
+      environmentId: "env_1",
+      environmentVersion: 7,
+      status: "active",
+    });
     expect(fetcher).not.toHaveBeenCalled();
     expect(reactivateDeployment).not.toHaveBeenCalled();
   });

@@ -53,12 +53,13 @@ capability leave the dormant mark unchanged. Reusing `installationId` with a dif
 `IDEMPOTENCY_KEY_CONFLICT` before verification. The response is:
 
 ```text
-{ installationId, appId, environmentId, environmentVersion, status: "active" | "revoked", deploymentMissingAt: string | null }
+{ installationId, appId, environmentId, environmentVersion, status: "active" | "revoked" }
 ```
 
-`deploymentMissingAt` is additive and optional in the response contract. The response uses a fresh
-installation read after recovery, so it reports the real state if a newer lifecycle event makes
-recovery lose its compare-and-set guard.
+This response is frozen. `@splitch/convex` 0.2.0 and earlier parse it with a strict schema, so an
+added key fails their installation. Later releases drop unknown response keys. Dormancy is
+reported only by the status endpoint below. The response uses a fresh installation read after recovery, so its `status`
+reports the real state if a newer lifecycle event makes recovery lose its compare-and-set guard.
 
 The component then pulls the snapshot. Installation is not complete locally until that snapshot is
 validated and committed.
