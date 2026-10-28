@@ -27,7 +27,7 @@ Changes merged since `sdk-v0.12.0`.
   `AppAuditListResponseSchema`, plus the `app_audit_list` operation.
 - The `integration_deliveries_create` operation, which wakes delivery for one Environment and returns
   outstanding Convex/Cloudflare counts, or `cron_noop` in cron mode.
-- Optional nullable `ConvexInstallation.deploymentMissingAt` for deleted deployment detection.
+- Optional nullable `ConvexInstallationStatus.deploymentMissingAt` for deleted deployment detection.
 - An updated `OverviewFlagConfigChange` shape with `seq`, `action`, `targetType`, `actorRef`,
   `actorVia`, and `changedAt`, replacing `flagName`, `enabled`, and `updatedAt`. Overview change counts
   now count Flag change-log events.

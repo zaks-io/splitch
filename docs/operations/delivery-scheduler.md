@@ -78,7 +78,7 @@ reactivate through this process.
 An exact re-registration with `callbackVerification: "hmac-sha256"` must prove control of the
 receiver before clearing dormancy and requeuing the current version. Failed verification leaves
 dormancy intact. An exact legacy `*.convex.site` re-registration without that capability returns
-`200` with `deploymentMissingAt` preserved and sends no challenge. Custom-domain registration
+`200`, leaves `deploymentMissingAt` set, and sends no challenge. Custom-domain registration
 without receiver verification is rejected before registration state is read. Re-registration
 preserves revoked status and rejects changed callback or secret content for the same installation.
 

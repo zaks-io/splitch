@@ -1,4 +1,4 @@
-import { ConvexInstallationStatusSchema } from "@splitch/contracts";
+import { ConvexInstallationSchema, ConvexInstallationStatusSchema } from "@splitch/contracts";
 import { createRepository, envScope } from "@splitch/db";
 import { createLocalD1, type LocalD1 } from "@splitch/db/test-d1-pool";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -80,7 +80,7 @@ async function register(expectedStatus = 200) {
     body: JSON.stringify(BODY),
   });
   expect(response.status).toBe(expectedStatus);
-  return response;
+  if (response.ok) ConvexInstallationSchema.parse(await response.json());
 }
 async function health() {
   const response = await app.request(`${PATH}/${BODY.installationId}`);
@@ -227,8 +227,7 @@ describe.each(["cron", "coordinator"] as const)(
           return stale;
         });
         verificationFails = !verified;
-        const response = await register(verified ? 200 : 400);
-        if (verified) expect(await response.json()).toMatchObject({ deploymentMissingAt: null });
+        await register(verified ? 200 : 400);
         expect(await health()).toMatchObject({
           deploymentMissingAt: verified ? null : "2099-01-01T00:00:00.000Z",
           pendingCount: verified ? 1 : 0,
@@ -238,7 +237,7 @@ describe.each(["cron", "coordinator"] as const)(
       },
     );
 
-    it("returns actual dormancy when a newer lifecycle event supersedes verified registration", async () => {
+    it("keeps actual dormancy when a newer lifecycle event supersedes verified registration", async () => {
       await register();
       await changeConfig();
       await dispatch(async () => deleted());
@@ -252,10 +251,7 @@ describe.each(["cron", "coordinator"] as const)(
           await recover(scope, id, token, now);
         },
       );
-      const response = await register();
-      expect(await response.json()).toMatchObject({
-        deploymentMissingAt: "2099-01-01T00:00:00.000Z",
-      });
+      await register();
       expect(await health()).toMatchObject({
         deploymentMissingAt: "2099-01-01T00:00:00.000Z",
         pendingCount: 0,

@@ -31,11 +31,11 @@ export const ConvexInstallationSchema = z
     environmentId: z.string(),
     environmentVersion: EnvironmentVersionSchema,
     status: z.enum(["active", "revoked"]),
-    deploymentMissingAt: z.iso.datetime().nullable().optional(),
   })
   .strict();
 
 export const ConvexInstallationStatusSchema = ConvexInstallationSchema.extend({
+  deploymentMissingAt: z.iso.datetime().nullable().optional(),
   callbackUrl: z.url(),
   lastDeliveredVersion: EnvironmentVersionSchema.nullable(),
   lastDeliveredAt: z.iso.datetime().nullable(),

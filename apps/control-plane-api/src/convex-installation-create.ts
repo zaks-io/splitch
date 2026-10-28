@@ -166,12 +166,12 @@ async function registrationResponse(
   if (!result) throw new Error("Convex registration: installation disappeared");
   const environmentVersion = await deps.repo.convex.environmentVersion(scope);
   deps.wakeDelivery?.(scope);
+  // Every published @splitch/convex parses this body strictly, so any added key breaks install.
   return Response.json({
     installationId: row.installationId,
     appId: scope.appId,
     environmentId: scope.environmentId,
     environmentVersion,
     status: result.status,
-    deploymentMissingAt: result.deploymentMissingAt,
   });
 }
