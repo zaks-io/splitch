@@ -71,6 +71,7 @@ export const installationResultValidator = v.object({
   environmentId: v.string(),
   environmentVersion: v.number(),
   status: v.union(v.literal("active"), v.literal("revoked")),
+  deploymentMissingAt: v.optional(v.union(v.string(), v.null())),
 });
 
 export const deliveryClaimValidator = v.union(

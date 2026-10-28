@@ -1,4 +1,5 @@
 import { createHmac } from "node:crypto";
+import { ConvexInstallationSchema } from "@splitch/contracts";
 import type { ConvexInstallationRow, Repository } from "@splitch/db";
 import type { HandlerArgs } from "@splitch/worker-runtime";
 import { describe, expect, it, vi } from "vitest";
@@ -151,9 +152,26 @@ describe("installation retries and old components", () => {
     const { callbackVerification: _capability, ...legacy } = INPUT;
     const response = await fixture.handlers(fetcher).create(args({ ...legacy, callbackUrl }));
     expect(response.status).toBe(200);
-    expect(await response.json()).toMatchObject({ deploymentMissingAt: NOW.toISOString() });
+    expect(legacyComponentResponse(await response.json())).toMatchObject({ status: "active" });
+    expect(existing.deploymentMissingAt).toBe(NOW.toISOString());
     expect(fetcher).not.toHaveBeenCalled();
     expect(reactivateDeployment).not.toHaveBeenCalled();
+  });
+
+  it("answers a fresh old-component registration in the shape it parses strictly", async () => {
+    const fixture = setup();
+    const { callbackVerification: _capability, ...legacy } = INPUT;
+    const response = await fixture
+      .handlers(vi.fn())
+      .create(args({ ...legacy, callbackUrl: "https://example.convex.site/configuration" }));
+    expect(response.status).toBe(200);
+    expect(legacyComponentResponse(await response.json())).toEqual({
+      installationId: INPUT.installationId,
+      appId: "app_1",
+      environmentId: "env_1",
+      environmentVersion: 7,
+      status: "active",
+    });
   });
 
   it("rejects changed registration content before a challenge or deployment check", async () => {
@@ -202,6 +220,10 @@ describe("installation retries and old components", () => {
     expect(fetcher).not.toHaveBeenCalled();
   });
 });
+
+/** The response parse in @splitch/convex 0.2.0 and earlier, which rejects unknown keys. */
+const legacyComponentResponse = (body: unknown) =>
+  ConvexInstallationSchema.omit({ deploymentMissingAt: true }).strict().parse(body);
 
 type Registration = Omit<typeof INPUT, "callbackVerification"> & {
   callbackVerification?: "hmac-sha256";

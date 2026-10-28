@@ -172,6 +172,8 @@ async function registrationResponse(
     environmentId: scope.environmentId,
     environmentVersion,
     status: result.status,
-    deploymentMissingAt: result.deploymentMissingAt,
+    // @splitch/convex 0.2.0 and earlier parse this response strictly and never send
+    // callbackVerification; only verification-capable components can act on dormancy.
+    ...(input.callbackVerification && { deploymentMissingAt: result.deploymentMissingAt }),
   });
 }
