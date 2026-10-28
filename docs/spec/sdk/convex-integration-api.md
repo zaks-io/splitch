@@ -56,9 +56,9 @@ capability leave the dormant mark unchanged. Reusing `installationId` with a dif
 { installationId, appId, environmentId, environmentVersion, status: "active" | "revoked" }
 ```
 
-This response is frozen. Every published `@splitch/convex` release parses it with a strict schema,
-so an added key fails installation for every deployed component. Dormancy is reported only by the
-status endpoint below. The response uses a fresh installation read after recovery, so its `status`
+This response is frozen. `@splitch/convex` 0.2.0 and earlier parse it with a strict schema, so an
+added key fails their installation. Later releases drop unknown response keys. Dormancy is
+reported only by the status endpoint below. The response uses a fresh installation read after recovery, so its `status`
 reports the real state if a newer lifecycle event makes recovery lose its compare-and-set guard.
 
 The component then pulls the snapshot. Installation is not complete locally until that snapshot is
