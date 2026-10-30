@@ -40,7 +40,6 @@ export function extractQuickstartSdkSnippet(markdown, options = {}) {
  */
 export function wrapQuickstartSnippetForTypecheck(snippet) {
   return `// Auto-generated from the docs/spec/quickstart.md SDK section by consumer-smoke. Do not edit.
-declare const userId: string;
 declare function renderFallback(errorCode: string | undefined): void;
 declare function render(value: unknown): void;
 
