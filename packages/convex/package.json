@@ -81,9 +81,9 @@
     "@splitch/bounded-body": "workspace:*",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
-    "convex": "^1.46.0",
-    "react": "^19.3.0",
-    "react-dom": "^19.3.0",
+    "convex": "^1.48.0",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
     "typescript": "^6.0.3"
   }
 }
