@@ -4,6 +4,7 @@ import {
   SENTRY_DATA_COLLECTION,
   sentryPrivacyIntegration,
   secretsFromEnv,
+  sentryTracesSampleRate,
 } from "@splitch/observability/emitter";
 import { createRouter } from "@tanstack/react-router";
 import { routeTree } from "./routeTree.gen";
@@ -25,7 +26,7 @@ export async function getRouter() {
         dsn: secrets.sentryDsn,
         environment: secrets.environment,
         release: import.meta.env.VITE_SENTRY_RELEASE,
-        tracesSampleRate: 1,
+        tracesSampleRate: sentryTracesSampleRate(secrets.environment),
         dataCollection: SENTRY_DATA_COLLECTION,
         traceLifecycle: "stream",
         beforeSendSpan: createSentryBeforeSendSpan({ surface: "marketing" }),

@@ -21,6 +21,8 @@ async function recordSpans(run: () => Promise<void>): Promise<RecordedSpan[]> {
   const spans: RecordedSpan[] = [];
   const client = new Sentry.CloudflareClient({
     ...workerSentryOptions(env, { surface: "event-ingest-api" }, Sentry),
+    // Production samples a fraction of roots; these tests cover export, not sampling.
+    tracesSampler: () => 1,
     integrations: [],
     stackParser: () => [],
     transport: () => ({

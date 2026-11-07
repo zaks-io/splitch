@@ -109,11 +109,23 @@ export function createSentryBeforeSendSpan(
 export function secretsFromEnv(env: {
   SENTRY_DSN?: string;
   SPLITCH_PLATFORM_TARGET?: string;
-}): ObservabilitySecrets {
+}): ObservabilitySecrets & { readonly environment: string } {
   return {
     sentryDsn: env.SENTRY_DSN,
     environment: env.SPLITCH_PLATFORM_TARGET ?? "local",
   };
+}
+
+/**
+ * Production traffic exhausted the Sentry span quota at full sampling. Error
+ * events are never sampled; this only thins SDK traces. Other targets keep every
+ * trace because their volume is small and they are where traces get debugged.
+ */
+const PRODUCTION_TRACES_SAMPLE_RATE = 0.1;
+
+/** Head sampling rate for Sentry SDK traces started on this platform target. */
+export function sentryTracesSampleRate(environment: string): number {
+  return environment === "production" ? PRODUCTION_TRACES_SAMPLE_RATE : 1;
 }
 
 /** Disable automatic payload collection; explicit events and spans still use scrubbers. */

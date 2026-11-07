@@ -8,6 +8,7 @@ import {
   SENTRY_DATA_COLLECTION,
   secretsFromEnv,
   sentryPrivacyIntegration,
+  sentryTracesSampleRate,
 } from "./emitter.js";
 import {
   type RequestErrorContext,
@@ -97,7 +98,7 @@ export function workerSentryOptions(
     release: env.SENTRY_RELEASE,
     tracesSampler({ name, attributes, inheritOrSampleWith }: SamplingContext) {
       if (name === "scheduled" && attributes["faas.trigger"] === "timer") return 0;
-      return inheritOrSampleWith(1);
+      return inheritOrSampleWith(sentryTracesSampleRate(secrets.environment));
     },
     // Native tracing owns D1; custom database spans and propagation spans stay.
     ignoreSpans: [{ attributes: { "sentry.origin": /^auto\.db\.cloudflare\.d1$/ } }],
