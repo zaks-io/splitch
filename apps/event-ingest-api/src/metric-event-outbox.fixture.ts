@@ -15,10 +15,18 @@ export interface ClaimInput {
   readonly activatedRuns?: number;
 }
 
-export function row(
-  targetingKey: string,
-  serverReceivedAt = "2026-08-07T00:00:00.000Z",
-): ClaimInput {
+const FIXTURE_RECEIVED_AT = "2026-08-07T00:00:00.000Z";
+
+/**
+ * Claims expire `METRIC_EVENT_CLAIM_RETENTION_MS` after receipt, so a test that
+ * reads the real clock silently flips to "expired" once that window passes
+ * `FIXTURE_RECEIVED_AT`. Pin the clock to the day after receipt instead.
+ */
+export function pinClockAfterFixtureReceipt(): void {
+  vi.spyOn(Date, "now").mockReturnValue(Date.parse(FIXTURE_RECEIVED_AT) + 24 * 60 * 60 * 1_000);
+}
+
+export function row(targetingKey: string, serverReceivedAt = FIXTURE_RECEIVED_AT): ClaimInput {
   return {
     fingerprint: `fp_${targetingKey}`,
     eventDefinitionId: "ed_signed_up",

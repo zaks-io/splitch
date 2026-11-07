@@ -1,6 +1,7 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
-import { makeOutbox, row } from "./metric-event-outbox.fixture";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { makeOutbox, pinClockAfterFixtureReceipt, row } from "./metric-event-outbox.fixture";
 
+beforeEach(pinClockAfterFixtureReceipt);
 afterEach(() => vi.restoreAllMocks());
 
 describe("Metric Event outbox publication retry", () => {
