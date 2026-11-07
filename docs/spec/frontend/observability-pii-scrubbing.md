@@ -29,10 +29,13 @@ Trace context propagates across these hops:
 | Wrapped Worker → outbound HTTP fetch   | Sentry adds all three headers to instrumented outbound fetches                                |
 
 Set `propagateTraceparent: true` in the shared Worker and browser options. Preserve browser
-`tracePropagationTargets` restricted to same-origin server functions. Keep the existing sampling rate
-of `1` on native and browser traces. Worker SDK tracing inherits parent sampling decisions and
-otherwise samples at `1`, except scheduled roots (`scheduled` with `faas.trigger: "timer"`), which
-sample at `0`. Scheduled errors still reach `captureException` independently of trace sampling.
+`tracePropagationTargets` restricted to same-origin server functions. Native traces keep a
+`head_sampling_rate` of `1`. Browser and Worker SDK traces share `sentryTracesSampleRate`: `0.1` in
+`production`, where full sampling exhausted the Sentry span quota, and `1` on every other target.
+Worker SDK tracing inherits parent sampling decisions, so a panel server function follows the
+browser's decision. Scheduled roots (`scheduled` with `faas.trigger: "timer"`) sample at `0`. Error
+events are never sampled: errors, including scheduled ones, reach Sentry independently of trace
+sampling.
 Native tracing owns D1 spans; the SDK drops automatic D1 spans by their exact `sentry.origin`
 `auto.db.cloudflare.d1`. Custom performance, Durable Object, RPC, and service-binding spans remain. Worker `strictTraceContinuation` remains enabled, so traces
 from a different Sentry organization start a new trace. This check is a telemetry policy, not

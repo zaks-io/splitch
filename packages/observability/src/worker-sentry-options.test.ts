@@ -34,33 +34,6 @@ describe("workerSentryOptions", () => {
     });
   });
 
-  it("does not sample scheduled roots even with a sampled parent", () => {
-    const options = workerSentryOptions({}, { surface: "control-plane-api" }, mockSentryModule());
-    const inheritOrSampleWith = vi.fn(() => 1);
-    expect(
-      options.tracesSampler({
-        name: "scheduled",
-        attributes: { "faas.trigger": "timer", "sentry.op": "function" },
-        parentSampled: true,
-        inheritOrSampleWith,
-      }),
-    ).toBe(0);
-    expect(inheritOrSampleWith).not.toHaveBeenCalled();
-  });
-
-  it.each([0, 0.25, 1])("honors the inherited HTTP sampling rate %s", (rate) => {
-    const options = workerSentryOptions({}, { surface: "evaluation-api" }, mockSentryModule());
-    const inheritOrSampleWith = vi.fn(() => rate);
-    expect(
-      options.tracesSampler({
-        name: "GET",
-        attributes: { "sentry.op": "http.server" },
-        inheritOrSampleWith,
-      }),
-    ).toBe(rate);
-    expect(inheritOrSampleWith).toHaveBeenCalledWith(1);
-  });
-
   it("drops Sentry's Console integration so fault rows are not double-sent", () => {
     const options = workerSentryOptions(
       { SENTRY_DSN: "https://example@sentry.io/1" },
@@ -179,6 +152,54 @@ describe("workerSentryOptions", () => {
       stackFrameVariables: false,
       frameContextLines: 0,
     });
+  });
+});
+
+describe("workerSentryOptions tracesSampler", () => {
+  it("does not sample scheduled roots even with a sampled parent", () => {
+    const options = workerSentryOptions({}, { surface: "control-plane-api" }, mockSentryModule());
+    const inheritOrSampleWith = vi.fn(() => 1);
+    expect(
+      options.tracesSampler({
+        name: "scheduled",
+        attributes: { "faas.trigger": "timer", "sentry.op": "function" },
+        parentSampled: true,
+        inheritOrSampleWith,
+      }),
+    ).toBe(0);
+    expect(inheritOrSampleWith).not.toHaveBeenCalled();
+  });
+
+  it.each([0, 0.25, 1])("honors the inherited HTTP sampling rate %s", (rate) => {
+    const options = workerSentryOptions({}, { surface: "evaluation-api" }, mockSentryModule());
+    const inheritOrSampleWith = vi.fn(() => rate);
+    expect(
+      options.tracesSampler({
+        name: "GET",
+        attributes: { "sentry.op": "http.server" },
+        inheritOrSampleWith,
+      }),
+    ).toBe(rate);
+    expect(inheritOrSampleWith).toHaveBeenCalledWith(1);
+  });
+
+  it.each([
+    ["production", 0.1],
+    ["shared-preview", 1],
+  ])("samples new %s HTTP roots at %s", (target, rate) => {
+    const options = workerSentryOptions(
+      { SPLITCH_PLATFORM_TARGET: target },
+      { surface: "evaluation-api" },
+      mockSentryModule(),
+    );
+    const inheritOrSampleWith = vi.fn((fallback: number) => fallback);
+    expect(
+      options.tracesSampler({
+        name: "GET",
+        attributes: { "sentry.op": "http.server" },
+        inheritOrSampleWith,
+      }),
+    ).toBe(rate);
   });
 });
 

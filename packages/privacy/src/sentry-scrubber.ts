@@ -246,7 +246,7 @@ function scrubSpanLinkAttribute(key: string, value: unknown): unknown {
  * as each streamed span finishes.
  *
  * This exists because `beforeSend` covers ERROR events only. With
- * `tracesSampleRate: 1` every Worker ships spans, so without this hook the whole
+ * trace sampling on, every Worker ships spans, so without this hook the whole
  * trace payload bypasses the redaction contract that the event path enforces.
  */
 export function scrubSentrySpan<T extends SentryEventLike>(span: T, options: ScrubOptions = {}): T {

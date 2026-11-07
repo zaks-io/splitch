@@ -29,6 +29,8 @@ it.each([false, true])("serializes private span-v2 links with malformed=%s", asy
       { surface: "event-ingest-api" },
       Sentry,
     ),
+    // Production samples a fraction of roots; this test covers export, not sampling.
+    tracesSampler: () => 1,
     integrations: [],
     stackParser: () => [],
     transport: (options) =>

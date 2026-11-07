@@ -4,6 +4,7 @@ import {
   SENTRY_DATA_COLLECTION,
   sentryPrivacyIntegration,
   secretsFromEnv,
+  sentryTracesSampleRate,
 } from "@splitch/observability/emitter";
 import { SESSION_COOKIE_NAME } from "#lib/sessions/session";
 
@@ -86,7 +87,7 @@ export function createControlPanelSentryOptions(
     dsn: secrets.sentryDsn,
     environment: secrets.environment,
     release: env.SENTRY_RELEASE,
-    tracesSampleRate: 1,
+    tracesSampleRate: sentryTracesSampleRate(secrets.environment),
     dataCollection: SENTRY_DATA_COLLECTION,
     traceLifecycle: "stream" as const,
     integrations: [sentryPrivacyIntegration()],

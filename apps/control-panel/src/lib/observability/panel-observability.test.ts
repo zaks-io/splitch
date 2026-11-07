@@ -180,7 +180,7 @@ describe("control-panel observability tiers", () => {
 });
 
 describe("control-panel Sentry PII scrubbing", () => {
-  it("samples every operator journey and propagates only to server functions", () => {
+  it("samples a tenth of production operator journeys and propagates only to server functions", () => {
     const options = createControlPanelSentryOptions({
       SENTRY_DSN: "https://example@sentry.io/1",
       SPLITCH_PLATFORM_TARGET: "production",
@@ -206,7 +206,11 @@ describe("control-panel Sentry PII scrubbing", () => {
         attributes: { "sentry.op": "http.client" },
       }).name,
     ).toBe("[Redacted]");
-    expect(options.tracesSampleRate).toBe(1);
+    expect(options.tracesSampleRate).toBe(0.1);
+    expect(
+      createControlPanelSentryOptions({ SPLITCH_PLATFORM_TARGET: "shared-preview" })
+        .tracesSampleRate,
+    ).toBe(1);
     expect(options.propagateTraceparent).toBe(true);
     expect(options.tracePropagationTargets).toHaveLength(1);
     expect(options.tracePropagationTargets[0]?.test("/_serverFn/function-id")).toBe(true);

@@ -1,7 +1,10 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { MetricEventDeliveryAttempt } from "./metric-event-delivery-attempt";
 import { METRIC_EVENT_CLAIM_RETENTION_MS } from "./metric-event-outbox";
-import { makeOutbox, row } from "./metric-event-outbox.fixture";
+import { makeOutbox, pinClockAfterFixtureReceipt, row } from "./metric-event-outbox.fixture";
+
+beforeEach(pinClockAfterFixtureReceipt);
+afterEach(() => vi.restoreAllMocks());
 
 /**
  * The Durable Object is the only place the accept/duplicate/conflict decision is

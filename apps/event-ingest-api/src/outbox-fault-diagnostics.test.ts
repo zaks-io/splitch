@@ -2,7 +2,7 @@ import { inspect } from "node:util";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { EvaluationCommitOutboxDurableObject } from "./evaluation-commit-outbox";
 import { durableState } from "./evaluation-commit-outbox.test-fixture";
-import { makeOutbox, row } from "./metric-event-outbox.fixture";
+import { makeOutbox, pinClockAfterFixtureReceipt, row } from "./metric-event-outbox.fixture";
 import type { Env } from "./types";
 
 const CANARY = "qxZ7s3crt";
@@ -40,6 +40,7 @@ function assertSafe(event: string) {
 
 describe("Outbox fault diagnostics", () => {
   it("withholds native parse causes while retaining a Metric Event for publication retry", async () => {
+    pinClockAfterFixtureReceipt();
     const outbox = makeOutbox(async () => {
       throw parseFailure();
     });
