@@ -258,7 +258,7 @@ real package API boundary.
 - Worker environment: `remote-cursor` `ccb64cf0-9ac4-4cf3-a6b0-c3f54d0f6321`
 - Repo-route (group `repo`): `zaks-io/splitch`
   `84bd2d20-ae8d-48aa-8dab-dea8138debc7`; other routes include
-  `zaks-io/skills`, `zaks-io/otto`, `zaks-io/agent-paste`, `zaks-io/insecur`,
+  `zaks-io/skills`, `zaks-io/otto`, `zaks-io/agent-paste`,
   `zaks-io/trace-flow`, `zaks-io/neuron-app`, and `zaks-io/time`.
 - Other: `placeholder-noop` `ee04a955-369d-4b66-8125-c568d6fb65db` (likely the
   bare-name publish ticket), `enhancement`, `frontend`, `research`,
