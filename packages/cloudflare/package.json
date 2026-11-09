@@ -41,10 +41,10 @@
     "access": "public"
   },
   "devDependencies": {
-    "@cloudflare/vitest-pool-workers": "^0.22.0",
+    "@cloudflare/vitest-pool-workers": "^0.23.0",
     "@splitch/contracts": "workspace:*",
     "@splitch/evaluation-core": "workspace:*",
     "@splitch/worker-runtime": "workspace:*",
-    "vitest": "^4.1.11"
+    "vitest": "^4.1.12"
   }
 }
